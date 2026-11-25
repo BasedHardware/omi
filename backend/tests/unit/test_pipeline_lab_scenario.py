@@ -72,7 +72,13 @@ def test_committed_scenarios_are_valid_and_named_after_their_file():
         assert plan_events(parsed)
 
 
-def test_incident_scenario_keeps_the_sca_4385_shape_and_expected_failure():
+def test_incident_scenarios_are_plain_passes_since_the_finish_fix():
+    # #26304 (SCA-4385) landed; a known-bug block left behind would turn a regression into exit 0.
+    for path in COMMITTED:
+        assert load_scenario(path).expected_failure is None, path.name
+
+
+def test_incident_scenario_keeps_the_sca_4385_shape():
     parsed = load_scenario(stack.SCENARIO_DIR / 'finish_after_reconnect_late_transcript.json')
     a, b, f = (parsed.recording(x) for x in 'ABF')
     assert (a.audio, a.sealed_at, a.transcript_at) == ((0, 64), 109, 184)
@@ -81,8 +87,22 @@ def test_incident_scenario_keeps_the_sca_4385_shape_and_expected_failure():
     assert parsed.finish.at == 152 and parsed.finish_target().label == 'B'
     assert admission_offset(parsed, b) == 169  # the provisional transcript lands at +169 s
     assert parsed.gaps[0]['seconds'] == 65
-    assert 'SCA-4385' in parsed.expected_failure['reason'] and parsed.expected_failure['strict'] is True
-    assert {'conversation_of': '@finish', 'recordings': ['A', 'B', 'F']} in [c.raw for c in parsed.checks]
+    finish_row = {'conversation_of': '@finish', 'recordings': ['A', 'B', 'F'], 'visible': True, 'manual_end': True}
+    assert finish_row in [c.raw for c in parsed.checks]
+
+
+@pytest.mark.parametrize(
+    'name, members',
+    [('finish_after_reconnect_late_transcript', ['A', 'B', 'F']), ('finish_after_long_reconnect_gap', ['A', 'B'])],
+)
+def test_reconnect_checks_hold_for_one_finish_conversation(name, members):
+    # Review of #26303: a visible non-manual conversation with every recording plus a visible manual one
+    # holding only the Finish recording must not pass as "the Finish conversation holds them all".
+    parsed = load_scenario(stack.SCENARIO_DIR / f'{name}.json')
+    split = [conv('whole', members), conv('only_b', ['B'], manual_end=True)]
+    assert not all(evaluate(c, split, 'B').ok for c in parsed.checks)
+    merged = [conv('whole', members, manual_end=True)]
+    assert all(evaluate(c, merged, 'B').ok for c in parsed.checks)
 
 
 def test_long_gap_scenario_is_longer_than_the_silence_gap_and_reconnects_one_capture():
@@ -91,7 +111,6 @@ def test_long_gap_scenario_is_longer_than_the_silence_gap_and_reconnects_one_cap
     assert parsed.gaps[0]['seconds'] == 360 > 300  # the ordinary v3 silence gap
     assert a.origin == b.origin and a.session != b.session
     assert a.sealed_at < parsed.finish.at < admission_offset(parsed, b) < a.transcript_at
-    assert parsed.expected_failure['strict'] is True
 
 
 def test_batch_rows_name_their_capture_origin_and_session():
@@ -139,6 +158,9 @@ def test_fill_lines_alternate_speakers_and_stay_inside_the_span():
         (lambda r: r['recordings'][0].update(transcript_at=25), 'before the capture is sealed'),
         (lambda r: r['recordings'][1].update(speech=[{'at': 10, 'end': 12, 'text': 'x'}]), 'outside the audio'),
         (lambda r: r['recordings'][1].update(id='A'), 'unique'),
+        (lambda r: r['recordings'][1].update(id='a'), 'ignoring case'),  # both would write scn-a
+        (lambda r: r['sync'][0].update(id='b'), 'ignoring case'),
+        (lambda r: r['origins'].append({'id': 'o'}), 'ignoring case'),
         (lambda r: r['recordings'][1].update(session='S1'), 'new recording session'),
         (lambda r: r['recordings'][0].update(bogus=1), 'unknown keys'),
         (lambda r: r['sync'][0].update(arrives_at=1.5), 'arrives after'),
@@ -148,6 +170,21 @@ def test_fill_lines_alternate_speakers_and_stay_inside_the_span():
         (lambda r: r['expect'].append({'no_hidden_with': 'A', 'visible': True}), 'no other fields'),
         (lambda r: r['expect'].append({'conversation_of': 'A', 'recordings': ['Q']}), 'declared recording'),
         (lambda r: r.update(expected_failure={'strict': True}), 'expected_failure'),
+        (lambda r: r.update(expected_failure={'reason': 'SCA-1: known'}), 'expected_failure.checks'),
+        (lambda r: r.update(expected_failure={'reason': 'SCA-1', 'checks': ['nope']}), 'unknown check label'),
+        (lambda r: r['expect'][1].update(label='Bad Label'), 'label'),
+        (lambda r: [c.update(label='same') for c in r['expect'][:2]], 'check labels must be unique'),
+        (
+            lambda r: [c.update(label=f'c{i}') for i, c in enumerate(r['expect'])]
+            and r.update(expected_failure={'reason': 'SCA-1', 'checks': ['c0', 'c1', 'c2']}),
+            'at least one check that must pass',
+        ),
+        (
+            lambda r: r['recordings'].append(
+                {'id': 'C', 'origin': 'O', 'session': 'S3', 'audio': [40, 58], 'speech': [{'fill': [40, 58]}]}
+            ),
+            'ambiguous',
+        ),
         (lambda r: r.update(env={'X': 1}), 'env'),
     ],
 )
@@ -188,9 +225,39 @@ def test_plan_orders_events_and_places_the_provisional_transcript_after_the_tap(
     assert (event.recording_id, event.instant_source, event.instant) == ('A', 'capture_start', parsed.t0)
 
 
+def test_finish_target_is_the_capture_still_open_until_its_seal():
+    # Review of #26303: audio [0, 40], seal at 50, a tap at 42 still finds the row in_progress (only the
+    # seal completes it), so the fast-finish transcript lands at 42 + 30, not at seal + lag.
+    raw = {
+        'name': 'late_tap',
+        'origins': [{'id': 'O'}],
+        'recordings': [{'id': 'B', 'origin': 'O', 'audio': [0, 40], 'sealed_at': 50, 'speech': [{'fill': [0, 40]}]}],
+        'finish': {'at': 42, 'provisional_latency': 30},
+    }
+    parsed = parse_scenario(raw)
+    assert parsed.finish_target().label == 'B'
+    assert admission_offset(parsed, parsed.recording('B')) == 72
+    raw['finish'] = {'at': 50.5, 'provisional_latency': 30}  # after the seal: nothing is capturing
+    parsed = parse_scenario(raw)
+    assert parsed.finish_target() is None
+    assert admission_offset(parsed, parsed.recording('B')) == 55
+
+
+def test_finish_target_is_the_newest_open_capture():
+    # get_in_progress_conversation orders by created_at descending: A is open until its seal at 45, B from 40.
+    raw = copy.deepcopy(BASE)
+    raw['recordings'][0]['sealed_at'] = 45
+    raw['recordings'][0]['transcript_at'] = 90
+    parsed = parse_scenario({**raw, 'finish': {'at': 42, 'provisional_latency': 20}})
+    assert [r.label for r in parsed.open_at(42)] == ['A', 'B']
+    assert parsed.finish_target().label == 'B'
+
+
 def test_ties_run_finish_before_seal_and_without_fast_finish_admission_follows_the_seal():
     parsed = scenario(finish={'at': 60, 'fast_finish': False})
-    assert parsed.finish_target() is None  # the tap is at B's last instant: nothing is capturing any more
+    assert parsed.finish_target().label == 'B'  # the tap ties B's seal and runs first: B is still capturing
+    parsed = scenario(finish={'at': 60.5, 'fast_finish': False})
+    assert parsed.finish_target() is None
     parsed = scenario(finish={'at': 59.5, 'fast_finish': False})
     kinds = [(parsed.offset(e.instant), e.kind) for e in plan_events(parsed) if e.ref in ('B', 'finish')]
     assert kinds == [(40, 'capture_start'), (59.5, 'finish'), (60, 'seal'), (65, 'admission')]
@@ -237,12 +304,31 @@ def test_conversation_checks_name_missing_targets():
     assert evaluate(parsed.checks[0], [conv('c', ['B'])], 'B').ok
 
 
+def labelled(**changes):
+    raw = copy.deepcopy(BASE)
+    raw['expect'] = [
+        {'label': 'finish_visible', 'conversation_of': '@finish', 'visible': True, 'manual_end': True},
+        {'label': 'merged', 'conversation_of': '@finish', 'recordings': ['A', 'B', 'F']},
+    ]
+    raw.update(changes)
+    return parse_scenario(raw)
+
+
+def results_for(parsed, snapshot, finish_label='B'):
+    return [evaluate(check, snapshot, finish_label) for check in parsed.checks]
+
+
 def test_outcomes_and_exit_codes():
-    plain, xfail = scenario(), scenario(expected_failure={'reason': 'SCA-1: known'})
-    loose = scenario(expected_failure={'reason': 'SCA-1: known', 'strict': False})
-    good = [evaluate(plain.checks[0], [conv('c', ['B'])], 'B')]
-    bad = [evaluate(plain.checks[0], [], 'B')]
-    assert [outcome(plain, good), outcome(plain, bad), outcome(xfail, bad), outcome(xfail, good)] == [
+    known = {'reason': 'SCA-1: known', 'checks': ['merged']}
+    plain, xfail, loose = (
+        labelled(),
+        labelled(expected_failure=known),
+        labelled(expected_failure={**known, 'strict': False}),
+    )
+    good = results_for(plain, [conv('c', ['A', 'B', 'F'], manual_end=True)])
+    incident = results_for(plain, [conv('c', ['F', 'B'], manual_end=True), conv('d', ['A'], visible=False)])
+    assert [r.ok for r in incident] == [True, False]
+    assert [outcome(plain, good), outcome(plain, incident), outcome(xfail, incident), outcome(xfail, good)] == [
         'passed',
         'failed',
         'xfail',
@@ -250,6 +336,16 @@ def test_outcomes_and_exit_codes():
     ]
     assert outcome(loose, good) == 'passed' and outcome(plain, good, error='boom') == 'error'
     assert [OUTCOMES[o] for o in ('passed', 'xfail', 'failed', 'xpass', 'error')] == [0, 0, 1, 1, 2]
+
+
+def test_expected_failure_does_not_excuse_checks_it_does_not_name():
+    # Review of #26303: an empty run with no Finish target failed every check and still read as XFAIL.
+    xfail = labelled(expected_failure={'reason': 'SCA-1: known', 'checks': ['merged']})
+    assert outcome(xfail, results_for(xfail, [], None)) == 'failed'
+    assert outcome(xfail, results_for(xfail, [], 'B')) == 'failed'
+    not_manual = results_for(xfail, [conv('c', ['F', 'B'])])  # the Finish conversation lost its manual end
+    assert [r.ok for r in not_manual] == [False, False] and outcome(xfail, not_manual) == 'failed'
+    assert outcome(xfail, results_for(xfail, [], 'B'), error='boom') == 'error'
 
 
 def test_conversation_row_keeps_safe_fields_only():

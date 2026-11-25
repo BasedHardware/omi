@@ -79,19 +79,12 @@
       "recordings": [
         "A",
         "B"
-      ]
-    },
-    {
-      "conversation_of": "@finish",
+      ],
       "visible": true,
       "manual_end": true
     },
     {
       "no_hidden_with": "A"
     }
-  ],
-  "expected_failure": {
-    "reason": "SCA-4385: on origin/main a manual-end cut does not wait for its capture's pending batch transcript (review of #26304). The planner fix (lane v3-finish-late-predecessor) should flip this to a pass and delete this block.",
-    "strict": true
-  }
+  ]
 }

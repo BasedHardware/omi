@@ -20,10 +20,17 @@ A scenario is one JSON object. Times are seconds from ``t0`` (a synthetic UTC in
       "gaps": [{"origin": "O", "between": ["A", "B"], "reason": "reconnect"}],   # stream gaps (checked)
       "sync": [{"id": "F", "origin": "O", "audio": [1.5, 2.7], "arrives_at": 162, "speech": [...]}],
       "finish": {"at": 38, "fast_finish": true, "provisional_latency": 15},
-      "expect": [{"at": 60, "conversation_of": "@finish", "visible": true}],
-      "expected_failure": {"reason": "SCA-xxxx: ...", "strict": true},
+      "expect": [{"at": 60, "label": "finish_visible", "conversation_of": "@finish", "visible": true}],
+      "expected_failure": {"reason": "SCA-xxxx: ...", "checks": ["finish_visible"], "strict": true},
       "tail_seconds": 1800
     }
+
+Labels name documents (``scn-<label lowercased>``), so recording ids, and origin ids, must differ in more
+than case. Every field of one ``expect`` row must hold for the same conversation, so put membership,
+visibility and manual end of one conversation in one row.
+
+``expected_failure`` names the ``label`` of each check the known bug fails (``checks``). Every other check
+must still pass: a scenario whose unnamed check fails is ``failed``, not ``xfail``.
 
 Speech text must be synthetic. ``fill`` writes placeholder lines from a fixed word list; a line whose
 text contains ``switching topics`` makes the lab's fake outline start a new conversation there.
@@ -31,7 +38,9 @@ text contains ``switching topics`` makes the lab's fake outline start a new conv
 The plan (``plan_events``) is what the runner feeds the v3 driver, earliest first:
 
 - ``capture_start`` (each recording's first audio): the live row is created through capture admission;
-- ``finish`` (the tap): the product's Finish branch is taken at that instant;
+- ``finish`` (the tap): the product's Finish branch is taken at that instant; a batch recording is still
+  capturing from its first audio until its seal (inclusive, since a tie runs the tap first), and the tap
+  ends the latest-started one, as ``get_in_progress_conversation`` orders by ``created_at``;
 - ``seal`` (capture close): the row completes; a Finish that landed while it was capturing is stored on it;
 - ``sync`` (a device-sync fragment arrives): a completed recording with its transcript;
 - ``admission`` (batch record admission): the manual-finish hook runs; with fast finish on it is placed at
@@ -96,6 +105,11 @@ class Recording:
     def doc_id(self) -> str:
         return 'scn-' + self.label.lower()
 
+    @property
+    def sealed(self) -> float:
+        """When the capture closes (batch): ``sealed_at``, else the end of its audio."""
+        return float(self.sealed_at if self.sealed_at is not None else self.audio[1])
+
     def words(self) -> int:
         return sum(len(line.text.split()) for line in self.lines)
 
@@ -114,12 +128,13 @@ class Check:
 
     raw: Mapping[str, Any]
     at: Optional[float] = None
+    label: Optional[str] = None
     conversation_of: Optional[str] = None
     no_hidden_with: Optional[str] = None
     fields: Mapping[str, Any] = field(default_factory=dict)
 
     def describe(self) -> str:
-        when = f'@+{self.at:g}s ' if self.at is not None else ''
+        when = (f'[{self.label}] ' if self.label else '') + (f'@+{self.at:g}s ' if self.at is not None else '')
         if self.no_hidden_with:
             return f'{when}no hidden conversation holds {self.no_hidden_with}'
         parts = ', '.join(f'{k}={json.dumps(v)}' for k, v in self.fields.items())
@@ -166,14 +181,18 @@ class Scenario:
                 return rec.label
         return '?' + doc_id[:8]
 
+    def open_at(self, seconds: float) -> list[Recording]:
+        """Batch recordings still ``in_progress`` at a Finish tap at ``seconds``: from their first audio
+        (``capture_start`` runs before a tied tap) through their seal (the tap runs before a tied seal)."""
+        return [rec for rec in self.recordings if rec.lane == 'batch' and rec.audio[0] <= seconds <= rec.sealed]
+
     def finish_target(self) -> Optional[Recording]:
-        """The batch recording still capturing at the tap: the Finish ends it (production's in-progress branch)."""
+        """The batch recording the tap ends: production's in-progress branch takes the newest in-progress
+        row (``created_at`` = first audio)."""
         if self.finish is None:
             return None
-        for rec in self.recordings:
-            if rec.lane == 'batch' and rec.audio[0] <= self.finish.at < rec.audio[1]:
-                return rec
-        return None
+        capturing = self.open_at(self.finish.at)
+        return max(capturing, key=lambda rec: rec.audio[0]) if capturing else None
 
 
 @dataclass(frozen=True)
@@ -324,6 +343,9 @@ def _check(raw: Any, where: str, labels: set[str], has_finish: bool) -> Check:
             raise ScenarioError(f'{where}: {FINISH_ALIAS} needs a finish')
         if name != FINISH_ALIAS and name not in labels:
             raise ScenarioError(f'{where}: unknown recording {name!r}')
+    label = raw.get('label')
+    if label is not None and (not isinstance(label, str) or not re.match(r'^[a-z0-9_]{1,64}$', label)):
+        raise ScenarioError(f'{where}.label: lowercase letters, digits and _')
     fields = {k: raw[k] for k in CHECK_FIELDS if k in raw}
     if target is not None and not fields:
         raise ScenarioError(f'{where}: a conversation check names at least one of {list(CHECK_FIELDS)}')
@@ -334,7 +356,7 @@ def _check(raw: Any, where: str, labels: set[str], has_finish: bool) -> Check:
             value = fields[key]
             if not isinstance(value, list) or not value or any(v not in labels for v in value):
                 raise ScenarioError(f'{where}.{key}: a list of declared recording labels')
-    return Check(raw=dict(raw), at=at, conversation_of=target, no_hidden_with=hidden, fields=fields)
+    return Check(raw=dict(raw), at=at, label=label, conversation_of=target, no_hidden_with=hidden, fields=fields)
 
 
 def parse_scenario(raw: Any, *, path: Optional[str] = None) -> Scenario:
@@ -370,6 +392,8 @@ def parse_scenario(raw: Any, *, path: Optional[str] = None) -> Scenario:
         if source not in SOURCES:
             raise ScenarioError(f'origins[{i}].source: one of {SOURCES}')
         label = _label(item.get('id'), f'origins[{i}].id')
+        if label.lower() in {o.lower() for o in origins}:
+            raise ScenarioError(f'origins[{i}].id: origin ids must be unique, ignoring case')
         origins[label] = Origin(label, source)
     if not origins:
         raise ScenarioError('origins: declare at least one capture origin')
@@ -384,8 +408,8 @@ def parse_scenario(raw: Any, *, path: Optional[str] = None) -> Scenario:
     if not any(r.lane == 'batch' for r in recordings):
         raise ScenarioError('recordings: at least one')
     labels = [r.label for r in recordings]
-    if len(set(labels)) != len(labels):
-        raise ScenarioError('recording ids must be unique across recordings and sync')
+    if len({r.doc_id for r in recordings}) != len(recordings):
+        raise ScenarioError('recording ids must be unique across recordings and sync, ignoring case')
     finish = None
     if raw.get('finish') is not None:
         item = raw['finish']
@@ -401,11 +425,21 @@ def parse_scenario(raw: Any, *, path: Optional[str] = None) -> Scenario:
     checks = tuple(
         _check(item, f'expect[{i}]', set(labels), finish is not None) for i, item in enumerate(raw.get('expect') or [])
     )
+    check_labels = [c.label for c in checks if c.label is not None]
+    if len(set(check_labels)) != len(check_labels):
+        raise ScenarioError('expect: check labels must be unique')
     failure = raw.get('expected_failure')
     if failure is not None:
         if not isinstance(failure, Mapping) or not str(failure.get('reason') or '').strip():
-            raise ScenarioError('expected_failure: {"reason": "...", "strict": true}')
-        _keys(failure, ('reason', 'strict'), 'expected_failure')
+            raise ScenarioError('expected_failure: {"reason": "...", "checks": ["label"], "strict": true}')
+        _keys(failure, ('reason', 'checks', 'strict'), 'expected_failure')
+        named = failure.get('checks')
+        if not isinstance(named, list) or not named or not all(isinstance(n, str) for n in named):
+            raise ScenarioError('expected_failure.checks: the labels of the checks the known bug fails')
+        if any(n not in check_labels for n in named):
+            raise ScenarioError(f'expected_failure.checks: unknown check label in {named}')
+        if len(set(named)) == len(checks):
+            raise ScenarioError('expected_failure.checks: leave at least one check that must pass')
     scenario = Scenario(
         name=name,
         description=str(raw.get('description') or ''),
@@ -421,9 +455,13 @@ def parse_scenario(raw: Any, *, path: Optional[str] = None) -> Scenario:
         admission_lag=_number(raw.get('admission_lag', DEFAULT_ADMISSION_LAG), 'admission_lag'),
         path=path,
     )
+    if finish is not None:
+        capturing = scenario.open_at(finish.at)
+        if len({rec.audio[0] for rec in capturing}) != len(capturing):
+            raise ScenarioError('finish: two capturing recordings started at the same instant; the target is ambiguous')
     target = scenario.finish_target()
     if finish is not None and target is not None and finish.fast_finish:
-        if finish.at + finish.provisional_latency < (target.sealed_at or target.audio[1]):
+        if finish.at + finish.provisional_latency < target.sealed:
             raise ScenarioError('finish: the provisional transcript cannot land before the capture is sealed')
     return scenario
 
@@ -472,7 +510,7 @@ def admission_offset(scenario: Scenario, rec: Recording) -> float:
     finish = scenario.finish
     if finish is not None and target is not None and rec.label == target.label and finish.fast_finish:
         return finish.at + finish.provisional_latency
-    return float(rec.sealed_at if rec.sealed_at is not None else rec.audio[1]) + scenario.admission_lag
+    return rec.sealed + scenario.admission_lag
 
 
 def plan_events(scenario: Scenario) -> list[ScenarioEvent]:
@@ -487,7 +525,7 @@ def plan_events(scenario: Scenario) -> list[ScenarioEvent]:
             add(float(rec.arrives_at or rec.audio[1]), 'sync', rec.label)
             continue
         add(rec.audio[0], 'capture_start', rec.label)
-        add(float(rec.sealed_at if rec.sealed_at is not None else rec.audio[1]), 'seal', rec.label)
+        add(rec.sealed, 'seal', rec.label)
         add(admission_offset(scenario, rec), 'admission', rec.label)
         if rec.transcript_at is not None:
             add(rec.transcript_at, 'transcript', rec.label)

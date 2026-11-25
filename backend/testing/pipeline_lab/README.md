@@ -159,9 +159,14 @@ recording session, seal, batch transcript landing, scripted lines with speaker a
 device-sync fragments with arrival instants, a Finish tap (fast finish on or off, provisional latency), an
 `env` overlay on top of this checkout's production `backend-sync` profile, and `expect` rows
 (`conversation_of` a label or `@finish`: `recordings`, `recordings_include`, `visible`, `manual_end`,
-`hidden_reason`, `min_words`, `kind`; or `no_hidden_with`), each optionally checked at an instant (`at`).
-`expected_failure: {"reason": "SCA-...", "strict": true}` marks a known bug: the run exits 0 while a check
-fails and 1 once they all pass, so the fix PR must delete the block. The clock is frozen per event by default
+`hidden_reason`, `min_words`, `kind`; or `no_hidden_with`), each optionally checked at an instant (`at`) and named (`label`).
+Every field of one `expect` row must hold for the same conversation, so a row that names membership,
+visibility and manual end pins one Finish conversation. Recording and origin ids must differ in more than
+case (they name documents). The Finish target is the newest batch recording still capturing at the tap, from
+its first audio through its seal. `expected_failure: {"reason": "SCA-...", "checks": ["label"], "strict": true}`
+marks a known bug: `checks` names the `label`s of the expect rows the bug fails. The run exits 0 while only
+those fail and every other check passes, 1 when any other check fails or once they all pass, so the fix PR
+must delete the block. The clock is frozen per event by default
 (`--clock tick` adds real elapsed time, as day replays do), so a scenario gives the same result every run.
 
 The outline LLM is the lab's fake gateway: one conversation per stretch, and a new one at any line containing

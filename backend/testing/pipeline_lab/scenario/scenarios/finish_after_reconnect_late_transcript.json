@@ -33,12 +33,7 @@
   ],
   "finish": {"at": 152, "fast_finish": true, "provisional_latency": 17},
   "expect": [
-    {"conversation_of": "@finish", "recordings": ["A", "B", "F"]},
-    {"conversation_of": "@finish", "visible": true, "manual_end": true},
+    {"conversation_of": "@finish", "recordings": ["A", "B", "F"], "visible": true, "manual_end": true},
     {"no_hidden_with": "A"}
-  ],
-  "expected_failure": {
-    "reason": "SCA-4385: on origin/main a predecessor recording whose batch transcript lands after the Finish cut becomes its own finished conversation, hidden under the Home word floor. The planner fix (lane v3-finish-late-predecessor) should flip this to a pass and delete this block.",
-    "strict": true
-  }
+  ]
 }

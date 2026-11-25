@@ -95,11 +95,17 @@ def evaluate(check: Check, snapshot: Sequence[Mapping[str, Any]], finish_label: 
 
 
 def outcome(scenario: Scenario, results: Sequence[CheckResult], error: Optional[str] = None) -> str:
+    """``xfail`` only when a check the known bug names fails and every other check passes; a failure the
+    bug does not explain is ``failed`` (an empty run, a missing Finish target, an unrelated regression)."""
     if error:
         return 'error'
-    failed = any(not r.ok for r in results)
-    if scenario.expected_failure is None:
-        return 'failed' if failed else 'passed'
-    if failed:
+    failure = scenario.expected_failure
+    named = set((failure or {}).get('checks') or ())
+    failing = [r for r in results if not r.ok]
+    if any(r.check.label not in named for r in failing):
+        return 'failed'
+    if failing:
         return 'xfail'
-    return 'xpass' if scenario.expected_failure.get('strict', True) else 'passed'
+    if failure is None:
+        return 'passed'
+    return 'xpass' if failure.get('strict', True) else 'passed'
