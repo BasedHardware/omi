@@ -180,7 +180,6 @@ BODY_DIGEST = {
     'database.conversation_batch_purge_jobs.run_job': '2c963aa7f8692928c6d1892b87992ea3b369bbb9547b71b48a4ddb21c35cd09b',
     'database.batch_pipeline_store.promote_record_recoveries': 'ce853ebe262f00a49241f670f28e23dfa0951d37cda42e1da34a966899c1ecd1',
     'database.record_custody_receipts.prune': 'a01ec56fc4132450ccd96a0eb11f59bfbdfdb8e7760e8c8d565f11ccd3af8e23',
-    'database.user_usage._s4_month_cache': '14a6b7d82ee83ec56f552ab798b0021e2342ffd920dcdbe2a8e851ec32029f28',
     'database.action_items.FirestoreActionItems.iter_all': '1bc86d38c0b932c87e130090fde9d1105a6ca0df82c636b7dca0e2fd24c9d6d3',
     'database.action_items.FirestoreActionItems.list_ids': '3948d1bcd948a5e6a36d39aef7d4a69bf19562b5fab40edf1e6775aa1165f7d7',
     'database.goals.FirestoreGoals.get_all': '9c29c7df864273b95db4bcad94948043418ce4b29c740ab0732816e2d59564e7',
@@ -202,7 +201,7 @@ BODY_DIGEST = {
     'database.batch_pipeline_projection_release.release_page_settled': 'd863e83874910f88595eb18925f58f8129e1665d7b14dbde81179c443a75c632',
     'database.batch_pipeline_projection_release.release_scan_pass': '92308c42482933a9adde1ca3fc20dff803d3c7c3be88d134d608e532061a1d22',
     'database.batch_pipeline_projection_release.release_scan_pass_settled': '0b064975a7115e66ee082bdf546b2b9bcfc75cbdf14bf08e67ccb595027c4de2',
-    'database.monthly_usage_totals._rebuild': '2c9be83589399a6824fbb2ef7376cd7baf8492e8a780671e31b67a8294b40db0',
+    'database.monthly_usage_totals._rebuild': 'fdd81eee728017f0276208b71c3c9c537124bd3058cd7169fe8f7c2365902d53',
     'database.batch_pipeline_shadow.ShadowStore._busy': 'bf2a9290745e8dd01ebb927b03ed67b08fac05fdb43fd76f81f2dcfa54e0b85a',
     'database.batch_pipeline_shadow.ShadowStore.reap': '014a779e64fb2ab2baded6c4baef3ae9528bd080b8b7bafbd0e68948e8c418d4',
     # Re-reviewed 2026-11-01: intake-outcome evidence kwarg only; no query or read added.
@@ -3354,10 +3353,11 @@ _add(
         'database.monthly_usage_totals.read_monthly_totals',
         base={'uid': UID, 'date': T0},
         domains={'start_date': [None, T0], 'ready_only': [False, True]},
+        neutrals={'shadow_metadata': (None, 'observation envelope does not affect query selection')},
         setup=_monthly_total_user,
         patchers=(
             _stub('database.monthly_usage_totals.lever_enabled', True),
-            _stub('database.monthly_usage_totals._epoch', 'v1'),
+            _stub('database.monthly_usage_totals.usage_month_epoch', 'v1'),
             _monthly_total_transaction_boundary,
         ),
     )
@@ -3368,7 +3368,7 @@ _add(
         base={'uid': UID, 'date': T0},
         setup=_monthly_total_user,
         patchers=(
-            _stub('database.monthly_usage_totals._epoch', 'v1'),
+            _stub('database.monthly_usage_totals.usage_month_epoch', 'v1'),
             _monthly_total_transaction_boundary,
         ),
     )
@@ -3414,21 +3414,32 @@ _add(
 )
 _add(DriverEntry('database.user_usage.get_monthly_chat_usage', base={'uid': UID}, domains={'now': [None, T0]}))
 _add(DriverEntry('database.user_usage.get_monthly_history_for_year', base={'uid': UID, 'date': T0}))
-_add(DriverEntry('database.user_usage.get_monthly_usage_stats', base={'uid': UID, 'date': T0}))
-_add(DriverEntry('database.user_usage.get_monthly_usage_stats_since', base={'uid': UID, 'date': T0, 'start_date': T0}))
 _add(
-    CoveredByEntry(
-        'database.user_usage._s4_month_cache',
-        covered_by=('database.user_usage._fresh_month_stats',),
-        reason='decorator schedules a hit-only background callback; the fresh reader driver records both query variants',
-        expect_observed=False,
-        body_digest=BODY_DIGEST['database.user_usage._s4_month_cache'],
+    DriverEntry(
+        'database.user_usage.get_monthly_usage_stats',
+        base={'uid': UID, 'date': T0},
+        neutrals={'_shadow_metadata': (None, 'observation envelope does not affect query selection')},
     )
 )
 _add(
     DriverEntry(
-        'database.user_usage._fresh_month_stats',
-        base={'uid': UID, 'date': T0, 'timeout': 5.0},
+        'database.user_usage.get_monthly_usage_stats_since',
+        base={'uid': UID, 'date': T0, 'start_date': T0},
+        neutrals={'_shadow_metadata': (None, 'observation envelope does not affect query selection')},
+    )
+)
+
+
+def _shadow_snapshot_stream(query, *_args, **_kwargs):
+    # Both legs use the SDK's original structured query. The historical
+    # consistency selector is exercised against the loopback emulator.
+    return query.stream()
+
+
+_add(
+    DriverEntry(
+        'database.user_usage.read_hourly_usage_for_shadow',
+        base={'uid': UID, 'date': T0, 'timeout': 5.0, 'read_time': T0, 'stream_snapshot': _shadow_snapshot_stream},
         domains={'start_date': [None, T0]},
     )
 )

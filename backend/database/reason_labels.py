@@ -58,6 +58,7 @@ class ReasonFamily(StrEnum):
     SUMMARY_REPAIR_DISCOVERY = 'summary_repair_discovery'
     RECORD_SEAL_REPAIR = 'record_seal_repair'
     HISTORICAL_SUMMARY_OPEN = 'historical_summary_open'
+    MONTHLY_USAGE_SHADOW = 'monthly_usage_shadow'
 
 
 REASON_UNKNOWN_TOTAL = Counter(
