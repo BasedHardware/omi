@@ -325,7 +325,7 @@
       ],
       "lever_expiry": {
         "lifecycle_record_pending_head": {
-          "expires": "2026-11-24",
+          "expires": "2026-12-01",
           "value": 5
         }
       }
@@ -636,7 +636,7 @@
       ],
       "lever_expiry": {
         "lifecycle_record_pending_head": {
-          "expires": "2026-11-24",
+          "expires": "2026-12-01",
           "value": 5
         }
       }
@@ -748,7 +748,7 @@
       ],
       "lever_expiry": {
         "lifecycle_record_pending_head": {
-          "expires": "2026-11-24",
+          "expires": "2026-12-01",
           "value": 5
         }
       }
@@ -967,7 +967,7 @@
       ],
       "lever_expiry": {
         "lifecycle_record_pending_head": {
-          "expires": "2026-11-24",
+          "expires": "2026-12-01",
           "value": 5
         }
       }
@@ -1186,7 +1186,7 @@
       ],
       "lever_expiry": {
         "lifecycle_record_pending_head": {
-          "expires": "2026-11-24",
+          "expires": "2026-12-01",
           "value": 5
         }
       }
@@ -1298,7 +1298,7 @@
       ],
       "lever_expiry": {
         "lifecycle_record_pending_head": {
-          "expires": "2026-11-24",
+          "expires": "2026-12-01",
           "value": 5
         }
       }
@@ -1410,7 +1410,7 @@
       ],
       "lever_expiry": {
         "lifecycle_record_pending_head": {
-          "expires": "2026-11-24",
+          "expires": "2026-12-01",
           "value": 5
         }
       }
@@ -1522,7 +1522,7 @@
       ],
       "lever_expiry": {
         "lifecycle_record_pending_head": {
-          "expires": "2026-11-24",
+          "expires": "2026-12-01",
           "value": 5
         }
       }
@@ -1634,7 +1634,7 @@
       ],
       "lever_expiry": {
         "lifecycle_record_pending_head": {
-          "expires": "2026-11-24",
+          "expires": "2026-12-01",
           "value": 5
         }
       }
@@ -1746,7 +1746,7 @@
       ],
       "lever_expiry": {
         "lifecycle_record_pending_head": {
-          "expires": "2026-11-24",
+          "expires": "2026-12-01",
           "value": 5
         }
       }
@@ -1858,7 +1858,7 @@
       ],
       "lever_expiry": {
         "lifecycle_record_pending_head": {
-          "expires": "2026-11-24",
+          "expires": "2026-12-01",
           "value": 5
         }
       }
@@ -1970,7 +1970,7 @@
       ],
       "lever_expiry": {
         "lifecycle_record_pending_head": {
-          "expires": "2026-11-24",
+          "expires": "2026-12-01",
           "value": 5
         }
       }
@@ -2082,7 +2082,7 @@
       ],
       "lever_expiry": {
         "lifecycle_record_pending_head": {
-          "expires": "2026-11-24",
+          "expires": "2026-12-01",
           "value": 5
         }
       }
@@ -2194,7 +2194,7 @@
       ],
       "lever_expiry": {
         "lifecycle_record_pending_head": {
-          "expires": "2026-11-24",
+          "expires": "2026-12-01",
           "value": 5
         }
       }
@@ -2306,7 +2306,7 @@
       ],
       "lever_expiry": {
         "lifecycle_record_pending_head": {
-          "expires": "2026-11-24",
+          "expires": "2026-12-01",
           "value": 5
         }
       }
@@ -2418,7 +2418,7 @@
       ],
       "lever_expiry": {
         "lifecycle_record_pending_head": {
-          "expires": "2026-11-24",
+          "expires": "2026-12-01",
           "value": 5
         }
       }
@@ -2530,7 +2530,7 @@
       ],
       "lever_expiry": {
         "lifecycle_record_pending_head": {
-          "expires": "2026-11-24",
+          "expires": "2026-12-01",
           "value": 5
         }
       }
@@ -2642,7 +2642,7 @@
       ],
       "lever_expiry": {
         "lifecycle_record_pending_head": {
-          "expires": "2026-11-24",
+          "expires": "2026-12-01",
           "value": 5
         }
       }
@@ -2754,7 +2754,7 @@
       ],
       "lever_expiry": {
         "lifecycle_record_pending_head": {
-          "expires": "2026-11-24",
+          "expires": "2026-12-01",
           "value": 5
         }
       }
@@ -3294,11 +3294,11 @@
       ],
       "lever_expiry": {
         "lifecycle_record_pending_head": {
-          "expires": "2026-11-24",
+          "expires": "2026-12-01",
           "value": 5
         },
         "privacy_checks_shadow": {
-          "expires": "2026-11-24",
+          "expires": "2026-12-01",
           "value": 10
         }
       }
@@ -3410,7 +3410,7 @@
       ],
       "lever_expiry": {
         "lifecycle_record_pending_head": {
-          "expires": "2026-11-24",
+          "expires": "2026-12-01",
           "value": 5
         }
       }
@@ -3522,7 +3522,7 @@
       ],
       "lever_expiry": {
         "lifecycle_record_pending_head": {
-          "expires": "2026-11-24",
+          "expires": "2026-12-01",
           "value": 5
         }
       }
@@ -3634,7 +3634,7 @@
       ],
       "lever_expiry": {
         "lifecycle_record_pending_head": {
-          "expires": "2026-11-24",
+          "expires": "2026-12-01",
           "value": 5
         }
       }
