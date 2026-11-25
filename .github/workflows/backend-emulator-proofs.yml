@@ -139,9 +139,6 @@ jobs:
           --health-interval 5s
           --health-timeout 5s
           --health-retries 10
-    env:
-      OMI_TEST_POSTGRES_DSN: "host=127.0.0.1 port=5432 dbname=postgres user=postgres password=postgres"
-
     steps:
       - name: Checkout code
         uses: actions/checkout@v7
@@ -220,6 +217,9 @@ jobs:
       # firebase.json (127.0.0.1:8085), runs the command, and shuts down -- so a
       # failing proof cannot leave a stray emulator holding the port.
       - name: Run emulator proofs
+        env:
+          # The runner passes this only to the PL-767 proof invocation.
+          PL767_POSTGRES_DSN: "host=127.0.0.1 port=5432 dbname=postgres user=postgres password=postgres"
         run: |
           firebase emulators:exec \
             --only firestore \

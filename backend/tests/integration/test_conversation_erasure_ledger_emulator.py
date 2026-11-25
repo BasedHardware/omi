@@ -1,5 +1,8 @@
 """PL-767: upload-ledger erasure on Firestore and its synchronous PostgreSQL copy."""
 
+import os
+import shlex
+from urllib.parse import parse_qs, urlsplit
 from uuid import uuid4
 
 import pytest
@@ -7,6 +10,72 @@ import pytest
 from tests.integration.test_conversation_batch_purge_emulator import plane  # noqa: F401
 
 pytestmark = pytest.mark.integration
+
+
+def _is_loopback_postgres_dsn(dsn: str) -> bool:
+    """Accept only explicit loopback hosts or Unix sockets for this synthetic-data proof."""
+    try:
+        if dsn.lower().startswith(("postgres://", "postgresql://")):
+            parsed = urlsplit(dsn)
+            query = {key.lower(): values for key, values in parse_qs(parsed.query, keep_blank_values=True).items()}
+            hosts = query.get("host", [parsed.hostname or ""])
+            hostaddrs = query.get("hostaddr", [])
+            options = {key.lower() for key in query}
+        else:
+            values = {}
+            for part in shlex.split(dsn):
+                key, separator, value = part.partition("=")
+                if not separator:
+                    return False
+                values.setdefault(key.lower(), []).append(value)
+            hosts = values.get("host", [""])
+            hostaddrs = values.get("hostaddr", [])
+            options = set(values)
+    except (ValueError, UnicodeError):
+        return False
+
+    # Service files can supply a different target, so this fixture deliberately refuses them.
+    if "service" in options or "servicefile" in options:
+        return False
+    allowed_hosts = {"", "localhost", "127.0.0.1", "::1"}
+    if not all(host.lower() in allowed_hosts or host.startswith("/") for entry in hosts for host in entry.split(",")):
+        return False
+    return all(
+        not address or address.strip("[]").lower() in {"127.0.0.1", "::1"}
+        for entry in hostaddrs
+        for address in entry.split(",")
+    )
+
+
+@pytest.mark.parametrize(
+    "dsn",
+    [
+        "host=localhost port=5432",
+        "host=127.0.0.1 port=5432",
+        "host=::1 port=5432",
+        "host=/var/run/postgresql dbname=postgres",
+        "postgresql://postgres@localhost/postgres",
+        "postgresql://postgres@[::1]/postgres",
+    ],
+)
+def test_loopback_postgres_dsn_is_accepted(dsn):
+    assert _is_loopback_postgres_dsn(dsn)
+
+
+@pytest.mark.parametrize(
+    "dsn",
+    [
+        "host=db-notlocalhost.example dbname=postgres",
+        "host=localhost host=db-notlocalhost.example dbname=postgres",
+        "host=localhost,db.example dbname=postgres",
+        "host=localhost hostaddr=203.0.113.7 dbname=postgres",
+        "service=staging",
+        "postgresql://postgres@db-notlocalhost.example/postgres",
+        "postgresql://localhost/postgres?Host=db-notlocalhost.example",
+    ],
+)
+def test_remote_postgres_dsn_is_rejected(dsn):
+    assert not _is_loopback_postgres_dsn(dsn)
 
 
 @pytest.fixture(params=['firestore', 'postgres-copy'])
@@ -24,9 +93,13 @@ def ledger_purge_stores(request, plane, monkeypatch):
         primary = FirestoreStore(f'batch_pipeline_test_{uuid4().hex[:12]}', firestore_client=plane.client)
         yield (primary,)
         return
-    # This synthetic-data proof accepts local DSNs but must never opt into a
-    # staging IAM target or a remote DSN explicitly enabled by the caller.
+    # This synthetic-data proof must never use a staging IAM target or caller-supplied remote DSN.
     for name in ('OMI_TEST_POSTGRES_IAM', 'OMI_TEST_POSTGRES_ALLOW_REMOTE'):
+        monkeypatch.delenv(name, raising=False)
+    dsn = os.getenv('OMI_TEST_POSTGRES_DSN')
+    if dsn and not _is_loopback_postgres_dsn(dsn):
+        raise BackendUnavailable('PL-767 requires a loopback or Unix-socket OMI_TEST_POSTGRES_DSN')
+    for name in ('PGHOST', 'PGHOSTADDR', 'PGSERVICE', 'PGSERVICEFILE'):
         monkeypatch.delenv(name, raising=False)
     try:
         postgres = make_postgres()

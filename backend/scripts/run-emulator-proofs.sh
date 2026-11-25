@@ -86,7 +86,8 @@ if [[ "$FIRESTORE_EMULATOR_HOST" == 127.0.0.1:* || "$FIRESTORE_EMULATOR_HOST" ==
     tests/integration/test_conversation_purge_mixed_version_emulator.py \
     tests/unit/test_record_wal_handoff_emulator.py
   run_proof "PL-767 upload-keyed batch erasure (Firestore + PostgreSQL required)" \
-    env OMI_REQUIRE_STORE_BACKENDS=all \
+    env OMI_TEST_POSTGRES_DSN="${PL767_POSTGRES_DSN:-${OMI_TEST_POSTGRES_DSN:-}}" \
+      OMI_REQUIRE_STORE_BACKENDS=all \
     "$PYTHON" -m pytest -q -rs -p no:cacheprovider tests/integration/test_conversation_erasure_ledger_emulator.py
 else
   echo "FAIL conversation purge and PL-767: a loopback Firestore emulator is required" >&2
@@ -132,7 +133,7 @@ run_proof "privacy cache replay (120-transition smoke and catch proofs)" \
   "$PYTHON" -m pytest -q -p no:cacheprovider tests/integration/test_replay_harness_privacy_firestore.py
 
 # Job-store conformance (legacy-retire lane 12): sim + Firestore emulator legs here; the Postgres leg
-# skips in CI (no Postgres service, decision S6) and is proven locally/staging.
+# remains optional in CI and is proven locally/staging. The disposable service is scoped to PL-767 below.
 # Includes PL-141/142/143 scheduler pull ownership, expiry and abort/restart recovery.
 run_proof "job-store conformance (fenced pulls, projection scan fallback and custody)" \
   env "OMI_REQUIRE_STORE_BACKENDS=${OMI_REQUIRE_STORE_BACKENDS:-sim,emulator}" \

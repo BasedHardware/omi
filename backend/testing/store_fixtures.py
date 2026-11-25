@@ -9,8 +9,8 @@ A backend whose infrastructure is missing is SKIPPED, because a laptop without a
 must still run the rest. A skip proves nothing, so ``OMI_REQUIRE_STORE_BACKENDS=emulator,postgres``
 (comma list or ``all``) turns a missing backend into a failure; run it that way when a result is
 claimed. Most GitHub CI jobs do not provide PostgreSQL and skip that matrix leg. The Backend Emulator
-Proofs workflow provides a disposable PostgreSQL service for PL-767 and requires that leg; the full
-PostgreSQL matrix remains qualified locally and on staging.
+Proofs workflow provides a disposable PostgreSQL service only to PL-767 and requires that leg; the
+full PostgreSQL matrix remains qualified locally and on staging.
 
 Postgres discovery order, all loopback by construction (a unix socket in a private temp dir):
 1. ``OMI_TEST_POSTGRES_DSN`` for an already-running server. A non-local host additionally needs
