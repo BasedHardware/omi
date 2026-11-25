@@ -1,0 +1,97 @@
+{
+  "name": "finish_after_long_reconnect_gap",
+  "description": "SCA-4385 variant, synthetic. The incident's capture without the sync fragment, and with a 360 s stream gap between A (0-64 s) and B (424-449 s), longer than the ordinary 300 s silence gap: only the reconnect rule (same origin and device, new session) joins A and B. A seals at 404 s, when listen gives up on the lost stream. The user taps Finish at 447 s; B's fast-finish transcript lands at 464 s and A's batch transcript at 479 s. The Finish conversation should hold A and B and be visible on Home.",
+  "origins": [
+    {
+      "id": "O",
+      "source": "omi"
+    }
+  ],
+  "recordings": [
+    {
+      "id": "A",
+      "origin": "O",
+      "session": "S1",
+      "audio": [
+        0,
+        64
+      ],
+      "sealed_at": 404,
+      "transcript_at": 479,
+      "speech": [
+        {
+          "fill": [
+            3,
+            64
+          ],
+          "every": 4,
+          "words": 10,
+          "speakers": [
+            "SPEAKER_00",
+            "SPEAKER_01"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "B",
+      "origin": "O",
+      "session": "S2",
+      "audio": [
+        424,
+        449
+      ],
+      "transcript_at": 524,
+      "speech": [
+        {
+          "fill": [
+            424.5,
+            449
+          ],
+          "every": 4,
+          "words": 10,
+          "speakers": [
+            "SPEAKER_00",
+            "SPEAKER_01"
+          ]
+        }
+      ]
+    }
+  ],
+  "gaps": [
+    {
+      "origin": "O",
+      "between": [
+        "A",
+        "B"
+      ],
+      "reason": "reconnect"
+    }
+  ],
+  "finish": {
+    "at": 447,
+    "fast_finish": true,
+    "provisional_latency": 17
+  },
+  "expect": [
+    {
+      "conversation_of": "@finish",
+      "recordings": [
+        "A",
+        "B"
+      ]
+    },
+    {
+      "conversation_of": "@finish",
+      "visible": true,
+      "manual_end": true
+    },
+    {
+      "no_hidden_with": "A"
+    }
+  ],
+  "expected_failure": {
+    "reason": "SCA-4385: on origin/main a manual-end cut does not wait for its capture's pending batch transcript (review of #26304). The planner fix (lane v3-finish-late-predecessor) should flip this to a pass and delete this block.",
+    "strict": true
+  }
+}

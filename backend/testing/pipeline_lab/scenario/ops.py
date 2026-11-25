@@ -165,7 +165,12 @@ class ScenarioOps(ProductV3Ops):
                 record_lane_owner='batch_live_v1',
                 server_batch_only=True,
                 server_batch_audio_start=start.timestamp(),
-                external_data={'recording_session_id': f'scenario-session-{(rec.session or rec.label).lower()}'},
+                # Listen stamps every generation of one client recording with its origin
+                # (routers/listen/conversations.py); a reconnect opens a new session under it.
+                external_data={
+                    'recording_session_id': f'scenario-session-{(rec.session or rec.label).lower()}',
+                    'recording_origin_id': f'scenario-origin-{origin.label.lower()}',
+                },
             )
         return row
 
