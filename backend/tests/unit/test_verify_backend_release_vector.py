@@ -1917,9 +1917,7 @@ def test_backend_listen_rollout_wait_can_cover_a_real_rollout():
     )
 
 
-@pytest.fixture(scope='module')
-def deploy_script_argparse_literals(request):
-    directory, pattern = request.param
+def _collect_deploy_script_argparse_literals(directory, pattern):
     paths = sorted((REPOSITORY_ROOT / directory).glob(pattern))
     literals = []
     for path in paths:
@@ -1942,17 +1940,29 @@ def deploy_script_argparse_literals(request):
     return literals
 
 
+@pytest.fixture(scope='module')
+def deploy_script_argparse_literals(request):
+    # Only scan groups selected in this worker, so the fast lane still skips backend/scripts.
+    groups = dict.fromkeys(
+        item.callspec.params['argparse_script_group']
+        for item in request.session.items
+        if isinstance(item, pytest.Function)
+        and item.getparent(pytest.Module) is request.node
+        and 'deploy_script_argparse_literals' in item.fixturenames
+    )
+    return {group: _collect_deploy_script_argparse_literals(*group) for group in groups}
+
+
 @pytest.mark.parametrize(
-    'deploy_script_argparse_literals',
+    'argparse_script_group',
     [
         pytest.param(('backend/scripts', '*.py'), marks=pytest.mark.slow, id='backend/scripts-*.py'),
         pytest.param(('infra/rollout', '**/*.py'), id='infra/rollout-**/*.py'),
         pytest.param(('.github/scripts', '**/*.py'), id='.github/scripts-**/*.py'),
     ],
-    indirect=True,
 )
-def test_deploy_script_argparse_percent_escapes(deploy_script_argparse_literals):
+def test_deploy_script_argparse_percent_escapes(argparse_script_group, deploy_script_argparse_literals):
     # Deploy run 42177595382: Python 3.14 rejects bare % while building the parser.
-    for path, lineno, literal in deploy_script_argparse_literals:
+    for path, lineno, literal in deploy_script_argparse_literals[argparse_script_group]:
         remainder = re.sub(r'%%|%\([^)]+\)s', '', literal)
         assert '%' not in remainder, f'{path}:{lineno}: escape literal percent as %%'
