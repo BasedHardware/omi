@@ -510,9 +510,9 @@ PROVIDER_429_BACKOFF_CAP_SECONDS = 60.0
 
 
 # Flex-first: try OpenAI Flex (Batch-API token rates, 50% below Standard) on
-# background conversation lanes, then fall straight back to Standard on any
-# provider failure. Prod 7d on memory-l2-flex (gpt-6-luna): 92% served, 8%
-# Flex 429, p50 7.3s vs 5.2s Standard. Callers of these lanes give up at the
+# background conversation lanes, with a Standard reserve after a rejection.
+# Prod 7d on memory-l2-flex (gpt-6-luna): 92% served, 8% Flex 429,
+# p50 7.3s vs 5.2s Standard. Callers of these lanes give up at the
 # backend's 60s foreground timeout, which the gateway cannot see, so each lane's
 # Flex cap leaves Standard well above its own 7d p99 (conv-structure 35.9s,
 # memory-l1 18.8s): 60-15=45s and 60-10=50s. A Flex 429 returns fast and costs
@@ -889,16 +889,13 @@ async def _attempt_provider(
                 )
             rejected = exc.failure_class == FailureClass.PROVIDER_429_OMI_PAID and exc.upstream_http_status == 429
             if flex_attempt:
-                if flex_deadline is not None:
-                    # Preserve completion on the existing recovery lanes. A receipt-free
-                    # timeout still has indeterminate usage, so never retry it on Flex.
-                    use_reserve = rejected or (
-                        route.lane_id in DEFAULT_FLEX_FIRST_LANES
-                        and exc.failure_class == FailureClass.TIMEOUT_BEFORE_OUTPUT
-                    )
-                    if exc.accounting is not None or not use_reserve:
-                        FLEX_FIRST_TOTAL.labels(lane_id=route.lane_id, outcome='stopped_after_error').inc()
-                        raise _BackgroundFlexTerminalError(error) from exc
+                # A timeout leaves usage indeterminate. Only a confirmed rejection
+                # can spend the scoped Standard reserve without paying twice.
+                if exc.failure_class == FailureClass.TIMEOUT_BEFORE_OUTPUT or (
+                    flex_deadline is not None and (exc.accounting is not None or not rejected)
+                ):
+                    FLEX_FIRST_TOTAL.labels(lane_id=route.lane_id, outcome='stopped_after_error').inc()
+                    raise _BackgroundFlexTerminalError(error) from exc
                 if flex_deadline is not None and rejected and flex_attempts < BACKGROUND_FLEX_MAX_ATTEMPTS:
                     retry_slack = flex_deadline - monotonic() - BACKGROUND_FLEX_MIN_ATTEMPT_MS / 1000
                     delay = provider_429_backoff_seconds(
@@ -912,7 +909,6 @@ async def _attempt_provider(
                             continue
                 flex_deadline = None
                 reason = {
-                    FailureClass.TIMEOUT_BEFORE_OUTPUT: ConvStructureFlexFallbackReason.TIMEOUT.value,
                     FailureClass.PROVIDER_429_OMI_PAID: ConvStructureFlexFallbackReason.HTTP_429.value,
                 }.get(exc.failure_class, ConvStructureFlexFallbackReason.OTHER.value)
                 FLEX_FIRST_TOTAL.labels(lane_id=route.lane_id, outcome='fallback_standard').inc()

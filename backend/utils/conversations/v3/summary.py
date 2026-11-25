@@ -251,7 +251,9 @@ async def stream(
         if row.get('recording') or row.get('is_locked'):
             yield 'error: {"detail":"Conversation not available"}\n\n'
             return
-        if fallback_open and (fresh(row) or not summary_eligible(row)):
+        if not live and (fresh(row) or not summary_eligible(row)):
+            await run_blocking(db_executor, leases.release, uid, 'summary-' + cid, token)
+            token = None
             yield done(row)
             return
         # run_blocking is awaited by a tracked task and never holds a DB worker
@@ -328,7 +330,8 @@ async def stream(
                 pass  # A newer owner/content revision keeps its own presentation.
         yield 'error: {"detail":"Summary unavailable; poll conversation detail"}\n\n'
     finally:
-        await run_blocking(db_executor, leases.release, uid, 'summary-' + row['id'], token)
+        if token is not None:
+            await run_blocking(db_executor, leases.release, uid, 'summary-' + cid, token)
 
 
 async def _wake_created(uid):

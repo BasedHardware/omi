@@ -96,6 +96,37 @@ async def test_stored_summary_returns_chat_done_without_a_writer(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_stream_serves_background_summary_settled_before_lease_acquisition(monkeypatch, strict):
+    async def blocking(pool, fn, *args, **kwargs):
+        return fn(*args, **kwargs)
+
+    row = {
+        'id': 'c',
+        'v3_derived': True,
+        'finished_at': AT,
+        'transcript_segments': [{'text': 'word ' * 400}],
+    }
+    settled = {**row, 'summary_covers_through': AT, 'structured': {'title': 'Background notes'}}
+    released = []
+
+    def acquire(*args):
+        strict.rows[('users', 'u', 'conversations', 'c')] = settled
+        return 'token'
+
+    monkeypatch.setattr(summary, 'run_blocking', blocking)
+    monkeypatch.setattr(summary.store, 'get_firestore_client', lambda: strict)
+    monkeypatch.setattr(summary.store, 'decode_row', lambda uid, snapshot: snapshot.to_dict())
+    monkeypatch.setattr(leases, 'acquire', acquire)
+    monkeypatch.setattr(leases, 'release', lambda *args: released.append(args))
+    monkeypatch.setattr(summary, 'write', lambda *args: pytest.fail('fresh summary called the notes model'))
+
+    stream = summary.stream('u', row)
+    assert await anext(stream) == summary.done(settled)
+    assert released == [('u', 'summary-c', 'token')]
+    assert [frame async for frame in stream] == []
+
+
+@pytest.mark.asyncio
 async def test_competing_writer_returns_pollable_error(monkeypatch):
     from fastapi import HTTPException
 

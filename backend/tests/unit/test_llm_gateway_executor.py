@@ -1050,7 +1050,6 @@ async def test_flex_first_success_sends_flex_once(monkeypatch):
     'failure_class',
     [
         FailureClass.PROVIDER_429_OMI_PAID,
-        FailureClass.TIMEOUT_BEFORE_OUTPUT,
         FailureClass.PROVIDER_5XX_OMI_PAID,
         FailureClass.PROVIDER_INVALID_REQUEST,
     ],
@@ -1086,10 +1085,9 @@ async def test_flex_first_failure_falls_back_to_standard_without_backoff(monkeyp
 @pytest.mark.parametrize(
     ('lane_id', 'failure_class', 'reason'),
     [
-        ('omi:auto:conv-structure', FailureClass.TIMEOUT_BEFORE_OUTPUT, 'timeout'),
         ('omi:auto:conv-structure', FailureClass.PROVIDER_429_OMI_PAID, 'http_429'),
         ('omi:auto:conv-structure', FailureClass.PROVIDER_5XX_OMI_PAID, 'other'),
-        (LANE_ID, FailureClass.TIMEOUT_BEFORE_OUTPUT, None),
+        (LANE_ID, FailureClass.PROVIDER_429_OMI_PAID, None),
     ],
 )
 @pytest.mark.asyncio
@@ -1433,7 +1431,7 @@ async def test_background_flex_gateway_switch_restores_legacy_for_zero_budget(mo
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize('lane', ['conv-structure', 'memory-l1', 'conversation-v3-summary'])
-async def test_background_flex_timeout_uses_standard_reserve_and_retries_standard(monkeypatch, lane):
+async def test_background_flex_429_uses_standard_reserve_and_retries_standard(monkeypatch, lane):
     lane = f'omi:auto:{lane}'
     resolved = resolve_chat_completion_route(
         gateway_config(), {'model': lane, 'messages': [{'role': 'user', 'content': 'Synthetic prompt'}]}
@@ -1447,7 +1445,7 @@ async def test_background_flex_timeout_uses_standard_reserve_and_retries_standar
     resolved = replace(resolved, active_route=active)
     provider = FakeChatCompletionProvider(
         [
-            ProviderFailure(FailureClass.TIMEOUT_BEFORE_OUTPUT),
+            ProviderFailure(FailureClass.PROVIDER_429_OMI_PAID, retry_after_seconds=90, upstream_http_status=429),
             ProviderFailure(FailureClass.PROVIDER_429_OMI_PAID, retry_after_seconds=2, upstream_http_status=429),
             fake_success_response(active.primary),
         ]
@@ -1463,6 +1461,31 @@ async def test_background_flex_timeout_uses_standard_reserve_and_retries_standar
     )
     assert slept == [2]
     assert [call.request.get('service_tier') for call in provider.calls] == ['flex', None, None]
+    assert trace.attempts[0].usage_status == UsageStatus.INDETERMINATE
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('lane', ['conv-structure', 'memory-l1', 'conversation-v3-summary'])
+@pytest.mark.parametrize('scoped', [True, False])
+async def test_flex_timeout_without_receipt_stops_dispatch(monkeypatch, lane, scoped):
+    lane = f'omi:auto:{lane}'
+    if not scoped:
+        monkeypatch.setenv(executor.BACKGROUND_FLEX_SWITCH, 'off')
+    resolved = resolve_chat_completion_route(
+        gateway_config(), {'model': lane, 'messages': [{'role': 'user', 'content': 'Synthetic prompt'}]}
+    )
+    provider = FakeChatCompletionProvider([ProviderFailure(FailureClass.TIMEOUT_BEFORE_OUTPUT)])
+    _install_retry_clock(monkeypatch)
+    trace = AttemptTrace()
+    with pytest.raises(GatewayProviderFailureError):
+        await execute_chat_completion(
+            resolved,
+            omi_credentials(),
+            ProviderRegistry({'openai': provider}),
+            attempt_trace=trace,
+            background_flex_budget_ms=57_000,
+        )
+    assert [call.request.get('service_tier') for call in provider.calls] == ['flex']
     assert trace.attempts[0].usage_status == UsageStatus.INDETERMINATE
 
 
