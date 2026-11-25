@@ -263,10 +263,12 @@ also runs `tests/promql/firestore_cost_budget.py`; no workflow change is needed.
 Release uses **Provision selected Firestore cost alerts**
 (`firestore_cost_alert_provisioning.yml`), never the all-bundle dashboard workflow
 for this outcome. It is manual, main-only, requires the `prod` Environment gate,
-and shares the existing production Grafana locks. Set `source_sha` to the reviewed
-merged main SHA; a dispatch whose actual checkout differs fails before contacting
-Grafana. Set `target_uids` to the exact comma-separated subset of the three UIDs
-above. Empty, wildcard, duplicate and every other UID are refused. Start with
+and shares the job-level alert lock with the existing live-alert importer; it
+does not acquire the dashboard-bundle lock before Environment approval. Set
+`source_sha` to the reviewed merged main SHA; a dispatch whose actual checkout
+differs fails before contacting Grafana. Dry-run can select a subset; apply and
+restore require all three UIDs above. Empty, wildcard, duplicate and every other
+UID are refused. Start with
 `operation=dry-run`; Release alone authorizes `operation=apply` after reviewing
 the selected diff and effective ticket/mute route. No dashboard step or Business
 credential is present in this workflow.
@@ -282,16 +284,26 @@ boards; those are protected by absent credentials and the mutation boundary.
 
 Preserve artifact `firestore-alert-evidence-<run-id>` for 15 days: the exclusive,
 0600 pre-write backup contains prior selected definitions and `created_uids`;
-the receipt binds its SHA-256, source SHA, selected readback and non-target
-inventory hashes. A failed/partial write retains the backup and an incomplete
+the receipt binds its SHA-256, originating run ID and apply operation, source SHA,
+selected readback and non-target inventory hashes. Before restore, the workflow
+fetches the run metadata through the Actions API and validates the workflow path,
+main branch, dispatch event, source SHA, run ID, operation, target set and backup
+checksum. A failed/partial write retains the backup and an incomplete
 receipt; it must never be treated as acceptance. Before rollback Release reviews
 that backup, then dispatches the same gated main workflow with `operation=restore`,
 the identical selected UID set, and `restore_run_id` of the original scoped apply.
-The workflow verifies the backup checksum; restore refuses backup UIDs outside
+Restore also re-reads each newly created rule immediately before deletion and
+refuses to delete it if its live definition changed since the apply. The receipt
+records each deleted definition and hash. Restore refuses backup UIDs outside
 the selected set, restores prior definitions/provenance, deletes only selected
 UIDs that the original apply created, and saves a fresh pre-restore backup and
 receipt. Code revert alone does not restore installed rules. Never run the
 executor directly as a substitute for Release's production approval.
+
+The existing `gcp_cloud_run_metrics_egress.yml` `provision-live-alerts` import
+also writes alert rules and can include these UIDs. Both paths share the job-level
+alert lock. The operation owner that performed a write owns its rollback; the
+scoped restore artifact only rolls back a matching scoped apply run.
 
 Independent Verify still needs the applied run/source and backup receipt, exact
 installed expression comparison, unchanged non-target inventory, fresh ro-prod

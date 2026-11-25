@@ -16,6 +16,7 @@ import provision_monitoring_alerts as shared
 TARGETS = frozenset(
     ('omi-firestore-batch-reads-audio-hour', 'omi-firestore-batch-reads-no-output', 'omi-firestore-billed-reads-step')
 )
+WORKFLOW_PATH = '.github/workflows/firestore_cost_alert_provisioning.yml'
 
 
 def select_uids(value: str) -> frozenset[str]:
@@ -90,6 +91,73 @@ def write_json(path: Path, value):
         os.fsync(handle.fileno())
 
 
+def validate_restore_evidence(receipt, backup_bytes, run_metadata, expected_run_id, targets):
+    """Bind rollback inputs to the original successful-or-partial scoped apply run."""
+    expected_id = str(expected_run_id)
+    if not expected_id.isdecimal():
+        raise ValueError('restore run ID must be numeric')
+    if not isinstance(run_metadata, dict):
+        raise ValueError('restore run metadata is invalid')
+    if str(run_metadata.get('id', '')) != expected_id:
+        raise ValueError('restore metadata run ID mismatch')
+    if (
+        run_metadata.get('path') != WORKFLOW_PATH
+        or run_metadata.get('head_branch') != 'main'
+        or run_metadata.get('event') != 'workflow_dispatch'
+        or run_metadata.get('status') != 'completed'
+        or run_metadata.get('conclusion') not in {'success', 'failure', 'cancelled', 'timed_out'}
+    ):
+        raise ValueError('restore must reference a completed main dispatch of the scoped workflow')
+    head_sha = run_metadata.get('head_sha')
+    if not isinstance(head_sha, str) or len(head_sha) != 40 or any(c not in '0123456789abcdef' for c in head_sha):
+        raise ValueError('restore run metadata has an invalid source SHA')
+    if not isinstance(receipt, dict):
+        raise ValueError('restore receipt is invalid')
+    if str(receipt.get('run_id', '')) != expected_id:
+        raise ValueError('restore receipt run ID mismatch')
+    if receipt.get('operation') != 'apply' or receipt.get('mode') != 'apply':
+        raise ValueError('restore artifact must come from an apply operation')
+    if receipt.get('source_sha') != head_sha:
+        raise ValueError('restore receipt source SHA does not match its workflow run')
+    expected_targets = sorted(targets)
+    if expected_targets != sorted(TARGETS) or receipt.get('targets') != expected_targets:
+        raise ValueError('restore receipt must cover exactly the approved Firestore UIDs')
+    selected_expected = receipt.get('selected_expected')
+    if not isinstance(selected_expected, dict) or set(selected_expected) != targets:
+        raise ValueError('restore receipt has no complete original selected definition')
+    if any(not isinstance(rule, dict) or rule.get('uid') != uid for uid, rule in selected_expected.items()):
+        raise ValueError('restore receipt selected definitions are invalid')
+    backup_sha256 = receipt.get('backup_sha256')
+    if (
+        not isinstance(backup_sha256, str)
+        or len(backup_sha256) != 64
+        or any(c not in '0123456789abcdef' for c in backup_sha256)
+    ):
+        raise ValueError('restore receipt is missing a valid backup checksum')
+    if hashlib.sha256(backup_bytes).hexdigest() != backup_sha256:
+        raise ValueError('restore backup checksum mismatch')
+    return receipt
+
+
+def load_restore_evidence(receipt_path, backup_path, metadata_path, expected_run_id, targets):
+    try:
+        receipt = json.loads(receipt_path.read_text())
+        metadata = json.loads(metadata_path.read_text())
+        backup_bytes = backup_path.read_bytes()
+    except (OSError, ValueError, UnicodeError):
+        raise ValueError('restore evidence files are missing or invalid') from None
+    return validate_restore_evidence(receipt, backup_bytes, metadata, expected_run_id, targets)
+
+
+def safe_error_diagnostic(error):
+    """Return a short diagnostic without response bodies, credentials, or filesystem paths."""
+    if isinstance(error, OSError):
+        message = f'errno={error.errno}; {error.strerror or "filesystem operation failed"}'
+    else:
+        message = str(error)
+    return {'type': type(error).__name__, 'message': message[:240]}
+
+
 def restore_plan(path: Path, targets):
     backup = json.loads(path.read_text())
     if not isinstance(backup, dict) or set(backup) != {'rules', 'created_uids'}:
@@ -129,18 +197,43 @@ def verify_canaries(api, live, desired):
         raise ValueError('existing datasource canary probes failed')
 
 
-def execute(api, desired, targets, *, backup=None, restore=None, evidence=None):
+def execute(
+    api,
+    desired,
+    targets,
+    *,
+    backup=None,
+    restore=None,
+    evidence=None,
+    restore_evidence=None,
+    run_id='unit-test',
+):
     if not targets or not targets <= TARGETS or set(desired) != targets:
         raise ValueError('desired rules must cover exactly the selected Firestore UIDs')
+    if backup is not None and targets != TARGETS:
+        raise ValueError('apply and restore require exactly the three approved Firestore UIDs')
+    if restore is not None and restore_evidence is None:
+        raise ValueError('restore requires the originating apply receipt')
+    if restore_evidence is not None:
+        validate_restore_evidence_shape(restore_evidence, targets)
     saved, created = restore_plan(restore, targets) if restore else ({}, [])
-    before = snapshot(api, targets)
     receipt = evidence if evidence is not None else {}
+    operation = 'restore' if restore else 'apply' if backup else 'dry-run'
+    mode = operation if backup else 'dry-run'
     receipt.update(
         status='incomplete',
+        operation=operation,
+        mode=mode,
+        run_id=str(run_id),
         targets=sorted(targets),
-        unchanged_before=before,
         selected_expected=saved if restore else desired,
     )
+    organization = api.request('/api/org')
+    if not isinstance(organization, dict) or type(organization.get('id')) is not int or organization['id'] != 1:
+        raise ValueError('refusing Grafana organization other than Ops (id 1)')
+    receipt['grafana_org_id'] = 1
+    before = snapshot(api, targets)
+    receipt['unchanged_before'] = before
     live = api.rules()
     # Shared reconciliation sees only selected rules. Check their full live
     # groups first so filtering cannot hide a provenance boundary.
@@ -157,13 +250,20 @@ def execute(api, desired, targets, *, backup=None, restore=None, evidence=None):
     scoped = ScopedGrafana(api, targets)
     if restore:
         receipt['restore_delete_uids'] = sorted(created)
+        receipt['restore_deleted'] = {}
         if any(live[uid].get('provenance', '') not in ('', 'api') for uid in created if uid in live):
             raise ValueError('restore cannot delete rules owned by another provisioner')
         # Restore can delete only UIDs that the original selected apply created.
         differences = shared.drift(saved, scoped.rules())
+        verify_canaries(api, live, saved)
         if backup:
-            verify_canaries(api, live, saved)
-            write_json(backup, {'rules': list(scoped.rules().values()), 'created_uids': sorted(targets - live.keys())})
+            write_json(
+                backup,
+                {
+                    'rules': list(scoped.rules().values()),
+                    'created_uids': sorted(targets - live.keys()),
+                },
+            )
             for uid, rule in saved.items():
                 scoped.request(
                     shared.API + '/' + uid if uid in live else shared.API,
@@ -172,28 +272,45 @@ def execute(api, desired, targets, *, backup=None, restore=None, evidence=None):
                     editable=rule.get('provenance', '') == '',
                 )
             for uid in created:
-                if uid in live:
+                current = scoped.rules()
+                if uid in current:
+                    expected = restore_evidence['selected_expected'][uid]
+                    if current[uid].get('provenance', '') not in ('', 'api'):
+                        raise ValueError(f'restore cannot delete rule {uid} owned by another provisioner')
+                    if shared.comparable(current[uid]) != shared.comparable(expected):
+                        raise ValueError(f'restore refuses to delete changed rule {uid}')
+                    deleted_definition = shared.comparable(current[uid])
                     scoped.request(shared.API + '/' + uid, method='DELETE')
+                    receipt['restore_deleted'][uid] = {
+                        'definition': deleted_definition,
+                        'sha256': fingerprint(deleted_definition),
+                    }
             current = scoped.rules()
             differences = shared.drift(saved, current)
     else:
         differences = shared.drift(desired, scoped.rules())
+        verify_canaries(api, live, desired)
+        contacts = api.request('/api/v1/provisioning/contact-points')
+        if not isinstance(contacts, list) or not any(
+            isinstance(point, dict)
+            and point.get('name') == shared.RECEIVER
+            and point.get('type') == 'telegram'
+            and point.get('disableResolveMessage') is not True
+            for point in contacts
+        ):
+            raise ValueError('Telegram receiver is missing or resolve notifications disabled')
+        for folder in sorted({rule['folderUID'] for rule in desired.values()}):
+            api.request('/api/folders/' + urllib.parse.quote(folder, safe=''))
         if backup:
             # Unlike bundle reconciliation, this path must never install or
             # repair canaries. Existing committed canaries must already pass.
-            verify_canaries(api, live, desired)
-            contacts = api.request('/api/v1/provisioning/contact-points')
-            if not isinstance(contacts, list) or not any(
-                isinstance(point, dict)
-                and point.get('name') == shared.RECEIVER
-                and point.get('type') == 'telegram'
-                and point.get('disableResolveMessage') is not True
-                for point in contacts
-            ):
-                raise ValueError('Telegram receiver is missing or resolve notifications disabled')
-            for folder in sorted({rule['folderUID'] for rule in desired.values()}):
-                api.request('/api/folders/' + urllib.parse.quote(folder, safe=''))
-            write_json(backup, {'rules': list(scoped.rules().values()), 'created_uids': sorted(targets - live.keys())})
+            write_json(
+                backup,
+                {
+                    'rules': list(scoped.rules().values()),
+                    'created_uids': sorted(targets - live.keys()),
+                },
+            )
             for uid, rule in sorted(desired.items()):
                 if uid in live and shared.comparable(rule) == shared.comparable(live[uid]):
                     continue
@@ -230,13 +347,29 @@ def execute(api, desired, targets, *, backup=None, restore=None, evidence=None):
     return receipt
 
 
+def validate_restore_evidence_shape(receipt, targets):
+    if (
+        not isinstance(receipt, dict)
+        or receipt.get('operation') != 'apply'
+        or receipt.get('mode') != 'apply'
+        or receipt.get('targets') != sorted(targets)
+        or not isinstance(receipt.get('selected_expected'), dict)
+        or set(receipt['selected_expected']) != targets
+    ):
+        raise ValueError('restore requires a complete receipt from the original selected apply')
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--target-uids', required=True)
     parser.add_argument('--source-sha', required=True)
+    parser.add_argument('--run-id', required=True)
     parser.add_argument('--apply', action='store_true')
     parser.add_argument('--backup-file', type=Path)
     parser.add_argument('--restore-file', type=Path)
+    parser.add_argument('--restore-receipt-file', type=Path)
+    parser.add_argument('--restore-run-metadata-file', type=Path)
+    parser.add_argument('--restore-run-id')
     parser.add_argument('--receipt-file', type=Path, required=True)
     args = parser.parse_args()
     try:
@@ -245,21 +378,68 @@ def main():
             raise ValueError('source SHA must be an exact lowercase commit SHA')
         if args.apply != (args.backup_file is not None):
             raise ValueError('--apply requires a fresh --backup-file; dry-run forbids it')
+        if args.apply and targets != TARGETS:
+            raise ValueError('apply and restore require exactly the three approved Firestore UIDs')
         if args.receipt_file.exists():
             raise ValueError('receipt file already exists')
         rules = shared.load_rules(shared.RULES)
         desired = {uid: rules[uid] for uid in targets}
         if args.restore_file:
             restore_plan(args.restore_file, targets)  # Refuse invalid scope before any network call.
+            if (
+                not args.apply
+                or not args.restore_receipt_file
+                or not args.restore_run_metadata_file
+                or not args.restore_run_id
+            ):
+                raise ValueError('restore requires apply mode, original receipt, run metadata, and run ID')
+            prior_receipt = load_restore_evidence(
+                args.restore_receipt_file,
+                args.restore_file,
+                args.restore_run_metadata_file,
+                args.restore_run_id,
+                targets,
+            )
+        elif any(
+            (
+                args.restore_receipt_file,
+                args.restore_run_metadata_file,
+                args.restore_run_id,
+            )
+        ):
+            raise ValueError('restore evidence arguments require --restore-file')
+        else:
+            prior_receipt = None
+        if not args.run_id.isdecimal():
+            raise ValueError('run ID must be numeric')
         token = os.environ.get('MONITOR_GRAFANA_TOKEN', '').strip()
         if not token:
             raise ValueError('MONITOR_GRAFANA_TOKEN is empty')
         api = shared.Grafana('https://monitor.omi.me', token)
-        receipt = {'source_sha': args.source_sha, 'status': 'incomplete'}
+        operation = 'restore' if args.restore_file else 'apply' if args.apply else 'dry-run'
+        receipt = {
+            'source_sha': args.source_sha,
+            'run_id': args.run_id,
+            'operation': operation,
+            'mode': operation,
+            'status': 'incomplete',
+        }
         fd = os.open(args.receipt_file, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
         with os.fdopen(fd, 'w') as handle:
             try:
-                execute(api, desired, targets, backup=args.backup_file, restore=args.restore_file, evidence=receipt)
+                execute(
+                    api,
+                    desired,
+                    targets,
+                    backup=args.backup_file,
+                    restore=args.restore_file,
+                    evidence=receipt,
+                    restore_evidence=prior_receipt,
+                    run_id=args.run_id,
+                )
+            except (ValueError, OSError, KeyError, TypeError) as exc:
+                receipt['error'] = safe_error_diagnostic(exc)
+                raise
             finally:
                 if args.backup_file and args.backup_file.exists():
                     receipt['backup_sha256'] = hashlib.sha256(args.backup_file.read_bytes()).hexdigest()
@@ -268,9 +448,10 @@ def main():
                 os.fsync(handle.fileno())
         print(f'{receipt["mode"]}: {len(targets)} selected alerts; non-target resources unchanged')
         return int(bool(args.apply and receipt['differences']))
-    except (ValueError, OSError, KeyError, TypeError):
-        # No rule bodies, dashboard contents or credentials in logs.
-        print('FAIL: scoped provisioning refused or readback failed; retain backup artifacts', file=sys.stderr)
+    except (ValueError, OSError, KeyError, TypeError) as exc:
+        # Diagnostics contain only a bounded reason; no response body or credential is logged.
+        diagnostic = safe_error_diagnostic(exc)
+        print(f'FAIL: {diagnostic["type"]}: {diagnostic["message"]}', file=sys.stderr)
         return 1
 
 

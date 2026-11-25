@@ -28,11 +28,6 @@ permissions:
   contents: read
   actions: read
 
-# Share both locks with the existing bundle provisioner.
-concurrency:
-  group: grafana-dashboard-provisioning-prod
-  cancel-in-progress: false
-
 env:
   GIT_HTTP_LOW_SPEED_LIMIT: "1000"
   GIT_HTTP_LOW_SPEED_TIME: "60"
@@ -55,6 +50,27 @@ jobs:
           set -euo pipefail
           test "$EXPECTED_SOURCE_SHA" = "$GITHUB_SHA"
           test "$(git rev-parse HEAD)" = "$EXPECTED_SOURCE_SHA"
+      - name: Verify and record the original restore run metadata
+        if: inputs.operation == 'restore'
+        uses: actions/github-script@v9
+        env:
+          RESTORE_RUN_ID: ${{ inputs.restore_run_id }}
+          RESTORE_RUN_METADATA_FILE: ${{ runner.temp }}/firestore-restore-run.json
+        with:
+          script: |
+            const fs = require('fs');
+            const rawRunId = process.env.RESTORE_RUN_ID;
+            if (!/^[0-9]+$/.test(rawRunId)) throw new Error('restore run ID must be numeric');
+            const runId = Number(rawRunId);
+            if (!Number.isSafeInteger(runId)) throw new Error('restore run ID is out of range');
+            const { data } = await github.rest.actions.getWorkflowRun({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              run_id: runId,
+            });
+            fs.writeFileSync(process.env.RESTORE_RUN_METADATA_FILE, JSON.stringify(data), {
+              encoding: 'utf8', mode: 0o600, flag: 'wx',
+            });
       - name: Retrieve the prior scoped backup for a gated restore
         if: inputs.operation == 'restore'
         uses: actions/download-artifact@v8
@@ -78,22 +94,16 @@ jobs:
             dry-run) ;;
             restore)
               test -n "$RESTORE_RUN_ID"
-              python3 - <<'PY'
-          import hashlib, json, os
-          from pathlib import Path
-          root = Path(os.environ['RUNNER_TEMP']) / 'firestore-restore'
-          receipt = json.loads((root / 'firestore-alert-receipt.json').read_text())
-          backup = root / 'firestore-alert-backup.json'
-          if hashlib.sha256(backup.read_bytes()).hexdigest() != receipt['backup_sha256']:
-              raise SystemExit('Restore backup checksum mismatch')
-          PY
               args+=(--apply --backup-file "$RUNNER_TEMP/firestore-alert-backup.json"
-                --restore-file "$RUNNER_TEMP/firestore-restore/firestore-alert-backup.json")
+                --restore-file "$RUNNER_TEMP/firestore-restore/firestore-alert-backup.json"
+                --restore-receipt-file "$RUNNER_TEMP/firestore-restore/firestore-alert-receipt.json"
+                --restore-run-metadata-file "$RUNNER_TEMP/firestore-restore-run.json"
+                --restore-run-id "$RESTORE_RUN_ID")
               ;;
             *) exit 1 ;;
           esac
           python3 backend/scripts/provision_firestore_cost_alerts.py \
-            --target-uids "$TARGET_UIDS" --source-sha "$GITHUB_SHA" \
+            --target-uids "$TARGET_UIDS" --source-sha "$GITHUB_SHA" --run-id "$GITHUB_RUN_ID" \
             --receipt-file "$RUNNER_TEMP/firestore-alert-receipt.json" "${args[@]}"
       - name: Preserve selected-rule rollback and non-target readback evidence
         if: always()
