@@ -11,7 +11,7 @@ from functools import lru_cache
 from math import floor, isfinite
 
 from prometheus_client import Counter
-from redis.exceptions import RedisError, WatchError
+import redis
 
 from database.redis_connection import create_bounded_redis_client
 from utils.observability.fallback import record_fallback
@@ -22,6 +22,7 @@ MAX_BYTES = 20 * 1024
 REDIS_RETRY_SECONDS = 5
 _redis_retry_at = 0.0
 CLOCK_MARGIN_SECONDS = 5
+SITES = ('probe', 'lease')
 
 # One Redis cell per owner holds the revision of its most recent invalidation
 # and the decision. Eviction therefore cannot leave behind a detached ALLOW.
@@ -33,10 +34,11 @@ TOKENLESS = Counter(
 TOKENLESS_SHADOW = Counter(
     'omi_batch_pipeline_privacy_tokenless_write_shadow_total',
     'Five-minute batch owner decisions compared with live authority',
-    ['outcome'],
+    ['site', 'outcome'],
 )
 for _outcome in ('match', 'changed_within_window', 'mismatch_outside_window', 'unavailable'):
-    TOKENLESS_SHADOW.labels(_outcome)
+    for _site in SITES:
+        TOKENLESS_SHADOW.labels(_site, _outcome)
 
 
 @dataclass(frozen=True)
@@ -44,6 +46,9 @@ class Decision:
     started: float
     version: tuple[str, str, int]
     generation: int
+
+    def fresh(self) -> bool:
+        return 0 <= time.time() - self.started < TTL_SECONDS - CLOCK_MARGIN_SECONDS
 
 
 def _redis_prefix() -> str:
@@ -70,7 +75,7 @@ def _coverage(ids) -> frozenset[str]:
 
 def _fallback(error: Exception, outcome: str) -> None:
     global _redis_retry_at
-    if isinstance(error, RedisError):
+    if isinstance(error, redis.RedisError):
         _redis_retry_at = time.monotonic() + REDIS_RETRY_SECONDS
     TOKENLESS.labels(outcome).inc()
     record_fallback(
@@ -153,7 +158,7 @@ def read_tokenless(client, owner: str, ids: frozenset[str], expected_generation:
             return TokenlessLookup(key, raw, changed, None)
         candidate, coverage = _decision(payload)
         decision = None
-        if not 0 <= time.time() - candidate.started < TTL_SECONDS:
+        if not candidate.fresh():
             TOKENLESS.labels('expired').inc()
         elif (expected_generation is not None and expected_generation != candidate.generation) or not _coverage(
             ids
@@ -163,7 +168,7 @@ def read_tokenless(client, owner: str, ids: frozenset[str], expected_generation:
             TOKENLESS.labels('covered').inc()
             decision = candidate
         return TokenlessLookup(key, raw, changed, decision)
-    except (RedisError, ValueError, TypeError, OverflowError) as error:
+    except (redis.RedisError, ValueError, TypeError, OverflowError) as error:
         _fallback(error, 'get_error')
         return None
 
@@ -196,9 +201,9 @@ def store_tokenless(lookup: TokenlessLookup, ids: frozenset[str], snapshot, vers
             pipe.set(lookup.key, payload, px=remaining)
             pipe.execute()
         TOKENLESS.labels('stored').inc()
-    except WatchError:
+    except redis.WatchError:
         TOKENLESS.labels('fill_race').inc()
-    except (RedisError, ValueError) as error:
+    except (redis.RedisError, ValueError) as error:
         _fallback(error, 'set_error')
 
 
@@ -224,18 +229,18 @@ def invalidate_tokenless(paths, commit_time: datetime) -> None:
                     pipe.execute()
                 TOKENLESS.labels('invalidation').inc()
                 break
-            except WatchError:
+            except redis.WatchError:
                 continue
-            except (RedisError, ValueError, TypeError) as error:
+            except (redis.RedisError, ValueError, TypeError) as error:
                 _fallback(error, 'invalidation_error')
-                if isinstance(error, RedisError):
+                if isinstance(error, redis.RedisError):
                     return
                 break
         else:
             TOKENLESS.labels('invalidation_race').inc()
 
 
-def compare_tokenless(candidate: Decision | None, snapshot, version, generation: int | None) -> None:
+def compare_tokenless(site: str, candidate: Decision | None, snapshot, version, generation: int | None) -> None:
     if candidate is None:
         return
     if generation == candidate.generation:
@@ -249,4 +254,4 @@ def compare_tokenless(candidate: Decision | None, snapshot, version, generation:
             and candidate.started < changed_at.timestamp() <= now < candidate.started + TTL_SECONDS
         )
         outcome = 'changed_within_window' if within_window else 'mismatch_outside_window'
-    TOKENLESS_SHADOW.labels(outcome).inc()
+    TOKENLESS_SHADOW.labels(site, outcome).inc()

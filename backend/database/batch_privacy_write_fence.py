@@ -39,6 +39,7 @@ from database.batch_account_authority_schema import (
 )
 from database.batch_privacy_write_cache import invalidate_tokenless
 from database.batch_privacy_late_intents import late_sweep_writes
+from database.privacy_check_metrics import ACCOUNT_AUTHORITY_WRITES
 from utils.executors import db_executor, run_blocking
 from database.home_feed_writer import augment_home_writes, affects_home, bulk_erasure_scope
 from database.batch_privacy_attempt import CONVERSATION_AUTHORITY_FIELDS, TOKEN_FIELD, SCHEMA_FIELD, TOKEN_SCHEMA
@@ -218,12 +219,8 @@ def _observe_account_writes(request: Any) -> None:
     # Observation must not turn a successful Commit into a caller-visible
     # failure. No client, authority read or identifier enters the metric.
     try:
-        observations = account_write_observations(request)
-        if observations:
-            from database.privacy_check_metrics import ACCOUNT_AUTHORITY_WRITES
-
-            for family, group, certified in observations:
-                ACCOUNT_AUTHORITY_WRITES.labels(family, group, 'true' if certified else 'false').inc()
+        for family, group, certified in account_write_observations(request):
+            ACCOUNT_AUTHORITY_WRITES.labels(family, group, 'true' if certified else 'false').inc()
     except Exception:
         pass
 

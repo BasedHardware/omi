@@ -973,7 +973,7 @@ def test_tokenless_write_cache_is_limited_to_existing_compute_admitted_leases(pl
     import fakeredis
 
     from database import batch_privacy_write_authority as authority, batch_privacy_write_cache as cache
-    from database import batch_privacy_write_fence
+    from database import batch_privacy_write_audit as audit, batch_privacy_write_fence
     from database.batch_pipeline_privacy import BatchPrivacyBlocked
     from database.batch_pipeline_store import FirestoreStore
     from testing.firestore_read_budget import delta_reads, reads_for_caller, snapshot_reads
@@ -987,7 +987,7 @@ def test_tokenless_write_cache_is_limited_to_existing_compute_admitted_leases(pl
     monkeypatch.setattr(authority, 'ttl_disabled', lambda: False)
     monkeypatch.setenv('FIRESTORE_READ_LEVERS', '{"bpp_tokenless_write_cache":100}')
     store = FirestoreStore('batch_pipeline_dev', firestore_client=plane.client)
-    assert store.run(lambda tx: tx.probe_write_privacy(plane.uid, ('source',), 0)) == 0
+    assert store.run(lambda tx: tx._probe_write_privacy(plane.uid, ('source',), 0)) == 0
 
     ref = plane.client.collection('batch_pipeline_dev_jobs').document('unleased')
     row = {
@@ -1003,7 +1003,9 @@ def test_tokenless_write_cache_is_limited_to_existing_compute_admitted_leases(pl
 
     def lease(tx):
         job = tx.get('jobs', ref.id)
-        tx.put('jobs', ref.id, {**job, 'state': 'leased', 'attempt': 1, 'token': 'synthetic-lease'})
+        tx.put(
+            'jobs', ref.id, {**job, 'state': 'leased', 'attempt': 1, 'token': 'synthetic-lease', 'lease_until': 123.0}
+        )
 
     def read_count():
         before = snapshot_reads()
@@ -1012,9 +1014,33 @@ def test_tokenless_write_cache_is_limited_to_existing_compute_admitted_leases(pl
 
     assert read_count() == 0
     ref.set(row)
-    shadow = cache.TOKENLESS_SHADOW.labels('match')
+
+    pending_audits = []
+    monkeypatch.setattr(audit.random, 'randrange', lambda _: 0)
+    monkeypatch.setattr(
+        audit.read_cache_shadow_executor,
+        'submit',
+        lambda run, *args: pending_audits.append((run, args)) or MagicMock(),
+    )
+    monkeypatch.setenv('FIRESTORE_READ_LEVERS', '{"bpp_tokenless_write_cache":100,"bpp_tokenless_write_audit":100}')
+    assert store.run(lambda tx: tx._probe_write_privacy(plane.uid, ('source',), 0)) == 0
+    assert read_count() == 0
+    assert [args[1].site for _, args in pending_audits] == ['probe', 'lease']
+    assert ref.get().to_dict()['state'] == 'leased'
+    for run, args in pending_audits:
+        agree = audit.AUDIT.labels(args[1].site, 'agree')._value
+        before = agree.get()
+        run(*args)
+        assert agree.get() == before + 1
+
+    ref.set(row)
+    shadow = cache.TOKENLESS_SHADOW.labels('lease', 'match')
     before = shadow._value.get()
     monkeypatch.setenv('FIRESTORE_READ_LEVERS', '{"bpp_tokenless_write_cache":100,"bpp_tokenless_write_shadow":100}')
+    probe_shadow = cache.TOKENLESS_SHADOW.labels('probe', 'match')._value
+    before_probe = probe_shadow.get()
+    assert store.run(lambda tx: tx._probe_write_privacy(plane.uid, ('source',), 0)) == 0
+    assert probe_shadow.get() == before_probe + 1
     assert read_count() > 0
     assert shadow._value.get() == before + 1
     ref.set(row)

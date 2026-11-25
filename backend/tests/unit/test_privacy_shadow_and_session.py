@@ -683,14 +683,14 @@ def test_tokenless_shadow_separates_fresh_and_outside_window_mismatches(monkeypa
     version = ('a' * 32, read_time.isoformat(), 0)
     decision = write_cache.Decision(read_time.timestamp(), version, 7)
     snapshot = SimpleNamespace(update_time=read_time + timedelta(seconds=1))
-    within = write_cache.TOKENLESS_SHADOW.labels('changed_within_window')
-    outside = write_cache.TOKENLESS_SHADOW.labels('mismatch_outside_window')
+    within = write_cache.TOKENLESS_SHADOW.labels('probe', 'changed_within_window')
+    outside = write_cache.TOKENLESS_SHADOW.labels('probe', 'mismatch_outside_window')
     before = within._value.get(), outside._value.get()
 
     monkeypatch.setattr(write_cache, 'time', SimpleNamespace(time=lambda: read_time.timestamp() + 5))
-    write_cache.compare_tokenless(decision, snapshot, None, None)
+    write_cache.compare_tokenless('probe', decision, snapshot, None, None)
     assert within._value.get() == before[0] + 1
 
     monkeypatch.setattr(write_cache, 'time', SimpleNamespace(time=lambda: read_time.timestamp() + 300))
-    write_cache.compare_tokenless(decision, snapshot, None, None)
+    write_cache.compare_tokenless('probe', decision, snapshot, None, None)
     assert outside._value.get() == before[1] + 1

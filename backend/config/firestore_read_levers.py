@@ -59,6 +59,7 @@ KNOWN_LEVERS = frozenset(
         'bpp_shared_owner_cache',  # ship-on: Redis owner memo, certified by the transactional token
         'bpp_shared_owner_shadow',  # sampled tokenless comparison; never authorizes
         'bpp_tokenless_write_cache',  # opt in only after write-side shadow qualification
+        'bpp_tokenless_write_audit',  # 0–100 basis points of enforced hits
         'bpp_tokenless_write_shadow',  # sampled comparison for write authority
         'bpp_status_skip',  # ship-on: content-free, read-only status polls
         'bpp_decision_cache',  # batch privacy: token-validated generation reuse across attempts, <= 60s

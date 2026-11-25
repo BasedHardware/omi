@@ -190,7 +190,7 @@ class _OwnWrites:
         return self._tx.check_privacy(uid, conversation_ids, expected_generation)
 
     def probe_write_privacy(self, uid: str, conversation_ids=(), expected_generation: int | None = None) -> int:
-        probe = getattr(self._tx, 'probe_write_privacy', self._tx.check_privacy)
+        probe = getattr(self._tx, '_probe_write_privacy', self._tx.check_privacy)
         return probe(uid, conversation_ids, expected_generation)
 
 
