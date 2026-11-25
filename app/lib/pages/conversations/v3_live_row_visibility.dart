@@ -9,7 +9,7 @@ V3HomeLiveRow v3HomeLiveRow({
   required bool listeningSuppressed,
 }) {
   if (!v3Home || liveRemoved) return V3HomeLiveRow.none;
-  if (streaming && (callActive || listeningSuppressed)) return V3HomeLiveRow.none;
   if (serverUsable) return V3HomeLiveRow.server;
-  return streaming ? V3HomeLiveRow.placeholder : V3HomeLiveRow.none;
+  if (streaming && !callActive && !listeningSuppressed) return V3HomeLiveRow.placeholder;
+  return V3HomeLiveRow.none;
 }
