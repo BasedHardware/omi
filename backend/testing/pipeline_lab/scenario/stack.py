@@ -140,10 +140,18 @@ def resolve(name: str) -> Path:
     raise ScenarioError(f'{name}: no such file or committed scenario')
 
 
-def run_one(path: Path, out: Path, peers: dict[str, str], *, timeout: float, clock: str = 'frozen') -> dict[str, Any]:
+def run_one(
+    path: Path,
+    out: Path,
+    peers: dict[str, str],
+    *,
+    timeout: float,
+    clock: str = 'frozen',
+    stt_args: Sequence[str] = (),
+) -> dict[str, Any]:
     env = {**os.environ, **peers}
     command = [sys.executable, '-m', 'testing.pipeline_lab.scenario.run', '--file', str(path), '--out', str(out)]
-    command += ['--clock', clock]
+    command += ['--clock', clock, *stt_args]
     try:
         done = subprocess.run(command, cwd=BACKEND, env=env, capture_output=True, text=True, timeout=timeout)
     except subprocess.TimeoutExpired:
@@ -209,6 +217,14 @@ def format_report(result: dict[str, Any]) -> str:
         )
     if result.get('fast_finish'):
         lines.append('  fast finish: ' + ', '.join(f'{k}={v}' for k, v in result['fast_finish'].items()))
+    for row in (result.get('audio') or {}).get('recordings', []):
+        lines.append(
+            f'  audio {row["label"]}: {row["audio_file"]} {row["audio_seconds"]:g}s, {row["source"]} cassette '
+            f'{row["cassette"]} ({row["provider"]}/{row["model"]}, {row["origin"]}), {row["words"]} words, '
+            f'driver {row["driver"]}'
+        )
+        lines.append('    product: ' + ', '.join(row['product']))
+        lines.append('    stand-in: ' + ', '.join(row['simulated']))
     if result.get('stand_ins'):
         lines.append('  stand-ins used: ' + ', '.join(f'{k}x{v}' for k, v in result['stand_ins'].items()))
     if result.get('finish_target') is not None or result.get('checks'):
@@ -239,8 +255,16 @@ def check_files(names: Sequence[str], *, as_json: bool) -> int:
 
 
 def run_files(
-    names: Sequence[str], *, keep: Optional[str], timeout: float, as_json: bool, clock: str = 'frozen'
+    names: Sequence[str],
+    *,
+    keep: Optional[str],
+    timeout: float,
+    as_json: bool,
+    clock: str = 'frozen',
+    stt: str = 'replay',
+    stt_budget_usd: Optional[float] = None,
 ) -> int:
+    stt_args = ['--stt', stt] + (['--stt-budget-usd', str(stt_budget_usd)] if stt_budget_usd is not None else [])
     paths = [resolve(name) for name in names]
     for path in paths:
         load_scenario(path)  # fail fast on a malformed file, before the stack starts
@@ -255,7 +279,7 @@ def run_files(
         for path in paths:
             out = root / path.stem
             out.mkdir(parents=True, exist_ok=True, mode=0o700)
-            result = run_one(path, out, peers, timeout=timeout, clock=clock)
+            result = run_one(path, out, peers, timeout=timeout, clock=clock, stt_args=stt_args)
             results.append(result)
             if not as_json:
                 print(format_report(result), flush=True)

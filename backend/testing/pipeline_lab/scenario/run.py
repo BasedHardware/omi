@@ -58,7 +58,9 @@ def seed_account(uid: str) -> str:
     return 'private_cloud_sync_enabled'
 
 
-async def run_scenario(scenario: Scenario, out_dir: Path, *, llm_url: str, tick: bool = True) -> dict[str, Any]:
+async def run_scenario(
+    scenario: Scenario, out_dir: Path, *, llm_url: str, tick: bool = True, audio: Optional[dict] = None
+) -> dict[str, Any]:
     from testing.pipeline_lab.chain.barrier import ExecutorBarrier
     from testing.pipeline_lab.chain.driver import ProductFinalizer
     from testing.pipeline_lab.chain.run import PRODUCT_MODULES, _record_processing_failures
@@ -103,10 +105,15 @@ async def run_scenario(scenario: Scenario, out_dir: Path, *, llm_url: str, tick:
         tasks.install(stack)
         install_emulator_size_errors(stack)
         stack.enter_context(installed_clock(clock))
+        if audio:  # audio_file recordings: their words through the lab's batch/sync lane code (scenario/audio.py)
+            from testing.pipeline_lab.scenario.audio import materialize
+
+            scenario, result['audio'] = materialize(scenario, audio)
         ops = ScenarioOps(
             scenario=scenario, firestore=env.firestore, finalizer=ProductFinalizer(env.firestore), barrier=barrier
         )
         ops.install(stack)
+        ops.stt_sources = {row['label']: row['source'] for row in (result.get('audio') or {}).get('recordings', [])}
         clock.set(start)
         reset_lab_state(env.firestore, env.redis, config.uid)
         result['account'] = seed_account(config.uid)
@@ -179,6 +186,8 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     parser.add_argument('--file', required=True)
     parser.add_argument('--out', required=True, help='output directory (outside git)')
     parser.add_argument('--clock', choices=('frozen', 'tick'), default='frozen')
+    parser.add_argument('--stt', choices=('replay', 'record-vendor', 'record-local'), default='replay')
+    parser.add_argument('--stt-budget-usd', type=float, default=None)
     args = parser.parse_args(argv)
     host = os.environ.get('FIRESTORE_EMULATOR_HOST', '')
     if not host.startswith(('127.0.0.1:', 'localhost:')):
@@ -187,15 +196,23 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     out = Path(args.out)
     out.mkdir(parents=True, exist_ok=True, mode=0o700)
     started = time.perf_counter()
+    from testing.pipeline_lab.scenario.audio import AudioError, prepare
+
     try:
         scenario = load_scenario(args.file)
+        # Before the lab environment: recording on a miss may need the ambient env and network.
+        audio = prepare(scenario, mode=args.stt, budget_usd=args.stt_budget_usd)
         from testing.pipeline_lab.llm_proxy.fake_upstream import FakeUpstream
 
         upstream = FakeUpstream().start()
         try:
-            result = asyncio.run(run_scenario(scenario, out, llm_url=upstream.url, tick=args.clock == 'tick'))
+            result = asyncio.run(
+                run_scenario(scenario, out, llm_url=upstream.url, tick=args.clock == 'tick', audio=audio)
+            )
         finally:
             upstream.stop()
+    except AudioError as error:
+        result = {'scenario': Path(args.file).stem, 'outcome': 'error', 'error': str(error)}
     except Exception as error:  # noqa: BLE001 - reported as the scenario's error outcome
         (out / 'scenario_error.log').write_text(traceback.format_exc())
         result = {'outcome': 'error', 'error': type(error).__name__, 'log': str(out / 'scenario_error.log')}

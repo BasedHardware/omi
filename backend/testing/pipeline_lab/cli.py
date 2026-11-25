@@ -175,6 +175,13 @@ def build_parser() -> argparse.ArgumentParser:
         default='frozen',
         help='frozen (default): each event runs at its scripted instant; tick: real elapsed time is added',
     )
+    scenario_run.add_argument(
+        '--stt',
+        choices=('replay', 'record-vendor', 'record-local'),
+        default='replay',
+        help='audio_file words: replay cassettes only (default); on a miss record from the vendor or a local model',
+    )
+    scenario_run.add_argument('--stt-budget-usd', type=float, help='spend cap for --stt record-vendor')
     scenario_check = scenario_sub.add_parser('check', parents=[common], help='validate files, print planned timelines')
     scenario_check.add_argument('files', nargs='+')
 
@@ -490,7 +497,15 @@ def _scenario(args: argparse.Namespace, as_json: bool) -> int:
     try:
         if args.scenario_command == 'check':
             return stack.check_files(args.files, as_json=as_json)
-        return stack.run_files(args.files, keep=args.keep, timeout=args.timeout, as_json=as_json, clock=args.clock)
+        return stack.run_files(
+            args.files,
+            keep=args.keep,
+            timeout=args.timeout,
+            as_json=as_json,
+            clock=args.clock,
+            stt=args.stt,
+            stt_budget_usd=args.stt_budget_usd,
+        )
     except (ScenarioError, RuntimeError) as error:
         if as_json:
             print(json.dumps({'error': str(error), 'kind': type(error).__name__}))

@@ -19,6 +19,7 @@ A scenario is one JSON object. Times are seconds from ``t0`` (a synthetic UTC in
       ],
       "gaps": [{"origin": "O", "between": ["A", "B"], "reason": "reconnect"}],   # stream gaps (checked)
       "sync": [{"id": "F", "origin": "O", "audio": [1.5, 2.7], "arrives_at": 162, "speech": [...]}],
+      "stt": {"provider": "...", "model": "...", "language": "en", "vocabulary": []},   # audio_file only
       "finish": {"at": 38, "fast_finish": true, "provisional_latency": 15},
       "expect": [{"at": 60, "label": "finish_visible", "conversation_of": "@finish", "visible": true}],
       "expected_failure": {"reason": "SCA-xxxx: ...", "checks": ["finish_visible"], "strict": true},
@@ -31,6 +32,13 @@ visibility and manual end of one conversation in one row.
 
 ``expected_failure`` names the ``label`` of each check the known bug fails (``checks``). Every other check
 must still pass: a scenario whose unnamed check fails is ``failed``, not ``xfail``.
+
+A recording or sync fragment may give ``"audio_file": "<path relative to this file>"`` instead of
+``speech`` (exactly one of the two). The file is a PCM WAV; ``audio`` may then be omitted and is
+``[0, duration]``, or given as ``[start, start + duration]``. Its words come from an STT cassette for that
+exact audio (``scenario/audio.py``): a committed ``synthetic`` fixture, or one recorded into the lab root
+with ``--stt record-local`` or ``--stt record-vendor``. ``stt`` pins the cassette's provider and model;
+without it the run takes the best recorded cassette of the file (vendor, then local, then synthetic).
 
 Speech text must be synthetic. ``fill`` writes placeholder lines from a fixed word list; a line whose
 text contains ``switching topics`` makes the lab's fake outline start a new conversation there.
@@ -72,6 +80,9 @@ FILL_WORDS = (
     'lantern', 'harbor', 'maple', 'pebble', 'orchard', 'canvas', 'meadow', 'copper', 'willow', 'saffron',
     'beacon', 'thistle', 'juniper', 'quarry', 'marble', 'hazel', 'tundra', 'velvet', 'cobalt', 'fennel',
 )  # fmt: skip
+STT_KEYS = ('provider', 'model', 'language', 'vocabulary')
+DEFAULT_LANGUAGE = 'en'
+AUDIO_SPAN_TOLERANCE = 0.05
 CHECK_FIELDS = ('recordings', 'recordings_include', 'visible', 'manual_end', 'hidden_reason', 'min_words', 'kind')
 _LABEL = re.compile(r'^[A-Za-z][A-Za-z0-9_-]{0,31}$')
 
@@ -100,6 +111,7 @@ class Recording:
     sealed_at: Optional[float] = None  # batch
     transcript_at: Optional[float] = None  # batch; None = never lands
     arrives_at: Optional[float] = None  # sync
+    audio_file: Optional[str] = None  # absolute path; ``lines`` are filled from its cassette at run time
 
     @property
     def doc_id(self) -> str:
@@ -162,6 +174,11 @@ class Scenario:
     tail_seconds: float = DEFAULT_TAIL_SECONDS
     admission_lag: float = DEFAULT_ADMISSION_LAG
     path: Optional[str] = None
+    stt: Mapping[str, Any] = field(default_factory=dict)
+
+    @property
+    def audio_recordings(self) -> tuple[Recording, ...]:
+        return tuple(rec for rec in self.recordings if rec.audio_file is not None)
 
     def at(self, seconds: float) -> datetime:
         return self.t0 + timedelta(seconds=seconds)
@@ -300,23 +317,71 @@ def _lines(raw: Any, where: str, audio: tuple[float, float], seed: int) -> tuple
     return tuple(lines)
 
 
-def _recording(raw: Any, where: str, origins: Mapping[str, Origin], lane: str, seed: int) -> Recording:
+def wav_seconds(path: Path) -> float:
+    """Duration of a PCM WAV file (stdlib ``wave``; any rate or channel count)."""
+    import wave
+
+    with wave.open(str(path), 'rb') as handle:
+        rate = handle.getframerate()
+        return handle.getnframes() / float(rate) if rate else 0.0
+
+
+def _audio_file(value: Any, where: str, base: Path) -> tuple[Path, float]:
+    if not isinstance(value, str) or not value.strip():
+        raise ScenarioError(f'{where}: a path to a WAV file, relative to the scenario file')
+    path = (base / value).resolve()
+    if not path.is_file():
+        raise ScenarioError(f'{where}: no such file {value!r} (paths are relative to the scenario file)')
+    try:
+        seconds = wav_seconds(path)
+    except Exception:  # noqa: BLE001 - wave raises several types on a non-WAV file
+        raise ScenarioError(
+            f'{where}: {value!r} is not a PCM WAV file; convert it with '
+            '`afconvert -f WAVE -d LEI16@16000 -c 1 IN OUT.wav` or `ffmpeg -i IN -ac 1 -ar 16000 OUT.wav`'
+        ) from None
+    if seconds <= 0:
+        raise ScenarioError(f'{where}: {value!r} holds no audio')
+    return path, seconds
+
+
+def _recording(
+    raw: Any, where: str, origins: Mapping[str, Origin], lane: str, seed: int, base: Optional[Path] = None
+) -> Recording:
     if not isinstance(raw, Mapping):
         raise ScenarioError(f'{where}: expected an object')
-    allowed = ('id', 'origin', 'audio', 'speech', 'session')
+    allowed = ('id', 'origin', 'audio', 'speech', 'audio_file', 'session')
     allowed += ('sealed_at', 'transcript_at') if lane == 'batch' else ('arrives_at',)
     _keys(raw, allowed, where)
     label = _label(raw.get('id'), where + '.id')
     origin = raw.get('origin')
     if origin not in origins:
         raise ScenarioError(f'{where}: origin {origin!r} is not declared in origins')
-    audio = _span(raw.get('audio'), where + '.audio')
-    lines = _lines(raw.get('speech'), where + '.speech', audio, seed)
+    if ('speech' in raw) == ('audio_file' in raw):
+        raise ScenarioError(f'{where}: give exactly one of speech (scripted lines) or audio_file (a WAV file)')
+    audio_file: Optional[str] = None
+    if 'audio_file' in raw:
+        path, seconds = _audio_file(raw['audio_file'], where + '.audio_file', base or Path.cwd())
+        audio_file = str(path)
+        if raw.get('audio') is None:
+            audio = (0.0, round(seconds, 3))
+        else:
+            audio = _span(raw.get('audio'), where + '.audio')
+            if abs((audio[1] - audio[0]) - seconds) > AUDIO_SPAN_TOLERANCE:
+                raise ScenarioError(
+                    f'{where}.audio: spans {audio[1] - audio[0]:g} s but audio_file lasts {seconds:.3f} s; '
+                    f'omit audio to take the file\'s duration, or give [start, start + {seconds:.3f}]'
+                )
+        lines: tuple[Line, ...] = ()
+    else:
+        audio = _span(raw.get('audio'), where + '.audio')
+        lines = _lines(raw.get('speech'), where + '.speech', audio, seed)
     if lane == 'sync':
         arrives = _number(raw.get('arrives_at'), where + '.arrives_at')
         if arrives < audio[1]:
             raise ScenarioError(f'{where}: a sync fragment arrives after its audio ends')
-        return Recording(label, origin, lane, audio, lines, session=raw.get('session'), arrives_at=arrives)
+        return Recording(
+            label, origin, lane, audio, lines, session=raw.get('session'), arrives_at=arrives, audio_file=audio_file
+        )
     sealed = _number(raw['sealed_at'], where + '.sealed_at') if raw.get('sealed_at') is not None else audio[1]
     if sealed < audio[1]:
         raise ScenarioError(f'{where}: sealed_at is before the audio ends')
@@ -324,7 +389,15 @@ def _recording(raw: Any, where: str, origins: Mapping[str, Origin], lane: str, s
     if landed is not None and landed < sealed:
         raise ScenarioError(f'{where}: the batch transcript lands before the capture is sealed')
     return Recording(
-        label, origin, lane, audio, lines, session=raw.get('session'), sealed_at=sealed, transcript_at=landed
+        label,
+        origin,
+        lane,
+        audio,
+        lines,
+        session=raw.get('session'),
+        sealed_at=sealed,
+        transcript_at=landed,
+        audio_file=audio_file,
     )
 
 
@@ -366,7 +439,7 @@ def parse_scenario(raw: Any, *, path: Optional[str] = None) -> Scenario:
         raw,
         (
             'name', 'description', 't0', 'env', 'origins', 'recordings', 'gaps', 'sync', 'finish', 'expect',
-            'expected_failure', 'tail_seconds', 'admission_lag',
+            'expected_failure', 'tail_seconds', 'admission_lag', 'stt',
         ),
         'scenario',
     )  # fmt: skip
@@ -397,14 +470,16 @@ def parse_scenario(raw: Any, *, path: Optional[str] = None) -> Scenario:
         origins[label] = Origin(label, source)
     if not origins:
         raise ScenarioError('origins: declare at least one capture origin')
+    base = Path(path).resolve().parent if path else Path.cwd()
     recordings = [
-        _recording(item, f'recordings[{i}]', origins, 'batch', seed=i * 7)
+        _recording(item, f'recordings[{i}]', origins, 'batch', seed=i * 7, base=base)
         for i, item in enumerate(raw.get('recordings') or [])
     ]
     recordings += [
-        _recording(item, f'sync[{i}]', origins, 'sync', seed=100 + i * 7)
+        _recording(item, f'sync[{i}]', origins, 'sync', seed=100 + i * 7, base=base)
         for i, item in enumerate(raw.get('sync') or [])
     ]
+    stt = _stt(raw.get('stt'), any(r.audio_file for r in recordings))
     if not any(r.lane == 'batch' for r in recordings):
         raise ScenarioError('recordings: at least one')
     labels = [r.label for r in recordings]
@@ -454,6 +529,7 @@ def parse_scenario(raw: Any, *, path: Optional[str] = None) -> Scenario:
         tail_seconds=_number(raw.get('tail_seconds', DEFAULT_TAIL_SECONDS), 'tail_seconds'),
         admission_lag=_number(raw.get('admission_lag', DEFAULT_ADMISSION_LAG), 'admission_lag'),
         path=path,
+        stt=stt,
     )
     if finish is not None:
         capturing = scenario.open_at(finish.at)
@@ -464,6 +540,30 @@ def parse_scenario(raw: Any, *, path: Optional[str] = None) -> Scenario:
         if finish.at + finish.provisional_latency < target.sealed:
             raise ScenarioError('finish: the provisional transcript cannot land before the capture is sealed')
     return scenario
+
+
+def _stt(raw: Any, has_audio: bool) -> dict[str, Any]:
+    """The cassette selection for ``audio_file`` recordings: language (default en), vocabulary, and an
+    optional provider + model pin."""
+    if raw is None:
+        return {'language': DEFAULT_LANGUAGE, 'vocabulary': []} if has_audio else {}
+    if not has_audio:
+        raise ScenarioError('stt: only a scenario with an audio_file recording uses it')
+    if not isinstance(raw, Mapping):
+        raise ScenarioError('stt: {"provider": "...", "model": "...", "language": "en", "vocabulary": []}')
+    _keys(raw, STT_KEYS, 'stt')
+    for key in ('provider', 'model', 'language'):
+        if key in raw and (not isinstance(raw[key], str) or not raw[key].strip()):
+            raise ScenarioError(f'stt.{key}: a non-empty string')
+    if ('provider' in raw) != ('model' in raw):
+        raise ScenarioError('stt: pin both provider and model, or neither')
+    vocabulary = raw.get('vocabulary', [])
+    if not isinstance(vocabulary, list) or not all(isinstance(v, str) and v for v in vocabulary):
+        raise ScenarioError('stt.vocabulary: a list of words, in production order')
+    out: dict[str, Any] = {'language': raw.get('language', DEFAULT_LANGUAGE), 'vocabulary': list(vocabulary)}
+    if 'provider' in raw:
+        out.update(provider=raw['provider'], model=raw['model'])
+    return out
 
 
 def _gap(raw: Any, where: str, recordings: Sequence[Recording]) -> Mapping[str, Any]:
