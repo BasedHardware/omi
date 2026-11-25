@@ -31,6 +31,7 @@ def retry_to_park(state, worker_backend):
     import yaml
 
     from routers import enrichment
+
     # The shared fake imports the enrichment router. Load it only after the
     # diagnostic selects the pinned worker's Python packages.
     from testing.fakes.cloud_tasks_queue import CloudTasksQueue, QueueConfig
