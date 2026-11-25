@@ -35,6 +35,7 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 	backend := flags.String("backend", "", "Python backend directory (detected from the working directory or corpus if omitted)")
 	python := flags.String("python", "", "backend Python interpreter (defaults to the backend virtualenv)")
 	jobd := flags.String("jobd", "", "compiled conformance jobd binary")
+	observations := flags.String("observations", "", "compare an existing synthetic diagnostic observation file instead of launching the gate driver")
 	commit := flags.String("commit", "", "40-character source commit SHA recorded with the unexplained-difference count")
 	testKey := flags.String("test-key-file", "", "optional private replay key file")
 	includeValues := flags.Bool("include-values", false, "include full observations in the report")
@@ -55,12 +56,52 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 			return failure(stderr, err)
 		}
 	}
-	if corpusPath == "" || *output == "" || *jobd == "" || len(*commit) != 40 || flags.NArg() != 0 {
+	if corpusPath == "" || *output == "" || (*jobd == "") == (*observations == "") || len(*commit) != 40 || flags.NArg() != 0 {
 		flags.Usage()
 		return 2
 	}
 	if _, err := hex.DecodeString(*commit); err != nil {
 		return failure(stderr, fmt.Errorf("invalid source commit SHA: %w", err))
+	}
+	if *observations != "" {
+		if corpusPath == "" || *jobd != "" || *testKey != "" || *ownerCorpus != "" || *includeValues || *python != "" {
+			flags.Usage()
+			return 2
+		}
+		input, err := prepareReplay(*backend, corpusPath, *output, "", false)
+		if err != nil {
+			return failure(stderr, err)
+		}
+		raw, err := loadObservationFile(*observations)
+		if err != nil {
+			return failure(stderr, err)
+		}
+		digest := corpusSHA256(input.corpus)
+		cases, err := importObservations(raw, input.corpus, digest)
+		if err != nil {
+			reportErr := writeReport(input.reportPath, invalidObservationReport(*commit, digest, err))
+			return failure(stderr, errors.Join(err, reportErr))
+		}
+		result, err := compare(cases)
+		if err != nil {
+			return failure(stderr, err)
+		}
+		result.CommitSHA = *commit
+		result.CorpusSHA256 = digest
+		stripReportValues(&result)
+		if err := writeReport(input.reportPath, result); err != nil {
+			return failure(stderr, err)
+		}
+		if err := summarize(stdout, result); err != nil {
+			return failure(stderr, err)
+		}
+		if result.Failed > 0 {
+			return 2
+		}
+		if result.Unexplained > 0 {
+			return 1
+		}
+		return 0
 	}
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Minute)
 	defer cancel()

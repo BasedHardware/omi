@@ -519,6 +519,23 @@
       }
     },
     {
+      "name": "revision-two-segment-transcript",
+      "recording": {
+        "duration_s": 19,
+        "segments": [
+          {
+            "text": "Synthetic live receipt transcript at the first stored revision."
+          },
+          {
+            "text": "Synthetic batch receipt tail appended as the second segment revision."
+          }
+        ]
+      },
+      "document": {
+        "sync_content_revision": 2
+      }
+    },
+    {
       "name": "transcript-standard-protection",
       "recording": {
         "duration_s": 25,

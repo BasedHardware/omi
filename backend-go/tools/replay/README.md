@@ -27,6 +27,13 @@ the developer-created webhook appear as `unported` when missing in Go. They stil
 count as unexplained differences. Queue bookkeeping collections are excluded from the
 derived-document diff, with the finalization disposition and queue binding checked directly.
 
+The approved timestamp, goal-event and Home-token rules for the 438-difference
+ordinary-sync report are recorded in [`comparison-rules.md`](comparison-rules.md).
+Each rule checks side-local evidence before explaining a difference. The
+`finalization_job_id` difference remains unexplained pending the required reader and
+queue-binding evidence. No rule treats null and absent as equivalent; Go must match
+Python's stored writes.
+
 ## Run
 
 From `backend-go/`, with the backend lock installed via
@@ -42,6 +49,48 @@ The test starts local emulators with the same wrappers as `make check`. It accep
 The first command primes the tokenizer dependency cache before network isolation. The
 existing Backend Go Checks workflow installs locked Python dependencies, primes the cache,
 and runs the replay test against its Postgres 16 service and Firestore emulator.
+
+### Workerd diagnostic (not the gate)
+
+The gate remains `test.sh` and its `cmd/jobd` driver. To measure the same pinned 41-case
+synthetic corpus against a draft that contains the ordinary-sync replay seam, run from the
+repo root with local Postgres 16, Java 21 and Firebase CLI available:
+
+```sh
+make oracle-diag WORKERD_REF=<full-workerd-commit-sha> \
+  ORACLE_DIAG_OUTPUT=../ordinary-sync-report.json
+```
+
+The default linked-checkout root is `/Volumes/scratch/worktrees`; set `OMI_WORKTREES`
+when the machine uses another managed Git-worktree root.
+
+This target builds the opt-in test binary from `WORKERD_REF`, runs the separate
+`ordinary_sync_diag.py` adapter, and compares its row-level observations with the same
+oracle comparator. The `-observations` input has a `corpus_sha256` digest of the exact
+source corpus bytes and a `cases` array containing each selected case name exactly once.
+The comparator checks both before recording any case comparisons. Invalid imports exit
+with status 2 and a value-free input-error report with the cohort gate closed and R7 invalid.
+The value-free comparison report records each difference's family, path, kind,
+label, and approved reason. Labels are `go_gap`, `python_bug:<issue>`, or
+`by_design:<rule>`; the by-design suffix is the comparator's approved reason. Rows without
+a reviewed label have `label: null` and count as unlabelled. It includes totals by label
+and family. Invalid Home token evidence includes a per-slot `failure_reason`, without token
+values. The SCA-3874 case runs Python through the fake Cloud Tasks queue and the real
+enrichment route to its durable age park. The reporter labels the parked-versus-dead-letter
+status difference as SCA-4178 after checking custody and retry evidence. Cost includes the
+full Python retry lifecycle. Pass-3 Go-gap patterns from SCA-4012 are applied from
+`approved-go-gaps-sca-4012.csv` to currently unlabelled rows. The report's unexplained gate count
+is `go_gap + unlabelled`; Python-bug exception rows are reported separately. Protected payload,
+clock, ID, and token checks are listed in `comparison-rules.md`.
+Family attribution uses this precedence: goals; apps and webhooks; memory source and
+metering; digest, minimum and relevance; other. The report exposes remaining unlabelled groups
+separately from rows already classified as Go gaps.
+
+The seam admits each fixture as one `sync_update` over a stored completed row. It does not
+exercise per-case trigger behavior, repeat-admission, final-attempt handling,
+`delete_before_worker_read`, or `erase_after`; those are listed in the report and remain
+uncovered until the real driver swap. Missing rows are materialized from their synthetic
+recording for this diagnostic. The target does not change `test.sh` or the cohort gate.
 
 To examine the active corpus interactively:
 
@@ -122,7 +171,7 @@ retain their different transport payloads separately as drift.
 Set `final_attempt` and name an `unavailable_app` from `apps` to exercise the
 terminal delivery path with a synthetic HTTP 503.
 Review new in-repo fixtures as synthetic, including decoded encrypted fixture contents,
-before updating their SHA-256 pins in `paths.go`. The 50-case active floor and each case's
+before updating their SHA-256 pins in `paths.go`. The 51-case active floor and each case's
 contract-rule mapping are in `case-map.json`. It names every F01–F38 rule the current oracle
 can drive and those it cannot. `corpus/held-out.json` contains four synthetic cases excluded
 from CI replay until the worker exposes the needed seams.
@@ -159,19 +208,24 @@ not fetch conversations or read production keys.
 | --- | --- |
 | Nested fields, arrays, numeric values, missing fields and escaped paths compare deterministically | `TestCompareReportsNestedDiffsAndKeepsPresence` |
 | Object, array, scalar and null mismatches produce a report | `TestCompareDifferencesWithIncompatibleJSONShapes` |
-| Job IDs and fanout keys must match admission, and generated timestamps must be inside the replay window | `TestCompareOnlyExcusesVerifiedBindingsAndClocks` |
+| Go-only fanout and ownership receipts require side-local evidence; conversation and nested write clocks are checked in their own windows | `TestGoOnlyReceiptsRequireBoundGoEvidenceAndNoPythonCopies`, `TestApprovedConversationAndNestedWriteClocksAreChecked` |
+| Each approved derived timestamp retains its Firestore or RFC3339 type, is inside its own replay window, and meets its fixture day bucket | `TestApprovedTimestampRulesRequireSideLocalTypeAndWindow` |
+| Goal event IDs bind to their paths, parent goals and progress sequence before event semantics are compared | `TestGoalEventIdentityIsBoundBeforeSemanticComparison` |
+| Every approved Home token is UUIDv4 hex, fresh, unique in its side's run, and bound to the same-side dependent record | `TestEachHomeTokenRequiresUUIDv4AndItsSameSideLink`, `TestHomeTokensRejectSeedCollisionsAndRunWideDuplicates` |
 | Missing evidence or driver errors cannot yield a pass | `TestCompareRejectsInvalidEvidence`, `TestCompareCountsExecutionErrors` |
 | Ten completed, failed, discarded and missing-row admissions across both paths produce zero unexplained differences | `test.sh` with `corpus/admission-parity.json` |
-| Forty active-worker cases persist notes, reach the memory and vector sinks, deliver webhooks, resume seeded own-key jobs and cover the mapped F01/F02/F04/F08/F09/F14/F17/F32 surfaces; Python also runs its canonical memory, app, task, folder, goal and developer-webhook code | `test.sh` with `corpus/conformance-gaps.json` and `case-map.json` |
+| Forty-one active-worker cases persist notes, reach the memory and vector sinks, deliver webhooks, resume seeded own-key jobs and cover the mapped F01/F02/F04/F08/F09/F14/F17/F32 surfaces; Python also runs its canonical memory, app, task, folder, goal and developer-webhook code | `test.sh` with `corpus/conformance-gaps.json` and `case-map.json` |
+| Deferred live and batch receipts expose their stored `sync_content_revision` through REST and MCP list, search and detail; the second segment is returned after the initial cached miss and repeated reads request no enrichment promotion. Locked/erased detail reads retain typed HTTP refusals; unreadable ciphertext is covered by the dead-letter case. A non-deferred GUI detail open is the positive control. | `test_deferred_live_and_batch_receipt_reads_return_latest_revision_without_enrichment` in `backend/testing/e2e/test_retrieval_search.py` and `unreadable-ciphertext-dead-letters` |
 
-The ten-case admission corpus is a zero-difference gate. The 40-case active-finalizer corpus
+The ten-case admission corpus is a zero-difference gate. The 41-case active-finalizer corpus
 is an interim measurement against `cmd/jobd`; its unexplained-difference count is expected to
-be non-zero. The gate records that count per commit, with no expected-drift signature pin,
+be nonzero. The gate records that count per commit, with no expected-drift signature pin,
 and preserves reasons on allowlisted differences. CI verifies the count against the observed
 unexplained paths and requires zero execution errors. This is the lane 6 worklist, not the
-final cohort gate. After the lane 6 handler lands, switch the driver to `cmd/workerd`, add a
-CI-runnable mutation check (breaking a fence or duplicating a paid call must make the oracle
-red), then require zero unexplained differences over the active floor.
+final cohort gate. `test.sh` also mutates the recorded fence outcome and duplicates a paid
+model call, then verifies each mutation is rejected. The workerd diagnostic target above is
+for draft-to-draft measurement only. After the lane 6 handler lands and the driver swap is
+approved, the cohort gate must run the full corpus and both mutations against the worker.
 
 The oracle does not cover Redis cache or suppression keys, mixed-version ownership handback,
 or rollback durability; the shadow plan covers these behaviors. Separate cases assert that
