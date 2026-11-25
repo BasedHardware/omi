@@ -133,3 +133,67 @@ async def test_budget_finishes_started_unit_and_resumes_at_next_row(delivery, mo
         assert result == {'outcome': 'committed'}
     assert calls == ['a', 'b']
     assert not coll.document('b').get().get('v3_process_pending')
+
+
+@pytest.mark.asyncio
+async def test_live_title_redelivery_can_reload_source_via_open_pointer(delivery, monkeypatch):
+    user, clock, run = delivery
+    coll = user.collection('conversations')
+    now = datetime.now(timezone.utc)
+    start = now - timedelta(seconds=220)
+    source = coll.document('recording-live')
+    source.set(
+        {
+            'id': source.id,
+            'recording': True,
+            'source': 'omi',
+            'status': 'in_progress',
+            'started_at': start,
+            'finished_at': start + timedelta(seconds=210),
+            'v3_pending': True,
+            'v3_pending_since': start,
+            'data_protection_level': 'standard',
+            'transcript_segments': [
+                {
+                    'id': f'live-{i}',
+                    'text': 'Synthetic planning speech ' * 12,
+                    'start': i * 30,
+                    'end': (i + 1) * 30,
+                    'is_user': True,
+                }
+                for i in range(7)
+            ],
+        }
+    )
+    monkeypatch.setenv('CONVERSATIONS_V3_LIVE_TITLE', 'on')
+    monkeypatch.setattr(service, 'drain_processing', AsyncMock())
+    title = 'Planning the release'
+    title_calls = []
+    commit = service._commit
+
+    def live_title(uid, _segments):
+        title_calls.append(uid)
+        return title
+
+    def commit_after_budget(*args, **kwargs):
+        result = commit(*args, **kwargs)
+        clock[0] = 460
+        return result
+
+    monkeypatch.setattr(service.models, 'live_title', live_title)
+    monkeypatch.setattr(service, '_commit', commit_after_budget)
+    assert_yield(await run())
+    assert not title_calls
+
+    lease = leases.lease_ref(store.get_firestore_client(), user.id, 'builder').get()
+    assert lease.get('token') is None
+    live = coll.document(lease.get('open_id'))
+    assert not (live.get().to_dict() or {}).get('v3_live_title_state')
+
+    # Exercise redelivery with only the durable open pointer available to load the source.
+    source.update({'v3_pending': False, 'v3_pending_since': None})
+    monkeypatch.setattr(service, '_commit', commit)
+    assert await run() == {'outcome': 'committed'}
+    assert title_calls == [user.id]
+    assert live.get().get('v3_live_title_state') == 'published'
+    assert live.get().get('structured.title') == title
