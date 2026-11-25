@@ -331,7 +331,25 @@ class CompositeTranscriptionSocket implements IPureSocket {
     onError(err, trace);
   }
 
-  bool get _routesOmiControls => customLiveCaptureFixEnabled && sttProvider == SttProvider.customLive.name;
+  /// Whether [send] should keep Omi control text off the audio-only primary.
+  ///
+  /// [customLiveCaptureFixEnabled] (`OMI_CUSTOM_LIVE_CAPTURE_FIX`) was introduced
+  /// in f091e051a8 for [SttProvider.customLive] only. Every composite primary is
+  /// audio-only (polling, streaming, or Gemini), so the same flag now covers the
+  /// other custom STT providers too. Disabling it restores the old
+  /// send-text-to-primary path for Custom Live and those providers together,
+  /// instead of adding a second switch.
+  bool get _routesOmiControls => customLiveCaptureFixEnabled && _isAudioOnlyCustomSttPrimary;
+
+  /// Built-in Omi providers are excluded so a mis-tagged socket would not drop
+  /// controls. A null provider still counts: this class is only built for custom STT.
+  bool get _isAudioOnlyCustomSttPrimary {
+    final provider = sttProvider;
+    if (provider == SttProvider.omi.name || provider == SttProvider.omiParakeet.name) {
+      return false;
+    }
+    return true;
+  }
 
   @override
   void send(dynamic message) {
