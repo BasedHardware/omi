@@ -17,6 +17,7 @@ import pytest
 from database import conversation_tombstones as tombstones
 from database import user_data_deletion
 from database.account_deletion_operational_holds import StoragePrefixPurgeBlocked, StoragePrefixPurgeError
+from database.legal_holds import LegalHoldActive
 from google.api_core.exceptions import AlreadyExists
 from testing.import_isolation import stub_modules, AutoMockModule
 from utils.log_sanitizer import sanitize
@@ -238,6 +239,7 @@ def test_background_audio_purge_reports_provider_outcome_once(error, outcome, re
     logger = MagicMock()
     namespace = {
         'delete_privacy_conversation_audio': purge,
+        'LegalHoldActive': LegalHoldActive,
         'logger': logger,
         'sanitize': sanitize,
     }

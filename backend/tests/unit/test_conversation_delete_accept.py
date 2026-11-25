@@ -25,6 +25,7 @@ from routers import users as users_router
 from utils import cloud_tasks
 from utils.conversations import deletion_batch_purge
 from utils.other import storage
+from utils.support import holds
 from tests.unit.test_conversation_delete_gate_wait import (  # noqa: F401 - fixtures
     GATE_PATH,
     HOLD_PATH,
@@ -34,6 +35,7 @@ from tests.unit.test_conversation_delete_gate_wait import (  # noqa: F401 - fixt
     gate_client,
 )
 from tests.unit.test_owner_storage_purge_and_gate import _Blob, _Bucket, _Client
+from tests.unit.test_support_holds import _Client as HoldSupportClient
 
 ERASURES = purge_jobs.ERASURE_COLLECTION
 
@@ -550,6 +552,58 @@ def test_delete_holds_one_audio_gate_through_every_blob_delete(
     assert not private.names and HOLD_PATH not in plane.docs
 
 
+def test_hold_between_request_and_response_audio_gates_leaves_release_follow_up(plane, cascade, monkeypatch):
+    plane.docs[_conversation_path('c1')]['sync_merged_from'] = ['donor-a']
+    monkeypatch.setattr(
+        conversations.conversations_db,
+        'get_conversation_raw_snapshot',
+        lambda *a, **k: plane.docs.get(_conversation_path('c1')),
+    )
+    monkeypatch.setenv('BUCKET_CANONICAL_AUDIO', 'canonical')
+    monkeypatch.setattr(storage, 'get_canonical_audio_bucket', lambda: 'canonical')
+    delete_packs = MagicMock()
+    delete_prefixes = MagicMock()
+    monkeypatch.setattr(storage.audio_packs, 'delete_conversation', delete_packs)
+    monkeypatch.setattr(storage, 'delete_conversation_audio_files', delete_prefixes)
+    monkeypatch.setattr(legal_holds, '_place_legal_hold_transaction', legal_holds._place_legal_hold_transaction.to_wrap)
+
+    def place_hold_before_first_audio_attempt(uid, conversation_id, *, source_ids):
+        assert plane.docs[GATE_PATH]['kind'] == 'explicit_memory_deletion'
+        assert plane.docs[GATE_PATH]['state'] == 'completed'
+        assert _conversation_path('c1') not in plane.docs
+        legal_holds.place_legal_hold(UID, issuer='legal_hold_service', firestore_client=plane)
+        # Later attempts from the durable runner take the real audio gate without this interposition.
+        monkeypatch.setattr(
+            conversations, 'delete_privacy_conversation_audio', storage.delete_privacy_conversation_audio
+        )
+        storage.delete_privacy_conversation_audio(uid, conversation_id, source_ids=source_ids)
+
+    monkeypatch.setattr(conversations, 'delete_privacy_conversation_audio', place_hold_before_first_audio_attempt)
+    response = _accept_behind_peer(cascade)
+    assert response.status_code == 204 and response.headers['X-Omi-Delete-Outcome'] == 'tombstoned'
+    delete_packs.assert_not_called()
+    delete_prefixes.assert_not_called()
+    assert _erasure(plane, 'c1')['audio_source_ids'] == ['donor-a']
+
+    outcomes, _ = _drain_erasures(plane, cascade, passes=1)
+    assert outcomes == ['held']
+    delete_packs.assert_not_called()
+    delete_prefixes.assert_not_called()
+
+    legal_holds.place_legal_hold(UID, issuer='legal_hold_service', active=False, firestore_client=plane)
+    follow_up = holds._held_deferred_deletes(HoldSupportClient(plane.docs), UID)
+    assert follow_up['conversations'] == [{'conversation_id': 'c1', 'erasure_armed': True}]
+
+    _advance(plane, purge_jobs.HOLD_RECHECK_SECONDS)
+    outcomes, _ = _drain_erasures(plane, cascade, passes=1)
+    assert outcomes == ['erased'] and _erasure(plane, 'c1') is None
+    assert {call.args for call in delete_packs.call_args_list} == {
+        ('canonical', UID, 'c1'),
+        ('canonical', UID, 'donor-a'),
+    }
+    delete_prefixes.assert_called_once_with(UID, 'c1')
+
+
 def test_eraser_owes_merge_donor_audio_recorded_at_acceptance(plane, cascade):
     plane.docs[_conversation_path('c1')]['sync_merged_from'] = ['donor-a', 'c1']
     plane.docs[GATE_PATH] = _gate_doc()
@@ -563,6 +617,24 @@ def test_eraser_owes_merge_donor_audio_recorded_at_acceptance(plane, cascade):
     audio = conversations.delete_privacy_conversation_audio
     audio.assert_called_once()
     assert audio.call_args.kwargs['source_ids'] == ['donor-a']
+
+
+def test_erasure_completion_keeps_donors_recorded_after_worker_claim(plane, cascade, monkeypatch):
+    conversation_tombstones.accept_deletion(UID, 'c1')
+    attempts = []
+
+    def erase(uid, conversation_id, source_ids):
+        attempts.append(source_ids)
+        if len(attempts) == 1:
+            # A background task that observed a hold can record its deferral
+            # after the hold was released and a queued worker claimed the job.
+            conversation_tombstones.defer_audio_erasure(uid, conversation_id, source_ids=['donor-a'])
+
+    monkeypatch.setattr(conversations, 'erase_accepted_conversation', erase)
+    outcomes, _ = _drain_erasures(plane, cascade)
+    assert outcomes == ['superseded', 'erased']
+    assert attempts == [[], ['donor-a']]
+    assert _erasure(plane, 'c1') is None
 
 
 @pytest.mark.parametrize(

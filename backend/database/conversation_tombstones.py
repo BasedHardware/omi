@@ -157,6 +157,28 @@ def clear_legal_hold_deferral(uid: str, conversation_id: str, *, firestore_clien
         pass  # Gone already (an account wipe or another delete): nothing left to reconcile.
 
 
+def defer_audio_erasure(uid: str, conversation_id: str, *, source_ids: List[str]) -> None:
+    """Record an audio cleanup blocked by a hold after the conversation was deleted."""
+    from database._client import get_firestore_client
+    from database.conversation_batch_purge_jobs import accept_fields, erasure_job_ref
+
+    client = get_firestore_client()
+    tombstone_ref = client.collection('users').document(uid).collection(COLLECTION).document(conversation_id)
+    obligation_ref = erasure_job_ref(client, uid, conversation_id)
+
+    def body(transaction):
+        # An account wipe supersedes conversation cleanup. Do not restore a removed tombstone.
+        if not tombstone_ref.get(transaction=transaction).exists:
+            return
+        owed = obligation_ref.get(transaction=transaction).to_dict() or {}
+        prior_sources = [str(source) for source in owed.get('audio_source_ids') or []]
+        sources = list(dict.fromkeys(prior_sources + source_ids))
+        transaction.update(tombstone_ref, {'legal_hold_deferred': True, 'erasure_armed': True})
+        transaction.set(obligation_ref, accept_fields(uid, conversation_id, audio_source_ids=sources), merge=True)
+
+    _in_transaction(client, body)
+
+
 def _in_transaction(client: Any, body: Any) -> Any:
     from google.cloud import firestore
 
