@@ -678,7 +678,11 @@ def process_in_progress_conversation(
 ):
     conversation = retrieve_in_progress_conversation(uid)
     if not conversation:
-        response = finish_live_window(uid, request.live_conversation_id if request else None)
+        response = finish_live_window(
+            uid,
+            request.live_conversation_id if request else None,
+            allow_recording_fallback=request is None or request.empty_body,
+        )
         if response is not None:
             return response
         raise HTTPException(status_code=404, detail="Conversation in progress not found")
@@ -1998,17 +2002,19 @@ def _delete_conversation_under_gate(
                 logger.error(
                     'event=conversation_delete action=task_vectors outcome=error exception_type=%s', type(e).__name__
                 )
-
-    # Audio is primary content like the transcript, so both cascade modes erase it.
-    # Snapshot merge donors before shared metadata cleanup removes them: their
-    # prefixes and sync uploads hold this conversation's audio.
-    try:
-        raw = conversations_db.get_conversation_raw_snapshot(uid, conversation_id, field_paths=['sync_merged_from'])
-    except Exception as error:
-        raise HTTPException(503, 'Conversation storage deletion is busy, please retry') from error
-    source_ids = [source for source in (raw or {}).get('sync_merged_from') or [] if isinstance(source, str)]
-    purge_audio = _delete_privacy_audio_after_response if record_event else delete_privacy_conversation_audio
-    background_tasks.add_task(purge_audio, uid, conversation_id, source_ids=source_ids)
+        # Snapshot retained bridge donors before shared metadata cleanup removes them.
+        # A previous lake-purge attempt may already have removed the transcript blob.
+        source_ids = []
+        if os.getenv('BUCKET_CANONICAL_AUDIO'):
+            try:
+                raw = conversations_db.get_conversation_raw_snapshot(
+                    uid, conversation_id, field_paths=['sync_merged_from']
+                )
+            except Exception as error:
+                raise HTTPException(503, 'Conversation storage deletion is busy, please retry') from error
+            source_ids = (raw or {}).get('sync_merged_from', [])
+        purge_audio = _delete_privacy_audio_after_response if record_event else delete_privacy_conversation_audio
+        background_tasks.add_task(purge_audio, uid, conversation_id, source_ids=source_ids)
 
     # Screen frames (meeting-note screenshots) are primary conversation
     # content, not cascade-only derived data, so this runs unconditionally

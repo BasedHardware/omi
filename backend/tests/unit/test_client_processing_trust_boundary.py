@@ -286,8 +286,6 @@ PINNED_REFERENCES: FrozenSet[Reference] = frozenset(
         Reference('routers/developer.py', '_parse_client_projection', 'ClientProcessing'),
         Reference('routers/developer.py', '_bind_projection_to_segments', 'ClientProcessing'),
         Reference('routers/developer.py', '_bind_late_client_projection', 'client_processing'),
-        # Budget retries restore the stored display projection through the existing attachment path.
-        Reference('routers/developer.py', '_ingest_conversation_from_segments', 'client_processing'),
         Reference('routers/developer.py', '_ingest_conversation_from_segments', 'client_projection'),
         Reference('routers/developer_segments.py', 'admit_segments', 'client_processing'),
         Reference('routers/developer_segments.py', 'common', 'client_processing'),

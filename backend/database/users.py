@@ -2748,8 +2748,5 @@ def write_ai_user_profile_if_unchanged(
 
 
 def delete_ai_user_profile(uid: str) -> None:
-    # ai_user_profile_v2 was written by the retired Dream state pass (a96ada8922); nothing reads it.
-    db.collection('users').document(uid).update(
-        {'ai_user_profile': firestore.DELETE_FIELD, 'ai_user_profile_v2': firestore.DELETE_FIELD}
-    )
+    db.collection('users').document(uid).update({'ai_user_profile': firestore.DELETE_FIELD})
     invalidate(_USER_AI_PROFILE_CACHE, uid)

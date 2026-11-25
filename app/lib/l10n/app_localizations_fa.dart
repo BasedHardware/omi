@@ -15821,7 +15821,18 @@ class AppLocalizationsFa extends AppLocalizations {
   String get playStripeBilledOnWebShort => 'صورتحساب از طریق omi.me.';
 
   @override
-  String playStripeUpdateCardToGetPlanBack(String plan) {
-    return 'برای بازگرداندن $plan، کارت خود را در omi.me به‌روزرسانی کنید.';
+  String playStripePlanPaused(String plan) {
+    return 'طرح $plan شما متوقف شده است.';
   }
+
+  @override
+  String get firmwareNewestSupportedForDevice =>
+      'دستگاه شما در حال حاضر روی جدیدترین نسخه فریم‌ور پشتیبانی‌شده قرار دارد';
+
+  @override
+  String get firmwareSyncRecordingsFirstTitle => 'ابتدا ضبط‌های خود را همگام‌سازی کنید';
+
+  @override
+  String get firmwareSyncRecordingsFirstMessage =>
+      'برخی ضبط‌ها هنوز روی دستگاه شما هستند. اجازه دهید همگام‌سازی آن‌ها به گوشی شما کامل شود، سپس بروزرسانی را شروع کنید.';
 }

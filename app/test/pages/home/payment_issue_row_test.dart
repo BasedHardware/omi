@@ -192,7 +192,10 @@ void main() {
         expect(tester.takeException(), isNull);
         expect(find.text('Your card was declined'), findsOneWidget);
         // One line, no repeat of "Update it".
-        expect(find.text('Update your card at omi.me to get Omi Pro back.'), findsOneWidget);
+        expect(find.text('Your Omi Pro plan is paused.'), findsOneWidget);
+        // Neutral: no place or way to pay.
+        expect(find.textContaining('omi.me'), findsNothing);
+        expect(find.textContaining('card at'), findsNothing);
         expect(find.text('Update it to get Omi Pro back'), findsNothing);
         expect(find.textContaining('a month'), findsNothing);
         expect(find.byKey(const ValueKey('payment_issue_update')), findsNothing);
@@ -225,7 +228,7 @@ void main() {
       expect(usage.buysThroughPlay, isTrue);
       expect(find.byKey(const ValueKey('payment_issue_update')), findsNothing);
       expect(find.byKey(const ValueKey('payment_issue_monthly')), findsNothing);
-      expect(find.text('Update your card at omi.me to get Omi Pro back.'), findsOneWidget);
+      expect(find.text('Your Omi Pro plan is paused.'), findsOneWidget);
     }, variant: TargetPlatformVariant.only(TargetPlatform.android));
 
     testWidgets('an already-open monthly switch sheet charges nothing once Play setup arrives', (tester) async {
@@ -265,14 +268,14 @@ void main() {
       await _pump(tester, _response(issue: _yearlyPastDue, play: playConfig));
       expect(find.byKey(const ValueKey('payment_issue_update')), findsOneWidget);
       expect(find.byKey(const ValueKey('payment_issue_monthly')), findsOneWidget);
-      expect(find.text('Update your card at omi.me to get Omi Pro back.'), findsNothing);
+      expect(find.text('Your Omi Pro plan is paused.'), findsNothing);
     }, variant: TargetPlatformVariant.only(TargetPlatform.iOS));
 
     testWidgets('Android without Play setup keeps Update and Switch to Monthly', (tester) async {
       await _pump(tester, _response(issue: _yearlyPastDue));
       expect(find.byKey(const ValueKey('payment_issue_update')), findsOneWidget);
       expect(find.byKey(const ValueKey('payment_issue_monthly')), findsOneWidget);
-      expect(find.text('Update your card at omi.me to get Omi Pro back.'), findsNothing);
+      expect(find.text('Your Omi Pro plan is paused.'), findsNothing);
     }, variant: TargetPlatformVariant.only(TargetPlatform.android));
   });
 
@@ -526,22 +529,39 @@ void main() {
       expect(find.byKey(const Key('monthly_switch_cancel')), findsOneWidget);
     });
 
-    for (final (code, body, message) in [
+    // The backend's real statuses and top-level shape (backend/routers/payment.py).
+    for (final (code, status, body, message, retryable) in [
       (
         'use_google_play',
+        409,
         '{"detail": "Subscribe with Google Play in the app.", "code": "use_google_play"}',
         'Subscribe with Google Play in the app.',
+        false,
       ),
       (
         'play_on_hold',
+        400,
         '{"detail": "You have a Google Play subscription on hold. Fix the payment in Google Play.", '
             '"code": "play_subscription_on_hold"}',
         'You have a Google Play subscription on hold. Fix the payment in Google Play.',
+        false,
+      ),
+      (
+        'play_check_unavailable',
+        400,
+        '{"detail": "We could not check your Google Play subscription. Try again in a minute.", '
+            '"code": "play_check_unavailable"}',
+        'We could not check your Google Play subscription. Try again in a minute.',
+        true,
       ),
     ]) {
       testWidgets('a $code refusal shows the server sentence, never JSON', (tester) async {
+        var calls = 0;
         await _pump(tester, _response(issue: _yearlyPastDue),
-            applyMonthlySwitch: ({required priceId, required expectedAmount}) async => paymentErrorFromBody(409, body));
+            applyMonthlySwitch: ({required priceId, required expectedAmount}) async {
+          calls++;
+          return paymentErrorFromBody(status, body);
+        });
         await tester.tap(find.byKey(const ValueKey('payment_issue_monthly')));
         await tester.pumpAndSettle();
         await tester.tap(find.byKey(const Key('monthly_switch_confirm')));
@@ -550,7 +570,13 @@ void main() {
         expect(tester.takeException(), isNull);
         expect(find.text(message), findsOneWidget);
         expect(find.textContaining('{'), findsNothing);
-        expect(find.byKey(const Key('monthly_switch_confirm')), findsNothing);
+        // A Play check that could not run is transient: Confirm stays so the reader can try again.
+        expect(find.byKey(const Key('monthly_switch_confirm')), retryable ? findsOneWidget : findsNothing);
+        if (retryable) {
+          await tester.tap(find.byKey(const Key('monthly_switch_confirm')));
+          await tester.pumpAndSettle();
+          expect(calls, 2);
+        }
       });
     }
 

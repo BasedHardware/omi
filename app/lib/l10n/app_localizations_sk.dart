@@ -15824,7 +15824,17 @@ class AppLocalizationsSk extends AppLocalizations {
   String get playStripeBilledOnWebShort => 'Účtované cez omi.me.';
 
   @override
-  String playStripeUpdateCardToGetPlanBack(String plan) {
-    return 'Aktualizujte kartu na omi.me a získajte $plan späť.';
+  String playStripePlanPaused(String plan) {
+    return 'Váš plán $plan je pozastavený.';
   }
+
+  @override
+  String get firmwareNewestSupportedForDevice => 'Vaše zariadenie už má najnovšiu podporovanú verziu firmvéru';
+
+  @override
+  String get firmwareSyncRecordingsFirstTitle => 'Najprv synchronizujte nahrávky';
+
+  @override
+  String get firmwareSyncRecordingsFirstMessage =>
+      'Niektoré nahrávky sa stále nachádzajú na zariadení. Počkajte, kým sa dokončí ich synchronizácia s telefónom, a potom spustite aktualizáciu.';
 }

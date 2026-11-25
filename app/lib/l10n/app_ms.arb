@@ -4765,5 +4765,8 @@
     "prepaidCodeResult": "{reason, select, invalid{Kod ini tidak sah. Semak dan cuba lagi.} used{Kod ini telah digunakan.} expired{Kod ini telah tamat tempoh.} hasPlan{Anda sudah mempunyai pelan. Kod anda tidak digunakan. Tebusnya selepas pelan anda tamat.} notPrepaid{Kod ini tidak boleh ditebus di sini. Gunakannya semasa memilih pelan.} notEligible{Kod ini tidak boleh digunakan pada akaun ini.} rateLimited{Terlalu banyak percubaan. Cuba lagi nanti.} other{Ada sesuatu yang tidak kena. Sila cuba lagi.}}",
     "playStripeBilledOnWeb": "Dibilkan melalui omi.me. Batalkan di sini pada bila-bila masa.",
     "playStripeBilledOnWebShort": "Dibilkan melalui omi.me.",
-    "playStripeUpdateCardToGetPlanBack": "Kemas kini kad anda di omi.me untuk mendapatkan semula {plan}."
+    "playStripePlanPaused": "Pelan {plan} anda dijeda.",
+    "firmwareNewestSupportedForDevice": "Peranti anda sudah menggunakan versi firmware terbaharu yang disokong",
+    "firmwareSyncRecordingsFirstTitle": "Segerakkan rakaman anda terlebih dahulu",
+    "firmwareSyncRecordingsFirstMessage": "Sebahagian rakaman masih berada pada peranti anda. Biarkan ia selesai disegerakkan ke telefon anda, kemudian mulakan kemas kini."
 }

@@ -12322,5 +12322,8 @@
     "prepaidCodeResult": "{reason, select, invalid{Ovaj kod nije važeći. Provjerite ga i pokušajte ponovo.} used{Ovaj kod je već iskorišten.} expired{Ovaj kod je istekao.} hasPlan{Već imate plan. Vaš kod nije iskorišten. Iskoristite ga kada vam plan istekne.} notPrepaid{Ovaj kod se ne može iskoristiti ovdje. Iskoristite ga kada odaberete plan.} notEligible{Ovaj kod se ne može koristiti na ovom računu.} rateLimited{Previše pokušaja. Pokušajte kasnije.} other{Nešto nije u redu. Pokušajte ponovo.}}",
     "playStripeBilledOnWeb": "Naplaćuje se putem omi.me. Otkažite ovdje bilo kada.",
     "playStripeBilledOnWebShort": "Naplaćuje se putem omi.me.",
-    "playStripeUpdateCardToGetPlanBack": "Ažurirajte karticu na omi.me da vratite {plan}."
+    "playStripePlanPaused": "Vaš {plan} plan je pauziran.",
+    "firmwareNewestSupportedForDevice": "Vaš uređaj već koristi najnoviju podržanu verziju firmvera",
+    "firmwareSyncRecordingsFirstTitle": "Prvo sinhronizujte svoje snimke",
+    "firmwareSyncRecordingsFirstMessage": "Neki snimci su još uvijek na vašem uređaju. Sačekajte da se sinhronizuju s telefonom, a zatim pokrenite ažuriranje."
 }

@@ -168,6 +168,15 @@ class UsageProvider with ChangeNotifier {
     return !(sub.plan.isPaid && !sub.billedByPlay);
   }
 
+  /// A paid plan not billed by Play on a build that sells through Google Play: an open native paywall has
+  /// nothing to sell this reader and closes. Resubscribe at the same price while a Stripe cancel is pending
+  /// stays (never for a prepaid plan, which ends on its own).
+  bool get paywallClosedForPlay {
+    if (!buysThroughPlay || playBilledPurchaser) return false;
+    final sub = _subscription!.subscription;
+    return sub.prepaid == true || !(sub.cancelAtPeriodEnd && sub.currentPriceId != null);
+  }
+
   /// Play's prices for this Google account; null until loaded or when Play has no product.
   PlayOffers? get playOffers => _playOffers;
   bool get playOffersLoading => _playOffersLoading;
@@ -757,14 +766,19 @@ class UsageProvider with ChangeNotifier {
     }
   }
 
-  /// Server switch on and no live paid plan: offer "Have a code?" for a prepaid code (no card).
-  /// Never for a Google Play purchaser or before Android knows its billing provider: the Play build
-  /// shows no purchase path outside Play.
+  /// The server offers it (its switch, or any Google Play build) and no live paid plan: "Have a code?"
+  /// redeems a prepaid code with no card. On a Play build it only redeems a code the reader already has,
+  /// and never shows to a paid reader (Play or Stripe) or before Android knows its billing provider.
   bool get canRedeemPrepaidCode {
     final response = subscription;
     if (response == null || !response.prepaidCodeRedeem) return false;
-    if (playBilledPurchaser || billingProviderUnknown) return false;
+    // Unknown provider, or the latest read failed after an earlier success: eligibility is stale. The cached
+    // Play setup still governs purchases (buysThroughPlay); only redemption waits for a good read.
+    if (billingProviderUnknown || _subscriptionReadFailed) return false;
     final sub = response.subscription;
+    // A past-due Stripe agreement shows as Free but can still bill (the server would answer has_plan).
+    if (response.paymentIssue != null && sub.stripeSubscriptionId != null) return false;
+    if (buysThroughPlay && sub.plan.isPaid) return false;
     return !(sub.plan.isPaid && sub.status == SubscriptionStatus.active);
   }
 

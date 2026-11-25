@@ -15821,7 +15821,17 @@ class AppLocalizationsEt extends AppLocalizations {
   String get playStripeBilledOnWebShort => 'Arveldatakse omi.me kaudu.';
 
   @override
-  String playStripeUpdateCardToGetPlanBack(String plan) {
-    return 'Uuenda oma kaarti aadressil omi.me, et $plan tagasi saada.';
+  String playStripePlanPaused(String plan) {
+    return 'Sinu $plan pakett on peatatud.';
   }
+
+  @override
+  String get firmwareNewestSupportedForDevice => 'Teie seadmes on juba uusim toetatud püsivaraversioon';
+
+  @override
+  String get firmwareSyncRecordingsFirstTitle => 'Sünkroonige oma salvestised esmalt';
+
+  @override
+  String get firmwareSyncRecordingsFirstMessage =>
+      'Mõned salvestised on veel teie seadmes. Oodake, kuni need on telefonisse sünkroonitud, ja seejärel alustage uuendust.';
 }

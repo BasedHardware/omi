@@ -15820,7 +15820,17 @@ class AppLocalizationsDa extends AppLocalizations {
   String get playStripeBilledOnWebShort => 'Faktureres via omi.me.';
 
   @override
-  String playStripeUpdateCardToGetPlanBack(String plan) {
-    return 'Opdater dit kort på omi.me for at få $plan tilbage.';
+  String playStripePlanPaused(String plan) {
+    return 'Dit $plan-abonnement er sat på pause.';
   }
+
+  @override
+  String get firmwareNewestSupportedForDevice => 'Din enhed kører allerede den nyeste understøttede firmwareversion';
+
+  @override
+  String get firmwareSyncRecordingsFirstTitle => 'Synkroniser dine optagelser først';
+
+  @override
+  String get firmwareSyncRecordingsFirstMessage =>
+      'Nogle optagelser er stadig på din enhed. Lad dem blive færdige med at synkronisere til din telefon, og start derefter opdateringen.';
 }

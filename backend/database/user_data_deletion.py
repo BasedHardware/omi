@@ -35,11 +35,11 @@ def purge_user_subtree(uid: str, client: Any, delete_collection: Callable) -> di
     # lives in the customer data plane (which can differ from this compute
     # client's project). A failed delete must propagate so the account wipe
     # retries it.
-    cohort_client = get_data_plane_firestore_client()
-    cohort_ref = cohort_client.collection('rollout_cohorts').document(uid)
+    data_plane = get_data_plane_firestore_client()
+    cohort_ref = data_plane.collection('rollout_cohorts').document(uid)
     # Child audit rows (go_finalization_audit) survive a parent delete, so erase them first.
     for sub in cohort_ref.collections():
-        delete_collection(sub, client=cohort_client)
+        delete_collection(sub, client=data_plane)
     cohort_ref.delete()
     # Creator-owned marketplace apps live outside users/{uid}; remove their
     # nested API keys/reviews too so final and immediate erasure share parity.
@@ -97,5 +97,11 @@ def purge_user_subtree(uid: str, client: Any, delete_collection: Callable) -> di
     elif root_exists:
         logger.info(f"Deleting user document: {uid}")
         user_ref.delete()
+    # A child can arrive after its conversation's first sweep but before the
+    # parent delete. list_documents also sees missing parents with descendants,
+    # including on retry after the user root has already been removed.
+    evidence_owner = data_plane.collection('users').document(uid)
+    for conversation in evidence_owner.collection('conversations').list_documents():
+        delete_collection(conversation.collection('speaker_evidence'), client=data_plane)
     stop_quiet_checks_for_account(uid, firestore_client=client)
     return {'status': 'ok', 'message': 'Account deleted successfully'}

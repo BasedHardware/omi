@@ -105,7 +105,7 @@ even below 20 words. Naturally ended media is hidden. Background hides only
 with positive wearer recognition somewhere in the contributing recordings:
 `is_user: true` or a segment-bound wearer label from authoritative speaker
 evidence. Without it, background becomes conversation and uses the normal
-300-word rule or the manual-end override. `kind`, `outline_kind` and the
+150-word rule or the manual-end override. `kind`, `outline_kind` and the
 classification reason remain available for analytics.
 Set `CONVERSATIONS_V3_MANUAL_END_HOME_VISIBLE=off` on every service that runs the
 v3 reconcile (`backend` for on-open rebuilds, `backend-sync`, `backend-sync-backfill`)
@@ -133,6 +133,11 @@ without waiting for the batch merge and delivery. The batch record projection la
 provisional segments; once `record_projection_revision` is set the fast write is refused. Recordings
 over 20 minutes, partial records, custom STT, locked rows and private rows are skipped. Read
 `omi_conversations_v3_fast_finish_total{outcome}` and `omi_conversations_v3_fast_finish_seconds{stage}`.
+A manual finish that never starts the pass is counted in
+`omi_conversations_v3_fast_finish_skipped_total{reason}`: `mode_off`, `already_started`, or the first
+failing `fast_finish.candidate_rejection` predicate (`not_recording`, `no_manual_end`,
+`status_in_progress`, `status_processing`, `status_other`, `no_private_cloud_sync`, `protection_level`,
+`projection_revision`, `audio_partial`, `deleted`, `discarded`, `locked`, `custom_stt`).
 Five minutes of placed-speech silence is a hard window boundary. An outline's
 `resumes_previous` may undo a topic split within that interval, never rejoin
 windows across the silence boundary, even with the same people. Short socket
@@ -153,7 +158,7 @@ proof of acoustic silence; qualify transcript completeness separately.
 `CONVERSATIONS_V3_STRETCH_COHESION` defaults to `on`. The outline renders
 stretch-local speaker labels, and short conversational topics fold within the
 same silence, manual-end and two-hour cap boundaries. Home evaluates the
-300-word threshold against that fresh stretch. Media, recognized background
+150-word threshold against that fresh stretch. Media, recognized background
 and late fragments around published claims retain their own visibility rules.
 Set the switch to `off` on v3 builder and backfill runners to restore the prior
 prompt and per-topic Home minimum for subsequent passes. Existing published
@@ -278,9 +283,10 @@ Finished-window copies retain user edits and stable titles. Recordings never
 enter model processing, apps, memories or webhooks. Automatically ended short speech of at least 20
 words uses the existing task extraction rules and memory processing without a
 summary call. Media/background have no derived processing. Summaries reuse the
-existing notes prompt; the v3 background lane is Luna/low, gateway Flex-first,
-then Standard. The on-open lane is Standard. Metering stays in the gateway and
-usage tracker. The section stream uses the chat `data:` / base64 `done:` /
+existing notes prompt; the v3 background lane and the on-open lane are both
+Luna/low on the Standard tier (the background lane left the gateway's Flex-first
+list on 2026-11-24; `LLM_GATEWAY_FLEX_FIRST_LANES` can name it again). Metering
+stays in the gateway and usage tracker. The section stream uses the chat `data:` / base64 `done:` /
 JSON `error:` protocol and stores only a complete revision-fenced result.
 Terminal processing/outline retry exhaustion and affirmative transcription
 failure show tile_state:failed, status:completed and summary_retryable when

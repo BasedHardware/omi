@@ -20602,7 +20602,7 @@ public enum OmiAPI {
     return try JSONDecoder().decode([OmiAnyCodable].self, from: data)
   }
 
-  public static func getLatestVersionV2FirmwareLatestGet(client: OmiApiClient, deviceModel: String, firmwareRevision: String, hardwareRevision: String, manufacturerName: String, deviceId: String? = nil) async throws -> OmiAnyCodable {
+  public static func getLatestVersionV2FirmwareLatestGet(client: OmiApiClient, deviceModel: String, firmwareRevision: String, hardwareRevision: String, manufacturerName: String, deviceId: String? = nil, bootloaderSha256: String? = nil) async throws -> OmiAnyCodable {
     let _path = "/v2/firmware/latest"
     guard var components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
@@ -20615,6 +20615,9 @@ public enum OmiAPI {
     if let deviceId {
       queryItems.append(URLQueryItem(name: "device_id", value: String(deviceId)))
     }
+    if let bootloaderSha256 {
+      queryItems.append(URLQueryItem(name: "bootloader_sha256", value: String(bootloaderSha256)))
+    }
     if !queryItems.isEmpty { components.queryItems = queryItems }
     guard let url = components.url else { throw OmiApiError.invalidURL }
     var req = URLRequest(url: url)
@@ -20631,13 +20634,16 @@ public enum OmiAPI {
     return try JSONDecoder().decode(OmiAnyCodable.self, from: data)
   }
 
-  public static func getStableVersionV2FirmwareStableGet(client: OmiApiClient, deviceModel: String) async throws -> OmiAnyCodable {
+  public static func getStableVersionV2FirmwareStableGet(client: OmiApiClient, deviceModel: String, bootloaderSha256: String? = nil) async throws -> OmiAnyCodable {
     let _path = "/v2/firmware/stable"
     guard var components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
     }
     var queryItems: [URLQueryItem] = []
     queryItems.append(URLQueryItem(name: "device_model", value: String(deviceModel)))
+    if let bootloaderSha256 {
+      queryItems.append(URLQueryItem(name: "bootloader_sha256", value: String(bootloaderSha256)))
+    }
     if !queryItems.isEmpty { components.queryItems = queryItems }
     guard let url = components.url else { throw OmiApiError.invalidURL }
     var req = URLRequest(url: url)
@@ -20654,7 +20660,7 @@ public enum OmiAPI {
     return try JSONDecoder().decode(OmiAnyCodable.self, from: data)
   }
 
-  public static func getFirmwareVersionV2FirmwareVersionGet(client: OmiApiClient, deviceModel: String, version: String) async throws -> OmiAnyCodable {
+  public static func getFirmwareVersionV2FirmwareVersionGet(client: OmiApiClient, deviceModel: String, version: String, bootloaderSha256: String? = nil) async throws -> OmiAnyCodable {
     let _path = "/v2/firmware/version"
     guard var components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
@@ -20662,6 +20668,9 @@ public enum OmiAPI {
     var queryItems: [URLQueryItem] = []
     queryItems.append(URLQueryItem(name: "device_model", value: String(deviceModel)))
     queryItems.append(URLQueryItem(name: "version", value: String(version)))
+    if let bootloaderSha256 {
+      queryItems.append(URLQueryItem(name: "bootloader_sha256", value: String(bootloaderSha256)))
+    }
     if !queryItems.isEmpty { components.queryItems = queryItems }
     guard let url = components.url else { throw OmiApiError.invalidURL }
     var req = URLRequest(url: url)

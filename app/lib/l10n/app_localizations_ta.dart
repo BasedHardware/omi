@@ -15936,7 +15936,18 @@ class AppLocalizationsTa extends AppLocalizations {
   String get playStripeBilledOnWebShort => 'omi.me மூலம் கட்டணம் வசூலிக்கப்படுகிறது.';
 
   @override
-  String playStripeUpdateCardToGetPlanBack(String plan) {
-    return '$plan ஐ மீண்டும் பெற omi.me இல் உங்கள் கார்டைப் புதுப்பிக்கவும்.';
+  String playStripePlanPaused(String plan) {
+    return 'உங்கள் $plan திட்டம் இடைநிறுத்தப்பட்டுள்ளது.';
   }
+
+  @override
+  String get firmwareNewestSupportedForDevice =>
+      'உங்கள் சாதனம் ஏற்கனவே ஆதரிக்கப்படும் மிகச் சமீபத்திய ஃபார்ம்வேர் பதிப்பில் உள்ளது';
+
+  @override
+  String get firmwareSyncRecordingsFirstTitle => 'முதலில் உங்கள் பதிவுகளை ஒத்திசைக்கவும்';
+
+  @override
+  String get firmwareSyncRecordingsFirstMessage =>
+      'சில பதிவுகள் இன்னும் உங்கள் சாதனத்தில் உள்ளன. அவை உங்கள் தொலைபேசிக்கு ஒத்திசைவை முடிக்க அனுமதித்து, பிறகு புதுப்பிப்பைத் தொடங்கவும்.';
 }

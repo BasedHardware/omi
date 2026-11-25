@@ -15836,7 +15836,17 @@ class AppLocalizationsSr extends AppLocalizations {
   String get playStripeBilledOnWebShort => 'Наплаћује се преко omi.me.';
 
   @override
-  String playStripeUpdateCardToGetPlanBack(String plan) {
-    return 'Ажурирајте картицу на omi.me да вратите $plan.';
+  String playStripePlanPaused(String plan) {
+    return 'Ваш $plan план је паузиран.';
   }
+
+  @override
+  String get firmwareNewestSupportedForDevice => 'Ваш уређај већ користи најновију подржану верзију фирмвера';
+
+  @override
+  String get firmwareSyncRecordingsFirstTitle => 'Прво синхронизујте снимке';
+
+  @override
+  String get firmwareSyncRecordingsFirstMessage =>
+      'Неки снимци се још увек налазе на вашем уређају. Сачекајте да заврше синхронизовање са телефоном, а затим покрените ажурирање.';
 }

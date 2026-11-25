@@ -430,7 +430,20 @@ FIELD_SITES = {
             'enqueue.commit',
             'state',
             "'holding'",
-            ('bytes', 'files', 'first_accept_at', 'id', 'key', 'members', 'release_by', 'scan_at', 'seconds', 'state'),
+            (
+                'bytes',
+                'files',
+                'first_accept_at',
+                'id',
+                'key',
+                'members',
+                'profile',
+                'release_by',
+                'scan_at',
+                'seconds',
+                'state',
+                'window_seconds',
+            ),
         ),
         (
             'enqueue.commit',
@@ -3456,6 +3469,10 @@ FIELD_SITES = {
         ('stamp_projection_debt', 'summary_due_at', 'accepted + deadline_seconds()', ('summary_due_at',)),
         ('stamp_projection_debt', 'summary_first_pending_at', 'accepted', ('summary_first_pending_at',)),
     ],
+    # The one settled stamp every completed-status writer splats or applies (not the claim's family).
+    'utils/conversations/terminal_settled.py': [
+        ('settle', 'terminal_family_at', 'now', ('terminal_family_at',)),
+    ],
     'utils/conversations/transcript_for_llm.py': [
         ('render_cluster_transcript', 'status', "'resolved' if resolution_available else 'unavailable'", ('status',))
     ],
@@ -3483,7 +3500,6 @@ FIELD_SITES = {
                 'usage_unknown',
             ),
         ),
-        ('run_pass', 'status', "'not_admitted'", ('levers', 'reason', 'status', 'trigger')),
         ('run_pass', 'status', "'not_admitted'", ('reason', 'status')),
         ('run_pass', 'status', "'not_admitted'", ('reason', 'status')),
         ('run_pass', 'status', "'not_admitted'", ('reason', 'status')),

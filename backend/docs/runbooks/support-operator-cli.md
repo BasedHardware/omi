@@ -12,11 +12,11 @@ their behalf, and every run is attributable.
 
 ## Rules
 
-- Every command needs `--ticket` (the Intercom conversation id), `--actor` (the
+- Every command needs `--ticket` (the Intercom conversation ID or issue reference), `--actor` (the
   person who asked) and `--reason` (one line, no customer content). `--agent`
   (or `SUPPORT_AGENT_ID`) names the identity that ran it.
-- Every command, read or write, first writes `support_actions/{action_id}` and
-  then finishes it with `outcome` `succeeded` or `failed`. If the audit write fails, the
+- Hold, retention, export and summary commands first write `support_actions/{action_id}` and
+  then finish the record with `outcome` `succeeded` or `failed`. If the audit write fails, the
   command does not run. The audit document never contains customer content:
   only counts, states and digests.
 - Writes are dry runs unless `--apply` is passed.
@@ -108,6 +108,58 @@ the ticket; the agent checks the uid matches the ticket's contact first.
 `account summary <uid>`: profile basics, plan, hold and deletion state. Write
 operations are added one at a time after review. Deletes and refunds are never
 offered here.
+
+### Correct a stale canceled Stripe plan
+
+`account correct-plan` operates on one owner (`--owner`) or a committed file
+with one owner per line (`--owners-file`). It requires a ticket, actor, reason
+and the UTC packet date (`--since YYYY-MM-DD`). Use the private triage checkout
+with directory mode 0700, and store all input lists and receipts under
+`packets/`. Keep owner arguments out of shell history and transcripts.
+Set `OMI_SUPPORT_TRIAGE_ORIGIN` to the approved private Forgejo SSH URL.
+The command checks this against the checkout’s effective fetch and push URLs.
+The command prints counts and Firestore document reads. The private JSONL
+receipt contains the per-owner plan diff and the audit mapping.
+
+Supply the restricted live `STRIPE_PLAN_CORRECTION_READ_KEY` from the operator credential loader.
+The command sends Stripe GET requests. It changes the Omi subscription plan
+and clears a verified stale price in the same transaction as the audit.
+It preserves the subscription association for late payments. It checks the
+owner’s current Stripe customer and canceled subscription, other subscription authority, invoices,
+charges, pending checkout, legal holds and deletion markers. Missing or
+conflicting evidence stops the affected owner. Stripe evidence is refreshed
+immediately before the Firestore transaction. The transaction fences the
+profile and hold/deletion documents within Firestore. Stripe and Firestore
+have separate transaction boundaries. Discovery covers the Omi billing
+customer and historical Stripe customer or subscription metadata tied to
+the owner. Stripe does not index Checkout Sessions by owner. Before apply,
+resolve any known checkout or customer without one of those bindings
+through the private support workflow.
+
+1. With the `ro-prod` tier, run `account correct-plan` without `--apply`.
+   Use a new packet-relative path for `--receipt`. Review the results privately,
+   then commit and push the dry run to `main` on the private Forgejo origin.
+2. Use a reviewed, merged CLI and the `prod-operator` tier. Fetch the private
+   origin, select the canary, then run with `--apply` and
+   `--dry-run-receipt` pointing to the committed dry-run receipt (up to
+   24 hours old). Use a distinct `--receipt` for every invocation.
+3. Before the canary, confirm the serving entitlement readers cannot reload
+   the stale paid price. An already-Basic record with a stored price needs
+   private eligibility review. Verify the canary projects Basic with a matching
+   audit, a corrected count of one, and zero failures.
+   Apply batches of up to ten ready owners. Stop on any failed batch or any
+   newly pending checkout or unclear guard. Commit each receipt to the private
+   origin. The Firestore plan and per-owner content-free audit are written
+   together. A prepared receipt entry with no verified result means the
+   outcome needs reconciliation before retrying.
+4. To roll back one owner, supply `--rollback-receipt` pointing to the
+   committed apply receipt and use the same ticket and list date. Dry run
+   first. With `--apply`, the command restores the previous plan and price
+   state only while both audit digests and the Firestore version still match
+   the original correction and the current guards pass.
+
+Set `OMI_SUPPORT_CORRECT_PLAN_ENABLED` to `false`, `off`, `0` or `no` to
+disable plan writes from this command.
 
 ### Apple and Google sign-ins on separate accounts
 

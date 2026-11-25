@@ -15858,7 +15858,17 @@ class AppLocalizationsPt extends AppLocalizations {
   String get playStripeBilledOnWebShort => 'Cobrado pelo omi.me.';
 
   @override
-  String playStripeUpdateCardToGetPlanBack(String plan) {
-    return 'Atualize seu cartão em omi.me para recuperar o $plan.';
+  String playStripePlanPaused(String plan) {
+    return 'Seu plano $plan está pausado.';
   }
+
+  @override
+  String get firmwareNewestSupportedForDevice => 'Seu dispositivo já está na versão de firmware mais recente suportada';
+
+  @override
+  String get firmwareSyncRecordingsFirstTitle => 'Sincronize suas gravações primeiro';
+
+  @override
+  String get firmwareSyncRecordingsFirstMessage =>
+      'Algumas gravações ainda estão no seu dispositivo. Deixe-as concluir a sincronização com seu telefone e, em seguida, inicie a atualização.';
 }

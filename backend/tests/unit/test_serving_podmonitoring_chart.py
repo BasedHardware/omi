@@ -125,6 +125,8 @@ def test_serving_podmonitoring_render(chart, values_suffix, stage):
             'privacy_session_cycle_operations_bucket',
             'omi_firestore_billed_reads_by_caller_total',
             'omi_firestore_caller_label_overflow_total',
+            'omi_firestore_billed_writes_by_caller_total',
+            'omi_firestore_billed_writes_by_origin_total',
             'omi_batch_pipeline_completed_audio_seconds_total',
             'omi_audio_pcm_storage_total',
             'omi_audio_pcm_storage_seconds_bucket',

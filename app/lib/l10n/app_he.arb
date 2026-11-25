@@ -12322,5 +12322,8 @@
     "prepaidCodeResult": "{reason, select, invalid{הקוד הזה אינו תקף. בדקו אותו ונסו שוב.} used{הקוד הזה כבר נוצל.} expired{תוקף הקוד הזה פג.} hasPlan{כבר יש לכם תוכנית. הקוד שלכם לא נוצל. ממשו אותו כשהתוכנית שלכם תסתיים.} notPrepaid{לא ניתן לממש את הקוד הזה כאן. השתמשו בו כשתבחרו תוכנית.} notEligible{לא ניתן להשתמש בקוד הזה בחשבון הזה.} rateLimited{יותר מדי ניסיונות. נסו שוב מאוחר יותר.} other{משהו השתבש. נסו שוב.}}",
     "playStripeBilledOnWeb": "החיוב מתבצע דרך omi.me. אפשר לבטל כאן בכל עת.",
     "playStripeBilledOnWebShort": "החיוב מתבצע דרך omi.me.",
-    "playStripeUpdateCardToGetPlanBack": "עדכנו את הכרטיס ב-omi.me כדי לקבל בחזרה את {plan}."
+    "playStripePlanPaused": "התוכנית {plan} שלך מושהית.",
+    "firmwareNewestSupportedForDevice": "המכשיר שלך כבר נמצא בגרסת הקושחה החדשה ביותר הנתמכת עבורו",
+    "firmwareSyncRecordingsFirstTitle": "סנכרן תחילה את ההקלטות שלך",
+    "firmwareSyncRecordingsFirstMessage": "חלק מההקלטות עדיין נמצאות במכשיר שלך. תן להן להשלים את הסינכרון לטלפון, ואז התחל את העדכון."
 }

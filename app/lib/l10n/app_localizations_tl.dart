@@ -15955,7 +15955,18 @@ class AppLocalizationsTl extends AppLocalizations {
   String get playStripeBilledOnWebShort => 'Sinisingil sa pamamagitan ng omi.me.';
 
   @override
-  String playStripeUpdateCardToGetPlanBack(String plan) {
-    return 'I-update ang iyong card sa omi.me para maibalik ang $plan.';
+  String playStripePlanPaused(String plan) {
+    return 'Naka-pause ang iyong $plan plan.';
   }
+
+  @override
+  String get firmwareNewestSupportedForDevice =>
+      'Ang iyong device ay nasa pinakabagong firmware version na kayang suportahan nito';
+
+  @override
+  String get firmwareSyncRecordingsFirstTitle => 'I-sync muna ang iyong mga recording';
+
+  @override
+  String get firmwareSyncRecordingsFirstMessage =>
+      'May mga recording pa na nasa iyong device. Hayaang matapos munang i-sync ang mga ito sa iyong phone, pagkatapos ay simulan ang pag-update.';
 }

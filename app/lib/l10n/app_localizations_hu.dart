@@ -15887,7 +15887,17 @@ class AppLocalizationsHu extends AppLocalizations {
   String get playStripeBilledOnWebShort => 'Számlázás az omi.me-n keresztül.';
 
   @override
-  String playStripeUpdateCardToGetPlanBack(String plan) {
-    return 'Frissítsd a kártyádat az omi.me oldalon, hogy visszakapd a(z) $plan csomagot.';
+  String playStripePlanPaused(String plan) {
+    return 'A(z) $plan csomagod szünetel.';
   }
+
+  @override
+  String get firmwareNewestSupportedForDevice => 'Az eszközödön már a legújabb támogatott firmware-verzió fut';
+
+  @override
+  String get firmwareSyncRecordingsFirstTitle => 'Először szinkronizáld a felvételeidet';
+
+  @override
+  String get firmwareSyncRecordingsFirstMessage =>
+      'Néhány felvétel még az eszközödön van. Várd meg, amíg a telefonodra szinkronizálásuk befejeződik, majd indítsd el a frissítést.';
 }

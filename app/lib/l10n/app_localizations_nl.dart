@@ -15870,7 +15870,17 @@ class AppLocalizationsNl extends AppLocalizations {
   String get playStripeBilledOnWebShort => 'Gefactureerd via omi.me.';
 
   @override
-  String playStripeUpdateCardToGetPlanBack(String plan) {
-    return 'Werk je kaart bij op omi.me om $plan terug te krijgen.';
+  String playStripePlanPaused(String plan) {
+    return 'Je $plan-abonnement is gepauzeerd.';
   }
+
+  @override
+  String get firmwareNewestSupportedForDevice => 'Je apparaat heeft al de nieuwste ondersteunde firmwareversie';
+
+  @override
+  String get firmwareSyncRecordingsFirstTitle => 'Synchroniseer eerst je opnames';
+
+  @override
+  String get firmwareSyncRecordingsFirstMessage =>
+      'Sommige opnames staan nog op je apparaat. Laat ze eerst volledig synchroniseren naar je telefoon en start daarna de update.';
 }

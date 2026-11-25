@@ -15715,7 +15715,17 @@ class AppLocalizationsHe extends AppLocalizations {
   String get playStripeBilledOnWebShort => 'החיוב מתבצע דרך omi.me.';
 
   @override
-  String playStripeUpdateCardToGetPlanBack(String plan) {
-    return 'עדכנו את הכרטיס ב-omi.me כדי לקבל בחזרה את $plan.';
+  String playStripePlanPaused(String plan) {
+    return 'התוכנית $plan שלך מושהית.';
   }
+
+  @override
+  String get firmwareNewestSupportedForDevice => 'המכשיר שלך כבר נמצא בגרסת הקושחה החדשה ביותר הנתמכת עבורו';
+
+  @override
+  String get firmwareSyncRecordingsFirstTitle => 'סנכרן תחילה את ההקלטות שלך';
+
+  @override
+  String get firmwareSyncRecordingsFirstMessage =>
+      'חלק מההקלטות עדיין נמצאות במכשיר שלך. תן להן להשלים את הסינכרון לטלפון, ואז התחל את העדכון.';
 }

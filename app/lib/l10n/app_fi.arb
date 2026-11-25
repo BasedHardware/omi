@@ -4765,5 +4765,8 @@
     "prepaidCodeResult": "{reason, select, invalid{Tämä koodi ei ole kelvollinen. Tarkista se ja yritä uudelleen.} used{Tämä koodi on jo käytetty.} expired{Tämä koodi on vanhentunut.} hasPlan{Sinulla on jo tilaus. Koodiasi ei käytetty. Lunasta se, kun tilauksesi päättyy.} notPrepaid{Tätä koodia ei voi lunastaa täällä. Käytä sitä, kun valitset tilauksen.} notEligible{Tätä koodia ei voi käyttää tällä tilillä.} rateLimited{Liian monta yritystä. Yritä myöhemmin uudelleen.} other{Jokin meni pieleen. Yritä uudelleen.}}",
     "playStripeBilledOnWeb": "Laskutetaan omi.me-palvelun kautta. Peru täällä milloin tahansa.",
     "playStripeBilledOnWebShort": "Laskutetaan omi.me-palvelun kautta.",
-    "playStripeUpdateCardToGetPlanBack": "Päivitä korttisi osoitteessa omi.me saadaksesi {plan} takaisin."
+    "playStripePlanPaused": "{plan}-tilauksesi on keskeytetty.",
+    "firmwareNewestSupportedForDevice": "Laiteellasi on jo uusin tuettu laiteohjelmistoversio",
+    "firmwareSyncRecordingsFirstTitle": "Synkronoi nauhoituksesi ensin",
+    "firmwareSyncRecordingsFirstMessage": "Osaa nauhoituksista on vielä laitteella. Anna niiden synkronoitua puhelimeen loppuun ja käynnistä sitten päivitys."
 }

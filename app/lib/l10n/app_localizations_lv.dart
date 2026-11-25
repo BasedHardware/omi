@@ -15864,7 +15864,17 @@ class AppLocalizationsLv extends AppLocalizations {
   String get playStripeBilledOnWebShort => 'Rēķins tiek izrakstīts caur omi.me.';
 
   @override
-  String playStripeUpdateCardToGetPlanBack(String plan) {
-    return 'Atjauniniet karti omi.me, lai atgūtu $plan.';
+  String playStripePlanPaused(String plan) {
+    return 'Jūsu $plan plāns ir apturēts.';
   }
+
+  @override
+  String get firmwareNewestSupportedForDevice => 'Jūsu ierīcē jau ir jaunākā atbalstītā aparatprogrammatūras versija';
+
+  @override
+  String get firmwareSyncRecordingsFirstTitle => 'Vispirms sinhronizējiet savus ierakstus';
+
+  @override
+  String get firmwareSyncRecordingsFirstMessage =>
+      'Daži ieraksti vēl atrodas jūsu ierīcē. Ļaujiet tiem pabeigt sinhronizēšanu ar tālruni, pēc tam sāciet atjaunināšanu.';
 }

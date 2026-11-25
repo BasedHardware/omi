@@ -4,6 +4,9 @@ This deployment drains already admitted work; it never admits uploads or enables
 a cohort. All storage and model construction happens after the explicit switch.
 """
 
+from database.batch_coalescing_capabilities import advertise
+from utils.executors import db_executor, run_blocking
+
 import asyncio
 from concurrent.futures import ThreadPoolExecutor
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -28,6 +31,7 @@ from utils.other.private_sync_get_metrics import OBJECT_GETS
 from utils.observability.stt_cap_dispatch import AUDIO_SECONDS
 from utils.observability.firestore_probe_export import register_probe_collectors
 from utils.stt.allowance_metrics import COLLECTORS as ALLOWANCE_WATCH_COLLECTORS
+from database.batch_pipeline_upload_metrics import COLLECTORS as UPLOAD_COLLECTORS
 from config.batch_pipeline import worker_pipeline_depth, worker_processes
 from config.batch_pipeline_providers import provider_config
 from database._client import get_data_plane_firestore_client
@@ -163,6 +167,8 @@ def health_server(
         registry.register(AUDIO_SECONDS)
     for collector in ALLOWANCE_WATCH_COLLECTORS:  # batch_gpu observations live in the default registry
         registry.register(collector)
+    for collector in UPLOAD_COLLECTORS:
+        registry.register(collector)
     registry.register(TRANSITIONS)
     registry.register(DURATION)
     registry.register(LABELS)
@@ -243,6 +249,10 @@ async def supervise(pump: Any, state: RuntimeState, stop_event: asyncio.Event, s
 
 
 async def run_process(store: Any, artifacts: Any, registry: CollectorRegistry, state: RuntimeState) -> None:
+    try:
+        await run_blocking(db_executor, advertise, store)
+    except Exception:
+        logger.warning('event=batch_coalescing outcome=capability_unavailable')
     config = provider_config()
     if config.pool_kind != 'dedicated_batch':
         raise ValueError('worker deployment requires the dedicated batch GPU pool')
