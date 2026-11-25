@@ -19,7 +19,7 @@ or account identifiers in these event properties. Existing SDK identity is outsi
 | Subscription Allowance Block Shown | The corresponding useful block UI is mounted, independently of authoritative reach or whether a paced automatic paywall opens. An optimistic local refusal still counts its rendered block; unavailable server cause uses unknown reason. Rebuilds deduplicate. A remounted block is a new presentation. |
 | Subscription Upgrade Tapped | Existing upgrade CTA intent/confirmation boundary, alongside legacy Upgrade Plan Selected; contextual navigation CTAs without a selected price use unknown plan/interval. |
 | Subscription Checkout Opened | A URL has been obtained and checkout is mounted/opened. Flutter uses the committed WebView route; native macOS uses the billing sheet appearance; Electron uses ready-to-show IPC after showing the window; web and external macOS chat require a successful browser open. Getting a URL alone never counts. |
-| Subscription Checkout Completed | A verified client success navigation at the configured API origin and exact terminal pathname, independently of permissive legacy flow resolution. **Not accepted payment, entitlement, fulfillment or revenue.** Emitted independently of subsequent subscription refresh/polling; a successful navigation may precede refresh lag. Cancellation, dismissal and failed checkout-page navigation never complete. Upgrade-in-place and reactivation retain Upgrade Succeeded without inventing checkout completion. |
+| Subscription Checkout Completed | A verified client success navigation at the configured API origin and exact terminal pathname, independently of permissive legacy flow resolution. **Not accepted payment, entitlement, fulfillment or revenue.** Emitted independently of subsequent subscription refresh/polling; a successful navigation may precede refresh lag. Cancellation, dismissal and failed checkout-page navigation never complete. Upgrade-in-place and reactivation retain Upgrade Succeeded without inventing checkout completion. Web has no return channel, so it observes the same wire name as a verified paid-plan transition on the post-checkout focus refresh; see the web paragraph below. |
 | Subscription Restore Attempted / Result | Flutter's three existing restore actions refresh subscription state. Results inspect the fresh read/error, including swallowed request errors; stale paid state cannot produce succeeded. Only succeeded, no_entitlement and failed are currently observable. These actions have no cancellation signal, so they do not emit cancelled. |
 
 Allowances are observations per authoritative observer and surface, not unique account-level cap hits.
@@ -55,6 +55,16 @@ and did-navigate events are documented main-frame-only. Legacy subframe success 
 as before, but consumes the existing terminal lifetime without emitting new completion; a later main-frame
 callback cannot retroactively verify it. This observation guard changes no checkout UI or payment authority.
 See [Electron webContents navigation events](https://www.electronjs.org/docs/latest/api/web-contents).
+
+Web has no checkout return channel: the launch severs `window.opener`, and the configured success page is
+backend-origin static HTML with no script. Web therefore observes completion on the existing post-checkout
+focus refresh as a verified paid-plan transition, not as a navigation. A tab-local `sessionStorage` record is
+written only by a checkout that actually opened in this tab, consumed exactly once, and checked against an
+authoritative subscription read. Bare focus, reload or a page load with no record, an unchanged paid snapshot,
+an inactive subscription, unavailable storage, a disallowed plan and a failed read all emit nothing. The
+checkout identifier never leaves the tab; day/platform/version are derived by the acceptance query rather
+than transported. Web completion remains an observation, never accepted payment or entitlement, and can be
+lost to webhook lag or a return that never raises focus.
 
 Desktop popup block observations describe presentation, including optimistic local chat refusal while
 the latest server snapshot still allows use. They deduplicate per presentation and use unknown reason

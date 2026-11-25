@@ -38,6 +38,10 @@ import {
   trackUpgradePlanSelected,
   trackUpgradeSucceeded,
 } from '@/lib/analytics/subscriptionFunnel';
+import {
+  watchCheckoutReturn,
+  type SubscriptionRefresh,
+} from '@/lib/analytics/checkoutCompletion';
 
 const PLAY_SUBSCRIPTIONS_URL =
   'https://play.google.com/store/account/subscriptions?sku=omi_pro&package=com.friend.ios';
@@ -46,7 +50,7 @@ interface PlansSheetProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   subscription: UserSubscription | null;
-  onSubscriptionUpdate: () => void;
+  onSubscriptionUpdate: SubscriptionRefresh;
   cachedPlans?: PricingOption[] | null;
 }
 
@@ -220,17 +224,14 @@ export function PlansSheet({
           // Stripe Checkout opens in a new tab. The parent page never sees the
           // cancel URL Stripe returns to, so Upgrade Cancelled is not emitted
           // here. trackUpgradeCancelled exists for a client that can observe it.
-          if (!openPurchaseCheckout(result.url, tier, interval, 'web_plans')) {
+          if (!openPurchaseCheckout(result.url, tier, interval, 'web_plans', isPaid)) {
             setError(CHECKOUT_POPUP_BLOCKED);
             return;
           }
           onOpenChange(false);
-          // Listen for window focus to refresh subscription
-          const handleFocus = () => {
-            onSubscriptionUpdate();
-            window.removeEventListener('focus', handleFocus);
-          };
-          window.addEventListener('focus', handleFocus);
+          // The checkout tab returns focus once it closes; completion there is
+          // only emitted for a verified paid-state transition.
+          watchCheckoutReturn(onSubscriptionUpdate);
         } else if (result?.status === 'reactivated') {
           const seconds = renewalDateSeconds(
             result.next_billing_date,

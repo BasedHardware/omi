@@ -89,6 +89,10 @@ import {
   trackUpgradePlanSelected,
   trackUpgradeSucceeded,
 } from '@/lib/analytics/subscriptionFunnel';
+import {
+  watchCheckoutReturn,
+  type SubscriptionRefresh,
+} from '@/lib/analytics/checkoutCompletion';
 import { TranscriptionUsageMeter } from './TranscriptionUsageMeter';
 import { clearRetiredExperimentalFeaturesStorage } from './retiredExperimentalFeatures';
 
@@ -862,7 +866,7 @@ export function UsageSectionContent({
 }: {
   allUsage: AllUsageData | null;
   subscription: UserSubscription | null;
-  onSubscriptionUpdate: () => void;
+  onSubscriptionUpdate: SubscriptionRefresh;
   cachedPlans: PricingOption[] | null;
 }) {
   const [activeTab, setActiveTab] = useState<PlanUsageTab>('plan');
@@ -1007,15 +1011,13 @@ export function UsageSectionContent({
         purchaseRoute = 'checkout';
         const result = await createCheckoutSession(selectedPriceId);
         if (result?.url) {
-          if (!openPurchaseCheckout(result.url, tier, interval, 'usage_page')) {
+          if (!openPurchaseCheckout(result.url, tier, interval, 'usage_page', isPaid)) {
             setError(CHECKOUT_POPUP_BLOCKED);
             return;
           }
-          const handleFocus = () => {
-            onSubscriptionUpdate();
-            window.removeEventListener('focus', handleFocus);
-          };
-          window.addEventListener('focus', handleFocus);
+          // The checkout tab returns focus once it closes; completion there is
+          // only emitted for a verified paid-state transition.
+          watchCheckoutReturn(onSubscriptionUpdate);
         } else if (result?.status === 'reactivated') {
           const seconds = renewalDateSeconds(
             result.next_billing_date,
@@ -1893,7 +1895,7 @@ export function SettingsPage() {
     }
   };
 
-  const refreshSubscription = async () => {
+  const refreshSubscription = async (): Promise<UserSubscription | null> => {
     try {
       const [usageData, sub] = await Promise.all([
         getAllUsageData().catch(() => null),
@@ -1901,8 +1903,10 @@ export function SettingsPage() {
       ]);
       setAllUsage(usageData);
       setSubscription(sub);
+      return sub;
     } catch (error) {
       console.error('Failed to refresh subscription:', error);
+      return null;
     }
   };
 

@@ -1,4 +1,5 @@
 import { purchasePayload, type PurchaseEventId } from './purchaseContract.generated';
+import { stageWebCheckout } from './checkoutCompletionStore';
 import { openCheckoutWindow } from '@/lib/checkoutWindow';
 import { PostHogManager } from '@/lib/analytics/posthog';
 
@@ -109,14 +110,17 @@ export function trackPurchaseEvent(
   }
 }
 
-// Web checkout completion is tracked separately in SCA-4433.
+// Web checkout completion is observed on the post-checkout focus refresh, not
+// from a return channel; see checkoutCompletion.ts.
 export function openPurchaseCheckout(
   url: string,
   plan: string,
   interval: string,
   source: string,
+  paidBefore = false,
 ): boolean {
   if (!openCheckoutWindow(url)) return false;
+  stageWebCheckout({ plan, interval, source, paidBefore });
   trackPurchaseEvent('checkoutOpened', {
     plan: subscriptionPlanWire(plan),
     billing_interval: subscriptionIntervalWire(interval),
