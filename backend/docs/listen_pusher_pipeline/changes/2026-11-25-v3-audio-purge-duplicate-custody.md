@@ -18,18 +18,47 @@ inline. In both cases the blobs are erased only after the intake purge has
 finished. A failure or an obligation that is still armed raises, and the
 existing 5-minute retry keeps the row pending.
 
-A merge target's retained donors are kept on the row
-(`v3_audio_purge_source_ids`) until the erase runs. The erase then deletes their
-canonical audio, as a user delete does with `sync_merged_from`. A successor that
-still names an erased donor gets a refusal: handoff authority, live upload and
-merge publication all reject a donor that is deleted, tombstoned or no longer
-settled.
+Legal holds: nothing is deleted while a hold is active. The purge runs the
+obligation runner's hold preflight (`assert_account_deletion_permitted`) before
+the claim and again before the blobs. The inline `purge_batch_owner` calls run
+under the account gate a synchronous user delete holds
+(`destructive_operation_gate`, kind `explicit_memory_deletion`), and acquiring
+that gate re-checks the hold in its transaction. A held purge raises, stays
+pending, and the sweep re-checks it every 5 minutes. The blob helper takes its
+own `audio_conversation_deletion` gate for canonical packs, so the blob step
+cannot share the intake gate; the second preflight covers it.
 
-Rows without custody are unchanged: the claim makes the same reads and writes as
-before.
+Merge targets: the claim keeps the retained donors on the row
+(`v3_audio_purge_source_ids`) until the erase runs. In the same commit it writes
+each donor's tombstone (the batch purge requires one, and handoff, live upload
+and merge publication refuse a tombstoned donor), clears the donor's custody
+fields and, with dispatch, arms the donor's own obligation. The erase then purges
+each donor's batch owner, deletes the donors' canonical packs with the
+recording's, and deletes each donor's `raw-live/`, `audio-outbox/` and
+`record-wal/` prefixes (`delete_conversation_audio_files`). Every step is
+idempotent, and the pending bit clears only after the last one, so a partial
+failure is retried whole. A donor that another target now retains is skipped.
+
+Residual identifiers: the final update clears `v3_audio_purge_source_ids`. When
+the erased row is itself a donor, the claim removes it from its successor's
+`wal_duplicate_retained_donors_v1` and `sync_merged_from` in the same
+transaction. Both lists drop the same id, so the equality a later merge checks
+still holds.
+
+Cost per purged row:
+- Every row: 2 legal-hold reads, then the claim as before (row and tombstone
+  reads; tombstone and row writes).
+- Custody rows add 1 obligation read, the successor read when the row is a
+  donor, and one `purge_batch_owner` (the cost a user delete pays), or the
+  obligation run when dispatch is configured.
+- Each retained donor (16 at most) adds 3 reads (row, tombstone, obligation),
+  up to 3 writes (tombstone, custody clear, obligation), one `purge_batch_owner`
+  and one `delete_conversation_audio_files`. That last call lists the user's
+  `raw-sync/` and `raw-mobile-batch/` originals, as a user delete does.
+- A retry repeats the reads and the idempotent deletes.
 
 `omi_conversations_v3_audio_purges_total{outcome}` counts `custody_invalidated`,
-`intakes_pending`, `intakes_failed` and `erased`. The `audio-outbox/` prefix is
-now listed with the other voice prefixes under `retain_until_user_deletes` in the
-retention contract. Rollback: revert the PR.
+`held`, `intakes_pending`, `intakes_failed` and `erased`. The `audio-outbox/`
+prefix is now listed with the other voice prefixes under
+`retain_until_user_deletes` in the retention contract. Rollback: revert the PR.
 [Pipeline contract](../../listen_pusher_pipeline.mdx#recording-derived-conversations-v3)
