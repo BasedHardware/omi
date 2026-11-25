@@ -19,7 +19,7 @@
       else if (k.startsWith('on')) el.addEventListener(k.slice(2), v);
       else el.setAttribute(k, v === true ? '' : String(v));
     }
-    for (const child of children.flat()) {
+    for (const child of children.flat(Infinity)) {
       if (child === null || child === undefined || child === false) continue;
       el.append(child instanceof Node ? child : document.createTextNode(String(child)));
     }
@@ -752,14 +752,19 @@
       const width = track.clientWidth;
       const placed = labels.map((el) => ({ el, at: (Number(el.dataset.pct) / 100) * width, w: el.offsetWidth }))
         .sort((p, q) => p.at - q.at);
-      // Things already on row 0 that a label must not cover: bars' text and the point markers.
+      // Things already on row 0 that a label must not cover: bars' text and the point glyphs (.pin, which
+      // are centred on their instant by a transform that offsetLeft does not include).
       const taken = [[]];
-      for (const el of track.querySelectorAll('.span')) if (el.textContent) taken[0].push([el.offsetLeft, el.offsetLeft + el.offsetWidth]);
-      const fits = (row, a, z) => !(taken[row] || []).some(([p, q]) => a < q + 3 && z > p - 3);
+      for (const el of track.querySelectorAll('.span, .pin')) {
+        if (!el.textContent) continue;
+        const half = el.classList.contains('pin') && !el.classList.contains('side') ? el.offsetWidth / 2 : 0;
+        taken[0].push([el.offsetLeft - half, el.offsetLeft - half + el.offsetWidth]);
+      }
+      const fits = (row, a, z) => !(taken[row] || []).some(([p, q]) => a < q + 2 && z > p - 2);
       let rows = 0;
       for (const p of placed) {
-        let a = p.at + 6, z = a + p.w;
-        if (z > width) { z = p.at - 6; a = z - p.w; }  // no room on the right: put it on the left of the marker
+        let a = p.at + 7, z = a + p.w;
+        if (z > width) { z = p.at - 7; a = z - p.w; }  // no room on the right: put it on the left of the marker
         let row = 0;
         while (!fits(row, a, z)) row += 1;
         (taken[row] = taken[row] || []).push([a, z]);

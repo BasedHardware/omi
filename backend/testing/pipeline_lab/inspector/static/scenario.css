@@ -208,12 +208,12 @@ button { font: inherit; color: inherit; }
 .pin.mk { top: 9px; color: var(--muted); }
 .pin.mk.finish { color: var(--accent); }
 /* Point labels: placed by layoutLabels() beside their marker, or stacked below with a leader line. */
-.lbl { position: absolute; top: 9px; font-size: 11px; line-height: 12px; white-space: nowrap; color: var(--muted); background: var(--surface); padding: 0 2px; border-radius: 2px; }
+.lbl { position: absolute; z-index: 2; top: 9px; font-size: 11px; line-height: 12px; white-space: nowrap; color: var(--muted); background: var(--surface); padding: 0 2px; border-radius: 2px; }
 .lbl.finish { color: var(--accent); font-weight: 600; }
 .lbl.landed { color: var(--good); }
 .lbl.arrive { color: var(--rec-sync); }
 .lbl.beside { color: var(--text); }
-.leader { position: absolute; width: 0; border-left: 1px solid var(--line-strong); pointer-events: none; }
+.leader { position: absolute; z-index: 1; width: 0; border-left: 1px solid var(--line-strong); pointer-events: none; }
 .legend { display: flex; flex-wrap: wrap; gap: 14px; margin-top: 10px; color: var(--muted); font-size: 12px; }
 .legend i { font-style: normal; color: var(--text); }
 .sw { display: inline-block; width: 18px; height: 10px; border-radius: 2px; vertical-align: -1px; margin-right: 4px; }

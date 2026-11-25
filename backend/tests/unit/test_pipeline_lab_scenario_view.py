@@ -157,6 +157,51 @@ def test_symlink_out_of_the_run_directory_is_refused(tmp_path):
 # ---- server -------------------------------------------------------------------------------------
 
 
+def test_real_run_layout_repeats_and_verdict_rows(tmp_path):
+    """The layout scenario/verdict.py writes: run.json, verdict.json rows, repeat-<k>/ directories."""
+    root = make_run(tmp_path / 'run', {'one': 'passed', 'two': 'passed'})
+    write(root / 'one' / 'repeat-2' / 'result.json', result('one', 'passed'))
+    write(root / 'one' / 'repeat-2' / 'home.json', home_doc())
+    write(root / 'one' / 'repeat-3' / 'result.json', result('one', 'failed', ok=False))
+    write(root / 'run.json', {'schema': 1, 'ref': 'lane/x', 'backend_tree': 'abc', 'repeat': 3})
+    rows = [
+        {'name': 'one', 'outcome': 'nondeterministic', 'differences': ['result.json $.outcome'],
+         'transcripts': {'B': 'synthetic'}, 'checks': []},
+        {'name': 'two', 'outcome': 'passed', 'transcripts': {'B': 'scripted'}, 'checks': []},
+    ]  # fmt: skip
+    write(root / 'verdict.json', {'schema': 1, 'outcome': 'failed', 'scenarios': rows})
+    run = scenario_view.RunDir(root)
+    view = run.overview()
+    assert view['sides']['run']['missing'] == []
+    assert view['scenarios'] == ['one', 'two']  # nondeterministic ranks with the failures
+    assert view['sides']['run']['outcomes']['one'] == 'nondeterministic'
+    one = run.scenario('one')['sides']['run']
+    assert one['repeat'] == 1 and one['verdict']['transcripts'] == {'B': 'synthetic'}
+    assert [(r['repeat'], r['outcome']) for r in one['repeats']] == [(1, 'passed'), (2, 'passed'), (3, 'failed')]
+    third = run.scenario('one', 3)['sides']['run']
+    assert third['dir'].endswith('one/repeat-3') and third['result']['outcome'] == 'failed'
+    assert third['scenario'] == {'name': 'one', 'description': 'synthetic'}  # shared by the repeats
+    assert [m['file'] for m in third['missing']] == ['home.json']
+    with pytest.raises(NotFound):
+        run.scenario('one', 4)
+
+
+def test_real_compare_layout_reads_compare_json_rows(tmp_path):
+    root = tmp_path / 'cmp'
+    make_run(root / 'base', {'one': 'passed'})
+    make_run(root / 'head', {'one': 'failed'})
+    for side, outcome in (('base', 'passed'), ('head', 'failed')):
+        write(root / side / 'run.json', {'schema': 1, 'ref': side})
+        write(root / side / 'verdict.json', {'schema': 1, 'scenarios': [{'name': 'one', 'outcome': outcome}]})
+    row = {'name': 'one', 'base': 'passed', 'head': 'failed', 'differs': True,
+           'conversations': [{'key': 'B', 'fields': ['visible'], 'base': {'visible': True}, 'head': {'visible': False}}]}  # fmt: skip
+    write(root / 'compare.json', {'schema': 1, 'differs': True, 'scenarios': [row]})
+    view = scenario_view.RunDir(root).overview()
+    assert view['kind'] == 'compare' and view['missing'] == []
+    assert view['compare']['scenarios'][0]['conversations'][0]['fields'] == ['visible']
+    assert {side: v['missing'] for side, v in view['sides'].items()} == {'base': [], 'head': []}
+
+
 @pytest.fixture()
 def served(tmp_path):
     root = make_run(tmp_path / 'run', {'one': 'failed', 'two': 'passed'})
@@ -187,6 +232,8 @@ def test_server_routes(served):
     for path in ('/static/scenario.js', '/static/scenario.css', '/static/app.css'):
         assert call(served, 'GET', path)[0] == 200
     assert call(served, 'GET', '/api/scenarios/nope')[0] == 404
+    assert call(served, 'GET', '/api/scenarios/one?repeat=2')[0] == 404
+    assert call(served, 'GET', '/api/scenarios/one?repeat=x')[0] == 400
     assert call(served, 'GET', '/api/scenarios/..%2Fx')[0] in (400, 404)
     assert call(served, 'GET', '/api/runs')[0] == 404
 
