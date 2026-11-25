@@ -28,6 +28,7 @@ import traceback
 from typing import Any, Optional, Sequence
 
 from testing.pipeline_lab.scenario.checks import OUTCOMES, evaluate, outcome
+from testing.pipeline_lab.scenario.home import HOME_MODULES, HomeRecorder
 from testing.pipeline_lab.scenario.spec import Scenario, load_scenario, plan_events
 
 FAST_FINISH_ENV = 'CONVERSATIONS_V3_FAST_FINISH'
@@ -89,7 +90,7 @@ async def run_scenario(scenario: Scenario, out_dir: Path, *, llm_url: str, tick:
         config,
         scenario_overlay(scenario),
         run_dir=out_dir,
-        preimport=PRODUCT_MODULES + V3_MODULES + SCENARIO_MODULES,
+        preimport=PRODUCT_MODULES + V3_MODULES + SCENARIO_MODULES + HOME_MODULES,
     ) as env, ExitStack() as stack:
         install_vector_index(stack, index)
         install_embeddings(stack, embedder)
@@ -107,6 +108,7 @@ async def run_scenario(scenario: Scenario, out_dir: Path, *, llm_url: str, tick:
             scenario=scenario, firestore=env.firestore, finalizer=ProductFinalizer(env.firestore), barrier=barrier
         )
         ops.install(stack)
+        home = HomeRecorder(uid=config.uid, out_dir=out_dir, offset=scenario.offset, now=clock.now).install(stack, ops)
         clock.set(start)
         reset_lab_state(env.firestore, env.redis, config.uid)
         result['account'] = seed_account(config.uid)
@@ -121,6 +123,7 @@ async def run_scenario(scenario: Scenario, out_dir: Path, *, llm_url: str, tick:
             driver = V3Driver(uid=config.uid, ops=ops, tasks=tasks, clock=clock, horizon=horizon, sweeps=True)
             report = await driver.run(events)  # type: ignore[arg-type] - scenario events quack like arrivals
             timings['driver'] = round(time.perf_counter() - mark, 3)
+            await home.final()  # Home as the product's route returns it (home.json), before the final snapshot
             final = ops.snapshot(config.uid)
             recordings = ops.recordings(config.uid)
         finally:
@@ -157,6 +160,7 @@ async def run_scenario(scenario: Scenario, out_dir: Path, *, llm_url: str, tick:
         recordings=recordings,
         fast_finish=ops.fast_finish_outcomes,
         stand_ins=ops.stand_ins,
+        home=home.summary(),
         driver=report.summary(),
         warnings=report.warnings,
         notifications=len(sinks.notifications),
