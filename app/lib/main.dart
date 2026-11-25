@@ -561,6 +561,7 @@ class MyApp extends StatefulWidget {
 }
 
 class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
+  Timer? _deviceSignalHeartbeat;
   final AppSessionTelemetry _appSessionTelemetry = AppSessionTelemetry();
   late final PhoneBatterySampleTelemetry _phoneBatteryTelemetry = PhoneBatterySampleTelemetry(
     captureContext: () {
@@ -597,7 +598,10 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
       _performanceTelemetry.attach();
       unawaited(_phoneBatteryTelemetry.start());
       PlatformManager.instance.analytics.recordTelemetryHealth();
-      if (ClientTelemetryFlags.migrationEnabled) installClientTelemetryTransport();
+      if (ClientTelemetryFlags.migrationEnabled) {
+        installClientTelemetryTransport();
+        _startDeviceSignalHeartbeat();
+      }
     }
     if (SharedPreferencesUtil().devLogsToFileEnabled) {
       DebugLogManager.setEnabled(true);
@@ -608,6 +612,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
 
   @override
   void dispose() {
+    _stopDeviceSignalHeartbeat();
     WidgetsBinding.instance.removeObserver(this);
     if (!PhysicalQualification.enabled) _performanceTelemetry.dispose();
     _phoneBatteryTelemetry.dispose();
@@ -642,11 +647,27 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
     unawaited(SyncUploadGate.instance.reconcileFairUseStatus());
   }
 
+  void _startDeviceSignalHeartbeat() {
+    if (!ClientTelemetryFlags.migrationEnabled) return;
+    void report() {
+      if (AnalyticsManager.deviceSignalTrackingEnabled) ClientTelemetry.instance.observeDeviceHeartbeat();
+    }
+
+    report();
+    _deviceSignalHeartbeat ??= Timer.periodic(const Duration(minutes: 5), (_) => report());
+  }
+
+  void _stopDeviceSignalHeartbeat() {
+    _deviceSignalHeartbeat?.cancel();
+    _deviceSignalHeartbeat = null;
+  }
+
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     super.didChangeAppLifecycleState(state);
 
     if (state == AppLifecycleState.resumed) {
+      if (!PhysicalQualification.enabled) _startDeviceSignalHeartbeat();
       OnboardingSyncRuntime.setActive(true);
       if (!PhysicalQualification.enabled) {
         _appSessionTelemetry.recordResumed();
@@ -662,6 +683,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
         _performanceTelemetry.onLifecycleState(state);
       }
     } else if (state == AppLifecycleState.paused) {
+      _stopDeviceSignalHeartbeat();
       OnboardingSyncRuntime.setActive(false);
       ClientTelemetry.instance.onBackground();
       if (!PhysicalQualification.enabled) {
@@ -671,6 +693,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
       SyncReconciler.instance.onBackground();
       _onAppPaused();
     } else if (state == AppLifecycleState.detached) {
+      _stopDeviceSignalHeartbeat();
       ClientTelemetry.instance.onBackground();
       _deinit();
     }

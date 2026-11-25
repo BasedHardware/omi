@@ -91,7 +91,10 @@ class SyncUploadGate {
   static String _defaultAttemptId() => const Uuid().v4();
 
   static void _emitProductionTelemetry(String eventName, Map<String, dynamic> properties) {
-    if (ClientTelemetryFlags.posthogRetirementEnabled) return;
+    if (ClientTelemetryFlags.posthogRetirementEnabled) {
+      AnalyticsManager.mirrorDeviceSignal(eventName, properties);
+      return;
+    }
     final analytics = AnalyticsManager();
     switch (eventName) {
       case RecordingUploadTelemetry.startedEvent:

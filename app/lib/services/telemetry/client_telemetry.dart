@@ -417,6 +417,70 @@ class ClientTelemetry {
     );
   }
 
+  static const _deviceSignalEvents = {
+    'Local WAL Stuck': 'local_wal_stuck',
+    'Recording Start Failed': 'recording_start_failed',
+    'Recording Upload Failed': 'upload_failed',
+    'Capture Wedge Detected': 'capture_wedge_detected',
+    'Capture Recovery Observed': 'capture_recovery_observed',
+    'Capture Recovery Resolved': 'capture_recovery_resolved',
+    'Phone Battery Sample': 'phone_battery_sample',
+    'Mobile Device Health Daily': 'mobile_device_health_daily',
+    'fallback_triggered': 'fallback_triggered',
+  };
+
+  ({String owner, int hour})? _lastDeviceHeartbeat;
+
+  void observeDeviceHeartbeat() {
+    if (!ClientTelemetryFlags.migrationEnabled) return;
+    final context = _emissionContext();
+    if (context == null) return;
+    final now = clock().toUtc();
+    final key = (owner: context.owner, hour: now.millisecondsSinceEpoch ~/ Duration.millisecondsPerHour);
+    if (key == _lastDeviceHeartbeat) return;
+    _lastDeviceHeartbeat = key;
+    _enqueue(
+      ownerId: context.owner,
+      occurredAt: now,
+      platform: context.platform,
+      channel: context.channel,
+      family: 'device_signal',
+      attributes: const {'event': 'heartbeat'},
+    );
+  }
+
+  void observeDeviceSignal(String name, Map<String, dynamic>? properties) {
+    if (!ClientTelemetryFlags.migrationEnabled) return;
+    final event = _deviceSignalEvents[name];
+    if (event == null) return;
+    final context = _emissionContext();
+    if (context == null) return;
+    final age = properties?['oldest_pending_age_seconds'];
+    final count = properties?['pending_wal_count'];
+    final block = properties?['block_reason'];
+    _enqueue(
+      ownerId: context.owner,
+      occurredAt: clock().toUtc(),
+      platform: context.platform,
+      channel: context.channel,
+      family: 'device_signal',
+      attributes: {
+        'event': event,
+        if (event == 'local_wal_stuck') ...{
+          if (age is num && age.isFinite) 'over_age': age > 86400,
+          if (count is num && count.isFinite) 'over_count': count > 720,
+        },
+        if (event == 'capture_wedge_detected')
+          'block_reason': switch (block) {
+            null => 'missing',
+            'count_cap' => 'count_cap',
+            'disk_reserve' => 'disk_reserve',
+            _ => 'other',
+          },
+      },
+    );
+  }
+
   ({String owner, String platform, String channel})? _emissionContext() {
     final owner = ownerId?.call();
     final host = platform?.call();
@@ -441,7 +505,7 @@ class ClientTelemetry {
     required Map<String, Object?> attributes,
   }) {
     final operationId = attributes['operation_id'];
-    if (operationId is! String || !ClientTelemetrySchema.isUuid(operationId)) {
+    if (family != 'device_signal' && (operationId is! String || !ClientTelemetrySchema.isUuid(operationId))) {
       _drop(ownerId, 'invalid_observation');
       return;
     }

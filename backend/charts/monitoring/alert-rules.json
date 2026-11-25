@@ -38955,5 +38955,775 @@
       "repeat_interval": "4h"
     },
     "record": null
+  },
+  {
+    "uid": "omi-device-local-wal-stuck-prom",
+    "orgID": 1,
+    "folderUID": "betdycdziadc0e",
+    "ruleGroup": "Device Signals Prometheus",
+    "title": "omi-device-local-wal-stuck-prom",
+    "condition": "D",
+    "data": [
+      {
+        "refId": "A",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 600,
+          "to": 0
+        },
+        "datasourceUid": "prometheus",
+        "model": {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "refId": "A",
+          "intervalMs": 60000,
+          "maxDataPoints": 20,
+          "expr": "(max(omi_client_device_signal_hourly_owners{signal=\"local_wal_stuck\"} and ignoring(signal) ((omi_client_device_signal_hour_start_seconds == scalar(max(omi_client_device_signal_hour_start_seconds))) and ((time() - omi_client_device_signal_hour_start_seconds) < 8100) and (omi_client_device_signal_reporting_owners > 0))) > bool 10) * (max(omi_client_device_signal_hourly_owners{signal=\"local_wal_stuck\"} and ignoring(signal) ((omi_client_device_signal_hour_start_seconds == scalar(max(omi_client_device_signal_hour_start_seconds))) and ((time() - omi_client_device_signal_hour_start_seconds) < 8100) and (omi_client_device_signal_reporting_owners > 0))) > bool (2 * max(omi_client_device_signal_baseline_owners{signal=\"local_wal_stuck\"} and ignoring(signal) ((omi_client_device_signal_hour_start_seconds == scalar(max(omi_client_device_signal_hour_start_seconds))) and ((time() - omi_client_device_signal_hour_start_seconds) < 8100) and (omi_client_device_signal_reporting_owners > 0)))))",
+          "instant": true,
+          "range": false
+        }
+      },
+      {
+        "refId": "D",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [
+                  0
+                ],
+                "type": "gt"
+              }
+            }
+          ],
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "A",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "D",
+          "type": "threshold"
+        }
+      }
+    ],
+    "noDataState": "NoData",
+    "execErrState": "KeepLast",
+    "for": "0s",
+    "keep_firing_for": "0s",
+    "annotations": {
+      "description": "Device has WALs stuck pending upload (exhausted retries).",
+      "runbook": "backend/docs/runbooks/client-telemetry-ingestion.md",
+      "safe_next_action": "Compare hourly counts, reporting coverage, and client rollout by release cohort.",
+      "scope": "Prometheus, distinct authenticated owners per UTC event hour, with a 10 minute delivery grace.",
+      "summary": "Device signal local-wal-stuck: distinct owners in the last closed UTC hour exceed both the floor and 2x the 7-day hourly median.",
+      "user_impact": "Affected phones are failing to capture, store or upload audio, so conversations go missing or arrive late.",
+      "verification": "Compare the same closed UTC hour in the legacy Device Signals query and check the reporting-owner and baseline-coverage gauges."
+    },
+    "labels": {
+      "alert_identity": "omi-device-local-wal-stuck-prom",
+      "audience": "agent",
+      "component": "mobile-capture",
+      "impact": "user-experience",
+      "owner": "observability",
+      "severity": "warning",
+      "tier": "agent"
+    },
+    "isPaused": false,
+    "notification_settings": {
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": [
+        "alertname"
+      ],
+      "group_wait": "5m",
+      "group_interval": "1h",
+      "repeat_interval": "24h",
+      "mute_time_intervals": [
+        "omi-tier-silent"
+      ]
+    },
+    "record": null
+  },
+  {
+    "uid": "omi-device-recording-start-failed-prom",
+    "orgID": 1,
+    "folderUID": "betdycdziadc0e",
+    "ruleGroup": "Device Signals Prometheus",
+    "title": "omi-device-recording-start-failed-prom",
+    "condition": "D",
+    "data": [
+      {
+        "refId": "A",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 600,
+          "to": 0
+        },
+        "datasourceUid": "prometheus",
+        "model": {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "refId": "A",
+          "intervalMs": 60000,
+          "maxDataPoints": 20,
+          "expr": "(max(omi_client_device_signal_hourly_owners{signal=\"recording_start_failed\"} and ignoring(signal) ((omi_client_device_signal_hour_start_seconds == scalar(max(omi_client_device_signal_hour_start_seconds))) and ((time() - omi_client_device_signal_hour_start_seconds) < 8100) and (omi_client_device_signal_reporting_owners > 0))) > bool 10) * (max(omi_client_device_signal_hourly_owners{signal=\"recording_start_failed\"} and ignoring(signal) ((omi_client_device_signal_hour_start_seconds == scalar(max(omi_client_device_signal_hour_start_seconds))) and ((time() - omi_client_device_signal_hour_start_seconds) < 8100) and (omi_client_device_signal_reporting_owners > 0))) > bool (2 * max(omi_client_device_signal_baseline_owners{signal=\"recording_start_failed\"} and ignoring(signal) ((omi_client_device_signal_hour_start_seconds == scalar(max(omi_client_device_signal_hour_start_seconds))) and ((time() - omi_client_device_signal_hour_start_seconds) < 8100) and (omi_client_device_signal_reporting_owners > 0)))))",
+          "instant": true,
+          "range": false
+        }
+      },
+      {
+        "refId": "D",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [
+                  0
+                ],
+                "type": "gt"
+              }
+            }
+          ],
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "A",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "D",
+          "type": "threshold"
+        }
+      }
+    ],
+    "noDataState": "NoData",
+    "execErrState": "KeepLast",
+    "for": "0s",
+    "keep_firing_for": "0s",
+    "annotations": {
+      "description": "Capture could not start after an ID was prepared.",
+      "runbook": "backend/docs/runbooks/client-telemetry-ingestion.md",
+      "safe_next_action": "Compare hourly counts, reporting coverage, and client rollout by release cohort.",
+      "scope": "Prometheus, distinct authenticated owners per UTC event hour, with a 10 minute delivery grace.",
+      "summary": "Device signal recording-start-failed: distinct owners in the last closed UTC hour exceed both the floor and 2x the 7-day hourly median.",
+      "user_impact": "Affected phones are failing to capture, store or upload audio, so conversations go missing or arrive late.",
+      "verification": "Compare the same closed UTC hour in the legacy Device Signals query and check the reporting-owner and baseline-coverage gauges."
+    },
+    "labels": {
+      "alert_identity": "omi-device-recording-start-failed-prom",
+      "audience": "agent",
+      "component": "mobile-capture",
+      "impact": "user-experience",
+      "owner": "observability",
+      "severity": "warning",
+      "tier": "agent"
+    },
+    "isPaused": false,
+    "notification_settings": {
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": [
+        "alertname"
+      ],
+      "group_wait": "5m",
+      "group_interval": "1h",
+      "repeat_interval": "24h",
+      "mute_time_intervals": [
+        "omi-tier-silent"
+      ]
+    },
+    "record": null
+  },
+  {
+    "uid": "omi-device-upload-failed-prom",
+    "orgID": 1,
+    "folderUID": "betdycdziadc0e",
+    "ruleGroup": "Device Signals Prometheus",
+    "title": "omi-device-upload-failed-prom",
+    "condition": "D",
+    "data": [
+      {
+        "refId": "A",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 600,
+          "to": 0
+        },
+        "datasourceUid": "prometheus",
+        "model": {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "refId": "A",
+          "intervalMs": 60000,
+          "maxDataPoints": 20,
+          "expr": "(max(omi_client_device_signal_hourly_owners{signal=\"upload_failed\"} and ignoring(signal) ((omi_client_device_signal_hour_start_seconds == scalar(max(omi_client_device_signal_hour_start_seconds))) and ((time() - omi_client_device_signal_hour_start_seconds) < 8100) and (omi_client_device_signal_reporting_owners > 0))) > bool 10) * (max(omi_client_device_signal_hourly_owners{signal=\"upload_failed\"} and ignoring(signal) ((omi_client_device_signal_hour_start_seconds == scalar(max(omi_client_device_signal_hour_start_seconds))) and ((time() - omi_client_device_signal_hour_start_seconds) < 8100) and (omi_client_device_signal_reporting_owners > 0))) > bool (2 * max(omi_client_device_signal_baseline_owners{signal=\"upload_failed\"} and ignoring(signal) ((omi_client_device_signal_hour_start_seconds == scalar(max(omi_client_device_signal_hour_start_seconds))) and ((time() - omi_client_device_signal_hour_start_seconds) < 8100) and (omi_client_device_signal_reporting_owners > 0)))))",
+          "instant": true,
+          "range": false
+        }
+      },
+      {
+        "refId": "D",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [
+                  0
+                ],
+                "type": "gt"
+              }
+            }
+          ],
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "A",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "D",
+          "type": "threshold"
+        }
+      }
+    ],
+    "noDataState": "NoData",
+    "execErrState": "KeepLast",
+    "for": "0s",
+    "keep_firing_for": "0s",
+    "annotations": {
+      "description": "Offline-audio upload requests throwing (10% sampled, reweighted).",
+      "runbook": "backend/docs/runbooks/client-telemetry-ingestion.md",
+      "safe_next_action": "Compare hourly counts, reporting coverage, and client rollout by release cohort.",
+      "scope": "Prometheus, distinct authenticated owners per UTC event hour, with a 10 minute delivery grace.",
+      "summary": "Device signal upload-failed: distinct owners in the last closed UTC hour exceed both the floor and 2x the 7-day hourly median.",
+      "user_impact": "Affected phones are failing to capture, store or upload audio, so conversations go missing or arrive late.",
+      "verification": "Compare the same closed UTC hour in the legacy Device Signals query and check the reporting-owner and baseline-coverage gauges."
+    },
+    "labels": {
+      "alert_identity": "omi-device-upload-failed-prom",
+      "audience": "agent",
+      "component": "mobile-capture",
+      "impact": "user-experience",
+      "owner": "observability",
+      "severity": "warning",
+      "tier": "agent"
+    },
+    "isPaused": false,
+    "notification_settings": {
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": [
+        "alertname"
+      ],
+      "group_wait": "5m",
+      "group_interval": "1h",
+      "repeat_interval": "24h",
+      "mute_time_intervals": [
+        "omi-tier-silent"
+      ]
+    },
+    "record": null
+  },
+  {
+    "uid": "omi-device-wal-backlog-age-24h-prom",
+    "orgID": 1,
+    "folderUID": "betdycdziadc0e",
+    "ruleGroup": "Device Signals Prometheus",
+    "title": "omi-device-wal-backlog-age-24h-prom",
+    "condition": "D",
+    "data": [
+      {
+        "refId": "A",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 600,
+          "to": 0
+        },
+        "datasourceUid": "prometheus",
+        "model": {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "refId": "A",
+          "intervalMs": 60000,
+          "maxDataPoints": 20,
+          "expr": "(max(omi_client_device_signal_hourly_owners{signal=\"wal_backlog_age_24h\"} and ignoring(signal) ((omi_client_device_signal_hour_start_seconds == scalar(max(omi_client_device_signal_hour_start_seconds))) and ((time() - omi_client_device_signal_hour_start_seconds) < 8100) and (omi_client_device_signal_reporting_owners > 0))) > bool 5) * (max(omi_client_device_signal_hourly_owners{signal=\"wal_backlog_age_24h\"} and ignoring(signal) ((omi_client_device_signal_hour_start_seconds == scalar(max(omi_client_device_signal_hour_start_seconds))) and ((time() - omi_client_device_signal_hour_start_seconds) < 8100) and (omi_client_device_signal_reporting_owners > 0))) > bool (2 * max(omi_client_device_signal_baseline_owners{signal=\"wal_backlog_age_24h\"} and ignoring(signal) ((omi_client_device_signal_hour_start_seconds == scalar(max(omi_client_device_signal_hour_start_seconds))) and ((time() - omi_client_device_signal_hour_start_seconds) < 8100) and (omi_client_device_signal_reporting_owners > 0)))))",
+          "instant": true,
+          "range": false
+        }
+      },
+      {
+        "refId": "D",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [
+                  0
+                ],
+                "type": "gt"
+              }
+            }
+          ],
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "A",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "D",
+          "type": "threshold"
+        }
+      }
+    ],
+    "noDataState": "NoData",
+    "execErrState": "KeepLast",
+    "for": "0s",
+    "keep_firing_for": "0s",
+    "annotations": {
+      "description": "Oldest pending WAL older than 24h: upload backlog not draining.",
+      "runbook": "backend/docs/runbooks/client-telemetry-ingestion.md",
+      "safe_next_action": "Compare hourly counts, reporting coverage, and client rollout by release cohort.",
+      "scope": "Prometheus, distinct authenticated owners per UTC event hour, with a 10 minute delivery grace.",
+      "summary": "Device signal wal-backlog-age-24h: distinct owners in the last closed UTC hour exceed both the floor and 2x the 7-day hourly median.",
+      "user_impact": "Affected phones are failing to capture, store or upload audio, so conversations go missing or arrive late.",
+      "verification": "Compare the same closed UTC hour in the legacy Device Signals query and check the reporting-owner and baseline-coverage gauges."
+    },
+    "labels": {
+      "alert_identity": "omi-device-wal-backlog-age-24h-prom",
+      "audience": "agent",
+      "component": "mobile-capture",
+      "impact": "user-experience",
+      "owner": "observability",
+      "severity": "warning",
+      "tier": "agent"
+    },
+    "isPaused": false,
+    "notification_settings": {
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": [
+        "alertname"
+      ],
+      "group_wait": "5m",
+      "group_interval": "1h",
+      "repeat_interval": "24h",
+      "mute_time_intervals": [
+        "omi-tier-silent"
+      ]
+    },
+    "record": null
+  },
+  {
+    "uid": "omi-device-wal-backlog-over-cap-prom",
+    "orgID": 1,
+    "folderUID": "betdycdziadc0e",
+    "ruleGroup": "Device Signals Prometheus",
+    "title": "omi-device-wal-backlog-over-cap-prom",
+    "condition": "D",
+    "data": [
+      {
+        "refId": "A",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 600,
+          "to": 0
+        },
+        "datasourceUid": "prometheus",
+        "model": {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "refId": "A",
+          "intervalMs": 60000,
+          "maxDataPoints": 20,
+          "expr": "(max(omi_client_device_signal_hourly_owners{signal=\"wal_backlog_over_cap\"} and ignoring(signal) ((omi_client_device_signal_hour_start_seconds == scalar(max(omi_client_device_signal_hour_start_seconds))) and ((time() - omi_client_device_signal_hour_start_seconds) < 8100) and (omi_client_device_signal_reporting_owners > 0))) > bool 5) * (max(omi_client_device_signal_hourly_owners{signal=\"wal_backlog_over_cap\"} and ignoring(signal) ((omi_client_device_signal_hour_start_seconds == scalar(max(omi_client_device_signal_hour_start_seconds))) and ((time() - omi_client_device_signal_hour_start_seconds) < 8100) and (omi_client_device_signal_reporting_owners > 0))) > bool (2 * max(omi_client_device_signal_baseline_owners{signal=\"wal_backlog_over_cap\"} and ignoring(signal) ((omi_client_device_signal_hour_start_seconds == scalar(max(omi_client_device_signal_hour_start_seconds))) and ((time() - omi_client_device_signal_hour_start_seconds) < 8100) and (omi_client_device_signal_reporting_owners > 0)))))",
+          "instant": true,
+          "range": false
+        }
+      },
+      {
+        "refId": "D",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [
+                  0
+                ],
+                "type": "gt"
+              }
+            }
+          ],
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "A",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "D",
+          "type": "threshold"
+        }
+      }
+    ],
+    "noDataState": "NoData",
+    "execErrState": "KeepLast",
+    "for": "0s",
+    "keep_firing_for": "0s",
+    "annotations": {
+      "description": "Pending WAL count above the 720 retention cap: next stop is count_cap audio refusal.",
+      "runbook": "backend/docs/runbooks/client-telemetry-ingestion.md",
+      "safe_next_action": "Compare hourly counts, reporting coverage, and client rollout by release cohort.",
+      "scope": "Prometheus, distinct authenticated owners per UTC event hour, with a 10 minute delivery grace.",
+      "summary": "Device signal wal-backlog-over-cap: distinct owners in the last closed UTC hour exceed both the floor and 2x the 7-day hourly median.",
+      "user_impact": "These phones are past the 720-WAL retention cap; the next step is pendant audio being refused (count_cap).",
+      "verification": "Compare the same closed UTC hour in the legacy Device Signals query and check the reporting-owner and baseline-coverage gauges."
+    },
+    "labels": {
+      "alert_identity": "omi-device-wal-backlog-over-cap-prom",
+      "audience": "human",
+      "component": "mobile-capture",
+      "impact": "user-experience",
+      "owner": "observability",
+      "severity": "warning",
+      "tier": "page"
+    },
+    "isPaused": false,
+    "notification_settings": {
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": [
+        "alertname"
+      ],
+      "group_wait": "5m",
+      "group_interval": "1h",
+      "repeat_interval": "24h"
+    },
+    "record": null
+  },
+  {
+    "uid": "omi-device-wedge-count-cap-prom",
+    "orgID": 1,
+    "folderUID": "betdycdziadc0e",
+    "ruleGroup": "Device Signals Prometheus",
+    "title": "omi-device-wedge-count-cap-prom",
+    "condition": "D",
+    "data": [
+      {
+        "refId": "A",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 600,
+          "to": 0
+        },
+        "datasourceUid": "prometheus",
+        "model": {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "refId": "A",
+          "intervalMs": 60000,
+          "maxDataPoints": 20,
+          "expr": "(max(omi_client_device_signal_hourly_owners{signal=\"wedge_count_cap\"} and ignoring(signal) ((omi_client_device_signal_hour_start_seconds == scalar(max(omi_client_device_signal_hour_start_seconds))) and ((time() - omi_client_device_signal_hour_start_seconds) < 8100) and (omi_client_device_signal_reporting_owners > 0))) > bool 10) * (max(omi_client_device_signal_hourly_owners{signal=\"wedge_count_cap\"} and ignoring(signal) ((omi_client_device_signal_hour_start_seconds == scalar(max(omi_client_device_signal_hour_start_seconds))) and ((time() - omi_client_device_signal_hour_start_seconds) < 8100) and (omi_client_device_signal_reporting_owners > 0))) > bool (2 * max(omi_client_device_signal_baseline_owners{signal=\"wedge_count_cap\"} and ignoring(signal) ((omi_client_device_signal_hour_start_seconds == scalar(max(omi_client_device_signal_hour_start_seconds))) and ((time() - omi_client_device_signal_hour_start_seconds) < 8100) and (omi_client_device_signal_reporting_owners > 0)))))",
+          "instant": true,
+          "range": false
+        }
+      },
+      {
+        "refId": "D",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [
+                  0
+                ],
+                "type": "gt"
+              }
+            }
+          ],
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "A",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "D",
+          "type": "threshold"
+        }
+      }
+    ],
+    "noDataState": "NoData",
+    "execErrState": "KeepLast",
+    "for": "0s",
+    "keep_firing_for": "0s",
+    "annotations": {
+      "description": "Pendant audio refused because >720 WALs retained (local_wal_sync.dart count_cap). P0 2026-10-25; hotfix lane walcap.",
+      "runbook": "backend/docs/runbooks/client-telemetry-ingestion.md",
+      "safe_next_action": "Compare hourly counts, reporting coverage, and client rollout by release cohort.",
+      "scope": "Prometheus, distinct authenticated owners per UTC event hour, with a 10 minute delivery grace.",
+      "summary": "Device signal wedge-count-cap: distinct owners in the last closed UTC hour exceed both the floor and 2x the 7-day hourly median.",
+      "user_impact": "Pendant audio is being refused on these phones; the dropped audio is never stored and cannot be recovered.",
+      "verification": "Compare the same closed UTC hour in the legacy Device Signals query and check the reporting-owner and baseline-coverage gauges."
+    },
+    "labels": {
+      "alert_identity": "omi-device-wedge-count-cap-prom",
+      "audience": "human",
+      "component": "mobile-capture",
+      "impact": "user-experience",
+      "owner": "observability",
+      "severity": "warning",
+      "tier": "page"
+    },
+    "isPaused": false,
+    "notification_settings": {
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": [
+        "alertname"
+      ],
+      "group_wait": "5m",
+      "group_interval": "1h",
+      "repeat_interval": "24h"
+    },
+    "record": null
+  },
+  {
+    "uid": "omi-device-wedge-disk-reserve-prom",
+    "orgID": 1,
+    "folderUID": "betdycdziadc0e",
+    "ruleGroup": "Device Signals Prometheus",
+    "title": "omi-device-wedge-disk-reserve-prom",
+    "condition": "D",
+    "data": [
+      {
+        "refId": "A",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 600,
+          "to": 0
+        },
+        "datasourceUid": "prometheus",
+        "model": {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "refId": "A",
+          "intervalMs": 60000,
+          "maxDataPoints": 20,
+          "expr": "(max(omi_client_device_signal_hourly_owners{signal=\"wedge_disk_reserve\"} and ignoring(signal) ((omi_client_device_signal_hour_start_seconds == scalar(max(omi_client_device_signal_hour_start_seconds))) and ((time() - omi_client_device_signal_hour_start_seconds) < 8100) and (omi_client_device_signal_reporting_owners > 0))) > bool 5) * (max(omi_client_device_signal_hourly_owners{signal=\"wedge_disk_reserve\"} and ignoring(signal) ((omi_client_device_signal_hour_start_seconds == scalar(max(omi_client_device_signal_hour_start_seconds))) and ((time() - omi_client_device_signal_hour_start_seconds) < 8100) and (omi_client_device_signal_reporting_owners > 0))) > bool (2 * max(omi_client_device_signal_baseline_owners{signal=\"wedge_disk_reserve\"} and ignoring(signal) ((omi_client_device_signal_hour_start_seconds == scalar(max(omi_client_device_signal_hour_start_seconds))) and ((time() - omi_client_device_signal_hour_start_seconds) < 8100) and (omi_client_device_signal_reporting_owners > 0)))))",
+          "instant": true,
+          "range": false
+        }
+      },
+      {
+        "refId": "D",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [
+                  0
+                ],
+                "type": "gt"
+              }
+            }
+          ],
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "A",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "D",
+          "type": "threshold"
+        }
+      }
+    ],
+    "noDataState": "NoData",
+    "execErrState": "KeepLast",
+    "for": "0s",
+    "keep_firing_for": "0s",
+    "annotations": {
+      "description": "Capture refused for low device storage.",
+      "runbook": "backend/docs/runbooks/client-telemetry-ingestion.md",
+      "safe_next_action": "Compare hourly counts, reporting coverage, and client rollout by release cohort.",
+      "scope": "Prometheus, distinct authenticated owners per UTC event hour, with a 10 minute delivery grace.",
+      "summary": "Device signal wedge-disk-reserve: distinct owners in the last closed UTC hour exceed both the floor and 2x the 7-day hourly median.",
+      "user_impact": "Affected phones are failing to capture, store or upload audio, so conversations go missing or arrive late.",
+      "verification": "Compare the same closed UTC hour in the legacy Device Signals query and check the reporting-owner and baseline-coverage gauges."
+    },
+    "labels": {
+      "alert_identity": "omi-device-wedge-disk-reserve-prom",
+      "audience": "agent",
+      "component": "mobile-capture",
+      "impact": "user-experience",
+      "owner": "observability",
+      "severity": "warning",
+      "tier": "agent"
+    },
+    "isPaused": false,
+    "notification_settings": {
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": [
+        "alertname"
+      ],
+      "group_wait": "5m",
+      "group_interval": "1h",
+      "repeat_interval": "24h",
+      "mute_time_intervals": [
+        "omi-tier-silent"
+      ]
+    },
+    "record": null
+  },
+  {
+    "uid": "omi-device-wedge-other-prom",
+    "orgID": 1,
+    "folderUID": "betdycdziadc0e",
+    "ruleGroup": "Device Signals Prometheus",
+    "title": "omi-device-wedge-other-prom",
+    "condition": "D",
+    "data": [
+      {
+        "refId": "A",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 600,
+          "to": 0
+        },
+        "datasourceUid": "prometheus",
+        "model": {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "refId": "A",
+          "intervalMs": 60000,
+          "maxDataPoints": 20,
+          "expr": "(max(omi_client_device_signal_hourly_owners{signal=\"wedge_other\"} and ignoring(signal) ((omi_client_device_signal_hour_start_seconds == scalar(max(omi_client_device_signal_hour_start_seconds))) and ((time() - omi_client_device_signal_hour_start_seconds) < 8100) and (omi_client_device_signal_reporting_owners > 0))) > bool 10) * (max(omi_client_device_signal_hourly_owners{signal=\"wedge_other\"} and ignoring(signal) ((omi_client_device_signal_hour_start_seconds == scalar(max(omi_client_device_signal_hour_start_seconds))) and ((time() - omi_client_device_signal_hour_start_seconds) < 8100) and (omi_client_device_signal_reporting_owners > 0))) > bool (2 * max(omi_client_device_signal_baseline_owners{signal=\"wedge_other\"} and ignoring(signal) ((omi_client_device_signal_hour_start_seconds == scalar(max(omi_client_device_signal_hour_start_seconds))) and ((time() - omi_client_device_signal_hour_start_seconds) < 8100) and (omi_client_device_signal_reporting_owners > 0)))))",
+          "instant": true,
+          "range": false
+        }
+      },
+      {
+        "refId": "D",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [
+                  0
+                ],
+                "type": "gt"
+              }
+            }
+          ],
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "A",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "D",
+          "type": "threshold"
+        }
+      }
+    ],
+    "noDataState": "NoData",
+    "execErrState": "KeepLast",
+    "for": "0s",
+    "keep_firing_for": "0s",
+    "annotations": {
+      "description": "Capture wedge without a block reason (ingress stalls).",
+      "runbook": "backend/docs/runbooks/client-telemetry-ingestion.md",
+      "safe_next_action": "Compare hourly counts, reporting coverage, and client rollout by release cohort.",
+      "scope": "Prometheus, distinct authenticated owners per UTC event hour, with a 10 minute delivery grace.",
+      "summary": "Device signal wedge-other: distinct owners in the last closed UTC hour exceed both the floor and 2x the 7-day hourly median.",
+      "user_impact": "Affected phones are failing to capture, store or upload audio, so conversations go missing or arrive late.",
+      "verification": "Compare the same closed UTC hour in the legacy Device Signals query and check the reporting-owner and baseline-coverage gauges."
+    },
+    "labels": {
+      "alert_identity": "omi-device-wedge-other-prom",
+      "audience": "agent",
+      "component": "mobile-capture",
+      "impact": "user-experience",
+      "owner": "observability",
+      "severity": "warning",
+      "tier": "agent"
+    },
+    "isPaused": false,
+    "notification_settings": {
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": [
+        "alertname"
+      ],
+      "group_wait": "5m",
+      "group_interval": "1h",
+      "repeat_interval": "24h",
+      "mute_time_intervals": [
+        "omi-tier-silent"
+      ]
+    },
+    "record": null
   }
 ]

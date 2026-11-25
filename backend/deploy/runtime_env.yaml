@@ -1222,6 +1222,9 @@ environments:
             PROMETHEUS_SIDECAR_PORT:
               value: '9090'
               category: telemetry
+            CLIENT_TELEMETRY_DEVICE_SIGNALS_EXPORT:
+              value: 'off'
+              category: telemetry
             LLM_GATEWAY_ACCOUNTING_ENABLED: {value: 'true', category: rollout}
             MEETING_NOTES_EVIDENCE_WAIT_SECONDS: {value: '25', category: rollout}
             CLOUD_SCREEN_VECTORS_EMBED_REFUSAL_ENABLED: {value: 'true', category: rollout}
@@ -4337,6 +4340,9 @@ environments:
             CLIENT_SUMMARIES_AT_CAP_ENABLED: {value: 'true', category: rollout}
             PROMETHEUS_SIDECAR_PORT:
               value: '9090'
+              category: telemetry
+            CLIENT_TELEMETRY_DEVICE_SIGNALS_EXPORT:
+              value: 'off'
               category: telemetry
             LLM_GATEWAY_ACCOUNTING_ENABLED: {value: 'true', category: rollout}
             MEETING_NOTES_EVIDENCE_WAIT_SECONDS: {value: '25', category: rollout}
