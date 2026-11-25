@@ -244,6 +244,8 @@ async def _release_reconcile_lease(uid, key, token, *, primary_failed):
 def _measure_reconcile_writes(run):
     @wraps(run)
     async def measured(*args, **kwargs):
+        if kwargs.get('_pass', 0):  # The outer pass owns the measurement for the whole chain.
+            return await run(*args, **kwargs)
         caller = 'backfill' if kwargs.get('derive') else 'on_open' if kwargs.get('on_open') else 'builder'
         with metrics.measure_reconcile_writes(caller):
             return await run(*args, **kwargs)

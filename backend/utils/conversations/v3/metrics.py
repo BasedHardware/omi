@@ -145,7 +145,7 @@ PROJECTION_ROWS = Histogram(
     'omi_conversations_v3_projection_rows',
     'Rows written or skipped by a completed projection pass or pending mark, before commit hooks',
     ['caller', 'outcome'],
-    buckets=(0, 1, 2, 3, 5, 8, 10, 15, 20, 30, 50, 90, 128, 256, 500),
+    buckets=(0, 1, 2, 3, 5, 8, 10, 15, 20, 30, 50, 90, 130),
 )
 
 
@@ -154,11 +154,17 @@ def projection_writes(caller, written, skipped):
     PROJECTION_ROWS.labels(caller, 'skipped').observe(skipped)
 
 
+EQUALITY_UNAVAILABLE = Counter(
+    'omi_conversations_v3_equality_unavailable_total',
+    'Comparisons that could not establish equality and fell back to a write',
+)
+
+
 RECONCILE_BILLED_WRITES = Histogram(
     'omi_conversations_v3_reconcile_billed_writes',
-    'Confirmed Firestore writes per builder pass including leases and commit-hook writes',
+    'Confirmed Firestore writes per builder pass chain including leases and commit-hook writes',
     ['caller'],
-    buckets=(0, 1, 2, 3, 5, 8, 10, 15, 20, 30, 50, 90, 128, 256, 500),
+    buckets=(0, 1, 2, 3, 5, 8, 10, 15, 20, 30, 50, 90, 130),
 )
 
 

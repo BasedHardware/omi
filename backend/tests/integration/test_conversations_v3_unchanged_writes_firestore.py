@@ -5,6 +5,7 @@ import json
 import os
 from unittest.mock import patch
 from uuid import uuid4
+import zlib
 
 from google.api_core.exceptions import Aborted, AlreadyExists
 from google.auth.credentials import AnonymousCredentials
@@ -16,8 +17,9 @@ from database import conversations
 from database import conversations_v3 as store, conversations_v3_leases as leases, firestore_write_probe
 from database.home_feed_writer import CONTROL
 from utils import cloud_tasks
+from utils.conversations import speaker_grouping_storage as grouping
 from utils.conversations.v3 import metrics, service, triggers
-from utils.encryption import encrypt
+from utils.encryption import decrypt, encrypt
 from utils.home_feed.projection import DISPLAY, reveal_display
 
 
@@ -122,7 +124,6 @@ async def test_noop_pass_bills_three_lease_writes_and_no_home_dirty_merges(owner
     assert await run() == set()
     assert card.get().update_time == revision
     assert control.get().to_dict()['ready'] is True
-    assert len(confirmed_paths) <= 10
     assert confirmed_paths == ['conversation_v3_leases/builder'] * 3
     assert metrics.RECONCILE_BILLED_WRITES.labels('builder')._sum.get() - before == 3
 
@@ -323,11 +324,11 @@ def test_privacy_filter_change_is_persisted_before_equality(owner, confirmed_pat
 
 
 @pytest.mark.asyncio
-async def test_reconcile_histogram_excludes_notes_followup(owner, confirmed_paths):
+async def test_reconcile_histogram_counts_one_recursive_chain_and_excludes_notes(owner, confirmed_paths):
     client, user = owner
     projection_pass(owner, [], [])
     followup = user.collection('test_followup').document('notes')
-    before = metrics.RECONCILE_BILLED_WRITES.labels('builder')._sum.get()
+    histogram = metrics.RECONCILE_BILLED_WRITES.labels('builder')
     confirmed_paths.clear()
 
     async def drain(uid):
@@ -338,13 +339,14 @@ async def test_reconcile_histogram_excludes_notes_followup(owner, confirmed_path
         patch.object(store, 'get_firestore_client', return_value=client),
         patch.object(leases, 'get_firestore_client', return_value=client),
         patch.object(store, 'load', return_value=({}, {}, [])),
-        patch.object(service, 'has_pending', return_value=False),
+        patch.object(service, 'has_pending', side_effect=[True, False]),
         patch.object(service, 'drain_processing', side_effect=drain),
+        patch.object(histogram, 'observe', wraps=histogram.observe) as observe,
     ):
         assert await service.reconcile(user.id) == 'committed'
 
-    assert confirmed_paths == ['conversation_v3_leases/builder'] * 3 + ['test_followup/notes']
-    assert metrics.RECONCILE_BILLED_WRITES.labels('builder')._sum.get() - before == 3
+    assert confirmed_paths == (['conversation_v3_leases/builder'] * 3 + ['test_followup/notes']) * 2
+    observe.assert_called_once_with(6)
 
 
 def test_reconcile_repairs_equal_but_unreadable_home_display(owner, confirmed_paths):
@@ -411,3 +413,48 @@ def test_noop_stages_no_conversation_writes_and_reads_the_same_documents(owner, 
         assert staged.count(path) == 1
         assert len(enabled_reads) == len(reads) == 8
         assert enabled_reads == reads
+
+
+@pytest.mark.parametrize('fault', ['padded-sidecar', 'trailing-bytes', 'utf16'])
+def test_projection_rewrites_a_transcript_rejected_by_a_serving_reader(owner, confirmed_paths, fault):
+    _, user = owner
+    rows = projection_rows(1)
+    if fault == 'padded-sidecar':
+        rows[0]['transcript_segments'][0]['provider_speaker'] = {
+            'id': 2,
+            'scope': 'final:batch:unit-a',
+            'provider': 'parakeet',
+            'timing_store': 'batch',
+        }
+    projection_pass(owner, rows, [])
+    card = user.collection('conversations').document('card-0')
+    original = card.get().to_dict()['transcript_segments']
+    content = zlib.decompress(bytes.fromhex(decrypt(original, user.id)))
+    segments = json.loads(content)
+
+    if fault == 'padded-sidecar':
+        compact = segments[0][grouping.FIELD]
+        padded = encrypt(' ' * grouping.MAX_ENCODED_BYTES + decrypt(compact, user.id), user.id)
+        segments[0][grouping.FIELD] = padded
+        revealed = [dict(segment) for segment in segments]
+        assert not grouping.reveal_segments(revealed, user.id)
+        assert 'provider_speaker' not in revealed[0]
+        invalid = zlib.compress(json.dumps(segments).encode())
+    elif fault == 'trailing-bytes':
+        invalid = bytes.fromhex(decrypt(original, user.id)) + b'trailing'
+    else:
+        invalid = zlib.compress(content.decode('utf-8').encode('utf-16'))
+    card.update({'transcript_segments': encrypt(invalid.hex(), user.id)})
+    confirmed_paths.clear()
+
+    projection_pass(owner, rows, [])
+
+    assert 'conversations/card-0' in confirmed_paths
+    repaired = card.get().to_dict()['transcript_segments']
+    assert conversations._decode_public_transcript_segments_bounded(user.id, repaired, compressed=True)
+    if fault == 'padded-sidecar':
+        decoded = conversations.decode_transcript_segments_blob(user.id, repaired, True, require_decryption=True)
+        assert grouping.reveal_segments(decoded, user.id)
+        assert decoded[0]['provider_speaker']['id'] == 2
+    else:
+        assert zlib.decompress(bytes.fromhex(decrypt(repaired, user.id))) == content

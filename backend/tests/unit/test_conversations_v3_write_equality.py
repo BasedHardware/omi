@@ -4,6 +4,7 @@ from datetime import datetime, timedelta, timezone
 import json
 from pathlib import Path
 import re
+from unittest.mock import patch
 from uuid import uuid4
 import zlib
 
@@ -14,6 +15,8 @@ from google.cloud import firestore
 
 from config.conversations_v3 import skip_unchanged_writes_enabled
 from database import conversations_v3_write_equality as equality
+from utils.conversations import speaker_grouping_storage as grouping
+from utils.conversations.v3 import metrics
 from utils.encryption import encrypt
 from utils.home_feed.projection import SCHEMA, reveal_display
 
@@ -91,6 +94,10 @@ def test_sync_scrape_keeps_projection_histograms():
             assert any(
                 rule['action'] == 'keep' and re.fullmatch(rule['regex'], f'{metric}_{suffix}') for rule in relabeling
             )
+    assert any(
+        rule['action'] == 'keep' and re.fullmatch(rule['regex'], 'omi_conversations_v3_equality_unavailable_total')
+        for rule in relabeling
+    )
 
 
 @pytest.mark.parametrize('value', ['off', 'false', 'no', '0'])
@@ -111,3 +118,38 @@ def test_home_display_must_be_servable_even_when_the_stored_field_matches():
         stored = {'home_display': unreadable}
         assert not equality.same_conversation(uid, stored, planned)
         assert not equality.same_conversation(uid, stored, stored)
+
+
+@pytest.mark.parametrize(
+    ('stored_id', 'pad', 'equal'), [(2, 0, True), (3, 0, False), (2, grouping.MAX_ENCODED_BYTES, False)]
+)
+def test_transcript_sidecar_comparison_requires_serving_acceptance(stored_id, pad, equal):
+    uid = 'synthetic'
+
+    def row(speaker_id, padding=0):
+        provider = {'id': speaker_id, 'scope': 'final:batch:unit-a', 'provider': 'parakeet', 'timing_store': 'batch'}
+        payload = json.dumps({'id': 'seg', 'values': {'provider_speaker': provider}})
+        sidecar = encrypt(' ' * padding + payload, uid)
+        segment = {'id': 'seg', 'text': 'Same speech', grouping.FIELD: sidecar}
+        assert grouping.reveal_segments([dict(segment)], uid) is (padding == 0)
+        return {
+            'transcript_segments': zlib.compress(json.dumps([segment]).encode('utf-8')),
+            'transcript_segments_compressed': True,
+        }
+
+    stored, planned = row(stored_id, pad), row(2)
+    assert stored['transcript_segments'] != planned['transcript_segments']
+    assert equality.same_conversation(uid, stored, planned) is equal
+
+
+def test_unavailable_codec_counts_writes_and_reports_the_fallback_once():
+    before = metrics.EQUALITY_UNAVAILABLE._value.get()
+    with (
+        patch.object(equality, '_fallback_reported', False),
+        patch.object(equality, 'encode_value', None),
+        patch.object(equality, 'record_fallback') as fallback,
+    ):
+        assert not equality.same_value(1, 1)
+        assert not equality.same_value(2, 2)
+    assert metrics.EQUALITY_UNAVAILABLE._value.get() - before == 2
+    fallback.assert_called_once()

@@ -946,9 +946,7 @@ def commit_projection(
                 lease_update['unlocked_ids'] = sorted(planned_unlocked)
             else:
                 lease_update['unlocked_ids'] = sorted(previous_unlocked | unlocked)
-        if skip_unchanged and write_equality.same_blob(
-            uid, lease.get('outline_cache'), encrypted_cache, compressed=False
-        ):
+        if skip_unchanged and write_equality.same_outline_cache(uid, lease.get('outline_cache'), encrypted_cache):
             lease_update['outline_cache'] = lease['outline_cache']
         staged['lease'] = (lease, lease_update)
         update_if_changed(held, lease, lease_update)
