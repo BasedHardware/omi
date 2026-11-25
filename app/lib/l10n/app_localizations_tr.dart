@@ -15347,9 +15347,6 @@ class AppLocalizationsTr extends AppLocalizations {
   String get stopThese => 'Bunları Durdur';
 
   @override
-  String get meetingActionItemsTitle => 'Eylem öğeleri';
-
-  @override
   String get addToTasks => 'Görevlere Ekle';
 
   @override
@@ -15833,5 +15830,16 @@ class AppLocalizationsTr extends AppLocalizations {
       },
     );
     return '$_temp0';
+  }
+
+  @override
+  String get playStripeBilledOnWeb => 'omi.me üzerinden faturalandırılır. İstediğin zaman buradan iptal et.';
+
+  @override
+  String get playStripeBilledOnWebShort => 'omi.me üzerinden faturalandırılır.';
+
+  @override
+  String playStripePlanPaused(String plan) {
+    return '$plan planın duraklatıldı.';
   }
 }

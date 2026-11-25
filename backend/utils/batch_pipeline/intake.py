@@ -32,6 +32,7 @@ from config.batch_pipeline_coverage_wait import decode_failure_memo_enabled
 from config.batch_pipeline_providers import provider_config
 from config.firestore_read_levers import lever_enabled
 from config.prerecorded_language import language_guard_enabled, language_class
+from config.request_clock import context_fields
 from config.stt_cap_dispatch import offline_enforcement_enabled
 from config.stt_provider_policy import normalized_stt_language, PARAKEET_SUPPORTED_LANGUAGES_BY_MODEL
 from database import batch_pipeline_allowance_hold as allowance_hold
@@ -1163,6 +1164,7 @@ async def accept_upload(
                 'lane': lane,
                 'repair_lineage': lineage_record(intake_context),
                 'repair_languages': repair_languages,
+                **context_fields(intake_context),
                 # Funded period the owner's choice was made in (cap-hold re-entry); projection
                 # attributes usage to it across a month rollover (lane 6, Subscription ruling B).
                 **({'usage_period': usage_period} if usage_period else {}),

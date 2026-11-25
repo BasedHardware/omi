@@ -88,33 +88,35 @@ class NeedsAttentionSection extends StatelessWidget {
         final retentionPlausible =
             acute != null && !ingressFailure && acute.trigger != CaptureWedgeMonitor.triggerConnectedNoBytes;
         final retryable = store.attention.where((i) => i.canRetry);
+        final largeText = MediaQuery.textScalerOf(context).scale(1) >= 1.6;
+        final header = Semantics(
+          header: true,
+          child: Text(
+            l.activityNeedsAttention.toUpperCase(),
+            // The same header as Activity's day groups: the row icons carry the warning.
+            style: OmiType.footnote
+                .copyWith(fontWeight: FontWeight.w600, color: OmiColors.textSecondary, letterSpacing: 0.4),
+          ),
+        );
+        final retryAll = retryable.length > 1
+            ? OmiButton.tertiary(
+                key: const Key('activity_retry_all'),
+                label: l.activityRetryAll,
+                onPressed: store.retryAll,
+              )
+            : null;
         return Column(
           key: const Key('activity_needs_attention'),
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             Padding(
               padding: const EdgeInsets.fromLTRB(OmiSpacing.xxs, OmiSpacing.md, 0, OmiSpacing.xxs),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: Semantics(
-                      header: true,
-                      child: Text(
-                        l.activityNeedsAttention.toUpperCase(),
-                        // The same header as Activity's day groups: the row icons carry the warning.
-                        style: OmiType.footnote
-                            .copyWith(fontWeight: FontWeight.w600, color: OmiColors.textSecondary, letterSpacing: 0.4),
-                      ),
-                    ),
-                  ),
-                  if (retryable.length > 1)
-                    OmiButton.tertiary(
-                      key: const Key('activity_retry_all'),
-                      label: l.activityRetryAll,
-                      onPressed: store.retryAll,
-                    ),
-                ],
-              ),
+              child: largeText
+                  // At the accessibility text sizes Retry all moves under the header, as the rows'
+                  // Try Again does, so the header keeps whole words.
+                  ? Column(
+                      crossAxisAlignment: CrossAxisAlignment.start, children: [header, if (retryAll != null) retryAll])
+                  : Row(children: [Expanded(child: header), if (retryAll != null) retryAll]),
             ),
             Material(
               color: OmiColors.surface1,

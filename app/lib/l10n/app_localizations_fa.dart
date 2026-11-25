@@ -15329,9 +15329,6 @@ class AppLocalizationsFa extends AppLocalizations {
   String get stopThese => 'توقف این موارد';
 
   @override
-  String get meetingActionItemsTitle => 'موارد اقدام';
-
-  @override
   String get addToTasks => 'افزودن به وظایف';
 
   @override
@@ -15815,5 +15812,16 @@ class AppLocalizationsFa extends AppLocalizations {
       },
     );
     return '$_temp0';
+  }
+
+  @override
+  String get playStripeBilledOnWeb => 'صورتحساب از طریق omi.me. هر زمان از اینجا لغو کنید.';
+
+  @override
+  String get playStripeBilledOnWebShort => 'صورتحساب از طریق omi.me.';
+
+  @override
+  String playStripePlanPaused(String plan) {
+    return 'طرح $plan شما متوقف شده است.';
   }
 }

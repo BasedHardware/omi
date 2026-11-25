@@ -979,6 +979,9 @@ class CreateConversation(BaseModel):
 
 class ProcessConversationRequest(BaseModel):
     calendar_meeting_context: Optional[CalendarMeetingContext] = None
+    live_conversation_id: Optional[str] = Field(
+        default=None, description='Optional live v3 window to Finish when no active recording is found.'
+    )
 
     @field_validator('calendar_meeting_context', mode='before')
     @classmethod

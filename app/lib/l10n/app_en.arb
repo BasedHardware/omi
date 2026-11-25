@@ -18690,10 +18690,6 @@
     "@stopThese": {
         "description": "Disable the producer of a For You card"
     },
-    "meetingActionItemsTitle": "Action items",
-    "@meetingActionItemsTitle": {
-        "description": "meetingActionItemsTitle"
-    },
     "addToTasks": "Add to Tasks",
     "@addToTasks": {
         "description": "addToTasks"
@@ -19332,6 +19328,23 @@
         "description": "Why a prepaid code was not redeemed. The code is never used when this shows.",
         "placeholders": {
             "reason": {
+                "type": "String"
+            }
+        }
+    },
+    "playStripeBilledOnWeb": "Billed through omi.me. Cancel here anytime.",
+    "@playStripeBilledOnWeb": {
+        "description": "Plans & Billing on an Android build that sells through Google Play, under the renewing plan of a reader who pays on omi.me (Stripe). The only action on the sheet is Cancel. Plain text, no link."
+    },
+    "playStripeBilledOnWebShort": "Billed through omi.me.",
+    "@playStripeBilledOnWebShort": {
+        "description": "Plans & Billing on an Android build that sells through Google Play, under a cancel-pending plan billed on omi.me (Stripe), next to Resubscribe. Plain text, no link."
+    },
+    "playStripePlanPaused": "Your {plan} plan is paused.",
+    "@playStripePlanPaused": {
+        "description": "Home row line under 'Your card was declined' on an Android build that sells through Google Play. Neutral: names no place or way to pay. plan = a product name such as Omi Pro.",
+        "placeholders": {
+            "plan": {
                 "type": "String"
             }
         }

@@ -15401,9 +15401,6 @@ class AppLocalizationsRo extends AppLocalizations {
   String get stopThese => 'Oprește acestea';
 
   @override
-  String get meetingActionItemsTitle => 'Elemente de acțiune';
-
-  @override
   String get addToTasks => 'Adaugă la Sarcini';
 
   @override
@@ -15888,5 +15885,16 @@ class AppLocalizationsRo extends AppLocalizations {
       },
     );
     return '$_temp0';
+  }
+
+  @override
+  String get playStripeBilledOnWeb => 'Facturat prin omi.me. Anulează aici oricând.';
+
+  @override
+  String get playStripeBilledOnWebShort => 'Facturat prin omi.me.';
+
+  @override
+  String playStripePlanPaused(String plan) {
+    return 'Planul tău $plan este întrerupt.';
   }
 }

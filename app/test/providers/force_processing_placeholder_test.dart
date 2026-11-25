@@ -2,13 +2,17 @@ import 'dart:async';
 
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'package:omi/backend/http/api/conversations.dart';
+import 'package:omi/backend/http/api_result.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/message.dart';
 import 'package:omi/backend/schema/message_event.dart';
 import 'package:omi/backend/schema/structured.dart';
+import 'package:omi/env/env.dart';
 import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/services/capture/capture_external_actions.dart';
 import 'package:omi/services/capture/capture_seams.dart';
@@ -140,7 +144,8 @@ Future<({List<Object> unhandled, Object? harnessError})> _runInGuardedZone(Futur
 CaptureProvider _provider({
   required _RecordingActions actions,
   required Completer<void> finalizeGate,
-  required Future<CreateConversationResponse?> Function() process,
+  Future<CreateConversationResponse?> Function()? process,
+  InProgressConversationRequestSender? processRequestSender,
   List<Completer<void>> laterFinalizeGates = const [],
   _GatedPhoneSync? phone,
 }) {
@@ -149,6 +154,7 @@ CaptureProvider _provider({
     externalActions: actions,
     walService: _GatedWal(resolvedPhone),
     processInProgressConversation: process,
+    processRequestSender: processRequestSender,
     connectivity: CaptureConnectivityBoundary(
       initiallyConnected: true,
       changes: const Stream.empty(),
@@ -194,6 +200,37 @@ void main() {
     crashlytics.reset();
     SharedPreferences.setMockInitialValues({});
     await SharedPreferencesUtil.init();
+  });
+
+  test('manual Finish serializes its optional window in the outbound POST', () async {
+    Env.overrideApiBaseUrl('https://finish.test/');
+    addTearDown(Env.clearApiBaseUrlOverride);
+    final requests = <ApiRequest>[];
+    final actions = _RecordingActions();
+    final provider = _provider(
+      actions: actions,
+      finalizeGate: Completer<void>()..complete(),
+      processRequestSender: (request) async {
+        requests.add(request);
+        return http.Response('', 404);
+      },
+    );
+    addTearDown(provider.dispose);
+
+    await provider.forceProcessingCurrentConversation(manualFinish: true, liveConversationId: 'window-1');
+    await _flushEventQueue();
+    await provider.forceProcessingCurrentConversation(manualFinish: true);
+    await _flushEventQueue();
+    final result = await provider.finishCaptureWithOutcome(liveConversationId: 'window-2');
+
+    expect(requests.map((request) => request.method), ['POST', 'POST', 'POST']);
+    expect(requests.map((request) => request.url).toSet(), {'https://finish.test/v1/conversations'});
+    expect(requests.map((request) => request.body), [
+      '{"live_conversation_id":"window-1"}',
+      '{}',
+      '{"live_conversation_id":"window-2"}',
+    ]);
+    expect(result.absence, ProcessAbsence.notFound);
   });
 
   test('adds the processing placeholder before finalizeCurrentSession completes', () async {

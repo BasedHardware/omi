@@ -15365,9 +15365,6 @@ class AppLocalizationsSl extends AppLocalizations {
   String get stopThese => 'Ustavi te';
 
   @override
-  String get meetingActionItemsTitle => 'Dejanja';
-
-  @override
   String get addToTasks => 'Dodaj med opravila';
 
   @override
@@ -15851,5 +15848,16 @@ class AppLocalizationsSl extends AppLocalizations {
       },
     );
     return '$_temp0';
+  }
+
+  @override
+  String get playStripeBilledOnWeb => 'Obračunano prek omi.me. Prekličite tukaj kadar koli.';
+
+  @override
+  String get playStripeBilledOnWebShort => 'Obračunano prek omi.me.';
+
+  @override
+  String playStripePlanPaused(String plan) {
+    return 'Vaš paket $plan je začasno ustavljen.';
   }
 }
