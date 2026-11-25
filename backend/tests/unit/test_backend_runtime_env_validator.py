@@ -544,7 +544,7 @@ def with_conversations_v3_env(payload: str) -> str:
     for service in ('backend', 'backend-sync', 'backend-integration'):
         payload = re.sub(
             rf'("{service}":\s*\{{.*?"env":\s*\[)',
-            r'\1\n        {"name": "CONVERSATIONS_V3_STAGE", "value": "beta"},'
+            r'\1\n        {"name": "CONVERSATIONS_V3_STAGE", "value": "all"},'
             r'\n        {"name": "CONVERSATIONS_V3_FIRST_APP_BUILD", "value": ""},'
             r'\n        {"name": "CONVERSATIONS_V3_TASKS_QUEUE", "value": "conversations-v3"},'
             r'\n        {"name": "CONVERSATIONS_V3_BACKFILL_QUEUE", "value": "conversations-v3-backfill"},',

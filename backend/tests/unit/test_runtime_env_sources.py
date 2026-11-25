@@ -112,28 +112,28 @@ def test_conversations_v3_stage_is_shared_across_creator_finalizer_readers():
     manifest = COMPOSER['compose_manifest']()
     for env in manifest['environments'].values():
         for service in env['cloud_run']['services'].values():
-            assert service['env']['CONVERSATIONS_V3_STAGE']['value'] == 'beta'
+            assert service['env']['CONVERSATIONS_V3_STAGE']['value'] == 'all'
         for job in env['cloud_run'].get('jobs', {}).values():
             if isinstance(job, dict):
-                assert job['env']['CONVERSATIONS_V3_STAGE']['value'] == 'beta'
+                assert job['env']['CONVERSATIONS_V3_STAGE']['value'] == 'all'
         for name in ('backend-listen', 'pusher'):
             assert env['gke'][name]['env']['CONVERSATIONS_V3_STAGE']['config_map']['key'] == 'CONVERSATIONS_V3_STAGE'
-        assert env['gke']['config_map']['entries']['CONVERSATIONS_V3_STAGE']['value'] == 'beta'
+        assert env['gke']['config_map']['entries']['CONVERSATIONS_V3_STAGE']['value'] == 'all'
 
 
 def test_one_stage_source_moves_all_runtime_roles(tmp_path):
     base = ROOT / 'backend/deploy/runtime_env/_base.yaml'
     expanded = tmp_path / 'base.yaml'
-    expanded.write_text(base.read_text().replace('conversations_v3_stage: beta', 'conversations_v3_stage: all'))
+    expanded.write_text(base.read_text().replace('conversations_v3_stage: all', 'conversations_v3_stage: beta'))
     manifest = COMPOSER['compose_manifest'](base_path=expanded)
     for env in manifest['environments'].values():
-        assert all(s['env']['CONVERSATIONS_V3_STAGE']['value'] == 'all' for s in env['cloud_run']['services'].values())
+        assert all(s['env']['CONVERSATIONS_V3_STAGE']['value'] == 'beta' for s in env['cloud_run']['services'].values())
         assert all(
-            j['env']['CONVERSATIONS_V3_STAGE']['value'] == 'all'
+            j['env']['CONVERSATIONS_V3_STAGE']['value'] == 'beta'
             for j in env['cloud_run'].get('jobs', {}).values()
             if isinstance(j, dict)
         )
-        assert env['gke']['config_map']['entries']['CONVERSATIONS_V3_STAGE']['value'] == 'all'
+        assert env['gke']['config_map']['entries']['CONVERSATIONS_V3_STAGE']['value'] == 'beta'
 
 
 @pytest.mark.parametrize('name', ['CONVERSATIONS_V3_STAGE', 'CONVERSATIONS_V3_FIRST_APP_BUILD'])
