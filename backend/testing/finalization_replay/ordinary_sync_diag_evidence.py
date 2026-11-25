@@ -34,7 +34,9 @@ def evidence(cases, comparator, worker):
 
 if __name__ == '__main__':
     source, output, comparator, worker = sys.argv[1:]
-    result = evidence(json.loads(Path(source).read_text()), comparator, worker)
+    capture = json.loads(Path(source).read_text())
+    result = evidence(capture['cases'], comparator, worker)
+    result['corpus_sha256'] = capture['corpus_sha256']
     with Path(output).open('x', encoding='utf-8') as report:
         json.dump(result, report, indent=2)
         report.write('\n')

@@ -41,6 +41,23 @@ class OrdinarySyncDiagnosticTests(unittest.TestCase):
         self.assertEqual(diagnostic['cohort_gate'], 'closed')
         self.assertEqual(diagnostic['r7_operation_budget']['status'], 'invalid')
 
+    def test_rejected_observation_report_cannot_be_enriched_into_a_pass(self):
+        report = {
+            'input_error': 'missing observation for selected case',
+            'failed_cases': 0,
+            'cases': [],
+            'operation_table': [],
+            'diagnostic': {'cohort_gate': 'closed', 'r7_operation_budget': {'status': 'invalid'}},
+        }
+        self.assertEqual(enrich(report), report)
+        with TemporaryDirectory() as directory:
+            path = Path(directory) / 'report.json'
+            path.write_text(json.dumps(report), encoding='utf-8')
+            script = Path(__file__).with_name('ordinary_sync_diag_report.py')
+            result = subprocess.run([sys.executable, '-I', script, path], capture_output=True, check=False)
+            self.assertEqual(result.returncode, 2, result.stderr)
+            self.assertEqual(json.loads(path.read_text(encoding='utf-8')), report)
+
     def test_memo_probe_suspends_only_its_own_meter(self):
         state = SimpleNamespace(cost_measured=False)
         with measure(state), ThreadPoolExecutor(max_workers=1) as executor:

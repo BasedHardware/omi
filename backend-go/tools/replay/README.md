@@ -66,7 +66,11 @@ when the machine uses another managed Git-worktree root.
 
 This target builds the opt-in test binary from `WORKERD_REF`, runs the separate
 `ordinary_sync_diag.py` adapter, and compares its row-level observations with the same
-oracle comparator. The value-free report records each difference's family, path, kind,
+oracle comparator. The `-observations` input has a `corpus_sha256` digest of the exact
+source corpus bytes and a `cases` array containing each selected case name exactly once.
+The comparator checks both before recording any case comparisons. Invalid imports exit
+with status 2 and a value-free input-error report with the cohort gate closed and R7 invalid.
+The value-free comparison report records each difference's family, path, kind,
 label, and approved reason. Labels are `go_gap`, `python_bug:<issue>`, or
 `by_design:<rule>`; the by-design suffix is the comparator's approved reason. Rows without
 a reviewed label have `label: null` and count as unlabelled. It includes totals by label

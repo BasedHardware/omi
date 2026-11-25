@@ -310,6 +310,8 @@ def unlabelled_groups(cases: list[dict]) -> list[dict]:
 
 
 def enrich(report: dict) -> dict:
+    if report.get('input_error'):
+        return report
     totals = {family: {'unexplained': 0, 'allowed': 0, 'go_gap': 0, 'python_bug': 0, 'total': 0} for family in FAMILIES}
     allowed_by_rule = Counter()
     label_totals = Counter()
@@ -568,6 +570,9 @@ def main():
         raise SystemExit('usage: ordinary_sync_diag_report.py REPORT.json')
     path = Path(sys.argv[1])
     report = json.loads(path.read_text(encoding='utf-8'))
+    if report.get('input_error'):
+        print('Ordinary-sync observation input rejected. R7 invalid, cohort gate closed.', file=sys.stderr)
+        raise SystemExit(2)
     enriched = enrich(report)
     temporary = path.with_name(f'.{path.name}.tmp')
     temporary.write_text(json.dumps(enriched, ensure_ascii=True, indent=2) + '\n', encoding='utf-8')

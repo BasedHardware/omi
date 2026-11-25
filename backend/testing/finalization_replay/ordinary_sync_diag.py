@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 from contextlib import ExitStack, redirect_stderr, redirect_stdout
+from hashlib import sha256
 import importlib
 import importlib.util
 import json
@@ -110,7 +111,12 @@ def _paired(payload, worker_binary, worker_backend):
             detail = result.stderr.decode(errors='replace')[-2000:]
             raise RuntimeError(f'{side} replay child failed (exit {result.returncode}): {detail}')
         sides.append(json.loads(result.stdout))
-    return [{**python, **go, 'errors': {**python['errors'], **go['errors']}} for python, go in zip(*sides, strict=True)]
+    paired = []
+    for python, go in zip(*sides, strict=True):
+        if python['name'] != go['name']:
+            raise ValueError('ordinary-sync replay sides returned different case names')
+        paired.append({**python, **go, 'errors': {**python['errors'], **go['errors']}})
+    return paired
 
 
 def _stored_sync_cases(cases):
@@ -140,10 +146,12 @@ def main():
     parser.add_argument('--side', choices=('python', 'go'))
     args = parser.parse_args()
     payload = sys.stdin.buffer.read(16 * 1024 * 1024 + 1)
+    corpus_sha256 = sha256(payload).hexdigest()
     cases = _stored_sync_cases(read_corpus(payload))
     payload = json.dumps({'version': 1, 'cases': cases}, ensure_ascii=True).encode()
     if args.side is None:
-        json.dump(_paired(payload, args.worker_binary, args.worker_backend), sys.stdout)
+        observations = _paired(payload, args.worker_binary, args.worker_backend)
+        json.dump({'corpus_sha256': corpus_sha256, 'cases': observations}, sys.stdout)
         return
     key = DEFAULT_TEST_KEY
     if len(key.encode()) < 32 or '\x00' in key:

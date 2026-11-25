@@ -189,15 +189,23 @@ type attachMemoCheck struct {
 }
 
 type report struct {
-	Version        int            `json:"version"`
-	CommitSHA      string         `json:"commit_sha,omitempty"`
-	Cases          []caseReport   `json:"cases"`
-	Matched        int            `json:"matched_cases"`
-	Unexplained    int            `json:"unexplained_differences"`
-	Expected       int            `json:"expected_differences"`
-	Failed         int            `json:"failed_cases"`
-	CostRows       []costRow      `json:"cost_table"`
-	OperationTable []operationRow `json:"operation_table"`
+	Version        int                     `json:"version"`
+	CommitSHA      string                  `json:"commit_sha,omitempty"`
+	CorpusSHA256   string                  `json:"corpus_sha256,omitempty"`
+	InputError     string                  `json:"input_error,omitempty"`
+	Diagnostic     *invalidInputDiagnostic `json:"diagnostic,omitempty"`
+	Cases          []caseReport            `json:"cases"`
+	Matched        int                     `json:"matched_cases"`
+	Unexplained    int                     `json:"unexplained_differences"`
+	Expected       int                     `json:"expected_differences"`
+	Failed         int                     `json:"failed_cases"`
+	CostRows       []costRow               `json:"cost_table"`
+	OperationTable []operationRow          `json:"operation_table"`
+}
+
+type invalidInputDiagnostic struct {
+	CohortGate        string            `json:"cohort_gate"`
+	R7OperationBudget map[string]string `json:"r7_operation_budget"`
 }
 
 type costRow struct {

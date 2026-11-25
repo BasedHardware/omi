@@ -76,15 +76,18 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 		if err != nil {
 			return failure(stderr, err)
 		}
-		cases, err := decodeCases(raw)
+		digest := corpusSHA256(input.corpus)
+		cases, err := importObservations(raw, input.corpus, digest)
 		if err != nil {
-			return failure(stderr, err)
+			reportErr := writeReport(input.reportPath, invalidObservationReport(*commit, digest, err))
+			return failure(stderr, errors.Join(err, reportErr))
 		}
 		result, err := compare(cases)
 		if err != nil {
 			return failure(stderr, err)
 		}
 		result.CommitSHA = *commit
+		result.CorpusSHA256 = digest
 		stripReportValues(&result)
 		if err := writeReport(input.reportPath, result); err != nil {
 			return failure(stderr, err)

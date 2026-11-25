@@ -111,15 +111,14 @@ class FirestoreProxyTests(unittest.TestCase):
         candidate = observation()
         self.assertEqual(proxy.counts()['batch_pipeline_privacy_document_reads'], 1)
         corpus = Path(__file__).resolve().parents[3] / 'backend-go/tools/replay/corpus/admission-parity.json'
+        corpus_bytes = corpus.read_bytes()
+        names = [case['name'] for case in json.loads(corpus_bytes)['cases']]
+        cases = [{'name': name, 'python': control, 'go': control} for name in names]
+        cases[1]['go'] = candidate
         with TemporaryDirectory() as scratch:
             observations, report = (Path(scratch) / name for name in ('observations.json', 'report.json'))
             observations.write_text(
-                json.dumps(
-                    [
-                        {'name': 'control', 'python': control, 'go': control},
-                        {'name': 'privacy-aggregation', 'python': control, 'go': candidate},
-                    ]
-                ),
+                json.dumps({'corpus_sha256': sha256(corpus_bytes).hexdigest(), 'cases': cases}),
                 encoding='utf-8',
             )
             result = subprocess.run(
@@ -129,7 +128,7 @@ class FirestoreProxyTests(unittest.TestCase):
                 text=True,
             )
             self.assertEqual(result.returncode, 1, result.stderr)
-            control_row, aggregation_row = json.loads(report.read_text(encoding='utf-8'))['cases']
+            control_row, aggregation_row, *_ = json.loads(report.read_text(encoding='utf-8'))['cases']
         self.assertEqual(control_row['differences'], [])
         self.assertEqual(
             aggregation_row['differences'],

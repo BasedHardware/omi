@@ -62,11 +62,6 @@ fi
         > "$temporary/observations.json"
 )
 
-if [[ -n ${ORACLE_DIAG_EVIDENCE:-} ]]; then
-    "$python_bin" -I "$repo/backend/testing/finalization_replay/ordinary_sync_diag_evidence.py" \
-        "$temporary/observations.json" "$ORACLE_DIAG_EVIDENCE" "$(git -C "$repo" rev-parse HEAD)" "$worker_ref"
-fi
-
 set +e
 (
     cd "$repo/backend-go"
@@ -89,4 +84,8 @@ if [[ $compare_status -gt 2 ]]; then
 fi
 
 "$python_bin" -I "$repo/backend/testing/finalization_replay/ordinary_sync_diag_report.py" "$output"
+if [[ -n ${ORACLE_DIAG_EVIDENCE:-} ]]; then
+    "$python_bin" -I "$repo/backend/testing/finalization_replay/ordinary_sync_diag_evidence.py" \
+        "$temporary/observations.json" "$ORACLE_DIAG_EVIDENCE" "$(git -C "$repo" rev-parse HEAD)" "$worker_ref"
+fi
 echo "Ordinary-sync diagnostic complete for $worker_ref; this target is not the lane 7 gate."
