@@ -94,9 +94,13 @@ def segment_dicts(rec: Recording, origin: float) -> list[dict[str, Any]]:
 
 
 class ScenarioOps(ProductV3Ops):
-    def __init__(self, *, scenario: Scenario, firestore: Any, finalizer: Any, barrier: ExecutorBarrier):
+    def __init__(
+        self, *, scenario: Scenario, firestore: Any, finalizer: Any, barrier: ExecutorBarrier, home: Any = None
+    ):
         super().__init__(finalizer=finalizer, barrier=barrier)
         self.scenario = scenario
+        # scenario/home.HomeRecorder (or None): Home captured before each checkpoint, ``on_home`` on rows.
+        self.home = home
         self.firestore = firestore
         self.requested: set[str] = set()  # labels a Finish reached while capturing
         self.finish_label: Optional[str] = None
@@ -286,8 +290,10 @@ class ScenarioOps(ProductV3Ops):
         return {'outcome': 'recording' if recording else 'legacy', 'words': rec.words()}
 
     async def _on_checkpoint(self, uid: str, event: ScenarioEvent) -> dict[str, Any]:
-        snapshot = await asyncio.to_thread(self.snapshot, uid)
         check = self.scenario.checks[event.check_index or 0]
+        if self.home is not None:  # Home at this instant first, so the snapshot's rows carry on_home
+            await asyncio.to_thread(self.home.write_home_snapshot, check.at)
+        snapshot = await asyncio.to_thread(self.snapshot, uid)
         result = evaluate(check, snapshot, self.finish_label)
         self.checkpoints[event.check_index or 0] = {'result': result, 'snapshot': snapshot}
         return {'outcome': 'ok' if result.ok else 'mismatch', 'conversations': len(snapshot)}
@@ -305,7 +311,7 @@ class ScenarioOps(ProductV3Ops):
             words = sum(text_word_count(str(s.get('text') or '')) for s in row.get('transcript_segments') or [])
             rows.append(conversation_row(row, self.scenario.label_of, words))
         rows.sort(key=lambda r: str(r.get('started_at') or ''))
-        return rows
+        return self.home.annotate_rows(rows) if self.home is not None else rows
 
     def recordings(self, uid: str) -> list[dict[str, Any]]:
         out = []

@@ -61,6 +61,10 @@ def _matches(conv: Mapping[str, Any], fields: Mapping[str, Any]) -> list[str]:
         elif key == 'min_words':
             ok = conv['words'] >= want
             have = conv['words']
+        elif key == 'on_home':
+            # Set by scenario/home.py from the product's Home route; None = the route gave no answer.
+            have = conv.get('on_home')
+            ok = have is not None and have == want
         elif key == 'hidden_reason':
             ok = conv['hidden_reason'] == want
             have = conv['hidden_reason']

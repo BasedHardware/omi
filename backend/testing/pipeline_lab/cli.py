@@ -203,6 +203,11 @@ def build_parser() -> argparse.ArgumentParser:
     scenario_compare.add_argument('--timeout', type=float, default=240.0, help='seconds per scenario')
     scenario_compare.add_argument('--jobs', type=int, default=1, help='scenarios run at once per side')
     scenario_compare.add_argument('--clock', choices=('frozen', 'tick'), default='frozen')
+    scenario_view = scenario_sub.add_parser(
+        'view', parents=[common], help='read-only web page for a scenario run directory (loopback, no stack)'
+    )
+    scenario_view.add_argument('run_dir', help='a `scenario run --keep` directory, a compare run, or one scenario')
+    scenario_view.add_argument('--port', type=int, default=0, help='port to bind (default: a free one)')
 
     sub.add_parser('stages', parents=[common], help='stages in order and their registered drivers')
     sub.add_parser('doctor', parents=[common], help='roots, permissions and plugins')
@@ -516,6 +521,14 @@ def _scenario(args: argparse.Namespace, as_json: bool) -> int:
     try:
         if args.scenario_command == 'check':
             return stack.check_files(args.files, as_json=as_json)
+        if args.scenario_command == 'view':
+            from testing.pipeline_lab.inspector import scenario_view
+            from testing.pipeline_lab.inspector.reader import NotFound
+
+            try:
+                return scenario_view.serve(args.run_dir, port=args.port)
+            except NotFound as error:
+                raise ScenarioError(str(error)) from None
         if args.scenario_command == 'stack':
             return stack.stack_command(args.stack_action, as_json=as_json)
         if args.scenario_command == 'compare':

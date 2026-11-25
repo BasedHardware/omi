@@ -21,6 +21,7 @@ A scenario is one JSON object. Times are seconds from ``t0`` (a synthetic UTC in
       "sync": [{"id": "F", "origin": "O", "audio": [1.5, 2.7], "arrives_at": 162, "speech": [...]}],
       "finish": {"at": 38, "fast_finish": true, "provisional_latency": 15},
       "expect": [{"at": 60, "label": "finish_visible", "conversation_of": "@finish", "visible": true}],
+                                                         # on_home: in the product Home route's response (home.py)
       "expected_failure": {"reason": "SCA-xxxx: ...", "checks": ["finish_visible"], "strict": true},
       "tail_seconds": 1800
     }
@@ -72,7 +73,9 @@ FILL_WORDS = (
     'lantern', 'harbor', 'maple', 'pebble', 'orchard', 'canvas', 'meadow', 'copper', 'willow', 'saffron',
     'beacon', 'thistle', 'juniper', 'quarry', 'marble', 'hazel', 'tundra', 'velvet', 'cobalt', 'fennel',
 )  # fmt: skip
-CHECK_FIELDS = ('recordings', 'recordings_include', 'visible', 'manual_end', 'hidden_reason', 'min_words', 'kind')
+CHECK_FIELDS = (
+    'recordings', 'recordings_include', 'visible', 'on_home', 'manual_end', 'hidden_reason', 'min_words', 'kind',
+)  # fmt: skip
 _LABEL = re.compile(r'^[A-Za-z][A-Za-z0-9_-]{0,31}$')
 
 
@@ -351,6 +354,8 @@ def _check(raw: Any, where: str, labels: set[str], has_finish: bool) -> Check:
         raise ScenarioError(f'{where}: a conversation check names at least one of {list(CHECK_FIELDS)}')
     if hidden is not None and fields:
         raise ScenarioError(f'{where}: no_hidden_with takes no other fields')
+    if 'on_home' in fields and not isinstance(fields['on_home'], bool):
+        raise ScenarioError(f'{where}.on_home: true or false (in the Home route\'s response)')
     for key in ('recordings', 'recordings_include'):
         if key in fields:
             value = fields[key]

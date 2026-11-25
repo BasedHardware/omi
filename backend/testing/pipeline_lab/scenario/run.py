@@ -33,6 +33,7 @@ import traceback
 from typing import Any, Optional, Sequence
 
 from testing.pipeline_lab.scenario.checks import OUTCOMES, evaluate, outcome
+from testing.pipeline_lab.scenario.home import HOME_MODULES, HomeRecorder
 from testing.pipeline_lab.scenario.spec import Scenario, load_scenario, plan_events
 
 FAST_FINISH_ENV = 'CONVERSATIONS_V3_FAST_FINISH'
@@ -48,16 +49,6 @@ def product_runtime_env() -> Path:
         if candidate.exists():
             return candidate
     return RUNTIME_ENV
-
-
-def write_home_snapshot(out_dir: Path, env: Any, uid: str, *, at: Optional[float]) -> None:
-    """HOOK (Home lane): write ``out_dir/home.json`` from the product's Home read for ``uid``.
-
-    Called after each checkpoint (``at`` = the checkpoint's offset in seconds) and once at the end of the
-    run (``at=None``), inside the lab environment, so product reads see this run's emulator project.
-    Intentionally a no-op here; the Home lane fills it in.
-    """
-    return None
 
 
 def scenario_overlay(scenario: Scenario, runtime_env: Path = RUNTIME_ENV) -> Any:
@@ -116,7 +107,7 @@ async def run_scenario(scenario: Scenario, out_dir: Path, *, llm_url: str, tick:
         config,
         scenario_overlay(scenario, product_runtime_env()),
         run_dir=out_dir,
-        preimport=PRODUCT_MODULES + V3_MODULES + SCENARIO_MODULES,
+        preimport=PRODUCT_MODULES + V3_MODULES + SCENARIO_MODULES + HOME_MODULES,
     ) as env, ExitStack() as stack:
         install_vector_index(stack, index)
         install_embeddings(stack, embedder)
@@ -130,11 +121,17 @@ async def run_scenario(scenario: Scenario, out_dir: Path, *, llm_url: str, tick:
         tasks.install(stack)
         install_emulator_size_errors(stack)
         stack.enter_context(installed_clock(clock))
+        # Home (home.json): the product's own Home routes, called by ops before each checkpoint's snapshot
+        # and here before the final one, inside this run's isolated emulator project and Redis database.
+        home = HomeRecorder(uid=config.uid, out_dir=out_dir, offset=scenario.offset, now=clock.now)
         ops = ScenarioOps(
-            scenario=scenario, firestore=env.firestore, finalizer=ProductFinalizer(env.firestore), barrier=barrier
+            scenario=scenario,
+            firestore=env.firestore,
+            finalizer=ProductFinalizer(env.firestore),
+            barrier=barrier,
+            home=home,
         )
         ops.install(stack)
-        _hook_checkpoints(ops, out_dir, env, config.uid)
         clock.set(start)
         reset_lab_state(env.firestore, env.redis, config.uid, redis_lease=redis_lease)
         result['account'] = seed_account(config.uid)
@@ -149,9 +146,9 @@ async def run_scenario(scenario: Scenario, out_dir: Path, *, llm_url: str, tick:
             driver = V3Driver(uid=config.uid, ops=ops, tasks=tasks, clock=clock, horizon=horizon, sweeps=True)
             report = await driver.run(events)  # type: ignore[arg-type] - scenario events quack like arrivals
             timings['driver'] = round(time.perf_counter() - mark, 3)
+            await asyncio.to_thread(home.write_home_snapshot, None)  # before the final snapshot reads on_home
             final = ops.snapshot(config.uid)
             recordings = ops.recordings(config.uid)
-            write_home_snapshot(out_dir, env, config.uid, at=None)
         finally:
             clear_admission(config.uid)
     results = []
@@ -186,25 +183,13 @@ async def run_scenario(scenario: Scenario, out_dir: Path, *, llm_url: str, tick:
         recordings=recordings,
         fast_finish=ops.fast_finish_outcomes,
         stand_ins=ops.stand_ins,
+        home=home.summary(),
         driver=report.summary(),
         warnings=report.warnings,
         notifications=len(sinks.notifications),
         network_refusals=len(env.network.refusals),
     )
     return result
-
-
-def _hook_checkpoints(ops: Any, out_dir: Path, env: Any, uid: str) -> None:
-    """Call ``write_home_snapshot`` right after each checkpoint the scenario declares."""
-    original = ops._on_checkpoint
-
-    async def on_checkpoint(uid_: str, event: Any) -> dict[str, Any]:
-        seen = await original(uid_, event)
-        check = ops.scenario.checks[event.check_index or 0]
-        await asyncio.to_thread(write_home_snapshot, out_dir, env, uid, at=check.at)
-        return seen
-
-    ops._on_checkpoint = on_checkpoint
 
 
 def _parse(at: str) -> datetime:

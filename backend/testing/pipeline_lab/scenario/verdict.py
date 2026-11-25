@@ -7,7 +7,7 @@ Layout (a contract other tools read; ``schema`` bumps on any incompatible change
                          "checks": [{"label", "passed", "expected", "actual", "at"}], "stand_ins", "error"}]}
     DIR/<name>/scenario.json   the scenario file as run
     DIR/<name>/result.json     what ``scenario/run.py`` writes
-    DIR/<name>/home.json       written by the Home hook (``run.write_home_snapshot``), not here
+    DIR/<name>/home.json       written by ``scenario/home.HomeRecorder.write_home_snapshot``, not here
     DIR/<name>/v3_tasks.jsonl, decisions.jsonl
     DIR/<name>/repeat-<k>/...  repeats 2..N of ``--repeat N`` (repeat 1 is DIR/<name>/ itself)
 
