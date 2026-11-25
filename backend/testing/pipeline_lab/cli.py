@@ -175,8 +175,34 @@ def build_parser() -> argparse.ArgumentParser:
         default='frozen',
         help='frozen (default): each event runs at its scripted instant; tick: real elapsed time is added',
     )
+    scenario_run.add_argument(
+        '--jobs', type=int, default=1, help='scenarios run at once on the shared stack (each isolated; default 1)'
+    )
+    scenario_run.add_argument(
+        '--repeat',
+        type=int,
+        default=1,
+        help='run each scenario N times; outcome nondeterministic (exit 1) when result.json differs',
+    )
     scenario_check = scenario_sub.add_parser('check', parents=[common], help='validate files, print planned timelines')
     scenario_check.add_argument('files', nargs='+')
+    scenario_stack = scenario_sub.add_parser(
+        'stack', parents=[common], help='a long-lived Firestore emulator + Redis that scenario runs on this host share'
+    )
+    scenario_stack.add_argument('stack_action', choices=('up', 'down', 'status'))
+    scenario_compare = scenario_sub.add_parser(
+        'compare', parents=[common], help='run the same scenarios on two backend refs and list what differs'
+    )
+    scenario_compare.add_argument('base', help='base ref (branch, tag or sha; not fetched)')
+    scenario_compare.add_argument('head', nargs='?', help='head ref (default: this working tree, as --worktree)')
+    scenario_compare.add_argument('--worktree', action='store_true', help='head is this working tree')
+    scenario_compare.add_argument(
+        '--scenario', action='append', dest='files', help='scenario file or name (repeatable; default all committed)'
+    )
+    scenario_compare.add_argument('--keep', help='output directory (outside git; default a fresh temp dir)')
+    scenario_compare.add_argument('--timeout', type=float, default=240.0, help='seconds per scenario')
+    scenario_compare.add_argument('--jobs', type=int, default=1, help='scenarios run at once per side')
+    scenario_compare.add_argument('--clock', choices=('frozen', 'tick'), default='frozen')
 
     sub.add_parser('stages', parents=[common], help='stages in order and their registered drivers')
     sub.add_parser('doctor', parents=[common], help='roots, permissions and plugins')
@@ -490,7 +516,32 @@ def _scenario(args: argparse.Namespace, as_json: bool) -> int:
     try:
         if args.scenario_command == 'check':
             return stack.check_files(args.files, as_json=as_json)
-        return stack.run_files(args.files, keep=args.keep, timeout=args.timeout, as_json=as_json, clock=args.clock)
+        if args.scenario_command == 'stack':
+            return stack.stack_command(args.stack_action, as_json=as_json)
+        if args.scenario_command == 'compare':
+            from testing.pipeline_lab.scenario import compare
+
+            if args.head and args.worktree:
+                raise ScenarioError('give a head ref or --worktree, not both')
+            return compare.compare_refs(
+                args.base,
+                args.head,
+                names=args.files or None,
+                keep=args.keep,
+                timeout=args.timeout,
+                jobs=args.jobs,
+                clock=args.clock,
+                as_json=as_json,
+            )
+        return stack.run_files(
+            args.files,
+            keep=args.keep,
+            timeout=args.timeout,
+            as_json=as_json,
+            clock=args.clock,
+            jobs=args.jobs,
+            repeat=args.repeat,
+        )
     except (ScenarioError, RuntimeError) as error:
         if as_json:
             print(json.dumps({'error': str(error), 'kind': type(error).__name__}))

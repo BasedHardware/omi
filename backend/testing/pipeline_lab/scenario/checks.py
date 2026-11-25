@@ -12,7 +12,8 @@ from typing import Any, Mapping, Optional, Sequence
 from testing.pipeline_lab.scenario.spec import FINISH_ALIAS, Check, Scenario
 
 # Process exit codes for ``scenario run`` (one scenario): passed / xfail 0, failed / xpass 1, error 2.
-OUTCOMES = {'passed': 0, 'xfail': 0, 'failed': 1, 'xpass': 1, 'error': 2}
+# ``nondeterministic``: ``--repeat`` saw results differ between repeats of the same scenario.
+OUTCOMES = {'passed': 0, 'xfail': 0, 'failed': 1, 'xpass': 1, 'nondeterministic': 1, 'error': 2}
 
 
 @dataclass(frozen=True)
@@ -109,3 +110,31 @@ def outcome(scenario: Scenario, results: Sequence[CheckResult], error: Optional[
     if failure is None:
         return 'passed'
     return 'xpass' if failure.get('strict', True) else 'passed'
+
+
+# ---- verdict rows (scenario/verdict.py) -----------------------------------------------------------
+
+# What a verdict shows of a conversation: the fields checks and compare read; no handle (it is a random id).
+VERDICT_FIELDS = ('recordings', 'words', 'visible', 'hidden_reason', 'manual_end', 'kind', 'status')
+
+
+def expected_of(check: Check) -> dict[str, Any]:
+    if check.no_hidden_with is not None:
+        return {'no_hidden_with': check.no_hidden_with}
+    return {'conversation_of': check.conversation_of, **dict(check.fields)}
+
+
+def actual_of(check: Check, snapshot: Sequence[Mapping[str, Any]], finish_label: Optional[str]) -> dict[str, Any]:
+    """What the run showed for ``check``: the holder conversation that matched (else the first holder), or
+    the hidden conversations holding the label. Same selection as :func:`evaluate`."""
+    live = [c for c in snapshot if not c.get('deleted')]
+    if check.no_hidden_with is not None:
+        label = finish_label if check.no_hidden_with == FINISH_ALIAS else check.no_hidden_with
+        hidden = [c for c in live if label in c['recordings'] and not c['visible']]
+        return {'label': label, 'hidden': [{k: c.get(k) for k in VERDICT_FIELDS} for c in hidden]}
+    label = finish_label if check.conversation_of == FINISH_ALIAS else check.conversation_of
+    holders = [c for c in live if label is not None and label in c['recordings']]
+    if not holders:
+        return {'label': label, 'conversation': None}
+    chosen = next((c for c in holders if not _matches(c, check.fields)), holders[0])
+    return {'label': label, 'conversation': {k: chosen.get(k) for k in VERDICT_FIELDS}, 'holders': len(holders)}

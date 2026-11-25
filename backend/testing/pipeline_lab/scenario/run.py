@@ -10,6 +10,10 @@ lab's scripted fake LLM gateway, and the production flag profile of this checkou
 (``deploy/runtime_env.yaml``, service ``backend-sync``) with the scenario's ``env`` on top.
 
 Writes ``DIR/result.json`` (outside git) and prints the same JSON as its last stdout line.
+
+Isolation (set by the parent, ``scenario/stack.py``): ``OMI_PIPELINE_LAB_PROJECT_ID`` names this run's own
+``demo-lab-<run id>`` Firestore project, ``OMI_PIPELINE_LAB_REDIS_DB`` the Redis database it leased, and
+``OMI_PIPELINE_LAB_REDIS_LEASE`` the run id holding that lease; the reset clears only that database.
 """
 
 from __future__ import annotations
@@ -19,6 +23,7 @@ import asyncio
 from contextlib import ExitStack
 from dataclasses import replace
 from datetime import datetime, timedelta
+import importlib.util
 import json
 import os
 from pathlib import Path
@@ -32,6 +37,27 @@ from testing.pipeline_lab.scenario.spec import Scenario, load_scenario, plan_eve
 
 FAST_FINISH_ENV = 'CONVERSATIONS_V3_FAST_FINISH'
 RUNTIME_ENV = Path(__file__).resolve().parents[3] / 'deploy' / 'runtime_env.yaml'
+REDIS_LEASE_ENV = 'OMI_PIPELINE_LAB_REDIS_LEASE'
+
+
+def product_runtime_env() -> Path:
+    """``deploy/runtime_env.yaml`` of the product tree on ``sys.path`` (a compare arm's, not the lab's)."""
+    spec = importlib.util.find_spec('database')
+    if spec is not None and spec.origin:
+        candidate = Path(spec.origin).resolve().parents[1] / 'deploy' / 'runtime_env.yaml'
+        if candidate.exists():
+            return candidate
+    return RUNTIME_ENV
+
+
+def write_home_snapshot(out_dir: Path, env: Any, uid: str, *, at: Optional[float]) -> None:
+    """HOOK (Home lane): write ``out_dir/home.json`` from the product's Home read for ``uid``.
+
+    Called after each checkpoint (``at`` = the checkpoint's offset in seconds) and once at the end of the
+    run (``at=None``), inside the lab environment, so product reads see this run's emulator project.
+    Intentionally a no-op here; the Home lane fills it in.
+    """
+    return None
 
 
 def scenario_overlay(scenario: Scenario, runtime_env: Path = RUNTIME_ENV) -> Any:
@@ -77,6 +103,7 @@ async def run_scenario(scenario: Scenario, out_dir: Path, *, llm_url: str, tick:
     from testing.pipeline_lab.vector.index import NumericVectorIndex
 
     config = replace(LabStackConfig.from_env(), llm_proxy_url=llm_url, lab_root=out_dir / 'lab')
+    redis_lease = os.environ.get(REDIS_LEASE_ENV) or None  # read now: the lab environment clears os.environ
     events = plan_events(scenario)
     start = min(scenario.t0, events[0].instant) - timedelta(seconds=1)
     clock = LabClock(start, tick=tick)
@@ -87,7 +114,7 @@ async def run_scenario(scenario: Scenario, out_dir: Path, *, llm_url: str, tick:
     index = NumericVectorIndex(dimension=embedder.dimension)
     with lab_environment(
         config,
-        scenario_overlay(scenario),
+        scenario_overlay(scenario, product_runtime_env()),
         run_dir=out_dir,
         preimport=PRODUCT_MODULES + V3_MODULES + SCENARIO_MODULES,
     ) as env, ExitStack() as stack:
@@ -107,8 +134,9 @@ async def run_scenario(scenario: Scenario, out_dir: Path, *, llm_url: str, tick:
             scenario=scenario, firestore=env.firestore, finalizer=ProductFinalizer(env.firestore), barrier=barrier
         )
         ops.install(stack)
+        _hook_checkpoints(ops, out_dir, env, config.uid)
         clock.set(start)
-        reset_lab_state(env.firestore, env.redis, config.uid)
+        reset_lab_state(env.firestore, env.redis, config.uid, redis_lease=redis_lease)
         result['account'] = seed_account(config.uid)
         timings['environment'] = round(time.perf_counter() - mark, 3)
         mark = time.perf_counter()
@@ -123,6 +151,7 @@ async def run_scenario(scenario: Scenario, out_dir: Path, *, llm_url: str, tick:
             timings['driver'] = round(time.perf_counter() - mark, 3)
             final = ops.snapshot(config.uid)
             recordings = ops.recordings(config.uid)
+            write_home_snapshot(out_dir, env, config.uid, at=None)
         finally:
             clear_admission(config.uid)
     results = []
@@ -163,6 +192,19 @@ async def run_scenario(scenario: Scenario, out_dir: Path, *, llm_url: str, tick:
         network_refusals=len(env.network.refusals),
     )
     return result
+
+
+def _hook_checkpoints(ops: Any, out_dir: Path, env: Any, uid: str) -> None:
+    """Call ``write_home_snapshot`` right after each checkpoint the scenario declares."""
+    original = ops._on_checkpoint
+
+    async def on_checkpoint(uid_: str, event: Any) -> dict[str, Any]:
+        seen = await original(uid_, event)
+        check = ops.scenario.checks[event.check_index or 0]
+        await asyncio.to_thread(write_home_snapshot, out_dir, env, uid, at=check.at)
+        return seen
+
+    ops._on_checkpoint = on_checkpoint
 
 
 def _parse(at: str) -> datetime:
