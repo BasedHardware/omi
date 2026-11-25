@@ -125,6 +125,10 @@ def _get_release_prefix(device: DeviceModel) -> str:
 #     and non-production builds. While set, nobody outside these channels or the
 #     allowlist gets the release, so remove it to roll out to everyone.
 # A malformed audience value fails closed.
+REQUIRED_BOOTLOADER_KEY = 'required_bootloader_sha256'
+_BOOTLOADER_SHA256_PATTERN = re.compile(r'[0-9a-f]{64}')
+
+
 AUDIENCE_UIDS_KEY = 'allow_uid_sha256'
 AUDIENCE_CHANNELS_KEY = 'channels'
 _UID_SHA256_PATTERN = re.compile(r'^[0-9a-f]{64}$')
@@ -161,12 +165,66 @@ def _audience_match(kv: Dict, audience: Optional[ReleaseAudience]) -> Optional[b
     return matched
 
 
+def _bootloader_declaration_is_valid(body: Optional[str]) -> bool:
+    """Do not let the permissive legacy KV parser erase an intended safety gate.
+
+    Guarded metadata uses one block and one key:value per line. Reject ambiguous
+    duplicates, misplaced declarations, and malformed/continued lines rather than
+    silently turning a guarded release into an unguarded one. Unguarded bodies
+    retain the legacy parser's behavior.
+    """
+    if not isinstance(body, str):
+        return True
+    declarations = [
+        line
+        for line in body.replace('<!-- KEY_VALUE_START', '<!-- KEY_VALUE_START\n').splitlines()
+        if re.match(r'\s*required_bootloader_sha256\b', line, re.IGNORECASE)
+    ]
+    if not declarations:
+        return True
+    blocks = re.findall(r'<!-- KEY_VALUE_START\s*(.*?)\s*KEY_VALUE_END -->', body, re.DOTALL)
+    if len(blocks) != 1 or len(declarations) != 1:
+        return False
+    lines = [line.strip() for line in blocks[0].splitlines() if line.strip()]
+    if any(not re.match(r'[A-Za-z_][A-Za-z0-9_]*\s*:', line) for line in lines):
+        return False
+    guard_lines = [line for line in lines if re.match(r'required_bootloader_sha256\b', line, re.IGNORECASE)]
+    if len(guard_lines) != 1 or guard_lines[0].split(':', 1)[0].strip() != REQUIRED_BOOTLOADER_KEY:
+        return False
+    # The legacy parser splits only on LF. A CR/Unicode separator must not make
+    # validation see a guard that extraction then drops or merges into a value.
+    kv = extract_key_value_pairs(body)
+    return kv.get(REQUIRED_BOOTLOADER_KEY) == guard_lines[0].split(':', 1)[1].strip()
+
+
+def _bootloader_is_eligible(kv: Dict, bootloader_sha256: Optional[str]) -> bool:
+    """Opt-in compatibility gate, not authentication or proof of device identity.
+
+    Unknown/legacy firmware cannot establish a qualified loader. Never infer it
+    from application version, uid, device id, channel, or a previous update.
+    """
+    if REQUIRED_BOOTLOADER_KEY not in kv:
+        return True
+    raw = kv[REQUIRED_BOOTLOADER_KEY]
+    if not isinstance(raw, str):
+        return False
+    qualified = [value.strip() for value in raw.split(',')]
+    if not all(_BOOTLOADER_SHA256_PATTERN.fullmatch(value) for value in qualified):
+        return False
+    return bool(
+        isinstance(bootloader_sha256, str)
+        and _BOOTLOADER_SHA256_PATTERN.fullmatch(bootloader_sha256)
+        and bootloader_sha256 in qualified
+    )
+
+
 def _release_is_eligible(
     kv: Dict,
     device_id: Optional[str],
     *,
     ignore_rollout_percent: bool = False,
     audience: Optional[ReleaseAudience] = None,
+    bootloader_sha256: Optional[str] = None,
 ) -> bool:
     """Stable nested cohorts. Missing policy preserves published-release behavior.
 
@@ -176,6 +234,8 @@ def _release_is_eligible(
     """
     blocked = str(kv.get('blocked', 'false')).strip().lower()
     if blocked != 'false':
+        return False
+    if not _bootloader_is_eligible(kv, bootloader_sha256):
         return False
     if ignore_rollout_percent:
         return True
@@ -211,6 +271,7 @@ def _find_candidate_releases(
     *,
     ignore_rollout_percent: bool = False,
     audience: Optional[ReleaseAudience] = None,
+    bootloader_sha256: Optional[str] = None,
 ) -> List[Dict]:
     """Filter releases matching the device prefix.
 
@@ -234,8 +295,16 @@ def _find_candidate_releases(
         if not re.match(regex_pattern, tag_name, re.IGNORECASE):
             continue
 
+        if not _bootloader_declaration_is_valid(release.get("body")):
+            continue
         kv = extract_key_value_pairs(release.get("body"))
-        if not _release_is_eligible(kv, device_id, ignore_rollout_percent=ignore_rollout_percent, audience=audience):
+        if not _release_is_eligible(
+            kv,
+            device_id,
+            ignore_rollout_percent=ignore_rollout_percent,
+            audience=audience,
+            bootloader_sha256=bootloader_sha256,
+        ):
             continue
 
         release_firmware_version_str = kv.get("release_firmware_version")
@@ -266,7 +335,11 @@ def _find_candidate_releases(
 
 
 def _find_release_by_version(
-    releases: List[Dict], release_prefix: str, target_firmware_tuple: Tuple[int, ...]
+    releases: List[Dict],
+    release_prefix: str,
+    target_firmware_tuple: Tuple[int, ...],
+    *,
+    bootloader_sha256: Optional[str] = None,
 ) -> Optional[Dict]:
     """Return the release whose release_firmware_version equals the target, or None.
 
@@ -276,7 +349,9 @@ def _find_release_by_version(
     unparseable stored version simply won't equal the (already-validated) target, so it is skipped.
     Ignores rollout_percent for support/reverts; blocked releases remain unavailable.
     """
-    candidates = _find_candidate_releases(releases, release_prefix, ignore_rollout_percent=True)
+    candidates = _find_candidate_releases(
+        releases, release_prefix, ignore_rollout_percent=True, bootloader_sha256=bootloader_sha256
+    )
     candidates.sort(key=lambda r: r.get("published_at", ""), reverse=True)
     for release in candidates:
         kv = extract_key_value_pairs(release.get("body"))
@@ -365,6 +440,7 @@ async def get_latest_version(
     manufacturer_name: str,
     device_id: Optional[str] = None,
     request: Request = None,  # pyright: ignore[reportArgumentType]  # FastAPI injects Request; direct callers omit it
+    bootloader_sha256: Optional[str] = None,
 ):
     """Return the newest eligible update using stable device rollout cohorts.
 
@@ -395,7 +471,12 @@ async def get_latest_version(
     release_prefix = _get_release_prefix(device)
     audience = await _request_audience(request, releases)
     candidates = _find_candidate_releases(
-        releases, release_prefix, current_firmware_tuple, device_id, audience=audience
+        releases,
+        release_prefix,
+        current_firmware_tuple,
+        device_id,
+        audience=audience,
+        bootloader_sha256=bootloader_sha256,
     )
 
     if not candidates:
@@ -406,7 +487,7 @@ async def get_latest_version(
 
 
 @router.get("/v2/firmware/stable", response_model=FirmwareVersionResponse)
-async def get_stable_version(device_model: str):
+async def get_stable_version(device_model: str, bootloader_sha256: Optional[str] = None):
     """Return the latest stable firmware for a device, regardless of current version.
 
     Used for rolling back to the official stable firmware after flashing custom firmware.
@@ -420,7 +501,7 @@ async def get_stable_version(device_model: str):
         raise HTTPException(status_code=404, detail="No releases found for the repository")
 
     release_prefix = _get_release_prefix(device)
-    candidates = _find_candidate_releases(releases, release_prefix)
+    candidates = _find_candidate_releases(releases, release_prefix, bootloader_sha256=bootloader_sha256)
 
     if not candidates:
         raise HTTPException(status_code=404, detail="No stable firmware found for your device.")
@@ -430,7 +511,7 @@ async def get_stable_version(device_model: str):
 
 
 @router.get("/v2/firmware/version", response_model=FirmwareVersionResponse)
-async def get_firmware_version(device_model: str, version: str):
+async def get_firmware_version(device_model: str, version: str, bootloader_sha256: Optional[str] = None):
     """Return the OTA metadata for a specific published firmware version of a device.
 
     Complements /v2/firmware/stable by making any individual published build addressable, e.g. to pin
@@ -449,7 +530,7 @@ async def get_firmware_version(device_model: str, version: str):
     if not releases:
         raise HTTPException(status_code=404, detail="No releases found for the repository")
 
-    match = _find_release_by_version(releases, _get_release_prefix(device), target)
+    match = _find_release_by_version(releases, _get_release_prefix(device), target, bootloader_sha256=bootloader_sha256)
     if not match:
         raise HTTPException(status_code=404, detail="Requested firmware version not found for your device.")
 

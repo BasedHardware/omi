@@ -1,0 +1,12 @@
+{
+  "version": 1,
+  "images": [
+    {
+      "file": "001-mobile-ios-cv1-held-newest-supported.png",
+      "platform": "mobile-ios",
+      "description": "Firmware Update page for a CV1 pendant whose offered release uploaded but did not install: calm newest-supported status, no update or Try Again button",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    }
+  ]
+}

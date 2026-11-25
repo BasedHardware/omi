@@ -10,7 +10,15 @@ from pydantic.json_schema import SkipJsonSchema
 import config.speaker_match_scores as match_scores
 import config.owner_recognition_diagnostics as owner_diagnostics
 
-from pydantic import BaseModel, Field, PrivateAttr, field_validator, model_serializer, model_validator
+from pydantic import (
+    BaseModel,
+    Field,
+    ModelWrapValidatorHandler,
+    PrivateAttr,
+    field_validator,
+    model_serializer,
+    model_validator,
+)
 
 from models.recorded_span import RecordedClock
 from models.audio_file import AudioFile
@@ -978,6 +986,23 @@ class CreateConversation(BaseModel):
 
 
 class ProcessConversationRequest(BaseModel):
+    _has_body_fields: bool = PrivateAttr(default=False)
+
+    @model_validator(mode='wrap')
+    @classmethod
+    def capture_body_field_presence(
+        cls, value: Any, handler: ModelWrapValidatorHandler['ProcessConversationRequest']
+    ) -> 'ProcessConversationRequest':
+        request = handler(value)
+        if isinstance(value, dict):
+            # Validation ignores unknown keys for wire compatibility. They still make the body nonempty.
+            request._has_body_fields = bool(value)
+        return request
+
+    @property
+    def empty_body(self) -> bool:
+        return not (self._has_body_fields or self.model_fields_set)
+
     calendar_meeting_context: Optional[CalendarMeetingContext] = None
     live_conversation_id: Optional[str] = Field(
         default=None, description='Optional live v3 window to Finish when no active recording is found.'

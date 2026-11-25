@@ -39,11 +39,11 @@ because commit-boundary fences treat an upsert as able to create a document.
 
 Cardinality: collection patterns reuse the read probe's allowlist. The caller
 label is ``module:function`` from the first product frame, with the read
-probe's plumbing rules plus the commit-boundary patches, and a separate cap
-(``MAX_WRITE_CALLERS``) so write call sites never push read callers into
-``other``. ``BulkWriter`` commits run on its own worker threads, so they carry
-no product frame and are labelled ``other``. ``origin`` is the bounded
-route/job origin the read probe uses. No uid, document id or field value is
+probe's plumbing rules plus the commit-boundary patches, and the shared caller cap. BulkWriter
+captures caller and origin when each operation is queued, and retains them
+across worker threads and retries. The caller/origin counters fold merge into
+set and transform into update. ``origin`` is the bounded route/job origin the
+read probe uses. No uid, document id or field value is
 ever a label. Recording never raises.
 """
 
@@ -53,13 +53,12 @@ import functools
 import inspect
 import logging
 import os
-import re
-import threading
+from contextvars import ContextVar
 from typing import Any, Callable, Iterable
 
 from prometheus_client import Counter
 
-from database.firestore_document_probe import collection_pattern, is_plumbing_module
+from database.firestore_document_probe import call_site, collection_pattern
 from database.firestore_read_origin import current_read_origin
 from database.plane_leak_probe import record_plane_leak
 
@@ -72,7 +71,6 @@ __all__ = [
     'FIRESTORE_BILLED_WRITES_BY_ORIGIN',
     'FIRESTORE_NOOP_WRITES_BY_CALLER',
     'FIRESTORE_WRITE_CALLER_LABEL_OVERFLOW',
-    'MAX_WRITE_CALLERS',
     'install_document_write_probe',
     'write_op',
 ]
@@ -131,16 +129,11 @@ FIRESTORE_WRITE_CALLER_LABEL_OVERFLOW = Counter(
 )
 
 
-# An AST scan of backend/ (excluding tests and scripts) on 2026-11-01 found at
-# most 1,324 functions that touch a document, batch or transaction and call
-# set/update/create/delete/commit; that over-counts (dict.update matches too).
-# 2048 is that bound plus headroom; the set fills on first observation.
-MAX_WRITE_CALLERS = 2048
-
 # Commit-boundary patches that sit between product code and the transport.
 _WRITE_PLUMBING_MODULES = frozenset(
     {
         __name__,
+        'database.firestore_bulk_attribution',
         'database.memory_change_head',
         'database.action_item_write_fence',
         'database.batch_privacy_write_fence',
@@ -162,53 +155,42 @@ _WRITE_PLUMBING_FUNCTIONS = frozenset(
         ('database.outbox_firestore', '_mutate'),
     }
 )
-_CALLER_RE = re.compile(r'^[a-z_][a-z0-9_]*(\.[a-z_][a-z0-9_]*){0,6}:[A-Za-z_][A-Za-z0-9_]{0,60}$')
 _OTHER = 'other'
 _UNKNOWN = 'unknown'
 _PROBE_MARK = '_omi_write_probe'
-_known_callers: set[str] = set()
-_caller_lock = threading.Lock()
+_ATTRIBUTION_OPS = {'merge': 'set', 'transform': 'update'}
 
 
-def _bound_caller(label: str) -> str:
-    try:
-        if len(label) > 96 or _CALLER_RE.match(label) is None:
-            return _OTHER
-        if label in _known_callers:
-            return label
-        with _caller_lock:
-            if label in _known_callers:
-                return label
-            if len(_known_callers) >= MAX_WRITE_CALLERS:
-                FIRESTORE_WRITE_CALLER_LABEL_OVERFLOW.inc()
-                return _OTHER
-            _known_callers.add(label)
-            return label
-    except Exception:
-        return _OTHER
+WriteAttribution = tuple[str, str]
+UNATTRIBUTED_WRITE = (_OTHER, 'unset')
+bulk_write_attribution: ContextVar[dict[tuple[str, ...], WriteAttribution] | None] = ContextVar(
+    'firestore_bulk_write_attribution', default=None
+)
 
 
-def _call_site() -> str:
-    """First product frame above the transport, as ``module:function``."""
-    try:
-        frame = inspect.currentframe()
-        frame = frame.f_back if frame is not None else None
-        while frame is not None:
-            module = frame.f_globals.get('__name__') or ''
-            name = frame.f_code.co_name
-            if (
-                module in _WRITE_PLUMBING_MODULES
-                or (module, name) in _WRITE_PLUMBING_FUNCTIONS
-                or is_plumbing_module(module)
-                or not name
-                or name.startswith('<')
-            ):
-                frame = frame.f_back
-                continue
-            return _bound_caller(f'{module}:{name}')
-    except Exception:
-        return _OTHER
-    return _OTHER
+def _is_write_plumbing(module: str, function: str) -> bool:
+    return module in _WRITE_PLUMBING_MODULES or (module, function) in _WRITE_PLUMBING_FUNCTIONS
+
+
+def write_caller() -> str:
+    return call_site(
+        skip_frame=_is_write_plumbing, extra_overflow=FIRESTORE_WRITE_CALLER_LABEL_OVERFLOW, use_privacy_caller=False
+    )
+
+
+def _wrap_bulk_init(original: Any) -> Any:
+    @functools.wraps(original)
+    def init(writer: Any, *args: Any, **kwargs: Any) -> None:
+        # Only a process constructing a BulkWriter needs its metadata hooks.
+        try:
+            from database.firestore_bulk_attribution import install_bulk_attribution
+
+            install_bulk_attribution()
+        except Exception:
+            logger.warning('firestore write probe failed to install BulkWriter attribution', exc_info=True)
+        original(writer, *args, **kwargs)
+
+    return init
 
 
 def _split_name(name: str) -> tuple[str, tuple[str, ...]]:
@@ -252,29 +234,43 @@ def write_op(write: Any) -> tuple[str, str, tuple[str, ...]]:
 def _record(writes: Iterable[Any], caller: str) -> None:
     """Count one successful commit's writes on every counter. Never raises."""
     try:
-        origin = current_read_origin()
-    except Exception:
-        origin = 'unset'
-    try:
-        tally: dict[tuple[str, str, str], int] = {}
+        bulk = bulk_write_attribution.get()
+        if bulk is None:
+            try:
+                origin = current_read_origin()
+            except Exception:
+                origin = 'unset'
+            fallback = (caller, origin)
+        else:
+            # Commit-boundary patches can append companion writes. Attribute
+            # those to a common submitter when the entire batch has one.
+            submitters = set(bulk.values())
+            fallback = next(iter(submitters)) if len(submitters) == 1 else UNATTRIBUTED_WRITE
+        tally: dict[tuple[str, str, str, WriteAttribution], int] = {}
         for write in writes:
             op, database, parts = write_op(write)
             record_plane_leak(parts, 'write')
-            key = (collection_pattern(parts) if parts else _UNKNOWN, op, database)
+            attribution = fallback if bulk is None else bulk.get(parts, fallback)
+            key = (collection_pattern(parts) if parts else _UNKNOWN, op, database, attribution)
             tally[key] = tally.get(key, 0) + 1
     except Exception:
         return
-    for (collection, op, database), amount in tally.items():
+    for (collection, op, database, (write_caller, origin)), amount in tally.items():
         try:
             FIRESTORE_BILLED_WRITES.labels(collection=collection, op=op, database=database).inc(amount)
         except Exception:
             logger.warning('firestore write probe failed to record', exc_info=True)
+        attribution_op = _ATTRIBUTION_OPS.get(op, op)
         try:
-            FIRESTORE_BILLED_WRITES_BY_CALLER.labels(collection=collection, op=op, caller=caller).inc(amount)
+            FIRESTORE_BILLED_WRITES_BY_CALLER.labels(collection=collection, op=attribution_op, caller=write_caller).inc(
+                amount
+            )
         except Exception:
             logger.warning('firestore write probe failed to record', exc_info=True)
         try:
-            FIRESTORE_BILLED_WRITES_BY_ORIGIN.labels(origin=origin, collection=collection, op=op).inc(amount)
+            FIRESTORE_BILLED_WRITES_BY_ORIGIN.labels(origin=origin, collection=collection, op=attribution_op).inc(
+                amount
+            )
         except Exception:
             pass  # Attribution must never affect a write or the counters above.
 
@@ -295,10 +291,10 @@ def _applied(writes: list, response: Any) -> list:
     try:
         statuses = list(response.status)
     except Exception:
-        return writes
+        return []
     if len(statuses) != len(writes):
-        return writes
-    return [write for write, status in zip(writes, statuses) if not getattr(status, 'code', 0)]
+        return []
+    return [write for write, status in zip(writes, statuses) if getattr(status, 'code', None) == 0]
 
 
 def _timestamp(value: Any) -> tuple[int, int]:
@@ -326,12 +322,15 @@ def _record_noops(writes: list, response: Any, caller: str) -> None:
         pass  # Attribution must never affect a write.
 
 
-def _after(writes: list, response: Any, caller: str, partial: bool) -> None:
+def _after(writes: list, response: Any, partial: bool) -> None:
     if partial:
-        _record(_applied(writes, response), caller)
+        writes = _applied(writes, response)
+    if not writes:
         return
+    caller = write_caller() if bulk_write_attribution.get() is None else _OTHER
     _record(writes, caller)
-    _record_noops(writes, response, caller)
+    if not partial:
+        _record_noops(writes, response, caller)
 
 
 def _record_ambiguous(writes: list, error: BaseException) -> None:
@@ -350,34 +349,32 @@ def _wrap(original: Any, *, partial: bool) -> Any:
 
         @functools.wraps(original)
         async def async_call(client: Any, request: Any = None, *args: Any, **kwargs: Any) -> Any:
-            caller = _call_site()
             writes = _request_writes(request, kwargs)
             try:
                 response = await original(client, request, *args, **kwargs)
             except BaseException as error:
                 _record_ambiguous(writes, error)
                 raise
-            _after(writes, response, caller, partial)
+            _after(writes, response, partial)
             return response
 
         return async_call
 
     @functools.wraps(original)
     def call(client: Any, request: Any = None, *args: Any, **kwargs: Any) -> Any:
-        caller = _call_site()
         writes = _request_writes(request, kwargs)
         try:
             response = original(client, request, *args, **kwargs)
         except BaseException as error:
             _record_ambiguous(writes, error)
             raise
-        _after(writes, response, caller, partial)
+        _after(writes, response, partial)
         return response
 
     return call
 
 
-def _patch(cls: Any, name: str, factory: Callable[[Any], Any]) -> None:
+def patch_write_probe(cls: Any, name: str, factory: Callable[[Any], Any]) -> None:
     try:
         current = getattr(cls, name)
     except AttributeError:
@@ -403,7 +400,10 @@ def probe_enabled() -> bool:
     to its GMP sidecar ``samples`` limit (backend/deploy/cloud_run_gmp_sidecar.yaml)
     would otherwise lose its whole scrape, not just these series.
     """
-    return os.getenv('OMI_FIRESTORE_WRITE_PROBE_ENABLED', 'true').strip().lower() != 'false'
+    return (
+        os.getenv('FIRESTORE_WRITE_PROBE_ENABLED', 'true').strip().lower() != 'false'
+        and os.getenv('OMI_FIRESTORE_WRITE_PROBE_ENABLED', 'true').strip().lower() != 'false'
+    )
 
 
 def install_document_write_probe() -> None:
@@ -412,10 +412,13 @@ def install_document_write_probe() -> None:
     if _installed or not probe_enabled():
         return
     try:
+        from google.cloud.firestore_v1.bulk_writer import BulkWriter
         from google.cloud.firestore_v1.services.firestore import FirestoreAsyncClient, FirestoreClient
     except ImportError:
         return
     for cls in (FirestoreClient, FirestoreAsyncClient):
-        _patch(cls, 'commit', lambda original: _wrap(original, partial=False))
-        _patch(cls, 'batch_write', lambda original: _wrap(original, partial=True))
+        patch_write_probe(cls, 'commit', lambda original: _wrap(original, partial=False))
+        patch_write_probe(cls, 'batch_write', lambda original: _wrap(original, partial=True))
+    # In SDK 2.20 even AsyncClient.bulk_writer returns the synchronous writer.
+    patch_write_probe(BulkWriter, '__init__', _wrap_bulk_init)
     _installed = True

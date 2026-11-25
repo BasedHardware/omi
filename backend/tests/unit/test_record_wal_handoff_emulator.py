@@ -619,6 +619,88 @@ def test_duplicate_terminal_receipt_is_purged_with_its_erased_owner(duplicate_wo
     marker.delete()
 
 
+@pytest.mark.parametrize('order', ('settle_then_purge', 'purge_then_settle'))
+def test_v3_audio_purge_invalidates_duplicate_custody_against_settlement(duplicate_world, order):
+    """A released recording's purge outranks duplicate custody on both sides of the race."""
+    from config.record_wal_duplicate import SETTLED_FIELD, has_retained_custody
+    from database import conversations_v3
+    from database import record_wal_duplicate as duplicate
+
+    case = duplicate_world
+    request = case.request('v3-purge')
+    candidate = case.attempt(request, files=case.files)
+    authority = {'expected': candidate.scope, 'files': case.files, 'placements': ['a', 'b'], 'commit': True}
+    case.conversation.update({'recording': True, 'claims': [], 'v3_audio_purge_pending': True})
+    if order == 'settle_then_purge':
+        assert case.attempt(request, **authority)
+        assert case.conversation.get().to_dict()[SETTLED_FIELD] is True
+    claim = conversations_v3.claim_audio_purge(request.uid, case.cid, firestore_client=case.store.client)
+    assert claim and claim.custody_invalidated is (order == 'settle_then_purge')
+    row = case.conversation.get().to_dict()
+    assert row['deleted'] is True and not has_retained_custody(row)
+    if order == 'purge_then_settle':
+        # The claim's tombstone and deleted row refuse a settlement prepared before it.
+        with pytest.raises(BatchPrivacyBlocked):
+            case.attempt(request, **authority)
+        assert not has_retained_custody(case.conversation.get().to_dict())
+        assert claim.intakes == 'none'
+    else:
+        assert claim.intakes == 'inline'
+        purge.purge_batch_owner(
+            request.uid,
+            conversation_id=case.cid,
+            namespaces=(case.store.namespace,),
+            firestore_client=case.store.client,
+            delete_uri=Mock(side_effect=AssertionError('metadata-only witness has no object URI')),
+        )
+    case.user.collection('deleted_conversations').document(case.cid).delete()
+    assert duplicate.terminal_status(case.store, request.uid, case.canonical) == (False, None)
+
+
+def test_v3_audio_purge_claim_erases_retained_donors_and_successor_lineage():
+    """Donor intents, donor custody and the successor's lineage move in the claim's one commit."""
+    from config.record_wal_duplicate import MERGE_TARGET_FIELD, RETAINED_DONORS_FIELD, SETTLED_FIELD
+    from database import conversations_v3
+
+    project = os.environ.get('GOOGLE_CLOUD_PROJECT', '')
+    assert project.startswith('demo-'), 'emulator proofs require a demo project'
+    client = firestore.Client(project=project, credentials=AnonymousCredentials())
+    uid = 'synthetic-purge-' + uuid4().hex
+    user = client.collection('users').document(uid)
+    rows = user.collection('conversations')
+    pending = {'recording': True, 'status': 'completed', 'claims': [], 'v3_audio_purge_pending': True}
+    rows.document('r').set(
+        {
+            **pending,
+            SETTLED_FIELD: True,
+            RETAINED_DONORS_FIELD: ['d1', 'd2'],
+            'sync_merged_from': ['d1', 'd2'],
+            MERGE_TARGET_FIELD: 'successor',
+        }
+    )
+    for donor in ('d1', 'd2'):
+        rows.document(donor).set({'deleted': True, SETTLED_FIELD: True, MERGE_TARGET_FIELD: 'r'})
+    rows.document('successor').set({RETAINED_DONORS_FIELD: ['other', 'r'], 'sync_merged_from': ['other', 'r']})
+    try:
+        claim = conversations_v3.claim_audio_purge(uid, 'r', firestore_client=client)
+        assert claim.custody_invalidated and claim.intakes == 'inline' and claim.donor_ids == ('d1', 'd2')
+        row = rows.document('r').get().to_dict()
+        assert not {SETTLED_FIELD, RETAINED_DONORS_FIELD, MERGE_TARGET_FIELD} & set(row)
+        assert row[conversations_v3.AUDIO_PURGE_DONORS_FIELD] == ['d1', 'd2']
+        for donor in ('d1', 'd2'):
+            assert user.collection('deleted_conversations').document(donor).get().exists
+            assert not {SETTLED_FIELD, MERGE_TARGET_FIELD} & set(rows.document(donor).get().to_dict())
+        successor = rows.document('successor').get().to_dict()
+        assert successor[RETAINED_DONORS_FIELD] == successor['sync_merged_from'] == ['other']
+        # A retry after a failed erase keeps every donor owed.
+        again = conversations_v3.claim_audio_purge(uid, 'r', firestore_client=client)
+        assert again.donor_ids == ('d1', 'd2') and again.intakes == 'inline' and not again.custody_invalidated
+    finally:
+        for collection in ('conversations', 'deleted_conversations'):
+            for snapshot in user.collection(collection).stream():
+                snapshot.reference.delete()
+
+
 @pytest.mark.parametrize('race', ('revision', 'tombstone', 'merge_removal'))
 def test_duplicate_cas_revalidates_source_and_privacy_after_compare(duplicate_world, race):
     case = duplicate_world

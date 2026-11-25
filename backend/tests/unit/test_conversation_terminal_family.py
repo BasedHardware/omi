@@ -348,7 +348,7 @@ def test_mode_default_and_operator_kill_switch(monkeypatch, mode, expected):
         monkeypatch.delenv('CONVERSATION_TERMINAL_FAMILY_MODE', raising=False)
     else:
         monkeypatch.setenv('CONVERSATION_TERMINAL_FAMILY_MODE', mode)
-    assert db._terminal_family_serving('synthetic') is expected
+    assert db.terminal_settled.serving('synthetic') is expected
 
 
 @pytest.mark.parametrize('reason', ['terminal_failure', 'completed_status_regression'])

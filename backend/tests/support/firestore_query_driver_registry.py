@@ -163,7 +163,8 @@ BODY_DIGEST = {
     'utils.support.holds._events': '360ff57663deaf3c17c934276f219cce74f4a468dc28c8a1145623524625927e',
     'utils.support.holds._held_deferred_deletes': '612a521045553ef1b02d1eb81aac37a3c63a75c598ce5e99484c007c7c87e878',
     'utils.support.retention._select_conversations': 'f36920350f4e3a557e0e474e8801ae414c21ce67203e0627f7a39ba820243d16',
-    'database.conversations_v3.commit_projection': '5dd4ec5de82b68c50f032b0e44f1961c5a7f0682158a9c57082a052ee49c7354',
+    'database.conversations_v3_live._recent_window_query': '6f2c323bfa8df890362c6bdc4796182a70e4c704376bcb4944358560b12edc75',
+    'database.conversations_v3.commit_projection': '91b5270321f6c924d8b098674dc712e059c3921512fce8c88b1373139819f350',
     'database.batch_pipeline_conversation_purge_scans._claim': 'faa5dabcf01dc5bd377b2e14a149282aa2db93b2872cdc97a3b756157701532c',
     'database.batch_pipeline_conversation_purge_scans.run_job': '1916be25d4e9d5b8a350a665ae0fce626ccc56f68fc66107e8f4b0bb1243b00e',
     'database.batch_pipeline_store.FirestoreStore.protected_retries': 'b55d2960c94057cb8df9b9cdd2e7728b6af63728bc0a2cb6f5bd333efed443a2',
@@ -234,8 +235,8 @@ BODY_DIGEST = {
     'database.batch_pipeline_store.FirestoreStore.fresh_pending': 'd9b3d9c6a869efec2ed3ff0379930dbe43de3cadc01bba28c96051986be058c2',
     'database.batch_pipeline_store.FirestoreStore.ready_owners': 'b5d53e56900da07d2069cd1068218cb1515895a8dfd35f91dab9d06390cd02cf',
     'database.batch_pipeline_store.FirestoreStore.held_merge_owners': '55ac8d67e8e3e3fb689c9e9e086084a6acbcd7f5bb3b0b3f6186f5014cafc143',
-    # Re-reviewed 2026-10-30: due_time now takes the owner id for hunt backoff; query shape is unchanged.
-    'database.dream_scheduler.discover': 'e882fde2014b8f3246665cf86f29046022bc7bdf190c521351fecf872eb379b0',
+    # Discovery schedules each unqueued eligible owner on the size-based cadence. Reads are unchanged.
+    'database.dream_scheduler.discover': '181a3b7a0aab77caaa4908b554df6eaac7a6781084d228c2316a5c9a07134839',
     'database.proactivity_producers.mentor_history_query': '716c4f332e0ff0cf6fda3bcea41f479ce3bb7eb2956c8bfe37c61e0baabbfdb3',
     'database.proactivity_producers.recent_mentor_query': 'dc28a1084121daa40a430764d1c638ec4fe090e66dff499e0bec152444035dee',
     'database.proactivity_producers.task_items_query': '9e98b929e35f9118cdb76076bb526e41a5383d94d0304f098d17a0a2a3bc3cb5',
@@ -3670,6 +3671,16 @@ for entry in (
     *batch_privacy_entries(),
     *home_feed_entries(),
     *conversations_v3_entries(),
+    CoveredByEntry(
+        'database.conversations_v3_live._recent_window_query',
+        covered_by=(
+            'database.conversations_v3_live.recent_windows',
+            'database.conversations_v3_live.request_recording_finish',
+        ),
+        reason='Builds the indexed filters; live lookup and Finish execute the query with their own field masks.',
+        expect_observed=False,
+        body_digest=BODY_DIGEST['database.conversations_v3_live._recent_window_query'],
+    ),
     CoveredByEntry(
         'database.conversations_v3.commit_projection',
         covered_by=('database.conversations_v3.merge_donors_have_tasks',),

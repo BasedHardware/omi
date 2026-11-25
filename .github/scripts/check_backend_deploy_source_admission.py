@@ -614,7 +614,7 @@ def validate_manual_workflow(text: str, root: Path = ROOT) -> list[str]:
     require_fragment(
         errors,
         text,
-        "      release_sha:\n        description: 'Exact main SHA with a successful Release Eligibility proof (deploy and build-only modes)'\n        required: false",
+        "      release_sha:\n        description: 'Exact SHA with a successful Release Eligibility proof (main by default)'\n        required: false",
         "manual backend deploy must keep release_sha optional for traffic-only repair",
     )
     if "github.event.inputs.branch" in text or re.search(r"(?m)^      branch:\n", text):

@@ -15860,4 +15860,14 @@ class AppLocalizationsSl extends AppLocalizations {
   String playStripePlanPaused(String plan) {
     return 'Vaš paket $plan je začasno ustavljen.';
   }
+
+  @override
+  String get firmwareNewestSupportedForDevice => 'Vaša naprava že uporablja najnovejšo podprto različico firmwareja';
+
+  @override
+  String get firmwareSyncRecordingsFirstTitle => 'Najprej sinhronizirajte posnetke';
+
+  @override
+  String get firmwareSyncRecordingsFirstMessage =>
+      'Nekateri posnetki so še na vaši napravi. Počakajte, da se dokonča sinhroniziranje s telefonom, nato pa začnite posodobitev.';
 }
