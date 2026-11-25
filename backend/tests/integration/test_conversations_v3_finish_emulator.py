@@ -1,7 +1,10 @@
 """Run the Finish read and race proofs with the loopback Firestore emulator."""
 
 import os
+from contextlib import nullcontext
+from dataclasses import asdict
 from datetime import datetime, timedelta, timezone
+from unittest.mock import Mock
 from urllib.parse import urlparse
 from uuid import uuid4
 
@@ -9,7 +12,14 @@ import pytest
 from google.auth.credentials import AnonymousCredentials
 from google.cloud import firestore
 
+from config.policy import ProjectionPolicy
+from config.record_audio import record_identity
+from database import batch_pipeline_projection as completion
 from database import conversations_v3_live as store
+from database.batch_pipeline_store import FirestoreStore
+from database.sync_ledger import sync_content_ledger_ref
+from utils.batch_pipeline.contracts import ProjectionBinding
+from utils.batch_pipeline.scheduler import owner_key
 from utils.conversations.v3 import live
 
 
@@ -123,18 +133,6 @@ def test_finish_declines_when_transactional_window_lookup_reaches_its_bound(owne
 
 
 def _pending_native_finish(owner, monkeypatch, unit_count, *, receipt_id, outcome='success'):
-    from contextlib import nullcontext
-    from dataclasses import asdict
-    from unittest.mock import Mock
-
-    from config.policy import ProjectionPolicy
-    from config.record_audio import record_identity
-    from database import batch_pipeline_projection as completion
-    from database.batch_pipeline_store import FirestoreStore
-    from database.sync_ledger import sync_content_ledger_ref
-    from utils.batch_pipeline.contracts import ProjectionBinding
-    from utils.batch_pipeline.scheduler import owner_key
-
     client, uid, recordings = owner
     client.collection('users').document(uid).set({'data_protection_level': 'standard'})
     monkeypatch.setenv('CONVERSATIONS_V3_BATCH_MANUAL_END', 'on')

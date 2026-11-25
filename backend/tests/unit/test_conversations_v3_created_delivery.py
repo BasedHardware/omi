@@ -13,7 +13,8 @@ import yaml
 from database import conversations_v3 as store, conversations_v3_leases as leases
 from database import conversations_v3_processing as writers
 from utils.app_integrations import ExternalIntegrationFanoutError
-from utils.conversations.v3 import created, processing, service
+from utils.conversations.v3 import created, outline, planner, processing, service
+from utils.conversations.v3.live import FINISH_RECORDING_FIELD, FINISH_WINDOW_FIELD
 from tests.unit.test_conversations_v3_review import AT, builder, source  # noqa: F401
 from tests.unit.test_conversations_v3_transactions import strict  # noqa: F401
 
@@ -480,8 +481,6 @@ async def test_the_builder_drain_delivers_settled_notes(strict, delivery, monkey
 
 
 def test_no_pointer_finish_counts_only_the_accepted_windows_first_settlement(strict, monkeypatch):
-    from utils.conversations.v3.live import FINISH_WINDOW_FIELD
-
     counter = Mock()
     monkeypatch.setattr(writers.metrics, 'FINISH_NO_POINTER', counter)
     strict.rows[C] = derived(
@@ -495,9 +494,6 @@ def test_no_pointer_finish_counts_only_the_accepted_windows_first_settlement(str
 
 
 def test_recording_finish_counts_first_settlement_of_its_derived_window(strict, monkeypatch):
-    from utils.conversations.v3 import outline, planner
-    from utils.conversations.v3.live import FINISH_RECORDING_FIELD, FINISH_WINDOW_FIELD
-
     counter = Mock()
     monkeypatch.setattr(writers.metrics, 'FINISH_NO_POINTER', counter)
     recording = source(v3_manual_end=True, **{FINISH_RECORDING_FIELD: True})

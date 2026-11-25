@@ -1,6 +1,7 @@
 """Execute recording-builder and sweeper query shapes without external effects."""
 
 from datetime import timedelta
+from importlib import import_module
 from unittest.mock import patch
 
 from tests.support.firestore_query_drivers import (
@@ -62,7 +63,9 @@ def _decode(client):
 
 
 def _transaction_without_rpc(client):
-    return patch('database.conversations_v3_live.firestore.transactional', side_effect=lambda fn: fn)
+    # The driver loads the target under its outbound-network guard.
+    target = import_module('database.conversations_v3_live')
+    return patch.object(target.firestore, 'transactional', side_effect=lambda fn: fn)
 
 
 def entries():

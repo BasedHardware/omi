@@ -26,6 +26,7 @@ os.environ.setdefault(
 os.environ.setdefault('OPENAI_API_KEY', 'test-openai-key-not-real')
 
 from config import episodes as config
+from config.record_audio import record_identity
 from models.conversation import Conversation
 from models.conversation_enums import ConversationSource, ConversationStatus
 from models.structured import Structured
@@ -955,8 +956,6 @@ def test_empty_body_finish_before_first_window_resolves_at_whole_record_completi
 
 
 def test_finish_accepts_retained_audio_after_first_native_unit_is_silent(pre_window_finish_route, monkeypatch):
-    from config.record_audio import record_identity
-
     client, db, paths, enqueued = pre_window_finish_route
     latest = db.rows[paths['latest']]
     latest.pop('v3_speech_landed_at')

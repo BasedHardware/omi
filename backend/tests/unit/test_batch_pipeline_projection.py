@@ -2,6 +2,7 @@
 
 from dataclasses import replace
 from dataclasses import asdict
+from datetime import datetime, timedelta, timezone
 from copy import deepcopy
 from types import SimpleNamespace
 from config.policy import BatchUnitPolicy, ProjectionPolicy, resolve_batch_policy, resolve_stage_policy
@@ -12,12 +13,14 @@ from google.api_core.exceptions import Aborted, InvalidArgument
 import pytest
 
 from utils.batch_pipeline.contracts import ProjectionBinding
+from database import batch_pipeline_projection as completion
 from database.batch_pipeline_projection import ProjectionStore
 from utils.batch_pipeline import projection
 from utils.sync import bridge
 from database.sync_ledger import sync_content_ledger_ref
 from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
 from utils.batch_pipeline.scheduler import owner_key
+from utils.conversations.v3.live import FINISH_RECORDING_FIELD
 from utils.sync.capture import chunk_identity
 
 
@@ -1327,11 +1330,6 @@ def test_full_multi_unit_completion_consumes_late_v3_finish_once(monkeypatch, ma
 
 @pytest.mark.parametrize('unit_count', [1, 2])
 def test_native_completion_resolves_recording_finish_on_the_redirect_donor(monkeypatch, unit_count):
-    from datetime import datetime, timedelta, timezone
-
-    from database import batch_pipeline_projection as completion
-    from utils.conversations.v3.live import FINISH_RECORDING_FIELD
-
     monkeypatch.setenv('OMI_ENV_STAGE', 'offline')
     monkeypatch.setenv('CONVERSATIONS_V3_BATCH_MANUAL_END', 'on')
     counter, enqueue = Mock(), Mock()
