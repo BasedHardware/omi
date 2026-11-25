@@ -76,7 +76,13 @@ def seed_account(uid: str) -> str:
 
 
 async def run_scenario(
-    scenario: Scenario, out_dir: Path, *, llm_url: str, tick: bool = True, audio: Optional[dict] = None
+    scenario: Scenario,
+    out_dir: Path,
+    *,
+    llm_url: str,
+    tick: bool = True,
+    audio: Optional[dict] = None,
+    trace_calls: bool = False,
 ) -> dict[str, Any]:
     from testing.pipeline_lab.chain.barrier import ExecutorBarrier
     from testing.pipeline_lab.chain.driver import ProductFinalizer
@@ -123,6 +129,12 @@ async def run_scenario(
         tasks.install(stack)
         install_emulator_size_errors(stack)
         stack.enter_context(installed_clock(clock))
+        # --trace-calls (scenario/reach.py): files with a function called from here to the final snapshot.
+        trace = None
+        if trace_calls:
+            from testing.pipeline_lab.scenario.reach import CallTrace
+
+            trace = CallTrace().start()
         if audio:  # audio_file recordings: their words through the lab's batch/sync lane code (scenario/audio.py)
             from testing.pipeline_lab.scenario.audio import materialize
 
@@ -158,6 +170,10 @@ async def run_scenario(
             recordings = ops.recordings(config.uid)
         finally:
             clear_admission(config.uid)
+            if trace is not None:
+                from testing.pipeline_lab.scenario.reach import CALLED_FILE
+
+                (out_dir / CALLED_FILE).write_text(json.dumps(trace.stop(), indent=0) + '\n')
     results = []
     for index_, check in enumerate(scenario.checks):
         if check.at is not None:
@@ -190,12 +206,16 @@ async def run_scenario(
         recordings=recordings,
         fast_finish=ops.fast_finish_outcomes,
         stand_ins=ops.stand_ins,
+        stand_in_sources=ops.stand_in_sources,
         home=home.summary(),
         driver=report.summary(),
         warnings=report.warnings,
         notifications=len(sinks.notifications),
         network_refusals=len(env.network.refusals),
     )
+    from testing.pipeline_lab.scenario.standins import audio_steps, stand_in_notes
+
+    result.update(stand_in_notes=stand_in_notes(result), audio_steps=audio_steps(result))
     return result
 
 
@@ -215,6 +235,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     parser.add_argument('--clock', choices=('frozen', 'tick'), default='frozen')
     parser.add_argument('--stt', choices=('replay', 'record-vendor', 'record-local'), default='replay')
     parser.add_argument('--stt-budget-usd', type=float, default=None)
+    parser.add_argument('--trace-calls', action='store_true', help='write called_files.json (scenario/reach.py)')
     args = parser.parse_args(argv)
     host = os.environ.get('FIRESTORE_EMULATOR_HOST', '')
     if not host.startswith(('127.0.0.1:', 'localhost:')):
@@ -234,7 +255,14 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         upstream = FakeUpstream().start()
         try:
             result = asyncio.run(
-                run_scenario(scenario, out, llm_url=upstream.url, tick=args.clock == 'tick', audio=audio)
+                run_scenario(
+                    scenario,
+                    out,
+                    llm_url=upstream.url,
+                    tick=args.clock == 'tick',
+                    audio=audio,
+                    trace_calls=args.trace_calls,
+                )
             )
         finally:
             upstream.stop()

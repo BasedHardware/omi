@@ -157,6 +157,13 @@ class RunDir:
             bundle[file.split('.')[0]] = value
             if problem:
                 bundle['missing'].append({'file': file, 'problem': problem})
+        result = bundle.get('result')
+        if isinstance(result, dict) and 'stand_ins' in result and 'stand_in_notes' not in result:
+            # A run written before per-run stand-in notes: word them from its own counters (scenario/standins.py).
+            from testing.pipeline_lab.scenario import standins
+
+            result['stand_in_notes'] = standins.stand_in_notes(result)
+            result['audio_steps'] = standins.audio_steps(result)
         for k in repeats:
             result, _ = _read_json(folder / 'result.json' if k == 1 else folder / f'repeat-{k}' / 'result.json')
             outcome = result.get('outcome') if isinstance(result, dict) else None

@@ -295,7 +295,7 @@ def test_batch_lane_turns_the_committed_cassette_into_lines(tmp_path):
     assert any(s.startswith('speaker_identification') for s in row['simulated'])
     assert any(s.startswith('diarization') for s in row['simulated'])
     text = format_report({'scenario': 's', 'outcome': 'passed', 'seconds': 1, 'audio': report})
-    assert 'synthetic cassette' in text and 'product: decode_pcm16_wav' in text
+    assert 'synthetic cassette' in text and 'product code: decode (decode_pcm16_wav)' in text
     distinctive = {w.text.strip('.,').lower() for w in prepared['B'].cassette.words if len(w.text) > 6} - {'synthetic'}
     assert distinctive and not distinctive & set(text.lower().replace(',', ' ').split())  # no transcript words
 

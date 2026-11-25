@@ -58,7 +58,17 @@ The plan (``plan_events``) is what the runner feeds the v3 driver, earliest firs
 - ``transcript`` (the canonical batch transcript lands);
 - ``checkpoint`` (an ``expect`` row with ``at``): the conversations are read and the checks evaluated.
 
-Ties at one instant run in that order.
+Ties at one instant run in that order. Two ties are lab choices, not production behaviour:
+
+- A Finish tap at the same instant as a seal. Production has no ordering between the two:
+  ``retrieve_in_progress_conversation`` follows the Redis in-progress pointer and requires the row to be
+  ``in_progress``, so whichever write lands first decides the branch. The lab runs the tap first (the
+  recording is still capturing and the tap is stored on it at the seal). A scenario that needs the other
+  order, the seal first and then a tap with nothing in progress, puts the tap after the seal (for example
+  ``finish.at`` = seal + 0.1).
+- Two recordings that start at the same instant, both capturing at the tap. Production resolves it (the
+  Redis pointer, then ``created_at`` descending, then document id); the lab refuses the file ("the target
+  is ambiguous") so the author states which recording the tap ends: start the intended one later.
 """
 
 from __future__ import annotations

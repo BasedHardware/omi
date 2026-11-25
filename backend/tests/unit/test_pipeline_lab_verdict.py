@@ -68,6 +68,8 @@ def test_scenario_verdict_of_an_error_has_no_checks():
         'seconds': 1.0,
         'checks': [],
         'stand_ins': [],
+        'stand_in_notes': [],
+        'audio_steps': [],
         'transcripts': {},
         'error': 'RuntimeError',
     }
@@ -171,7 +173,9 @@ def test_run_dir_layout_contract(tmp_path, fake_runs, capsys):
     printed = json.loads(capsys.readouterr().out.strip().splitlines()[-1])
     on_disk = json.loads((out / 'verdict.json').read_text())
     assert printed == on_disk and on_disk['schema'] == 1 and on_disk['outcome'] == 'passed'
-    assert set(on_disk['scenarios'][0]) == {'name', 'outcome', 'seconds', 'checks', 'stand_ins', 'transcripts', 'error'}
+    assert set(on_disk['scenarios'][0]) == {
+        'name', 'outcome', 'seconds', 'checks', 'stand_ins', 'stand_in_notes', 'audio_steps', 'transcripts', 'error'
+    }  # fmt: skip
     assert set(on_disk['scenarios'][0]['checks'][0]) == {'label', 'passed', 'expected', 'actual', 'at'}
     run = json.loads((out / 'run.json').read_text())
     assert {'schema', 'backend_tree', 'ref', 'started_at', 'seconds', 'scenarios', 'isolation'} <= set(run)

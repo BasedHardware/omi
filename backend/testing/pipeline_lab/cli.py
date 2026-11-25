@@ -193,6 +193,17 @@ def build_parser() -> argparse.ArgumentParser:
         help='audio_file words: replay cassettes only (default); on a miss record from the vendor or a local model',
     )
     scenario_run.add_argument('--stt-budget-usd', type=float, help='spend cap for --stt record-vendor')
+    scenario_run.add_argument(
+        '--trace-calls', action='store_true', help='record the backend files each scenario calls (for scenario reach)'
+    )
+    scenario_reach = scenario_sub.add_parser(
+        'reach', parents=[common], help='write scenario/reach.json from a `scenario run --trace-calls --keep` directory'
+    )
+    scenario_reach.add_argument('run_dir')
+    scenario_summary = scenario_sub.add_parser(
+        'summary', parents=[common], help='markdown verdict summary of a `scenario run --keep` directory'
+    )
+    scenario_summary.add_argument('run_dir')
     scenario_check = scenario_sub.add_parser('check', parents=[common], help='validate files, print planned timelines')
     scenario_check.add_argument('files', nargs='+')
     scenario_stack = scenario_sub.add_parser(
@@ -225,6 +236,15 @@ def build_parser() -> argparse.ArgumentParser:
         'range', nargs='?', help='BASE..HEAD, or BASE alone (to the working tree); default merge-base with origin/main'
     )
     affected.add_argument('--repo', help='git repo (default: this checkout)')
+    view = sub.add_parser(
+        'view',
+        parents=[common],
+        help='open results on loopback: a scenario run or compare dir, or a store root / day run',
+    )
+    view.add_argument(
+        'path', help='scenario run (--keep) or compare directory, lab store root, or <root>/runs/<run id>'
+    )
+    view.add_argument('--port', type=int, default=0, help='port to bind (default: a free one)')
     sub.add_parser('stages', parents=[common], help='stages in order and their registered drivers')
     sub.add_parser('doctor', parents=[common], help='roots, permissions and plugins')
     return parser
@@ -299,11 +319,6 @@ def dispatch(args: argparse.Namespace, store: Store, registry: Registry, as_json
         if args.overlay_command == 'live-env':
             return _overlay_live_env(args), 0
         return _overlay_from_runtime_env(args), 0
-    if command == 'affected':
-        from testing.pipeline_lab import affected as affected_map
-
-        report = affected_map.affected(Path(args.repo) if args.repo else default_repo(), args.range)
-        return (report if as_json else _Raw(affected_map.format_text(report) + '\n')), 0
     if command == 'stages':
         return registry.describe(), 0
     if command == 'doctor':
@@ -555,6 +570,22 @@ def _scenario(args: argparse.Namespace, as_json: bool) -> int:
                 raise ScenarioError(str(error)) from None
         if args.scenario_command == 'stack':
             return stack.stack_command(args.stack_action, as_json=as_json)
+        if args.scenario_command == 'summary':
+            from testing.pipeline_lab.scenario.verdict import markdown_summary
+
+            try:
+                sys.stdout.write(markdown_summary(Path(args.run_dir)))
+            except (OSError, ValueError) as error:
+                raise ScenarioError(f'{args.run_dir}: no readable verdict.json ({error})') from None
+            return 0
+        if args.scenario_command == 'reach':
+            from testing.pipeline_lab.scenario import reach
+
+            try:
+                print(json.dumps(reach.write_reach(Path(args.run_dir)), indent=None if as_json else 1))
+            except (ValueError, OSError) as error:
+                raise ScenarioError(str(error)) from None
+            return 0
         if args.scenario_command == 'compare':
             from testing.pipeline_lab.scenario import compare
 
@@ -580,6 +611,7 @@ def _scenario(args: argparse.Namespace, as_json: bool) -> int:
             repeat=args.repeat,
             stt=args.stt,
             stt_budget_usd=args.stt_budget_usd,
+            trace_calls=args.trace_calls,
         )
     except (ScenarioError, RuntimeError) as error:
         if as_json:
@@ -620,6 +652,24 @@ def main(argv: Optional[Sequence[str]] = None, *, registry: Optional[Registry] =
     as_json = bool(getattr(args, 'json', False))
     if args.command == 'scenario':
         return _scenario(args, as_json)
+    if args.command == 'view':  # picks the page from the path; no run store is opened here
+        from testing.pipeline_lab.inspector import view as viewer
+
+        try:
+            return viewer.view(args.path, port=args.port, verdicts=args.verdicts)
+        except viewer.NotAViewable as error:
+            print(json.dumps({'error': str(error)}) if as_json else f'error: {error}', file=sys.stderr)
+            return orchestrator.EXIT_ERROR
+    if args.command == 'affected':  # reads git and the tree only: no run store
+        from testing.pipeline_lab import affected as affected_map
+
+        try:
+            report = affected_map.affected(Path(args.repo) if args.repo else default_repo(), args.range)
+        except ValueError as error:
+            print(json.dumps({'error': str(error)}) if as_json else f'error: {error}', file=sys.stderr)
+            return orchestrator.EXIT_ERROR
+        _emit(report if as_json else _Raw(affected_map.format_text(report) + '\n'), as_json)
+        return 0
     try:
         store = Store.open(Path(args.root) if args.root else None, Path(args.verdicts) if args.verdicts else None)
         if registry is None:

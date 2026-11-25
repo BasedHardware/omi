@@ -168,6 +168,8 @@ def run(root: Path, run_id: str, engine: str) -> dict[str, Any]:
     timings['entry_total'] = round(time.monotonic() - started, 3)
     summary = {
         'engine': engine,
+        'clock': result.get('clock'),
+        'late_monotonic_reads': result.get('late_monotonic_reads'),
         'transcripts': transcripts,
         'chain': (result.get('chain') or {}).get('summary'),
         'day': result.get('day'),

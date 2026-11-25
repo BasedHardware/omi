@@ -781,22 +781,22 @@
   window.addEventListener('resize', () => requestAnimationFrame(layoutLabels));
 
   // ---- stand-ins ------------------------------------------------------------------------------
-  const STAND_INS = {
-    capture_close: 'Finish during capture: stored as the finalization job’s capture close (status completed and the manual-end request) at the seal; the job itself did not run.',
-    record_admission: 'Batch record admission (audio listing, units, staging, intake) did not run; the manual-finish hook got one unit over the whole audio, and STT is the scripted text.',
-    batch_projection: 'Batch transcript landing: written through the live transcript writer; the projection transaction did not run.',
-    sync_intake: 'Device-sync fragment: written as a completed recording; the sync-local-files intake and its job did not run.',
-  };
+  // The lines are written per run by scenario/standins.py from the run's own counters (result.json
+  // stand_in_notes, audio_steps); an older run directory without them shows its counts only.
   function standInSection(b) {
     const sec = h('section', { class: 'section', 'aria-labelledby': 's-title' });
     sec.append(h('h2', { id: 's-title' }, 'Stand-ins', h('span', { class: 'hint', text: 'steps that ran as lab stand-ins instead of product code in this run' })));
     const r = b.result;
     if (!r) { sec.append(missingNote('result.json', b.dir, 'the stand-in counts are not known.')); return sec; }
-    const used = Object.entries(r.stand_ins || {});
     const ul = h('ul', { class: 'standins' });
-    for (const [k, n] of used) ul.append(h('li', {}, h('b', { class: 'mono', text: `${k} ×${n}` }), ' ', STAND_INS[k] || ''));
-    ul.append(h('li', {}, h('b', { text: 'outline model' }), ' The lab’s fake gateway (one conversation per stretch; a new one at “switching topics”), in every scenario run.'));
-    if (!used.length) sec.append(h('p', { class: 'muted', text: 'No counted stand-in ran.' }));
+    const notes = r.stand_in_notes;
+    if (Array.isArray(notes)) {
+      for (const n of notes) ul.append(h('li', {}, h('b', { class: 'mono', text: n.count ? `${n.name} ×${n.count}` : n.name }), ' ', n.text || ''));
+    } else {
+      for (const [k, n] of Object.entries(r.stand_ins || {})) ul.append(h('li', {}, h('b', { class: 'mono', text: `${k} ×${n}` }), ' ', h('span', { class: 'muted', text: '(this run predates per-run stand-in notes)' })));
+    }
+    for (const a of r.audio_steps || []) ul.append(h('li', {}, h('b', { text: 'audio to words' }), ' ', a.text || ''));
+    if (!Object.keys(r.stand_ins || {}).length) sec.append(h('p', { class: 'muted', text: 'No counted stand-in ran.' }));
     sec.append(ul);
     return sec;
   }

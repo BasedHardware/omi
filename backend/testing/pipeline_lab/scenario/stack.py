@@ -8,7 +8,8 @@ Peers, in order of preference:
 2. The host's shared stack (``scenario stack up``; pid file ``<lab root>/scenario-stack/stack.json``): used,
    never stopped.
 3. Otherwise a Firestore emulator and a ``redis-server`` on free loopback ports, started here and stopped by
-   the PIDs started here (logs in ``DIR/.stack/``).
+   the PIDs started here (logs in ``DIR/.stack/``). When only ``OMI_PIPELINE_LAB_REDIS`` names a loopback
+   Redis (CI's Redis service container), that Redis is used and only the emulator is started here.
 
 Isolation, so many runs share one emulator and one Redis: every scenario process (each repeat too) gets
 a run id, its own Firestore project ``demo-lab-<run id>`` (the emulator runs multi-project), its own Redis
@@ -49,6 +50,21 @@ from testing.pipeline_lab.scenario.spec import ScenarioError, describe_plan, loa
 BACKEND = Path(__file__).resolve().parents[3]
 SCENARIO_DIR = Path(__file__).resolve().parent / 'scenarios'
 JAVA_HOMES = ('/opt/homebrew/opt/openjdk@21/bin', '/usr/local/opt/openjdk@21/bin')
+# Where ``firebase`` is looked for after PATH: the repo's pinned firebase-tools (``npm ci``), then a user-level
+# npm global install. Its ``#!/usr/bin/env node`` still needs ``node`` on PATH.
+FIREBASE_FALLBACKS = (
+    BACKEND.parent / 'node_modules' / '.bin' / 'firebase',
+    Path.home() / '.local' / 'bin' / 'firebase',
+)
+
+
+def firebase_binary() -> Optional[str]:
+    found = shutil.which('firebase')
+    if found:
+        return found
+    return next((str(path) for path in FIREBASE_FALLBACKS if path.is_file() and os.access(path, os.X_OK)), None)
+
+
 PROJECT = 'demo-omi-local'  # the emulator's start project; runs use their own demo-lab-<run id>
 RUN_PROJECT_PREFIX = 'demo-lab-'
 DEFAULT_TIMEOUT = 240.0
@@ -91,7 +107,7 @@ def _stop(process: subprocess.Popen, *, grace: float = 15.0) -> None:
 class Peers:
     firestore: str
     redis: str
-    mode: str  # given | shared | started
+    mode: str  # given | shared | started | started-firestore (Redis given)
 
     def env(self) -> dict[str, str]:
         return {'FIRESTORE_EMULATOR_HOST': self.firestore, 'OMI_PIPELINE_LAB_REDIS': self.redis}
@@ -101,26 +117,32 @@ def _port(hostport: str) -> int:
     return int(hostport.rpartition(':')[2])
 
 
-def _start_peers(work: Path) -> tuple[list[subprocess.Popen], int, int]:
-    """Start redis-server and the Firestore emulator (multi-project) in new sessions; wait until both listen."""
-    for tool in ('redis-server', 'firebase'):
-        if shutil.which(tool) is None:
-            raise RuntimeError(f'{tool} not found on PATH (see the pipeline lab README, "Scenarios")')
+def _start_peers(work: Path, redis: Optional[str] = None) -> tuple[list[subprocess.Popen], int, int]:
+    """Start redis-server (unless ``redis`` names a running one) and the Firestore emulator (multi-project) in
+    new sessions; wait until both listen."""
+    firebase = firebase_binary()
+    missing = [] if redis or shutil.which('redis-server') else ['redis-server']
+    missing += [] if firebase else ['firebase']
+    for tool in missing:
+        raise RuntimeError(f'{tool} not found on PATH (see the pipeline lab README, "Scenarios")')
     work.mkdir(parents=True, exist_ok=True, mode=0o700)
-    fs_port, redis_port = _free_port(), _free_port()
+    fs_port, redis_port = _free_port(), (_port(redis) if redis else _free_port())
     started: list[subprocess.Popen] = []
     try:
         with open(work / 'redis.log', 'wb') as redis_log:
-            started.append(
-                subprocess.Popen(
-                    ['redis-server', '--port', str(redis_port), '--bind', '127.0.0.1', '--save', '']
-                    + ['--appendonly', 'no', '--databases', str(REDIS_DATABASES)],
-                    cwd=work,
-                    stdout=redis_log,
-                    stderr=subprocess.STDOUT,
-                    start_new_session=True,
+            if redis:
+                redis_log.write(f'redis given: {redis}\n'.encode())
+            else:
+                started.append(
+                    subprocess.Popen(
+                        ['redis-server', '--port', str(redis_port), '--bind', '127.0.0.1', '--save', '']
+                        + ['--appendonly', 'no', '--databases', str(REDIS_DATABASES)],
+                        cwd=work,
+                        stdout=redis_log,
+                        stderr=subprocess.STDOUT,
+                        start_new_session=True,
+                    )
                 )
-            )
         (work / 'firebase.json').write_text(
             json.dumps(
                 {
@@ -140,7 +162,7 @@ def _start_peers(work: Path) -> tuple[list[subprocess.Popen], int, int]:
         with open(work / 'firestore.log', 'wb') as emulator_log:
             started.append(
                 subprocess.Popen(
-                    ['firebase', 'emulators:start', '--only', 'firestore', '--project', PROJECT],
+                    [str(firebase), 'emulators:start', '--only', 'firestore', '--project', PROJECT],
                     cwd=work,
                     env=env,
                     stdout=emulator_log,
@@ -178,9 +200,15 @@ def local_stack(work: Path) -> Iterator[Peers]:
     if peers is not None:
         yield peers
         return
-    started, fs_port, redis_port = _start_peers(work / '.stack')
+    redis = os.environ.get('OMI_PIPELINE_LAB_REDIS', '')
+    redis = redis if redis.startswith(('127.0.0.1:', 'localhost:')) else None
+    started, fs_port, redis_port = _start_peers(work / '.stack', redis=redis)
     try:
-        yield Peers(f'127.0.0.1:{fs_port}', f'127.0.0.1:{redis_port}', 'started')
+        yield Peers(
+            f'127.0.0.1:{fs_port}',
+            redis or f'127.0.0.1:{redis_port}',
+            'started-firestore' if redis else 'started',
+        )
     finally:
         for process in reversed(started):
             _stop(process)
@@ -513,10 +541,11 @@ def format_report(result: dict[str, Any]) -> str:
             f'{row["cassette"]} ({row["provider"]}/{row["model"]}, {row["origin"]}), {row["words"]} words, '
             f'driver {row["driver"]}'
         )
-        lines.append('    product: ' + ', '.join(row['product']))
-        lines.append('    stand-in: ' + ', '.join(row['simulated']))
-    if result.get('stand_ins'):
-        lines.append('  stand-ins used: ' + ', '.join(f'{k}x{v}' for k, v in result['stand_ins'].items()))
+    if 'stand_ins' in result or (result.get('audio') or {}).get('recordings'):
+        from testing.pipeline_lab.scenario.standins import lines as stand_in_lines
+
+        lines.append('  stand-ins:')
+        lines.extend('    ' + line for line in stand_in_lines(result))
     if result.get('finish_target') is not None or result.get('checks'):
         lines.append(f'  finish target: {result.get("finish_target")}')
     for check in result.get('checks') or []:
@@ -718,8 +747,11 @@ def run_files(
     repeat: int = 1,
     stt: str = 'replay',
     stt_budget_usd: Optional[float] = None,
+    trace_calls: bool = False,
 ) -> int:
     stt_args = ['--stt', stt] + (['--stt-budget-usd', str(stt_budget_usd)] if stt_budget_usd is not None else [])
+    if trace_calls:  # scenario/reach.py: each scenario writes called_files.json
+        stt_args.append('--trace-calls')
     names = list(names) or sorted(path.stem for path in SCENARIO_DIR.glob('*.json'))  # default: all committed
     paths = [resolve(name) for name in names]
     for path in paths:

@@ -17,8 +17,18 @@ Each changed path gets the earliest stage it can influence, by three rules in or
 3. **Conservative default.** Any other path under ``backend/`` means "run everything"
    (earliest stage ``ingest``). Paths outside ``backend/`` cannot reach the lab: no stage.
 
-Scenarios (``scenario/scenarios/*.json``) are worth running when a changed file is in the
-closure of ``SCENARIO_ROOTS`` (all of them) or when the scenario file itself changed.
+Scenarios (``scenario/scenarios/*.json``) a path names, first match wins:
+
+1. ``SCENARIO_TABLE``: the scenario file itself; audio fixtures and the cassette code (the scenarios with an
+   ``audio_file``); the scenario harness and the scenario view (every scenario); the product areas every
+   scenario exercises by design: the conversations v3 runtime, Finish, fast finish, visibility, the Home
+   routes, the manual-finish hook, and the production profile (every scenario); dependency locks.
+2. **Measured reach.** ``scenario/reach.json`` lists, per committed scenario, the backend files in which a
+   function ran during that scenario (``scenario run --trace-calls``, ``scenario/reach.py``). A changed
+   ``.py`` file names the scenarios whose reach holds it. A committed scenario missing from ``reach.json``
+   is named for any file in the static import closure of ``SCENARIO_ROOTS`` (conservative).
+3. Lab code in the closure of ``SCENARIO_ROOTS`` and not measured (imported by the runner, e.g. a parent
+   process module): every scenario. Anything else: none.
 
 The closure is computed on the head side (the working tree, or the head ref read from git);
 a path that exists only on the base side is looked up in the base closure too.
@@ -94,6 +104,35 @@ SHARED_CODE = ('backend/pylock*.toml', 'backend/requirements*.txt', 'backend/pyp
 LAB_PREFIX = 'backend/testing/'
 SCENARIO_ROOTS = (f'{LAB}.scenario.run', f'{LAB}.scenario.ops', f'{LAB}.scenario.stack', f'{LAB}.scenario.checks')
 SCENARIO_DIR = 'backend/testing/pipeline_lab/scenario/scenarios'
+SCENARIO_REACH = 'backend/testing/pipeline_lab/scenario/reach.json'
+_SCN = 'backend/testing/pipeline_lab/scenario'
+# (glob, selector, reason). Selectors: 'self' (the scenario file), 'uses' (scenarios whose JSON names the file),
+# 'audio' (scenarios with an audio_file), 'all', None (none). First match wins.
+SCENARIO_TABLE: tuple[tuple[str, Optional[str], str], ...] = (
+    (f'{SCENARIO_DIR}/*.json', 'self', 'the scenario file'),
+    (f'{_SCN}/fixtures/audio/*', 'uses', 'audio fixture: the scenarios whose audio_file names it'),
+    (f'{_SCN}/fixtures/*', 'audio', 'audio fixtures and committed STT cassettes'),
+    (f'{_SCN}/audio.py', 'audio', 'audio_file words'),
+    ('backend/testing/pipeline_lab/cassette/*', 'audio', 'STT cassettes: audio_file words'),
+    ('backend/testing/pipeline_lab/lanes/batch.py', 'audio', 'batch lane: audio_file words'),
+    ('backend/testing/pipeline_lab/lanes/sync.py', 'audio', 'sync lane: audio_file words'),
+    (SCENARIO_REACH, None, "the scenarios' measured reach"),
+    (f'{_SCN}/*.md', None, 'documentation'),
+    (f'{_SCN}/*', 'all', 'scenario harness'),
+    ('backend/testing/pipeline_lab/inspector/scenario_view.py', 'all', 'scenario view'),
+    ('backend/testing/pipeline_lab/inspector/server.py', 'all', 'scenario view server'),
+    ('backend/testing/pipeline_lab/inspector/reader.py', 'all', 'scenario view server'),
+    ('backend/testing/pipeline_lab/inspector/static/scenario.*', 'all', 'scenario view page'),
+    ('backend/utils/conversations/v3/*', 'all', 'conversations v3 runtime, Finish, fast finish, visibility'),
+    ('backend/database/conversations_v3*.py', 'all', 'conversations v3 storage'),
+    ('backend/config/conversations_v3*.py', 'all', 'conversations v3 admission and switches'),
+    ('backend/routers/conversations.py', 'all', 'Home routes (scenario/home.py)'),
+    ('backend/utils/batch_pipeline/live.py', 'all', 'manual-finish hook (scenario admission)'),
+    ('backend/deploy/runtime_env.yaml', 'all', 'the production profile scenarios run under'),
+    ('backend/pylock*.toml', 'all', 'dependencies'),
+    ('backend/requirements*.txt', 'all', 'dependencies'),
+    ('backend/pyproject.toml', 'all', 'dependencies and tool config'),
+)
 
 # Moves a closure hit to a later stage: the file is reached by the chain process, but only the
 # named stage executes it. Keep this to files whose only callers are that stage.
@@ -144,6 +183,7 @@ class PathResult:
     rule: str  # closure | table | default | outside
     reason: str
     scenarios: list[str] = field(default_factory=list)
+    scenario_reason: str = ''
 
     def to_json(self) -> dict[str, Any]:
         return dict(self.__dict__)
@@ -381,16 +421,56 @@ class StageMap:
         sides = [self.source] + ([self.base] if self.base is not None and not self.source.exists(rel) else [])
         return next((stage for stage in STAGES if any(self.in_reach(side, stage, rel) for side in sides)), None)
 
+    def _sides(self, rel: str) -> list[Source]:
+        return [self.source] + ([self.base] if self.base is not None and not self.source.exists(rel) else [])
+
     def in_scenarios(self, rel: str) -> bool:
-        sides = [self.source] + ([self.base] if self.base is not None and not self.source.exists(rel) else [])
-        return any(rel in self._closure(side, SCENARIO_ROOTS) for side in sides)
+        """``rel`` is in the static import closure of the scenario runner (head side, or base for a removal)."""
+        return any(rel in self._closure(side, SCENARIO_ROOTS) for side in self._sides(rel))
+
+    def world(self) -> 'ScenarioWorld':
+        if getattr(self, '_world', None) is None:
+            self._world = ScenarioWorld.read(self.source)
+        return self._world
+
+    def scenarios_for(self, rel: str) -> tuple[list[str], str]:
+        """(scenarios worth running for a change to ``rel``, why); see the module docstring."""
+        world = self.world()
+        names = world.names
+        for pattern, selector, why in SCENARIO_TABLE:
+            if not fnmatch.fnmatch(rel, pattern):
+                continue
+            if selector == 'self':
+                return ([Path(rel).stem] if Path(rel).stem in names else []), why
+            if selector == 'uses':
+                return [n for n in names if Path(rel).name in world.texts.get(n, '')], why
+            if selector == 'audio':
+                return [n for n in names if n in world.audio], why
+            if selector == 'all':
+                return list(names), why
+            return [], why
+        if not rel.startswith('backend/') or not rel.endswith('.py'):
+            return [], ''
+        measured = [n for n in names if rel in world.reach.get(n, ())]
+        unmeasured = [n for n in names if n not in world.reach]
+        static = self.in_scenarios(rel)
+        if rel.startswith(LAB_PREFIX) and static and not measured:
+            return list(names), 'lab code the scenario runner imports'
+        found = sorted(set(measured) | (set(unmeasured) if static else set()))
+        if not found:
+            return [], ('imported by the scenario runner; no committed scenario calls it' if static else '')
+        why = f'measured: called in {len(measured)} of {len(names)} scenarios'
+        if static and unmeasured:
+            why += f'; {len(unmeasured)} not measured yet (scenario reach)'
+        return found, why
 
     def classify(self, rel: str, scenario_names: list[str]) -> PathResult:
+        result = self._classify(rel)
+        result.scenarios, result.scenario_reason = self.scenarios_for(rel)
+        return result
+
+    def _classify(self, rel: str) -> PathResult:
         scenarios: list[str] = []
-        if rel.startswith(SCENARIO_DIR + '/') and rel.endswith('.json'):
-            scenarios = [Path(rel).stem]
-        elif rel.endswith('.py') and rel.startswith('backend/') and self.in_scenarios(rel):
-            scenarios = list(scenario_names)
         if not rel.startswith('backend/'):
             return PathResult(rel, None, 'outside', 'outside backend/: the lab cannot reach it', scenarios)
         candidates: list[tuple[str, str, str]] = []  # (stage, rule, reason); the earliest wins
@@ -414,9 +494,30 @@ class StageMap:
         if candidates:
             stage, rule, reason = min(candidates, key=lambda c: stage_index(c[0]))
             return PathResult(rel, stage, rule, reason, scenarios)
-        if scenarios:
-            return PathResult(rel, None, 'table', 'scenario input only', scenarios)
+        if any(fnmatch.fnmatch(rel, pattern) for pattern, selector, _ in SCENARIO_TABLE if selector):
+            return PathResult(rel, None, 'table', 'scenario input only (no day-replay stage runs it)', scenarios)
+        if rel.endswith('.py') and self.in_scenarios(rel):
+            return PathResult(rel, None, 'table', 'scenario runner only (no day-replay stage imports it)', scenarios)
         return PathResult(rel, STAGES[0], 'default', 'unmapped backend path: run everything', scenarios)
+
+
+@dataclass
+class ScenarioWorld:
+    """The committed scenarios on one side: names, file texts, which use ``audio_file``, measured reach."""
+
+    names: list[str]
+    texts: dict[str, str]
+    audio: set[str]
+    reach: dict[str, set[str]]
+
+    @classmethod
+    def read(cls, source: Source) -> 'ScenarioWorld':
+        from testing.pipeline_lab.scenario.reach import load_reach
+
+        files = sorted(source.matching([f'{SCENARIO_DIR}/*.json']))
+        texts = {Path(f).stem: source.read(f) or '' for f in files}
+        audio = {name for name, text in texts.items() if '"audio_file"' in text}
+        return cls(sorted(texts), texts, audio, load_reach(source.read, SCENARIO_REACH))
 
 
 def scenario_names(source: Source, repo: Path) -> list[str]:
@@ -512,7 +613,7 @@ def format_text(report: dict[str, Any]) -> str:
     width = max([len(p['path']) for p in report['paths']] + [10])
     for row in report['paths']:
         stage = row['stage'] or '-'
-        extra = f'  scenarios: {len(row["scenarios"])}' if row['scenarios'] else ''
+        extra = f'  scenarios: {len(row["scenarios"])} ({row["scenario_reason"]})' if row['scenarios'] else ''
         lines.append(f'  {row["path"]:<{width}}  {stage:<13} {row["rule"]}: {row["reason"]}{extra}')
     if report['earliest_stage']:
         lines.append(f'earliest stage: {report["earliest_stage"]}; re-run: {", ".join(report["rerun_stages"])}')

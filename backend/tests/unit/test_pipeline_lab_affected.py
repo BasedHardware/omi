@@ -25,6 +25,7 @@ def stage_map():
     for stage in STAGES:
         built.reach(stage)
     built.in_scenarios('backend/utils/llm/goals.py')
+    built.world()
     return built
 
 
@@ -95,9 +96,64 @@ def test_scenarios_follow_their_closure_and_their_own_file(report):
     out, rows = report(scenario_file, 'backend/testing/pipeline_lab/scenario/ops.py', 'backend/utils/llm/goals.py')
     assert rows[scenario_file]['scenarios'] == [names[0]] and rows[scenario_file]['stage'] is None
     assert rows['backend/testing/pipeline_lab/scenario/ops.py']['scenarios'] == names
-    assert rows['backend/utils/llm/goals.py']['scenarios'] == names  # the v3 product path
+    assert rows['backend/utils/llm/goals.py']['scenarios'] == names  # measured: every scenario calls it
     _, rows = report('backend/testing/pipeline_lab/timeline/build.py')
     assert rows['backend/testing/pipeline_lab/timeline/build.py']['scenarios'] == []
+
+
+AUDIO_SCENARIOS = ['audio_single_recording_finish']
+
+
+@pytest.mark.parametrize(
+    'path, expected, reason',
+    [
+        # the product areas every scenario exercises by design
+        ('backend/utils/conversations/v3/visibility.py', 'all', 'visibility'),
+        ('backend/utils/conversations/v3/finish.py', 'all', 'Finish'),
+        ('backend/utils/conversations/v3/fast_finish.py', 'all', 'fast finish'),
+        ('backend/routers/conversations.py', 'all', 'Home routes'),
+        ('backend/deploy/runtime_env.yaml', 'all', 'production profile'),
+        # the scenario harness and view
+        ('backend/testing/pipeline_lab/scenario/spec.py', 'all', 'scenario harness'),
+        ('backend/testing/pipeline_lab/inspector/scenario_view.py', 'all', 'scenario view'),
+        ('backend/testing/pipeline_lab/inspector/static/scenario.js', 'all', 'scenario view page'),
+        # audio words: only the scenarios with an audio_file
+        ('backend/testing/pipeline_lab/cassette/player.py', AUDIO_SCENARIOS, 'STT cassettes'),
+        ('backend/testing/pipeline_lab/scenario/audio.py', AUDIO_SCENARIOS, 'audio_file'),
+        ('backend/testing/pipeline_lab/scenario/fixtures/audio/synthetic_two_voices.wav', AUDIO_SCENARIOS, 'names it'),
+        ('backend/diarizer/batch_pipeline.py', AUDIO_SCENARIOS, 'measured'),  # the batch lane, audio only
+        # not part of any scenario
+        ('backend/testing/pipeline_lab/scenario/IMPORTER.md', [], 'documentation'),
+        ('backend/utils/llm/notes_agent_prompt.py', [], 'no committed scenario calls it'),
+        ('backend/testing/pipeline_lab/timeline/build.py', [], ''),
+        ('app/lib/main.dart', [], ''),
+    ],
+)
+def test_scenario_world_names_the_right_scenarios(report, path, expected, reason):
+    names = affected.scenario_names(affected.DiskSource(REPO), REPO)
+    _, rows = report(path)
+    assert rows[path]['scenarios'] == (names if expected == 'all' else expected), rows[path]
+    assert reason in rows[path]['scenario_reason']
+
+
+def test_scenario_reach_is_current():
+    """reach.json measures every committed scenario and names only files that exist. Re-measure with
+    ``scenario run --trace-calls --keep DIR`` then ``scenario reach DIR`` (scenario/reach.py)."""
+    world = affected.ScenarioWorld.read(affected.DiskSource(REPO))
+    assert set(world.reach) == set(world.names), 'scenario reach.json is missing or has extra scenarios'
+    missing = sorted({rel for files in world.reach.values() for rel in files if not (REPO / rel).is_file()})
+    assert not missing, f'reach.json names files that no longer exist: {missing[:10]}'
+    assert world.audio == set(AUDIO_SCENARIOS)
+
+
+def test_unmeasured_scenario_is_named_for_anything_the_runner_imports(stage_map, monkeypatch):
+    world = stage_map.world()
+    names = [*world.names, 'zz_new_scenario']
+    monkeypatch.setattr(stage_map, '_world', affected.ScenarioWorld(names, world.texts, world.audio, world.reach))
+    found, why = stage_map.scenarios_for('backend/utils/llm/notes_agent_prompt.py')  # imported, never called
+    assert found == ['zz_new_scenario'] and 'not measured yet' in why
+    found, _ = stage_map.scenarios_for('backend/diarizer/batch_pipeline.py')
+    assert found == [*AUDIO_SCENARIOS, 'zz_new_scenario']
 
 
 def test_report_names_the_unit_and_the_command(report):

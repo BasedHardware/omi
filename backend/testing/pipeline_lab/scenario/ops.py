@@ -23,12 +23,17 @@ Stand-ins (each is listed in the README's gap table with its follow-up):
   ``v3_manual_end_requested`` in one write) when the capture seals; the job, lease and outbox are not run;
 - ``STAND_IN_ADMISSION``: batch record admission (audio listing, units, staging, intake) is not run; the
   manual-finish hook gets one unit spanning the recording's audio, a batch store whose privacy check
-  answers allowed, and STT is the scripted text (``fast_finish._transcribe``) with the funding gate open;
+  answers allowed, and STT (``fast_finish._transcribe``) returns the recording's lines, with the funding gate
+  open; the lines are the scenario's speech, or for an ``audio_file`` recording the cassette words the batch
+  lane turned into segments (``scenario/audio.py``);
 - ``STAND_IN_PROJECTION``: the canonical batch transcript lands through the live transcript writer and then
   stamps ``record_projection_revision``; the projection transaction (replace_record, its own manual-end
   promotion ``_v3_finish_update``, receipts) is not run;
 - ``STAND_IN_SYNC``: a device-sync fragment is written as a completed recording with its transcript and woken
   as the projection would; ``/v2/sync-local-files`` intake and its batch job are not run.
+
+Every stand-in is counted in ``stand_ins``; the ones that write words also count where the words came from in
+``stand_in_sources`` (``scripted``, or the cassette source). ``scenario/standins.py`` words each from those.
 """
 
 from __future__ import annotations
@@ -108,6 +113,7 @@ class ScenarioOps(ProductV3Ops):
         self.checkpoints: dict[int, dict[str, Any]] = {}
         self._transcribing: Optional[Recording] = None
         self.stand_ins: dict[str, int] = {}
+        self.stand_in_sources: dict[str, dict[str, int]] = {}  # stand-in -> words source -> count
         self.stt_sources: dict[str, str] = {}  # label -> cassette source, for audio_file recordings
 
     # ---- seams installed for the run ----------------------------------------------------------
@@ -133,8 +139,12 @@ class ScenarioOps(ProductV3Ops):
 
     # ---- helpers --------------------------------------------------------------------------------
 
-    def _stand_in(self, name: str) -> None:
+    def _stand_in(self, name: str, rec: Optional[Recording] = None) -> None:
         self.stand_ins[name] = self.stand_ins.get(name, 0) + 1
+        if rec is not None:
+            source = self.stt_sources.get(rec.label, 'scripted')
+            counts = self.stand_in_sources.setdefault(name, {})
+            counts[source] = counts.get(source, 0) + 1
 
     def _ref(self, uid: str, rec: Recording) -> Any:
         return self.firestore.collection('users').document(uid).collection('conversations').document(rec.doc_id)
@@ -247,7 +257,7 @@ class ScenarioOps(ProductV3Ops):
     async def _on_admission(self, uid: str, rec: Recording) -> dict[str, Any]:
         from utils.batch_pipeline import live
 
-        self._stand_in(STAND_IN_ADMISSION)
+        self._stand_in(STAND_IN_ADMISSION, rec)
         current = await asyncio.to_thread(self._raw, uid, rec)
         units = [(self.scenario.at(rec.audio[0]).timestamp(), rec.audio[1] - rec.audio[0], [])]
         self._transcribing = rec
@@ -268,7 +278,7 @@ class ScenarioOps(ProductV3Ops):
     async def _on_transcript(self, uid: str, rec: Recording) -> dict[str, Any]:
         from database import conversations as conversations_db
 
-        self._stand_in(STAND_IN_PROJECTION)
+        self._stand_in(STAND_IN_PROJECTION, rec)
         segments = segment_dicts(rec, rec.audio[0])
         wrote = await asyncio.to_thread(
             conversations_db.update_conversation_segments,
@@ -284,7 +294,7 @@ class ScenarioOps(ProductV3Ops):
         return {'outcome': 'landed' if wrote is not False else 'refused', 'words': rec.words(), **self._stt(rec)}
 
     async def _on_sync(self, uid: str, rec: Recording) -> dict[str, Any]:
-        self._stand_in(STAND_IN_SYNC)
+        self._stand_in(STAND_IN_SYNC, rec)
         row = self._row(rec, created=rec.arrives_at or rec.audio[1], status='completed')
         recording = await asyncio.to_thread(self._seed, uid, row)
         await asyncio.to_thread(

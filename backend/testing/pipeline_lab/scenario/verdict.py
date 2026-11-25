@@ -4,7 +4,8 @@ Layout (a contract other tools read; ``schema`` bumps on any incompatible change
 
     DIR/run.json        {"schema": 1, "backend_tree", "ref", "started_at", "seconds", "scenarios": [...], "isolation": {...}}
     DIR/verdict.json    {"schema": 1, "outcome": "passed|failed|error", "scenarios": [{"name", "outcome", "seconds",
-                         "checks": [{"label", "passed", "expected", "actual", "at"}], "stand_ins", "error"}]}
+                         "checks": [{"label", "passed", "expected", "actual", "at"}], "stand_ins", "stand_in_notes",
+                         "audio_steps", "error"}]}
     DIR/<name>/scenario.json   the scenario file as run
     DIR/<name>/result.json     what ``scenario/run.py`` writes
     DIR/<name>/home.json       written by ``scenario/home.HomeRecorder.write_home_snapshot``, not here
@@ -21,6 +22,7 @@ import json
 from pathlib import Path
 from typing import Any, Mapping, Optional, Sequence
 
+from testing.pipeline_lab.scenario import standins
 from testing.pipeline_lab.scenario.checks import OUTCOMES, actual_of, expected_of
 
 SCHEMA = 1
@@ -69,6 +71,8 @@ def scenario_verdict(name: str, result: Mapping[str, Any], scenario: Any = None)
         'seconds': result.get('seconds', 0),
         'checks': checks,
         'stand_ins': sorted((result.get('stand_ins') or {}).keys()),
+        'stand_in_notes': [row['text'] for row in result.get('stand_in_notes') or standins.stand_in_notes(result)],
+        'audio_steps': [row['text'] for row in result.get('audio_steps') or standins.audio_steps(result)],
         'transcripts': transcript_sources(result),
         'error': result.get('error'),
     }
@@ -117,3 +121,39 @@ def write_json(path: Path, value: Any) -> None:
 
 def read_json(path: Path) -> Any:
     return json.loads(path.read_text())
+
+
+# ---- summary (markdown, for a pull request or a CI job summary) -------------------------------------
+
+
+def markdown_summary(run_dir: Path) -> str:
+    """The verdict of a ``scenario run --keep DIR`` as markdown: overall outcome, one row per scenario,
+    failed checks and repeat differences by label/path only (no transcript text), and how to view it."""
+    run_dir = Path(run_dir)
+    verdict_value = read_json(run_dir / 'verdict.json')
+    run = read_json(run_dir / 'run.json') if (run_dir / 'run.json').is_file() else {}
+    rows = verdict_value.get('scenarios') or []
+    ref = run.get('sha') or run.get('ref') or 'unknown'
+    head = (
+        f'**Pipeline lab scenarios: {verdict_value.get("outcome")}** ({len(rows)} scenario(s) x{run.get("repeat", 1)}, '
+        f'jobs {run.get("jobs", 1)}, stt {run.get("stt", "replay")}, {run.get("seconds", "?")} s, '
+        f'ref `{str(ref)[:12]}`{" dirty" if run.get("dirty") else ""})'
+    )
+    lines = [head, '', '| scenario | outcome | checks | seconds | transcripts |', '| --- | --- | --- | --- | --- |']
+    for row in rows:
+        checks = row.get('checks') or []
+        passed = sum(1 for check in checks if check.get('passed'))
+        sources = ', '.join(sorted(set((row.get('transcripts') or {}).values()))) or '-'
+        lines.append(
+            f'| {row["name"]} | {row["outcome"]} | {passed}/{len(checks)} | {row.get("seconds", 0)} | {sources} |'
+        )
+    for row in rows:
+        failed = [str(check.get('label')) for check in row.get('checks') or [] if not check.get('passed')]
+        if failed:
+            lines.append(f'- {row["name"]}: failed checks: {", ".join(failed)}')
+        if row.get('differences'):
+            lines.append(f'- {row["name"]}: differs between repeats at: {", ".join(row["differences"][:10])}')
+        if row.get('error'):
+            lines.append(f'- {row["name"]}: error: {row["error"]}')
+    lines += ['', f'View: `python -m testing.pipeline_lab view {run_dir}` (run from `backend/`).']
+    return '\n'.join(lines) + '\n'

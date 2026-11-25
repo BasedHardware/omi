@@ -163,3 +163,22 @@ def test_product_monotonic_is_opt_in_and_restored(product_module):
         assert time.monotonic is not real_monotonic
     assert time.monotonic is real_monotonic and asyncio.BaseEventLoop.time is real_loop_time
     assert product_module.read_bound.__globals__['monotonic'] is real_monotonic
+
+
+def test_classic_chain_runs_on_the_sim_clock_unless_the_v3_switch_says_tick():
+    from testing.pipeline_lab.chain.run import chain_clock_mode
+    from testing.pipeline_lab.stack.overlay import Overlay
+
+    assert chain_clock_mode(Overlay()) == 'sim'
+    assert chain_clock_mode(Overlay.from_mapping({'model_config': {'v3': {'clock': 'tick'}}})) == 'tick'
+    with pytest.raises(ValueError, match='model_config.v3.clock'):
+        chain_clock_mode(Overlay.from_mapping({'model_config': {'v3': {'clock': 'wall'}}}))
+
+
+def test_chain_smoke_script_finds_homebrew_java_like_the_scenario_stack():
+    from pathlib import Path
+
+    from testing.pipeline_lab.scenario.stack import JAVA_HOMES
+
+    script = (Path(clock_module.__file__).parent / 'run_chain_smoke.sh').read_text()
+    assert all(home in script for home in JAVA_HOMES)
