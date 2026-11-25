@@ -2250,6 +2250,7 @@ overlay:
         - BATCH_PIPELINE_PROJECTION_PHASE_SAMPLE_PERCENT
         - BATCH_POLICY_KILL_SWITCH_LOG_ON_CHANGE_ENABLED
         env:
+          CONVERSATIONS_V3_LIVE_TITLE: {value: 'on', category: ops_kill}
           CONVERSATION_PARKED_TERMINAL_STATUS_ENABLED:
             value: 'off'
             category: rollout
