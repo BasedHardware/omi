@@ -42,6 +42,34 @@ class PlanOptionCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final stacked = MediaQuery.textScalerOf(context).scale(1) >= 1.6;
+    final titleBlock = Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(title, style: OmiType.headline),
+        if (subtitle != null) ...[
+          const SizedBox(height: OmiSpacing.xxs),
+          Text(subtitle!, style: OmiType.subhead.copyWith(color: OmiColors.textSecondary)),
+        ],
+      ],
+    );
+    final priceBlock = Column(
+      crossAxisAlignment: stacked ? CrossAxisAlignment.start : CrossAxisAlignment.end,
+      children: [
+        Text(price, style: OmiType.headline),
+        if (saveTag != null) ...[
+          const SizedBox(height: OmiSpacing.xs),
+          PlanBadge(label: saveTag!, color: OmiColors.successSurface),
+        ],
+        if (endsOnDate != null) ...[
+          const SizedBox(height: OmiSpacing.xs),
+          PlanBadge(label: context.l10n.endsOnDate(endsOnDate!), color: OmiColors.dangerSurface),
+        ] else if (isActive) ...[
+          const SizedBox(height: OmiSpacing.xs),
+          PlanBadge(label: context.l10n.active, color: OmiColors.surface3),
+        ],
+      ],
+    );
     // The whole card is the tap target, but only the header is the screen-reader button so the
     // plan details stay separately readable instead of merging into one long label.
     return GestureDetector(
@@ -70,41 +98,17 @@ class PlanOptionCard extends StatelessWidget {
                     PlanBadge(label: context.l10n.popularBadge, inverted: true),
                     const SizedBox(height: OmiSpacing.sm),
                   ],
-                  Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(title, style: OmiType.headline),
-                            if (subtitle != null) ...[
-                              const SizedBox(height: OmiSpacing.xxs),
-                              Text(subtitle!, style: OmiType.subhead.copyWith(color: OmiColors.textSecondary)),
-                            ],
-                          ],
-                        ),
-                      ),
-                      const SizedBox(width: OmiSpacing.sm),
-                      Column(
-                        crossAxisAlignment: CrossAxisAlignment.end,
-                        children: [
-                          Text(price, style: OmiType.headline),
-                          if (saveTag != null) ...[
-                            const SizedBox(height: OmiSpacing.xs),
-                            PlanBadge(label: saveTag!, color: OmiColors.successSurface),
-                          ],
-                          if (endsOnDate != null) ...[
-                            const SizedBox(height: OmiSpacing.xs),
-                            PlanBadge(label: context.l10n.endsOnDate(endsOnDate!), color: OmiColors.dangerSurface),
-                          ] else if (isActive) ...[
-                            const SizedBox(height: OmiSpacing.xs),
-                            PlanBadge(label: context.l10n.active, color: OmiColors.surface3),
-                          ],
-                        ],
-                      ),
-                    ],
-                  ),
+                  // At accessibility text sizes the price goes under the title so neither overflows.
+                  if (stacked)
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [titleBlock, const SizedBox(height: OmiSpacing.xs), priceBlock],
+                    )
+                  else
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [Expanded(child: titleBlock), const SizedBox(width: OmiSpacing.sm), priceBlock],
+                    ),
                 ],
               ),
             ),

@@ -15344,9 +15344,6 @@ class AppLocalizationsSr extends AppLocalizations {
   String get stopThese => 'Заустави ово';
 
   @override
-  String get meetingActionItemsTitle => 'Ставке за рад';
-
-  @override
   String get addToTasks => 'Додај у задатке';
 
   @override
@@ -15831,4 +15828,25 @@ class AppLocalizationsSr extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get playStripeBilledOnWeb => 'Наплаћује се преко omi.me. Откажите овде у било ком тренутку.';
+
+  @override
+  String get playStripeBilledOnWebShort => 'Наплаћује се преко omi.me.';
+
+  @override
+  String playStripePlanPaused(String plan) {
+    return 'Ваш $plan план је паузиран.';
+  }
+
+  @override
+  String get firmwareNewestSupportedForDevice => 'Ваш уређај већ користи најновију подржану верзију фирмвера';
+
+  @override
+  String get firmwareSyncRecordingsFirstTitle => 'Прво синхронизујте снимке';
+
+  @override
+  String get firmwareSyncRecordingsFirstMessage =>
+      'Неки снимци се још увек налазе на вашем уређају. Сачекајте да заврше синхронизовање са телефоном, а затим покрените ажурирање.';
 }

@@ -74,6 +74,12 @@ class Ref:
         names = {p[len(prefix) :].split('/')[0] for p in self.store.rows if p.startswith(prefix)}
         return [self.collection(n) for n in names]
 
+    def list_documents(self):
+        # Firestore lists child references even when only their subcollections survive.
+        prefix = self.path + '/'
+        document_ids = {path[len(prefix) :].split('/', 1)[0] for path in self.store.rows if path.startswith(prefix)}
+        return [self.document(document_id) for document_id in sorted(document_ids)]
+
 
 def function(path, name, namespace):
     if path == 'routers/conversations.py' and name == 'delete_conversation':
@@ -126,7 +132,7 @@ def test_tombstone_contains_only_identity_and_point_lookup_is_owner_scoped(store
     assert not tombstones.is_deleted('other-user', 'c')
 
 
-def test_non_cascade_delete_purges_prompt_evidence_and_primary_audio_after_intent(store):
+def test_non_cascade_delete_purges_prompt_evidence_after_intent_without_purging_primary_audio(store):
     calls = []
 
     def purge(uid, cid):
@@ -136,30 +142,24 @@ def test_non_cascade_delete_purges_prompt_evidence_and_primary_audio_after_inten
         calls.append(('parent', tombstones.is_deleted(uid, cid)))
         store.rows.pop(f'users/{uid}/conversations/{cid}')
 
-    snapshots = MagicMock()
-    snapshots.get_conversation_raw_snapshot.return_value = {'sync_merged_from': ['donor']}
+    audio = MagicMock()
     namespace = {
         'logger': MagicMock(),
         'conversation_tombstones': tombstones,
-        'conversations_db': snapshots,
         'delete_owner_prompt_embedding_cache': purge,
         'delete_conversation_screen_frames': MagicMock(),
         'delete_conversation_and_frame_evidence': hard_delete,
-        'delete_privacy_conversation_audio': MagicMock(),
+        'delete_privacy_conversation_audio': audio,
         'delete_vector': MagicMock(),
         'delete_transcript_chunk_vectors': MagicMock(),
         'record_product_event': MagicMock(),
     }
     delete = function('routers/conversations.py', 'delete_conversation', namespace)
-    background = MagicMock()
     # The handler returns no body: the route is 204 No Content, the contract the
     # released mobile client gates on (test_conversation_delete_wire_contract.py).
-    assert delete('c', background, False, None, 'u').status_code == 204
+    assert delete('c', MagicMock(), False, None, 'u').status_code == 204
     assert calls == [('prompt', True), ('parent', True)]
-    # Audio is primary content: a non-cascade delete erases it after the response, donors included.
-    background.add_task.assert_called_once_with(
-        namespace['_delete_privacy_audio_after_response'], 'u', 'c', source_ids=['donor']
-    )
+    audio.assert_not_called()
 
 
 @pytest.mark.parametrize('failure', ['retraction', 'cleanup', None])

@@ -146,7 +146,7 @@ jobs:
       id-token: 'write'
 
     timeout-minutes: ${{ inputs.mode == 'evidence' && 10 || 360 }}
-    runs-on: ubuntu-latest
+    runs-on: ${{ inputs.mode == 'evidence' && 'ubuntu-22.04' || 'ubuntu-latest' }}
     steps:
       - name: Validate Environment Input
         if: github.event_name == 'workflow_dispatch'
@@ -156,7 +156,7 @@ jobs:
             exit 1
           fi
       - name: Checkout
-        uses: actions/checkout@v7
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
         with:
           ref: ${{ inputs.control_sha != '' && github.sha || (inputs.mode == 'evidence' && inputs.expected_sha || (github.event.inputs.environment == 'prod' && 'main' || github.event.inputs.branch)) }}
           fetch-depth: 0
@@ -248,41 +248,9 @@ jobs:
           echo "IMAGE_TAG=$IMAGE_TAG" >> "$GITHUB_ENV"
           echo "checked_out_sha=$CHECKED_OUT_SHA" >> "$GITHUB_OUTPUT"
 
-      - name: Install Helm
-        uses: azure/setup-helm@v5
-
-      # Prod: GitHub WIF as omi-ci-deployer-prod@ (credential-hygiene WS-C, plan v2 Phase E).
-      # Development keeps its JSON lane.
-      - name: Google Auth (prod WIF)
-        id: auth-wif
-        if: github.event.inputs.environment == 'prod'
-        uses: google-github-actions/auth@v3
-        with:
-          workload_identity_provider: projects/208440318997/locations/global/workloadIdentityPools/omi-gha-deploy-prod/providers/github
-          service_account: omi-ci-deployer-prod@based-hardware.iam.gserviceaccount.com
-
-      - name: Google Auth
-        id: auth
-        if: github.event.inputs.environment != 'prod'
-        uses: google-github-actions/auth@v3
-        with:
-          # Development: GitHub WIF as the dev deployer, no JSON key (credential hygiene WS-D).
-          workload_identity_provider: projects/1031333818730/locations/global/workloadIdentityPools/omi-gha-deploy-dev/providers/github
-          service_account: omi-ci-deployer-dev@based-hardware-dev.iam.gserviceaccount.com
-
-      - name: Set up gcloud
-        uses: google-github-actions/setup-gcloud@v3
-
-      - name: Get GKE credentials
-        uses: google-github-actions/get-gke-credentials@v3
-        with:
-          cluster_name: ${{ vars.GKE_CLUSTER }}
-          location: ${{ env.REGION }}
-          project_id: ${{ vars.GCP_PROJECT_ID }}
-
       - name: Checkout trusted overlay evidence controls
         if: ${{ inputs.mode == 'evidence' }}
-        uses: actions/checkout@v7
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
         with:
           ref: ${{ github.workflow_sha }}
           path: .github/listen-evidence-control
@@ -291,24 +259,61 @@ jobs:
             .github/scripts
             .github/workflows/gcp_backend_listen_helm.yml
 
-      - name: Install evidence parser before secret injection
+      - name: Reconstruct evidence runtime before credentials
         if: ${{ inputs.mode == 'evidence' }}
-        run: python3 -m pip install -q pyyaml
+        run: |
+          python3 .github/listen-evidence-control/.github/scripts/listen_runtime.py reconstruct --root "$RUNNER_TEMP/listen-runtime"
+          echo "$RUNNER_TEMP/listen-runtime/helm/linux-amd64" >> "$GITHUB_PATH"
+
+      - name: Install Helm
+        if: ${{ inputs.mode != 'evidence' }}
+        uses: azure/setup-helm@v5
+
+      # Prod: GitHub WIF as omi-ci-deployer-prod@ (credential-hygiene WS-C, plan v2 Phase E).
+      # Development keeps its JSON lane.
+      - name: Google Auth (prod WIF)
+        id: auth-wif
+        if: github.event.inputs.environment == 'prod'
+        uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093 # v3
+        with:
+          workload_identity_provider: projects/208440318997/locations/global/workloadIdentityPools/omi-gha-deploy-prod/providers/github
+          service_account: omi-ci-deployer-prod@based-hardware.iam.gserviceaccount.com
+
+      - name: Google Auth
+        id: auth
+        if: github.event.inputs.environment != 'prod'
+        uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093 # v3
+        with:
+          # Development: GitHub WIF as the dev deployer, no JSON key (credential hygiene WS-D).
+          workload_identity_provider: projects/1031333818730/locations/global/workloadIdentityPools/omi-gha-deploy-dev/providers/github
+          service_account: omi-ci-deployer-dev@based-hardware-dev.iam.gserviceaccount.com
+
+      - name: Set up gcloud
+        uses: google-github-actions/setup-gcloud@aa5489c8933f4cc7a4f7d45035b3b1440c9c10db # v3
+
+      - name: Get GKE credentials
+        uses: google-github-actions/get-gke-credentials@3da1e46a907576cefaa90c484278bb5b259dd395 # v3
+        with:
+          cluster_name: ${{ vars.GKE_CLUSTER }}
+          location: ${{ env.REGION }}
+          project_id: ${{ vars.GCP_PROJECT_ID }}
 
       - name: Produce private-overlay effect receipt without mutation
         if: ${{ inputs.mode == 'evidence' }}
         env:
           EVIDENCE_REQUEST: ${{ inputs.evidence_request }}
-          LISTEN_PRIVATE_VALUES_YAML: ${{ secrets.LISTEN_PRIVATE_VALUES_YAML }}
+          LISTEN_PRIVATE_VALUES_YAML: ${{ fromJSON(inputs.evidence_request).overlay_state != 'references' && secrets.LISTEN_PRIVATE_VALUES_YAML || '' }}
         run: |
           set -euo pipefail
           umask 077
-          python3 .github/listen-evidence-control/.github/scripts/listen_overlay_evidence.py job \
+          export LD_LIBRARY_PATH="$RUNNER_TEMP/listen-runtime/python/lib"
+          unset LD_PRELOAD PYTHONHOME PYTHONPATH
+          "$RUNNER_TEMP/listen-runtime/python/bin/python3.12" -I -B .github/listen-evidence-control/.github/scripts/listen_overlay_evidence.py job \
             --root "$GITHUB_WORKSPACE" --output "$RUNNER_TEMP/listen-overlay-receipt.json"
 
       - name: Upload only the sanitized overlay receipt
         if: ${{ inputs.mode == 'evidence' && success() }}
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: listen-overlay-${{ inputs.evidence_request_id }}-${{ github.run_attempt }}
           path: ${{ runner.temp }}/listen-overlay-receipt.json
@@ -787,7 +792,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v7
+        uses: actions/checkout@v7 # v7
         with:
           ref: ${{ needs.helm-upgrade.outputs.checked_out_sha }}
 
@@ -795,16 +800,16 @@ jobs:
         uses: azure/setup-helm@v5
 
       - name: Google Auth (prod WIF)
-        uses: google-github-actions/auth@v3
+        uses: google-github-actions/auth@v3 # v3
         with:
           workload_identity_provider: projects/208440318997/locations/global/workloadIdentityPools/omi-gha-deploy-prod/providers/github
           service_account: omi-ci-deployer-prod@based-hardware.iam.gserviceaccount.com
 
       - name: Set up gcloud
-        uses: google-github-actions/setup-gcloud@v3
+        uses: google-github-actions/setup-gcloud@v3 # v3
 
       - name: Get GKE credentials
-        uses: google-github-actions/get-gke-credentials@v3
+        uses: google-github-actions/get-gke-credentials@v3 # v3
         with:
           cluster_name: ${{ vars.GKE_CLUSTER }}
           location: us-central1

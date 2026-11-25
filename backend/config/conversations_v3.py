@@ -24,6 +24,10 @@ def conversations_v3_enabled(uid: str) -> bool:
     return in_rollout_cohort(uid, 'conversations-v3')
 
 
+def finish_no_pointer_enabled() -> bool:
+    return os.getenv('CONVERSATIONS_V3_FINISH_NO_POINTER', 'on').strip().lower() not in {'off', 'false', '0', 'no'}
+
+
 def live_recap_enabled(uid: str) -> bool:
     """Only explicit authenticated testers. Empty or invalid config closes the whole cohort."""
     raw = os.getenv('CONVERSATIONS_V3_LIVE_RECAP_COHORT', '')
@@ -66,6 +70,18 @@ def rotation_seconds() -> tuple[float, float]:
 
 def manual_end_home_visible_enabled() -> bool:
     return os.getenv('CONVERSATIONS_V3_MANUAL_END_HOME_VISIBLE', 'on').strip().lower() not in {
+        'off',
+        'false',
+        '0',
+        'no',
+    }
+
+
+def capture_continuity_enabled() -> bool:
+    """Default on. A stream gap inside one capture origin is not silence, and a manual-end cut waits
+    (bounded) for the batch transcript of its own or a preceding sealed recording. Off restores the
+    previous cut and gap rules and skips the predecessor read."""
+    return os.getenv('CONVERSATIONS_V3_CAPTURE_CONTINUITY', 'on').strip().lower() not in {
         'off',
         'false',
         '0',

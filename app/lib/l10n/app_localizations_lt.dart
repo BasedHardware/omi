@@ -15360,9 +15360,6 @@ class AppLocalizationsLt extends AppLocalizations {
   String get stopThese => 'Sustabdyti šiuos';
 
   @override
-  String get meetingActionItemsTitle => 'Veiksmai';
-
-  @override
   String get addToTasks => 'Pridėti prie užduočių';
 
   @override
@@ -15848,4 +15845,26 @@ class AppLocalizationsLt extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get playStripeBilledOnWeb => 'Mokama per omi.me. Atšaukite čia bet kada.';
+
+  @override
+  String get playStripeBilledOnWebShort => 'Mokama per omi.me.';
+
+  @override
+  String playStripePlanPaused(String plan) {
+    return 'Jūsų $plan planas pristabdytas.';
+  }
+
+  @override
+  String get firmwareNewestSupportedForDevice =>
+      'Jūsų įrenginyje jau yra naujausia palaikoma aparatinės programinės įrangos versija';
+
+  @override
+  String get firmwareSyncRecordingsFirstTitle => 'Pirmiausia sinchronizuokite savo įrašus';
+
+  @override
+  String get firmwareSyncRecordingsFirstMessage =>
+      'Kai kurie įrašai dar yra jūsų įrenginyje. Leiskite jiems užbaigti sinchronizavimą į telefoną, tada pradėkite atnaujinimą.';
 }

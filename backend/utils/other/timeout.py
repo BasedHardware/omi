@@ -1,4 +1,6 @@
 from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
+
+from config.request_clock import started_at
 from starlette.responses import JSONResponse, Response
 from starlette.types import ASGIApp
 from fastapi import Request
@@ -96,7 +98,10 @@ class TimeoutMiddleware(BaseHTTPMiddleware):
         # (utils.other.list_budget) can derive an internal deadline that leaves
         # serialization headroom under this middleware's hard cutoff.
         request.state.omi_request_started_monotonic = time.monotonic()
+        arrival_token = started_at.set(time.time())
         try:
             return await asyncio.wait_for(call_next(request), timeout=timeout)
         except asyncio.TimeoutError:
             return Response(status_code=504)
+        finally:
+            started_at.reset(arrival_token)

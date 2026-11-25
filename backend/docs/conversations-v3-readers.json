@@ -339,6 +339,10 @@
     "policy": "storage",
     "reason": "Persistence boundary: user-scoped storage and authoritative lifecycle/privacy/custody metadata. Public-facing methods apply the central visibility predicate."
   },
+  "backend/database/user_data_deletion.py:collection": {
+    "policy": "storage",
+    "reason": "Account erasure enumerates owner-scoped conversation references to purge speaker evidence children, including orphaned parents."
+  },
   "backend/database/summary_processing.py:collection": {
     "policy": "storage",
     "reason": "Persistence boundary: user-scoped storage and authoritative lifecycle/privacy/custody metadata. Public-facing methods apply the central visibility predicate."
@@ -478,6 +482,10 @@
   "backend/scripts/backfill_conversation_owner_uid.py:collection_group": {
     "policy": "operator",
     "reason": "Offline operator utility; explicit raw ownership/recovery inspection, never a product read."
+  },
+  "backend/scripts/backfill_home_visibility_index.py:collection": {
+    "policy": "operator",
+    "reason": "Owner-scoped Home index migration reads only the two visibility flags and their derived index bit."
   },
   "backend/scripts/backfill_notes_v2_default_emoji.py:collection": {
     "policy": "operator",

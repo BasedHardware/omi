@@ -15373,9 +15373,6 @@ class AppLocalizationsMs extends AppLocalizations {
   String get stopThese => 'Hentikan Ini';
 
   @override
-  String get meetingActionItemsTitle => 'Perkara tindakan';
-
-  @override
   String get addToTasks => 'Tambah ke Tugasan';
 
   @override
@@ -15861,4 +15858,26 @@ class AppLocalizationsMs extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get playStripeBilledOnWeb => 'Dibilkan melalui omi.me. Batalkan di sini pada bila-bila masa.';
+
+  @override
+  String get playStripeBilledOnWebShort => 'Dibilkan melalui omi.me.';
+
+  @override
+  String playStripePlanPaused(String plan) {
+    return 'Pelan $plan anda dijeda.';
+  }
+
+  @override
+  String get firmwareNewestSupportedForDevice =>
+      'Peranti anda sudah menggunakan versi firmware terbaharu yang disokong';
+
+  @override
+  String get firmwareSyncRecordingsFirstTitle => 'Segerakkan rakaman anda terlebih dahulu';
+
+  @override
+  String get firmwareSyncRecordingsFirstMessage =>
+      'Sebahagian rakaman masih berada pada peranti anda. Biarkan ia selesai disegerakkan ke telefon anda, kemudian mulakan kemas kini.';
 }

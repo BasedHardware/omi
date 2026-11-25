@@ -55,6 +55,7 @@ from utils.conversations.finalization_decision import (
 from utils.conversations.processing_trigger import is_recovery_trigger
 from utils.conversations.processing_trigger import ProcessingTrigger
 from utils.conversations.terminal_relevance import stamp_terminal_decision
+from utils.conversations import terminal_settled
 from utils.llm.gateway_error_contract import (
     is_byok_account_state_http_exception,
     is_retryable_processing_http_exception,
@@ -417,6 +418,13 @@ def complete_orphan_batch_capture(
         'relevance_decision': terminal['relevance_decision'],
         'home_transcription_pending_at': now,
         'home_transcription_deadline_at': now + timedelta(seconds=home_transcription_deadline_seconds()),
+        **terminal_settled.settle(
+            current,
+            now=now,
+            enabled=terminal_settled.serving(
+                jobs_db.uid_from_conversation_path(str(getattr(conversation_ref, 'path', ''))) or ''
+            ),
+        ),
     }
     transaction.update(conversation_ref, updates)
 

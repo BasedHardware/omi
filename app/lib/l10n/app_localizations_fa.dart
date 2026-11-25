@@ -15329,9 +15329,6 @@ class AppLocalizationsFa extends AppLocalizations {
   String get stopThese => 'توقف این موارد';
 
   @override
-  String get meetingActionItemsTitle => 'موارد اقدام';
-
-  @override
   String get addToTasks => 'افزودن به وظایف';
 
   @override
@@ -15816,4 +15813,26 @@ class AppLocalizationsFa extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get playStripeBilledOnWeb => 'صورتحساب از طریق omi.me. هر زمان از اینجا لغو کنید.';
+
+  @override
+  String get playStripeBilledOnWebShort => 'صورتحساب از طریق omi.me.';
+
+  @override
+  String playStripePlanPaused(String plan) {
+    return 'طرح $plan شما متوقف شده است.';
+  }
+
+  @override
+  String get firmwareNewestSupportedForDevice =>
+      'دستگاه شما در حال حاضر روی جدیدترین نسخه فریم‌ور پشتیبانی‌شده قرار دارد';
+
+  @override
+  String get firmwareSyncRecordingsFirstTitle => 'ابتدا ضبط‌های خود را همگام‌سازی کنید';
+
+  @override
+  String get firmwareSyncRecordingsFirstMessage =>
+      'برخی ضبط‌ها هنوز روی دستگاه شما هستند. اجازه دهید همگام‌سازی آن‌ها به گوشی شما کامل شود، سپس بروزرسانی را شروع کنید.';
 }

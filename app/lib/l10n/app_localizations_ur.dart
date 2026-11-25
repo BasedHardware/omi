@@ -15348,9 +15348,6 @@ class AppLocalizationsUr extends AppLocalizations {
   String get stopThese => 'یہ روکیں';
 
   @override
-  String get meetingActionItemsTitle => 'عمل کے نکات';
-
-  @override
   String get addToTasks => 'ٹاسکس میں شامل کریں';
 
   @override
@@ -15836,4 +15833,25 @@ class AppLocalizationsUr extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get playStripeBilledOnWeb => 'omi.me کے ذریعے بل کیا جاتا ہے۔ کسی بھی وقت یہاں سے منسوخ کریں۔';
+
+  @override
+  String get playStripeBilledOnWebShort => 'omi.me کے ذریعے بل کیا جاتا ہے۔';
+
+  @override
+  String playStripePlanPaused(String plan) {
+    return 'آپ کا $plan پلان روک دیا گیا ہے۔';
+  }
+
+  @override
+  String get firmwareNewestSupportedForDevice => 'آپ کا ڈیوائس پہلے ہی سپورٹ شدہ تازہ ترین فرم ویئر ورژن پر ہے';
+
+  @override
+  String get firmwareSyncRecordingsFirstTitle => 'پہلے اپنی ریکارڈنگز سنک کریں';
+
+  @override
+  String get firmwareSyncRecordingsFirstMessage =>
+      'کچھ ریکارڈنگز ابھی آپ کے ڈیوائس پر ہیں۔ انہیں فون پر سنک ہونے دیں، پھر اپڈیٹ شروع کریں۔';
 }

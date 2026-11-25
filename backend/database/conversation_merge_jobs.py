@@ -19,6 +19,7 @@ from database._client import get_firestore_client
 from config.record_wal_duplicate import MERGE_PLAN_FIELD
 from database.record_wal_merge import plan_retention, RetainedMergeDeferred
 from database.conversation_merge_policy import source_has_merge_receipt
+from utils.conversations import terminal_settled
 
 COLLECTION = 'conversation_finalization_jobs'
 KIND = 'conversation_merge'
@@ -290,6 +291,7 @@ def finish_recovery(job_id: str, epoch: int, *, firestore_client: Any = None) ->
                         'status': 'completed',
                         'merge_job_id': firestore.DELETE_FIELD,
                         'relevance_decision': terminal['relevance_decision'],
+                        **terminal_settled.settle(data, now=_now(), enabled=terminal_settled.serving(row['uid'])),
                     },
                 )
         transaction.update(

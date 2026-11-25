@@ -80,7 +80,7 @@ class _FakeAudioSegment:
 _PART_PCM = {1000.0: b'\x01' * 320_000, 1200.0: b'\x02' * 160_000}
 
 
-def _fake_download(uid, conversation_id, timestamps, fill_gaps=True, sample_rate=16000):
+def _fake_download(uid, conversation_id, timestamps, fill_gaps=True, sample_rate=16000, *, raw_memo=None):
     first = sorted(timestamps)[0]
     if first not in _PART_PCM:
         raise FileNotFoundError(f'no chunks at {first}')
@@ -89,7 +89,8 @@ def _fake_download(uid, conversation_id, timestamps, fill_gaps=True, sample_rate
 
 def test_span_math_collapses_inter_part_gap(monkeypatch):
     monkeypatch.setattr(playback, 'AudioSegment', _FakeAudioSegment)
-    monkeypatch.setattr(playback, 'download_audio_chunks_and_merge', _fake_download)
+    download = MagicMock(wraps=_fake_download)
+    monkeypatch.setattr(playback, 'download_audio_chunks_and_merge', download)
 
     audio_files = [
         {'id': 'A', 'chunk_timestamps': [1000.0]},
@@ -97,6 +98,9 @@ def test_span_math_collapses_inter_part_gap(monkeypatch):
     ]
     mp3, spans = playback.build_conversation_playback_artifact('u', 'c', audio_files, 990.0)
 
+    first_read, second_read = download.call_args_list
+    assert first_read.kwargs['raw_memo'] is not None
+    assert first_read.kwargs['raw_memo'] is second_read.kwargs['raw_memo']
     assert mp3 == b'MP3'
     assert spans == [
         {'file_id': 'A', 'wall_offset': 10.0, 'artifact_offset': 0.0, 'len': 10.0},
@@ -325,7 +329,7 @@ def test_skewed_part_wall_offset_uses_persisted_playback_start(monkeypatch):
     """
     pcm = {1171.0: b'\x01' * 320_000, 1300.0: b'\x02' * 320_000}
 
-    def fake_download(uid, conversation_id, timestamps, fill_gaps=True, sample_rate=16000):
+    def fake_download(uid, conversation_id, timestamps, fill_gaps=True, sample_rate=16000, *, raw_memo=None):
         first = sorted(timestamps)[0]
         if first not in pcm:
             raise FileNotFoundError(f'no chunks at {first}')

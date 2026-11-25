@@ -15439,9 +15439,6 @@ class AppLocalizationsTa extends AppLocalizations {
   String get stopThese => 'இவற்றை நிறுத்து';
 
   @override
-  String get meetingActionItemsTitle => 'செயல் உருப்படிகள்';
-
-  @override
   String get addToTasks => 'பணிகளில் சேர்க்கவும்';
 
   @override
@@ -15930,4 +15927,27 @@ class AppLocalizationsTa extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get playStripeBilledOnWeb =>
+      'omi.me மூலம் கட்டணம் வசூலிக்கப்படுகிறது. எப்போது வேண்டுமானாலும் இங்கே ரத்து செய்யலாம்.';
+
+  @override
+  String get playStripeBilledOnWebShort => 'omi.me மூலம் கட்டணம் வசூலிக்கப்படுகிறது.';
+
+  @override
+  String playStripePlanPaused(String plan) {
+    return 'உங்கள் $plan திட்டம் இடைநிறுத்தப்பட்டுள்ளது.';
+  }
+
+  @override
+  String get firmwareNewestSupportedForDevice =>
+      'உங்கள் சாதனம் ஏற்கனவே ஆதரிக்கப்படும் மிகச் சமீபத்திய ஃபார்ம்வேர் பதிப்பில் உள்ளது';
+
+  @override
+  String get firmwareSyncRecordingsFirstTitle => 'முதலில் உங்கள் பதிவுகளை ஒத்திசைக்கவும்';
+
+  @override
+  String get firmwareSyncRecordingsFirstMessage =>
+      'சில பதிவுகள் இன்னும் உங்கள் சாதனத்தில் உள்ளன. அவை உங்கள் தொலைபேசிக்கு ஒத்திசைவை முடிக்க அனுமதித்து, பிறகு புதுப்பிப்பைத் தொடங்கவும்.';
 }

@@ -223,3 +223,19 @@ def test_semantic_duplicate_hint_without_transfer_receipt_remains_mergeable(stor
     job = admit(store)
     assert job is not None
     assert all(row(store, cid)['merge_job_id'] == job['job_id'] for cid in ('a', 'b'))
+
+
+@pytest.mark.parametrize('stamped', [False, True])
+def test_rollback_stamps_the_settle_time_only_when_missing(store, monkeypatch, stamped):
+    monkeypatch.delenv('CONVERSATION_TERMINAL_FAMILY_MODE', raising=False)
+    earlier = NOW - timedelta(hours=1)
+    if stamped:
+        row(store, 'a')['terminal_family_at'] = earlier
+    job = admit(store)
+    jobs.claim(job['job_id'], firestore_client=store[0])
+    monkeypatch.setattr(jobs, '_now', lambda: NOW + jobs.LEASE + timedelta(seconds=1))
+    recovery = jobs.begin_recovery(job['job_id'], firestore_client=store[0])
+    assert jobs.finish_recovery(job['job_id'], recovery['lease_epoch'], firestore_client=store[0])
+    expected = earlier if stamped else NOW + jobs.LEASE + timedelta(seconds=1)
+    assert row(store, 'a')['terminal_family_at'] == expected
+    assert 'terminal_family' not in row(store, 'a')

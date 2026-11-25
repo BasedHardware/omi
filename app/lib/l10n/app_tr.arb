@@ -4657,7 +4657,6 @@
     "capturePendantDisconnectedShort": "Omi kendiliğinden yeniden bağlanır",
     "forYou": "Sizin İçin",
     "stopThese": "Bunları Durdur",
-    "meetingActionItemsTitle": "Eylem öğeleri",
     "addToTasks": "Görevlere Ekle",
     "showInTranscript": "Transkriptte Göster",
     "tentativeTaskDueDate": "Yaklaşık teslim tarihi {date}",
@@ -4798,5 +4797,11 @@
     "prepaidCodeFieldHint": "Kodunuzu girin",
     "prepaidCodeRedeem": "Kullan",
     "prepaidCodeRedeemed": "Kod kullanıldı",
-    "prepaidCodeResult": "{reason, select, invalid{Bu kod geçerli değil. Kontrol edip tekrar deneyin.} used{Bu kod zaten kullanılmış.} expired{Bu kodun süresi dolmuş.} hasPlan{Zaten bir planınız var. Kodunuz kullanılmadı. Planınız bittikten sonra kullanın.} notPrepaid{Bu kod burada kullanılamaz. Bir plan seçerken kullanın.} notEligible{Bu kod bu hesapta kullanılamaz.} rateLimited{Çok fazla deneme. Daha sonra tekrar deneyin.} other{Bir sorun oluştu. Lütfen tekrar deneyin.}}"
+    "prepaidCodeResult": "{reason, select, invalid{Bu kod geçerli değil. Kontrol edip tekrar deneyin.} used{Bu kod zaten kullanılmış.} expired{Bu kodun süresi dolmuş.} hasPlan{Zaten bir planınız var. Kodunuz kullanılmadı. Planınız bittikten sonra kullanın.} notPrepaid{Bu kod burada kullanılamaz. Bir plan seçerken kullanın.} notEligible{Bu kod bu hesapta kullanılamaz.} rateLimited{Çok fazla deneme. Daha sonra tekrar deneyin.} other{Bir sorun oluştu. Lütfen tekrar deneyin.}}",
+    "playStripeBilledOnWeb": "omi.me üzerinden faturalandırılır. İstediğin zaman buradan iptal et.",
+    "playStripeBilledOnWebShort": "omi.me üzerinden faturalandırılır.",
+    "playStripePlanPaused": "{plan} planın duraklatıldı.",
+    "firmwareNewestSupportedForDevice": "Cihazınız zaten desteklenen en yeni firmware sürümünü kullanıyor",
+    "firmwareSyncRecordingsFirstTitle": "Önce kayıtlarınızı senkronize edin",
+    "firmwareSyncRecordingsFirstMessage": "Bazı kayıtlar hâlâ cihazınızda. Telefonunuza senkronize edilmelerini bekleyin, ardından güncellemeyi başlatın."
 }

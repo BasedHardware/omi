@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import 'package:omi/l10n/app_localizations.dart';
+import 'package:omi/backend/http/api/payment.dart' show paymentRefusalMessage, useGooglePlayCode;
 import 'package:omi/pages/settings/payment_webview_page.dart';
 import 'package:omi/services/billing/play_billing.dart';
 import 'package:omi/utils/analytics/registry/events.g.dart' show UpgradeBillingProviderStage;
@@ -15,7 +16,9 @@ import 'package:omi/utils/other/temp.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
 
 /// [pending]: Google Play accepted a purchase whose payment has not cleared; nothing to retry or upsell.
-enum PaywallCheckoutOutcome { purchased, cancelled, failed, pending }
+/// [alreadyPaid]: the reader already has a paid plan billed outside Google Play on a build that sells through
+/// Play, so no Stripe Checkout starts; the paywall closes with nothing bought.
+enum PaywallCheckoutOutcome { purchased, cancelled, failed, pending, alreadyPaid }
 
 /// The purchase path shared by every paywall variant: the same Stripe Checkout session and in-app
 /// webview the `PlansSheet` uses for a free user, with the same analytics. Variants only change
@@ -56,6 +59,18 @@ abstract final class PaywallCheckout {
     if (provider.playBilledPurchaser) {
       return _startPlay(context, plan: plan, interval: interval, source: source, report: report, trialDays: trialDays);
     }
+    // A build that sells through Google Play starts no Stripe Checkout. A paid Stripe reader (a paywall still
+    // open when Play setup or the plan arrived) may only reactivate the same price while its cancel is pending.
+    final reactivateOnly = provider.buysThroughPlay;
+    if (reactivateOnly &&
+        cancelPendingPurchase(
+              cancelAtPeriodEnd: subscription?.cancelAtPeriodEnd == true,
+              currentPriceId: subscription?.currentPriceId,
+              priceId: priceId,
+            ) !=
+            CancelPendingPurchase.resubscribe) {
+      return PaywallCheckoutOutcome.alreadyPaid;
+    }
     PlatformManager.instance.analytics.upgradePlanSelected(plan: plan, billingInterval: interval, source: source);
     try {
       final session = await provider.createUserCheckoutSession(priceId: priceId, trialDays: trialDays);
@@ -63,11 +78,14 @@ abstract final class PaywallCheckout {
       if (session != null && session['error'] == true) {
         // Checkout's 409 is an existing subscription, not a pending cancellation.
         report(
-          session['status_code'] == 409
-              ? l10n.checkoutExistingSubscription
-              : session['detail'] as String? ?? l10n.couldNotProcessSubscription,
+          paymentRefusalMessage(session) ??
+              (session['status_code'] == 409
+                  ? l10n.checkoutExistingSubscription
+                  : session['detail'] as String? ?? l10n.couldNotProcessSubscription),
           error: true,
         );
+        // The server now sells this client through Google Play: read the plan again so the paywall shows Play.
+        if (session['code'] == useGooglePlayCode) await provider.fetchSubscription(fresh: true);
         return PaywallCheckoutOutcome.failed;
       }
       if (session == null) {
@@ -84,6 +102,11 @@ abstract final class PaywallCheckout {
             .upgradeSucceeded(previousPlan: previousPlan, newPlan: plan, billingInterval: interval);
         await provider.fetchSubscription(fresh: true);
         return PaywallCheckoutOutcome.purchased;
+      }
+      // Never open Stripe Checkout on a build that sells through Google Play, even when that became known while
+      // the request was in flight; a reactivation answers `reactivated` above, never with a Checkout URL.
+      if (reactivateOnly || provider.buysThroughPlay) {
+        return provider.playBilledPurchaser ? PaywallCheckoutOutcome.failed : PaywallCheckoutOutcome.alreadyPaid;
       }
       final url = session['url'] as String?;
       if (url == null) {

@@ -55,6 +55,20 @@ void main() {
   });
 
   group('processInProgressConversationOutcome', () {
+    test('sends the known live window ID and preserves a benign 404 answer', () async {
+      final outcome = await processInProgressConversationOutcome(
+        liveConversationId: 'live-1',
+        sendRequest: (request) async {
+          expect(request.method, 'POST');
+          expect(jsonDecode(request.body), {'live_conversation_id': 'live-1'});
+          return http.Response('', 404);
+        },
+      );
+
+      expect(outcome.absence, ProcessAbsence.notFound);
+      expect(outcome.response, isNull);
+    });
+
     test('retries the identical in-progress request after the typed 503 and returns its summary', () async {
       final requests = <ApiRequest>[];
       final waits = <Duration>[];

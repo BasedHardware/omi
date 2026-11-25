@@ -8,6 +8,7 @@ import json
 import logging
 import os
 import time
+from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
@@ -15,9 +16,16 @@ from google.api_core.exceptions import DeadlineExceeded, InvalidArgument
 from google.cloud import firestore
 from google.cloud.firestore_v1 import FieldFilter
 
+from database import home_visibility_index
 from database._client import firestore_failure_reason, get_firestore_client
-from database.transcript_pointer import TranscriptBlobAbsent, TranscriptShredded
+from database.transcript_pointer import (
+    MAX_PRELOAD_DOCUMENTS,
+    TranscriptBlobAbsent,
+    TranscriptShredded,
+    run_preloaded_transaction_with_contention_retry,
+)
 from database import conversations, conversations_v3_leases as leases
+from database.conversations_v3_finish_predecessors import attach as attach_finish_predecessors
 from database.conversations_v3_undo_removals import removal_ref
 from database.home_feed_fields import COMMIT_STAMPED_FIELDS
 from database.account_deletion_marker import account_deletion_blocks_user_work, account_deletion_document
@@ -25,8 +33,16 @@ from database.account_deletion_policy import account_deletion_marker_blocks_acce
 from models.finalization_owner import ENGINE_FIELD, EPOCH_FIELD, python_owns_finalization
 from utils.encryption import encrypt, decrypt
 from utils.home_feed.projection import stamp as stamp_home_display
-from config.record_wal_duplicate import has_retained_custody
+from database.conversation_batch_purge_jobs import arm_fields, job_ref
+from config.record_wal_duplicate import (
+    MERGE_PLAN_FIELD,
+    MERGE_TARGET_FIELD,
+    RETAINED_DONORS_FIELD,
+    SETTLED_FIELD,
+    has_retained_custody,
+)
 from config.conversations_v3 import boundary_seconds, stretch_cohesion_enabled
+from utils.conversations import terminal_settled
 from utils.conversations.v3 import Conflict, policy, preview_wakes, request_log_trace_id
 from utils.open_loops.extraction import OPEN_LOOP_EXTRACTIONS_COMPRESSED_FIELD, OPEN_LOOP_EXTRACTIONS_FIELD
 
@@ -214,7 +230,7 @@ def save_outline(uid, token, fingerprint, entries, *, key='builder', preview=Non
         cache.append({'fingerprint': fingerprint, 'entries': entries, **(preview or {})})
         tx.update(ref, {'outline_cache': encrypt(json.dumps(cache[-128:], default=str), uid)})
 
-    save(client.transaction())
+    run_preloaded_transaction_with_contention_retry(client, save)
 
 
 BLOCKED_BACKOFF_MAX = timedelta(hours=1)
@@ -239,7 +255,7 @@ def record_blocked(uid, token, reason, *, firestore_client=None):
         tx.update(ref, {'v3_blocked_count': count, 'v3_blocked_reason': reason, 'v3_backoff_until': now + delay})
         return True
 
-    return park(client.transaction())
+    return run_preloaded_transaction_with_contention_retry(client, park)
 
 
 def backoff_until(uid, *, firestore_client=None):
@@ -437,6 +453,7 @@ def load(uid, *, conversation_id=None, firestore_client=None):
         if policy.builder_eligible({**unreadable[rid], '_v3_unreadable': False}):
             raise Conflict('recording_decode_unavailable')
     _mark_successor_pending(coll, recordings)
+    attach_finish_predecessors(coll, recordings, existing)
     return {**recordings, **unreadable}, existing, cache
 
 
@@ -704,15 +721,17 @@ def commit_projection(
                         {OPEN_LOOP_EXTRACTIONS_FIELD: retained}, uid, level
                     )
                 )
-        prepared.append(encoded)
+        prepared.append(home_visibility_index.stamp(encoded))
     encrypted_cache = encrypt(json.dumps(cache, default=str), uid)
     batch_reads = os.getenv('CONVERSATIONS_V3_BATCH_COMMIT_READS', 'on').strip().lower() != 'off'
+    settle_enabled = terminal_settled.serving(uid)
     # What the current transaction attempt writes, kept by reference and sized only after a failure.
     staged = {}
 
     @firestore.transactional
     def commit(tx, batch_rows, batch_prepared, final):
         observed = {}
+        batch_moved = set()
         staged.clear()
         staged.update(
             rows=[row for raw, row in zip(batch_rows, batch_prepared) if not raw.get('deleted')], recordings={}
@@ -734,7 +753,7 @@ def commit_projection(
             if not snapshot.exists or snapshot.update_time != row['_v3_revision']:
                 if rid in existing or rid not in recordings or not speech_moved(row, current):
                     raise Conflict('source_changed')
-                moved.add(rid)
+                batch_moved.add(rid)
             observed[rid] = current or {}
         absorbed = {cid: row['id'] for row in batch_rows for cid in row.get('_v3_absorbed', ())}
         touched = {*(row['id'] for row in batch_rows), *absorbed}
@@ -746,20 +765,18 @@ def commit_projection(
             raise Conflict('source_changed')
         if retired and merge_donors_have_tasks(uid, retired, firestore_client=client, transaction=tx):
             raise Conflict('rederive_live_donor_tasks')
-        for cid in [*(row['id'] for row in batch_rows), *absorbed, *(retire if final else ())]:
-            tombstone = (
-                client.collection('users')
-                .document(uid)
-                .collection('deleted_conversations')
-                .document(cid)
-                .get(transaction=tx)
-            )
-            if tombstone.exists:
-                raise Conflict('target_deleted')
-        new_ids = {r['id'] for r in batch_rows} - existing.keys()
-        for cid in new_ids:
-            if coll.document(cid).get(transaction=tx).exists:
-                raise Conflict('target_exists')
+        tombstones = client.collection('users').document(uid).collection('deleted_conversations')
+        tombstone_ids = list(dict.fromkeys([*(row['id'] for row in batch_rows), *absorbed, *(retire if final else ())]))
+        if any(
+            snapshot.exists
+            for _, snapshot in _projection_snapshots(client, tombstones, tx, tombstone_ids, batch_reads=batch_reads)
+        ):
+            raise Conflict('target_deleted')
+        new_ids = sorted({r['id'] for r in batch_rows} - existing.keys())
+        if any(
+            snapshot.exists for _, snapshot in _projection_snapshots(client, coll, tx, new_ids, batch_reads=batch_reads)
+        ):
+            raise Conflict('target_exists')
         if final:
             for cid in remove:
                 # Only a backfill re-derive retires a copy, and only its own backfilled rows.
@@ -768,6 +785,8 @@ def commit_projection(
         from database.recurring_voice_privacy import filter_processing_write
 
         user = client.collection('users').document(uid)
+        # Filtering can mutate the encoded payload; every attempt needs its original input.
+        batch_prepared = [dict(row) for row in batch_prepared]
         for row in batch_prepared:
             filter_processing_write(tx, user, row)
         for raw, row in zip(batch_rows, batch_prepared):
@@ -776,6 +795,8 @@ def commit_projection(
             if final and row['id'] in retire:
                 # A live re-derive survivor's bridge list lands with the bridges it names.
                 row = {**row, **retire[row['id']]}
+            # Planned settles (failure patch, unavailable preview) close here; the planner row keeps any prior stamp.
+            row = terminal_settled.stamp(observed.get(row['id']) or {}, dict(row), now=now, enabled=settle_enabled)
             tx.set(coll.document(row['id']), row)
         for cid, survivor in absorbed.items():
             tx.update(
@@ -784,6 +805,7 @@ def commit_projection(
                     'deleted': True,
                     'discarded': True,
                     'home_hidden': True,
+                    home_visibility_index.FIELD: False,
                     'summary_due_at': None,
                     'sync_merged_into': survivor,
                     'v3_claims_transferred_to': survivor,
@@ -806,7 +828,7 @@ def commit_projection(
             if recording.get('deleted') or recording.get('sync_merged_into'):
                 tx.update(coll.document(rid), {'v3_pending': False, 'v3_pending_since': None})
                 continue
-            if rid in moved:
+            if rid in batch_moved or rid in moved:
                 # Merge onto the re-read document; never write the stale snapshot's view of a live source.
                 claims = [c for c in observed[rid].get('claims') or [] if c['conversation_id'] not in replaced]
                 for row in batch_rows:
@@ -890,7 +912,7 @@ def commit_projection(
                 lease_update['unlocked_ids'] = sorted(previous_unlocked | unlocked)
         staged['lease'] = (lease, lease_update)
         tx.update(held, lease_update)
-        return observed
+        return observed, batch_moved, batch_prepared
 
     fixed = fixed_write_bytes(recordings, rows, encrypted_cache)
     # Reserve space for all donor writes, including the task-link fences in the survivor's batch.
@@ -898,22 +920,28 @@ def commit_projection(
     if retired and fixed_writes + bool(rows) > BATCH_MAX_WRITES:
         raise Conflict('backfill_partition_budget')
     max_rows = max(1, BATCH_MAX_WRITES - fixed_writes)
-    batches, current, size = [], [], 0
+    batches, current, size, pointers = [], [], 0, 0
     for raw, encoded in zip(rows, prepared):
         amount = len(json.dumps(encoded, default=str).encode())
+        # Privacy filtering resolves each prepared pointer before the first write.
+        pointer = isinstance(encoded.get('transcript_segments'), dict)
         if current and (
-            size + amount > BATCH_ROW_BYTES or fixed + size + amount > BATCH_WRITE_BYTES or len(current) >= max_rows
+            size + amount > BATCH_ROW_BYTES
+            or fixed + size + amount > BATCH_WRITE_BYTES
+            or len(current) >= max_rows
+            or (pointer and pointers >= MAX_PRELOAD_DOCUMENTS)
         ):
             batches.append(current)
-            current, size = [], 0
+            current, size, pointers = [], 0, 0
         current.append((raw, encoded))
         size += amount
+        pointers += pointer
     if current or not batches:
         batches.append(current)
     for index, batch in enumerate(batches):
         try:
-            observed = commit(
-                client.transaction(), [r for r, _ in batch], [r for _, r in batch], index == len(batches) - 1
+            observed, batch_moved, committed_prepared = run_preloaded_transaction_with_contention_retry(
+                client, commit, [r for r, _ in batch], [r for _, r in batch], index == len(batches) - 1
             )
         except Conflict:
             raise
@@ -928,6 +956,7 @@ def commit_projection(
                 len(batches),
             )
             raise
+        moved.update(batch_moved)
         from utils.conversations.v3 import metrics
 
         for row, _encoded in batch:
@@ -952,7 +981,7 @@ def commit_projection(
                 }
                 if recordings[rid].get('_v3_derive'):
                     # Our own committed conversion, not an external change.
-                    owned |= {'recording', 'v3_backfill_run', 'v3_backfill_prior'}
+                    owned |= {'recording', home_visibility_index.FIELD, 'v3_backfill_run', 'v3_backfill_prior'}
                 changed = sorted(
                     k
                     for k in set(current) | set(observed[rid])
@@ -976,7 +1005,7 @@ def commit_projection(
                     '_v3_revision': snapshot.update_time,
                     **({'_v3_fence': source_fence(current)} if recordings[rid].get('_v3_fence') is not None else {}),
                 }
-            for raw, encoded in batch:
+            for (raw, _), encoded in zip(batch, committed_prepared):
                 snapshot = coll.document(raw['id']).get()
                 if snapshot.exists:
                     current = snapshot.to_dict() or {}
@@ -1126,7 +1155,7 @@ def backfill_conversion(recording):
     patch = {'recording': True, 'backfill_superseded': True, 'v3_backfill_run': recording['_v3_backfill_run']}
     if '_v3_backfill_prior' in recording:
         patch['v3_backfill_prior'] = recording['_v3_backfill_prior']
-    return patch
+    return home_visibility_index.stamp(patch)
 
 
 def _rederive_prior(row):
@@ -1347,7 +1376,7 @@ def restore_backfill_donors(uid, token, ids, *, firestore_client=None):
                 continue
             patch = {k: prior[k] if k in prior else firestore.DELETE_FIELD for k in BACKFILL_TRACKED}
             patch.update(v3_backfill_run=firestore.DELETE_FIELD, v3_backfill_prior=firestore.DELETE_FIELD)
-            tx.update(ref, patch)
+            tx.update(ref, home_visibility_index.stamp(patch, row))
             restored += 1
         return restored, kept
 
@@ -1377,16 +1406,64 @@ def delete_backfill_rows(uid, token, ids, *, firestore_client=None):
     return remove(client.transaction())
 
 
-def claim_audio_purge(uid, rid, *, firestore_client=None):
-    """Close the owner before prefix deletion so late sync cannot reuse it."""
+# Record-WAL duplicate custody a user erasure invalidates. The merge plan is
+# job-scoped today; clearing it here keeps a stray row copy from outliving erasure.
+AUDIO_PURGE_CUSTODY_FIELDS = (SETTLED_FIELD, RETAINED_DONORS_FIELD, MERGE_TARGET_FIELD, MERGE_PLAN_FIELD)
+# Batch intakes keyed to the recording (wal_duplicate_<file>, wal_duplicate_terminal_<job>)
+# are owed erasure before the blobs go: 'inline' runs purge_batch_owner in the sweep,
+# 'armed' means a conversation_batch_purge_jobs obligation was written with this marker.
+AUDIO_PURGE_INTAKES_FIELD = 'v3_audio_purge_intakes'
+# A merge target's retained donors, kept from the custody clear until the blob erase runs.
+AUDIO_PURGE_DONORS_FIELD = 'v3_audio_purge_source_ids'
+
+
+def _custody_clear(row):
+    """Delete each AUDIO_PURGE_CUSTODY_FIELDS field present on ``row``.
+
+    Keys are spelled out rather than generated so the terminal-writer ratchet
+    can see this patch never carries ``status``.
+    """
+    clear = {
+        SETTLED_FIELD: firestore.DELETE_FIELD,
+        RETAINED_DONORS_FIELD: firestore.DELETE_FIELD,
+        MERGE_TARGET_FIELD: firestore.DELETE_FIELD,
+        MERGE_PLAN_FIELD: firestore.DELETE_FIELD,
+    }
+    for field in list(clear):
+        if field not in row:
+            del clear[field]
+    return clear
+
+
+@dataclass(frozen=True)
+class AudioPurgeClaim:
+    """What the purge owes before deleting blobs. ``intakes``: none, inline, pending or done."""
+
+    custody_invalidated: bool = False
+    intakes: str = 'none'
+    donor_ids: tuple[str, ...] = ()
+
+
+def claim_audio_purge(uid, rid, *, defer_intake_purge=False, firestore_client=None):
+    """Close the owner before prefix deletion so late sync cannot reuse it.
+
+    A user deletion outranks record-WAL duplicate custody: the same commit that
+    closes the owner clears the custody fields and records that the batch
+    intakes are owed erasure (arming the obligations when ``defer_intake_purge``).
+    A merge target's retained donors are erased with it, so the commit also
+    writes each donor's deletion intent and clears its custody; an erased donor
+    is removed from its live successor's lineage. Returns False when the row is
+    not purgeable, else an ``AudioPurgeClaim``.
+    """
     client = firestore_client or get_firestore_client()
-    ref = user_conversations(client, uid).document(rid)
-    tombstone = client.collection('users').document(uid).collection('deleted_conversations').document(rid)
+    conversations_ref = user_conversations(client, uid)
+    ref = conversations_ref.document(rid)
+    tombstones = client.collection('users').document(uid).collection('deleted_conversations')
 
     @firestore.transactional
     def claim(tx):
         row = ref.get(transaction=tx).to_dict() or {}
-        intent = tombstone.get(transaction=tx)
+        intent = tombstones.document(rid).get(transaction=tx)
         if (
             not row.get('recording')
             or not row.get('v3_audio_purge_pending')
@@ -1396,13 +1473,83 @@ def claim_audio_purge(uid, rid, *, firestore_client=None):
             or row.get('status') != 'completed'
         ):
             return False
+        custody = has_retained_custody(row) or bool(row.get(MERGE_PLAN_FIELD))
+        owed = row.get(AUDIO_PURGE_INTAKES_FIELD)
+        if custody and owed is None:
+            owed = 'inline'
+        donors = list(row.get(AUDIO_PURGE_DONORS_FIELD) or [])
+        retained = row.get(RETAINED_DONORS_FIELD) if custody else None
+        if isinstance(retained, list) and retained and not donors:
+            # The donor list goes with custody; the erase it is owed may run sweeps later.
+            donors = [d for d in retained if isinstance(d, str) and d and '/' not in d and d != rid]
+        # Every read precedes the first write. Rows without custody or donors read nothing more.
+        donor_rows = {donor: conversations_ref.document(donor).get(transaction=tx) for donor in donors}
+        donor_intents = {donor: tombstones.document(donor).get(transaction=tx).exists for donor in donors}
+        # A donor another target now retains is not this recording's to erase.
+        donors = [
+            donor
+            for donor in donors
+            if not isinstance(target := (donor_rows[donor].to_dict() or {}).get(MERGE_TARGET_FIELD), str)
+            or target == rid
+        ]
+        owners = (rid, *donors)
+        armed = {owner: job_ref(client, uid, owner).get(transaction=tx).exists for owner in owners} if owed else {}
+        successor_id = row.get(MERGE_TARGET_FIELD) if custody else None
+        successor_ref = (
+            conversations_ref.document(successor_id) if isinstance(successor_id, str) and successor_id else None
+        )
+        successor = (successor_ref.get(transaction=tx).to_dict() or {}) if successor_ref is not None else {}
+        now = datetime.now(timezone.utc)
         if not intent.exists:
             tx.set(
-                tombstone,
-                {'conversation_id': rid, 'deleted_at': datetime.now(timezone.utc), 'created_at': row.get('created_at')},
+                tombstones.document(rid),
+                {'conversation_id': rid, 'deleted_at': now, 'created_at': row.get('created_at')},
             )
-        tx.update(ref, {'deleted': True, 'v3_audio_erased': True})
-        return True
+        for donor in donors:
+            snapshot = donor_rows[donor]
+            donor_row = (snapshot.to_dict() or {}) if snapshot.exists else {}
+            if not donor_intents[donor]:
+                # The donor's own deletion intent: its batch purge requires it, and handoff,
+                # live upload and merge publication refuse a tombstoned donor.
+                tx.set(
+                    tombstones.document(donor),
+                    {'conversation_id': donor, 'deleted_at': now, 'created_at': donor_row.get('created_at')},
+                )
+            stale = _custody_clear(donor_row)
+            if stale:
+                tx.update(conversations_ref.document(donor), stale)
+        lineage = {}
+        retained_lineage = successor.get(RETAINED_DONORS_FIELD) or []
+        if rid in retained_lineage:
+            lineage[RETAINED_DONORS_FIELD] = [value for value in retained_lineage if value != rid]
+        merged_lineage = successor.get('sync_merged_from') or []
+        if rid in merged_lineage:
+            lineage['sync_merged_from'] = [value for value in merged_lineage if value != rid]
+        if lineage:
+            # The erased donor leaves its successor's lineage, so no later delete or merge resolves it.
+            tx.update(successor_ref, lineage)
+        updates: dict[str, Any] = {'deleted': True, 'v3_audio_erased': True}
+        if custody:
+            updates.update(_custody_clear(row))
+        if donors != list(row.get(AUDIO_PURGE_DONORS_FIELD) or []):
+            updates[AUDIO_PURGE_DONORS_FIELD] = donors
+        if owed == 'inline' and defer_intake_purge:
+            for owner in owners:
+                if not armed[owner]:
+                    # Each owner's tombstone above is the obligation runner's deletion intent.
+                    tx.set(job_ref(client, uid, owner), arm_fields(uid, owner))
+                    armed[owner] = True
+            owed = 'armed'
+        if owed and owed != row.get(AUDIO_PURGE_INTAKES_FIELD):
+            updates[AUDIO_PURGE_INTAKES_FIELD] = owed
+        tx.update(ref, updates)
+        pending = any(armed.values())
+        if owed == 'armed':
+            # Without dispatch the sweep erases inline; absent armed obligations were run to completion.
+            intakes = ('pending' if defer_intake_purge else 'inline') if pending else 'done'
+        else:
+            intakes = owed or 'none'
+        return AudioPurgeClaim(custody_invalidated=custody, intakes=intakes, donor_ids=tuple(donors))
 
     return claim(client.transaction())
 
@@ -1461,7 +1608,7 @@ def outline_attempt(uid, token, fingerprint, *, key='builder', firestore_client=
         tx.update(ref, {'outline_attempts': dict(list(attempts.items())[-128:])})
         return True
 
-    return begin(client.transaction())
+    return run_preloaded_transaction_with_contention_retry(client, begin)
 
 
 def write_live_title_preview(uid, token, cid, revision, *, title=None, firestore_client=None):
@@ -1497,4 +1644,4 @@ def write_live_title_preview(uid, token, cid, revision, *, title=None, firestore
             return True
         return False
 
-    return write(client.transaction())
+    return run_preloaded_transaction_with_contention_retry(client, write)

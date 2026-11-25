@@ -2,13 +2,13 @@
 
 from prometheus_client import Counter, Histogram, Gauge
 
-RECONCILES = Counter('omi_conversations_v3_reconciles_total', 'Builder outcomes', ['outcome'])
+RECONCILES = Counter('omi_conversations_v3_reconciles_total', 'Builder and processing outcomes', ['outcome'])
 BLOCKED = Counter(
     'omi_conversations_v3_blocked_total', 'Deterministic reconcile conflicts parked behind owner backoff', ['reason']
 )
 RACES = Counter(
     'omi_conversations_v3_races_total',
-    'Retryable reconcile races answered with a coalesced follow-up wake instead of a task retry',
+    'Retryable reconcile outcomes answered with a coalesced wake or a task retry',
     ['reason'],
 )
 CREATED_DELIVERIES = Counter(
@@ -36,6 +36,39 @@ for outcome in ('visible', 'hidden'):
     for kind in MANUAL_END_KINDS:
         MANUAL_END_HOME.labels(outcome, kind)
 
+FINISH_NO_POINTER = Counter(
+    'omi_conversations_v3_finish_no_pointer_total',
+    'No-pointer Finish API outcomes, whole-record batch resolution, and first settlement',
+    ['outcome'],
+)
+for outcome in (
+    'cut',
+    'already_cut',
+    'already_empty',
+    'resolved_empty',
+    'requested',
+    'already_requested',
+    'request_conflict',
+    'no_live_window',
+    'disabled',
+    'owner_not_enabled',
+    'recording_lookup_capped',
+    'window_lookup_capped',
+    'recording_ambiguous',
+    'recording_ineligible',
+    'recording_requested',
+    'recording_cut',
+    'no_recording',
+    'batch_disabled',
+    'batch_unavailable',
+    'consumed',
+    'whole_record_consumed',
+    'whole_record_resolved_empty',
+    'whole_record_redirected',
+    'settled',
+):
+    FINISH_NO_POINTER.labels(outcome)
+
 BATCH_MANUAL_END = Counter(
     'omi_conversations_v3_batch_manual_end_total',
     'Manual-end requests of audio-only v3 recordings at record admission, by what admission did with them',
@@ -43,6 +76,11 @@ BATCH_MANUAL_END = Counter(
 )
 for outcome in ('promoted', 'fast_finish', 'multi_unit_deferred', 'not_promoted', 'error'):
     BATCH_MANUAL_END.labels(outcome)
+
+FINISH_HELD = Counter(
+    'omi_conversations_v3_finish_held_total',
+    'Builder passes that kept a manual-end cut open while its own or a preceding batch transcript was pending',
+)
 
 SUMMARY_LATENCY = Histogram('omi_conversations_v3_end_to_summary_seconds', 'End to stored summary')
 SUMMARY_WRITES = Counter('omi_conversations_v3_summary_writes_total', 'First writes and late rewrites', ['kind'])
@@ -88,3 +126,12 @@ def terminal_failure(reason):
 def observe_word_floor(legacy_below: bool, script_aware_below: bool) -> None:
     for method, below in (('legacy', legacy_below), ('script_aware', script_aware_below)):
         WORD_FLOOR_COMPLETIONS.labels(method, 'below' if below else 'met').inc()
+
+
+AUDIO_PURGES = Counter(
+    'omi_conversations_v3_audio_purges_total',
+    'Released-recording audio purge steps: custody invalidated, held, intake purge pending or failed, audio erased',
+    ['outcome'],
+)
+for outcome in ('custody_invalidated', 'held', 'intakes_pending', 'intakes_failed', 'erased'):
+    AUDIO_PURGES.labels(outcome)
