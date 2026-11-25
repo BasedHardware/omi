@@ -449,7 +449,7 @@ void main() {
       expect(harness.drainedWalIds, ['wal-1']);
     });
 
-    test('a due mobile batch can wake the background drain while a pass is finishing', () async {
+    test('a due mobile batch wakes only the phone drain while a background pass is finishing', () async {
       final finishing = Completer<void>();
       final finishEntered = Completer<void>();
       final harness = _TransferHarness(onTransferFinished: () async {
@@ -465,8 +465,9 @@ void main() {
       finishing.complete();
       await current;
       await harness.coordinator.waitUntilIdle();
-      expect(harness.discoveryPasses, 1);
-      expect(harness.drainPasses, 1);
+      expect(harness.discoveryPasses, 0);
+      expect(harness.drainPasses, 0);
+      expect(harness.liveCaptureDrainPasses, 2);
       expect(harness.drainedWalIds, ['wal-1', 'due-mobile-batch']);
     });
 

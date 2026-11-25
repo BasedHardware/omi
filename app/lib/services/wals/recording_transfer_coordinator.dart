@@ -520,10 +520,11 @@ class RecordingTransferCoordinator {
       _scheduleRetry('an abandoned pass has not exited yet');
       return;
     }
-    final backlogWake = trigger == WakeTrigger.periodic ||
-        trigger == WakeTrigger.mobileBatchReady ||
-        trigger == WakeTrigger.deviceConnected ||
-        trigger == WakeTrigger.watchdog;
+    final backlogWake =
+        trigger == WakeTrigger.periodic || trigger == WakeTrigger.deviceConnected || trigger == WakeTrigger.watchdog;
+    // A hold expires on a freshly indexed phone WAL. Keep that wake off the
+    // pendant discovery/download path while its capture may still be live.
+    bool canDrainBacklog() => trigger != WakeTrigger.mobileBatchReady && (_foreground || backlogWake);
     try {
       if (trigger == WakeTrigger.connectivityRestored) {
         await _onConnectivityRestored?.call();
@@ -534,7 +535,7 @@ class RecordingTransferCoordinator {
       // must not stop new recordings from uploading — it is retried instead.
       var reconcileFailed = !await _tryReconcile();
       if (expired()) return;
-      if (_foreground || backlogWake) {
+      if (canDrainBacklog()) {
         await _discover();
       }
       if (expired()) return;
@@ -548,7 +549,7 @@ class RecordingTransferCoordinator {
         return;
       }
 
-      final drain = (_foreground || backlogWake) ? _drain : _drainLiveCapture;
+      final drain = canDrainBacklog() ? _drain : _drainLiveCapture;
       if (drain == null) return;
       final RecordingTransferDrainResult result;
       _periodicDrainInFlight = trigger == WakeTrigger.periodic;
