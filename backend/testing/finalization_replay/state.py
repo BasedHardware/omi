@@ -199,6 +199,7 @@ class CaseState:
         self.embedding_tokens = 0
         self.firestore_operations = {
             'rpc_calls': 0,
+            'failed_commit_rpcs': 0,
             'document_reads': 0,
             'query_documents': 0,
             'query_requests': 0,

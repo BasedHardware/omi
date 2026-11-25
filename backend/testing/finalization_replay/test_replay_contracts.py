@@ -199,6 +199,25 @@ class ReplayContractTests(unittest.TestCase):
         self.assertIsNone(differences[-1]['label'])
         self.assertEqual(enriched['diagnostic']['cohort_gate'], 'closed')
 
+    def test_failed_commits_survive_report_enrichment_and_stay_outside_r7(self):
+        report = {
+            'cases': [
+                {
+                    'name': 'retry',
+                    'cost': {
+                        'python': {'firestore_operations': {'document_reads': 2, 'failed_commit_rpcs': 1}},
+                        'go': {'firestore_operations': {'document_reads': 2, 'failed_commit_rpcs': 3}},
+                    },
+                }
+            ],
+        }
+        for _ in range(2):
+            report = enrich_ordinary_sync_report(report)
+            row = report['operation_table'][0]
+            self.assertEqual((row['python_failed_commit_rpcs'], row['go_failed_commit_rpcs']), (1, 3))
+            self.assertEqual((row['python_operations'], row['go_operations']), (2, 2))
+            self.assertEqual(report['diagnostic']['r7_operation_budget']['status'], 'pass')
+
     def test_missing_profile_or_task_write_proof_is_counted_as_go_gap(self):
         report = {
             'commit_sha': 'fixture',
