@@ -12,7 +12,7 @@ from datetime import datetime, timedelta
 
 import pytest
 
-from utils.conversations.v3 import outline, planner, policy
+from utils.conversations.v3 import outline, planner, policy, preview_wakes
 from utils.conversations.v3.live import FINISH_WINDOW_FIELD
 from tests.unit.test_conversations_v3_claim_growth import strict, owners_import, path, UID  # noqa: F401
 from tests.unit.test_conversations_v3_live_passes import T0, derived, reconcile_at, timing
@@ -218,18 +218,242 @@ async def test_switch_off_restores_the_previous_cut(strict, monkeypatch):
     assert [(ids, manual) for ids, manual, *_ in shape(rows)] == [(['rec-a'], False), (['rec-b', 'rec-f'], True)]
 
 
-# Pure planner: missing audio inside one capture origin is not silence.
+# Production loading: only pending recordings and the closure of loaded rows reach the planner, and the
+# predecessor read runs against the fixture (review of #26304, P1 and P2).
 
 
-def recording(rid, started, seconds, *, origin=ORIGIN, words=5, speech_from=0.0, **extra):
+class _Doc:
+    def __init__(self, rid, data):
+        self.id, self._data = rid, data
+
+    def to_dict(self):
+        return dict(self._data)
+
+
+def _field(row, dotted):
+    for part in dotted.split('.'):
+        row = (row or {}).get(part) if isinstance(row, dict) else None
+    return row
+
+
+class _Rows:
+    """The predecessor read over the fixture's recordings: equality and range filters, newest first."""
+
+    OPS = {'==': lambda a, b: a == b, '<=': lambda a, b: a <= b, '>=': lambda a, b: a >= b, '<': lambda a, b: a < b}
+
+    def __init__(self, rows, calls=None):
+        self.rows, self.filters, self.count, self.calls = rows, [], None, calls if calls is not None else []
+
+    def where(self, *, filter):
+        self.calls.append(('where', filter.field_path, filter.op_string, filter.value))
+        self.filters.append((filter.field_path, filter.op_string, filter.value))
+        return self
+
+    def order_by(self, field, direction=None):
+        self.calls.append(('order_by', field, direction))
+        return self
+
+    def select(self, fields):
+        self.calls.append(('select', tuple(fields)))
+        return self
+
+    def limit(self, count):
+        self.calls.append(('limit', count))
+        self.count = count
+        return self
+
+    def stream(self):
+        self.calls.append(('stream',))
+        hits = [
+            row
+            for row in self.rows
+            if all(_field(row, f) is not None and self.OPS[op](_field(row, f), v) for f, op, v in self.filters)
+        ]
+        hits.sort(key=lambda row: (row['started_at'], row['finished_at']), reverse=True)
+        return iter(_Doc(row['id'], row) for row in hits[: self.count])
+
+
+def production_loader(strict, now, reads=None):
+    from copy import deepcopy
+    from unittest.mock import patch
+
+    from database import conversations_v3_finish_predecessors as finish_predecessors
+
+    class Clock(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return now
+
+    def load(uid, **kwargs):
+        rows = {
+            p[3]: {**deepcopy(r), '_v3_revision': 1}
+            for p, r in strict.rows.items()
+            if len(p) == 4 and p[2] == 'conversations'
+        }
+        existing = {k: r for k, r in rows.items() if r.get('v3_derived')}
+        sources = {k: r for k, r in rows.items() if r.get('recording')}
+        recordings = {k: r for k, r in sources.items() if r.get('v3_pending')}
+        for row in existing.values():  # store.load's closure: every recording a loaded row names
+            for rid in row.get('v3_recording_ids') or ():
+                if rid in sources:
+                    recordings.setdefault(rid, sources[rid])
+        with patch.object(finish_predecessors, 'datetime', Clock):
+            finish_predecessors.attach(_Rows(list(sources.values()), reads), recordings, existing)
+        return recordings, existing, []
+
+    return load
+
+
+async def reconcile_loaded(strict, monkeypatch, now, reads=None):
+    return await reconcile_at(strict, monkeypatch, now, loader=production_loader(strict, now, reads))
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('gap, lock', [(300, 300), (900, 3600)])
+async def test_incident_with_production_loading_finds_the_unloaded_predecessor(strict, monkeypatch, gap, lock):
+    timing(monkeypatch, gap, lock)
+    schedule = incident(strict)
+    strict.rows[path('rec-b')]['v3_pending'] = True  # admission promoted the cut
+    reads = []
+    for rid, started, segments, landed in schedule:
+        await land_one(strict, rid, started, segments, landed)
+        assert await reconcile_loaded(strict, monkeypatch, landed + timedelta(seconds=1), reads) == 'committed'
+    assert await reconcile_loaded(strict, monkeypatch, schedule[-1][3] + timedelta(minutes=10)) == 'committed'
+    assert shape(derived(strict)) == [(['rec-a', 'rec-b', 'rec-f'], True, False, 'manual_end')]
+    # The predecessor read ran only while the cut was fresh and unsettled: at most 8 documents a pass.
+    assert reads.count(('stream',)) <= 3 and ('limit', 8) in reads
+
+
+async def land_one(strict, rid, started, segments, landed):
+    if rid == 'rec-f':
+        extra = {
+            'capture_evidence': {'origin': 'sync_vad'},
+            'record_lane_owner': 'batch_sync_v1',
+            'record_sealed_at': landed.timestamp(),
+            'record_projection_revision': 1,
+        }
+        origin = 'device-sync'
+    else:
+        current = strict.rows[path(rid)]
+        origin = current['external_data']['recording_origin_id']
+        extra = {
+            k: current[k] for k in ('v3_manual_end', 'v3_manual_end_requested', 'record_sealed_at') if k in current
+        }
+        if rid != 'rec-b':
+            extra['record_projection_revision'] = 1
+    put(strict, rid, started=started, segments=segments, landed=landed, origin=origin, **extra)
+
+
+@pytest.mark.asyncio
+async def test_a_finish_whose_own_transcript_never_lands_keeps_its_cut_through_the_wait(strict, monkeypatch):
+    # P1: fast finish off and B's batch transcript never lands. The first held pass must keep B pending, or
+    # the next load (B owns no claim and no row names it) loses the cut and A+F lock as a hidden card.
+    timing(monkeypatch, 300, 300)
+    schedule = incident(strict)
+    strict.rows[path('rec-b')]['v3_pending'] = True
+    f, _, a = schedule
+    cut = strict.rows[path('rec-b')]['finished_at']
+    until = cut + policy.FINISH_WAIT
+    for rid, started, segments, landed in (f, a):
+        await land_one(strict, rid, started, segments, landed)
+        assert await reconcile_loaded(strict, monkeypatch, landed + timedelta(seconds=1)) == 'committed'
+        b = strict.rows[path('rec-b')]
+        assert b['v3_pending'] is True and b['v3_pending_since'] == until, (b['v3_pending'], b['v3_pending_since'])
+        (row,) = derived(strict)
+        assert planner.is_unlocked(row)
+    assert await reconcile_loaded(strict, monkeypatch, until) == 'committed'
+    assert shape(derived(strict)) == [(['rec-a', 'rec-f'], True, False, 'manual_end')]
+    assert strict.rows[path('rec-b')]['v3_pending'] is False
+
+
+@pytest.mark.asyncio
+async def test_the_window_a_held_cut_closes_does_not_lock_by_age(strict, monkeypatch):
+    # P1: a fragment older than the lock delay must not lock while its Finish waits for B's transcript.
+    timing(monkeypatch, 300, 300)
+    b_start = T0 + timedelta(seconds=260)
+    put(
+        strict,
+        'rec-b',
+        started=b_start,
+        segments=None,
+        _audio_seconds=15,
+        v3_manual_end=True,
+        v3_pending=True,
+        v3_pending_since=b_start,
+        record_sealed_at=sealed(b_start) + 20,
+    )
+    put(
+        strict,
+        'rec-f',
+        started=T0,
+        segments=turns(1, words=4, prefix='F'),
+        landed=T0 + timedelta(seconds=302),
+        record_projection_revision=1,
+        origin='device-sync',
+    )
+    assert await reconcile_loaded(strict, monkeypatch, b_start + timedelta(seconds=45)) == 'committed'
+    (fragment,) = derived(strict)
+    assert planner.is_unlocked(fragment)
+    put(
+        strict,
+        'rec-b',
+        started=b_start,
+        segments=turns(3, words=5, prefix='B'),
+        landed=T0 + timedelta(seconds=320),
+        v3_manual_end=True,
+        record_sealed_at=sealed(b_start) + 20,
+    )
+    assert await reconcile_loaded(strict, monkeypatch, T0 + timedelta(seconds=321)) == 'committed'
+    assert shape(derived(strict)) == [(['rec-b', 'rec-f'], True, False, 'manual_end')]
+
+
+@pytest.mark.asyncio
+async def test_a_held_cut_never_joins_the_next_finish(strict, monkeypatch):
+    # P1: B's cut waits for A (its reconnected predecessor); C, a later Finish on another device, must stay
+    # its own conversation while B's cut is held and after it applies.
+    timing(monkeypatch, 300, 300)
+
+    def save(rid, offset, duration, origin, *, speech, cut, pending, session=None):
+        start = T0 + timedelta(seconds=offset)
+        put(
+            strict,
+            rid,
+            started=start,
+            origin=origin,
+            session=session,
+            segments=turns(1, words=20, step=duration + 0.5, prefix=rid) if speech else None,
+            landed=start + timedelta(seconds=duration + 10),
+            _audio_seconds=duration,
+            v3_manual_end=cut,
+            record_sealed_at=(start + timedelta(seconds=duration + 1)).timestamp(),
+            **({'v3_pending': True} if pending else {}),
+        )
+
+    save('A', 0, 60, 'device1', speech=False, cut=False, pending=False)
+    save('B', 400, 20, 'device1', speech=True, cut=True, pending=True)
+    save('C', 470, 22, 'device2', speech=True, cut=True, pending=True)
+    assert await reconcile_loaded(strict, monkeypatch, T0 + timedelta(seconds=502)) == 'committed'
+    (held,) = derived(strict)
+    assert planner.is_unlocked(held) and held['v3_recording_ids'] == ['B']
+    assert strict.rows[path('C')]['v3_pending'] is True  # C's speech waits for the next pass
+    assert await reconcile_loaded(strict, monkeypatch, T0 + timedelta(seconds=420) + policy.FINISH_WAIT) == 'committed'
+    assert shape(derived(strict)) == [(['B'], True, False, 'manual_end'), (['C'], True, False, 'manual_end')]
+
+
+# Pure planner: missing audio between a capture and its reconnect is not silence.
+
+
+def recording(rid, started, seconds, *, origin=ORIGIN, session=None, device=None, words=5, speech_from=0.0, **extra):
     segments = turns(1, words=words, start=speech_from, step=seconds - speech_from + 0.5, prefix=rid)
+    external = {'recording_origin_id': origin, 'recording_session_id': session or f'session-{rid}'} if origin else {}
     return {
         'id': rid,
         'recording': True,
         'started_at': started,
         'finished_at': started + timedelta(seconds=seconds),
         'transcript_segments': segments,
-        'external_data': {'recording_origin_id': origin} if origin else {},
+        'external_data': external,
+        **({'client_device_id': device} if device else {}),
         **extra,
     }
 
@@ -239,16 +463,19 @@ def grouping(members, now, *, continuity=True, gap=outline.SILENCE):
     return [sorted(outline.group_rids(g)) for g in groups]
 
 
-def test_a_stream_gap_inside_one_origin_is_not_silence():
+def test_a_reconnect_gap_is_not_silence():
     hole = outline.SILENCE + timedelta(minutes=1)
-    a = recording('a', T0, 60)
-    b = recording('b', T0 + timedelta(seconds=60) + hole, 25)
+    a = recording('a', T0, 60, device='phone-1')
+    b = recording('b', T0 + timedelta(seconds=60) + hole, 25, device='phone-1')
     now = T0 + timedelta(hours=1)
     assert grouping([a, b], now) == [['a', 'b']]
     assert grouping([a, b], now, continuity=False) == [['a'], ['b']]
-    # Another capture origin, or none: the gap is silence as before.
+    # No reconnect evidence: another origin, no origin, the same session, or another device.
     assert grouping([a, {**b, 'external_data': {'recording_origin_id': 'other'}}], now) == [['a'], ['b']]
     assert grouping([{**a, 'external_data': {}}, {**b, 'external_data': {}}], now) == [['a'], ['b']]
+    same_session = {**b, 'external_data': {**b['external_data'], 'recording_session_id': 'session-a'}}
+    assert grouping([a, same_session], now) == [['a'], ['b']]
+    assert grouping([a, {**b, 'client_device_id': 'phone-2'}], now) == [['a'], ['b']]
     # A gap longer than the limit is a new capture, whatever the origin says.
     far = recording('b', T0 + timedelta(seconds=60) + outline.CAPTURE_GAP_LIMIT + timedelta(seconds=1), 25)
     assert grouping([a, far], now) == [['a'], ['b']]
@@ -266,9 +493,9 @@ def test_recorded_silence_inside_the_next_recording_still_counts():
     assert grouping([a, b], T0 + timedelta(hours=1)) == [['a'], ['b']]
 
 
-def awaiting(rid, started, seconds, *, sealed_at, origin=ORIGIN):
+def awaiting(rid, started, seconds, *, sealed_at, origin=ORIGIN, **extra):
     return {
-        **recording(rid, started, seconds, origin=origin),
+        **recording(rid, started, seconds, origin=origin, **extra),
         'transcript_segments': [],
         'status': 'completed',
         'record_lane_owner': 'batch_live_v1',
@@ -276,10 +503,10 @@ def awaiting(rid, started, seconds, *, sealed_at, origin=ORIGIN):
     }
 
 
-def finish(started, seconds, *, origin=ORIGIN, sealed_after=8):
+def finish(started, seconds, *, origin=ORIGIN, sealed_after=8, rid='b'):
     end = started + timedelta(seconds=seconds)
     return recording(
-        'b',
+        rid,
         started,
         seconds,
         origin=origin,
@@ -297,10 +524,14 @@ def test_the_cut_waits_for_a_predecessor_named_by_the_loader_or_loaded(loaded):
     members = [a, b] if loaded else [{**b, outline.FINISH_PREDECESSORS: [a]}]
     cut = b['finished_at']
     (group,) = outline.stretches(members, cut + timedelta(seconds=20), continuity=True)
-    assert not group['manual_end'] and not group['finished']
+    assert not group['manual_end'] and not group['finished'] and not group['outline_ready']
     assert group['finish_held_until'] == cut + policy.FINISH_WAIT
+    finishing = next(m for m in members if m['id'] == 'b')
+    assert finishing[outline.HOLD_UNTIL] == cut + policy.FINISH_WAIT
+    assert preview_wakes([], {'b': finishing}) == {'b': cut + policy.FINISH_WAIT}
     (group,) = outline.stretches(members, cut + policy.FINISH_WAIT, continuity=True)
     assert group['manual_end'] and group['locked'] and 'finish_held_until' not in group
+    assert outline.HOLD_UNTIL not in finishing
 
 
 @pytest.mark.parametrize(
@@ -327,14 +558,49 @@ def test_the_cut_does_not_wait_for_audio_sealed_after_the_finish():
     assert group['manual_end']
 
 
-def test_a_far_predecessor_holds_the_cut_only_in_the_same_capture_origin():
-    gap = outline.SILENCE
-    b = finish(T0 + timedelta(seconds=64) + gap + timedelta(minutes=1), 22)
+def test_a_far_predecessor_holds_the_cut_only_when_the_finish_reconnects_it():
+    b = finish(T0 + timedelta(seconds=64) + outline.SILENCE + timedelta(minutes=1), 22)
     now = b['finished_at'] + timedelta(seconds=20)
     other = awaiting('a', T0, 64, sealed_at=T0 + timedelta(seconds=70), origin='other')
     assert outline.stretches([other, b], now, continuity=True)[0]['manual_end']
-    same = awaiting('a', T0, 64, sealed_at=T0 + timedelta(seconds=70))
-    assert 'finish_held_until' in outline.stretches([same, b], now, continuity=True)[0]
+    same_session = awaiting('a', T0, 64, sealed_at=T0 + timedelta(seconds=70), session='session-b')
+    assert outline.stretches([same_session, b], now, continuity=True)[0]['manual_end']
+    reconnect = awaiting('a', T0, 64, sealed_at=T0 + timedelta(seconds=70))
+    assert 'finish_held_until' in outline.stretches([reconnect, b], now, continuity=True)[0]
+
+
+def test_a_predecessor_the_gap_rule_separates_never_holds():
+    # P2: same origin, but 45 minutes apart: its speech would not join B's window, so it cannot hold B.
+    a = awaiting('a', T0, 60, sealed_at=T0 + timedelta(seconds=61))
+    b = finish(T0 + timedelta(minutes=45), 30)
+    now = b['finished_at'] + timedelta(seconds=10)
+    (group,) = outline.stretches([a, b], now, continuity=True)
+    assert group['manual_end'] and 'finish_held_until' not in group
+    assert grouping([recording('a', T0, 60), b], now) == [['a'], ['b']]
+
+
+def test_a_recording_that_starts_after_the_finish_recording_never_holds():
+    # P2: another device's recording inside B's span did not precede the Finish.
+    b = finish(T0, 120)
+    other = awaiting('c', T0 + timedelta(seconds=60), 5, sealed_at=T0 + timedelta(seconds=70), origin='device2')
+    (group,) = outline.stretches([b, other], b['finished_at'] + timedelta(seconds=4), continuity=True)
+    assert group['manual_end'] and 'finish_held_until' not in group
+
+
+def test_a_held_cut_stays_a_boundary_and_later_speech_waits():
+    # P1: B's cut waits for A; C (another device) finishes after it. C never joins B's window.
+    a = awaiting('a', T0, 60, sealed_at=T0 + timedelta(seconds=61))
+    b = finish(T0 + timedelta(seconds=400), 20)
+    c = finish(T0 + timedelta(seconds=470), 22, origin='device2', rid='c')
+    now = c['finished_at'] + timedelta(seconds=10)
+    (group,) = outline.stretches([a, b, c], now, continuity=True)
+    assert outline.group_rids(group) == {'b'} and not group['locked'] and not group['manual_end']
+    assert b[outline.HOLD_UNTIL] == c[outline.HOLD_UNTIL] == b['finished_at'] + policy.FINISH_WAIT
+    after = outline.stretches([a, b, c], b['finished_at'] + policy.FINISH_WAIT, continuity=True)
+    assert [(outline.group_rids(g), g['manual_end'], g['locked']) for g in after] == [
+        ({'b'}, True, True),
+        ({'c'}, True, True),
+    ]
 
 
 def test_the_finish_recording_waits_for_its_own_transcript():
@@ -347,46 +613,17 @@ def test_the_finish_recording_waits_for_its_own_transcript():
     assert group['manual_end']
 
 
-class _Doc:
-    def __init__(self, rid, data):
-        self.id, self._data = rid, data
-
-    def to_dict(self):
-        return dict(self._data)
-
-
-class _Query:
-    def __init__(self, docs, calls):
-        self.docs, self.calls = docs, calls
-
-    def where(self, *, filter):
-        self.calls.append(('where', filter.field_path, filter.op_string, filter.value))
-        return self
-
-    def order_by(self, field, direction=None):
-        self.calls.append(('order_by', field, direction))
-        return self
-
-    def limit(self, count):
-        self.calls.append(('limit', count))
-        return self
-
-    def select(self, fields):
-        self.calls.append(('select', tuple(fields)))
-        return self
-
-    def stream(self):
-        return iter(self.docs)
-
-
-def test_the_loader_names_awaiting_predecessors_of_a_fresh_cut(monkeypatch):
+def test_the_loader_reads_one_capture_origin_within_the_reconnect_bound(monkeypatch):
     from database import conversations_v3_finish_predecessors as store
 
     b = finish(T0 + timedelta(seconds=128), 22)
-    a = awaiting('a', T0, 64, sealed_at=T0 + timedelta(seconds=109))
+    a = {**awaiting('a', T0, 64, sealed_at=T0 + timedelta(seconds=109)), 'id': 'a'}
     done = {**awaiting('c', T0 - timedelta(minutes=3), 30, sealed_at=T0), 'record_projection_revision': 2}
+    later = awaiting('d', T0 + timedelta(seconds=129), 5, sealed_at=T0 + timedelta(seconds=140))
+    elsewhere = awaiting('e', T0, 64, sealed_at=T0 + timedelta(seconds=109), origin='other')
+    old = awaiting('g', T0 - outline.CAPTURE_GAP_LIMIT - timedelta(minutes=2), 30, sealed_at=T0)
     calls = []
-    coll = _Query([_Doc('a', a), _Doc('c', done), _Doc('b-loaded', a)], calls)
+    coll = _Rows([a, done, later, elsewhere, old, b], calls)
 
     class Clock(datetime):
         @classmethod
@@ -394,17 +631,35 @@ def test_the_loader_names_awaiting_predecessors_of_a_fresh_cut(monkeypatch):
             return b['finished_at'] + timedelta(seconds=20)
 
     monkeypatch.setattr(store, 'datetime', Clock)
-    recordings = {'b': dict(b), 'b-loaded': {'id': 'b-loaded', 'started_at': T0}}
-    store.attach(coll, recordings)
+    recordings = {'b': dict(b)}
+    store.attach(coll, recordings, {})
     assert [row['id'] for row in recordings['b'][outline.FINISH_PREDECESSORS]] == ['a']
+    assert ('where', 'external_data.recording_origin_id', '==', ORIGIN) in calls
+    assert ('where', 'finished_at', '>=', b['started_at'] - outline.CAPTURE_GAP_LIMIT) in calls
     assert ('limit', store.FINISH_PREDECESSOR_LIMIT) in calls
-    assert ('where', 'started_at', '<', b['started_at']) in calls
-    # One read per fresh cut; none once the wait is over, none with the switch off.
-    calls.clear()
+
+    def reads(rows, existing=None):
+        calls.clear()
+        coll.filters = []
+        store.attach(coll, rows, existing or {})
+        return calls.count(('stream',))
+
+    # No read: the wait is over, the cut already settled, no capture origin, or the switch is off.
+    applied = {'x': {'id': 'x', 'v3_recording_ids': ['b'], 'manual_end': True, 'status': 'processing'}}
+    assert reads({'b': dict(b)}, applied) == 0
+    assert reads({'b': {**b, 'external_data': {}}}) == 0
     monkeypatch.setattr(Clock, 'now', classmethod(lambda cls, tz=None: b['finished_at'] + policy.FINISH_WAIT))
-    store.attach(coll, {'b': dict(b)})
-    assert calls == []
+    assert reads({'b': dict(b)}) == 0
     monkeypatch.setattr(Clock, 'now', classmethod(lambda cls, tz=None: b['finished_at']))
+    assert reads({'b': dict(b)}) == 1
     monkeypatch.setenv('CONVERSATIONS_V3_CAPTURE_CONTINUITY', 'off')
-    store.attach(coll, {'b': dict(b)})
-    assert calls == []
+    assert reads({'b': dict(b)}) == 0
+
+
+def test_a_held_cut_keeps_open_only_the_window_its_speech_joins():
+    # Speech a silence gap before the awaited speech is not the finished window: it settles as usual.
+    f = recording('f', T0, 1.2, origin='device-sync')
+    b = {**finish(T0 + timedelta(seconds=1.2) + outline.SILENCE + timedelta(minutes=2), 22), 'transcript_segments': []}
+    (group,) = outline.stretches([f, b], b['finished_at'] + timedelta(seconds=10), continuity=True)
+    assert group['locked'] and 'finish_held_until' not in group
+    assert b[outline.HOLD_UNTIL] == b['finished_at'] + policy.FINISH_WAIT  # B's own cut still waits

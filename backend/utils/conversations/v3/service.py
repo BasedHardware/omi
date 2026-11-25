@@ -764,12 +764,12 @@ async def reconcile(
                 # Cloud Tasks' completed-name dedupe swallowing the continuation.
                 delay = lock_delay if group['outline_ready'] else min(silence_gap, lock_delay)
                 settle_from = group.get('settle_from', group['end'])
-                at = settle_from + delay
-                if group.get('finish_held_until'):
-                    # A held manual-end cut applies when its wait ends, even if no transcript lands.
-                    metrics.FINISH_HELD.inc()
-                    at = min(at, group['finish_held_until'])
-                await run_blocking(db_executor, enqueue, uid, at=max(at, now + timedelta(minutes=1)))
+                await run_blocking(db_executor, enqueue, uid, at=max(settle_from + delay, now + timedelta(minutes=1)))
+        holds = [r[outline.HOLD_UNTIL] for r in recordings.values() if r.get(outline.HOLD_UNTIL) is not None]
+        if holds and not derive:
+            # A held manual-end cut applies when its wait ends, even if no transcript lands.
+            metrics.FINISH_HELD.inc()
+            await run_blocking(db_executor, enqueue, uid, at=max(min(holds), now + timedelta(minutes=1)))
         for row in rows:
             prior = existing.get(row['id']) or {}
             if (

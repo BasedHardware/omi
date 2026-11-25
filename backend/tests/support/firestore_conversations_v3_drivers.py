@@ -103,8 +103,10 @@ def entries():
                         'started_at': FROZEN_NOW,
                         'finished_at': FROZEN_NOW,
                         'v3_manual_end': True,
+                        'external_data': {'recording_origin_id': 'shape-origin'},
                     }
                 },
+                'existing': {},
             },
             patchers=(_finish_clock,),
         ),

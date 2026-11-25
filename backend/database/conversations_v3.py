@@ -440,7 +440,7 @@ def load(uid, *, conversation_id=None, firestore_client=None):
         if policy.builder_eligible({**unreadable[rid], '_v3_unreadable': False}):
             raise Conflict('recording_decode_unavailable')
     _mark_successor_pending(coll, recordings)
-    attach_finish_predecessors(coll, recordings)
+    attach_finish_predecessors(coll, recordings, existing)
     return {**recordings, **unreadable}, existing, cache
 
 
