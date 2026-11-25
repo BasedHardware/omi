@@ -177,6 +177,11 @@ def build_parser() -> argparse.ArgumentParser:
     )
     scenario_check = scenario_sub.add_parser('check', parents=[common], help='validate files, print planned timelines')
     scenario_check.add_argument('files', nargs='+')
+    scenario_view = scenario_sub.add_parser(
+        'view', parents=[common], help='read-only web page for a scenario run directory (loopback, no stack)'
+    )
+    scenario_view.add_argument('run_dir', help='a `scenario run --keep` directory, a compare run, or one scenario')
+    scenario_view.add_argument('--port', type=int, default=0, help='port to bind (default: a free one)')
 
     sub.add_parser('stages', parents=[common], help='stages in order and their registered drivers')
     sub.add_parser('doctor', parents=[common], help='roots, permissions and plugins')
@@ -490,6 +495,14 @@ def _scenario(args: argparse.Namespace, as_json: bool) -> int:
     try:
         if args.scenario_command == 'check':
             return stack.check_files(args.files, as_json=as_json)
+        if args.scenario_command == 'view':
+            from testing.pipeline_lab.inspector import scenario_view
+            from testing.pipeline_lab.inspector.reader import NotFound
+
+            try:
+                return scenario_view.serve(args.run_dir, port=args.port)
+            except NotFound as error:
+                raise ScenarioError(str(error)) from None
         return stack.run_files(args.files, keep=args.keep, timeout=args.timeout, as_json=as_json, clock=args.clock)
     except (ScenarioError, RuntimeError) as error:
         if as_json:
