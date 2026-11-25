@@ -67,9 +67,18 @@ def test_invalid_clocks_never_create_latency_observations(monkeypatch, clock):
 
 @pytest.mark.parametrize(
     'state,expected',
-    [(state, state) for state in sorted(HOLD_STATES)] + [(None, 'unknown'), ('synthetic-private-user', 'unknown')],
+    [
+        ('none', 'none'),
+        ('bg300', 'bg300'),
+        ('fg_preview300', 'fg_preview300'),
+        ('fg60', 'fg60'),
+        ('unknown', 'unknown'),
+        (None, 'unknown'),
+        ('synthetic-private-user', 'unknown'),
+    ],
 )
 def test_upload_latency_labels_are_closed(monkeypatch, state, expected):
+    assert HOLD_STATES == {'none', 'bg300', 'fg_preview300', 'fg60', 'unknown'}
     delivered = Mock()
     monkeypatch.setattr(upload_metrics, 'DELIVERED', delivered)
     upload_metrics.observe_delivery(

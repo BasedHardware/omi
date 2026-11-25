@@ -78,21 +78,31 @@ Production data/account documents are not part of the inventory.
 counts non-shadow unit creation only after durable admission, not transaction
 retries or receipt re-ACKs. Unclassified/native adapters report unknown rather
 than guessing. This is a post-commit observation and can undercount a lost reply.
-`omi_batch_pipeline_upload_to_transcript_seconds{entitlement=...}` retains each
+`omi_batch_pipeline_upload_to_transcript_seconds{entitlement=...,hold_state=...}` retains each
 original sync request-arrival timestamp (before multipart parsing) through a hold, merged admission
 and completion. It observes one sample per first original terminal receipt,
-including all hold/queue/processing time; replays do not refresh the clock or
+including server hold, queue and processing time; replays do not refresh the clock or
 observe again. Merged units do not replace N originals with one latency sample.
 Deleted sources and legacy uploads lacking the original clock do not contribute.
 The endpoint is durable server transcript publication, not notes completion or
 proof of a client receiving a response. Check actual client receipt separately;
 watch oldest unfinished/held obligations as well as completed-sample p90.
 
+For the SCA-4372 mobile ramp, read p90 per `hold_state`. The explicit states are
+`none`, `bg300`, `fg_preview300`, and `fg60`. `unknown` includes absent headers
+and unrecognized values. During the backend roll, filter the guard query to
+explicit states. Older revisions lack the label and the new 360-second bucket,
+so their samples would mix bucket layouts in an aggregate. A ramp cohort
+without measurements for its expected state leaves the guard blind. Use
+`omi_sync_seal_to_accept_seconds` and local WAL age to check on-device wait
+separately. The server p90 starts at request arrival.
+
 Both collectors live in the default Cloud Run registry and the worker private
 registry/multiprocess forwarding. Existing `batch_pipeline_.*` and `omi_.*`
 keep-lists retain the counter and every histogram sample; regression tests
-evaluate every keep/drop rule in both Cloud Run profiles and the actual worker
-health registry. No keep-list widening is needed.
+evaluate every keep/drop rule in the sync, projection pump, and shared Cloud
+Run profiles and verify the actual worker health registry. No keep-list
+widening is needed.
 
 There is still no percentage/cohort gate for this path. Do **not** call the batch
 admission percentage a 10% coalescing cohort. Smallest safe first production

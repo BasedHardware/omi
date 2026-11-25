@@ -1225,7 +1225,9 @@ def test_committed_transcript_signals_episode_before_playback_or_enrichment(bind
     assert events == ['commit', 'signal', 'finish']
 
 
-def native_finish_completion(monkeypatch, db, uid, cid, unit_count, *, empty_outcome=None, native_record=True):
+def native_finish_completion(
+    monkeypatch, db, uid, cid, unit_count, *, empty_outcome=None, native_record=True, settle_allowance=None
+):
     """Supply ready sibling fixtures; use the real completion transaction and ledger writer."""
     from contextlib import nullcontext
 
@@ -1270,7 +1272,7 @@ def native_finish_completion(monkeypatch, db, uid, cid, unit_count, *, empty_out
     session.prepare.side_effect = lambda tx, **_: setattr(session, 'ledger', ledger.get(transaction=tx).to_dict())
     monkeypatch.setattr(store, 'session', lambda *a, **k: session)
     monkeypatch.setattr(store, '_observe_transcription', Mock())
-    monkeypatch.setattr(store, '_settle_allowance', Mock())
+    monkeypatch.setattr(store, '_settle_allowance', settle_allowance if settle_allowance is not None else Mock())
     monkeypatch.setattr(store, 'run', lambda operation, **_: operation(db.transaction()))
     accounting = {'seconds': 0.0 if empty_outcome else float(unit_count), 'updates': {}}
 
@@ -1286,12 +1288,17 @@ def test_ordinary_upload_observes_first_durable_transcript_only(monkeypatch):
     monkeypatch.setenv('OMI_ENV_STAGE', 'dev')
     uid, cid = 'synthetic-owner', 'synthetic-conversation'
     db = StrictFirestore({('users', uid, 'conversations', cid): {'status': 'completed'}})
-    complete, ledger_path, _ = native_finish_completion(monkeypatch, db, uid, cid, 2, native_record=False)
+    settle_allowance = Mock(side_effect=[RuntimeError('synthetic post-commit failure'), None])
+    complete, ledger_path, _ = native_finish_completion(
+        monkeypatch, db, uid, cid, 2, native_record=False, settle_allowance=settle_allowance
+    )
     db.rows[ledger_path].update(upload_arrived_at=100.0, upload_entitlement='free', upload_hold_state='bg300')
     delivered = Mock()
     monkeypatch.setattr(metrics, 'DELIVERED', delivered)
 
-    assert complete(172.0) is not None
+    with pytest.raises(RuntimeError, match='synthetic post-commit failure'):
+        complete(172.0)
+    assert db.rows[ledger_path]['status'] == 'completed'
     assert complete(200.0) is not None
     delivered.labels.assert_called_once_with('free', 'bg300')
     delivered.labels.return_value.observe.assert_called_once_with(72.0)

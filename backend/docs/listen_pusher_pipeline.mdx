@@ -9550,6 +9550,12 @@ clamped to 60..1800, `0` withdraws it) is sent to phones as `end_silence_seconds
 measurement only: `omi_sync_seal_to_accept_seconds{gate}` records how long the batch's oldest file waited on
 the phone and which gate held it. A malformed header is ignored.
 
+The optional `X-Omi-Upload-Hold` request header on `/v2/sync-local-files` labels batch
+publication latency. Clients send `none`, `bg300`, `fg_preview300`, or `fg60`.
+An absent or unrecognized value becomes `unknown`. The value does not control
+admission, processing priority, or custody.
+[Change note](listen_pusher_pipeline/changes/2026-11-25-mobile-upload-hold-metric.md).
+
 The older `sync_processing_hold.upload_watermark_at` slot is unchanged and still has no producer: if
 supplied it must pass `finished_at` plus the quiet window, and a lagging value waits up to the maximum hold.
 
