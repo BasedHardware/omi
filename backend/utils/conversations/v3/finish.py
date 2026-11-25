@@ -55,8 +55,8 @@ def _acknowledge(uid, window, outcome, recording_id):
         triggers.enqueue_pending(uid, manual_end_id=recording_id)
     conversation = deserialize_conversation(window)
     if outcome in {'resolved_empty', 'already_empty'}:
-        # Shipped clients check discarded before treating a recording as pending.
-        conversation.discarded = True
+        # A silent tail can resolve empty while an earlier member still has speech.
+        conversation.discarded = not live.has_finish_content({}, window, recording_id)
         conversation.status = ConversationStatus.completed
         conversation.tile_state = 'done'
     else:

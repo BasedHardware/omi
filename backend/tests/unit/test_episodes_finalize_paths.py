@@ -695,6 +695,34 @@ def test_silent_whole_batch_resolves_deferred_finish(
         assert not enqueued
 
 
+def test_finish_retry_preserves_earlier_window_speech_after_silent_tail(v3_finish_route, monkeypatch):
+    client, db, paths, enqueued = v3_finish_route
+    window = db.rows[paths['window']]
+    latest = db.rows[paths['latest']]
+    latest.update(record_lane_owner='batch_live_v1', server_batch_only=True, has_content=False)
+    db.rows[paths['older']].update(has_content=True, record_projection_revision=1)
+    complete, ledger, _ = native_finish_completion(monkeypatch, db, _UID, 'latest', 1, empty_outcome='silence')
+
+    request = {'live_conversation_id': 'window'}
+    assert client.post('/v1/conversations', json=request).json()['conversation']['tile_state'] == 'transcribing'
+    window.update(status='processing', tile_state='writing')
+    assert complete(latest['finished_at'].timestamp())['outcome'] == 'expected_silence'
+    assert latest['v3_manual_end_requested'] is False
+    db.rows[ledger]['result']['superseded_segments'] = 1
+    window.update(status='in_progress', tile_state='live')
+
+    response = client.post('/v1/conversations', json=request)
+    assert response.status_code == 200
+    conversation = response.json()['conversation']
+    assert (conversation['id'], conversation['status'], conversation['tile_state'], conversation['discarded']) == (
+        'window',
+        'completed',
+        'done',
+        False,
+    )
+    assert not db.transactions[-1].updates and not enqueued
+
+
 @pytest.mark.parametrize('marked_window', ['window', 'previous'])
 def test_finish_rearms_resolved_marker_for_pending_batch(v3_finish_route, monkeypatch, marked_window):
     client, db, paths, enqueued = v3_finish_route
