@@ -98,7 +98,9 @@ def require_record_audio_barrier(row, *, expected=None):
         # Same type and message as before; the cause rides as attributes so
         # callers that compare str(error) or log type names are unchanged.
         try:
-            error.barrier_blocker, error.barrier_token_kind = barrier_blocker(row)
+            blocker, kind = barrier_blocker(row)
+            setattr(error, 'barrier_blocker', blocker)
+            setattr(error, 'barrier_token_kind', kind)
         except Exception:
             # Malformed rows (e.g. an unhashable owner) must keep the exact
             # refusal; counters report missing attributes as ``unknown``.
