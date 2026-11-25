@@ -18,7 +18,8 @@ func pairedErasureRuns(t *testing.T) (*observation, *observation, string) {
 	diag := mustMap(documentField(py, "owner_recognition_diagnostics"))
 	diag["first_resolver"], diag["current_resolver"] = maps.Clone(exit), maps.Clone(exit)
 	goRun := ruleRun()
-	goRun.Document = map[string]any{"id": fixture}
+	goRun.Document = maps.Clone(mustMap(py.Document))
+	goRun.SpeakerTrace = py.SpeakerTrace
 	for i, run := range []*observation{py, goRun} {
 		memo := batchPrivacyRun([]string{pyMemoToken, goMemoToken}[i])
 		run.OwnerID, run.ConversationID = owner, fixture
@@ -67,13 +68,22 @@ func TestPairedErasureValidatesFinalizationBeforeTheWipe(t *testing.T) {
 func TestPairedErasureRejectsUnverifiedGoSpeakerResults(t *testing.T) {
 	t.Run("resolver without trace", func(t *testing.T) {
 		py, goRun, _ := pairedErasureRuns(t)
-		doc := mustMap(goRun.BeforeErasure.Document)
-		doc["private_cloud_sync_enabled"] = false
-		doc["speaker_resolution"] = map[string]any{"status": "capture"}
-		doc["owner_recognition_diagnostics"] = mustMap(py.BeforeErasure.Document)["owner_recognition_diagnostics"]
+		goRun.SpeakerTrace = nil
 		diffs := compareObservations(py, goRun)
 		if !hasKindPath(diffs, "invalid_binding", "/go"+clockPath) {
 			t.Fatalf("proved erasure excused a pre-wipe Go result without a trace: %+v", diffs)
+		}
+	})
+	t.Run("missing resolver result", func(t *testing.T) {
+		py, goRun, _ := pairedErasureRuns(t)
+		doc := mustMap(goRun.BeforeErasure.Document)
+		delete(doc, "speaker_resolution")
+		delete(doc, "owner_recognition_diagnostics")
+		goRun.SpeakerTrace = &speakerTrace{}
+		diffs := compareObservations(py, goRun)
+		path := "/go/before_erasure" + resolverPath + "/current_resolver"
+		if !hasKindPath(diffs, "missing_in_go", path) {
+			t.Fatalf("proved erasure hid the missing pre-wipe Go resolver result: %+v", diffs)
 		}
 	})
 	t.Run("invalid stored envelope", func(t *testing.T) {

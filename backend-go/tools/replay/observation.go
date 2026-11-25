@@ -42,7 +42,8 @@ func compareObservationsForRun(python, goRun *observation, pythonTokens, goToken
 	compareObject(&diffs, "/provider_calls", countProviderCalls(python.ProviderCalls), countProviderCalls(goRun.ProviderCalls))
 	compareObject(&diffs, "/webhooks", webhookGroups(python), webhookGroups(goRun))
 	pythonFinalization, goFinalization := finalizationBeforeErasure(&diffs, python, goRun)
-	reviewSpeakerDifferences(&diffs, pythonFinalization, goFinalization, provedJobdDeparture(goRun))
+	pairedErasure := pythonFinalization != python && goFinalization != goRun
+	reviewSpeakerDifferences(&diffs, pythonFinalization, goFinalization, pairedErasure)
 	reviewRuledSyncWrites(&diffs, python, goRun)
 	for i := range diffs {
 		diff := &diffs[i]
