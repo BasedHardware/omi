@@ -166,6 +166,23 @@ func TestPairedAdmissionDetectsBYOKSplit(t *testing.T) {
 	}
 }
 
+func TestUnboundGoFanoutKeyRemainsUnexplained(t *testing.T) {
+	python, goRun := ruleRun(), ruleRun()
+	python.Document = map[string]any{}
+	goRun.Document = map[string]any{"fanout_key": "unbound"}
+	diffs := compareObservations(python, goRun)
+	want := difference{Path: "/conversation/fanout_key", Kind: "missing_in_python"}
+	if len(diffs) != 1 || diffs[0] != want {
+		t.Fatalf("unbound Go fanout key must produce an unexplained difference: %+v", diffs)
+	}
+	goRun.Admitted = &admission{Job: "go-job", Fanout: "unbound"}
+	mustMap(goRun.Document)["finalization_job_id"] = "go-job"
+	goRun.QueueFanout = "other-key"
+	if diffs := compareObservations(python, goRun); !hasUnexplainedAt(diffs, want.Path) {
+		t.Fatalf("matching admission and stored keys without a queue binding hid the fanout key: %+v", diffs)
+	}
+}
+
 func TestAdmissionIDsAreValidatedPerSideWithoutCrossEngineComparison(t *testing.T) {
 	t.Parallel()
 	start := time.Date(2026, 1, 1, 12, 0, 0, 0, time.UTC)

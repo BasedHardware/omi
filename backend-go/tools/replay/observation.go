@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"maps"
 	"strconv"
 	"strings"
 )
@@ -24,7 +25,7 @@ func compareObservationsForRun(python, goRun *observation, pythonTokens, goToken
 	if python.Admitted != nil && goRun.Admitted != nil {
 		compareValue(&diffs, "/admitted/own_key", python.Admitted.OwnKey, goRun.Admitted.OwnKey)
 	}
-	compareValue(&diffs, "/conversation", python.Document, goConversation(goRun, python))
+	compareValue(&diffs, "/conversation", python.Document, goConversation(goRun))
 	compareDerivedDocuments(&diffs, python, goRun)
 	if terminalChecks != nil {
 		filtered := diffs[:0]
@@ -165,19 +166,14 @@ func isEpisodeAttachMemoDifferencePath(path string) bool {
 			parts[2] == "attach_revision" || parts[2] == "attach_owner_id")
 }
 
-// Fanout IDs are validated against each side's own queue/job binding, not across engines.
-func goConversation(goRun, _ *observation) any {
+// A bound Go fanout key is validated against its own queue and job.
+func goConversation(goRun *observation) any {
 	doc, ok := goRun.Document.(map[string]any)
-	if !ok {
+	if !ok || !goAdmissionBinds(goRun) {
 		return goRun.Document
 	}
-	fields := make(map[string]any, len(doc))
-	for name, value := range doc {
-		if name == "fanout_key" {
-			continue
-		}
-		fields[name] = value
-	}
+	fields := maps.Clone(doc)
+	delete(fields, "fanout_key")
 	return fields
 }
 
