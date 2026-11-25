@@ -64,9 +64,18 @@ def main_endpoint():
 
 @pytest.mark.parametrize('future_enabled', [False, True])
 @pytest.mark.parametrize('mixed', [False, True])
-@pytest.mark.parametrize('hold,expected_hold', [(None, None), ('bg300', 'bg300'), ('private', 'unknown')])
+@pytest.mark.parametrize(
+    'hold,expected_hold,recovery_header',
+    [
+        (None, None, None),
+        ('bg300', 'bg300', None),
+        ('bg300', 'bg300', '1'),
+        ('bg300', 'bg300', 'private'),
+        ('private', 'unknown', None),
+    ],
+)
 def test_early_upload_job_and_context_documents_equal_main(
-    client, monkeypatch, tmp_path, future_enabled, mixed, hold, expected_hold
+    client, monkeypatch, tmp_path, future_enabled, mixed, hold, expected_hold, recovery_header
 ):
     histogram = Mock()
     monkeypatch.setattr(sync_upload, 'HOLD_AGE', histogram)
@@ -159,6 +168,8 @@ def test_early_upload_job_and_context_documents_equal_main(
         if hold is not None:
             headers['X-Omi-Upload-Hold'] = hold
             headers['X-Omi-Upload-Hold-Age-Ms'] = '300500' if hold == 'bg300' else 'invalid'
+        if recovery_header is not None:
+            headers['X-Omi-Upload-Recovered'] = recovery_header
         with TestClient(app, raise_server_exceptions=False) as routed:
             response = routed.post('/v2/sync-local-files', headers=headers, files=files)
         assert response.status_code == 202, response.text
@@ -185,9 +196,11 @@ def test_early_upload_job_and_context_documents_equal_main(
     if expected_hold is not None:
         for row in [*expected['contexts'], *expected['intakes'].values(), *expected['ledgers'].values()]:
             row['upload_hold_state'] = expected_hold
+            if recovery_header == '1':
+                row['upload_recovered'] = True
     assert expected == records[1]
     if hold == 'bg300':
-        histogram.labels.assert_called_once_with('bg300')
+        histogram.labels.assert_called_once_with('bg300', 'true' if recovery_header == '1' else 'false')
         histogram.labels.return_value.observe.assert_called_once_with(300.5)
     else:
         histogram.labels.assert_not_called()
