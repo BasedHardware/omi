@@ -619,6 +619,8 @@ def test_live_rederive_rebuilds_and_restores_a_chunked_prior(row, monkeypatch):
         stale = {**entry, 'source_revision': AT}
         with pytest.raises(store.Conflict, match='source_changed'):
             runs.save_priors(uid, run_id, [stale], firestore_client=client)
+        with pytest.raises(store.Conflict, match='source_changed'):
+            runs.save_priors(uid, 'missing-run', [entry], firestore_client=client)
         assert runs.save_priors(uid, run_id, [entry], firestore_client=client) == 1
         copy_chunks = set(prior.collection(PAYLOAD_CHUNKS).list_documents())
         assert copy_chunks and not original_chunks & copy_chunks

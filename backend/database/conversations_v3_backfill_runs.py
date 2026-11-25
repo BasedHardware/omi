@@ -200,12 +200,14 @@ def save_priors(uid, run_id, entries, *, firestore_client=None):
             if level is not None and level != entry['raw'].get('data_protection_level', 'standard'):
                 raise Conflict('source_changed')
             if PAYLOAD_FIELD in entry['raw']:
+                run = run_ref(client, uid, run_id).get(transaction=tx)
                 if (
                     not current.exists
                     or current.update_time != entry['source_revision']
                     or row.get('is_locked')
                     or level == 'private'
                     or row.get(PAYLOAD_FIELD) != entry['raw'][PAYLOAD_FIELD]
+                    or (run.to_dict() or {}).get('mode') != LIVE_MODE
                 ):
                     raise Conflict('source_changed')
                 if not recorded[entry['id']].exists:
