@@ -1630,6 +1630,11 @@ class ConversationDetailPageState extends State<ConversationDetailPage>
             // the reader opened this one. Report only this page's own failure, and retry only it.
             final failedId = detailProvider.lastFailedReprocessConversationId;
             if (failedId == null || failedId != detailProvider.conversationOrNull?.id) break;
+            final failure = detailProvider.summaryFailure;
+            if (failure?.kind == SummaryFailureKind.providerAccount) {
+              OmiFeedback.error(context, failure?.providerMessage ?? context.l10n.summaryFailedBody);
+              break;
+            }
             final appId = detailProvider.lastFailedReprocessAppId;
             OmiFeedback.error(
               context,

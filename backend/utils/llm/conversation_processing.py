@@ -36,7 +36,7 @@ from models.structured_extraction import (
 )
 from .clients import get_llm, get_llm_gateway_chat_structured, parser
 from .discard_parser import DiscardConversation, LenientDiscardParser
-from .gateway_error_contract import is_byok_rate_limit_gateway_error
+from .gateway_error_contract import EmptyAppResult, is_byok_rate_limit_gateway_error
 from utils.byok import has_byok_keys
 from utils.conversations.meeting_participants import MeetingRoster
 
@@ -720,13 +720,20 @@ def _finish_shaped_notes(
     return structured
 
 
+def _app_result_content(response: Any) -> str | EmptyAppResult:
+    if not response.content:
+        return EmptyAppResult.MODEL_OUTPUT
+    content = strip_speaker_placeholders(_content_str(response).replace('```json', '').replace('```', ''))
+    return content if content.strip() else EmptyAppResult.MODEL_OUTPUT
+
+
 def get_app_result(
     transcript: str,
     photos: List[ConversationPhoto],
     app: App,
     language_code: str = 'en',
     prompt_prefix: Optional[ConversationPromptPrefix] = None,
-) -> str:
+) -> str | EmptyAppResult:
     context_parts: List[str] = []
     if transcript and transcript.strip():
         context_parts.append(f"Transcript: ```{transcript.strip()}```")
@@ -737,7 +744,7 @@ def get_app_result(
             context_parts.append(f"Photo Descriptions from a wearable camera:\n{photo_descriptions}")
 
     if not context_parts:
-        return ""
+        return EmptyAppResult.CONTEXT
 
     full_context = "\n\n".join(context_parts)
 
@@ -782,7 +789,7 @@ Task: {app.memory_prompt}'''
         )
         # apps_results render on the summary card like notes; strip diarization
         # placeholders the same way (SCA-454) — getSummarizedApp shows this verbatim.
-        return strip_speaker_placeholders(_content_str(response).replace('```json', '').replace('```', ''))
+        return _app_result_content(response)
 
     gateway_mode_enabled = should_route_features_through_gateway()
     explicit_cache_enabled = _gpt56_explicit_cache_enabled()
@@ -803,8 +810,7 @@ Task: {app.memory_prompt}'''
     cache_options = GPT56_EXPLICIT_CACHE_OPTIONS if explicit_cache_enabled and not has_byok_keys() else None
     app_result_llm = get_llm('conv_app_result', cache_key=cache_key, prompt_cache_options=cache_options)
     response = app_result_llm.invoke(marked_messages or prompt)
-    content = strip_speaker_placeholders(_content_str(response).replace('```json', '').replace('```', ''))
-    return content
+    return _app_result_content(response)
 
 
 class BestAppSelection(BaseModel):

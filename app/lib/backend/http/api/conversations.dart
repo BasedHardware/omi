@@ -60,17 +60,22 @@ bool endAcceptedWithNoConversationYet(http.Response response) =>
     ReliabilityExperiments.enabled('end_open_conversation') && response.headers[endAcceptedHeader] == 'pending';
 
 /// True only for the backend's typed, recoverable processing failure.
-@visibleForTesting
-bool isRetryableInProgressConversationResponse(http.Response? response) {
-  if (response?.statusCode != 503) return false;
-  try {
-    // omi-perf-allow: history-json-on-ui -- bounded typed error body, never conversation history
-    final decoded = jsonDecode(response!.body);
-    final detail = decoded is Map ? decoded['detail'] : null;
-    return detail is Map && detail['code'] == 'conversation_processing_retryable';
-  } catch (_) {
-    return false;
-  }
+bool _isRetryableProcessingResponse(http.Response? response) {
+  return response != null &&
+      response.statusCode == 503 &&
+      _errorDetail(response.body)?['code'] == 'conversation_processing_retryable';
+}
+
+Future<http.Response?> _sendWithProcessingRetry(
+  Future<http.Response?> Function() send,
+  Future<void> Function(Duration)? waitBeforeRetry,
+) async {
+  final response = await send();
+  if (!_isRetryableProcessingResponse(response)) return response;
+  final delay = parseApiRetryAfter(response!, DateTime.now) ?? const Duration(seconds: 2);
+  await (waitBeforeRetry ?? Future<void>.delayed)(delay);
+  // The typed failure released admission so the same request can be sent once more.
+  return send();
 }
 
 /// Sends the serialized Process Now request.
@@ -117,14 +122,7 @@ Future<InProgressProcessOutcome> processInProgressConversationOutcome({
       );
 
   final send = sendRequest ?? sendProductionRequest;
-  var response = await send(request);
-  if (isRetryableInProgressConversationResponse(response)) {
-    final delay = parseApiRetryAfter(response!, DateTime.now) ?? const Duration(seconds: 2);
-    await (waitBeforeRetry ?? (duration) => Future<void>.delayed(duration))(delay);
-    // This typed failure rolls back admission, so replay the same request once.
-    // Other 5xx responses may have left work in flight.
-    response = await send(request);
-  }
+  final response = await _sendWithProcessingRetry(() => send(request), waitBeforeRetry);
   if (response == null) return const InProgressProcessOutcome(absence: ProcessAbsence.transport);
   Logger.debug('createConversationServer: ${response.body}');
   if (response.statusCode == 200) {
@@ -140,7 +138,7 @@ Future<InProgressProcessOutcome> processInProgressConversationOutcome({
   } else if (isBenignInProgressConversationCreateStatus(response.statusCode)) {
     Logger.debug('processInProgressConversation: no in-progress conversation (already finalized), skipping');
     return const InProgressProcessOutcome(absence: ProcessAbsence.notFound);
-  } else if (isRetryableInProgressConversationResponse(response)) {
+  } else if (_isRetryableProcessingResponse(response)) {
     Logger.debug('processInProgressConversation: bounded retry exhausted; conversation remains recoverable');
     return const InProgressProcessOutcome(absence: ProcessAbsence.transport);
   }
@@ -312,6 +310,13 @@ final class ReprocessRateLimited extends ReprocessResult {
   final Duration? retryAfter;
 }
 
+/// The configured provider account needs attention (HTTP 429 with a BYOK code).
+final class ReprocessProviderAccountFailure extends ReprocessResult {
+  const ReprocessProviderAccountFailure({required this.message});
+
+  final String? message;
+}
+
 /// Anything else: transport failure, 5xx (502 `app_result_failed` when the selected template
 /// returned nothing), an app the server will not run, an unacknowledged speaker receipt, an
 /// undecodable body.
@@ -342,10 +347,13 @@ Future<ReprocessResult> reProcessConversationServer(
   bool forceOmi = false,
   // Tests replace the transport; production sends through makeApiCall.
   Future<http.Response?> Function(String url)? send,
+  @visibleForTesting Future<void> Function(Duration)? waitBeforeRetry,
 }) async {
   final route = '${Env.apiBaseUrl}v1/conversations/$conversationId/reprocess';
   final url = '$route${reprocessQuery(appId: appId, forceOmi: forceOmi)}';
-  final response = await (send ?? _sendReprocess)(url);
+  final sendRequest = send ?? _sendReprocess;
+  final response =
+      appId == null ? await sendRequest(url) : await _sendWithProcessingRetry(() => sendRequest(url), waitBeforeRetry);
   if (response == null) return const ReprocessFailed();
   Logger.debug('reProcessConversationServer: ${response.statusCode}');
   final result = reprocessResultFromResponse(response, requireSpeakerReceipt: requireSpeakerReceipt);
@@ -397,26 +405,31 @@ ReprocessResult reprocessResultFromResponse(
       // 409 is busy only with the structured `conversation_processing_in_progress` detail. The same
       // route answers 409 with a string detail when the selected app is disabled or not enabled:
       // that is the template failing, not the conversation being busy.
-      return switch (_detailCode(response.body)) {
+      return switch (_errorDetail(response.body)?['code']) {
         'conversation_processing_in_progress' => const ReprocessBusy(),
         'transcription_pending' => const ReprocessTranscriptionPending(),
         _ => const ReprocessFailed(statusCode: 409),
       };
     case 429:
+      final detail = _errorDetail(response.body);
+      if (const {'byok_quota', 'byok_rate_limit', 'byok_invalid_key'}.contains(detail?['code'])) {
+        final message = detail?['message'];
+        return ReprocessProviderAccountFailure(
+            message: message is String && message.trim().isNotEmpty ? message : null);
+      }
       return ReprocessRateLimited(retryAfter: parseApiRetryAfter(response, now));
     default:
       return ReprocessFailed(statusCode: response.statusCode);
   }
 }
 
-/// The `detail.code` of an error body (`{"detail": {"code": ..., "message": ...}}`), if any.
-String? _detailCode(String body) {
+/// The typed detail object of an error response, if present.
+Map<String, dynamic>? _errorDetail(String body) {
   try {
     // omi-perf-allow: history-json-on-ui -- a small error body, never a conversation list
     final decoded = jsonDecode(body);
     final detail = decoded is Map ? decoded['detail'] : null;
-    final code = detail is Map ? detail['code'] : null;
-    return code is String ? code : null;
+    return detail is Map<String, dynamic> ? detail : null;
   } catch (_) {
     return null;
   }

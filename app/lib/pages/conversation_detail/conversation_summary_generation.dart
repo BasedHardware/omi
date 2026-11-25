@@ -39,6 +39,9 @@ enum SummaryFailureKind {
   /// The hourly regenerate limit (HTTP 429).
   rateLimited,
 
+  /// The configured provider account needs attention (HTTP 429 with a BYOK code).
+  providerAccount,
+
   /// The audio is still awaiting transcription (HTTP 409 `transcription_pending`): nothing to retry.
   transcriptionPending,
 
@@ -49,13 +52,14 @@ enum SummaryFailureKind {
 /// The last failed summary request, scoped to the conversation it was for.
 @immutable
 class SummaryFailure {
-  const SummaryFailure({required this.conversationId, required this.kind, this.appId});
+  const SummaryFailure({required this.conversationId, required this.kind, this.appId, this.providerMessage});
 
   final String conversationId;
   final SummaryFailureKind kind;
 
   /// The template that was asked for; null for Omi's own summary.
   final String? appId;
+  final String? providerMessage;
 }
 
 /// Whether [conversation] carries the summary a reprocess asked for: the template's non-empty
