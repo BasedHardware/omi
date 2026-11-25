@@ -105,7 +105,7 @@ even below 20 words. Naturally ended media is hidden. Background hides only
 with positive wearer recognition somewhere in the contributing recordings:
 `is_user: true` or a segment-bound wearer label from authoritative speaker
 evidence. Without it, background becomes conversation and uses the normal
-300-word rule or the manual-end override. `kind`, `outline_kind` and the
+150-word rule or the manual-end override. `kind`, `outline_kind` and the
 classification reason remain available for analytics.
 Set `CONVERSATIONS_V3_MANUAL_END_HOME_VISIBLE=off` on every service that runs the
 v3 reconcile (`backend` for on-open rebuilds, `backend-sync`, `backend-sync-backfill`)
@@ -158,7 +158,7 @@ proof of acoustic silence; qualify transcript completeness separately.
 `CONVERSATIONS_V3_STRETCH_COHESION` defaults to `on`. The outline renders
 stretch-local speaker labels, and short conversational topics fold within the
 same silence, manual-end and two-hour cap boundaries. Home evaluates the
-300-word threshold against that fresh stretch. Media, recognized background
+150-word threshold against that fresh stretch. Media, recognized background
 and late fragments around published claims retain their own visibility rules.
 Set the switch to `off` on v3 builder and backfill runners to restore the prior
 prompt and per-topic Home minimum for subsequent passes. Existing published
