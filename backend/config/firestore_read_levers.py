@@ -81,7 +81,10 @@ DEFAULT_PERCENTAGES = {
     'admission_frontier_hint': 100,
     'sync_allowance_single_resolve': 100,
     'bpp_owner_memo': 100,
-    'bpp_shared_owner_cache': 100,
+    # SCA-3508 phase 1 merges dark for the shared owner cache: Release ramps
+    # shadow, then enforcement, by config after per-route shadow evidence and
+    # revocation/account-deletion/erasure readbacks (privacy memo admission).
+    'bpp_shared_owner_cache': 0,
     'bpp_status_skip': 100,
     'bpp_owner_memo_enforce': 0,
 }
