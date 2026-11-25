@@ -53,7 +53,13 @@ enum SummaryFailureKind {
 /// The last failed summary request, scoped to the conversation it was for.
 @immutable
 class SummaryFailure {
-  const SummaryFailure({required this.conversationId, required this.kind, this.appId, this.providerAccountCode});
+  const SummaryFailure({
+    required this.conversationId,
+    required this.kind,
+    this.appId,
+    this.providerAccountCode,
+    this.providerAccountGatewayMessage,
+  });
 
   final String conversationId;
   final SummaryFailureKind kind;
@@ -61,12 +67,13 @@ class SummaryFailure {
   /// The template that was asked for; null for Omi's own summary.
   final String? appId;
   final ReprocessProviderAccountCode? providerAccountCode;
+  final String? providerAccountGatewayMessage;
 
   String providerAccountMessage(AppLocalizations l10n) => switch (providerAccountCode) {
         ReprocessProviderAccountCode.quota => l10n.summaryProviderQuota,
         ReprocessProviderAccountCode.rateLimit => l10n.summaryProviderRateLimit,
         ReprocessProviderAccountCode.invalidKey => l10n.summaryProviderInvalidKey,
-        null => l10n.summaryFailedBody,
+        null => providerAccountGatewayMessage ?? l10n.summaryFailedBody,
       };
 }
 

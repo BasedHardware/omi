@@ -314,9 +314,10 @@ enum ReprocessProviderAccountCode { quota, rateLimit, invalidKey }
 
 /// The configured provider account needs attention (HTTP 429 with a BYOK code).
 final class ReprocessProviderAccountFailure extends ReprocessResult {
-  const ReprocessProviderAccountFailure({required this.code});
+  const ReprocessProviderAccountFailure({this.code, this.gatewayMessage});
 
-  final ReprocessProviderAccountCode code;
+  final ReprocessProviderAccountCode? code;
+  final String? gatewayMessage;
 }
 
 /// Anything else: transport failure, 5xx (502 `app_result_failed` when the selected template
@@ -413,13 +414,18 @@ ReprocessResult reprocessResultFromResponse(
         _ => const ReprocessFailed(statusCode: 409),
       };
     case 429:
-      final code = switch (_errorDetail(response.body)?['code']) {
+      final detail = _errorDetail(response.body);
+      final code = switch (detail?['code']) {
         'byok_quota' => ReprocessProviderAccountCode.quota,
         'byok_rate_limit' => ReprocessProviderAccountCode.rateLimit,
         'byok_invalid_key' => ReprocessProviderAccountCode.invalidKey,
         _ => null,
       };
       if (code != null) return ReprocessProviderAccountFailure(code: code);
+      final message = detail?['message'];
+      if (message is String && message.trim().isNotEmpty) {
+        return ReprocessProviderAccountFailure(gatewayMessage: message);
+      }
       return ReprocessRateLimited(retryAfter: parseApiRetryAfter(response, now));
     default:
       return ReprocessFailed(statusCode: response.statusCode);

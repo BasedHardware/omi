@@ -11,7 +11,8 @@ from unittest.mock import MagicMock
 
 import httpx
 import pytest
-from fastapi import BackgroundTasks, HTTPException, Response
+from fastapi import BackgroundTasks, FastAPI, HTTPException, Response
+from fastapi.testclient import TestClient
 from openai import APITimeoutError, AuthenticationError, RateLimitError
 
 import routers.conversations as conv_router
@@ -120,6 +121,59 @@ def test_successful_reprocess_restores_with_exactly_one_obligation(reprocess, mo
     assert reprocess.rows[ROW_PATH]['discarded'] is False
     assert processed.discarded is False
     assert reprocess.rows[JOB_PATH]['state'] == 'record_pending'
+    processor.record_app_usage.assert_called_once()
+
+
+def test_reprocess_retryable_failure_refunds_only_its_hourly_slot(reprocess, monkeypatch):
+    usage = 9
+    bucket_expiry = 123456789
+    # The strict store captures encrypted writes. Supply the decrypted row that
+    # the production conversation reader would return on each request.
+    initial_row = deepcopy(reprocess.rows[ROW_PATH])
+    monkeypatch.setattr(conv_router, '_get_valid_conversation_by_id', lambda uid, cid: deepcopy(initial_row))
+
+    def reserve(uid, policy, limit, window):
+        nonlocal usage
+        assert (uid, policy, limit, window) == (UID, 'conversations:reprocess', 10, 3600)
+        if usage == limit:
+            return False, 60, None
+        usage += 1
+        return True, 60, bucket_expiry
+
+    def release(uid, policy, *, expires_at_ms):
+        nonlocal usage
+        assert (uid, policy, expires_at_ms) == (UID, 'conversations:reprocess', bucket_expiry)
+        usage -= 1
+
+    monkeypatch.setattr(conv_router.redis_db, 'reserve_rate_limit_slot', reserve)
+    monkeypatch.setattr(conv_router.redis_db, 'release_rate_limit', release)
+    monkeypatch.setattr(conv_router.auth, 'RATE_LIMIT_SHADOW', False)
+    monkeypatch.setenv('CONVERSATION_PROCESSING_RETRYABLE_PROVIDER_FAILURE_ENABLED', '1')
+    app_result = MagicMock(
+        side_effect=[APITimeoutError(request=httpx.Request('POST', 'https://example.invalid')), 'Synthetic summary']
+    )
+    monkeypatch.setattr(processor, 'get_app_result', app_result)
+    app = FastAPI()
+    app.include_router(conv_router.router)
+    app.dependency_overrides[conv_router.auth.get_current_user_uid] = lambda: UID
+    url = f'/v1/conversations/{CID}/reprocess?app_id={APP_ID}'
+    with TestClient(app) as client:
+        first = client.post(url)
+        assert first.status_code == 503
+        assert first.json()['detail']['code'] == 'conversation_processing_retryable'
+        assert usage == 9
+
+        retry = client.post(url)
+        assert retry.status_code == 200
+        assert usage == 10
+
+        exhausted = client.post(url)
+        assert exhausted.status_code == 429
+        assert exhausted.json() == {'detail': 'Rate limit exceeded. Try again in 60s.'}
+        assert exhausted.headers['Retry-After'] == '60'
+        assert usage == 10
+    assert app_result.call_count == 2
+    processor.record_app_usage.assert_called_once()
 
 
 @pytest.mark.parametrize(
@@ -195,6 +249,7 @@ def test_reprocess_app_result_failure_keeps_the_row_hidden(
         assert 'conversation_id' not in error.value.detail
         assert record.levelno == logging.WARNING
         assert record.getMessage().endswith(f'conversation_id={CID}')
+        processor.record_app_usage.assert_not_called()
     assert private_message not in caplog.text
     assert private_message not in str(error.value.detail)
     assert registrations == []
