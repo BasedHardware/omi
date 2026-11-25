@@ -256,6 +256,7 @@ class FirestoreTransaction:
             uid,
             conversation_ids=conversation_ids,
             expected_generation=expected_generation,
+            shared_owner_cache=True,
             **options,
         )
 
