@@ -178,6 +178,13 @@ def build_parser() -> argparse.ArgumentParser:
     scenario_check = scenario_sub.add_parser('check', parents=[common], help='validate files, print planned timelines')
     scenario_check.add_argument('files', nargs='+')
 
+    affected = sub.add_parser(
+        'affected', parents=[common], help='earliest stage and scenarios a change can influence (BASE..HEAD)'
+    )
+    affected.add_argument(
+        'range', nargs='?', help='BASE..HEAD, or BASE alone (to the working tree); default merge-base with origin/main'
+    )
+    affected.add_argument('--repo', help='git repo (default: this checkout)')
     sub.add_parser('stages', parents=[common], help='stages in order and their registered drivers')
     sub.add_parser('doctor', parents=[common], help='roots, permissions and plugins')
     return parser
@@ -249,6 +256,11 @@ def dispatch(args: argparse.Namespace, store: Store, registry: Registry, as_json
         if args.overlay_command == 'live-env':
             return _overlay_live_env(args), 0
         return _overlay_from_runtime_env(args), 0
+    if command == 'affected':
+        from testing.pipeline_lab import affected as affected_map
+
+        report = affected_map.affected(Path(args.repo) if args.repo else default_repo(), args.range)
+        return (report if as_json else _Raw(affected_map.format_text(report) + '\n')), 0
     if command == 'stages':
         return registry.describe(), 0
     if command == 'doctor':
