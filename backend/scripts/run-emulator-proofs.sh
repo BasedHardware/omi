@@ -89,6 +89,8 @@ else
   echo "FAIL conversation purge: a loopback Firestore emulator is required" >&2
   failures+=("conversation purge: loopback emulator required")
 fi
+run_proof "PL-767 conversation erasure follows upload-keyed batch rows" \
+  "$PYTHON" -m pytest -q -p no:cacheprovider tests/integration/test_conversation_erasure_ledger_emulator.py
 run_proof "ledger correction, revert, standalone reopen, privacy fence" \
   "$PYTHON" scripts/knowledge_ledger_correction_emulator_test.py
 # Module execution, not a file path: this older proof has no sys.path bootstrap
