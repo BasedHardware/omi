@@ -302,7 +302,8 @@ def evidence_commands_bound(text: str) -> bool:
             if name.startswith('Reconstruct')
             else {
                 'EVIDENCE_REQUEST': '${{ inputs.evidence_request }}',
-                'LISTEN_PRIVATE_VALUES_YAML': '${{ secrets.LISTEN_PRIVATE_VALUES_YAML }}',
+                'LISTEN_PRIVATE_VALUES_YAML': ("${{ fromJSON(inputs.evidence_request).overlay_state != 'references' "
+                                               "&& secrets.LISTEN_PRIVATE_VALUES_YAML || '' }}"),
             }
         )
         if step.get('env', {}) != expected_env:

@@ -80,6 +80,14 @@ terminal transaction. Record admission promotes it to `v3_manual_end` for a sing
 recording, or when the fast first transcript covers the whole recording. Set it to `off` on
 `backend` and `backend-integration` to restore the silence and lock timers for later finishes.
 
+`CONVERSATIONS_V3_CAPTURE_CONTINUITY` defaults to `on`. When two recordings prove a reconnect (same
+capture origin `external_data.recording_origin_id`, a new `recording_session_id`, same device when both
+name one), the stream gap between them, up to 10 minutes, is missing audio, not silence, for v3 grouping.
+A manual-end cut waits, at most 5 minutes after the cut, while its own recording or a preceding batch
+recording sealed by the Finish that joins the finished speech has no transcript yet. A held cut stays a
+boundary: its window stays open and unlocked, and later speech waits. Set it to `off` on the v3 builder
+to restore the previous cut and silence rules; rows already written keep their boundaries.
+
 `CONVERSATIONS_V3_FINISH_NO_POINTER` defaults to `on`. When the existing in-progress
 recording lookup misses, an authenticated v3 owner's Finish can acknowledge the
 live derived window in the existing processing response. An optional
@@ -106,9 +114,25 @@ segments counted once. Its durable claim limits it to one title-only provider
 attempt. The builder publishes the preview through `structured.title` while the
 row is live. User titles and the final outline take precedence.
 
-`CONVERSATIONS_V3_BATCH_COMMIT_READS=on` is the default. The projection commit reads its
-recordings and existing derived rows with one transactional BatchGet per chunk. Set it to `off`
-to restore serial per-document reads.
+`CONVERSATIONS_V3_BATCH_COMMIT_READS=on` is the default. The projection commit uses
+transactional BatchGet chunks for input revisions, tombstones, and new-target existence
+checks. Set it to `off` to restore serial point reads.
+
+`CONVERSATIONS_V3_SKIP_UNCHANGED_WRITES` defaults to on. The builder compares its final
+payloads against existing transaction snapshots before writing. Set it to `off` to
+restore unconditional projection and pending writes. `omi_conversations_v3_projection_rows`
+measures skipped and written rows by caller. `omi_conversations_v3_reconcile_billed_writes`
+measures confirmed builder writes, including leases and Home feed writes. Downstream notes
+processing has separate write attribution.
+
+`POST /v1/conversations-v3/reconcile` returns HTTP 409 with
+`{"status":"retry","reason":"dependency_warming"}` for exhausted Firestore contention,
+expiry, or retry deadlines. Confirmed processing fences use `persistence_fenced` in the
+same response. `CONVERSATIONS_V3_RECONCILE_RETRY_RESPONSE` defaults to on. Set it to
+`off` on backend-sync to restore the prior HTTP error mapping. See the
+[reconcile retry change note](./listen_pusher_pipeline/changes/2026-11-25-v3-reconcile-retry-contract.md)
+for retry metrics and processing settlement.
+
 
 ## Pre-recorded Modulate credit-refusal failover
 

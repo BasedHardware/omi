@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import importlib.util
+import json
 import os
 import re
 import shutil
@@ -105,6 +106,148 @@ class ReleaseAdmissionVerifierTests(unittest.TestCase):
         for payload in ({}, {"workflow_runs": {}}, {"workflow_runs": ["not-a-run"]}):
             with self.subTest(payload=payload), self.assertRaises(VERIFIER.ReleaseAdmissionError):
                 VERIFIER.validate_admission(payload, sha=SHA, repository=REPOSITORY)
+
+
+class ReleaseBranchWorkflowTests(unittest.TestCase):
+    branch = "release/listen-hotfix"
+    proof_path = Path(".github/workflows/release-eligibility.yml")
+
+    def setUp(self) -> None:
+        temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(temporary.cleanup)
+        self.repo = Path(temporary.name)
+        self.git("init", "-q", "-b", "main")
+        self.git("config", "user.name", "Release fixture")
+        self.git("config", "user.email", "release-fixture@example.com")
+        self.git("config", "commit.gpgsign", "false")
+        self.git("remote", "add", "origin", ".")
+        for path in (
+            self.proof_path,
+            Path(".github/scripts/verify_backend_release_admission.py"),
+            Path(".github/scripts/verify_backend_release_floor.py"),
+        ):
+            (self.repo / path).parent.mkdir(parents=True, exist_ok=True)
+            shutil.copyfile(ROOT / path, self.repo / path)
+        self.git("add", ".")
+        self.base = self.commit("Serving base")
+        floor = self.repo / "backend/deploy/release_floor.json"
+        floor.parent.mkdir(parents=True)
+        floor.write_text(json.dumps({"floor": self.base, "reason": "fixture", "since": "2026-01-01"}))
+        self.git("add", str(floor))
+        self.main_head = self.commit("Main advanced")
+        self.git("switch", "-q", "-c", self.branch, self.base)
+        self.commit("First carrier change")
+        self.head = self.commit("Second carrier change")
+
+    def git(self, *args: str) -> str:
+        return subprocess.check_output(["git", *args], cwd=self.repo, text=True).strip()
+
+    def commit(self, message: str) -> str:
+        self.git("commit", "-qm", message, "--allow-empty")
+        return self.git("rev-parse", "HEAD")
+
+    def step(self, workflow: Path, job: str, step_id: str) -> str:
+        job_steps = yaml.safe_load((ROOT / workflow).read_text())["jobs"][job]["steps"]
+        return next(step["run"] for step in job_steps if step.get("id") == step_id)
+
+    def run_bash(self, script: str, **env: str) -> tuple[subprocess.CompletedProcess[str], str]:
+        output = self.repo / "step-output"
+        output.unlink(missing_ok=True)
+        result = subprocess.run(
+            ["bash", "-c", script],
+            cwd=self.repo,
+            capture_output=True,
+            text=True,
+            env={**os.environ, "GITHUB_OUTPUT": str(output), "RUNNER_TEMP": str(self.repo), **env},
+        )
+        return result, output.read_text() if output.exists() else ""
+
+    def test_proof_uses_exact_branch_head_and_the_full_fork_range(self) -> None:
+        script = self.step(self.proof_path, "release-eligibility", "range")
+        script = script.replace("${{ github.event_name }}", "workflow_dispatch")
+        context = {"GITHUB_EVENT_NAME": "workflow_dispatch", "GITHUB_REF": f"refs/heads/{self.branch}"}
+        result, output = self.run_bash(script, **context, GITHUB_SHA=self.head)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(output, f"before={self.base}\nafter={self.head}\nproof_ref=refs/heads/ci-evidence/{self.head}\n")
+        stale, output = self.run_bash(script, **context, GITHUB_SHA=self.base)
+        self.assertNotEqual(stale.returncode, 0)
+        self.assertEqual(output, "")
+
+        controls = self.repo / ".github/checks-manifest.yaml"
+        controls.write_text("changed")
+        self.git("add", str(controls))
+        modified_head = self.commit("Modified check controls")
+        modified, output = self.run_bash(script, **context, GITHUB_SHA=modified_head)
+        self.assertNotEqual(modified.returncode, 0)
+        self.assertEqual(output, "")
+
+    def test_build_admits_only_exact_green_release_branch_proof(self) -> None:
+        self.git("switch", "-q", "main")
+        script = self.step(CHECKER.MANUAL_WORKFLOW_PATH, "firestore_readiness", "admitted_source")
+        # Substitute only transport. The checked-in shell, Git and verifier run normally.
+        gh_fixture = """gh() {
+  if [[ -n "$RELEASE_BRANCH" ]]; then
+    [[ "$*" == *"event=workflow_dispatch -f branch=$RELEASE_BRANCH -f status=completed -f head_sha=$DEPLOY_SHA"* ]] || return 1
+  else
+    [[ "$*" == *"event=push&branch=main&status=completed&head_sha=$DEPLOY_SHA"* ]] || return 1
+  fi
+  printf '%s' "$PROOF"
+}
+"""
+        cases = (
+            ("release branch", {}, {}, True),
+            ("branch-qualified path", {"path": f"{self.proof_path}@{self.branch}"}, {}, True),
+            (
+                "main path",
+                {"event": "push", "head_branch": "main", "head_sha": self.main_head},
+                {"RELEASE_BRANCH": "", "DEPLOY_SHA": self.main_head},
+                True,
+            ),
+            ("missing proof", None, {}, False),
+            ("stale proof", {"head_sha": self.base}, {}, False),
+            ("stale request despite exact old proof", {"head_sha": self.base}, {"DEPLOY_SHA": self.base}, False),
+            ("different branch", {"head_branch": "release/other"}, {}, False),
+            ("main proof replay", {"event": "push", "head_branch": "main"}, {}, False),
+            ("push proof on release branch", {"event": "push"}, {}, False),
+            ("red proof", {"conclusion": "failure"}, {}, False),
+            ("proof still running", {"status": "in_progress"}, {}, False),
+            ("different repo", {"head_repository": {"full_name": "fork/omi"}}, {}, False),
+            ("different workflow path", {"path": f"{self.proof_path}@main"}, {}, False),
+            ("missing release branch", {"head_branch": "release/missing"}, {"RELEASE_BRANCH": "release/missing"}, False),
+            ("break glass", {}, {"SKIP_PROOF": "true"}, False),
+            ("deploy mode", {}, {"WORKFLOW_MODE": "deploy"}, False),
+            ("unqualified source branch", {}, {"RELEASE_BRANCH": "main"}, False),
+        )
+        for name, proof, overrides, accepted in cases:
+            with self.subTest(name=name):
+                run = admitted_run(event="workflow_dispatch", head_branch=self.branch, head_sha=self.head)
+                run.update(proof or {})
+                env = {
+                    "DEPLOY_SHA": self.head,
+                    "RELEASE_BRANCH": self.branch,
+                    "WORKFLOW_MODE": "build-only",
+                    "GITHUB_REPOSITORY": REPOSITORY,
+                    "SKIP_PROOF": "false",
+                    "PROOF": json.dumps({"workflow_runs": [run] if proof is not None else []}),
+                    **overrides,
+                }
+                result, output = self.run_bash(gh_fixture + script, **env)
+                self.assertEqual(result.returncode == 0, accepted, result.stderr)
+                expected = f"break_glass=false\nadmitted_sha={env['DEPLOY_SHA']}\n" if accepted else ""
+                self.assertEqual(output, expected)
+
+        self.git("switch", "-q", self.branch)
+        workflow = self.repo / self.proof_path
+        workflow.write_text("name: Release Eligibility\n")
+        self.git("add", str(workflow))
+        modified_head = self.commit("Modified proof workflow")
+        self.git("switch", "-q", "main")
+        result, output = self.run_bash(
+            script, DEPLOY_SHA=modified_head, RELEASE_BRANCH=self.branch, WORKFLOW_MODE="build-only"
+        )
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("reviewed Release Eligibility workflow", result.stderr)
+        self.assertEqual(output, "")
 
 
 class AutomaticReleaseAdmissionVerifierTests(unittest.TestCase):

@@ -20,6 +20,7 @@ import yaml
 from scripts.alert_backtest import metric_names, prometheus
 from scripts.redis_pager_route import REDIS_PAGER_RECEIVER, REDIS_PAGER_TARGET, REDIS_PAGER_UID
 from tests.unit.test_record_seal_cluster_repair_deploy import documents as repair_documents
+from utils.conversations.v3 import metrics as v3_metrics
 
 REPO = Path(__file__).resolve().parents[3]
 MONITORING = REPO / 'backend/charts/monitoring'
@@ -45,6 +46,30 @@ def test_app_review_sweep_counter_is_declared_with_its_outcome_label():
     inventory = json.loads((MONITORING / 'metric-inventory.prod.json').read_text())
     assert 'omi_app_review_config_sweep_total' in inventory['declared_metrics']
     assert tuple(OMI_APP_REVIEW_CONFIG_SWEEP_TOTAL._labelnames) == ('outcome',)
+
+
+def test_backend_sync_scrapes_v3_builder_metric_families():
+    sync = yaml.safe_load((REPO / 'backend/deploy/cloud_run_gmp_sync.yaml').read_text())
+    (keep,) = [
+        rule
+        for rule in sync['spec']['endpoints'][0]['metricRelabeling']
+        if rule['action'] == 'keep' and rule['sourceLabels'] == ['__name__']
+    ]
+    for counter in (
+        v3_metrics.RECONCILES,
+        v3_metrics.MODEL_CALLS,
+        v3_metrics.TERMINAL_FAILURES,
+        v3_metrics.RACES,
+        v3_metrics.SUMMARY_WRITES,
+    ):
+        (family,) = counter.collect()
+        assert re.fullmatch(keep['regex'], f'{family.name}_total'), family.name
+    (pending_age,) = v3_metrics.PENDING_AGE.collect()
+    for sample in pending_age.samples:
+        if not sample.name.endswith('_created'):
+            assert re.fullmatch(keep['regex'], sample.name), sample.name
+    (unlisted,) = v3_metrics.ADOPTED.collect()
+    assert not re.fullmatch(keep['regex'], f'{unlisted.name}_total')
 
 
 def _cpu_millicores(value: object) -> float:

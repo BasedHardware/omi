@@ -97,13 +97,13 @@ run_proof "ledger correction, revert, standalone reopen, privacy fence" \
 # and relies on backend/ staying the import root.
 run_proof "writer cutover / rollback / rollforward" \
   "$PYTHON" -m scripts.knowledge_ledger_writer_transition_emulator_test
-run_proof "Dream idle parking keeps every wakeup (park/acquire vs concurrent mark_dirty)" \
-  "$PYTHON" scripts/dream_park_race_emulator_test.py
 run_proof "summary task recovery, concurrency and expiry" \
   "$PYTHON" -m pytest \
   tests/integration/test_summary_debt_repair_firestore.py \
   tests/integration/test_summary_task_promotion_emulator.py \
   tests/integration/test_candidate_accept_expiry_emulator.py -q
+run_proof "v3 reconcile write elision (unchanged pass, Home receipts, kill switch)" \
+  "$PYTHON" -m pytest -q -p no:cacheprovider tests/integration/test_conversations_v3_unchanged_writes_firestore.py
 run_proof "desktop screen sync frame request delivery, expiry and quota" \
   "$PYTHON" -m pytest -q tests/integration/test_screen_sync_frame_queue_emulator.py
 

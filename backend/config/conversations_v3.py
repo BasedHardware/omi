@@ -2,6 +2,7 @@
 
 import os
 
+from config.refactor_modes import default_on
 from config.rollout_cohorts import in_rollout_cohort, parse_cohort, valid_uid
 from utils.conversations.v3 import client_capability
 from utils.episodes import client_gate
@@ -22,6 +23,10 @@ def conversations_v3_enabled(uid: str) -> bool:
     if stage == 'all' and client_capability.capable_cached(uid):
         return True
     return in_rollout_cohort(uid, 'conversations-v3')
+
+
+def skip_unchanged_writes_enabled() -> bool:
+    return default_on('CONVERSATIONS_V3_SKIP_UNCHANGED_WRITES')
 
 
 def finish_no_pointer_enabled() -> bool:
@@ -70,6 +75,18 @@ def rotation_seconds() -> tuple[float, float]:
 
 def manual_end_home_visible_enabled() -> bool:
     return os.getenv('CONVERSATIONS_V3_MANUAL_END_HOME_VISIBLE', 'on').strip().lower() not in {
+        'off',
+        'false',
+        '0',
+        'no',
+    }
+
+
+def capture_continuity_enabled() -> bool:
+    """Default on. A stream gap inside one capture origin is not silence, and a manual-end cut waits
+    (bounded) for the batch transcript of its own or a preceding sealed recording. Off restores the
+    previous cut and gap rules and skips the predecessor read."""
+    return os.getenv('CONVERSATIONS_V3_CAPTURE_CONTINUITY', 'on').strip().lower() not in {
         'off',
         'false',
         '0',

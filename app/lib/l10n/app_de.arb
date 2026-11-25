@@ -4765,5 +4765,8 @@
     "prepaidCodeResult": "{reason, select, invalid{Dieser Code ist ungültig. Prüfe ihn und versuche es erneut.} used{Dieser Code wurde bereits verwendet.} expired{Dieser Code ist abgelaufen.} hasPlan{Du hast bereits einen Plan. Dein Code wurde nicht verwendet. Löse ihn ein, wenn dein Plan endet.} notPrepaid{Dieser Code kann hier nicht eingelöst werden. Verwende ihn, wenn du einen Plan wählst.} notEligible{Dieser Code kann für dieses Konto nicht verwendet werden.} rateLimited{Zu viele Versuche. Versuche es später erneut.} other{Etwas ist schiefgelaufen. Bitte versuche es erneut.}}",
     "playStripeBilledOnWeb": "Abgerechnet über omi.me. Hier jederzeit kündbar.",
     "playStripeBilledOnWebShort": "Abgerechnet über omi.me.",
-    "playStripePlanPaused": "Dein {plan}-Tarif ist pausiert."
+    "playStripePlanPaused": "Dein {plan}-Tarif ist pausiert.",
+    "firmwareNewestSupportedForDevice": "Ihr Gerät verwendet bereits die neueste unterstützte Firmware-Version",
+    "firmwareSyncRecordingsFirstTitle": "Synchronisieren Sie zuerst Ihre Aufnahmen",
+    "firmwareSyncRecordingsFirstMessage": "Einige Aufnahmen sind noch auf Ihrem Gerät. Warten Sie, bis sie vollständig mit Ihrem Telefon synchronisiert wurden, und starten Sie dann die Aktualisierung."
 }

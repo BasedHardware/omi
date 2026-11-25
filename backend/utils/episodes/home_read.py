@@ -33,7 +33,7 @@ from database import conversations, episodes
 from database._client import get_firestore_client
 from database.firestore_cache_metrics import record_request
 from database.firestore_retry import FIRESTORE_NO_RETRY
-from database.fsr_read_cache import plane_id
+from database.fsr_read_cache import fresh_reader, plane_id
 from database.firestore_read_origin import read_origin
 from utils.read_cache_shadow import compare_hit
 from utils.episodes.timeline import ownership_end
@@ -179,7 +179,9 @@ def _read_members(uid: str, rows: list[dict[str, Any]], *, firestore_client: Any
                 pass
             try:
                 compare_hit(
-                    'episode_members', cached[1], lambda timeout: _fetch_members(uid, ids, client, timeout=timeout)
+                    'episode_members',
+                    cached[1],
+                    fresh_reader(lambda timeout: _fetch_members(uid, ids, client, timeout=timeout)),
                 )
             except Exception:
                 pass  # Even broken observation must preserve the cached response.
