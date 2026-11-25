@@ -706,8 +706,11 @@ def run_files(
         if as_json:
             return
         with printing:
-            suffix = f' (repeat {job.repeat})' if repeat > 1 else ''
-            print(format_report(result) + suffix, flush=True)
+            text = format_report(result)
+            if repeat > 1:
+                first, _, rest = text.partition('\n')
+                text = f'{first}  repeat {job.repeat}/{repeat}' + ('\n' + rest if rest else '')
+            print(text, flush=True)
 
     with local_stack(root) as peers:
         stack_seconds = round(time.perf_counter() - started, 1)
