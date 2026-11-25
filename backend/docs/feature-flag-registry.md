@@ -1704,6 +1704,8 @@ admission.
 
 | Key | Retired | Reason |
 | --- | --- | --- |
+| `OMI_LIST_PROJECTION_WRITER_ENABLED` | 2026-11-22 | SCA-3695 removed the disabled list projection writer in #26022. |
+| `OMI_LIST_VERSION_EPOCH` | 2026-11-22 | SCA-3695 removed the unused list version epoch in #26022. |
 | `AUDIO_ARCHIVE_SEPARATE_MERGE_ENABLED` | 2026-11-22 | David 2026-11-17 quality-ladder flag docket: retire the never-provisioned separate merge phase (SCA-3691); false on every committed serving surface (composed prod/dev manifest, listen and pusher charts) and no separate merge worker exists |
 | `AUDIO_MERGE_WORKER_URL` | 2026-11-22 | David 2026-11-17 quality-ladder flag docket: retire with AUDIO_ARCHIVE_SEPARATE_MERGE_ENABLED (SCA-3691); empty on every committed serving surface and AUDIO_MERGE_HANDLER_URL already covers dispatch |
 | `EPISODE_BOUNDARIES_MODE` | 2026-11-22 | PR #26010: episode-only boundary selection retired; shared evidence sampling and calendar polling retained. |
