@@ -160,13 +160,10 @@ async def execute_chat_completion(
     _validate_credential_mode(serving_route, credential_context)
     budget_ms = serving_route.timeouts.request_ms
     flex_deadline = None
-    scoped_flex = (
-        background_flex_budget_ms is not None
-        and serving_route.lane_id in BACKGROUND_FLEX_LANES
-        and _enabled(BACKGROUND_FLEX_SWITCH)
-    )
+    scoped_flex = serving_route.lane_id in BACKGROUND_FLEX_LANES and _enabled(BACKGROUND_FLEX_SWITCH)
     if (
-        background_flex_budget_ms
+        background_flex_budget_ms is not None
+        and 0 < background_flex_budget_ms <= BACKGROUND_FLEX_MAX_BUDGET_MS
         and scoped_flex
         and _background_flex_applies(resolved_route, serving_route, credential_context, max_provider_attempts)
     ):
@@ -193,6 +190,7 @@ async def execute_chat_completion(
             deadline_monotonic=deadline_monotonic,
             flex_deadline=flex_deadline,
             allow_legacy_flex=not scoped_flex,
+            enforce_deadline=flex_deadline is not None,
         )
     except _BackgroundFlexTerminalError as exc:
         raise exc.gateway_error from exc.__cause__
@@ -218,6 +216,8 @@ async def execute_chat_completion(
                 attempt_trace=attempt_trace,
                 max_provider_attempts=max_provider_attempts,
                 deadline_monotonic=deadline_monotonic,
+                allow_legacy_flex=not scoped_flex,
+                enforce_deadline=flex_deadline is not None,
             )
         except GatewayError as exc:
             last_error = exc
@@ -587,7 +587,7 @@ def _enabled(name: str) -> bool:
 
 def _background_flex_applies(resolved, route, credentials, max_attempts):
     if route.lane_id == 'omi:auto:conversation-v3-outline':
-        if not _enabled(OUTLINE_FLEX_SWITCH):
+        if os.getenv(OUTLINE_FLEX_SWITCH, '').strip().lower() not in {'on', 'true', '1', 'yes'}:
             return False
     elif route.lane_id not in flex_first_lanes():
         return False
@@ -677,6 +677,7 @@ async def _execute_route(
     deadline_monotonic: float,
     flex_deadline: float | None = None,
     allow_legacy_flex: bool = True,
+    enforce_deadline: bool = False,
 ) -> ExecutorResult:
     refs = [route.primary] if route.lane_id in DREAM_LANES else [route.primary, *route.fallbacks]
     last_error: GatewayError | None = None
@@ -709,6 +710,7 @@ async def _execute_route(
                     deadline_monotonic=deadline_monotonic,
                     flex_deadline=flex_deadline if index == 0 else None,
                     allow_legacy_flex=allow_legacy_flex,
+                    enforce_deadline=enforce_deadline,
                 )
             if error is None:
                 if response is None:
@@ -777,6 +779,7 @@ async def _attempt_provider(
     deadline_monotonic: float,
     flex_deadline: float | None = None,
     allow_legacy_flex: bool = True,
+    enforce_deadline: bool = False,
 ) -> tuple[ProviderResponse | None, GatewayError | None]:
     """Try a single provider up to ``route.retry.max_attempts`` times.
 
@@ -843,7 +846,7 @@ async def _attempt_provider(
         if attempt_trace is not None and attempt_trace.keyed:
             KEYED_PROVIDER_ATTEMPTS_TOTAL.inc()
         try:
-            if flex_deadline is not None or (flex_attempts and not legacy_flex):
+            if enforce_deadline:
                 response = await _call_with_deadline(
                     provider, provider_request, provider_ref, credential_context, timeout_ms
                 )
@@ -884,20 +887,19 @@ async def _attempt_provider(
                     metadata=exc.accounting,
                     usage_status=UsageStatus.INDETERMINATE,
                 )
-            if flex_attempts and not legacy_flex:
-                # Only an upstream rejection without a receipt permits another
-                # dispatch. A transport timeout cannot establish that billing stopped.
-                if not (
-                    flex_attempt
-                    and exc.failure_class == FailureClass.PROVIDER_429_OMI_PAID
-                    and exc.upstream_http_status == 429
-                    and exc.accounting is None
-                ):
-                    if flex_attempt:
-                        FLEX_FIRST_TOTAL.labels(lane_id=route.lane_id, outcome='stopped_after_error').inc()
-                    raise _BackgroundFlexTerminalError(error) from exc
+            rejected = exc.failure_class == FailureClass.PROVIDER_429_OMI_PAID and exc.upstream_http_status == 429
             if flex_attempt:
-                if flex_deadline is not None and flex_attempts < BACKGROUND_FLEX_MAX_ATTEMPTS:
+                if flex_deadline is not None:
+                    # Preserve completion on the existing recovery lanes. A receipt-free
+                    # timeout still has indeterminate usage, so never retry it on Flex.
+                    use_reserve = rejected or (
+                        route.lane_id in DEFAULT_FLEX_FIRST_LANES
+                        and exc.failure_class == FailureClass.TIMEOUT_BEFORE_OUTPUT
+                    )
+                    if exc.accounting is not None or not use_reserve:
+                        FLEX_FIRST_TOTAL.labels(lane_id=route.lane_id, outcome='stopped_after_error').inc()
+                        raise _BackgroundFlexTerminalError(error) from exc
+                if flex_deadline is not None and rejected and flex_attempts < BACKGROUND_FLEX_MAX_ATTEMPTS:
                     retry_slack = flex_deadline - monotonic() - BACKGROUND_FLEX_MIN_ATTEMPT_MS / 1000
                     delay = provider_429_backoff_seconds(
                         attempt=flex_attempts,
@@ -908,7 +910,6 @@ async def _attempt_provider(
                         await sleep_for_provider_retry(delay)
                         if (flex_deadline - monotonic()) * 1000 >= BACKGROUND_FLEX_MIN_ATTEMPT_MS:
                             continue
-                # Scoped Flex reaches Standard only after an upstream 429.
                 flex_deadline = None
                 reason = {
                     FailureClass.TIMEOUT_BEFORE_OUTPUT: ConvStructureFlexFallbackReason.TIMEOUT.value,

@@ -33,7 +33,11 @@ def fresh(row):
 
 
 def needs_open_reconcile(row):
-    return row.get('v3_derived') and (row.get('status') == 'in_progress' or row.get('v3_unlocked'))
+    return row.get('v3_derived') and (
+        row.get('status') == 'in_progress'
+        or row.get('v3_unlocked')
+        or row.get('v3_process_failure_reason') == 'outline'
+    )
 
 
 def summary_eligible(row):
@@ -96,7 +100,9 @@ def _record(observation: recap_telemetry.RecapObservation | None, outcome: str) 
         observation.record(outcome)
 
 
-async def prepare(uid, row, *, live=False, observation: recap_telemetry.RecapObservation | None = None):
+async def prepare(
+    uid, row, *, live=False, promote_llm=False, observation: recap_telemetry.RecapObservation | None = None
+):
     def check_cohort():
         if live and not live_recap_enabled(uid):
             _record(observation, 'cohort_revoked')
@@ -114,8 +120,10 @@ async def prepare(uid, row, *, live=False, observation: recap_telemetry.RecapObs
         # No foreground model work: the stream serves the stored row, as processing would.
         return None
     check_cohort()
-    promotion = {'promote_llm': True} if background_flex_retry_enabled() and not live else {}
-    token = await run_blocking(db_executor, leases.acquire, uid, 'summary-' + row['id'], **promotion)
+    if promote_llm and background_flex_retry_enabled() and not live:
+        token = await run_blocking(db_executor, writers.acquire_open_summary, uid, row['id'])
+    else:
+        token = await run_blocking(db_executor, leases.acquire, uid, 'summary-' + row['id'])
     if token is None:
         _record(observation, 'lease_conflict')
         raise HTTPException(409, 'summary_in_progress')

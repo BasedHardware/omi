@@ -5,6 +5,7 @@ import argparse
 import json
 import math
 import random
+from collections import Counter
 from statistics import fmean
 
 OUTLINE = 'conversation-v3-outline'
@@ -46,9 +47,14 @@ def evaluate(rows, lane):
     rows = [row for row in rows if row['lane'] == lane]
     if len(rows) < 300 or len({row['id'] for row in rows}) != len(rows):
         raise ValueError('at least 300 unique approved pairs per experiment are required')
-    missing = REQUIRED_TAGS[lane] - {tag for row in rows for tag in row['tags']}
-    if missing:
-        raise ValueError(f'missing required strata {sorted(missing)}')
+    counts = Counter(tag for row in rows for tag in set(row['tags']))
+    # At 100 cases the nearest-rank p99 can distinguish the maximum from p99.
+    required = {tag: 30 for tag in sorted(REQUIRED_TAGS[lane])}
+    if lane == OUTLINE:
+        required['foreground'] = 100
+    undersampled = {tag: (counts[tag], minimum) for tag, minimum in required.items() if counts[tag] < minimum}
+    if undersampled:
+        raise ValueError(f'undersampled strata (observed, minimum): {undersampled}')
 
     baseline = [row['baseline'] for row in rows]
     candidate = [row['candidate'] for row in rows]
@@ -82,6 +88,7 @@ def evaluate(rows, lane):
     lower_bounds = {name: paired_lower_bound(values) for name, values in scores.items()}
     report = {
         'pairs': len(rows),
+        'strata': {tag: counts[tag] for tag in required},
         'violations': violations,
         'paired_95ci_lower': lower_bounds,
         'foreground_ms': foreground_latency,

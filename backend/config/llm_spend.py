@@ -33,13 +33,13 @@ def topic_deterministic_short_enabled() -> bool:
 
 def outline_cache_prefix_enabled() -> bool:
     """Revert to the legacy wire prompt and cache policy with OMI_OUTLINE_CACHE_PREFIX=off."""
-    return os.getenv('OMI_OUTLINE_CACHE_PREFIX', 'true').strip().lower() not in _FALSE_WORDS
+    return os.getenv('OMI_OUTLINE_CACHE_PREFIX', '').strip().lower() in _TRUE_WORDS
 
 
 def background_outline_flex_enabled() -> bool:
     """Use streamed realtime outlines with LLM_GATEWAY_BACKGROUND_OUTLINE_FLEX=off."""
     return background_flex_retry_enabled() and (
-        os.getenv('LLM_GATEWAY_BACKGROUND_OUTLINE_FLEX', 'true').strip().lower() not in _FALSE_WORDS
+        os.getenv('LLM_GATEWAY_BACKGROUND_OUTLINE_FLEX', '').strip().lower() in _TRUE_WORDS
     )
 
 

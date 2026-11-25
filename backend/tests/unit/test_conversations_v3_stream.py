@@ -263,7 +263,8 @@ async def test_summary_renews_lease_until_model_finishes(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_summary_route_returns_409_before_streaming_response(monkeypatch):
+@pytest.mark.parametrize('headers', [{}, {'X-Omi-Recording-Detail': '1'}])
+async def test_summary_route_returns_409_before_streaming_response(monkeypatch, headers):
     from fastapi import HTTPException
 
     async def blocking(pool, fn, *args, **kwargs):
@@ -276,14 +277,12 @@ async def test_summary_route_returns_409_before_streaming_response(monkeypatch):
     monkeypatch.setattr(leases, 'acquire', lambda *a, **kw: None)
     monkeypatch.setattr(routes, 'StreamingResponse', lambda *a, **kw: pytest.fail('headers already sent'))
     with pytest.raises(HTTPException) as error:
-        await routes.conversation_summary_stream(
-            'c', 'u', request=SimpleNamespace(headers={'X-Omi-Recording-Detail': '1'})
-        )
+        await routes.conversation_summary_stream('c', 'u', request=SimpleNamespace(headers=headers))
     assert error.value.status_code == 409
 
 
 @pytest.mark.asyncio
-async def test_summary_read_without_detail_open_serves_stored_row_without_paid_work(monkeypatch):
+async def test_explicit_read_only_summary_serves_stored_row_without_paid_work(monkeypatch):
     row = {
         'id': 'c',
         'finished_at': AT,
@@ -301,7 +300,9 @@ async def test_summary_read_without_detail_open_serves_stored_row_without_paid_w
     monkeypatch.setattr(service, 'reconcile', lambda *a, **kw: pytest.fail('ordinary read reconciled'))
     monkeypatch.setattr(summary, 'prepare', lambda *a, **kw: pytest.fail('ordinary read prepared paid work'))
 
-    response = await routes.conversation_summary_stream('c', 'u')
+    response = await routes.conversation_summary_stream(
+        'c', 'u', request=SimpleNamespace(headers={'X-Omi-Recording-Detail': '0'})
+    )
     (frame,) = [event async for event in response.body_iterator]
     payload = json.loads(base64.b64decode(frame[6:].strip()))
     assert payload['structured']['title'] == 'Stored'
@@ -356,7 +357,8 @@ async def test_legacy_summary_reconciles_other_v3_rows_and_rechecks_live_admissi
         if becomes_live:
             row['home_hidden'] = False
 
-    async def prepare(uid, stored):
+    async def prepare(uid, stored, *, promote_llm):
+        assert promote_llm
         prepares.append((uid, stored))
 
     monkeypatch.delenv('CONVERSATIONS_V3_LIVE_RECAP_COHORT', raising=False)
@@ -379,7 +381,7 @@ async def test_legacy_summary_reconciles_other_v3_rows_and_rechecks_live_admissi
             )
         ).status_code == 200
         assert prepares == [('u', row)]
-    assert reconciles == [('u', {'on_open': True, 'conversation_id': 'c'})]
+    assert reconciles == [('u', {'on_open': True, 'promote_llm': True, 'conversation_id': 'c'})]
 
 
 @pytest.mark.parametrize('locked', [True, False])
@@ -1011,7 +1013,8 @@ def test_completed_note_detail_repairs_uuid_citations_without_rewriting_storage(
 
 
 @pytest.mark.asyncio
-async def test_explicit_summary_open_locks_configured_preview_with_live_recap_present(monkeypatch):
+@pytest.mark.parametrize('detail_intent', [None, '1'])
+async def test_summary_open_locks_configured_preview_with_live_recap_present(monkeypatch, detail_intent):
     row = {
         'id': 'c',
         'v3_derived': True,
@@ -1026,12 +1029,12 @@ async def test_explicit_summary_open_locks_configured_preview_with_live_recap_pr
     async def blocking(pool, fn, *args, **kwargs):
         return fn(*args, **kwargs)
 
-    async def reconcile(uid, *, on_open, conversation_id):
-        reconciles.append((on_open, conversation_id))
+    async def reconcile(uid, *, on_open, promote_llm, conversation_id):
+        reconciles.append((on_open, promote_llm, conversation_id))
         row.update(status='processing', v3_unlocked=False)
 
-    async def prepare(uid, current):
-        prepared.append(current.copy())
+    async def prepare(uid, current, *, promote_llm):
+        prepared.append((promote_llm, current.copy()))
 
     monkeypatch.setenv('CONVERSATIONS_V3_LIVE_RECAP_COHORT', 'uid:synthetic')
     monkeypatch.setattr(routes, 'run_blocking', blocking)
@@ -1040,12 +1043,12 @@ async def test_explicit_summary_open_locks_configured_preview_with_live_recap_pr
     monkeypatch.setattr(service, 'reconcile', reconcile)
     monkeypatch.setattr(summary, 'prepare', prepare)
 
-    response = await routes.conversation_summary_stream(
-        'c', 'synthetic', request=SimpleNamespace(headers={'X-Omi-Recording-Detail': '1'})
-    )
+    headers = {} if detail_intent is None else {'X-Omi-Recording-Detail': detail_intent}
+    response = await routes.conversation_summary_stream('c', 'synthetic', request=SimpleNamespace(headers=headers))
     assert response.media_type == 'text/event-stream'
-    assert reconciles == [(True, 'c')]
-    assert prepared[0]['status'] == 'processing' and not prepared[0]['v3_unlocked']
+    assert reconciles == [(True, detail_intent == '1', 'c')]
+    assert prepared[0][0] is (detail_intent == '1')
+    assert prepared[0][1]['status'] == 'processing' and not prepared[0][1]['v3_unlocked']
 
 
 @pytest.mark.asyncio
@@ -1108,7 +1111,11 @@ async def test_background_outline_sends_same_lane_and_explicit_cache_prefix(monk
         )
         monkeypatch.setattr(models, 'get_or_create_omi_gateway_llm', lambda *a, **kw: model)
         messages = [('system', outline.OUTLINE_CACHE_PREFIX), ('human', 'Synthetic speech')]
-        assert await models.background_outline('u', messages, budget_ms=83_000) == ('' if gateway_timeout else '{}')
+
+        async def claim():
+            return 83_000
+
+        assert await models.background_outline('u', messages, claim=claim) == ('' if gateway_timeout else '{}')
         assert len(calls) == 1
 
 
@@ -1128,7 +1135,6 @@ def test_outline_only_budgets_finished_automatic_stretches_with_publication_head
 @pytest.mark.asyncio
 @pytest.mark.parametrize('foreground', [False, True])
 async def test_summary_model_marks_only_the_background_attempt_preemptible(monkeypatch, foreground):
-    from utils import executors
     from utils.conversations.v3 import models
     from utils.llm import background_flex
 
@@ -1137,7 +1143,7 @@ async def test_summary_model_marks_only_the_background_attempt_preemptible(monke
     async def blocking(_pool, fn, *args):
         return fn(*args)
 
-    monkeypatch.setattr(executors, 'run_blocking', blocking)
+    monkeypatch.setattr(models, 'run_blocking', blocking)
     monkeypatch.setattr(leases, 'mark_llm_preemptible', lambda *_args: marks.append(_args))
     now = datetime.now(timezone.utc)
     with models.notes_mode('u', foreground=foreground, background_lease=('c', 'token', now)):

@@ -6,30 +6,38 @@ close time. An admitted phase has at most 57 seconds of gateway time, with
 Standard reserves of 40 seconds for structure, 24 for L1, and 42 for V3 summary.
 A phase with less than its full Standard reserve uses its existing realtime
 deadline. Summary opts in only during the existing background model call.
-Interactive, catch-up, and pusher socket finalization use Standard with their
-existing transport deadlines. Tool turns, streaming requests, BYOK, and
-caller-selected tiers are excluded. For these background requests, the gateway
-retries one upstream Flex HTTP 429 without a usage receipt if the provider delay
-and another useful attempt fit. These rejections can also use the Standard
-reserve for one dispatch. A timeout or other uncertain Flex failure ends the
-gateway request because the provider may already have billed it.
+With the default-on switch, interactive, catch-up, pusher socket, sync
+finalization, silent backfill, server recovery and derive calls use Standard
+unless they enter an eligible durable scope with time remaining. Tool turns,
+streaming requests, BYOK, and caller-selected tiers are excluded from scoped
+Flex. The gateway can retry one receipt-free upstream Flex HTTP 429 when another
+useful attempt fits. Receipt-free rejections and timeouts on the three existing
+Flex lanes use the Standard reserve, with the usual retry and failover policy
+inside the original deadline. Timeouts are never retried on Flex and their usage
+stays indeterminate. Compare total attempt usage and spend during readback, since
+the provider may bill a timed-out Flex call. A Flex failure with a usage receipt
+ends dispatch. The outline experiment also stops on Flex timeout.
 
 Only an authenticated builder task can request nonstreaming Flex for a finished,
 non-manual outline with headroom before close + 2 hours. It reserves 45 seconds
 for Standard and 15 for publication, with at most 110 seconds of gateway time
 per builder pass. A foreground open can take the existing lease during the
 background model call. The old token cannot publish, although a provider call
-already in flight can still charge. The durable outline attempt count reserves a
-second slot for the realtime path.
-On a background gateway timeout, the builder takes its existing outline
-fallback path within its publication budget.
+already in flight can still charge. The Flex attempt has its own counter and
+leaves both realtime attempts available. On a background gateway timeout the
+builder can publish the deterministic outline within its publication budget.
+The fallback stays out of the result cache so an open can try Standard.
 
 Set `LLM_GATEWAY_BACKGROUND_FLEX_RETRY=off` in the gateway and backend to restore
 the previous Flex behavior. The gateway's `LLM_GATEWAY_FLEX_FIRST_LANES` can exclude
-one of the three existing lanes from Flex. Set
-`LLM_GATEWAY_BACKGROUND_OUTLINE_FLEX=off` in the backend and gateway to restore
-streamed Standard outlines, and `OMI_OUTLINE_CACHE_PREFIX=off` in the backend to
-restore the original prompt and cache policy.
+one of the three existing lanes from Flex. The outline experiments default off.
+Release owns enabling `LLM_GATEWAY_BACKGROUND_OUTLINE_FLEX=on` in the backend and
+gateway and `OMI_OUTLINE_CACHE_PREFIX=on` in the backend after Margin GO and the
+paired replay. Enable each arm independently, starting on the approved replay
+cohort. Before expanding to eligible live outlines, confirm foreground p95/p99,
+the close + 2h deadline, and net spend against matched Standard traffic. Margin
+checks the first full 24-hour cohort window before authorizing expansion.
+Set either key to `off` to roll its arm back.
 
 ## Offline gate
 
@@ -56,11 +64,20 @@ with no prompt or response text. Provide:
   Record a zero only when the corresponding usage field is known to be zero.
 
 Run `python backend/scripts/evaluate-conversation-flex.py <lane> <receipts.jsonl>`.
-The evaluator rejects missing strata, checks the paired noninferiority bound at
-one percentage point, compares foreground latency, and prints weighted cache
-hit shares for both arms. Compare repriced cache reads and writes separately over
+The evaluator requires at least 30 distinct pairs per required stratum, with
+at least 100 foreground outline pairs for the p95/p99 comparison. Tags can
+overlap. It reports the counts, checks the paired noninferiority bound at one
+percentage point, and prints weighted cache hit shares for both arms. Compare repriced cache reads and writes separately over
 matched traffic at the same rate card before booking savings. The Nov 24 baseline
 in SCA-4247 was 9.05% of outline input tokens reported as cache hits.
+
+## Gateway readback
+
+Use `sum by (lane_id) (increase(llm_gateway_flex_first_total{outcome="attempt"}[24h]))`
+as the attempt denominator for both legacy and scoped Flex after this release.
+Use provider-confirmed Flex usage to measure served share. The old
+`flex + fallback_standard` proxy does not capture intermediate rejections or
+terminal attempts and is only suitable for pre-change windows.
 
 Release is contingent on the paired gate, SCA-3677 transcript access, SCA-3655
 open promotion, and SCA-3657 chat/search freshness. The local deterministic

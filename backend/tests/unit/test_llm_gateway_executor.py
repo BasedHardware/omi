@@ -1094,6 +1094,7 @@ async def test_flex_first_failure_falls_back_to_standard_without_backoff(monkeyp
 )
 @pytest.mark.asyncio
 async def test_flex_fallback_reason_counts_reconcile_for_conv_structure(monkeypatch, lane_id, failure_class, reason):
+    monkeypatch.setenv(executor.BACKGROUND_FLEX_SWITCH, 'off')
     monkeypatch.setenv(executor.FLEX_FIRST_LANES_ENV_VAR, lane_id)
     if lane_id == LANE_ID:
         resolved = _route_with_attempts(1)
@@ -1296,6 +1297,7 @@ def byok_policy():
     ],
 )
 async def test_background_flex_retries_within_shared_budget(monkeypatch, lane, budget, flex_ms):
+    monkeypatch.setenv(executor.OUTLINE_FLEX_SWITCH, 'on')
     lane = f'omi:auto:{lane}'
     request = {'model': lane, 'messages': [{'role': 'user', 'content': 'Synthetic prompt'}]}
     resolved = resolve_chat_completion_route(gateway_config(), request)
@@ -1325,6 +1327,7 @@ async def test_background_flex_retries_within_shared_budget(monkeypatch, lane, b
 async def test_background_flex_preserves_standard_reserve_after_rejections(
     monkeypatch, retry_after, expected_flex_calls
 ):
+    monkeypatch.setenv(executor.OUTLINE_FLEX_SWITCH, 'on')
     lane = 'omi:auto:conversation-v3-outline'
     resolved = resolve_chat_completion_route(
         gateway_config(), {'model': lane, 'messages': [{'role': 'user', 'content': 'Synthetic prompt'}]}
@@ -1346,9 +1349,12 @@ async def test_background_flex_preserves_standard_reserve_after_rejections(
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
-    'preceding_429s,expected_tiers', [(0, ['flex']), (1, ['flex', 'flex']), (2, ['flex', 'flex', None])]
+    'preceding_429s,expected_tiers', [(0, ['flex']), (1, ['flex', 'flex']), (2, ['flex', 'flex'] + [None] * 7)]
 )
-async def test_background_flex_timeout_stops_provider_and_lkg_fallbacks(monkeypatch, preceding_429s, expected_tiers):
+async def test_outline_flex_timeout_is_terminal_but_standard_retains_failover(
+    monkeypatch, preceding_429s, expected_tiers
+):
+    monkeypatch.setenv(executor.OUTLINE_FLEX_SWITCH, 'on')
     lane = 'omi:auto:conversation-v3-outline'
     resolved = resolve_chat_completion_route(
         gateway_config(), {'model': lane, 'messages': [{'role': 'user', 'content': 'Synthetic prompt'}]}
@@ -1394,7 +1400,9 @@ async def test_background_flex_timeout_stops_provider_and_lkg_fallbacks(monkeypa
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize('budget,standard_ms', [(0, 120_000), (45_000, 45_000), (50, 120_000)])
+@pytest.mark.parametrize(
+    'budget,standard_ms', [(None, 120_000), (0, 120_000), (45_000, 45_000), (50, 120_000), (110_001, 120_000)]
+)
 async def test_scoped_flex_needs_background_intent_and_standard_reserve(monkeypatch, budget, standard_ms):
     lane = 'omi:auto:conv-structure'
     resolved = resolve_chat_completion_route(
@@ -1421,3 +1429,71 @@ async def test_background_flex_gateway_switch_restores_legacy_for_zero_budget(mo
         resolved, omi_credentials(), ProviderRegistry({'openai': provider}), background_flex_budget_ms=0
     )
     assert provider.calls[0].request['service_tier'] == 'flex'
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('lane', ['conv-structure', 'memory-l1', 'conversation-v3-summary'])
+async def test_background_flex_timeout_uses_standard_reserve_and_retries_standard(monkeypatch, lane):
+    lane = f'omi:auto:{lane}'
+    resolved = resolve_chat_completion_route(
+        gateway_config(), {'model': lane, 'messages': [{'role': 'user', 'content': 'Synthetic prompt'}]}
+    )
+    active = resolved.active_route.model_copy(
+        update={
+            **_active_rollout_kwargs(resolved.active_route),
+            'retry': resolved.active_route.retry.model_copy(update={'max_attempts': 2}),
+        }
+    )
+    resolved = replace(resolved, active_route=active)
+    provider = FakeChatCompletionProvider(
+        [
+            ProviderFailure(FailureClass.TIMEOUT_BEFORE_OUTPUT),
+            ProviderFailure(FailureClass.PROVIDER_429_OMI_PAID, retry_after_seconds=2, upstream_http_status=429),
+            fake_success_response(active.primary),
+        ]
+    )
+    slept = _install_retry_clock(monkeypatch)
+    trace = AttemptTrace()
+    await execute_chat_completion(
+        resolved,
+        omi_credentials(),
+        ProviderRegistry({'openai': provider}),
+        attempt_trace=trace,
+        background_flex_budget_ms=57_000,
+    )
+    assert slept == [2]
+    assert [call.request.get('service_tier') for call in provider.calls] == ['flex', None, None]
+    assert trace.attempts[0].usage_status == UsageStatus.INDETERMINATE
+
+
+@pytest.mark.asyncio
+async def test_background_flex_timeout_with_receipt_stops_dispatch(monkeypatch):
+    lane = 'omi:auto:conv-structure'
+    resolved = resolve_chat_completion_route(
+        gateway_config(), {'model': lane, 'messages': [{'role': 'user', 'content': 'Synthetic prompt'}]}
+    )
+    from llm_gateway.gateway.accounting import ProviderResponseMetadata
+
+    provider = FakeChatCompletionProvider(
+        [ProviderFailure(FailureClass.TIMEOUT_BEFORE_OUTPUT, accounting=ProviderResponseMetadata())]
+    )
+    _install_retry_clock(monkeypatch)
+    with pytest.raises(GatewayProviderFailureError):
+        await execute_chat_completion(
+            resolved, omi_credentials(), ProviderRegistry({'openai': provider}), background_flex_budget_ms=57_000
+        )
+    assert [call.request.get('service_tier') for call in provider.calls] == ['flex']
+
+
+@pytest.mark.asyncio
+async def test_background_outline_requires_explicit_opt_in(monkeypatch):
+    monkeypatch.delenv(executor.OUTLINE_FLEX_SWITCH, raising=False)
+    lane = 'omi:auto:conversation-v3-outline'
+    resolved = resolve_chat_completion_route(
+        gateway_config(), {'model': lane, 'messages': [{'role': 'user', 'content': 'Synthetic prompt'}]}
+    )
+    provider = FakeChatCompletionProvider([fake_success_response(resolved.active_route.primary)])
+    await execute_chat_completion(
+        resolved, omi_credentials(), ProviderRegistry({'openai': provider}), background_flex_budget_ms=110_000
+    )
+    assert [call.request.get('service_tier') for call in provider.calls] == [None]

@@ -891,6 +891,7 @@ def test_open_takes_preemptible_outline_lease_and_old_provider_cannot_publish(st
     with pytest.raises(store.Conflict, match='lease_lost'):
         store.save_outline(uid, token, fingerprint, [], firestore_client=strict)
     assert store.outline_attempt(uid, foreground, fingerprint, firestore_client=strict)
+    assert store.outline_attempt(uid, foreground, fingerprint, firestore_client=strict)
     assert not store.outline_attempt(uid, foreground, fingerprint, firestore_client=strict)
     assert leases.acquire(uid, key, promote_llm=True, firestore_client=strict) is None
 
@@ -906,3 +907,89 @@ def test_open_can_promote_summary_only_until_background_result_returns(strict):
     assert leases.acquire(uid, key, promote_llm=True, firestore_client=strict) is not None
     with pytest.raises(store.Conflict, match='lease_lost'):
         leases.mark_llm_preemptible(uid, key, token, False, firestore_client=strict)
+
+
+@pytest.mark.asyncio
+async def test_preempted_notes_pass_refunds_only_its_attempt(strict, monkeypatch):
+    from utils.conversations.v3 import models
+
+    uid, cid = 'synthetic', 'conversation'
+    key = 'summary-' + cid
+    path = ('users', uid, 'conversations', cid)
+    row = {'id': cid, 'status': 'processing', 'v3_process_pending': True}
+    row['v3_process_fingerprint'] = writers.processing_hash(row)
+    row['v3_process_attempts'] = 1
+    strict.rows[path] = row.copy()
+    monkeypatch.setattr(leases, 'get_firestore_client', lambda: strict)
+    token = leases.acquire(uid, key)
+    assert writers.begin_processing(uid, row, token, firestore_client=strict)
+    assert strict.rows[path]['v3_process_attempts'] == 2
+    with models.notes_mode(uid, background_lease=(cid, token, datetime.now(timezone.utc))):
+        with pytest.raises(store.Conflict, match='lease_lost'):
+            async with models.summary_model_attempt():
+                foreground = writers.acquire_open_summary(uid, cid)
+                assert foreground and foreground != token
+                assert writers.acquire_open_summary(uid, cid) is None
+
+    assert strict.rows[path]['v3_process_attempts'] == 1
+    assert strict.rows[path]['v3_process_pending'] is True
+    leases.release(uid, key, foreground)
+    token = leases.acquire(uid, key)
+    assert writers.begin_processing(uid, row, token, firestore_client=strict)
+
+
+@pytest.mark.asyncio
+async def test_notes_drain_reloads_foreground_coverage_after_acquiring_lease(monkeypatch, created_delivery):
+    scanned = {'id': 'c', 'v3_process_pending': True}
+    written = {**scanned, 'summary_covers_through': AT, 'finished_at': AT, 'structured': {'title': 'On open'}}
+    monkeypatch.setattr(service, 'pending_processing', lambda _: [scanned])
+    monkeypatch.setattr(service, '_load_processing_row', lambda *_: written)
+    monkeypatch.setattr(leases, 'acquire', lambda *_: 'token')
+    monkeypatch.setattr(leases, 'release', lambda *_: None)
+    process = AsyncMock()
+    monkeypatch.setattr(service, '_process_leased', process)
+    await service.drain_processing('synthetic')
+    process.assert_awaited_once_with('synthetic', written, 'token')
+
+
+@pytest.mark.asyncio
+async def test_outline_takeover_after_attempt_claim_skips_provider_dispatch(strict, monkeypatch):
+    from utils.conversations.v3 import models
+
+    uid, key = 'synthetic', 'builder'
+    token = leases.acquire(uid, key, firestore_client=strict)
+    real_attempt = store.outline_attempt
+    calls = []
+
+    def claim(*args, **kwargs):
+        assert real_attempt(*args, **kwargs, firestore_client=strict)
+        assert leases.acquire(uid, key, promote_llm=True, firestore_client=strict)
+
+    def promote_after_claim(*args, **kwargs):
+        claim(*args, **kwargs)
+        return True
+
+    class Model:
+        async def ainvoke(self, *_args, **_kwargs):
+            calls.append('dispatch')
+
+    monkeypatch.setattr(leases, 'get_firestore_client', lambda: strict)
+    monkeypatch.setattr(store, 'outline_attempt', promote_after_claim)
+    monkeypatch.setattr(models, 'require_current_generated_compute', lambda *a, **kw: None)
+    monkeypatch.setattr(models, 'get_or_create_omi_gateway_llm', lambda *a, **kw: Model())
+    group = {'finished': True, 'manual_end': False, 'end': datetime.now(timezone.utc)}
+    with pytest.raises(store.Conflict, match='lease_lost'):
+        await service._derive_outline(
+            uid,
+            key,
+            token,
+            group,
+            [],
+            'fingerprint',
+            {},
+            cohesion=False,
+            silence_gap=timedelta(minutes=5),
+            preview_key=None,
+            flex_owner_deadline=service.time.monotonic() + 90,
+        )
+    assert not calls

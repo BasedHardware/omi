@@ -11,6 +11,8 @@ from typing import Any, Callable
 from langchain_core.callbacks import BaseCallbackHandler
 from openai import APIStatusError, DefaultAsyncHttpxClient
 
+from database import conversations_v3_leases as leases
+from utils.executors import db_executor, run_blocking
 from utils.llm import background_flex
 from utils.llm.gateway_client import feature_auto_lane_id
 from utils.llm.usage_tracker import track_usage
@@ -111,9 +113,6 @@ async def summary_model_attempt():
     if foreground or background_lease is None:
         yield
         return
-    from database import conversations_v3_leases as leases
-    from utils.executors import db_executor, run_blocking
-
     cid, token, closed_at = background_lease
     feature = 'conversation_v3_summary'
     key = 'summary-' + cid
@@ -125,7 +124,14 @@ async def summary_model_attempt():
         await run_blocking(db_executor, leases.mark_llm_preemptible, uid, key, token, True)
         try:
             yield
-        finally:
+        except BaseException:
+            try:
+                await run_blocking(db_executor, leases.mark_llm_preemptible, uid, key, token, False)
+            except leases.Conflict as error:
+                if str(error) != 'lease_lost':
+                    raise
+            raise
+        else:
             await run_blocking(db_executor, leases.mark_llm_preemptible, uid, key, token, False)
 
 
@@ -141,7 +147,7 @@ def outline(uid, messages):
         return asyncio.run(_stream_outline(model, messages))
 
 
-async def background_outline(uid, messages, *, budget_ms):
+async def background_outline(uid, messages, *, claim):
     """A bounded, nonstreaming call for a builder lease that foreground can take over."""
     feature = 'conversation_v3_outline'
     with track_usage(uid, feature):
@@ -149,6 +155,9 @@ async def background_outline(uid, messages, *, budget_ms):
             feature_auto_lane_id(feature), options={'request_timeout': 115, 'max_retries': 0}, feature=feature
         )
         messages, options = _outline_cache_request(messages)
+        budget_ms = await claim()
+        if not budget_ms:
+            return None
         deadline = asyncio.timeout(budget_ms / 1000 + 3)
         try:
             async with deadline:

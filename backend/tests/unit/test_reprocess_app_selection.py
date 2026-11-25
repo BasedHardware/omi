@@ -277,7 +277,7 @@ def test_detail_poll_does_not_claim_rearmed_enrichment(monkeypatch, polling, det
             request=SimpleNamespace(headers=headers, query_params=query_params),
         )
 
-    should_enrich = detail_open and not polling
+    should_enrich = not polling
     assert result['status'] == ('processing' if should_enrich else 'completed')
     assert result['deferred'] is not should_enrich
     assert enrich.call_count == int(should_enrich)

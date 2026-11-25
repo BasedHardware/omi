@@ -18,7 +18,7 @@ def lease_ref(client, uid, key):
     return client.collection('users').document(uid).collection('conversation_v3_leases').document(key)
 
 
-def acquire(uid, key, *, promote_llm=False, now=None, firestore_client=None):
+def acquire(uid, key, *, promote_llm=False, on_promote=None, now=None, firestore_client=None):
     client = firestore_client or get_firestore_client()
     now = now or datetime.now(timezone.utc)
     token = uuid4().hex
@@ -31,6 +31,8 @@ def acquire(uid, key, *, promote_llm=False, now=None, firestore_client=None):
         if row.get('until') and row['until'] > now:
             if not (promote_llm and row.get('llm_preemptible') is True):
                 return None
+            if on_promote is not None:
+                on_promote(client, tx)
         row.pop('llm_preemptible', None)
         tx.set(ref, {**row, 'token': token, 'until': now + timedelta(seconds=LEASE_SECONDS)})
         return token
@@ -56,6 +58,13 @@ def held(uid, key, *, now=None, firestore_client=None):
     client = firestore_client or get_firestore_client()
     row = lease_ref(client, uid, key).get().to_dict() or {}
     return bool(row.get('token') and row.get('until') and row['until'] > (now or datetime.now(timezone.utc)))
+
+
+def require_current(uid, key, token, *, firestore_client=None):
+    client = firestore_client or get_firestore_client()
+    row = lease_ref(client, uid, key).get().to_dict() or {}
+    if row.get('token') != token or not row.get('until') or row['until'] <= datetime.now(timezone.utc):
+        raise Conflict('lease_lost')
 
 
 def mark_llm_preemptible(uid, key, token, preemptible, *, firestore_client=None):

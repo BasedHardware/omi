@@ -152,16 +152,28 @@ async def test_preceding_outline_context_is_title_and_line(builder, monkeypatch)
 
 
 @pytest.mark.asyncio
-async def test_malformed_outline_uses_cached_deterministic_fallback(builder, monkeypatch):
+async def test_malformed_outline_is_published_but_not_cached_and_open_retries(builder, monkeypatch):
+    from utils.conversations.v3 import summary
+
     committed, _ = builder
-    monkeypatch.setattr(store, 'load', lambda *a, **kw: ({'r': source()}, {}, []))
-    monkeypatch.setattr(service.models, 'outline', lambda *a: 'malformed JSON')
-    await service.reconcile('u')
-    cache = committed[0][5]
-    assert cache[0]['entries'][0]['first_line'] == 1
-    monkeypatch.setattr(store, 'load', lambda *a, **kw: ({'r': source()}, {}, cache))
-    monkeypatch.setattr(service.models, 'outline', lambda *a: pytest.fail('paid malformed retry'))
-    await service.reconcile('u')
+    recording = source()
+    monkeypatch.setattr(store, 'load', lambda *a, **kw: ({'r': recording}, {}, []))
+    monkeypatch.setattr(service.context, 'cache_key', lambda *a: 'fingerprint')
+    malformed = AsyncMock(return_value='malformed JSON')
+    with monkeypatch.context() as patch:
+        patch.setattr(service, 'leased_work', malformed)
+        await service.reconcile('u')
+    (row,) = committed[0][4]
+    assert not committed[0][5]
+    assert row['v3_process_failure_reason'] == 'outline'
+    assert summary.needs_open_reconcile(row)
+    old_cache = [{'fingerprint': 'fingerprint', 'entries': [{'first_line': 1, '_outline_failed': True}]}]
+    monkeypatch.setattr(store, 'load', lambda *a, **kw: ({'r': recording}, {row['id']: row}, old_cache))
+    await service.reconcile('u', on_open=True, promote_llm=True, conversation_id=row['id'])
+    (cache_entry,) = committed[1][5]
+    assert cache_entry['entries'][0]['title'] == 'A plan'
+    assert not cache_entry['entries'][0].get('_outline_failed')
+    assert committed[1][4][0]['v3_process_pending'] is True
 
 
 @pytest.mark.parametrize(
@@ -192,8 +204,7 @@ def test_reconcile_route_falls_back_only_for_exact_lease_exhaustion(builder, mon
         assert response.json() == {'outcome': 'committed'}
         (commit,) = committed
         assert commit[4]
-        assert commit[5][0]['entries'][0]['title'] == 'speech for a synthetic plan'
-        assert commit[5][0]['entries'][0]['_outline_failed'] is True
+        assert not commit[5]
         assert fallback._value.get() == before + 1
     else:
         assert not committed

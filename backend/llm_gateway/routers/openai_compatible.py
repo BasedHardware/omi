@@ -89,7 +89,7 @@ def _background_flex_budget(request: Request, service: str) -> int | None:
     if not (raw.isascii() and raw.isdigit() and 1 <= len(raw) <= 6):
         return None
     budget = int(raw)
-    return budget if budget <= BACKGROUND_FLEX_MAX_BUDGET_MS else None
+    return budget if 0 < budget <= BACKGROUND_FLEX_MAX_BUDGET_MS else None
 
 
 @router.post('/v1/chat/completions', response_model=None)

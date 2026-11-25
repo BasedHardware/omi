@@ -122,7 +122,9 @@ class GatewayContextChatOpenAI(ChatOpenAI):
         headers = dict(raw_headers) if isinstance(raw_headers, Mapping) else {}
         headers.update(_gateway_usage_headers(feature=self._omi_gateway_feature))
         if self._omi_gateway_feature is not None and self._omi_gateway_feature in background_flex.SCOPED_FEATURES:
-            headers[background_flex.BUDGET_HEADER] = str(background_flex.budget_ms(self._omi_gateway_feature))
+            budget = background_flex.budget_ms(self._omi_gateway_feature)
+            if budget > 0:
+                headers[background_flex.BUDGET_HEADER] = str(budget)
         if headers:
             payload['extra_headers'] = headers
 

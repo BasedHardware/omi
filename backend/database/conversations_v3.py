@@ -1457,12 +1457,13 @@ def outline_attempt(uid, token, fingerprint, *, key='builder', preemptible=False
             timezone.utc
         ):
             raise Conflict('lease_lost')
-        attempts = dict(row.get('outline_attempts') or {})
+        field = 'outline_flex_attempts' if preemptible else 'outline_attempts'
+        attempts = dict(row.get(field) or {})
         count = attempts.get(fingerprint, 0)
         if count >= (1 if preemptible else 2):
             return False
         attempts[fingerprint] = count + 1
-        update: dict[str, Any] = {'outline_attempts': dict(list(attempts.items())[-128:])}
+        update: dict[str, Any] = {field: dict(list(attempts.items())[-128:])}
         if preemptible:
             update['llm_preemptible'] = True
         tx.update(ref, update)
