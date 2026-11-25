@@ -663,3 +663,23 @@ def test_a_held_cut_keeps_open_only_the_window_its_speech_joins():
     (group,) = outline.stretches([f, b], b['finished_at'] + timedelta(seconds=10), continuity=True)
     assert group['locked'] and 'finish_held_until' not in group
     assert b[outline.HOLD_UNTIL] == b['finished_at'] + policy.FINISH_WAIT  # B's own cut still waits
+
+
+def test_awaited_speech_bridges_the_window_it_will_join():
+    # Lab finish_after_long_reconnect_gap: F (a sync fragment inside A) and B are 7 minutes apart; only A's
+    # awaited speech, reconnected to B, joins them. While B's cut waits for A, F must not settle apart.
+    a = awaiting('a', T0, 64, sealed_at=T0 + timedelta(seconds=404), device='phone-1')
+    b = {**finish(T0 + timedelta(seconds=424), 25), 'client_device_id': 'phone-1'}
+    f = recording('f', T0 + timedelta(seconds=1.5), 1.2, origin=None)
+    now = T0 + timedelta(seconds=465)
+    (group,) = outline.stretches([a, b, f], now, continuity=True)
+    assert outline.group_rids(group) == {'b', 'f'} and not group['locked']
+    assert group['finish_held_until'] == b['finished_at'] + policy.FINISH_WAIT
+    assert group['end'] == b['finished_at']  # the awaited audio never stands in as speech
+    landed = {**recording('a', T0, 64, device='phone-1'), 'record_projection_revision': 1}
+    (group,) = outline.stretches([landed, b, f], now + timedelta(seconds=15), continuity=True)
+    assert outline.group_rids(group) == {'a', 'b', 'f'} and group['manual_end'] and group['locked']
+    # Without the reconnect, A's audio is a silence gap away from B: nothing bridges F to B.
+    other = {**a, 'client_device_id': 'phone-2'}
+    groups = outline.stretches([other, b, f], now, continuity=True)
+    assert [outline.group_rids(g) for g in groups] == [{'f'}, {'b'}] and groups[0]['finished']

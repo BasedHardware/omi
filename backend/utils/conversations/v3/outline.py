@@ -145,13 +145,12 @@ def unrecorded(earlier, later, left, right):
 
 
 def _held_cuts(members, lines, now, silence_gap, continuity):
-    """``{cut: (until, finishing recording id, anchor)}`` for manual-end cuts that wait for speech.
+    """``{cut: (until, finishing recording id, awaited rows)}`` for manual-end cuts that wait for speech.
 
     Finish means "finish what I was just saying". The cut waits while speech that would join the
     finished window has not landed: the finishing recording's own transcript, or that of a recording
     that starts before it, was sealed by the Finish, and joins its speech (within the silence gap of
-    it, or as the capture it reconnects). ``anchor`` is the earliest start of the awaited speech.
-    Bounded by ``policy.FINISH_WAIT`` after the cut.
+    it, or as the capture it reconnects). Bounded by ``policy.FINISH_WAIT`` after the cut.
     """
     if not continuity:
         return {}
@@ -163,7 +162,7 @@ def _held_cuts(members, lines, now, silence_gap, continuity):
         if cut is None or begin is None or now - cut >= policy.FINISH_WAIT:
             continue
         sealed = row.get('record_sealed_at')
-        anchors = [begin] if policy.awaiting_batch_transcript(row) else []
+        awaited = [row] if policy.awaiting_batch_transcript(row) else []
         # Where the finished speech starts: walk back from this recording while speech stays within the gap.
         chain = begin
         for line in reversed([line for line in lines if line['start'] < cut]):
@@ -182,9 +181,9 @@ def _held_cuts(members, lines, now, silence_gap, continuity):
             ):
                 continue  # sealed after the Finish (late sync): ordinary late speech
             if end + silence_gap >= chain or stream_gap(other, row) is not None:
-                anchors.append(start)
-        if anchors:
-            held[cut] = (cut + policy.FINISH_WAIT, row['id'], min(anchors))
+                awaited.append(other)
+        if awaited:
+            held[cut] = (cut + policy.FINISH_WAIT, row['id'], awaited)
     return held
 
 
@@ -257,16 +256,26 @@ def stretches(
         row.pop(HOLD_UNTIL, None)
     held = _held_cuts(members, lines, now, silence_gap, continuity)
     hold = None
+    marks = lines
     if held:
         # The earliest held cut stays a boundary: speech after it waits for the next pass (its sources stay
         # pending), so the window it closes is the last one and can stay open without joining later speech.
         first = min(held)
-        until, finishing, anchor = held[first]
+        until, finishing, awaited = held[first]
         waiting = {finishing} | {line['conversation_id'] for line in lines if line['start'] >= first}
         lines = [line for line in lines if line['start'] < first]
-        hold = first, until, finishing, anchor
+        hold = first, until
         for rid in waiting:
             rows[rid][HOLD_UNTIL] = until
+        # The awaited audio stands in for its speech when grouping (never as a line): the window it will
+        # join is planned now, so speech it bridges is not settled apart in the meantime.
+        placeholders = []
+        for row in awaited:
+            rows.setdefault(row['id'], row)
+            start, end = _bounds(row)
+            if start is not None and end is not None and start < first:
+                placeholders.append({'start': start, 'end': max(start, end), 'conversation_id': row['id']})
+        marks = sorted([*lines, *placeholders], key=lambda mark: (mark['start'], mark['conversation_id']))
     cuts = iter(
         sorted(
             cut
@@ -275,22 +284,22 @@ def stretches(
         )
     )
     cut = next(cuts, None)
-    for line in lines:
+    for mark in marks:
         previous = groups[-1] if groups else None
         # A segment belongs to the side on which it starts, even if it crosses the cut.
-        while cut is not None and cut <= line['start']:
-            if previous and previous['lines'][0]['start'] < cut:
+        while cut is not None and cut <= mark['start']:
+            if previous and previous['first'] < cut:
                 previous['manual_end'] = True
             cut = next(cuts, None)
         silence = previous is None
         if previous is not None:
-            gap = line['start'] - previous['end']
+            gap = mark['start'] - previous['end']
             if continuity and gap >= silence_gap:
                 gap -= unrecorded(
                     rows.get(previous['end_rid']),
-                    rows.get(line['conversation_id']),
+                    rows.get(mark['conversation_id']),
                     previous['end'],
-                    line['start'],
+                    mark['start'],
                 )
             silence = gap >= silence_gap
         capped = False
@@ -299,16 +308,16 @@ def stretches(
             and not silence
             and not previous['manual_end']
             and max_window
-            and line['start'] - previous['lines'][0]['start'] >= max_window
+            and mark['start'] - previous['first'] >= max_window
         ):
             previous['window_cap_end'] = True
             capped = True
         if silence or capped or (previous and previous['manual_end']):
-            key = hashlib.sha256(f"{line['conversation_id']}:{line['start'].isoformat()}".encode()).hexdigest()[:24]
             groups.append(
                 {
-                    'key': key,
-                    'end': line['end'],
+                    'key': None,
+                    'first': mark['start'],
+                    'end': mark['end'],
                     'lines': [],
                     'manual_end': False,
                     'after_window_cap': capped,
@@ -316,22 +325,30 @@ def stretches(
                 }
             )
         group = groups[-1]
-        group['lines'].append(line)
-        if line['end'] >= group['end'] or not group.get('end_rid'):
-            group['end_rid'] = line['conversation_id']
-        group['end'] = max(group['end'], line['end'])
+        if 'segment' in mark:
+            group['lines'].append(mark)
+            if group['key'] is None:
+                key = f"{mark['conversation_id']}:{mark['start'].isoformat()}"
+                group['key'] = hashlib.sha256(key.encode()).hexdigest()[:24]
+        else:
+            group['awaits'] = True
+        if mark['end'] >= group['end'] or not group.get('end_rid'):
+            group['end_rid'] = mark['conversation_id']
+        group['end'] = max(group['end'], mark['end'])
+    groups = [group for group in groups if group['lines']]
+    for group in groups:
+        group['end'] = max(line['end'] for line in group['lines'])
     if groups and cut is not None and cut <= now:
         groups[-1]['manual_end'] = True
-    closing = None
-    if hold is not None and groups and not groups[-1]['manual_end']:
-        # The window the held cut will close: the last one, when the awaited speech joins it.
-        last, (_, until, finishing, anchor) = groups[-1], hold
-        gap = anchor - last['end']
-        if gap >= silence_gap:
-            gap -= unrecorded(rows.get(last['end_rid']), rows.get(finishing), last['end'], anchor)
-        if gap < silence_gap:
-            closing = last
-            closing['finish_held_until'] = until
+    # The window the held cut will close: the last one, when the awaited speech joins it.
+    closing = groups[-1] if hold is not None and groups and groups[-1].pop('awaits', False) else None
+    if closing is not None and not closing['manual_end']:
+        closing['finish_held_until'] = hold[1]
+    else:
+        closing = None
+    for group in groups:
+        group.pop('awaits', None)
+        group.pop('first', None)
     for index, group in enumerate(groups):
         # Silence, a manual cut or the window cap starts a later stretch, so only the last one can
         # still be open. Page continuation and future-dated speech must not also hold an earlier one
