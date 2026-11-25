@@ -135,6 +135,15 @@ func TestBatchPrivacyMemoRuleRequiresBoundRotationAndExactOperations(t *testing.
 	}
 }
 
+func TestBatchPrivacyPairRequiresBothSnapshots(t *testing.T) {
+	python, goRun := batchPrivacyRun(pyMemoToken), ruleRun()
+	python.Derived = map[string]any{}
+	goRun.OwnerID = python.OwnerID
+	if diffs := compareObservations(python, goRun); !hasKindPath(diffs, "missing_evidence", "/go/batch_pipeline_privacy/evidence") {
+		t.Fatalf("missing Go privacy snapshots were hidden by absent derived documents: %+v", diffs)
+	}
+}
+
 func TestMissingGoMemoStaysAMissingInGoDifference(t *testing.T) {
 	py, goRun := batchPrivacyRun(pyMemoToken), batchPrivacyRun(goMemoToken)
 	goRun.BatchPrivacy = &batchPrivacyEvidence{

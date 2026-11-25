@@ -54,6 +54,7 @@ type observation struct {
 	TaskWrites                     []string                   `json:"task_writes,omitempty"`
 	TaskEmbeddingInputs            map[string][]string        `json:"task_embedding_inputs,omitempty"`
 	HourlyUsageReplayBucket        string                     `json:"hourly_usage_replay_bucket,omitempty"`
+	OrdinarySyncDiagnostic         bool                       `json:"ordinary_sync_diagnostic,omitempty"`
 	ProviderTokenCalls             []providerTokenCall        `json:"provider_token_calls,omitempty"`
 	ProviderCalls                  []string                   `json:"provider_calls"`
 	Effects                        map[string]any             `json:"effects"`

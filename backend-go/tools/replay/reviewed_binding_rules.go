@@ -132,14 +132,6 @@ func approvedGoOnlyDifference(path string, python, goRun *observation) string {
 			}
 		}
 	}
-	if path == "/admitted" || path == "/admitted/job_id" || path == "/admitted/fanout_key" {
-		if python.Admitted == nil && goAdmissionBinds(goRun) {
-			return "Go job and fanout IDs bind to its admitted queue job; the Python row has no Go admission"
-		}
-		if admissionBinds(python) && goAdmissionBinds(goRun) {
-			return "Python and Go job and fanout IDs each bind to their own admitted queue job"
-		}
-	}
 	return ""
 }
 

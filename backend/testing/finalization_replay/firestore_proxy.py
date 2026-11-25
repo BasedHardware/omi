@@ -8,7 +8,11 @@ from threading import Lock
 import grpc
 from google.cloud.firestore_v1.types import firestore
 
-from testing.finalization_replay.metrics import query_document_name
+from testing.finalization_replay.metrics import (
+    batch_privacy_read_count,
+    direct_write_document_name,
+    query_document_name,
+)
 
 # Bound loopback calls to less than the worker subprocess timeout. grpcio
 # 1.66 returns a finite-looking seconds value (~9e18) when the incoming RPC
@@ -25,7 +29,7 @@ def _forward_options(context):
 
 
 _SERVICE = 'google.firestore.v1.Firestore'
-_SERVER_STREAMING = {'batch_get_documents', 'run_query', 'run_aggregation_query', 'list_documents'}
+_SERVER_STREAMING = {'batch_get_documents', 'run_query', 'run_aggregation_query'}
 _BIDI_STREAMING = {'write', 'listen'}
 _QUERIES = {'run_query', 'run_aggregation_query', 'list_documents'}
 _METHODS = (
@@ -49,7 +53,6 @@ _METHODS = (
 _RESPONSE_TYPES = {
     'batch_get_documents': firestore.BatchGetDocumentsResponse,
     'run_query': firestore.RunQueryResponse,
-    'run_aggregation_query': firestore.RunAggregationQueryResponse,
     'list_documents': firestore.ListDocumentsResponse,
 }
 
@@ -155,7 +158,7 @@ class FirestoreProxy:
             source[operation] += count
 
     def _is_privacy_document(self, name):
-        return _resource_path(name) == self.privacy_document_path
+        return bool(self.privacy_document_path) and _resource_path(name) == self.privacy_document_path
 
     def _is_home_dirty_receipt(self, name):
         return _resource_path(name) == self.home_dirty_receipt_path
@@ -178,35 +181,15 @@ class FirestoreProxy:
         with self._lock:
             self._home_receipt_trace[bucket] += 1
 
-    def _query_targets_privacy(self, request):
-        parent = getattr(request, 'parent', '')
-        if parent.endswith('/documents/' + self.privacy_document_path):
-            return True
-        if not parent.endswith('/documents'):
-            return False
-        query = getattr(request, 'structured_query', None)
-        return bool(query) and any(
-            source.collection_id == 'batch_pipeline_privacy' for source in getattr(query, 'from_', ())
-        )
-
     def _record_request(self, method, request, count_rpc=True):
         self._add(
             rpc_calls=int(count_rpc),
             query_requests=int(method in _QUERIES),
             document_reads=int(method == 'get_document'),
+            batch_pipeline_privacy_document_reads=batch_privacy_read_count(self.privacy_document_path, method, request),
         )
         if method == 'get_document':
             self._record_operation_source(getattr(request, 'name', ''), 'reads')
-        if method == 'get_document' and self._is_privacy_document(getattr(request, 'name', '')):
-            self._add(batch_pipeline_privacy_document_reads=1)
-        elif method == 'batch_get_documents':
-            privacy_reads = sum(self._is_privacy_document(name) for name in request.documents)
-            self._add(batch_pipeline_privacy_document_reads=privacy_reads)
-        elif method in {'run_query', 'run_aggregation_query', 'list_documents'} and self._query_targets_privacy(
-            request
-        ):
-            # Count collection reads conservatively: a filtered query can still read the target.
-            self._add(batch_pipeline_privacy_document_reads=1)
         if method in {'commit', 'batch_write', 'write'}:
             writes = getattr(request, 'writes', ())
             self._record_writes(writes)
@@ -216,16 +199,7 @@ class FirestoreProxy:
             else:
                 deletes, writes = 0, 1
             self._add(writes=writes, deletes=deletes)
-            name = getattr(request, 'name', '')
-            if method == 'create_document':
-                name = '/'.join(
-                    part.strip('/')
-                    for part in (
-                        getattr(request, 'parent', ''),
-                        getattr(request, 'collection_id', ''),
-                        getattr(request, 'document_id', ''),
-                    )
-                )
+            name = direct_write_document_name(method, request)
             self._record_operation_source(name, 'deletes' if deletes else 'writes')
             if self._is_privacy_document(name):
                 self._add(
@@ -289,7 +263,7 @@ class FirestoreProxy:
             if method == 'batch_write':
                 statuses = getattr(firestore.BatchWriteResponse.deserialize(response), 'status', ())
                 writes = [
-                    write for index, write in enumerate(writes) if index >= len(statuses) or statuses[index].code == 0
+                    write for index, write in enumerate(writes) if index < len(statuses) and statuses[index].code == 0
                 ]
             for write in writes:
                 name = _write_path(write)
@@ -300,16 +274,7 @@ class FirestoreProxy:
                 else:
                     self._record_home_receipt(name, getattr(write, 'update', None))
         elif method in {'create_document', 'update_document', 'delete_document'}:
-            name = getattr(request, 'name', '')
-            if method == 'create_document':
-                name = '/'.join(
-                    part.strip('/')
-                    for part in (
-                        getattr(request, 'parent', ''),
-                        getattr(request, 'collection_id', ''),
-                        getattr(request, 'document_id', ''),
-                    )
-                )
+            name = direct_write_document_name(method, request)
             if method == 'delete_document':
                 if self._is_home_dirty_receipt(name):
                     with self._lock:
@@ -398,6 +363,7 @@ class FirestoreProxy:
                 )
                 kwargs = _forward_options(context)
                 response = call(request_bytes, **kwargs)
+                self._record_response(method, response)
                 self._record_committed_home_writes(method, request, response)
                 return response
             except grpc.RpcError as error:

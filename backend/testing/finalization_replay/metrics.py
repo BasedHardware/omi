@@ -132,6 +132,10 @@ def query_document_name(response):
 
 def _matches_batch_privacy_document(state, name):
     path = getattr(state, 'batch_privacy_document_path', '')
+    return _matches_document_path(path, name)
+
+
+def _matches_document_path(path, name):
     if not isinstance(name, str) or not path:
         return False
     marker = '/documents/'
@@ -148,7 +152,7 @@ def _write_document_name(write):
     )
 
 
-def _direct_write_document_name(name, request):
+def direct_write_document_name(name, request):
     document_name = _field(request, 'name', '') or _field(_field(request, 'document', {}), 'name', '')
     if document_name or name != 'create_document':
         return document_name
@@ -160,30 +164,27 @@ def _direct_write_document_name(name, request):
     return ''
 
 
-def _batch_privacy_read_count(state, name, request):
-    path = getattr(state, 'batch_privacy_document_path', '')
+def batch_privacy_read_count(path, name, request):
     if not path:
         return 0
     if name == 'get_document':
-        return int(_matches_batch_privacy_document(state, _field(request, 'name', '')))
+        return int(_matches_document_path(path, _field(request, 'name', '')))
     if name == 'batch_get_documents':
-        return sum(
-            _matches_batch_privacy_document(state, document) for document in (_field(request, 'documents', ()) or ())
-        )
+        return sum(_matches_document_path(path, document) for document in (_field(request, 'documents', ()) or ()))
+    if name not in {'list_documents', 'run_query', 'run_aggregation_query'}:
+        return 0
+    parent = (_field(request, 'parent', '') or '').rstrip('/')
+    if _matches_document_path(path, parent):
+        # Reads rooted at the target document are counted conservatively.
+        return 1
+    if not parent.endswith('/documents') or len(parent.split('/')) != 5:
+        return 0
     if name == 'list_documents':
-        parent = _field(request, 'parent', '') or ''
-        collection = _field(request, 'collection_id', '') or ''
-        return int(collection == 'batch_pipeline_privacy' and parent.rstrip('/').endswith('/documents'))
-    if name in {'run_query', 'run_aggregation_query'}:
-        query = _field(request, 'structured_query', {}) or {}
-        if name == 'run_aggregation_query':
-            aggregation = _field(request, 'structured_aggregation_query', {}) or {}
-            query = _field(aggregation, 'structured_query', query) or query
-        sources = _field(query, 'from_', _field(query, 'from', ())) or ()
-        targets_collection = any(_field(source, 'collection_id', '') == 'batch_pipeline_privacy' for source in sources)
-        parent = _field(request, 'parent', '') or ''
-        return int(targets_collection and parent.rstrip('/').endswith('/documents'))
-    return 0
+        return int(_field(request, 'collection_id') == 'batch_pipeline_privacy')
+    query_request = _field(request, 'structured_aggregation_query') if name == 'run_aggregation_query' else request
+    query = _field(query_request, 'structured_query')
+    sources = _field(query, 'from_', _field(query, 'from', ())) or ()
+    return int(any(_field(source, 'collection_id') == 'batch_pipeline_privacy' for source in sources))
 
 
 def _matches_home_dirty_receipt(state, name):
@@ -298,7 +299,9 @@ def _invoke_rpc(state, name, read_methods, call, *args, **kwargs):
             query_requests=int(name in {'run_query', 'run_aggregation_query'}),
             document_reads=int(name in read_methods),
         )
-        privacy_reads = _batch_privacy_read_count(state, name, _request(args, kwargs))
+        privacy_reads = batch_privacy_read_count(
+            getattr(state, 'batch_privacy_document_path', ''), name, _request(args, kwargs)
+        )
         if privacy_reads:
             state.add_firestore_operations(batch_pipeline_privacy_document_reads=privacy_reads)
     return call(*args, **kwargs)
@@ -353,7 +356,7 @@ def install_firestore_meter():
                 if name in direct_writes:
                     deleted = name == 'delete_document'
                     counts = {'deletes': int(deleted), 'writes': int(not deleted)}
-                    if _matches_batch_privacy_document(state, _direct_write_document_name(name, request)):
+                    if _matches_batch_privacy_document(state, direct_write_document_name(name, request)):
                         counts[
                             (
                                 'batch_pipeline_privacy_document_deletes'
@@ -363,7 +366,7 @@ def install_firestore_meter():
                         ] = 1
                     state.add_firestore_operations(**counts)
                     document = _field(request, 'document', {}) or {}
-                    document_name = _direct_write_document_name(name, request)
+                    document_name = direct_write_document_name(name, request)
                     fields = _field(document, 'fields', {}) or {}
                     _capture_parity_write(
                         state,

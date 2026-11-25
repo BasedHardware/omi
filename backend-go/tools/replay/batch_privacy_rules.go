@@ -46,8 +46,10 @@ func batchPrivacyRelevant(run *observation) bool {
 	if run == nil {
 		return false
 	}
-	if run.BatchPrivacy != nil && (run.BatchPrivacy.Seed.Exists || run.BatchPrivacy.Final.Exists) {
-		return true
+	if evidence := run.BatchPrivacy; evidence != nil {
+		if evidence.Seed.Exists || evidence.Final.Exists || len(evidence.Seed.Fields) != 0 || len(evidence.Final.Fields) != 0 {
+			return true
+		}
 	}
 	if run.Cost.Firestore.BatchPrivacyDocumentReads != 0 ||
 		run.Cost.Firestore.BatchPrivacyDocumentWrites != 0 || run.Cost.Firestore.BatchPrivacyDocumentDeletes != 0 {
@@ -166,9 +168,9 @@ func validateBatchPrivacyPair(diffs *[]difference, python, goRun *observation) {
 	if !batchPrivacyRelevant(python) && !batchPrivacyRelevant(goRun) {
 		return
 	}
-	if python == nil || goRun == nil || python.BatchPrivacy == nil || goRun.BatchPrivacy == nil ||
-		python.BatchPrivacy.Seed.Fields == nil || goRun.BatchPrivacy.Seed.Fields == nil ||
-		python.BatchPrivacy.Final.Fields == nil || goRun.BatchPrivacy.Final.Fields == nil {
+	pySnapshots := batchPrivacyPairSnapshotPresent(diffs, "python", python)
+	goSnapshots := batchPrivacyPairSnapshotPresent(diffs, "go", goRun)
+	if !pySnapshots || !goSnapshots {
 		return
 	}
 	path := batchPrivacyDocumentPath(python.OwnerID)
@@ -178,4 +180,16 @@ func validateBatchPrivacyPair(diffs *[]difference, python, goRun *observation) {
 			addDifference(diffs, "/derived_documents/"+escapePointer(path)+"/"+field, "invalid_binding")
 		}
 	}
+}
+
+func batchPrivacyPairSnapshotPresent(diffs *[]difference, side string, run *observation) bool {
+	if run != nil && run.BatchPrivacy != nil && batchPrivacySnapshotValid(run.BatchPrivacy.Seed) &&
+		batchPrivacySnapshotValid(run.BatchPrivacy.Final) {
+		return true
+	}
+	// A relevant side already reports missing evidence in its own check.
+	if !batchPrivacyRelevant(run) {
+		addDifference(diffs, "/"+side+"/batch_pipeline_privacy/evidence", "missing_evidence")
+	}
+	return false
 }

@@ -22,9 +22,7 @@ func compareObservationsForRun(python, goRun *observation, pythonTokens, goToken
 	diffs := []difference{}
 	terminalChecks := terminalMemoChecks(python, goRun)
 	compareValue(&diffs, "/status", python.Status, goRun.Status)
-	if python.Admitted != nil && goRun.Admitted != nil {
-		compareValue(&diffs, "/admitted/own_key", python.Admitted.OwnKey, goRun.Admitted.OwnKey)
-	}
+	compareAdmissions(&diffs, python, goRun)
 	compareValue(&diffs, "/conversation", python.Document, goConversation(goRun))
 	compareDerivedDocuments(&diffs, python, goRun)
 	if terminalChecks != nil {
@@ -124,31 +122,51 @@ func compareObservationsForRun(python, goRun *observation, pythonTokens, goToken
 	return diffs, terminalChecks
 }
 
+func ordinarySyncDiagnosticPair(python, goRun *observation) bool {
+	return python.OrdinarySyncDiagnostic && goRun.OrdinarySyncDiagnostic
+}
+
+func compareAdmissions(diffs *[]difference, python, goRun *observation) {
+	switch {
+	case python.Admitted != nil && goRun.Admitted != nil:
+		compareValue(diffs, "/admitted/own_key", python.Admitted.OwnKey, goRun.Admitted.OwnKey)
+	case python.Admitted != nil:
+		addDifference(diffs, "/admitted", "missing_in_go")
+	case goRun.Admitted != nil:
+		diff := difference{Path: "/admitted", Kind: "missing_in_python"}
+		if ordinarySyncDiagnosticPair(python, goRun) && goRun.Admitted.Engine == "go" {
+			diff.Reason = "ordinary_sync_python_callback_without_admission"
+		}
+		*diffs = append(*diffs, diff)
+	}
+}
+
 func validateGoAttachMemoEvidence(diffs *[]difference, goRun *observation) {
-	if goRun == nil || goRun.EpisodeAttachMemoValid || goRun.EpisodeAttachMemoFailureReason == "missing_transcript" ||
-		goRun.EpisodeAttachMemoFailureReason == "transcript_decode_failed" || goRun.EpisodeAttachMemoFailureReason == "discarded_without_memo" ||
-		goRun.EpisodeAttachMemoFailureReason == "content_key_unavailable" {
+	if goRun == nil || goRun.EpisodeAttachMemoValid {
 		return
 	}
 	conversation, conversationOK := goRun.Document.(map[string]any)
 	needsMemo := conversationOK && hasDocumentField(conversation, "episode_id") &&
 		conversation["transcript_segments"] != nil
 	linkPath := "users/" + goRun.OwnerID + "/episode_links/" + goRun.ConversationID
-	link, ok := goRun.Derived[linkPath].(map[string]any)
-	if !ok && !needsMemo {
-		return
+	link := goRun.Derived[linkPath]
+	var hasMemo, hasLiveMemo bool
+	for _, field := range []string{"attach_revision", "attach_completed", "attach_finalized", "attach_owner_id"} {
+		hasMemo = hasMemo || hasDocumentField(link, field)
+		hasLiveMemo = hasLiveMemo || objectField(link, field) != nil
 	}
-	hasMemo := needsMemo
-	if ok {
-		for _, field := range []string{"attach_revision", "attach_completed", "attach_finalized", "attach_owner_id"} {
-			hasMemo = hasMemo || hasDocumentField(link, field)
+	if !hasLiveMemo {
+		switch goRun.EpisodeAttachMemoFailureReason {
+		case "missing_transcript", "transcript_decode_failed", "discarded_without_memo", "content_key_unavailable":
+			// An unkeyable row may omit its memo. A stored memo still needs proof.
+			return
 		}
 	}
-	if !hasMemo {
+	if !hasMemo && !needsMemo {
 		return
 	}
 	for _, diff := range *diffs {
-		if isEpisodeAttachMemoDifferencePath(diff.Path) {
+		if episodeAttachMemoField(diff.Path, goRun) {
 			return
 		}
 	}
@@ -156,14 +174,6 @@ func validateGoAttachMemoEvidence(diffs *[]difference, goRun *observation) {
 	*diffs = append(*diffs, difference{
 		Path: path, Kind: "invalid_binding", FailureReason: goRun.EpisodeAttachMemoFailureReason,
 	})
-}
-
-func isEpisodeAttachMemoDifferencePath(path string) bool {
-	parts := pointerParts(path)
-	return len(parts) == 3 && parts[0] == "derived_documents" &&
-		strings.Contains(parts[1], "/episode_links/") &&
-		(parts[2] == "attach_completed" || parts[2] == "attach_finalized" ||
-			parts[2] == "attach_revision" || parts[2] == "attach_owner_id")
 }
 
 // A bound Go fanout key is validated against its own queue and job.
@@ -214,6 +224,9 @@ func validateBinding(diffs *[]difference, side string, run *observation, goSide 
 		validateGoMinimumBinding(diffs, side, run)
 	}
 	if run.Admitted == nil {
+		if run.QueueFanout != "" {
+			addDifference(diffs, side+"/admitted", "invalid_binding")
+		}
 		return
 	}
 	ids := run.Admitted

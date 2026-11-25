@@ -64,8 +64,8 @@ func reviewProfileRefreshClocks(diffs []difference, python, goRun *observation) 
 }
 
 func reviewRuledSyncWrites(diffs *[]difference, python, goRun *observation) {
-	if goRun == nil || python == nil || goRun.Admitted == nil || goRun.Admitted.Engine != "go" ||
-		goRun.OwnerID != "replay-"+goRun.ConversationID {
+	if goRun.OwnerID != "replay-"+goRun.ConversationID ||
+		(!ordinarySyncDiagnosticPair(python, goRun) && (goRun.Admitted == nil || goRun.Admitted.Engine != "go")) {
 		return
 	}
 	switch goRun.ConversationID {

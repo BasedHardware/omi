@@ -23,7 +23,7 @@ func approvedEpisodeAttachMemoDifference(path string, python, goRun *observation
 }
 
 func validateEpisodeAttachMemoEvidence(diffs *[]difference, python, goRun *observation) {
-	if !goRun.EpisodeAttachMemoExpected {
+	if !python.EpisodeAttachMemoExpected && !goRun.EpisodeAttachMemoExpected {
 		return
 	}
 	if !goRun.EpisodeAttachMemoValid {

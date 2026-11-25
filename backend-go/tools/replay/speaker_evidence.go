@@ -169,12 +169,23 @@ func expectsResolverWitness(run *observation) bool {
 	}
 	diag := documentField(run, "owner_recognition_diagnostics")
 	for _, field := range []string{"first_resolver", "current_resolver"} {
-		reason := objectField(objectField(diag, field), "reason")
-		if reason == "private_cloud_disabled" || reason == "empty_transcript" {
+		if isCaptureResolver(objectField(diag, field)) {
 			return true
 		}
 	}
+	if run.SpeakerTrace != nil {
+		for _, exit := range run.SpeakerTrace.Exits {
+			if isCaptureResolver(exit) {
+				return true
+			}
+		}
+	}
 	return false
+}
+
+func isCaptureResolver(row any) bool {
+	reason := objectField(row, "reason")
+	return reason == "private_cloud_disabled" || reason == "empty_transcript"
 }
 
 func validateResolverWitness(diffs *[]difference, side string, diag map[string]any) {

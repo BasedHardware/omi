@@ -375,6 +375,25 @@ func TestInvalidGoAttachMemoIsReportedEvenWhenStoredValuesMatchPython(t *testing
 	}
 }
 
+func TestPythonMemoExpectationRequiresGoProof(t *testing.T) {
+	python, goRun := ruleRun(), ruleRun()
+	python.EpisodeAttachMemoExpected, python.EpisodeAttachMemoValid = true, true
+	if diffs := compareObservations(python, goRun); !hasKindPath(diffs, "invalid_binding", "/go/episode_attach_memo") {
+		t.Fatalf("missing Go memo proof was hidden by its absent expectation: %+v", diffs)
+	}
+}
+
+func TestUnkeyableRowStillRequiresProofForStoredMemo(t *testing.T) {
+	python, goRun := ruleRun(), ruleRun()
+	goRun.EpisodeAttachMemoFailureReason = "content_key_unavailable"
+	path := "users/u/episode_links/c"
+	python.Derived[path] = map[string]any{"attach_revision": "stale"}
+	goRun.Derived[path] = map[string]any{"attach_revision": "stale"}
+	if diffs := compareObservations(python, goRun); !hasKindPath(diffs, "invalid_binding", "/go/derived_documents/"+escapePointer(path)+"/attach_memo_evidence") {
+		t.Fatalf("an unkeyable row was allowed to retain an unverified memo: %+v", diffs)
+	}
+}
+
 func TestProtectedFieldReasonDoesNotExposePlaintext(t *testing.T) {
 	uid := "synthetic-owner"
 	left, right := ruleRun(), ruleRun()

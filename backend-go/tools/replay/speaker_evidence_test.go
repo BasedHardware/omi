@@ -142,6 +142,19 @@ func TestSpeakerClockRequiresRunAndWriteWitness(t *testing.T) {
 	}
 }
 
+func TestCaptureExitWithoutStoredResolverResultFails(t *testing.T) {
+	python, goRun := captureRun(t, "0.2", 1), captureRun(t, "0.2", 2)
+	for _, run := range []*observation{python, goRun} {
+		run.Document, run.Derived = map[string]any{}, map[string]any{}
+	}
+	goRun.SpeakerTrace = nil
+	diffs := compareObservations(python, goRun)
+	if !hasKindPath(diffs, "invalid_binding", "/python"+clockPath) ||
+		!hasKindPath(diffs, "invalid_binding", "/go"+clockPath) {
+		t.Fatalf("a witnessed capture with both stored resolver results absent was hidden: %+v", diffs)
+	}
+}
+
 func TestSpeakerCiphertextRequiresEqualAuthenticatedBuilderBytes(t *testing.T) {
 	tests := map[string]func(*observation){
 		"valid":                   nil,

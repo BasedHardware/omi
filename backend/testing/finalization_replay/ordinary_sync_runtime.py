@@ -275,6 +275,7 @@ def run_cases(states, side, binary, database, key, worker_backend, server, clien
             if getattr(state, 'diag_missing_module', None):
                 out['errors'][side] = f'ModuleNotFoundError: {state.diag_missing_module}'
             if side in out:
+                out[side]['ordinary_sync_diagnostic'] = True
                 if state.case['name'] == 'kept-with-effects':
                     out[side]['observed_notes_output'] = _observed_notes_output(out[side])
                 out[side]['hourly_usage_replay_bucket'] = HOURLY_USAGE_REPLAY_TIME.strftime('%Y-%m-%d-%H')

@@ -166,6 +166,43 @@ func TestPairedAdmissionDetectsBYOKSplit(t *testing.T) {
 	}
 }
 
+func TestOneSidedAdmissionRequiresNamedOrdinarySyncException(t *testing.T) {
+	python, goRun := ruleRun(), ruleRun()
+	for _, run := range []*observation{python, goRun} {
+		run.Document = map[string]any{"finalization_job_id": "job", "fanout_key": "key"}
+	}
+	python.Admitted = &admission{Job: "job", Fanout: "key"}
+	python.QueueFanout = "key"
+	if diffs := compareObservations(python, goRun); len(diffs) != 1 ||
+		diffs[0] != (difference{Path: "/admitted", Kind: "missing_in_go"}) {
+		t.Fatalf("identical documents hid a missing Go admission: %+v", diffs)
+	}
+
+	python.Admitted, goRun.Admitted = nil, &admission{Job: "job", Fanout: "key", Engine: "go"}
+	python.Document = map[string]any{}
+	goRun.QueueFanout = "key"
+	goRun.OrdinarySyncDiagnostic = true
+	if diffs := compareObservations(python, goRun); !hasUnexplainedAt(diffs, "/admitted") {
+		t.Fatalf("Go admission alone suppressed the missing Python admission: %+v", diffs)
+	}
+	python.OrdinarySyncDiagnostic = true
+	if diffs := compareObservations(python, goRun); !hasExactPathReason(diffs, "/admitted", "ordinary_sync_python_callback_without_admission") {
+		t.Fatalf("ordinary-sync absence did not have its named reason: %+v", diffs)
+	}
+	python.Admitted, goRun.Admitted = goRun.Admitted, nil
+	if diffs := compareObservations(python, goRun); !hasUnexplainedAt(diffs, "/admitted") {
+		t.Fatalf("ordinary-sync mode suppressed the missing Go admission: %+v", diffs)
+	}
+}
+
+func TestQueueFanoutEvidenceRequiresAdmission(t *testing.T) {
+	python, goRun := ruleRun(), ruleRun()
+	goRun.QueueFanout = "orphaned-key"
+	if diffs := compareObservations(python, goRun); !hasKindPath(diffs, "invalid_binding", "/go/admitted") {
+		t.Fatalf("orphaned Go queue evidence was hidden: %+v", diffs)
+	}
+}
+
 func TestUnboundGoFanoutKeyRemainsUnexplained(t *testing.T) {
 	python, goRun := ruleRun(), ruleRun()
 	python.Document = map[string]any{}

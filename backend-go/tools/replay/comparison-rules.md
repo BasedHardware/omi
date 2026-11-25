@@ -106,6 +106,7 @@ IDs may differ only after each side binds them to its own write or queue job.
 | --- | --- |
 | Admitted job and fanout IDs | Validate each side's IDs against its own queue job and stored row. Do not compare IDs across engines; ordinary-sync Python has no Go admission. |
 | `admitted.own_key` | Compare the BYOK routing flag whenever both sides admitted. |
+| `/admitted` presence | Report a missing admission on either side. `ordinary_sync_python_callback_without_admission` applies only when both observations identify the ordinary-sync diagnostic and the Go admission identifies the Go engine. The Python callback runs without admission in that diagnostic. Go still needs its admission and queue proof. |
 | `finalization_engine`, `finalization_owner_epoch`, `finalization_revision` | When Go ownership metadata is present (or Go admission occurred), Go's fence must bind to its admitted job, owner epoch, and revision. Python must not carry Go's engine or owner-epoch markers. `finalization_revision` is a shared lifecycle counter written by Python too, so compare its value normally unless a valid Go fence makes a missing Python value an approved generated-field difference. |
 | `go_sync_minimum_discarded`, `go_sync_minimum_revision` | Go receipt fields must be present together, use the expected types, and bind to the Go row's sync content revision and discarded outcome. The Python row must not contain them. |
 | Home version fields and `home_feed_control.generation` | Existing UUIDv4 checks require a fresh, seeded-value-free, side-unique token with its same-side Home receipt or preparation link. |
@@ -145,6 +146,11 @@ privacy and operation evidence. Other differences remain visible. R7 compares th
 metered Python attempt and park operations with Go's terminal cost.
 Both Firestore meters count a query result only when it contains a document name.
 A protobuf default document contributes zero document reads.
+The privacy read guard recognizes point and batch-get targets, list collection
+IDs, and the source collections of structured and nested aggregation queries.
+Aggregation replies contain aggregate values, so they add a query RPC and a privacy
+read receipt when applicable without attributing document reads to unknown rows.
+Begin and rollback carry only transaction metadata.
 
 The four exact conversation fields `go_sync_inline_fanout_epoch`,
 `go_sync_inline_fanout_revision`, `go_empty_discard_fanout_epoch`, and

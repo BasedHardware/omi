@@ -22,6 +22,8 @@ scratch=$(mktemp -d "${TMPDIR:-/tmp}/finalization-replay.XXXXXXXX")
 trap 'rm -rf -- "$scratch"' EXIT
 go build -o "$scratch/jobd" ./cmd/jobd
 go build -o "$scratch/replay" ./tools/replay
+PYTHONPATH="$go_root/../backend" REPLAY_TEST_BINARY="$scratch/replay" \
+    "$python_bin" -m unittest testing.finalization_replay.test_firestore_proxy -v
 commit=$(git -C "$go_root/.." rev-parse HEAD)
 
 ./scripts/with-postgres.sh ./scripts/with-firestore.sh bash -euc '
