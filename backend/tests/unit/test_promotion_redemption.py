@@ -198,7 +198,7 @@ def test_failed_promo_deactivation_releases_claim_without_reactivating_code():
     env.release.assert_called_once_with('promo_1')
 
 
-def test_failed_reactivation_still_releases_claim():
+def test_failed_reactivation_keeps_claim_locked():
     with _Env() as env:
         env.sub_modify.side_effect = redemption.stripe.error.InvalidRequestError('sub modify failed', None)
         env.promo_modify.side_effect = [
@@ -211,7 +211,7 @@ def test_failed_reactivation_still_releases_claim():
     assert env.promo_modify.call_count == 2
     assert env.promo_modify.call_args_list[0].kwargs['active'] is False
     assert env.promo_modify.call_args_list[1].kwargs == {'active': True}
-    env.release.assert_called_once_with('promo_1')
+    env.release.assert_not_called()
 
 
 def test_active_subscription_applies_at_handles_missing_period_end_and_empty_items():

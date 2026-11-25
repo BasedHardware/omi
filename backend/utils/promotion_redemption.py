@@ -170,4 +170,5 @@ def _undo_claim(promotion_code_id: str, *, reactivate_code: bool = True) -> None
             stripe.PromotionCode.modify(promotion_code_id, active=True)
         except Exception as e:
             logger.error(f"Could not reactivate promotion code {promotion_code_id}: {sanitize(str(e))}")
+            return
     redemptions_db.release(promotion_code_id)
