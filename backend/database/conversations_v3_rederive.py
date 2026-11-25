@@ -20,12 +20,13 @@ from database import conversations_v3_leases as leases
 from database import home_visibility_index
 from database.account_deletion_marker import account_deletion_document
 from database.account_deletion_policy import account_deletion_marker_blocks_access
+from database.conversation_payload import read_conversation_payload, read_payload_children_for_delete
 from database.conversations import ACTION_ITEMS_EDIT_REVISION, EVENTS_EDIT_REVISION, has_created_calendar_events
 from database.conversations_v3_undo_removals import removal_ref
 from database.home_feed_fields import COMMIT_STAMPED_FIELDS
 from database.recurring_voice_privacy import filter_processing_write
 from database.transcript_pointer import TranscriptBlobAbsent, TranscriptShredded
-from utils.conversation_payload import PAYLOAD_FIELD
+from utils.conversation_payload import PAYLOAD_FIELD, ConversationProjectionTooLarge, InvalidConversationPayload
 from utils.conversations.v3 import Conflict, policy
 
 # Documents (sources and rows) one partition's started_at read may return; more blocks the partition.
@@ -391,6 +392,26 @@ def _run_priors(uid, run_id, ids, client):
     return runs.get_priors(uid, run_id, ids, firestore_client=client)
 
 
+def _check_undo_account(client, tx, uid):
+    marker = account_deletion_document(uid, firestore_client=client).get(transaction=tx)
+    if account_deletion_marker_blocks_access(
+        marker_exists=marker.exists, raw_status=(marker.to_dict() or {}).get('wipe_status')
+    ):
+        raise Conflict('account_deletion')
+
+
+def _undo_payload(client, tx, snapshot, *, erase):
+    raw = snapshot.to_dict() or {}
+    if raw.get('is_locked') or raw.get('data_protection_level') == 'private':
+        raise Conflict('owner_edited_rebuilt_row')
+    try:
+        row = read_conversation_payload(client, tx, snapshot)
+        children, size = read_payload_children_for_delete(tx, snapshot.reference) if erase else ([], 0)
+    except (InvalidConversationPayload, ConversationProjectionTooLarge) as exc:
+        raise Conflict('undo_payload_unavailable') from exc
+    return row, children, size
+
+
 def record_baselines(uid, run_id, ids=None, *, firestore_client=None):
     """After a partition settles its notes, digest the owner surface of every row the run stamped.
 
@@ -408,17 +429,29 @@ def record_baselines(uid, run_id, ids=None, *, firestore_client=None):
         @firestore.transactional
         def record(tx, page=page):
             rows = {e['id']: coll.document(e['id']).get(transaction=tx) for e in page}
-            count = 0
+            baselines = {}
+            account_checked = False
             for entry in page:
                 snapshot = rows[entry['id']]
                 row = (snapshot.to_dict() or {}) if snapshot.exists else {}
                 if row.get('v3_rederive_live_run') != run_id:
                     continue
-                ref = runs.run_ref(client, uid, run_id).collection(runs.PRIORS).document(entry['id'])
-                baseline = CHANGED_BEFORE_SETTLE if owner_changed(row, entry) else owner_surface(row)
+                if PAYLOAD_FIELD in row:
+                    if not account_checked:
+                        _check_undo_account(client, tx, uid)
+                        account_checked = True
+                    try:
+                        row, _, _ = _undo_payload(client, tx, snapshot, erase=False)
+                    except Conflict as exc:
+                        if str(exc) != 'owner_edited_rebuilt_row':
+                            raise
+                        baselines[entry['id']] = CHANGED_BEFORE_SETTLE
+                        continue
+                baselines[entry['id']] = CHANGED_BEFORE_SETTLE if owner_changed(row, entry) else owner_surface(row)
+            for cid, baseline in baselines.items():
+                ref = runs.run_ref(client, uid, run_id).collection(runs.PRIORS).document(cid)
                 tx.update(ref, {'baseline': baseline})
-                count += 1
-            return count
+            return len(baselines)
 
         recorded += record(client.transaction())
     return recorded
@@ -430,13 +463,18 @@ UNDO_GROUP_BYTES = 8_000_000
 SOURCE_CLAIMS_BYTES = 64_000
 
 
-def undo_group_fits(entries):
+def undo_group_fits(entries, *, payload_costs=None):
     """One undo group's restore (rows, their sources and the lease reads) fits one transaction."""
     sources = {c['recording_id'] for e in entries for c in e.get('claims') or []}
     sources.update(rid for e in entries for rid in e.get('sources') or [])
     size = sum(stored_bytes(e.get('raw') or {}) + stored_bytes(e.get('claims') or []) for e in entries)
     size += len(sources) * SOURCE_CLAIMS_BYTES
     writes = len(entries) + len(sources) + sum(bool(entry.get('created')) for entry in entries)
+    if payload_costs:
+        for entry in entries:
+            child_writes, child_bytes = payload_costs.get(entry['id'], (0, 0))
+            writes += child_writes
+            size += child_bytes
     return writes < store.BATCH_MAX_WRITES and size <= UNDO_GROUP_BYTES
 
 
@@ -476,7 +514,7 @@ def drop_stale_priors(uid, run_id, ids=None, *, firestore_client=None):
     return drop_unwritten_priors(uid, run_id, entries, firestore_client=client) if entries else 0
 
 
-def live_undo_blocker(uid, run_id, entries, *, firestore_client=None):
+def live_undo_blocker(uid, run_id, entries, *, firestore_client=None, payload_costs=None):
     """Checked before any group restores, so a refusal leaves the run whole (each group re-checks)."""
     client = firestore_client or store.get_firestore_client()
     coll = store.user_conversations(client, uid)
@@ -489,7 +527,8 @@ def live_undo_blocker(uid, run_id, entries, *, firestore_client=None):
         cid = entry['id']
         if deleted.document(cid).get().exists:
             return 'owner_deleted_rebuilt_row'
-        snapshot = coll.document(cid).get()
+        ref = coll.document(cid)
+        snapshot = ref.get()
         row = (snapshot.to_dict() or {}) if snapshot.exists else None
         if (
             row is not None
@@ -504,9 +543,21 @@ def live_undo_blocker(uid, run_id, entries, *, firestore_client=None):
         if stamp not in (None, run_id):
             return 'undo_newer_run_first'
         if stamp == run_id and PAYLOAD_FIELD in row:
-            # A legacy undo must neither replace a payload-bearing row nor
-            # validate the owner's edits against its partial parent.
-            return 'document_too_large'
+
+            @firestore.transactional
+            def read(tx):
+                _check_undo_account(client, tx, uid)
+                current = ref.get(transaction=tx)
+                if current.update_time != snapshot.update_time:
+                    raise Conflict('undo_source_changed')
+                return _undo_payload(client, tx, current, erase=not entry.get('created'))
+
+            try:
+                row, children, size = read(client.transaction(read_only=True))
+            except Conflict as exc:
+                return str(exc)
+            if payload_costs is not None:
+                payload_costs[cid] = (len(children), size)
         if stamp == run_id and owner_changed(row, entry):
             return 'owner_edited_rebuilt_row'
         if stamp == run_id:
@@ -538,11 +589,7 @@ def undo_live_rederive(uid, held_leases, run_id, entries, *, firestore_client=No
 
     @firestore.transactional
     def undo(tx):
-        deletion = account_deletion_document(uid, firestore_client=client).get(transaction=tx)
-        if account_deletion_marker_blocks_access(
-            marker_exists=deletion.exists, raw_status=(deletion.to_dict() or {}).get('status')
-        ):
-            raise Conflict('account_deletion')
+        _check_undo_account(client, tx, uid)
         docs = {cid: coll.document(cid).get(transaction=tx) for cid in ids}
         tombstones = {cid: deleted.document(cid).get(transaction=tx) for cid in ids}
         current = {cid: (snapshot.to_dict() or {}) if snapshot.exists else None for cid, snapshot in docs.items()}
@@ -562,8 +609,15 @@ def undo_live_rederive(uid, held_leases, run_id, entries, *, firestore_client=No
         ours = {
             cid for cid, row in current.items() if cid not in done and row and row.get('v3_rederive_live_run') == run_id
         }
-        if any(PAYLOAD_FIELD in current[cid] for cid in ours):
-            raise Conflict('document_too_large')
+        erase_chunks, payload_costs = {}, {}
+        for cid in sorted(ours):
+            if PAYLOAD_FIELD in current[cid]:
+                row, children, size = _undo_payload(client, tx, docs[cid], erase=not by_id[cid].get('created'))
+                current[cid] = row
+                erase_chunks[cid] = children
+                payload_costs[cid] = (len(children), size)
+        if not undo_group_fits(entries, payload_costs=payload_costs):
+            raise Conflict('undo_group_too_large')
         if any(owner_changed(current[cid] or {}, by_id[cid]) for cid in ours):
             raise Conflict('owner_edited_rebuilt_row')
         created = [cid for cid in sorted(ours | done) if current[cid] is not None and by_id[cid].get('created')]
@@ -607,6 +661,8 @@ def undo_live_rederive(uid, held_leases, run_id, entries, *, firestore_client=No
                     },
                 )
             else:
+                for chunk in erase_chunks.get(entry['id'], ()):
+                    tx.delete(chunk)
                 tx.set(coll.document(entry['id']), home_visibility_index.stamp(restore[entry['id']]))
                 restored += 1
         repaired = 0

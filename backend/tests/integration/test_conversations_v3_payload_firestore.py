@@ -141,10 +141,10 @@ def test_integration_create_overflow_lifecycle_and_readback(row, monkeypatch):
     assert not list(ref.collection(PAYLOAD_CHUNKS).list_documents())
 
 
-def publish(row, *, fields, recording=False, sections=None):
+def publish(row, *, fields, recording=False, sections=None, protection_level='enhanced'):
     client, uid, ref = row
     # Incompressible synthetic data exercises a real overflow after protection.
-    text = Random(2520).randbytes(460_000).hex()
+    text = Random(2520).randbytes(460_000 if protection_level == 'enhanced' else 970_000).hex()
     prepared = conversations._prepare_conversation_for_write(
         {
             'id': ref.id,
@@ -155,7 +155,7 @@ def publish(row, *, fields, recording=False, sections=None):
             'recording': recording,
             'v3_pending': recording,
             'v3_derived': not recording,
-            'data_protection_level': 'enhanced',
+            'data_protection_level': protection_level,
             'transcript_segments': [{'start': 0.0, 'end': 10.0, 'text': text, 'speaker': 'SPEAKER_0'}],
             'structured': {'title': 'Locked title', 'emoji': '📝', **({'sections': sections} if sections else {})},
             'title_locked': True,
@@ -163,7 +163,7 @@ def publish(row, *, fields, recording=False, sections=None):
             'claims': [{'conversation_id': 'prior', 'start': AT, 'end': AT}],
         },
         uid,
-        'enhanced',
+        protection_level,
         allow_offload=False,
     )
 
@@ -534,7 +534,7 @@ def test_backfill_builder_retires_chunks_in_the_row_removal_commit(row, monkeypa
     assert not list(ref.collection(PAYLOAD_CHUNKS).list_documents())
 
 
-def test_live_rederive_refuses_to_copy_or_overwrite_a_payload_generation(row):
+def test_live_rederive_refuses_to_copy_a_live_payload_generation(row):
     client, uid, ref = row
     publish(row, fields={'transcript_segments'})
     run_id = 'synthetic-run'
@@ -552,11 +552,121 @@ def test_live_rederive_refuses_to_copy_or_overwrite_a_payload_generation(row):
     assert not list(runs.run_ref(client, uid, run_id).collection(runs.PRIORS).list_documents())
 
     assert rederive.undo_prior_blocker([{**saved, 'raw': raw}]) == 'document_too_large'
-    assert rederive.live_undo_blocker(uid, run_id, [saved], firestore_client=client) == 'document_too_large'
-    with pytest.raises(store.Conflict, match='document_too_large'):
-        rederive.undo_live_rederive(uid, [], run_id, [saved], firestore_client=client)
     assert ref.get().update_time == snapshot.update_time
     assert set(ref.collection(PAYLOAD_CHUNKS).list_documents()) == chunks
+
+
+def test_live_undo_restores_an_inline_prior_and_retires_rebuilt_chunks(row, monkeypatch):
+    client, uid, ref = row
+    run_id = 'synthetic-run'
+    prior = {'id': ref.id, 'structured': {'title': 'Prior'}, 'data_protection_level': 'enhanced'}
+    ref.create(prior)
+    runs.save_priors(uid, run_id, [{'id': ref.id, 'raw': prior}], firestore_client=client)
+    try:
+        publish(row, fields={'transcript_segments', 'structured'})
+        ref.update({'v3_rederive_live_run': run_id})
+        rebuilt = ref.get()
+        chunks = set(ref.collection(PAYLOAD_CHUNKS).list_documents())
+        assert rederive.record_baselines(uid, run_id, firestore_client=client) == 1
+        entries = runs.list_priors(uid, run_id, firestore_client=client)
+        token = leases.acquire(uid, 'builder', firestore_client=client)
+        assert token
+        held = [('builder', token)]
+
+        costs = {}
+        assert rederive.live_undo_blocker(uid, run_id, entries, firestore_client=client, payload_costs=costs) is None
+        assert costs[ref.id][0] == len(chunks) and costs[ref.id][1] > 1024 * 1024
+        with monkeypatch.context() as limit:
+            limit.setattr(rederive, 'UNDO_GROUP_BYTES', costs[ref.id][1])
+            assert not rederive.undo_group_fits(entries, payload_costs=costs)
+            with pytest.raises(store.Conflict, match='undo_group_too_large'):
+                rederive.undo_live_rederive(uid, held, run_id, entries, firestore_client=client)
+        with pytest.raises(store.Conflict, match='lease_lost'):
+            rederive.undo_live_rederive(uid, [('builder', 'lost')], run_id, entries, firestore_client=client)
+
+        marker = client.collection('account_deletions').document(uid)
+        marker.create({'wipe_status': 'pending_deletion'})
+        try:
+            assert rederive.live_undo_blocker(uid, run_id, entries, firestore_client=client) == 'account_deletion'
+            with pytest.raises(store.Conflict, match='account_deletion'):
+                rederive.undo_live_rederive(uid, held, run_id, entries, firestore_client=client)
+        finally:
+            marker.delete()
+        assert ref.get().update_time == rebuilt.update_time
+        assert set(ref.collection(PAYLOAD_CHUNKS).list_documents()) == chunks
+
+        result = rederive.undo_live_rederive(uid, held, run_id, entries, firestore_client=client)
+        assert result == {'rows_restored': 1, 'created': [], 'sources_repaired': 0}
+        assert rederive.already_undone(ref.get().to_dict(), entries[0], run_id)
+        assert not list(ref.collection(PAYLOAD_CHUNKS).list_documents())
+        assert rederive.undo_live_rederive(uid, held, run_id, entries, firestore_client=client)['rows_restored'] == 0
+    finally:
+        runs.drop_priors(uid, run_id, [ref.id], firestore_client=client)
+
+
+def test_live_undo_hides_a_created_chunked_row_and_retries_its_erasure(row):
+    client, uid, ref = row
+    run_id = 'synthetic-run'
+    runs.save_priors(uid, run_id, [{'id': ref.id, 'created': True}], firestore_client=client)
+    token = leases.acquire(uid, 'builder', firestore_client=client)
+    assert token
+    held = [('builder', token)]
+    try:
+        # Created entries do not contain a prior or its protection level.
+        prepared = publish(row, fields={'transcript_segments', 'structured'}, protection_level='standard')
+        ref.update({'v3_rederive_live_run': run_id, 'title_locked': False})
+        assert rederive.record_baselines(uid, run_id, firestore_client=client) == 1
+        entries = runs.list_priors(uid, run_id, firestore_client=client)
+        assert rederive.live_undo_blocker(uid, run_id, entries, firestore_client=client) is None
+        first = rederive.undo_live_rederive(uid, held, run_id, entries, firestore_client=client)
+        assert first == {'rows_restored': 0, 'created': [ref.id], 'sources_repaired': 0}
+        hidden = ref.get()
+        assert hidden.to_dict()['deleted'] and hidden.to_dict()['home_hidden']
+        assert rederive.already_undone(hidden.to_dict(), entries[0], run_id)
+        assert (
+            store.read_projection_snapshot(hidden, firestore_client=client)['transcript_segments']
+            == prepared['transcript_segments']
+        )
+        assert rederive.undo_live_rederive(uid, held, run_id, entries, firestore_client=client) == first
+
+        conversations.delete_collection_recursive(ref.parent, client=client)
+        assert not ref.get().exists
+        assert not list(ref.collection(PAYLOAD_CHUNKS).list_documents())
+        assert rederive.undo_live_rederive(uid, held, run_id, entries, firestore_client=client)['created'] == []
+    finally:
+        runs.drop_priors(uid, run_id, [ref.id], firestore_client=client)
+
+
+def test_live_undo_refuses_malformed_payload_or_an_edit_after_baseline(row, monkeypatch):
+    client, uid, ref = row
+    run_id = 'synthetic-run'
+    prior = {'id': ref.id, 'structured': {'title': 'Prior'}, 'data_protection_level': 'enhanced'}
+    ref.create(prior)
+    runs.save_priors(uid, run_id, [{'id': ref.id, 'raw': prior}], firestore_client=client)
+    try:
+        publish(row, fields={'transcript_segments', 'structured'})
+        ref.update({'v3_rederive_live_run': run_id})
+        assert rederive.record_baselines(uid, run_id, firestore_client=client) == 1
+        entries = runs.list_priors(uid, run_id, firestore_client=client)
+        monkeypatch.setattr(conversations, 'db', client)
+        monkeypatch.setattr(conversations, '_sync_conversation_search_index', lambda *_: None)
+        monkeypatch.setenv('DREAM_AGENT_ENABLED', 'false')
+        assert conversations.update_conversation_summary(uid, ref.id, None, 'Owner edit') == 'ok'
+        chunks = set(ref.collection(PAYLOAD_CHUNKS).list_documents())
+        noticed = ref.get()
+        assert rederive.live_undo_blocker(uid, run_id, entries, firestore_client=client) == 'owner_edited_rebuilt_row'
+        with pytest.raises(store.Conflict, match='owner_edited_rebuilt_row'):
+            rederive.undo_live_rederive(uid, [], run_id, entries, firestore_client=client)
+        assert ref.get().update_time == noticed.update_time
+        assert set(ref.collection(PAYLOAD_CHUNKS).list_documents()) == chunks
+
+        ref.update({PAYLOAD_FIELD: 'invalid'})
+        assert rederive.live_undo_blocker(uid, run_id, entries, firestore_client=client) == 'undo_payload_unavailable'
+        with pytest.raises(store.Conflict, match='undo_payload_unavailable'):
+            rederive.undo_live_rederive(uid, [], run_id, entries, firestore_client=client)
+        assert set(ref.collection(PAYLOAD_CHUNKS).list_documents()) == chunks
+    finally:
+        runs.drop_priors(uid, run_id, [ref.id], firestore_client=client)
 
 
 def test_builder_publishes_oversized_derived_row_and_replaces_it_after_rollback(row, monkeypatch):
