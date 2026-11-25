@@ -5,11 +5,14 @@ class ConnectionReadCancelled implements Exception {}
 /// A caller-owned deadline that can release even a non-cooperative dependency.
 /// The underlying SDK/HTTP operation may finish later; it cannot publish twice.
 class ConnectionRead<T> {
-  ConnectionRead(Future<T> Function() load, Duration deadline) {
+  ConnectionRead(Future<T> Function() load, Duration deadline) : this.withLifetime((_) => load(), deadline);
+
+  /// Lets the operation fence side effects that must stop when the wait ends.
+  ConnectionRead.withLifetime(Future<T> Function(bool Function() isPending) load, Duration deadline) {
     _done.future.ignore(); // Cancellation stays observable to awaiting owners.
     _timer = Timer(deadline, () => _fail(TimeoutException('Connection read timed out')));
-    unawaited(
-        Future.sync(load).then<void>(_complete, onError: (Object error, StackTrace stack) => _fail(error, stack)));
+    unawaited(Future.sync(() => load(() => !_done.isCompleted))
+        .then<void>(_complete, onError: (Object error, StackTrace stack) => _fail(error, stack)));
   }
 
   final _done = Completer<T>();

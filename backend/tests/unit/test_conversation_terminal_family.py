@@ -7,10 +7,17 @@ from datetime import datetime, timezone
 import pytest
 from google.cloud.firestore_v1 import _helpers
 
-from database import conversations as db
+from database import conversations as db, recurring_voice_privacy
 from models.conversation_enums import ConversationStatus as Status
 from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
+from utils.conversations import lifecycle, terminal_relevance
+from utils.conversations.processing_trigger import ProcessingTrigger
+from utils.conversations.relevance import RelevanceDecision
 from utils.conversations.relevance_rules import RULES_VERSION
+
+# persist_processed_conversation lazily imports speaker_resolution_inputs on its
+# first call; load it at collection so the first case's CPU guard measures the test.
+import utils.conversations.speaker_resolution_inputs  # noqa: E402,F401
 from utils.conversations.transcript_hash import transcript_sha256_for_binding
 
 PATH = ('users', 'synthetic', 'conversations', 'capture')
@@ -45,8 +52,6 @@ def store(monkeypatch):
         monkeypatch.setattr(db, name, lambda *a, **k: None)
     monkeypatch.setattr(db, '_stage_notes_identity', lambda *a, **k: None)
     monkeypatch.setattr(db, '_reapply_current_manual_assignments', lambda *a, **k: None)
-    from database import recurring_voice_privacy
-
     monkeypatch.setattr(recurring_voice_privacy, 'filter_processing_write', lambda *a: None)
     monkeypatch.setattr(db.summary_delivery, 'merge_result', lambda *a: None)
     monkeypatch.setattr(db.summary_delivery, 'emit_result', lambda *a: None)
@@ -125,8 +130,6 @@ def test_core_does_not_mutate_inputs_or_run_hooks(store, monkeypatch):
     def forbidden(*a, **k):
         pytest.fail('pure core called an IO/metric/quiet hook')
 
-    from utils.conversations import terminal_relevance
-
     monkeypatch.setattr(terminal_relevance, 'stamp_terminal_decision', forbidden)
     monkeypatch.setattr(db, 'restore_quiet_check_in_transaction', forbidden)
     current, extra = copy.deepcopy(store.rows[PATH]), {'language': 'en'}
@@ -193,6 +196,29 @@ def test_persist_flips_content_and_status_in_one_write(store):
     assert patch['title'] == 'new content' and patch['status'] == 'completed'
     assert patch['terminal_family'] == 'success'
     assert observed == [True]
+
+
+@pytest.mark.parametrize('mode', ['off', 'on'])
+@pytest.mark.parametrize(
+    'existing, patch, visible',
+    [
+        ({'recording': True, 'home_hidden': True}, {'recording': False}, False),
+        ({'recording': False, 'home_hidden': True}, {'home_hidden': False}, True),
+    ],
+)
+def test_persist_writes_home_visibility_with_its_source_flags(store, monkeypatch, mode, existing, patch, visible):
+    monkeypatch.setenv('CONVERSATION_TERMINAL_FAMILY_MODE', mode)
+    store.rows[PATH].update(existing)
+    tx = store.transaction()
+    monkeypatch.setattr(store, 'transaction', lambda: tx)
+    if mode == 'off':
+        monkeypatch.setattr(tx, 'set', lambda ref, data, *, merge: tx.sets.append((ref.path, data)))
+
+    assert persist(patch)
+    [(path, payload)] = tx.sets + tx.updates
+    assert path == PATH
+    assert {key: payload[key] for key in patch} == patch
+    assert payload['home_list_visible'] is visible
 
 
 @pytest.mark.parametrize(
@@ -275,10 +301,6 @@ def test_user_reprocess_commits_restore_authority_with_completion(store):
 @pytest.mark.parametrize('trigger', ['server_recovery', 'silent_backfill', 'user_reprocess', 'backlog_choice'])
 @pytest.mark.parametrize('restored', [False, True])
 def test_retry_triggers_never_replace_explicit_restore_authority(store, trigger, restored):
-    from utils.conversations.relevance import RelevanceDecision
-    from utils.conversations.processing_trigger import ProcessingTrigger
-    from utils.conversations import lifecycle
-
     store.rows[PATH].update(status='failed', discarded=True)
     decision = RelevanceDecision('keep', 'policy', 'explicit_retry', ProcessingTrigger(trigger)).as_record()
     payload = {'id': 'capture', 'status': 'completed', 'discarded': False, 'relevance_decision': decision}

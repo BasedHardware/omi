@@ -327,3 +327,197 @@ def test_the_store_names_the_same_collection_as_the_session_authority():
     from database import recording_sessions
 
     assert store.RECORDING_SESSIONS_COLLECTION == recording_sessions.RECORDING_SESSIONS_COLLECTION
+    assert store.PIPELINE_LEDGER_COLLECTION == ledger.COLLECTION
+    assert capture_end.LEDGER_TRANSCRIBED == ledger.TRANSCRIBED
+
+
+SEALED_AT = 900.0
+
+
+def sealed_live(**changes):
+    """A batch-owned live record the server sealed, with a phone copy that landed after."""
+    base = {
+        'id': 'c',
+        'status': 'completed',
+        'record_lane_owner': 'batch_live_v1',
+        'record_audio_closed': True,
+        'record_sealed_at': SEALED_AT,
+        'record_projection_revision': 1,
+        'sync_live_target': True,
+        'external_data': {'server_batch_only': True},
+        **row(),
+    }
+    return {**base, **changes}
+
+
+def ledger_doc(*stages):
+    """``(stage, at)`` transitions as ``database.pipeline_ledger`` stores them."""
+    return {
+        'stage': stages[-1][0],
+        'transitions': [{'stage': stage, 'at': at, 'revision': i + 1} for i, (stage, at) in enumerate(stages)],
+    }
+
+
+# Every unit projected: the record's whole projection completed after its seal.
+ALL_UNITS = ledger_doc((ledger.SEALED, SEALED_AT), (ledger.TRANSCRIBED, SEALED_AT + 90))
+# Unit 1 of 2 projected (revision 1 on the row), its sibling still transcribing.
+SIBLING_PENDING = ledger_doc((ledger.SEALED, SEALED_AT))
+
+
+@pytest.mark.parametrize(
+    'changes, expected',
+    [
+        ({}, 'proven'),
+        ({'record_lane_owner': None}, 'absent'),
+        ({'record_lane_owner': 'batch_sync_v1'}, 'absent'),
+        ({'status': 'in_progress'}, 'record_open'),
+        ({'record_audio_closed': False}, 'record_open'),
+        ({'record_audio_partial': True}, 'record_open'),
+        ({'record_upload_sessions': {'s': {}}}, 'record_open'),
+        ({'record_upload_failed': True}, 'record_open'),
+        ({'record_projection_revision': None}, 'transcript_pending'),
+        ({'summary_completed_at': 900.0}, 'notes_written'),
+        ({'summary_output_present': True}, 'notes_written'),
+        (
+            {hold.FIELD: {'pending_since': 100, 'last_content_at': 100, 'full_snapshot': {'digest': 'd'}}},
+            'notes_written',
+        ),
+        ({'record_sealed_at': None}, 'units_pending'),
+    ],
+)
+def test_the_seal_proves_only_a_closed_transcribed_live_record_before_its_first_notes(changes, expected):
+    assert capture_end.seal_proof(sealed_live(**changes), ALL_UNITS) == expected
+
+
+def test_one_projected_unit_with_a_sibling_pending_is_not_proof_until_every_unit_lands():
+    conversation = sealed_live(record_projection_revision=1)
+    assert capture_end.seal_barrier(conversation) is None
+    assert capture_end.seal_proof(conversation, SIBLING_PENDING) == 'units_pending'
+    assert capture_end.seal_proof(conversation, None) == 'units_pending'
+    assert capture_end.seal_proof(conversation, ALL_UNITS) == 'proven'
+
+
+def test_a_transcript_from_before_a_reseal_does_not_prove_the_resealed_record():
+    # Reopened and sealed again at 1000; the ledger never moves back, so its
+    # transcribed stage still describes the first seal's units.
+    resealed = sealed_live(record_sealed_at=1000.0, record_projection_revision=2)
+    assert capture_end.seal_proof(resealed, ALL_UNITS) == 'units_pending'
+
+
+def test_a_sealed_live_record_reads_only_its_ledger_and_counts_as_sealed(monkeypatch):
+    load = Mock(side_effect=AssertionError('the seal needs no session read'))
+    monkeypatch.setattr(store, 'load', load)
+    ledgers = Mock(return_value=ALL_UNITS)
+    monkeypatch.setattr(store, 'load_ledger', ledgers)
+    counted = Mock()
+    monkeypatch.setattr(capture_end, 'record_proof', counted)
+    assert store.proven('u', sealed_live()) is True
+    ledgers.assert_called_once_with('u', 'c', firestore_client=None)
+    counted.assert_called_once_with('sealed')
+    # A row that fails the barrier never reads the ledger.
+    ledgers.reset_mock()
+    assert store.proven('u', sealed_live(record_audio_closed=False)) is False
+    ledgers.assert_not_called()
+    # A sibling still pending, or an unreadable ledger, is "not proven".
+    monkeypatch.setattr(store, 'load_ledger', Mock(return_value=SIBLING_PENDING))
+    assert store.proven('u', sealed_live()) is False
+    monkeypatch.setattr(store, 'load_ledger', Mock(side_effect=OSError('synthetic')))
+    assert store.proven('u', sealed_live()) is False
+    # Without the seal, a recording-session row still asks the phone's marker.
+    monkeypatch.setattr(store, 'load', Mock(return_value=None))
+    unsealed = sealed_live(record_audio_closed=False, external_data={'recording_session_id': 's'})
+    assert store.proven('u', unsealed) is False
+    monkeypatch.setattr(store, 'load_ledger', ledgers)
+    monkeypatch.setenv('SYNC_UPLOAD_WATERMARK_ENABLED', 'false')
+    ledgers.reset_mock()
+    assert store.proven('u', sealed_live()) is False
+    ledgers.assert_not_called()
+    assert [c for c in counted.call_args_list if c.args == ('sealed',)] == [(('sealed',),)]
+
+
+def test_the_ledger_read_names_the_capture_document():
+    client = _FakeClient()
+    assert store.load_ledger('u', 'c', firestore_client=client) is None
+    client.store['users/u/pipeline_ledger/c'] = ALL_UNITS
+    assert store.load_ledger('u', 'c', firestore_client=client) == ALL_UNITS
+
+
+def test_a_sealed_live_record_gets_notes_now_while_a_sync_only_row_still_waits_quiet(monkeypatch):
+    monkeypatch.setattr(store, 'load_ledger', Mock(return_value=ALL_UNITS))
+    proven = lambda conversation: lambda: store.proven('u', conversation)  # noqa: E731
+    sealed = sealed_live()
+    assert hold.admission(sealed, {'first_pending_at': 100}, now=130, end_proven=proven(sealed)) == ('end_proof', None)
+    sync_only = row()
+    assert hold.admission(sync_only, {'first_pending_at': 100}, now=130, end_proven=proven(sync_only)) == (
+        'quiet_wait',
+        100 + hold.quiet_seconds(),
+    )
+    # The same sealed row with a sibling unit still transcribing keeps the quiet wait.
+    monkeypatch.setattr(store, 'load_ledger', Mock(return_value=SIBLING_PENDING))
+    assert hold.admission(sealed, {'first_pending_at': 100}, now=130, end_proven=proven(sealed)) == (
+        'quiet_wait',
+        100 + hold.quiet_seconds(),
+    )
+
+
+def test_a_pendant_copy_after_sealed_notes_waits_quiet_then_buys_exactly_one_late_run(monkeypatch):
+    monkeypatch.setattr(store, 'load_ledger', Mock(return_value=ALL_UNITS))
+    conversation = sealed_live()
+    asked = lambda: store.proven('u', conversation)  # noqa: E731
+    assert hold.admission(conversation, {'first_pending_at': 100}, now=130, end_proven=asked)[0] == 'end_proof'
+    # First notes settle the epoch and record what they saw.
+    conversation[hold.FIELD] = hold.completion_patch(conversation, hold.content_snapshot(conversation))
+    conversation['summary_completed_at'] = 131.0
+    # The pendant's stored copy lands later and adds material speech.
+    conversation['transcript_segments'].append({'text': 'pendant ' * 120, 'start': 60, 'end': 120})
+    conversation[hold.FIELD] = hold.activity_patch(conversation, 1000)
+    pending = {'first_pending_at': 1000}
+    assert hold.admission(conversation, pending, now=1030, end_proven=asked) == (
+        'quiet_wait',
+        1000 + hold.quiet_seconds(),
+    )
+    assert hold.admission(conversation, pending, now=1000 + hold.quiet_seconds(), end_proven=asked) == ('ready', None)
+    conversation[hold.FIELD] = hold.completion_patch(conversation, hold.content_snapshot(conversation))
+    assert conversation[hold.FIELD]['late_runs'] == 1
+    # A further copy cannot buy a second automatic run.
+    conversation['transcript_segments'].append({'text': 'later ' * 120, 'start': 120, 'end': 180})
+    conversation[hold.FIELD] = hold.activity_patch(conversation, 2000)
+    assert hold.admission(
+        conversation, {'first_pending_at': 2000}, now=2000 + hold.quiet_seconds(), end_proven=asked
+    ) == ('late_cap', None)
+
+
+def held_units(**changes):
+    """A sealed live record whose projection stamped every unit landed or held for recovery."""
+    conversation = sealed_live(**changes)
+    conversation[hold.FIELD] = {**conversation[hold.FIELD], capture_end.UNITS_SETTLED_FIELD: SEALED_AT}
+    return conversation
+
+
+def test_units_held_for_recovery_prove_the_first_notes_without_the_ledger():
+    assert capture_end.seal_proof(held_units(), None) == 'units_held'
+    assert capture_end.seal_proof(held_units(), SIBLING_PENDING) == 'units_held'
+    # A reseal moves the clock the stamp named; the old stamp proves nothing.
+    assert capture_end.seal_proof(held_units(record_sealed_at=1000.0), SIBLING_PENDING) == 'units_pending'
+    # The barrier still decides first: notes written, record reopened.
+    assert capture_end.seal_proof(held_units(summary_output_present=True), None) == 'notes_written'
+    assert capture_end.seal_proof(held_units(status='in_progress'), None) == 'record_open'
+    assert capture_end.units_settled(sealed_live()) is False
+
+
+def test_a_held_units_stamp_is_proof_with_no_ledger_read(monkeypatch):
+    ledgers = Mock(side_effect=AssertionError('the stamp needs no ledger read'))
+    monkeypatch.setattr(store, 'load_ledger', ledgers)
+    counted = Mock()
+    monkeypatch.setattr(capture_end, 'record_proof', counted)
+    conversation = held_units()
+    assert store.proven('u', conversation) is True
+    counted.assert_called_once_with('sealed_held')
+    assert hold.admission(
+        conversation, {'first_pending_at': 100}, now=130, end_proven=lambda: store.proven('u', conversation)
+    ) == (
+        'end_proof',
+        None,
+    )
+    monkeypatch.setenv('SYNC_UPLOAD_WATERMARK_ENABLED', 'false')
+    assert store.proven('u', conversation) is False

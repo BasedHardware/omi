@@ -591,12 +591,11 @@ packages:
     source: hosted
     version: "6.3.0"
   flutter_background_service_ios:
-    dependency: transitive
+    dependency: "direct overridden"
     description:
-      name: flutter_background_service_ios
-      sha256: "6037ffd45c4d019dab0975c7feb1d31012dd697e25edc05505a4a9b0c7dc9fba"
-      url: "https://pub.dev"
-    source: hosted
+      path: "packages/flutter_background_service_ios"
+      relative: true
+    source: path
     version: "5.0.3"
   flutter_background_service_platform_interface:
     dependency: "direct main"
@@ -1103,6 +1102,22 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "2.4.1"
+  in_app_purchase_android:
+    dependency: "direct main"
+    description:
+      name: in_app_purchase_android
+      sha256: b76ab601573f8a848e72d015496257235066ba3479bef6300482239f417e0d72
+      url: "https://pub.dev"
+    source: hosted
+    version: "0.5.5"
+  in_app_purchase_platform_interface:
+    dependency: "direct main"
+    description:
+      name: in_app_purchase_platform_interface
+      sha256: "0b0076cac8ce4fa7048f01e76af8b123aeb6a7c4e0dea2a5206d6664454f3e36"
+      url: "https://pub.dev"
+    source: hosted
+    version: "1.4.1"
   in_app_review:
     dependency: "direct main"
     description:

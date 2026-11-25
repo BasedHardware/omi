@@ -10,12 +10,61 @@ import 'package:omi/backend/preferences.dart';
 
 typedef GoalsFetcher = Future<List<Goal>?> Function();
 
+/// The goal writes, replaceable in tests. A null (or false) answer is a failed write.
+class GoalWrites {
+  const GoalWrites();
+
+  Future<Goal?> create(
+          {required String title,
+          required String goalType,
+          required double targetValue,
+          double currentValue = 0,
+          double minValue = 0,
+          double maxValue = 10,
+          String? unit}) =>
+      createGoalApi(
+          title: title,
+          goalType: goalType,
+          targetValue: targetValue,
+          currentValue: currentValue,
+          minValue: minValue,
+          maxValue: maxValue,
+          unit: unit);
+
+  Future<Goal?> update(String goalId,
+          {String? title,
+          double? targetValue,
+          double? currentValue,
+          double? minValue,
+          double? maxValue,
+          String? unit}) =>
+      updateGoalApi(goalId,
+          title: title,
+          targetValue: targetValue,
+          currentValue: currentValue,
+          minValue: minValue,
+          maxValue: maxValue,
+          unit: unit);
+
+  Future<Goal?> progress(String goalId, double currentValue) => updateGoalProgressApi(goalId, currentValue);
+
+  Future<bool> delete(String goalId) => deleteGoalApi(goalId);
+}
+
 class GoalsProvider extends ChangeNotifier {
   static const String _legacyGoalsStorageKey = 'goals_tracker_local_goals';
 
-  GoalsProvider({GoalsFetcher? goalsFetcher}) : _goalsFetcher = goalsFetcher ?? getAllGoals;
+  GoalsProvider({GoalsFetcher? goalsFetcher, GoalWrites writes = const GoalWrites()})
+      : _goalsFetcher = goalsFetcher ?? getAllGoals,
+        _writes = writes;
 
   final GoalsFetcher _goalsFetcher;
+  final GoalWrites _writes;
+
+  /// The last read from the server failed (offline, a server error). With no goals kept locally
+  /// the page shows an error with Try Again, never the empty "Add goal" state (ux-contract §17.2).
+  bool _loadFailed = false;
+  bool get loadFailed => _loadFailed;
 
   List<Goal> _goals = [];
   bool _isLoading = true;
@@ -83,13 +132,16 @@ class GoalsProvider extends ChangeNotifier {
     try {
       final goals = await _goalsFetcher();
       if (generation != _sessionGeneration) return;
+      _loadFailed = goals == null;
       if (goals != null) {
         // A goal waiting on its Undo toast stays hidden until the delete commits or is undone.
         _goals = goals.where((g) => !_stagedDeletes.containsKey(g.id)).toList();
         await _saveToLocalStorage();
         _notifyAfterFrame();
       }
-    } catch (_) {}
+    } catch (_) {
+      if (generation == _sessionGeneration) _loadFailed = true;
+    }
   }
 
   Future<void> _saveToLocalStorage() async {
@@ -111,6 +163,7 @@ class GoalsProvider extends ChangeNotifier {
     _sessionGeneration++;
     _goals = [];
     _isLoading = false;
+    _loadFailed = false;
     _lastGoalDeletion = null;
     _stagedDeletes.clear();
     notifyListeners();
@@ -127,7 +180,7 @@ class GoalsProvider extends ChangeNotifier {
     String? unit,
   }) async {
     final generation = _sessionGeneration;
-    final goal = await createGoalApi(
+    final goal = await _writes.create(
       title: title,
       goalType: goalType,
       targetValue: targetValue,
@@ -158,7 +211,7 @@ class GoalsProvider extends ChangeNotifier {
     String? unit,
   }) async {
     final generation = _sessionGeneration;
-    final updatedGoal = await updateGoalApi(
+    final updatedGoal = await _writes.update(
       goalId,
       title: title,
       targetValue: targetValue,
@@ -184,7 +237,7 @@ class GoalsProvider extends ChangeNotifier {
   /// Update goal progress only
   Future<Goal?> updateGoalProgress(String goalId, double currentValue) async {
     final generation = _sessionGeneration;
-    final updatedGoal = await updateGoalProgressApi(goalId, currentValue);
+    final updatedGoal = await _writes.progress(goalId, currentValue);
     if (generation != _sessionGeneration) return null;
 
     if (updatedGoal != null) {
@@ -211,7 +264,12 @@ class GoalsProvider extends ChangeNotifier {
     notifyListeners();
 
     // Then delete from server
-    final success = await deleteGoalApi(goalId);
+    bool success;
+    try {
+      success = await _writes.delete(goalId);
+    } catch (_) {
+      success = false; // a malformed answer is a failed delete: the goal comes back (G4)
+    }
     if (!success && removed != null && generation == _sessionGeneration && !_goals.any((g) => g.id == goalId)) {
       _goals.insert(index.clamp(0, _goals.length), removed);
       await _saveToLocalStorage();

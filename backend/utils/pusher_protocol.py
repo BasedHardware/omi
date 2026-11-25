@@ -11,6 +11,10 @@ PRIVATE_CLOUD_QUEUE_MAX_SIZE = 20  # ~18MB/connection max (30 conns × 18MB = 54
 MIN_SAMPLE_RATE = 8000
 MAX_SAMPLE_RATE = 48000
 BUFFERED_AUDIO_MAX_BYTES = 20 * 1024 * 1024
+# Optional consumers (audio-bytes apps and the developer audio webhook) get their
+# own per-connection budget. They are best-effort: a slow or dead consumer drops
+# its oldest optional audio and never holds bytes the capture custody path needs.
+OPTIONAL_AUDIO_MAX_BYTES = 8 * 1024 * 1024  # one 5 s webhook item at 16 kHz is 160 KB
 PRIVATE_CLOUD_PENDING_MAX_CONVERSATIONS = PRIVATE_CLOUD_QUEUE_MAX_SIZE
 
 # Audio-timeline v2 wire contract. The opt-in is a bounded WebSocket query
@@ -108,6 +112,63 @@ def extend_bounded(buffer: bytearray, data: bytes, queue_name: str, byte_budget:
         return False
     buffer.extend(data)
     return True
+
+
+def optional_flush_bytes(sample_rate: int, interval_seconds: float) -> int:
+    """Bytes at which an optional buffer is queued for its consumer.
+
+    The configured interval (``sample_rate * seconds * 2``), capped at a quarter of the optional
+    budget so a long user-configured webhook interval can never strand a partial buffer below
+    its own threshold with the budget exhausted (e.g. 120 s at 48 kHz is 11.5 MB > 8 MB).
+    """
+    return max(1, min(int(sample_rate * interval_seconds * 2), OPTIONAL_AUDIO_MAX_BYTES // 4))
+
+
+def extend_optional(
+    buffer: bytearray,
+    data: bytes,
+    queue_name: str,
+    byte_budget: ByteBudget,
+    queue: Optional[Deque['AudioBytesQueueItem']] = None,
+) -> bool:
+    """Buffer audio for an optional consumer; drop it instead of back-pressuring capture.
+
+    Never raises AudioBackpressure: optional app/webhook audio is best-effort and
+    must not close or stall the capture socket (prod 2026-11-16: a full optional
+    queue closed live sockets with 1011 ~180 times an hour). When the budget is
+    short, the oldest queued optional items are evicted first (they are the
+    stalest), then the new data is dropped.
+    """
+    while not byte_budget.reserve(len(data)):
+        if not queue:
+            record_queue_drop(queue_name, len(data))
+            return False
+        removed = queue.popleft()
+        size = len(removed['data'])
+        byte_budget.release(size)
+        record_queue_drop('audio_bytes', size)
+    buffer.extend(data)
+    return True
+
+
+def append_optional(
+    queue: Deque['AudioBytesQueueItem'], item: 'AudioBytesQueueItem', queue_name: str, byte_budget: ByteBudget
+) -> int:
+    """Queue one optional audio item, evicting the oldest while full. Never waits or raises.
+
+    The item's bytes were already reserved by ``extend_optional``; evicted items
+    release theirs. Returns the number of evicted items.
+    """
+    evicted = 0
+    limit = queue.maxlen
+    while limit is not None and len(queue) >= limit:
+        removed = queue.popleft()
+        size = len(removed['data'])
+        byte_budget.release(size)
+        record_queue_drop(queue_name, size)
+        evicted += 1
+    queue.append(item)
+    return evicted
 
 
 def bound_private_pending(pending: Dict[str, Dict[str, Any]], byte_budget: ByteBudget) -> None:

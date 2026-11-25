@@ -1,3 +1,4 @@
+from utils.conversations.layer import read_product as read_product_conversation
 import logging
 
 from utils.conversations import transcribing_hold
@@ -178,7 +179,7 @@ def move_conversation_to_folder(
     conversation_id: str, request: MoveConversationRequest, uid: str = Depends(auth.get_current_user_uid)
 ):
     """Move a conversation to a different folder."""
-    conversation = conversations_db.get_conversation(uid, conversation_id)
+    conversation = read_product_conversation(conversations_db.get_conversation, uid, conversation_id)
     if not conversation or conversation.get('deleted', False):
         raise HTTPException(status_code=404, detail="Conversation not found")
     if conversation.get('is_locked', False):
@@ -192,7 +193,7 @@ def move_conversation_to_folder(
     moved = folders_db.move_conversation_to_folder(uid, conversation_id, request.folder_id)
     if moved is False:
         raise HTTPException(status_code=404, detail="Conversation not found")
-    fresh_conversation = conversations_db.get_conversation(uid, conversation_id)
+    fresh_conversation = read_product_conversation(conversations_db.get_conversation, uid, conversation_id)
     if not fresh_conversation:
         raise HTTPException(status_code=404, detail="Conversation not found")
     return {"status": "ok", "conversation": fresh_conversation}
@@ -213,7 +214,7 @@ def bulk_move_conversations(
 
     # Validate none of the conversations are locked or deleted
     for conv_id in request.conversation_ids:
-        conv = conversations_db.get_conversation(uid, conv_id)
+        conv = read_product_conversation(conversations_db.get_conversation, uid, conv_id)
         if not conv or conv.get('deleted', False):
             raise HTTPException(status_code=404, detail=f"Conversation {conv_id} not found")
         if conv.get('is_locked', False):

@@ -1,6 +1,7 @@
 """Proposed exact-digest publication; invoked only by the protected CI job."""
 
 import argparse
+import image_smoke
 import base64
 import json
 import os
@@ -10,11 +11,13 @@ import subprocess
 import tempfile
 from operator_ingress import sha, release_metadata, validate_release
 from validate_saved_oci import validate
+from registry_access import validate_evidence, permission_hint
 
 DESTINATION = 'gcr.io/based-hardware/jobstore-reconcile-operator'
 
 
 def validate_qualification(contract, receipt):
+    image_smoke.source_refusal_program(contract.get('readiness_sha256'))
     expected = {
         'result': 'NATIVE_AMD64_QUALIFIED_OFFLINE_ONLY',
         'source_sha': contract['source_sha'],
@@ -23,7 +26,7 @@ def validate_qualification(contract, receipt):
         'oci_manifest_digest': contract['oci_manifest_digest'],
         'build_inputs_sha256': contract['build_inputs_sha256'],
         'supervisor_sha256': contract['supervisor_sha256'],
-        'tests_run': 49,
+        'tests_run': 58,
         'tests_skipped': 0,
         'uid': 1000,
         'container_network': 'none',
@@ -34,6 +37,7 @@ def validate_qualification(contract, receipt):
     }
     if any(receipt.get(k) != v for k, v in expected.items()):
         raise ValueError('CURRENT_RUN_EXACT_NATIVE_QUALIFICATION_REQUIRED')
+    image_smoke.validate_source_refusal(receipt.get('resource_bound_source_refusal', {}), contract['readiness_sha256'])
     host = receipt.get('native_host', {})
     if (
         host.get('system') != 'Linux'
@@ -41,17 +45,7 @@ def validate_qualification(contract, receipt):
         or host.get('docker_architecture') not in ('x86_64', 'amd64')
     ):
         raise ValueError('NATIVE_AMD64_RECEIPT_REQUIRED')
-    permission = contract.get('registry_write_authorization')
-    if (
-        not isinstance(permission, dict)
-        or permission.get('repository') != DESTINATION
-        or permission.get('principal') != 'omi-ci-deployer-prod@based-hardware.iam.gserviceaccount.com'
-        or permission.get('existing_authorization_verified') is not True
-        or not re.fullmatch('[0-9a-f]{64}', permission.get('evidence_sha256', ''))
-    ):
-        raise ValueError('REVIEWED_EXISTING_REPOSITORY_AUTHORIZATION_REQUIRED')
-    if contract.get('destination') != DESTINATION:
-        raise ValueError('FIXED_OPERATOR_REPOSITORY_REQUIRED')
+    validate_evidence(contract)
 
 
 def command(argv, env=None):
@@ -62,6 +56,9 @@ def command(argv, env=None):
 
 
 def publish(contract, directory, receipt, output):
+    hint = None
+    write_attempted = False
+
     def progress(state):
         output.write_text(
             json.dumps(
@@ -70,6 +67,9 @@ def publish(contract, directory, receipt, output):
                     'publication_state': state,
                     'image': DESTINATION + '@' + contract['oci_manifest_digest'],
                     'source_sha': contract['source_sha'],
+                    'registry_permission_hint': hint,
+                    'effective_registry_write': 'UNVERIFIED',
+                    'write_attempted': write_attempted,
                     'deployed': False,
                     'runtime_admission': 'CLOSED',
                 },
@@ -96,9 +96,11 @@ def publish(contract, directory, receipt, output):
     token = command(['gcloud', 'auth', 'print-access-token'], env).decode().strip()
     if not token or '\n' in token:
         raise ValueError('KEYLESS_WORKFLOW_TOKEN_REQUIRED')
+    hint = permission_hint(token)
+    progress('CALLER_PERMISSION_HINT_COMPLETE_NO_WRITE_ATTEMPT')
     with tempfile.TemporaryDirectory(prefix='operator-registry-auth-', dir=directory.parent) as temporary:
         auth = Path(temporary) / 'auth.json'
-        with auth.open('x', opener=lambda path, flags: os.open(path, flags, 0o600)) as stream:
+        with open(auth, 'x', opener=lambda path, flags: os.open(path, flags, 0o600)) as stream:
             json.dump(
                 {'auths': {'gcr.io': {'auth': base64.b64encode(('oauth2accesstoken:' + token).encode()).decode()}}},
                 stream,
@@ -124,6 +126,7 @@ def publish(contract, directory, receipt, output):
             # registry's explicit absent-manifest response before a first push.
             if b'manifest unknown' not in before.stderr.lower():
                 raise ValueError('DESTINATION_STATE_UNKNOWN')
+            write_attempted = True
             progress('PUBLICATION_ATTEMPTED_OUTCOME_UNKNOWN_UNTIL_READBACK')
             command(
                 [
@@ -170,6 +173,13 @@ def publish(contract, directory, receipt, output):
                 'source_sha': contract['source_sha'],
                 'workflow_sha': os.environ['GITHUB_WORKFLOW_SHA'],
                 'run_id': os.environ['GITHUB_RUN_ID'],
+                'registry_permission_hint': hint,
+                'write_attempted': write_attempted,
+                'effective_registry_write': (
+                    'CONFIRMED_BY_SUCCESSFUL_COPY_AND_READBACK'
+                    if write_attempted
+                    else 'NOT_TESTED_EXISTING_EXACT_ARTIFACT_REUSED'
+                ),
                 'deployed': False,
                 'runtime_admission': 'CLOSED',
             },

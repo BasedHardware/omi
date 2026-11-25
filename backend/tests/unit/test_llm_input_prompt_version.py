@@ -68,6 +68,14 @@ PINNED: dict[str, dict[str, str]] = {
         'notes-3': '5307871ec67f0f81cafbca8d9aa209dd4fdc3fe9eec9d13139156fd0706ac766',
         'notes-4': '018b0f5c72af37d0ccb23f8a492ebfd88d8f8c28d30024042ad7ce0114efddc8',
         'notes-5': '618f083cb5fb222e0982df19e52b2ad7e18b7b9871c839463eb931f3aa636801',
+        'notes-6': '25076427ce2b964154d4e1ccc272b48690e875cc937e65aa4e8d16533f401462',
+        'notes-7': 'e73813a82cc476d83424b516a264368c12708e2532ca259ee5b8d70dcb5e66c8',
+        'notes-8': '4a5a5a90a9a12e62c3cdc2fe2613a404e6d0b9d03aa3bc884a6e3d15a0161359',
+        # notes-9 digest refreshed in place: the from-segments request deadline
+        # only bounds how long the notes step may run. It cannot change the
+        # output for the same input, so the version is not bumped and existing
+        # notes-9 checkpoints stay reusable.
+        'notes-9': 'd150f39c05377979d9f7f42055f44b7abc9f1b548c06f12229d2e9482d25d135',
     },
     'l1': {'l1-1': '0ad51076315481003b05af2a90ce18797539846e35f4970680dff906c00b7d70'},
 }

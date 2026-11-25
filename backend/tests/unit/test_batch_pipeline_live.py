@@ -21,7 +21,7 @@ from utils.batch_pipeline.contracts import Priority, ProjectionBinding, WorkItem
 from utils.batch_pipeline.live import record_identity, register_recording
 from utils.batch_pipeline.live_projection import replace_record
 from utils.batch_pipeline.source_audio import MAGIC, materialize, validate_reference
-from utils.conversations import summary_delivery
+from utils.conversations import lifecycle, summary_delivery
 from utils.enrichment.age_gate import expired
 from utils.sync.assignment_errors import SyncAssignmentConflict
 from tests.unit.test_batch_provider_stt import Outbox, Artifacts, Vendor, stage as provider_stage
@@ -777,20 +777,21 @@ def test_projection_stamps_first_summary_debt_on_an_untitled_completed_row():
     assert home_step.classify(listed) == home_step.WRITING_NOTES
 
 
-def test_projection_does_not_stamp_debt_past_the_repair_age_gate():
+def test_projection_past_the_repair_age_gate_stamps_no_debt_and_stays_on_home():
     from utils.conversations import home_step
 
     old = recording(created_at=datetime.fromtimestamp(STAMP_NOW - 4 * 86400, timezone.utc))
     result, new = replace_record(old, incoming(), {'start': 100, 'end': 102})
     assert new
     # Provenance is honest, but no debt means the repair never parks the row
-    # one-way and Home never presents it as Writing notes forever.
+    # one-way and Home never presents it as Writing notes forever. The row has
+    # the projected speech, so Home keeps it as a finished card, never noise.
     assert result['summary_title_provenance'] == 'server_minimum'
     assert 'summary_due_at' not in result
     assert 'summary_first_pending_at' not in result
     assert summary_delivery.refusal(result) is None
     listed = {key: value for key, value in result.items() if key != 'transcript_segments'}
-    assert home_step.classify(listed) == home_step.NOISE
+    assert home_step.classify(listed) == home_step.READY
 
 
 def test_projection_does_not_double_stamp_existing_debt():
@@ -890,7 +891,6 @@ def test_projection_debt_stamp_skips_every_non_empty_summary_block(reason):
         {'summary_completed_at': 90.0},
         {'summary_output_present': True},
         {'summary_due_at': 170.0},
-        {'summary_first_pending_at': 50.0},
         {'structured': {'title': 'Synthetic title'}},
         {'structured': {'overview': 'Synthetic overview'}},
         {'structured': {'sections': [{'body_markdown': 'Synthetic body'}]}},
@@ -1205,8 +1205,6 @@ async def test_protocol_cutover_defers_without_reading_archive_or_expiring_oblig
 
 @pytest.mark.parametrize('language,admitted', [('en', True), ('vi', False), ('multi', False)])
 def test_capture_reservation_preserves_supported_language_route(monkeypatch, language, admitted):
-    from utils.conversations import lifecycle
-
     monkeypatch.setenv('BATCH_PIPELINE_ENABLED', 'true')
     monkeypatch.setenv('BATCH_PIPELINE_PERCENT', '100')
     monkeypatch.setenv('BATCH_PIPELINE_LIVE_ADMISSION_ENABLED', 'true')
@@ -1304,3 +1302,15 @@ def test_late_record_transcript_has_durable_episode_read_recovery_marker(monkeyp
     monkeypatch.setenv('EPISODE_COMPOSE_TRANSCRIPT_READY_ENABLED', 'false')
     result, _ = replace_record(recording(), incoming(), {'start': 100, 'end': 102})
     assert 'episode_transcript_updated_at' not in result
+
+
+@pytest.mark.parametrize('whole_native_record', [True, False])
+def test_batch_projection_honors_late_v3_finish_only_with_whole_record(whole_native_record, monkeypatch):
+    monkeypatch.delenv('CONVERSATIONS_V3_BATCH_MANUAL_END', raising=False)
+    original = recording(recording=True, v3_manual_end_requested=True, transcript_segments=[])
+    result, _ = replace_record(
+        original, incoming(), {'start': 100, 'end': 102, 'whole_native_record': whole_native_record}
+    )
+    assert result['v3_manual_end_requested'] is True
+    assert result.get('v3_manual_end', False) == whole_native_record
+    assert result.get('v3_pending', False) == whole_native_record

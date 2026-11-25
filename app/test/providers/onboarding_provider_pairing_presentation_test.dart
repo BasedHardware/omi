@@ -14,6 +14,7 @@ import 'package:omi/pages/onboarding/find_device/pairing_failure_card.dart';
 import 'package:omi/providers/onboarding_provider.dart';
 import 'package:omi/services/devices/pairing_failure.dart';
 import 'package:omi/services/services.dart';
+import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/analytics/analytics_adapter.dart';
 import 'package:omi/utils/analytics/analytics_manager.dart';
 import 'package:omi/utils/analytics/registry/events.g.dart';
@@ -26,6 +27,39 @@ import '../widgets/onboarding_polish_test.dart' as polish;
 typedef Reason = DeviceConnectFailureShownFailureReason;
 
 class DiscoveryDeviceProvider extends AuditDeviceProvider {
+  DiscoveryDeviceProvider({super.device, super.connected, super.battery});
+
+  bool? chargingNow;
+  BtDevice? resolvedDevice;
+  int? liveBattery;
+
+  @override
+  BtDevice? get capabilityNormalizedDevice => resolvedDevice ?? super.capabilityNormalizedDevice;
+
+  @override
+  int get batteryLevel => liveBattery ?? super.batteryLevel;
+
+  @override
+  bool get isCharging => chargingNow ?? false;
+
+  @override
+  bool? get observedChargingStatus => chargingNow;
+
+  void updateCharging(bool value) {
+    chargingNow = value;
+    notifyListeners();
+  }
+
+  void resolveGlass(BtDevice discovered) {
+    resolvedDevice = discovered.copyWith(type: DeviceType.openglass);
+    notifyListeners();
+  }
+
+  void updateBattery(int level) {
+    liveBattery = level;
+    notifyListeners();
+  }
+
   @override
   void stopDiscoveryScanning() {}
 }
@@ -95,6 +129,121 @@ void main() {
     await tester.pump();
     await tester.pump();
   }
+
+  testWidgets('Omi pairing shows one live status and skips the stale percentage', (tester) async {
+    final device = BtDevice(id: 'omi-first-charge', name: 'Omi', type: DeviceType.omi, rssi: -50);
+    final live = DiscoveryDeviceProvider(device: device, connected: true, battery: 3);
+    addTearDown(live.dispose);
+    final render = Platform.environment['FIRST_CHARGE_RENDER'] == '1';
+    if (render) await tester.runAsync(polish.loadFonts);
+    tester.view.physicalSize = const Size(1179, 2556);
+    tester.view.devicePixelRatio = 3;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    const boundary = Key('first-charge-render');
+    await tester.pumpWidget(RepaintBoundary(
+      key: boundary,
+      child: polish.host(polish.connect(provider, device: live)),
+    ));
+    await tester.pump();
+    await tester.pump();
+    provider
+      ..isConnected = true
+      ..deviceId = device.id
+      ..deviceName = device.name
+      ..deviceType = device.type
+      ..batteryPercentage = 3
+      ..setLoading(false);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 500));
+    final l10n = AppLocalizationsEn();
+    Future<void> capture(String filename) async {
+      if (!render) return;
+      await tester.runAsync(() async {
+        for (final element in find.byType(Image).evaluate()) {
+          await precacheImage((element.widget as Image).image, element);
+        }
+      });
+      await tester.pump();
+      await tester.runAsync(() async {
+        final target = tester.renderObject<RenderRepaintBoundary>(find.byKey(boundary));
+        final image = await target.toImage(pixelRatio: 3);
+        final png = await image.toByteData(format: ui.ImageByteFormat.png);
+        image.dispose();
+        File('../.agent-artifacts/ui-evidence/first-charge-mobile/$filename')
+          ..createSync(recursive: true)
+          ..writeAsBytesSync(png!.buffer.asUint8List());
+      });
+    }
+
+    expect(find.text(l10n.connected), findsOneWidget);
+    expect(find.text(l10n.deviceReadyToUse), findsNothing);
+    live.updateCharging(true);
+    await tester.pump();
+    expect(find.text(l10n.charging), findsOneWidget);
+    expect(find.text(l10n.pairingSuccessful), findsNothing);
+    expect(find.text('3%'), findsNothing);
+    await capture('001-mobile-ios-pairing-charging.png');
+    live.updateCharging(false);
+    await tester.pump();
+    expect(find.text(l10n.deviceReadyToUse), findsOneWidget);
+    expect(find.text(l10n.charging), findsNothing);
+    expect(find.text('3%'), findsNothing);
+    await capture('002-mobile-ios-pairing-ready.png');
+    await tester.pumpWidget(const SizedBox());
+  });
+
+  testWidgets('OmiGlass advertised as Omi keeps its battery level after pairing', (tester) async {
+    final device = BtDevice(id: 'glass-discovery', name: 'OmiGlass', type: DeviceType.omi, rssi: -50);
+    final live = DiscoveryDeviceProvider(device: device, connected: true, battery: 72);
+    addTearDown(live.dispose);
+    await tester.pumpWidget(polish.host(polish.connect(provider, device: live)));
+    await tester.pump();
+    await tester.pump();
+    provider
+      ..isConnected = true
+      ..deviceId = device.id
+      ..deviceName = device.name
+      ..deviceType = device.type
+      ..batteryPercentage = live.batteryLevel
+      ..setLoading(false);
+    await tester.pump();
+    final l10n = AppLocalizationsEn();
+    expect(find.text(l10n.pairingSuccessful), findsOneWidget);
+    expect(find.text('72%'), findsOneWidget);
+    expect(find.text(l10n.deviceReadyToUse), findsNothing);
+    await tester.pumpWidget(const SizedBox());
+  });
+
+  testWidgets('late Glass capability switches pairing to the live battery without changing the discovered type',
+      (tester) async {
+    final device = BtDevice(id: 'glass-capability', name: 'Omi', type: DeviceType.omi, rssi: -50);
+    final live = DiscoveryDeviceProvider(device: device, connected: true);
+    addTearDown(live.dispose);
+    await tester.pumpWidget(polish.host(polish.connect(provider, device: live)));
+    await tester.pump();
+    provider
+      ..isConnected = true
+      ..deviceId = device.id
+      ..deviceName = device.name
+      ..deviceType = device.type
+      ..batteryPercentage = 3
+      ..setLoading(false);
+    await tester.pump();
+    final l10n = AppLocalizationsEn();
+    expect(find.text(l10n.connected), findsOneWidget);
+    expect(find.text('3%'), findsNothing);
+
+    live.resolveGlass(device);
+    await tester.pump();
+    expect(find.text(l10n.pairingSuccessful), findsOneWidget);
+    expect(find.text('3%'), findsNothing);
+    live.updateBattery(72);
+    await tester.pump();
+    expect(find.text('72%'), findsOneWidget);
+    expect(provider.deviceType, DeviceType.omi);
+    await tester.pumpWidget(const SizedBox());
+  });
 
   testWidgets('real empty-scan timer retains No Omi Found and never shows or emits a connection failure',
       (tester) async {
@@ -178,6 +327,87 @@ void main() {
     addTearDown(() => binding.defaultBinaryMessenger.setMockMethodCallHandler(permissions, null));
     provider.hasBluetoothPermission = false;
     await expectDelayedHelpAfterBlockedScan(tester, Reason.bluetoothPermissionDenied);
+  });
+
+  group('Bluetooth permission blocked in Settings', () {
+    const permissions = MethodChannel('flutter.baseflow.com/permissions/methods');
+    // What both the status read and the request answer: 0 denied, 1 granted, 4 permanently denied.
+    late int status;
+    late List<String> calls;
+    int count(String method) => calls.where((call) => call == method).length;
+    Future<void> backInApp(WidgetTester tester) async {
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+      await tester.pump();
+      await tester.pump();
+    }
+
+    setUp(() {
+      status = 4;
+      calls = [];
+      binding.defaultBinaryMessenger.setMockMethodCallHandler(permissions, (call) async {
+        calls.add(call.method);
+        if (call.method == 'requestPermissions') return {for (final p in call.arguments as List) p as int: status};
+        if (call.method == 'openAppSettings') return true;
+        return status;
+      });
+      provider.hasBluetoothPermission = false;
+    });
+    tearDown(() => binding.defaultBinaryMessenger.setMockMethodCallHandler(permissions, null));
+
+    testWidgets('leads with Open Settings, and coming back allowed searches again without a tap', (tester) async {
+      await pumpConnect(tester);
+      expect(provider.pairingFailureReason, Reason.bluetoothPermissionDenied);
+      expect(provider.pairingBlockNeedsSettings, isTrue);
+      final openSettings = find.byKey(const Key('pairing_failure_open_settings'));
+      expect(tester.widget<OmiButton>(openSettings).variant, OmiButtonVariant.primary);
+      expect(
+          tester.widget<OmiButton>(find.byKey(const Key('pairing_failure_retry'))).variant, OmiButtonVariant.secondary);
+      await tester.ensureVisible(openSettings);
+      await tester.tap(openSettings);
+      await tester.pump();
+      expect(count('openAppSettings'), 1);
+      await AnalyticsManager.flushPending(force: true);
+      expect(adapter.names.where((name) => name == 'Device Pairing Settings Opened'), hasLength(1));
+
+      // Allowed in Settings, then back in the app: re-read without a prompt, then search.
+      status = 1;
+      final requests = count('requestPermissions');
+      await backInApp(tester);
+      expect(count('requestPermissions'), requests);
+      expect(provider.hasBluetoothPermission, isTrue);
+      expect(provider.pairingFailureReason, isNull);
+      expect(provider.pairingBlockNeedsSettings, isFalse);
+      expect(find.byType(PairingFailureCard), findsNothing);
+      expect(find.text(AppLocalizationsEn().searchingForDevices), findsOneWidget);
+      await tester.pumpWidget(const SizedBox());
+    });
+
+    testWidgets('coming back still denied keeps the card and never prompts', (tester) async {
+      await pumpConnect(tester);
+      final requests = count('requestPermissions');
+      await AnalyticsManager.flushPending(force: true);
+      final blocked = adapter.names.where((name) => name == 'Device Pairing Blocked').length;
+      await backInApp(tester);
+      expect(count('requestPermissions'), requests);
+      expect(count('checkPermissionStatus'), greaterThan(0));
+      expect(provider.pairingFailureReason, Reason.bluetoothPermissionDenied);
+      expect(find.byKey(const Key('pairing_failure_open_settings')), findsOneWidget);
+      await AnalyticsManager.flushPending(force: true);
+      expect(adapter.names.where((name) => name == 'Device Pairing Blocked'), hasLength(blocked));
+      await tester.pumpWidget(const SizedBox());
+    });
+
+    testWidgets('a denial the OS can still ask about again keeps Try Again first', (tester) async {
+      status = 0;
+      await pumpConnect(tester);
+      expect(provider.pairingFailureReason, Reason.bluetoothPermissionDenied);
+      expect(provider.pairingBlockNeedsSettings, isFalse);
+      expect(find.byKey(const Key('pairing_failure_open_settings')), findsNothing);
+      expect(
+          tester.widget<OmiButton>(find.byKey(const Key('pairing_failure_retry'))).variant, OmiButtonVariant.primary);
+      await tester.pumpWidget(const SizedBox());
+    });
   });
 
   test('saved visible devices clear reachability, but stale-bond recovery is retained', () async {

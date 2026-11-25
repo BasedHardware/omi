@@ -1,0 +1,13 @@
+{
+  "id": "wal-custody-audit",
+  "kind": "question",
+  "owner": "mobile-custody",
+  "events": [
+    "walCustodyAudit"
+  ],
+  "namespace_property": "$app_namespace",
+  "question": "How often do interval coverage and the independent frame digest audit agree, and how many verified WALs reached persisted synced retention?",
+  "zero_policy": "Require received events with positive audited coverage. Missing evidence holds the cohort.",
+  "query": "contracts/analytics/consumers/wal-custody-audit.sql",
+  "posthog_query": "SELECT sum(toInt(properties['agree_covered'])), sum(toInt(properties['agree_pending'])), sum(toInt(properties['disagree'])), sum(toInt(properties['unknown'])), sum(toInt(properties['released'])) FROM events WHERE event = 'WAL Custody Audit' AND properties['$app_namespace'] = '{app_namespace}' AND properties['build_number'] = '{build_number}'"
+}

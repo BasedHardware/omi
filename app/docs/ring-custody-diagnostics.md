@@ -67,3 +67,45 @@ null; modification and metadata-change times are labelled separately. No IDs,
 paths, filenames, raw index rows or owner values enter the JSON. Known schema
 buckets share one physical index; foreign/current/legacy/unstamped owner counts
 are categorical only, not per-account identifiers.
+
+## Ring-read state at disconnect
+
+New native disconnect rows snapshot `ring_read_active` and, while active,
+`ring_read_age_ms` (monotonic milliseconds since the current READ_BEGIN).
+The diagnostics export always projects both keys, using null for unknown
+legacy/unobserved link state and for age when no read is active.
+
+The native BLE boundary observes the storage characteristic's valid READ_BEGIN
+(0x05, at least 13 bytes) and DONE (0x04, at least 10 bytes), matching
+`RingProtocol` framing. BEGIN is accepted only after this link writes a ring READ
+(0x11 with 9 or 13 bytes); legacy file READs use 6 bytes and never arm it. This
+prevents legacy raw audio/file-list packets from being mistaken for ring frames.
+BEGIN must echo the requested start sequence. Rejected/failed native writes clear
+the matching pending request; neither a failed request nor a different sequence
+can turn a later packet into a measured active read. The temporary sequence is
+never included in the new export or analytics fields.
+Firmware sends DONE for completion, STOP and read errors.
+A READ request alone does not mean active; a timeout or failed STOP does not
+prove termination before DONE. A disconnect consumes the state; a new connection
+starts inactive. A restored iOS link without an observed boundary stays unknown.
+Android notifications are fenced to the GATT object that owns the observation.
+No additional subscriptions, writes, timers, audio buffers or custody decisions
+are introduced. The observer retains only link state and a monotonic start time.
+
+This owner avoids a Dart-to-native state update racing a native disconnect and
+also records Android foreground-service reads when Dart is suspended. Historical
+rows retain the snapshot when reconnect metadata is backfilled. No process-local
+state is used to annotate older rows at export time.
+
+`Mobile Device Health Daily` adds registered scalar counters for active reads,
+known-state disconnects and five RSSI ranges: <-90, [-90,-80), [-80,-60), >=-60,
+and unknown (missing/nonnegative RSSI). These sum to the active-read count.
+Only actual disconnects in that local calendar day enter the counters. The
+known-state count excludes legacy/unknown values, so zero active reads with zero
+known states is unobserved. Per-disconnect ages remain local export metadata;
+analytics carries no new identifiers or paths. This measures overlap, not cause.
+
+Both platforms use sleep-inclusive monotonic clocks for read age: iOS
+`mach_continuous_time` and Android `elapsedRealtime`. The passive iOS observer
+also sees valid storage boundaries during capture recovery's cancellation window;
+the existing audio/capture fence remains in effect for its downstream consumers.

@@ -2,42 +2,53 @@
   "repository": "BasedHardware/omi",
   "source_sha": "97074e78defa1a84b9d39c021e28aa70cf4f2e4e",
   "source_tree": "25c38ee2fa9caff96ce6b920fd4f0843e80d6ad0",
-  "build_inputs_sha256": "cf6d520e6a0939bbd3d15429b366477da8719aba58af629521984b4bf1052d90",
+  "build_inputs_sha256": "fb0a79a2a11a89f52913b08a0e57388468dcbcb742fd2c3fdefcabea561bd252",
   "supervisor_sha256": "1b6a0a1ed5ca8dbc7f8087ae51441539a8aa9b4f4da2171932e2f08af9de699f",
-  "oci_manifest_digest": "sha256:8b0bf0de13348de53700dee40b5f83f02c5edf3db184345f5c0769601efaefd0",
-  "archive_sha256": "b9a0b9cd859f8ef022e4cb44692b5641c3ddb576f80d6780da1a8982c7ae2d0b",
-  "archive_bytes": 3514967040,
+  "oci_manifest_digest": "sha256:f713574047679618ecea32ff29b939f20fa3d63cfea33ba9cdf6643577d2c145",
+  "archive_sha256": "f8fdc1a5ea37fab77ad3188f3004dbdc87bf010f7cbc2ba80f4b9f30185ec5de",
+  "archive_bytes": 3514789376,
   "parts": [
     {
       "name": "operator.oci.tar.part-000",
       "bytes": 1800000000,
-      "sha256": "a9877d1695b08b02d124988e2af965a38065d5388b44971a8248820e76a65bc8",
-      "asset_id": 753807644
+      "sha256": "05aa21c9b0264aa1646ca01f35f9c30e861aee43b26b8cb8e2f90b950c37ad62",
+      "asset_id": 757685908
     },
     {
       "name": "operator.oci.tar.part-001",
-      "bytes": 1714967040,
-      "sha256": "ea422336d28478b4d2305f5316e9573f961c81534b2c3cd9b855e2b80d304130",
-      "asset_id": 753807638
+      "bytes": 1714789376,
+      "sha256": "fa5665123182bbde1f2561414d0e21d74e95c82ef101ce11fc2985457265c46f",
+      "asset_id": 757685904
     }
   ],
   "fixture": {
     "name": "operator-fixtures.tar.gz",
-    "bytes": 48361,
-    "sha256": "7c6f052598369cc55ce759cf7543914cfc473b52c0a0e276c7b7f9c6f83bf201",
-    "asset_id": 753807641
+    "bytes": 46949,
+    "sha256": "b2d38771835aed37dda39f398aa74829089ca2c08f6cefefc3d86650d7c272c3",
+    "asset_id": 757685909
   },
-  "release_tag": "jobstore-operator-input-8b0bf0de1334",
-  "release_id": 446696207,
+  "release_tag": "jobstore-operator-input-f71357404767",
+  "release_id": 448153636,
   "asset_ids": [
-    753807644,
-    753807638,
-    753807641
+    757685908,
+    757685904,
+    757685909
   ],
   "native_qualification": null,
   "registry_write_authorization": null,
-  "required_disposable_free_bytes": 20963938304,
+  "required_disposable_free_bytes": 20963231744,
   "destination": "gcr.io/based-hardware/jobstore-reconcile-operator",
-  "status": "APPROVED_INGRESS_STAGED_REGISTRY_UNVERIFIED_NOT_DISPATCHABLE",
-  "loaded_tag": "omi-jobstore-operator:root-97074-20261115-isolated-venv"
+  "status": "REVIEWED_EXACT_INPUTS_FOR_GUARDED_PUBLICATION",
+  "loaded_tag": "omi-jobstore-operator:root-97074-source-budget-20261117-credentialfree",
+  "registry_access_evidence": {
+    "decision": "REVIEWED_EXISTING_ALLOW_AND_TRUST_FOR_BOUNDED_ATTEMPT",
+    "repository": "gcr.io/based-hardware/jobstore-reconcile-operator",
+    "iam_resource": "projects/based-hardware/locations/us/repositories/gcr.io",
+    "principal": "omi-ci-deployer-prod@based-hardware.iam.gserviceaccount.com",
+    "effective_authorization": "UNKNOWN_UNTIL_ACTUAL_REGISTRY_OPERATIONS",
+    "allow_policy_receipt_sha256": "86bdb76a0b57dc383cfc64a21c937df417627449c5e6d143b35e53ad12d4eeed",
+    "wif_metadata_receipt_sha256": "9514752dee8ebf61b40a7faab48946bdaed54d21d0e3f3d274a572bc689f0aa1",
+    "sa_trust_receipt_sha256": "45706b58f3972a31e7e8a9f7edb254b5a04cf9b6b0b851c359e4c50a64d69243"
+  },
+  "readiness_sha256": "68954c63e888dcc720f6466394d472d5a308a119a80c74622efeae2908f417bb"
 }

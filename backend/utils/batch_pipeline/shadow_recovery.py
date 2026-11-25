@@ -4,7 +4,7 @@ from types import SimpleNamespace
 
 from config.batch_pipeline_shadow import shadow_percent
 from config.policy import RecoveryPolicy
-from config.batch_pipeline_empty_asr import terminal_empty_allowed
+from config.batch_pipeline_empty_asr import language_guarded_empty_close_enabled, terminal_empty_allowed
 from config.batch_language_recovery import (
     language_guarded,
     below_silence_threshold,
@@ -20,7 +20,7 @@ from utils.batch_pipeline.recovery_steps import ProviderStep, run_sync, run_asyn
 from utils.batch_pipeline.shadow_projection import run as run_shadow_projection
 
 
-def guarded_recovery(repository, segment, item, job, audio, duration, spans, stt, second_stt, ready):
+def guarded_recovery(repository, segment, item, job, audio, duration, spans, stt, second_stt, ready, policy):
     """Mirror the serving disposition without writing content or user accounting."""
     speech = sum(span['end'] - span['start'] for span in spans)
     receipts = {}
@@ -74,6 +74,15 @@ def guarded_recovery(repository, segment, item, job, audio, duration, spans, stt
         return 'recovered', receipts, payload
     if first == second == 'empty' and below_silence_threshold(held_vad_census({**job['item'], **job}, speech)):
         return 'empty', receipts, None
+    # Mirrors recovery: behind its switch, two validated empty recognizers close a guarded unit.
+    if (
+        language_guarded_empty_close_enabled()
+        and first == second == 'empty'
+        and bool(spans)
+        and policy.terminal_empty_disposition
+        and terminal_empty_allowed(spans, recognizer_receipts=receipts, language_guarded=True)
+    ):
+        return 'empty', receipts, None
     return 'failed_held', receipts, None
 
 
@@ -101,7 +110,7 @@ def _recover_steps(repository, artifacts, segment, *, stt=None, second_stt=None,
     job = repository.start_recovery(segment)
     if job is None:
         return 'held'
-    item = WorkItem(**job['item'])
+    item = WorkItem.from_dict(job['item'])
     policy = RecoveryPolicy.from_dict(job['recovery_policy'])
     speech, vad, outcome, receipts, payload = 0.0, 'unknown', 'error', None, None
     duration = 0.0
@@ -121,6 +130,7 @@ def _recover_steps(repository, artifacts, segment, *, stt=None, second_stt=None,
                 stt,
                 second_stt,
                 independent_ready if second_stt is second_transcribe else lambda: True,
+                policy,
             )
         elif not spans:
             outcome = 'empty' if held_silence_allowed({**job['item'], **job}, 0) else 'failed_held'
@@ -155,7 +165,14 @@ def _recover_steps(repository, artifacts, segment, *, stt=None, second_stt=None,
                                 if (
                                     below_silence_threshold(speech)
                                     if language_guarded(job)
-                                    else policy.terminal_empty_disposition and terminal_empty_allowed(empty.spans)
+                                    else policy.terminal_empty_disposition
+                                    and terminal_empty_allowed(
+                                        empty.spans,
+                                        recognizer_receipts={
+                                            name: {'provider': name, 'outcome': 'empty', 'word_count': 0}
+                                            for name in ('modulate', provider)
+                                        },
+                                    )
                                 )
                                 else 'failed_held'
                             )

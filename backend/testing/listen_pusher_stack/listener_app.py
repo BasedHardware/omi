@@ -172,9 +172,9 @@ def _install_rest_finalization_race_barrier() -> None:
     lock = Lock()
     remaining = parties
 
-    def lookup_with_race_gate(request_uid: str, request_conversation_id: str):
+    def lookup_with_race_gate(request_uid: str, request_conversation_id: str, **lookup_options):
         nonlocal remaining
-        snapshot = original_lookup(request_uid, request_conversation_id)
+        snapshot = original_lookup(request_uid, request_conversation_id, **lookup_options)
         if request_uid != uid or request_conversation_id != conversation_id:
             return snapshot
         with lock:

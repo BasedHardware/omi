@@ -8,19 +8,16 @@ from fastapi.testclient import TestClient
 
 from routers import boundary_evidence as endpoint
 from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
-from utils.episodes import boundary_runtime
 
 
 @pytest.fixture
 def client(monkeypatch):
     store = StrictFirestore()
-    monkeypatch.setenv('EPISODE_BOUNDARIES_MODE', 'serve')
     monkeypatch.setattr(endpoint.boundary_store, 'get_firestore_client', lambda: store)
-    monkeypatch.setattr(boundary_runtime, 'apply_signal_edges', lambda *a, **k: 'unchanged')
     app = FastAPI()
     app.include_router(endpoint.router)
     dependency = endpoint.router.routes[0].dependant.dependencies[0].call
-    app.dependency_overrides[dependency] = lambda: 'test-account'
+    app.dependency_overrides[dependency] = lambda: 'fixture-owner-39'
     with TestClient(app) as http:
         yield http, store
 

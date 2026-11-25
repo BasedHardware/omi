@@ -214,3 +214,26 @@ class _OmiEditSheetState extends State<OmiEditSheet> {
     );
   }
 }
+
+/// The dirty guard for an editor that is not a sheet: a full-page form or an inline editor
+/// (ux-contract §2). While [isDirty], back, the iOS edge swipe and system back ask
+/// [confirmDiscardChanges]; Discard leaves, Keep Editing stays. A clean editor just closes.
+class OmiUnsavedChangesGuard extends StatelessWidget {
+  const OmiUnsavedChangesGuard({super.key, required this.isDirty, required this.child});
+
+  final bool isDirty;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    return PopScope<Object?>(
+      canPop: !isDirty,
+      onPopInvokedWithResult: (didPop, result) async {
+        if (didPop) return;
+        final navigator = Navigator.of(context);
+        if (await confirmDiscardChanges(context)) navigator.pop(result);
+      },
+      child: child,
+    );
+  }
+}

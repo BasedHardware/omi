@@ -169,6 +169,9 @@ def test_deletion_negative_cache_read_count(env, monkeypatch, enabled, expected)
 
 
 def test_deletion_next_request_fenced_after_real_intent_writer(env, monkeypatch):
+    # This read-counter fixture fakes the intent transaction and exercises
+    # cache invalidation. Atomic routing is covered with the real emulator.
+    monkeypatch.setenv('BATCH_ACCOUNT_PRIVACY_WRITER_ENABLED', 'false')
     enable(monkeypatch, 'deletion_marker_cache')
     assert deletion.get_user_deletion_wipe_status('u') is None
 

@@ -204,9 +204,22 @@
         "category": "rollout",
         "value": "60"
       },
-      "all_levers_sha256": "ed5a26b7604ce31a9f5ca6c13a51ba3957aaa93c1e12b87a5b580d8c8c85d696",
+      "all_levers_sha256": "52a61324c78139d523e9f8670d8262409d0f429b785774aff3405ebfb09733c5",
       "usage_month_cache": 100,
       "usage_month_total": 100
+    },
+    "/environments/prod/cloud_run/services/backend-projection-pump/env": {
+      "all_levers_sha256": "52a61324c78139d523e9f8670d8262409d0f429b785774aff3405ebfb09733c5",
+      "usage_month_cache": 100,
+      "usage_month_total": 100,
+      "FSR_USAGE_MONTH_TOTAL_EPOCH": {
+        "value": "c2fs_20261026_r1",
+        "category": "rollout"
+      },
+      "FSR_USAGE_MONTH_TTL_SECONDS": {
+        "value": "60",
+        "category": "rollout"
+      }
     },
     "/environments/prod/cloud_run/services/backend-sync-backfill/env": {
       "FSR_USAGE_MONTH_TOTAL_EPOCH": {
@@ -217,7 +230,7 @@
         "category": "rollout",
         "value": "60"
       },
-      "all_levers_sha256": "019448ea06ed3bcbc30c987205281fab9ed59b16fecdba7baf1f2340bd0a6116",
+      "all_levers_sha256": "a1492daa08d1fd804c75552c3ed4ca3420d635a702a732b1b1d05b82c51fb9b1",
       "usage_month_cache": 0,
       "usage_month_total": 0
     },
@@ -230,7 +243,7 @@
         "category": "rollout",
         "value": "60"
       },
-      "all_levers_sha256": "ed5a26b7604ce31a9f5ca6c13a51ba3957aaa93c1e12b87a5b580d8c8c85d696",
+      "all_levers_sha256": "52a61324c78139d523e9f8670d8262409d0f429b785774aff3405ebfb09733c5",
       "usage_month_cache": 100,
       "usage_month_total": 100
     },
@@ -243,7 +256,7 @@
         "category": "rollout",
         "value": "60"
       },
-      "all_levers_sha256": "ed5a26b7604ce31a9f5ca6c13a51ba3957aaa93c1e12b87a5b580d8c8c85d696",
+      "all_levers_sha256": "52a61324c78139d523e9f8670d8262409d0f429b785774aff3405ebfb09733c5",
       "usage_month_cache": 100,
       "usage_month_total": 100
     },
@@ -438,7 +451,7 @@
         "category": "rollout",
         "value": "c2fs_20261026_r1"
       },
-      "all_levers_sha256": "ed5a26b7604ce31a9f5ca6c13a51ba3957aaa93c1e12b87a5b580d8c8c85d696",
+      "all_levers_sha256": "52a61324c78139d523e9f8670d8262409d0f429b785774aff3405ebfb09733c5",
       "usage_month_cache": 100,
       "usage_month_total": 100
     },
@@ -447,7 +460,7 @@
         "category": "rollout",
         "value": "c2fs_20261026_r1"
       },
-      "all_levers_sha256": "019448ea06ed3bcbc30c987205281fab9ed59b16fecdba7baf1f2340bd0a6116",
+      "all_levers_sha256": "a1492daa08d1fd804c75552c3ed4ca3420d635a702a732b1b1d05b82c51fb9b1",
       "usage_month_cache": 0,
       "usage_month_total": 0
     },
@@ -456,7 +469,7 @@
         "category": "rollout",
         "value": "c2fs_20261026_r1"
       },
-      "all_levers_sha256": "ed5a26b7604ce31a9f5ca6c13a51ba3957aaa93c1e12b87a5b580d8c8c85d696",
+      "all_levers_sha256": "52a61324c78139d523e9f8670d8262409d0f429b785774aff3405ebfb09733c5",
       "usage_month_cache": 100,
       "usage_month_total": 100
     },
@@ -465,7 +478,7 @@
         "category": "rollout",
         "value": "c2fs_20261026_r1"
       },
-      "all_levers_sha256": "ed5a26b7604ce31a9f5ca6c13a51ba3957aaa93c1e12b87a5b580d8c8c85d696",
+      "all_levers_sha256": "52a61324c78139d523e9f8670d8262409d0f429b785774aff3405ebfb09733c5",
       "usage_month_cache": 100,
       "usage_month_total": 100
     }

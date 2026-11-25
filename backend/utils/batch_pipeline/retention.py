@@ -10,6 +10,7 @@ from datetime import datetime, timedelta, timezone
 import hashlib
 import logging
 import os
+import time
 from typing import Any
 from urllib.parse import urlsplit
 
@@ -36,22 +37,12 @@ ARTIFACT_RETENTION = timedelta(hours=24)
 RECEIPT_RETENTION = timedelta(days=45)
 HOLD_RECHECK = timedelta(hours=1)
 logger = logging.getLogger(__name__)
+BATCH_OBJECT_BUCKET_ENV = ('BUCKET_BATCH_PIPELINE', 'BUCKET_TEMPORAL_SYNC_LOCAL')
 
 
-def delete_batch_object(uid: str, uri: str, *, timeout: float | None = None, storage_client: Any = None) -> None:
-    """Delete only a configured, owner-scoped object; foreign refs fail closed.
-
-    Inside ``rpc_deadline`` (a gate-held unit) the delete is one attempt with
-    no SDK retry, bounded by the time left; ``storage_client`` lets such a
-    caller reuse a client whose session is bound to that deadline.
-    """
+def batch_object_address(uid: str, uri: str, allowed_buckets: set[str]) -> tuple[str, str, int | None]:
     parsed = urlsplit(uri)
     bucket_name, path = parsed.netloc, parsed.path.lstrip('/')
-    allowed_buckets = {
-        value
-        for name in ('BUCKET_BATCH_PIPELINE', 'BUCKET_TEMPORAL_SYNC_LOCAL')
-        if (value := os.getenv(name, '').strip())
-    }
     wal_original = bucket_name == private_archive_bucket() and path.startswith(f'record-wal/{uid}/')
     if (
         parsed.scheme != 'gs'
@@ -71,6 +62,20 @@ def delete_batch_object(uid: str, uri: str, *, timeout: float | None = None, sto
     ):
         raise ValueError('batch object reference outside configured owner storage')
     generation = int(parsed.fragment) if parsed.fragment else None
+    return bucket_name, path, generation
+
+
+def delete_batch_object(
+    uid: str, uri: str, *, timeout: float | None = None, storage_client: Any = None, resolve_generation: bool = False
+) -> None:
+    """Delete only a configured, owner-scoped object; foreign refs fail closed.
+
+    Inside ``rpc_deadline`` (a gate-held unit) the delete is one attempt with
+    no SDK retry, bounded by the time left; ``storage_client`` lets such a
+    caller reuse a client whose session is bound to that deadline.
+    """
+    allowed_buckets = {value for name in BATCH_OBJECT_BUCKET_ENV if (value := os.getenv(name, '').strip())}
+    bucket_name, path, generation = batch_object_address(uid, uri, allowed_buckets)
     if storage_client is None:
         from utils.other.local_storage import create_storage_client
 
@@ -78,6 +83,14 @@ def delete_batch_object(uid: str, uri: str, *, timeout: float | None = None, sto
     blob = storage_client.bucket(bucket_name).blob(path, generation=generation)
     left = rpc_deadline.remaining()
     try:
+        if resolve_generation and generation is None:
+            if timeout is None or left is not None:
+                raise ValueError('generation resolution requires a standalone bounded RPC')
+            blob.reload(timeout=timeout, retry=None)
+            generation = blob.generation
+            if not generation:
+                raise RuntimeError('object metadata has no generation')
+            blob = storage_client.bucket(bucket_name).blob(path, generation=generation)
         if left is not None:
             if left <= 0:
                 raise rpc_deadline.RpcDeadlineExceeded('object delete not sent: unit deadline passed')
@@ -152,17 +165,21 @@ def _register_batch_artifact(
                 voice_due = min(voice_due, result['expires_at'] - RECEIPT_RETENTION + timedelta(seconds=FINALIZED_TTL))
             if datetime.now(timezone.utc) + timedelta(seconds=UPLOAD_PENDING_SECONDS) >= voice_due:
                 raise PermissionError('voice evidence upload cannot finish within retention window')
-        conversation_ids = [
-            value
-            for value in (
-                job.get('conversation_id'),
-                job.get('capture_source_conversation_id'),
-                getattr(item, 'capture_source_conversation_id', None),
-                binding.get('target_conversation_id'),
-                getattr(item, 'conversation_id', None),
-            )
-            if value
-        ] + projected_ids
+        conversation_ids = (
+            [
+                value
+                for value in (
+                    job.get('conversation_id'),
+                    job.get('capture_source_conversation_id'),
+                    getattr(item, 'capture_source_conversation_id', None),
+                    binding.get('target_conversation_id'),
+                    getattr(item, 'conversation_id', None),
+                )
+                if value
+            ]
+            + projected_ids
+            + list(getattr(item, 'source_conversation_ids', ()) or job.get('source_conversation_ids') or [])
+        )
         assert_batch_write_allowed(
             client, transaction, uid, conversation_ids=conversation_ids, expected_generation=expected_generation
         )
@@ -231,6 +248,15 @@ def _register_batch_artifact(
             and bool(redrive.get('token'))
             and uri.endswith(f"/{redrive['token']}.enc")
         )
+        source_alias_write = False
+        if not job and getattr(item, 'source_alias_of', None):
+            from database.batch_pipeline_source_reuse import current
+            from database.batch_pipeline_store import FirestoreTransaction
+
+            candidate = current(
+                FirestoreTransaction(client, namespace, transaction), item, time.time(), expected=item.source_alias_of
+            )
+            source_alias_write = candidate is not None
         if (
             kind != 'audio'
             and job.get('state') != 'leased'
@@ -240,11 +266,12 @@ def _register_batch_artifact(
             and not redrive_write
             and not terminal_write
             and not voice_write
+            and not source_alias_write
         ):
             raise BatchPrivacyBlocked('result_lease_lost')
         if job and not shadow and job.get('owner_id') != uid:
             raise ValueError('artifact owner mismatch')
-        if not job and (item is None or item.owner_id != uid or kind != 'audio'):
+        if not job and (item is None or item.owner_id != uid or kind != 'audio' and not source_alias_write):
             raise ValueError('result requires an existing owner job')
         existing = reference.get(transaction=transaction)
         if not existing.exists:
@@ -505,7 +532,11 @@ def batch_artifact_authorize(store: Any, item: Any, *, snapshots: dict | None = 
             item.owner_id,
             conversation_ids=tuple(
                 value
-                for value in (item.conversation_id, getattr(item, 'capture_source_conversation_id', None))
+                for value in (
+                    item.conversation_id,
+                    getattr(item, 'capture_source_conversation_id', None),
+                    *(getattr(item, 'source_conversation_ids', ()) or ()),
+                )
                 if value
             ),
             expected_generation=item.privacy_generation,

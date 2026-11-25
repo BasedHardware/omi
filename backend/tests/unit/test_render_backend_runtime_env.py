@@ -512,7 +512,9 @@ def test_backend_integration_deploy_pins_mcp_serving_capacity():
         "--memory=${{ inputs.runtime_env == 'prod' && '4Gi' || '2Gi' }}",
         "--concurrency=${{ inputs.runtime_env == 'prod' && '80' || '40' }}",
         integration_min,
-        "--max-instances=${{ inputs.runtime_env == 'prod' && '35' || '50' }}",
+        # 2026-11-20: the cap is live-resolved (prod fresh-service default 35) so a capacity
+        # revision's cap survives the next train; test_cloud_run_live_caps.py runs the resolver.
+        '--max-instances=${{ steps.live-integration-max-scale.outputs.max_scale }}',
         '--no-cpu-throttling',
     ):
         assert flag in integration_flags, flag
@@ -526,9 +528,11 @@ def test_backend_integration_deploy_pins_mcp_serving_capacity():
     assert '--cpu=2' in sync_flags
     # Backend's own prod shape (dev branch empty: dev keeps inheriting).
     assert (
-        "${{ inputs.runtime_env == 'prod' && '--cpu=2 --memory=4Gi --concurrency=20"
+        "${{ inputs.runtime_env == 'prod' && '--cpu=2 --concurrency=20"
         " --min-instances=3 --max-instances=100' || '' }}"
     ) in backend_flags
+    assert "format('--memory={0}', steps.ops-memory.outputs.backend)" in backend_flags
+    assert 'steps.ops-memory.outputs.backend_sync || inputs.backend_sync_memory' in sync_flags
 
 
 VERTEX_PT_CONTRACT = 'Company-paid Gemini text and vision generation may use only the active model'
@@ -780,6 +784,45 @@ def test_phase_a_keeps_cloud_run_credentials_and_isolates_gke_v2_redis():
     }
 
 
+_LIVE_RECAP_COHORT = 'CONVERSATIONS_V3_LIVE_RECAP_COHORT'
+
+
+def _assert_cloud_run_live_recap_cohort_scope(manifest):
+    for env_name, env in manifest['environments'].items():
+        cloud_run = env.get('cloud_run') or {}
+        for kind in ('services', 'jobs'):
+            for name, spec in (cloud_run.get(kind) or {}).items():
+                workload = (env_name, kind, name)
+                assert _LIVE_RECAP_COHORT not in (spec.get('env') or {}), workload
+                if workload == ('prod', 'services', 'backend'):
+                    continue
+                for entry in _MODULE['_render_secret_entries'](spec.get('secrets') or {}):
+                    resource = entry['valueFrom']['secretKeyRef']['name'].rsplit('/', 1)[-1]
+                    assert _LIVE_RECAP_COHORT not in (entry['name'], resource), workload
+
+
+def test_cloud_run_live_recap_cohort_is_backend_only():
+    _assert_cloud_run_live_recap_cohort_scope(_MANIFEST)
+
+
+@pytest.mark.parametrize('env_name', ['dev', 'prod'])
+@pytest.mark.parametrize(
+    ('section', 'key', 'entry'),
+    [
+        ('env', _LIVE_RECAP_COHORT, {'value': 'fixture-cohort'}),
+        ('secrets', 'COHORT_ALIAS', {'secret': _LIVE_RECAP_COHORT, 'version': '1'}),
+        ('secrets', 'COHORT_ALIAS', {'secret': f'projects/example/secrets/{_LIVE_RECAP_COHORT}', 'version': '1'}),
+    ],
+    ids=['literal-env', 'aliased-secret', 'aliased-qualified-secret'],
+)
+def test_cloud_run_live_recap_cohort_rejects_job_bindings(monkeypatch, env_name, section, key, entry):
+    job = _MANIFEST['environments'][env_name]['cloud_run']['jobs']['notifications-job']
+    monkeypatch.setitem(job[section], key, entry)
+
+    with pytest.raises(AssertionError, match=rf"\('{env_name}', 'jobs', 'notifications-job'\)"):
+        _assert_cloud_run_live_recap_cohort_scope(_MANIFEST)
+
+
 def test_prod_cloud_run_secret_refs_match_approved_bindings():
     # Base mounts, prod-only dream salt and backend-only messaging provider credentials.
     # Preserve resource, env alias and version: aliases can introduce startup dependencies.
@@ -793,7 +836,7 @@ def test_prod_cloud_run_secret_refs_match_approved_bindings():
         'OMI_LLM_GATEWAY_SERVICE_TOKEN',
         'SONIOX_API_KEY',
     }
-    baseline = {
+    service_baseline = {
         'backend': common
         | {
             'METRICS_SECRET',
@@ -811,19 +854,54 @@ def test_prod_cloud_run_secret_refs_match_approved_bindings():
             # Keiki iMessage/WhatsApp signing secrets (David, 2026-10-30: build the Keiki integration).
             'KEIKI_IMESSAGE_SIGNING_SECRET',
             'KEIKI_WHATSAPP_SIGNING_SECRET',
+            # Google Play Billing account-id HMAC key (purchase binding; backend serves the Play routes).
+            'PLAY_ACCOUNT_ID_HMAC_KEY',
         },
         'backend-sync': common
         | {'GOOGLE_MAPS_API_KEY', 'DREAM_AGENT_FEEDBACK_SALT', 'TYPESENSE_HOST', 'TYPESENSE_API_KEY'},
         'backend-sync-backfill': common,
         'backend-integration': common | {'POSTHOG_EVENTS_API_KEY'},
+        'backend-projection-pump': common | {'POSTHOG_EVENTS_API_KEY'},
+    }
+    job_baseline = {
+        'notifications-job': {
+            'OMI_LLM_GATEWAY_SERVICE_TOKEN',
+            'OPENAI_API_KEY',
+            'ENCRYPTION_SECRET',
+            'PINECONE_API_KEY',
+        },
+        'x-connector-sync-job': {
+            'OMI_LLM_GATEWAY_SERVICE_TOKEN',
+            'OPENAI_API_KEY',
+            'ENCRYPTION_SECRET',
+            'PINECONE_API_KEY',
+            'X_OAUTH_CLIENT_SECRET',
+            'RAPID_API_KEY',
+            'REDIS_DB_PASSWORD',
+        },
+        'frame-request-retention-job': {'POSTHOG_PROJECT_API_KEY', 'SERVICE_ACCOUNT_JSON'},
+        'day3-reengagement-email-job': {
+            'ENCRYPTION_SECRET',
+            'POSTHOG_PROJECT_API_KEY',
+            'RESEND_API_KEY',
+            'LIFECYCLE_EMAIL_SIGNING_SECRET',
+        },
+    }
+    # Version-pinned, single-role bindings. David 2026-11-20 (SCA-3063): the internal TestFlight
+    # live-recap cohort mounts version 1 on the conversation API role only; other roles must not bind it.
+    pinned = {
+        ('services', 'backend'): {(_LIVE_RECAP_COHORT, _LIVE_RECAP_COHORT, '1')},
     }
     prod = _MANIFEST['environments']['prod']
-    for service, names in baseline.items():
-        refs = _MODULE['_render_secret_entries'](prod['cloud_run']['services'][service]['secrets'])
-        assert {
-            (entry['name'], entry['valueFrom']['secretKeyRef']['name'], entry['valueFrom']['secretKeyRef']['key'])
-            for entry in refs
-        } == {(name, name, 'latest') for name in names}, service
+    for kind, baseline in (('services', service_baseline), ('jobs', job_baseline)):
+        workloads = prod['cloud_run'][kind]
+        assert set(baseline) == set(workloads), f'baseline must name exactly the prod Cloud Run {kind}'
+        for workload, names in baseline.items():
+            refs = _MODULE['_render_secret_entries'](workloads[workload].get('secrets') or {})
+            assert {
+                (entry['name'], entry['valueFrom']['secretKeyRef']['name'], entry['valueFrom']['secretKeyRef']['key'])
+                for entry in refs
+            } == {(name, name, 'latest') for name in names} | pinned.get((kind, workload), set()), (kind, workload)
     backend_env = prod['cloud_run']['services']['backend']['env']
     token = backend_env['PROACTIVITY_V2_POSTHOG_TOKEN']['value']
     assert token.startswith('phc_')
@@ -1330,31 +1408,14 @@ def test_firestore_cut_switches_preserve_operator_next_roll_policy(environment):
     services = _MANIFEST['environments'][environment]['cloud_run']['services']
     for name, service in services.items():
         env = service['env']
-        # SCA-2173 / SCA-2283 (2026-11-14): finish backoff is declared off for prod backend-integration,
-        # which runs the finish sweep, and for prod backend-sync, which can reach the same sweep through
-        # its reconcile and batch metrics routes (review SCA-2270). It was turned off in production at
-        # 19:41Z and stays off by ruling. No other service or environment declares it (SCA-1993).
-        if environment == 'prod' and name in ('backend-integration', 'backend-sync'):
-            assert env['BATCH_PROJECTION_FINISH_BACKOFF_ENABLED'] == {'value': 'false', 'category': 'rollout'}
+        retired = {'BATCH_PROJECTION_FINISH_BACKOFF_ENABLED', 'BATCH_HELD_POLL_SKIP_ENABLED'}
+        assert not retired.intersection(env)
+        assert not retired.intersection(service.get('secrets', {}))
+        assert retired.intersection(service.get('forbidden_env', [])) == (retired if environment == 'prod' else set())
+        if environment == 'prod' and name in ('backend-sync', 'backend-integration', 'backend-projection-pump'):
+            assert env['BATCH_PIPELINE_UPLOAD_COALESCING_ENABLED'] == {'value': 'true', 'category': 'ops_kill'}
         else:
-            assert 'BATCH_PROJECTION_FINISH_BACKOFF_ENABLED' not in env
-        # A hand-set true was left on prod backend and backend-sync-backfill. Deploy merges env, so
-        # leaving the key out would keep it; the removal list is what turns it off there (SCA-2283).
-        removed = 'BATCH_PROJECTION_FINISH_BACKOFF_ENABLED' in service.get('forbidden_env', [])
-        assert removed == (environment == 'prod' and name in ('backend', 'backend-sync-backfill'))
-        expected = {}
-        if environment == 'prod':
-            expected['BATCH_HELD_POLL_SKIP_ENABLED'] = 'true'
-            if name in ('backend-sync', 'backend-integration'):
-                expected['BATCH_PIPELINE_UPLOAD_COALESCING_ENABLED'] = 'true'
-        switches = {
-            key: env[key]
-            for key in ('BATCH_HELD_POLL_SKIP_ENABLED', 'BATCH_PIPELINE_UPLOAD_COALESCING_ENABLED')
-            if key in env
-        }
-        assert switches == {key: {'value': value, 'category': 'ops_kill'} for key, value in expected.items()}
-        rendered = {entry['name']: entry['value'] for entry in _MODULE['_render_env_entries'](switches)}
-        assert rendered == expected
+            assert 'BATCH_PIPELINE_UPLOAD_COALESCING_ENABLED' not in env
 
 
 @pytest.mark.parametrize('environment', ['dev', 'prod'])
@@ -1362,7 +1423,9 @@ def test_firestore_train_preserves_monthly_reader_scope_and_cloud_run_overrides(
     """A base edit must neither enable unqualified readers nor miss CR overrides."""
     config = _MANIFEST['environments'][environment]
     cloud_run = config['cloud_run']['services']
-    assert set(cloud_run) == {'backend', 'backend-sync', 'backend-sync-backfill', 'backend-integration'}
+    assert set(cloud_run) == {'backend', 'backend-sync', 'backend-sync-backfill', 'backend-integration'} | (
+        {'backend-projection-pump'} if environment == 'prod' else set()
+    )
     expected = {
         'action_items_page': 100,
         'action_items_ttl120': 100,
@@ -1407,19 +1470,19 @@ def test_firestore_train_preserves_monthly_reader_scope_and_cloud_run_overrides(
         # on backend-integration, backend-sync and backend — monthly readers on
         # (usage_month_cache/total=100), pending head 100, timeliness leader 100 (fleet
         # sampler election and capped backlog counts on).
-        # SCA-2190 comparison preparation pins all four callers to shadow=10,
-        # negative-cache=0, TTL60=0 and explicit owner enforcement=0.
+        # O2b admits only the three API roles; backfill remains excluded (O4).
+        # The full literal preserves the existing monthly/lifecycle scope.
         # backend-sync-backfill keeps its other ec191a row 3 pins.
         if enabled:
             wanted.update(
-                bpp_decision_cache=100,
-                privacy_checks_shadow=10,
+                bpp_decision_cache=0,
+                privacy_checks_shadow=0,
                 privacy_negative_lookup_cache=0,
                 privacy_ttl60=0,
-                bpp_owner_memo_enforce=0,
+                bpp_owner_memo_enforce=100,
             )
             if name == 'cloud_run/backend-sync-backfill':
-                wanted.update(batch_timeliness_leader=0)
+                wanted.update(batch_timeliness_leader=0, bpp_owner_memo_enforce=0, privacy_checks_shadow=10)
             else:
                 wanted.update(
                     usage_month_cache=100,
@@ -1571,6 +1634,10 @@ def test_post_seal_switches_reach_rendered_pods_and_can_be_disabled(environment,
         containers = deployment['spec']['template']['spec']['containers']
         env = {e['name']: e.get('value') for c in containers for e in c.get('env', [])}
         if chart == 'batch-pipeline-worker':
+            if environment == 'prod' and mode == 'staged':
+                # Preserve the live omission and let the runtime default stay off.
+                assert not (set(flags) & env.keys())
+                continue
             assert set(flags) & env.keys() == {'RECORD_FRESH_MERGE_ENABLED'}
             assert env['RECORD_FRESH_MERGE_ENABLED'] == ('true' if mode == 'qualified' else 'false')
             continue
@@ -1649,3 +1716,87 @@ def test_record_close_notify_renders_on_every_cloud_run_listener(environment, se
         'PUSHER_RECORD_CLOSE_NOTIFY_ENABLED_SERVE_UID_SHA256S': '',
     }.items():
         assert [(name, value) for name, value in rendered if name == key] == [(key, expected)]
+
+
+def test_prod_silence_read_skip_respects_backend_backfill_pump_and_listen_pins():
+    key = 'BATCH_PIPELINE_SILENCE_READ_SKIP_ENABLED'
+    prod = _MANIFEST['environments']['prod']
+    for name in ('backend-sync', 'backend-integration'):
+        assert prod['cloud_run']['services'][name]['env'][key] == {'value': 'true', 'category': 'ops_kill'}
+    assert prod['cloud_run']['services']['backend-sync-backfill']['env'][key] == {
+        'value': 'false',
+        'category': 'ops_kill',
+    }
+    # SCA-3555: keep live backend behavior until the SCA-1824 guard covers first traffic.
+    assert prod['cloud_run']['services']['backend']['env'][key] == {'value': 'false', 'category': 'ops_kill'}
+    # SCA-3318: the pump's one-key activation keeps its dark successor's false; widening it is a later change.
+    assert prod['cloud_run']['services']['backend-projection-pump']['env'][key] == {
+        'value': 'false',
+        'category': 'ops_kill',
+    }
+    # SCA-3516: the listen roll preserves live listen behaviour; listen activation is its own one-key step.
+    assert prod['gke']['backend-listen']['env'][key] == {'value': 'false', 'category': 'ops_kill'}
+    chart = Path(__file__).resolve().parents[2] / 'charts/backend-listen/prod_omi_backend_listen_values.yaml'
+    values = yaml.safe_load(chart.read_text())
+    assert [entry['value'] for entry in values['env'] if entry['name'] == key] == ['false']
+
+
+def test_prod_backend_renders_sibling_skip_preservation_pin(monkeypatch):
+    prod = _MANIFEST['environments']['prod']
+    _set_workflow_bound_env(monkeypatch, prod)
+    backend = prod['cloud_run']['services']['backend']
+    rendered = dict(_MODULE['_parse_deploy_cloud_run_env_vars'](_MODULE['_render_env_vars'](backend['env'])))
+
+    assert rendered['BATCH_PIPELINE_FOLLOWUP_CLAIMED_SIBLING_SKIP_ENABLED'] == 'false'
+
+
+def test_prod_logging_reductions_render_only_on_backend_integration(monkeypatch):
+    prod = _MANIFEST['environments']['prod']
+    _set_workflow_bound_env(monkeypatch, prod)
+    expected = {
+        'BATCH_PIPELINE_PROJECTION_PHASE_SAMPLE_ENABLED': 'true',
+        'BATCH_PIPELINE_PROJECTION_PHASE_SAMPLE_PERCENT': '1',
+        'BATCH_POLICY_KILL_SWITCH_LOG_ON_CHANGE_ENABLED': 'true',
+    }
+
+    for name, service in prod['cloud_run']['services'].items():
+        rendered = dict(_MODULE['_parse_deploy_cloud_run_env_vars'](_MODULE['_render_env_vars'](service['env'])))
+        actual = {key: rendered[key] for key in expected if key in rendered}
+        assert actual == (expected if name == 'backend-integration' else {}), name
+    pump = prod['cloud_run']['services']['backend-projection-pump']
+    assert set(expected) <= set(pump['forbidden_env'])
+
+
+def test_prod_backfill_renders_sibling_skip_and_poll_backoff_preservation_pins(monkeypatch):
+    prod = _MANIFEST['environments']['prod']
+    _set_workflow_bound_env(monkeypatch, prod)
+    backfill = prod['cloud_run']['services']['backend-sync-backfill']
+    rendered = _MODULE['_parse_deploy_cloud_run_env_vars'](_MODULE['_render_env_vars'](backfill['env']))
+
+    for key, expected in {
+        'BATCH_PIPELINE_FOLLOWUP_CLAIMED_SIBLING_SKIP_ENABLED': 'false',
+        'SYNC_POLL_BACKOFF_ENABLED': 'false',
+        'SYNC_POLL_BACKOFF_PERCENT': '0',
+    }.items():
+        assert [(name, value) for name, value in rendered if name == key] == [(key, expected)]
+
+
+@pytest.mark.parametrize(('environment', 'enabled', 'percent'), [('dev', 'false', '0'), ('prod', 'true', '5')])
+def test_job_status_poll_cohort_renders_for_client_facing_backend(monkeypatch, environment, enabled, percent):
+    # Client GET /v2/sync-local-files/{job_id} goes to backend. The sync worker
+    # processes Cloud Tasks, and keys in its env alone cannot configure client polls.
+    config = _MANIFEST['environments'][environment]
+    _set_workflow_bound_env(monkeypatch, config)
+    monkeypatch.setenv('CLOUD_RUN_VPC_NETWORK', 'omi-prod-vpc')
+    monkeypatch.setenv('CLOUD_RUN_VPC_SUBNET', 'omi-prod-subnet')
+    monkeypatch.setattr('sys.argv', ['render_backend_runtime_env.py', '--env', environment])
+
+    assert _MODULE['main']() == 0
+    output = _read_workflow_outputs()
+    block = '\n'.join(_job_env_block(output, 'backend').splitlines()[1:-1])
+    rendered = _MODULE['_parse_deploy_cloud_run_env_vars'](block)
+    assert [value for key, value in rendered if key == 'SYNC_POLL_BACKOFF_ENABLED'] == [enabled]
+    assert [value for key, value in rendered if key == 'SYNC_POLL_BACKOFF_PERCENT'] == [percent]
+    service = config['cloud_run']['services']['backend']
+    removed = _MODULE['_action_removed_env_names']('backend') | set(service.get('forbidden_env', []))
+    assert removed.isdisjoint({'SYNC_POLL_BACKOFF_ENABLED', 'SYNC_POLL_BACKOFF_PERCENT'})

@@ -188,7 +188,7 @@ def test_send_client_displayed_notification_async_matches_sync_shape(notificatio
     notifications.messaging.send_each = fake_send_each
     notifications.notification_db.get_all_tokens = lambda _uid: ['t1']
 
-    asyncio.run(
+    accepted = asyncio.run(
         notifications.send_client_displayed_notification_async(
             'uid-1',
             'omi says',
@@ -202,6 +202,7 @@ def test_send_client_displayed_notification_async_matches_sync_shape(notificatio
         )
     )
 
+    assert accepted == 1
     assert len(captured['messages']) == 1
     msg = captured['messages'][0]
     assert msg.notification is None

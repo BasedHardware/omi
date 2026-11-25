@@ -1,6 +1,7 @@
 {
   "schema_version": 1,
   "id": "FC-path-implied-identity-required-by-decoder",
+  "family": "input-tolerance",
   "violated_contract": "A field the storage path already determines must not be a required input of the decoder that reads it. When the decoder demands it from the document body, every historical row that omitted the redundant copy fails validation and is silently dropped from the read.",
   "canonical_prevention": "Supply path-derived identity to the decoder at the read boundary that owns the path, alongside the boundary's other compatibility defaults, and cover it with a test that decodes a row missing the redundant copy.",
   "evidence_prs": [

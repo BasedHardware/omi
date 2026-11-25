@@ -43,6 +43,10 @@ def legacy_offline_spend_policy():
         yield
 
 
+# Legacy suites exercise the shipped episode/capture shape. V3 contracts opt
+# in explicitly and verify the per-owner stage/kill-switch matrix.
+os.environ.setdefault('CONVERSATIONS_V3', 'off')
+
 from tests.unit.memory_import_isolation import (  # noqa: F401 — re-export for test modules
     AutoMockModule as _AutoMockModule,
     install_database_client_stub,

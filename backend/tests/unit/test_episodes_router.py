@@ -215,3 +215,15 @@ def test_list_unknown_channel_never_reads(client, monkeypatch):
         ).json()['enabled']
         is False
     )
+
+
+@pytest.mark.parametrize('channel', ['beta', 'store', None])
+def test_channel_admission_only_beta_refreshes_episode_client_marker(monkeypatch, channel):
+    from routers import episodes as routes
+
+    seen = []
+    monkeypatch.setattr(routes, 'episodes_enabled_for', lambda uid: True)
+    monkeypatch.setattr(routes, 'client_channel_admitted', lambda channel: True)
+    monkeypatch.setattr(routes.client_gate, 'note_client_seen', lambda uid: seen.append(uid))
+    assert routes._admitted('u', channel, v3_enabled=False)
+    assert seen == (['u'] if channel == 'beta' else [])

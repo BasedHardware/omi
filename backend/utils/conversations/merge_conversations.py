@@ -8,7 +8,9 @@ This module provides functions for merging multiple conversations into one.
 
 """
 
+from utils.conversations.layer import read_product as read_product_conversation
 import config.speaker_match_scores as match_scores
+from config import historical_tier
 
 import copy
 import random
@@ -22,13 +24,15 @@ from typing import Any, Callable, Dict, List, Optional, Set, Tuple
 from google.api_core import exceptions as google_exceptions
 
 import database.conversations as conversations_db
-from database import conversation_tombstones
+from database.record_audio import fence_record_audio_removal
+from database import conversation_tombstones, conversations_v3_backfill_runs
 from database.conversation_merge_policy import source_has_merge_receipt
 from database._client import db as firestore_db
 from database.vector_db import delete_action_item_vectors_batch, delete_vector
 from models.audio_file import AudioFile
 from models.conversation import Conversation
 from models.conversation_enums import ConversationStatus
+from models.finalization_owner import FinalizationOwnedElsewhere, python_owns_finalization
 from models.structured import Structured
 from utils.memory.memory_service import MemoryService
 from utils.metrics import OMI_SYNC_BRIDGE_AUDIO_COPY_TOTAL
@@ -251,8 +255,10 @@ def perform_merge_async(
         # 1. Fetch all source conversations
         conversations = []
         for conv_id in conversation_ids:
-            conv = conversations_db.get_conversation(uid, conv_id)
+            conv = read_product_conversation(conversations_db.get_conversation, uid, conv_id)
             if conv:
+                if not python_owns_finalization(conv):
+                    raise FinalizationOwnedElsewhere()
                 conversations.append(conv)
 
         if len(conversations) < 2:
@@ -304,7 +310,23 @@ def perform_merge_async(
         # generation per object per run (the 10-16..19 CloneObject burst).
         # The bridge copy skips a destination already holding the same bytes
         # and preconditions concurrent writers on the destination generation.
-        merged_audio_files = _copy_audio_chunks_for_merge(uid, sorted_convs, new_conversation_id, skip_existing=True)
+        v3_merge = any(c.get('v3_derived') for c in sorted_convs)
+        copy_sources = [c for c in sorted_convs if not c.get('v3_derived')]
+        merged_audio_files = (
+            _copy_audio_chunks_for_merge(uid, copy_sources, new_conversation_id, skip_existing=True)
+            if copy_sources
+            else []
+        )
+        v3_pieces = [p for c in sorted_convs for p in c.get('recording_pieces') or []]
+        if v3_merge:
+            v3_files = [af for c in sorted_convs if c.get('v3_derived') for af in c.get('audio_files') or []]
+            from models.audio_file import AudioFile
+
+            v3_pieces.extend(
+                {'recording_id': new_conversation_id, 'audio_file_id': af.id, 'start': 0.0, 'end': af.duration}
+                for af in merged_audio_files
+            )
+            merged_audio_files.extend(AudioFile(**af) for af in v3_files)
 
         # 4. Determine basic fields from source conversations
         # Use earliest conversation's dates. created_at fallback uses
@@ -328,6 +350,10 @@ def perform_merge_async(
         # A custom-STT source must not be able to shed the marker by merging with
         # a normal-STT one.
         uses_custom_stt = any(c.get('uses_custom_stt', False) for c in sorted_convs)
+
+        # Historical tier (T1+): a merge of old backfill stays summary-only, so the
+        # owner's merge cannot buy derived effects the tier withholds.
+        historical = any(historical_tier.is_historical(c) for c in sorted_convs)
 
         # Discarded: only if ALL are discarded
         discarded = all(c.get("discarded", False) for c in sorted_convs)
@@ -376,6 +402,22 @@ def perform_merge_async(
             client_device_id=client_device_id,
             client_platform=client_platform,
             external_data={"merge_metadata": merge_metadata},
+            **({'processing_tier': historical_tier.TIER} if historical else {}),
+            **(
+                {
+                    'v3_derived': True,
+                    'manual_end': any(c.get('manual_end') for c in sorted_convs),
+                    'recording_pieces': v3_pieces,
+                    'v3_recording_ids': list(
+                        dict.fromkeys(rid for c in sorted_convs for rid in c.get('v3_recording_ids') or [])
+                    ),
+                    'kind': 'conversation',
+                    'tile_state': 'writing' if reprocess or any(c.get('manual_end') for c in sorted_convs) else 'done',
+                    'home_hidden': False,
+                }
+                if v3_merge
+                else {}
+            ),
         )
 
         # 7. Save stub conversation to database. The modeled field's None
@@ -387,7 +429,7 @@ def perform_merge_async(
         # Build the conversation-level playback artifact for the merged conversation.
         # Fingerprint-named task: dedups with the enqueue process_conversation may
         # also fire on the reprocess path.
-        if merged_audio_files and is_audio_merge_dispatch_enabled():
+        if merged_audio_files and not v3_merge and is_audio_merge_dispatch_enabled():
             files_payload = [af.model_dump() for af in merged_audio_files]
             enqueue_conversation_artifact_build(
                 uid,
@@ -403,7 +445,7 @@ def perform_merge_async(
         # 8. Process conversation to generate title, summary, action items, memories, etc.
         # Its created webhook is held until a failure can no longer roll the record back.
         created_webhook_sends: List[Callable[[], None]] = []
-        if reprocess:
+        if reprocess or new_conversation.manual_end:
             try:
                 with lifecycle_service.processing_admission_guard(uid, new_conversation_id, rollback_on_failure=False):
                     processed_conversation = process_conversation(
@@ -413,6 +455,8 @@ def perform_merge_async(
                         trigger=ProcessingTrigger.MERGE,
                         created_webhook_observer=created_webhook_sends.append,
                     )
+            except FinalizationOwnedElsewhere:
+                raise
             except Exception as e:
                 logger.error(f"Error processing merged conversation: {e}")
                 # Even if processing fails, continue with cleanup
@@ -454,6 +498,10 @@ def perform_merge_async(
             if canonical_intake_is_fenced()
             else None
         )
+        if v3_merge:
+            from database.conversations_v3 import transfer_claims
+
+            transfer_claims(uid, sorted_convs, new_conversation.model_dump())
         for conv in sorted_convs:
 
             def mark_source_deletion_started() -> None:
@@ -478,6 +526,12 @@ def perform_merge_async(
 
         return True if merge_job_id else None
 
+    except FinalizationOwnedElsewhere:
+        logger.info('event=conversation_merge outcome=deferred reason=finalization_owned_elsewhere')
+        if merge_job_id is not None:
+            return False  # Durable recovery owns release of the source claims.
+        _handle_merge_failure(uid, conversation_ids)
+        return None
     except Exception as e:
         if merge_job_id is not None:
             # Recovery alone owns rollback of durable claims. A stale worker
@@ -926,6 +980,10 @@ def copy_sync_bridge_audio(uid: str, source_id: str, target_id: str) -> None:
     _copy_audio_chunks_for_merge(uid, [{'id': source_id}], target_id, strict=True, skip_existing=True)
 
 
+def _purge_rederive_priors(uid: str, conversation_ids: list) -> None:
+    conversations_v3_backfill_runs.purge_conversation_priors(uid, conversation_ids, 'deleted')
+
+
 def delete_conversation_with_sync_sources(
     uid: str,
     conversation_id: str,
@@ -939,20 +997,16 @@ def delete_conversation_with_sync_sources(
     row = (
         conversation_row
         if conversation_row is not None
-        else conversations_db.get_conversation(uid, conversation_id) or {}
+        else read_product_conversation(conversations_db.get_conversation, uid, conversation_id) or {}
     )
+    # A stopped attempt can have a prior before the row is stamped. Use the requested ID even
+    # on a retry without row metadata, and purge the known lineage before deleting its rows.
+    _purge_rederive_priors(uid, [conversation_id, *(row.get('sync_merged_from') or [])])
     for source_id in row.get('sync_merged_from', []):
         if source_id != conversation_id:
-            # The source row is destroyed below; without intent its from-segments
-            # session id would re-derive the same id on the next backlog retry and
-            # resurrect a merge donor the user deleted with the survivor. Best-effort:
-            # a tombstone write that cannot reach Firestore must not block the purge
-            # the user asked for (the caller's later from-segments retry re-checks the
-            # survivor's tombstone through the same module before recreating).
-            try:
-                conversation_tombstones.record_deletion(uid, source_id)
-            except Exception:
-                logger.exception('merge-source tombstone write failed uid=%s source=%s', uid, source_id)
+            # Erasure must invalidate the donor's custody fence before any
+            # prefix is removed. Leave the cascade retryable on write failure.
+            conversation_tombstones.record_deletion(uid, source_id)
             _delete_conversation_and_related_data(
                 uid,
                 source_id,
@@ -996,6 +1050,8 @@ def _delete_conversation_and_related_data(
     - Vector embedding
     - Conversation document
     """
+    if merged_into and not retain_capture:
+        retain_capture = fence_record_audio_removal(uid, conversation_id)
     # Import here to avoid circular imports
     import database.action_items as action_items_db
 

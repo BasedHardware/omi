@@ -6,6 +6,7 @@ import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:omi/app_globals.dart';
+import 'package:omi/backend/http/api/conversations.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/structured.dart';
@@ -14,9 +15,12 @@ import 'package:omi/l10n/app_localizations.dart';
 import 'package:omi/pages/conversation_detail/conversation_detail_provider.dart';
 import 'package:omi/pages/conversations/widgets/conversation_list_item.dart';
 import 'package:omi/providers/conversation_provider.dart';
+import 'package:omi/providers/transcription_pending_conversations.dart';
 import 'package:omi/utils/analytics/registry/events.g.dart';
 import 'package:omi/utils/conversations/conversation_title.dart';
 import 'package:omi/ui/format/omi_date_format.dart';
+
+import '../helpers/transcription_hold_wire.dart';
 
 TranscriptSegment _segment(String text) {
   return TranscriptSegment(
@@ -58,6 +62,7 @@ Future<ConversationProvider> _pumpRow(
   WidgetTester tester, {
   required ServerConversation conversation,
   Future<ServerConversation?> Function(String conversationId)? reprocess,
+  Future<ReprocessResult> Function(String conversationId)? reprocessResult,
 }) async {
   final provider = ConversationProvider(
     conversationListFetcher: () async => (items: <ServerConversation>[], ok: true),
@@ -84,7 +89,8 @@ Future<ConversationProvider> _pumpRow(
                 conversation: conversations.conversations.first,
                 date: DateTime.utc(2020),
                 conversationIdx: 0,
-                reprocess: reprocess,
+                reprocess: reprocessResult ??
+                    (reprocess == null ? null : (id) async => ReprocessResult.fromConversation(await reprocess(id))),
               );
             },
           ),
@@ -97,6 +103,7 @@ Future<ConversationProvider> _pumpRow(
 }
 
 void main() {
+  setUpAll(initHeldWireEnv);
   final emitted = <ConversationUntitledRendered>[];
 
   setUp(() async {
@@ -187,6 +194,216 @@ void main() {
       expectPresentation();
     });
   }
+
+  // Held-recording rows use the real wire copies in ../helpers/transcription_hold_wire.dart:
+  // (a) the Home row, (b) the detail copy, (c) the 200 waiting answer and (d) the 409 body.
+  Future<ReprocessResult> Function(String) wire(int status, Object body) =>
+      (id) => reProcessConversationServer(id, send: (_) async => heldJsonResponse(status, body));
+  Finder pendingIndicator() => find.byKey(const Key('conversation_transcription_pending_indicator'));
+  ServerConversation listRow({String? id, String? homeStep, String? title, bool? summaryRetryable}) =>
+      ServerConversation.fromJson({
+        ...heldListRowJson(),
+        if (id != null) 'id': id,
+        if (homeStep != null) 'home_step': homeStep,
+        if (summaryRetryable != null) 'summary_retryable': summaryRetryable,
+        if (title != null) 'structured': {...heldListRowJson()['structured'] as Map<String, dynamic>, 'title': title},
+      });
+
+  testWidgets('an authoritative allowance hold is labeled in a conversation card before any retry', (tester) async {
+    await _pumpRow(tester,
+        conversation: ServerConversation.fromJson({
+          ...heldListRowJson(),
+          'transcription_admission': 'allowance_held',
+        }));
+    final l10n = _l10n(tester);
+    expect(find.text(l10n.summaryTranscriptionPendingTitle), findsOneWidget);
+    expect(find.text(l10n.waitingForTranscriptionAllowance), findsOneWidget);
+    expect(_retryButton, findsNothing);
+    expect(_indicator, findsNothing);
+  });
+
+  testWidgets('a held row answered 409 says Not transcribed yet once, as its title, with no error', (tester) async {
+    TranscriptionPendingConversations.reset();
+    addTearDown(TranscriptionPendingConversations.reset);
+    await _pumpRow(tester, conversation: heldListRow(), reprocessResult: wire(409, heldReprocess409Body));
+    expect(_retryButton, findsOneWidget);
+    await tester.tap(_retryButton);
+    await tester.pumpAndSettle();
+    final l10n = _l10n(tester);
+    expect(find.text(l10n.somethingWentWrong), findsNothing);
+    expect(_retryButton, findsNothing);
+    // The server's stand-in title gives way to the status, shown once; the slot is omitted.
+    expect(find.text(l10n.summaryTranscriptionPendingTitle), findsOneWidget);
+    expect(find.text(TranscriptionPendingConversations.serverHoldTitle), findsNothing);
+    expect(pendingIndicator(), findsNothing);
+    TranscriptionPendingConversations.reset();
+  });
+
+  testWidgets('a titled held row answered 409 keeps its title and shows the status once, in the slot', (tester) async {
+    TranscriptionPendingConversations.reset();
+    addTearDown(TranscriptionPendingConversations.reset);
+    // The 409 path also covers a held row someone titled; its title is not the stand-in.
+    await _pumpRow(
+      tester,
+      conversation: listRow(title: 'Standup with Ana'),
+      reprocessResult: wire(409, heldReprocess409Body),
+    );
+    await tester.tap(_retryButton);
+    await tester.pumpAndSettle();
+    expect(find.text('Standup with Ana'), findsOneWidget);
+    expect(pendingIndicator(), findsOneWidget);
+    expect(find.text(_l10n(tester).summaryTranscriptionPendingTitle), findsOneWidget);
+    expect(_retryButton, findsNothing);
+    TranscriptionPendingConversations.reset();
+  });
+
+  testWidgets('a retry inside the transcription window shows the server waiting state, not an error', (tester) async {
+    TranscriptionPendingConversations.reset();
+    addTearDown(TranscriptionPendingConversations.reset);
+    final provider =
+        await _pumpRow(tester, conversation: heldListRow(), reprocessResult: wire(200, heldRetryWaitingJson()));
+    await tester.tap(_retryButton);
+    await tester.pumpAndSettle();
+    expect(find.text(_l10n(tester).somethingWentWrong), findsNothing);
+    expect(find.text('moved-to-processing'), findsOneWidget);
+    expect(provider.processingConversations.single.homeStep, 'transcribing');
+    // The copy carries the answer; no session status is kept for it.
+    expect(TranscriptionPendingConversations.contains(heldConversationId), isFalse);
+
+    // End the processing row so its reconcile timer cancels within the test body.
+    provider.removeProcessingConversation(heldConversationId);
+    await tester.pump();
+  });
+
+  testWidgets('a failed attempt is an error even after another surface marked a different row', (tester) async {
+    TranscriptionPendingConversations.reset();
+    addTearDown(TranscriptionPendingConversations.reset);
+    TranscriptionPendingConversations.mark('other');
+    await _pumpRow(
+      tester,
+      conversation: heldListRow(),
+      reprocessResult: (_) async => const ReprocessFailed(statusCode: 500),
+    );
+    await tester.tap(_retryButton);
+    await tester.pumpAndSettle();
+    expect(find.text(_l10n(tester).somethingWentWrong), findsOneWidget);
+    expect(_retryButton, findsOneWidget);
+    expect(TranscriptionPendingConversations.contains(heldConversationId), isFalse);
+    TranscriptionPendingConversations.reset();
+  });
+
+  testWidgets('the row follows the not-transcribed set without a tap, and a settled copy clears it', (tester) async {
+    TranscriptionPendingConversations.reset();
+    addTearDown(TranscriptionPendingConversations.reset);
+    final provider = await _pumpRow(tester, conversation: heldListRow());
+    expect(_retryButton, findsOneWidget);
+
+    TranscriptionPendingConversations.mark(heldConversationId);
+    await tester.pump();
+    expect(_retryButton, findsNothing);
+    expect(find.text(_l10n(tester).summaryTranscriptionPendingTitle), findsOneWidget);
+
+    // A newer list copy: transcribed and summarized, so the Home step is ready.
+    provider.updateConversation(listRow(homeStep: 'ready', title: 'Venue planning'), preserveHomeStep: false);
+    await tester.pump();
+    expect(TranscriptionPendingConversations.contains(heldConversationId), isFalse);
+    expect(find.text('Venue planning'), findsOneWidget);
+  });
+
+  testWidgets('opening the detail page keeps the not-transcribed row: its copy has no home_step', (tester) async {
+    TranscriptionPendingConversations.reset();
+    addTearDown(TranscriptionPendingConversations.reset);
+    final provider = await _pumpRow(tester, conversation: heldListRow());
+    TranscriptionPendingConversations.mark(heldConversationId);
+    await tester.pump();
+
+    final detailCopy = heldDetail();
+    expect(detailCopy.homeStep, isNull);
+    final detail = ConversationDetailProvider(fetchConversation: (_) async => detailCopy)
+      ..conversationProvider = provider
+      ..selectedDate = conversationLocalDayKey(detailCopy.createdAt)
+      ..setCachedConversation(provider.conversations.single);
+    addTearDown(detail.dispose);
+    expect(await detail.refreshConversation(), isTrue);
+    await tester.pump();
+
+    expect(provider.conversations.single.homeStep, 'failed');
+    expect(TranscriptionPendingConversations.contains(heldConversationId), isTrue);
+    expect(find.text(_l10n(tester).summaryTranscriptionPendingTitle), findsOneWidget);
+    expect(_retryButton, findsNothing);
+    expect(find.text(_l10n(tester).conversationSummaryFailed), findsNothing);
+    TranscriptionPendingConversations.reset();
+  });
+
+  testWidgets('a detail copy with a transcript clears the status and brings Retry back', (tester) async {
+    TranscriptionPendingConversations.reset();
+    addTearDown(TranscriptionPendingConversations.reset);
+    final provider = await _pumpRow(tester, conversation: heldListRow());
+    TranscriptionPendingConversations.mark(heldConversationId);
+    await tester.pump();
+    expect(_retryButton, findsNothing);
+
+    // Transcribed since, but the summary pass failed: the hold no longer applies, the row is retryable.
+    final detailCopy = ServerConversation.fromJson({
+      ...heldDetailJson(),
+      'summary_retryable': true,
+      'structured': {...heldDetailJson()['structured'] as Map<String, dynamic>, 'title': ''},
+      'transcript_segments': [_segment('We picked Friday.').toJson()],
+    });
+    final detail = ConversationDetailProvider(fetchConversation: (_) async => detailCopy)
+      ..conversationProvider = provider
+      ..selectedDate = conversationLocalDayKey(detailCopy.createdAt)
+      ..setCachedConversation(provider.conversations.single);
+    addTearDown(detail.dispose);
+    expect(await detail.refreshConversation(), isTrue);
+    await tester.pump();
+
+    expect(TranscriptionPendingConversations.contains(heldConversationId), isFalse);
+    expect(_retryButton, findsOneWidget);
+  });
+
+  test('a list replacement clears the status only for rows the server settled', () async {
+    TranscriptionPendingConversations.reset();
+    addTearDown(TranscriptionPendingConversations.reset);
+    for (final id in ['settled', 'retryable', 'still-held']) {
+      TranscriptionPendingConversations.mark(id);
+    }
+    final provider = ConversationProvider(
+      conversationListFetcher: () async => (
+        items: [
+          // List rows omit transcripts: only the Home step and the retryable marker speak.
+          listRow(id: 'settled', homeStep: 'ready', title: 'Venue planning'),
+          listRow(id: 'retryable', title: '', summaryRetryable: true),
+          listRow(id: 'still-held'),
+        ],
+        ok: true,
+      ),
+      conversationCacheLoader: () async => [],
+      isSignedIn: () => true,
+    );
+    addTearDown(provider.dispose);
+    expect(await provider.fetchConversations(), isTrue);
+    expect(TranscriptionPendingConversations.contains('settled'), isFalse);
+    expect(TranscriptionPendingConversations.contains('retryable'), isFalse);
+    expect(TranscriptionPendingConversations.contains('still-held'), isTrue);
+  });
+
+  testWidgets('Retry comes back on its own when the not-transcribed answer expires', (tester) async {
+    TranscriptionPendingConversations.reset();
+    addTearDown(TranscriptionPendingConversations.reset);
+    await _pumpRow(tester, conversation: heldListRow());
+    TranscriptionPendingConversations.mark(heldConversationId);
+    await tester.pump();
+    expect(_retryButton, findsNothing);
+
+    await tester.pump(TranscriptionPendingConversations.ttl - const Duration(seconds: 1));
+    expect(_retryButton, findsNothing);
+    // Nothing else changes: only the expiry rebuilds the row.
+    await tester.pump(const Duration(seconds: 1));
+    expect(TranscriptionPendingConversations.contains(heldConversationId), isFalse);
+    expect(find.text(_l10n(tester).summaryTranscriptionPendingTitle), findsNothing);
+    expect(_retryButton, findsOneWidget);
+  });
 
   testWidgets('a row the model found nothing in keeps its title and offers no retry', (tester) async {
     await _pumpRow(tester, conversation: _conversation(summaryRetryable: false));

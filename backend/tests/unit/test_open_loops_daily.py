@@ -9,14 +9,18 @@ exercised, not stubbed.
 import json
 from datetime import date, datetime, timedelta, timezone
 from types import SimpleNamespace
-from unittest.mock import Mock
+from unittest.mock import Mock, call
 
+import httpx
 import pytest
+from langchain_core.outputs import LLMResult
+from openai import APITimeoutError
 
 import database.conversations as conversations_db
 import utils.open_loops.daily as daily
 from database.open_loops import get_cards, get_cards_doc, get_loops
 from tests.support.open_loops_store_fake import FakeFirestore
+from utils.llm.usage_tracker import Features, LLMUsageCallback
 from utils.open_loops import store
 from utils.open_loops.extraction import OPEN_LOOP_EXTRACTIONS_FIELD
 from utils.open_loops.prompts import OPEN_LOOPS_DAILY_RULES
@@ -472,6 +476,86 @@ def test_model_failure_raises_releases_the_claim_and_retries_once(pass_env):
     # retry two is refused even after another failure: the day's attempts are spent
     open_loops_db.mark_daily_pass_failed(UID, DATE_STR, firestore_client=pass_env.fake)
     assert not open_loops_db.claim_daily_pass(UID, DATE_STR, now=NOW, firestore_client=pass_env.fake)
+
+
+@pytest.mark.parametrize('elapsed, fallback_timeout', [(2, 15), (20.25, 9)])
+def test_timeout_fallback_writes_loops_cards_and_usage_once(pass_env, monkeypatch, elapsed, fallback_timeout):
+    db = daily.open_loops_db
+    claim = Mock(wraps=db.claim_daily_pass)
+    upsert = Mock(wraps=db.upsert_loop)
+    set_cards = Mock(wraps=db.set_cards)
+    monkeypatch.setattr(db, 'claim_daily_pass', claim)
+    monkeypatch.setattr(db, 'upsert_loop', upsert)
+    monkeypatch.setattr(db, 'set_cards', set_cards)
+    monkeypatch.setenv('OPEN_LOOPS_CARD_POLISH_ENABLED', 'off')
+    write_usage = Mock()
+    usage_callback = LLMUsageCallback(flush_fn=write_usage)
+    timeout = APITimeoutError(request=httpx.Request('POST', 'https://example.com'))
+    result = LLMResult(
+        generations=[],
+        llm_output={'model_name': 'gpt-5-nano', 'token_usage': {'prompt_tokens': 20, 'completion_tokens': 10}},
+    )
+
+    def invoke_primary(messages):
+        usage_callback.on_llm_error(timeout)
+        raise timeout
+
+    def invoke_fallback(messages):
+        usage_callback.on_llm_end(result)
+        return SimpleNamespace(content=json.dumps(_model_says_maya_due_soon()))
+
+    primary = Mock(invoke=Mock(side_effect=invoke_primary))
+    fallback = Mock(invoke=Mock(side_effect=invoke_fallback))
+    get_llm = Mock(side_effect=[primary, fallback])
+    telemetry = Mock()
+    monkeypatch.setattr(daily, 'get_llm', get_llm)
+    monkeypatch.setattr(daily, 'monotonic', Mock(side_effect=[100, 100 + elapsed]))
+    monkeypatch.setattr(daily, 'record_fallback', telemetry)
+
+    assert _run(pass_env, None) == daily.RAN
+    assert _run(pass_env, None) == daily.SKIPPED_ALREADY_RAN
+
+    assert get_llm.call_args_list == [
+        call('open_loop_daily', request_timeout=20, max_retries=0),
+        call('daily_summary_simple', request_timeout=fallback_timeout, max_retries=0),
+    ]
+    primary.invoke.assert_called_once()
+    fallback.invoke.assert_called_once_with(*primary.invoke.call_args.args)
+    claim.assert_called_once()
+    upsert.assert_called_once()
+    set_cards.assert_called_once()
+    write_usage.assert_called_once_with(UID, Features.OPEN_LOOP_DAILY, 'gpt-5-nano', 20, 10)
+    telemetry.assert_called_once_with(
+        component='daily_summary',
+        from_mode='open_loops_daily_pass',
+        to_mode='daily_summary_simple',
+        reason='timeout',
+        outcome='recovered',
+    )
+    assert len(get_loops(UID, firestore_client=pass_env.fake)) == 1
+    assert len(get_cards(UID, DATE_STR, firestore_client=pass_env.fake)) == 1
+
+
+@pytest.mark.parametrize('elapsed, expected_attempts, invalid_output', [(20, 2, False), (30, 1, False), (20, 2, True)])
+def test_timeout_exhaustion_leaves_the_day_unrun(pass_env, monkeypatch, elapsed, expected_attempts, invalid_output):
+    timeout = APITimeoutError(request=httpx.Request('POST', 'https://example.com'))
+    llm = Mock()
+    last_attempt = SimpleNamespace(content='{"loops": []}') if invalid_output else timeout
+    llm.invoke.side_effect = [timeout, last_attempt]
+    monkeypatch.setattr(daily, 'get_llm', Mock(return_value=llm))
+    monkeypatch.setattr(daily, 'monotonic', Mock(side_effect=[100, 100 + elapsed]))
+    recovered = Mock()
+    monkeypatch.setattr(daily, 'record_fallback', recovered)
+
+    with pytest.raises(ValueError if invalid_output else APITimeoutError):
+        _run(pass_env, None)
+
+    assert llm.invoke.call_count == expected_attempts
+    recovered.assert_not_called()
+    assert get_loops(UID, firestore_client=pass_env.fake) == []
+    assert get_cards_doc(UID, DATE_STR, firestore_client=pass_env.fake) is None
+    claim = daily.open_loops_db._claim_ref(UID, DATE_STR, pass_env.fake).get().to_dict()
+    assert claim['state'] == 'failed' and claim['attempts'] == 1
 
 
 def test_concurrent_runs_make_exactly_one_model_call(pass_env):

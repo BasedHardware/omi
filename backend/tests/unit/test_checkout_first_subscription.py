@@ -54,6 +54,9 @@ def checkout(monkeypatch):
     monkeypatch.setattr(payment, 'is_purchasable_price_id', lambda price: price in (PRICE, OTHER_PRICE))
     monkeypatch.setattr(payment.users_db, 'get_user_subscription', lambda uid, **kwargs: state.stored)
     monkeypatch.setattr(payment.users_db, 'get_stripe_customer_id', lambda uid: None)
+    # No Google Play history or pending Play purchase for these Stripe readers.
+    monkeypatch.setattr(payment.subscription_utils.play_subscriptions_db, 'get_user_fields', lambda uid: {})
+    monkeypatch.setattr(payment.play_subscriptions_db, 'is_play_customer', lambda uid: False)
     state.writes = MagicMock()
     state.customer_writes = MagicMock()
     monkeypatch.setattr(payment.users_db, 'update_user_subscription', state.writes)

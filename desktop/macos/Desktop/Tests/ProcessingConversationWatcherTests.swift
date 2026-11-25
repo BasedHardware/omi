@@ -88,6 +88,40 @@ final class ProcessingConversationWatcherTests: XCTestCase {
     XCTAssertEqual(ProcessingConversationWatcher.pollDelay(attempt: 50), 60)
   }
 
+  func test_detailOpenClaimsOnceAndPollsUntilTheServerRearmsDeferred() async {
+    var responses = [
+      Self.conversation(status: .processing),
+      Self.conversation(status: .completed, deferred: true),
+    ]
+    var pollRequests: [Bool] = []
+    var processingStates: [Bool] = []
+
+    await ProcessingConversationWatcher.followDetail(
+      fetch: { polling in
+        pollRequests.append(polling)
+        return responses.isEmpty ? nil : responses.removeFirst()
+      },
+      onResponse: { _, isProcessing in processingStates.append(isProcessing) },
+      sleeper: { _ in }
+    )
+
+    XCTAssertEqual(pollRequests, [false, true])
+    XCTAssertEqual(processingStates, [true, false])
+
+    await ProcessingConversationWatcher.followDetail(
+      fetch: { polling in
+        pollRequests.append(polling)
+        return polling ? nil : Self.conversation(status: .completed, title: "Summary")
+      },
+      onResponse: { row, isProcessing in
+        XCTAssertEqual(row.structured.title, "Summary")
+        XCTAssertFalse(isProcessing)
+      },
+      sleeper: { _ in XCTFail("A completed response must not schedule a poll") }
+    )
+    XCTAssertEqual(pollRequests, [false, true, false])
+  }
+
   func test_failedHomeProjectionIsNotWatched() {
     for status in [ConversationStatus.processing, .merging, .inProgress] {
       var failed = Self.conversation(status: status)

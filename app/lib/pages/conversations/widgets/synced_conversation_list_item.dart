@@ -19,12 +19,16 @@ class SyncedConversationListItem extends StatefulWidget {
   final ServerConversation conversation;
   final bool showReprocess;
 
+  /// Optional reprocess override for tests.
+  final Future<ReprocessResult> Function(String conversationId)? reprocess;
+
   const SyncedConversationListItem({
     super.key,
     required this.conversation,
     required this.date,
     required this.conversationIdx,
     this.showReprocess = false,
+    this.reprocess,
   });
 
   @override
@@ -99,18 +103,7 @@ class _SyncedConversationListItemState extends State<SyncedConversationListItem>
                 ),
                 widget.showReprocess || conversation.discarded
                     ? GestureDetector(
-                        onTap: () async {
-                          setReprocessing(true);
-                          var mem = (await reProcessConversationServer(conversation.id)).conversation;
-                          if (!context.mounted) return;
-                          if (mem != null) {
-                            setState(() {
-                              conversation = mem;
-                            });
-                            context.read<ConversationProvider>().updateSyncedConversation(mem);
-                          }
-                          setReprocessing(false);
-                        },
+                        onTap: () => _reprocess(context),
                         child: isReprocessing
                             ? const Center(
                                 child: Padding(
@@ -128,6 +121,37 @@ class _SyncedConversationListItemState extends State<SyncedConversationListItem>
         ),
       ),
     );
+  }
+
+  Future<void> _reprocess(BuildContext context) async {
+    if (isReprocessing) return;
+    setReprocessing(true);
+    try {
+      final result = await (widget.reprocess ?? reProcessConversationServer)(conversation.id);
+      if (!context.mounted) return;
+      // A still-transcribing copy is the server's own waiting state: show it like a result.
+      final updated = result.conversation;
+      if (updated != null) {
+        setState(() => conversation = updated);
+        context.read<ConversationProvider>().updateSyncedConversation(updated);
+      }
+      switch (result) {
+        case ReprocessSuccess():
+          break;
+        case ReprocessTranscriptionPending():
+          OmiFeedback.info(context, context.l10n.summaryTranscriptionPendingBody);
+        case ReprocessBusy():
+          OmiFeedback.info(context, context.l10n.summaryBusyBody);
+        case ReprocessRateLimited():
+          OmiFeedback.info(context, context.l10n.summaryLimitBody);
+        default:
+          OmiFeedback.error(context, context.l10n.somethingWentWrong);
+      }
+    } catch (_) {
+      if (context.mounted) OmiFeedback.error(context, context.l10n.somethingWentWrong);
+    } finally {
+      setReprocessing(false);
+    }
   }
 
   _getConversationHeader() {

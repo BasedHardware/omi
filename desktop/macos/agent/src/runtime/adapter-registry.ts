@@ -6,6 +6,7 @@ import {
 } from "../adapters/interface.js";
 import type { RuntimeAdapter } from "../adapters/interface.js";
 import { AdapterWorkerPool, configuredMaxWorkers } from "./worker-pool.js";
+import type { AdapterWorkerPoolOptions } from "./worker-pool.js";
 import { assertProductionAdapterScopeDeclared } from "./execution-policy.js";
 
 export type RuntimeAdapterFactory = () => RuntimeAdapter;
@@ -16,7 +17,8 @@ export class AdapterRegistry {
   register(
     adapterId: string,
     factory: RuntimeAdapterFactory,
-    maxWorkers = configuredMaxWorkers()
+    maxWorkers = configuredMaxWorkers(),
+    options: AdapterWorkerPoolOptions = {},
   ): AdapterWorkerPool {
     if (isPlaceholderAdapterId(adapterId)) {
       throw new Error(
@@ -29,7 +31,7 @@ export class AdapterRegistry {
     if (this.pools.has(adapterId)) {
       throw new Error(`Adapter already registered: ${adapterId}`);
     }
-    const pool = new AdapterWorkerPool(() => contractCheckedAdapter(factory()), maxWorkers);
+    const pool = new AdapterWorkerPool(() => contractCheckedAdapter(factory()), maxWorkers, options);
     this.pools.set(adapterId, pool);
     return pool;
   }

@@ -1,4 +1,5 @@
-# Merge-time billed-read ceilings, measured against the loopback Firestore emulator.
+# Document-read ceilings measured against the loopback Firestore emulator. The probe
+# includes point misses and empty-query minimums. Index-entry reads are outside these ceilings.
 # Raising any row requires a reviewed PR whose body states the resulting $/day impact.
 
 [[scenario]]
@@ -16,3 +17,44 @@ unit = "page_at_limit_100"
 owner = "fsreads-lead"
 review_by = "2026-12-11"
 notes = "Measured 100 document reads and zero fixed overhead; K = ceil(0 * 1.20) = 0; source and list-projection fixtures are seeded."
+
+[[scenario]]
+scenario = "idle_backlog_projection_sweep"
+budget_reads = 11
+unit = "sweep"
+owner = "firestore-cost-owner"
+review_by = "2026-12-11"
+notes = "Projector.sweep with pending assignment, finish async skip, a completed finish-clock backfill, and 200 or 400 ready receipts with async finish clocks and deferred follow-ups: 9 document reads per sweep at both sizes (1.00x), including one async existence read and zero eligible rows; ceil(9 * 1.20) = 11."
+
+[[scenario]]
+scenario = "idle_backlog_pending_work"
+budget_reads = 245
+unit = "poll_with_200_ineligible_rows"
+owner = "firestore-cost-owner"
+review_by = "2026-12-11"
+notes = "pending_work.pending_work (GET /v1/pending-work), Home step projection on, fixed test identity and empty Redis: 204 document reads with 200 processing rows whose finalization is completed, 404 with 400 rows (1.98x). Both return zero items. CI ceiling at 200 rows: ceil(204 * 1.20) = 245."
+
+[[scenario]]
+scenario = "sync_upload_accept"
+budget_reads = 45
+unit = "accepted_upload"
+owner = "firestore-cost-owner"
+review_by = "2026-12-11"
+notes = "routers.sync.sync_local_files_v2 (POST /v2/sync-local-files) through durable one-unit batch acceptance: 37 document reads including 16 from batch privacy; ceil(37 * 1.20) = 45. Uses the real auth dependency with synthetic token verification, local archive storage, and in-memory Redis and artifact storage."
+
+[[scenario]]
+scenario = "sync_job_status_poll"
+budget_reads = 9
+unit = "poll"
+owner = "firestore-cost-owner"
+review_by = "2026-12-11"
+notes = "routers.sync.get_sync_job_status (GET /v2/sync-local-files/{job_id}): queued 5 document reads including 1 batch privacy read; completed with one result conversation 7 including 3 batch privacy reads; ceil(max(5, 7) * 1.20) = 9."
+
+[[scenario]]
+scenario = "sync_request_privacy"
+budget_reads = 45
+unit = "successful_batch_upload"
+owner = "firestore-cost-owner"
+review_by = "2026-12-11"
+notes = "Same successful routers.sync.sync_local_files_v2 request as sync_upload_accept: 37 total reads, ceil(37 * 1.20) = 45. Pin the measured 16 reads from database.batch_pipeline_privacy:read with no caller headroom. Uses a valid privacy token and both bpp_generation_memo and bpp_owner_memo_enforce at 100%; SCA-3610's 20 to 28 was a production mean across successful requests."
+caller_budget_reads = {"database.batch_pipeline_privacy:read" = 16}

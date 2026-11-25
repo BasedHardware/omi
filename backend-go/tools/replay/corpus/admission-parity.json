@@ -1,0 +1,165 @@
+{
+  "version": 1,
+  "cases": [
+    {
+      "name": "completed-capture",
+      "trigger": "capture_end",
+      "recording": {
+        "duration_s": 25,
+        "segments": [
+          {
+            "text": "We concluded the fictitious agenda."
+          }
+        ]
+      },
+      "document": {
+        "status": "completed"
+      },
+      "revision": 1
+    },
+    {
+      "name": "completed-explicit",
+      "trigger": "client_finalize",
+      "recording": {
+        "duration_s": 25,
+        "segments": [
+          {
+            "text": "Synthetic notes already exist."
+          }
+        ]
+      },
+      "document": {
+        "status": "completed",
+        "finalization_revision": 2
+      },
+      "revision": 3
+    },
+    {
+      "name": "failed-after-disconnect",
+      "trigger": "capture_end",
+      "recording": {
+        "duration_s": 25,
+        "segments": [
+          {
+            "text": "A failed session retains speech."
+          }
+        ]
+      },
+      "document": {
+        "status": "failed",
+        "finalization_status": "dead_letter"
+      },
+      "revision": 1
+    },
+    {
+      "name": "failed-client-retry",
+      "trigger": "client_finalize",
+      "recording": {
+        "duration_s": 25,
+        "segments": [
+          {
+            "text": "The next test run will revisit the fixture."
+          }
+        ]
+      },
+      "document": {
+        "status": "failed",
+        "summary_retryable": true
+      },
+      "revision": 1
+    },
+    {
+      "name": "discarded-before-end",
+      "trigger": "capture_end",
+      "recording": {
+        "duration_s": 25,
+        "segments": [
+          {
+            "text": "This synthetic row was discarded while recording."
+          }
+        ]
+      },
+      "document": {
+        "status": "in_progress",
+        "discarded": true
+      },
+      "revision": 1
+    },
+    {
+      "name": "discarded-after-summary",
+      "trigger": "client_finalize",
+      "recording": {
+        "duration_s": 25,
+        "segments": [
+          {
+            "text": "The old recording has been discarded."
+          }
+        ]
+      },
+      "document": {
+        "status": "completed",
+        "discarded": true
+      },
+      "revision": 1
+    },
+    {
+      "name": "missing-capture",
+      "trigger": "capture_end",
+      "recording": {
+        "duration_s": 25,
+        "segments": [
+          {
+            "text": "The recording existed locally only."
+          }
+        ]
+      },
+      "document": null,
+      "revision": 1
+    },
+    {
+      "name": "missing-explicit",
+      "trigger": "client_finalize",
+      "recording": {
+        "duration_s": 25,
+        "segments": [
+          {
+            "text": "The conversation was removed."
+          },
+          {
+            "text": "No new content should appear."
+          }
+        ]
+      },
+      "document": null,
+      "revision": 1
+    },
+    {
+      "name": "missing-recovery",
+      "trigger": "server_recovery",
+      "recording": {
+        "duration_s": 25,
+        "segments": [
+          {
+            "text": "A stale sweep found an absent recording."
+          }
+        ]
+      },
+      "document": null,
+      "revision": 1
+    },
+    {
+      "name": "missing-reprocess",
+      "trigger": "user_reprocess",
+      "recording": {
+        "duration_s": 25,
+        "segments": [
+          {
+            "text": "A late retry refers to an absent recording."
+          }
+        ]
+      },
+      "document": null,
+      "revision": 1
+    }
+  ]
+}

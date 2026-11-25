@@ -94,11 +94,21 @@ envFrom:
   - configMapRef:
       name: prod-omi-backend-config
 
-# NAME: "string" env values the prod listen workflow renders from the
-# protected-environment secret LISTEN_PRIVATE_VALUES_YAML, in the same Helm
-# rollout. Never commit values here. A key replaces the env entry of the same
-# name below (e.g. the STT_CAP_DISPATCH_* defaults).
-privateEnv: {}
+# Private env (uid-bearing cohorts): NAMES only here, values never. The values
+# are one JSON document in Secret Manager (LISTEN_PRIVATE_ENV), synced by the
+# backend-secrets chart's listen-private ExternalSecret into secretName and
+# rendered as one secretKeyRef per name, so the deploy render and the drift gate
+# see references, not values. A declared name replaces the env entry of the same
+# name below. Changing a value is its own audited operation (new Secret Manager
+# version, force-sync, rollout restart): backend/docs/runbooks/listen-private-env.md.
+# The old privateEnv overlay (LISTEN_PRIVATE_VALUES_YAML) is retired: the chart
+# refuses a non-empty privateEnv while this is set.
+privateSecretEnv:
+  secretName: prod-omi-backend-listen-private-env
+  keys:
+    - STT_CAP_DISPATCH_ENFORCEMENT
+    - STT_CAP_DISPATCH_COHORT
+    - MEDIA_NOISE_MODE_SERVE_UID_SHA256S
 
 env:
   - name: PUSHER_RECORD_CLOSE_NOTIFY_ENABLED
@@ -150,6 +160,12 @@ env:
     value: "true"
   - name: SYNC_RECORD_DECODE_FAILURE_MEMO
     value: "true"
+  - name: CONVERSATIONS_V3_STAGE
+    valueFrom:
+      configMapKeyRef: {name: prod-omi-backend-config, key: CONVERSATIONS_V3_STAGE}
+  - name: CONVERSATIONS_V3_FIRST_APP_BUILD
+    valueFrom:
+      configMapKeyRef: {name: prod-omi-backend-config, key: CONVERSATIONS_V3_FIRST_APP_BUILD}
   - name: RECORD_TOKEN_LEASE_MODE
     valueFrom:
       configMapKeyRef: {name: prod-omi-backend-config, key: RECORD_TOKEN_LEASE_MODE}
@@ -162,6 +178,10 @@ env:
   - name: RECORD_TOKEN_LEASE_DEPLOYED_AT
     valueFrom:
       configMapKeyRef: {name: prod-omi-backend-config, key: RECORD_TOKEN_LEASE_DEPLOYED_AT}
+  - name: BATCH_ACCOUNT_PRIVACY_WRITER_ENABLED
+    value: "false"
+  - name: CONVERSATION_PARKED_TERMINAL_STATUS_ENABLED
+    value: "off"
   - name: CONVERSATION_TERMINAL_FAMILY_MODE
     value: "on"
   - name: HOME_TRANSCRIPTION_PRESENTATION_GATE
@@ -171,7 +191,7 @@ env:
   - name: HOME_TRANSCRIPTION_QUEUE_HOLD_ENABLED
     value: "true"
   - name: SYNC_FUTURE_CAPTURE_CLAMP_ENABLED
-    value: 'false'
+    value: 'true'
   - name: HOME_TRANSCRIPTION_MAX_AGE_SECONDS
     value: "86400"
   - name: HOME_LIVE_MEMBER_NOTES_BOUNDED_ENABLED
@@ -183,12 +203,17 @@ env:
   # Production retirement; false restores the old routes only after GPUs are ready.
   - name: STT_GPU_FLEET_OFF
     value: "true"
-  - name: STT_CAP_DISPATCH_ENFORCEMENT
-    value: "false"
-  - name: STT_CAP_DISPATCH_COHORT
-    value: ""
+  # STT_CAP_DISPATCH_ENFORCEMENT and STT_CAP_DISPATCH_COHORT are private (privateSecretEnv above;
+  # enforcement by ruling, lead2 4e5e71/45689e, b2cf73): no public literal, so none can be mistaken
+  # for the live value.
   - name: STT_CAP_DISPATCH_LANES
     value: "live"
+  # Media/noise classifier: live shadow/0 (folded 2026-11-18, unchanged). The digest serve list is
+  # private: see privateSecretEnv above.
+  - name: MEDIA_NOISE_MODE
+    value: "shadow"
+  - name: MEDIA_NOISE_MODE_SERVE_PERCENT
+    value: "0"
   - name: UNLIMITED_V2_BACKFILL_HOURS_CAP_ENABLED
     value: "false"
   - name: UNLIMITED_V2_BACKFILL_HOURS_CAP_HOURS
@@ -221,12 +246,16 @@ env:
     value: "true"
   - name: BATCH_HELD_DEAD_LETTER_ENABLED
     value: "true"
+  - name: BATCH_PARKED_JOB_SWEEPER_ENABLED
+    value: "true"
   - name: RECORD_INTAKE_AGE_PRIORITY_ENABLED
     value: "true"
   - name: RECORD_SEAL_REPAIR_FRESH_ENABLED
     value: "true"
   - name: BATCH_PIPELINE_ENABLED
     value: "true"
+  - name: BATCH_PIPELINE_PACKING_SAMPLE_RATE
+    value: "0"
   - name: FIRST_SUMMARY_PRESERVE_ADMITTED_ENABLED
     value: "false"
   - name: BATCH_LIVE_STT_RETIRE_PERCENT
@@ -239,6 +268,10 @@ env:
   # Separate listen roll after mobile batch-only 100; lead expands by 2026-11-03.
   - name: RECORD_SEAL_OVERLAP_TRIM_ENABLED
     value: "true"
+  # Pinned false on listen (SCA-3516): the listen roll preserves live behaviour. Activation is its own
+  # one-key step with a scoped go, guard and readback.
+  - name: BATCH_PIPELINE_SILENCE_READ_SKIP_ENABLED
+    value: "false"
   - name: BATCH_PIPELINE_SERVING_ENABLED
     value: "false"
   - name: BATCH_PIPELINE_WORKER_ENABLED
@@ -259,8 +292,16 @@ env:
     value: "true"
   - name: STALE_IN_PROGRESS_RECOVERY_ENABLED
     value: "true"
+  - name: CONVERSATIONS_V3_RECORDING_ROTATION
+    value: "off"
+  - name: CONVERSATIONS_V3_ROTATION_MIN_SECONDS
+    value: "180"
+  - name: CONVERSATIONS_V3_ROTATION_MAX_SECONDS
+    value: "300"
   - name: SYNC_POLL_BACKOFF_ENABLED
-    value: "false"
+    value: "true"
+  - name: SYNC_POLL_BACKOFF_PERCENT
+    value: "5"
   - name: BATCH_PIPELINE_AUTHORITATIVE_LABELS_ENABLED
     value: "false"
   - name: BATCH_PIPELINE_LIVE_ADMISSION_ENABLED
@@ -303,8 +344,6 @@ env:
     value: "false"
   - name: AUDIO_ARCHIVE_REGIONAL_CACHE_ENABLED
     value: "false"
-  - name: AUDIO_ARCHIVE_SEPARATE_MERGE_ENABLED
-    value: "false"
   - name: AUDIO_ARCHIVE_PERCENT
     value: "100"
   - name: AUDIO_ARCHIVE_STOP_PCM_PERCENT
@@ -312,8 +351,6 @@ env:
   - name: AUDIO_ARCHIVE_REGIONAL_CACHE_PERCENT
     value: "0"
   - name: BUCKET_AUDIO_DERIVED
-    value: ""
-  - name: AUDIO_MERGE_WORKER_URL
     value: ""
   # Public client token for v2 cohort reads only; shared backend PostHog stays disabled.
   - name: PROACTIVITY_V2_POSTHOG_TOKEN
@@ -504,6 +541,10 @@ env:
     value: "100"
   - name: NOTES_TIER_ESCALATION_ENABLED
     value: 'true'
+  # Short-recording compute floor: live true on listen since lead2 f9bdc4 (2026-11-11, kubectl set env);
+  # folded 2026-11-18 so a chart roll keeps it.
+  - name: NOTES_SHORT_CLIP_FLOOR
+    value: "true"
   # Staged sync-lineage rollout (omi#19947); keep identical to the Cloud Run services in
   # backend/deploy/runtime_env/prod.overlay.yaml. Empty admits every user.
   - name: SYNC_LINEAGE_RESOLVE_UID_ALLOWLIST
@@ -683,8 +724,6 @@ env:
     value: "parakeet,modulate-velma-2"
   - name: PRERECORDED_SONIOX_FAILOVER_ENABLED
     value: "true"
-  - name: STT_RESILIENT_RECONNECT
-    value: "false"
   - name: STT_LIVE_DEMAND_ENABLED
     value: "true"
   - name: STT_LIVE_DEMAND_PERCENT
@@ -730,8 +769,6 @@ env:
     value: "3"
   - name: PARAKEET_WINDOW_POST_TIMEOUT_SECONDS
     value: "8"
-  - name: PARAKEET_WINDOW_DIARIZATION
-    value: "false"
   - name: PARAKEET_WINDOW_DEADLINE_CUT_POST_LATENCY_SECONDS
     value: "1.2"
   - name: PARAKEET_WINDOW_PACE_SECONDS
@@ -754,17 +791,6 @@ env:
     value: "3"
   - name: SONIOX_CIRCUIT_COOLDOWN_SECONDS
     value: "30"
-  # Cohort off 2026-11-01: at 5% the treatment arm fell well below control on words per capture second and transcribed share
-  # (2 s drain cap; #24278 widens it). Treatment is now the speech gate: close 10 s after the first silent frame (6 s past
-  # the hangover), re-arm 2 s, cap 120/h. Percent stays 0 until the lead ramps it; rollback SONIOX_IDLE_COHORT_PERCENT=0.
-  - name: SONIOX_IDLE_COHORT_PERCENT
-    value: "0"
-  - name: SONIOX_IDLE_COHORT_CLOSE_SECONDS
-    value: "10"
-  - name: SONIOX_IDLE_COHORT_REARM_SECONDS
-    value: "2"
-  - name: SONIOX_IDLE_COHORT_MAX_CLOSES_PER_HOUR
-    value: "120"
   - name: STT_SERVICE_MODELS
     value: "parakeet-window,modulate-velma-2,soniox"
   # All live translation runs on Luna; the NLLB GPU service is retired in prod.
@@ -833,8 +859,8 @@ env:
   - name: EDGE_SHADOW_URL
     value: "ws://prod-omi-listen-edge.prod-omi-backend.svc.cluster.local:8080/v1/shadow"
   # EDGE_SHADOW_TOKEN (sent as x-edge-shadow-token; must match listen-edge's)
-  # is a secret: never committed here, set only through privateEnv
-  # (LISTEN_PRIVATE_VALUES_YAML), which adds the entry at rollout. Unset,
+  # is a secret: never committed here. To set it, add it to the Secret Manager
+  # document LISTEN_PRIVATE_ENV and to privateSecretEnv.keys above. Unset,
   # listen sends no token.
   - name: EDGE_SHADOW_PERCENT
     value: "0"
@@ -843,16 +869,12 @@ env:
   # existing v1 sessions and resumed v1 conversations are unaffected.
   - name: AUDIO_TIMELINE_V2
     value: "false"
-  - name: LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION
-    value: 'false'
   - name: LIVE_CAPTURE_WINDOW_MERGE_UNION
     value: 'true'
   - name: LIVE_CAPTURE_WINDOW_TRANSLATOR_SENDS
     value: "true"
   - name: SONIOX_WIRE_LEDGER
     value: "true"
-  - name: SONIOX_ORDERED_FINALIZE
-    value: "false"
   - name: SONIOX_CAPTURE_AXIS_DIAGNOSTICS
     value: "true"
   # Fair-use system (PR #5748)
@@ -908,6 +930,11 @@ env:
     value: 'true'
   # Quiet-check empty exit; evaluated on backend-sync (Cloud Tasks handler), pinned here for consistency (lead2 9b4ffd).
   - name: QUIET_EMPTY_EXIT_ENABLED
+    value: 'true'
+  # SCA-4019: hold a mobile server-batch capture across a socket drop for the 120 s reconnect
+  # grace; the producer drain releases the lease and persists a bounded deadline, so a held row
+  # seals at the deadline. Rollback: 'false' here and on backend-sync in one config train.
+  - name: LISTEN_BATCH_RECONNECT_ENABLED
     value: 'true'
   - name: LISTEN_FINALIZATION_ORPHAN_STALE_SECONDS
     value: "900"
@@ -1064,3 +1091,11 @@ affinity:
               values:
                 - backend-listen-pool-v2
                 - backend-listen-pool-v2-b
+
+# GMP only: local Prometheus still scrapes every family at 15s for HPA/pages.
+# Keep job-pinned custody guards, privacy, GMP paging and freshness at 15s.
+# Complementary filters export all remaining families once per 120s.
+# Set bulkInterval to 60s to restore the prior bulk cadence.
+podMonitoring:
+  bulkInterval: 120s
+  fastMetrics: 'backend_listen_active_ws_connections|pusher_active_ws_connections|privacy_.*|omi_audio_.*|omi_record_.*|omi_firestore_billed_reads_by_caller_total|omi_firestore_caller_label_overflow_total|omi_batch_pipeline_completed_audio_seconds_total|.*_(timestamp|refreshed_at|observed_at)_seconds'

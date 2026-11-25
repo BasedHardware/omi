@@ -1,4 +1,5 @@
 import 'package:omi/backend/schema/conversation.dart';
+import 'package:omi/backend/schema/conversation_v3.dart';
 import 'package:omi/backend/schema/episode.dart';
 import 'package:omi/backend/schema/structured.dart';
 import 'package:omi/services/capture/optimistic_processing.dart';
@@ -100,9 +101,21 @@ class HomeEpisodeLayout {
   }
 }
 
-/// Failed status and the server's failed projection both belong to Activity.
-bool isFailedHomeConversation(ServerConversation c) =>
-    c.status == ConversationStatus.failed || homeStepOf(c) == HomeStep.failed;
+/// Whether a listed conversation is a row on v3 Home: not hidden by the server, not a recording
+/// document, and not failed (a failed one is on Activity, X5).
+bool shownOnV3Home(ServerConversation c) =>
+    c.v3?.homeHidden != true && c.v3?.recording != true && !isFailedConversation(c);
+
+/// The one answer to "did this conversation fail?" (X5), for Home, Activity, the bell and the
+/// conversation page. A v3 conversation's tile state wins: the server sets it for Home, and a v3
+/// conversation can be `completed` with a failed tile. Without one, failed status and the server's
+/// failed Home projection decide. A failed conversation belongs to Activity, not Home.
+bool isFailedConversation(ServerConversation c) {
+  if (c.isAdmittedForTranscription) return false;
+  final tile = c.v3?.tileState;
+  if (tile != null) return tile == ConversationTileState.failed;
+  return c.status == ConversationStatus.failed || homeStepOf(c) == HomeStep.failed;
+}
 
 List<HomeRow> buildHomeRows(List<ServerConversation> conversations, List<Episode> episodes,
     {required bool enabled,
@@ -123,7 +136,7 @@ List<HomeRow> buildHomeRows(List<ServerConversation> conversations, List<Episode
   if (!enabled && !groupAwaitingTranscript) {
     return [
       for (final c in conversations)
-        if (!activityOnlyFailures || !isFailedHomeConversation(c)) HomeRow(c)
+        if (!activityOnlyFailures || !isFailedConversation(c)) HomeRow(c)
     ];
   }
   if (neutralUnknownSteps) {
@@ -180,7 +193,7 @@ List<HomeRow> buildHomeRows(List<ServerConversation> conversations, List<Episode
         ...processingConversations,
         for (final e in episodes) ...e.members
       ])
-        if (isFailedHomeConversation(c)) c.id,
+        if (isFailedConversation(c)) c.id,
   };
   final byId = {for (final c in conversations) c.id: c, for (final c in knownConversations) c.id: c};
   final processingById = {for (final c in processingConversations) c.id: c};
@@ -514,8 +527,10 @@ DateTime _latestMemberStart(List<ServerConversation> members) =>
 /// row's status, an empty capture, or a stand-in title. A [HomeStep.failed] result is
 /// terminal and must never be folded into a processing run.
 HomeStep? homeStepOf(ServerConversation c) {
-  if (c.homeStep == 'failed') return HomeStep.failed;
+  if (c.homeStep == 'failed' && !c.isAdmittedForTranscription) return HomeStep.failed;
   if (c.isLocked || c.discarded || c.deleted || c.clientProcessing != null || c.processingDeferred) return null;
+  if (c.isTranscriptionAllowanceHeld) return null;
+  if (c.isAdmittedForTranscription) return HomeStep.transcribing;
   switch (c.homeStep) {
     case 'transcribing':
       return HomeStep.transcribing;

@@ -247,9 +247,18 @@ def test_count_people_uses_server_side_aggregation():
 def test_count_conversations_with_geolocation_filters_on_latitude():
     client = MagicMock()
     conversations_ref = client.collection.return_value.document.return_value.collection.return_value
-    conversations_ref.where.return_value.count.return_value.get.return_value = _aggregation(9)
+    located = conversations_ref.where.return_value
+    located.count.return_value.get.return_value = _aggregation(9)
+    # Hidden recordings carry the same geolocation as the conversations over them: never counted twice.
+    located.where.return_value.count.return_value.get.return_value = _aggregation(2)
 
-    assert conversations_db.count_conversations_with_geolocation('uid1', firestore_client=client) == 9
+    assert conversations_db.count_conversations_with_geolocation('uid1', firestore_client=client) == 7
+    recording_filter = located.where.call_args.kwargs['filter']
+    assert (recording_filter.field_path, recording_filter.op_string, recording_filter.value) == (
+        'recording',
+        '==',
+        True,
+    )
     field_filter = conversations_ref.where.call_args.kwargs['filter']
     assert field_filter.field_path == 'geolocation.latitude'
     # The client rewrites `!= None` into Firestore's unary IS_NOT_NULL filter.

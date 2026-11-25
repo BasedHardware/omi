@@ -153,6 +153,7 @@ def discoverable_live_overlap(row: dict, incoming: dict) -> bool:
     """
     if (
         not compatible_capture(row, incoming)
+        or row.get('v3_derived')
         or row.get('deleted')
         or row.get('sync_merged_into')
         or row.get('status') not in ('completed', 'in_progress', 'processing')

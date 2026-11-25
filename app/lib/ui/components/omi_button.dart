@@ -91,12 +91,12 @@ class OmiButton extends StatefulWidget {
     this.isLoading = false,
     this.expand = false,
     this.pill = false,
+    this.maxLines = 1,
   })  : variant = OmiButtonVariant.secondary,
         colors = null,
         width = null,
         height = null,
-        labelStyle = null,
-        maxLines = 1;
+        labelStyle = null;
 
   const OmiButton.destructive({
     super.key,
@@ -108,12 +108,12 @@ class OmiButton extends StatefulWidget {
     this.isLoading = false,
     this.expand = false,
     this.pill = false,
+    this.maxLines = 1,
   })  : variant = OmiButtonVariant.destructive,
         colors = null,
         width = null,
         height = null,
-        labelStyle = null,
-        maxLines = 1;
+        labelStyle = null;
 
   const OmiButton.tertiary({
     super.key,
@@ -125,12 +125,12 @@ class OmiButton extends StatefulWidget {
     this.isLoading = false,
     this.expand = false,
     this.pill = false,
+    this.maxLines = 1,
   })  : variant = OmiButtonVariant.tertiary,
         colors = null,
         width = null,
         height = null,
-        labelStyle = null,
-        maxLines = 1;
+        labelStyle = null;
 
   /// See [OmiButtonVariant.toolbar].
   const OmiButton.toolbar({
@@ -143,12 +143,12 @@ class OmiButton extends StatefulWidget {
     this.isLoading = false,
     this.expand = false,
     this.pill = false,
+    this.maxLines = 1,
   })  : variant = OmiButtonVariant.toolbar,
         colors = null,
         width = null,
         height = null,
-        labelStyle = null,
-        maxLines = 1;
+        labelStyle = null;
 
   final String label;
 
@@ -311,7 +311,12 @@ class _OmiButtonState extends State<OmiButton> {
         foregroundColor: WidgetStatePropertyAll(colors.foreground),
         overlayColor: WidgetStatePropertyAll(colors.foreground.withValues(alpha: 0.12)),
         elevation: const WidgetStatePropertyAll(0),
-        padding: WidgetStatePropertyAll(EdgeInsets.symmetric(horizontal: horizontalPadding)),
+        // A label that may wrap keeps space above and below its lines. One line still fits inside the
+        // minimum height, so single-line buttons are unchanged.
+        padding: WidgetStatePropertyAll(EdgeInsets.symmetric(
+          horizontal: horizontalPadding,
+          vertical: widget.maxLines == null ? (compact ? OmiSpacing.xs : OmiSpacing.sm) : 0,
+        )),
         minimumSize: WidgetStatePropertyAll(Size(widget.width ?? visualHeight, visualHeight)),
         fixedSize: widget.width != null ? WidgetStatePropertyAll(Size(widget.width!, visualHeight)) : null,
         shape: WidgetStatePropertyAll(

@@ -6,20 +6,23 @@
 // until {connected:true}. Only `google_calendar` is supported on this lane; Gmail
 // stays on the separate client-side loopback lane.
 import { omiApi } from './apiClient'
+import type { AxiosRequestConfig } from 'axios'
 
 const OAUTH_URL_PATH = '/v1/integrations/google_calendar/oauth-url'
 const STATUS_PATH = '/v1/integrations/google_calendar'
 
 export type CalendarStatus = { connected: boolean; lastSyncAt?: string }
 
-export async function getCalendarStatus(): Promise<CalendarStatus> {
-  const r = await omiApi.get(STATUS_PATH)
+export async function getCalendarStatus(canSend?: () => boolean): Promise<CalendarStatus> {
+  const config: AxiosRequestConfig & { __canSend?: () => boolean } = { __canSend: canSend }
+  const r = await omiApi.get(STATUS_PATH, config)
   const d = (r.data ?? {}) as { connected?: boolean; last_synced?: string; last_synced_at?: string }
   return { connected: !!d.connected, lastSyncAt: d.last_synced ?? d.last_synced_at }
 }
 
-export async function getCalendarOAuthUrl(): Promise<string> {
-  const r = await omiApi.get(OAUTH_URL_PATH)
+export async function getCalendarOAuthUrl(canSend?: () => boolean): Promise<string> {
+  const config: AxiosRequestConfig & { __canSend?: () => boolean } = { __canSend: canSend }
+  const r = await omiApi.get(OAUTH_URL_PATH, config)
   const url = (r.data as { auth_url?: string })?.auth_url
   if (!url) throw new Error('No auth URL returned by the server')
   return url

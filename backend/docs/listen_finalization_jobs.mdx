@@ -160,7 +160,10 @@ or racing caller gets `conflict`/`already_requeued` and never a second grant.
 A second exhaustion of the requeued life (`budget_requeue_count >= 1`) is
 terminal: dead-letter with the observability emit below, and the reconciler
 closes such a queued row delivery-independently within one pass even if no
-final worker delivery ever arrives.
+final worker delivery ever arrives. The exception is a row parked on a foreign
+owner (`finalization_waiting_on_owner`): the reconciler leaves it to the replay
+ownership probe, which rechecks the survivor hourly and resumes the row once
+Python owns it again.
 
 Refused the requeue (dead-letter immediately, exactly as before this
 mechanism): `requires_byok` rows (the pusher path claims BYOK; a requeue could

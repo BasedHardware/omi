@@ -25,6 +25,7 @@ from config.sync_bridge_containment import (
     contained_donor_merge_mode,
 )
 from config.sync_finalize import sync_finalize_target_recovery_enabled
+from models.finalization_owner import python_owns_finalization
 from utils.conversations.recorded_time import segment_span, segment_span_is_exact
 from utils.conversations.smart_merge_policy import user_managed as _policy_user_managed
 from database.action_item_refresh import RefreshConversationUnavailable
@@ -49,7 +50,7 @@ from utils.sync.assignment_errors import (
 )
 from utils.sync.telemetry import bounded_exception_reason, bounded_exception_type
 from utils.sync.fsr_metadata import read_metadata
-from utils.sync import bridge_pending
+from utils.sync import bridge_pending, processing_hold
 from utils.sync.live_overlap import choose_live_overlap, span_contained
 from utils.conversations.fragment_visibility import is_user_curated
 
@@ -193,7 +194,7 @@ def _shadow_contained_donor(uid: str, source: dict, target_id: str) -> None:
     logger.info('event=sync_bridge_contained_donor_shadow outcome=%s', outcome.value)
 
 
-def _finish_pending_live_bridge(uid: str, conversation_id: str) -> str:
+def _finish_pending_live_bridge(uid: str, conversation_id: str, *, require_python_owner: bool = False) -> str:
     """Retry the ordinary assignment transaction once live recording proof lands.
 
     A pending hint never authorizes a merge by itself. Re-read both records;
@@ -202,6 +203,8 @@ def _finish_pending_live_bridge(uid: str, conversation_id: str) -> str:
     source = conversations_db.get_conversation(uid, conversation_id)
     if not source or source.get('deleted') or not source.get(bridge_pending.FIELD):
         return conversation_id
+    if require_python_owner and not python_owns_finalization(source):
+        raise processing_hold.finalization_owner_deferral()
     target_id = source[bridge_pending.FIELD].get('target_id')
     if not isinstance(target_id, str) or target_id == conversation_id or is_user_curated(source):
         return conversation_id
@@ -215,6 +218,8 @@ def _finish_pending_live_bridge(uid: str, conversation_id: str) -> str:
         _shadow_contained_donor(uid, source, target_id)
         return conversation_id
     target = conversations_db.get_conversation(uid, target_id)
+    if target is not None and require_python_owner and not python_owns_finalization(target):
+        raise processing_hold.finalization_owner_deferral()
     if not target or target.get('status') == 'in_progress':
         return conversation_id
     if choose_live_overlap([target], source, uid=uid) != target_id:
@@ -245,7 +250,12 @@ def _finish_pending_live_bridge(uid: str, conversation_id: str) -> str:
 
 @read_origin('job:sync_operation_snapshot')
 def finish_sync_bridges(
-    uid: str, conversation_id: str, *, audio_source_id: str | None = None, silent: bool = False
+    uid: str,
+    conversation_id: str,
+    *,
+    audio_source_id: str | None = None,
+    silent: bool = False,
+    require_python_owner: bool = False,
 ) -> str:
     recovery = sync_finalize_target_recovery_enabled()
     # The legacy hydrated reader can do photo/correction IO after its document
@@ -259,11 +269,13 @@ def finish_sync_bridges(
         row = read_metadata(conversations_db, uid, conversation_id, operation='bridge')
         if not row or (row.get('deleted') and not row.get('sync_merged_into')):
             raise SyncAssignmentSuperseded('sync conversation deleted during bridge')
+        if require_python_owner and not python_owns_finalization(row):
+            raise processing_hold.finalization_owner_deferral()
         if row.get('sync_merged_into'):
             conversation_id = row['sync_merged_into']
             continue
         if recovery and row.get(bridge_pending.FIELD):
-            canonical = _finish_pending_live_bridge(uid, conversation_id)
+            canonical = _finish_pending_live_bridge(uid, conversation_id, require_python_owner=require_python_owner)
             if canonical != conversation_id:
                 conversation_id = canonical
                 continue
@@ -384,6 +396,8 @@ def finish_sync_bridges(
             sync_operation_snapshot.avoided('bridge_no_effect')
         else:
             current = read_metadata(conversations_db, uid, conversation_id, operation='bridge')
+        if current is not None and require_python_owner and not python_owns_finalization(current):
+            raise processing_hold.finalization_owner_deferral()
         if current and current.get('sync_merged_into'):
             conversation_id = current['sync_merged_into']
             continue
@@ -401,14 +415,16 @@ def resume_pending(uid: str, conversation_id: str, row: dict, context: dict | No
     if not row.get(bridge_pending.FIELD) or is_user_curated(row):
         return conversation_id, row
     canonical = (
-        finish_sync_bridges(uid, conversation_id) if sync_finalize_target_recovery_enabled() else conversation_id
+        finish_sync_bridges(uid, conversation_id, require_python_owner=True)
+        if sync_finalize_target_recovery_enabled()
+        else conversation_id
     )
     if canonical != conversation_id:
         if context is not None:
             context['redirect_to'] = canonical
             return canonical, None
         conversation_id = canonical
-        current = conversations_db.get_conversation(uid, canonical)
+        current = conversations_db.get_conversation(uid, canonical, include_transcript_decode_status=True)
         if not current or current.get('deleted'):
             return canonical, None
         row = current
@@ -417,6 +433,8 @@ def resume_pending(uid: str, conversation_id: str, row: dict, context: dict | No
         if row.get(bridge_pending.FIELD)
         else None
     )
+    if target is not None and not python_owns_finalization(target):
+        raise processing_hold.finalization_owner_deferral()
     target_active = bool(target and not target.get('deleted') and target.get('status') in ('in_progress', 'processing'))
     if bridge_pending.hidden(row) or target_active:
         if context is not None:

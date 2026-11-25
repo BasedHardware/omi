@@ -1,5 +1,6 @@
 """Vector enrollment first; existing verified audio teaching remains the fallback."""
 
+from utils.conversations.layer import read_product as read_product_conversation
 from database import conversations, speaker_auto_enroll, users
 from database._client import get_firestore_client
 from utils.other.storage import download_owner_evidence_cache
@@ -16,7 +17,7 @@ def enroll(uid: str, person_id: str, conversation_id: str, segment_ids: list) ->
     if policy.unit(user.get('speaker_embedding')) is None:
         return 'rejected_embedding'
     person = users.get_person(uid, person_id)
-    conversation = conversations.get_conversation(uid, conversation_id)
+    conversation = read_product_conversation(conversations.get_conversation, uid, conversation_id)
     if not person or not conversation:
         return 'person_missing' if not person else 'conversation_missing'
     if conversation.get('private_cloud_sync_enabled') is not True:

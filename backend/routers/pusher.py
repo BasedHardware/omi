@@ -53,6 +53,7 @@ from utils.pusher_record_close import VERSION as RECORD_CLOSE_VERSION, PusherClo
 from utils.pusher_protocol import (
     AudioBackpressure,
     BUFFERED_AUDIO_MAX_BYTES,
+    OPTIONAL_AUDIO_MAX_BYTES,
     MAX_SAMPLE_RATE,
     MIN_SAMPLE_RATE,
     PRIVATE_CLOUD_QUEUE_MAX_SIZE,
@@ -64,10 +65,12 @@ from utils.pusher_protocol import (
     SpeakerSampleRequest,
     TranscriptQueueItem,
     append_bounded,
+    append_optional,
     audio_timeline_ack_frame,
     audio_custody_ack_frame,
     bound_private_pending,
-    extend_bounded,
+    extend_optional,
+    optional_flush_bytes,
     frame_header,
     json_object,
     pusher_session_outcome,
@@ -573,8 +576,9 @@ async def _run_websocket_util_trigger(
     # chunk for one user is strictly better than killing the pod.
     private_cloud_queue: deque[PrivateCloudChunk] = deque(maxlen=PRIVATE_CLOUD_QUEUE_MAX_SIZE)
     audio_bytes_event = asyncio.Event()  # Signals when items are added for instant wake
-    audio_bytes_capacity = asyncio.Event()
     audio_budget = ByteBudget(BUFFERED_AUDIO_MAX_BYTES)
+    # Apps/webhook audio never shares the custody budget (see append_optional).
+    optional_audio_budget = ByteBudget(OPTIONAL_AUDIO_MAX_BYTES)
     durable_audio = audio_outbox_enabled()
     log_closed_record_drain_cap()
     record_futures = ExecutorFutureTracker(storage_executor, record_barrier_executor)
@@ -1358,7 +1362,6 @@ async def _run_websocket_util_trigger(
             # Process all queued items
             batch: List[AudioBytesQueueItem] = list(audio_bytes_queue)
             audio_bytes_queue.clear()
-            audio_bytes_capacity.set()
 
             for item in batch:
                 try:
@@ -1369,25 +1372,17 @@ async def _run_websocket_util_trigger(
                 except Exception as e:
                     logger.error(f"Error processing audio bytes: {e} {uid}")
                 finally:
-                    audio_budget.release(len(item['data']))
+                    optional_audio_budget.release(len(item['data']))
 
     # The conversation this session last streamed, for the episode moment flush at teardown.
     episode_session: Dict[str, Optional[str]] = {'conversation_id': None}
 
     async def enqueue_audio_bytes(item: AudioBytesQueueItem) -> None:
-        # Optional app/webhook work must not throw AudioBackpressure out of the
-        # capture receiver when its bounded queue fills. Keep the charged PCM
-        # with this producer and wait for the consumer instead of evicting it.
-        if durable_audio and len(audio_bytes_queue) >= AUDIO_BYTES_QUEUE_WARN_SIZE:
-            BACKPRESSURE.labels(stage='pusher_queue').inc()
-            async with asyncio.timeout(WS_RECEIVE_TIMEOUT):
-                while len(audio_bytes_queue) >= AUDIO_BYTES_QUEUE_WARN_SIZE:
-                    audio_bytes_capacity.clear()
-                    audio_bytes_event.set()
-                    await audio_bytes_capacity.wait()
-        append_bounded(
-            audio_bytes_queue, item, 'audio_bytes', byte_budget=audio_budget, size_of=lambda entry: len(entry['data'])
-        )
+        # Optional app/webhook audio is best-effort. A slow or dead consumer must
+        # never stall the receive loop or close the capture socket: evict the
+        # oldest optional item instead (counted as an audio_bytes queue drop).
+        if append_optional(audio_bytes_queue, item, 'audio_bytes', optional_audio_budget):
+            logger.warning(f"audio_bytes_queue full; dropped oldest optional audio {uid}")
         audio_bytes_event.set()
 
     async def receive_tasks() -> None:
@@ -1951,9 +1946,13 @@ async def _run_websocket_util_trigger(
                 # Only accumulate audio buffers if there's a consumer (app trigger or webhook)
                 # Without this guard, buffers grow ~16KB/s indefinitely for users with no audio apps
                 if has_audio_apps_enabled:
-                    extend_bounded(trigger_audiobuffer, audio_data, 'audio_app_buffer', audio_budget)
+                    extend_optional(
+                        trigger_audiobuffer, audio_data, 'audio_app_buffer', optional_audio_budget, audio_bytes_queue
+                    )
                 if audio_bytes_webhook_delay_seconds is not None:
-                    extend_bounded(audiobuffer, audio_data, 'audio_webhook_buffer', audio_budget)
+                    extend_optional(
+                        audiobuffer, audio_data, 'audio_webhook_buffer', optional_audio_budget, audio_bytes_queue
+                    )
 
                 # Private cloud sync - queue chunks for background processing.
                 # Durable custody buffers the accepted stream the same way
@@ -2006,9 +2005,8 @@ async def _run_websocket_util_trigger(
                         _reset_private_cloud_buffer()
 
                 # Queue audio bytes triggers for batched processing
-                if (
-                    has_audio_apps_enabled
-                    and len(trigger_audiobuffer) > sample_rate * audio_bytes_trigger_delay_seconds * 2
+                if has_audio_apps_enabled and len(trigger_audiobuffer) >= optional_flush_bytes(
+                    sample_rate, audio_bytes_trigger_delay_seconds
                 ):
                     if len(audio_bytes_queue) >= AUDIO_BYTES_QUEUE_WARN_SIZE:
                         logger.warning(f"Warning: audio_bytes_queue size {len(audio_bytes_queue)} {uid}")
@@ -2021,9 +2019,8 @@ async def _run_websocket_util_trigger(
                     )
                     audio_bytes_event.set()  # Wake consumer immediately
                     trigger_audiobuffer = bytearray()
-                if (
-                    audio_bytes_webhook_delay_seconds is not None
-                    and len(audiobuffer) > sample_rate * audio_bytes_webhook_delay_seconds * 2
+                if audio_bytes_webhook_delay_seconds is not None and len(audiobuffer) >= optional_flush_bytes(
+                    sample_rate, audio_bytes_webhook_delay_seconds
                 ):
                     if len(audio_bytes_queue) >= AUDIO_BYTES_QUEUE_WARN_SIZE:
                         logger.warning(f"Warning: audio_bytes_queue size {len(audio_bytes_queue)} {uid}")

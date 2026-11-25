@@ -7,7 +7,8 @@ remains the authority for completion. No poll or surviving hold row is needed.
 
 from datetime import datetime, timedelta, timezone
 
-from config.batch_pipeline_coalescing import MAX_MEMBERS
+from config.batch_pipeline_coalescing_protocol import MAX_COMPLETION_MEMBERS
+from config.request_clock import clock_fields
 from database.sync_ledger import LEDGER_RETENTION_DAYS, is_valid_completed_sync_content_result, sync_content_ledger_ref
 
 
@@ -29,7 +30,7 @@ def prepare(client, namespace, transaction, binding, ledger):
     if metadata is None:
         return []  # Ordinary uploads add no reads or writes.
     members = metadata['members']
-    if not 0 < len(members) <= MAX_MEMBERS or len({m['job_id'] for m in members}) != len(members):
+    if not 0 < len(members) <= MAX_COMPLETION_MEMBERS or len({m['job_id'] for m in members}) != len(members):
         raise ValueError('invalid original receipt membership')
     prepared = []
     for member in members:
@@ -58,6 +59,7 @@ def prepare(client, namespace, transaction, binding, ledger):
             if not is_valid_completed_sync_content_result(content.get('result')):
                 raise ValueError('invalid original completion')
             continue  # Do not extend terminal retention on retries or polls.
+        member = {**member, **clock_fields(intake.get('upload_arrived_at'), intake.get('upload_entitlement'))}
         prepared.append((intake_ref, content_ref, member, binding.job_id))
     return prepared
 
@@ -75,6 +77,7 @@ def write(transaction, prepared, result, now):
             {
                 'status': 'completed',
                 'result': {**result, 'total_segments': member['original_units']},
+                'completed_at': stamp,
                 'updated_at': stamp,
                 'expires_at': expires,
             },

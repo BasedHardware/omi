@@ -10,6 +10,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/gen/pigeon_communicator.g.dart';
 import 'package:omi/utils/analytics/analytics_manager.dart';
+import 'package:omi/utils/analytics/registry/events.g.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
 
 /// Aggregates only. The local device id is used for deduplication and never emitted.
@@ -238,6 +239,9 @@ class DeviceHealthTelemetry {
     final reasons = <String, int>{};
     final reconnectBuckets = <String, int>{};
     final rssiBuckets = <String, int>{};
+    var ringReadDisconnects = 0;
+    var ringReadKnown = 0;
+    final ringReadRssi = List<int>.filled(5, 0);
     final resets = <String, int>{};
     var connectedMs = 0;
     var connectedBeforeHorizonMs = 0;
@@ -284,6 +288,12 @@ class DeviceHealthTelemetry {
         reconnectBuckets[key] = (reconnectBuckets[key] ?? 0) + 1;
       }
       final rssi = (event['lastRssi'] as num?)?.toInt() ?? 0;
+      if (event['ring_read_active'] is bool) ringReadKnown++;
+      if (event['ring_read_active'] == true) {
+        ringReadDisconnects++;
+        final index = rssi >= 0 ? 4 : (rssi < -90 ? 0 : (rssi < -80 ? 1 : (rssi < -60 ? 2 : 3)));
+        ringReadRssi[index]++;
+      }
       if (rssi < 0) {
         final key = bucket(rssi, [-90, -75, -60]);
         rssiBuckets[key] = (rssiBuckets[key] ?? 0) + 1;
@@ -411,6 +421,15 @@ class DeviceHealthTelemetry {
       'disconnects_by_reason': reasons,
       'reconnect_latency_buckets': reconnectBuckets,
       'rssi_at_disconnect_buckets': rssiBuckets,
+      ...MobileDeviceHealthDailyRingRead(
+        disconnectsDuringRingRead: ringReadDisconnects,
+        disconnectsWithRingReadState: ringReadKnown,
+        rssiBelowMinus90: ringReadRssi[0],
+        rssiMinus90ToMinus80: ringReadRssi[1],
+        rssiMinus80ToMinus60: ringReadRssi[2],
+        rssiAtLeastMinus60: ringReadRssi[3],
+        rssiUnknown: ringReadRssi[4],
+      ).properties,
       'schema_version': 2,
       'day_app_build': builds.isEmpty ? null : (builds.toList()..sort()),
       'day_firmware': firmwares.isEmpty ? null : (firmwares.toList()..sort()),

@@ -29,7 +29,7 @@ WORKFLOW_ID = "mobile-rollout-advance"
 GATE_RECEIPT_MAX_AGE = timedelta(hours=26)
 
 
-def latest_gate_receipt() -> datetime | None:
+def _gate_runs(query: list[str]) -> list[dict]:
     repository = os.environ.get("GITHUB_REPOSITORY", "BasedHardware/omi")
     try:
         result = subprocess.run(
@@ -39,12 +39,7 @@ def latest_gate_receipt() -> datetime | None:
                 "--method",
                 "GET",
                 f"repos/{repository}/actions/workflows/mobile_daily_train.yml/runs",
-                "-f",
-                "branch=main",
-                "-f",
-                "status=success",
-                "-f",
-                "per_page=1",
+                *query,
             ],
             capture_output=True,
             text=True,
@@ -57,6 +52,11 @@ def latest_gate_receipt() -> datetime | None:
     runs = payload.get("workflow_runs") if isinstance(payload, dict) else None
     if not isinstance(runs, list):
         raise DispatchError("GitHub daily gate receipt response is malformed")
+    return runs
+
+
+def latest_gate_receipt() -> datetime | None:
+    runs = _gate_runs(["-f", "branch=main", "-f", "status=success", "-f", "per_page=1"])
     if not runs:
         return None
     run = runs[0]
@@ -69,6 +69,33 @@ def latest_gate_receipt() -> datetime | None:
     if created_at.tzinfo is None:
         raise DispatchError("GitHub daily gate receipt created_at has no timezone")
     return created_at
+
+
+def latest_gate_run() -> str:
+    """Describe the newest main train run, whatever its conclusion.
+
+    Freeze diagnostics only: this distinguishes "the dispatcher stopped
+    dispatching" (no runs at all) from "the train is running and failing"
+    (conclusion failure) from "the train keeps succeeding but the receipt is
+    stale". It never raises; a failed lookup degrades to "unavailable" so the
+    freeze itself is still reported.
+    """
+    try:
+        runs = _gate_runs(["-f", "branch=main", "-f", "per_page=1"])
+    except DispatchError:
+        return "latest run: unavailable"
+    if not runs:
+        return "latest run: none"
+    run = runs[0]
+    if not isinstance(run, dict) or run.get("head_branch") != "main":
+        return "latest run: unexpected"
+    try:
+        created_at = datetime.fromisoformat(str(run["created_at"]).replace("Z", "+00:00"))
+    except (KeyError, TypeError, ValueError):
+        return "latest run: malformed"
+    conclusion = run.get("conclusion")
+    state = conclusion if isinstance(conclusion, str) and conclusion else (run.get("status") or "unknown")
+    return f"latest run: {state} at {created_at.isoformat()}"
 
 
 def build_payload(app_id: str, *, dry_run: bool, branch: str = "main", capture_health_override: str = "") -> dict:
@@ -97,6 +124,12 @@ def dispatch(app_id: str, token: str, *, dry_run: bool, capture_health_override:
     return build_id
 
 
+def _summarize(lines: list[str]) -> None:
+    if summary := os.environ.get("GITHUB_STEP_SUMMARY"):
+        with open(summary, "a", encoding="utf-8") as output:
+            output.write("\n".join(lines) + "\n")
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--app-id", required=True)
@@ -106,17 +139,37 @@ def main(argv: list[str] | None = None) -> int:
         default="",
         help="reason to advance past a capture-health HOLD for this run only (empty = no override)",
     )
+    parser.add_argument(
+        "--gate-freeze-override",
+        default="",
+        help=(
+            "reason to advance although no daily train succeeded in the last 26h "
+            "(empty = freeze). Operator recovery path when the dispatcher is "
+            "paused; the reason is logged and summarized"
+        ),
+    )
     args = parser.parse_args(argv)
     try:
         receipt = latest_gate_receipt()
-        if receipt is None or not timedelta(0) <= datetime.now(timezone.utc) - receipt <= GATE_RECEIPT_MAX_AGE:
+        frozen = receipt is None or not timedelta(0) <= datetime.now(timezone.utc) - receipt <= GATE_RECEIPT_MAX_AGE
+        if frozen:
             last = receipt.isoformat() if receipt is not None else "never"
-            reason = f"LADDER FROZEN: no successful mobile_daily_train run in the last 26h (last: {last})"
-            print(reason)
-            if summary := os.environ.get("GITHUB_STEP_SUMMARY"):
-                with open(summary, "a", encoding="utf-8") as output:
-                    output.write(reason + "\n")
-            return 0
+            reason = (
+                f"LADDER FROZEN: no successful mobile_daily_train run in the last 26h "
+                f"(last success: {last}; {latest_gate_run()})"
+            )
+            override = args.gate_freeze_override.strip()
+            if not override:
+                print(reason)
+                print(f"::error::{reason}", file=sys.stderr)
+                _summarize([reason, "", "Release exposure cannot advance until a daily train succeeds. Recovery is documented in .github/agent-docs/mobile-release-process.md (Ladder liveness)."])
+                # A frozen ladder means the release pipeline is not advancing. Failing
+                # the scheduled run is what makes that visible; a green run that did
+                # nothing is how 1.0.587 sat at 10% for two days unnoticed.
+                return 1
+            notice = f"LADDER FROZEN OVERRIDDEN: {override} ({last})"
+            print(notice)
+            print(f"::warning::{notice}", file=sys.stderr)
         token = os.environ.get("CODEMAGIC_API_TOKEN", "")
         if not token:
             print("CODEMAGIC_API_TOKEN is required", file=sys.stderr)

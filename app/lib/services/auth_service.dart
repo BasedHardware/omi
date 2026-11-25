@@ -60,16 +60,43 @@ final class AnonymousSourceMigration {
 
 /// The outcome of linking an external provider.
 ///
-/// A credential collision signs in to the already-linked destination account
-/// inside [AuthService]. The caller must use [anonymousSourceMigration], rather
-/// than inspecting FirebaseAuth.currentUser after that switch, to migrate the
-/// anonymous source data.
+/// An anonymous credential collision can establish the destination account.
+/// Its source proof is captured before the switch and returned in [anonymousSourceMigration].
 final class ProviderLinkResult {
   const ProviderLinkResult({required this.destinationUid, this.destinationSession, this.anonymousSourceMigration});
 
   final String? destinationUid;
   final AuthSessionSnapshot? destinationSession;
   final AnonymousSourceMigration? anonymousSourceMigration;
+}
+
+/// The selected provider identity already belongs to a separate account.
+final class ProviderLinkConflict implements Exception {
+  const ProviderLinkConflict();
+}
+
+/// A pending provider authorization can be retired until Firebase receives the link.
+final class ProviderLinkAuthorization extends ChangeNotifier {
+  final _cancelled = Completer<void>();
+  bool _dispatched = false;
+
+  bool get _isCancelled => _cancelled.isCompleted;
+  bool get canCancel => !_dispatched && !_isCancelled;
+
+  void cancel() {
+    if (!canCancel) return;
+    _cancelled.complete();
+    notifyListeners();
+  }
+
+  Future<T?> _untilCancelled<T>(Future<T?> pending) => Future.any([pending, _cancelled.future.then<T?>((_) => null)]);
+
+  bool _dispatch() {
+    if (!canCancel) return false;
+    _dispatched = true;
+    notifyListeners();
+    return true;
+  }
 }
 
 /// Captures an anonymous source proof before [establishDestination] can replace
@@ -244,24 +271,17 @@ class AuthService {
     return _firebaseAuth.currentUser;
   }
 
-  /// Google Sign In using the standard google_sign_in package (iOS, Android)
+  Future<AuthCredential?> _requestGoogleMobileCredential() async {
+    final googleUser = await GoogleSignIn(scopes: ['profile', 'email']).signIn();
+    final googleAuth = await googleUser?.authentication;
+    if (googleAuth == null || (googleAuth.accessToken == null && googleAuth.idToken == null)) return null;
+    return GoogleAuthProvider.credential(accessToken: googleAuth.accessToken, idToken: googleAuth.idToken);
+  }
+
+  /// Google Sign In using the standard google_sign_in package (iOS, Android).
   Future<UserCredential?> signInWithGoogleMobile() async {
-    // Trigger the authentication flow
-    final GoogleSignInAccount? googleUser = await GoogleSignIn(scopes: ['profile', 'email']).signIn();
-
-    // Obtain the auth details from the request
-    final GoogleSignInAuthentication? googleAuth = await googleUser?.authentication;
-    if (googleAuth == null) {
-      return null;
-    }
-
-    // Create a new credential
-    if (googleAuth.accessToken == null && googleAuth.idToken == null) {
-      return null;
-    }
-    final credential = GoogleAuthProvider.credential(accessToken: googleAuth.accessToken, idToken: googleAuth.idToken);
-
-    // Once signed in, return the UserCredential
+    final credential = await _requestGoogleMobileCredential();
+    if (credential == null) return null;
     final result = await runAccountMutation(() => _firebaseAuth.signInWithCredential(credential));
     await _updateUserPreferences(result, 'google');
     return result;
@@ -282,14 +302,7 @@ class AuthService {
     return digest.toString();
   }
 
-  /// Throws the Apple or Firebase error unchanged so the caller can tell a
-  /// cancel from a real failure and report its code.
-  Future<UserCredential> signInWithAppleMobile() async {
-    // Sign out the current user first
-    Logger.debug('Signing out current user...');
-    await signOutForAccountSwitch();
-    Logger.debug('User signed out successfully.');
-
+  Future<({AuthCredential credential, AuthorizationCredentialAppleID apple})> _requestAppleMobileCredential() async {
     final rawNonce = generateNonce();
     final nonce = sha256ofString(rawNonce);
 
@@ -303,16 +316,24 @@ class AuthService {
       throw const AppleIdentityTokenMissing();
     }
 
-    // Create an `OAuthCredential` from the credential returned by Apple.
-    final oauthCredential = OAuthProvider("apple.com").credential(
+    final credential = OAuthProvider("apple.com").credential(
       idToken: appleCredential.identityToken,
       rawNonce: rawNonce,
       accessToken: appleCredential.authorizationCode,
     );
+    return (credential: credential, apple: appleCredential);
+  }
+
+  /// Throws the Apple or Firebase error unchanged so the caller can tell a
+  /// cancel from a real failure and report its code.
+  Future<UserCredential> signInWithAppleMobile() async {
+    // Sign out the current user first.
+    await signOutForAccountSwitch();
+    final (credential: credential, apple: appleCredential) = await _requestAppleMobileCredential();
 
     // Sign in the user with Firebase.
     Logger.debug('Attempting to sign in with Firebase...');
-    UserCredential userCred = await runAccountMutation(() => _firebaseAuth.signInWithCredential(oauthCredential));
+    UserCredential userCred = await runAccountMutation(() => _firebaseAuth.signInWithCredential(credential));
     Logger.debug('Firebase sign-in successful.');
 
     // Extract name from Apple credential (only available on first sign-in)
@@ -638,109 +659,90 @@ class AuthService {
 
   Future<UserCredential?> authenticateWithProvider(String provider) async {
     try {
-      final state = _generateState();
-      final codeVerifier = _generateCodeVerifier();
-      final codeChallenge = _codeChallengeForVerifier(codeVerifier);
-      final redirectUri = Env.authRedirectUri;
-      final callbackScheme = Env.authCallbackScheme;
-
-      Logger.debug('Starting OAuth flow for provider: $provider');
-
-      final authUrl = Uri.parse('${Env.authApiBaseUrl}v1/auth/authorize').replace(
-        queryParameters: {
-          'provider': provider,
-          'redirect_uri': redirectUri,
-          'state': state,
-          'code_challenge': codeChallenge,
-          'code_challenge_method': 'S256',
-        },
-      ).toString();
-
-      Logger.debug('Authorization URL: $authUrl');
-
-      // Set up listeners before launching URL
-      final appLinks = AppLinks();
-      late StreamSubscription linkSubscription;
-      final completer = Completer<String>();
-
-      // Listen via app_links
-      linkSubscription = appLinks.uriLinkStream.listen(
-        (Uri uri) {
-          Logger.debug('Received callback URI via app_links: $uri');
-          if (uri.scheme == callbackScheme && uri.host == 'auth' && uri.path == '/callback') {
-            if (!completer.isCompleted) {
-              linkSubscription.cancel();
-              completer.complete(uri.toString());
-            }
-          }
-        },
-        onError: (error) {
-          Logger.debug('App link error: $error');
-          if (!completer.isCompleted) {
-            linkSubscription.cancel();
-            completer.completeError(error);
-          }
-        },
-      );
-
-      // Now launch the URL
-      final launched = await launchUrl(Uri.parse(authUrl), mode: LaunchMode.inAppBrowserView);
-
-      if (!launched) {
-        linkSubscription.cancel();
-        throw Exception('Failed to launch authentication URL');
-      }
-
-      final result = await completer.future.timeout(
-        const Duration(minutes: 5),
-        onTimeout: () {
-          linkSubscription.cancel();
-          throw Exception('Authentication timeout');
-        },
-      );
-
-      final uri = Uri.parse(result);
-      final code = uri.queryParameters['code'];
-      final returnedState = uri.queryParameters['state'];
-
-      if (code == null) {
-        throw Exception('No authorization code received');
-      }
-
-      if (returnedState != state) {
-        throw Exception('Invalid state parameter');
-      }
-
-      // Exchange the code for OAuth credentials
-      final oauthCredentials = await _exchangeCodeForOAuthCredentials(code, redirectUri, codeVerifier);
-
-      if (oauthCredentials == null) {
-        throw Exception('Failed to exchange code for OAuth credentials');
-      }
-
-      // Sign in to Firebase with the OAuth credentials
+      final oauthCredentials = await _requestOAuthCredentials(provider, useCustomToken: Env.useAuthCustomToken);
+      if (oauthCredentials == null) return null;
       final credential = await _signInWithOAuthCredentials(oauthCredentials);
-
-      // Update user profile and local storage after successful sign-in
       await _updateUserPreferences(credential, provider);
-
       Logger.debug('Firebase authentication successful');
       return credential;
-    } catch (e) {
-      Logger.debug('OAuth authentication error: $e');
-      Logger.handle(e, StackTrace.current, message: 'Authentication failed');
+    } catch (e, stackTrace) {
+      Logger.handle(e, stackTrace, message: 'Authentication failed');
       return null;
+    }
+  }
+
+  Future<Map<String, dynamic>?> _requestOAuthCredentials(
+    String provider, {
+    required bool useCustomToken,
+    bool selectAccount = false,
+    ProviderLinkAuthorization? authorization,
+  }) async {
+    final state = _generateState();
+    final codeVerifier = _generateCodeVerifier();
+    final redirectUri = Env.authRedirectUri;
+    final callbackScheme = Env.authCallbackScheme;
+    final authUrl = Uri.parse('${Env.authApiBaseUrl}v1/auth/authorize').replace(queryParameters: {
+      'provider': provider,
+      'redirect_uri': redirectUri,
+      'state': state,
+      'code_challenge': _codeChallengeForVerifier(codeVerifier),
+      'code_challenge_method': 'S256',
+      if (selectAccount) 'select_account': 'true',
+    });
+
+    final callback = Completer<Uri>();
+    // A platform stream error can arrive while the browser is still launching.
+    callback.future.ignore();
+    final subscription = AppLinks().uriLinkStream.listen(
+      (uri) {
+        if (!callback.isCompleted &&
+            uri.scheme == callbackScheme &&
+            uri.host == 'auth' &&
+            uri.path == '/callback' &&
+            uri.queryParameters['state'] == state) {
+          callback.complete(uri);
+        }
+      },
+      onError: (Object error, StackTrace stackTrace) {
+        if (!callback.isCompleted) callback.completeError(error, stackTrace);
+      },
+    );
+
+    try {
+      if (authorization?._isCancelled == true) return null;
+      final launch = launchUrl(authUrl, mode: LaunchMode.inAppBrowserView);
+      final launched = await (authorization?._untilCancelled(launch) ?? launch);
+      if (launched == null) return null;
+      if (!launched) throw StateError('Failed to launch authentication URL');
+      final pendingCallback = authorization?._untilCancelled(callback.future) ?? callback.future;
+      final uri = await pendingCallback.timeout(const Duration(minutes: 5));
+      if (uri == null || authorization?._isCancelled == true) return null;
+      final code = uri.queryParameters['code'];
+      if (code == null) throw StateError('No authorization code received');
+      final exchange = _exchangeCodeForOAuthCredentials(
+        code,
+        redirectUri,
+        codeVerifier,
+        useCustomToken: useCustomToken,
+      );
+      final credentials = await (authorization?._untilCancelled(exchange) ?? exchange);
+      if (authorization?._isCancelled == true) return null;
+      if (credentials == null || credentials['provider'] != provider) {
+        throw StateError('Failed to exchange provider authorization code');
+      }
+      return credentials;
+    } finally {
+      await subscription.cancel();
     }
   }
 
   Future<Map<String, dynamic>?> _exchangeCodeForOAuthCredentials(
     String code,
     String redirectUri,
-    String codeVerifier,
-  ) async {
+    String codeVerifier, {
+    required bool useCustomToken,
+  }) async {
     try {
-      final useCustomToken = Env.useAuthCustomToken;
-
       final response = await http.post(
         Uri.parse('${Env.authApiBaseUrl}v1/auth/token'),
         headers: {'Content-Type': 'application/x-www-form-urlencoded'},
@@ -759,7 +761,7 @@ class AuthService {
         Logger.debug('Token exchange succeeded');
         return json.decode(response.body);
       } else {
-        Logger.debug('Token exchange failed: ${response.body}');
+        Logger.debug('Token exchange failed: HTTP ${response.statusCode}');
         return null;
       }
     } catch (e) {
@@ -1051,7 +1053,10 @@ class AuthService {
     return base64Url.encode(digest.bytes).replaceAll('=', '');
   }
 
-  AuthSessionSnapshot _captureLinkOwner(User user) {
+  AuthSessionSnapshot _captureLinkOwner(User user, String? expectedOwnerUid) {
+    if (expectedOwnerUid != null && expectedOwnerUid != user.uid) {
+      throw StateError('Account changed before provider linking');
+    }
     handleAuthUserChanged(user.uid);
     final owner = AuthSessionSnapshot(ownerUid: user.uid, generation: _sessionGeneration);
     _requireLinkOwner(owner);
@@ -1064,101 +1069,56 @@ class AuthService {
     }
   }
 
-  Future<ProviderLinkResult?> linkWithProvider(String provider) async {
+  Future<ProviderLinkResult?> linkWithProvider(
+    String provider, {
+    String? expectedOwnerUid,
+    ProviderLinkAuthorization? authorization,
+  }) async {
     final user = _firebaseAuth.currentUser;
     if (user == null) throw StateError('No user is currently signed in');
-    final owner = _captureLinkOwner(user);
-    final credential = await _authorizeProviderLink(provider);
-    return _linkOwnedProvider(owner, user, provider, () => user.linkWithCredential(credential));
+    final owner = _captureLinkOwner(user, expectedOwnerUid);
+    if (authorization != null && !authorization.canCancel) return null;
+    final credential = await _authorizeProviderLink(provider, authorization);
+    if (credential == null) return null;
+    return _linkOwnedProvider(owner, user, provider, credential, authorization: authorization);
   }
 
-  Future<AuthCredential> _authorizeProviderLink(String provider) async {
+  Future<AuthCredential?> _authorizeProviderLink(String provider, ProviderLinkAuthorization? authorization) async {
     final authorize = _authorizeProviderLinkOverride;
-    if (authorize != null) return authorize(provider);
-    final state = _generateState();
-    final codeVerifier = _generateCodeVerifier();
-    final codeChallenge = _codeChallengeForVerifier(codeVerifier);
-    final redirectUri = Env.authRedirectUri;
-    final callbackScheme = Env.authCallbackScheme;
-
-    Logger.debug('Starting OAuth linking flow for provider: $provider');
-
-    final authUrl = Uri.parse('${Env.authApiBaseUrl}v1/auth/authorize').replace(
-      queryParameters: {
-        'provider': provider,
-        'redirect_uri': redirectUri,
-        'state': state,
-        'code_challenge': codeChallenge,
-        'code_challenge_method': 'S256',
-      },
-    ).toString();
-
-    Logger.debug('Authorization URL: $authUrl');
-
-    final launched = await launchUrl(Uri.parse(authUrl), mode: LaunchMode.inAppBrowserView);
-
-    if (!launched) {
-      throw Exception('Failed to launch authentication URL');
+    if (authorize != null) {
+      final pending = authorize(provider);
+      return authorization?._untilCancelled(pending) ?? pending;
     }
-
-    // Listen for the callback URL using app_links
-    final appLinks = AppLinks();
-    late StreamSubscription linkSubscription;
-    final completer = Completer<String>();
-
-    linkSubscription = appLinks.uriLinkStream.listen(
-      (Uri uri) {
-        Logger.debug('Received callback URI: $uri');
-        if (uri.scheme == callbackScheme && uri.host == 'auth' && uri.path == '/callback') {
-          linkSubscription.cancel();
-          completer.complete(uri.toString());
-        }
-      },
-      onError: (error) {
-        Logger.debug('App link error: $error');
-        linkSubscription.cancel();
-        completer.completeError(error);
-      },
+    if (provider == 'google' &&
+        !kIsWeb &&
+        (defaultTargetPlatform == TargetPlatform.iOS || defaultTargetPlatform == TargetPlatform.android) &&
+        !Env.useWebAuth) {
+      final pending = _requestGoogleMobileCredential();
+      return authorization?._untilCancelled(pending) ?? pending;
+    }
+    if (provider == 'apple' && !kIsWeb && defaultTargetPlatform == TargetPlatform.iOS && !Env.useWebAuth) {
+      final pending = _requestAppleMobileCredential().then((result) => result.credential);
+      return authorization?._untilCancelled(pending) ?? pending;
+    }
+    // Minting a custom Firebase token signs in on the server. Linking only needs the provider credential.
+    final oauthCredentials = await _requestOAuthCredentials(
+      provider,
+      useCustomToken: false,
+      selectAccount: provider == 'google',
+      authorization: authorization,
     );
-
-    final result = await completer.future.timeout(
-      const Duration(minutes: 5),
-      onTimeout: () {
-        linkSubscription.cancel();
-        throw Exception('Authentication timeout');
-      },
-    );
-
-    final uri = Uri.parse(result);
-    final code = uri.queryParameters['code'];
-    final returnedState = uri.queryParameters['state'];
-
-    if (code == null) {
-      throw Exception('No authorization code received');
-    }
-
-    if (returnedState != state) {
-      throw Exception('Invalid state parameter');
-    }
-
-    // Exchange the code for OAuth credentials
-    final oauthCredentials = await _exchangeCodeForOAuthCredentials(code, redirectUri, codeVerifier);
-
-    if (oauthCredentials == null) {
-      throw Exception('Failed to exchange code for OAuth credentials');
-    }
-
-    // Create Firebase credential
-    return _createFirebaseCredential(oauthCredentials);
+    return oauthCredentials == null ? null : _createFirebaseCredential(oauthCredentials);
   }
 
-  Future<ProviderLinkResult> _linkOwnedProvider(
+  Future<ProviderLinkResult?> _linkOwnedProvider(
     AuthSessionSnapshot owner,
     User sourceUser,
     String provider,
-    Future<UserCredential> Function() link,
-  ) async {
+    AuthCredential providerCredential, {
+    ProviderLinkAuthorization? authorization,
+  }) async {
     final outcome = await runAccountMutation(() async {
+      if (authorization?._isCancelled == true) return null;
       _requireLinkOwner(owner);
       // Capture proof before the native link can fail or replace currentUser.
       final sourceIsAnonymous = sourceUser.isAnonymous;
@@ -1168,13 +1128,23 @@ class AuthService {
       ProviderLinkResult result;
       var collision = false;
       try {
-        credential = await link();
+        if (authorization != null && !authorization._dispatch()) return null;
+        credential = await sourceUser.linkWithCredential(providerCredential);
         _requireLinkOwner(owner);
         if (credential.user?.uid != owner.ownerUid) throw StateError('Unexpected linked account');
         result = ProviderLinkResult(destinationUid: credential.user?.uid);
       } on FirebaseAuthException catch (error) {
-        if (error.code != 'credential-already-in-use' || error.credential == null) rethrow;
         _requireLinkOwner(owner);
+        if (!sourceIsAnonymous &&
+            const {
+              'credential-already-in-use',
+              'account-exists-with-different-credential',
+              'email-already-in-use',
+            }.contains(error.code)) {
+          throw const ProviderLinkConflict();
+        }
+        final destinationCredential = error.credential;
+        if (error.code != 'credential-already-in-use' || destinationCredential == null) rethrow;
         collision = true;
         result = await resolveProviderCredentialCollision(
           sourceUid: owner.ownerUid,
@@ -1187,7 +1157,7 @@ class AuthService {
             // Already holding the mutation slot: do not call queued wrappers.
             handleAuthUserChanged(null);
             await _tokenGateway.signOut();
-            credential = await _firebaseAuth.signInWithCredential(error.credential!);
+            credential = await _firebaseAuth.signInWithCredential(destinationCredential);
             return credential.user?.uid;
           },
         );
@@ -1196,14 +1166,18 @@ class AuthService {
       if (destination == null || _tokenGateway.currentUser?.uid != destination.uid) {
         throw StateError('Linked account is no longer current');
       }
-      markAuthenticatedUser(destination.uid);
+      // Adding a sign-in method to an established account keeps the live
+      // session and its owner generation, even if the provider issues new tokens.
+      if (sourceIsAnonymous) markAuthenticatedUser(destination.uid);
       return (
         credential: credential,
         result: result,
         collision: collision,
+        sourceWasAnonymous: sourceIsAnonymous,
         owner: AuthSessionSnapshot(ownerUid: destination.uid, generation: _sessionGeneration)
       );
     });
+    if (outcome == null) return null;
     _requireLinkOwner(outcome.owner);
     if (outcome.collision) {
       await getIdToken();
@@ -1213,7 +1187,7 @@ class AuthService {
       SharedPreferencesUtil().uid = user.uid;
       SharedPreferencesUtil().email = user.email ?? '';
       SharedPreferencesUtil().givenName = user.displayName?.split(' ')[0] ?? '';
-    } else {
+    } else if (outcome.sourceWasAnonymous) {
       await _updateUserPreferences(outcome.credential, provider, expectedOwner: outcome.owner);
     }
     _requireLinkOwner(outcome.owner);
@@ -1238,14 +1212,17 @@ class AuthService {
     }
   }
 
-  Future<ProviderLinkResult?> linkWithGoogle() async {
-    return await linkWithProvider('google');
+  Future<ProviderLinkResult?> linkWithGoogle({
+    String? expectedOwnerUid,
+    ProviderLinkAuthorization? authorization,
+  }) {
+    return linkWithProvider('google', expectedOwnerUid: expectedOwnerUid, authorization: authorization);
   }
 
-  Future<ProviderLinkResult?> linkWithApple() async {
-    final user = _firebaseAuth.currentUser;
-    if (user == null) throw StateError('No user is currently signed in');
-    final owner = _captureLinkOwner(user);
-    return _linkOwnedProvider(owner, user, 'apple', () => user.linkWithProvider(AppleAuthProvider()));
+  Future<ProviderLinkResult?> linkWithApple({
+    String? expectedOwnerUid,
+    ProviderLinkAuthorization? authorization,
+  }) {
+    return linkWithProvider('apple', expectedOwnerUid: expectedOwnerUid, authorization: authorization);
   }
 }

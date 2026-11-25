@@ -5,6 +5,7 @@ One object per conversation, at most 16 PCM-digest entries, each usable for
 private evidence cache's encryption and account-deletion write fence.
 """
 
+from utils.conversations.layer import read_product as read_product_conversation
 import json
 import math
 import time
@@ -59,7 +60,7 @@ def load(uid: str, conversation_id: str) -> dict:
 def _source_live(uid: str, conversation_id: str) -> bool:
     if conversation_tombstones.is_deleted(uid, conversation_id):
         return False
-    source = conversations_db.get_conversation(uid, conversation_id)
+    source = read_product_conversation(conversations_db.get_conversation, uid, conversation_id)
     return bool(source and not source.get('deleted') and not source.get('discarded'))
 
 

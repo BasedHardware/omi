@@ -10,11 +10,31 @@
 #                        listen-only fix without a full backend train. The push runs
 #                        in the same GitHub Environment as deploy, so the prod
 #                        registry keeps the prod approval and WIF binding.
+#   workerd-image-only  Publish only the admitted prod workerd image.
+#   workerd-install     Migrate and helm-install prod workerd at workerd_digest from the admitted
+#                       SHA. Refuses unless release-identity.sh prints exactly workerd_identity.
+#   workerd-rollback    helm rollback prod workerd to workerd_helm_revision.
 #   repair-traffic-only  Restore Cloud Run traffic to the serving revisions.
+#   recover-pump-cap    SCA-3318 one-time service-level cap correction on the dark pump.
 
 name: Deploy Backend to Cloud RUN
 
-run-name: Deploy Backend (${{ inputs.environment || github.event_name }} ${{ inputs.mode || github.event_name }}) by ${{ inputs.requested_by || github.actor }}
+run-name: >-
+  ${{ inputs.selected_rollback_revision && format('Select {0}/{1}/{2} sha={3} lock={4} img={5} elig={6} by {7} inverse={8}',
+    inputs.environment, inputs.mode, inputs.cloud_run_service, inputs.release_sha,
+    github.event.inputs.break_glass_lock == 'true' && 'break-glass' || 'prod-train',
+    inputs.service_images == '' && 'default' || 'override',
+    github.event.inputs.skip_eligibility_proof == 'true' && 'bypass' || 'proof',
+    inputs.requested_by, inputs.selected_rollback_revision) ||
+    format('Deploy Backend ({0} {1} service={2} source={3} lock={4} images={5} eligibility={6}) by {7}',
+      inputs.environment || github.event_name,
+      inputs.mode || github.event_name,
+      inputs.cloud_run_service || 'all',
+      inputs.release_sha || '',
+      github.event.inputs.break_glass_lock == 'true' && 'break-glass' || 'prod-train',
+      inputs.service_images == '' && 'default' || 'override',
+      github.event.inputs.skip_eligibility_proof == 'true' && 'bypass' || 'proof',
+      inputs.requested_by || github.actor) }}
 
 on:
   workflow_dispatch:
@@ -47,8 +67,12 @@ on:
         options:
           - deploy
           - build-only
+          - workerd-image-only
+          - workerd-install
+          - workerd-rollback
           - repair-traffic-only
           - operator-qualify-publish
+          - recover-pump-cap
       deploy_targets:
         description: 'Deploy all backend surfaces or Cloud Run only'
         required: true
@@ -57,6 +81,16 @@ on:
         options:
           - all
           - cloud-run-only
+      cloud_run_service:
+        description: 'Cloud Run deploy target; all retains the existing four-service path; backend-projection-pump is explicit-only (SCA-3120)'
+        required: false
+        default: 'all'
+        type: choice
+        options: [all, backend, backend-sync, backend-sync-backfill, backend-integration, backend-projection-pump]
+      selected_rollback_revision:
+        description: 'Named standard deploy only. Exact revision admitted at 100% serving before dispatch.'
+        required: false
+        default: ''
       deploy_gateway:
         description: 'Development only: deploy the LLM gateway binary with the backend stack (requires deploy_targets=all)'
         required: true
@@ -65,6 +99,30 @@ on:
       # Plan B B2 opt-in; blank changes nothing. See backend/docs/runbooks/role-image-cutover.md.
       service_images:
         description: 'mode=deploy only: service=<role image>@sha256 pairs from a build-only run of this release_sha (blank = every service keeps its current image)'
+        required: false
+        default: ''
+      pump_control_sha:
+        description: 'Projection pump only. Full reviewed SHA of the workflow and deploy controls on main.'
+        required: false
+        default: ''
+      pump_release_disposition:
+        description: 'Existing projection pump only. Release comment UUID, serving revision, source SHA, digest-pinned image (space-separated).'
+        required: false
+        default: ''
+      pump_recovery_etag:
+        description: 'SCA-3318 cap recovery only. Fresh Cloud Run v2 service etag from Release readback.'
+        required: false
+        default: ''
+      workerd_digest:
+        description: 'workerd-install only. sha256 digest of gcr.io/based-hardware/workerd to install.'
+        required: false
+        default: ''
+      workerd_identity:
+        description: 'workerd-install only. Exact release-identity.sh JSON object the RELEASE_GO names.'
+        required: false
+        default: ''
+      workerd_helm_revision:
+        description: 'workerd-rollback only. Helm revision of prod-omi-workerd to restore.'
         required: false
         default: ''
       # Break-glass: the eligibility proof requires a *successful* Release
@@ -153,22 +211,67 @@ jobs:
       rollback_revision: ${{ steps.boundary.outputs.rollback_revision }}
     if: >-
       github.event.inputs.mode == 'deploy' ||
-      github.event.inputs.mode == 'build-only'
+      github.event.inputs.mode == 'build-only' ||
+      github.event.inputs.mode == 'workerd-image-only' ||
+      github.event.inputs.mode == 'workerd-install' ||
+      github.event.inputs.mode == 'workerd-rollback' ||
+      github.event.inputs.mode == 'recover-pump-cap'
     runs-on: ubuntu-latest
     steps:
       - name: Reject unsupported production deployment boundary before side effects
+        if: inputs.mode != 'recover-pump-cap'
         id: boundary
         env:
           DEPLOY_ENVIRONMENT: ${{ github.event.inputs.environment }}
           DEPLOY_TARGETS: ${{ github.event.inputs.deploy_targets }}
           WORKFLOW_MODE: ${{ github.event.inputs.mode }}
+          CLOUD_RUN_SERVICE: ${{ github.event.inputs.cloud_run_service || 'all' }}
           SERVICE_IMAGES: ${{ github.event.inputs.service_images }}
+          SELECTED_ROLLBACK_REVISION: ${{ inputs.selected_rollback_revision }}
           REQUESTED_BY: ${{ github.event.inputs.requested_by }}
           RELEASE_SHA: ${{ github.event.inputs.release_sha }}
           SKIP_ELIGIBILITY: ${{ github.event.inputs.skip_eligibility_proof }}
           BREAK_GLASS_LOCK: ${{ github.event.inputs.break_glass_lock }}
+          PUMP_CONTROL_SHA: ${{ inputs.pump_control_sha }}
+          PUMP_RELEASE_DISPOSITION: ${{ inputs.pump_release_disposition }}
+          WORKFLOW_CONTROL_SHA: ${{ github.workflow_sha }}
         run: |
           set -euo pipefail
+          CLOUD_RUN_SERVICE="${CLOUD_RUN_SERVICE:-all}"
+          SELECTED_ROLLBACK_REVISION="${SELECTED_ROLLBACK_REVISION:-}"
+          case "$CLOUD_RUN_SERVICE" in all|backend|backend-sync|backend-sync-backfill|backend-integration|backend-projection-pump) ;; *) exit 1 ;; esac
+          if [[ "$CLOUD_RUN_SERVICE" != all ]]; then
+            [[ "$WORKFLOW_MODE" == deploy && "$DEPLOY_TARGETS" == cloud-run-only && "$DEPLOY_ENVIRONMENT" == prod && "$BREAK_GLASS_LOCK" != true && "$SKIP_ELIGIBILITY" != true ]] || exit 1
+          fi
+          # SCA-3120: the projection pump ships the admitted fat image only, never a role-image opt-in.
+          if [[ "$CLOUD_RUN_SERVICE" == backend-projection-pump ]]; then
+            if [[ -n "${SERVICE_IMAGES//[[:space:],]/}" ]]; then
+              echo 'backend-projection-pump takes no service_images.' >&2
+              exit 1
+            fi
+            if [[ ! "$PUMP_CONTROL_SHA" =~ ^[0-9a-f]{40}$ ||
+                  "$PUMP_CONTROL_SHA" != "$WORKFLOW_CONTROL_SHA" ||
+                  "$WORKFLOW_CONTROL_SHA" != "$GITHUB_SHA" ]]; then
+              echo 'backend-projection-pump requires the reviewed workflow control SHA.' >&2
+              exit 1
+            fi
+            # Publish the actual inputs before the prod environment approval so the
+            # approver can compare the recovery disposition with the Release order.
+            {
+              echo '### Projection pump approval inputs'
+              echo '```json'
+              jq -n --arg control "$WORKFLOW_CONTROL_SHA" --arg source "$RELEASE_SHA" \
+                --arg disposition "$PUMP_RELEASE_DISPOSITION" \
+                '{dispatch_control: $control, requested_source: $source, release_disposition: $disposition}'
+              echo '```'
+            } >> "$GITHUB_STEP_SUMMARY"
+          fi
+          if [[ "$WORKFLOW_MODE" == workerd-* ]]; then
+            if [[ "$DEPLOY_ENVIRONMENT" != prod || "$SKIP_ELIGIBILITY" == true || "$BREAK_GLASS_LOCK" == true ]]; then
+              echo "$WORKFLOW_MODE requires prod and normal release admission." >&2
+              exit 1
+            fi
+          fi
           INTEGRATION_ONLY=false
           INTEGRATION_IMAGE=''
           POST_WRAP_GUARD=internal
@@ -192,7 +295,19 @@ jobs:
               echo 'Integration-only requires exact admitted source/digest and normal production gates.' >&2
               exit 1
             }
+            [[ "$CLOUD_RUN_SERVICE" == all || "$CLOUD_RUN_SERVICE" == backend-integration ]] || exit 1
             INTEGRATION_ONLY=true
+          fi
+          if [[ "$CLOUD_RUN_SERVICE" != all && "$CLOUD_RUN_SERVICE" != backend-projection-pump && "$INTEGRATION_ONLY" != true ]]; then
+            if [[ ! "$SELECTED_ROLLBACK_REVISION" =~ ^${CLOUD_RUN_SERVICE}-[a-z0-9]([a-z0-9-]*[a-z0-9])?$ ||
+                  ${#SELECTED_ROLLBACK_REVISION} -gt 63 ]]; then
+              echo 'Named deploy requires the admitted selected_rollback_revision.' >&2
+              exit 1
+            fi
+            ROLLBACK_REVISION="$SELECTED_ROLLBACK_REVISION"
+          elif [[ -n "$SELECTED_ROLLBACK_REVISION" ]]; then
+            echo 'selected_rollback_revision applies only to a named standard deploy.' >&2
+            exit 1
           fi
           printf 'integration_only=%s\nintegration_image=%s\npost_wrap_guard=%s\nrollback_revision=%s\n' "$INTEGRATION_ONLY" "$INTEGRATION_IMAGE" "$POST_WRAP_GUARD" "$ROLLBACK_REVISION" >> "$GITHUB_OUTPUT"
           if [[ "$DEPLOY_ENVIRONMENT" == prod && "$WORKFLOW_MODE" == deploy &&
@@ -239,6 +354,38 @@ jobs:
             exit 1
           fi
 
+      - name: Bind SCA-3318 recovery approval inputs
+        if: inputs.mode == 'recover-pump-cap'
+        env:
+          DEPLOY_ENVIRONMENT: ${{ inputs.environment }}
+          DEPLOY_TARGETS: ${{ inputs.deploy_targets }}
+          CLOUD_RUN_SERVICE: ${{ inputs.cloud_run_service }}
+          RELEASE_SHA: ${{ inputs.release_sha }}
+          CONTROL_SHA: ${{ inputs.pump_control_sha }}
+          WORKFLOW_CONTROL_SHA: ${{ github.workflow_sha }}
+          APPROVED_ETAG: ${{ inputs.pump_recovery_etag }}
+        run: |
+          set -euo pipefail
+          jq -e '.inputs |
+            .break_glass_lock == "false" and .skip_eligibility_proof == "false" and
+            .deploy_gateway == "false" and
+            ([.service_images, .pump_release_disposition, .break_glass_confirm,
+              .break_glass_reason, .release_version, .selected_rollback_revision] | all(. == "" or . == null)) and
+            (.requested_by | test("[^[:space:]]"))' "$GITHUB_EVENT_PATH" >/dev/null
+          # Cloud Run v2 can return literal outer quotes as part of the etag.
+          etag_pattern='^([A-Za-z0-9_+/=-]{1,200}|"[A-Za-z0-9_+/=-]{1,200}")$'
+          [[ "$GITHUB_EVENT_NAME" == workflow_dispatch && "$GITHUB_REF" == refs/heads/main &&
+             "$GITHUB_REPOSITORY" == BasedHardware/omi && "$GITHUB_RUN_ATTEMPT" == 1 &&
+             "$DEPLOY_ENVIRONMENT" == prod && "$DEPLOY_TARGETS" == cloud-run-only &&
+             "$CLOUD_RUN_SERVICE" == backend-projection-pump &&
+             "$CONTROL_SHA" =~ ^[0-9a-f]{40}$ && "$CONTROL_SHA" == "$WORKFLOW_CONTROL_SHA" &&
+             "$WORKFLOW_CONTROL_SHA" == "$GITHUB_SHA" &&
+             "$RELEASE_SHA" == f7060aa1a0c9e3481790d497140096ae99f9b062 &&
+             "$APPROVED_ETAG" =~ $etag_pattern ]]
+          jq -n --arg control "$CONTROL_SHA" --arg etag "$APPROVED_ETAG" --arg source "$RELEASE_SHA" \
+            '{issue:"SCA-3318", service:"backend-projection-pump", control:$control, etag:$etag,
+              base_source:$source, forward_max:4, inverse_max:20}' >> "$GITHUB_STEP_SUMMARY"
+
   repair-traffic:
     if: >-
       github.ref == 'refs/heads/main' &&
@@ -251,8 +398,10 @@ jobs:
     steps:
       - name: Validate Environment Input
         env:
+          CLOUD_RUN_SERVICE: ${{ github.event.inputs.cloud_run_service || 'all' }}
           REQUESTED_BY: ${{ github.event.inputs.requested_by }}
         run: |
+          [[ "${CLOUD_RUN_SERVICE:-all}" == all ]] || { echo "::error::repair does not accept a service selector" >&2; exit 1; }
           if [[ "${{ github.event.inputs.environment }}" != "development" && "${{ github.event.inputs.environment }}" != "prod" ]]; then
             echo "Invalid environment: ${{ github.event.inputs.environment }}. Must be 'development' or 'prod'."
             exit 1
@@ -271,12 +420,13 @@ jobs:
           # Traffic repair changes no source-derived runtime state. It stays a
           # separate recovery path and does not consume a release proof.
           ref: main
+          fetch-depth: 0
 
       # Prod: GitHub WIF as omi-ci-deployer-prod@ (credential-hygiene WS-C,
       # plan v2 Phase E). Development keeps its JSON lane.
       - name: Google Auth (prod WIF)
         id: auth-wif
-        if: github.event.inputs.environment == 'prod'
+        if: github.event.inputs.environment == 'prod' && (github.event.inputs.cloud_run_service == '' || github.event.inputs.cloud_run_service == 'all')
         uses: 'google-github-actions/auth@v3'
         with:
           workload_identity_provider: projects/208440318997/locations/global/workloadIdentityPools/omi-gha-deploy-prod/providers/github
@@ -296,10 +446,12 @@ jobs:
 
       - name: Restore Cloud Run traffic spec to currently serving revisions
         run: |
+          git fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main
           python3 backend/scripts/repair_cloud_run_traffic.py \
             --project=${{ vars.GCP_PROJECT_ID }} \
             --region=${{ env.REGION }} \
-            --repair
+            --repair \
+            --release-floor-check .github/scripts/verify_backend_release_floor.py
 
       - name: Cloud Run deploy status report
         if: always()
@@ -314,13 +466,13 @@ jobs:
             --cloud-run-service backend-sync-backfill \
             --cloud-run-service backend-integration || true
 
-  # Source admission is shared by deploy and build-only so both modes enforce the
+  # Source admission is shared by deploy and image-only modes so they enforce the
   # one Release Eligibility proof (and break-glass audit) for the exact SHA.
   firestore_readiness:
     needs: validate-production-boundary
     if: >-
       github.ref == 'refs/heads/main' &&
-      (github.event.inputs.mode == 'deploy' || github.event.inputs.mode == 'build-only')
+      (github.event.inputs.mode == 'deploy' || github.event.inputs.mode == 'build-only' || github.event.inputs.mode == 'workerd-image-only' || github.event.inputs.mode == 'workerd-install' || github.event.inputs.mode == 'workerd-rollback')
     environment: ${{ github.event.inputs.environment == 'prod' && 'prod' || 'development' }}
     permissions:
       actions: 'read'
@@ -375,6 +527,8 @@ jobs:
             echo "ERROR: release_sha is not an ancestor of origin/main; only merged code may deploy."
             exit 1
           fi
+
+          python3 .github/scripts/verify_backend_release_floor.py --sha "$DEPLOY_SHA"
 
           if [[ "${SKIP_PROOF:-false}" == "true" ]]; then
             if [[ "$BREAK_GLASS_CONFIRM" != "deploy-without-proof" ]]; then
@@ -651,6 +805,337 @@ jobs:
             echo "\`gh workflow run gcp_backend_listen_helm.yml --ref main -f environment=${DEPLOY_ENVIRONMENT} -f branch=main -f mode=deploy -f image_tag=${SHORT_SHA}\`"
           } >> "$GITHUB_STEP_SUMMARY"
 
+  publish-workerd:
+    name: Build and publish workerd production image
+    needs: [validate-production-boundary, firestore_readiness]
+    if: >-
+      github.ref == 'refs/heads/main' &&
+      inputs.mode == 'workerd-image-only' &&
+      inputs.environment == 'prod' &&
+      needs.firestore_readiness.outputs.break_glass == 'false'
+    environment: prod
+    permissions:
+      contents: 'read'
+      id-token: 'write'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout admitted workerd source
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.firestore_readiness.outputs.admitted_sha }}
+          persist-credentials: false
+
+      - name: Google Auth (WIF)
+        uses: google-github-actions/auth@v3
+        with:
+          workload_identity_provider: projects/208440318997/locations/global/workloadIdentityPools/omi-gha-deploy-prod/providers/github
+          service_account: omi-ci-deployer-prod@based-hardware.iam.gserviceaccount.com
+
+      - name: Set up gcloud
+        uses: google-github-actions/setup-gcloud@v3
+        with:
+          project_id: ${{ vars.GCP_PROJECT_ID }}
+
+      - name: Configure Docker for GCR
+        run: gcloud auth configure-docker --quiet
+
+      - name: Publish admitted workerd image
+        env:
+          ADMITTED_SHA: ${{ needs.firestore_readiness.outputs.admitted_sha }}
+        run: |
+          set -euo pipefail
+          [[ "$ADMITTED_SHA" =~ ^[a-f0-9]{40}$ && "$(git rev-parse HEAD)" == "$ADMITTED_SHA" ]]
+          repository="gcr.io/based-hardware/workerd"
+          image="$repository:${ADMITTED_SHA:0:7}"
+          # SCA-3883: the build context is backend-go/ only, so its git tree identifies the
+          # image. A later admitted SHA with the same tree reuses the published digest instead
+          # of rebuilding, and a Release go-ahead bound to {digest, backend_go_tree} survives
+          # main moving. The tree also covers the chart and values-prod.yaml. The build
+          # invocation below is outside the tree: bump recipe when it changes, so old images
+          # are not reused for a new recipe.
+          recipe=v1
+          tree="$(git rev-parse "$ADMITTED_SHA:backend-go")"
+          [[ "$tree" =~ ^[a-f0-9]{40}$ ]]
+          tree_image="$repository:tree-$recipe-${tree:0:20}"
+
+          describe() {
+            gcloud container images describe "$1" --format='value(image_summary.digest)' 2>"$RUNNER_TEMP/workerd-describe.err"
+          }
+          missing() {
+            grep -qF "[$1] is not found or is not a valid name" "$RUNNER_TEMP/workerd-describe.err"
+          }
+          label() {
+            # A failed read is fatal and named, never mistaken for a mismatch.
+            if ! docker buildx imagetools inspect "$repository@$1" \
+                --format "{{ index .Image.Config.Labels \"$2\" }}" 2>"$RUNNER_TEMP/workerd-label.err"; then
+              echo "::error::Could not read the $2 label of the workerd image." >&2
+              cat "$RUNNER_TEMP/workerd-label.err" >&2
+              return 1
+            fi
+          }
+
+          outcome=''
+          if digest="$(describe "$tree_image")"; then
+            [[ "$digest" =~ ^sha256:[a-f0-9]{64}$ ]]
+            recorded_tree="$(label "$digest" omi.workerd.backend-go-tree)"
+            if [[ "$recorded_tree" != "$tree" ]]; then
+              echo "::error::Existing workerd tree tag has a different backend-go tree."
+              exit 1
+            fi
+            # Keep the per-SHA tag reachable for this admitted SHA too.
+            if [[ -z "$(describe "$image")" ]]; then
+              missing "$image" || { cat "$RUNNER_TEMP/workerd-describe.err" >&2; exit 1; }
+              gcloud container images add-tag --quiet "$repository@$digest" "$image"
+            fi
+            outcome=reused
+          elif ! missing "$tree_image"; then
+            cat "$RUNNER_TEMP/workerd-describe.err" >&2
+            exit 1
+          elif digest="$(describe "$image")"; then
+            [[ "$digest" =~ ^sha256:[a-f0-9]{64}$ ]]
+            revision="$(label "$digest" org.opencontainers.image.revision)"
+            if [[ "$revision" != "$ADMITTED_SHA" ]]; then
+              echo "::error::Existing workerd tag has a different source revision."
+              exit 1
+            fi
+            # An image published before tree labels has none ("<no value>") and stays usable for
+            # its own SHA only. A present label must match, and then the tree tag is added.
+            recorded_tree="$(label "$digest" omi.workerd.backend-go-tree)"
+            if [[ "$recorded_tree" == "$tree" ]]; then
+              gcloud container images add-tag --quiet "$repository@$digest" "$tree_image"
+            elif [[ -n "$recorded_tree" && "$recorded_tree" != '<no value>' ]]; then
+              echo "::error::Existing workerd SHA tag has a different backend-go tree."
+              exit 1
+            fi
+            outcome=existing
+          elif missing "$image"; then
+            docker build --platform linux/amd64 --label "org.opencontainers.image.revision=$ADMITTED_SHA" \
+              --label "omi.workerd.backend-go-tree=$tree" \
+              --tag "$image" --file backend-go/Dockerfile backend-go
+            docker push "$image"
+            digest="$(gcloud container images describe "$image" --format='value(image_summary.digest)')"
+            [[ "$digest" =~ ^sha256:[a-f0-9]{64}$ ]]
+            gcloud container images add-tag --quiet "$repository@$digest" "$tree_image"
+            outcome=built
+          else
+            cat "$RUNNER_TEMP/workerd-describe.err" >&2
+            exit 1
+          fi
+
+          image_revision="$(label "$digest" org.opencontainers.image.revision)"
+          {
+            echo "### Workerd production image published"
+            echo "- Admitted SHA: \`$ADMITTED_SHA\`"
+            echo "- Image revision: \`$image_revision\` ($outcome)"
+            echo "- backend-go tree: \`$tree\`"
+            echo "- Image: \`$repository@$digest\`"
+            echo "- Release identity: \`backend-go/deploy/workerd/release-identity.sh --digest $digest --ref $ADMITTED_SHA --verify-image $repository --check-worktree\` plus the same \`-f\` files as the install"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  # SCA-3883: the CI route for the workerd chart (no direct Helm, permission audit K3).
+  # workerd-install binds to the release identity the RELEASE_GO names: it refuses unless
+  # release-identity.sh, run here on the admitted checkout with the pinned helm, prints
+  # exactly workerd_identity. It migrates first, then installs, then checks rollout and
+  # /ready, and helm-rolls back to the prior revision if any post-install check fails.
+  workerd-helm:
+    name: Install or roll back prod workerd
+    needs: [validate-production-boundary, firestore_readiness]
+    if: >-
+      github.ref == 'refs/heads/main' &&
+      (inputs.mode == 'workerd-install' || inputs.mode == 'workerd-rollback') &&
+      inputs.environment == 'prod' &&
+      needs.firestore_readiness.outputs.break_glass == 'false'
+    environment: prod
+    permissions:
+      contents: 'read'
+      id-token: 'write'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      NAMESPACE: prod-omi-backend
+      RELEASE: prod-omi-workerd
+      REPOSITORY: gcr.io/based-hardware/workerd
+    steps:
+      - name: Checkout admitted workerd source
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.firestore_readiness.outputs.admitted_sha }}
+          persist-credentials: false
+
+      - name: Install Helm
+        uses: azure/setup-helm@v5
+        with:
+          # The release identity binds the helm version; change it only with a new identity.
+          version: v4.2.4
+
+      - name: Google Auth (WIF)
+        uses: google-github-actions/auth@v3
+        with:
+          workload_identity_provider: projects/208440318997/locations/global/workloadIdentityPools/omi-gha-deploy-prod/providers/github
+          service_account: omi-ci-deployer-prod@based-hardware.iam.gserviceaccount.com
+
+      - name: Set up gcloud
+        uses: google-github-actions/setup-gcloud@v3
+        with:
+          project_id: ${{ vars.GCP_PROJECT_ID }}
+
+      - name: Configure Docker for GCR
+        run: gcloud auth configure-docker --quiet
+
+      - name: Get GKE credentials
+        uses: google-github-actions/get-gke-credentials@v3
+        with:
+          cluster_name: ${{ vars.GKE_CLUSTER }}
+          location: ${{ env.REGION }}
+          project_id: ${{ vars.GCP_PROJECT_ID }}
+
+      - name: Record current release
+        id: before
+        run: |
+          set -euo pipefail
+          if ! status_err="$(helm -n "$NAMESPACE" status "$RELEASE" 2>&1 >/dev/null)"; then
+            # A first install has nothing to restore; any other read failure refuses.
+            if [[ "$status_err" == *"release: not found"* && "${{ inputs.mode }}" == workerd-install ]]; then
+              echo "revision=0" >> "$GITHUB_OUTPUT"
+              { echo "### Prod workerd before"; echo "- No Helm release: first install"; } >> "$GITHUB_STEP_SUMMARY"
+              exit 0
+            fi
+            echo "::error::Cannot read the $RELEASE Helm release: $status_err" >&2
+            exit 1
+          fi
+          revision="$(helm -n "$NAMESPACE" history "$RELEASE" --max 1 -o json | jq -r '.[-1].revision')"
+          [[ "$revision" =~ ^[1-9][0-9]*$ ]] || { echo "::error::Cannot read the current $RELEASE revision." >&2; exit 1; }
+          image="$(kubectl -n "$NAMESPACE" get "deployment/$RELEASE" -o jsonpath='{.spec.template.spec.containers[0].image}')"
+          echo "revision=$revision" >> "$GITHUB_OUTPUT"
+          { echo "### Prod workerd before"; echo "- Helm revision: \`$revision\`"; echo "- Image: \`$image\`"; } >> "$GITHUB_STEP_SUMMARY"
+          helm -n "$NAMESPACE" history "$RELEASE" --max 5
+          # This job carries values-prod.yaml only. With private intake live, an install would
+          # silently withdraw the route and a rollback could too, while the Cloud Run notifier
+          # still points at it. Intake changes follow the README's ordered procedure instead.
+          live_intake="$(helm -n "$NAMESPACE" get values "$RELEASE" --all -o json | jq -r '.intake.enabled // false')"
+          if [[ "$live_intake" != false ]]; then
+            echo "::error::$RELEASE has intake.enabled=$live_intake; refusing ${{ inputs.mode }} while private intake is live." >&2
+            exit 1
+          fi
+
+      - name: Verify release identity
+        if: inputs.mode == 'workerd-install'
+        env:
+          ADMITTED_SHA: ${{ needs.firestore_readiness.outputs.admitted_sha }}
+          WORKERD_DIGEST: ${{ inputs.workerd_digest }}
+          EXPECTED_IDENTITY: ${{ inputs.workerd_identity }}
+        run: |
+          set -euo pipefail
+          [[ "$WORKERD_DIGEST" =~ ^sha256:[a-f0-9]{64}$ ]] || { echo '::error::workerd_digest must be sha256:<64 hex>.' >&2; exit 1; }
+          identity="$(bash backend-go/deploy/workerd/release-identity.sh --digest "$WORKERD_DIGEST" \
+            --ref "$ADMITTED_SHA" --verify-image "$REPOSITORY" --check-worktree)"
+          { echo "### Workerd release identity"; echo '```'; echo "$identity"; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+          if [[ "$identity" != "$EXPECTED_IDENTITY" ]]; then
+            echo "::error::Release identity differs from workerd_identity; refusing to install." >&2
+            printf 'computed: %s\nexpected: %s\n' "$identity" "$EXPECTED_IDENTITY" >&2
+            exit 1
+          fi
+
+      - name: Run migration Job
+        if: inputs.mode == 'workerd-install'
+        env:
+          WORKERD_DIGEST: ${{ inputs.workerd_digest }}
+        run: |
+          set -euo pipefail
+          chart=backend-go/deploy/workerd
+          job="$RELEASE-migrate"
+          if kubectl -n "$NAMESPACE" get "job/$job" >/dev/null 2>&1; then
+            kubectl -n "$NAMESPACE" delete "job/$job" --wait=true
+          fi
+          helm template "$RELEASE" "$chart" --namespace "$NAMESPACE" -f "$chart/values-prod.yaml" \
+            --set-string "image.digest=$WORKERD_DIGEST" --set migration.enabled=true \
+            --show-only templates/migration.yaml | kubectl -n "$NAMESPACE" create -f -
+          if ! kubectl -n "$NAMESPACE" wait --for=condition=complete "job/$job" --timeout=150s; then
+            kubectl -n "$NAMESPACE" describe "job/$job" || true
+            kubectl -n "$NAMESPACE" logs "job/$job" --tail=50 || true
+            echo "::error::Workerd migration did not complete; the Deployment is unchanged." >&2
+            exit 1
+          fi
+          echo "- Migration: \`job/$job\` complete" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Install chart
+        id: install
+        if: inputs.mode == 'workerd-install'
+        env:
+          WORKERD_DIGEST: ${{ inputs.workerd_digest }}
+        run: |
+          set -euo pipefail
+          chart=backend-go/deploy/workerd
+          helm upgrade --install "$RELEASE" "$chart" --namespace "$NAMESPACE" \
+            -f "$chart/values-prod.yaml" --set-string "image.digest=$WORKERD_DIGEST"
+
+      - name: Roll back to requested revision
+        id: rollback
+        if: inputs.mode == 'workerd-rollback'
+        env:
+          REVISION: ${{ inputs.workerd_helm_revision }}
+        run: |
+          set -euo pipefail
+          [[ "$REVISION" =~ ^[1-9][0-9]*$ ]] || { echo '::error::workerd_helm_revision must be a Helm revision number.' >&2; exit 1; }
+          # Rollback restores the worker only. Private intake has its own approval and must
+          # never come back through a rollback, so refuse a target revision with it enabled.
+          intake="$(helm -n "$NAMESPACE" get values "$RELEASE" --revision "$REVISION" --all -o json | jq -r '.intake.enabled // false')"
+          if [[ "$intake" != false ]]; then
+            echo "::error::Helm revision $REVISION has intake.enabled=$intake; refusing a rollback that would enable private intake." >&2
+            exit 1
+          fi
+          helm -n "$NAMESPACE" rollback "$RELEASE" "$REVISION" --wait --timeout 5m
+
+      - name: Verify rollout and readiness
+        id: verify
+        env:
+          WORKERD_DIGEST: ${{ inputs.workerd_digest }}
+        run: |
+          set -euo pipefail
+          kubectl -n "$NAMESPACE" rollout status "deployment/$RELEASE" --timeout=5m
+          kubectl -n "$NAMESPACE" port-forward "deployment/$RELEASE" 18080:8080 >"$RUNNER_TEMP/pf.log" 2>&1 &
+          pf=$!
+          trap 'kill "$pf" 2>/dev/null || true' EXIT
+          for _ in $(seq 1 20); do curl -fsS -m 3 http://127.0.0.1:18080/ready >/dev/null 2>&1 && break; sleep 1; done
+          curl -fsS -m 5 http://127.0.0.1:18080/ready
+          image="$(kubectl -n "$NAMESPACE" get "deployment/$RELEASE" -o jsonpath='{.spec.template.spec.containers[0].image}')"
+          ready="$(kubectl -n "$NAMESPACE" get "deployment/$RELEASE" -o jsonpath='{.status.readyReplicas}/{.spec.replicas}')"
+          if [[ "${{ inputs.mode }}" == workerd-install && "$image" != "$REPOSITORY@$WORKERD_DIGEST" ]]; then
+            echo "::error::Deployment serves $image, not $REPOSITORY@$WORKERD_DIGEST." >&2
+            exit 1
+          fi
+          [[ "${ready%/*}" == "${ready#*/}" ]] || { echo "::error::Only $ready workerd replicas are ready." >&2; exit 1; }
+          revision="$(helm -n "$NAMESPACE" history "$RELEASE" --max 1 -o json | jq -r '.[-1].revision')"
+          {
+            echo "### Prod workerd after (${{ inputs.mode }})"
+            echo "- Helm revision: \`$revision\` (before: \`${{ steps.before.outputs.revision }}\`)"
+            echo "- Image: \`$image\`"
+            echo "- Ready: \`$ready\`, \`/ready\` 200"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Restore prior revision after a failed install
+        if: failure() && inputs.mode == 'workerd-install' && steps.install.outcome != 'skipped'
+        env:
+          REVISION: ${{ steps.before.outputs.revision }}
+        run: |
+          set -euo pipefail
+          if [[ "$REVISION" == 0 ]]; then
+            # First install: nothing to restore. Leave the failed release for inspection.
+            echo "- **First install failed; no prior revision to restore.**" >> "$GITHUB_STEP_SUMMARY"
+            exit 1
+          fi
+          intake="$(helm -n "$NAMESPACE" get values "$RELEASE" --revision "$REVISION" --all -o json | jq -r '.intake.enabled // false')"
+          if [[ "$intake" != false ]]; then
+            echo "::error::Helm revision $REVISION has intake.enabled=$intake; not restoring it automatically." >&2
+            exit 1
+          fi
+          helm -n "$NAMESPACE" rollback "$RELEASE" "$REVISION" --wait --timeout 5m
+          kubectl -n "$NAMESPACE" rollout status "deployment/$RELEASE" --timeout=5m
+          {
+            echo "- **Install failed; restored Helm revision \`$REVISION\`.**"
+            echo "- The migration already applied stays. If the restored image rejects the current migration checksums, fix forward."
+          } >> "$GITHUB_STEP_SUMMARY"
+
   # Plan B B2 release train: build-only also publishes every role image
   # (backend/Dockerfile.roles targets and listen-edge) from the admitted SHA,
   # stamped OMI_RELEASE_SHA and labelled with that revision, on the private base.
@@ -752,6 +1237,7 @@ jobs:
       always() &&
       github.ref == 'refs/heads/main' &&
       github.event.inputs.mode == 'deploy' &&
+      github.event.inputs.cloud_run_service != 'backend-projection-pump' &&
       needs.validate-production-boundary.result == 'success' &&
       needs.firestore_readiness.result == 'success' &&
       (needs.record_break_glass.result == 'success' || needs.record_break_glass.result == 'skipped')
@@ -789,6 +1275,7 @@ jobs:
           admitted_sha: ${{ needs.firestore_readiness.outputs.admitted_sha }}
           environment: ${{ github.event.inputs.environment }}
           deploy_targets: ${{ github.event.inputs.deploy_targets }}
+          cloud_run_service: ${{ github.event.inputs.cloud_run_service || 'all' }}
           deploy_gateway: ${{ github.event.inputs.deploy_gateway }}
           service_images: ${{ github.event.inputs.service_images }}
           release_version: ${{ github.event.inputs.release_version }}
@@ -814,7 +1301,7 @@ jobs:
 
       - name: Provision backend route and request storm alerts
         id: backend-route-alert
-        if: github.event.inputs.environment == 'prod'
+        if: github.event.inputs.environment == 'prod' && (github.event.inputs.cloud_run_service == '' || github.event.inputs.cloud_run_service == 'all')
         continue-on-error: true
         timeout-minutes: 15
         env:
@@ -862,7 +1349,7 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Provision Firestore missing-index alert
-        if: github.event.inputs.environment == 'prod'
+        if: github.event.inputs.environment == 'prod' && (github.event.inputs.cloud_run_service == '' || github.event.inputs.cloud_run_service == 'all')
         env:
           ALERT_CHANNELS: ${{ vars.SYNC_BACKFILL_ALERT_NOTIFICATION_CHANNELS }}
           PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
@@ -879,6 +1366,86 @@ jobs:
           python3 "$DEPLOY_WORKFLOW_ROOT/.github/scripts/ensure_firestore_missing_index_alert.py" \
             --project "$PROJECT_ID" \
             --notification-channels "$ALERT_CHANNELS"
+
+  # SCA-3120: the dedicated projection pump is a fifth Cloud Run service with its own
+  # composite. It runs only for an explicit manual prod cloud-run-only selection, under
+  # the same prod-train concurrency group, admission and break-glass jobs as deploy; the
+  # deploy job above never runs for it, so the four-service stack is untouched.
+  deploy-projection-pump:
+    needs: [validate-production-boundary, firestore_readiness, record_break_glass]
+    if: >-
+      always() &&
+      github.ref == 'refs/heads/main' &&
+      github.event.inputs.mode == 'deploy' &&
+      github.event.inputs.environment == 'prod' &&
+      github.event.inputs.cloud_run_service == 'backend-projection-pump' &&
+      needs.validate-production-boundary.result == 'success' &&
+      needs.firestore_readiness.result == 'success' &&
+      (needs.record_break_glass.result == 'success' || needs.record_break_glass.result == 'skipped')
+    environment: prod
+    permissions:
+      contents: 'read'
+      id-token: 'write'
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - name: Checkout workflow dispatch surface for composite action
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.workflow_sha }}
+
+      - name: Deploy backend projection pump
+        uses: ./.github/actions/deploy-projection-pump
+        with:
+          admitted_sha: ${{ needs.firestore_readiness.outputs.admitted_sha }}
+          reviewed_control_sha: ${{ inputs.pump_control_sha }}
+          release_disposition: ${{ inputs.pump_release_disposition }}
+          environment: ${{ github.event.inputs.environment }}
+          runtime_env: ${{ vars.ENV }}
+          workload_identity_provider: projects/208440318997/locations/global/workloadIdentityPools/omi-gha-deploy-prod/providers/github
+          workload_identity_service_account: omi-ci-deployer-prod@based-hardware.iam.gserviceaccount.com
+          project_id: ${{ vars.GCP_PROJECT_ID }}
+          region: ${{ env.REGION }}
+          release_version: ${{ github.event.inputs.release_version }}
+
+  recover-projection-pump-cap:
+    needs: validate-production-boundary
+    if: >-
+      github.event_name == 'workflow_dispatch' &&
+      github.ref == 'refs/heads/main' &&
+      inputs.mode == 'recover-pump-cap' &&
+      inputs.environment == 'prod' &&
+      inputs.cloud_run_service == 'backend-projection-pump' &&
+      !inputs.break_glass_lock &&
+      !inputs.skip_eligibility_proof &&
+      needs.validate-production-boundary.result == 'success'
+    environment: prod
+    permissions:
+      contents: read
+      id-token: write
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - name: Checkout exact reviewed recovery controls
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.workflow_sha }}
+          persist-credentials: false
+      - name: Verify recovery control checkout
+        env:
+          CONTROL_SHA: ${{ inputs.pump_control_sha }}
+        run: test "$(git rev-parse HEAD)" = "$CONTROL_SHA"
+      - name: Authenticate existing production workflow identity
+        uses: google-github-actions/auth@v3
+        with:
+          workload_identity_provider: projects/208440318997/locations/global/workloadIdentityPools/omi-gha-deploy-prod/providers/github
+          service_account: omi-ci-deployer-prod@based-hardware.iam.gserviceaccount.com
+      - name: Set up existing gcloud client
+        uses: google-github-actions/setup-gcloud@v3
+      - name: Validate, correct and read back only the pump service cap
+        env:
+          APPROVED_ETAG: ${{ inputs.pump_recovery_etag }}
+        run: python3 backend/scripts/recover_projection_pump_cap.py --etag="$APPROVED_ETAG"
 
   # SOURCE-ONLY PROPOSAL: contract remains closed until approved ingress IDs
   # and existing repository authorization evidence are reviewed and committed.

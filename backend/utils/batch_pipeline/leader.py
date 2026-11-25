@@ -16,10 +16,9 @@ cost and contention control only, never a correctness fence:
   before this lease existed. ``BATCH_PIPELINE_LEADER_LEASE_ENABLED=false`` does
   the same unconditionally.
 
-The strict ``upload_coalescing_scan`` role is the exception: it always elects,
-fails closed on errors, and supplies transactional token witnesses for scan
-progress, heartbeat and new group claims. Existing group custody has its own
-independent lease and survives discovery takeover.
+The upload coalescing and projection outbox scan roles always elect, fail
+closed on errors, and supply transactional token witnesses for scan progress.
+Delivery and custody claims survive discovery takeover.
 """
 
 import logging
@@ -43,10 +42,12 @@ PUMP_RECOVERY = 'pump_recovery'
 SERVING_MAINTENANCE = 'serving_maintenance'
 QUEUE_METRICS = 'queue_metrics'
 TIMELINESS_METRICS = 'timeliness_metrics'
+PROJECTION_OUTBOX_SCAN = 'projection_outbox_scan'
+STRICT_ROLES = frozenset({UPLOAD_COALESCING_SCAN, PROJECTION_OUTBOX_SCAN})
 # Cover supervised tick jitter and sample RPCs between configured samples;
 # the default sampling cadence remains 300s.
 TIMELINESS_LEASE_GRACE_SECONDS = 60.0
-ROLES = frozenset({PUMP_RECOVERY, SERVING_MAINTENANCE, QUEUE_METRICS, TIMELINESS_METRICS, UPLOAD_COALESCING_SCAN})
+ROLES = STRICT_ROLES | {PUMP_RECOVERY, SERVING_MAINTENANCE, QUEUE_METRICS, TIMELINESS_METRICS}
 LEASE_EVENTS = Counter('omi_batch_leader_lease_total', 'Lease checks by static role and outcome', ['role', 'outcome'])
 
 
@@ -77,7 +78,7 @@ class LeaderLease:
 
     def acquire(self) -> bool:
         """True when this replica should run the guarded loop this tick."""
-        if self.role != UPLOAD_COALESCING_SCAN and not leader_lease_enabled():
+        if self.role not in STRICT_ROLES and not leader_lease_enabled():
             return True
         # One process-local holder may be acquired from several executor
         # threads (serving supervisor and /metrics); serialize so a losing
@@ -118,7 +119,7 @@ class LeaderLease:
         try:
             token = self.store.run(body)
         except Exception as error:
-            strict = self.role == UPLOAD_COALESCING_SCAN
+            strict = self.role in STRICT_ROLES
             LEASE_EVENTS.labels(role=self.role, outcome='error').inc()
             logger.warning(
                 'event=batch_leader_lease role=%s outcome=%s exception_type=%s',
@@ -141,6 +142,6 @@ class LeaderLease:
 
     def guard(self) -> LeaseGuard:
         """Immutable token for a strict scan, never the mutable next acquisition."""
-        if self.role != UPLOAD_COALESCING_SCAN or self.token is None:
+        if self.role not in STRICT_ROLES or self.token is None:
             raise LeaseLost('strict scan ownership required')
         return LeaseGuard(self.role, self.holder, self.token, self.clock)

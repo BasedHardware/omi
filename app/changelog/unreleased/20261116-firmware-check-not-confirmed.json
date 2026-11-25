@@ -1,0 +1,3 @@
+{
+  "change": "Firmware Update no longer says your device is up to date when the release info is unusable, your firmware is too old for the update, the update needs a newer app, or your device's version couldn't be read"
+}

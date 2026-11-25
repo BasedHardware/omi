@@ -20,6 +20,20 @@ import urllib.parse
 import urllib.request
 from pathlib import Path
 
+if __package__ in (None, ''):
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+from scripts.redis_pager_route import (  # noqa: E402
+    CONTACT_POINTS_PATH,
+    POLICIES_PATH,
+    REDIS_PAGER_UID,
+    TELEGRAM_RECEIVER as RECEIVER,
+    redis_contact_error,
+    redis_receiver_scope_error,
+    rule_route_error,
+    validate_publisher_url,
+)
+
 ROOT = Path(__file__).resolve().parents[2]
 RULES = ROOT / 'backend/charts/monitoring/alert-rules.json'
 FIELDS = (
@@ -42,7 +56,6 @@ FIELDS = (
     'missingSeriesEvalsToResolve',
 )
 API = '/api/v1/provisioning/alert-rules'
-RECEIVER = 'Omi - Services Alerting (Telegram)'
 CANARY_UIDS = ('omi-datasource-prometheus', 'omi-datasource-cloud-monitoring', 'omi-datasource-gmp')
 EXPRESSION_DATASOURCES = ('__expr__', '-100')
 
@@ -65,6 +78,11 @@ def index_rules(payload: object) -> dict[str, dict]:
 # them even when the committed source omits them; they are not semantic drift.
 QUERY_DEFAULTS = (('queryType', ''),)
 MODEL_DEFAULTS = (('intervalMs', 1000), ('maxDataPoints', 43200))
+# Grafana's NotificationSettings marks these lists `omitempty`, so an empty list
+# is dropped on save and readback omits the key. Empty and absent are the same
+# setting: an empty group_by inherits the parent group, and no mute/active
+# interval is no interval.
+NOTIFICATION_LIST_DEFAULTS = ('group_by', 'mute_time_intervals', 'active_time_intervals')
 DURATION_UNITS = {'ms': 0.001, 's': 1, 'm': 60, 'h': 3600, 'd': 86400, 'w': 604800}
 
 
@@ -100,6 +118,9 @@ def comparable(rule: dict) -> dict:
                     model.pop(key)
     settings = result.get('notification_settings')
     if isinstance(settings, dict):
+        for key in NOTIFICATION_LIST_DEFAULTS:
+            if key in settings and settings[key] == []:
+                settings.pop(key)
         for key in ('group_wait', 'group_interval', 'repeat_interval'):
             if key in settings:
                 settings[key] = duration_seconds(settings[key])
@@ -153,10 +174,8 @@ def load_rules(path: Path) -> dict[str, dict]:
     for uid, rule in rules.items():
         if not {'folderUID', 'ruleGroup', 'condition', 'data', 'isPaused'} <= rule.keys():
             raise ValueError(f'{uid}: incomplete alert definition')
-        if rule.get('labels', {}).get('alert_identity') != uid:
-            raise ValueError(f'{uid}: missing stable alert identity')
-        if rule.get('notification_settings', {}).get('receiver') != RECEIVER:
-            raise ValueError(f'{uid}: unexpected notification receiver')
+        if error := rule_route_error(uid, rule):
+            raise ValueError(error)
     errors = [error for rule in rules.values() for error in invalid_query_windows(rule)]
     if errors:
         raise ValueError('\n'.join(errors))
@@ -290,9 +309,11 @@ def probe_datasources(api: Grafana, rules: dict[str, dict]) -> list[str]:
 
 def reconcile(api: Grafana, desired: dict[str, dict], *, backup: Path | None = None) -> list[str]:
     live = api.rules()
+    # The Redis phone cutover has its own approval and readback scope.
+    bulk_desired = {uid: rule for uid, rule in desired.items() if uid != REDIS_PAGER_UID}
     if backup is None:
-        return drift(desired, live)
-    needs_canaries = any(rule.get('execErrState') == 'KeepLast' for rule in desired.values())
+        return drift(bulk_desired, {uid: rule for uid, rule in live.items() if uid != REDIS_PAGER_UID})
+    needs_canaries = any(rule.get('execErrState') == 'KeepLast' for rule in bulk_desired.values())
     canaries = {uid: desired[uid] for uid in CANARY_UIDS if uid in desired}
     if needs_canaries and len(canaries) != len(CANARY_UIDS):
         raise ValueError('KeepLast requires every committed datasource canary')
@@ -303,7 +324,7 @@ def reconcile(api: Grafana, desired: dict[str, dict], *, backup: Path | None = N
             or rule.get('noDataState') != 'Alerting'
         ):
             raise ValueError('datasource canaries must be active and page on errors and no data')
-    contacts = api.request('/api/v1/provisioning/contact-points')
+    contacts = api.request(CONTACT_POINTS_PATH)
     if not isinstance(contacts, list) or not any(
         point.get('name') == RECEIVER
         and point.get('type') == 'telegram'
@@ -312,7 +333,7 @@ def reconcile(api: Grafana, desired: dict[str, dict], *, backup: Path | None = N
         if isinstance(point, dict)
     ):
         raise ValueError('Telegram receiver is missing or resolve notifications disabled')
-    for folder in sorted({rule['folderUID'] for rule in desired.values()}):
+    for folder in sorted({rule['folderUID'] for rule in bulk_desired.values()}):
         api.request('/api/folders/' + urllib.parse.quote(folder, safe=''))
     # Grafana forbids mixing API- and UI-provisioned rules in a group. Preserve
     # each existing group's provenance; new groups are API-managed. File-owned
@@ -325,7 +346,7 @@ def reconcile(api: Grafana, desired: dict[str, dict], *, backup: Path | None = N
             raise ValueError('live rule group has mixed provenance')
         provenance[group] = value
     planned = []
-    for uid, rule in sorted(desired.items()):
+    for uid, rule in sorted(bulk_desired.items()):
         if uid in live and comparable(rule) == comparable(live[uid]):
             continue
         current = live[uid].get('provenance', '') if uid in live else 'api'
@@ -340,7 +361,7 @@ def reconcile(api: Grafana, desired: dict[str, dict], *, backup: Path | None = N
     fd = os.open(backup, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
     with os.fdopen(fd, 'w') as handle:
         json.dump(
-            {'rules': list(live.values()), 'created_uids': sorted(desired.keys() - live.keys())}, handle, indent=2
+            {'rules': list(live.values()), 'created_uids': sorted(bulk_desired.keys() - live.keys())}, handle, indent=2
         )
         handle.flush()
         os.fsync(handle.fileno())
@@ -367,7 +388,23 @@ def reconcile(api: Grafana, desired: dict[str, dict], *, backup: Path | None = N
         if failures:
             return failures
     apply_rules(item for item in planned if item[0] not in canaries)
-    return drift(desired, api.rules())
+    bulk_live = {uid: rule for uid, rule in api.rules().items() if uid != REDIS_PAGER_UID}
+    return drift(bulk_desired, bulk_live)
+
+
+def check_redis_pilot(
+    api: Grafana, rules: dict[str, dict], publisher_url: str, alias_hosts: tuple[str, ...] = ()
+) -> list[str]:
+    validate_publisher_url(publisher_url)
+    desired = rules.get(REDIS_PAGER_UID)
+    if desired is None:
+        raise ValueError('committed Redis pilot rule is missing')
+    if error := redis_contact_error(api.request(CONTACT_POINTS_PATH), publisher_url, alias_hosts):
+        return [error]
+    current = api.rules()
+    if error := redis_receiver_scope_error(current, api.request(POLICIES_PATH)):
+        return [error]
+    return drift({REDIS_PAGER_UID: desired}, {uid: rule for uid, rule in current.items() if uid == REDIS_PAGER_UID})
 
 
 def main() -> int:
@@ -380,8 +417,16 @@ def main() -> int:
     parser.add_argument('--lint', action='store_true')
     parser.add_argument('--regenerate', action='store_true', help='offline: rebuild combined export from split sources')
     parser.add_argument('--probe-datasources', action='store_true', help='read-only canary queries through Grafana')
+    parser.add_argument('--redis-pilot-url', help='read-only Redis pilot rule and dedicated contact check')
+    parser.add_argument('--redis-pilot-alias-host', action='append', default=[], help='reviewed relay ingress alias')
     args = parser.parse_args()
     try:
+        if args.redis_pilot_alias_host and args.redis_pilot_url is None:
+            raise ValueError('--redis-pilot-alias-host requires --redis-pilot-url')
+        if args.redis_pilot_url is not None and (
+            args.apply or args.backup_file or args.regenerate or args.lint or args.probe_datasources
+        ):
+            raise ValueError('--redis-pilot-url is a standalone read-only check')
         if args.regenerate:
             if args.apply or args.backup_file or args.probe_datasources:
                 raise ValueError('regeneration is offline only')
@@ -400,17 +445,23 @@ def main() -> int:
         if not token:
             raise ValueError(f'{args.token_env} is empty')
         api = Grafana(args.grafana_url, token)
-        differences = (
-            probe_datasources(api, rules) if args.probe_datasources else reconcile(api, rules, backup=args.backup_file)
-        )
+        if args.redis_pilot_url is not None:
+            differences = check_redis_pilot(api, rules, args.redis_pilot_url, tuple(args.redis_pilot_alias_host))
+        elif args.probe_datasources:
+            differences = probe_datasources(api, rules)
+        else:
+            differences = reconcile(api, rules, backup=args.backup_file)
         for difference in differences:
             print('DRIFT ' + difference)
         if differences:
             return 1
+        if args.redis_pilot_url is not None:
+            print('Verified Redis pilot rule and dedicated webhook')
+            return 0
         print(
             'Canary query probes passed'
             if args.probe_datasources
-            else f'Verified {len(rules)} production alert definitions; no drift'
+            else f'Verified {len(rules) - int(REDIS_PAGER_UID in rules)} bulk-managed alert definitions; no drift'
         )
         return 0
     except (ValueError, OSError):

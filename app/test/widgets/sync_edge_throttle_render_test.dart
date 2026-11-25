@@ -17,10 +17,11 @@ import 'package:omi/providers/sync_provider.dart';
 import 'package:omi/providers/user_provider.dart';
 import 'package:omi/services/wals/sync_rate_limiter.dart';
 import 'package:omi/services/wals/wal.dart';
+import 'package:omi/services/wals/wal_derived_sync_views.dart';
 import 'package:omi/ui/ui.dart';
 import '../helpers/sfpro_font_fixtures.dart';
 
-class _ThrottledSync extends ChangeNotifier implements SyncProvider {
+class _ThrottledSync extends ChangeNotifier with WalDerivedSyncViews implements SyncProvider {
   @override
   SyncState get syncState => const SyncState();
   @override

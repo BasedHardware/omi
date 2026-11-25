@@ -1,5 +1,5 @@
 # Retire the streaming GPU writer before applying the off overlays.
-# Wait for any existing guard Job to finish before setting deployment replicas to zero.
+# Wait for any pre-retirement guard Job to finish before setting deployment replicas to zero.
 parakeetSuspended: true
 namespace: prod-omi-backend
 hpaName: prod-omi-parakeet

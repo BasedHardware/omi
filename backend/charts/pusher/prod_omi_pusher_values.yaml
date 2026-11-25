@@ -148,6 +148,17 @@ env:
     value: "true"
   - name: CONVERSATION_NOTES_SCALED_DETAIL_ENABLED
     value: "true"
+  # Cloud Tasks binding for the conversations v3 reconcile dispatch (same values as backend-listen).
+  - name: SYNC_TASKS_PROJECT
+    value: "based-hardware"
+  - name: SYNC_TASKS_LOCATION
+    value: "us-central1"
+  - name: CONVERSATIONS_V3_STAGE
+    valueFrom:
+      configMapKeyRef: {name: prod-omi-backend-config, key: CONVERSATIONS_V3_STAGE}
+  - name: CONVERSATIONS_V3_FIRST_APP_BUILD
+    valueFrom:
+      configMapKeyRef: {name: prod-omi-backend-config, key: CONVERSATIONS_V3_FIRST_APP_BUILD}
   - name: RECORD_TOKEN_LEASE_MODE
     valueFrom:
       configMapKeyRef: {name: prod-omi-backend-config, key: RECORD_TOKEN_LEASE_MODE}
@@ -173,6 +184,8 @@ env:
     value: "true"
   - name: SYNC_RECORD_DECODE_FAILURE_MEMO
     value: "true"
+  - name: CONVERSATION_PARKED_TERMINAL_STATUS_ENABLED
+    value: "off"
   - name: CONVERSATION_TERMINAL_FAMILY_MODE
     value: "on"
   - name: HOME_TRANSCRIPTION_PRESENTATION_GATE
@@ -238,7 +251,9 @@ env:
   - name: PLAYBACK_ON_DEMAND_ENABLED
     value: "true"
   - name: SYNC_POLL_BACKOFF_ENABLED
-    value: "false"
+    value: "true"
+  - name: SYNC_POLL_BACKOFF_PERCENT
+    value: "5"
   - name: AUDIO_ARCHIVE_LIVE_ENABLED
     value: "true"
   - name: AUDIO_ARCHIVE_READ_ENABLED
@@ -249,8 +264,6 @@ env:
     value: "false"
   - name: AUDIO_ARCHIVE_REGIONAL_CACHE_ENABLED
     value: "false"
-  - name: AUDIO_ARCHIVE_SEPARATE_MERGE_ENABLED
-    value: "false"
   - name: AUDIO_ARCHIVE_PERCENT
     value: "100"
   - name: AUDIO_ARCHIVE_STOP_PCM_PERCENT
@@ -260,8 +273,6 @@ env:
   - name: AUDIO_ARCHIVE_REGIONAL_CHUNKS_PERCENT
     value: "0"
   - name: BUCKET_AUDIO_DERIVED
-    value: ""
-  - name: AUDIO_MERGE_WORKER_URL
     value: ""
   # Bounded, process-local late identity repair coalescing; rollback with false.
   - name: OWNER_IDENTITY_RETRY_COALESCE_ENABLED
@@ -378,16 +389,12 @@ env:
   # existing v1 sessions and resumed v1 conversations are unaffected.
   - name: AUDIO_TIMELINE_V2
     value: "false"
-  - name: LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION
-    value: 'false'
   - name: LIVE_CAPTURE_WINDOW_MERGE_UNION
     value: 'true'
   - name: LIVE_CAPTURE_WINDOW_TRANSLATOR_SENDS
     value: "true"
   - name: SONIOX_WIRE_LEDGER
     value: "true"
-  - name: SONIOX_ORDERED_FINALIZE
-    value: "false"
   - name: SONIOX_CAPTURE_AXIS_DIAGNOSTICS
     value: "true"
   # Inert co-host mirror of backend-listen; pusher does not run the S1 producer.
@@ -811,3 +818,11 @@ affinity:
               values:
                 - pusher-pool-v3
                 - pusher-pool-v3-bc
+
+# GMP only: local Prometheus still scrapes every family at 15s for HPA/pages.
+# Keep job-pinned custody guards, privacy, GMP paging and freshness at 15s.
+# Complementary filters export all remaining families once per 120s.
+# Set bulkInterval to 60s to restore the prior bulk cadence.
+podMonitoring:
+  bulkInterval: 120s
+  fastMetrics: 'backend_listen_active_ws_connections|pusher_active_ws_connections|privacy_.*|omi_audio_.*|omi_record_.*|omi_firestore_billed_reads_by_caller_total|omi_firestore_caller_label_overflow_total|omi_batch_pipeline_completed_audio_seconds_total|.*_(timestamp|refreshed_at|observed_at)_seconds'

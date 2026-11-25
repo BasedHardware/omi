@@ -961,7 +961,7 @@ def _backfill_recent_daily_summaries(uid, display_date, tz_name: Optional[str]) 
 def _run_open_loops_daily_pass(uid, date_str, start_date_utc, end_date_utc, tz_name) -> None:
     """The open-loops daily pass as a sibling step of the recap (fail-open).
 
-    One structured call per user per local day, dispatched only after the
+    One structured result per user per local day, dispatched only after the
     recap's own work for that user fully finished (see
     ``_start_open_loops_passes``): it reuses the recap's conversation
     render, updates the loop store and stores the day's Review cards (not

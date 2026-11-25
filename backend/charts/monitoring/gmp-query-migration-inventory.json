@@ -650,7 +650,7 @@
         "omi_batch_held_oldest_age_seconds",
         "omi_batch_timeliness_observed_at_seconds"
       ],
-      "owner_title": "Held batch staging input older than 21 days",
+      "owner_title": "Held batch staging input older than 51 days",
       "owner_uid": "omi-batch-staged-input-age",
       "panel": null,
       "pointer": "/data/0/model/expr",
@@ -968,6 +968,19 @@
       ],
       "owner_title": "Firestore - unattributed reads above 3% of billed reads",
       "owner_uid": "omi-firestore-unattributed-reads",
+      "panel": null,
+      "pointer": "/data/0/model/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "sum(rate(omi_firestore_billed_reads_by_caller_total[30m])) or vector(0)",
+      "file": "alerts/firestore.json",
+      "issues": [],
+      "metrics": [
+        "omi_firestore_billed_reads_by_caller_total"
+      ],
+      "owner_title": "FirestoreUnattributedReadsAbsolute",
+      "owner_uid": "omi-firestore-unattributed-absolute",
       "panel": null,
       "pointer": "/data/0/model/expr",
       "scope": "normalized-omi-consumer-source-review"
@@ -2452,30 +2465,19 @@
       "scope": "normalized-omi-consumer-source-review"
     },
     {
-      "expression": "sum(increase(omi_listen_accepted_total{job=\"backend-listen-metrics\"}[5m]))",
+      "expression": "(((sum(increase(omi_fallback_total{job=~\"backend-listen-metrics|pusher-metrics\",component=\"other\",from_mode=\"cache_write\",reason=~\"auth_error|connection_error|timeout\",outcome=\"degraded\"}[5m])) / clamp_min(sum(increase(omi_listen_accepted_total{job=\"backend-listen-metrics\"}[5m])), 1)) > bool 0.5)\n * (sum(increase(omi_listen_accepted_total{job=\"backend-listen-metrics\"}[5m])) >= bool 50) == 1)\nor on() max((omi_redis_authenticated_ping_success{job=\"omi-redis-serving-probe\",target=\"prod-serving-redis\"}\n and (omi_redis_authenticated_ping_last_attempt_seconds{job=\"omi-redis-serving-probe\",target=\"prod-serving-redis\"} >= time() - 90)\n and (omi_redis_authenticated_ping_last_attempt_seconds{job=\"omi-redis-serving-probe\",target=\"prod-serving-redis\"} <= time())) == bool 0)",
       "file": "alerts/resilience.json",
       "issues": [],
       "metrics": [
-        "omi_listen_accepted_total"
+        "omi_fallback_total",
+        "omi_listen_accepted_total",
+        "omi_redis_authenticated_ping_last_attempt_seconds",
+        "omi_redis_authenticated_ping_success"
       ],
       "owner_title": "Redis cache - connection-class write failures degrading sessions",
       "owner_uid": "omi-redis-cache-conn-page",
       "panel": null,
       "pointer": "/data/0/model/expr",
-      "scope": "normalized-omi-consumer-source-review"
-    },
-    {
-      "expression": "sum(increase(omi_fallback_total{job=~\"backend-listen-metrics|pusher-metrics\",component=\"other\",from_mode=\"cache_write\",reason=~\"auth_error|connection_error|timeout\",outcome=\"degraded\"}[5m])) / clamp_min(sum(increase(omi_listen_accepted_total{job=\"backend-listen-metrics\"}[5m])), 1)",
-      "file": "alerts/resilience.json",
-      "issues": [],
-      "metrics": [
-        "omi_fallback_total",
-        "omi_listen_accepted_total"
-      ],
-      "owner_title": "Redis cache - connection-class write failures degrading sessions",
-      "owner_uid": "omi-redis-cache-conn-page",
-      "panel": null,
-      "pointer": "/data/1/model/expr",
       "scope": "normalized-omi-consumer-source-review"
     },
     {
