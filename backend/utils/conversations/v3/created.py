@@ -15,6 +15,7 @@ from models.finalization_owner import python_owns_finalization
 from utils.app_integrations import ExternalIntegrationFanoutError, trigger_external_integrations
 from utils.conversations.factory import deserialize_conversation
 from utils.conversations.v3 import metrics, policy
+from utils.conversations.v3.budget import Stage, measure_stage, require_headroom
 from utils.conversations.v3.triggers import enqueue
 from utils.executors import db_executor, run_blocking
 
@@ -27,11 +28,12 @@ def idempotency_key(cid):
     return 'v3-created:' + cid
 
 
-async def deliver(uid):
+async def deliver(uid, *, budget=None):
     """Deliver every owed conversation-created fanout for one owner; returns the count delivered."""
     ids = await run_blocking(db_executor, writers.pending_created, uid)
     delivered, retry = 0, False
     for cid in ids:
+        require_headroom(budget, Stage.DELIVER)
         attempt = await run_blocking(db_executor, writers.claim_created, uid, cid)
         if not attempt:
             continue
@@ -51,13 +53,14 @@ async def deliver(uid):
                 )
                 metrics.CREATED_DELIVERIES.labels('dropped').inc()
                 continue
-            await trigger_external_integrations(
-                uid,
-                deserialize_conversation(data),
-                idempotency_key=idempotency_key(cid),
-                require_delivery=True,
-                last_delivery_attempt=attempt >= writers.CREATED_MAX_ATTEMPTS,
-            )
+            with measure_stage(budget, Stage.DELIVER):
+                await trigger_external_integrations(
+                    uid,
+                    deserialize_conversation(data),
+                    idempotency_key=idempotency_key(cid),
+                    require_delivery=True,
+                    last_delivery_attempt=attempt >= writers.CREATED_MAX_ATTEMPTS,
+                )
         except Exception as error:
             # The marker stays owed; the claim is released for a later wake, never a tight loop.
             metrics.CREATED_DELIVERIES.labels('retry').inc()
