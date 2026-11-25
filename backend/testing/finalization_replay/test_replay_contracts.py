@@ -13,7 +13,18 @@ from unittest.mock import patch
 from testing.finalization_replay.candidate import _Handler, replay_database
 from testing.finalization_replay.driver import _observe
 from testing.finalization_replay.metrics import _delete_write, _invoke_rpc, _wrap_stream, prompt_token_estimate
-from testing.finalization_replay.state import CaseState
+from testing.finalization_replay.state import (
+    CaseState,
+    episode_attach_memo_failure_reason,
+    episode_attach_memo_valid,
+    ordinary_sync_attach_memo_failure_reason,
+)
+from testing.finalization_replay.ordinary_sync_diag_report import (
+    UNREADABLE_RETRY_BUG,
+    enrich as enrich_ordinary_sync_report,
+    is_go_coordination_stamp_difference,
+    is_unreadable_retry_consequence,
+)
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 VERIFY_PATH = REPO_ROOT / 'backend-go' / 'tools' / 'replay' / 'verify.py'
@@ -23,6 +34,299 @@ VERIFY_SPEC.loader.exec_module(verify)
 
 
 class ReplayContractTests(unittest.TestCase):
+    def test_approved_coordination_stamp_rule_requires_exact_name_and_direction(self):
+        for field in (
+            'go_sync_inline_fanout_epoch',
+            'go_sync_inline_fanout_revision',
+            'go_empty_discard_fanout_epoch',
+            'go_sync_empty_discard_home_revision',
+        ):
+            self.assertTrue(
+                is_go_coordination_stamp_difference(
+                    {
+                        'path': f'/conversation/{field}',
+                        'kind': 'missing_in_python',
+                    }
+                )
+            )
+            self.assertFalse(
+                is_go_coordination_stamp_difference(
+                    {
+                        'path': f'/conversation/{field}s',
+                        'kind': 'missing_in_python',
+                    }
+                )
+            )
+            self.assertFalse(
+                is_go_coordination_stamp_difference(
+                    {
+                        'path': f'/conversation/{field}',
+                        'kind': 'different_value',
+                    }
+                )
+            )
+
+    def test_unreadable_retry_rule_labels_only_nine_verified_consequences(self):
+        consequence_rows = [
+            ('/conversation/finalization_status', 'missing_in_python'),
+            ('/derived_documents/sync_reprocess_outbox~1outbox-id', 'missing_in_go'),
+            ('/derived_documents/users~1owner~1processing_attention_items~1item-id', 'missing_in_python'),
+            ('/go/admitted', 'invalid_binding'),
+            ('/python/batch_pipeline_privacy/final', 'missing_document'),
+            ('/python/derived_documents/batch_pipeline_privacy~1hash/memo_token', 'invalid_binding'),
+            ('/python/derived_documents/batch_pipeline_privacy~1hash/memo_schema', 'missing_evidence'),
+            ('/python/batch_pipeline_privacy/final_snapshot', 'invalid_binding'),
+            ('/python/firestore_operations/batch_pipeline_privacy_document', 'invalid_operations'),
+        ]
+        self.assertTrue(
+            all(is_unreadable_retry_consequence({'path': path, 'kind': kind}) for path, kind in consequence_rows)
+        )
+        self.assertFalse(
+            is_unreadable_retry_consequence(
+                {
+                    'path': '/python/derived_documents/batch_pipeline_privacy~1hash/memo_token',
+                    'kind': 'missing_evidence',
+                }
+            )
+        )
+        self.assertFalse(
+            is_unreadable_retry_consequence(
+                {
+                    'path': '/conversation/finalization_status/extra',
+                    'kind': 'missing_in_python',
+                }
+            )
+        )
+
+        differences = [
+            {'path': '/status', 'kind': 'different_value'},
+            *({'path': path, 'kind': kind} for path, kind in consequence_rows),
+        ]
+        report = {
+            'commit_sha': 'fixture',
+            'unexplained_differences': len(differences),
+            'cases': [
+                {
+                    'name': 'unreadable-ciphertext-dead-letters',
+                    'errors': {},
+                    'python_status': 'parked',
+                    'go_status': 'failure',
+                    'python_retry': {
+                        'outcome': 'parked',
+                        'reason': 'age_gate_72h',
+                        'ciphertext_kept': True,
+                        'attempts': 869,
+                        'callback_pending_attempts': 868,
+                    },
+                    'go_ciphertext_kept': True,
+                    'differences': differences,
+                }
+            ],
+            'operation_table': [
+                {
+                    'case': 'unreadable-ciphertext-dead-letters',
+                    'difference': 0,
+                }
+            ],
+        }
+        enriched = enrich_ordinary_sync_report(report)
+        labels = [row.get('label') for row in enriched['cases'][0]['differences']]
+        self.assertEqual(labels, [UNREADABLE_RETRY_BUG] * 10)
+        self.assertEqual(
+            enriched['diagnostic']['unexplained_gate']['python_bug_exceptions'],
+            {
+                'unreadable_ciphertext_retry_until_age_gate': 10,
+            },
+        )
+
+    def test_missing_profile_or_task_write_proof_is_counted_as_go_gap(self):
+        report = {
+            'commit_sha': 'fixture',
+            'unexplained_differences': 2,
+            'cases': [
+                {
+                    'name': 'kept-with-effects',
+                    'errors': {},
+                    'differences': [
+                        {
+                            'path': '/go/profile_refresh',
+                            'kind': 'invalid_binding',
+                            'failure_reason': 'profile_refresh_proof_failed',
+                        },
+                        {
+                            'path': '/go/task_vector',
+                            'kind': 'invalid_binding',
+                            'failure_reason': 'task_vector_proof_failed',
+                        },
+                    ],
+                }
+            ],
+            'operation_table': [{'case': 'kept-with-effects', 'difference': 0}],
+        }
+        enriched = enrich_ordinary_sync_report(report)
+        self.assertEqual(
+            [difference['label'] for difference in enriched['cases'][0]['differences']],
+            ['go_gap', 'go_gap'],
+        )
+
+    def test_episode_attach_memo_evidence_checks_key_owner_and_completion(self):
+        conversation = {'transcript_segments': 'fixture-envelope', 'transcript_segments_compressed': True}
+        link_path = 'users/owner/episode_links/conversation'
+        link = {
+            'episode_id': 'episode',
+            'attach_owner_id': 'episode',
+            'attach_revision': 'v2:fixture-key',
+            'attach_completed': 'v2:fixture-key',
+            'attach_finalized': None,
+        }
+        decoded_rows = []
+
+        def decode(uid, raw, compressed):
+            decoded_rows.append((uid, raw, compressed))
+            return [{'text': 'fixture'}]
+
+        def compute_key(row):
+            self.assertEqual(row['transcript_segments'], [{'text': 'fixture'}])
+            return 'v2:fixture-key'
+
+        self.assertTrue(
+            episode_attach_memo_valid(
+                'owner',
+                'conversation',
+                conversation,
+                {link_path: link},
+                transcript_decoder=decode,
+                content_key_fn=compute_key,
+            )
+        )
+        self.assertEqual(decoded_rows, [('owner', 'fixture-envelope', True)])
+
+        link['attach_owner_id'] = 'other-episode'
+        self.assertFalse(
+            episode_attach_memo_valid(
+                'owner',
+                'conversation',
+                conversation,
+                {link_path: link},
+                transcript_decoder=decode,
+                content_key_fn=compute_key,
+            )
+        )
+        self.assertEqual(
+            episode_attach_memo_failure_reason(
+                'owner',
+                'conversation',
+                conversation,
+                {link_path: link},
+                transcript_decoder=decode,
+                content_key_fn=compute_key,
+            ),
+            'owner_binding_mismatch',
+        )
+        link['attach_owner_id'] = 'episode'
+        link['attach_revision'] = 'v2:fixture-key'
+        link['attach_finalized'] = 'stale-finalization'
+        self.assertFalse(
+            episode_attach_memo_valid(
+                'owner',
+                'conversation',
+                conversation,
+                {link_path: link},
+                transcript_decoder=decode,
+                content_key_fn=compute_key,
+            )
+        )
+        link['attach_finalized'] = None
+        link['attach_revision'] = 'stale-key'
+        self.assertFalse(
+            episode_attach_memo_valid(
+                'owner',
+                'conversation',
+                conversation,
+                {link_path: link},
+                transcript_decoder=decode,
+                content_key_fn=compute_key,
+            )
+        )
+
+    def test_episode_attach_memo_accepts_go_decoded_transcript_segments(self):
+        segments = [{'text': 'fixture', 'start': 0, 'end': 1}]
+        link_path = 'users/owner/episode_links/conversation'
+        link = {
+            'episode_id': 'episode',
+            'attach_owner_id': 'episode',
+            'attach_revision': 'v2:fixture-key',
+            'attach_completed': 'v2:fixture-key',
+            'attach_finalized': 'v2:fixture-key',
+        }
+
+        def decode(*_args):
+            self.fail('already-decoded segments must not be decoded again')
+
+        def compute_key(row):
+            self.assertEqual(row['transcript_segments'], segments)
+            return 'v2:fixture-key'
+
+        self.assertTrue(
+            episode_attach_memo_valid(
+                'owner',
+                'conversation',
+                {'transcript_segments': segments},
+                {link_path: link},
+                transcript_decoder=decode,
+                content_key_fn=compute_key,
+            )
+        )
+        link['attach_finalized'] = 'stale-key'
+        self.assertFalse(
+            episode_attach_memo_valid(
+                'owner',
+                'conversation',
+                {'transcript_segments': segments},
+                {link_path: link},
+                transcript_decoder=decode,
+                content_key_fn=compute_key,
+            )
+        )
+
+    def test_ordinary_sync_memo_requires_exact_go_key_and_proven_python_cache(self):
+        path = 'users/owner/episode_links/conversation'
+        conversation = {'episode_id': 'episode'}
+        link = {
+            'episode_id': 'episode',
+            'attach_owner_id': 'episode',
+            'attach_revision': 'v2:final',
+            'attach_completed': 'v2:final',
+            'attach_finalized': 'v2:final',
+        }
+
+        def check(python_keys=None, *, has_link=True):
+            return ordinary_sync_attach_memo_failure_reason(
+                'owner',
+                'conversation',
+                conversation,
+                {path: link} if has_link else {},
+                python_keys=python_keys,
+                key_fn=lambda *_: 'v2:final',
+            )
+
+        self.assertEqual(check(), '')
+        self.assertEqual(check(has_link=False), 'missing_link')
+        self.assertEqual(check([], has_link=False), '')
+        self.assertEqual(check([]), 'completed_key_mismatch')
+        self.assertEqual(check(['v2:final']), '')
+        link['attach_finalized'] = 'v2:old'
+        self.assertEqual(check(), 'finalized_binding_mismatch')
+        link.update(attach_revision='v2:old', attach_completed='v2:old', attach_finalized=None)
+        self.assertEqual(check(), 'completed_key_mismatch')
+        self.assertEqual(check(['v2:old']), '')
+        self.assertEqual(check(['v2:other']), 'completed_key_mismatch')
+        link.update(attach_revision='v2:final', attach_completed='v2:final', attach_finalized='v2:final')
+        conversation['episode_id'] = 'other'
+        self.assertEqual(check(), 'owner_binding_mismatch')
+        link.clear()
+        self.assertEqual(check([]), '')
+
     def test_database_creation_ignores_hostile_libpq_environment(self):
         observed = {}
 

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"strings"
 	"testing"
@@ -64,6 +65,69 @@ func TestCompareCountsExecutionErrors(t *testing.T) {
 	}
 }
 
+func TestOperationTableSurvivesValueStripping(t *testing.T) {
+	result, err := compare([]replayCase{{
+		Name: "operation-overage",
+		Python: &observation{
+			Status: "completed", Derived: map[string]any{}, Effects: map[string]any{},
+			Cost: replayCost{Firestore: firestoreOperations{DocumentReads: 2, QueryDocuments: 1, Writes: 2, Deletes: 1}},
+		},
+		Go: &observation{
+			Status: "completed", Derived: map[string]any{}, Effects: map[string]any{},
+			Cost: replayCost{Firestore: firestoreOperations{DocumentReads: 4, Writes: 4, Deletes: 1}},
+			FirestoreOperationSources: map[string]operationSource{
+				"users/u/episode_links/c": {Reads: 3, Writes: 1},
+				"users/u/conversations/c": {Reads: 1, Writes: 3, Deletes: 1},
+			},
+		},
+	}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(result.OperationTable) != 1 {
+		t.Fatalf("got %d operation rows", len(result.OperationTable))
+	}
+	row := result.OperationTable[0]
+	if row.PythonReads != 3 || row.PythonWrites != 2 || row.PythonDeletes != 1 ||
+		row.GoReads != 4 || row.GoWrites != 4 || row.GoDeletes != 1 ||
+		row.Difference != 3 || row.Label != "go_gap:ops" {
+		t.Fatalf("unexpected operation row: %+v", row)
+	}
+	if len(row.GoTopOperationSources) != 2 || row.GoTopOperationSources[0].DocumentPath != "users/u/conversations/c" {
+		t.Fatalf("Go operation sources were not ranked: %+v", row.GoTopOperationSources)
+	}
+	stripReportValues(&result)
+	if result.OperationTable[0].Label != "go_gap:ops" || len(result.OperationTable[0].GoTopOperationSources) != 2 {
+		t.Fatalf("value stripping removed the operation report: %+v", result.OperationTable[0])
+	}
+}
+
+func TestCompareRetainsValueFreeHomeReceiptTraceWhenStrippingObservations(t *testing.T) {
+	result, err := compare([]replayCase{{
+		Name: "receipt",
+		Python: &observation{
+			Status: "completed", Derived: map[string]any{}, Effects: map[string]any{},
+			HomeDirtyReceiptTrace: map[string]int{"set_true": 2, "set_false": 1, "deleted": 0, "other_write": 0},
+		},
+		Go: &observation{
+			Status: "completed", Derived: map[string]any{}, Effects: map[string]any{},
+			HomeDirtyReceiptTrace: map[string]int{"set_true": 1, "set_false": 0, "deleted": 1, "other_write": 0},
+		},
+	}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	stripReportValues(&result)
+	trace := result.Cases[0].HomeDirtyReceiptTrace
+	if trace["python"]["set_true"] != 2 || trace["python"]["set_false"] != 1 ||
+		trace["go"]["set_true"] != 1 || trace["go"]["deleted"] != 1 {
+		t.Fatalf("home receipt write trace was lost or changed: %#v", trace)
+	}
+	if result.Cases[0].Python != nil || result.Cases[0].Go != nil {
+		t.Fatal("value-bearing observations should still be stripped")
+	}
+}
+
 func TestCompareDifferencesWithIncompatibleJSONShapes(t *testing.T) {
 	t.Parallel()
 	for _, pair := range [][2]any{
@@ -78,7 +142,7 @@ func TestCompareDifferencesWithIncompatibleJSONShapes(t *testing.T) {
 	}
 }
 
-func TestCompareOnlyExcusesVerifiedBindingsAndClocks(t *testing.T) {
+func TestAdmissionIDsAreValidatedPerSideWithoutCrossEngineComparison(t *testing.T) {
 	t.Parallel()
 	start := time.Date(2026, 1, 1, 12, 0, 0, 0, time.UTC)
 	build := func(job, fanout string, stamp time.Time) *observation {
@@ -101,17 +165,26 @@ func TestCompareOnlyExcusesVerifiedBindingsAndClocks(t *testing.T) {
 	}
 	doc["fanout_key"] = "go-fanout"
 	diffs := compareObservations(py, goRun)
-	fanoutCompared := false
+	finalizationJobUnexplained := false
 	for _, diff := range diffs {
-		if diff.Path == "/fanout_key" {
-			fanoutCompared = true
+		if diff.Path == "/conversation/finalization_job_id" {
+			if diff.Reason != "" {
+				t.Fatalf("finalization_job_id remains a go_gap pending the status-route fix: %v", diff)
+			}
+			finalizationJobUnexplained = true
+			continue
 		}
 		if diff.Reason == "" {
 			t.Fatalf("verified binding and timestamp drift: %v", diff)
 		}
 	}
-	if !fanoutCompared {
-		t.Fatal("Python queue and Go conversation fanout IDs were not compared")
+	if !finalizationJobUnexplained {
+		t.Fatalf("expected the Go job pointer difference to remain visible: %+v", diffs)
+	}
+	for _, diff := range diffs {
+		if diff.Path == "/conversation/fanout_key" || diff.Path == "/fanout_key" || strings.HasPrefix(diff.Path, "/admitted") {
+			t.Fatalf("cross-engine admission identifiers were compared: %+v", diff)
+		}
 	}
 	goRun = build("go", "go-fanout", start.Add(time.Hour))
 	goRun.Admitted.Job = "wrong"
@@ -124,6 +197,15 @@ func TestCompareOnlyExcusesVerifiedBindingsAndClocks(t *testing.T) {
 		if diff.Reason != "" {
 			t.Fatalf("invalid binding or clock was allowed: %v", diff)
 		}
+	}
+}
+
+func TestCompareKeepsBooleanAndIntegerValuesDistinct(t *testing.T) {
+	t.Parallel()
+	var diffs []difference
+	compareValue(&diffs, "/conversation/enabled", true, json.Number("1"))
+	if len(diffs) != 1 || diffs[0].Kind != "different_value" || diffs[0].Reason != "" {
+		t.Fatalf("boolean-to-integer change was normalized away: %+v", diffs)
 	}
 }
 
