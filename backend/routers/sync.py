@@ -1298,6 +1298,7 @@ async def sync_local_files_v2(
                 and conversation_id
                 and getattr(record_response, 'retry_conversation', None) == conversation_id
                 and has_server_capture_proof
+                and client_device_context.client_device_id
                 and manifest_claims
                 and filenames == upload_filenames
                 and len(set(filenames)) == len(filenames)

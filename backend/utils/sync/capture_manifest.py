@@ -128,7 +128,7 @@ def manifest_claims_match_paths(claims: list[dict[str, str]], paths: Iterable[st
 RETRY_HANDLE_SECONDS = 120
 
 
-def _retry_signature(uid, device, conversation, claims, expires):
+def _retry_signature(uid: str, device: str, conversation: str, claims: Iterable[dict[str, str]], expires: int) -> str:
     payload = json.dumps(
         ['wal-conversation-wait-v1', uid, device, conversation, validate_file_claims(claims), expires],
         sort_keys=True,
@@ -137,12 +137,14 @@ def _retry_signature(uid, device, conversation, claims, expires):
     return hmac.new(_secret(), payload.encode(), hashlib.sha256).hexdigest()
 
 
-def issue_retry_handle(uid, device, conversation, claims):
+def issue_retry_handle(uid: str, device: str, conversation: str, claims: Iterable[dict[str, str]]) -> str:
     expires = int(time.time()) + RETRY_HANDLE_SECONDS
     return f'{expires}.{_retry_signature(uid, device, conversation, claims, expires)}'
 
 
-def valid_retry_handle(handle, uid, device, conversation, claims):
+def valid_retry_handle(
+    handle: str | None, uid: str, device: str | None, conversation: str, claims: Iterable[dict[str, str]]
+) -> bool:
     if not isinstance(handle, str) or len(handle) > 80 or not device:
         return False
     try:
