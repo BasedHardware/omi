@@ -3,7 +3,7 @@
 from dataclasses import dataclass
 from types import SimpleNamespace
 
-from tests.support.firestore_query_drivers import DriverEntry, CoveredByEntry
+from tests.support.firestore_query_drivers import CallerProfile, DriverEntry, CoveredByEntry
 
 
 @dataclass(frozen=True)
@@ -29,6 +29,21 @@ def entries():
     stores = [StoreArgument(namespace) for namespace in namespaces]
     return (
         DriverEntry(
+            'database.batch_pipeline_admission_view.read_jobs',
+            domains={'store': stores},
+            base={'uid': 'synthetic-owner'},
+            neutrals={'limit': (256, 'metadata read bound'), 'timeout': (1.5, 'RPC deadline')},
+            profiles=(
+                CallerProfile('conversation-detail', {'conversation_ids': [['one']]}),
+                CallerProfile('conversation-list', {'conversation_ids': [['one'], ['one', 'two']]}),
+            ),
+        ),
+        DriverEntry(
+            'database.batch_pipeline_store.FirestoreStore.packing_candidates',
+            domains={'self': stores},
+            base={'owner_key': 'synthetic-owner-hash'},
+        ),
+        DriverEntry(
             'database.batch_pipeline_store.FirestoreStore.allowance_owners',
             domains={'self': stores},
             neutrals={'now': (3000000.0, 'due clock operand only'), 'limit': (20, 'page bound only')},
@@ -42,8 +57,12 @@ def entries():
         DriverEntry('database.batch_pipeline_allowance_migration.counts', domains={'store': stores}),
         DriverEntry(
             'database.batch_pipeline_allowance_migration.apply_page',
-            domains={'store': stores},
-            neutrals={'now': (3000000.0, 'checkpoint clock only'), 'size': (100, 'page bound only')},
+            domains={'store': stores, 'concurrency': [1, 32]},
+            neutrals={
+                'now': (3000000.0, 'checkpoint clock only'),
+                'size': (100, 'page bound only'),
+                'rate_limiter': (None, 'attempt pacing does not affect the query shape'),
+            },
             trials=2,
             setup=seed_checkpoint,
         ),

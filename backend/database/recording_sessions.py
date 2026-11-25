@@ -14,6 +14,7 @@ from typing import Any, Literal, Mapping, TypedDict
 
 from google.cloud import firestore
 from config.server_batch import owned as server_batch_owned
+from config import listen_reconnect
 
 from database import conversations as conversations_db, transcript_pointer, episode_empty_members
 from database.quiet_check_retirement import stop_quiet_check_for_conversation
@@ -132,6 +133,7 @@ def _create_or_get_recording_session_txn(
         if (
             current.get('conversation_id') == proposed_conversation_id
             and str(current.get('lifecycle_phase') or 'in_progress') == 'in_progress'
+            and not listen_reconnect.producer(conversation or {})
         ):
             transaction.update(
                 session_ref,
@@ -140,7 +142,7 @@ def _create_or_get_recording_session_txn(
     else:
         transaction.create(session_ref, current)
 
-    if conversation is not None:
+    if conversation is not None and not listen_reconnect.producer(conversation):
         external_data = conversation.get('external_data')
         marker = dict(external_data) if isinstance(external_data, Mapping) else {}
         if marker.get('recording_session_id') != recording_session_id:
@@ -197,6 +199,7 @@ def _renew_recording_session_lease_txn(
         or current.get('recording_session_id') != recording_session_id
         or current.get('conversation_id') != conversation_id
         or str(current.get('lifecycle_phase') or 'in_progress') != 'in_progress'
+        or current.get('listen_producer_token')
     ):
         return False
     transaction.update(

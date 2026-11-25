@@ -42,9 +42,10 @@ record).
 3. **Token (optional)**: `EDGE_SHADOW_TOKEN` is a secret
    (`config/deployment-setting-classification.json`) and is never a committed
    env entry. If used, the same shared value goes in two protected places —
-   listen's `LISTEN_PRIVATE_VALUES_YAML` and the edge's
-   `LISTEN_EDGE_PRIVATE_VALUES_YAML` (both `privateEnv: {EDGE_SHADOW_TOKEN:
-   ...}`); the chart's privateEnv rendering adds the entry at rollout. Unset
+   listen's Secret Manager document `LISTEN_PRIVATE_ENV` (plus the name in the
+   listen chart's `privateSecretEnv.keys`; `runbooks/listen-private-env.md`) and
+   the edge's `LISTEN_EDGE_PRIVATE_VALUES_YAML` (`privateEnv: {EDGE_SHADOW_TOKEN:
+   ...}`, rendered by the edge chart at rollout). Unset
    on both sides, listen sends no header and the edge checks none; the
    NetworkPolicy and ClusterIP boundary still apply.
 4. **URL**: already plumbed in the listen chart values

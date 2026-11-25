@@ -22,6 +22,7 @@
 
 #include "accel.h"
 #include "battery_guard.h"
+#include "boot_identity.h"
 #include "button.h"
 #include "config.h"
 #include "custody.h"
@@ -152,6 +153,8 @@ static void update_phy(struct bt_conn *conn);
 static void update_data_length(struct bt_conn *conn);
 static void update_mtu(struct bt_conn *conn);
 static void update_conn_params(struct bt_conn *conn);
+/* Explicit requests, including API failures, share a lifetime budget. */
+static atomic_t conn_param_requests[CONFIG_BT_MAX_CONN];
 static void schedule_mtu_recheck(void);
 static void mtu_recheck_work_handler(struct k_work *work);
 static void adv_name_update_work_handler(struct k_work *work);
@@ -431,6 +434,17 @@ static struct bt_uuid_128 diagnostics_characteristic_uuid =
 static struct bt_uuid_128 recovery_diagnostics_characteristic_uuid =
     BT_UUID_INIT_128(BT_UUID_128_ENCODE(0x19B10042, 0xE8F2, 0x537E, 0x4F6C, 0xD104768A1214));
 
+static struct bt_uuid_128 boot_identity_characteristic_uuid =
+    BT_UUID_INIT_128(BT_UUID_128_ENCODE(0x19B10043, 0xE8F2, 0x537E, 0x4F6C, 0xD104768A1214));
+
+static ssize_t
+boot_identity_read(struct bt_conn *conn, const struct bt_gatt_attr *attr, void *buf, uint16_t len, uint16_t offset)
+{
+    uint8_t value[OMI_BOOT_IDENTITY_SIZE];
+    omi_boot_identity_snapshot(value);
+    return bt_gatt_attr_read(conn, attr, buf, len, offset, value, sizeof(value));
+}
+
 /* Recovery also needs a coherent value across ATT Read Blob requests. */
 static struct {
     bool valid;
@@ -537,6 +551,19 @@ static ssize_t diagnostics_read_handler(struct bt_conn *conn,
     if (offset == 0 || !diagnostics_read_cache[index].valid) {
         struct omi_diagnostics_snapshot snapshot;
         omi_diagnostics_snapshot(&snapshot);
+        /* Query this link, rather than retaining callback state across reconnects.
+         * bt_conn_get_info reads host state; it does not issue an HCI request. */
+        struct bt_conn_info info = {0};
+        if (bt_conn_get_info(conn, &info) == 0 && info.type == BT_CONN_TYPE_LE &&
+            info.state == BT_CONN_STATE_CONNECTED) {
+            snapshot.conn_interval = info.le.interval;
+            snapshot.conn_latency = info.le.latency;
+            snapshot.conn_timeout = info.le.timeout;
+            if (info.le.phy != NULL) {
+                snapshot.tx_phy = info.le.phy->tx_phy;
+                snapshot.rx_phy = info.le.phy->rx_phy;
+            }
+        }
         omi_diagnostics_pack(diagnostics_read_cache[index].value, &snapshot);
         diagnostics_read_cache[index].valid = true;
     }
@@ -559,6 +586,12 @@ static struct bt_gatt_attr diagnostics_service_attr[] = {
                            recovery_diagnostics_read,
                            NULL,
                            NULL),
+    BT_GATT_CHARACTERISTIC(&boot_identity_characteristic_uuid.uuid,
+                           BT_GATT_CHRC_READ,
+                           BT_GATT_PERM_READ,
+                           boot_identity_read,
+                           NULL,
+                           NULL),
 };
 static struct bt_gatt_service diagnostics_service = BT_GATT_SERVICE(diagnostics_service_attr);
 
@@ -569,6 +602,12 @@ static struct bt_gatt_attr safe_diagnostics_service_attr[] = {
                            BT_GATT_CHRC_READ,
                            BT_GATT_PERM_READ,
                            recovery_diagnostics_read,
+                           NULL,
+                           NULL),
+    BT_GATT_CHARACTERISTIC(&boot_identity_characteristic_uuid.uuid,
+                           BT_GATT_CHRC_READ,
+                           BT_GATT_PERM_READ,
+                           boot_identity_read,
                            NULL,
                            NULL),
 };
@@ -1062,6 +1101,7 @@ void broadcast_battery_level(struct k_work *work_item)
 static void _transport_connected(struct bt_conn *conn, uint8_t err)
 {
     diagnostics_reset_read_cache(conn);
+    atomic_set(&conn_param_requests[bt_conn_index(conn)], 0);
 
     struct bt_conn_info info = {0};
 #ifdef CONFIG_OMI_ENABLE_OFFLINE_STORAGE
@@ -1148,6 +1188,7 @@ K_SEM_DEFINE(audio_tx_sem,
 static void _transport_disconnected(struct bt_conn *conn, uint8_t err)
 {
     diagnostics_reset_read_cache(conn);
+    atomic_set(&conn_param_requests[bt_conn_index(conn)], 0);
 
     k_work_cancel_delayable(&mtu_recheck_work);
     mtu_recheck_attempts = 0;
@@ -1218,7 +1259,6 @@ static void _le_param_updated(struct bt_conn *conn, uint16_t interval, uint16_t 
             supervision_timeout);
 
     if (interval > 24) {
-        LOG_WRN("Connection interval still high (%u units). Re-requesting preferred params.", interval);
         update_conn_params(conn);
     }
 }
@@ -1269,33 +1309,40 @@ static struct bt_conn_cb _callback_references = {
 #define PHY_UPDATE_RETRY_DELAY_MS 150
 #define MTU_UPDATE_RETRY_COUNT 3
 #define MTU_UPDATE_RETRY_DELAY_MS 120
-#define CONN_PARAM_RETRY_COUNT 3
-#define CONN_PARAM_RETRY_DELAY_MS 300
+/* At most the initial request plus two callback-driven re-requests per link.
+ * Never sleep in the Bluetooth RX callback, including on immediate API failure. */
+#define CONN_PARAM_MAX_REQUESTS 3
 
 static void update_conn_params(struct bt_conn *conn)
 {
-    int err = 0;
+    uint8_t index = bt_conn_index(conn);
+    if (index >= ARRAY_SIZE(conn_param_requests)) {
+        return;
+    }
+    atomic_val_t attempts = atomic_get(&conn_param_requests[index]);
+    for (;;) {
+        if (attempts >= CONN_PARAM_MAX_REQUESTS) {
+            return;
+        }
+        if (atomic_cas(&conn_param_requests[index], attempts, attempts + 1)) {
+            break;
+        }
+        attempts = atomic_get(&conn_param_requests[index]);
+    }
+
     const struct bt_le_conn_param preferred_param = {
         .interval_min = 6,
         .interval_max = 12,
         .latency = 0,
-        .timeout = 400,
+        /* 15 ms * (0 + 1) * 3 = 45 ms < 6000 ms (Apple timeout constraint).
+         * Keep the throughput-sensitive interval range unchanged. */
+        .timeout = 600,
     };
-
-    LOG_INF("Requesting conn params update (7.5-15ms, latency 0)...");
-    for (int attempt = 1; attempt <= CONN_PARAM_RETRY_COUNT; attempt++) {
-        err = bt_conn_le_param_update(conn, &preferred_param);
-        if (!err) {
-            return;
-        }
-
-        if (attempt < CONN_PARAM_RETRY_COUNT) {
-            LOG_WRN("bt_conn_le_param_update() failed (err %d), retry %d/%d", err, attempt, CONN_PARAM_RETRY_COUNT);
-            k_sleep(K_MSEC(CONN_PARAM_RETRY_DELAY_MS));
-        }
+    LOG_INF("Requesting conn params update (7.5-15ms, latency 0, timeout 6s)...");
+    int err = bt_conn_le_param_update(conn, &preferred_param);
+    if (err) {
+        LOG_WRN("bt_conn_le_param_update() failed (err %d); request consumed budget", err);
     }
-
-    LOG_WRN("bt_conn_le_param_update() still failed after retries (last err %d)", err);
 }
 
 static void update_phy(struct bt_conn *conn)
@@ -1912,6 +1959,7 @@ int transport_off()
 
 int transport_start_safe(void)
 {
+    omi_boot_identity_prepare();
     int err;
     bt_conn_cb_register(&recovery_callbacks);
 #ifdef CONFIG_OMI_ENABLE_RFSW_CTRL
@@ -1952,6 +2000,7 @@ int transport_start_safe(void)
 // periodic advertising
 int transport_start()
 {
+    omi_boot_identity_prepare();
     int err = 0;
 
     k_thread_start(power_off_thread);

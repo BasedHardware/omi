@@ -1,10 +1,22 @@
 """Pure audio bounds. A processing clock is never evidence of recorded duration."""
 
 import math
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Any, Mapping, Sequence
 
 from config.recorded_time_tolerances import CONTINUE_GAP_SECONDS as DEFAULT_GAP_SECONDS
+
+
+def admitted_start(row: Mapping[str, Any]) -> datetime | None:
+    """The recorded start known at admission: committed audio bounds, else the row clock."""
+    value = row.get('server_batch_audio_start')
+    if isinstance(value, (int, float)) and not isinstance(value, bool) and math.isfinite(value):
+        return datetime.fromtimestamp(value, timezone.utc)
+    for key in ('started_at', 'created_at'):
+        candidate = row.get(key)
+        if isinstance(candidate, datetime):
+            return candidate if candidate.tzinfo is not None else candidate.replace(tzinfo=timezone.utc)
+    return None
 
 
 def _placed_interval(segment: Mapping[str, Any]) -> tuple[float, float] | None:

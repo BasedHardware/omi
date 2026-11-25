@@ -10,18 +10,20 @@ from __future__ import annotations
 from contextlib import contextmanager
 from enum import StrEnum
 import time
-from typing import Any
+from typing import Any, cast
 
 from prometheus_client import Counter
 
 import database.jobstore.codec as codec
 from database.jobstore.postgres_store import PostgresStore, PostgresTransaction
+from database.jobstore.connection import sql
 from database import rpc_deadline
 from database.batch_pipeline_projection_finish_backfill import BACKFILL_KEY, backfill_marker_complete
 from database.batch_pipeline_projection_followup_backfill import (
     BACKFILL_KEY as FOLLOWUP_BACKFILL_KEY,
     backfill_marker_complete as followup_backfill_marker_complete,
 )
+from database.batch_pipeline_projection_outbox import DueObligation
 from utils.observability.reasons import ReasonFamily, reason_label
 from database.jobstore.cohort import production_policy_applies
 
@@ -37,6 +39,7 @@ STORE_QUERIES = frozenset(
         'control_candidates',
         'fresh_pending',
         'longest_ready_pending',
+        'packing_candidates',
         'ready_pending',
         'held_merge_owners',
         'ready_owners',
@@ -44,6 +47,8 @@ STORE_QUERIES = frozenset(
         'allowance_page',
         'projection_pending',
         'projection_page',
+        'projection_page_with_outbox',
+        'projection_outbox_page',
         'projection_successor',
         'projection_finish_backfill_complete',
         'projection_followup_backfill_complete',
@@ -52,7 +57,9 @@ STORE_QUERIES = frozenset(
 TRANSACTION_QUERIES = frozenset(
     {
         'get',
+        'get_existing',
         'first_pending',
+        'pending_page',
         'first_ready_pending',
         'fresh_first_pending',
         'fresh_first_ready_pending',
@@ -98,7 +105,9 @@ class _ParityPostgresStore(PostgresStore):
                 budget = min(budget, remaining) if remaining is not None else budget
                 if budget <= 0:
                     raise TimeoutError('serving observation deadline exceeded')
-                conn.execute(f'SET LOCAL statement_timeout = {max(1, int(budget * 1000))}')
+                conn.execute(
+                    sql().SQL('SET LOCAL statement_timeout = {}').format(sql().Literal(max(1, int(budget * 1000))))
+                )
                 yield conn
 
     read_connection = _read_conn
@@ -118,7 +127,7 @@ def query_value(store, query: str, args: tuple, kwargs: dict, *, transaction: bo
     allowed = TRANSACTION_QUERIES if transaction else STORE_QUERIES
     if query not in allowed:
         raise ValueError('only enumerated serving reads may be compared')
-    if query == 'get':
+    if query in {'get', 'get_existing'}:
         from database.jobstore.dual_store import MIRRORED_TABLES
 
         if (args[0] if args else kwargs.get('table')) not in MIRRORED_TABLES:
@@ -172,7 +181,7 @@ def compare_serving_query(
 
         def read(store):
             value = query_value(store, query, args, kwargs, transaction=transaction, budget_s=budget_s)
-            if query == 'get' and store is primary and isinstance(value, dict):
+            if query in {'get', 'get_existing'} and store is primary and isinstance(value, dict):
                 # Only the table's own exception (a GPU reservation's segment id) is taken off, and only from
                 # the primary side: a copy that still holds it must read as a mismatch. The fields the mirror
                 # omits for every table (repair_lineage) stay in: that omission is a serving mismatch and an
@@ -181,6 +190,12 @@ def compare_serving_query(
 
                 dropped = UNMIRRORED_TABLE_FIELDS.get(args[0] if args else kwargs.get('table') or '', frozenset())
                 value = {name: field for name, field in value.items() if name not in dropped}
+            elif query == 'projection_page_with_outbox':
+                rows, cursor, covered = value
+                value = (rows, cursor, sorted(covered))
+            elif query == 'projection_outbox_page':
+                obligations = cast(list[DueObligation], value)
+                value = [(entry.key.segment_id, entry.key.revision, float(entry.due_at)) for entry in obligations]
             return codec.canonical(value)
 
         deadline = time.monotonic() + budget_s

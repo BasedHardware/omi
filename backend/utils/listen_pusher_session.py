@@ -37,6 +37,7 @@ from config.pusher_record import close_notify_enabled
 from utils.pusher_protocol import PUSHER_RECORD_CLOSE_ACK_OPCODE
 from utils.pusher_record_close import VERSION as RECORD_CLOSE_VERSION, RESULT_OPCODE, PendingClose
 from utils.listen_record_boundary import ListenRecordBoundary
+from utils.other.relay_recovery_metrics import SAMPLES
 
 # Typed wrapper because utils.pusher.connect_to_trigger_pusher uses the untyped
 # `callable` builtin as a parameter annotation; cast to the proper signature.
@@ -799,6 +800,7 @@ class ListenPusherSession:
                                 run.failed_socket = pusher_ws
                         raise
                     sent_envelopes += 1
+                    SAMPLES.labels(stage='sent').inc(len(envelope.data) // 2)
                     close = (
                         self.pending_record_closes.get(conversation)
                         if conversation and self.pending_record_closes is not None

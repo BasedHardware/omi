@@ -1,6 +1,8 @@
 'use client';
 import { usePurchaseExposure } from '@/lib/analytics/usePurchaseExposure';
 
+import { CHECKOUT_POPUP_BLOCKED } from '@/lib/checkoutWindow';
+
 import { useState, useEffect, useRef } from 'react';
 import { useRouter, useSearchParams } from '@tschk/moonshine-next/navigation';
 import Image from '@tschk/moonshine-next/image';
@@ -1005,7 +1007,10 @@ export function UsageSectionContent({
         purchaseRoute = 'checkout';
         const result = await createCheckoutSession(selectedPriceId);
         if (result?.url) {
-          openPurchaseCheckout(result.url, tier, interval, 'usage_page');
+          if (!openPurchaseCheckout(result.url, tier, interval, 'usage_page')) {
+            setError(CHECKOUT_POPUP_BLOCKED);
+            return;
+          }
           const handleFocus = () => {
             onSubscriptionUpdate();
             window.removeEventListener('focus', handleFocus);

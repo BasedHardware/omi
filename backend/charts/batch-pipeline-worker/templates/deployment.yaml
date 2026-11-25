@@ -24,42 +24,78 @@
 {{- if or (lt (int .Values.worker.unitSeconds) 1) (gt (int .Values.worker.unitSeconds) 7200) }}
 {{- fail "dedicated batch units must be in [1,7200] seconds" }}
 {{- end }}
+{{- $preserveLiveEnv := concat (.Values.worker.preserveLiveEnv | default list) (.instance.preserveLiveEnv | default list) }}
+{{- $current := dict }}
+{{- if or $preserveLiveEnv .Values.autoscaling.enabled (hasKey .instance "fixedReplicas") }}
+{{- $current = lookup "apps/v1" "Deployment" .Release.Namespace .instance.name }}
+{{- end }}
+{{- if not $current }}
+{{- $preserveLiveEnv = list }}
+{{- end }}
+{{- $privateBinding := has "BATCH_PIPELINE_UID_ALLOWLIST" $preserveLiveEnv }}
+{{- if and $privateBinding .Release.IsUpgrade }}
+{{- fail "use the primary-only patch for an existing worker with live allowlist preservation" }}
+{{- end }}
+{{- $configuredAllowlist := .Values.worker.uidAllowlist | default dict }}
+{{- if $configuredAllowlist.value }}
+{{- fail "use an allowlist Secret reference; literal values are not renderable" }}
+{{- end }}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: {{ .instance.name }}
-  {{- if and .Values.autoscaling.balancedPools.enabled (eq .instance.name .Release.Name) }}
+  {{- $hasCompanion := and .Values.autoscaling.balancedPools.enabled (eq .instance.name .Release.Name) }}
+  {{- if or $hasCompanion $privateBinding }}
   annotations:
+    {{- if $hasCompanion }}
     # The existing deployment reporter verifies the required Spot sibling too.
     omi.ai/required-companion-deployment: {{ printf "%s-spot" .Release.Name | quote }}
+    {{- end }}
+    {{- if $privateBinding }}
+    {{- range $current.spec.template.spec.containers }}
+    {{- if eq .name "worker" }}
+    omi.ai/worker-allowlist-binding-kind: {{ include "batch-pipeline-worker.allowlistKind" .env | quote }}
+    {{- end }}
+    {{- end }}
+    {{- end }}
   {{- end }}
 spec:
   # L4 scale-from-zero, image pull and joint model startup exceeded 600s in dev.
-  # Recreate also waits for old pods to drain (terminationGracePeriodSeconds 1500)
-  # before new ones start, so the deadline covers drain plus startup.
-  progressDeadlineSeconds: 2400
+  # A replaced pod may drain for up to terminationGracePeriodSeconds (1500) before
+  # its successor starts on the freed GPU, and the startupProbe allows 1200 s more,
+  # so the deadline covers a worst-case drain plus startup with margin.
+  progressDeadlineSeconds: 3000
   {{- $replicas := .instance.baselineReplicas | default .Values.replicaCount }}
   {{- if hasKey .instance "fixedReplicas" }}
   {{- $replicas = .instance.fixedReplicas }}
+  {{- end }}
   {{- /* Operators scale the fallback with kubectl; upgrades keep the live count. */}}
-  {{- $current := lookup "apps/v1" "Deployment" .Release.Namespace .instance.name }}
-  {{- if $current }}
+  {{- if and $current (or .Values.autoscaling.enabled (hasKey .instance "fixedReplicas")) }}
   {{- $replicas = dig "spec" "replicas" $replicas $current }}
-  {{- end }}
-  {{- else if .Values.autoscaling.enabled }}
-  {{- $current := lookup "apps/v1" "Deployment" .Release.Namespace .instance.name }}
-  {{- if $current }}
-  {{- $replicas = dig "spec" "replicas" $replicas $current }}
-  {{- end }}
   {{- end }}
   # Keep the live count in Helm's manifest while HPA controls the scale subresource.
   # Omitting replicas defaults the Deployment to one before HPA reconciliation;
   # looking up the live value also prevents later Helm upgrades resetting HPA scale.
   # New installs and offline renders use replicaCount as their baseline.
   replicas: {{ $replicas | int }}
-  # Never allocate surge GPUs or co-locate a second chain on one device.
+  # Never allocate surge GPUs or co-locate a second chain on one device: maxSurge
+  # stays 0 and every pod requests a whole nvidia.com/gpu. Rolling, not Recreate,
+  # so a GPU node is never left empty during a roll: each replacement is created
+  # (Pending) as soon as its predecessor is told to stop and takes the freed GPU
+  # seconds after that pod exits, long before the cluster autoscaler's 10-minute
+  # unneeded-node timer. Under Recreate, one old pod that hung for its full
+  # 1500 s grace kept every replacement from existing while the autoscaler
+  # returned nine idle L4 nodes during a stockout (incident SCA-3274, 2026-11-20).
+  # A hung pod now delays only its own replacement.
+  {{- $maxUnavailable := toString (.Values.rollout | default dict).maxUnavailable }}
+  {{- if not (regexMatch "^([1-9][0-9]?|100)%$" $maxUnavailable) }}
+  {{- fail "rollout.maxUnavailable must be a percentage in [1%, 100%]" }}
+  {{- end }}
   strategy:
-    type: Recreate
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 0
+      maxUnavailable: {{ $maxUnavailable | quote }}
   selector:
     matchLabels:
       app.kubernetes.io/name: batch-pipeline-worker
@@ -105,21 +141,30 @@ spec:
           ports:
             - {name: http, containerPort: 8080}
           env:
+            {{- if not (has "ROLLOUT_POD_TEMPLATE_HASH" $preserveLiveEnv) }}
             # Immutable rollout exporter identity, including supervised GPU children.
             - name: ROLLOUT_POD_TEMPLATE_HASH
               valueFrom:
                 fieldRef: {fieldPath: "metadata.labels['pod-template-hash']"}
+            {{- end }}
             - {name: BATCH_PIPELINE_SERVING_METRICS_MIN_REFRESH_SECONDS, value: {{ .Values.worker.servingMetricsMinRefreshSeconds | quote }}}
             - {name: BATCH_CONTROL_CANDIDATE_FANOUT, value: {{ .Values.worker.controlCandidateFanout | quote }}}
             - {name: BATCH_ADMISSION_PARALLEL_CALLS, value: {{ .Values.worker.admissionParallelCalls | quote }}}
             - {name: BATCH_PIPELINE_IDLE_POLL_MAX_SECONDS, value: {{ .Values.worker.idlePollMaxSeconds | quote }}}
+            {{- if not (has "FIRESTORE_READ_LEVERS" $preserveLiveEnv) }}
             - {name: FIRESTORE_READ_LEVERS, value: {{ .Values.worker.firestoreReadLevers | quote }}}
-            {{- if hasKey .Values.worker "heldPollSkipEnabled" }}
-            - {name: BATCH_HELD_POLL_SKIP_ENABLED, value: {{ .Values.worker.heldPollSkipEnabled | quote }}}
             {{- end }}
-            - {name: RECORD_FRESH_MERGE_ENABLED, value: {{ .Values.worker.RECORD_FRESH_MERGE_ENABLED | default false | quote }}}
+            {{- if hasKey .Values.worker "RECORD_FRESH_MERGE_ENABLED" }}
+            - {name: RECORD_FRESH_MERGE_ENABLED, value: {{ .Values.worker.RECORD_FRESH_MERGE_ENABLED | quote }}}
+            {{- end }}
+            {{- if hasKey .Values.worker "mergeStaleHeadUidAllowlist" }}
+            - {name: BATCH_PIPELINE_MERGE_STALE_HEAD_UID_ALLOWLIST, value: {{ .Values.worker.mergeStaleHeadUidAllowlist | quote }}}
+            {{- end }}
             - {name: BATCH_SHARD_SPREAD_ENABLED, value: {{ .Values.worker.shardSpreadEnabled | quote }}}
             - {name: BATCH_PULL_MULTI_LEASE_ENABLED, value: {{ .Values.worker.pullMultiLeaseEnabled | quote }}}
+            {{- if hasKey .Values.worker "packingSampleRate" }}
+            - {name: BATCH_PIPELINE_PACKING_SAMPLE_RATE, value: {{ .Values.worker.packingSampleRate | quote }}}
+            {{- end }}
             - {name: BATCH_PULL_BUSY_BORROW_ENABLED, value: {{ .Values.worker.pullBusyBorrowEnabled | quote }}}
             - {name: BATCH_PIPELINE_CONTENTION_RETRY_ENABLED, value: {{ .Values.worker.contentionRetryEnabled | quote }}}
             {{- if ne .Values.worker.stageProfilingEnabled nil }}
@@ -128,8 +173,12 @@ spec:
             - {name: STT_CAP_DISPATCH_ENFORCEMENT, value: {{ .Values.worker.capDispatchEnforcement | quote }}}
             - {name: STT_CAP_DISPATCH_COHORT, value: {{ .Values.worker.capDispatchCohort | quote }}}
             - {name: STT_CAP_DISPATCH_LANES, value: {{ .Values.worker.capDispatchLanes | quote }}}
+            {{- if not (has "UNLIMITED_V2_BACKFILL_HOURS_CAP_ENABLED" $preserveLiveEnv) }}
             - {name: UNLIMITED_V2_BACKFILL_HOURS_CAP_ENABLED, value: {{ .Values.worker.unlimitedV2BackfillHoursCapEnabled | default false | quote }}}
+            {{- end }}
+            {{- if not (has "UNLIMITED_V2_BACKFILL_HOURS_CAP_HOURS" $preserveLiveEnv) }}
             - {name: UNLIMITED_V2_BACKFILL_HOURS_CAP_HOURS, value: {{ .Values.worker.unlimitedV2BackfillHoursCapHours | default "24" | quote }}}
+            {{- end }}
             - {name: BATCH_PIPELINE_WORKER_RELEASE, value: {{ .Release.Name | quote }}}
             - name: POD_NAMESPACE
               valueFrom:
@@ -140,7 +189,9 @@ spec:
             - {name: BATCH_PIPELINE_WORKER_VALIDATION_DISPOSITION_ENABLED, value: {{ .Values.worker.workerValidationDispositionEnabled | quote }}}
             - {name: BATCH_PIPELINE_DIARIZE_SPEECH_ONLY_ENABLED, value: {{ .Values.worker.diarizeSpeechOnlyEnabled | quote }}}
             - {name: BATCH_HELD_DEAD_LETTER_ENABLED, value: {{ .Values.worker.heldDeadLetterEnabled | quote }}}
+            {{- if not (has "RECORD_SEAL_REPAIR_FRESH_ENABLED" $preserveLiveEnv) }}
             - {name: RECORD_SEAL_REPAIR_FRESH_ENABLED, value: {{ if hasKey .Values.recordSealRepair "freshEnabled" }}{{ .Values.recordSealRepair.freshEnabled | quote }}{{ else }}"true"{{ end }}}
+            {{- end }}
             - {name: BATCH_INPUT_EXPIRING_ENABLED, value: {{ .Values.worker.inputExpiringEnabled | quote }}}
             - {name: BATCH_PIPELINE_EMPTY_ASR_DISPOSITION_ENABLED, value: {{ .Values.worker.emptyAsrDispositionEnabled | quote }}}
             - {name: BATCH_PIPELINE_EMPTY_ASR_SAFETY_NET_ENABLED, value: {{ .Values.worker.emptyAsrSafetyNetEnabled | quote }}}
@@ -159,6 +210,9 @@ spec:
             # Prepare the budgeted flight prefix before the GPU lock; "false" is the kill switch.
             - {name: BATCH_PIPELINE_PREPARE_FLIGHT_ENABLED, value: {{ .Values.worker.prepareFlightEnabled | quote }}}
             - {name: BATCH_PIPELINE_WORKER_ENABLED, value: "true"}
+            {{- if hasKey .Values.worker "projectionOutbox" }}
+            - {name: BATCH_PROJECTION_OUTBOX, value: {{ .Values.worker.projectionOutbox | quote }}}
+            {{- end }}
             - {name: BATCH_PIPELINE_ENABLED, value: "false"}
             - {name: BATCH_PIPELINE_PERCENT, value: "0"}
             - {name: BATCH_PIPELINE_SHADOW_PERCENT, value: {{ .Values.worker.shadowPercent | quote }}}
@@ -168,7 +222,18 @@ spec:
             # No `default` here: Helm's default treats 0 as empty, which would
             # silently turn the documented 0-disable into 10.
             - {name: BATCH_PIPELINE_STRICT_VAD_SHADOW_PERCENT, value: {{ .Values.worker.strictVadShadowPercent | quote }}}
-            - {name: BATCH_PIPELINE_UID_ALLOWLIST, value: ""}
+            {{- if and (hasKey .Values.worker "shadowLanguageOnly") (not (has "BATCH_PIPELINE_SHADOW_LANGUAGE_ONLY" $preserveLiveEnv)) }}
+            - {name: BATCH_PIPELINE_SHADOW_LANGUAGE_ONLY, value: {{ .Values.worker.shadowLanguageOnly | quote }}}
+            {{- end }}
+            {{- if not $privateBinding }}
+            - name: BATCH_PIPELINE_UID_ALLOWLIST
+              {{- if $configuredAllowlist.valueFrom }}
+              valueFrom:
+                {{- toYaml $configuredAllowlist.valueFrom | nindent 16 }}
+              {{- else }}
+              value: ""
+              {{- end }}
+            {{- end }}
             - {name: BATCH_PIPELINE_SHARED_LIVE_ENABLED, value: "false"}
             - {name: BATCH_PIPELINE_POOL_KIND, value: dedicated_batch}
             - {name: BATCH_PIPELINE_WORDS_PROVIDER, value: parakeet}
@@ -178,7 +243,7 @@ spec:
             - {name: BATCH_PIPELINE_NAMESPACE, value: {{ .Values.namespace | quote }}}
             - {name: BUCKET_BATCH_PIPELINE, value: {{ required "dedicated staging bucket required" .Values.bucket | quote }}}
             # Retained-audio references may name the regional chunk bucket; empty admits only the private bucket.
-            - {name: BUCKET_AUDIO_DERIVED, value: {{ .Values.audioDerivedBucket | default "" | quote }}}
+            - {name: BUCKET_AUDIO_DERIVED, value: {{ .Values.audioDerivedBucket | quote }}}
             # Shared by Parakeet windows and pyannote segmentation, embedding and VAD inference.
             - {name: BATCH_PIPELINE_MODEL_BATCH_SIZE, value: {{ .Values.worker.batchSize | quote }}}
             - {name: BATCH_PIPELINE_UNIT_SECONDS, value: {{ .Values.worker.unitSeconds | quote }}}
@@ -206,6 +271,12 @@ spec:
                   name: {{ .Values.secretName }}
                   key: SONIOX_API_KEY
                   optional: true
+            {{- if $preserveLiveEnv }}
+            {{- $liveEnv := include "batch-pipeline-worker.liveEnv" (dict "deployment" $current "container" "worker" "names" $preserveLiveEnv) | fromYamlArray }}
+            {{- with $liveEnv }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+            {{- end }}
           startupProbe:
             httpGet: {path: /ready, port: http}
             periodSeconds: 10

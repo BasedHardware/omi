@@ -6,7 +6,7 @@ from utils.external_list_reads import ExternalListCacheRoute, cached_external_li
 from utils.other.list_budget import finish_list_budget, list_read_budget_for_request
 from utils.executors import postprocess_executor
 
-from fastapi import APIRouter, HTTPException, Depends, Request, Response
+from fastapi import APIRouter, HTTPException, Depends, Query, Request, Response
 from pydantic import BaseModel, Field, ValidationError
 
 import database.users as users_db
@@ -58,6 +58,7 @@ from utils.mcp_server.handlers import action_items as mcp_action_item_handlers
 from utils.mcp_server.handlers import conversations as mcp_conversation_handlers
 from utils.mcp_server.handlers import memories as mcp_memory_handlers
 from utils.mcp_server.handlers import other as mcp_other_handlers
+from utils.mcp_server.handlers import sync as mcp_sync_handlers
 from utils.conversations import transcribing_hold
 from utils.mcp_server.helpers import bounded_transcript_segments, conversation_card, public_transcript_timing
 from utils.mcp_server.registry import TOOL_REQUIRED_SCOPE, spec_for_tool
@@ -575,7 +576,8 @@ def get_conversations(
         # capability gap, not a transient outage.
         _incremental_sync_unsupported(
             "conversations",
-            "page this endpoint with the opaque X-Next-Cursor cursor (created_at DESC, id keyset)",
+            "page this endpoint with the opaque X-Next-Cursor cursor (created_at DESC, id keyset); "
+            "deletions are served by GET /v1/mcp/conversations/deleted?deleted_since=",
         )
     # Clamp pagination so a negative value cannot reach Firestore .limit()/.offset() (which
     # raises -> HTTP 500) and an oversized value cannot stream/skip the whole collection.
@@ -620,6 +622,39 @@ def get_conversations(
     return [
         SimpleConversation.model_validate(localize_timestamps(conv.model_dump(), zone)) for conv in valid_conversations
     ]
+
+
+class DeletedConversation(BaseModel):
+    id: str
+    deleted_at: datetime
+
+
+# Declared before /v1/mcp/conversations/{conversation_id} so "deleted" is never read as an id.
+@router.get("/v1/mcp/conversations/deleted", response_model=List[DeletedConversation], tags=["mcp"])
+def get_deleted_conversations(
+    response: Response,
+    deleted_since: Optional[str] = None,
+    limit: int = Query(100, ge=1, le=500),
+    cursor: Optional[str] = None,
+    uid: str = Depends(get_uid_with_mcp_conversations_read),
+):
+    """Deletion feed for clients that keep copies: ``(deleted_at ASC, id ASC)``, ``X-Next-Cursor`` paging."""
+    try:
+        since = parse_sync_timestamp(deleted_since, "deleted_since")
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    try:
+        rows, next_cursor = mcp_sync_handlers.deleted_conversations_page_core(
+            uid,
+            deleted_since=since,
+            limit=limit,
+            cursor_token=cursor,
+            cursor_kind="rest_get_deleted_conversations",
+        )
+    except ToolExecutionError as e:
+        raise _http_error_from_tool_error(e)
+    _next_cursor_header(response, next_cursor)
+    return [DeletedConversation(**row) for row in rows]
 
 
 @router.get("/v1/mcp/conversations/search", response_model=List[SimpleConversation], tags=["mcp"])

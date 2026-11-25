@@ -119,7 +119,13 @@ async def test_locked_obsolete_job_is_consumed_but_current_job_keeps_retrying(mo
             json={**payload, 'fingerprint': conversation_merge_fingerprint(row, demand=demand)},
         )
         assert result.status_code == 409 and result.json() == {'status': 'locked'}
-    assert read.call_args.kwargs['field_paths'] == ['audio_files', 'started_at', 'created_at', 'deleted']
+    assert read.call_args.kwargs['field_paths'] == [
+        'audio_files',
+        'started_at',
+        'created_at',
+        'deleted',
+        'recording_pieces',
+    ]
     assert read.call_args.kwargs['timeout'] == 1.0
     for work in (release, encode, stamp):
         work.assert_not_called()

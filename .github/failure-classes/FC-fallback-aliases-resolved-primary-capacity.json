@@ -1,6 +1,7 @@
 {
   "schema_version": 1,
   "id": "FC-fallback-aliases-resolved-primary-capacity",
+  "family": "config-value-change",
   "violated_contract": "A fallback advertised as independent capacity must not resolve to any primary pool selected by the active deployment topology. Checking an overridden base selector can allow the fallback to share the same unavailable capacity it is meant to replace.",
   "canonical_prevention": "Resolve the primary instances first, then reject a fallback pool that matches any resolved primary selector. Test both balanced primary pools with base and resolved selectors deliberately different, and retain a positive case for independent capacity.",
   "canonical_prevention_artifact": [

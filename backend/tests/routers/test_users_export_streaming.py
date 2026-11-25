@@ -242,7 +242,7 @@ def test_disconnect_during_blocked_read_cancels_context_and_closes_source(monkey
     read_errors = []
     captured_contexts = []
 
-    def _conversations(_uid, *, include_discarded=True):
+    def _conversations(_uid, *, include_discarded=True, include_recordings=False):
         try:
             yield {'id': 'conv1'}
             reads.append('read-1')

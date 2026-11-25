@@ -848,21 +848,17 @@ export type OmiBridgeApi = {
     cb: (p: { deleted: number; failed: number; total: number; done: boolean }) => void
   ) => () => void
   // --- Track 3 (AI user profile) ---
-  // Once-daily synthesized "about the user" doc, generated + stored + synced in
-  // the main process. The renderer pushes a session (Firebase token + base URLs)
-  // since the token lives renderer-side, and drives generation.
+  // The backend owns the synthesized "about the user" profile (generation,
+  // cadence, storage). Main is a reader: it caches the last GET for its prompt
+  // consumers and proxies refresh/edit/delete. The renderer still pushes a session
+  // (Firebase token + base URLs) since the token lives renderer-side.
   aiProfileSetSession: (
     session: { apiBase: string; desktopApiBase: string; token: string } | null
   ) => Promise<void>
-  aiProfileGenerateNow: (session?: {
-    apiBase: string
-    desktopApiBase: string
-    token: string
-  }) => Promise<AiUserProfileRecord>
-  aiProfileGetLatest: () => Promise<AiUserProfileRecord | null>
-  aiProfileEdit: (id: number, text: string) => Promise<void>
-  aiProfileDelete: (id: number) => Promise<void>
-  aiProfileDeleteAll: () => Promise<void>
+  aiProfileGet: () => Promise<AiProfileResult<AiUserProfile | null>>
+  aiProfileRefresh: () => Promise<AiProfileResult<AiUserProfile>>
+  aiProfileEdit: (text: string) => Promise<AiProfileResult<AiUserProfile>>
+  aiProfileDelete: () => Promise<AiProfileResult<null>>
   // --- Main-process token PULL (session freshness) ---
   // The push relay above can stall when this hidden window's background timers are
   // throttled, leaving main's cached token expired. So main can PULL a fresh token
@@ -2218,24 +2214,40 @@ export type InsightNotificationStyle = 'omi' | 'native'
 // three sets mirror the macOS reference implementation; see src/main/ipc/db.ts
 // for the tables and readers/writers.
 
-// Local history of the daily-synthesized AI User Profile. The backend is the
-// source of truth; local rows exist so the stage-2 consolidation can read up to
-// 5 past profiles.
-export type AiUserProfileRecord = {
-  id: number
+// The backend-owned AI User Profile (users/{uid}.ai_user_profile), as read from
+// GET /v1/users/ai-profile. There is no local history: the backend keeps one
+// current profile and regenerates it itself. Local mirror of the API shape until
+// omiApi.generated.ts carries `source` / `refreshed_at`.
+export type AiUserProfileSource = 'backend' | 'user_edit' | 'exploration' | 'client'
+
+export type AiUserProfile = {
   profileText: string
-  dataSourcesUsed: string[] // parsed from the stored JSON array (never null)
-  generatedAt: number // epoch ms
-  backendSynced: boolean
+  /** When this text was produced (epoch ms), or null when the backend omits it. */
+  generatedAt: number | null
+  /** Item count the backend fed to synthesis. */
+  dataSourcesUsed: number
+  source: AiUserProfileSource | null
+  /** When the backend last generated it (epoch ms), or null. */
+  refreshedAt: number | null
 }
 
-// Insert input: id is assigned by SQLite; backendSynced defaults to false.
-export type AiUserProfileInput = {
-  profileText: string
-  dataSourcesUsed?: string[]
-  generatedAt: number
-  backendSynced?: boolean
-}
+/** Failure classes the profile IPCs report. The renderer turns each into its own
+ *  plain-English line (never a raw backend body). */
+export type AiProfileErrorCode =
+  | 'not_signed_in'
+  | 'usage_exhausted' // 402
+  | 'in_progress' // 409
+  | 'insufficient_data' // 422
+  | 'synthesis_failed' // 502
+  | 'rate_limited' // 429
+  | 'auth_expired' // 401/403
+  | 'invalid_edit' // empty or over the 10,000-char cap (checked before sending)
+  | 'network'
+  | 'unknown'
+
+/** IPC result envelope. Errors travel as data: an Electron invoke rejection only
+ *  carries a wrapped message string, which is a poor channel for a status code. */
+export type AiProfileResult<T> = { ok: true; value: T } | { ok: false; code: AiProfileErrorCode }
 
 export type FocusSessionStatus = 'focused' | 'distracted'
 

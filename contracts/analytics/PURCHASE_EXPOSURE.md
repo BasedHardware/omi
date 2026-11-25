@@ -79,17 +79,10 @@ after dismissal counts another block. Server reach observations and quota/allowa
   the Electron preload runtime platform: windows/Windows, linux/Linux or unknown/unknown. The legacy
   event envelope and the existing `omi-windows` library identifier retain continuity.
 - Signed-in web: legacy PlansSheet, inline settings grid, storefront/contextual plans and server chat
-  budget pause. New-tab checkout observes a static message from the existing backend success landing
-  page, accepting only the configured API origin and the exact opened WindowProxy. The captured closed
-  plan/interval/source dimensions are used once with `client_navigation_completed`; this observes
-  navigation, not accepted payment. The cancel page sends a distinct static terminal message. Neither
-  message contains checkout/account data. Wrong origin/window/payload, duplicate/late returns, closed
-  windows and unopened popups cannot complete. Observers expire after 30 minutes or parent page exit.
-  Focus/refresh never emits Checkout Completed. Opener isolation, popup blocking, API-origin mismatch,
-  parent navigation or returns after expiry leave completion unobserved. The observer is optional and
-  fail-open; landing-page content and payment/read/write logic are unchanged. Use authoritative server
-  billing/invoice records and their paid/trial classification for payment analysis; Billing Subscription
-  Started is a lifecycle signal and does not alone prove a charge.
+  budget pause. Checkout opens in an isolated tab. Only a successful popup emits Checkout Opened.
+  Web Checkout Completed is deferred to SCA-4433. Use authoritative server billing/invoice records
+  and their paid/trial classification for payment analysis. Billing Subscription Started is a
+  lifecycle signal and does not alone prove a charge.
 
 No real purchase-restore action was found in native macOS, Windows/Linux or signed-in web purchase
 surfaces. Those clients emit neither restore event. No separate Linux purchase tree, native store IAP

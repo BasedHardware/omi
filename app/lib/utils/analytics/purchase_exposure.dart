@@ -116,19 +116,21 @@ class _AllowanceBlockShownOnceState extends State<AllowanceBlockShownOnce> {
   Widget build(BuildContext context) => widget.child;
 }
 
-/// Restore is the existing server subscription refresh, not a native store purchase.
-Future<void> observePurchaseRestore(UsageProvider usage, String source) async {
+/// Classifies the fresh subscription read while preserving the platform restore flow.
+Future<RestoreOutcome> observePurchaseRestore(UsageProvider usage, String source) async {
   final analytics = PlatformManager.instance.analytics;
   analytics.restoreAttempted(source: source);
   try {
-    await usage.fetchSubscription();
+    final outcome = await usage.restorePurchases();
     analytics.restoreResult(
-        source: source,
-        result: usage.error != null || usage.subscription == null
-            ? RestoreResultResult.failed
-            : usage.subscription!.subscription.plan.isPaid
-                ? RestoreResultResult.succeeded
-                : RestoreResultResult.noEntitlement);
+      source: source,
+      result: switch (outcome) {
+        RestoreOutcome.paid => RestoreResultResult.succeeded,
+        RestoreOutcome.free => RestoreResultResult.noEntitlement,
+        RestoreOutcome.failed => RestoreResultResult.failed,
+      },
+    );
+    return outcome;
   } catch (_) {
     analytics.restoreResult(source: source, result: RestoreResultResult.failed);
     rethrow;

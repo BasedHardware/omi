@@ -1,0 +1,17 @@
+{
+  "schema_version": 1,
+  "id": "FC-admission-receipt-accepts-unreviewed-fields",
+  "family": "cross-boundary-contract",
+  "violated_contract": "A verifier for a reviewed execution manifest must reject admission-added fields that can change execution, confinement or cleanup. Matching only the expected subset must not certify an object carrying unreviewed annotations, finalizers or spec fields.",
+  "canonical_prevention": "Compare the full execution spec and exact labels/annotations after normalizing only explicitly enumerated API defaults. Reject cleanup-blocking finalizers before execution. Cover both accepted defaults and added-field mutations at preflight and completed-receipt boundaries.",
+  "canonical_prevention_artifact": [
+    "backend/scripts/jobstore_operator/readiness_probe.py",
+    "backend/scripts/jobstore_operator/tests/test_readiness_probe.py"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "backend/scripts/jobstore_operator/readiness_probe.py",
+    "backend/scripts/jobstore_operator/tests/test_readiness_probe.py"
+  ],
+  "status": "open"
+}

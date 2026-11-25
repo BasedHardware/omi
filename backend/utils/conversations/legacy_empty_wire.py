@@ -4,6 +4,7 @@ from typing import Any, Mapping
 
 from config.episode_composition import legacy_empty_wire_enabled
 from utils.episodes.compose_wait import empty_terminal_result
+from utils.summary_quality import valid_title
 
 TERMINAL_TITLE = 'No summary'
 
@@ -22,6 +23,6 @@ def project(row: dict[str, Any], *, noise: bool) -> dict[str, Any]:
     if not noise or not legacy_empty_wire_enabled() or not empty_terminal_result(row):
         return row
     structured = row.get('structured') or {}
-    if str(structured.get('title') or '').strip():
+    if valid_title(structured.get('title')):
         return row
     return {**row, 'structured': {**structured, 'title': TERMINAL_TITLE}}

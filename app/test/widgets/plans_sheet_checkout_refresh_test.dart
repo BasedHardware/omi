@@ -171,8 +171,11 @@ Future<_Usage> _pumpSheet(
   addTearDown(tester.view.resetDevicePixelRatio);
   WebViewPlatform.instance = webView;
 
+  // The sheet re-reads the plan when it opens; that read still sees the free plan.
+  var opened = false;
   final usage = _Usage(
     subscriptionRequest: () async {
+      if (!opened) return _subscription(PlanType.basic, _freeAllowance);
       onSubscriptionRequest();
       return refreshedSubscription;
     },
@@ -213,6 +216,8 @@ Future<_Usage> _pumpSheet(
     ),
   );
   await tester.pump();
+  await tester.pump();
+  opened = true;
   await tester.ensureVisible(find.byKey(const ValueKey('plans_sheet_upgrade_button')));
   await tester.tap(find.byKey(const ValueKey('plans_sheet_upgrade_button')));
   await tester.pump();

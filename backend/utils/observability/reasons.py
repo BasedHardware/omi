@@ -23,7 +23,12 @@ from __future__ import annotations
 import re
 from enum import StrEnum
 
-from prometheus_client import Counter
+from database.reason_labels import (
+    OMI_REASON_TOTAL as OMI_REASON_TOTAL,
+    REASON_UNKNOWN_TOTAL as REASON_UNKNOWN_TOTAL,
+    ReasonFamily as ReasonFamily,
+    reason_label as _reason_label,
+)
 
 REASON_VALUE_MAX_LENGTH = 40
 
@@ -51,47 +56,68 @@ class MemoryL1Reason(StrEnum):
     UNKNOWN = 'unknown'
 
 
-class ReasonFamily(StrEnum):
-    MEMORY_L1 = 'memory_l1'
-    PUSHER_PCM = 'pusher_pcm'
-    LIVE_STT = 'live_stt'
-    WORKER_VALIDATION = 'worker_validation'
-    RECOVERY_FAILURE = 'recovery_failure'
-    STALE_RECOVERY = 'stale_recovery'
-    WORK_OUTCOME = 'work_outcome'
-    QUARANTINE = 'quarantine'
-    FALLBACK = 'fallback'
-    RETRY = 'retry'
-    CONSUMER = 'consumer'
-    PROVIDER_STT = 'provider_stt'
-    RAMP = 'ramp'
-    LEGACY_DARK = 'legacy_dark'
-    PARITY = 'parity'
-    STAGING_FENCE = 'staging_fence'
-    HELD_CONTENT = 'held_content'
-    SPEAKER_EVIDENCE = 'speaker_evidence'
-    NOTES_AGENT_FORCE = 'notes_agent_force'
-    NOTES_AGENT_TRANSPORT = 'notes_agent_transport'
-    SYNC_DISPATCH = 'sync_dispatch'
-    SYNC_CAPTURE_TIME = 'sync_capture_time'
-    SYNC_BRIDGE_CONTAINMENT = 'sync_bridge_containment'
-    SYNC_PROCESSING_HOLD = 'sync_processing_hold'
-    APP_REVIEW_CONFIG = 'app_review_config'
-    ADMISSION_HOLD = 'admission_hold'
-    LISTEN_SESSION_TRANSCRIPT = 'listen_session_transcript'
-    RECORD_PARTIAL_RERUN = 'record_partial_rerun'
-    VENDOR_ROUTE = 'vendor_route'
-    DELIVERY = 'delivery'
-    BATCH_FINAL_PASS = 'batch_final_pass'
-    RECURRING_VOICE = 'recurring_voice'
-    RECORD_GAP_FILL = 'record_gap_fill'
-    RECORD_RETAINED_ACK = 'record_retained_ack'
-    PIPELINE_LEDGER = 'pipeline_ledger'
-    CAPTURE_END = 'capture_end'
-    JOURNEY_FAILURE = 'journey_failure'
-    LISTEN_NO_AUDIO_CLOSE = 'listen_no_audio_close'
-    DUE_MARKER_SWEEP = 'due_marker_sweep'
-    RECORD_SEAL_REPAIR = 'record_seal_repair'
+class NotesQualityRepairReason(StrEnum):
+    UNKNOWN = 'unknown'
+    CAPTURE_AVAILABILITY = 'capture_availability'
+    EMPTY_HEADING = 'empty_heading'
+
+
+class OwnerRecognitionProofReason(StrEnum):
+    """Original-unit proof refusals; never identifiers or exception text."""
+
+    UNKNOWN = 'unknown'
+    NO_JOB = 'no_job'
+    NO_RESULT = 'no_result'
+    JOB_OWNER_MISMATCH = 'job_owner_mismatch'
+    JOB_UNIT_MISMATCH = 'job_unit_mismatch'
+    BINDING_OWNER_MISMATCH = 'binding_owner_mismatch'
+    RECEIPT_MISSING = 'receipt_missing'
+    ARTIFACT_ROW_MISSING = 'artifact_row_missing'
+    ARTIFACT_CLEANED = 'artifact_cleaned'
+    ARTIFACT_KIND_MISMATCH = 'artifact_kind_mismatch'
+    ARTIFACT_OWNER_MISMATCH = 'artifact_owner_mismatch'
+    ARTIFACT_UNIT_MISMATCH = 'artifact_unit_mismatch'
+    GENERATION_MISMATCH = 'generation_mismatch'
+    ERASURE = 'erasure'
+    URI_MISMATCH = 'uri_mismatch'
+    SKIPPED_EXPIRED = 'skipped_expired'
+    SKIPPED_MERGED = 'skipped_merged'
+    SKIPPED_SHARED_UNIT = 'skipped_shared_unit'
+    PROJECTION_SEGMENT_MISSING = 'projection_segment_missing'
+    PROJECTION_TEXT_MISMATCH = 'projection_text_mismatch'
+    PROJECTION_POINT_WORDS = 'projection_point_words'
+    PROJECTION_UNASSIGNED_WORDS = 'projection_unassigned_words'
+    UNIT_PCM_FORMAT = 'unit_pcm_format'
+    UNIT_DURATION = 'unit_duration'
+    ENDPOINT_UNCONFIGURED = 'endpoint_unconfigured'
+    PRIVATE_CLOUD_DISABLED = 'private_cloud_disabled'
+    INVENTORY_PAIR_MISMATCH = 'inventory_pair_mismatch'
+    INVENTORY_COUNT_MISMATCH = 'inventory_count_mismatch'
+    DECODED_COVERAGE_HOLE = 'decoded_coverage_hole'
+    DECODED_OVERLAP = 'decoded_overlap'
+    DECODED_DURATION_MISMATCH = 'decoded_duration_mismatch'
+    MANIFEST_UNVALIDATED = 'manifest_unvalidated'
+    NO_PROVEN_WINDOW = 'no_proven_window'
+    UNCOVERED_WINDOW = 'uncovered_window'
+    GLOBAL_MANIFEST_AMBIGUITY = 'global_manifest_ambiguity'
+    STALE_GENERATION = 'stale_generation'
+    READ_BUDGET = 'read_budget'
+    OTHER = 'other'
+
+
+class OwnerRecognitionFinalPassOutcome(StrEnum):
+    UNKNOWN = 'unknown'
+    DISABLED = 'disabled'
+    INELIGIBLE = 'ineligible'
+    ADMITTED = 'admitted'
+    DEPENDENCY_UNAVAILABLE = 'dependency_unavailable'
+
+
+class OwnerRecognitionBatchEmbeddingOutcome(StrEnum):
+    UNKNOWN = 'unknown'
+    ATTEMPTED = 'attempted'
+    SUCCESSFUL = 'successful'
+    CACHED = 'cached'
 
 
 class RecordSealRepairRunOutcome(StrEnum):
@@ -120,6 +146,19 @@ class PusherPcmStage(StrEnum):
     TAIL = 'tail'
 
 
+class RawPackExclusionReason(StrEnum):
+    UNKNOWN = 'unknown'
+    ARRIVAL_CLOCK = 'arrival_clock'
+    DISABLED = 'disabled'
+    BOUNDS = 'bounds'
+    CHANNELS = 'channels'
+    CODEC = 'codec'
+    LAYOUT = 'layout'
+    MISSING_MANIFEST = 'missing_manifest'
+    AMBIGUOUS_MANIFEST = 'ambiguous_manifest'
+    INVALID = 'invalid'
+
+
 class PusherPcmErrorReason(StrEnum):
     UNKNOWN = 'unknown'
     ACQUIRE = 'acquire'
@@ -142,23 +181,6 @@ class AppReviewConfigOutcome(StrEnum):
     OK = 'ok'
     PARTIAL = 'partial'
     ERROR = 'error'
-
-
-REASON_UNKNOWN_TOTAL = Counter(
-    'omi_reason_unknown_total',
-    'Values presented to a closed reason enum that were not members, by reason family',
-    ['family'],
-)
-OMI_REASON_TOTAL = Counter(
-    'omi_reason_total',
-    'Values presented to a closed reason enum (denominator for omi:reason_unknown_ratio:rate30m), by reason family',
-    ['family'],
-)
-
-
-for _family in ReasonFamily:  # pre-initialise children so rate() sees them from the first scrape
-    REASON_UNKNOWN_TOTAL.labels(family=_family.value)
-    OMI_REASON_TOTAL.labels(family=_family.value)
 
 
 class RecordGapFillOutcome(StrEnum):
@@ -228,6 +250,8 @@ class CaptureEndProofOutcome(StrEnum):
     NO_SPEECH_CLOCK = 'no_speech_clock'
     RESUMED = 'resumed'
     CLOCK_UNKNOWN = 'clock_unknown'
+    SEALED = 'sealed'
+    SEALED_HELD = 'sealed_held'
 
 
 class UploadTraceGateReason(StrEnum):
@@ -255,6 +279,27 @@ class SyncProcessingHoldOutcome(StrEnum):
     LATE_CAP = 'late_cap'
 
 
+class FutureCaptureRecoveryOutcome(StrEnum):
+    UNKNOWN = 'unknown'
+    ANCHORED = 'anchored'
+    ANCHOR_PENDING = 'anchor_pending'
+    IDENTITY_REQUIRED = 'identity_required'
+    ANCHOR_ERROR = 'anchor_error'
+    REFUSED = 'refused'
+
+
+class FutureCaptureRequestOutcome(StrEnum):
+    UNKNOWN = 'unknown'
+    PREFLIGHT_REFUSED = 'preflight_refused'
+    IDENTITY_REQUIRED = 'identity_required'
+    ROUTE_DECLINED = 'route_declined'
+    PRIOR_CUSTODY = 'prior_custody'
+    DECODE_MEMO_HIT = 'decode_memo_hit'
+    DECODE_FAILED = 'decode_failed'
+    PRE_OFFSET_ERROR = 'pre_offset_error'
+    REACHED_OFFSETS = 'reached_offsets'
+
+
 class ListenSessionTranscriptOutcome(StrEnum):
     """One listen session's headline transcript outcome (``ListenSessionRuntime._session_transcript_outcome``)."""
 
@@ -269,6 +314,22 @@ class PersonVoiceQualityReason(StrEnum):
     INVALID_PERSON_VOICEPRINT = 'invalid_person_voiceprint'
     INSUFFICIENT_PERSON_VOICE_AUDIO = 'insufficient_person_voice_audio'
     INCOMPATIBLE_PERSON_VOICEPRINT = 'incompatible_person_voiceprint'
+
+
+class RecordingRotationOutcome(StrEnum):
+    """Disposition of one listen v3 recording rotation step."""
+
+    UNKNOWN = 'unknown'
+    ROTATED = 'rotated'
+    SAME_ROW = 'same_row'
+    CREATE_FAILED = 'create_failed'
+    SEAL_FAILED = 'seal_failed'
+    SEAL_RETRY = 'seal_retry'
+    HANDED_OFF = 'handed_off'
+    OTHER_OWNER = 'other_owner'
+    POINTER_FAILED = 'pointer_failed'
+    SKIPPED_PRODUCER = 'skipped_producer'
+    SUCCESSOR_KEPT = 'successor_kept'
 
 
 class StaleRecoveryOutcome(StrEnum):
@@ -290,6 +351,26 @@ class DueMarkerSweepOutcome(StrEnum):
     REMARKED = 'remarked'
     SKIPPED = 'skipped'
     ERROR = 'error'
+
+
+class SummaryRepairDiscoveryOutcome(StrEnum):
+    """Bounded counts for a summary repair discovery phase."""
+
+    UNKNOWN = 'unknown'
+    QUERIES = 'queries'
+    QUERY_ERROR = 'query_error'
+    FETCHED = 'fetched'
+    EXAMINED = 'examined'
+    UNEXAMINED = 'unexamined'
+    ROW_REFUSED = 'row_refused'
+    INVALID_PATH = 'invalid_path'
+    ACCOUNT_DELETION_BLOCKED = 'account_deletion_blocked'
+    EXPIRED = 'expired'
+    OWNER_DEFERRED = 'owner_deferred'
+    ATTEMPTED = 'attempted'
+    ADMITTED = 'admitted'
+    NOT_ADMITTED = 'not_admitted'
+    REDRIVE_ERROR = 'redrive_error'
 
 
 class RetryReason(StrEnum):
@@ -314,6 +395,7 @@ class ConsumerReason(StrEnum):
     STALE_TOKEN = 'stale_token'
     LEASE_HELD = 'lease_held'
     EMPTY_OUTPUT_BLOCKED = 'empty_output_blocked'
+    V3_CUSTODY_CONFLICT = 'v3_custody_conflict'
 
 
 class RampReason(StrEnum):
@@ -775,11 +857,21 @@ class RecoveryFailureReason(StrEnum):
     ABANDONED_RUNNING = 'abandoned_running'
 
 
+class ConvStructureFlexFallbackReason(StrEnum):
+    """Why a conversation structure request fell back from Flex to Standard."""
+
+    UNKNOWN = 'unknown'
+    TIMEOUT = 'timeout'
+    HTTP_429 = 'http_429'
+    OTHER = 'other'
+
+
 class FallbackReason(StrEnum):
     """Every reason `record_fallback` may emit (superset of LiveSttReason)."""
 
     UNKNOWN = 'unknown'
     INPUT_MISSING = 'input_missing'
+    RETAINED_DIGEST_CHANGED = 'retained_digest_changed'
     INITIALIZATION_FAILED = 'initialization_failed'
     CONNECTION_LOST = 'connection_lost'
     SEND_FAILED = 'send_failed'
@@ -887,29 +979,30 @@ def reason_values(enum: type[StrEnum]) -> frozenset[str]:
 
 
 def reason_label(family: ReasonFamily, value: object, enum: type[StrEnum]) -> str:
-    """Return ``value`` if it is a member of ``enum``; otherwise count it and return ``'unknown'``.
+    """Normalize and count through the single shared reason telemetry core."""
+    return _reason_label(family, value, enum)
 
-    Never raises. The family label is bounded by ``ReasonFamily``.
-    """
-    try:
-        family_label = ReasonFamily(family).value
-    except Exception:
-        family_label = 'unknown'
-    result = 'unknown'
-    try:
-        if isinstance(value, str):
-            result = enum(value).value
-        elif isinstance(value, enum):
-            result = value.value
-    except Exception:
-        result = 'unknown'
-    try:
-        OMI_REASON_TOTAL.labels(family=family_label).inc()
-        if result == 'unknown' and value != 'unknown':
-            REASON_UNKNOWN_TOTAL.labels(family=family_label).inc()
-    except Exception:
-        pass
-    return result
+
+class HistoricalSummaryOpenOutcome(StrEnum):
+    """``omi_historical_summary_open_total{outcome}``: one per summary-on-open request (T1+)."""
+
+    UNKNOWN = 'unknown'
+    EXISTING = 'existing'
+    GENERATED = 'generated'
+    NOT_FOUND = 'not_found'
+    LOCKED = 'locked'
+    DISCARDED = 'discarded'
+    NOT_HISTORICAL = 'not_historical'
+    DISABLED = 'disabled'
+    RATE_LIMITED = 'rate_limited'
+    GLOBAL_LIMITED = 'global_limited'
+    BYOK_REQUIRED = 'byok_keys_required'
+    BUDGET = 'budget'
+    ATTEMPTS_EXHAUSTED = 'attempts_exhausted'
+    BUSY = 'busy'
+    EMPTY = 'empty'
+    TRANSIENT = 'transient'
+    FENCED = 'fenced'
 
 
 class RecurringProfileOutcome(StrEnum):

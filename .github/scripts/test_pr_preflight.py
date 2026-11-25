@@ -856,6 +856,20 @@ class SelectionTests(unittest.TestCase):
         self.assertIn("scripts/failure-class explain FC-<slug> --format json", output)
         self.assertIn("FC-malformed-doc-read", output)
 
+    def test_failure_class_suggestion_tags_candidates_with_their_family(self) -> None:
+        output = format_failure_class_suggest(
+            {
+                "requires_declaration": True,
+                "pr_body_patch": {"text": "Failure-Class: none\n"},
+                "advisory_candidates": [
+                    {"id": "FC-a", "family": "write-fence", "violated_contract": "Late writers lose."},
+                    {"id": "FC-b", "violated_contract": "No family field yet."},
+                ],
+            }
+        )
+        self.assertIn("- FC-a [write-fence]: Late writers lose.", output)
+        self.assertIn("- FC-b: No family field yet.", output)
+
     def test_pr_body_file_env_is_honored(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             temp = Path(tmp)

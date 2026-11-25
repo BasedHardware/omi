@@ -76,6 +76,9 @@ class _Recording:
     def get(self, table: str, key: str) -> dict:
         return self._tx.get(table, key)
 
+    def get_existing(self, table: str, key: str) -> dict | None:
+        return self._tx.get_existing(table, key)
+
     def put(self, table: str, key: str, value: dict) -> None:
         self._tx.get(table, key)  # first touch caches the committed row (the observers' "previous")
         self._tx.put(table, key, value)
@@ -86,6 +89,9 @@ class _Recording:
 
     def first_pending(self, owner_key: str) -> dict | None:
         return self._tx.first_pending(owner_key)
+
+    def pending_page(self, owner_key: str, limit: int) -> list[dict]:
+        return self._tx.pending_page(owner_key, limit)
 
     def fresh_first_pending(self, owner_key: str) -> dict | None:
         return self._tx.fresh_first_pending(owner_key)
@@ -107,6 +113,9 @@ class _Recording:
 
 
 class PgSimStore(SimStore):
+    def packing_candidates(self, owner_key: str) -> list[dict]:
+        return self.pg.packing_candidates(owner_key)
+
     def projection_finish_backfill_complete(self) -> bool:
         return self.pg.projection_finish_backfill_complete()
 
@@ -211,6 +220,12 @@ class PgSimStore(SimStore):
             exclude_async=exclude_async,
             followup_due_before=followup_due_before,
         )
+
+    def projection_outbox_page(self, now: float, limit: int):
+        return self.pg.projection_outbox_page(now, limit)
+
+    def projection_page_with_outbox(self, **scope):
+        return self.pg.projection_page_with_outbox(**scope)
 
     def projection_successor(self, owner_key: str, previous: str | None) -> str | None:
         return self.pg.projection_successor(owner_key, previous)

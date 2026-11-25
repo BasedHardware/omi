@@ -454,11 +454,10 @@ environments:
         attempt_deadline: 600s
         owner: backend/docs/runbooks/error-class-alerts.md
       - name: app-review-config-sweep-hourly
-        lifecycle: planned
         region: us-central1
         schedule: "17 * * * *"
         time_zone: Etc/UTC
-        state: PAUSED
+        state: ENABLED
         target:
           type: http
           uri: https://backend-sync-hhibjajaja-uc.a.run.app/v2/app-review-config/sweep
@@ -473,3 +472,43 @@ environments:
           min_backoff: 5s
         attempt_deadline: 300s
         owner: backend/docs/runbooks/app-review-config.md
+      # conversations v3: prod only. Dev's data plane is production Firestore, so a dev sweeper would
+      # rebuild real users' conversations with dev code; these jobs are not declared for based-hardware-dev.
+      - name: conversations-v3-sweep
+        region: us-central1
+        schedule: "*/5 * * * *"
+        time_zone: UTC
+        state: ENABLED
+        target:
+          type: http
+          uri: https://backend-sync-hhibjajaja-uc.a.run.app/v1/conversations-v3/sweep
+          method: POST
+          oidc:
+            service_account: sync-tasks-invoker@based-hardware.iam.gserviceaccount.com
+            audience: https://backend-sync-hhibjajaja-uc.a.run.app/v2/sync-jobs/run
+        retry:
+          max_backoff: 3600s
+          max_doublings: 5
+          max_retry: 0s
+          min_backoff: 5s
+        attempt_deadline: 600s
+        owner: backend/docs/runbooks/conversations-v3.md
+      - name: conversations-v3-legacy-users
+        region: us-central1
+        schedule: "15 0 * * *"
+        time_zone: UTC
+        state: ENABLED
+        target:
+          type: http
+          uri: https://backend-sync-hhibjajaja-uc.a.run.app/v1/conversations-v3/legacy-users
+          method: POST
+          oidc:
+            service_account: sync-tasks-invoker@based-hardware.iam.gserviceaccount.com
+            audience: https://backend-sync-hhibjajaja-uc.a.run.app/v2/sync-jobs/run
+        retry:
+          max_backoff: 3600s
+          max_doublings: 5
+          max_retry: 0s
+          min_backoff: 5s
+        attempt_deadline: 600s
+        owner: backend/docs/runbooks/conversations-v3.md

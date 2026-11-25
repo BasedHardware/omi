@@ -1,0 +1,9 @@
+environment: prod
+image:
+  digest: ""
+replicaCount: 2
+resources:
+  requests: {cpu: 250m, memory: 128Mi}
+  limits: {memory: 512Mi}
+podMonitoring:
+  enabled: true

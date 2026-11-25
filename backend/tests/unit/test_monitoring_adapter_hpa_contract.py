@@ -200,9 +200,8 @@ def test_diff_chain_rule_is_a_closed_reviewed_addition():
             expected_config(broken)
 
 
-def test_hpa_and_adapter_changes_select_this_contract():
-    sources = [ADAPTER] + list(CHARTS.glob('*/prod*values.yaml'))
-    sources += list(CHARTS.glob('*/templates/hpa.yaml'))
+def _hpa_contract_sources():
+    sources = [ADAPTER, *CHARTS.glob('*/prod*values.yaml'), *CHARTS.glob('*/templates/hpa.yaml')]
     owned = {
         'parakeet',
         'backend-listen',
@@ -213,13 +212,22 @@ def test_hpa_and_adapter_changes_select_this_contract():
         'monitoring',
         'batch-pipeline-worker',
     }
-    all_tests = selector.discover_all_tests()
-    for source in sources:
-        if source.relative_to(CHARTS).parts[0] not in owned:
-            continue
-        path = str(source.relative_to(CHARTS.parents[1]))
-        selected, _ = selector.tests_for_changed_paths([path], all_tests)
-        assert 'tests/unit/test_monitoring_adapter_hpa_contract.py' in selected, path
+    return sorted(
+        source.relative_to(CHARTS.parents[1]).as_posix()
+        for source in sources
+        if source.relative_to(CHARTS).parts[0] in owned
+    )
+
+
+@pytest.fixture(scope='module')
+def discoverable_backend_tests():
+    return selector.discover_all_tests()
+
+
+@pytest.mark.parametrize('path', _hpa_contract_sources())
+def test_hpa_and_adapter_changes_select_this_contract(path, discoverable_backend_tests):
+    selected, _ = selector.tests_for_changed_paths([path], discoverable_backend_tests)
+    assert 'tests/unit/test_monitoring_adapter_hpa_contract.py' in selected
 
 
 def _comparison_inputs():

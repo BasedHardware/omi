@@ -1,0 +1,17 @@
+{
+  "schema_version": 1,
+  "id": "FC-transport-liveness-read-as-speech-activity",
+  "family": "temporal-correctness",
+  "violated_contract": "A conversation boundary that means 'the people stopped talking' must be measured on speech, never on transport liveness. Batch-only /v4/listen sockets run no live STT, so the lifecycle loop counted its silence timeout from the last received audio frame. A pendant sends frames through silence, so the timeout never fired: on 2026-11-17, 30% of the 476 open batch recordings with fresh audio had been open longer than an hour, and two separate conversations sat inside one recording that stayed in progress for 1h43m until the device disconnected.",
+  "canonical_prevention": "Batch-only sockets run the local Silero model over decoded audio and expose a last-speech clock. The lifecycle loop counts quiet from that clock, keeps an all-silent row open instead of closing empty recordings, and falls back to the audio clock only when the model fails. Tests pin speech then streamed silence closing the row, recent speech and all-silent rows staying open, and the failure fallback.",
+  "canonical_prevention_artifact": [
+    "backend/tests/unit/test_listen_batch_speech_quiet.py"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "backend/routers/listen/conversations.py",
+    "backend/routers/listen/receiver.py",
+    "backend/utils/stt/speech_clock.py"
+  ],
+  "status": "open"
+}

@@ -12,6 +12,9 @@ MONITORING = REPO / "backend/charts/monitoring"
 RATIO = "omi-firestore-batch-reads-audio-hour"
 NO_OUTPUT = "omi-firestore-batch-reads-no-output"
 STEP = "omi-firestore-billed-reads-step"
+UNATTRIBUTED = "omi-firestore-unattributed-reads"
+BLIND = UNATTRIBUTED + "-blind"
+ABSOLUTE = "omi-firestore-unattributed-absolute"
 RULES = {rule["uid"]: rule for rule in json.loads((MONITORING / "alerts/firestore.json").read_text())}
 SPEC = importlib.util.spec_from_file_location("cost_backtest", REPO / "backend/scripts/alert_backtest.py")
 BACKTEST = importlib.util.module_from_spec(SPEC)
@@ -70,16 +73,19 @@ def test_step_samples_seven_matching_full_hours_without_daily_subquery_alignment
     nodes = RULES[STEP]["data"]
     metric = "firestore_googleapis_com:document_read_count"
     coverage = (
-        "(min(count_over_time(" + metric + "[1h] offset 1ms)) >= 58) and "
-        "(count(count by (type) (count_over_time(" + metric + "[1h] offset 1ms))) == 3)"
+        "(min(count_over_time(" + metric + "[1h])) >= 58) and "
+        "(count(count by (type) (count_over_time(" + metric + "[1h]))) == 3)"
     )
-    hourly = "last_over_time((sum(sum_over_time(" + metric + "[1h] offset 1ms)) and " + coverage + ")[1h:1h])"
+    hourly = "last_over_time((sum(sum_over_time(" + metric + "[1h])) and " + coverage + ")[1h:1h] offset 1ms)"
     assert nodes[0]["model"]["expr"] == hourly
     historical = nodes[1]["model"]["expr"]
+    # Real GMP returned NoData for raw-selector offsets nested in a subquery.
+    assert all("[1h] offset" not in node["model"]["expr"] for node in nodes[:2])
     expected = (
         "quantile(0.5, "
         + " or ".join(
-            'label_replace(' + hourly[:-1] + f' offset {day}d), "day", "{day}", "", "")' for day in range(1, 8)
+            'label_replace(' + hourly.removesuffix(' offset 1ms)') + f' offset {day}d1ms), "day", "{day}", "", "")'
+            for day in range(1, 8)
         )
         + ")"
     )
@@ -90,22 +96,37 @@ def test_step_samples_seven_matching_full_hours_without_daily_subquery_alignment
     assert "increase(" not in hourly
 
 
-@pytest.mark.parametrize("uid", [RATIO, NO_OUTPUT, STEP])
-def test_rules_are_enabled_production_only_tickets_with_owner_and_rollback(uid):
+@pytest.mark.parametrize("uid", [RATIO, NO_OUTPUT, STEP, UNATTRIBUTED, BLIND, ABSOLUTE])
+def test_rules_are_enabled_production_only_and_owned_by_margin(uid):
     rule = RULES[uid]
-    assert rule["for"] == "2h"
+    assert rule["for"] == ("30m" if uid in {UNATTRIBUTED, BLIND} else "2h")
     assert rule["isPaused"] is False
-    assert rule["annotations"]["severity"] == "ticket"
     assert rule["labels"]["tier"] == "agent"
-    assert rule["labels"]["owner"] == "firestore-cost-owner"
-    assert rule["labels"]["owner_issue"] == "SCA-2173"
+    assert rule["labels"]["audience"] == "agent"
+    assert rule["labels"]["owner"] == "margin"
+    assert rule["labels"]["owner_issue"] == "SCA-3891"
     assert rule["notification_settings"]["receiver"] == "Omi - Services Alerting (Telegram)"
-    assert {node["datasourceUid"] for node in rule["data"][:2]} == {"gmp-cloud-run"}
+    assert rule["notification_settings"]["mute_time_intervals"] == ["omi-tier-silent"]
+    assert {node["datasourceUid"] for node in rule["data"] if "expr" in node["model"]} == {"gmp-cloud-run"}
+    if uid in {RATIO, NO_OUTPUT, STEP}:
+        assert rule["annotations"]["severity"] == "ticket"
+        assert rule["labels"]["owner_issue"] in rule["annotations"]["safe_next_action"]
     verifier = runpy.run_path(str(REPO / "backend/scripts/verify_pusher_live_alert_route.py"))
     assert uid in json.loads((MONITORING / "live-alert-gate.json").read_text())["uids"]
     assert uid in verifier["load_live_stt_import_rules"](production=True)
     assert uid not in verifier["load_live_stt_import_rules"](production=False)
     assert verifier["mismatched_definition_keys"](dict(rule, isPaused=True), rule) == ["isPaused"]
+
+
+def test_absolute_rule_shares_ratio_units_and_requires_healthy_native_data():
+    instrumented, billed, excess, threshold = [node["model"] for node in RULES[ABSOLUTE]["data"]]
+    assert instrumented["expr"] == RULES[UNATTRIBUTED]["data"][0]["model"]["expr"]
+    ratio_billed = RULES[UNATTRIBUTED]["data"][1]["model"]["expr"]
+    blind_check = RULES[BLIND]["data"][0]["model"]["expr"]
+    assert billed["expr"] == f"({ratio_billed}) and (({blind_check}) == 1)"
+    assert excess["expression"] == "$B - $A"
+    assert threshold["conditions"][0]["evaluator"] == {"type": "gt", "params": [579]}
+    assert RULES[ABSOLUTE]["noDataState"] == "OK"
 
 
 def test_shared_checksum_pinned_promtool_hook_runs_the_cost_fixtures():

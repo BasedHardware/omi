@@ -79,7 +79,8 @@ _BOOST_EXEMPT_DEFAULT = (
     "storefront:plans,import:upload,action_items:list,action_items:list_hot_client,static_map:get,"
     "dev:memories,dev:memories_write_burst,dev:conversations,dev:conversations_from_segments,"
     "mcp:oauth_url_client,mcp:oauth_url_client_global,screen_task:gate,screen_task:gate_daily,users:budget_choice,"
-    "conversations:task-presence"
+    "conversations:task-presence,google_calendar:selection,"
+    "conversations:historical_summary_open,conversations:historical_summary_open_daily"
 )
 _RATE_LIMIT_BOOST_EXEMPT_RAW: str = os.getenv("RATE_LIMIT_BOOST_EXEMPT", _BOOST_EXEMPT_DEFAULT)
 
@@ -108,6 +109,9 @@ RATE_POLICIES: dict[str, tuple[int, int]] = {
     "storefront:plans": (12, 60),
     # Each attempt looks up a promotion code; a low ceiling stops code guessing.
     "payments:redeem_code": (10, 3600),
+    # No-card prepaid code redemption: a low per-uid ceiling stops code guessing.
+    "payments:prepaid_code": (10, 3600),
+    "payments:play_verify": (30, 3600),
     "proactivity:api": (120, 60),
     # Conversations — each triggers ~22 OpenAI calls
     "conversations:create": (10, 3600),
@@ -117,6 +121,10 @@ RATE_POLICIES: dict[str, tuple[int, int]] = {
     # LLM calls, well under :create's STT + ~22 calls), so 10/hour/user keeps
     # the worst case below the :create ceiling while allowing real exploration.
     "conversations:reprocess": (10, 3600),
+    # Historical-tier summary on open (T1+): one summary per old conversation the
+    # owner opens. A cost cap, so boost-exempt; the hour and the day are separate windows.
+    "conversations:historical_summary_open": (30, 3600),
+    "conversations:historical_summary_open_daily": (100, 86400),
     "conversations:merge": (5, 3600),
     # Episodes: "Wrap up now" and Undo on a captured item; no model call.
     "episodes:write": (60, 3600),
@@ -236,10 +244,16 @@ RATE_POLICIES: dict[str, tuple[int, int]] = {
     "memories:extract": (30, 3600),
     # Return-only SSOT calendar/gmail/notes synthesis for desktop connector imports
     "connectors:synthesize": (30, 3600),
+    # Calendar read selection. Each catalog read enumerates Google CalendarList
+    # (up to 20 pages) and each save re-derives it, so a polling client can drain
+    # the shared OAuth client's Calendar quota. A picker opens on user intent.
+    "google_calendar:selection": (10, 60),
     # Return-only SSOT provisional conversation topic (emoji + short title)
     "conversations:topic": (60, 3600),
     # Return-only SSOT AI user profile synthesis (once-daily desktop cadence)
     "users:ai_profile_synthesize": (8, 86400),
+    # Explicit backend-owned AI user profile refresh (Generate Now / Regenerate)
+    "users:ai_profile_refresh": (8, 86400),
     # Canonical graph reads — paginated Firestore + assertion hydration
     "knowledge_graph:canonical": (120, 3600),
     "wrapped:generate": (2, 86400),

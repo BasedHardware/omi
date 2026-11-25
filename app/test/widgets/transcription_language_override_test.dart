@@ -11,6 +11,7 @@ import 'package:omi/models/stt_provider.dart';
 import 'package:omi/pages/settings/transcription_settings_page.dart';
 import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/providers/home_provider.dart';
+import 'package:omi/providers/usage_provider.dart';
 
 /// Language is chosen in one place: a Custom STT provider shows the primary language read-only
 /// until the reader explicitly overrides it (docs/ux-contract.md §12).
@@ -29,6 +30,8 @@ void main() {
     addTearDown(captureProvider.dispose);
     final homeProvider = HomeProvider();
     addTearDown(homeProvider.dispose);
+    final usageProvider = UsageProvider();
+    addTearDown(usageProvider.dispose);
     tester.view.physicalSize = const Size(1179, 2556);
     tester.view.devicePixelRatio = 3;
     addTearDown(tester.view.resetPhysicalSize);
@@ -39,6 +42,7 @@ void main() {
         providers: [
           ChangeNotifierProvider<CaptureProvider>.value(value: captureProvider),
           ChangeNotifierProvider<HomeProvider>.value(value: homeProvider),
+          ChangeNotifierProvider<UsageProvider>.value(value: usageProvider),
         ],
         child: const MaterialApp(
           localizationsDelegates: [

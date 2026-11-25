@@ -9,6 +9,19 @@ keep their existing recovery.
 
 ## Readers, writers and sweeps
 
+Sync upload intake can establish a monthly allowance refusal after it has
+selected the Omi-funded GPU route. The bounded probe uses the same batch-funded
+resolver with an already verified monthly usage total. An unavailable total,
+budget denial or ambiguous decision leaves the upload on the ordinary worker
+path. Sync upload enforces the independent Unlimited V2 backfill day cap. The
+admission transaction rechecks the release cursor and usage period before
+inserting the job and owner's held count together.
+New holds have no ready-queue link, so workers predating SCA-2195 cannot lease
+them. Observe committed uploads with
+`omi_stt_cap_dispatch_decisions_total{path="batch_intake",outcome="held",reason="allowance_exhausted"}`.
+The `batch_allowance_intake` log also records the number of parked units per
+commit.
+
 `Scheduler.defer` (GPU worker and backend) parks new refusals transactionally;
 `Scheduler.recover` (both services) parks old-worker retry decisions. The
 operator migration and scheduler use the same CAS helper in
@@ -23,13 +36,7 @@ held owners with one leader at this rate). There is no per-recording poll.
 The generation reads both the commercial subscription and
 `referral_campaign_grant`. It hashes commercial authority/validity, campaign
 enablement, the grant fields admission consumes, the shared effective plan
-projection, and the UTC usage month (UTC day when the optional backfill day cap
-is enabled). The daily signal prevents a re-parked day-cap refusal from waiting
-until next month. Discovery may reoffer a still-capped row once per day; normal
-admission still refuses it, without changing entitlement or allowance amounts.
-This adds at most one generation recheck/release attempt per owner per day while
-that cap is enabled; repeated large daily bursts need the same cost remeasurement
-as other repeated generation bursts. Grant claims/extensions and starts, expiry
+projection, and the UTC usage month. Grant claims/extensions and starts, expiry
 or paid-coverage time boundaries therefore change discovery even without a
 commercial write. Other usage counters and profile fields do not. This uses
 `effective_subscription_payload`, the same promotion composition as admission;
@@ -97,17 +104,116 @@ prod-operator:
 
 ```sh
 python backend/scripts/batch_pipeline_allowance_migration.py --stage prod --apply \
-  --confirm-reviewed-rollout-go --max-pages 10000
+  --confirm-reviewed-rollout-go --max-pages 10000 \
+  --concurrency 32 --max-rows-per-second 50
 ```
 
-Each page discovers at most 100 document IDs, rechecks every row transactionally,
+Run **one driver process only**, after stopping/waiting for any earlier driver.
+`--concurrency` defaults to 1 (the original sequential path), accepts 1..32, and
+limits concurrent owner groups. Within each page, rows sharing `owner_key` run
+in document-ID order, including commit; different owners can finish out of order.
+The shared DB executor can impose a lower worker ceiling if configured below 32.
+`--max-rows-per-second` defaults to unlimited; a positive finite value sets a
+single process-wide token bucket shared across pages and workers. Every row
+transaction **attempt**, including SDK/contention retries and fenced/no-op rows,
+takes a token before BeginTransaction, so low rates never wait with a transaction
+open. Capacity is one token: at 50/s it spaces permits
+by at least 20 ms and does not accumulate an idle/page burst. Already permitted
+in-flight attempts can finish together; checkpoint transactions and individual
+document reads are not row attempts and are outside this rate. Never multiply
+the limit by running another driver. Stop on any unexpected error; in-flight
+transactions drain, no new rows start, and the failed page is not checkpointed.
+The stop line is `{"errors": N, "error_type": ..., "retryable": ...}`, plus
+`cause_types` for the explicit cause chain (`__cause__`, and `RetryError.cause`) and `sibling_types` when other
+concurrent owner groups also failed on that page. It names only exception
+classes, never a message, which can name documents. `retryable: true` means
+every failure on the page, through its whole cause chain, is a transient
+Firestore/RPC class (Aborted, DeadlineExceeded, InternalServerError,
+ResourceExhausted, ServiceUnavailable, an expired transaction), exhausted
+transaction contention, or `MigrationOwnerChanged` (a discovery hint went stale
+before that row was parked), and no link in any chain is a fatal RPC status such as PermissionDenied or NotFound. Because the failed page is replayed idempotently,
+the release owner may relaunch such a stop from the retained checkpoint under
+the standing recovery disposition on SCA-2198. Any other stop stays stopped for
+the tool owner.
+
+Each page discovers at most 100 candidate rows, rechecks every row transactionally,
 and CAS-advances `<namespace>_migrations/allowance_parking_v1`. A crash can replay
 one page; state-CAS prevents duplicate holds or counter increments. A failed
 page does not advance progress. Re-run to resume. Completion resets the cursor,
 allowing a subsequent pass to catch old-worker writes behind it. No user data,
 audio, queues or entitlement authority is read by dry-run or printed by apply.
+The concurrent discovery projection includes only `owner_key`; the candidate
+filters, document-ID ordering, cursor and 100-row bound are unchanged. This key
+is a scheduling hint, verified against the job inside every transaction attempt.
+An owner mismatch fails the page before parking that row. The progress document
+is written only after **every** row has finished; the CAS detects a competing
+driver but is not permission to operate multiple drivers.
+
+### Migration latency and completion planning
+
+Release-owner production canary, started **2026-11-17T04:37Z**: approximately
+400 rows in six minutes, reported **1.16 rows/s**, zero fenced and zero errors.
+This is the supplied production baseline, not a new measurement of this change.
+The supplied candidate stock was 1,264,556 rows; refresh count-only aggregates
+before applying. At 1.16 rows/s that stock needs about **12.6 days**.
+
+For an eligible row with no conversation and uncached live privacy checks:
+
+| Operation | Sequential RPCs | Concurrent RPCs |
+| --- | ---: | ---: |
+| BeginTransaction | 1 | 1 |
+| Read job and allowance-owner bookkeeping | 2 | 1 BatchGet (same two documents) |
+| Privacy: account deletion, user, privacy generation | 3 | 3 |
+| Commit job + allowance-owner writes atomically | 1 | 1 |
+| Total per successful attempt | 7 | 6 |
+
+Each distinct conversation/redirect hop adds its existing tombstone and
+conversation reads. Cache/shadow levers, retries, SDK read retries and competing
+controllers can change these counts. Page discovery adds one billed read per
+candidate; page progress read, query and transactional checkpoint add about five
+amortized RPCs per page. BatchGet removes one network round trip, **not** a billed
+document read. The privacy decision is still checked at each row's commit fence;
+never reuse a per-owner decision across transactions. The owner hold document's
+`revision` and `held_count` writes make within-owner concurrency counterproductive.
+
+The 0.862 s/row baseline does not contain an RPC latency trace. Assuming all seven
+RPCs have equal latency, batching predicts 0.739 s/row. With 100-row page barriers,
+distinct owners, no retries, and five page RPCs at the same assumed latency:
+
+| Concurrency | Row-only ceiling (rows/s) | Including modeled page RPCs (rows/s) |
+| --- | ---: | ---: |
+| 8 | 10.4 | 9.8 |
+| 16 | 19.3 | 17.3 |
+| 32 | 33.8 | 28.0 |
+
+These are planning estimates, **not sustained production results**. Faster page
+RPCs could reach 30..34/s at 32 owners; the supplied baseline alone cannot establish
+the 30/s target. Measure a bounded canary at 8, 16, then 32, with the rate ceiling
+kept at 50 throughout. Owner skew, longer privacy chains, transaction retries,
+client-to-database latency and page barriers can reduce throughput. If the
+32-owner canary stays below 30/s, use a release-owner-approved runner nearer the
+database or return measured RPC timings to the rollout lead; do not raise the
+concurrency/rate bounds or weaken fences. The one-owner bound is still roughly
+one row's latency per commit.
+
+At measured sustained 30/s, 1,264,556 rows take **11 h 43 m**; at 50/s, **7 h 2 m**.
+The existing `--max-pages 10000` cap covers at most one million candidates per
+invocation. Run the command above, then resume with the same command if its last
+report has `complete: false`; the stock needs approximately 12,646 pages in total,
+so normally two sequential invocations. Never overlap them. Printouts remain only
+examined/parked/fenced/complete counts. Runtime rollback: stop the driver, wait
+for it to exit, and resume with `--concurrency 1` and the same rate ceiling. Keep
+the durable progress document; do not undo safely parked rows to roll back speed.
+No saving is claimed by this tool change or its synthetic/emulator tests.
 
 ## Rollback and production acceptance
+
+Set `BATCH_ALLOWANCE_INTAKE_PARK_ENABLED=off` on upload-serving roles to stop
+new intake holds. Existing holds still release and newly refused jobs still
+park through the worker and recovery paths. For rollback past the original
+parking protocol, turn intake parking off before disabling the controller
+and worker parking below. Keep the parking-aware controller until held stock
+drains.
 
 Kill switch: `BATCH_ALLOWANCE_PARK_ENABLED=off` on **backend-integration and
 every GPU worker**, read live per transition; unset/on keeps parking enabled.

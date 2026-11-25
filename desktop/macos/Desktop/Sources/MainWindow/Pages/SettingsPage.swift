@@ -259,11 +259,11 @@ struct SettingsContentView: View {
   @AppStorage("settingsShowProfileAndStats") var showProfileAndStats = false
 
   // AI User Profile
-  @State var aiProfileId: Int64?
   @State var aiProfileText: String?
   @State var aiProfileGeneratedAt: Date?
   @State var aiProfileDataSourcesUsed: Int = 0
   @State var isGeneratingAIProfile = false
+  @State var aiProfileError: String?
   @State var isEditingAIProfile = false
   @State var isConfirmingAIProfileDelete = false
   @State var isConfirmingNudgeReset = false

@@ -718,8 +718,8 @@ def _default_allowed(owner_id: str, seconds: float, service: str) -> tuple[bool,
 _DURABLE_DENIALS = frozenset({DispatchReason.ALLOWANCE_EXHAUSTED.value, DispatchReason.BUDGET_EXHAUSTED.value})
 
 
-# A held unit's staged audio is deleted by the bucket lifecycle at 30 days; the pipeline treats
-# 29 days as the end (input_retention.TERMINAL_SECONDS). Inside the unit's last day before that,
+# The retention contract defines the staged-audio lifecycle; the pipeline treats one day
+# before deletion as the end (input_retention.TERMINAL_SECONDS). Inside the unit's last day before that,
 # the hold re-checks at this interval whatever the configured window, and a longer window is cut
 # so the next re-check lands no later than the start of that day. A renewal in the last day is
 # then seen as soon as it was when the window was 2 h.

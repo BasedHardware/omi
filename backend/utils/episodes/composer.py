@@ -25,6 +25,7 @@ deferred: it keeps the first member's title and composes when its page is first 
 """
 
 from __future__ import annotations
+from utils.conversations.layer import read_product as read_product_conversation
 
 import asyncio
 import hashlib
@@ -42,6 +43,7 @@ from zoneinfo import ZoneInfo
 
 
 from utils.conversations import phase_shadow
+from config import episode_live_members as live_members
 
 from config.episodes import (
     COMPOSER_FEATURE,
@@ -81,10 +83,20 @@ from config.episodes import (
 )
 from database import conversations as conversations_db
 from database import episodes as episodes_db
+from database.episode_finalization_fence import EpisodeFinalizationDeleted
 from utils.conversations.recorded_time import conversation_span
+from utils.conversations.transcript_for_llm import owner_safe_transcript_segments
 from utils.episodes import compose_wait, composer_context, metrics, policy, transcript_receipts
 from utils.episodes.composer_detail import detail_budget
 from utils.episodes.state import is_placeholder_heading, trim_text
+from utils.summary_quality import (
+    NOTE_QUALITY_RULES,
+    safe_body,
+    title_or_fallback,
+    episode_quality,
+    filter_output,
+    content_units,
+)
 from utils.episodes.visibility import hidden_member
 from utils.speakers.display import sanitize_speaker_text
 from utils.llm.clients import get_llm
@@ -112,14 +124,19 @@ Skip noise, background chatter, mumbling and filler entirely. Never write meta-c
 
 # The repair retry sees only the malformed reply, never the transcripts: the facts are
 # already in the reply, and re-sending the episode would pay for the same input twice.
-REPAIR_SYSTEM_PROMPT = """You repair a malformed JSON reply from an episode summarizer. Return JSON only, in exactly this shape:
+REPAIR_SYSTEM_PROMPT = (
+    """You repair a malformed JSON reply from an episode summarizer. Return JSON only, in exactly this shape:
 {{"title": "<= 7 words", "emoji": "one emoji", "lede": "one or two sentences", "chapters": [{{"start": "HH:MM:SS", "end": "HH:MM:SS", "title": "<= 6 words", "points": [{{"text": "one specific point", "details": ["a supporting specific"]}}]}}], "follow_ups": ["a concrete next step"], "people": ["names of people who mattered"]}}
 Keep every fact, name, number and clock label that is already in the reply. Do not invent anything. Use an empty list for a field the reply does not have. Return only the JSON object, with no prose and no code fence."""
+    + "\n"
+    + NOTE_QUALITY_RULES
+)
 
 SYSTEM_PROMPT = (
     """You write the page people read for an "episode": one continuous stretch of {owner}'s day captured by a wearable. It can span several recordings. {owner} is the wearer; call them {owner}, never "the user" or "someone".
 You get each recording's existing summary and action items, and the full transcript (or its densest stretches when it is very long). The transcript is automatic and noisy: speaker labels can be wrong, and short fragments in other languages are usually mis-transcribed background noise. Use the summaries as a map and the transcript as the source of truth.
 Write in {language}. """
+    + NOTE_QUALITY_RULES
     + _OUTPUT_RULES
 )
 
@@ -223,7 +240,7 @@ def notes_hash(state: Mapping[str, Any]) -> str:
 def _speaker(segment: Mapping[str, Any], owner: str) -> str:
     if segment.get('is_user'):
         return owner
-    name = str(segment.get('person_name') or '').strip()
+    name = str(segment.get('person_name') or '').strip() if segment.get('person_id') else ''
     if name:
         return name
     label = str(segment.get('speaker') or 'Someone').replace('SPEAKER_', 'Speaker ')
@@ -254,7 +271,8 @@ def transcript_lines(row: Mapping[str, Any], owner: str, tz: ZoneInfo) -> list[t
             local = open_at.astimezone(tz)
             out.append((open_at, f"[{local:%H:%M:%S}] {open_speaker}: {' '.join(words)}"))
 
-    for segment in _segments(row):
+    segments, _ = owner_safe_transcript_segments(_segments(row))
+    for segment in segments:
         start = float(segment.get('start') or 0)
         at = (origin or datetime.now(timezone.utc)) + timedelta(seconds=start)
         speaker = _speaker(segment, owner)
@@ -400,6 +418,7 @@ def parse(content: str) -> dict[str, Any]:
         raise ComposeFailed('parse_error') from error
     if not isinstance(data, dict):
         raise ComposeFailed('parse_error')
+    data = filter_output(data)
     for key in ('lede', 'overview'):
         if isinstance(data.get(key), list):
             data[key] = ' '.join(str(part) for part in data[key] if str(part).strip())
@@ -409,7 +428,9 @@ def parse(content: str) -> dict[str, Any]:
         if not isinstance(data.get(key), list):
             data[key] = []
     data['chapters'] = [chapter for chapter in data['chapters'] if isinstance(chapter, Mapping)]
-    if not str(data.get('title') or '').strip() or not str(data.get('lede') or '').strip():
+    data['title'] = title_or_fallback(data.get('title'))
+    data['lede'] = safe_body(data.get('lede'))
+    if not data['lede']:
         raise ComposeFailed('parse_error')
     return data
 
@@ -447,7 +468,7 @@ def _speech_end(row: Mapping[str, Any]) -> Optional[datetime]:
 
 
 def _line(value: Any, limit: int) -> str:
-    return trim_text(re.sub(r'\s+', ' ', sanitize_speaker_text(str(value or ''))).strip().strip('•-* ').strip(), limit)
+    return trim_text(re.sub(r'\s+', ' ', sanitize_speaker_text(safe_body(value))).strip().strip('•-* ').strip(), limit)
 
 
 def _points(chapter: Mapping[str, Any]) -> list[dict[str, Any]]:
@@ -508,7 +529,9 @@ def to_updates(
         for chapter in (data.get('chapters') or [])[: detail_budget(members)[0]]:
             if not isinstance(chapter, Mapping):
                 continue
-            heading = _line(chapter.get('title'), 60)
+            if is_placeholder_heading(str(chapter.get('title') or '')):
+                continue
+            heading = title_or_fallback(_line(chapter.get('title'), 60), index=len(drafts) + 1)
             start = _clock(chapter.get('start'), lo, hi, tz)
             if not heading or is_placeholder_heading(heading) or start is None:
                 continue
@@ -679,7 +702,7 @@ def single_member_updates(member: Mapping[str, Any]) -> dict[str, Any]:
     span_start, span_end = _span(member)
     moments = []
     for section, (start, end) in zip(sections, _section_offsets(member, sections)):
-        heading = _line(section.get('heading'), 60)
+        heading = title_or_fallback(_line(section.get('heading'), 60), index=len(moments) + 1)
         points = _markdown_points(section.get('body_markdown'))
         if not heading and not points:
             continue
@@ -767,6 +790,8 @@ def compose(
     started = time.monotonic()
     try:
         outcome = _compose(uid, episode_id, c, force=force, background=background, service=service, trigger=trigger)
+    except EpisodeFinalizationDeleted:
+        outcome = 'skipped_deleted'
     except Exception as error:  # Never break finalization or reads.
         logger.warning('event=episode_compose outcome=error exception_type=%s', type(error).__name__)
         outcome = 'error'
@@ -810,7 +835,7 @@ def _members(
     episode: Mapping[str, Any],
     c: Any,
     *,
-    revisions: Optional[dict[str, Optional[datetime]]] = None,
+    revisions: Optional[dict[str, live_members.MemberRevision]] = None,
     waiting_until: Optional[list[datetime]] = None,
     waiting_members: Optional[list[str]] = None,
     wait_observations: Optional[dict[str, Any]] = None,
@@ -819,12 +844,19 @@ def _members(
     members = []
     awaiting_transcript = False
     for cid in _retained_ids(episode):
-        row = conversations_db.get_conversation(uid, cid, firestore_client=c.firestore_client)
+        row = read_product_conversation(
+            conversations_db.get_conversation, uid, cid, firestore_client=c.firestore_client
+        )
         if revisions is not None:
             # get_conversation carries the snapshot's canonical update_time in
             # updated_at, including after decoding and Home projection.
             revisions[cid] = row.get('updated_at') if row else None
         if not row or hidden_member(row) or not conversations_db.is_visible_conversation(row):
+            continue
+        if live_members.enabled() and not policy.is_live(episode) and live_members.capturing(row):
+            if revisions is not None:
+                revisions[cid] = live_members.CAPTURING_REVISION
+            metrics.record_live_member('excluded_readiness')
             continue
         if str(row.get('status') or '') not in _DONE:
             return 'waiting', []
@@ -860,7 +892,7 @@ def _write(
     updates: _Updates,
     *,
     guard: Optional[Callable[[Mapping[str, Any]], Optional[str]]] = None,
-    expected_member_revisions: Optional[Mapping[str, Optional[datetime]]] = None,
+    expected_member_revisions: Optional[Mapping[str, live_members.MemberRevision]] = None,
 ) -> str:
     """CAS write with bounded retries. ``guard(current)`` returns an outcome to stop, or None."""
     outcome = 'conflict'
@@ -882,6 +914,7 @@ def _write(
                 updates=payload,
                 firestore_client=c.firestore_client,
                 expected_member_revisions=expected_member_revisions,
+                finalizing_conversation_id=getattr(c, 'finalizing_conversation_id', None),
             )
             return 'written'
         except episodes_db.EpisodeConflict as error:
@@ -999,7 +1032,9 @@ def _deferred_within_grace(episode: Mapping[str, Any], *, now: Optional[datetime
 def _first_member_title(uid: str, episode: Mapping[str, Any], c: Any) -> str:
     """The first retained, visible member's own summary title: the row's title until composed."""
     for cid in _retained_ids(episode):
-        row = conversations_db.get_conversation(uid, cid, firestore_client=getattr(c, 'firestore_client', None))
+        row = read_product_conversation(
+            conversations_db.get_conversation, uid, cid, firestore_client=getattr(c, 'firestore_client', None)
+        )
         if not row or hidden_member(row) or not conversations_db.is_visible_conversation(row):
             continue
         title = str((row.get('structured') or {}).get('title') or '').strip()
@@ -1127,18 +1162,21 @@ def _write_single_member(
     members: Sequence[Mapping[str, Any]],
     print_: str,
     member_ids: list[str],
-    member_revisions: Mapping[str, Optional[datetime]],
+    member_revisions: Mapping[str, live_members.MemberRevision],
 ) -> str:
     """Persist the code-built notes for a one-conversation episode. Never raises to callers."""
     composed = single_member_updates(members[0])
 
     def finish(current: Mapping[str, Any]) -> dict[str, Any]:
+        final = episode_quality(
+            current, {**composed, 'content_word_units': sum(content_units(_segments(row)) for row in members)}
+        )
         return {
-            **composed,
+            **final,
             'composed_fingerprint': print_,
             'composed_member_ids': member_ids,
             **_trigger_stamp(episode, members),
-            'composed_notes': notes_hash(composed),
+            'composed_notes': notes_hash(final),
             'composed_at': datetime.now(timezone.utc),
             'composer_version': COMPOSER_VERSION,
             'summary_needs_regeneration': False,
@@ -1168,12 +1206,18 @@ def _write_single_member(
 def _compose(
     uid: str, episode_id: str, c: Any, *, force: bool, background: bool, service: Any, trigger: str = 'close'
 ) -> str:
+    from utils.conversations.v3.metrics import EPISODE_COMPOSES
+    from config.conversations_v3 import conversations_v3_enabled
+
+    EPISODE_COMPOSES.labels(str(conversations_v3_enabled(uid)).lower()).inc()
     episode = episodes_db.get_episode(uid, episode_id, firestore_client=c.firestore_client)
     if not episode:
         return 'no_episode'
     if policy.is_live(episode):
         return 'live'
-    member_revisions: dict[str, Optional[datetime]] = {}
+    if service.repair_closed_live_members(uid, episode, c):
+        episode = episodes_db.get_episode(uid, episode_id, firestore_client=c.firestore_client) or episode
+    member_revisions: dict[str, live_members.MemberRevision] = {}
     waiting_until: list[datetime] = []
     waiting_members: list[str] = []
     wait_observations: dict[str, Any] = {}
@@ -1440,14 +1484,16 @@ def _compose(
     # The model call took seconds: re-read the evidence. A discard, a transcript upgrade or a
     # membership change since then makes this result stale; its own trigger composes again.
     fresh_episode = episodes_db.get_episode(uid, episode_id, firestore_client=c.firestore_client) or episode
-    fresh_revisions: dict[str, Optional[datetime]] = {}
+    fresh_revisions: dict[str, live_members.MemberRevision] = {}
     fresh_state, fresh = _members(uid, fresh_episode, c, revisions=fresh_revisions)
     superseded = fresh_state != 'ok' or fingerprint(fresh) != print_
     member_changed = bool(set(member_ids) - set(_retained_ids(fresh_episode)))
     # Waiting members collapse _members to []; check visibility of the original
     # paid set separately so an actual removal/hidden member still cannot leak.
     for cid in member_ids:
-        row = conversations_db.get_conversation(uid, cid, firestore_client=c.firestore_client)
+        row = read_product_conversation(
+            conversations_db.get_conversation, uid, cid, firestore_client=c.firestore_client
+        )
         # Preserve the fingerprint snapshot's revisions; never adopt later reads.
         if (
             not row
@@ -1464,18 +1510,21 @@ def _compose(
     kept_pending = {'value': superseded}
 
     def finish(current: Mapping[str, Any]) -> dict[str, Any]:
+        final = episode_quality(
+            current, {**composed, 'content_word_units': sum(content_units(_segments(row)) for row in members)}
+        )
         usage = dict(current.get('usage') or {})
         usage['composer_calls'] = int(usage.get('composer_calls') or 0) + paid_calls
         usage['composer_input_tokens'] = int(usage.get('composer_input_tokens') or 0) + input_tokens
         usage['composer_output_tokens'] = int(usage.get('composer_output_tokens') or 0) + output_tokens
         usage['composer_tool_calls'] = int(usage.get('composer_tool_calls') or 0) + tool_calls
         payload = {
-            **composed,
+            **final,
             'usage': usage,
             'composed_fingerprint': print_,
             'composed_member_ids': member_ids,
             **_trigger_stamp(episode, members),
-            'composed_notes': notes_hash(composed),
+            'composed_notes': notes_hash(final),
             'composed_at': datetime.now(timezone.utc),
             'composer_version': COMPOSER_VERSION,
             'summary_needs_regeneration': False,
@@ -1602,6 +1651,8 @@ def _observe_evidence(
         if outcome != 'written':
             raise ComposeFailed('settle_state_conflict')
         return episodes_db.get_episode(uid, str(episode['id']), firestore_client=c.firestore_client) or dict(episode)
+    except EpisodeFinalizationDeleted:
+        raise
     except Exception as error:
         logger.warning('event=episode_compose_settle outcome=bypassed exception_type=%s', type(error).__name__)
         record_fallback(
@@ -1940,7 +1991,9 @@ def schedule_for_conversation(
                 member = (
                     dict(row)
                     if row is not None
-                    else conversations_db.get_conversation(uid, conversation_id, firestore_client=client)
+                    else read_product_conversation(
+                        conversations_db.get_conversation, uid, conversation_id, firestore_client=client
+                    )
                 )
                 baseline = episode.get('compose_pending_evidence') or episode.get('composed_evidence')
                 # A legacy full hash cannot distinguish new speech from regenerated labels.
@@ -1993,6 +2046,8 @@ def schedule_for_conversation(
                     if changed:
                         _observe_evidence(uid, episode, c, evidence)
             schedule(uid, str(episode['id']), collaborators=collaborators, trigger='member_final')
+    except EpisodeFinalizationDeleted:
+        return
     except Exception as error:
         logger.warning('event=episode_compose_schedule outcome=error exception_type=%s', type(error).__name__)
 
@@ -2005,7 +2060,7 @@ def _receive_transcript_receipts(receipts: Sequence[tuple[str, str, Any]]) -> No
         ):
             continue
         try:
-            row = conversations_db.get_conversation(uid, cid, firestore_client=client)
+            row = read_product_conversation(conversations_db.get_conversation, uid, cid, firestore_client=client)
             if row:
                 transcript_projected(uid, row, firestore_client=client)
         except Exception as error:
@@ -2052,7 +2107,9 @@ def owns_closed_notes(uid: str, episode: Mapping[str, Any], conversation_id: str
         for cid in _retained_ids(episode):
             if cid == conversation_id:
                 continue
-            row = conversations_db.get_conversation(uid, cid, firestore_client=getattr(c, 'firestore_client', None))
+            row = read_product_conversation(
+                conversations_db.get_conversation, uid, cid, firestore_client=getattr(c, 'firestore_client', None)
+            )
             if row and not hidden_member(row):
                 due = _transcript_wait_until(row)
                 if str(row.get('status') or '') not in _DONE or (due and due > datetime.now(timezone.utc)):

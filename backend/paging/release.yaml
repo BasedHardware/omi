@@ -1,0 +1,129 @@
+# Release review manifest. This file has no provisioning side effects.
+issue: SCA-2116
+owner: Release
+project: omi-paging-ops-prod
+region: us-central1
+firestore:
+  database: pager
+  mode: firestore-native
+  deleteProtection: enabled
+  collections: [pager_events, pager_deliveries, pager_recipient_limits]
+  databaseCondition: 'resource.name == "projects/omi-paging-ops-prod/databases/pager"'
+cloudRun:
+  service: omi-pager
+  buildContext: .
+  dockerfile: backend/paging/Dockerfile
+  platform: linux/amd64
+  artifactRepository: us-central1-docker.pkg.dev/omi-paging-ops-prod/pager/omi-pager
+  image: reviewed-head-digest-required
+  runtimeIdentity: pager-runtime@omi-paging-ops-prod.iam.gserviceaccount.com
+  cpuAllocation: request
+  minInstances: 0
+  maxInstances: 2
+  concurrency: 8
+  timeoutSeconds: 60
+  ingress: all
+  invokerIamCheck: disabled
+  env:
+    PAGER_FIRESTORE_PROJECT: omi-paging-ops-prod
+    PAGER_FIRESTORE_DATABASE: pager
+    PAGER_AUDIENCE: exact-cloud-run-service-url-required
+    PAGER_SENDER_ENABLED: 'false'
+  secretEnv:
+    PAGER_GRAFANA_HMAC: projects/omi-paging-ops-prod/secrets/pager-grafana-redis-hmac/versions/REVIEWED_VERSION
+    PAGER_BARK_DEVICE_KEY: projects/omi-paging-ops-prod/secrets/pager-bark-oncall-primary/versions/REVIEWED_VERSION
+iam:
+  runtime:
+    principal: serviceAccount:pager-runtime@omi-paging-ops-prod.iam.gserviceaccount.com
+    firestoreCustomRole: projects/omi-paging-ops-prod/roles/pagerRuntime
+    firestorePermissions:
+      - datastore.databases.get
+      - datastore.entities.get
+      - datastore.entities.list
+      - datastore.entities.create
+      - datastore.entities.update
+    secretRole: roles/secretmanager.secretAccessor
+    secrets: [pager-grafana-redis-hmac, pager-bark-oncall-primary]
+  history:
+    principal: user:david@scalingforever.com
+    role: roles/datastore.viewer
+    resource: projects/omi-paging-ops-prod/databases/pager
+    logRole: roles/logging.viewer
+    logProject: omi-paging-ops-prod
+  acknowledgement:
+    caller: user:david@scalingforever.com
+    role: roles/iam.serviceAccountOpenIdTokenCreator
+    resource: pager-operator@omi-paging-ops-prod.iam.gserviceaccount.com
+    path: /internal/ack/{delivery_id}
+    audienceSuffix: /internal/ack
+  scheduler:
+    principal: serviceAccount:pager-scheduler@omi-paging-ops-prod.iam.gserviceaccount.com
+    job: projects/omi-paging-ops-prod/locations/us-central1/jobs/omi-pager-drain
+    schedule: '* * * * *'
+    timeZone: Etc/UTC
+    method: POST
+    path: /internal/drain
+    audienceSuffix: /internal/drain
+    initialState: paused
+    attemptDeadlineSeconds: 60
+    retryCount: 0
+grafana:
+  instance: https://monitor.omi.me
+  receiver: Omi - Redis phone wake
+  contactPoint:
+    uid: omi-redis-phone-wake
+    name: Omi - Redis phone wake
+    type: webhook
+    disableResolveMessage: false
+    settings:
+      url: reviewed-cloud-run-origin-required/v1/publish/grafana-redis
+      httpMethod: POST
+      hmacConfig:
+        header: X-Grafana-Alerting-Signature
+        timestampHeader: X-Grafana-Alerting-Timestamp
+  hmacSecretRef: projects/omi-paging-ops-prod/secrets/pager-grafana-redis-hmac/versions/REVIEWED_VERSION
+  ruleUid: omi-redis-cache-conn-page
+  targetLabel: paging_target
+  target: prod-serving-redis
+  removeRuleMuteReference: omi-tier-silent
+redisProbe:
+  cluster: prod-omi-gke
+  namespace: prod-omi-backend
+  chart: backend/charts/redis-serving-probe
+  workload: deployment/omi-redis-serving-probe
+  identity: system:serviceaccount:prod-omi-backend:omi-redis-serving-probe
+  image: reviewed-head-digest-required
+  dockerfile: backend/paging/redis_probe/Dockerfile
+  endpoint:
+    hostRef: configmap/prod-omi-backend-config:REDIS_DB_HOST
+    port: 13151
+    transport: Redis RESP over TCP
+  credential:
+    redisUsername: omi-redis-serving-probe
+    permission: PING only
+    passwordRef: secret/omi-redis-serving-probe-auth:password
+  networkPolicy:
+    name: omi-redis-serving-probe
+    redisAddresses: requires-verified-addresses-of-serving-host
+    dnsResolverAddresses: requires-verified-workload-resolver-addresses
+  attemptIntervalSeconds: 30
+  attemptDeadlineSeconds: 2
+  scrape:
+    podMonitor: omi-redis-serving-probe
+    intervalSeconds: 15
+    datasourceUid: prometheus
+    success: 'omi_redis_authenticated_ping_success{job="omi-redis-serving-probe",target="prod-serving-redis"}'
+    attemptedAt: 'omi_redis_authenticated_ping_last_attempt_seconds{job="omi-redis-serving-probe",target="prod-serving-redis"}'
+    freshnessSeconds: 90
+    healthQuery: >-
+      (
+      (min(up{job="omi-redis-serving-probe"}) == bool 1)
+      * on() (count(omi_redis_authenticated_ping_success{job="omi-redis-serving-probe",target="prod-serving-redis"}
+      and (omi_redis_authenticated_ping_last_attempt_seconds{job="omi-redis-serving-probe",target="prod-serving-redis"} >= time() - 90)
+      and (omi_redis_authenticated_ping_last_attempt_seconds{job="omi-redis-serving-probe",target="prod-serving-redis"} <= time())) > bool 0)
+      ) or on() vector(0)
+recipient:
+  route: redis-wake
+  id: oncall-primary
+  channel: bark
+  endpoint: https://api.day.app/push

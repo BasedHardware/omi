@@ -52,6 +52,7 @@ TARGET_SCHEMAS = (
     'ScreenTaskGateResponse',
     'ClientFlagsResponse',
     'Conversation',
+    'LiveSummaryPreview',
     'Structured',
     'ActionItem',
     'ActionItemResponse',

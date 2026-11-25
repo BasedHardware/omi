@@ -10,6 +10,10 @@ import yaml
 ROOT = Path(__file__).resolve().parents[3]
 
 
+def _listen_private(doc):
+    return doc['metadata']['name'].endswith('-omi-backend-listen-private-env')
+
+
 def _render_backend_secrets(stage, tmp_path, remote_key=None, include_metrics=True):
     helm = shutil.which('helm')
     if helm is None:
@@ -54,7 +58,7 @@ def _render_backend_secrets(stage, tmp_path, remote_key=None, include_metrics=Tr
 @pytest.mark.parametrize('remote_key', [None, 'synthetic-rotated-metrics-source'])
 def test_metrics_scrape_token_render(stage, remote_key, tmp_path):
     resources, values = _render_backend_secrets(stage, tmp_path, remote_key)
-    externals = [doc for doc in resources if doc['kind'] == 'ExternalSecret']
+    externals = [doc for doc in resources if doc['kind'] == 'ExternalSecret' and not _listen_private(doc)]
     assert len(externals) == 2
     app = next(doc for doc in externals if doc['metadata']['name'] == values['externalSecret']['name'])
     scrape = next(doc for doc in externals if doc['metadata']['name'] == 'metrics-scrape-token-store')
@@ -80,7 +84,7 @@ def test_metrics_scrape_token_render(stage, remote_key, tmp_path):
 @pytest.mark.parametrize('stage', ['dev', 'prod'])
 def test_metrics_scrape_token_absent_without_metrics_secret(stage, tmp_path):
     resources, values = _render_backend_secrets(stage, tmp_path, include_metrics=False)
-    externals = [doc for doc in resources if doc['kind'] == 'ExternalSecret']
+    externals = [doc for doc in resources if doc['kind'] == 'ExternalSecret' and not _listen_private(doc)]
     assert len(externals) == 1
     assert externals[0]['metadata']['name'] == values['externalSecret']['name']
     assert not any(doc['metadata']['name'] == 'metrics-scrape-token-store' for doc in externals)
@@ -118,10 +122,43 @@ def test_metrics_scrape_secret_cross_chart_contract(stage, tmp_path):
         serving = [doc for doc in yaml.safe_load_all(result.stdout) if doc]
         monitors = [doc for doc in serving if doc['kind'] == 'PodMonitoring']
         roles = [doc for doc in serving if doc['kind'] == 'Role']
-        assert len(monitors) == len(roles) == 1
+        expected_names = {f'{stage}-omi-{chart}'}
+        if stage == 'prod':
+            expected_names.add(f'{stage}-omi-{chart}-bulk')
+        assert {m['metadata']['name'] for m in monitors} == expected_names
+        assert len(roles) == 1
         for monitor in monitors:
             for endpoint in monitor['spec']['endpoints']:
                 assert endpoint['authorization']['credentials']['secret']['name'] == target_name
         for role in roles:
             for rule in role['rules']:
                 assert rule['resourceNames'] == [target_name]
+
+
+@pytest.mark.parametrize('stage', ['dev', 'prod'])
+def test_listen_private_env_is_a_dedicated_prod_only_secret(stage, tmp_path):
+    resources, _ = _render_backend_secrets(stage, tmp_path)
+    private = [doc for doc in resources if doc['kind'] == 'ExternalSecret' and _listen_private(doc)]
+    if stage == 'dev':
+        assert private == []
+        return
+    (doc,) = private
+    # The targeted migration apply must leave the resource adoptable by Helm.
+    assert doc['metadata']['labels']['app.kubernetes.io/managed-by'] == 'Helm'
+    assert doc['metadata']['annotations'] == {
+        'meta.helm.sh/release-name': 'prod-omi-backend-secrets',
+        'meta.helm.sh/release-namespace': 'prod-omi-backend',
+    }
+    spec = doc['spec']
+    # One Secret Manager JSON document -> its own Kubernetes Secret, never the
+    # shared backend secret that other workloads load whole through envFrom.
+    assert spec['dataFrom'] == [{'extract': {'key': 'LISTEN_PRIVATE_ENV'}}]
+    assert 'data' not in spec
+    assert spec['target']['name'] == 'prod-omi-backend-listen-private-env'
+    assert spec['target']['name'] != 'prod-omi-backend-secrets'
+    assert spec['target']['deletionPolicy'] == 'Retain'
+    # Synced only on spec change or force-sync: a new version waits for the audited restart.
+    assert spec['refreshInterval'] == '0s'
+    assert spec['secretStoreRef'] == {'name': 'backend-secrets-store', 'kind': 'SecretStore'}
+    listen = yaml.safe_load((ROOT / 'backend/charts/backend-listen/prod_omi_backend_listen_values.yaml').read_text())
+    assert listen['privateSecretEnv']['secretName'] == spec['target']['name']

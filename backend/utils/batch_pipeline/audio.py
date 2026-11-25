@@ -1,6 +1,6 @@
 """GPU-independent canonical WAV and authenticated capture-context envelope."""
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 import io
 import json
 import struct
@@ -20,6 +20,9 @@ class AudioUnit:
     stored_capture_at: float | None = None
     # Original source identity for receipt imports; never a synthetic time key.
     recovery_id: str | None = None
+    source_reuse_key: str | None = None
+    # The canonical decoder can distinguish original PCM from inserted silence.
+    source_frames: int | None = field(default=None, compare=False, repr=False)
 
 
 def audio_unit(capture_at: float, pcm: bytes) -> AudioUnit:

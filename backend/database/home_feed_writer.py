@@ -10,6 +10,7 @@ from contextvars import ContextVar
 from contextlib import contextmanager
 import inspect
 from functools import wraps
+from database.batch_account_authority_schema import USER_POLICY_FIELDS
 from google.cloud.firestore_v1.types import Document, DocumentMask, Value, Write
 
 _ERASING_ROOTS: ContextVar[frozenset[str]] = ContextVar("home_feed_erasing_roots", default=frozenset())
@@ -50,6 +51,7 @@ SAFE_FIELDS = frozenset(
         'share_email_in_flight',
         'external_data',
         'summary_due_at',
+        'v3_live_title_state',
     }
 )
 
@@ -58,11 +60,6 @@ def _parts(write):
     path = write.delete or write.update.name or write.transform.document
     parts = path.split('/')
     return parts if len(parts) == 9 and parts[4:6] == ['documents', 'users'] else []
-
-
-USER_POLICY_FIELDS = frozenset(
-    {'data_protection_level', 'migration_status', 'private_cloud_sync_enabled', 'speaker_auto_enroll_privacy_version'}
-)
 
 
 def _policy_owner(write):

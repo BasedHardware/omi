@@ -28,9 +28,9 @@ vi.mock('@/components/auth/AuthProvider', () => ({
     signOut: vi.fn(),
   }),
 }));
-vi.mock('@/lib/analytics/subscriptionFunnel', () => ({
+vi.mock('@/lib/analytics/subscriptionFunnel', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/analytics/subscriptionFunnel')>()),
   trackPurchaseEvent: vi.fn(),
-  openPurchaseCheckout: vi.fn((url) => window.open(url, '_blank')),
   trackPaywallOpened: mocks.opened,
   trackUpgradePlanSelected: mocks.selected,
   trackUpgradeSucceeded: mocks.succeeded,

@@ -87,3 +87,37 @@ def test_partial_result_never_acknowledges_originals(receipts):
     with pytest.raises(ValueError, match='authoritative'):
         completion.write(transaction, prepared, {'failed_segments': 1}, 100)
     assert client.rows == before
+
+
+def test_sixteen_originals_complete_with_windows_unset_and_keep_each_original_clock(receipts, monkeypatch):
+    client, binding, _, _, _ = receipts
+    for name in ('FREE', 'BACKLOG'):
+        monkeypatch.delenv(f'BATCH_PIPELINE_COALESCING_{name}_WINDOW_SECONDS', raising=False)
+    originals = []
+    for i in range(16):
+        original = {
+            **member(str(i)),
+            'coalesce_group': 'group',
+            'upload_arrived_at': 10 + i,
+            'upload_entitlement': 'free',
+        }
+        intake_ref = client.collection('synthetic_intakes').document(original['job_id'])
+        content_ref = sync_content_ledger_ref(client, 'owner', original['content_id'])
+        client.rows[intake_ref.path] = original
+        client.rows[content_ref.path] = {
+            'job_id': original['job_id'],
+            'dispatch_protocol': 'batch_v1',
+            'status': 'processing',
+        }
+        originals.append(original)
+    ledger = {'status': 'processing', **completion.manifest({'id': 'group', 'mode': 'merged', 'members': originals})}
+    tx = client.transaction()
+    prepared = completion.prepare(client, 'synthetic', tx, binding, ledger)
+    assert [m['upload_arrived_at'] for _, _, m, _ in prepared] == list(range(10, 26))
+    result = {'new_memories': [], 'updated_memories': [], 'failed_segments': 0, 'total_segments': 1, 'errors': []}
+    completion.write(tx, prepared, result, 400)
+    for original in originals:
+        ref = sync_content_ledger_ref(client, 'owner', original['content_id'])
+        assert client.rows[ref.path]['status'] == 'completed'
+    ledger['status'] = 'completed'
+    assert completion.prepare(client, 'synthetic', client.transaction(), binding, ledger) == []

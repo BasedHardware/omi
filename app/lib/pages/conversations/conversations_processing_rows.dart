@@ -28,7 +28,9 @@ List<_ConversationListRow> _withTodayRow(List<_ConversationListRow> rows, DateTi
       (kind: kind, date: today, isFirst: isFirst, conversation: null, recording: null, conversationIndex: -1);
   if (header >= 0) {
     var at = header + 1;
-    while (at < rows.length && rows[at].kind == _ConversationListRowKind.liveEpisode) {
+    while (at < rows.length &&
+        (rows[at].kind == _ConversationListRowKind.liveEpisode ||
+            rows[at].kind == _ConversationListRowKind.v3LivePlaceholder)) {
       at++;
     }
     return [...rows.take(at), todayRow(kind), ...rows.skip(at)];

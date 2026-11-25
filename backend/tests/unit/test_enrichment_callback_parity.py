@@ -62,6 +62,7 @@ def test_callback_helpers_share_the_legacy_custody_primitive():
         'ConversationAbsorbed': ('utils.enrichment.admission', 'ConversationAbsorbed'),
         'SyncConversationPersistenceFenced': ('utils.enrichment.admission', 'SyncConversationPersistenceFenced'),
         '_require_current_conversation_persistence': ('utils.enrichment.admission', 'require_current_persistence'),
+        'require_transcript_decoded': ('utils.enrichment.admission', 'require_transcript_decoded'),
         '_run_conversation_created_webhook': ('utils.enrichment.admission', 'run_created_webhook'),
     }
     assert shared_imports('utils/sync/pipeline.py') == expected

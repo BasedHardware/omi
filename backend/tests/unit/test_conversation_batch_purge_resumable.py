@@ -176,6 +176,29 @@ def _redrive(tombstone_db, armed, seconds=purge_jobs.HOLD_RECHECK_SECONDS + 1):
 # --- 1. durable segment work: dependents before their binding, resume never strands an artifact ---
 
 
+def test_fallback_provenance_reaches_audio_and_source_receipt(owner, tombstone_db, armed, dispatch, fast_clock):
+    plane = owner.plane()
+    plane.add(
+        'jobs',
+        'fallback',
+        conversation_id='independent-upload',
+        source_conversation_ids=['independent-upload'],
+        source_alias_fallback={'prior_dependencies': ['c1']},
+        priority=1,
+    )
+    plane.add('artifacts', 'own-audio', segment_id='fallback', uri='gs://bucket/owners/own-audio')
+    plane.add('projections', 'source-receipt', segment_id='fallback', source_conversation_ids=['independent-upload'])
+    plane.add('projections', 'unrelated-receipt', segment_id='unrelated')
+    deletion_batch_purge.reconcile_conversation_batch_purges()
+    assert _run(armed, 1) == 'purged'
+    assert plane.doc('jobs', 'fallback') is None
+    assert plane.doc('artifacts', 'own-audio') is None
+    assert plane.doc('projections', 'source-receipt') is None
+    assert plane.doc('projections', 'unrelated-receipt') is not None
+    assert plane.objects == ['gs://bucket/owners/own-audio']
+    assert plane.erased == [('artifacts', 'own-audio'), ('jobs', 'fallback')]
+
+
 def test_hold_before_the_artifact_unit_then_resume_erases_the_segment_only_artifact(
     owner, tombstone_db, gate_client, armed, dispatch, fast_clock
 ):
@@ -535,3 +558,60 @@ def test_unit_blocked_by_another_destructive_kind_still_fails_the_run(
     assert fast_clock.sleeps == [] and plane.erased == [] and plane.objects == []
     row = _obligation(tombstone_db, 'c1')
     assert row['last_outcome'] == 'failed' and row['lease_until'] is None
+
+
+def test_legacy_rearm_behind_cursor_preserves_obligation_and_restarts_discovery(
+    monkeypatch, owner, tombstone_db, armed, dispatch, fast_clock
+):
+    plane = owner.plane()
+    plane.add('results', 'original', conversation_id='c1', segment_id='original')
+    rearmed = []
+
+    def rearm_after_namespace(namespace, uid):
+        if not rearmed:
+            tombstone_db.docs[f'{purge_jobs.COLLECTION}/{armed}'].update(purge_jobs.arm_fields(UID, 'c1'))
+            plane.add('results', 'behind-cursor', conversation_id='c1', segment_id='behind-cursor')
+            rearmed.append(True)
+        return 0
+
+    monkeypatch.setattr(purge, 'purge_jobstore_owner', rearm_after_namespace)
+    deletion_batch_purge.reconcile_conversation_batch_purges()
+    assert _run(armed, 1) == 'superseded'
+    row = _obligation(tombstone_db, 'c1')
+    assert row['last_outcome'] == 'rearmed' and row['progress'] == {}
+    assert row['lease_until'] is None and row['run_token'] is None
+    assert plane.doc('results', 'behind-cursor')['conversation_id'] == 'c1'
+    deletion_batch_purge.reconcile_conversation_batch_purges()
+    assert dispatch[-1] == (armed, 2)
+    assert _run(armed, 2) == 'purged'
+    assert plane.doc('results', 'behind-cursor')['projection_state'] == 'erased'
+    assert _obligation(tombstone_db, 'c1') is None
+
+
+@pytest.mark.parametrize('parked', [False, True])
+def test_pending_upload_keeps_purge_and_segment_link_until_replay(
+    monkeypatch, owner, tombstone_db, armed, dispatch, fast_clock, parked
+):
+    plane = owner.plane()
+    plane.add('jobs', 's1', conversation_id='c1', priority=1)
+    plane.add('artifacts', 'a1', segment_id='s1', owner_id=UID, owner_key='parked' if parked else KEY)
+    original = plane.erase_artifact
+
+    def erase(uid, namespace, snapshot, data, delete_uri, fence=None, client=None):
+        if not data.get('erasure_requested'):
+            plane.doc('artifacts', 'a1').update(owner_key=KEY, erasure_requested=True)
+            return True
+        return original(uid, namespace, snapshot, data, delete_uri, fence=fence, client=client)
+
+    monkeypatch.setattr(purge, '_erase_artifact', erase)
+    deletion_batch_purge.reconcile_conversation_batch_purges()
+    assert _run(armed, 1) == 'artifact_pending'
+    assert plane.doc('jobs', 's1') is not None
+    assert plane.doc('artifacts', 'a1') is not None
+    assert _obligation(tombstone_db, 'c1') is not None
+
+    _advance(tombstone_db, armed, purge_jobs.ARTIFACT_RETRY_SECONDS + 1)
+    deletion_batch_purge.reconcile_conversation_batch_purges()
+    assert _run(armed, 2) == 'purged'
+    assert plane.doc('artifacts', 'a1') is None
+    assert _obligation(tombstone_db, 'c1') is None

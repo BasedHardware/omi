@@ -1,0 +1,34 @@
+version: 2
+name: conversation-delete-feedback
+tier: manual
+description: Conversation delete outcomes remain visible through row and detail entry points
+app: non-prod
+covers:
+  - desktop/macos/Desktop/Sources/MainWindow/Conversations/ConversationDeleteOutcome.swift
+  - desktop/macos/Desktop/Sources/MainWindow/Components/ConversationRowPrompts.swift
+  - desktop/macos/Desktop/Sources/MainWindow/Pages/ConversationDetailView.swift
+  - desktop/macos/Desktop/Sources/MainWindow/Conversations/ConversationRepository.swift
+  - desktop/macos/Desktop/Sources/ConversationReconciliationPolicy.swift
+  - desktop/macos/Desktop/Sources/Services/APIClient/APIClient+ConversationDelete.swift
+preconditions:
+  - named_non_production_bundle_ui_lane
+  - loopback_backend_with_synthetic_conversations_and_controllable_delete_replies
+steps:
+  - id: S1
+    name: Successful and already-absent deletes
+    do: "From both a row menu and an open detail, confirm Delete for synthetic rows. Return 204 tombstoned, then 204 already_deleted or 404 for another row. Verify the row disappears, the appropriate confirmation toast appears, and a cache reload cannot restore the deleted row."
+    expect:
+      text_visible:
+        - Conversation deleted
+  - id: S2
+    name: Busy retry and hard failure
+    do: "From each entry point return 409 or 503 with Retry-After, then 204; verify bounded automatic retry. Keep returning busy past the retry budget and verify the row remains and a shell confirmation explains the delay with Retry and Cancel. Retry after recovery. Return 500 for another row and verify it remains with a visible error. Swift transport/repository regressions cover these replies with injected time."
+    expect:
+      text_visible:
+        - Couldn't Delete Conversation
+        - Retry
+  - id: S3
+    name: Reconcile stale capture rows
+    do: "Seed a cached in-progress row without active local capture and return a successful empty server page; verify it disappears. Repeat with a matching live local session and verify the active row remains. Fail the server page and verify the cache remains available."
+    expect:
+      state.ui.currentView: conversations

@@ -1,65 +1,100 @@
 part of 'local_wal_sync.dart';
 
 extension CaptureCommittedCustody on LocalWalSyncImpl {
-  /// Receipts are serialized with WAL buffer changes and durably recorded even in shadow.
-  Future<void> recordCaptureCommitted(CaptureCommittedEvent event) {
+  /// The socket supplies its opening owner and session. Never attribute a late
+  /// receipt to whichever account happens to be active when the queue drains.
+  Future<void> recordCustodyReceipt(MessageEvent event, {required String owner, String? recordingSessionId}) {
     final generation = _sessionGeneration;
-    final owner = _currentWalOwnerUid();
+    bool current() => _isCurrent(generation) && owner == _currentWalOwnerUid();
     return _enqueueBuffer(() async {
-      if (owner.isEmpty || owner == 'legacy' || !_isCurrent(generation)) return;
-      await captureCommits.record(owner, event);
-      if (!_isCurrent(generation)) return;
-      await _persistCaptureCommits(generation);
-      if (!_isCurrent(generation)) return;
-      _notifyUpdated(generation);
+      if (owner.isEmpty || owner == 'legacy' || !current()) return;
+      final intervals = await captureCommits.record(owner, event, recordingSessionId: recordingSessionId);
+      if (!current() || intervals.isEmpty) return;
+      await _persistCaptureCommits(generation, affected: (wal) {
+        final start = wal.sourceFrameStart!;
+        return intervals.any((range) =>
+            range.root == wal.captureRoot &&
+            range.epoch == wal.sourceClockEpoch &&
+            start < range.end &&
+            range.start < start + wal.totalFrames);
+      });
     });
   }
 
-  Future<bool> _persistCaptureCommits(int generation, {bool onlyIfReleased = false}) async {
-    final released = <Wal>[];
-    try {
-      await _applyCaptureCommits(generation, released);
-      if (onlyIfReleased && released.isEmpty) return _isCurrent(generation);
-      final saved = await _saveWalsToFile(generation);
-      if (!saved) _revertCaptureCommits(released, generation);
-      return saved;
-    } catch (_) {
-      _revertCaptureCommits(released, generation);
-      rethrow;
-    }
-  }
-
-  void _revertCaptureCommits(List<Wal> released, int generation) {
-    if (!_isCurrent(generation)) return;
-    for (final wal in released) {
-      if (_wals.any((tracked) => identical(tracked, wal))) _keepForTranscriptRepair(wal);
-    }
-  }
-
-  Future<void> _applyCaptureCommits(int generation, List<Wal> released) async {
+  /// The buffer queue serializes journal updates, flushes, and confirmations.
+  /// Compute decisions first so a slow audit cannot expose half a batch.
+  Future<void> _persistCaptureCommits(int generation, {bool Function(Wal)? affected}) async {
     final owner = _currentWalOwnerUid();
-    if (owner.isEmpty || owner == 'legacy') return;
+    bool current() => _isCurrent(generation) && owner == _currentWalOwnerUid();
+    if (!current() || owner.isEmpty || owner == 'legacy' || _initialIndexAdmissionPending) return;
+    final candidates = _wals
+        .where((wal) =>
+            wal.ownerUid == owner &&
+            wal.storage == WalStorage.disk &&
+            _captureCommitEligible(wal) &&
+            captureEvidenceWalClaimable(wal) &&
+            (affected == null || affected(wal)))
+        .toList();
+    if (candidates.isEmpty) return;
+
     final release = await ClientRefactorFlags.custodyRelease();
-    if (!_isCurrent(generation)) return;
-    for (final wal in List<Wal>.of(_wals)) {
-      if (!_captureCommitEligible(wal)) continue;
-      final committed = await captureCommits.covers(owner, wal);
-      if (!_isCurrent(generation)) return;
-      ClientRefactorFlags.compare('custody_commit', committed == (wal.status == WalStatus.synced && wal.syncedAt > 0));
-      if (release && committed) {
-        wal.status = WalStatus.synced;
-        wal.syncedAt = _now().millisecondsSinceEpoch ~/ 1000;
-        wal.keptForTranscriptRecovery = false;
-        released.add(wal);
+    final verified = <Wal, Object>{};
+    var agreeCovered = 0, agreePending = 0, disagree = 0, unknown = 0;
+    for (final wal in candidates) {
+      if (!current()) return;
+      final identity = CaptureCommittedJournal.releaseIdentity(owner, wal);
+      final decision = await captureCommits.evaluate(owner, wal, shadow: !release);
+      if (decision.audited == null) {
+        unknown++;
+      } else if (decision.covered != decision.audited) {
+        disagree++;
+      } else if (decision.covered) {
+        agreeCovered++;
+        if (release && identity != null) verified[wal] = identity;
+      } else {
+        agreePending++;
       }
     }
-    return;
+    if (!current()) return;
+    // Immediately recheck membership and eligibility. In particular an uploader
+    // may have reserved a row while the manifest digests were being checked.
+    verified.removeWhere((wal, identity) =>
+        !_activeWals.containsIdentity(wal) ||
+        !_captureCommitEligible(wal) ||
+        identity != CaptureCommittedJournal.releaseIdentity(owner, wal));
+    final now = _now().millisecondsSinceEpoch ~/ 1000;
+    for (final wal in verified.keys) {
+      wal.status = WalStatus.synced;
+      wal.syncedAt = now;
+      wal.keptForTranscriptRecovery = false;
+    }
+    if (verified.isNotEmpty) {
+      try {
+        if (!await _saveWalsToFile(generation)) throw StateError('WAL index admission unavailable');
+      } catch (_) {
+        for (final wal in verified.keys) {
+          if (_isTrackedWal(wal)) _keepForTranscriptRepair(wal);
+        }
+        rethrow;
+      }
+      if (!current()) return;
+      _notifyUpdated(generation);
+    }
+    try {
+      const TypedEvents().emit(WalCustodyAudit(
+          agreeCovered: agreeCovered,
+          agreePending: agreePending,
+          disagree: disagree,
+          unknown: unknown,
+          released: verified.length));
+    } catch (_) {/* Analytics availability never grants custody. */}
   }
 
   bool _captureCommitEligible(Wal wal) =>
       !wal.holdForUser &&
       !wal.onDeviceOnly &&
       !wal.isSyncing &&
+      !_isDiscardedRecording(wal) &&
       (wal.storage == WalStorage.disk || wal.storage == WalStorage.mem) &&
       (wal.status == WalStatus.miss || wal.status == WalStatus.synced && wal.syncedAt == 0);
 
@@ -75,71 +110,65 @@ extension CaptureCommittedCustody on LocalWalSyncImpl {
     int? conversationStartSeconds,
     String? failClosedReason,
     bool allowTranscriptCoverageFallback = false,
-  }) async {
+  }) {
     final generation = _sessionGeneration;
-    final useCommits = await ClientRefactorFlags.custodyRelease();
-    if (!_isCurrent(generation)) return (released: 0, kept: 0);
-    // A stamped WAL can start before the session window — its timerStart is backdated from its
-    // frame count — so the transcript evidence judges every stamped copy instead.
-    final stamped = _wals.where((wal) => wal.conversationId == conversationId).toList();
-    if (stamped.isEmpty) return (released: 0, kept: 0);
-
-    final spans =
-        failClosedReason == null && transcriptSpans != null && transcriptSpans.isNotEmpty ? transcriptSpans : null;
-    final reason = failClosedReason ?? (spans != null ? null : 'no_spans');
-    final nowSeconds = _now().millisecondsSinceEpoch ~/ 1000;
-    final covered = <Wal>[], kept = <Wal>[];
-    for (final wal in stamped) {
-      // Only phone-side pending copies and transport-only synced ones (socket sends, never
-      // server-confirmed) are judged; in-flight, durable and terminal copies never regress.
-      final eligible = !wal.holdForUser &&
-          !wal.onDeviceOnly &&
-          !wal.isSyncing &&
-          (wal.storage == WalStorage.disk || wal.storage == WalStorage.mem) &&
-          (wal.status == WalStatus.miss || wal.status == WalStatus.synced && wal.syncedAt == 0);
-      if (!eligible) continue;
-      final legacyCovered =
-          spans != null && walCoveredByTranscript(wal, spans, conversationStartSeconds ?? sessionStartSeconds);
-      final committed = await captureCommits.covers(_currentWalOwnerUid(), wal);
+    return _enqueueBuffer(() async {
+      final useCommits = await ClientRefactorFlags.custodyRelease();
       if (!_isCurrent(generation)) return (released: 0, kept: 0);
-      ClientRefactorFlags.compare('custody_release', legacyCovered == committed);
-      // refactor: superseded by CaptureCommittedJournal when custody_capture_committed_release=true
-      // Live custom STT sends suggested_transcript segments from the client's primary STT socket
-      // without server audio-frame receipts, so verified transcript span coverage still releases it.
-      final isCovered = useCommits
-          ? committed || (allowTranscriptCoverageFallback && wal.ownerUid == _currentWalOwnerUid() && legacyCovered)
-          : legacyCovered;
-      if (isCovered) {
-        wal.status = WalStatus.synced;
-        wal.syncedAt = nowSeconds;
-        wal.keptForTranscriptRecovery = false;
-        covered.add(wal);
-      } else {
-        // An uncovered transport-only synced copy reclassifies to miss so
-        // fail-closed recovery uploads it instead of status-skipping it.
-        _keepForTranscriptRepair(wal);
-        kept.add(wal);
-      }
-    }
-    if (covered.isNotEmpty || kept.isNotEmpty) {
-      try {
-        await _saveWalsToFile(generation);
-      } catch (_) {
-        // The durable index never recorded the coverage, so covered copies fail closed too.
-        if (_isCurrent(generation)) {
-          covered.where((wal) => _wals.any((tracked) => identical(tracked, wal))).forEach(_keepForTranscriptRepair);
+      if (useCommits) await _persistCaptureCommits(generation);
+      if (!_isCurrent(generation)) return (released: 0, kept: 0);
+      // A stamped WAL can start before the session window — its timerStart is backdated from its
+      // frame count — so the transcript evidence judges every stamped copy instead.
+      final stamped = _wals.where((wal) => wal.conversationId == conversationId).toList();
+      if (stamped.isEmpty) return (released: 0, kept: 0);
+
+      final spans =
+          failClosedReason == null && transcriptSpans != null && transcriptSpans.isNotEmpty ? transcriptSpans : null;
+      final reason = failClosedReason ?? (spans != null ? null : 'no_spans');
+      final nowSeconds = _now().millisecondsSinceEpoch ~/ 1000;
+      final covered = <Wal>[], kept = <Wal>[];
+      for (final wal in stamped) {
+        // Only phone-side pending copies and transport-only synced ones (socket sends, never
+        // server-confirmed) are judged; in-flight, durable and terminal copies never regress.
+        if (!_captureCommitEligible(wal)) continue;
+        // Live Custom STT owns a separate, explicit transcript-confirmation contract.
+        // Only the capture mode frozen at socket creation grants this fallback.
+        final allowTranscript = !useCommits || allowTranscriptCoverageFallback && wal.ownerUid == _currentWalOwnerUid();
+        final isCovered = allowTranscript &&
+            spans != null &&
+            walCoveredByTranscript(wal, spans, conversationStartSeconds ?? sessionStartSeconds);
+        if (isCovered) {
+          wal.status = WalStatus.synced;
+          wal.syncedAt = nowSeconds;
+          wal.keptForTranscriptRecovery = false;
+          covered.add(wal);
+        } else {
+          // An uncovered transport-only synced copy reclassifies to miss so
+          // fail-closed recovery uploads it instead of status-skipping it.
+          _keepForTranscriptRepair(wal);
+          kept.add(wal);
         }
-        rethrow;
       }
-    }
-    if (_isCurrent(generation) && covered.isNotEmpty) _notifyUpdated(generation);
-    _emitWalTranscriptCoverage(
-      generation: generation,
-      phase: 'confirmation',
-      covered: covered,
-      kept: kept,
-      failClosedReason: reason,
-    );
-    return (released: 0, kept: kept.length);
+      if (covered.isNotEmpty || kept.isNotEmpty) {
+        try {
+          if (!await _saveWalsToFile(generation)) throw StateError('WAL index admission unavailable');
+        } catch (_) {
+          // The durable index never recorded the coverage, so covered copies fail closed too.
+          if (_isCurrent(generation)) {
+            covered.where((wal) => _wals.any((tracked) => identical(tracked, wal))).forEach(_keepForTranscriptRepair);
+          }
+          rethrow;
+        }
+      }
+      if (_isCurrent(generation) && covered.isNotEmpty) _notifyUpdated(generation);
+      _emitWalTranscriptCoverage(
+        generation: generation,
+        phase: 'confirmation',
+        covered: covered,
+        kept: kept,
+        failClosedReason: reason,
+      );
+      return (released: 0, kept: kept.length);
+    });
   }
 }

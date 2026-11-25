@@ -49,7 +49,16 @@ class _GoalsPageState extends State<GoalsPage> {
           padding: const EdgeInsets.only(bottom: OmiSpacing.xl),
           children: [
             GoalsWidget(key: _goalsKey, showHeader: false),
-            if (!goals.isLoading && goals.goals.isEmpty)
+            if (!goals.isLoading && goals.goals.isEmpty && goals.loadFailed)
+              Padding(
+                padding: const EdgeInsets.only(top: 120),
+                child: OmiErrorState(
+                  key: const Key('goals_load_failed'),
+                  message: context.l10n.goalsLoadFailed,
+                  onRetry: () => context.read<GoalsProvider>().refresh(),
+                ),
+              )
+            else if (!goals.isLoading && goals.goals.isEmpty)
               Padding(
                 padding: const EdgeInsets.only(top: 120),
                 child: OmiEmptyState(

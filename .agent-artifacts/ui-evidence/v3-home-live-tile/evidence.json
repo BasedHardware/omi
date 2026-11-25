@@ -1,0 +1,47 @@
+{
+  "version": 1,
+  "images": [
+    {
+      "file": "001-mobile-ios-v3-home-live-row.png",
+      "platform": "mobile-ios",
+      "description": "v3 Home: the live row shows the speech span (11m, same as its detail) and no End button; Home stays uncluttered",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "002-mobile-ios-v3-live-detail-end.png",
+      "platform": "mobile-ios",
+      "description": "v3 live conversation detail as it opens: on the Transcript tab, a '● Live · 11m' chip (the speech so far, as its Home row shows), no Share, End Conversation beside Ask Omi. Transcript lines render as blocks in the widget-test engine (the transcript's RichText has no font family); a device shows the system font",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "003-mobile-ios-v3-home-live-placeholder.png",
+      "platform": "mobile-ios",
+      "description": "v3 Home while the pendant streams with no window open yet: a live-row placeholder (Listening, Live) instead of the pendant capture card",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "004-mobile-ios-v3-home-light.png",
+      "platform": "mobile-ios",
+      "description": "v3 Home in light mode: live row with speech span, no End button",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "005-mobile-ios-v3-live-detail-light.png",
+      "platform": "mobile-ios",
+      "description": "v3 live conversation detail in light mode: Transcript tab, live chip, no Share, End beside Ask Omi",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "006-mobile-ios-v3-live-detail-summary-tab.png",
+      "platform": "mobile-ios",
+      "description": "v3 live conversation detail, Summary tab: one quiet line, 'Summary when this conversation ends'; no spinner, no link, no summary write",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    }
+  ]
+}

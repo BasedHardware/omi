@@ -18,7 +18,6 @@ from tests.unit.test_capture_window_merge_union_r5 import harness, known, raw, t
 from tests.unit.test_capture_window_merge_union_r7 import adapter
 from tests.unit.test_audio_timeline_round3 import RATE, T0
 from utils.stt import live_session
-from utils.stt import resilient_stream
 from utils.stt.resilient_stream import ResilientAudio
 from utils.stt.replay_capture_accounting import record_replay_sends
 from utils.stt.streaming import STTService
@@ -234,41 +233,6 @@ def save_parity(key, rows, before, enabled):
 
 
 @pytest.mark.parametrize('enabled', [False, True])
-@pytest.mark.parametrize('recovery', [False, True])
-async def test_same_provider_reconnect_uses_fresh_zero_axis(monkeypatch, enabled, recovery):
-    monkeypatch.setenv(FLAG, 'true' if enabled else 'false')
-    monkeypatch.setenv('STT_FAILOVER_RECOVERY_ENABLED', 'true' if recovery else 'false')
-    monkeypatch.setenv('STT_RESILIENT_RECONNECT', 'true')
-    receiver, callback, epoch, _, processor, store = harness(monkeypatch, False, 'soniox')
-    receiver.host.state.active = True
-    receiver.host.stt_service = STTService.soniox
-    prefix = b'\1\0' * RATE * 2
-    receiver.capture_timeline.accept(b'\0\0' * RATE * 3, T0 + 3, 3)
-    receiver.capture_timeline.accept(prefix, T0 + 5, 5)
-    ring = receiver._resilient_audio
-    assert ring is not None
-    ring.append(prefix, 3 * RATE)
-    old = LocalTransport(None)
-    old.is_connection_dead, old.typed_death_reason = True, 'soniox_rotation'
-    receiver.stt_socket = old
-    emit = await parser(monkeypatch, 'soniox', callback)
-    transport = LocalTransport(emit)
-    receiver._stt_rebuild = (lambda: (callback, callback, epoch), RATE)
-    receiver._create_stt_socket = AsyncMock(return_value=transport)
-    monkeypatch.setattr(receiver_module, 'record_live_connection', lambda *a: None)
-    monkeypatch.setattr(receiver_module, 'fallback_socket_is_serving', AsyncMock(return_value=True))
-    monkeypatch.setattr(resilient_stream, 'fallback_socket_is_serving', AsyncMock(return_value=True))
-    assert await receiver._reconnect_stt_socket_locked()
-    await deliver(emit, raw('reconnect', 'Reconnected audio.', 0.2, 1.8))
-    rows = await tick(receiver, processor, store)
-    # The old (unpaced) reconnect already wraps its replay before sending.
-    assert known(rows) == int(enabled or not recovery)
-    if enabled or not recovery:
-        assert (rows[0]['audio_capture_start'], rows[0]['audio_capture_end']) == (T0 + 3.2, T0 + 4.8)
-    assert sum(len(data) for _, data in transport.sent) == len(prefix)
-
-
-@pytest.mark.parametrize('enabled', [False, True])
 @pytest.mark.parametrize('provider', PROVIDERS)
 @pytest.mark.parametrize('fault', ['reject', 'capture_gap', 'wall_gap', 'overshoot_edge', 'unobserved'])
 async def test_replay_never_fills_unobserved_audio(monkeypatch, enabled, provider, fault):
@@ -325,7 +289,6 @@ async def test_managed_replay_is_not_registered_twice(monkeypatch, provider):
 @pytest.mark.parametrize('axis', ['compact', 'elapsed_candidate'])
 async def test_gated_provider_axis_is_never_guessed(monkeypatch, enabled, provider, axis):
     monkeypatch.setenv(FLAG, 'true' if enabled else 'false')
-    monkeypatch.setenv('SONIOX_ELAPSED_AXIS', 'shadow')
     receiver, callback, epoch, _, processor, store = harness(monkeypatch, False, provider)
     emit = await parser(monkeypatch, provider, callback)
     transport = LocalTransport(emit)

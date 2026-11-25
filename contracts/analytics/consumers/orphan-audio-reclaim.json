@@ -1,0 +1,13 @@
+{
+  "id": "orphan-audio-reclaim",
+  "kind": "question",
+  "owner": "mobile-custody",
+  "events": [
+    "orphanAudioReclaim"
+  ],
+  "namespace_property": "$app_namespace",
+  "question": "How many stranded files and bytes were reclaimed, and which safety fences retained files? Compare census unreferenced delta with deleted count and missing-recording reports during the ramp.",
+  "zero_policy": "No events is unknown until build, flag resolution, consent and ingestion are verified.",
+  "query": "contracts/analytics/consumers/orphan-audio-reclaim.sql",
+  "posthog_query": "SELECT properties['result'], sum(toInt(properties['deleted_files'])), sum(toInt(properties['deleted_bytes'])) FROM events WHERE event = 'Orphan Audio Reclaim' AND properties['$app_namespace'] = '{app_namespace}' AND properties['build_number'] = '{build_number}' GROUP BY properties['result']"
+}

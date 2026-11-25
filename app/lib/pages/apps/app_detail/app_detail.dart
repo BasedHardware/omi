@@ -2,12 +2,14 @@ import 'dart:async';
 
 import 'package:omi/utils/error_message.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:collection/collection.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:provider/provider.dart';
+import 'package:omi/providers/usage_provider.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:skeletonizer/skeletonizer.dart';
 
@@ -204,6 +206,7 @@ class _AppDetailPageState extends State<AppDetailPage> with WidgetsBindingObserv
     );
 
     WidgetsBinding.instance.addPostFrameCallback((_) async {
+      _retryFailedBillingRead();
       // Load details first: a transport-backed app's home URL carries a one-use
       // launch grant that only a fresh details response contains.
       final loaded = await _refreshAppDetails();
@@ -466,7 +469,7 @@ class _AppDetailPageState extends State<AppDetailPage> with WidgetsBindingObserv
                               );
                             }
                           },
-                          action: _buildPrimaryAction(l10n),
+                          action: _buildPrimaryAction(context, l10n),
                         ),
                       ),
                       const SizedBox(width: 20),
@@ -511,7 +514,9 @@ class _AppDetailPageState extends State<AppDetailPage> with WidgetsBindingObserv
                   if (_setupWaiting || _setupFailed) ...[
                     AppDetailNotice(
                         icon: FontAwesomeIcons.circleInfo,
-                        text: _setupFailed ? l10n.connectionErrorDesc : l10n.completeAuthInBrowser),
+                        text: _setupFailed
+                            ? (_setupTimedOut ? l10n.appSetupNotFinished : l10n.connectionErrorDesc)
+                            : l10n.completeAuthInBrowser),
                     if (_setupFailed)
                       OmiButton.secondary(
                           key: const Key('app-setup-retry'),
@@ -856,8 +861,34 @@ class _AppDetailPageState extends State<AppDetailPage> with WidgetsBindingObserv
     );
   }
 
+  /// A failed first subscription read leaves a paid app's button on the unavailable label; opening
+  /// the page tries the read once more.
+  void _retryFailedBillingRead() {
+    if (!mounted || !app.isPaid || app.isUserPaid) return;
+    try {
+      final usage = context.read<UsageProvider>();
+      if (usage.billingProviderFailed) usage.fetchSubscription();
+    } on ProviderNotFoundException {
+      // Hosts without plan state have nothing to retry.
+    }
+  }
+
+  /// No reader on a build that sells through Google Play can be sent to an app's own payment link, Stripe
+  /// subscriber or not. Until an Android reader's billing
+  /// provider is known the paid button waits (loading) rather than guessing either way; if that read
+  /// failed it shows the unavailable label, never the payment link. Hosts without plan state never
+  /// wait. Watched, so the button updates when the first subscription read lands.
+  ({bool playBilled, bool unknown}) _paidAppBilling(BuildContext buildContext) {
+    try {
+      return buildContext.select<UsageProvider, ({bool playBilled, bool unknown})>((usage) =>
+          (playBilled: usage.buysThroughPlay || usage.billingProviderFailed, unknown: usage.billingProviderPending));
+    } on ProviderNotFoundException {
+      return (playBilled: false, unknown: false);
+    }
+  }
+
   /// Enable (after the data-access question for external apps), Subscribe, or Disable.
-  Widget _buildPrimaryAction(AppLocalizations l10n) {
+  Widget _buildPrimaryAction(BuildContext buildContext, AppLocalizations l10n) {
     if (isLoading) {
       return OmiButton(label: l10n.enable, size: OmiButtonSize.compact, isLoading: true, onPressed: null);
     }
@@ -870,6 +901,30 @@ class _AppDetailPageState extends State<AppDetailPage> with WidgetsBindingObserv
         onPressed: () {
           _disableApp();
         },
+      );
+    }
+    final billing = app.isPaid && !app.isUserPaid ? _paidAppBilling(buildContext) : (playBilled: false, unknown: false);
+    if (billing.unknown && !billing.playBilled) {
+      return OmiButton(
+        key: const Key('app_detail_paid_pending'),
+        label: l10n.subscribe,
+        size: OmiButtonSize.compact,
+        isLoading: true,
+        onPressed: null,
+      );
+    }
+    // A Play build gets no payment link from the server: Android shows the same unavailable state.
+    final noPaymentLink = app.isPaid &&
+        !app.isUserPaid &&
+        (app.paymentLink?.isEmpty ?? true) &&
+        defaultTargetPlatform == TargetPlatform.android;
+    if (billing.playBilled || noPaymentLink) {
+      // Its payment link is not Google Play; a Play-billed reader cannot buy it in this app.
+      return OmiButton.secondary(
+        key: const Key('app_detail_paid_unavailable'),
+        label: l10n.playPaidAppUnavailable,
+        size: OmiButtonSize.compact,
+        onPressed: null,
       );
     }
     if (app.isPaid && !app.isUserPaid) {

@@ -9,6 +9,7 @@ from unittest.mock import MagicMock
 import pytest
 
 from testing.import_isolation import AutoMockModule, load_module_fresh, stub_modules
+from utils.other import request_deadline as request_deadline_real
 
 _BACKEND = Path(__file__).resolve().parents[2]
 
@@ -157,7 +158,9 @@ def conversations_db():
     """Load the production query function against a minimal in-memory Firestore seam."""
     # Load the pure policy/registry before the fixture closes the utils import path.
     import config.dream_agent  # noqa: F401
-    from utils.conversations import summary_delivery, lifecycle_clocks, home_titles, transcribing_hold
+    from utils.conversations import summary_delivery, lifecycle_clocks, home_titles, transcribing_hold, llm_input_dedupe
+    from utils import summary_quality
+    from models import structured
     from database import sync_live_overlap, transcript_pointer
     from utils.sync import live_overlap, stage
     from utils.home_feed import projection as home_feed_projection
@@ -232,6 +235,8 @@ def conversations_db():
         # The write-only restore-obligation lookup imports the real stage
         # helper; load its env-loader dependency before closing utils paths.
         "utils.sync.stage": stage,
+        # The archive read contract does not use the V3 repair ledger.
+        "database.conversations_v3_backfill_runs": ModuleType("database.conversations_v3_backfill_runs"),
         "database.speaker_assignment_effects": AutoMockModule("database.speaker_assignment_effects"),
         # Archive queries never invoke the separate speaker publication/revocation IO seam.
         "database.speaker_auto_enroll": ModuleType("database.speaker_auto_enroll"),
@@ -239,10 +244,14 @@ def conversations_db():
         "database.users": AutoMockModule("database.users"),
         "models": models,
         "models.audio_file": AutoMockModule("models.audio_file"),
+        "models.structured": structured,
         "models.conversation_enums": AutoMockModule("models.conversation_enums"),
         "models.conversation_photo": AutoMockModule("models.conversation_photo"),
         "models.transcript_segment": AutoMockModule("models.transcript_segment"),
         "utils": utils,
+        # Archive reads do not execute notes writes; retain the module-level pure seams.
+        "utils.summary_quality": summary_quality,
+        "utils.conversations.llm_input_dedupe": llm_input_dedupe,
         "utils.home_feed.projection": home_feed_projection,
         "utils.conversations": utils_conversations,
         "utils.conversations.summary_delivery": summary_delivery,
@@ -268,6 +277,7 @@ def conversations_db():
         "utils.other.hume": AutoMockModule("utils.other.hume"),
         "utils.other.list_budget": list_budget_real,
         "utils.other.portability_read": portability_read_real,
+        "utils.other.request_deadline": request_deadline_real,
         "utils.other.storage": AutoMockModule("utils.other.storage"),
     }
 

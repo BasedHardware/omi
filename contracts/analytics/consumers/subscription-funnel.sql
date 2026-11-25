@@ -1,5 +1,5 @@
 -- Offline/PostHog SQL projection: bind one namespace and build.
--- Closed properties only: source, current_plan, catalog_tier, plan, billing_interval, previous_plan, new_plan, change_source, allowance_kind, reason, stage, result, has_details, step, surface.
+-- Closed properties only: choice, provider, source, current_plan, catalog_tier, plan, billing_interval, previous_plan, new_plan, change_source, allowance_kind, reason, stage, result, has_details, step, surface.
 -- Checkout Completed is success-navigation telemetry, not accepted payment or entitlement.
 -- Upgrade Succeeded and Upgrade Cancelled are the property-less presence names.
 -- Upgrade Succeeded Attributed is the checkout success that carries tier and interval.
@@ -16,8 +16,10 @@ WHERE app_namespace = :app_namespace AND build_number = :build_number
     'Subscription Restore Attempted',
     'Subscription Restore Result',
     'Paywall Opened',
+    'Free Cap Sheet Choice',
     'Upgrade Plan Selected',
     'Upgrade Succeeded Attributed',
+    'Upgrade Billing Provider',
     'Upgrade Succeeded',
     'Upgrade Cancelled',
     'Subscription Plan Changed',

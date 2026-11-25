@@ -172,7 +172,10 @@ def main(argv=None):
             owners.add(uid)
             work.append((uid, cid))
     counts['accounts_with_live_leftovers'] = len(owners)
-    counts['batch_purge_obligations_pending'] = sum(1 for _ in client.collection(OBLIGATIONS).select([]).stream())
+    # Obligations have SHA-256 hex IDs; underscore IDs are reserved control metadata.
+    counts['batch_purge_obligations_pending'] = sum(
+        1 for row in client.collection(OBLIGATIONS).select([]).stream() if not row.id.startswith('_')
+    )
     print(f'since={since.date().isoformat()} mode={"execute" if args.execute else "dry-run"}')
     print(f'bindings={json.dumps(bindings, sort_keys=True, default=str)}')
     print(f'runtime_digest={digest or "n/a (standalone scan cannot authorize --execute)"}')

@@ -109,8 +109,8 @@ export async function loadFocusContext(now: Date = new Date()): Promise<FocusCon
     cache = { at: nowMs, goals, tasks, memories }
   }
   return {
-    // Read fresh every time — it's a local read, and the profile can change
-    // under us (a background regeneration) between the 120s source refreshes.
+    // Read every time — it's an in-memory cache of the backend profile (the
+    // service refetches it in the background), so it costs nothing here.
     profileText: getLatestProfileText(),
     goals: cache.goals,
     tasks: cache.tasks,

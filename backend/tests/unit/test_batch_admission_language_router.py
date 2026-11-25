@@ -78,47 +78,55 @@ async def route(world, mode):
     )
 
 
-@pytest.mark.parametrize('mode', [LegacySyncMode.ON])
-@pytest.mark.parametrize('language', ['auto', 'ja'])
-async def test_actual_sync_router_excludes_before_claim_and_batch_intake(monkeypatch, mode, language):
-    world = setup(monkeypatch, language)
-    module, saved, jobs, BytesIO, _, _ = _load_sync_router_for_fast_path()
-    before = deepcopy(world.client.rows)
+@pytest.fixture
+def sync_router(defaults):
+    # Imports/stub installation are harness setup; keep each real endpoint call
+    # under the unchanged CPU guard and restore modules after every test.
+    module, saved, _, BytesIO, _, _ = _load_sync_router_for_fast_path()
     try:
-        monkeypatch.setattr(legacy_dark, 'current_mode', lambda uid=None: mode)
-        monkeypatch.setattr(legacy_dark, 'read_ledger_row', lambda *a: None)
-        module.resolve_batch_policy = lambda uid: world.policy
-        module.ramp_admission_policy = lambda uid, policy, **kwargs: policy
-        module.compute_sync_content_id = lambda *a: 'new'
-        module.registered_record_response = live_upload.registered_record_response
-        module.accept_batch_upload = intake.accept_upload
-        module.archive_mobile_batch_raw_files = lambda *a: []
-
-        def authorize(store, work, snapshots):
-            snapshots['user'] = deepcopy(world.client.rows[USER])
-            snapshots['conversations'] = {CID: deepcopy(world.client.rows[CONVERSATION])}
-            return ProtectionContext('standard', 0)
-
-        monkeypatch.setattr(intake, 'batch_artifact_authorize', authorize)
-        staging = Mock(side_effect=AssertionError('unsafe bound upload entered batch staging'))
-        monkeypatch.setattr(intake, 'artifacts_for', staging)
-        response = await module.sync_local_files_v2(
-            files=[UploadFile(filename=f'omi_{int(module.time.time())}.bin', file=BytesIO(b'\x00' * 10))],
-            uid=UID,
-            conversation_id=CID,
-        )
-        assert not world.store.rows  # No batch ledger, jobs, intakes or queue writes.
-        staging.assert_not_called()
-        if mode is LegacySyncMode.ON:
-            assert response.status_code == 202
-            assert world.claims == ['legacy_final_pass_v1']
-            module.create_sync_job.assert_called_once()
-        else:
-            assert response.status_code == 409 and b'sync_content_retry_later' in response.body
-            assert not world.claims and world.client.rows == before
-            module.create_sync_job.assert_not_called()
+        yield module, BytesIO
     finally:
         _restore(saved)
+
+
+@pytest.mark.parametrize('mode', [LegacySyncMode.ON])
+@pytest.mark.parametrize('language', ['auto', 'ja'])
+async def test_actual_sync_router_excludes_before_claim_and_batch_intake(monkeypatch, mode, language, sync_router):
+    world = setup(monkeypatch, language)
+    module, BytesIO = sync_router
+    before = deepcopy(world.client.rows)
+    monkeypatch.setattr(legacy_dark, 'current_mode', lambda uid=None: mode)
+    monkeypatch.setattr(legacy_dark, 'read_ledger_row', lambda *a: None)
+    module.resolve_batch_policy = lambda uid: world.policy
+    module.ramp_admission_policy = lambda uid, policy, **kwargs: policy
+    module.compute_sync_content_id = lambda *a: 'new'
+    module.registered_record_response = live_upload.registered_record_response
+    module.accept_batch_upload = intake.accept_upload
+    module.archive_mobile_batch_raw_files = lambda *a: []
+
+    def authorize(store, work, snapshots):
+        snapshots['user'] = deepcopy(world.client.rows[USER])
+        snapshots['conversations'] = {CID: deepcopy(world.client.rows[CONVERSATION])}
+        return ProtectionContext('standard', 0)
+
+    monkeypatch.setattr(intake, 'batch_artifact_authorize', authorize)
+    staging = Mock(side_effect=AssertionError('unsafe bound upload entered batch staging'))
+    monkeypatch.setattr(intake, 'artifacts_for', staging)
+    response = await module.sync_local_files_v2(
+        files=[UploadFile(filename=f'omi_{int(module.time.time())}.bin', file=BytesIO(b'\x00' * 10))],
+        uid=UID,
+        conversation_id=CID,
+    )
+    assert not world.store.rows  # No batch ledger, jobs, intakes or queue writes.
+    staging.assert_not_called()
+    if mode is LegacySyncMode.ON:
+        assert response.status_code == 202
+        assert world.claims == ['legacy_final_pass_v1']
+        module.create_sync_job.assert_called_once()
+    else:
+        assert response.status_code == 409 and b'sync_content_retry_later' in response.body
+        assert not world.claims and world.client.rows == before
+        module.create_sync_job.assert_not_called()
 
 
 @pytest.mark.parametrize('mode', list(LegacySyncMode))
@@ -182,9 +190,11 @@ async def test_existing_batch_owner_and_kill_switch_never_read_new_preferences(m
     assert world.claims == (['batch_sync_v1'] if disabled else [])
 
 
-async def test_negative_control_router_without_preclaim_gate_exposes_the_reviewed_bypass(monkeypatch):
+async def test_negative_control_router_without_preclaim_gate_exposes_the_reviewed_bypass(monkeypatch, sync_router):
     # Disable only the early gate, leaving the intake exclusion ON. The real
     # router reserves batch_sync_v1 first, and the regression catches staging.
     monkeypatch.setattr(live_upload, 'admission_language_exclusion_enabled', lambda: False)
     with pytest.raises(AssertionError, match='not have been called'):
-        await test_actual_sync_router_excludes_before_claim_and_batch_intake(monkeypatch, LegacySyncMode.ON, 'auto')
+        await test_actual_sync_router_excludes_before_claim_and_batch_intake(
+            monkeypatch, LegacySyncMode.ON, 'auto', sync_router
+        )

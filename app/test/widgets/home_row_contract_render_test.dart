@@ -484,6 +484,14 @@ void main() {
     await tester.tap(find.byKey(_processingKey));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 500));
+    // Near the fixture's capture time, the pending page uses Summary/Transcript
+    // tabs. Member assertions belong to Transcript in that layout as well.
+    final transcriptTab = find.byKey(const Key('conversation_tab_transcript'));
+    if (transcriptTab.evaluate().isNotEmpty) {
+      await tester.tap(transcriptTab);
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 500));
+    }
     for (final member in fixture.members.take(2)) {
       expect(find.byKey(ValueKey('episode_member_${member.id}')), findsNothing);
     }

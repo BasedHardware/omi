@@ -624,13 +624,17 @@ class DesktopCandidateSourceCheckTests(unittest.TestCase):
         self.assertNotIn("source-check-poll-seconds", workflow)
         self.assertNotIn("pre-tag-readiness", workflow)
         self.assertNotIn("verify-pre-tag-readiness.py", workflow)
-        self.assertIn("timeout-minutes: 30", workflow)
+        self.assertIn("timeout-minutes: 45", workflow)
         self.assertIn("runs-on: ubuntu-latest", workflow)
         self.assertIn("group: desktop-release-planner-main", workflow)
         self.assertIn("cancel-in-progress: false", workflow)
         self.assertIn("ref: ${{ steps.plan.outputs.source_sha }}", workflow)
         self.assertLess(
-            workflow.index("Create and regular-merge PR to sync changelog back to main"),
+            workflow.index("Wait for UI author approval on the exact changelog head"),
+            workflow.index("Merge the approved changelog PR at the exact head"),
+        )
+        self.assertLess(
+            workflow.index("Merge the approved changelog PR at the exact head"),
             workflow.index("Publish immutable tag from merged release source"),
         )
         self.assertNotIn("Replan release source after changelog sync", workflow)

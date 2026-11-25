@@ -141,7 +141,44 @@ class AddAppProvider extends ChangeNotifier {
       checkValidity();
     }
 
+    _createBaseline = _createFingerprint();
     setIsLoading(false);
+  }
+
+  /// What the create form held once it was set up (presets included), so leaving it asks only
+  /// after the reader changed something.
+  String? _createBaseline;
+
+  String _createFingerprint() => [
+        for (final controller in [
+          appNameController,
+          appDescriptionController,
+          chatPromptController,
+          conversationPromptController,
+          webhookUrlController,
+          setupCompletedController,
+          instructionsController,
+          authUrlController,
+          appHomeUrlController,
+          chatToolsManifestUrlController,
+          sourceCodeUrlController,
+          priceController,
+        ])
+          controller.text,
+        imageFile?.path ?? '',
+        appCategory ?? '',
+        selectedCapabilities.map((c) => c.id).join(','),
+        thumbnailIds.join(','),
+        '$isPaid',
+      ].join('\u0000');
+
+  /// Whether leaving the create or edit form now would lose what the reader entered
+  /// (ux-contract §2): the edit form against the app it opened, the create form against its presets.
+  bool get hasUnsavedInput {
+    if (isLoading || isSubmitting || isUpdating) return false;
+    if (_originalApp != null) return hasChanges;
+    final baseline = _createBaseline;
+    return baseline != null && _createFingerprint() != baseline;
   }
 
   void setIsLoading(bool loading) {
@@ -273,6 +310,7 @@ class AddAppProvider extends ChangeNotifier {
     thumbnailIds = [];
     actions.clear();
     _originalApp = null;
+    _createBaseline = null;
     hasChanges = false;
   }
 
@@ -443,9 +481,18 @@ class AddAppProvider extends ChangeNotifier {
 
   void checkValidity() {
     isValid = isFormValid();
+    missingBasics = !isValid &&
+        !(capabilitySelected() &&
+            (imageFile != null || imageUrl != null) &&
+            appCategory != null &&
+            (metadataKey.currentState?.validate() ?? false));
     hasChanges = _originalApp != null && hasDataChanged(_originalApp!, _originalApp!.category);
     notifyListeners();
   }
+
+  /// True while a base field (capability, image, category, or the metadata form) is missing, so
+  /// the disabled Submit can name what it waits for (A2); otherwise a capability or pricing detail is.
+  bool missingBasics = true;
 
   bool isFormValid() {
     if (capabilitySelected() && (imageFile != null || imageUrl != null) && appCategory != null) {

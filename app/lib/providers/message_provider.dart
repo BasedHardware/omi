@@ -206,8 +206,8 @@ class MessageProvider extends ChangeNotifier with ChatHistoryState {
 
   ChatStreamFailureClass? replyFailure(ServerMessage message) => _failedReplies[message]?.failure;
 
+  /// The words Omi already said stay on screen; the failure shows under them with Try Again (H2).
   void _markReplyFailed(ServerMessage message, _FailedReply reply) {
-    message.text = '';
     _failedReplies[message] = reply;
   }
 

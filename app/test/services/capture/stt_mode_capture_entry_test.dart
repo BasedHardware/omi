@@ -66,8 +66,12 @@ void main() {
 
     expect(capture.openCalls, 1);
     expect(capture.lastConfig, isNotNull);
-    expect(capture.lastConfig!.sttConfigId, SttModeResolver.freemiumOnDeviceId);
+    expect(capture.lastConfig!.provider, SttProvider.onDeviceWhisper);
     expect(capture.lastConfig!.isEnabled, isTrue);
+    // The switch at the cap is the permanent phone choice: persisted and pinned before the socket opens.
+    expect(SharedPreferencesUtil().customSttConfig.sttConfigId, capture.lastConfig!.sttConfigId);
+    expect(SharedPreferencesUtil().paywallOnDeviceSttConfigId, capture.lastConfig!.sttConfigId);
+    expect(capture.lastConfig!.sendRawAudioToOmi, isFalse);
   });
 
   var prepared = 0;

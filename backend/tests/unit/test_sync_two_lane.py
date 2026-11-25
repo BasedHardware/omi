@@ -352,7 +352,7 @@ def test_sync_backfill_lifecycle_is_shared_by_manual_and_auto_dev():
         assert 'id: sync-backfill' in workflow
         assert 'mode: worker' in workflow
         assert "'platform' || 'dispatch'" in workflow
-        assert '${{ steps.sync-backfill.outputs.sync_backfill_env_vars }}' in workflow
+        assert '${{ steps.sync-routing.outputs.sync_backfill_env_vars }}' in workflow
         assert '${{ steps.sync-backfill.outputs.revision }}' in workflow
         assert 'provision_sync_ledger_ttl: \'true\'' in workflow
         assert 'firestore_project_id: ${{ inputs.runtime_gcp_project_id }}' in composite
@@ -397,7 +397,11 @@ def test_sync_backfill_lifecycle_is_shared_by_manual_and_auto_dev():
         if step.get('name') == 'Reconcile bounded sync backfill queue'
     )
     assert reconcile['env']['BACKFILL_ENV'] == '${{ inputs.backfill_env_vars }}'
-    assert 'backfill_env_vars: ${{ steps.runtime-env.outputs.backend_sync_backfill_env_vars }}' in stack
+    worker = next(step for step in yaml.safe_load(stack)['runs']['steps'] if step.get('id') == 'sync-backfill')
+    assert worker['with']['backfill_env_vars'].splitlines() == [
+        '${{ steps.runtime-env.outputs.backend_sync_backfill_env_vars }}',
+        'OMI_BACKEND_RELEASE_SHA=${{ inputs.admitted_sha }}',
+    ]
     assert '--max-concurrent-dispatches="$BACKFILL_MAX_CONCURRENT_DISPATCHES"' in action
     assert '--max-dispatches-per-second=15' in action
     assert '--max-backoff=60s' in action
@@ -433,8 +437,11 @@ def test_sync_backfill_dispatch_mode_reconciles_queue_without_platform_mutation(
     steps = composite['runs']['steps']
     lane = next(step for step in steps if step.get('name') == 'Provision sync-backfill lane')
     # Integration-only restoration cannot mutate the consumer lane. Normal
-    # successful deploys still reconcile it in their existing dispatch mode.
-    assert lane['if'] == "${{ inputs.integration_only != 'true' && (success()) }}"
+    # all-service successful deploys still reconcile it in their existing dispatch mode;
+    # a selected service never reconfigures the shared queue.
+    assert (
+        lane['if'] == "${{ inputs.cloud_run_service == 'all' && (inputs.integration_only != 'true' && (success())) }}"
+    )
     mode = lane['with']['mode']
     assert "deploy_profile == 'auto-dev'" in mode
     assert "deploy_targets == 'all'" in mode
@@ -466,7 +473,11 @@ def test_sync_backfill_dispatch_mode_reconciles_queue_without_platform_mutation(
     assert "provision_budget_alerts == 'true'" in abort['if']
 
     resolver = next(step for step in lifecycle['runs']['steps'] if step.get('id') == 'live-max-scale')
-    assert 'if' not in resolver  # Also resolve for platform/dispatch, not just the worker deploy.
+    # Platform/dispatch retain their existing scaling read; the new read-only
+    # routing producer must not inspect or configure the omitted worker.
+    assert resolver['if'] == (
+        "${{ inputs.mode == 'worker' || inputs.mode == 'platform' || inputs.mode == 'dispatch' }}"
+    )
     assert lifecycle['runs']['steps'].index(resolver) < lifecycle['runs']['steps'].index(queue)
     assert queue['env']['BACKFILL_MAX_CONCURRENT_DISPATCHES'] == (
         '${{ steps.live-max-scale.outputs.max_concurrent_dispatches }}'
@@ -537,7 +548,10 @@ def test_production_cloud_run_only_smokes_the_promoted_serving_api():
     )
 
     serving_smoke = by_name['Smoke promoted production serving API']
-    assert serving_smoke['if'] == "${{ inputs.deploy_profile == 'manual' && inputs.environment == 'prod' }}"
+    assert serving_smoke['if'] == (
+        "${{ (inputs.cloud_run_service == 'all' || inputs.cloud_run_service == 'backend') && "
+        "(inputs.deploy_profile == 'manual' && inputs.environment == 'prod') }}"
+    )
     assert 'https://api.omi.me/v2/desktop/beta/candidates/reserve' in serving_smoke['run']
     assert '--candidate-api-url https://api.omi.me' in serving_smoke['run']
     assert 'firebase-production-serving-token' in serving_smoke['run']
@@ -562,20 +576,6 @@ def test_production_cloud_run_only_smokes_the_promoted_serving_api():
         in by_name['Restore Cloud Run traffic snapshot after failed promotion']['if']
     )
 
-    development_smoke = by_name['Smoke What Matters Now datastore query']
-    assert development_smoke['if'] == (
-        "${{ inputs.integration_only != 'true' && "
-        "(inputs.deploy_profile == 'manual' && inputs.environment == 'development') }}"
-    )
-    assert development_smoke.get('id') == 'smoke-what-matters-now-datastore-query'
-    assert steps.index(by_name['Verify serving backend release vector']) < steps.index(development_smoke)
-    assert steps.index(development_smoke) < steps.index(
-        by_name['Restore Cloud Run traffic snapshot after failed promotion']
-    )
-    assert (
-        "steps.smoke-what-matters-now-datastore-query.outcome == 'failure'"
-        in by_name['Restore Cloud Run traffic snapshot after failed promotion']['if']
-    )
     assert (
         'gcloud run services describe backend --project=${{ inputs.project_id }}'
         in by_name['Verify validated revisions are still current']['run']
@@ -1246,10 +1246,15 @@ def test_backfill_deploy_preserves_every_reviewed_cohort_binding():
     deploy_step = next(step for step in steps if step.get('id') == 'deploy-backend-sync-backfill')
     assert '${{ inputs.backfill_env_vars }}' in clone_step['env']['ENV_OVERLAY']
     assert deploy_step['with']['env_vars'] == '${{ steps.backfill-runtime.outputs.env_vars }}'
-    assert (
-        'backfill_env_vars: ${{ steps.runtime-env.outputs.backend_sync_backfill_env_vars }}'
-        in DEPLOY_BACKEND_STACK_ACTION.read_text()
+    worker = next(
+        step
+        for step in yaml.safe_load(DEPLOY_BACKEND_STACK_ACTION.read_text())['runs']['steps']
+        if step.get('id') == 'sync-backfill'
     )
+    assert worker['with']['backfill_env_vars'].splitlines() == [
+        '${{ steps.runtime-env.outputs.backend_sync_backfill_env_vars }}',
+        'OMI_BACKEND_RELEASE_SHA=${{ inputs.admitted_sha }}',
+    ]
     source = {
         'spec': {
             'template': {

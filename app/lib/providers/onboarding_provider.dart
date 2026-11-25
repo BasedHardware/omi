@@ -20,6 +20,7 @@ import 'package:omi/pages/onboarding/permissions/onboarding_permission_decision.
 import 'package:omi/services/bridges/ble_bridge.dart';
 import 'package:omi/services/devices.dart';
 import 'package:omi/services/devices/bluetooth_readiness.dart';
+import 'package:omi/services/devices/connectors/device_connection.dart';
 import 'package:omi/services/devices/pairing_failure.dart';
 import 'package:omi/services/notifications.dart';
 import 'package:omi/utils/analytics/registry/events.g.dart';
@@ -37,6 +38,26 @@ class OnboardingProvider extends BaseProvider with MessageNotifierMixin implemen
   void dismissPairingFailure() {
     pairingFailureReason = null;
     notifyListeners();
+  }
+
+  /// The last Bluetooth (iOS) or Nearby devices (Android) request came back denied for good: the OS
+  /// will not ask again, so only this app's Settings page can grant it.
+  bool _bluetoothPermissionNeedsSettings = false;
+
+  /// The pairing card leads with Open Settings: Try Again alone would hit the same block at once.
+  bool get pairingBlockNeedsSettings =>
+      _bluetoothPermissionNeedsSettings && _isBluetoothPermissionBlock(pairingFailureReason);
+
+  static bool _isBluetoothPermissionBlock(DeviceConnectFailureShownFailureReason? reason) =>
+      reason == DeviceConnectFailureShownFailureReason.bluetoothPermissionDenied ||
+      reason == DeviceConnectFailureShownFailureReason.nearbyDevicesDenied;
+
+  /// Back in the app (from Settings or anywhere else) while a Bluetooth permission block shows:
+  /// reads the permission again without prompting. True when it is now granted, so the page can
+  /// search again by itself.
+  Future<bool> recheckPermissionBlock() async {
+    if (_isDisposed || isConnected || !_isBluetoothPermissionBlock(pairingFailureReason)) return false;
+    return readBluetoothPermission();
   }
 
   bool isClicked = false;
@@ -122,6 +143,7 @@ class OnboardingProvider extends BaseProvider with MessageNotifierMixin implemen
 
   void updateBluetoothPermission(bool value) {
     hasBluetoothPermission = value;
+    if (value) _bluetoothPermissionNeedsSettings = false;
     notifyListeners();
   }
 
@@ -162,10 +184,13 @@ class OnboardingProvider extends BaseProvider with MessageNotifierMixin implemen
       if (Platform.isIOS) {
         PermissionStatus bleStatus = await Permission.bluetooth.request();
         Logger.debug('bleStatus: $bleStatus');
+        _bluetoothPermissionNeedsSettings = permissionStatusIsPermanentDenial(bleStatus);
         updateBluetoothPermission(bleStatus.isGranted);
       } else {
         PermissionStatus bleScanStatus = await Permission.bluetoothScan.request();
         PermissionStatus bleConnectStatus = await Permission.bluetoothConnect.request();
+        _bluetoothPermissionNeedsSettings =
+            permissionStatusIsPermanentDenial(bleScanStatus) || permissionStatusIsPermanentDenial(bleConnectStatus);
         updateBluetoothPermission(bleConnectStatus.isGranted && bleScanStatus.isGranted);
         // Android 11 and below require location permission for BLE scanning
         if (PlatformService.isAndroid) {
@@ -348,6 +373,7 @@ class OnboardingProvider extends BaseProvider with MessageNotifierMixin implemen
 
   // Method to handle taps on devices
   Future<void> handleTap({required BtDevice device, required bool isFromOnboarding, VoidCallback? goNext}) async {
+    VoidCallback? finishFirstChargePreparation;
     try {
       if (isClicked) return;
       pairingFailureReason = null;
@@ -369,6 +395,10 @@ class OnboardingProvider extends BaseProvider with MessageNotifierMixin implemen
         }
       }
 
+      final resolvedDeviceType = DeviceConnectionFactory.resolveDeviceType(device);
+      final firstOmiPairing = resolvedDeviceType == DeviceType.omi &&
+          !SharedPreferencesUtil().btDevices.any((saved) => saved.id.toUpperCase() == device.id.toUpperCase());
+      if (firstOmiPairing) finishFirstChargePreparation = deviceProvider?.prepareFirstChargeCheck(device.id);
       final connection = await ServiceManager.instance().device.ensureConnection(device.id, force: true);
       if (connection == null || connection.status != DeviceConnectionState.connected) {
         throw StateError('Device initialization did not complete');
@@ -381,11 +411,13 @@ class OnboardingProvider extends BaseProvider with MessageNotifierMixin implemen
       deviceType = device.type;
       var cDevice = await _getConnectedDevice(deviceId);
       if (cDevice != null) {
-        deviceProvider!.setConnectedDevice(cDevice);
+        unawaited(deviceProvider!.setConnectedDevice(cDevice));
         SharedPreferencesUtil().deviceName = cDevice.name;
         deviceProvider!.setIsConnected(true);
       }
       await deviceProvider?.scanAndConnectToDevice();
+      finishFirstChargePreparation?.call();
+      finishFirstChargePreparation = null;
       var connectedDevice = deviceProvider!.connectedDevice;
       batteryPercentage = deviceProvider!.batteryLevel;
       isConnected = true;
@@ -422,6 +454,8 @@ class OnboardingProvider extends BaseProvider with MessageNotifierMixin implemen
       PlatformManager.instance.analytics.deviceConnectFailed(classifyDeviceConnectError(e));
       notifyError('DEVICE_CONNECT_FAILED');
       notifyListeners();
+    } finally {
+      finishFirstChargePreparation?.call();
     }
 
     notifyListeners();
