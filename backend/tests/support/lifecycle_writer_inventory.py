@@ -4247,13 +4247,7 @@ FIELD_SITES = {
     ],
     'utils/memory/memory_service.py': [
         (
-            'MemoryService._write_historical_override',
-            'status',
-            'status.value',
-            ('memory_id', 'origin', 'public_id', 'status', 'uid', 'updated_at'),
-        ),
-        (
-            'MemoryService._write_historical_overrides',
+            'MemoryService._historical_override_payload',
             'status',
             'status.value',
             ('memory_id', 'origin', 'public_id', 'status', 'uid', 'updated_at'),
