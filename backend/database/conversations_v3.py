@@ -27,6 +27,7 @@ from database.account_deletion_policy import account_deletion_marker_blocks_acce
 from models.finalization_owner import ENGINE_FIELD, EPOCH_FIELD, python_owns_finalization
 from utils.encryption import encrypt, decrypt
 from utils.home_feed.projection import stamp as stamp_home_display
+from database.conversation_batch_purge_jobs import arm_fields, job_ref
 from config.record_wal_duplicate import (
     MERGE_PLAN_FIELD,
     MERGE_TARGET_FIELD,
@@ -1415,20 +1416,21 @@ def claim_audio_purge(uid, rid, *, defer_intake_purge=False, firestore_client=No
 
     A user deletion outranks record-WAL duplicate custody: the same commit that
     closes the owner clears the custody fields and records that the batch
-    intakes are owed erasure (arming the obligation when ``defer_intake_purge``).
-    Returns False when the row is not purgeable, else an ``AudioPurgeClaim``.
+    intakes are owed erasure (arming the obligations when ``defer_intake_purge``).
+    A merge target's retained donors are erased with it, so the commit also
+    writes each donor's deletion intent and clears its custody; an erased donor
+    is removed from its live successor's lineage. Returns False when the row is
+    not purgeable, else an ``AudioPurgeClaim``.
     """
-    from database.conversation_batch_purge_jobs import arm_fields, job_ref
-
     client = firestore_client or get_firestore_client()
-    ref = user_conversations(client, uid).document(rid)
-    tombstone = client.collection('users').document(uid).collection('deleted_conversations').document(rid)
-    obligation = job_ref(client, uid, rid)
+    conversations_ref = user_conversations(client, uid)
+    ref = conversations_ref.document(rid)
+    tombstones = client.collection('users').document(uid).collection('deleted_conversations')
 
     @firestore.transactional
     def claim(tx):
         row = ref.get(transaction=tx).to_dict() or {}
-        intent = tombstone.get(transaction=tx)
+        intent = tombstones.document(rid).get(transaction=tx)
         if (
             not row.get('recording')
             or not row.get('v3_audio_purge_pending')
@@ -1442,34 +1444,77 @@ def claim_audio_purge(uid, rid, *, defer_intake_purge=False, firestore_client=No
         owed = row.get(AUDIO_PURGE_INTAKES_FIELD)
         if custody and owed is None:
             owed = 'inline'
-        armed = obligation.get(transaction=tx).exists if owed else False
+        donors = list(row.get(AUDIO_PURGE_DONORS_FIELD) or [])
+        retained = row.get(RETAINED_DONORS_FIELD) if custody else None
+        if isinstance(retained, list) and retained and not donors:
+            # The donor list goes with custody; the erase it is owed may run sweeps later.
+            donors = [d for d in retained if isinstance(d, str) and d and '/' not in d and d != rid]
+        # Every read precedes the first write. Rows without custody or donors read nothing more.
+        donor_rows = {donor: conversations_ref.document(donor).get(transaction=tx) for donor in donors}
+        donor_intents = {donor: tombstones.document(donor).get(transaction=tx).exists for donor in donors}
+        # A donor another target now retains is not this recording's to erase.
+        donors = [
+            donor
+            for donor in donors
+            if not isinstance(target := (donor_rows[donor].to_dict() or {}).get(MERGE_TARGET_FIELD), str)
+            or target == rid
+        ]
+        owners = (rid, *donors)
+        armed = {owner: job_ref(client, uid, owner).get(transaction=tx).exists for owner in owners} if owed else {}
+        successor_id = row.get(MERGE_TARGET_FIELD) if custody else None
+        successor_ref = (
+            conversations_ref.document(successor_id) if isinstance(successor_id, str) and successor_id else None
+        )
+        successor = (successor_ref.get(transaction=tx).to_dict() or {}) if successor_ref is not None else {}
+        now = datetime.now(timezone.utc)
         if not intent.exists:
             tx.set(
-                tombstone,
-                {'conversation_id': rid, 'deleted_at': datetime.now(timezone.utc), 'created_at': row.get('created_at')},
+                tombstones.document(rid),
+                {'conversation_id': rid, 'deleted_at': now, 'created_at': row.get('created_at')},
             )
+        for donor in donors:
+            snapshot = donor_rows[donor]
+            donor_row = (snapshot.to_dict() or {}) if snapshot.exists else {}
+            if not donor_intents[donor]:
+                # The donor's own deletion intent: its batch purge requires it, and handoff,
+                # live upload and merge publication refuse a tombstoned donor.
+                tx.set(
+                    tombstones.document(donor),
+                    {'conversation_id': donor, 'deleted_at': now, 'created_at': donor_row.get('created_at')},
+                )
+            stale = {field: firestore.DELETE_FIELD for field in AUDIO_PURGE_CUSTODY_FIELDS if field in donor_row}
+            if stale:
+                tx.update(conversations_ref.document(donor), stale)
+        lineage = {
+            field: [value for value in successor.get(field) or [] if value != rid]
+            for field in (RETAINED_DONORS_FIELD, 'sync_merged_from')
+            if rid in (successor.get(field) or [])
+        }
+        if lineage:
+            # The erased donor leaves its successor's lineage, so no later delete or merge resolves it.
+            tx.update(successor_ref, lineage)
         updates: dict[str, Any] = {'deleted': True, 'v3_audio_erased': True}
-        donors = row.get(AUDIO_PURGE_DONORS_FIELD) or []
         if custody:
             updates.update({field: firestore.DELETE_FIELD for field in AUDIO_PURGE_CUSTODY_FIELDS if field in row})
-            retained = row.get(RETAINED_DONORS_FIELD)
-            if isinstance(retained, list) and retained and not donors:
-                # The donor list goes with custody; the erase it is owed may run sweeps later.
-                donors = updates[AUDIO_PURGE_DONORS_FIELD] = [d for d in retained if isinstance(d, str) and d]
-        donors = tuple(donors)
-        if owed == 'inline' and defer_intake_purge and not armed:
-            # The tombstone above is the obligation runner's deletion intent.
-            tx.set(obligation, arm_fields(uid, rid))
-            owed, armed = 'armed', True
+        if donors != list(row.get(AUDIO_PURGE_DONORS_FIELD) or []):
+            updates[AUDIO_PURGE_DONORS_FIELD] = donors
+        if owed == 'inline' and defer_intake_purge:
+            for owner in owners:
+                if not armed[owner]:
+                    # Each owner's tombstone above is the obligation runner's deletion intent.
+                    tx.set(job_ref(client, uid, owner), arm_fields(uid, owner))
+                    armed[owner] = True
+            owed = 'armed'
         if owed and owed != row.get(AUDIO_PURGE_INTAKES_FIELD):
             updates[AUDIO_PURGE_INTAKES_FIELD] = owed
         tx.update(ref, updates)
+        pending = any(armed.values())
         if owed == 'armed':
-            # Without dispatch the sweep erases inline; an absent armed obligation was run to completion.
-            intakes = ('pending' if defer_intake_purge else 'inline') if armed else 'done'
+            # Without dispatch the sweep erases inline; absent armed obligations were run to completion.
+            intakes = ('pending' if defer_intake_purge else 'inline') if pending else 'done'
         else:
             intakes = owed or 'none'
-        return AudioPurgeClaim(custody_invalidated=custody, intakes=intakes, donor_ids=donors)
+        return AudioPurgeClaim(custody_invalidated=custody, intakes=intakes, donor_ids=tuple(donors))
 
     return claim(client.transaction())
 

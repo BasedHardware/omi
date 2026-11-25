@@ -22,9 +22,10 @@ from config.record_wal_duplicate import (
     SETTLED_FIELD,
     has_retained_custody,
 )
-from database import batch_pipeline_purge, conversation_batch_purge_jobs as purge_jobs
+from database import batch_pipeline_purge, conversation_batch_purge_jobs as purge_jobs, legal_holds
 from database import conversations_v3 as store
 from utils import cloud_tasks
+from utils.other import storage
 from utils.conversations.v3 import bind_request_log_trace, metrics, service, summary
 from utils.conversations import (
     lifecycle,
@@ -338,10 +339,9 @@ def test_delete_during_capture_rearms_purge_at_settlement(strict, monkeypatch):
     token = leases.acquire('synthetic', 'builder', firestore_client=strict)
     store.commit_projection('synthetic', token, {'r': source}, {}, [], [], firestore_client=strict)
     assert strict.rows[R]['v3_audio_purge_pending'] is True
-    from utils.other import storage
-
     erased = []
     monkeypatch.setattr(store, 'get_firestore_client', lambda: strict)
+    monkeypatch.setattr(legal_holds, 'account_deletion_firestore_client', lambda firestore_client=None: strict)
     monkeypatch.setattr(storage, 'delete_privacy_conversation_audio', lambda *a: erased.append(a))
     monkeypatch.setattr(
         service.conversations_db, 'update_conversation', lambda uid, cid, patch: strict.rows[R].update(patch)
@@ -369,22 +369,37 @@ def _purge_count(outcome):
     return metrics.AUDIO_PURGES.labels(outcome)._value.get()
 
 
+def _row(cid):
+    return ('users', 'synthetic', 'conversations', cid)
+
+
+def _tombstone(cid):
+    return ('users', 'synthetic', 'deleted_conversations', cid)
+
+
 @pytest.fixture
 def purge_world(strict, monkeypatch):
-    """The sweep's purge with storage and the batch-intake purge recorded in call order."""
-    from utils.other import storage
+    """The sweep's purge with storage and the batch-intake purge recorded in call order.
 
+    The legal-hold preflight and the account gate are the real ones, on the strict client.
+    """
     calls = []
     monkeypatch.setattr(store, 'get_firestore_client', lambda: strict)
+    monkeypatch.setattr(legal_holds, 'account_deletion_firestore_client', lambda firestore_client=None: strict)
     monkeypatch.setattr(cloud_tasks, 'is_conversation_batch_purge_dispatch_configured', lambda: False)
     monkeypatch.setattr(
         storage, 'delete_privacy_conversation_audio', lambda uid, cid, **kw: calls.append(('erase', cid, kw))
     )
+    monkeypatch.setattr(storage, 'delete_conversation_audio_files', lambda uid, cid: calls.append(('prefixes', cid)))
+
+    def purge_batch_owner(uid, **kw):
+        # The batch purge's own precondition: the owner's deletion intent exists.
+        assert _tombstone(kw['conversation_id']) in strict.rows
+        calls.append(('intakes', kw['conversation_id']))
+
+    monkeypatch.setattr(batch_pipeline_purge, 'purge_batch_owner', purge_batch_owner)
     monkeypatch.setattr(
-        batch_pipeline_purge, 'purge_batch_owner', lambda uid, **kw: calls.append(('intakes', kw['conversation_id']))
-    )
-    monkeypatch.setattr(
-        service.conversations_db, 'update_conversation', lambda uid, cid, patch: strict.rows[R].update(patch)
+        service.conversations_db, 'update_conversation', lambda uid, cid, patch: strict.rows[_row(cid)].update(patch)
     )
     return calls
 
@@ -403,8 +418,16 @@ def test_purge_invalidates_custody_and_erases_intakes_before_audio(strict, purge
     row = _live(strict.rows[R])
     assert field not in row and not has_retained_custody(row)
     assert row['deleted'] is True and row['v3_audio_erased'] is True and row['v3_audio_purge_pending'] is False
-    donors = {'source_ids': ['donor']} if field == RETAINED_DONORS_FIELD else {}
-    assert purge_world == [('intakes', 'r'), ('erase', 'r', donors)]
+    if field == RETAINED_DONORS_FIELD:
+        assert purge_world == [
+            ('intakes', 'r'),
+            ('intakes', 'donor'),
+            ('erase', 'r', {'source_ids': ['donor']}),
+            ('prefixes', 'donor'),
+        ]
+        assert row[store.AUDIO_PURGE_DONORS_FIELD] == []
+    else:
+        assert purge_world == [('intakes', 'r'), ('erase', 'r', {})]
     assert _purge_count('custody_invalidated') == before + 1
     # The intake purge reads the tombstone the claim wrote with the custody clear.
     assert ('users', 'synthetic', 'deleted_conversations', 'r') in strict.rows
@@ -495,12 +518,162 @@ def test_dispatched_intake_purge_waits_for_its_obligation(strict, purge_world, m
     with pytest.raises(service.AudioPurgeIntakesPending):
         service.purge_audio('synthetic', 'r')
     assert purge_world == []
+    donor_obligation = ('conversation_batch_purge_jobs', purge_jobs.job_id('synthetic', 'donor'))
+    # The donor owes its own obligation, behind its own tombstone.
+    assert strict.rows[donor_obligation]['conversation_id'] == 'donor' and _tombstone('donor') in strict.rows
     del strict.rows[OBLIGATION]  # the obligation's owning run removes it after its last phase
+    with pytest.raises(service.AudioPurgeIntakesPending):
+        service.purge_audio('synthetic', 'r')
+    del strict.rows[donor_obligation]
     service.purge_audio('synthetic', 'r')
     # Custody is gone, but the donors it retained are still owed with this recording's erase.
     assert RETAINED_DONORS_FIELD not in _live(strict.rows[R])
-    assert purge_world == [('erase', 'r', {'source_ids': ['donor']})]
+    assert purge_world == [('erase', 'r', {'source_ids': ['donor']}), ('prefixes', 'donor')]
     assert strict.rows[R]['v3_audio_purge_pending'] is False
+
+
+PENDING = {'recording': True, 'status': 'completed', 'claims': [], 'v3_audio_purge_pending': True}
+
+
+def _hold():
+    legal_holds.place_legal_hold('synthetic', issuer='admin', active=True, firestore_client=legal_holds_client())
+
+
+def legal_holds_client():
+    return legal_holds.account_deletion_firestore_client()
+
+
+def test_held_purge_deletes_nothing_and_stays_owed(strict, purge_world):
+    strict.rows[R] = {**PENDING, SETTLED_FIELD: True, RETAINED_DONORS_FIELD: ['donor']}
+    _hold()
+    before = _purge_count('held')
+    with pytest.raises(legal_holds.LegalHoldActive):
+        service.purge_audio('synthetic', 'r')
+    assert purge_world == []
+    assert _purge_count('held') == before + 1
+    # The hold is checked before the claim: custody and the row are untouched, the purge stays owed.
+    assert strict.rows[R] == {**PENDING, SETTLED_FIELD: True, RETAINED_DONORS_FIELD: ['donor']}
+    assert _tombstone('r') not in strict.rows and _tombstone('donor') not in strict.rows
+
+
+def test_hold_placed_after_the_claim_stops_the_inline_purge_at_the_gate(strict, purge_world, monkeypatch):
+    strict.rows[R] = {**PENDING, SETTLED_FIELD: True}
+    claim = store.claim_audio_purge
+
+    def claim_then_hold(*args, **kwargs):
+        result = claim(*args, **kwargs)
+        _hold()
+        return result
+
+    monkeypatch.setattr(store, 'claim_audio_purge', claim_then_hold)
+    before = _purge_count('held')
+    with pytest.raises(legal_holds.LegalHoldActive):
+        service.purge_audio('synthetic', 'r')
+    # The account gate re-checks the hold before the first deletion: no WAL, no intakes, no blobs.
+    assert purge_world == []
+    assert _purge_count('held') == before + 1
+    row = _live(strict.rows[R])
+    assert row['v3_audio_purge_pending'] is True and row[store.AUDIO_PURGE_INTAKES_FIELD] == 'inline'
+
+
+def _merge_target_world(strict):
+    strict.rows[R] = {
+        **PENDING,
+        SETTLED_FIELD: True,
+        RETAINED_DONORS_FIELD: ['d1', 'd2'],
+        'sync_merged_from': ['d1', 'd2'],
+    }
+    for donor in ('d1', 'd2'):
+        strict.rows[_row(donor)] = {
+            'deleted': True,
+            SETTLED_FIELD: True,
+            MERGE_TARGET_FIELD: 'r',
+            'sync_merged_into': 'r',
+        }
+
+
+def test_merge_target_erases_every_donor_before_completing(strict, purge_world):
+    _merge_target_world(strict)
+    service.purge_audio('synthetic', 'r')
+    assert purge_world == [
+        ('intakes', 'r'),
+        ('intakes', 'd1'),
+        ('intakes', 'd2'),
+        ('erase', 'r', {'source_ids': ['d1', 'd2']}),
+        ('prefixes', 'd1'),
+        ('prefixes', 'd2'),
+    ]
+    for donor in ('d1', 'd2'):
+        assert _tombstone(donor) in strict.rows
+        assert not has_retained_custody(_live(strict.rows[_row(donor)]))
+    row = _live(strict.rows[R])
+    assert row['v3_audio_purge_pending'] is False and row[store.AUDIO_PURGE_DONORS_FIELD] == []
+
+
+@pytest.mark.parametrize('step', ['intakes', 'prefixes'])
+def test_partial_donor_erasure_retries_without_completing(strict, purge_world, monkeypatch, step):
+    _merge_target_world(strict)
+    real = {'intakes': batch_pipeline_purge.purge_batch_owner, 'prefixes': storage.delete_conversation_audio_files}
+    failed = []
+
+    def flaky(uid, *args, **kwargs):
+        cid = kwargs.get('conversation_id') or args[0]
+        if cid == 'd2' and not failed:
+            failed.append(cid)
+            raise RuntimeError('synthetic outage')
+        return real[step](uid, *args, **kwargs)
+
+    if step == 'intakes':
+        monkeypatch.setattr(batch_pipeline_purge, 'purge_batch_owner', flaky)
+    else:
+        monkeypatch.setattr(storage, 'delete_conversation_audio_files', flaky)
+    with pytest.raises(RuntimeError):
+        service.purge_audio('synthetic', 'r')
+    row = _live(strict.rows[R])
+    assert row['v3_audio_purge_pending'] is True and row[store.AUDIO_PURGE_DONORS_FIELD] == ['d1', 'd2']
+    if step == 'intakes':
+        assert not [call for call in purge_world if call[0] in {'erase', 'prefixes'}]
+    first = list(purge_world)
+    service.purge_audio('synthetic', 'r')
+    # The retry repeats every idempotent step for both donors, then completes.
+    assert purge_world[len(first) :] == [
+        ('intakes', 'r'),
+        ('intakes', 'd1'),
+        ('intakes', 'd2'),
+        ('erase', 'r', {'source_ids': ['d1', 'd2']}),
+        ('prefixes', 'd1'),
+        ('prefixes', 'd2'),
+    ]
+    row = _live(strict.rows[R])
+    assert row['v3_audio_purge_pending'] is False and row[store.AUDIO_PURGE_DONORS_FIELD] == []
+
+
+def test_blob_delete_failure_keeps_the_purge_pending_for_the_next_sweep(strict, purge_world, monkeypatch):
+    strict.rows[R] = {**PENDING, SETTLED_FIELD: True}
+
+    def unavailable(uid, cid, **kw):
+        raise RuntimeError('synthetic storage outage')
+
+    monkeypatch.setattr(storage, 'delete_privacy_conversation_audio', unavailable)
+    before = _purge_count('erased')
+    with pytest.raises(RuntimeError):
+        service.purge_audio('synthetic', 'r')
+    assert strict.rows[R]['v3_audio_purge_pending'] is True and _purge_count('erased') == before
+    monkeypatch.setattr(
+        storage, 'delete_privacy_conversation_audio', lambda uid, cid, **kw: purge_world.append(('erase', cid, kw))
+    )
+    service.purge_audio('synthetic', 'r')
+    assert purge_world == [('intakes', 'r'), ('intakes', 'r'), ('erase', 'r', {})]
+    assert strict.rows[R]['v3_audio_purge_pending'] is False and _purge_count('erased') == before + 1
+
+
+def test_erased_donor_leaves_its_successor_lineage(strict, purge_world):
+    successor = _row('successor')
+    strict.rows[successor] = {RETAINED_DONORS_FIELD: ['other', 'r'], 'sync_merged_from': ['other', 'r']}
+    strict.rows[R] = {**PENDING, 'deleted': True, SETTLED_FIELD: True, MERGE_TARGET_FIELD: 'successor'}
+    service.purge_audio('synthetic', 'r')
+    assert strict.rows[successor] == {RETAINED_DONORS_FIELD: ['other'], 'sync_merged_from': ['other']}
+    assert purge_world == [('intakes', 'r'), ('erase', 'r', {})]
 
 
 @pytest.mark.parametrize('state', ['deleted', 'is_locked'])

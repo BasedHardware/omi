@@ -114,8 +114,8 @@ def observe_word_floor(legacy_below: bool, script_aware_below: bool) -> None:
 
 AUDIO_PURGES = Counter(
     'omi_conversations_v3_audio_purges_total',
-    'Released-recording audio purge steps: custody invalidated, intake purge pending or failed, audio erased',
+    'Released-recording audio purge steps: custody invalidated, held, intake purge pending or failed, audio erased',
     ['outcome'],
 )
-for outcome in ('custody_invalidated', 'intakes_pending', 'intakes_failed', 'erased'):
+for outcome in ('custody_invalidated', 'held', 'intakes_pending', 'intakes_failed', 'erased'):
     AUDIO_PURGES.labels(outcome)
