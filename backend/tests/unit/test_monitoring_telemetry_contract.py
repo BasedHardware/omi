@@ -47,6 +47,32 @@ def test_app_review_sweep_counter_is_declared_with_its_outcome_label():
     assert tuple(OMI_APP_REVIEW_CONFIG_SWEEP_TOTAL._labelnames) == ('outcome',)
 
 
+def test_backend_sync_scrapes_v3_builder_metric_families():
+    from utils.conversations.v3 import metrics
+
+    sync = yaml.safe_load((REPO / 'backend/deploy/cloud_run_gmp_sync.yaml').read_text())
+    (keep,) = [
+        rule
+        for rule in sync['spec']['endpoints'][0]['metricRelabeling']
+        if rule['action'] == 'keep' and rule['sourceLabels'] == ['__name__']
+    ]
+    for counter in (
+        metrics.RECONCILES,
+        metrics.MODEL_CALLS,
+        metrics.TERMINAL_FAILURES,
+        metrics.RACES,
+        metrics.SUMMARY_WRITES,
+    ):
+        (family,) = counter.collect()
+        assert re.fullmatch(keep['regex'], f'{family.name}_total'), family.name
+    (pending_age,) = metrics.PENDING_AGE.collect()
+    for sample in pending_age.samples:
+        if not sample.name.endswith('_created'):
+            assert re.fullmatch(keep['regex'], sample.name), sample.name
+    (unlisted,) = metrics.ADOPTED.collect()
+    assert not re.fullmatch(keep['regex'], f'{unlisted.name}_total')
+
+
 def _cpu_millicores(value: object) -> float:
     text = str(value)
     return float(text[:-1]) if text.endswith('m') else float(text) * 1000
@@ -78,18 +104,6 @@ def test_every_record_token_alert_metric_survives_its_producer_scrape_filters(en
     sync_relabels = sync['spec']['endpoints'][0]['metricRelabeling']
     shared = yaml.safe_load((REPO / 'backend/deploy/cloud_run_gmp_sidecar.yaml').read_text())
     shared_relabels = shared['spec']['endpoints'][0]['metricRelabeling']
-    for suffix in (
-        'reconciles_total',
-        'model_calls_total',
-        'terminal_failures_total',
-        'races_total',
-        'summary_writes_total',
-        'pending_age_seconds_bucket',
-        'pending_age_seconds_count',
-        'pending_age_seconds_sum',
-    ):
-        assert passes(f'omi_conversations_v3_{suffix}', sync_relabels), suffix
-    assert not passes('omi_conversations_v3_unregistered_total', sync_relabels)
     # Keep the entire requested lease family, including histogram samples.
     for metric in (
         'omi_record_token_late_append_total',
