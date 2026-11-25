@@ -8,21 +8,19 @@ import calendar
 from contextlib import contextmanager
 from datetime import datetime, timezone
 import math
-import os
-import re
 from typing import Any, Callable, Iterator
 
 from google.cloud import firestore
 from google.cloud.firestore_v1 import FieldFilter
 
 from config.firestore_read_levers import lever_enabled
+from config.monthly_usage import FIELDS as FIELDS, usage_month_epoch as usage_month_epoch
 from database._client import get_firestore_client
 from database.firestore_read_origin import read_origin
 from database.legal_holds import DestructiveOperationInProgress, external_write_fence
 from database.monthly_usage_observation import observe_monthly_usage
 from utils.observability.fallback import record_fallback
 
-FIELDS = ('transcription_seconds', 'words_transcribed', 'insights_gained', 'memories_created', 'speech_seconds')
 SCHEMA_VERSION = 1
 
 
@@ -76,12 +74,6 @@ def queue_increment(writer: Any, user_ref: Any, date: datetime, update_doc: dict
 def queue_invalidation(writer: Any, user_ref: Any, date: datetime) -> None:
     """Overwrite/reset/delete sources and invalidate their total in ONE commit."""
     writer.set(month_ref(user_ref, date), {'ready': False}, merge=True)
-
-
-def usage_month_epoch() -> str:
-    value = os.environ.get('FSR_USAGE_MONTH_TOTAL_EPOCH', 'v1')
-    # Empty/malformed epochs must never accidentally reuse a ready total.
-    return value if re.fullmatch(r'[A-Za-z0-9_-]{1,64}', value) else ''
 
 
 def _numeric_stats(value: Any) -> bool:

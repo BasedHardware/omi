@@ -15,9 +15,10 @@ from fastapi import Depends, FastAPI
 from fastapi.testclient import TestClient
 from google.cloud.firestore_v1.transforms import Increment
 
-from database import _client, account_deletion_marker as deletion
+from database import _client, account_deletion_marker as deletion, monthly_usage_observation
 from database import desktop_update_policy, serving_query_reads, user_usage, users
 from models.users import PlanType, Subscription
+from services.monthly_usage_shadow import install_month_shadow
 from routers import users as router, payment, desktop_prompts, updates
 from utils.other import endpoints as auth
 from database import fsr_read_cache as cache
@@ -133,9 +134,6 @@ class Ref:
 
 @pytest.fixture
 def env(monkeypatch):
-    from database import monthly_usage_observation
-    from utils.read_cache_shadow import install_month_shadow
-
     monkeypatch.setattr(monthly_usage_observation, '_observer', None)
     install_month_shadow()
     monkeypatch.setenv('OMI_USAGE_MONTH_TOTAL_SHADOW_RATE', '0')
@@ -324,7 +322,7 @@ def test_broken_hit_observer_does_not_fetch_or_change_response(env, monkeypatch)
 
 @pytest.mark.parametrize('start_day,expected', [(None, 17), (16, 16)])
 def test_fresh_usage_aggregates_hourly_totals_with_rpc_bound(env, monkeypatch, start_day, expected):
-    from database import firestore_document_probe as probe, firestore_snapshot_query
+    from database import firestore_document_probe as probe
     from database.firestore_read_origin import current_read_origin
 
     store, _ = env
@@ -357,11 +355,12 @@ def test_fresh_usage_aggregates_hourly_totals_with_rpc_bound(env, monkeypatch, s
     monkeypatch.setattr(
         Ref, '_parent', property(lambda self: SimpleNamespace(_path=tuple(self.path.split('/')))), raising=False
     )
-    monkeypatch.setattr(firestore_snapshot_query, 'stream_at_read_time', bounded_stream)
     date = datetime(2026, 10, 16, tzinfo=timezone.utc)
     start = date.replace(day=start_day) if start_day else None
     assert (
-        user_usage.read_hourly_usage_for_shadow('u', date, start, 5, read_time=date)['transcription_seconds']
+        user_usage.read_hourly_usage_for_shadow('u', date, start, 5, read_time=date, stream_snapshot=bounded_stream)[
+            'transcription_seconds'
+        ]
         == expected
     )
     assert options_seen == [(date, 5)]
@@ -409,6 +408,7 @@ def test_real_projection_cache_compares_hourly_float_sums_as_match(env, monkeypa
         }
     stream = Mock(side_effect=lambda query, read_time, **options: query.stream())
     monkeypatch.setattr(firestore_snapshot_query, 'stream_at_read_time', stream)
+    install_month_shadow()
     pending, metric = [], Mock()
     monkeypatch.setattr(executors, 'submit_with_context', lambda pool, fn: pending.append(fn))
     monkeypatch.setattr(shadow, 'MONTH_SHADOW', metric)
@@ -444,12 +444,15 @@ def test_usage_document_limit_is_bounded_and_skips_incomplete_comparison(env, mo
     for number in range(documents):
         store.docs[f'users/u/hourly_usage/{number:04d}'] = {'year': 2026, 'month': 10}
     monkeypatch.setattr(firestore_snapshot_query, 'stream_at_read_time', lambda query, *a, **kw: query.stream())
+    install_month_shadow()
     monkeypatch.setenv('OMI_USAGE_MONTH_TOTAL_SHADOW_RATE', '1')
     pending, metric = [], Mock()
     monkeypatch.setattr(executors, 'submit_with_context', lambda pool, fn: pending.append(fn))
     monkeypatch.setattr(shadow, 'MONTH_SHADOW', metric)
     date = datetime(2026, 10, 16, tzinfo=timezone.utc)
-    shadow.compare_month('total_uncached', 'u', date, None, dict.fromkeys(shadow.USAGE_FIELDS, 0), store, date, 'v1')
+    monthly_usage_observation.observe_monthly_usage(
+        'total_uncached', 'u', date, None, dict.fromkeys(shadow.USAGE_FIELDS, 0), store, date, 'v1'
+    )
     pending.pop()()
     assert len(store.reads) == min(documents, 745)
     assert metric.labels.call_args.kwargs['outcome'] == ('skipped' if documents >= 745 else 'match')

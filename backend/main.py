@@ -53,7 +53,7 @@ from routers.listen.registry import proactive_message_dispatcher
 from utils.other.timeout import TimeoutMiddleware
 from utils.observability import log_langsmith_status
 from utils.subscription import validate_stripe_price_ids
-from utils.read_cache_shadow import install_month_shadow
+from services.monthly_usage_shadow import install_month_shadow
 from utils.http_client import close_all_clients
 from utils.metrics import start_metrics_sidecar_server, stop_metrics_sidecar_server
 from utils.observability.sync_phases import shutdown_sync_metrics

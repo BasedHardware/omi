@@ -38,7 +38,7 @@ from routers import (
     desktop_screen_crisp,
     desktop_tts_updates,
 )
-from utils.read_cache_shadow import install_month_shadow
+from services.monthly_usage_shadow import install_month_shadow
 from utils.http_client import close_all_clients
 from utils.llm.vertex_reservation_state import reservation_state
 from utils.metrics import start_metrics_sidecar_server, stop_metrics_sidecar_server

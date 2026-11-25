@@ -3446,22 +3446,17 @@ _add(
 )
 
 
-def _shadow_snapshot_stream(_client):
+def _shadow_snapshot_stream(query, *_args, **_kwargs):
     # Both legs use the SDK's original structured query. The historical
     # consistency selector is exercised against the loopback emulator.
-    from database import firestore_snapshot_query
-
-    return unittest.mock.patch.object(
-        firestore_snapshot_query, 'stream_at_read_time', lambda query, *_args, **_kwargs: query.stream()
-    )
+    return query.stream()
 
 
 _add(
     DriverEntry(
         'database.user_usage.read_hourly_usage_for_shadow',
-        base={'uid': UID, 'date': T0, 'timeout': 5.0, 'read_time': T0},
+        base={'uid': UID, 'date': T0, 'timeout': 5.0, 'read_time': T0, 'stream_snapshot': _shadow_snapshot_stream},
         domains={'start_date': [None, T0]},
-        patchers=(_shadow_snapshot_stream,),
     )
 )
 _add(DriverEntry('database.user_usage.get_today_usage_stats', base={'uid': UID, 'start': T0, 'end': T1}))

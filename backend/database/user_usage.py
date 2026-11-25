@@ -10,7 +10,7 @@ from google.cloud import firestore
 from google.cloud.firestore_v1 import FieldFilter
 
 from ._client import db, get_firestore_client
-from . import firestore_snapshot_query, monthly_usage_totals
+from . import monthly_usage_totals
 from .firestore_document_probe import call_site
 from .firestore_read_origin import read_origin
 from .firestore_read_metrics import FirestoreReadFamily, FirestoreReadMode, record_firestore_read
@@ -18,7 +18,7 @@ from .firestore_index_registry import HOURLY_USAGE_UTC_DAY_QUERY
 from .llm_usage import nest_usage_fields, resolve_usage_plan_id
 from .usage_units import hourly_shadow, normalize_plan_usage
 from models.user_usage import UsageStats
-from .monthly_usage_observation import ShadowSkipped, observe_cached_month
+from .monthly_usage_observation import observe_cached_month
 
 logger = logging.getLogger(__name__)
 
@@ -628,7 +628,7 @@ def _s4_month_cache(since=False):
     return decorate
 
 
-def read_hourly_usage_for_shadow(uid, date, start_date, timeout, *, read_time, firestore_client=None):
+def read_hourly_usage_for_shadow(uid, date, start_date, timeout, *, read_time, stream_snapshot, firestore_client=None):
     # Read the authoritative hourly totals; never rebuild/write a monthly projection.
     client = firestore_client if firestore_client is not None else get_firestore_client()
     query = (
@@ -645,12 +645,10 @@ def read_hourly_usage_for_shadow(uid, date, start_date, timeout, *, read_time, f
     limit = 745
     query = query.limit(limit)
     with read_origin('job:usage_month_total_shadow'):
-        rows = firestore_snapshot_query.stream_at_read_time(query, read_time, timeout=timeout, caller=call_site())
+        rows = stream_snapshot(query, read_time, timeout=timeout, caller=call_site())
         stats, count = _aggregate_stats_with_count(rows)
         record_firestore_read(FirestoreReadFamily.LISTEN_MONTHLY_USAGE, FirestoreReadMode.BOUNDED, count)
-    if count >= limit:
-        raise ShadowSkipped('hourly document limit reached')
-    return stats
+    return stats if count < limit else None
 
 
 @_s4_month_cache()

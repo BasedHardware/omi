@@ -230,8 +230,10 @@ result is used only for metrics.
 
 `omi_usage_month_total_shadow_total` groups outcomes by `service`, `epoch` and
 `path` (`total_uncached`, `cache_hit`, `free_allowance`). Free allowance covers
-the verified monthly baseline used by the chargeable-seconds ledger and the
-establishment path. PTT charges and holds remain outside this comparison.
+the verified monthly baseline used by reservations and chargeable-seconds
+reads, plus baseline establishment. Reservations submit only the successful
+transaction's snapshot, after commit. PTT charges and holds remain outside
+this comparison.
 The cache path compares the value in the Redis hit against its source snapshot.
 The existing cache key, generation, TTL and returned value are preserved.
 Cache entries with no projection timestamp (including hourly fallbacks and old
@@ -247,15 +249,21 @@ as no completed comparison. Source-read telemetry uses
 `job:usage_month_total_shadow`. Include it and legacy `job:read_cache_shadow`
 reads in the rollout's net read calculation.
 
-For the later ramp gate, require **at least 100 completed comparisons per
-service, target epoch and serving path**, with zero mismatches, in its
-artifact-bound qualification window. Require `total_uncached` before expanding
-the total lever and `cache_hit` before expanding the cache lever. Require the
-same floor for `free_allowance` wherever the verified baseline is used. Use
-synthetic/loopback traffic to meet floors that the live 1% sample cannot reach,
-and keep the existing two-hour equivalence, latency, accounting and contention
-requirements. At 100 comparisons the probability of missing a uniformly
-distributed 1% mismatch remains about 37%, so the floor is a coverage check.
+For the later ramp gate, keep **100 completed comparisons per service, target
+epoch and serving path** as a coverage floor in its artifact-bound qualification
+window. Require `total_uncached` before expanding the total lever and
+`cache_hit` before expanding the cache lever. Track `free_allowance` wherever
+the verified baseline is used.
+
+Before expanding a paid allowance read path, require **at least 299 independent
+completed comparisons with zero mismatches** per service, target epoch and
+qualifying path. This targets at least 95% probability of seeing one or more
+mismatches at a 1% per-comparison mismatch rate (`1 - 0.99^299`). Repeated
+observations of the same account and snapshot do not establish independence.
+Use independently seeded synthetic/loopback cases to qualify paths with
+insufficient independent live samples. Pair this check with the **two-hour
+synthetic/loopback equivalence gate per artifact** and the existing latency,
+accounting and contention gates.
 
 The SCA-4276 attestation window ending 2026-11-24 20:20 UTC measured 24.33M
 hourly reads/day across the listen and pusher since-date paths. At full
@@ -268,3 +276,16 @@ their own shadow traffic. Per service, estimate it as the sample rate times
 the eligible calls/day times the mean hourly source documents per call, with
 a one-read floor for empty queries. The attestation did not measure that
 eligible pool. Measure it separately before attributing aggregate cost.
+
+The 24-hour GMP window ending 2026-11-25 02:24 UTC measured about 359,000
+completed Free reservation decisions/day using
+`omi_free_allowance_lease_decisions_total` filtered to the reasons returned by
+`reserve()` (`reserved`, `allowance_exhausted`, `ledger_full`, `lease_expired`,
+`already_settled`, `operation_too_old`). At 1%, this adds about 3,590 sampled
+reservations/day before saturation and skips. Using the prior SCA-4276 GMP
+cache-shadow mean of 57 reads/query as a proxy adds about **205,000 reads/day**,
+bringing the prior already-serving estimate of about 200,000 to about
+**405,000 incremental reads/day**. The proxy comes from cache-shadow traffic,
+so measure the Free reservation query size during qualification. The separate
+since-date listen and pusher caller pool contributes according to its own
+enrollment.

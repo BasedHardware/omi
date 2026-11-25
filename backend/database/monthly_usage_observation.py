@@ -4,11 +4,6 @@ from collections.abc import Callable, Mapping
 from datetime import datetime
 from typing import Any
 
-
-class ShadowSkipped(Exception):
-    """A bounded shadow read cannot produce a complete comparable value."""
-
-
 Observer = Callable[[str, str, datetime, datetime | None, dict, Any, Any, str | None], None]
 _observer: Observer | None = None
 
