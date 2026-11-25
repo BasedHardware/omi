@@ -157,3 +157,63 @@ def test_cancelled_audit_sample_is_counted_as_dropped(monkeypatch, site):
     assert dropped.get() == before
     assert future.cancel()
     assert dropped.get() == before + 1
+
+
+@pytest.mark.parametrize(
+    'setting,draw,sampled',
+    [(None, 99, True), (None, 100, False), (0, 0, False), (50, 49, True), (50, 50, False)],
+)
+def test_enforced_audit_sampling_defaults_to_one_percent_and_has_an_inverse(monkeypatch, setting, draw, sampled):
+    if setting is None:
+        monkeypatch.delenv('FIRESTORE_READ_LEVERS', raising=False)
+    else:
+        monkeypatch.setenv('FIRESTORE_READ_LEVERS', f'{{"bpp_tokenless_write_audit":{setting}}}')
+    monkeypatch.setattr(audit.random, 'randrange', lambda size: draw if size == 10_000 else pytest.fail('wrong range'))
+    submit = Mock(return_value=Future())
+    monkeypatch.setattr(audit.read_cache_shadow_executor, 'submit', submit)
+    live = Mock()
+    monkeypatch.setattr(audit, '_live_outcome', live)
+    hit = audit.Hit('owner', frozenset({'source'}), 'lease', cache.Decision(audit.time.time(), ('token', 'rev', 0), 7))
+
+    audit.submit(object(), hit)
+
+    assert submit.call_count == int(sampled)
+    live.assert_not_called()
+
+
+@pytest.mark.parametrize(
+    'worker,service,role',
+    [
+        ('', 'backend-integration', 'integration'),
+        ('', 'backend-sync-backfill', 'sync'),
+        ('', 'backend', 'backend'),
+        ('true', '', 'worker'),
+        ('', 'unrecognized-service', 'other'),
+    ],
+)
+def test_write_audit_uses_bounded_role_labels(monkeypatch, worker, service, role):
+    monkeypatch.setenv('BATCH_PIPELINE_WORKER_ENABLED', worker)
+    monkeypatch.setenv('K_SERVICE', service)
+    assert audit._deployment_role() == role
+
+
+@pytest.mark.parametrize('outcome', [*audit.OUTCOMES, 'failed'])
+def test_completed_write_audit_denominator_counts_each_evaluated_hit_once(monkeypatch, outcome):
+    if outcome == 'failed':
+        live = Mock(side_effect=RuntimeError('synthetic read failure'))
+    else:
+        live = Mock(return_value=outcome)
+    monkeypatch.setattr(audit, '_live_outcome', live)
+    monkeypatch.setattr(audit, '_ROLE', 'integration')
+    hit = audit.Hit('owner', frozenset({'source'}), 'lease', cache.Decision(audit.time.time(), ('token', 'rev', 0), 7))
+    counters = {label: audit.AUDIT_BY_ROLE.labels('integration', label)._value for label in audit.OUTCOMES}
+    before = {label: counter.get() for label, counter in counters.items()}
+    failed = audit.INCOMPLETE.labels('lease', 'failed')._value
+    failed_before = failed.get()
+
+    audit._run(object(), hit, object())
+
+    assert {label: counter.get() - before[label] for label, counter in counters.items()} == {
+        label: int(label == outcome) for label in audit.OUTCOMES
+    }
+    assert failed.get() - failed_before == int(outcome == 'failed')

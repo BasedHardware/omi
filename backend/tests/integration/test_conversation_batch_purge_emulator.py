@@ -970,6 +970,8 @@ def test_late_privacy_sweep_recovers_an_inflight_object(plane, monkeypatch, tmp_
 
 
 def test_tokenless_write_cache_is_limited_to_existing_compute_admitted_leases(plane, monkeypatch):
+    from dataclasses import replace
+
     import fakeredis
 
     from database import batch_privacy_write_authority as authority, batch_privacy_write_cache as cache
@@ -1022,16 +1024,22 @@ def test_tokenless_write_cache_is_limited_to_existing_compute_admitted_leases(pl
         'submit',
         lambda run, *args: pending_audits.append((run, args)) or MagicMock(),
     )
-    monkeypatch.setenv('FIRESTORE_READ_LEVERS', '{"bpp_tokenless_write_cache":100,"bpp_tokenless_write_audit":100}')
+    monkeypatch.setattr(audit, '_ROLE', 'integration')
+    agree_by_role = audit.AUDIT_BY_ROLE.labels('integration', 'agree')._value
+    before_role = agree_by_role.get()
     assert store.run(lambda tx: tx._probe_write_privacy(plane.uid, ('source',), 0)) == 0
     assert read_count() == 0
     assert [args[1].site for _, args in pending_audits] == ['probe', 'lease']
     assert ref.get().to_dict()['state'] == 'leased'
+    assert agree_by_role.get() == before_role
     for run, args in pending_audits:
         agree = audit.AUDIT.labels(args[1].site, 'agree')._value
         before = agree.get()
         run(*args)
         assert agree.get() == before + 1
+    assert agree_by_role.get() == before_role + 2
+    lease_hit = next(hit for _, (_, hit, _) in pending_audits if hit.site == 'lease')
+    pending_audits.clear()
 
     ref.set(row)
     shadow = cache.TOKENLESS_SHADOW.labels('lease', 'match')
@@ -1043,6 +1051,7 @@ def test_tokenless_write_cache_is_limited_to_existing_compute_admitted_leases(pl
     assert probe_shadow.get() == before_probe + 1
     assert read_count() > 0
     assert shadow._value.get() == before + 1
+    assert not pending_audits
     ref.set(row)
     monkeypatch.setenv('FIRESTORE_READ_LEVERS', '{"bpp_tokenless_write_cache":0}')
     assert read_count() > 0
@@ -1051,6 +1060,20 @@ def test_tokenless_write_cache_is_limited_to_existing_compute_admitted_leases(pl
     # still calls durable authority, even while that lease proof is cached.
     monkeypatch.setattr(batch_privacy_write_fence, 'invalidate_tokenless', lambda *args: None)
     plane.client.collection('users').document(plane.uid).update({'migration_status': 'pending'})
+    token = plane.client.collection(audit.PRIVACY_COLLECTION).document(plane.key).get()
+    current_version = audit.token_version(token)
+    assert current_version is not None and current_version != lease_hit.decision.version
+    # Model a refusal with and without a token revision explaining the change.
+    unexplained_hit = replace(lease_hit, decision=replace(lease_hit.decision, version=current_version))
+    for hit, outcome in (
+        (lease_hit, 'disagree_within_window'),
+        (unexplained_hit, 'disagree_beyond_window'),
+    ):
+        counter = audit.AUDIT_BY_ROLE.labels('integration', outcome)._value
+        before = counter.get()
+        audit._run(plane.client, hit, audit._Budget(time.monotonic() + 2))
+        assert counter.get() == before + 1
+
     monkeypatch.setenv('FIRESTORE_READ_LEVERS', '{"bpp_tokenless_write_cache":100}')
     with pytest.raises(BatchPrivacyBlocked, match='data_protection_changed'):
         store.run(lambda tx: tx.put('jobs', ref.id, {**row, 'state': 'result_ready', 'result': {'outcome': 'silence'}}))

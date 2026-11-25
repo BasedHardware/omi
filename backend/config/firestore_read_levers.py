@@ -85,6 +85,7 @@ DEFAULT_PERCENTAGES = {
     'sync_allowance_single_resolve': 100,
     'bpp_owner_memo': 100,
     'bpp_shared_owner_cache': 100,
+    'bpp_tokenless_write_audit': 100,  # basis points, sampled only on enforced hits
     'bpp_status_skip': 100,
     'bpp_owner_memo_enforce': 0,
 }

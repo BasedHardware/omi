@@ -32,7 +32,7 @@ from config.batch_pipeline import worker_pipeline_depth, worker_processes
 from config.batch_pipeline_providers import provider_config
 from database._client import get_data_plane_firestore_client
 from database.batch_pipeline_store import FirestoreStore
-from database import batch_privacy_write_cache
+from database import batch_privacy_write_audit, batch_privacy_write_cache
 from database.firestore_document_probe import FIRESTORE_BILLED_READS_BY_ORIGIN
 from database.privacy_check_metrics import (
     NEGATIVE_LOOKUPS,
@@ -179,6 +179,9 @@ def health_server(
         MEMO_REQUESTS,
         batch_privacy_write_cache.TOKENLESS,
         batch_privacy_write_cache.TOKENLESS_SHADOW,
+        batch_privacy_write_audit.AUDIT_BY_ROLE,
+        batch_privacy_write_audit.AUDIT,
+        batch_privacy_write_audit.INCOMPLETE,
     ):
         registry.register(collector)
     register_gpu_skip_counters(registry)  # diarization decisions + per-unit FP32-parity counters

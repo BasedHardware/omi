@@ -1,6 +1,7 @@
 """Sample enforced scheduler hits against a fresh, bounded authority snapshot."""
 
 from dataclasses import dataclass
+import os
 import random
 import time
 
@@ -21,6 +22,29 @@ from database.firestore_read_origin import read_origin
 from utils.batch_pipeline.artifact_reads import ArtifactReadLimit
 from utils.executors import read_cache_shadow_executor
 
+
+def _deployment_role() -> str:
+    if os.getenv('BATCH_PIPELINE_WORKER_ENABLED', '').lower() == 'true':
+        return 'worker'
+    return {
+        'backend': 'backend',
+        'backend-integration': 'integration',
+        'backend-sync': 'sync',
+        'backend-sync-backfill': 'sync',
+        'backend-projection-pump': 'projection_pump',
+    }.get(os.getenv('K_SERVICE', ''), 'other')
+
+
+_ROLE = _deployment_role()
+OUTCOMES = ('agree', 'disagree_within_window', 'disagree_beyond_window')
+AUDIT_BY_ROLE = Counter(
+    'omi_batch_pipeline_privacy_tokenless_audit_total',
+    'Completed enforced write authorization audits',
+    ['role', 'outcome'],
+)
+for _outcome in OUTCOMES:
+    AUDIT_BY_ROLE.labels(_ROLE, _outcome)
+
 AUDIT = Counter(
     'omi_batch_pipeline_privacy_tokenless_write_audit_total',
     'Completed enforced scheduler hit comparisons',
@@ -32,7 +56,7 @@ INCOMPLETE = Counter(
     ['site', 'outcome'],
 )
 for _site in SITES:
-    for _outcome in ('agree', 'disagree_within_window', 'disagree_beyond_window'):
+    for _outcome in OUTCOMES:
         AUDIT.labels(_site, _outcome)
     for _outcome in ('failed', 'dropped'):
         INCOMPLETE.labels(_site, _outcome)
@@ -94,6 +118,7 @@ def _run(client, hit, budget):
     except Exception:
         INCOMPLETE.labels(hit.site, 'failed').inc()
     else:
+        AUDIT_BY_ROLE.labels(_ROLE, outcome).inc()
         AUDIT.labels(hit.site, outcome).inc()
 
 

@@ -44,13 +44,39 @@ authorization, use six hours with evaluated samples at each site and zero
 scenario assumes much wider proven sink coverage and GPU connectivity.
 
 For canary expansion, `bpp_tokenless_write_audit` samples enforced hits after
-the transaction succeeds. The lever takes basis points from 0 to 100. Audits
-use a fresh read-only snapshot capped at two seconds and 32 point reads.
-`omi_batch_pipeline_privacy_tokenless_write_audit_total` counts completed
-comparisons by `site=probe|lease` and `outcome=agree|disagree_within_window|disagree_beyond_window`.
-`omi_batch_pipeline_privacy_tokenless_write_audit_incomplete_total` tracks
-failed or dropped samples separately. SCA-3891 requires completed audits for
-each site being expanded. Zero comparisons is `NO_DATA`, and any evaluated
-beyond-window disagreement trips the inverse. Include reads under
+the transaction succeeds. The lever defaults to 100 basis points (1%) and
+accepts 0–100. Audits use a fresh read-only snapshot capped at two seconds and
+32 point reads on a two-slot executor with no queue.
+`omi_batch_pipeline_privacy_tokenless_audit_total` counts completed comparisons
+by `role` and `outcome=agree|disagree_within_window|disagree_beyond_window`.
+`omi_batch_pipeline_privacy_tokenless_write_audit_total` counts the same outcomes
+by `site=probe|lease`. The GPU worker exposes both metrics and the separate
+`omi_batch_pipeline_privacy_tokenless_write_audit_incomplete_total` for failed or
+dropped samples.
+
+SCA-3891's guard selects `outcome=disagree_beyond_window` as its numerator and
+sums all outcomes for the same role or site as its denominator. Set
+`min_comparisons=1` for this slice so zero completed audits is `NO_DATA` and the
+first beyond-window disagreement breaches the guard. Require evidence at each
+site before expansion. The inverse is `bpp_tokenless_write_cache=0`. For the
+integration canary, use this `signals.correctness` block with the reviewed
+app cohort in the SCA-3891 cut spec.
+
+```json
+{
+  "metric": "omi_batch_pipeline_privacy_tokenless_audit_total",
+  "scope": "app",
+  "labels": {"role": "integration", "outcome": "disagree_beyond_window"},
+  "min_comparisons": 1,
+  "blind_after_seconds": 1800,
+  "coverage": {
+    "metric": "omi_batch_pipeline_privacy_tokenless_audit_total",
+    "scope": "app",
+    "labels": {"role": "integration"}
+  }
+}
+```
+
+Include reads under
 `job:batch_tokenless_write_audit_probe` and `job:batch_tokenless_write_audit_lease`
 in the net savings readback.
