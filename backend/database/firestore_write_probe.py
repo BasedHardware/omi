@@ -53,8 +53,10 @@ import functools
 import inspect
 import logging
 import os
+from contextlib import contextmanager
 from contextvars import ContextVar
 from typing import Any, Callable, Iterable
+from threading import Lock
 
 from prometheus_client import Counter
 
@@ -322,11 +324,44 @@ def _record_noops(writes: list, response: Any, caller: str) -> None:
         pass  # Attribution must never affect a write.
 
 
+class CommittedWrites:
+    """Shared by the executor threads in one request context."""
+
+    def __init__(self):
+        self._total = 0
+        self._lock = Lock()
+
+    def add(self, count):
+        with self._lock:
+            self._total += count
+
+    @property
+    def total(self):
+        with self._lock:
+            return self._total
+
+
+_committed_writes: ContextVar[CommittedWrites | None] = ContextVar('firestore_committed_writes', default=None)
+
+
+@contextmanager
+def count_committed_writes():
+    counter = CommittedWrites()
+    token = _committed_writes.set(counter)
+    try:
+        yield counter
+    finally:
+        _committed_writes.reset(token)
+
+
 def _after(writes: list, response: Any, partial: bool) -> None:
     if partial:
         writes = _applied(writes, response)
     if not writes:
         return
+    count = _committed_writes.get()
+    if count is not None:
+        count.add(len(writes))
     caller = write_caller() if bulk_write_attribution.get() is None else _OTHER
     _record(writes, caller)
     if not partial:

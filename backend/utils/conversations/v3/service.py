@@ -240,6 +240,17 @@ async def _release_reconcile_lease(uid, key, token, *, primary_failed):
         logger.warning('v3 reconcile lease release failed exception_type=%s', type(error).__name__)
 
 
+def _measure_reconcile_writes(run):
+    @wraps(run)
+    async def measured(*args, **kwargs):
+        caller = 'backfill' if kwargs.get('derive') else 'on_open' if kwargs.get('on_open') else 'builder'
+        with metrics.measure_reconcile_writes(caller):
+            return await run(*args, **kwargs)
+
+    return measured
+
+
+@_measure_reconcile_writes
 async def reconcile(
     uid,
     *,

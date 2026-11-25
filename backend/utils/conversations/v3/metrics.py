@@ -1,6 +1,10 @@
 """Static-label v3 rollout and builder meters."""
 
+from contextlib import contextmanager
+
 from prometheus_client import Counter, Histogram, Gauge
+
+from database.firestore_write_probe import count_committed_writes, probe_enabled
 
 RECONCILES = Counter('omi_conversations_v3_reconciles_total', 'Builder and processing outcomes', ['outcome'])
 BLOCKED = Counter(
@@ -135,3 +139,36 @@ AUDIO_PURGES = Counter(
 )
 for outcome in ('custody_invalidated', 'held', 'intakes_pending', 'intakes_failed', 'erased'):
     AUDIO_PURGES.labels(outcome)
+
+
+PROJECTION_ROWS = Histogram(
+    'omi_conversations_v3_projection_rows',
+    'Rows written or skipped by a completed projection pass or pending mark, before commit hooks',
+    ['caller', 'outcome'],
+    buckets=(0, 1, 2, 3, 5, 8, 10, 15, 20, 30, 50, 90, 128, 256, 500),
+)
+
+
+def projection_writes(caller, written, skipped):
+    PROJECTION_ROWS.labels(caller, 'written').observe(written)
+    PROJECTION_ROWS.labels(caller, 'skipped').observe(skipped)
+
+
+RECONCILE_BILLED_WRITES = Histogram(
+    'omi_conversations_v3_reconcile_billed_writes',
+    'Confirmed Firestore writes per reconcile pass including commit-hook writes',
+    ['caller'],
+    buckets=(0, 1, 2, 3, 5, 8, 10, 15, 20, 30, 50, 90, 128, 256, 500),
+)
+
+
+@contextmanager
+def measure_reconcile_writes(caller):
+    if not probe_enabled():
+        yield
+        return
+    with count_committed_writes() as writes:
+        try:
+            yield
+        finally:
+            RECONCILE_BILLED_WRITES.labels(caller).observe(writes.total)
