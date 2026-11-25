@@ -8,7 +8,6 @@ from database import firestore_transaction_retry
 from database._client import get_firestore_client
 from database.account_deletion_marker import account_deletion_blocks_user_work
 from config.dream_agent import allowlist_uids, eligibility, eligible, enabled, hunt_interval
-from config import dream_levers
 from utils.observability.fallback import record_fallback
 
 EPOCH = datetime(1970, 1, 1, tzinfo=timezone.utc)

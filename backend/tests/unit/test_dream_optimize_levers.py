@@ -358,7 +358,7 @@ def test_no_progress_retirement_keeps_normal_completion(runtime, monkeypatch):
     assert 'no_progress_stop' not in report['levers']
 
 
-def test_finish_without_payload_completes_the_pass(runtime, monkeypatch):
+def test_early_loop_stop_without_finish_payload_completes_the_pass(runtime, monkeypatch):
     limits = SessionLimits(bucket='light', turns=32, tools=32, tokens=400000)
     _scripted(EvidenceRecords(records(runtime)), limits, monkeypatch)
     run = Session.run
@@ -367,6 +367,7 @@ def test_finish_without_payload_completes_the_pass(runtime, monkeypatch):
         return True
 
     async def run_with_early_finish(session, *args, **kwargs):
+        # Inject an early loop stop before the finish tool sets a payload.
         session.after_execute = stop_after_read
         return await run(session, *args, **kwargs)
 
