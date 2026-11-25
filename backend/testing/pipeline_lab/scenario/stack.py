@@ -720,6 +720,7 @@ def run_files(
     stt_budget_usd: Optional[float] = None,
 ) -> int:
     stt_args = ['--stt', stt] + (['--stt-budget-usd', str(stt_budget_usd)] if stt_budget_usd is not None else [])
+    names = list(names) or sorted(path.stem for path in SCENARIO_DIR.glob('*.json'))  # default: all committed
     paths = [resolve(name) for name in names]
     for path in paths:
         load_scenario(path)  # fail fast on a malformed file, before the stack starts

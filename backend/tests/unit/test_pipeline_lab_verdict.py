@@ -223,6 +223,13 @@ def test_repeat_that_differs_is_nondeterministic(tmp_path, fake_runs, capsys):
     assert 'differs between repeats at: result.json $.conversations[0].hidden_reason' in capsys.readouterr().out
 
 
+def test_run_without_files_runs_every_committed_scenario(tmp_path, fake_runs, capsys):
+    _, calls = fake_runs
+    assert cli.main(['scenario', 'run', '--keep', str(tmp_path / 'r'), '--json']) in (0, 1)
+    committed = sorted(p.stem for p in stack.SCENARIO_DIR.glob('*.json'))
+    assert sorted(c['out'].name for c in calls) == committed
+
+
 def test_jobs_and_repeat_must_be_positive(tmp_path, fake_runs, capsys):
     assert cli.main(['scenario', 'run', str(FAST), '--keep', str(tmp_path / 'r'), '--jobs', '0']) == 2
 

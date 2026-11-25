@@ -166,7 +166,9 @@ def build_parser() -> argparse.ArgumentParser:
     scenario_run = scenario_sub.add_parser(
         'run', parents=[common], help='run scenario files on a local emulator + Redis (started here unless given)'
     )
-    scenario_run.add_argument('files', nargs='+', help='scenario JSON files, or names under scenario/scenarios/')
+    scenario_run.add_argument(
+        'files', nargs='*', help='scenario JSON files, or names under scenario/scenarios/ (default: all committed)'
+    )
     scenario_run.add_argument('--keep', help='output directory (outside git; default a fresh temp dir)')
     scenario_run.add_argument('--timeout', type=float, default=240.0, help='seconds per scenario')
     scenario_run.add_argument(
