@@ -156,7 +156,7 @@ def test_rendered_key_union_includes_removed_and_added_keys():
 
 
 @pytest.mark.parametrize(
-    'fault', [None, 'live-movement', 'wrong-source', 'wrong-image', 'wrong-attempt', 'helm-movement']
+    'fault', [None, 'live-movement', 'wrong-source', 'wrong-image', 'wrong-attempt', 'helm-movement', 'missing-runtime']
 )
 def test_complete_producer_uses_only_bounded_reads_and_refuses_changed_binding(tmp_path, fault):
     private_file = tmp_path / 'private.yaml'
@@ -256,6 +256,8 @@ def test_complete_producer_uses_only_bounded_reads_and_refuses_changed_binding(t
         'based-hardware',
         ['-f', '<private-overlay>'],
     )
+    if fault == 'missing-runtime':
+        del req['bindings']['runtime_manifest_sha256']
     values = tmp_path / 'backend/charts/backend-listen/prod_omi_backend_listen_values.yaml'
     values.parent.mkdir(parents=True)
     values.write_text('privateEnv: {}\nenv: []\n')  # a pre-privateSecretEnv candidate
@@ -276,6 +278,8 @@ def test_complete_producer_uses_only_bounded_reads_and_refuses_changed_binding(t
         assert not (args[0] == 'kubectl' and 'apply' in args)
         if args[0] == 'helm' and 'upgrade' in args:
             assert '--dry-run=client' in args
+    if fault == 'missing-runtime':
+        assert reader.commands == []
 
 
 def test_evidence_is_retired_once_the_candidate_declares_private_secret_env(tmp_path):
@@ -312,3 +316,33 @@ def test_real_subprocess_output_is_capped_and_private_error_is_never_echoed(tmp_
     assert result.stdout == ''
     assert result.stderr.strip() == 'LISTEN_OVERLAY_EVIDENCE_REFUSED'
     assert not (tmp_path / 'receipt.json').exists()
+
+
+@pytest.mark.parametrize('terminal', [None, 1])
+def test_reader_cleanup_permission_denial_is_ignored_only_after_terminal_poll(monkeypatch, terminal):
+    ticks = iter([0, 0, 0, 11])
+    reader = evidence.Reader(clock=lambda: next(ticks))
+    polls = iter([None, None, terminal])
+    waited, killed = [], []
+
+    class Child:
+        pid = 123456
+
+        def poll(self):
+            return next(polls)
+
+        def wait(self):
+            waited.append(True)
+            return terminal
+
+    def denied(pid, sig):
+        killed.append((pid, sig))
+        raise PermissionError('synthetic owned-group denial')
+
+    monkeypatch.setattr(evidence.subprocess, 'Popen', lambda *args, **kwargs: Child())
+    monkeypatch.setattr(evidence.os, 'killpg', denied)
+    expected = PermissionError if terminal is None else evidence.Refused
+    with pytest.raises(expected):
+        reader.run(['offline-synthetic-child'])
+    assert killed == [(Child.pid, evidence.signal.SIGKILL)]
+    assert waited == [True]

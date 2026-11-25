@@ -123,7 +123,12 @@ async def test_serving_outbox_recovers_without_legacy_projection_discovery(monke
         await stop.wait()
 
     reconcile = AsyncMock(side_effect=lambda **_: reconciled.set())
-    service = SimpleNamespace(store=MemoryStore(), outbox=SimpleNamespace(run=run_outbox), reconcile_async=reconcile)
+    service = SimpleNamespace(
+        store=MemoryStore(),
+        outbox=SimpleNamespace(run=run_outbox),
+        reconcile_async=reconcile,
+        sweep_held_dead_letters=Mock(),
+    )
     monkeypatch.setattr(serving, 'serving_for_stage', lambda _: service)
     monkeypatch.setattr(serving, 'drain_recordings', AsyncMock(return_value=False))
     monkeypatch.setattr(serving, 'recovery_dispatch_interval_seconds', lambda: 0)
@@ -896,6 +901,7 @@ def test_periodic_maintenance_runs_on_one_serving_instance_per_lease():
         )
         instances.append(instance)
     for instance in instances:
+        instance.held_dead_letter.tick = Mock()
         instance.reconcile(recover_quarantine=True, periodic=True)
     leader, follower = instances
     for maintenance in ('cleanup', 'enrichment_sweep'):
@@ -903,6 +909,10 @@ def test_periodic_maintenance_runs_on_one_serving_instance_per_lease():
         assert getattr(follower, maintenance).call_count == 0
     leader.recovery.sweep.assert_called_once()
     follower.recovery.sweep.assert_not_called()
+    leader.held_dead_letter.tick.assert_called_once()
+    follower.held_dead_letter.tick.assert_not_called()
+    follower.sweep_held_dead_letters(periodic=True)
+    follower.held_dead_letter.tick.assert_not_called()
     # Projection throughput and each instance's own gauges are not leader-gated.
     for instance in instances:
         instance.projector.sweep.assert_called_once()
@@ -911,6 +921,9 @@ def test_periodic_maintenance_runs_on_one_serving_instance_per_lease():
     follower.reconcile(recover_quarantine=True)
     follower.recovery.sweep.assert_called_once()
     follower.cleanup.assert_called_once()
+    follower.held_dead_letter.tick.assert_called_once()
+    leader.reconcile(periodic=True, run_held_expiry=False)
+    leader.held_dead_letter.tick.assert_called_once()
 
 
 def test_recovery_dispatch_tick_runs_only_recovery_on_the_maintenance_leader():
@@ -949,7 +962,13 @@ async def test_serving_runtime_dispatches_recovery_beside_the_serving_pass(monke
     async def reconcile_async(**kwargs):
         passes.set()
 
-    service = SimpleNamespace(store=Mock(), metrics=None, reconcile_async=reconcile_async, dispatch_recovery=Mock())
+    service = SimpleNamespace(
+        store=Mock(),
+        metrics=None,
+        reconcile_async=reconcile_async,
+        dispatch_recovery=Mock(),
+        sweep_held_dead_letters=Mock(),
+    )
 
     async def drain_recordings(store, **kwargs):
         return None
@@ -966,6 +985,63 @@ async def test_serving_runtime_dispatches_recovery_beside_the_serving_pass(monke
     await serving.stop_serving(runtime)
     assert service.dispatch_recovery.called is dispatches
     assert runtime[1].done()
+
+
+@pytest.mark.asyncio
+async def test_serving_expires_held_jobs_while_reconciliation_is_blocked(monkeypatch):
+    from utils.batch_pipeline import serving
+
+    monkeypatch.setenv('BATCH_PIPELINE_SERVING_ENABLED', 'true')
+    monkeypatch.setenv('BATCH_HELD_DEAD_LETTER_ENABLED', 'true')
+    monkeypatch.setenv('BATCH_PIPELINE_RECOVERY_DISPATCH_INTERVAL_SECONDS', 'off')
+    reconciling, expired, resume = asyncio.Event(), asyncio.Event(), asyncio.Event()
+    service = Serving(MemoryStore())
+
+    async def blocked_reconcile(**options):
+        assert options['run_held_expiry'] is False
+        reconciling.set()
+        await resume.wait()
+
+    async def drain_recordings(*args, **kwargs):
+        return None
+
+    monkeypatch.setattr(service, 'reconcile_async', blocked_reconcile)
+    monkeypatch.setattr(service.held_dead_letter, 'tick', lambda now: expired.set())
+    monkeypatch.setattr(serving, 'current_stage', lambda: 'dev')
+    monkeypatch.setattr(serving, 'serving_for_stage', lambda stage: service)
+    monkeypatch.setattr(serving, 'run_blocking', _inline_serving_call)
+    monkeypatch.setattr(serving, 'drain_recordings', drain_recordings)
+    runtime = serving.start_serving_from_env()
+    try:
+        await asyncio.wait_for(reconciling.wait(), timeout=2)
+        await asyncio.wait_for(expired.wait(), timeout=2)
+    finally:
+        resume.set()
+        await serving.stop_serving(runtime)
+    assert runtime[1].done()
+
+
+@pytest.mark.asyncio
+async def test_held_expiry_supervisor_uses_db_executor_for_lookup_and_sweep(monkeypatch):
+    from utils.batch_pipeline import serving
+
+    stop = asyncio.Event()
+    calls = []
+    service = SimpleNamespace(sweep_held_dead_letters=Mock(side_effect=lambda **_: stop.set()))
+
+    async def run_on(executor, fn, *args, **kwargs):
+        calls.append(executor)
+        return fn(*args, **kwargs)
+
+    monkeypatch.setattr(serving, 'batch_held_dead_letter_enabled', lambda: True)
+    monkeypatch.setattr(serving, 'serving_for_stage', lambda stage: service)
+    monkeypatch.setattr(serving, 'current_stage', lambda: 'prod')
+    monkeypatch.setattr(serving, 'run_blocking', run_on)
+
+    await serving._supervise_held_dead_letters(stop)
+
+    assert calls == [serving.db_executor, serving.db_executor]
+    service.sweep_held_dead_letters.assert_called_once_with(periodic=True)
 
 
 def test_serving_maintenance_fails_open_when_lease_store_errors():
@@ -1019,7 +1095,13 @@ async def test_record_drain_is_independent_contained_and_stopped(monkeypatch, bl
         assert kwargs['metrics'] is service.metrics
         await tick('drain')
 
-    service = SimpleNamespace(store=object(), metrics=Mock(), reconcile_async=reconcile_async, dispatch_recovery=Mock())
+    service = SimpleNamespace(
+        store=object(),
+        metrics=Mock(),
+        reconcile_async=reconcile_async,
+        dispatch_recovery=Mock(),
+        sweep_held_dead_letters=Mock(),
+    )
 
     def resolve(selected):
         stages.append(selected)
@@ -1086,7 +1168,9 @@ async def test_full_record_pass_repeats_after_yield_without_idle_wait(monkeypatc
     async def reconcile_async(**kwargs):
         return None
 
-    service = SimpleNamespace(store=object(), metrics=None, reconcile_async=reconcile_async)
+    service = SimpleNamespace(
+        store=object(), metrics=None, reconcile_async=reconcile_async, sweep_held_dead_letters=Mock()
+    )
     monkeypatch.setattr(serving, 'run_blocking', _inline_serving_call)
     monkeypatch.setattr(serving, 'current_stage', lambda: 'dev')
     monkeypatch.setattr(serving, 'serving_for_stage', lambda stage: service)

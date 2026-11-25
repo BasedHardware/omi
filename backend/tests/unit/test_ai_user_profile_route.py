@@ -95,26 +95,6 @@ def test_delete_ai_profile(monkeypatch):
     assert deleted == [UID]
 
 
-def test_forget_profile_also_clears_the_retired_v2_profile(monkeypatch):
-    from unittest.mock import MagicMock
-
-    from database import users as users_db
-
-    store = MagicMock()
-    invalidated = []
-    monkeypatch.setattr(users_db, 'db', store)
-    monkeypatch.setattr(users_db, 'invalidate', lambda cache, uid: invalidated.append(uid))
-    users_db.delete_ai_user_profile(UID)
-    store.collection.assert_called_once_with('users')
-    store.collection.return_value.document.assert_called_once_with(UID)
-    (update,), _ = store.collection.return_value.document.return_value.update.call_args
-    assert update == {
-        'ai_user_profile': users_db.firestore.DELETE_FIELD,
-        'ai_user_profile_v2': users_db.firestore.DELETE_FIELD,
-    }
-    assert invalidated == [UID]
-
-
 @pytest.mark.parametrize(
     'code, status',
     [

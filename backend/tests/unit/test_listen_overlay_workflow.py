@@ -13,13 +13,13 @@ EXPECTED = [
     EXACT_CONTROL,
     'Bind shared record token lease rollout inputs',
     'Admit checked-out production source and image identity',
+    'Checkout trusted overlay evidence controls',
+    'Reconstruct evidence runtime before credentials',
     'Install Helm',
     'Google Auth (prod WIF)',
     'Google Auth',
     'Set up gcloud',
     'Get GKE credentials',
-    'Checkout trusted overlay evidence controls',
-    'Install evidence parser before secret injection',
     'Produce private-overlay effect receipt without mutation',
     'Upload only the sanitized overlay receipt',
     'Remove evidence private files',
@@ -56,7 +56,6 @@ SAFE = {
     'Checkout',
     EXACT_CONTROL,
     'Admit checked-out production source and image identity',
-    'Install Helm',
     'Google Auth (prod WIF)',
     'Google Auth',
     'Set up gcloud',
@@ -76,7 +75,7 @@ MIGRATE = {
 }
 EVIDENCE = {
     'Checkout trusted overlay evidence controls',
-    'Install evidence parser before secret injection',
+    'Reconstruct evidence runtime before credentials',
     'Produce private-overlay effect receipt without mutation',
     'Upload only the sanitized overlay receipt',
     'Remove evidence private files',
@@ -108,7 +107,7 @@ def qualify(doc):
         else:
             assert expr.startswith("${{ inputs.mode != 'evidence' &&") or expr == "${{ inputs.mode != 'evidence' }}"
     for name, other in doc['jobs'].items():
-        if name != 'helm-upgrade':
+        if name not in {'helm-upgrade', 'runtime-reconstruction'}:
             assert "inputs.mode == 'deploy'" in other.get('if', '')
     assert job['environment'] == "${{ github.event.inputs.environment == 'prod' && 'prod' || 'development' }}"
     assert doc['concurrency']['cancel-in-progress'] is False
@@ -139,7 +138,7 @@ def test_evidence_uses_control_sha_and_exact_candidate_not_deploy_for_evidence()
     steps = {s['name']: s for s in doc['jobs']['helm-upgrade']['steps']}
     assert steps['Checkout trusted overlay evidence controls']['with']['ref'] == '${{ github.workflow_sha }}'
     assert "inputs.expected_sha" in steps['Checkout']['with']['ref']
-    assert 'LISTEN_PRIVATE_VALUES_YAML' not in steps['Install evidence parser before secret injection'].get('env', {})
+    assert 'LISTEN_PRIVATE_VALUES_YAML' not in steps['Reconstruct evidence runtime before credentials'].get('env', {})
     upload = steps['Upload only the sanitized overlay receipt']['with']
     assert upload['path'] == '${{ runner.temp }}/listen-overlay-receipt.json'
     assert '*' not in upload['path']
