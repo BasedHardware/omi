@@ -10,6 +10,7 @@ import 'package:omi/backend/preferences.dart';
 import 'package:omi/env/env.dart';
 import 'package:omi/services/auth/auth_token_result.dart';
 import 'package:omi/services/auth_service.dart';
+import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
 
 const _empty = {'nodes': <dynamic>[], 'edges': <dynamic>[]};
@@ -199,17 +200,24 @@ void main() {
     ]);
   });
 
-  test('failed legacy rebuild propagates without polling', () async {
+  test('failed legacy rebuild propagates without polling or logging its response body', () async {
+    const responseBody = 'synthetic rebuild error detail';
+    final talker = Logger.instance.talker;
+    talker.cleanHistory();
     serve((request) {
       if (request.uri.path.endsWith('/canonical')) {
         request.response.statusCode = HttpStatus.notFound;
       } else if (request.method == 'POST') {
         request.response.statusCode = HttpStatus.badRequest;
+        request.response.write(responseBody);
       } else {
         request.response.write(jsonEncode(_empty));
       }
     });
     await expectLater(KnowledgeGraphApi.prebuildForOnboarding(), throwsException);
+    final messages = talker.history.map((entry) => entry.message);
+    expect(messages, contains(startsWith('Failed to rebuild knowledge graph: status=400')));
+    expect(messages, isNot(contains(contains(responseBody))));
     expect(requests, [
       'GET /v1/knowledge-graph',
       'GET /v1/knowledge-graph/canonical',

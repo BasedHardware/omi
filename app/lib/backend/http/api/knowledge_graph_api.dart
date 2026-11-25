@@ -12,18 +12,17 @@ import 'package:omi/utils/memory_graph_identity.dart';
 class KnowledgeGraphApi {
   /// Short user-facing copy for a knowledge-graph HTTP failure.
   ///
-  /// [statusCode] and [body] are accepted so a regression that interpolates
-  /// them into the returned string is caught by tests. They belong in debug
-  /// logs only.
+  /// Tests supply [statusCode] and [body] to check that the returned message
+  /// stays generic.
   @visibleForTesting
   static String knowledgeGraphHttpUserMessage({required String action, int? statusCode, String? body}) {
     final _ = (statusCode, body);
     return "Couldn't $action knowledge graph";
   }
 
-  static Never _throwHttpFailure({required String action, int? statusCode, String? body}) {
-    Logger.debug('Failed to $action knowledge graph: status=$statusCode body=$body');
-    throw Exception(knowledgeGraphHttpUserMessage(action: action, statusCode: statusCode, body: body));
+  static Never _throwHttpFailure({required String action, int? statusCode}) {
+    Logger.debug('Failed to $action knowledge graph: status=$statusCode');
+    throw Exception(knowledgeGraphHttpUserMessage(action: action));
   }
 
   /// Preserve the compatibility/shared projection (including #12878) when it
@@ -184,7 +183,7 @@ class KnowledgeGraphApi {
         status: 'canonical_up_to_date',
       ).toJson();
     }
-    _throwHttpFailure(action: 'rebuild', statusCode: response?.statusCode, body: response?.body);
+    _throwHttpFailure(action: 'rebuild', statusCode: response?.statusCode);
   }
 
   /// Polls until the node count stabilizes, two consecutive reads are empty,
