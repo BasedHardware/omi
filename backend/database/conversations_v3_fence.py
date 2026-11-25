@@ -2,18 +2,28 @@
 
 from contextlib import contextmanager
 from contextvars import ContextVar
+from dataclasses import dataclass
 from datetime import datetime, timezone
 
 _current: ContextVar[tuple[str, str, str] | None] = ContextVar('conversation_v3_writer', default=None)
-_declined: ContextVar[bool] = ContextVar('conversation_v3_persistence_declined', default=False)
 
 
-def record_persistence_outcome(*, declined: bool) -> None:
-    """Report a committed terminal decline while keeping the public persistence result boolean."""
-    _declined.set(declined)
+@dataclass(frozen=True)
+class PersistenceDecline:
+    reason: str
+    update_time: datetime | None
+    transient: bool = False
 
 
-def persistence_declined() -> bool:
+_declined: ContextVar[PersistenceDecline | None] = ContextVar('conversation_v3_persistence_declined', default=None)
+
+
+def record_persistence_outcome(decline: PersistenceDecline | None) -> None:
+    """Report a committed decline while keeping the public persistence result boolean."""
+    _declined.set(decline)
+
+
+def persistence_declined() -> PersistenceDecline | None:
     return _declined.get()
 
 
@@ -24,7 +34,7 @@ def current():
 @contextmanager
 def writer(uid, cid, token):
     held = _current.set((uid, cid, token))
-    declined = _declined.set(False)
+    declined = _declined.set(None)
     try:
         yield
     finally:

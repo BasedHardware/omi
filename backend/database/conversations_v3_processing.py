@@ -12,6 +12,7 @@ from datetime import datetime, timedelta, timezone
 from google.cloud import firestore
 from google.cloud.firestore_v1 import FieldFilter
 from database import conversations, conversations_v3 as store
+from database.conversations_v3_fence import PersistenceDecline
 from database.transcript_pointer import run_preloaded_transaction_with_contention_retry
 from database.account_deletion_marker import account_deletion_document
 from database.account_deletion_policy import account_deletion_marker_blocks_access
@@ -238,6 +239,9 @@ def store_summary(uid, cid, token, revision, structured, covers, *, live_input=N
     return armed
 
 
+PROCESS_DECLINE_BACKOFF = timedelta(minutes=15)
+
+
 def settle_processing(
     uid,
     cid,
@@ -246,6 +250,7 @@ def settle_processing(
     covers,
     *,
     skipped=False,
+    decline: PersistenceDecline | None = None,
     notes=False,
     content_hash=None,
     word_floor_outcomes: tuple[bool, bool] | None = None,
@@ -270,7 +275,19 @@ def settle_processing(
         if lease.get('token') != token or not lease.get('until') or lease['until'] <= datetime.now(timezone.utc):
             raise Conflict('processing_source_changed')
         if not row or not python_owns_finalization(row):
-            return False, False, None, False, None
+            return False, False, None, False, None, None
+        if decline is not None:
+            # The terminal decision belongs to the exact declined row, not a
+            # replacement obligation written between persist and settlement.
+            if not row.get('v3_process_pending') or snapshot.update_time != decline.update_time:
+                return False, False, None, False, None, None
+            if not row.get('deleted') and row.get('sync_content_revision') != revision:
+                return False, False, None, False, None, None
+            if decline.transient:
+                # Planned backfill owns its own continuation and attempt budget.
+                if not row.get('v3_backfill_process_pending'):
+                    tx.update(ref, {'v3_process_retry_after': datetime.now(timezone.utc) + PROCESS_DECLINE_BACKOFF})
+                return False, False, None, False, None, None
         if not skipped and not row.get('deleted') and row.get('sync_content_revision') != revision:
             decoded = store.decode_row(uid, snapshot)
             if not content_hash or processing_hash(decoded) != content_hash:
@@ -307,6 +324,7 @@ def settle_processing(
             {
                 'v3_process_pending': False,
                 'v3_process_attempts': 0,
+                **({'v3_process_retry_after': None} if row.get('v3_process_retry_after') else {}),
                 'tile_state': 'done',
                 'v3_process_failed': False,
                 'v3_process_failure_reason': None,
@@ -330,11 +348,14 @@ def settle_processing(
             manual_visibility,
             manual_visibility is not None and row.get(FINISH_WINDOW_FIELD) == cid,
             (first, row) if first else None,
+            decline.reason if decline is not None else None,
         )
 
-    armed, settled, manual_visibility, finish_settled, outcome = run_preloaded_transaction_with_contention_retry(
-        client, settle
+    armed, settled, manual_visibility, finish_settled, outcome, skipped_reason = (
+        run_preloaded_transaction_with_contention_retry(client, settle)
     )
+    if skipped_reason is not None:
+        metrics.RECONCILES.labels('processing_skipped_' + skipped_reason).inc()
     if outcome is not None:
         first, row = outcome
         if first == 'notes':
@@ -490,6 +511,12 @@ def begin_processing(uid, row, token, *, force=False, firestore_client=None):
             raise Conflict('lease_lost')
         if not current or not python_owns_finalization(current) or current.get('deleted') or current.get('is_locked'):
             return False
+        if (
+            not force
+            and not current.get('v3_backfill_process_pending')
+            and not policy.processing_due(current, datetime.now(timezone.utc))
+        ):
+            return False
         attempts = (
             current.get('v3_process_attempts', 0)
             if not force and current.get('v3_process_fingerprint') == fingerprint
@@ -503,6 +530,7 @@ def begin_processing(uid, row, token, *, force=False, firestore_client=None):
             {
                 'v3_process_fingerprint': fingerprint,
                 'v3_process_attempts': attempts + 1,
+                **({'v3_process_retry_after': None} if current.get('v3_process_retry_after') else {}),
                 'v3_process_failed': False,
                 'v3_process_failure_reason': None,
                 'summary_retryable': False,

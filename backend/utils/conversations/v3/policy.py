@@ -149,3 +149,8 @@ def awaiting_transcript(row, now, cap_seconds):
         created = field(row, 'created_at') or field(row, 'started_at')
         return created is not None and now - created < timedelta(seconds=cap_seconds + 15)
     return False
+
+
+def processing_due(row, now):
+    retry_at = row.get('v3_process_retry_after')
+    return not isinstance(retry_at, datetime) or retry_at <= now

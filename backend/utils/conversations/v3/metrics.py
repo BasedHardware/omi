@@ -2,7 +2,7 @@
 
 from prometheus_client import Counter, Histogram, Gauge
 
-RECONCILES = Counter('omi_conversations_v3_reconciles_total', 'Builder outcomes', ['outcome'])
+RECONCILES = Counter('omi_conversations_v3_reconciles_total', 'Builder and processing outcomes', ['outcome'])
 BLOCKED = Counter(
     'omi_conversations_v3_blocked_total', 'Deterministic reconcile conflicts parked behind owner backoff', ['reason']
 )

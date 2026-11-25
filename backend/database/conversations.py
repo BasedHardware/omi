@@ -1697,7 +1697,7 @@ def persist_processing_result_with_lifecycle(
     from database import conversations_v3_fence
 
     @firestore.transactional
-    def _persist(transaction) -> Literal['stored', 'declined', 'fenced']:
+    def _persist(transaction) -> Literal['stored', 'fenced'] | conversations_v3_fence.PersistenceDecline:
         nonlocal stale_sync_revision, first_completed, summary_receipt, summary_changed, notes_refresh_state_write, delivery_outcome, terminal_refusal, ledger_stages, source_revision
         terminal_refusal = None
         summary_changed = False
@@ -1713,27 +1713,33 @@ def persist_processing_result_with_lifecycle(
         write_data.pop(CAPTURE_GROUP_FIELD, None)
         existing_snapshot = conversation_ref.get(transaction=transaction)
         source_revision = pipeline_ledger.source_revision(existing_snapshot)
+
+        def declined(reason: str, *, transient: bool = False):
+            return conversations_v3_fence.PersistenceDecline(
+                reason, getattr(existing_snapshot, 'update_time', None), transient
+            )
+
         if not getattr(existing_snapshot, 'exists', False):
             # A processor is never an authority to recreate a conversation.
             # Deleting one is a decision its owner made, and a merge write to a
             # missing document would create it, so a late processor could bring
             # back what they removed and emit derived side effects from it.
-            return 'declined'
+            return declined('missing')
 
         existing = existing_snapshot.to_dict() or {}
         if not python_owns_finalization(existing):
-            return 'declined'
+            return declined('foreign_owner')
         if existing.get('arrival_at'):
             write_data['arrival_at'] = existing['arrival_at']
         if expected_capture_group is not None:
             expected_group_id, expected_group_revision = expected_capture_group
             current_group = existing.get(CAPTURE_GROUP_FIELD) or {}
             if current_group.get('id') != expected_group_id or current_group.get('revision') != expected_group_revision:
-                return 'declined'
+                return declined('capture_group_changed')
         if capture_group_notes_refresh is not None:
             group_id, reservation_id = capture_group_notes_refresh
             if expected_capture_group is None or expected_capture_group[0] != group_id:
-                return 'declined'
+                return declined('capture_group_reservation')
             notes_refresh_state_write = capture_group_notes.read_success_write(
                 transaction,
                 uid,
@@ -1742,7 +1748,7 @@ def persist_processing_result_with_lifecycle(
                 firestore_client=db,
             )
             if notes_refresh_state_write is None:
-                return 'declined'
+                return declined('capture_group_reservation')
         preserve_duplicate_hint(write_data, existing)
         if existing.get('record_lane_owner'):
             write_data['record_lane_owner'] = existing['record_lane_owner']
@@ -1750,13 +1756,18 @@ def persist_processing_result_with_lifecycle(
             write_data['record_audio_partial'] = existing['record_audio_partial']
         else:
             write_data.pop('record_audio_partial', None)
-        if (
-            existing.get('deleted')
-            or summary_delivery.repair_fenced(existing)
-            or summary_delivery.processing_fenced(existing)
-            or (evidence_refresh and effective_user_title(existing.get('user_title')))
-        ):
-            return 'declined'
+        if existing.get('deleted'):
+            return declined('deleted')
+        if summary_delivery.repair_fenced(existing):
+            repair = summary_delivery.REPAIR_CONTEXT.get() or {}
+            if existing.get('sync_content_revision') != repair.get('summary_expected_revision'):
+                return declined('repair_superseded')
+            # Repair eligibility can change as another writer settles the row.
+            return declined('repair_ineligible', transient=True)
+        if summary_delivery.processing_fenced(existing):
+            return declined('processing_owner_changed', transient=True)
+        if evidence_refresh and effective_user_title(existing.get('user_title')):
+            return declined('manual_title')
         if smart_merge_refresh is not None:
             expected_revision, expected_owner = smart_merge_refresh
             merge_state = existing.get('smart_merge') or {}
@@ -1768,7 +1779,7 @@ def persist_processing_result_with_lifecycle(
                 or not isinstance(until, datetime)
                 or until <= datetime.now(timezone.utc)
             ):
-                return 'declined'
+                return declined('smart_merge_refused', transient=True)
         if not conversations_v3_fence.permits(transaction, db, uid, conversation_data['id']):
             return 'fenced'
         # A processor that read before another sync append cannot replace that
@@ -1781,7 +1792,7 @@ def persist_processing_result_with_lifecycle(
 
         if not _batch_identity_membership_current(uid, write_data, existing):
             stale_sync_revision = True
-            return 'declined'
+            return declined('identity_membership_changed', transient=True)
 
         if write_data.get('discarded') is True and recovery_discard_payload(write_data):
             from utils.conversations.recovery import (
@@ -1973,7 +1984,9 @@ def persist_processing_result_with_lifecycle(
             from utils.conversations.v3 import ProcessingPersistenceFenced
 
             raise ProcessingPersistenceFenced('v3_processing_not_completed')
-        conversations_v3_fence.record_persistence_outcome(declined=outcome == 'declined')
+        conversations_v3_fence.record_persistence_outcome(
+            outcome if isinstance(outcome, conversations_v3_fence.PersistenceDecline) else None
+        )
     persisted = outcome == 'stored'
     if persisted and ledger_stages:
         # After the real commit, in the ledger's own fenced transaction.

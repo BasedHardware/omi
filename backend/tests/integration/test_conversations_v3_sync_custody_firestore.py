@@ -304,8 +304,8 @@ def test_v3_processing_persist_distinguishes_retryable_and_terminal_declines(pro
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize('terminal', [False, True])
-async def test_reconcile_route_uses_real_processing_persistence_outcome(processing_store, monkeypatch, terminal):
+@pytest.mark.parametrize('outcome', ['stale_revision', 'deleted', 'capture_group', 'transient'])
+async def test_reconcile_route_uses_real_processing_persistence_outcome(processing_store, monkeypatch, outcome):
     from unittest.mock import AsyncMock
 
     import httpx
@@ -327,22 +327,32 @@ async def test_reconcile_route_uses_real_processing_persistence_outcome(processi
         'v3_derived': True,
         'manual_end': True,
         'structured': {},
+        'v3_process_pending': True,
     }
-    stored = {**row, 'sync_content_revision': 2, 'deleted': terminal}
+    stored = {
+        **row,
+        'sync_content_revision': 2 if outcome in {'stale_revision', 'deleted'} else 1,
+        'deleted': outcome == 'deleted',
+    }
     coll.document(row['id']).set(stored)
     before_row = coll.document(row['id']).get().to_dict()
     monkeypatch.setattr(v3, 'backoff_state', lambda *_: (None, None))
     monkeypatch.setattr(v3, 'load', lambda *_: ({}, {}, []))
     monkeypatch.setattr(service.context, 'outline_sources', lambda *_: ({}, [], []))
     monkeypatch.setattr(service, '_commit', lambda *a, **kw: set())
+    original_pending_processing = service.pending_processing
     monkeypatch.setattr(service, 'pending_processing', lambda *_: [row])
+    if outcome == 'transient':
+        monkeypatch.setattr(db, '_batch_identity_membership_current', lambda *_: False)
     monkeypatch.setattr(service, 'has_pending', lambda *_: False)
+    original_begin_processing = service.writers.begin_processing
     monkeypatch.setattr(service.writers, 'begin_processing', lambda *_: True)
     monkeypatch.setattr(created, 'deliver', AsyncMock())
 
     def persist(_uid, _language, conversation, *, persistence_observer, **_kwargs):
         payload = {**row, 'status': 'completed', 'data_protection_level': 'standard'}
-        persistence_observer(db.persist_processing_result_with_lifecycle(user.id, payload))
+        kwargs = {'expected_capture_group': ('old-group', 1)} if outcome == 'capture_group' else {}
+        persistence_observer(db.persist_processing_result_with_lifecycle(user.id, payload, **kwargs))
         return conversation.model_copy(update={'status': 'completed'})
 
     monkeypatch.setattr(process_conversation, 'process_conversation', persist)
@@ -351,13 +361,57 @@ async def test_reconcile_route_uses_real_processing_persistence_outcome(processi
     app.dependency_overrides[route.verify_cloud_tasks_oidc] = lambda: 0
     counter = metrics.RACES.labels('v3_processing_not_completed')
     before = counter._value.get()
+    skipped_reason = 'capture_group_changed' if outcome == 'capture_group' else 'deleted'
+    skipped = metrics.RECONCILES.labels('processing_skipped_' + skipped_reason)
+    skipped_before = skipped._value.get()
     async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url='http://test') as client:
         response = await client.post('/v1/conversations-v3/reconcile', json={'uid': user.id})
 
-    if terminal:
-        assert response.status_code == 200 and response.json() == {'outcome': 'committed'}
-    else:
+    if outcome == 'stale_revision':
         assert response.status_code == 409 and response.json() == {'status': 'retry', 'reason': 'persistence_fenced'}
-    assert counter._value.get() == before + (not terminal)
-    assert coll.document(row['id']).get().to_dict() == before_row
+        assert coll.document(row['id']).get().to_dict() == before_row
+    else:
+        assert response.status_code == 200 and response.json() == {'outcome': 'committed'}
+        after_row = coll.document(row['id']).get().to_dict()
+        assert after_row['v3_process_pending'] is (outcome == 'transient')
+        assert original_pending_processing(user.id) == []
+        if outcome == 'transient':
+            assert after_row['v3_process_retry_after'] > datetime.now(timezone.utc)
+        enqueued = []
+        monkeypatch.setattr(service, 'enqueue', enqueued.append)
+        await service.sweep()
+        assert user.id not in enqueued
+        if outcome == 'transient':
+            token = leases.acquire(user.id, 'summary-capture')
+            assert token is not None
+            assert not original_begin_processing(user.id, row, token)
+            leases.release(user.id, 'summary-capture', token)
+            coll.document(row['id']).update({'v3_process_retry_after': now - timedelta(seconds=1)})
+            await service.sweep()
+            assert enqueued == [user.id]
+    assert counter._value.get() == before + (outcome == 'stale_revision')
+    assert skipped._value.get() == skipped_before + (outcome in {'deleted', 'capture_group'})
     assert not leases.held(user.id, 'summary-capture')
+
+
+def test_decline_cannot_settle_replacement_obligation(processing_store):
+    from database import conversations_v3_processing as writers
+    from database.conversations_v3_fence import PersistenceDecline
+
+    _, user, coll = processing_store
+    ref = coll.document('capture')
+    ref.set({'sync_content_revision': 1, 'v3_process_pending': True, 'tile_state': 'writing'})
+    old = ref.get()
+    token = leases.acquire(user.id, 'summary-capture')
+    ref.update({'tile_state': 'queued'})
+    writers.settle_processing(
+        user.id,
+        'capture',
+        token,
+        1,
+        None,
+        skipped=True,
+        decline=PersistenceDecline('capture_group_changed', old.update_time),
+    )
+    assert ref.get().get('v3_process_pending') is True
+    assert ref.get().get('tile_state') == 'queued'

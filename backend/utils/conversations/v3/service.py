@@ -650,6 +650,7 @@ async def reconcile(
                     and (not was_ended or rewrite or promoted or (prior or {}).get('tile_state') == 'transcribing')
                 ):
                     row['v3_process_pending'] = True
+                    row.pop('v3_process_retry_after', None)
                     row['v3_rewrites'] = int((prior or {}).get('v3_rewrites') or 0) + int(rewrite)
                 if (
                     prior
@@ -1140,12 +1141,14 @@ async def drain_processing(uid):
 
 def pending_processing(uid):
     client = store.get_firestore_client()
+    now = datetime.now(timezone.utc)
     return [
         store.decode_row(uid, doc)
         for doc in store.user_conversations(client, uid)
         .where(filter=FieldFilter('v3_process_pending', '==', True))
         .limit(store.LIMIT)
         .stream()
+        if policy.processing_due(doc.to_dict() or {}, now)
     ]
 
 
@@ -1191,8 +1194,12 @@ def _process(uid, row, token):
                 # short-clip floor match live notes; process_conversation withholds their derived effects.
                 trigger=ProcessingTrigger.CAPTURE_END,
             )
-            if fence.persistence_declined():
-                return
+            decline = fence.persistence_declined()
+        if decline is not None:
+            writers.settle_processing(
+                uid, row['id'], token, row.get('sync_content_revision'), None, skipped=True, decline=decline
+            )
+            return
         if getattr(result.status, 'value', result.status) == 'failed':
             writers.fail_processing(
                 uid, row['id'], token, row.get('sync_content_revision'), content_hash=writers.processing_hash(row)
@@ -1261,7 +1268,8 @@ async def sweep():
             query = query.start_after(cursor)
         processing = await run_blocking(db_executor, lambda: list(query.stream()))
         for doc in processing:
-            if not python_owns_finalization(doc.to_dict() or {}):
+            row = doc.to_dict() or {}
+            if not python_owns_finalization(row) or not policy.processing_due(row, now):
                 continue
             parts = doc.reference.path.split('/')
             if len(parts) == 4 and parts[0] == 'users' and parts[1] not in users:
