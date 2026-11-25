@@ -6,7 +6,7 @@ from database import conversation_processing_recovery as processing_recovery
 
 from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
-from unittest.mock import Mock
+from unittest.mock import ANY, Mock
 
 import pytest
 from google.api_core.exceptions import Aborted
@@ -1125,6 +1125,7 @@ def test_final_attempt_atomically_closes_its_bound_processing_conversation():
             conversation_ref,
             {
                 'status': 'completed',
+                'terminal_family_at': ANY,
                 'discarded': False,
                 'finalization_status': 'dead_letter',
                 'relevance_decision': {
@@ -1933,6 +1934,7 @@ def test_complete_orphan_gives_an_untitled_row_its_deterministic_title():
             orphan,
             {
                 'status': 'completed',
+                'terminal_family_at': ANY,
                 'structured': {'title': 'Call the plumber tomorrow.', 'overview': '', 'category': 'other'},
                 'discarded': False,
                 'relevance_decision': {
@@ -2355,6 +2357,7 @@ def test_terminalize_exhausted_requeued_job_closes_the_parked_row_and_its_conver
         conversation_ref,
         {
             'status': 'completed',
+            'terminal_family_at': ANY,
             'discarded': False,
             'finalization_status': 'dead_letter',
             # The discard-detection audit stamps an explicit policy keep on
