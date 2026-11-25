@@ -114,11 +114,10 @@ def entries():
                 'now': (datetime(2026, 10, 9, tzinfo=timezone.utc), 'UTC accounting day only'),
                 'denial_sink': (None, 'count-only denial reason after commit does not alter query shape'),
             },
-            domains={'trigger': ['schedule', 'manual'], 'skip_idle': [False, True]},
+            domains={'trigger': ['schedule', 'manual']},
             setup=admission_state,
             patchers=(producer_mode,),
         ),
-        DriverEntry('database.dream_store.park_if_idle', base={'uid': UID}),
         DriverEntry(
             'database.dream_store.dirty_count',
             base={'uid': UID},
@@ -153,7 +152,6 @@ def entries():
                 'consumed': ([], 'settlement metadata; watermark uses the separately driven dirty_refs builder'),
                 'unavailable': ([], 'settlement metadata; watermark uses the separately driven dirty_refs builder'),
                 'release': (True, 'post-query lease policy'),
-                'park_when_idle': (False, 'chooses delete vs set of the due row; no query shape change'),
             },
             setup=finish_state,
         ),
@@ -180,8 +178,8 @@ registry_extension = SimpleNamespace(
             covered_by=('database.dream_scheduler.candidate_page',),
             reason='Discovery streams only through candidate_page (allowlist mode reads listed user documents by explicit ref instead); its chunked get_all calls read explicit document refs in bounded transactions that only initialize due rows and a cursor. SDK queue races are exercised in test_dream_queue_emulator.',
             expect_observed=False,
-            # Re-reviewed: pending-deletion owners are skipped; query shape is unchanged.
-            body_digest='e882fde2014b8f3246665cf86f29046022bc7bdf190c521351fecf872eb379b0',
+            # Idle-skip retirement removes a due-row write condition. Read coverage is unchanged.
+            body_digest='21aeade67276cccc50e12a1153e8786b2b4c886f482f1d84823f1a2335478ab3',
         ),
     },
     SKIPS={},

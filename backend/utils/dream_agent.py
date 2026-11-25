@@ -93,16 +93,6 @@ def material_tokens(material, current):
     return min(current, max(tier, min(current, LIGHT_TOKENS)))
 
 
-def _backlog_owed(uid):
-    # Required-intake backlog rides Dream passes without a dirty mark. Unknown means owed.
-    try:
-        from config import required_memory_intake
-
-        return required_memory_intake.backlog_enabled(uid)
-    except Exception:
-        return True
-
-
 _FAILURE_STAGES = {
     ('dream_seed.py', 'load'): 'seed',
     ('dream_store.py', 'acquire'): 'acquire',
@@ -1016,26 +1006,6 @@ async def run_pass(
         return report
     pass_started = asyncio.get_running_loop().time()
     arms = {} if canary else dream_levers.arms(uid)
-    backlog = _backlog_owed(uid)
-    idle_arm = arms.get('idle_skip', 'off')
-    skip_idle = idle_arm == 'serve' and trigger == 'schedule' and not canary and not dry_run and not backlog
-    if skip_idle:
-        # Before any capacity slot or seed read: an owner with nothing new is parked
-        # until mark_dirty re-enqueues it. Any error falls through to today's pass.
-        try:
-            parked = await run_blocking(db_executor, dream_store.park_if_idle, uid)
-        except Exception as error:
-            logger.warning('event=dream_lever_error lever=idle_skip exc=%s', type(error).__name__)
-            parked = False
-        if parked:
-            report = {
-                'status': 'not_admitted',
-                'reason': 'idle_no_material',
-                'trigger': trigger,
-                'levers': {'idle_skip': {'arm': idle_arm, 'skipped': True}},
-            }
-            record_pass(report)
-            return report
     mode, allowlisted = admission_for(uid)
     slot = (
         await dream_capacity.claim(
@@ -1074,7 +1044,6 @@ async def run_pass(
                     canary=canary,
                     reclaim_sink=reclaimed,
                     denial_sink=denied,
-                    skip_idle=skip_idle,
                 )
             finally:
                 if reclaimed:
@@ -1084,11 +1053,6 @@ async def run_pass(
                 report = {'status': 'not_admitted', 'reason': denied.get('reason', 'unknown')}
                 record_pass(report)
                 return report
-            if idle_arm != 'off':
-                pass_levers['idle_skip'] = {
-                    'arm': idle_arm,
-                    'would_skip': bool(lease.get('hunt')) and trigger == 'schedule' and not backlog,
-                }
             backoff_arm = arms.get('hunt_backoff', 'off')
             if backoff_arm != 'off' and lease.get('hunt'):
                 pass_levers['hunt_backoff'] = {
@@ -1113,7 +1077,7 @@ async def run_pass(
                 prescan = await asyncio.wait_for(run_blocking(db_executor, dream_prescan.scan, uid), timeout=5.0)
                 pass_levers['prescan'] = {'arm': prescan_arm, 'targets': len(prescan['refs']), **prescan['counts']}
                 # Serve only hunts: a pass admitted for dirty work keeps its targets first, and an
-                # owner parked as an empty-bucket idle pass is never woken into a model session.
+                # empty-bucket idle pass never reaches a model session.
                 served = 0
                 if prescan_arm == 'serve' and lease.get('hunt') and limits.bucket != 'empty':
                     served = dream_prescan.serve_targets(seed, prescan['refs'], limits)
@@ -1222,7 +1186,6 @@ async def run_pass(
                 reviewed=set(session.records),
                 refund=report['tokens'] == 0 and not report['usage_unknown'],
                 release=report.get('error_type') != 'TimeoutError',
-                park_when_idle=skip_idle,
             )
         if report.get('reason') == 'idle':
             report.pop('run_id', None)

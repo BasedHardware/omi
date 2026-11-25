@@ -16,9 +16,6 @@ logger = logging.getLogger(__name__)
 
 Arm = Literal['off', 'shadow', 'serve']
 
-# Skip a scheduled pass when the owner has no new material (David 2026-10-28: no slow-rotation floor).
-IDLE_SKIP_MODE_ENV = 'DREAM_IDLE_SKIP_MODE'
-IDLE_SKIP_SERVE_PERCENT_ENV = 'DREAM_IDLE_SKIP_MODE_SERVE_PERCENT'
 # Size the pass token budget by new material instead of total history.
 MATERIAL_BUDGET_MODE_ENV = 'DREAM_MATERIAL_BUDGET_MODE'
 MATERIAL_BUDGET_SERVE_PERCENT_ENV = 'DREAM_MATERIAL_BUDGET_MODE_SERVE_PERCENT'
@@ -39,25 +36,21 @@ VERIFY_HOLD_SERVE_PERCENT_ENV = 'DREAM_VERIFY_HOLD_MODE_SERVE_PERCENT'
 # Apply trivially reversible auto kinds left unverified by budget or transport, never
 # when a verifier disagreed or the evidence was oversized or answered with invalid ids.
 
-# Defaults when the mode env is unset. 10-29 shadow day: idle-skip would have cut 79% of
-# applied edits; idle skip stays off. The no-progress lever is retired. Payoff ordering
+# Defaults when the mode env is unset. Payoff ordering
 # serves (David 2026-10-30: payoff first). The verify hold serves: it only moves budget
 # from searching to verifying what was found. Every other lever measures in shadow.
 DEFAULT_MODES: dict[str, Arm] = {
-    IDLE_SKIP_MODE_ENV: 'off',
     PAYOFF_ORDER_MODE_ENV: 'serve',
     VERIFY_HOLD_MODE_ENV: 'serve',
 }
 
 PER_OWNER = (
-    IDLE_SKIP_MODE_ENV,
     MATERIAL_BUDGET_MODE_ENV,
     HUNT_BACKOFF_MODE_ENV,
     PRESCAN_MODE_ENV,
     VERIFY_HOLD_MODE_ENV,
 )
 SHORT_NAMES = {
-    IDLE_SKIP_MODE_ENV: 'idle_skip',
     MATERIAL_BUDGET_MODE_ENV: 'material_budget',
     PAYOFF_ORDER_MODE_ENV: 'payoff_order',
     HUNT_BACKOFF_MODE_ENV: 'hunt_backoff',
