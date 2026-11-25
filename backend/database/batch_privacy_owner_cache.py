@@ -10,7 +10,7 @@ from functools import lru_cache
 from math import floor, isfinite
 
 from prometheus_client import Counter
-from redis.exceptions import RedisError
+from redis import RedisError
 
 from database.redis_connection import create_bounded_redis_client
 from utils.observability.fallback import record_fallback
