@@ -15948,4 +15948,15 @@ class AppLocalizationsDe extends AppLocalizations {
   String playStripePlanPaused(String plan) {
     return 'Dein $plan-Tarif ist pausiert.';
   }
+
+  @override
+  String get firmwareNewestSupportedForDevice =>
+      'Ihr Gerät verwendet bereits die neueste unterstützte Firmware-Version';
+
+  @override
+  String get firmwareSyncRecordingsFirstTitle => 'Synchronisieren Sie zuerst Ihre Aufnahmen';
+
+  @override
+  String get firmwareSyncRecordingsFirstMessage =>
+      'Einige Aufnahmen sind noch auf Ihrem Gerät. Warten Sie, bis sie vollständig mit Ihrem Telefon synchronisiert wurden, und starten Sie dann die Aktualisierung.';
 }

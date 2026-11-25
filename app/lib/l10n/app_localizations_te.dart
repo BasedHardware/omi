@@ -15895,4 +15895,15 @@ class AppLocalizationsTe extends AppLocalizations {
   String playStripePlanPaused(String plan) {
     return 'మీ $plan ప్లాన్ పాజ్ చేయబడింది.';
   }
+
+  @override
+  String get firmwareNewestSupportedForDevice =>
+      'మీ డివైస్ ఇప్పటికే మద్దతు ఉన్న అత్యంత కొత్త ఫర్మ్‌వేర్ వెర్షన్‌లో ఉంది';
+
+  @override
+  String get firmwareSyncRecordingsFirstTitle => 'ముందుగా మీ రికార్డింగ్‌లను సమకాలీకరించండి';
+
+  @override
+  String get firmwareSyncRecordingsFirstMessage =>
+      'కొన్ని రికార్డింగ్‌లు ఇంకా మీ డివైస్‌లో ఉన్నాయి. అవి మీ ఫోన్‌కు పూర్తిగా సమకాలీకరించనివ్వండి, తర్వాత నవీకరణను ప్రారంభించండి.';
 }

@@ -88436,6 +88436,22 @@
               ],
               "title": "Device Id"
             }
+          },
+          {
+            "in": "query",
+            "name": "bootloader_sha256",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Bootloader Sha256"
+            }
           }
         ],
         "responses": {
@@ -88483,6 +88499,22 @@
             "schema": {
               "title": "Device Model",
               "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "bootloader_sha256",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Bootloader Sha256"
             }
           }
         ],
@@ -88540,6 +88572,22 @@
             "schema": {
               "title": "Version",
               "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "bootloader_sha256",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Bootloader Sha256"
             }
           }
         ],
