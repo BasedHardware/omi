@@ -78,6 +78,18 @@ def test_every_record_token_alert_metric_survives_its_producer_scrape_filters(en
     sync_relabels = sync['spec']['endpoints'][0]['metricRelabeling']
     shared = yaml.safe_load((REPO / 'backend/deploy/cloud_run_gmp_sidecar.yaml').read_text())
     shared_relabels = shared['spec']['endpoints'][0]['metricRelabeling']
+    for suffix in (
+        'reconciles_total',
+        'model_calls_total',
+        'terminal_failures_total',
+        'races_total',
+        'summary_writes_total',
+        'pending_age_seconds_bucket',
+        'pending_age_seconds_count',
+        'pending_age_seconds_sum',
+    ):
+        assert passes(f'omi_conversations_v3_{suffix}', sync_relabels), suffix
+    assert not passes('omi_conversations_v3_unregistered_total', sync_relabels)
     # Keep the entire requested lease family, including histogram samples.
     for metric in (
         'omi_record_token_late_append_total',
