@@ -27,7 +27,9 @@ class WalRetryManifests {
     if (upload.statusCode != 503 ||
         syncUploadServerWaitReasonCode(upload) != recordCapturePending ||
         handle == null ||
-        !_live(handle)) return;
+        !_live(handle)) {
+      return;
+    }
     if (_handles.length >= 64) _handles.remove(_handles.keys.first);
     _handles[key] = handle;
   }
