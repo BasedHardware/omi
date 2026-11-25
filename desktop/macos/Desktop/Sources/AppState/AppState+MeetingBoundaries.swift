@@ -218,8 +218,6 @@ extension AppState {
         callChanged: callChanged)
     else { return }
 
-    reportMeetingBoundaryEvidence(active: active, callChanged: callChanged)
-
     // Starting a meeting already opens a fresh conversation for whichever call is on.
     if active { meetingDetector?.clearPendingCallChange() }
     meetingBoundaryInProgress = true
