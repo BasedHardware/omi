@@ -35,6 +35,7 @@ on:
       - 'backend/models/product_memory.py'
       - 'backend/scripts/*_emulator_test.py'
       - 'backend/tests/integration/test_record_custody_append_emulator.py'
+      - 'backend/tests/integration/test_conversation_erasure_ledger_emulator.py'
       - 'backend/tests/unit/test_record_seal_nojob_emulator.py'
       - 'backend/testing/lifecycle_properties/**'
       - 'backend/testing/lifecycle_sim/**'
@@ -76,6 +77,7 @@ on:
       - 'backend/models/product_memory.py'
       - 'backend/scripts/*_emulator_test.py'
       - 'backend/tests/integration/test_record_custody_append_emulator.py'
+      - 'backend/tests/integration/test_conversation_erasure_ledger_emulator.py'
       - 'backend/tests/unit/test_record_seal_nojob_emulator.py'
       - 'backend/testing/lifecycle_properties/**'
       - 'backend/testing/lifecycle_sim/**'
@@ -123,6 +125,22 @@ jobs:
     name: Backend emulator proofs
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: postgres
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      OMI_TEST_POSTGRES_DSN: "host=127.0.0.1 port=5432 dbname=postgres user=postgres password=postgres"
 
     steps:
       - name: Checkout code

@@ -24,7 +24,9 @@ def ledger_purge_stores(request, plane, monkeypatch):
         primary = FirestoreStore(f'batch_pipeline_test_{uuid4().hex[:12]}', firestore_client=plane.client)
         yield (primary,)
         return
-    for name in ('OMI_TEST_POSTGRES_IAM', 'OMI_TEST_POSTGRES_DSN'):
+    # This synthetic-data proof accepts local DSNs but must never opt into a
+    # staging IAM target or a remote DSN explicitly enabled by the caller.
+    for name in ('OMI_TEST_POSTGRES_IAM', 'OMI_TEST_POSTGRES_ALLOW_REMOTE'):
         monkeypatch.delenv(name, raising=False)
     try:
         postgres = make_postgres()
@@ -70,6 +72,16 @@ def test_pl767_purge_follows_provisional_upload_identity_in_both_stores(plane, l
     upload(foreign, 'foreign-ledger', 'deleted-window')
     # Even an erroneous old row in this owner's ledger cannot authorize a foreign batch row.
     upload(owner, 'foreign-row', 'deleted-window')
+    ledger_docs = {
+        ('owner', segment): owner.collection(ledger).document(segment)
+        for segment in ('exclusive', 'shared', 'unrelated', 'foreign-row')
+    }
+    ledger_docs[('foreign', 'foreign-ledger')] = foreign.collection(ledger).document('foreign-ledger')
+    ledger_before = {key: ref.get().to_dict() for key, ref in ledger_docs.items()}
+    assert all(value is not None for value in ledger_before.values())
+
+    def assert_ledgers_untouched():
+        assert {key: ref.get().to_dict() for key, ref in ledger_docs.items()} == ledger_before
 
     def batch_rows(segment, uid=plane.uid):
         owner_fields = {'owner_id': uid, 'owner_key': privacy_owner_key(uid)}
@@ -138,6 +150,7 @@ def test_pl767_purge_follows_provisional_upload_identity_in_both_stores(plane, l
     purge('deleted-window')
     expected = {**seeded, 'exclusive': erased('exclusive')}
     assert [store.run(read) for store in stores] == [expected] * len(stores)
+    assert_ledgers_untouched()
     assert removed == {(plane.uid, f'gs://synthetic/exclusive/{kind}') for kind in ('audio', 'transcript', 'artifact')}
 
     # A formerly shared upload becomes eligible when its final sibling is deleted.
@@ -146,6 +159,7 @@ def test_pl767_purge_follows_provisional_upload_identity_in_both_stores(plane, l
     purge('live-window')
     expected.update(shared=erased('shared'), unrelated=erased('unrelated'))
     assert [store.run(read) for store in stores] == [expected] * len(stores)
+    assert_ledgers_untouched()
     assert removed == {
         (plane.uid, f'gs://synthetic/{segment}/{kind}')
         for segment in ('shared', 'unrelated')
