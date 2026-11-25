@@ -929,11 +929,18 @@ def test_live_undo_refuses_malformed_payload_or_an_edit_after_baseline(row, monk
         runs.drop_priors(uid, run_id, [ref.id], firestore_client=client)
 
 
-def test_builder_publishes_oversized_derived_row_and_replaces_it_after_rollback(row, monkeypatch):
+@pytest.mark.parametrize('elide_unchanged', [False, True])
+def test_builder_publishes_oversized_derived_row_and_replaces_it_after_rollback(row, monkeypatch, elide_unchanged):
     client, uid, ref = row
     token = leases.acquire(uid, 'builder', firestore_client=client)
     assert token
-    text = Random(2520).randbytes(470_000).hex()
+    if elide_unchanged:
+        # Use the identical promotion path with a reduced projection budget so
+        # the strict equality codec can compare both protected transcripts.
+        monkeypatch.setattr(store, 'PROJECTION_BYTES', 4096)
+        monkeypatch.setattr(payload_codec, 'PROJECTION_BYTES', 4096)
+        monkeypatch.setenv('CONVERSATIONS_V3_SKIP_UNCHANGED_WRITES', 'on')
+    text = Random(2520).randbytes(10_000 if elide_unchanged else 470_000).hex()
     candidate = {
         'id': ref.id,
         'status': 'completed',
@@ -954,6 +961,13 @@ def test_builder_publishes_oversized_derived_row_and_replaces_it_after_rollback(
 
     monkeypatch.delenv('OMI_V3_CONVERSATION_PAYLOAD_WRITES')
     previous = store.decode_row(uid, snapshot, firestore_client=client)
+    if elide_unchanged:
+        store.commit_projection(
+            uid, token, {}, {ref.id: previous}, [{**previous, **candidate}], [], firestore_client=client
+        )
+        assert ref.get().update_time == snapshot.update_time
+        assert set(ref.collection(PAYLOAD_CHUNKS).list_documents()) == original_chunks
+
     replacement = {**candidate, 'structured': {'title': 'Updated synthetic title'}}
     store.commit_projection(uid, token, {}, {ref.id: previous}, [replacement], [], firestore_client=client)
     latest = ref.get()

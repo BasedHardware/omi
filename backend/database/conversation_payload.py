@@ -133,6 +133,10 @@ def stage_conversation_payload(
     ref = snapshot.reference
     previous = snapshot.to_dict() or {}
     old_refs = _chunk_refs(ref, previous)
+    # The Home commit hook sees only inline fields. Preserve the full-write
+    # invalidation stamp when the transcript or corrections move to chunks.
+    if {'transcript_segments', 'user_corrections'} & prepared.keys():
+        prepared = {**prepared, 'home_content_invalidated': 'structured' not in prepared}
     write = pack_conversation(prepared, ref.path, spill_fields=spill_fields, generation=uuid4().hex)
     if write.chunks and not old_refs and not allow_promotion:
         raise ConversationProjectionTooLarge('conversation payload promotion is disabled')

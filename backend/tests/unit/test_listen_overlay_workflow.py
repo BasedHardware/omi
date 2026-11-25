@@ -11,10 +11,12 @@ EXPECTED = [
     'Validate Environment Input',
     'Checkout',
     EXACT_CONTROL,
+    'Validate image-only Listen admission',
     'Bind shared record token lease rollout inputs',
     'Admit checked-out production source and image identity',
     'Checkout trusted overlay evidence controls',
     'Reconstruct evidence runtime before credentials',
+    'Reconstruct image-only runtime before credentials',
     'Install Helm',
     'Google Auth (prod WIF)',
     'Google Auth',
@@ -44,7 +46,9 @@ EXPECTED = [
     'Prove private listen env is unchanged',
     'Upgrade backend-listen Helm chart',
     'Roll back backend-listen Helm release',
+    'Replace only the admitted Listen image',
     'Verify rollout',
+    'Verify admitted Listen digest on every serving pod',
     'Reconcile prod listen NEG zones on the LB backend',
     'Upgrade listen-edge Helm chart',
     'Show listen-edge pod status',
@@ -93,7 +97,10 @@ def qualify(doc):
             continue
         if step['name'] in NATIVE:
             if step['name'] == 'Resolve backend-listen image tag':
-                assert step['if'] == "${{ (github.event.inputs.mode || 'deploy') == 'deploy' }}"
+                assert (
+                    step['if']
+                    == "${{ (github.event.inputs.mode || 'deploy') == 'deploy' || inputs.mode == 'image-only' }}"
+                )
                 assert step['run'].count('BACKEND_LISTEN_SOURCE_SHA') == 1
             else:
                 assert step['if'] == "${{ env.BACKEND_LISTEN_SOURCE_SHA != '' }}"
@@ -144,12 +151,34 @@ def test_evidence_uses_control_sha_and_exact_candidate_not_deploy_for_evidence()
     assert '*' not in upload['path']
 
 
+def test_image_only_uses_index_gate_and_excludes_other_writers():
+    doc = yaml.safe_load((ROOT / '.github/workflows/gcp_backend_listen_helm.yml').read_text())
+    steps = {s['name']: s for s in doc['jobs']['helm-upgrade']['steps']}
+    assert 'inputs.mode == \'image-only\'' in steps['Replace only the admitted Listen image']['if']
+    assert list(steps).index('Verify serving Firestore indexes') < list(steps).index(
+        'Replace only the admitted Listen image'
+    )
+    for name in (
+        'Apply non-secret backend runtime config',
+        'Upgrade backend-secrets Helm chart',
+        'Upgrade backend-listen Helm chart',
+        'Roll back backend-listen Helm release',
+        'Reconcile prod listen NEG zones on the LB backend',
+        'Upgrade listen-edge Helm chart',
+    ):
+        assert "inputs.mode == 'image-only'" not in steps[name]['if']
+        assert "'deploy'" in steps[name]['if'] or "'rollback'" in steps[name]['if']
+    assert "inputs.mode == 'deploy'" in doc['jobs']['deploy-neg-coverage-exporter']['if']
+
+
 def test_native_index_gate_cannot_run_in_evidence_because_only_sha_writer_is_deploy_only():
     doc = yaml.safe_load((ROOT / '.github/workflows/gcp_backend_listen_helm.yml').read_text())
     steps = doc['jobs']['helm-upgrade']['steps']
     writers = [s for s in steps if 'echo "BACKEND_LISTEN_SOURCE_SHA=' in s.get('run', '')]
     assert len(writers) == 1
     assert writers[0]['name'] == 'Resolve backend-listen image tag'
-    assert writers[0]['if'] == "${{ (github.event.inputs.mode || 'deploy') == 'deploy' }}"
+    assert (
+        writers[0]['if'] == "${{ (github.event.inputs.mode || 'deploy') == 'deploy' || inputs.mode == 'image-only' }}"
+    )
     assert 'BACKEND_LISTEN_SOURCE_SHA' not in doc.get('env', {})
     assert 'BACKEND_LISTEN_SOURCE_SHA' not in doc['jobs']['helm-upgrade'].get('env', {})

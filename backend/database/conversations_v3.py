@@ -34,6 +34,8 @@ from database.transcript_pointer import (
 from database import conversations, conversations_v3_leases as leases
 from database.conversations_v3_finish_predecessors import attach as attach_finish_predecessors
 from database.conversations_v3_undo_removals import removal_ref
+from database import conversations_v3_write_equality as write_equality
+from database.recurring_voice_privacy import filter_processing_write
 from database.home_feed_fields import COMMIT_STAMPED_FIELDS
 from database.account_deletion_marker import account_deletion_blocks_user_work, account_deletion_document
 from database.account_deletion_policy import account_deletion_marker_blocks_access
@@ -48,9 +50,9 @@ from config.record_wal_duplicate import (
     SETTLED_FIELD,
     has_retained_custody,
 )
-from config.conversations_v3 import boundary_seconds, stretch_cohesion_enabled
+from config.conversations_v3 import boundary_seconds, skip_unchanged_writes_enabled, stretch_cohesion_enabled
 from utils.conversations import terminal_settled
-from utils.conversations.v3 import Conflict, policy, preview_wakes, request_log_trace_id
+from utils.conversations.v3 import Conflict, metrics, policy, preview_wakes, request_log_trace_id
 from utils.open_loops.extraction import OPEN_LOOP_EXTRACTIONS_COMPRESSED_FIELD, OPEN_LOOP_EXTRACTIONS_FIELD
 from utils.conversation_payload import (
     PAYLOAD_FIELD,
@@ -612,20 +614,34 @@ def mark_pending(uid, cid, *, manual_end=False, firestore_client=None):
     client = firestore_client or get_firestore_client()
     ref = user_conversations(client, uid).document(cid)
 
+    skip_unchanged = skip_unchanged_writes_enabled()
+
     @firestore.transactional
     def mark(tx):
         row = ref.get(transaction=tx).to_dict() or {}
         if not row.get('recording') or row.get('deleted'):
-            return False
+            return False, None
+        # True still owes a wake even when the durable marker is already set.
+        # A legacy marker without a timestamp is invisible to the ordered loader and sweeper.
+        if (
+            skip_unchanged
+            and row.get('v3_pending') is True
+            and isinstance(row.get('v3_pending_since'), datetime)
+            and (not manual_end or row.get('v3_manual_end') is True)
+        ):
+            return True, 'skipped'
         # The landing time (SPEECH_LANDED_FIELD) is stamped by the transaction that commits the speech,
         # not here: a reconcile can run between that commit and this re-arm.
         update = {'v3_pending': True, 'v3_pending_since': row.get('v3_pending_since') or datetime.now(timezone.utc)}
         if manual_end:
             update['v3_manual_end'] = True
         tx.update(ref, update)
-        return True
+        return True, 'written'
 
-    return mark(client.transaction())
+    should_enqueue, outcome = mark(client.transaction())
+    if outcome:
+        metrics.projection_writes('mark_pending', int(outcome == 'written'), int(outcome == 'skipped'))
+    return should_enqueue
 
 
 def promote_manual_end(uid, cid, *, firestore_client=None):
@@ -759,6 +775,8 @@ def commit_projection(
     encrypted_cache = encrypt(json.dumps(cache, default=str), uid)
     batch_reads = os.getenv('CONVERSATIONS_V3_BATCH_COMMIT_READS', 'on').strip().lower() != 'off'
     settle_enabled = terminal_settled.serving(uid)
+    skip_unchanged = skip_unchanged_writes_enabled()
+    written_rows, skipped_rows = set(), set()
     # What the current transaction attempt writes, kept by reference and sized only after a failure.
     staged = {}
 
@@ -848,13 +866,23 @@ def commit_projection(
                     removed_payloads[cid] = (children, payload_bytes + parent_bytes)
                 except ConversationProjectionTooLarge as error:
                     raise Conflict('document_too_large') from error
-        from database.recurring_voice_privacy import filter_processing_write
-
         user = client.collection('users').document(uid)
         # Filtering can mutate the encoded payload; every attempt needs its original input.
         batch_prepared = [dict(row) for row in batch_prepared]
         for row in batch_prepared:
             filter_processing_write(tx, user, row)
+        skipped_ids = set()
+        skipped_patches, written = set(), set()
+
+        def update_if_changed(ref, current, patch, *, count_row=True):
+            if skip_unchanged and write_equality.or_write(write_equality.same_patch, current, patch):
+                if count_row:
+                    skipped_patches.add(ref.id)
+                return
+            tx.update(ref, patch)
+            if count_row:
+                written.add(ref.id)
+
         extra_writes = 0
         extra_bytes = 0
         row_bytes = None
@@ -873,6 +901,10 @@ def commit_projection(
                 raise Conflict('request_too_large')
 
         def update_recording(rid, patch):
+            if skip_unchanged and write_equality.or_write(write_equality.same_patch, observed[rid], patch):
+                skipped_patches.add(rid)
+                return
+            written.add(rid)
             snapshot = snapshots[rid]
             raw = snapshot.to_dict() or {}
             if PAYLOAD_FIELD not in raw and not allow_promotion:
@@ -903,6 +935,14 @@ def commit_projection(
             # Planned settles close here. The stamp must be included in the size check.
             row = terminal_settled.stamp(observed.get(row['id']) or {}, dict(row), now=now, enabled=settle_enabled)
             cid = row['id']
+            if (
+                skip_unchanged
+                and cid in observed
+                and write_equality.or_write(write_equality.same_conversation, uid, observed[cid], row)
+            ):
+                skipped_ids.add(cid)
+                continue
+            written.add(cid)
             snapshot = snapshots[cid]
             ref = coll.document(cid)
             previous = snapshot.to_dict() or {}
@@ -936,6 +976,7 @@ def commit_projection(
                 },
             )
             tx.set(removal_ref(user, cid), {'absorbed_by_refinement': True})
+            written.add(cid)
         if final:
             for cid in remove:
                 children, payload_bytes = removed_payloads.get(cid, ((), 0))
@@ -943,16 +984,17 @@ def commit_projection(
                 for ref in children:
                     tx.delete(ref)
                 tx.delete(coll.document(cid))
-            written = {r['id'] for r in batch_rows}
+                written.add(cid)
+            planned_ids = {r['id'] for r in batch_rows}
             for cid, patch in retire.items():
-                if cid not in written:
-                    tx.update(coll.document(cid), patch)
+                if cid not in planned_ids:
+                    update_if_changed(coll.document(cid), observed.get(cid, {}), patch)
                 if cid in retired:
                     tx.set(removal_ref(user, cid), {'retired_by_repair': True})
         replaced = {r['id'] for r in batch_rows} | set(absorbed) | (set(remove) | retired if final else set())
         for rid, recording in recordings.items():
             if recording.get('deleted') or recording.get('sync_merged_into'):
-                tx.update(coll.document(rid), {'v3_pending': False, 'v3_pending_since': None})
+                update_if_changed(coll.document(rid), observed[rid], {'v3_pending': False, 'v3_pending_since': None})
                 continue
             if rid in batch_moved or rid in moved:
                 # Merge onto the re-read document; never write the stale snapshot's view of a live source.
@@ -1036,9 +1078,13 @@ def commit_projection(
                 lease_update['unlocked_ids'] = sorted(planned_unlocked)
             else:
                 lease_update['unlocked_ids'] = sorted(previous_unlocked | unlocked)
+        if skip_unchanged and write_equality.or_write(
+            write_equality.same_outline_cache, uid, lease.get('outline_cache'), encrypted_cache
+        ):
+            lease_update['outline_cache'] = lease['outline_cache']
         staged['lease'] = (lease, lease_update)
-        tx.update(held, lease_update)
-        return observed, batch_moved, batch_prepared
+        update_if_changed(held, lease, lease_update, count_row=False)
+        return observed, batch_moved, batch_prepared, skipped_ids, written, skipped_ids | skipped_patches
 
     fixed = fixed_write_bytes(recordings, rows, encrypted_cache)
     # Reserve space for all donor writes, including the task-link fences in the survivor's batch.
@@ -1066,8 +1112,10 @@ def commit_projection(
         batches.append(current)
     for index, batch in enumerate(batches):
         try:
-            observed, batch_moved, committed_prepared = run_preloaded_transaction_with_contention_retry(
-                client, commit, [r for r, _ in batch], [r for _, r in batch], index == len(batches) - 1
+            observed, batch_moved, committed_prepared, skipped_ids, written, skipped = (
+                run_preloaded_transaction_with_contention_retry(
+                    client, commit, [r for r, _ in batch], [r for _, r in batch], index == len(batches) - 1
+                )
             )
         except Conflict:
             raise
@@ -1083,7 +1131,8 @@ def commit_projection(
             )
             raise
         moved.update(batch_moved)
-        from utils.conversations.v3 import metrics
+        written_rows.update(written)
+        skipped_rows.update(skipped)
 
         for row, _encoded in batch:
             if failure_transitions[row['id']]:
@@ -1132,6 +1181,8 @@ def commit_projection(
                     **({'_v3_fence': source_fence(current)} if recordings[rid].get('_v3_fence') is not None else {}),
                 }
             for (raw, _), encoded in zip(batch, committed_prepared):
+                if raw['id'] in skipped_ids:
+                    continue  # The next batch fences this row at its original revision.
                 snapshot = coll.document(raw['id']).get()
                 if snapshot.exists:
                     current = read_projection_snapshot(snapshot, firestore_client=client)
@@ -1144,6 +1195,7 @@ def commit_projection(
                         )
                         raise Conflict('source_changed')
                     existing[raw['id']] = {**raw, '_v3_revision': snapshot.update_time}
+    metrics.projection_writes('commit_projection', len(written_rows), len(skipped_rows - written_rows))
     return moved
 
 

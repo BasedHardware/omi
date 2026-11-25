@@ -605,7 +605,7 @@ def estimate_live_partition(uid, partition, run_id, *, now=None, historical_sitd
 
     Before counts are exact. After counts come from the real planner with one window per stretch
     (each stretch outlined as a single conversation), so ``windows_after`` is the fewest windows the
-    run can make; the outline can split a stretch into more windows (each with at least 300 words, or
+    run can make; the outline can split a stretch into more windows (each with at least 150 words, or
     the manual-end window), which adopt more rows, so the run retires at most about
     ``rows_retired_est`` (eligible rows minus the windows that adopt one). Spend is priced
     like a backfill: one outline per stretch, plus notes or tasks for every window after.

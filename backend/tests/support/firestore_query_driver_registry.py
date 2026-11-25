@@ -164,7 +164,7 @@ BODY_DIGEST = {
     'utils.support.holds._held_deferred_deletes': '612a521045553ef1b02d1eb81aac37a3c63a75c598ce5e99484c007c7c87e878',
     'utils.support.retention._select_conversations': 'f36920350f4e3a557e0e474e8801ae414c21ce67203e0627f7a39ba820243d16',
     'database.conversations_v3_live._recent_window_query': '6f2c323bfa8df890362c6bdc4796182a70e4c704376bcb4944358560b12edc75',
-    'database.conversations_v3.commit_projection': 'ad9a9daa8a6ac3f73ae72b3023569906b22c7e8a98795e44d62bc432f9f0b29c',
+    'database.conversations_v3.commit_projection': 'b62e509f79f8d4350f955c27a40d94fbd5fb2b3850d570ff46be92132806855d',
     'database.batch_pipeline_conversation_purge_scans._claim': 'faa5dabcf01dc5bd377b2e14a149282aa2db93b2872cdc97a3b756157701532c',
     'database.batch_pipeline_conversation_purge_scans.run_job': '1916be25d4e9d5b8a350a665ae0fce626ccc56f68fc66107e8f4b0bb1243b00e',
     'database.batch_pipeline_store.FirestoreStore.protected_retries': 'b55d2960c94057cb8df9b9cdd2e7728b6af63728bc0a2cb6f5bd333efed443a2',
@@ -3710,7 +3710,8 @@ for entry in (
         reason='Refinement and live repair use the same bounded donor-task query and write point markers with donor redirects. '
         'The WAL custody guard uses the existing observation rows before donor-task queries or projection writes. '
         'The Home index bit is derived from the flags already present in those writes. '
-        'Backfill removal enumerates the bounded payload children before deletion.',
+        'Backfill removal enumerates the bounded payload children before deletion. '
+        'Write elision uses only the projection snapshots already read under revision fences.',
         expect_observed=False,
         body_digest=BODY_DIGEST['database.conversations_v3.commit_projection'],
     ),

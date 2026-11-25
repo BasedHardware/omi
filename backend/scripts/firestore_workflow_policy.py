@@ -244,10 +244,14 @@ _CUTOVER = re.compile(r'sync_ledger_fence_cutover\.py\s+(?:stage|activate)')
 _CUTOVER_WORKFLOW = 'sync_ledger_fence_cutover.yml'
 _LISTEN_REPLAY = re.compile(r'BACKEND_LISTEN_IMAGE_TAG|\brollback\b')
 _LISTEN_MUTATION_RUN = re.compile(
-    r'deploy-backend-config\.sh|deploy-backend-secrets\.sh|\bhelm\s+(?:[^\s]+\s+){0,4}(?:upgrade|rollback)\b'
+    r'deploy-backend-config\.sh|deploy-backend-secrets\.sh|listen_overlay_evidence\.py apply-image-only'
+    r'|\bhelm\s+(?:[^\s]+\s+){0,4}(?:upgrade|rollback)\b'
 )
 _LISTEN_SELECT_STEP = 'Resolve backend-listen image tag'
-_LISTEN_DEPLOY_IF = "${{ (github.event.inputs.mode || 'deploy') == 'deploy' }}"
+_LISTEN_DEPLOY_IF = {
+    "${{ (github.event.inputs.mode || 'deploy') == 'deploy' }}",
+    "${{ (github.event.inputs.mode || 'deploy') == 'deploy' || inputs.mode == 'image-only' }}",
+}
 _DOCKER_PUSH = re.compile(r'\b(?:docker|podman)\s+push\s+([^\s;&|]+)')
 _DOCKER_BUILD = re.compile(r'\b(?:docker|podman)\s+(?:buildx\s+)?build\b')
 _SHELL_IF = re.compile(
@@ -1002,7 +1006,7 @@ def workflow_gate_violations(
             for step in (job.get('steps') or [])
             if isinstance(step, dict)
             and step.get('name') == _LISTEN_SELECT_STEP
-            and str(step.get('if', '')).strip() == _LISTEN_DEPLOY_IF
+            and str(step.get('if', '')).strip() in _LISTEN_DEPLOY_IF
         ]
         select_run = select_runs[0] if len(select_runs) == 1 else ''
         if not (0 <= select_run.find('exit 0') < select_run.find('BACKEND_LISTEN_SOURCE_SHA')) or (
