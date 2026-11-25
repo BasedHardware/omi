@@ -14,6 +14,7 @@ from config.translation import resolve_ondemand_config, resolve_translation_prof
 from database import conversations as conversations_db
 from database import users as users_db
 from database.translation_admission import release_translation, reservation_is_current, reserve_translation
+from utils.metrics import detail_translation_gui_signal, record_detail_translation
 from utils.translation import VIEWED_REST_CAPACITY, TranslationService, TranslationStatus
 from utils.translation_cache import should_persist_translation
 from utils.translation_core.planner import TranslationMode
@@ -50,7 +51,7 @@ def _decode_cursor(uid: str, cursor: str) -> dict[str, Any]:
     if len(cursor) > 2048:
         raise ValueError('Invalid translation cursor')
     try:
-        signed = base64.urlsafe_b64decode(cursor + '=' * (-len(cursor) % 4))
+        signed = base64.b64decode(cursor + '=' * (-len(cursor) % 4), altchars=b'-_', validate=True)
         data, signature = signed[:-32], signed[-32:]
         if not hmac.compare_digest(signature, hmac.new(_cursor_secret(uid), data, hashlib.sha256).digest()):
             raise ValueError('Invalid translation cursor')
@@ -67,20 +68,18 @@ def translate_open_page(
     conversation: dict[str, Any],
     cursor: str | None = None,
     *,
+    gui_signal: bool,
     service: TranslationService | None = None,
     clock: Callable[[], float] = time.monotonic,
 ) -> tuple[dict[str, Any], str, str | None]:
     """Return the same detail shape, a status, and an optional signed cursor."""
     config = resolve_ondemand_config()
-    if not config.onopen_enabled:
-        return conversation, 'unavailable', None
+    generate = gui_signal and config.onopen_enabled
     if conversation.get('deleted') or conversation.get('is_locked'):
         return conversation, 'unavailable', None
-    target = users_db.get_user_language_preference(uid)
+    target = users_db.get_user_language_preference(uid, use_cache=generate)
     if not target or not is_translation_target(target):
         return conversation, 'unavailable', None
-    if not config.spend_configured:
-        return conversation, 'deferred', None
     conversation_id = str(conversation.get('id') or '')
     segments = conversation.get('transcript_segments')
     if not conversation_id or not isinstance(segments, list):
@@ -94,9 +93,12 @@ def translate_open_page(
     revision = _revision(segments[:scan_cap])
     materialization_revision = _materialization_revision(conversation, segments[:scan_cap])
     policy = 'viewed_v1'
+    mode = 'generate' if generate else 'stored'
+    stored_revision = str(conversation.get('updated_at') or '') if not generate else ''
+    missing = False
     start = 0
     stale_cursor = False
-    if cursor:
+    if cursor is not None:
         payload = _decode_cursor(uid, cursor)
         if (
             payload.get('id'),
@@ -104,16 +106,23 @@ def translate_open_page(
             payload.get('revision'),
             payload.get('policy'),
             payload.get('materialization_revision'),
+            payload.get('mode'),
+            payload.get('stored_revision'),
         ) == (
             conversation_id,
             target,
             revision,
             policy,
             materialization_revision,
+            mode,
+            stored_revision,
         ):
             start = min(payload['index'], len(segments))
+            missing = not generate and payload.get('missing') is True
         else:
             stale_cursor = True
+    if generate and not config.spend_configured:
+        return conversation, 'deferred', None
     deadline = min(clock() + config.deadline_seconds, scan_deadline)
     selected: list[tuple[int, dict[str, Any]]] = []
     chars = 0
@@ -122,17 +131,26 @@ def translate_open_page(
     deferred_index: int | None = None
     scan_bounded = min(len(segments), start + scan_cap)
     for index in range(start, scan_bounded):
-        if clock() >= deadline:
+        if clock() >= deadline and (generate or index > start):
             next_index = index
             break
         segment = segments[index]
         if not isinstance(segment, dict) or not isinstance(segment.get('text'), str) or not segment.get('id'):
             continue
         text = segment['text']
-        if conversations_db.translation_materialization_is_current(uid, conversation, segment, target, policy):
+        if generate:
+            if conversations_db.translation_materialization_is_current(uid, conversation, segment, target, policy):
+                continue
+        elif any(
+            isinstance(value, dict) and value.get('lang') == target and value.get('text')
+            for value in segment.get('translations') or ()
+        ):
             continue
         need = classify_translation_need(text, target, is_stable=True)
         if need == TranslationNeed.SKIP:
+            continue
+        if not generate:
+            missing = True
             continue
         if need == TranslationNeed.DEFER:
             deferred_index = index if deferred_index is None else min(deferred_index, index)
@@ -152,10 +170,8 @@ def translate_open_page(
         next_index = scan_bounded
 
     def make_cursor(index: int) -> str:
-        # Bind the cursor to exactly the transcript prefix it covers (Luna R2-2):
-        # hashing materializations over a fixed window while commits mutate that
-        # window makes every successive cursor look stale and restarts the scan
-        # from zero — an infinite loop on transcripts longer than one page chain.
+        # Generation may have changed the materializations in this response.
+        # Bind its continuation to the post-write fingerprint.
         return _encode_cursor(
             uid,
             {
@@ -163,10 +179,22 @@ def translate_open_page(
                 'target': target,
                 'revision': revision,
                 'policy': policy,
-                'materialization_revision': _materialization_revision(conversation, segments[:scan_cap]),
+                'materialization_revision': (
+                    _materialization_revision(conversation, segments[:scan_cap])
+                    if generate
+                    else materialization_revision
+                ),
+                'mode': mode,
+                'stored_revision': stored_revision,
+                'missing': missing,
                 'index': index,
             },
         )
+
+    if not generate:
+        if next_index < len(segments):
+            return conversation, 'partial', make_cursor(next_index)
+        return conversation, 'deferred' if missing else 'complete', None
 
     if not selected:
         if oversized:
@@ -184,6 +212,7 @@ def translate_open_page(
     # (Luna R2-3): total on-open worker occupancy stays within the configured
     # bound even after a long selection scan.
     remaining_deadline = max(0.5, deadline - clock())
+    record_detail_translation(event='reservation_attempted', gui_signal=gui_signal)
     reservation, reason = reserve_translation(
         uid,
         conversation_id,
@@ -206,11 +235,13 @@ def translate_open_page(
             rest_slot = VIEWED_REST_CAPACITY.acquire(blocking=False)
             if not rest_slot:
                 return conversation, 'deferred', make_cursor(selected[0][0])
+        signal_token = detail_translation_gui_signal.set(gui_signal)
         try:
             outcomes = (service or TranslationService()).translate_outcomes(
                 target, selected_text, mode=TranslationMode.whole_text, profile=profile
             )
         finally:
+            detail_translation_gui_signal.reset(signal_token)
             if rest_slot:
                 VIEWED_REST_CAPACITY.release()
         for (index, segment), outcome in zip(selected, outcomes):
@@ -240,6 +271,7 @@ def translate_open_page(
                 failed = True
                 next_index = min(next_index, index)
             else:
+                record_detail_translation(event='materialization_committed', gui_signal=gui_signal)
                 segments[index] = committed
         if len(outcomes) != len(selected):
             failed = True

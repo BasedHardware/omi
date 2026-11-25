@@ -1,6 +1,7 @@
 import os
 import re
 import threading
+from contextvars import ContextVar
 from typing import TYPE_CHECKING, Any
 
 from database.fsr_cache_telemetry import OMI_FALLBACK_TOTAL as OMI_FALLBACK_TOTAL
@@ -535,6 +536,23 @@ for _first_open_event in ('detail_returned', 'enrich_started'):
 def record_first_open_transcript(*, event: str, gui_signal: bool) -> None:
     if event in ('detail_returned', 'enrich_started'):
         FIRST_OPEN_TRANSCRIPT_TOTAL.labels(event=event, gui_signal='present' if gui_signal else 'absent').inc()
+
+
+detail_translation_gui_signal: ContextVar[bool | None] = ContextVar('detail_translation_gui_signal', default=None)
+
+
+DETAIL_TRANSLATION_TOTAL = Counter(
+    'omi_detail_translation_total',
+    'Historical detail translation activity by exact GUI detail signal.',
+    ['event', 'gui_signal'],
+)
+for _detail_event in ('detail_returned', 'reservation_attempted', 'provider_called', 'materialization_committed'):
+    for _detail_signal in ('present', 'absent'):
+        DETAIL_TRANSLATION_TOTAL.labels(event=_detail_event, gui_signal=_detail_signal)
+
+
+def record_detail_translation(*, event: str, gui_signal: bool) -> None:
+    DETAIL_TRANSLATION_TOTAL.labels(event=event, gui_signal='present' if gui_signal else 'absent').inc()
 
 
 # Conversation relevance (utils/conversations/relevance.py): one increment per

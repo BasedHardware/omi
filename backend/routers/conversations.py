@@ -124,7 +124,7 @@ from utils.conversations.meeting_receipt import record_finalized_meeting_receipt
 from utils.integration_telemetry import emit_posthog_event
 from utils.executors import db_executor, llm_executor, postprocess_executor, run_blocking, submit_with_context
 from utils.memory.memory_service import MemoryService
-from utils.metrics import record_first_open_transcript, record_lazy_desktop_deferral
+from utils.metrics import record_detail_translation, record_first_open_transcript, record_lazy_desktop_deferral
 from utils.memory.retraction_scope import retraction_can_be_skipped
 from utils.memory.canonical_memory_adapter import ConversationReplacementConflictError
 from utils import byok
@@ -1372,7 +1372,9 @@ def get_conversation_by_id(
             conversation = _enrich_deferred_conversation(uid, conversation, gui_signal=gui_signal)
     if include_translations is True:
         try:
-            conversation, translation_status, next_cursor = translate_open_page(uid, conversation, translation_cursor)
+            conversation, translation_status, next_cursor = translate_open_page(
+                uid, conversation, translation_cursor, gui_signal=gui_signal
+            )
         except ValueError as error:
             raise HTTPException(status_code=400, detail='Invalid translation cursor') from error
         except Exception as error:
@@ -1392,6 +1394,8 @@ def get_conversation_by_id(
     if preview:
         conversation['live_summary'] = preview
     result = present_generated_note_sections(historical_projection.project(transcribing_hold.project(conversation)))
+    if include_translations is True:
+        record_detail_translation(event='detail_returned', gui_signal=gui_signal)
     if was_deferred and result.get('transcript_segments'):
         record_first_open_transcript(event='detail_returned', gui_signal=gui_signal)
     return result

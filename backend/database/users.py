@@ -1824,12 +1824,13 @@ def finalize_migration(uid: str, target_level: str, *, operation_id: str | None 
 # **************************************
 
 
-def get_user_language_preference(uid: str) -> str:
+def get_user_language_preference(uid: str, *, use_cache: bool = True) -> str:
     """
     Get the user's preferred language.
 
     Args:
         uid: User ID
+        use_cache: Allow the language cache to be read and populated.
 
     Returns:
         Language code (e.g., 'en', 'vi') or empty string if not set
@@ -1837,7 +1838,7 @@ def get_user_language_preference(uid: str) -> str:
 
     def fetch_language():
         user_ref = db.collection('users').document(uid)
-        user_doc = user_ref.get(['language'])
+        user_doc = user_ref.get(field_paths=['language'])
 
         if user_doc.exists:
             user_data = user_doc.to_dict()
@@ -1855,7 +1856,7 @@ def get_user_language_preference(uid: str) -> str:
     #
     # Safety: cache is disabled by default, Redis failures fall back to Firestore,
     # and set_user_language_preference() invalidates this namespace.
-    return get_or_fetch(_USER_LANGUAGE_CACHE, uid, fetch_language)
+    return get_or_fetch(_USER_LANGUAGE_CACHE, uid, fetch_language) if use_cache else fetch_language()
 
 
 def set_user_language_preference(uid: str, language: str) -> None:

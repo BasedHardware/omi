@@ -16,6 +16,7 @@ from pydantic import BaseModel
 from config.translation import TranslationProfile, TranslationProvider
 from utils.llm.clients import get_llm, get_model
 from utils.llm.model_config import LUNA_MODEL
+from utils.metrics import detail_translation_gui_signal, record_detail_translation
 from utils.observability.fallback import record_fallback
 from utils.translation_core.metrics import TranslationMetrics, get_translation_metrics
 from utils.translation_language import (
@@ -106,9 +107,12 @@ class LunaTranslationProvider:
                 )
                 limits = {'max_tokens': profile.max_output_tokens, 'max_output_tokens': profile.max_output_tokens}
                 client = client.model_copy(update=limits) if hasattr(client, 'model_copy') else client
-                response = client.with_structured_output(LunaViewedTranslationBatch).invoke(
-                    _viewed_translation_prompt(contents, target_language, source_language)
-                )
+                runnable = client.with_structured_output(LunaViewedTranslationBatch)
+                prompt = _viewed_translation_prompt(contents, target_language, source_language)
+                gui_signal = detail_translation_gui_signal.get()
+                if gui_signal is not None:
+                    record_detail_translation(event='provider_called', gui_signal=gui_signal)
+                response = runnable.invoke(prompt)
                 if not isinstance(response, LunaViewedTranslationBatch) or [
                     item.ordinal for item in response.translations
                 ] != list(range(len(contents))):
