@@ -336,6 +336,7 @@ class CommittedWrites:
 
     def __init__(self):
         self._total = 0
+        self.incomplete = False
         self._lock = Lock()
 
     def add(self, count):
@@ -345,6 +346,8 @@ class CommittedWrites:
     @property
     def total(self):
         with self._lock:
+            if self.incomplete:
+                raise RuntimeError('Firestore write tally incomplete')
             return self._total
 
 
@@ -378,7 +381,12 @@ def _after(writes: list, response: Any, partial: bool) -> None:
         return
     count = _committed_writes.get()
     if count is not None:
-        count.add(len(writes))
+        try:
+            count.add(len(writes))
+        except Exception:
+            # The RPC succeeded. Leave its result and the global counters alone;
+            # the guarded per-reconcile observer must not publish a partial total.
+            count.incomplete = True
     caller = write_caller() if bulk_write_attribution.get() is None else _OTHER
     _record(writes, caller)
     if not partial:
