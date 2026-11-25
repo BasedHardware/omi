@@ -449,6 +449,27 @@ void main() {
       expect(harness.drainedWalIds, ['wal-1']);
     });
 
+    test('a due mobile batch can wake the background drain while a pass is finishing', () async {
+      final finishing = Completer<void>();
+      final finishEntered = Completer<void>();
+      final harness = _TransferHarness(onTransferFinished: () async {
+        if (!finishEntered.isCompleted) finishEntered.complete();
+        await finishing.future;
+      });
+      addTearDown(harness.dispose);
+      harness.coordinator.setForeground(false);
+      final current = harness.coordinator.wake(WakeTrigger.socketReconnected);
+      await finishEntered.future;
+      harness.backlog.add('due-mobile-batch');
+      unawaited(harness.coordinator.wake(WakeTrigger.mobileBatchReady));
+      finishing.complete();
+      await current;
+      await harness.coordinator.waitUntilIdle();
+      expect(harness.discoveryPasses, 1);
+      expect(harness.drainPasses, 1);
+      expect(harness.drainedWalIds, ['wal-1', 'due-mobile-batch']);
+    });
+
     test('startup resumes a pending backlog once without loss or duplication', () async {
       final sharedBacklog = <String>['pending-wal'];
       final drainedWalIds = <String>[];

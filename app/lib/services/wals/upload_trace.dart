@@ -28,7 +28,7 @@ class UploadTrace {
   String? _lastGate;
   DateTime? _lastGateAt;
   final Map<String, ({int first, int attempts})> _attempts = {};
-  final Map<String, String> _pending = {};
+  final Map<String, ({String trace, String? holdState})> _pending = {};
 
   /// An upload pass was held back for [gate]. Unknown labels become `other`.
   void noteGate(String gate) {
@@ -38,7 +38,12 @@ class UploadTrace {
 
   /// Builds the header for an upload whose oldest file is [oldestId], sealed
   /// at [sealedAtSeconds], and parks it under [firstFilePath] for the uploader.
-  void prepare({required String firstFilePath, required String oldestId, required int sealedAtSeconds}) {
+  void prepare({
+    required String firstFilePath,
+    required String oldestId,
+    required int sealedAtSeconds,
+    String? holdState,
+  }) {
     if (sealedAtSeconds <= 0) return;
     final nowSeconds = _now().millisecondsSinceEpoch ~/ 1000;
     final seen = _attempts[oldestId];
@@ -50,11 +55,14 @@ class UploadTrace {
     final held = gateAt != null && gateAt.millisecondsSinceEpoch ~/ 1000 >= sealedAtSeconds;
     final gate = held ? (_lastGate ?? 'none') : 'none';
     if (_pending.length >= _maxTracked) _pending.remove(_pending.keys.first);
-    _pending[firstFilePath] = 'sealed=$sealedAtSeconds;first=${entry.first};gate=$gate;attempts=${entry.attempts}';
+    _pending[firstFilePath] = (
+      trace: 'sealed=$sealedAtSeconds;first=${entry.first};gate=$gate;attempts=${entry.attempts}',
+      holdState: holdState,
+    );
   }
 
   /// The header parked for the upload that starts with [firstFilePath], once.
-  String? take(String firstFilePath) => _pending.remove(firstFilePath);
+  ({String trace, String? holdState})? take(String firstFilePath) => _pending.remove(firstFilePath);
 
   /// The server accepted the upload whose oldest file is [oldestId].
   void accepted(String oldestId) => _attempts.remove(oldestId);

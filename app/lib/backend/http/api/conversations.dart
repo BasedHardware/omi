@@ -1240,7 +1240,8 @@ Future<UploadFilesResult> uploadLocalFilesV2(
         if (captureManifest != null) 'X-Omi-Sync-Capture-Manifest': captureManifest,
         if (captureEvidence != null) 'X-Omi-Capture-Evidence': captureEvidence,
         if (geolocation != null) 'X-Omi-Conversation-Geolocation': jsonEncode(geolocation.toJson()),
-        if (uploadTrace != null) 'X-Omi-Upload-Trace': uploadTrace,
+        if (uploadTrace != null) 'X-Omi-Upload-Trace': uploadTrace.trace,
+        if (uploadTrace?.holdState case final state?) 'X-Omi-Upload-Hold': state,
       },
       onUploadProgress: onUploadProgress,
     );

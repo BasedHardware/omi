@@ -2,6 +2,14 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:omi/services/wals/upload_trace.dart';
 
 void main() {
+  test('takes the bounded hold label with the matching request trace', () {
+    final trace = UploadTrace(now: () => DateTime.fromMillisecondsSinceEpoch(2000000));
+    trace.prepare(firstFilePath: '/a.bin', oldestId: 'a', sealedAtSeconds: 1990, holdState: 'bg300');
+    expect(trace.take('/b.bin'), isNull);
+    expect(trace.take('/a.bin')?.holdState, 'bg300');
+    expect(trace.take('/a.bin'), isNull);
+  });
+
   late DateTime clock;
   late UploadTrace trace;
 
@@ -14,7 +22,7 @@ void main() {
 
   test('a first attempt with no gate reports none and one attempt', () {
     trace.prepare(firstFilePath: '/a.bin', oldestId: 'w1', sealedAtSeconds: 1990);
-    expect(trace.take('/a.bin'), 'sealed=1990;first=2000;gate=none;attempts=1');
+    expect(trace.take('/a.bin')?.trace, 'sealed=1990;first=2000;gate=none;attempts=1');
     expect(trace.take('/a.bin'), isNull, reason: 'taken once');
   });
 
@@ -25,7 +33,7 @@ void main() {
     trace.noteGate('rate_limited');
     clock = at(4000);
     trace.prepare(firstFilePath: '/a.bin', oldestId: 'w1', sealedAtSeconds: 1990);
-    expect(trace.take('/a.bin'), 'sealed=1990;first=2000;gate=rate_limited;attempts=2');
+    expect(trace.take('/a.bin')?.trace, 'sealed=1990;first=2000;gate=rate_limited;attempts=2');
   });
 
   test('a gate from before the file was sealed did not hold it', () {
@@ -33,14 +41,14 @@ void main() {
     trace.noteGate('background');
     clock = at(2000);
     trace.prepare(firstFilePath: '/a.bin', oldestId: 'w1', sealedAtSeconds: 1990);
-    expect(trace.take('/a.bin'), contains('gate=none'));
+    expect(trace.take('/a.bin')?.trace, contains('gate=none'));
   });
 
   test('unknown labels are folded into other; a missing seal time sends nothing', () {
     clock = at(2100);
     trace.noteGate('something new');
     trace.prepare(firstFilePath: '/a.bin', oldestId: 'w1', sealedAtSeconds: 1990);
-    expect(trace.take('/a.bin'), contains('gate=other'));
+    expect(trace.take('/a.bin')?.trace, contains('gate=other'));
     trace.prepare(firstFilePath: '/b.bin', oldestId: 'w2', sealedAtSeconds: 0);
     expect(trace.take('/b.bin'), isNull);
   });
@@ -51,7 +59,7 @@ void main() {
     trace.accepted('w1');
     clock = at(3000);
     trace.prepare(firstFilePath: '/a.bin', oldestId: 'w1', sealedAtSeconds: 1990);
-    expect(trace.take('/a.bin'), 'sealed=1990;first=3000;gate=none;attempts=1');
+    expect(trace.take('/a.bin')?.trace, 'sealed=1990;first=3000;gate=none;attempts=1');
   });
 
   test('memory stays bounded', () {

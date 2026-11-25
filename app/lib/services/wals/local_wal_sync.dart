@@ -55,6 +55,7 @@ import 'package:omi/utils/analytics/analytics_manager.dart';
 import 'package:omi/services/experiments/wal_delta_index_gate.dart';
 import 'package:omi/services/wals/pendant_ring_custody.dart';
 import 'package:omi/services/wals/batch_ring_proof.dart';
+import 'package:omi/services/wals/mobile_batch_upload_hold.dart';
 import 'package:omi/services/wals/wal.dart';
 import 'package:omi/services/wals/deleted_account_uids.dart';
 import 'package:omi/services/wals/wal_interfaces.dart';
@@ -90,6 +91,8 @@ part 'wal_orphan_reclaim.dart';
 part 'conversation_wal_snapshot.dart';
 
 class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
+  MobileBatchUploadHold? mobileBatchUploadHold;
+
   /// A cheap view invalidation signal: unrelated live/device sync changes do
   /// not make Home walk the complete WAL index and stat its manual files.
   final ValueNotifier<int> heldRevision = ValueNotifier(0);
@@ -335,6 +338,7 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
 
   @override
   void clearUserData() {
+    mobileBatchUploadHold?.clear();
     _backlogTelemetry.clearUserData();
     _orphanFrameCache = const OrphanAudioFrameCache.empty();
     _sessionGeneration++;
@@ -2443,10 +2447,13 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
     if (!_isCurrent(generation) || passCancelled()) return null;
     _accumulatedResponse = null;
 
+    final batchHold = mobileBatchUploadHold;
+    batchHold?.tick();
     final initialNowSeconds = _now().millisecondsSinceEpoch ~/ 1000;
     var wals = _wals
         .where((wal) =>
             isAutoUploadEligible(wal, nowSeconds: initialNowSeconds) &&
+            !(batchHold?.isHeld(wal) ?? false) &&
             !_isDiscardedRecording(wal) &&
             (!liveCaptureOnly || isLiveCaptureWal(wal, initialNowSeconds)))
         .toList();
@@ -2511,6 +2518,7 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
       final eligible = _wals
           .where((wal) =>
               isAutoUploadEligible(wal, nowSeconds: batchNowSeconds) &&
+              !(batchHold?.isHeld(wal) ?? false) &&
               !_isDiscardedRecording(wal) &&
               !attemptedWalIds.contains(walAttemptKey(wal)) &&
               !_isRecordingWaiting(wal) &&
@@ -2532,7 +2540,7 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
       // confirmation the deadline may not survive (#14688).
       final waiting = turnPending.where((wal) => !deferredGroups.contains(groupKeys[wal])).toList();
       final candidates = waiting.isNotEmpty ? waiting : turnPending;
-      var batch = nextSyncUploadBatch(candidates, batchNowSeconds);
+      var batch = nextSyncUploadBatch(candidates, batchNowSeconds, holdLabel: batchHold?.label);
       if (batch.isEmpty) break;
       if (batch
           .any((wal) => wal.status == WalStatus.uploadRejected || isolateAfterRefusal.contains(walAttemptKey(wal)))) {
@@ -2560,7 +2568,13 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
       if (batch.first.status == WalStatus.uploadRejected) refusalRetries++;
       attemptedWalIds.addAll(batch.map(walAttemptKey));
       final batchConversationId = batch.first.conversationId;
-      final claimLiveCapture = !unclaimableConversationIds.contains(batchConversationId) &&
+      // A held sibling is absent from candidates but its bytes still belong
+      // to this conversation. Do not claim an immutable partial manifest.
+      final hasHeldSibling = batchConversationId != null &&
+          batchHold != null &&
+          _wals.any((wal) => wal.conversationId == batchConversationId && batchHold.isHeld(wal));
+      final claimLiveCapture = !hasHeldSibling &&
+          !unclaimableConversationIds.contains(batchConversationId) &&
           canClaimLiveCapture(
             batch,
             candidates.where((wal) => wal.conversationId == batchConversationId).toList(),
@@ -2680,7 +2694,11 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
         clockRecoveryAttempted = walCaptureTimeClass(batchWals.first, batchNowSeconds) == WalCaptureTimeClass.unknown;
         final oldest = batchWals.reduce((a, b) => a.timerStart <= b.timerStart ? a : b);
         UploadTrace.instance.prepare(
-            firstFilePath: files.first.path, oldestId: oldest.id, sealedAtSeconds: oldest.timerStart + oldest.seconds);
+          firstFilePath: files.first.path,
+          oldestId: oldest.id,
+          sealedAtSeconds: oldest.timerStart + oldest.seconds,
+          holdState: isMobileStandardBatchWal(oldest) ? batchHold?.label(oldest) ?? 'none' : null,
+        );
         final result = await _uploadGate.upload(
           files,
           conversationId: batchWals.first.conversationId,
@@ -3015,9 +3033,11 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
       );
       final audioBounds = syncUploadAudioBounds([walToSync]);
       UploadTrace.instance.prepare(
-          firstFilePath: walFile.path,
-          oldestId: walToSync.id,
-          sealedAtSeconds: walToSync.timerStart + walToSync.seconds);
+        firstFilePath: walFile.path,
+        oldestId: walToSync.id,
+        sealedAtSeconds: walToSync.timerStart + walToSync.seconds,
+        holdState: isMobileStandardBatchWal(walToSync) ? mobileBatchUploadHold?.label(walToSync) ?? 'none' : null,
+      );
       final result = await _uploadGate.upload(
         [walFile],
         conversationId: walToSync.conversationId,
@@ -3032,6 +3052,7 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
       );
       // The server took it: a later retry of this file starts a fresh trace.
       UploadTrace.instance.accepted(walToSync.id);
+      mobileBatchUploadHold?.forget(walToSync);
 
       _observeNativeUpload([walToSync]);
       if (result.completed != null) {
