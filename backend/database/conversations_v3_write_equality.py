@@ -2,6 +2,7 @@
 
 import json
 import zlib
+from collections.abc import Callable
 from threading import Lock
 from typing import Any
 from uuid import UUID
@@ -45,6 +46,14 @@ def _write_on_uncertainty() -> bool:
         _fallback_reported = True
     record_fallback(component='other', from_mode='elide_write', to_mode='write', reason='other', outcome='degraded')
     return False
+
+
+def or_write(compare: Callable[..., bool], *args: Any) -> bool:
+    """Run an optional comparison before staging a write."""
+    try:
+        return compare(*args)
+    except Exception:
+        return _write_on_uncertainty()
 
 
 def same_value(left: Any, right: Any) -> bool:
@@ -105,7 +114,7 @@ def _decode_comparable_transcript(uid: str, value: bytes | str) -> list:
     # Public chat applies the strict inline limits. Compare the full codec output
     # because its public safe-field projection omits data kept by other readers.
     conversations._decode_public_transcript_segments_bounded(  # pyright: ignore[reportPrivateUsage]
-        uid, value, compressed=True
+        uid, value, compressed=True, retain_anchors=True
     )
     return _grouping_payloads(
         uid, conversations.decode_transcript_segments_blob(uid, value, True, require_decryption=True)

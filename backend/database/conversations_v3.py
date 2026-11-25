@@ -811,7 +811,7 @@ def commit_projection(
 
         def update_if_changed(ref, current, patch):
             nonlocal skipped_patches, written
-            if skip_unchanged and write_equality.same_patch(current, patch):
+            if skip_unchanged and write_equality.or_write(write_equality.same_patch, current, patch):
                 skipped_patches += 1
                 return
             tx.update(ref, patch)
@@ -826,7 +826,11 @@ def commit_projection(
             # Planned settles (failure patch, unavailable preview) close here; the planner row keeps any prior stamp.
             row = terminal_settled.stamp(observed.get(row['id']) or {}, dict(row), now=now, enabled=settle_enabled)
             cid = row['id']
-            if skip_unchanged and cid in observed and write_equality.same_conversation(uid, observed[cid], row):
+            if (
+                skip_unchanged
+                and cid in observed
+                and write_equality.or_write(write_equality.same_conversation, uid, observed[cid], row)
+            ):
                 skipped_ids.add(cid)
                 continue
             tx.set(coll.document(cid), row)
@@ -946,7 +950,9 @@ def commit_projection(
                 lease_update['unlocked_ids'] = sorted(planned_unlocked)
             else:
                 lease_update['unlocked_ids'] = sorted(previous_unlocked | unlocked)
-        if skip_unchanged and write_equality.same_outline_cache(uid, lease.get('outline_cache'), encrypted_cache):
+        if skip_unchanged and write_equality.or_write(
+            write_equality.same_outline_cache, uid, lease.get('outline_cache'), encrypted_cache
+        ):
             lease_update['outline_cache'] = lease['outline_cache']
         staged['lease'] = (lease, lease_update)
         update_if_changed(held, lease, lease_update)

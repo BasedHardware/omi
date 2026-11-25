@@ -417,6 +417,7 @@ def test_noop_stages_no_conversation_writes_and_reads_the_same_documents(owner, 
 
 @pytest.mark.parametrize('fault', ['padded-sidecar', 'trailing-bytes', 'utf16'])
 def test_projection_rewrites_a_transcript_rejected_by_a_serving_reader(owner, confirmed_paths, fault):
+    """UTF-16 is rejected by the full verified decoder even without the public gate."""
     _, user = owner
     rows = projection_rows(1)
     if fault == 'padded-sidecar':
@@ -428,7 +429,8 @@ def test_projection_rewrites_a_transcript_rejected_by_a_serving_reader(owner, co
         }
     projection_pass(owner, rows, [])
     card = user.collection('conversations').document('card-0')
-    original = card.get().to_dict()['transcript_segments']
+    current = card.get().to_dict()
+    original = current['transcript_segments']
     content = zlib.decompress(bytes.fromhex(decrypt(original, user.id)))
     segments = json.loads(content)
 
@@ -444,7 +446,9 @@ def test_projection_rewrites_a_transcript_rejected_by_a_serving_reader(owner, co
         invalid = bytes.fromhex(decrypt(original, user.id)) + b'trailing'
     else:
         invalid = zlib.compress(content.decode('utf-8').encode('utf-16'))
-    card.update({'transcript_segments': encrypt(invalid.hex(), user.id)})
+    # Keep structured in the update so the Home hook does not independently
+    # force a write by setting home_content_invalidated on this fixture.
+    card.update({'transcript_segments': encrypt(invalid.hex(), user.id), 'structured': current['structured']})
     confirmed_paths.clear()
 
     projection_pass(owner, rows, [])
@@ -458,3 +462,45 @@ def test_projection_rewrites_a_transcript_rejected_by_a_serving_reader(owner, co
         assert decoded[0]['provider_speaker']['id'] == 2
     else:
         assert zlib.decompress(bytes.fromhex(decrypt(repaired, user.id))) == content
+
+
+def test_projection_writes_when_inline_anchor_is_rejected(owner, confirmed_paths):
+    _, user = owner
+    rows = projection_rows(1)
+    rows[0]['transcript_segments'][0]['id'] = 'x' * 257
+    projection_pass(owner, rows, [])
+    card = user.collection('conversations').document('card-0')
+    original = card.get().to_dict()['transcript_segments']
+    assert conversations._decode_public_transcript_segments_bounded(user.id, original, compressed=True)
+    with pytest.raises(ValueError, match='invalid bounded public transcript'):
+        conversations._decode_public_transcript_segments_bounded(
+            user.id, original, compressed=True, retain_anchors=True
+        )
+    confirmed_paths.clear()
+
+    projection_pass(owner, rows, [])
+
+    assert 'conversations/card-0' in confirmed_paths
+
+
+@pytest.mark.parametrize(
+    ('comparison', 'path'),
+    [
+        ('same_conversation', 'conversations/card-0'),
+        ('same_patch', 'conversations/live'),
+        ('same_outline_cache', 'conversation_v3_leases/builder'),
+    ],
+)
+def test_projection_writes_when_comparison_raises(owner, confirmed_paths, comparison, path):
+    _, user = owner
+    user.collection('conversations').document('live').set({'id': 'live', 'recording': True, 'status': 'completed'})
+    rows = projection_rows(1)
+    projection_pass(owner, rows, [], ('live',))
+    confirmed_paths.clear()
+    baseline = metrics.EQUALITY_UNAVAILABLE._value.get()
+
+    with patch.object(store.write_equality, comparison, side_effect=RuntimeError('unexpected comparator failure')):
+        projection_pass(owner, rows, [], ('live',))
+
+    assert confirmed_paths.count(path) == (4 if comparison == 'same_outline_cache' else 1)
+    assert metrics.EQUALITY_UNAVAILABLE._value.get() > baseline
