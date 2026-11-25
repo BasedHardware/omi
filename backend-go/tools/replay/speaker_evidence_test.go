@@ -131,7 +131,7 @@ func TestSpeakerClockRequiresRunAndWriteWitness(t *testing.T) {
 				mutate(g)
 			}
 			diffs := []difference{{Kind: "different_value", Path: clockPath}, {Kind: "different_value", Path: strings.Replace(clockPath, "current", "first", 1)}, {Kind: "different_value", Path: "/other/elapsed_seconds"}, {Kind: "missing_in_go", Path: clockPath}}
-			reviewSpeakerDifferences(&diffs, py, g)
+			reviewSpeakerDifferences(&diffs, py, g, false)
 			for i, d := range diffs {
 				want := mutate == nil && i < 2
 				if (d.Reason == "replay_clock") != want {
@@ -186,7 +186,7 @@ func TestSpeakerCiphertextRequiresEqualAuthenticatedBuilderBytes(t *testing.T) {
 			}
 			path := "/derived_documents/" + strings.ReplaceAll(speakerDoc, "/", "~1") + "/payload"
 			diffs := []difference{{Kind: "different_value", Path: path}, {Kind: "different_value", Path: path + "2"}, {Kind: "missing_in_go", Path: path}}
-			reviewSpeakerDifferences(&diffs, py, g)
+			reviewSpeakerDifferences(&diffs, py, g, false)
 			for i, d := range diffs {
 				want := mutate == nil && i == 0
 				if i == 0 && mutate != nil && d.FailureReason != "speaker_envelope_unverified" {
@@ -204,7 +204,7 @@ func TestSpeakerClockAcceptsOnlyStoredRounding(t *testing.T) {
 	py, g := captureRun(t, "0.4", 1), captureRun(t, "0.2", 2)
 	g.SpeakerTrace.ClockSeconds = []json.Number{"10", "10.200499"}
 	diff := []difference{{Kind: "different_value", Path: clockPath}}
-	reviewSpeakerDifferences(&diff, py, g)
+	reviewSpeakerDifferences(&diff, py, g, false)
 	if diff[0].Reason != "replay_clock" {
 		t.Fatalf("valid rounded duration refused: %+v", diff[0])
 	}

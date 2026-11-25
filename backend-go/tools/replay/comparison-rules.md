@@ -129,8 +129,10 @@ pointer is the exception: the Go status route exposes it as `job_id`, so its row
 The value-free report emits no stored row values.
 
 The paired account-erasure fixture captures the resolver and batch-privacy
-witnesses before the wipe. The oracle checks finalization against those
-witnesses and compares the post-erase documents and effects separately.
+witnesses on both sides before the wipe. A proved Go departure can explain a
+missing resolver result when the snapshot and trace contain no result.
+Any resolver or stored speaker evidence captured before erasure must pass its
+own checks. The oracle compares the post-erase documents and effects separately.
 
 ## Go gap and Python bug
 

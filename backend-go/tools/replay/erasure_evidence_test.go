@@ -64,6 +64,29 @@ func TestPairedErasureValidatesFinalizationBeforeTheWipe(t *testing.T) {
 	}
 }
 
+func TestPairedErasureRejectsUnverifiedGoSpeakerResults(t *testing.T) {
+	t.Run("resolver without trace", func(t *testing.T) {
+		py, goRun, _ := pairedErasureRuns(t)
+		doc := mustMap(goRun.BeforeErasure.Document)
+		doc["private_cloud_sync_enabled"] = false
+		doc["speaker_resolution"] = map[string]any{"status": "capture"}
+		doc["owner_recognition_diagnostics"] = mustMap(py.BeforeErasure.Document)["owner_recognition_diagnostics"]
+		diffs := compareObservations(py, goRun)
+		if !hasKindPath(diffs, "invalid_binding", "/go"+clockPath) {
+			t.Fatalf("proved erasure excused a pre-wipe Go result without a trace: %+v", diffs)
+		}
+	})
+	t.Run("invalid stored envelope", func(t *testing.T) {
+		py, goRun, _ := pairedErasureRuns(t)
+		doc := "users/" + goRun.OwnerID + "/conversations/" + goRun.ConversationID + "/speaker_evidence/current"
+		goRun.BeforeErasure.Derived[doc] = map[string]any{"version": json.Number("1"), "payload": "invalid"}
+		diffs := compareObservations(py, goRun)
+		if !hasKindPath(diffs, "invalid_binding", "/go/derived_documents/"+escapePointer(doc)+"/payload") {
+			t.Fatalf("proved erasure excused a pre-wipe invalid Go speaker envelope: %+v", diffs)
+		}
+	})
+}
+
 func TestPairedErasureStillRejectsBadFinalizationWitnesses(t *testing.T) {
 	tests := []struct {
 		name   string

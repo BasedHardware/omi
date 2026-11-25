@@ -97,22 +97,28 @@ func observedSpeakerPayload(run *observation, path string) []byte {
 
 // Approved for the synthetic capture-only corpus. A trace is emitted by the
 // actual resolver and evidence builder independently of the stored result.
-func reviewSpeakerDifferences(diffs *[]difference, py, goRun *observation) {
+func reviewSpeakerDifferences(diffs *[]difference, py, goRun *observation, goDeparted bool) {
 	if py.ConversationID == "" || strings.ContainsAny(py.ConversationID, "/~") || py.OwnerID != "replay-"+py.ConversationID || goRun.OwnerID != py.OwnerID || goRun.ConversationID != py.ConversationID {
 		return
 	}
 	pyDiag, goDiag := measuredResolver(py), measuredResolver(goRun)
 	doc := "users/" + py.OwnerID + "/conversations/" + py.ConversationID + "/speaker_evidence/current"
 	docPath := "/derived_documents/" + escapePointer(doc)
-	if expectsResolverWitness(py) || expectsResolverWitness(goRun) {
-		validateResolverWitness(diffs, "/python", pyDiag)
-		if !provedJobdResolverDeparture(goRun) {
-			validateResolverWitness(diffs, "/go", goDiag)
-		}
-	}
-	var pyPayload, goPayload []byte
 	_, pyStored := py.Derived[doc]
 	_, goStored := goRun.Derived[doc]
+	resolverExpected := expectsResolverWitness(py) || expectsResolverWitness(goRun)
+	if resolverExpected {
+		validateResolverWitness(diffs, "/python", pyDiag)
+	}
+	// The departure proves row absence after the lifecycle event. A captured
+	// Go resolver result still needs validation against its own trace.
+	goHasResolver := documentField(goRun, "owner_recognition_diagnostics") != nil ||
+		documentField(goRun, "speaker_resolution") != nil ||
+		(goRun.SpeakerTrace != nil && (len(goRun.SpeakerTrace.Exits) != 0 || len(goRun.SpeakerTrace.ClockSeconds) != 0))
+	if (resolverExpected && !goDeparted) || (goDeparted && goHasResolver) {
+		validateResolverWitness(diffs, "/go", goDiag)
+	}
+	var pyPayload, goPayload []byte
 	// Unsampled shadow processing can build evidence without persisting it.
 	if pyStored || goStored {
 		pyPayload, goPayload = observedSpeakerPayload(py, doc), observedSpeakerPayload(goRun, doc)
@@ -140,10 +146,9 @@ func reviewSpeakerDifferences(diffs *[]difference, py, goRun *observation) {
 
 const resolverPath = "/conversation/owner_recognition_diagnostics"
 
-// The jobd fence and erase fixtures can end with a proved absent row. There is
-// then no Go resolver result to authenticate. The whole-row difference remains.
-func provedJobdResolverDeparture(run *observation) bool {
-	if run.Document != nil || (run.SpeakerTrace != nil && len(run.SpeakerTrace.Exits) != 0) {
+// Use the post-event observation to prove an absent conversation.
+func provedJobdDeparture(run *observation) bool {
+	if run.Document != nil {
 		return false
 	}
 	job := run.GoEvidence["job"]
