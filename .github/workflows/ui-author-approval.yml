@@ -61,7 +61,6 @@ jobs:
           script: |
             await require('./.github/scripts/ui-author-approval.cjs')({
               github, context, headSha: process.env.HEAD_SHA,
-              skipEmpty: context.eventName === 'pull_request_target',
             });
         env:
           HEAD_SHA: ${{ matrix.sha }}

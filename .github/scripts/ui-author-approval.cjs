@@ -133,7 +133,7 @@ async function unchangedUI(github, repo, approvedSha, headSha) {
   }
 }
 
-async function evaluateHead({github, context, headSha, skipEmpty = false}) {
+async function evaluateHead({github, context, headSha}) {
   const repo = context.repo;
   const pull_number = context.payload.pull_request?.number || context.payload.issue.number;
   const trigger = (await github.rest.pulls.get({...repo,pull_number})).data;
@@ -152,10 +152,10 @@ async function evaluateHead({github, context, headSha, skipEmpty = false}) {
       return mainTargets.length ? mainTargets : sameHead;
     };
     const candidates = await sameHeadCandidates();
-    // Lifecycle events can refer to heads that no open PR uses anymore.
-    if (skipEmpty && candidates.length === 0) return;
+    // Events can refer to historical heads that no open PR uses anymore.
+    if (candidates.length === 0) return;
     await status('pending','Checking account-scoped UI approval');
-    const stack = candidates.length > 0 && candidates[0].base.ref !== 'main';
+    const stack = candidates[0].base.ref !== 'main';
     const readMain = async () => {
       const {data} = await github.rest.git.getRef({...repo,ref:'heads/main'});
       if (!/^[a-f0-9]{40}$/.test(data.object?.sha || '')) throw new Error('Invalid main snapshot');
@@ -165,7 +165,7 @@ async function evaluateHead({github, context, headSha, skipEmpty = false}) {
     // All stacks use the same immutable main comparison so inherited UI
     // changes and authors count. Approval comments remain scoped to each PR.
     const stackEvidence = stack ? await evidence(github,repo,{base:{sha:main},head:{sha}}) : null;
-    let allowed = candidates.length > 0;
+    let allowed = true;
     for (const summary of candidates) {
       const pr = (await github.rest.pulls.get({...repo,pull_number:summary.number})).data;
       if (pr.state !== 'open' || pr.head.sha !== sha || pr.base.ref !== summary.base.ref

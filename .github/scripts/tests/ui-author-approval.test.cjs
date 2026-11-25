@@ -56,7 +56,8 @@ function fixture() {
       comments[issue_number].push({id:10,user:{type:'Bot'},body});
     }},repos:{createCommitStatus:async s => statuses.push(s),compareCommitsWithBasehead:async args => {
       calls.push(args);return {data:{files:ui,commits:[{sha:'d'.repeat(40)}],total_commits:1}};
-    }}},paginate:async (method,args) => method === 'prs' ? prs.map(p => ({...p})) : comments[args.issue_number],
+    }}},paginate:async (method,args) => method === 'prs'
+      ? prs.filter(p => p.state === args.state).map(p => ({...p})) : comments[args.issue_number],
     graphql:async (query,args) => ({repository:{object:{oid:args.oid,authors:{totalCount:0,nodes:[]}}}})};
   const context = {repo:{owner:'test',repo:'test'},payload:{pull_request:{number:1}}};
   return {p,prs,comments,statuses,calls,github,context};
@@ -180,16 +181,26 @@ test('actual desktop view locations are gated, services stay out', () => {
   }
 });
 
-test('resolved SHA mismatch cannot evaluate another concurrency group', async () => {
-  const f = fixture(); await run({...f,headSha:'e'.repeat(40)});
-  assert.ok(f.statuses.every(s => s.sha === 'e'.repeat(40)));
-  assert.equal(f.statuses.at(-1).state,'failure');
-});
-test('lifecycle reconciliation leaves the status of an unused head alone', async () => {
+test('an unused locked SHA leaves its status and the current head alone', async () => {
   const f = stackFixture();
-  await run({...f,headSha:'e'.repeat(40),skipEmpty:true});
+  await run({...f,headSha:'e'.repeat(40)});
   assert.equal(f.statuses.length,0);
   assert.equal(f.calls.length,0);
+});
+test('a comment on a closed PR preserves its historical status', async () => {
+  const f = stackFixture();
+  f.p.state = 'closed';
+  await run(f);
+  assert.deepEqual(f.statuses,[]);
+  assert.deepEqual(f.calls,[]);
+
+  // A closed trigger can still share the head with an open stack.
+  f.prs.push({...f.p,number:2,state:'open'});
+  f.comments[2] = [approve];
+  await run(f);
+  assert.deepEqual(f.statuses.map(s => [s.sha,s.state]),[
+    [f.headSha,'pending'], [f.headSha,'success'],
+  ]);
 });
 test('arbitrarily named SwiftUI file is gated by immutable contents', async () => {
   const f = fixture();
