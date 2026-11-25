@@ -21,7 +21,7 @@ from utils import stt_cap_dispatch
 # Imported at module load: record admission is a heavy import, and one made inside a test is
 # charged to that test's CPU budget.
 from utils.batch_pipeline import live
-from utils.conversations.v3 import fast_finish, triggers
+from utils.conversations.v3 import fast_finish, metrics as v3_metrics, triggers
 from utils.observability.stt_cap_dispatch import DispatchPath
 from utils.stt import pre_recorded
 
@@ -887,8 +887,6 @@ def _skipped(reason):
 
 
 def _manual_end(reason):
-    from utils.conversations.v3 import metrics as v3_metrics
-
     return v3_metrics.BATCH_MANUAL_END.labels(reason)._value.get()
 
 
