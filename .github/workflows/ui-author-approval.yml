@@ -1,8 +1,7 @@
 name: UI author approval
 on:
   pull_request_target:
-    branches: [main]
-    types: [opened, synchronize, reopened, ready_for_review]
+    types: [opened, synchronize, reopened, ready_for_review, edited, closed]
   issue_comment:
     types: [created, edited, deleted]
 permissions:
@@ -15,32 +14,44 @@ env:
   GIT_HTTP_LOW_SPEED_TIME: "60"
 jobs:
   resolve:
-    if: github.event_name == 'pull_request_target' || github.event.issue.pull_request
+    if: (github.event_name == 'pull_request_target' && (github.event.action != 'edited' || github.event.changes.base.ref)) || github.event.issue.pull_request
     permissions:
       pull-requests: read
     runs-on: ubuntu-latest
     timeout-minutes: 2
     outputs:
-      sha: ${{ steps.head.outputs.sha }}
+      heads: ${{ steps.head.outputs.heads }}
     steps:
       - uses: actions/github-script@v9
         id: head
         with:
           script: |
-            const pull_number = context.payload.pull_request?.number || context.payload.issue.number;
-            const {data: pr} = await github.rest.pulls.get({...context.repo, pull_number});
-            if (!/^[a-f0-9]{40}$/.test(pr.head.sha)) throw new Error('Invalid head SHA');
-            core.setOutput('sha', pr.head.sha);
+            const event = context.payload;
+            let heads;
+            if (context.eventName === 'pull_request_target') {
+              heads = [event.pull_request.head.sha];
+              // A synchronized PR changes membership on both SHA groups.
+              if (event.action === 'synchronize') heads.push(event.before);
+            } else {
+              const pull_number = event.issue.number;
+              const {data: pr} = await github.rest.pulls.get({...context.repo, pull_number});
+              heads = [pr.head.sha];
+            }
+            if (heads.some(sha => !/^[a-f0-9]{40}$/.test(sha))) throw new Error('Invalid head SHA');
+            core.setOutput('heads', JSON.stringify([...new Set(heads)]));
   guard:
     needs: resolve
+    strategy:
+      fail-fast: false
+      matrix:
+        sha: ${{ fromJSON(needs.resolve.outputs.heads) }}
     concurrency:
-      group: ui-author-approval-${{ needs.resolve.outputs.sha }}
+      group: ui-author-approval-${{ matrix.sha }}
       cancel-in-progress: false
-    if: github.event_name == 'pull_request_target' || github.event.issue.pull_request
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      # Never check out or execute the PR head with these credentials.
+      # Both triggers use the trusted default-branch workflow revision.
       - uses: actions/checkout@v6
         with:
           ref: ${{ github.workflow_sha }}
@@ -48,6 +59,9 @@ jobs:
       - uses: actions/github-script@v9
         with:
           script: |
-            await require('./.github/scripts/ui-author-approval.cjs')({github, context, headSha: process.env.HEAD_SHA});
+            await require('./.github/scripts/ui-author-approval.cjs')({
+              github, context, headSha: process.env.HEAD_SHA,
+              skipEmpty: context.eventName === 'pull_request_target',
+            });
         env:
-          HEAD_SHA: ${{ needs.resolve.outputs.sha }}
+          HEAD_SHA: ${{ matrix.sha }}

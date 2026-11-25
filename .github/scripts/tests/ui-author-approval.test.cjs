@@ -185,6 +185,12 @@ test('resolved SHA mismatch cannot evaluate another concurrency group', async ()
   assert.ok(f.statuses.every(s => s.sha === 'e'.repeat(40)));
   assert.equal(f.statuses.at(-1).state,'failure');
 });
+test('lifecycle reconciliation leaves the status of an unused head alone', async () => {
+  const f = stackFixture();
+  await run({...f,headSha:'e'.repeat(40),skipEmpty:true});
+  assert.equal(f.statuses.length,0);
+  assert.equal(f.calls.length,0);
+});
 test('arbitrarily named SwiftUI file is gated by immutable contents', async () => {
   const f = fixture();
   f.github.rest.repos.compareCommitsWithBasehead = async () => ({data:{files:[{filename:'desktop/macos/Desktop/Sources/IntegrationNudges/IntegrationNudgeCard.swift'}],commits:[],total_commits:0}});

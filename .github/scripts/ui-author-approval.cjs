@@ -133,7 +133,7 @@ async function unchangedUI(github, repo, approvedSha, headSha) {
   }
 }
 
-async function evaluateHead({github, context, headSha}) {
+async function evaluateHead({github, context, headSha, skipEmpty = false}) {
   const repo = context.repo;
   const pull_number = context.payload.pull_request?.number || context.payload.issue.number;
   const trigger = (await github.rest.pulls.get({...repo,pull_number})).data;
@@ -142,7 +142,6 @@ async function evaluateHead({github, context, headSha}) {
   const status = (state, description) => github.rest.repos.createCommitStatus({
     ...repo,sha,state,context:STATUS,description,
   });
-  await status('pending','Checking account-scoped UI approval');
   try {
     // A commit status is shared by head SHA. Main-target PRs take precedence.
     // Without one, reconcile every open stack on that SHA.
@@ -153,6 +152,9 @@ async function evaluateHead({github, context, headSha}) {
       return mainTargets.length ? mainTargets : sameHead;
     };
     const candidates = await sameHeadCandidates();
+    // Lifecycle events can refer to heads that no open PR uses anymore.
+    if (skipEmpty && candidates.length === 0) return;
+    await status('pending','Checking account-scoped UI approval');
     const stack = candidates.length > 0 && candidates[0].base.ref !== 'main';
     const readMain = async () => {
       const {data} = await github.rest.git.getRef({...repo,ref:'heads/main'});
