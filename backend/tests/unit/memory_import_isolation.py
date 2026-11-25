@@ -94,6 +94,13 @@ def make_database_client_stub() -> ModuleType:
     client_mod.transaction_body = transaction_body
     client_mod.in_transaction_body = in_body.get
 
+    # Keep imports complete for production modules that classify transaction
+    # failures. This no-client stub does not simulate Firestore faults, so its
+    # default is deliberately non-retryable; tests for that behavior use the
+    # real helper or patch the classifier explicitly.
+    client_mod.firestore_failure_reason = lambda _error: "other"
+    client_mod.is_retryable_firestore_transaction_error = lambda _error: False
+
     # The data-plane seam (database/_client.py's get_data_plane_firestore_client()):
     # memory_apply_store and screen/frame sync import
     # `data_plane_db` at their module boundary instead of the shared `db` above.
