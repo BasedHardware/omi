@@ -64,8 +64,6 @@ def entries():
             base={'uid': UID},
             neutrals={'caps': (Caps(), 'seed size and model ceilings; no filter changes')},
         ),
-        DriverEntry('utils.dream_prescan.scan_people', base={'uid': UID}),
-        DriverEntry('utils.dream_prescan._scan_tasks', base={'uid': UID}),
         DriverEntry(
             'database.dream_history.history_page',
             base={'uid': UID},
@@ -178,8 +176,8 @@ registry_extension = SimpleNamespace(
             covered_by=('database.dream_scheduler.candidate_page',),
             reason='Discovery streams only through candidate_page (allowlist mode reads listed user documents by explicit ref instead); its chunked get_all calls read explicit document refs in bounded transactions that only initialize due rows and a cursor. SDK queue races are exercised in test_dream_queue_emulator.',
             expect_observed=False,
-            # Idle-skip retirement removes a due-row write condition. Read coverage is unchanged.
-            body_digest='21aeade67276cccc50e12a1153e8786b2b4c886f482f1d84823f1a2335478ab3',
+            # The size-based due-time calculation adds no reads.
+            body_digest='181a3b7a0aab77caaa4908b554df6eaac7a6781084d228c2316a5c9a07134839',
         ),
     },
     SKIPS={},

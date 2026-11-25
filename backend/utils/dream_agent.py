@@ -27,7 +27,6 @@ from config.dream_agent import (
     FINISH_MARGIN_SECONDS,
 )
 from config import dream_levers
-from config.dream_session import HEAVY_TOKENS, LIGHT_TOKENS, MEDIUM_TOKENS
 from database import dream_feedback
 from database import dream_scheduler, dream_store, dream_turns, legal_holds, review_store
 from database.account_deletion_marker import account_deletion_blocks_user_work
@@ -39,7 +38,7 @@ from models.agent_edit import HarnessEdit
 from utils.agent_capabilities import tools as dream_tools
 from utils.agent_capabilities import change_view as dream_change_view
 from utils.agent_capabilities import verifiers
-from utils import dream_review_policy, dream_capacity, dream_harness_transport, dream_seed, dream_prescan, dream_verify
+from utils import dream_review_policy, dream_capacity, dream_harness_transport, dream_seed, dream_verify
 from utils import dream_judge, dream_required_intake
 from utils.dream_cost import (
     conservative_attempt_micro,
@@ -64,33 +63,6 @@ TAIL_BUDGET_NOTICE_THRESHOLD = 0.20
 # Verifier allowance after an overshoot, in multiples of the staged items' two-call reserve.
 VERIFY_ALLOWANCE_FACTOR = 2
 logger = logging.getLogger(__name__)
-
-# Lever B4 (history compaction): once the main prompt reaches this size, older
-# large tool results are replaced by a stub. Only tool results are elided; the
-# system prompt, seed, assistant tool calls and the latest results stay intact.
-# Lever B5 (material budget): new-material thresholds for the medium and heavy token ceilings.
-MATERIAL_MEDIUM = 5
-MATERIAL_HEAVY = 16
-
-
-def cap_tail(staged, capped, outcomes):
-    """B5 shadow: work staged after the pass crossed the would-be cap, and how much of it applied."""
-    late = set() if capped is None else {key for key in staged if key not in capped}
-    return {
-        'crossed': capped is not None,
-        'staged_after_cap': len(late),
-        'applied_after_cap': sum(
-            1 for row in outcomes if isinstance(row, dict) and row.get('key') in late and row.get('status') == 'applied'
-        ),
-    }
-
-
-def material_tokens(material, current):
-    """Token ceiling by new material, never above today's size ceiling nor below the light budget."""
-    tier = (
-        HEAVY_TOKENS if material >= MATERIAL_HEAVY else MEDIUM_TOKENS if material >= MATERIAL_MEDIUM else LIGHT_TOKENS
-    )
-    return min(current, max(tier, min(current, LIGHT_TOKENS)))
 
 
 _FAILURE_STAGES = {
@@ -207,7 +179,6 @@ async def run_session(
     timeout_seconds=PASS_TIMEOUT_SECONDS,
     bootstrap_tools=None,
     arms=None,
-    budget_probe=None,
     judge=False,
 ):
     caps = caps or Caps.from_env()
@@ -310,21 +281,6 @@ async def run_session(
             session.defect_sink = defect_sink
     except Exception:
         pass
-
-    progress: dict[str, Any] = {'capped': None}
-
-    async def after_execute(current):
-        try:
-            # B5 shadow: staged keys when the pass crossed the material cap, so the
-            # report can count the edits a served cap would have cut.
-            if budget_probe and progress['capped'] is None and report['price_weighted_tokens'] >= budget_probe:
-                progress['capped'] = set(current.staged)
-        except Exception as error:
-            logger.warning('event=dream_lever_error lever=material_budget exc=%s', type(error).__name__)
-        return False
-
-    if budget_probe:
-        session.after_execute = after_execute
 
     async def usage(result):
         nonlocal stage
@@ -708,8 +664,6 @@ async def run_session(
                         deadline_seconds=max(1, timeout_seconds - 300),
                     )
                     report['stop_reason'] = result.reason
-                    if result.reason == 'finished' and session.finish is None and progress['fired'] is not None:
-                        report['stop_reason'] = 'no_progress'
             except Exception as exc:
                 stop_code = error_code(exc)
                 provider_stop = bool(session.staged) and (
@@ -927,11 +881,6 @@ async def run_session(
             _log_pass_failure(exc, stage=stage)
     report['accounted_tokens'] += session.counters['search_embedding_token_upper_bound']
     report['price_weighted_tokens'] += session.counters['search_embedding_token_upper_bound']
-    try:
-        if budget_probe:
-            levers['material_budget'] = cap_tail(session.staged, progress['capped'], report['outcomes'])
-    except Exception as error:
-        logger.warning('event=dream_lever_error lever=report exc=%s', type(error).__name__)
     report.update(timing=timing, levers=levers, defect_reports=dict(defects))
     report.update(
         tool_counts={key[5:]: count for key, count in session.counters.items() if key.startswith('tool:')},
@@ -1020,7 +969,6 @@ async def run_pass(
         return report
     lease = None
     release_slot = False
-    pass_levers: dict[str, dict[str, Any]] = {}
     try:
         seed_started = asyncio.get_running_loop().time()
         seed, records, dirty, limits = await run_blocking(db_executor, dream_seed.load, uid, caps)
@@ -1053,13 +1001,6 @@ async def run_pass(
                 report = {'status': 'not_admitted', 'reason': denied.get('reason', 'unknown')}
                 record_pass(report)
                 return report
-            backoff_arm = arms.get('hunt_backoff', 'off')
-            if backoff_arm != 'off' and lease.get('hunt'):
-                pass_levers['hunt_backoff'] = {
-                    'arm': backoff_arm,
-                    'dry_hunts': int(lease.get('dry_hunts', 0) or 0),
-                    'would_defer': bool(lease.get('backoff_would_defer')) and trigger == 'schedule',
-                }
         if not dry_run and not canary:
             assert lease is not None
             intake_scope = ACTIVE_RUN.set((uid, lease['run_id']))
@@ -1068,40 +1009,6 @@ async def run_pass(
             finally:
                 ACTIVE_RUN.reset(intake_scope)
         material = len(dirty) + len(seed.get('required_intake_candidates') or [])
-        prescan_arm = arms.get('prescan', 'off')
-        prescan = None
-        if prescan_arm != 'off' and trigger == 'schedule' and lease is not None:
-            # Pre-scan after admission only: bounded projected reads hand hunts
-            # concrete targets. Any failure leaves the pass exactly as today.
-            try:
-                prescan = await asyncio.wait_for(run_blocking(db_executor, dream_prescan.scan, uid), timeout=5.0)
-                pass_levers['prescan'] = {'arm': prescan_arm, 'targets': len(prescan['refs']), **prescan['counts']}
-                # Serve only hunts: a pass admitted for dirty work keeps its targets first, and an
-                # empty-bucket idle pass never reaches a model session.
-                served = 0
-                if prescan_arm == 'serve' and lease.get('hunt') and limits.bucket != 'empty':
-                    served = dream_prescan.serve_targets(seed, prescan['refs'], limits)
-                pass_levers['prescan']['served'] = served
-            except Exception as error:
-                logger.warning('event=dream_lever_error lever=prescan exc=%s', type(error).__name__)
-                prescan = None
-        budget_arm = arms.get('material_budget', 'off')
-        budget_probe = None
-        if budget_arm != 'off':
-            try:
-                sized = material_tokens(material, limits.tokens)
-                pass_levers['material_budget'] = {
-                    'arm': budget_arm,
-                    'tokens_before': limits.tokens,
-                    'tokens_after': sized,
-                }
-                if budget_arm == 'shadow' and sized < limits.tokens:
-                    budget_probe = sized
-                if budget_arm == 'serve' and sized < limits.tokens:
-                    limits = replace(limits, tokens=sized)
-                    caps = replace(caps, tokens=limits.tokens)
-            except Exception as error:
-                logger.warning('event=dream_lever_error lever=material_budget exc=%s', type(error).__name__)
         if limits.bucket == 'empty' and not seed.get('targets'):
             report: dict[str, Any] = {
                 'status': 'not_admitted',
@@ -1138,28 +1045,10 @@ async def run_pass(
                 timeout_seconds=timeout_seconds,
                 bootstrap_tools=bootstrap_tools,
                 arms=arms,
-                budget_probe=budget_probe,
                 # Scheduled sweep passes only; operator CLIs pass judge=False.
                 judge=(trigger == 'schedule' if judge is None else judge) and not canary and not dry_run,
             )
-        if 'prescan' in pass_levers:
-            # Recall of the finalized report, merged into the admission-time row
-            # like the material-budget tail merge.
-            try:
-                pass_levers['prescan']['hits'] = dream_prescan.applied_hits(report, (prescan or {}).get('refs'))
-            except Exception as error:
-                logger.warning('event=dream_lever_error lever=prescan exc=%s', type(error).__name__)
-        session_levers = report.get('levers') or {}
-        report['levers'] = {
-            **pass_levers,
-            **session_levers,
-            # Merge the session's B5 tail counts into the admission-time sizing row.
-            **(
-                {'material_budget': {**pass_levers['material_budget'], **session_levers['material_budget']}}
-                if 'material_budget' in pass_levers and 'material_budget' in session_levers
-                else {}
-            ),
-        }
+        report['levers'] = report.get('levers') or {}
         report['material'] = material
         report.setdefault('timing', {})['seed_ms'] = seed_ms
         if progress is not None:
