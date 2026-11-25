@@ -5,6 +5,7 @@ from database import conversations_v3_leases as leases
 from database import conversations_v3_processing as writers
 
 from datetime import datetime, timedelta, timezone
+from contextlib import contextmanager
 from copy import deepcopy
 from concurrent.futures import ThreadPoolExecutor
 import importlib
@@ -34,6 +35,8 @@ from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore, St
 
 AT = datetime.now(timezone.utc)
 R = ('users', 'synthetic', 'conversations', 'r')
+# Captured before any test patches it: the hold-race test runs the real canonical helper.
+REAL_DELETE_PRIVACY_AUDIO = storage.delete_privacy_conversation_audio
 L = ('users', 'synthetic', 'conversation_v3_leases', 'builder')
 
 
@@ -377,6 +380,11 @@ def _tombstone(cid):
     return ('users', 'synthetic', 'deleted_conversations', cid)
 
 
+def _assert_audio_gate_held(uid):
+    # Every blob deletion runs inside the sweep's one audio-deletion gate.
+    legal_holds.current_destructive_operation_token(uid, kind=service.AUDIO_GATE_KIND)
+
+
 @pytest.fixture
 def purge_world(strict, monkeypatch):
     """The sweep's purge with storage and the batch-intake purge recorded in call order.
@@ -387,10 +395,17 @@ def purge_world(strict, monkeypatch):
     monkeypatch.setattr(store, 'get_firestore_client', lambda: strict)
     monkeypatch.setattr(legal_holds, 'account_deletion_firestore_client', lambda firestore_client=None: strict)
     monkeypatch.setattr(cloud_tasks, 'is_conversation_batch_purge_dispatch_configured', lambda: False)
-    monkeypatch.setattr(
-        storage, 'delete_privacy_conversation_audio', lambda uid, cid, **kw: calls.append(('erase', cid, kw))
-    )
-    monkeypatch.setattr(storage, 'delete_conversation_audio_files', lambda uid, cid: calls.append(('prefixes', cid)))
+
+    def erase(uid, cid, **kw):
+        _assert_audio_gate_held(uid)
+        calls.append(('erase', cid, kw))
+
+    def prefixes(uid, cid):
+        _assert_audio_gate_held(uid)
+        calls.append(('prefixes', cid))
+
+    monkeypatch.setattr(storage, 'delete_privacy_conversation_audio', erase)
+    monkeypatch.setattr(storage, 'delete_conversation_audio_files', prefixes)
 
     def purge_batch_owner(uid, **kw):
         # The batch purge's own precondition: the owner's deletion intent exists.
@@ -674,6 +689,107 @@ def test_erased_donor_leaves_its_successor_lineage(strict, purge_world):
     service.purge_audio('synthetic', 'r')
     assert strict.rows[successor] == {RETAINED_DONORS_FIELD: ['other'], 'sync_merged_from': ['other']}
     assert purge_world == [('intakes', 'r'), ('erase', 'r', {})]
+
+
+def _gate_row():
+    return (
+        legal_holds_client().document(f'{legal_holds.LEGAL_HOLD_DELETION_GATES_COLLECTION}/synthetic').get().to_dict()
+    )
+
+
+def test_no_hold_lands_between_canonical_and_prefix_deletes(strict, purge_world, monkeypatch):
+    """The race the point preflight left open: a hold placed after the canonical packs go.
+
+    The real canonical helper runs; its nested audio gate reuses the sweep's. A hold attempted
+    between the canonical delete and the raw and donor prefix deletes is refused by the gate
+    (place_legal_hold raises while a destructive gate runs), so it cannot be active for them.
+    """
+    _merge_target_world(strict)
+    monkeypatch.setenv('BUCKET_CANONICAL_AUDIO', 'synthetic-canonical')
+    monkeypatch.setattr(storage, 'get_canonical_audio_bucket', lambda: 'canonical')
+    refused = []
+
+    def delete_packs(bucket, uid, cid):
+        _assert_audio_gate_held(uid)
+        purge_world.append(('packs', cid))
+        if not refused:
+            with pytest.raises(legal_holds.DestructiveOperationInProgress) as error:
+                _hold()
+            refused.append(error.value)
+
+    monkeypatch.setattr(storage.audio_packs, 'delete_conversation', delete_packs)
+    monkeypatch.setattr(storage, 'delete_privacy_conversation_audio', REAL_DELETE_PRIVACY_AUDIO)
+    acquired = []
+    real_acquire = legal_holds.acquire_destructive_operation
+
+    def acquire(uid, *, kind, **kwargs):
+        acquired.append(kind)
+        return real_acquire(uid, kind=kind, **kwargs)
+
+    monkeypatch.setattr(legal_holds, 'acquire_destructive_operation', acquire)
+    service.purge_audio('synthetic', 'r')
+    assert refused
+    # The canonical step did not take a gate of its own: one intake gate, one audio gate.
+    assert acquired == [purge_jobs.GATE_KIND, service.AUDIO_GATE_KIND]
+    assert sorted(call for call in purge_world if call[0] == 'packs') == [
+        ('packs', 'd1'),
+        ('packs', 'd2'),
+        ('packs', 'r'),
+    ]
+    assert [call for call in purge_world if call[0] == 'prefixes'] == [
+        ('prefixes', 'r'),
+        ('prefixes', 'd1'),
+        ('prefixes', 'd2'),
+    ]
+    assert legal_holds.read_legal_hold('synthetic', firestore_client=legal_holds_client()) is None
+    assert _gate_row()['state'] == 'completed' and _gate_row()['kind'] == service.AUDIO_GATE_KIND
+    assert strict.rows[R]['v3_audio_purge_pending'] is False
+
+
+def test_hold_landing_after_the_intake_purge_stops_every_blob_delete(strict, purge_world, monkeypatch):
+    """A hold placed in the only window no gate covers, after the intake gate releases.
+
+    The audio gate's acquisition reads it transactionally: no canonical, raw or donor
+    prefix delete runs, the row stays owed with its donors, and the purge counts as held.
+    """
+    _merge_target_world(strict)
+    real_gate = legal_holds.destructive_operation_gate
+
+    @contextmanager
+    def gate_then_hold(uid, *, kind, **kwargs):
+        with real_gate(uid, kind=kind, **kwargs) as token:
+            yield token
+        if kind == purge_jobs.GATE_KIND:
+            _hold()
+
+    monkeypatch.setattr(legal_holds, 'destructive_operation_gate', gate_then_hold)
+    before = _purge_count('held')
+    with pytest.raises(legal_holds.LegalHoldActive):
+        service.purge_audio('synthetic', 'r')
+    assert purge_world == [('intakes', 'r'), ('intakes', 'd1'), ('intakes', 'd2')]
+    assert _purge_count('held') == before + 1
+    row = _live(strict.rows[R])
+    assert row['v3_audio_purge_pending'] is True and row[store.AUDIO_PURGE_DONORS_FIELD] == ['d1', 'd2']
+    # The refused acquisition never wrote the audio gate: the last row is the intake gate's receipt.
+    assert _gate_row()['kind'] == purge_jobs.GATE_KIND and _gate_row()['state'] == 'completed'
+
+
+def test_moved_donor_is_not_erased_with_its_former_target(strict, purge_world):
+    """A retained donor whose current merge target names another conversation is that target's custody."""
+    moved = {'deleted': True, SETTLED_FIELD: True, MERGE_TARGET_FIELD: 'other', 'sync_merged_into': 'other'}
+    strict.rows[R] = {**PENDING, SETTLED_FIELD: True, RETAINED_DONORS_FIELD: ['d1', 'moved']}
+    strict.rows[_row('d1')] = {'deleted': True, SETTLED_FIELD: True, MERGE_TARGET_FIELD: 'r'}
+    strict.rows[_row('moved')] = dict(moved)
+    service.purge_audio('synthetic', 'r')
+    assert purge_world == [
+        ('intakes', 'r'),
+        ('intakes', 'd1'),
+        ('erase', 'r', {'source_ids': ['d1']}),
+        ('prefixes', 'd1'),
+    ]
+    # No tombstone, no custody clear, no intake purge and no prefix delete for the moved donor.
+    assert _tombstone('moved') not in strict.rows and strict.rows[_row('moved')] == moved
+    assert _tombstone('d1') in strict.rows and not has_retained_custody(_live(strict.rows[_row('d1')]))
 
 
 @pytest.mark.parametrize('state', ['deleted', 'is_locked'])

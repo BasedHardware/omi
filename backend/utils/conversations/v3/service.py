@@ -1382,6 +1382,10 @@ async def drain_backfill(uid, *, deadline, after=None, keep_going=None, concurre
     return counts
 
 
+# The account gate kind storage's audio-deletion helpers take; held here, theirs nests in it.
+AUDIO_GATE_KIND = 'audio_conversation_deletion'
+
+
 class AudioPurgeIntakesPending(RuntimeError):
     """The recording's batch-intake purge obligation has not run yet; the blobs wait for it."""
 
@@ -1400,8 +1404,9 @@ def purge_audio(uid, rid):
 
     Nothing is deleted under an active legal hold: the hold is checked before the
     claim, the inline intake purge runs under the account gate a synchronous user
-    delete holds (its acquisition re-checks the hold), and the blobs are re-checked
-    before they go. Each step is idempotent and the pending bit clears last.
+    delete holds (its acquisition re-checks the hold), and every blob deletion runs
+    under one audio-deletion gate, which a hold cannot overtake. Each step is
+    idempotent and the pending bit clears last.
     """
     _assert_erasure_permitted(uid)
     claim = store.claim_audio_purge(
@@ -1427,15 +1432,23 @@ def purge_audio(uid, rid):
         except Exception:
             metrics.AUDIO_PURGES.labels('intakes_failed').inc()
             raise
-    _assert_erasure_permitted(uid)
-    if claim.donor_ids:
-        # A merge target's retained donors served only this recording, as a user delete erases them:
-        # their canonical packs with the recording's, then each donor's own prefixes.
-        storage.delete_privacy_conversation_audio(uid, rid, source_ids=list(claim.donor_ids))
-        for donor in claim.donor_ids:
-            storage.delete_conversation_audio_files(uid, donor)
-    else:
-        storage.delete_privacy_conversation_audio(uid, rid)
+    # One account gate spans every irreversible blob deletion: canonical packs, the recording's raw
+    # prefixes and each donor's. Its acquisition re-checks the hold transactionally, and while it runs
+    # place_legal_hold refuses, so no hold can land between the canonical and the prefix deletes.
+    # The storage helpers' own audio gate nests in this one (same uid and kind) rather than releasing it.
+    try:
+        with legal_holds.destructive_operation_gate(uid, kind=AUDIO_GATE_KIND):
+            if claim.donor_ids:
+                # A merge target's retained donors served only this recording, as a user delete erases them:
+                # their canonical packs with the recording's, then each donor's own prefixes.
+                storage.delete_privacy_conversation_audio(uid, rid, source_ids=list(claim.donor_ids))
+                for donor in claim.donor_ids:
+                    storage.delete_conversation_audio_files(uid, donor)
+            else:
+                storage.delete_privacy_conversation_audio(uid, rid)
+    except legal_holds.LegalHoldActive:
+        metrics.AUDIO_PURGES.labels('held').inc()
+        raise
     done = {'v3_audio_purge_pending': False, 'audio_files': []}
     if claim.donor_ids:
         # The donor list is the last identifier the erase needed; it goes with the pending bit.

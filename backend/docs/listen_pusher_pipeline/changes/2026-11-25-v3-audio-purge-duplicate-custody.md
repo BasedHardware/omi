@@ -20,13 +20,19 @@ existing 5-minute retry keeps the row pending.
 
 Legal holds: nothing is deleted while a hold is active. The purge runs the
 obligation runner's hold preflight (`assert_account_deletion_permitted`) before
-the claim and again before the blobs. The inline `purge_batch_owner` calls run
-under the account gate a synchronous user delete holds
-(`destructive_operation_gate`, kind `explicit_memory_deletion`), and acquiring
-that gate re-checks the hold in its transaction. A held purge raises, stays
-pending, and the sweep re-checks it every 5 minutes. The blob helper takes its
-own `audio_conversation_deletion` gate for canonical packs, so the blob step
-cannot share the intake gate; the second preflight covers it.
+the claim. The inline `purge_batch_owner` calls run under the account gate a
+synchronous user delete holds (`destructive_operation_gate`, kind
+`explicit_memory_deletion`), and acquiring that gate re-checks the hold in its
+transaction. Every blob deletion then runs under one gate of kind
+`audio_conversation_deletion`, the kind the user-delete blob helper uses: the
+canonical packs, the recording's raw prefixes, and every donor's packs and
+prefixes. Its acquisition re-checks the hold, and while it runs
+`place_legal_hold` refuses (`DestructiveOperationInProgress`), so a hold cannot
+land between the canonical and the prefix deletes. The storage helpers' own
+audio gate nests in it (same uid and kind) instead of taking and releasing a
+second one. A hold placed after the intake gate releases is seen when the audio
+gate is acquired, before any blob delete. A held purge raises, stays pending, is
+counted as `held`, and the sweep re-checks it every 5 minutes.
 
 Merge targets: the claim keeps the retained donors on the row
 (`v3_audio_purge_source_ids`) until the erase runs. In the same commit it writes
@@ -46,8 +52,10 @@ transaction. Both lists drop the same id, so the equality a later merge checks
 still holds.
 
 Cost per purged row:
-- Every row: 2 legal-hold reads, then the claim as before (row and tombstone
-  reads; tombstone and row writes).
+- Every row: 1 legal-hold read, the claim as before (row and tombstone reads;
+  tombstone and row writes), and the audio gate's acquire and release (2 short
+  transactions: 3 reads, 2 writes). Rows with canonical audio paid that gate
+  before this change too; the helper now reuses it.
 - Custody rows add 1 obligation read, the successor read when the row is a
   donor, and one `purge_batch_owner` (the cost a user delete pays), or the
   obligation run when dispatch is configured.
