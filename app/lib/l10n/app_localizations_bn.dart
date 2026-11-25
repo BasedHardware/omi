@@ -15331,9 +15331,6 @@ class AppLocalizationsBn extends AppLocalizations {
   String get stopThese => 'এগুলো বন্ধ করুন';
 
   @override
-  String get meetingActionItemsTitle => 'করণীয় বিষয়';
-
-  @override
   String get addToTasks => 'টাস্কে যোগ করুন';
 
   @override
@@ -15817,5 +15814,16 @@ class AppLocalizationsBn extends AppLocalizations {
       },
     );
     return '$_temp0';
+  }
+
+  @override
+  String get playStripeBilledOnWeb => 'omi.me-এর মাধ্যমে বিল করা হয়। যেকোনো সময় এখান থেকে বাতিল করুন।';
+
+  @override
+  String get playStripeBilledOnWebShort => 'omi.me-এর মাধ্যমে বিল করা হয়।';
+
+  @override
+  String playStripePlanPaused(String plan) {
+    return 'আপনার $plan প্ল্যান বিরতিতে আছে।';
   }
 }

@@ -60,6 +60,7 @@ from models.conversation_continuity import continuation_timeout
 from utils.conversations.backfill_stats import same_timestamp_revision
 from utils.account_cutover.fence import background_job_should_skip_account
 from utils.conversations.terminal_relevance import stamp_terminal_decision
+from utils.conversations import terminal_settled
 from utils.conversations.processing_trigger import (
     PROCESSING_MODES,
     ProcessingTrigger,
@@ -1205,6 +1206,7 @@ def _complete_server_batch_capture_txn(
         if current.get('recording') is True and _is_client_finalize(job) and server_batch.manual_end_marker_enabled()
         else {}
     )
+    # Capture close settles the row before transcription or notes: the stamp means settled, not summarized.
     transaction.update(
         conversation_ref,
         {
@@ -1213,6 +1215,7 @@ def _complete_server_batch_capture_txn(
             'home_transcription_pending_at': now,
             'home_transcription_deadline_at': now + timedelta(seconds=home_transcription_deadline_seconds()),
             **manual_end_update,
+            **terminal_settled.settle(current, now=now, enabled=terminal_settled.serving(uid)),
         },
     )
     transaction.update(
@@ -1610,7 +1613,11 @@ def _complete_discarded_server_batch_fanout_txn(
             allow_discarded=True,
         )
         if claimed is not None:
-            transaction.update(conversation_ref, claimed)
+            uid = uid_from_conversation_path(str(getattr(conversation_ref, 'path', '') or '')) or ''
+            transaction.update(
+                conversation_ref,
+                terminal_settled.stamp(current, claimed, now=now, enabled=terminal_settled.serving(uid)),
+            )
     transaction.update(
         job_ref,
         {

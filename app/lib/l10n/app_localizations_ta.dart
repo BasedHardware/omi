@@ -15439,9 +15439,6 @@ class AppLocalizationsTa extends AppLocalizations {
   String get stopThese => 'இவற்றை நிறுத்து';
 
   @override
-  String get meetingActionItemsTitle => 'செயல் உருப்படிகள்';
-
-  @override
   String get addToTasks => 'பணிகளில் சேர்க்கவும்';
 
   @override
@@ -15929,5 +15926,17 @@ class AppLocalizationsTa extends AppLocalizations {
       },
     );
     return '$_temp0';
+  }
+
+  @override
+  String get playStripeBilledOnWeb =>
+      'omi.me மூலம் கட்டணம் வசூலிக்கப்படுகிறது. எப்போது வேண்டுமானாலும் இங்கே ரத்து செய்யலாம்.';
+
+  @override
+  String get playStripeBilledOnWebShort => 'omi.me மூலம் கட்டணம் வசூலிக்கப்படுகிறது.';
+
+  @override
+  String playStripePlanPaused(String plan) {
+    return 'உங்கள் $plan திட்டம் இடைநிறுத்தப்பட்டுள்ளது.';
   }
 }

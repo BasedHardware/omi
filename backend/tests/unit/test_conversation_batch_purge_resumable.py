@@ -78,13 +78,6 @@ class BatchPlane:
         monkeypatch.setattr(purge, 'purge_jobstore_owner', lambda *args: 0)
         # Gate/segment fixtures own no WAL originals; WAL emulator tests cover real prefix discovery.
         monkeypatch.setattr(purge, 'conversation_objects', lambda *args, **kwargs: [])
-        # Sync-ledger-linked segments per conversation id; empty unless a test names some.
-        self.owed: dict[str, dict[str, set[str]]] = {}
-        monkeypatch.setattr(
-            purge,
-            'owed_batch_segments',
-            lambda _uid, cids, **kwargs: {ns: ids for cid in cids for ns, ids in self.owed.get(cid, {}).items()},
-        )
         from tests.unit.test_conversation_delete_gate_wait import _Transaction
 
         monkeypatch.setattr(purge, '_in_transaction', lambda _client, body: body(_Transaction(client)))
@@ -204,24 +197,6 @@ def test_fallback_provenance_reaches_audio_and_source_receipt(owner, tombstone_d
     assert plane.doc('projections', 'unrelated-receipt') is not None
     assert plane.objects == ['gs://bucket/owners/own-audio']
     assert plane.erased == [('artifacts', 'own-audio'), ('jobs', 'fallback')]
-
-
-def test_sync_ledger_segments_with_provisional_ids_are_erased(owner, tombstone_db, armed, dispatch, fast_clock):
-    """A sync upload's rows carry its capture identity, not c1; the ledger names them."""
-    plane = owner.plane()
-    plane.owed = {'c1': {NS: {'upload-job', 'upload-result'}}}
-    plane.add('jobs', 'upload-job', conversation_id='capture-identity', priority=1)
-    plane.add('results', 'upload-job', conversation_id='capture-identity', segment_id='upload-job')
-    plane.add('results', 'upload-result', conversation_id='capture-identity', segment_id='upload-result')
-    plane.add('artifacts', 'upload-audio', segment_id='upload-result', uri='gs://bucket/owners/upload-audio')
-    plane.add('results', 'other-upload', conversation_id='other-identity', segment_id='other-upload')
-    deletion_batch_purge.reconcile_conversation_batch_purges()
-    assert _run(armed, 1) == 'purged'
-    assert plane.doc('jobs', 'upload-job') is None
-    assert plane.doc('results', 'upload-result') == {'owner_key': KEY, 'projection_state': 'erased'}
-    assert plane.doc('artifacts', 'upload-audio') is None
-    assert plane.objects == ['gs://bucket/owners/upload-audio']
-    assert plane.doc('results', 'other-upload')['conversation_id'] == 'other-identity'
 
 
 def test_hold_before_the_artifact_unit_then_resume_erases_the_segment_only_artifact(

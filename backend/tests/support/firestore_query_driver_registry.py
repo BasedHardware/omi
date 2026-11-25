@@ -163,9 +163,10 @@ BODY_DIGEST = {
     'utils.support.holds._events': '360ff57663deaf3c17c934276f219cce74f4a468dc28c8a1145623524625927e',
     'utils.support.holds._held_deferred_deletes': '612a521045553ef1b02d1eb81aac37a3c63a75c598ce5e99484c007c7c87e878',
     'utils.support.retention._select_conversations': 'f36920350f4e3a557e0e474e8801ae414c21ce67203e0627f7a39ba820243d16',
-    'database.conversations_v3.commit_projection': '2587c3ec10a675e41ecfed4ded303bdb9bda893380df227564408184e3daba62',
-    'database.batch_privacy_late_sweeps.reconcile_batch_privacy_late_sweeps': '470e3d3aaaf87a8a0387371178f944380bcdd0c4b3cc358ddd3e478b26c777cc',
+    'database.conversations_v3_live._recent_window_query': '6f2c323bfa8df890362c6bdc4796182a70e4c704376bcb4944358560b12edc75',
+    'database.conversations_v3.commit_projection': 'e8ef3b2c4e9a4bb6b88de62144d05e89115395fa07f29347aa38a3d5cb959d58',
     'database.batch_pipeline_conversation_purge_scans._claim': '662c759fc79795f0851e0b18082b7dcb006e109253e45ba1fde2190d542bddf8',
+    'database.batch_privacy_late_sweeps.reconcile_batch_privacy_late_sweeps': '470e3d3aaaf87a8a0387371178f944380bcdd0c4b3cc358ddd3e478b26c777cc',
     'database.batch_pipeline_conversation_purge_scans.run_job': 'fe5d30b77da198a7e0dc188115c8906fb6446925079a4e96339d36675a55faeb',
     'database.batch_pipeline_store.FirestoreStore.protected_retries': 'b55d2960c94057cb8df9b9cdd2e7728b6af63728bc0a2cb6f5bd333efed443a2',
     'database.batch_pipeline_store.FirestoreTransaction.protected_ready': 'c722019b927498cd74c6d5c4d3e52506c4e1318ef5ae74da4ddd17af978ae564',
@@ -1514,23 +1515,6 @@ _add(
         ),
     )
 )
-
-
-def _sync_stage(_fs: Any) -> Any:
-    # Ledger collections are stage-scoped; with no stage there is no ledger and no query.
-    import os
-
-    return unittest.mock.patch.dict(os.environ, {'OMI_ENV_STAGE': 'prod'})
-
-
-for _fn in ('uploads_for_conversations', 'staging_job_ids', 'owed_batch_segments'):
-    _add(
-        DriverEntry(
-            f'database.sync_ledger_sources.{_fn}',
-            base={'uid': UID, 'conversation_ids': ['conv-1']},
-            patchers=(_sync_stage,),
-        )
-    )
 _add(
     DriverEntry(
         'database.recording_speakers.scope_conversation_ids',
@@ -3700,10 +3684,21 @@ for entry in (
     *home_feed_entries(),
     *conversations_v3_entries(),
     CoveredByEntry(
+        'database.conversations_v3_live._recent_window_query',
+        covered_by=(
+            'database.conversations_v3_live.recent_windows',
+            'database.conversations_v3_live.request_recording_finish',
+        ),
+        reason='Builds the indexed filters; live lookup and Finish execute the query with their own field masks.',
+        expect_observed=False,
+        body_digest=BODY_DIGEST['database.conversations_v3_live._recent_window_query'],
+    ),
+    CoveredByEntry(
         'database.conversations_v3.commit_projection',
         covered_by=('database.conversations_v3.merge_donors_have_tasks',),
         reason='Refinement and live repair use the same bounded donor-task query and write point markers with donor redirects. '
-        'The WAL custody guard uses the existing observation rows before donor-task queries or projection writes.',
+        'The WAL custody guard uses the existing observation rows before donor-task queries or projection writes. '
+        'The Home index bit is derived from the flags already present in those writes.',
         expect_observed=False,
         body_digest=BODY_DIGEST['database.conversations_v3.commit_projection'],
     ),

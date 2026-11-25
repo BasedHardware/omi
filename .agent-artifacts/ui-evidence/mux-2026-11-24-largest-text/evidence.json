@@ -1,0 +1,47 @@
+{
+  "version": 1,
+  "images": [
+    {
+      "file": "001-mobile-ios-sign-in-before-after.png",
+      "platform": "mobile-ios",
+      "description": "Sign-in at default and largest text, BEFORE vs AFTER, plus AFTER largest dark: the sign-in button and legal line are pinned on screen, the label has room above and below; default size unchanged",
+      "captured_by": "agent",
+      "source": "screencapture"
+    },
+    {
+      "file": "002-mobile-ios-consent-before-after.png",
+      "platform": "mobile-ios",
+      "description": "Data & Privacy at default and largest text, BEFORE vs AFTER, plus AFTER largest dark: Agree & Continue and Use a Different Account wrap with padding instead of cutting off",
+      "captured_by": "agent",
+      "source": "screencapture"
+    },
+    {
+      "file": "003-mobile-ios-home-tabs-before-after.png",
+      "platform": "mobile-ios",
+      "description": "Home at default and largest text, BEFORE vs AFTER: Home and Tasks fit beside the actions instead of overflowing by 72 px",
+      "captured_by": "agent",
+      "source": "screencapture"
+    },
+    {
+      "file": "004-mobile-ios-activity-needs-attention-before-after.png",
+      "platform": "mobile-ios",
+      "description": "Activity at default and largest text, BEFORE vs AFTER: NEEDS ATTENTION keeps whole words with Retry all under it",
+      "captured_by": "agent",
+      "source": "screencapture"
+    },
+    {
+      "file": "005-mobile-ios-plan-usage-badge-before-after.png",
+      "platform": "mobile-ios",
+      "description": "Plan & Usage at default and largest text, BEFORE vs AFTER: the Omi Pro badge reads on one line with Manage Plan under it",
+      "captured_by": "agent",
+      "source": "screencapture"
+    },
+    {
+      "file": "006-mobile-ios-conversation-tasks-before-after.png",
+      "platform": "mobile-ios",
+      "description": "Conversation detail at default and largest text, BEFORE vs AFTER: the task list header says Tasks instead of Action items",
+      "captured_by": "agent",
+      "source": "screencapture"
+    }
+  ]
+}

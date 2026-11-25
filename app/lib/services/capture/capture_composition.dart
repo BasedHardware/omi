@@ -39,6 +39,7 @@ import 'package:omi/utils/audio/foreground.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:omi/services/wals/local_wal_sync.dart';
 import 'package:omi/services/experiments/capture_end_marker.dart';
+import 'package:omi/services/experiments/mobile_batch_file_cap_gate.dart';
 import 'package:omi/services/capture/capture_end.dart';
 import 'package:omi/backend/http/api/capture_end.dart';
 
@@ -234,18 +235,22 @@ Future<void> _installMobileStandardBatch(CaptureProvider provider) async {
     final directory = await getApplicationDocumentsDirectory();
     final phone = ServiceManager.instance().wal.getSyncs().phone;
     await phone.walReady;
+    final buffer = MobileBatchBuffer(
+        directory: directory,
+        publish: (wal) async {
+          if (wal.ownerUid != SharedPreferencesUtil().uid) throw StateError('Batch owner retired');
+          await phone.addExternalWal(wal, admittedGeneration: phone.sessionGeneration);
+          if (wal.ownerUid != SharedPreferencesUtil().uid ||
+              !await phone.hasDurableWal(wal, admittedGeneration: phone.sessionGeneration)) {
+            throw StateError('Batch WAL index was not committed');
+          }
+          unawaited(RecordingTransferCoordinator.instance.wake(WakeTrigger.periodic));
+        });
+    // Never delays the lane: capture starts on the default cap and the gate's
+    // answer applies from the next frame after it arrives.
+    unawaited(MobileBatchFileCapGate.maxFileSeconds().then((seconds) => buffer.maxFileSeconds = seconds));
     final lane = MobileStandardBatch(
-      buffer: MobileBatchBuffer(
-          directory: directory,
-          publish: (wal) async {
-            if (wal.ownerUid != SharedPreferencesUtil().uid) throw StateError('Batch owner retired');
-            await phone.addExternalWal(wal, admittedGeneration: phone.sessionGeneration);
-            if (wal.ownerUid != SharedPreferencesUtil().uid ||
-                !await phone.hasDurableWal(wal, admittedGeneration: phone.sessionGeneration)) {
-              throw StateError('Batch WAL index was not committed');
-            }
-            unawaited(RecordingTransferCoordinator.instance.wake(WakeTrigger.periodic));
-          }),
+      buffer: buffer,
       loadVad: SileroMobileBatchVad.load,
       freeDiskBytes: () async {
         final mb = await DiskSpace.getFreeDiskSpaceForPath(directory.path);

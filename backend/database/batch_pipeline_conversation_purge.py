@@ -41,7 +41,6 @@ from database.batch_pipeline_purge import delete_job as _delete_job
 from database.batch_pipeline_purge import erase_artifact as _erase_artifact
 from database.batch_pipeline_purge import erase_result as _erase_result
 from database.batch_pipeline_purge import row_belongs as _belongs
-from database.sync_ledger_sources import owed_batch_segments
 from database.batch_pipeline_purge import row_references as _references
 from database.batch_pipeline_shadow_hook import mirror_refresh, purge_owner as purge_jobstore_owner
 from database.legal_holds import settles_unknown_erasure
@@ -239,9 +238,6 @@ def purge_conversations(
     def belongs(data: dict[str, Any]) -> bool:
         return any(_belongs(data, conversation_id) for conversation_id in members)
 
-    # Sync uploads are keyed by a provisional capture identity; the ledger names
-    # the batch segments that a now fully deleted upload left behind.
-    owed = {cid: owed_batch_segments(uid, [cid], firestore_client=client) for cid in members}
     key = privacy_owner_key(uid)
     start = dict(progress.position or {})
     start_ns = int(start.get('ns') or 0)
@@ -350,9 +346,7 @@ def purge_conversations(
                                     result = result_ref.get().to_dict() or {}
                                 projection = result.get('projection') or data.get('projection')
                                 for cid in members:
-                                    if snapshot.id in owed[cid].get(namespace, ()) or _belongs(
-                                        {**data, 'projection': projection}, cid
-                                    ):
+                                    if _belongs({**data, 'projection': projection}, cid):
                                         found[cid].append(snapshot.id)
                             if len(members) == 1 and next(iter(members.values())) is progress:
                                 mark(position, add_segments=(namespace, next(iter(found.values()))))

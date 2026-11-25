@@ -653,6 +653,7 @@ overlay:
             secret: PLAY_ACCOUNT_ID_HMAC_KEY
             version: latest
         env:
+          CONVERSATIONS_V3_LIVE_TITLE: {value: 'on', category: ops_kill}
           CONVERSATION_PARKED_TERMINAL_STATUS_ENABLED:
             value: 'off'
             category: rollout
@@ -1518,6 +1519,7 @@ overlay:
         - SYNC_REPROCESS_COALESCE_ENABLED
         - REPEAT_WORK_REVISION_ENABLED
         env:
+          CONVERSATIONS_V3_LIVE_TITLE: {value: 'on', category: ops_kill}
           CONVERSATION_PARKED_TERMINAL_STATUS_ENABLED:
             value: 'off'
             category: rollout
@@ -1911,6 +1913,7 @@ overlay:
         - REPEAT_WORK_REVISION_ENABLED
         - HOSTED_DIARIZATION_API_URL
         env:
+          CONVERSATIONS_V3_LIVE_TITLE: {value: 'off', category: ops_kill}
           CONVERSATION_PARKED_TERMINAL_STATUS_ENABLED:
             value: 'off'
             category: rollout
@@ -2247,6 +2250,7 @@ overlay:
         - BATCH_PIPELINE_PROJECTION_PHASE_SAMPLE_PERCENT
         - BATCH_POLICY_KILL_SWITCH_LOG_ON_CHANGE_ENABLED
         env:
+          CONVERSATIONS_V3_LIVE_TITLE: {value: 'on', category: ops_kill}
           CONVERSATION_PARKED_TERMINAL_STATUS_ENABLED:
             value: 'off'
             category: rollout

@@ -4622,7 +4622,6 @@
     "capturePendantDisconnectedShort": "Omi verbindet sich von selbst neu",
     "forYou": "Für dich",
     "stopThese": "Diese stoppen",
-    "meetingActionItemsTitle": "Aktionspunkte",
     "addToTasks": "Zu Aufgaben hinzufügen",
     "showInTranscript": "Im Transkript anzeigen",
     "tentativeTaskDueDate": "Fällig etwa {date}",
@@ -4763,5 +4762,8 @@
     "prepaidCodeFieldHint": "Code eingeben",
     "prepaidCodeRedeem": "Einlösen",
     "prepaidCodeRedeemed": "Code eingelöst",
-    "prepaidCodeResult": "{reason, select, invalid{Dieser Code ist ungültig. Prüfe ihn und versuche es erneut.} used{Dieser Code wurde bereits verwendet.} expired{Dieser Code ist abgelaufen.} hasPlan{Du hast bereits einen Plan. Dein Code wurde nicht verwendet. Löse ihn ein, wenn dein Plan endet.} notPrepaid{Dieser Code kann hier nicht eingelöst werden. Verwende ihn, wenn du einen Plan wählst.} notEligible{Dieser Code kann für dieses Konto nicht verwendet werden.} rateLimited{Zu viele Versuche. Versuche es später erneut.} other{Etwas ist schiefgelaufen. Bitte versuche es erneut.}}"
+    "prepaidCodeResult": "{reason, select, invalid{Dieser Code ist ungültig. Prüfe ihn und versuche es erneut.} used{Dieser Code wurde bereits verwendet.} expired{Dieser Code ist abgelaufen.} hasPlan{Du hast bereits einen Plan. Dein Code wurde nicht verwendet. Löse ihn ein, wenn dein Plan endet.} notPrepaid{Dieser Code kann hier nicht eingelöst werden. Verwende ihn, wenn du einen Plan wählst.} notEligible{Dieser Code kann für dieses Konto nicht verwendet werden.} rateLimited{Zu viele Versuche. Versuche es später erneut.} other{Etwas ist schiefgelaufen. Bitte versuche es erneut.}}",
+    "playStripeBilledOnWeb": "Abgerechnet über omi.me. Hier jederzeit kündbar.",
+    "playStripeBilledOnWebShort": "Abgerechnet über omi.me.",
+    "playStripePlanPaused": "Dein {plan}-Tarif ist pausiert."
 }

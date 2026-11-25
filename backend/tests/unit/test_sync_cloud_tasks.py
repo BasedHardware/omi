@@ -7,6 +7,13 @@ utils/cloud_tasks.py, and the structural contract of the /v2/sync-jobs/run
 handler in routers/sync.py.
 """
 
+from types import SimpleNamespace
+
+from routers import (
+    enrichment as real_enrichment_adapter,
+)  # noqa: F401 - retain the canonical adapter across package stubs
+from utils.batch_pipeline import upload_entitlement as real_upload_entitlement  # noqa: F401 - CPU boundary dependency
+
 from utils.sync import size_telemetry  # noqa: F401 - retain real scoped telemetry across legacy package stubs
 from utils.other import owned_paths  # noqa: F401 - retain real scratch guard across legacy package stubs
 from models import conversation_continuity  # noqa: F401 - retain pure policy across legacy package stubs
@@ -1561,6 +1568,7 @@ def _load_sync_router_for_fast_path():
     )
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
+    module.upload_entitlement = SimpleNamespace(classify=lambda _uid: 'unknown')
     module.sync_redrive = types.SimpleNamespace(
         enabled=lambda: os.getenv('SYNC_DURABLE_REDRIVE_GUARD') == 'true',
         legacy_convergence_enabled=lambda: os.getenv('SYNC_LEGACY_COMPLETION_CONVERGENCE') == 'true',

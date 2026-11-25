@@ -57,6 +57,8 @@ run_proof() {
 
 # These require real transaction retries and the lifecycle network guard;
 # ordinary unit shards intentionally do not stand up emulator services.
+run_proof "v3 Finish (bounded source query and concurrent window fence)" \
+  "$PYTHON" -m pytest -q -p no:cacheprovider tests/integration/test_conversations_v3_finish_emulator.py
 run_proof "record custody append (committed reply loss, retries, privacy)" \
   "$PYTHON" -m pytest -q -p no:cacheprovider tests/integration/test_record_custody_append_emulator.py
 run_proof "LLM gateway idempotency (claim, replay, expiry, stale settlement)" \
@@ -202,6 +204,11 @@ run_proof "pending deletion and restore conformance (sim + emulator required)" \
 run_proof "provider merge conformance (sim + emulator required; Postgres when available)" \
   env OMI_REQUIRE_STORE_BACKENDS="${OMI_REQUIRE_STORE_BACKENDS:-sim,emulator}" \
   "$PYTHON" -m pytest -q -p no:cacheprovider scripts/provider_merge_emulator_test.py
+
+# PL-606/607/608: independent projection clocks cannot hide owed follow-ups.
+run_proof "projection discovery conformance (sim + emulator required; Postgres when available)" \
+  env OMI_REQUIRE_STORE_BACKENDS="${OMI_REQUIRE_STORE_BACKENDS:-sim,emulator}" \
+  "$PYTHON" -m pytest -q -p no:cacheprovider scripts/projection_discovery_emulator_test.py
 
 run_proof "stale merge-head promotion (real transactions, privacy fence, stale hints, demotion)" \
   env OMI_REQUIRE_STORE_BACKENDS="${OMI_REQUIRE_STORE_BACKENDS:-sim,emulator}" \
