@@ -224,7 +224,7 @@ def body(doc):
                      if k not in {'uid', 'resourceVersion', 'generation', 'creationTimestamp', 'managedFields'}}}
 
 
-def compare(desired, live, baseline, private_names):
+def compare(desired, live, baseline, private_names, *, references=False):
     """No raw value crosses the comparison boundary, including public-looking data."""
     require(set(desired) == set(baseline), 'overlay_document_set')
     deployments = [k for k in desired if k[1] == 'Deployment']
@@ -255,7 +255,10 @@ def compare(desired, live, baseline, private_names):
     # Mandatory live preservation is checked privately, never disclosed as a value.
     matches = [env(c).get('STT_CAP_DISPATCH_ENFORCEMENT') for c in want.values()
                if 'STT_CAP_DISPATCH_ENFORCEMENT' in env(c)]
-    require(matches == [{'value': 'true'}], 'required_policy_changed')
+    if references:
+        require('STT_CAP_DISPATCH_ENFORCEMENT' in private_names and len(matches) == 1, 'required_policy_changed')
+    else:
+        require(matches == [{'value': 'true'}], 'required_policy_changed')
     docs = []
     for key in sorted(set(desired) | set(live)):
         d, old = desired.get(key), live.get(key)
@@ -268,6 +271,80 @@ def compare(desired, live, baseline, private_names):
     return {'documents': docs, 'containers': sorted(want), 'env': rows,
             'document_count': len(docs), 'env_key_count': len(rows), 'complete': True,
             'policy_preserved': True, 'private_keys': sorted(private_names), 'private_container': main_container}
+
+
+def compare_reference_render(desired, predecessor, inverse, live, private_keys, secret_name, image):
+    """Prove the reconnect addition against a pinned Helm predecessor and live references."""
+    require(set(desired) == set(predecessor) == set(inverse) == set(live), 'reference_document_set')
+    require(all(live[key] is not None for key in desired), 'reference_live_document_missing')
+    require(inverse == predecessor, 'reference_inverse_differs')
+    deployments = [key for key in desired if key[1] == 'Deployment']
+    require(len(deployments) == 1 and deployments[0][3] == TARGET, 'deployment_coverage')
+    target = deployments[0]
+    corrected = copy.deepcopy(desired)
+    primary = corrected[target]['spec']['template']['spec']['containers'][0]
+    primary_name = 'containers/' + primary['name']
+    reconnect = 'LISTEN_BATCH_RECONNECT_ENABLED'
+    require(env(primary).get(reconnect) == {'value': 'true'}, 'reference_reconnect_value')
+    primary['env'] = [row for row in primary['env'] if row['name'] != reconnect]
+    require(corrected == predecessor, 'reference_render_differs')
+
+    expected = containers(predecessor[target])
+    observed = containers(live[target])
+    require(expected.keys() == observed.keys(), 'container_set_changed')
+    require(all(env(expected[name]) == env(observed[name]) for name in expected), 'reference_live_env_drift')
+    require(expected[primary_name]['image'] == observed[primary_name]['image'] == image, 'reference_image_changed')
+    require(all(reconnect not in env(container) for container in observed.values()), 'reference_reconnect_present')
+
+    require(isinstance(private_keys, list) and 0 < len(private_keys) == len(set(private_keys))
+            and isinstance(secret_name, str) and NAME.fullmatch(secret_name), 'reference_inventory')
+    private_env = env(observed[primary_name])
+    for key in private_keys:
+        require(isinstance(key, str) and KEY.fullmatch(key), 'reference_inventory')
+        require(private_env.get(key) == {'valueFrom': {'secretKeyRef': {'name': secret_name, 'key': key}}},
+                'reference_binding_changed')
+    return primary['name']
+
+
+def serving_pods(reader, deployment, primary, image):
+    """Read only the selected Ready pods and bind the running image digest."""
+    meta, spec, status = deployment['metadata'], deployment['spec'], deployment['status']
+    replicas = spec['replicas']
+    require(type(replicas) is int and replicas > 0 and status.get('observedGeneration') == meta['generation']
+            and all(status.get(field) == replicas for field in
+                    ('replicas', 'updatedReplicas', 'readyReplicas', 'availableReplicas')), 'reference_not_ready')
+    selector = spec['selector']
+    labels = selector.get('matchLabels')
+    require(set(selector) == {'matchLabels'} and isinstance(labels, dict) and labels
+            and all(re.fullmatch(r'[A-Za-z0-9./_-]+', k) and re.fullmatch(r'[A-Za-z0-9._-]+', v)
+                    for k, v in labels.items()), 'reference_selector_unknown')
+    selected = ','.join(f'{key}={value}' for key, value in sorted(labels.items()))
+    pods = json_read(reader.run(['kubectl', '-n', NS, 'get', 'pods', '--selector', selected, '-o', 'json']))['items']
+    require(len(pods) == replicas, 'reference_pod_count')
+    versions = {}
+    owners = set()
+    for pod in pods:
+        pod_meta = pod['metadata']
+        ready = [condition for condition in pod['status']['conditions']
+                 if condition.get('type') == 'Ready' and condition.get('status') == 'True']
+        primary_status = [row for row in pod['status']['containerStatuses'] if row['name'] == primary]
+        require(not pod_meta.get('deletionTimestamp') and len(ready) == 1 and len(primary_status) == 1
+                and primary_status[0].get('ready') is True, 'reference_pod_not_ready')
+        image_id = primary_status[0]['imageID'].removeprefix('docker-pullable://')
+        require(image_id == image, 'reference_serving_digest')
+        owner = [row for row in pod_meta['ownerReferences']
+                 if row.get('kind') == 'ReplicaSet' and row.get('controller') is True]
+        require(len(owner) == 1, 'reference_pod_owner')
+        owners.add((owner[0]['name'], owner[0]['uid']))
+        versions[pod_meta['name']] = version(pod)
+    require(len(owners) == 1 and len(versions) == replicas, 'reference_pod_owner')
+    name, uid = owners.pop()
+    require(isinstance(name, str) and NAME.fullmatch(name), 'reference_pod_owner')
+    replica_set = json_read(reader.run(['kubectl', '-n', NS, 'get', 'replicaset', name, '-o', 'json']))
+    require(replica_set and replica_set['metadata']['uid'] == uid and any(
+        owner.get('kind') == 'Deployment' and owner.get('uid') == meta['uid'] and owner.get('controller') is True
+        for owner in replica_set['metadata'].get('ownerReferences', [])), 'reference_replicaset_owner')
+    return versions
 
 
 def changed_paths(old, new, prefix=''):
@@ -291,6 +368,10 @@ def validate_request(request, now):
     require(state in {'requested', 'bound'}, 'overlay_replayed')
     if state == 'bound':
         fields |= {'run_id', 'run_attempt'}
+    reference_revision = request.get('reference_helm_revision')
+    if 'reference_helm_revision' in request:
+        fields.add('reference_helm_revision')
+        require(type(reference_revision) is int and reference_revision > 0, 'reference_revision_unknown')
     if 'ledger_binding' in request:
         fields.add('ledger_binding')
         require(isinstance(request['ledger_binding'], str) and HASH.fullmatch(request['ledger_binding']),
@@ -310,8 +391,11 @@ def validate_request(request, now):
             'overlay_release_identity_unknown')
     require(re.fullmatch(r'gcr.io/based-hardware/backend@sha256:[0-9a-f]{64}', request['image'])
             and re.fullmatch(r'[0-9a-f]{7,40}', request['image_tag']), 'overlay_image_binding')
-    require(request['overlay_state'] in {'present', 'empty'}
-            and isinstance(request['overlay_updated_at'], str) and request['overlay_updated_at'], 'overlay_version_unknown')
+    require((request['overlay_state'] == 'references' and request['overlay_updated_at'] == '')
+            if reference_revision else
+            (request['overlay_state'] in {'present', 'empty'}
+             and isinstance(request['overlay_updated_at'], str) and bool(request['overlay_updated_at'])),
+            'overlay_version_unknown')
     bindings = request.get('bindings')
     require(isinstance(bindings, dict) and set(bindings) == BINDING_FIELDS, 'overlay_tool_binding')
     for key, value in bindings.items():
@@ -363,12 +447,16 @@ def bindings(root, reader):
 def produce(request, reader, environ, root, private_file, overrides, now):
     validate_request(request, now)
     require(request['state'] == 'requested', 'request_already_bound')
-    # Retired once the candidate declares privateSecretEnv: the chart refuses any privateEnv overlay
-    # and renders references, so there is no overlay effect to prove (the train gate needs none).
     from listen_helm_env_overrides import load_values
 
     candidate = load_values(root / 'backend/charts/backend-listen/prod_omi_backend_listen_values.yaml')
-    require(not (candidate.get('privateSecretEnv') or {}).get('keys'), 'evidence_retired_private_secret_env')
+    reference_revision = request.get('reference_helm_revision')
+    private_spec = candidate.get('privateSecretEnv') or {}
+    if reference_revision:
+        require(private_spec.get('keys') and not candidate.get('privateEnv') and '-f' not in overrides,
+                'reference_inventory')
+    else:
+        require(not private_spec.get('keys'), 'evidence_retired_private_secret_env')
     require(environ.get('GITHUB_REPOSITORY') == 'BasedHardware/omi'
             and environ.get('GITHUB_EVENT_NAME') == 'workflow_dispatch'
             and environ.get('GITHUB_REF') == 'refs/heads/main'
@@ -394,8 +482,8 @@ def produce(request, reader, environ, root, private_file, overrides, now):
     # Import the trusted existing validator, not candidate code.
     from listen_helm_env_overrides import load_private_env
     private = load_private_env(private_file) if raw else {}
-    require((bool(raw) and request.get('overlay_state') == 'present')
-            or (not raw and request.get('overlay_state') == 'empty'), 'overlay_state_mismatch')
+    require(request['overlay_state'] == ('present' if raw else 'references' if reference_revision else 'empty'),
+            'overlay_state_mismatch')
     image_tag = request['image_tag']
     require(re.fullmatch(r'[0-9a-f]{7,40}', image_tag), 'image_invalid')
     image_source = reader.run(['git', '-C', str(root), 'rev-parse', '--verify', image_tag + '^{commit}']).decode().strip()
@@ -405,7 +493,7 @@ def produce(request, reader, environ, root, private_file, overrides, now):
                               'gcr.io/based-hardware/backend:' + image_tag,
                               '--format=value(image_summary.digest)']).decode().strip()
     require(request['image'] == 'gcr.io/based-hardware/backend@' + image_digest, 'image_digest_mismatch')
-    overlay = {'state': 'present' if raw else 'empty', 'updatedAt': request['overlay_updated_at'], 'sha256': sha(raw)}
+    overlay = {'state': request['overlay_state'], 'updatedAt': request['overlay_updated_at'], 'sha256': sha(raw)}
     args = helm_args(root / 'backend/charts/backend-listen',
                      root / 'backend/charts/backend-listen/prod_omi_backend_listen_values.yaml',
                      request['image_tag'], 'based-hardware', 'based-hardware', overrides)
@@ -417,18 +505,40 @@ def produce(request, reader, environ, root, private_file, overrides, now):
     if '-f' in overrides:
         require(overrides[-2:] == ['-f', str(private_file)], 'private_argv_binding')
         base_args = args[:-2]
-    base = json_read(reader.run([*base_args, '--dry-run=client', '--output=json']))
-    baseline = documents(base['manifest'] + ''.join('\n---\n' + h['manifest'] for h in base.get('hooks', [])))
-    current = documents(reader.run(['helm', '-n', NS, 'get', 'manifest', TARGET]).decode())
     helm_revision = release_revision(reader)
+    require(not reference_revision or helm_revision == reference_revision, 'reference_revision_mismatch')
+    current = documents(reader.run(['helm', '-n', NS, 'get', 'manifest', TARGET]).decode())
+    if reference_revision:
+        baseline = current
+    else:
+        base = json_read(reader.run([*base_args, '--dry-run=client', '--output=json']))
+        baseline = documents(base['manifest'] + ''.join('\n---\n' + h['manifest'] for h in base.get('hooks', [])))
     keys = sorted(set(baseline) | set(current))
     live = {k: reader.obj(k[1], k[3], k[2]) for k in keys}
     before = {k: version(v) for k, v in live.items()}
     full = json_read(reader.run([*args, '--dry-run=client', '--output=json']))
     require(isinstance(full.get('manifest'), str) and isinstance(full.get('hooks', []), list), 'partial_render')
-    rendered = full['manifest'] + ''.join('\n---\n' + h['manifest'] for h in full.get('hooks', []))
-    desired = documents(rendered)
-    coverage = compare(desired, live, baseline, set(private))
+    rendered_hooks = ''.join('\n---\n' + h['manifest'] for h in full.get('hooks', []))
+    if reference_revision:
+        desired = documents(full['manifest'])
+        hooks = documents(rendered_hooks)
+        require(not (hooks.keys() & desired.keys()) and all(
+            hook['kind'] == 'Pod' and hook['metadata'].get('annotations', {}).get('helm.sh/hook') == 'test'
+            for hook in hooks.values()), 'reference_hook_unsupported')
+        prior_hooks = documents(reader.run(['helm', '-n', NS, 'get', 'hooks', TARGET,
+                                             '--revision', str(reference_revision)]).decode())
+        require(hooks == prior_hooks, 'reference_hooks_changed')
+        inverse = documents(reader.run(['helm', '-n', NS, 'get', 'manifest', TARGET,
+                                        '--revision', str(reference_revision)]).decode())
+        primary = compare_reference_render(desired, current, inverse, live, private_spec['keys'],
+                                           private_spec['secretName'], 'gcr.io/based-hardware/backend:' + image_tag)
+        deployment = next(live[key] for key in live if key[1] == 'Deployment')
+        pods = serving_pods(reader, deployment, primary, request['image'])
+        coverage = compare(desired, live, desired, set(private_spec['keys']), references=True)
+        require(serving_pods(reader, deployment, primary, request['image']) == pods, 'reference_pods_moved')
+    else:
+        desired = documents(full['manifest'] + rendered_hooks)
+        coverage = compare(desired, live, baseline, set(private))
     for k in keys:
         require(version(reader.obj(k[1], k[3], k[2])) == before[k], 'live_moved')
     require(release_revision(reader) == helm_revision, 'release_revision_moved')
@@ -438,6 +548,9 @@ def produce(request, reader, environ, root, private_file, overrides, now):
                'image': request['image'], 'helm_args': canonical_args, 'overlay': overlay,
                'run_id': environ['GITHUB_RUN_ID'], 'run_attempt': environ['GITHUB_RUN_ATTEMPT'],
                'coverage': coverage, 'helm_revision': helm_revision, 'read_count': reader.calls, 'read_bytes': reader.bytes}
+    if reference_revision:
+        receipt['reference_helm_revision'] = reference_revision
+        receipt['inverse'] = ['helm', '-n', NS, 'rollback', TARGET, str(reference_revision), '--wait', '--timeout', '70m']
     require(len(canonical(receipt)) <= MAX_RECEIPT, 'receipt_bound')
     return receipt
 
@@ -474,7 +587,9 @@ def main():
             private_root.mkdir(mode=0o700, exist_ok=False)
             with tempfile.TemporaryDirectory(prefix='private-', dir=private_root) as tmp:
                 private_file = Path(tmp) / 'overlay.yaml'
-                private_file.write_text(os.environ.pop('LISTEN_PRIVATE_VALUES_YAML', ''))
+                overlay_text = os.environ.pop('LISTEN_PRIVATE_VALUES_YAML', '')
+                require(not request.get('reference_helm_revision') or not overlay_text, 'reference_overlay_injected')
+                private_file.write_text(overlay_text)
                 values = load_values(a.root / 'backend/charts/backend-listen/prod_omi_backend_listen_values.yaml')
                 names = {'gateway_feature_mode': 'OMI_LLM_GATEWAY_FEATURE_MODE',
                          'chat_agent_route': 'OMI_LLM_CHAT_AGENT_ROUTE',
