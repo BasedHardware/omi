@@ -1,20 +1,15 @@
 {
   "schema_version": 1,
   "id": "FC-conversation-delete-misses-upload-keyed-storage",
-  "family": "other",
-  "violated_contract": "Deleting a conversation must remove every copy of its audio and transcript, including state keyed by the sync upload or a provisional capture identity rather than the conversation id. Sync staging (syncing/{uid}/{job_id}/, no lifecycle delete) and batch-pipeline rows carrying the capture identity survived conversation deletion; non-cascade deletes kept all audio.",
-  "canonical_prevention": "Conversation deletion resolves upload-keyed storage through the sync content ledger (database/sync_ledger_sources.py) and erases it with the existing owner-prefix purge and batch purges; both cascade modes schedule the audio purge.",
-  "canonical_prevention_artifact": [
-    "backend/tests/unit/test_sync_ledger_sources.py",
-    "backend/tests/unit/test_owner_storage_purge_and_gate.py"
-  ],
+  "family": "resource-lifecycle",
+  "violated_contract": "Deleting a conversation must scrub its exclusive upload's batch rows and transcript reference on both data-plane copies; a shared upload survives until its final sibling is deleted, and cross-owner or unrelated rows remain intact.",
+  "canonical_prevention": "The PL-767 proof selected by the Backend Emulator Proofs runner requires both Firestore and PostgreSQL and verifies exclusive-upload erasure, shared-upload retention until the final sibling deletion, and preservation of cross-owner and unrelated rows.",
   "evidence_prs": [],
   "scope_hints": [
-    "backend/database/sync_ledger_sources.py",
-    "backend/utils/other/storage.py",
+    "backend/tests/integration/test_conversation_erasure_ledger_emulator.py",
     "backend/database/batch_pipeline_purge.py",
-    "backend/database/batch_pipeline_conversation_purge.py",
-    "backend/routers/conversations.py"
+    "backend/scripts/run-emulator-proofs.sh",
+    ".github/workflows/backend-emulator-proofs.yml"
   ],
   "status": "open"
 }
