@@ -205,6 +205,16 @@ class ChainStage:
     def attribute_call(self, row: Mapping[str, Any]) -> Optional[str]:
         return attribute_call(row)
 
+    def cache_ok(self, outputs: Mapping[str, Mapping[str, Any]]) -> Optional[str]:
+        """Why this result must not be stored (a failure may be transient), or None."""
+        failed = int((outputs.get('discard') or {}).get('failed') or 0)
+        if failed:
+            return f'{failed} conversations failed to finalize'
+        recap = (outputs.get('daily_summary') or {}).get('status')
+        if recap not in (None, 'ok'):
+            return f'daily summary {recap}'
+        return None
+
     def restore(self, ctx: Any, output: dict[str, Any]) -> None:
         ctx.run_extra.update(output.get('run_extra') or {})
 

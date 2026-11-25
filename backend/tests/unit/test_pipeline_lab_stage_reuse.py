@@ -286,3 +286,15 @@ def test_chain_call_attribution_by_feature_then_tag():
     assert attribute_call({'stage': 'notes', 'feature': 'pipeline_lab_fake_notes'}) == 'notes'
     assert attribute_call({'stage': 'finalize', 'feature': 'something_new'}) == 'discard'
     assert attribute_call({'feature': 'something_new'}) is None  # the executing stage keeps it
+
+
+def test_refresh_mode_reruns_and_failed_chain_results_are_not_stored(lab, capsys):
+    from testing.pipeline_lab.chain.plugin import ChainStage
+
+    run(capsys, lab)
+    refreshed = run(capsys, lab, '--llm-mode', 'refresh')
+    assert set(caches(refreshed).values()) == {'miss'}
+    stage = ChainStage('discard', None)
+    assert stage.cache_ok({'discard': {'failed': 0}, 'daily_summary': {'status': 'ok'}}) is None
+    assert stage.cache_ok({'discard': {'failed': 2}}) == '2 conversations failed to finalize'
+    assert stage.cache_ok({'discard': {}, 'daily_summary': {'status': 'failed'}}) == 'daily summary failed'

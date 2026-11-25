@@ -18,7 +18,10 @@ which execute and are cached together. For each unit it:
 the run warns when X falls inside one); earlier units are served from the cache when an entry
 exists and are otherwise marked ``skipped`` (``--from-stage discard`` then starts the chain from
 the stored production transcripts, RULINGS 16). Unchanged LLM calls inside re-run stages are
-still served by the proxy cache. ``--no-cache`` runs everything and stores nothing.
+still served by the proxy cache. ``--no-cache`` runs everything and stores nothing;
+``--llm-mode refresh`` runs everything and stores the result. A driver's ``cache_ok(outputs)``
+may refuse to store a result (the chain refuses one with failed conversations). The stage cache,
+like the proxy cache, does not key on which LLM upstream answered.
 
 Every stage gets a report row in ``run.json`` (``stages.<s>.report``): ``cache`` (hit, miss,
 off, skipped, failed), seconds, LLM calls made during the stage split into upstream and
@@ -513,7 +516,9 @@ def run_pipeline(
                     schema_version=max(int(getattr(d, 'schema_version', 1)) for d in drivers),
                 )
                 cacheable = whole and all(bool(getattr(d, 'cacheable', True)) for d in drivers) and not request.no_cache
-                entry = store.cache_get(first, key) if cacheable and not forced else None
+                # refresh asks the upstream again, so it never takes a stored result (it still stores one)
+                lookup = cacheable and not forced and request.llm_mode != 'refresh'
+                entry = store.cache_get(first, key) if lookup else None
                 if entry is not None and not store.cache_files_present(first, key, entry.get('artifacts') or []):
                     run.warnings.append(f'{first}: cache entry is missing stored artifacts (re-running)')
                     entry = None
@@ -590,7 +595,13 @@ def run_pipeline(
                         breakdown=timings if isinstance(timings, dict) else None,
                         **llm[stage],
                     )
-                if cacheable:
+                verdict = getattr(drivers[0], 'cache_ok', None)
+                refusal = verdict(outputs) if verdict is not None and cacheable else None
+                if refusal:
+                    run.warnings.append(f'{first}: not stored in the stage cache ({refusal})')
+                    for stage in group:
+                        reports[stage]['cache'] = 'off'
+                if cacheable and not refusal:
                     artifacts = _changed(before, _snapshot(store.run_dir(run_id)))
                     digests = store.cache_put_files(first, key, store.run_dir(run_id), artifacts)
                     digest = keys.hash_json(digests)
