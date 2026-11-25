@@ -4,6 +4,7 @@ The real router, real processor and real restore run against the strict store. O
 the external model and app boundaries are controlled.
 """
 
+import logging
 from copy import deepcopy
 from types import SimpleNamespace
 from unittest.mock import MagicMock
@@ -183,11 +184,17 @@ def test_reprocess_app_result_failure_keeps_the_row_hidden(
     assert isinstance(error.value.__cause__, processor.ExplicitAppSelectionFailedError)
     assert error.value.__cause__.__cause__ is original
     assert model.invoke.call_count == (0 if outcome == 'empty_context' else 1)
-    gateway_logs = [record.getMessage() for record in caplog.records if record.name.endswith('gateway_error_contract')]
+    gateway_logs = [record for record in caplog.records if record.name.endswith('gateway_error_contract')]
     assert len(gateway_logs) == 1
-    assert logged_class in gateway_logs[0]
+    record = gateway_logs[0]
+    assert logged_class in record.getMessage()
     if code:
-        assert 'route=conversation_processing/app_result' in gateway_logs[0]
+        assert 'route=conversation_processing/app_result' in record.getMessage()
+    if status == 502:
+        assert error.value.detail['failure_class'] == logged_class
+        assert 'conversation_id' not in error.value.detail
+        assert record.levelno == logging.WARNING
+        assert record.getMessage().endswith(f'conversation_id={CID}')
     assert private_message not in caplog.text
     assert private_message not in str(error.value.detail)
     assert registrations == []

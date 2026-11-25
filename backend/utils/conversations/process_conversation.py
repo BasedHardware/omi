@@ -3504,6 +3504,7 @@ def _process_conversation_steps(
             failure.__cause__ or failure,
             route='conversation_processing/app_result',
             empty_app_result=failure.empty_result,
+            conversation_id=conversation.id,
         ) from failure
     complete_explicit(uid, conversation, trigger)
     logger.info(f'process_conversation completed conversation.id= {conversation.id}')

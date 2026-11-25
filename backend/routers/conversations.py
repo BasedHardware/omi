@@ -1035,7 +1035,10 @@ def get_conversation_finalization_status(
                 }
             },
         },
-        502: {'description': 'The selected app produced no summary (detail code app_result_failed)'},
+        502: {
+            'description': 'The selected app produced no summary (detail code app_result_failed with failure_class '
+            'empty_context or empty_model_output)'
+        },
         503: {
             'description': 'Transient provider failure; the in-progress conversation is recoverable and may be retried',
             'content': {

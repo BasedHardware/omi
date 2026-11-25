@@ -117,7 +117,7 @@ void main() {
     test('502 app_result_failed and 500 are failures', () {
       expect(
         reprocessResultFromResponse(_json(502, {
-          'detail': {'code': 'app_result_failed', 'message': 'no content'},
+          'detail': {'code': 'app_result_failed', 'message': 'no content', 'failure_class': 'empty_model_output'},
         })),
         isA<ReprocessFailed>(),
       );

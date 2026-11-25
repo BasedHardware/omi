@@ -423,6 +423,7 @@ def conversation_processing_http_exception(
     *,
     route: str = 'conversation_processing',
     empty_app_result: EmptyAppResult | None = None,
+    conversation_id: str | None = None,
 ) -> HTTPException:
     """Map a processing failure to the existing safe HTTP contract.
 
@@ -450,7 +451,13 @@ def conversation_processing_http_exception(
     if retryable is not None:
         return retryable
     if empty_app_result is not None:
-        logger.warning('selected app produced no summary: failure_class=%s route=%s', empty_app_result.value, route)
-        return HTTPException(status_code=502, detail=APP_RESULT_FAILED_ERROR_DETAIL)
+        failure_class = empty_app_result.value
+        logger.warning(
+            'selected app produced no summary: failure_class=%s route=%s conversation_id=%s',
+            failure_class,
+            route,
+            conversation_id,
+        )
+        return HTTPException(status_code=502, detail={**APP_RESULT_FAILED_ERROR_DETAIL, 'failure_class': failure_class})
     logger.error('Conversation processing failed: %s', type(error).__name__)
     return HTTPException(status_code=500, detail=GENERIC_CONVERSATION_PROCESSING_ERROR_DETAIL)
