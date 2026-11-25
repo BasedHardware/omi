@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import asyncio
 from contextvars import copy_context
+from hashlib import sha256
+from threading import local
 from unittest.mock import patch
 from urllib.parse import urlsplit
 
@@ -77,7 +79,9 @@ def run_reference(state, stack, url):
     stack.enter_context(patch.object(app_integrations, 'safe_request_target', pin))
     stack.enter_context(patch.object(webhooks, 'safe_request_targets', lambda target: [pin(target)]))
     # Replace the vendor SDK at its network boundary. Production computes metadata and records.
-    stack.enter_context(patch.object(vector_db, 'index', VectorReceiver(state)))
+    vectors = VectorReceiver(state, vector_db.embeddings)
+    stack.enter_context(patch.object(vector_db, 'index', vectors))
+    stack.enter_context(patch.object(vector_db, 'embeddings', vectors))
 
     futures = []
     submit = processing.submit_with_context
@@ -111,13 +115,32 @@ def run_reference(state, stack, url):
 class VectorReceiver:
     """Record the outgoing vector operation after the real owner routing and shaping."""
 
-    def __init__(self, state):
+    def __init__(self, state, embeddings):
         self.state = state
+        self.embeddings = embeddings
+        self._inputs = local()
+
+    def __getattr__(self, name):
+        return getattr(self.embeddings, name)
+
+    def embed_documents(self, texts, *args, **kwargs):
+        vectors = self.embeddings.embed_documents(texts, *args, **kwargs)
+        self._inputs.pending = (list(texts), vectors)
+        return vectors
 
     def query(self, **_kwargs):
         return {'matches': []}
 
     def upsert(self, *, vectors, namespace, **_kwargs):
+        pending = getattr(self._inputs, 'pending', None)
+        self._inputs.pending = None
+        if namespace == 'ns4' and pending is not None:
+            texts, produced = pending
+            if len(texts) == len(vectors) and [record['values'] for record in vectors] == produced:
+                for record, text in zip(vectors, texts):
+                    self.state.task_embedding_inputs.setdefault(record['id'], []).append(
+                        sha256(text.encode()).hexdigest()
+                    )
         for record in vectors:
             if record['id'] == f'{self.state.uid}-{self.state.cid}':
                 self.state.vector(self.state.cid)

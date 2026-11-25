@@ -30,7 +30,7 @@ class Conflict(RuntimeError):
 
 
 def preview_wakes(rows, recordings) -> dict[str, datetime]:
-    """Keep one recording pending per preview so the existing sweep can recover its deadline."""
+    """Keep one recording pending per preview, and each source a held Finish waits on, until its deadline."""
     wakes: dict[str, datetime] = {}
     for row in rows:
         due = row.get('_v3_preview_due_at')
@@ -45,5 +45,11 @@ def preview_wakes(rows, recordings) -> dict[str, datetime]:
             None,
         )
         if rid is not None:
+            wakes[rid] = min(due, wakes.get(rid, due))
+    # A held Finish keeps its own recording, and every source whose speech after the cut waits, pending
+    # until the hold ends (outline.HOLD_UNTIL): the next load still finds the cut and that speech.
+    for rid, recording in recordings.items():
+        due = recording.get('_v3_hold_until')
+        if isinstance(due, datetime) and not recording.get('deleted'):
             wakes[rid] = min(due, wakes.get(rid, due))
     return wakes

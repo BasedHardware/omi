@@ -2,13 +2,13 @@
 
 from prometheus_client import Counter, Histogram, Gauge
 
-RECONCILES = Counter('omi_conversations_v3_reconciles_total', 'Builder outcomes', ['outcome'])
+RECONCILES = Counter('omi_conversations_v3_reconciles_total', 'Builder and processing outcomes', ['outcome'])
 BLOCKED = Counter(
     'omi_conversations_v3_blocked_total', 'Deterministic reconcile conflicts parked behind owner backoff', ['reason']
 )
 RACES = Counter(
     'omi_conversations_v3_races_total',
-    'Retryable reconcile races answered with a coalesced follow-up wake instead of a task retry',
+    'Retryable reconcile outcomes answered with a coalesced wake or a task retry',
     ['reason'],
 )
 CREATED_DELIVERIES = Counter(
@@ -76,6 +76,11 @@ BATCH_MANUAL_END = Counter(
 )
 for outcome in ('promoted', 'fast_finish', 'multi_unit_deferred', 'not_promoted', 'error'):
     BATCH_MANUAL_END.labels(outcome)
+
+FINISH_HELD = Counter(
+    'omi_conversations_v3_finish_held_total',
+    'Builder passes that kept a manual-end cut open while its own or a preceding batch transcript was pending',
+)
 
 SUMMARY_LATENCY = Histogram('omi_conversations_v3_end_to_summary_seconds', 'End to stored summary')
 SUMMARY_WRITES = Counter('omi_conversations_v3_summary_writes_total', 'First writes and late rewrites', ['kind'])

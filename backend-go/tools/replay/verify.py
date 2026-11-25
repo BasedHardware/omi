@@ -1,5 +1,6 @@
 """Check that the two emulator runs prove both parity and drift detection."""
 
+import copy
 import json
 import os
 from pathlib import Path
@@ -92,7 +93,7 @@ def verify_corpus_map(parity, gaps):
     require(all(item['rules'] for item in entries), 'held-out case has no contract mapping')
     reported = {case['name'] for report in (parity, gaps) for case in report['cases']}
     require(reported == {item['name'] for item in active_entries}, 'held-out cases must stay out of CI reports')
-    require(len(gaps['cases']) == 40 and len(parity['cases']) == 10, 'expected 40 active-finalizer and 10 admission cases')
+    require(len(gaps['cases']) == 41 and len(parity['cases']) == 10, 'expected 41 active-finalizer and 10 admission cases')
     require(parity['commit_sha'] == gaps['commit_sha'] and len(gaps['commit_sha']) == 40, 'reports must name the same commit')
     verify_cost(parity)
     verify_cost(gaps)
@@ -124,6 +125,45 @@ def verify_departures(gaps):
     require('conv-structure' not in unreadable['go']['provider_calls'], 'Go sent unreadable ciphertext to note generation')
 
 
+def verify_worker_fence(gaps):
+    by_name = {case['name']: case for case in gaps['cases']}
+    missing_worker = by_name['worker-missing-row-fence']
+    require(missing_worker['go_evidence']['job']['outcome'] == 'fenced', 'Go worker did not fence the deleted row')
+    require('conv-structure' not in missing_worker['go']['provider_calls'], 'Go worker called the model after losing its row')
+
+
+def verify_paid_call_counts(gaps):
+    kept = next(case for case in gaps['cases'] if case['name'] == 'kept-with-effects')
+    for side in ('python', 'go'):
+        calls = kept[side]['provider_calls']
+        for feature in ('conv-structure', 'memory-l1'):
+            require(calls.count(feature) == 1, (side, feature, 'paid call must occur exactly once'))
+
+
+def verify_mutation_sensitivity(gaps):
+    fence_mutant = copy.deepcopy(gaps)
+    fence_case = next(case for case in fence_mutant['cases'] if case['name'] == 'worker-missing-row-fence')
+    fence_case['go_evidence']['job']['outcome'] = 'completed'
+    fence_case['go']['provider_calls'].append('conv-structure')
+    try:
+        verify_worker_fence(fence_mutant)
+    except SystemExit:
+        pass
+    else:
+        raise SystemExit('mutation check failed: broken fence was accepted')
+
+    paid_mutant = copy.deepcopy(gaps)
+    paid_case = next(case for case in paid_mutant['cases'] if case['name'] == 'kept-with-effects')
+    paid_case['go']['provider_calls'].append('conv-structure')
+    try:
+        verify_paid_call_counts(paid_mutant)
+    except SystemExit:
+        pass
+    else:
+        raise SystemExit('mutation check failed: duplicate paid call was accepted')
+    print('Mutation check passed: a broken fence and duplicate paid call both fail verification.')
+
+
 def main():
     parity_path, gaps_path = map(Path, sys.argv[1:])
     parity = json.loads(parity_path.read_text())
@@ -145,9 +185,8 @@ def main():
     verify_unexplained_count(gaps)
     by_name = {case['name']: case for case in gaps['cases']}
     verify_departures(gaps)
-    missing_worker = by_name['worker-missing-row-fence']
-    require(missing_worker['go_evidence']['job']['outcome'] == 'fenced', 'Go worker did not fence the deleted row')
-    require('conv-structure' not in missing_worker['go']['provider_calls'], 'Go worker called the model after losing its row')
+    verify_worker_fence(gaps)
+    verify_paid_call_counts(gaps)
     for case in gaps['cases']:
         if case['name'].startswith('trigger-'):
             expected = case['name'].removeprefix('trigger-').replace('-', '_')
@@ -316,5 +355,7 @@ def verify_task_reports(output_dir, parity_path, gaps_path):
 if __name__ == '__main__':
     if len(sys.argv) == 5 and sys.argv[1] == '--task-output':
         verify_task_reports(sys.argv[2], sys.argv[3], sys.argv[4])
+    elif len(sys.argv) == 3 and sys.argv[1] == '--mutation-check':
+        verify_mutation_sensitivity(json.loads(Path(sys.argv[2]).read_text()))
     else:
         main()
