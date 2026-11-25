@@ -1,10 +1,21 @@
-"""``python -m testing.pipeline_lab scenario run|check``: bring up the local stack, run each scenario in a
-fresh process, print the timeline, the conversations and the checks.
+"""``python -m testing.pipeline_lab scenario run|check|stack``: bring up (or reuse) the local stack, run each
+scenario in a fresh process, write the run directory (``scenario/verdict.py``), print the timeline, the
+conversations and the checks.
 
-The stack is the smoke's (``stack/run_chain_smoke.sh``): a Firestore emulator (project ``demo-omi-local``)
-and a ``redis-server`` on free loopback ports, started here and stopped by the PIDs started here. When
-``FIRESTORE_EMULATOR_HOST`` and ``OMI_PIPELINE_LAB_REDIS`` already name loopback peers, those are used and
-nothing is started. Scenarios run one at a time; each resets the lab uid first.
+Peers, in order of preference:
+
+1. ``FIRESTORE_EMULATOR_HOST`` and ``OMI_PIPELINE_LAB_REDIS`` naming loopback peers: used, never stopped.
+2. The host's shared stack (``scenario stack up``; pid file ``<lab root>/scenario-stack/stack.json``): used,
+   never stopped.
+3. Otherwise a Firestore emulator and a ``redis-server`` on free loopback ports, started here and stopped by
+   the PIDs started here (logs in ``DIR/.stack/``).
+
+Isolation, so many runs share one emulator and one Redis: every scenario process (each repeat too) gets
+a run id, its own Firestore project ``demo-lab-<run id>`` (the emulator runs multi-project), its own Redis
+database number held by a lease key in that database (``RedisSlots``; database 0 is never used), its own
+blob root under its output directory, and Typesense writes off. The reset clears only that database; after
+the run its database is flushed and its project's documents deleted, both only while the lease is held.
+The uid stays the synthetic ``local-dev-user`` (task names hash it; a fixed uid keeps runs comparable).
 
 Needs ``firebase`` (firebase-tools) and a Java 21 runtime for the emulator, and ``redis-server``. A Homebrew
 ``openjdk@21`` is put on PATH for the emulator when present.
@@ -12,27 +23,39 @@ Needs ``firebase`` (firebase-tools) and a Java 21 runtime for the emulator, and 
 
 from __future__ import annotations
 
+from concurrent.futures import ThreadPoolExecutor
 from contextlib import contextmanager
+from dataclasses import dataclass, field
+from datetime import datetime, timezone
+import fcntl
 import json
 import os
 from pathlib import Path
+import secrets
 import shutil
 import signal
 import socket
 import subprocess
 import sys
 import tempfile
+import threading
 import time
 from typing import Any, Iterator, Optional, Sequence
+import urllib.request
 
-from testing.pipeline_lab.scenario.checks import OUTCOMES
+from testing.pipeline_lab.scenario import verdict as verdicts
 from testing.pipeline_lab.scenario.spec import ScenarioError, describe_plan, load_scenario
 
 BACKEND = Path(__file__).resolve().parents[3]
 SCENARIO_DIR = Path(__file__).resolve().parent / 'scenarios'
 JAVA_HOMES = ('/opt/homebrew/opt/openjdk@21/bin', '/usr/local/opt/openjdk@21/bin')
-PROJECT = 'demo-omi-local'
+PROJECT = 'demo-omi-local'  # the emulator's start project; runs use their own demo-lab-<run id>
+RUN_PROJECT_PREFIX = 'demo-lab-'
 DEFAULT_TIMEOUT = 240.0
+REDIS_DATABASES = 256  # for a redis-server started here; a given one reports its own count
+LEASE_GRACE = 120.0  # lease outlives the scenario timeout by this much
+PEER_ENV = ('FIRESTORE_EMULATOR_HOST', 'OMI_PIPELINE_LAB_REDIS')
+MODULE = 'testing.pipeline_lab.scenario.run'
 
 
 def _free_port() -> int:
@@ -64,38 +87,48 @@ def _stop(process: subprocess.Popen, *, grace: float = 15.0) -> None:
         process.wait(timeout=5)
 
 
-@contextmanager
-def local_stack(work: Path) -> Iterator[dict[str, str]]:
-    """``{FIRESTORE_EMULATOR_HOST, OMI_PIPELINE_LAB_REDIS}`` for loopback peers, started here if not given."""
-    given = {k: os.environ.get(k, '') for k in ('FIRESTORE_EMULATOR_HOST', 'OMI_PIPELINE_LAB_REDIS')}
-    if all(v.startswith(('127.0.0.1:', 'localhost:')) for v in given.values()):
-        yield given
-        return
+@dataclass(frozen=True)
+class Peers:
+    firestore: str
+    redis: str
+    mode: str  # given | shared | started
+
+    def env(self) -> dict[str, str]:
+        return {'FIRESTORE_EMULATOR_HOST': self.firestore, 'OMI_PIPELINE_LAB_REDIS': self.redis}
+
+
+def _port(hostport: str) -> int:
+    return int(hostport.rpartition(':')[2])
+
+
+def _start_peers(work: Path) -> tuple[list[subprocess.Popen], int, int]:
+    """Start redis-server and the Firestore emulator (multi-project) in new sessions; wait until both listen."""
     for tool in ('redis-server', 'firebase'):
         if shutil.which(tool) is None:
             raise RuntimeError(f'{tool} not found on PATH (see the pipeline lab README, "Scenarios")')
+    work.mkdir(parents=True, exist_ok=True, mode=0o700)
     fs_port, redis_port = _free_port(), _free_port()
     started: list[subprocess.Popen] = []
-    logs = []
     try:
-        redis_log = open(work / 'redis.log', 'wb')
-        logs.append(redis_log)
-        started.append(
-            subprocess.Popen(
-                ['redis-server', '--port', str(redis_port), '--bind', '127.0.0.1', '--save', '', '--appendonly', 'no'],
-                cwd=work,
-                stdout=redis_log,
-                stderr=subprocess.STDOUT,
-                start_new_session=True,
+        with open(work / 'redis.log', 'wb') as redis_log:
+            started.append(
+                subprocess.Popen(
+                    ['redis-server', '--port', str(redis_port), '--bind', '127.0.0.1', '--save', '']
+                    + ['--appendonly', 'no', '--databases', str(REDIS_DATABASES)],
+                    cwd=work,
+                    stdout=redis_log,
+                    stderr=subprocess.STDOUT,
+                    start_new_session=True,
+                )
             )
-        )
         (work / 'firebase.json').write_text(
             json.dumps(
                 {
                     'emulators': {
                         'firestore': {'host': '127.0.0.1', 'port': fs_port},
                         'ui': {'enabled': False},
-                        'singleProjectMode': True,
+                        # Every run writes its own demo-lab-<run id> project.
+                        'singleProjectMode': False,
                     }
                 }
             )
@@ -104,29 +137,268 @@ def local_stack(work: Path) -> Iterator[dict[str, str]]:
         java = next((p for p in JAVA_HOMES if Path(p, 'java').exists()), None)
         if java:
             env['PATH'] = java + os.pathsep + env.get('PATH', '')
-        emulator_log = open(work / 'firestore.log', 'wb')
-        logs.append(emulator_log)
-        started.append(
-            subprocess.Popen(
-                ['firebase', 'emulators:start', '--only', 'firestore', '--project', PROJECT],
-                cwd=work,
-                env=env,
-                stdout=emulator_log,
-                stderr=subprocess.STDOUT,
-                start_new_session=True,
+        with open(work / 'firestore.log', 'wb') as emulator_log:
+            started.append(
+                subprocess.Popen(
+                    ['firebase', 'emulators:start', '--only', 'firestore', '--project', PROJECT],
+                    cwd=work,
+                    env=env,
+                    stdout=emulator_log,
+                    stderr=subprocess.STDOUT,
+                    start_new_session=True,
+                )
             )
-        )
         deadline = time.monotonic() + 120
         while not (_listening(fs_port) and _listening(redis_port)):
             if time.monotonic() > deadline or any(p.poll() is not None for p in started):
                 raise RuntimeError(f'local stack did not start; logs in {work}')
             time.sleep(0.25)
-        yield {'FIRESTORE_EMULATOR_HOST': f'127.0.0.1:{fs_port}', 'OMI_PIPELINE_LAB_REDIS': f'127.0.0.1:{redis_port}'}
+    except BaseException:
+        for process in reversed(started):
+            _stop(process)
+        raise
+    return started, fs_port, redis_port
+
+
+def given_peers() -> Optional[Peers]:
+    given = {k: os.environ.get(k, '') for k in PEER_ENV}
+    if all(v.startswith(('127.0.0.1:', 'localhost:')) for v in given.values()):
+        return Peers(given['FIRESTORE_EMULATOR_HOST'], given['OMI_PIPELINE_LAB_REDIS'], 'given')
+    return None
+
+
+@contextmanager
+def local_stack(work: Path) -> Iterator[Peers]:
+    """Loopback peers: given in the env, else the host's shared stack, else started here (and stopped)."""
+    peers = given_peers()
+    if peers is None:
+        shared = stack_status()
+        if shared.get('running'):
+            peers = Peers(shared['firestore'], shared['redis'], 'shared')
+    if peers is not None:
+        yield peers
+        return
+    started, fs_port, redis_port = _start_peers(work / '.stack')
+    try:
+        yield Peers(f'127.0.0.1:{fs_port}', f'127.0.0.1:{redis_port}', 'started')
     finally:
         for process in reversed(started):
             _stop(process)
-        for handle in logs:
-            handle.close()
+
+
+# ---- the host's shared stack (scenario stack up|down|status) -------------------------------------
+
+
+def stack_dir() -> Path:
+    from testing.pipeline_lab.stack.config import LabStackConfig
+
+    return LabStackConfig.from_env().lab_root / 'scenario-stack'
+
+
+def _pid_command(pid: int) -> str:
+    done = subprocess.run(['ps', '-o', 'command=', '-p', str(pid)], capture_output=True, text=True)
+    return done.stdout.strip()
+
+
+# What each recorded pid's command line must contain before it is trusted or signalled.
+_STACK_MARKERS = {'redis': 'redis-server', 'firestore': 'emulators:start'}
+
+
+def _ours(pid: int, role: str) -> bool:
+    try:
+        os.kill(pid, 0)
+    except (ProcessLookupError, PermissionError):
+        return False
+    return _STACK_MARKERS[role] in _pid_command(pid)
+
+
+def stack_status(root: Optional[Path] = None) -> dict[str, Any]:
+    root = root or stack_dir()
+    path = root / 'stack.json'
+    if not path.exists():
+        return {'running': False, 'pid_file': str(path)}
+    record = json.loads(path.read_text())
+    alive = {role: _ours(int(pid), role) for role, pid in (record.get('pids') or {}).items()}
+    listening = _listening(_port(record['firestore'])) and _listening(_port(record['redis']))
+    return {
+        **record,
+        'running': bool(alive) and all(alive.values()) and listening,
+        'alive': alive,
+        'pid_file': str(path),
+    }
+
+
+@contextmanager
+def _stack_lock(root: Path) -> Iterator[None]:
+    root.mkdir(parents=True, exist_ok=True, mode=0o700)
+    with open(root / 'lock', 'w') as handle:
+        fcntl.flock(handle, fcntl.LOCK_EX)
+        try:
+            yield
+        finally:
+            fcntl.flock(handle, fcntl.LOCK_UN)
+
+
+def stack_up(root: Optional[Path] = None) -> dict[str, Any]:
+    """Start the long-lived shared stack unless it is already running. Its processes outlive this one."""
+    root = root or stack_dir()
+    with _stack_lock(root):
+        status = stack_status(root)
+        if status.get('running'):
+            return {**status, 'started': False}
+        if status.get('pids'):
+            _stop_recorded(status)  # a half-dead earlier stack: stop what is still ours
+        started, fs_port, redis_port = _start_peers(root)
+        record = {
+            'schema': 1,
+            'started_at': datetime.now(timezone.utc).isoformat(timespec='seconds'),
+            'firestore': f'127.0.0.1:{fs_port}',
+            'redis': f'127.0.0.1:{redis_port}',
+            'pids': {'redis': started[0].pid, 'firestore': started[1].pid},
+            'logs': str(root),
+        }
+        (root / 'stack.json').write_text(json.dumps(record, indent=1) + '\n')
+        return {**stack_status(root), 'started': True}
+
+
+def _stop_recorded(record: dict[str, Any], grace: float = 15.0) -> dict[str, str]:
+    stopped = {}
+    for role, pid in (record.get('pids') or {}).items():
+        pid = int(pid)
+        if not _ours(pid, role) or os.getpgid(pid) != pid:
+            stopped[role] = 'not running (or not ours)'
+            continue
+        os.killpg(pid, signal.SIGTERM)
+        deadline = time.monotonic() + grace
+        while time.monotonic() < deadline and _ours(pid, role):
+            time.sleep(0.2)
+        if _ours(pid, role):
+            os.killpg(pid, signal.SIGKILL)
+        stopped[role] = 'stopped'
+    return stopped
+
+
+def stack_down(root: Optional[Path] = None) -> dict[str, Any]:
+    """Stop the shared stack by the PIDs in its pid file (each checked to be the process it names)."""
+    root = root or stack_dir()
+    with _stack_lock(root):
+        status = stack_status(root)
+        if not status.get('pids'):
+            return {'running': False, 'stopped': {}}
+        stopped = _stop_recorded(status)
+        (root / 'stack.json').unlink(missing_ok=True)
+        return {'running': False, 'stopped': stopped}
+
+
+# ---- per-run isolation -----------------------------------------------------------------------------
+
+
+def new_run_id() -> str:
+    return secrets.token_hex(6)
+
+
+class RedisSlots:
+    """Lease one Redis database number per run on a shared ``redis-server``.
+
+    The lease is ``SET pipeline_lab:lease <run id> NX EX ttl`` inside the database it claims, so claim and
+    ownership live together and a crashed run's lease expires by itself. Database 0 is never leased: it is
+    a dev stack's, and the product's own default.
+    """
+
+    def __init__(self, hostport: str):
+        import redis
+
+        host, _, port = hostport.rpartition(':')
+        self._redis = redis
+        self._host, self._port = host, int(port)
+        self._lock = threading.Lock()
+        admin = self._client(0)
+        try:
+            raw = admin.config_get('databases').get('databases')
+            self.databases = int(raw or 16)
+        except Exception:  # noqa: BLE001 - CONFIG may be disabled; redis' default count
+            self.databases = 16
+        finally:
+            admin.close()
+
+    def _client(self, db: int) -> Any:
+        return self._redis.Redis(host=self._host, port=self._port, db=db, socket_timeout=5)
+
+    def claim(self, run_id: str, ttl: float) -> int:
+        from testing.pipeline_lab.seed.writer import REDIS_LEASE_KEY
+
+        with self._lock:
+            for db in range(1, self.databases):
+                client = self._client(db)
+                try:
+                    if client.set(REDIS_LEASE_KEY, run_id, nx=True, ex=max(1, int(ttl))):
+                        return db
+                finally:
+                    client.close()
+        raise RuntimeError(f'no free Redis database on {self._host}:{self._port} ({self.databases - 1} leasable)')
+
+    def release(self, db: int, run_id: str) -> bool:
+        """Flush database ``db`` (lease included) only while ``run_id`` still holds it."""
+        from testing.pipeline_lab.seed.writer import REDIS_LEASE_KEY
+
+        if db == 0:
+            return False
+        client = self._client(db)
+        try:
+            with client.pipeline() as pipe:
+                try:
+                    pipe.watch(REDIS_LEASE_KEY)
+                    holder = pipe.get(REDIS_LEASE_KEY)
+                    if (holder.decode() if isinstance(holder, bytes) else holder) != run_id:
+                        return False
+                    pipe.multi()
+                    pipe.flushdb()
+                    pipe.execute()
+                    return True
+                except self._redis.WatchError:
+                    return False
+        finally:
+            client.close()
+
+
+def delete_project(firestore_host: str, project: str) -> None:
+    """Drop every document of one run's emulator project (the emulator's own reset endpoint)."""
+    if not project.startswith(RUN_PROJECT_PREFIX):
+        raise ScenarioError(f'refusing to clear project {project}: not a per-run demo-lab project')
+    url = f'http://{firestore_host}/emulator/v1/projects/{project}/databases/(default)/documents'
+    request = urllib.request.Request(url, method='DELETE')
+    with urllib.request.urlopen(request, timeout=30):  # noqa: S310 - loopback emulator only
+        pass
+
+
+@dataclass(frozen=True)
+class Isolation:
+    run_id: str
+    project_id: str
+    redis_db: int
+
+    def env(self) -> dict[str, str]:
+        return {
+            'OMI_PIPELINE_LAB_RUN_ID': self.run_id,
+            'OMI_PIPELINE_LAB_PROJECT_ID': self.project_id,
+            'OMI_PIPELINE_LAB_REDIS_DB': str(self.redis_db),
+            'OMI_PIPELINE_LAB_REDIS_LEASE': self.run_id,
+            'OMI_PIPELINE_LAB_TYPESENSE': 'off',
+        }
+
+
+@contextmanager
+def isolated_run(peers: Peers, slots: RedisSlots, ttl: float) -> Iterator[Isolation]:
+    run_id = new_run_id()
+    project = RUN_PROJECT_PREFIX + run_id
+    db = slots.claim(run_id, ttl)
+    try:
+        yield Isolation(run_id=run_id, project_id=project, redis_db=db)
+    finally:
+        try:
+            delete_project(peers.firestore, project)
+        finally:
+            slots.release(db, run_id)
 
 
 def resolve(name: str) -> Path:
@@ -140,12 +412,37 @@ def resolve(name: str) -> Path:
     raise ScenarioError(f'{name}: no such file or committed scenario')
 
 
-def run_one(path: Path, out: Path, peers: dict[str, str], *, timeout: float, clock: str = 'frozen') -> dict[str, Any]:
-    env = {**os.environ, **peers}
-    command = [sys.executable, '-m', 'testing.pipeline_lab.scenario.run', '--file', str(path), '--out', str(out)]
-    command += ['--clock', clock]
+@dataclass(frozen=True)
+class Arm:
+    """Another backend tree to run the scenarios against (``scenario compare``): the lab package is
+    vendored from this checkout into ``vendor``; product code comes only from ``backend``."""
+
+    backend: Path
+    vendor: Path
+
+
+def run_one(
+    path: Path,
+    out: Path,
+    peers: dict[str, str],
+    *,
+    timeout: float,
+    clock: str = 'frozen',
+    isolation: Optional[Isolation] = None,
+    arm: Optional[Arm] = None,
+) -> dict[str, Any]:
+    child = {**peers, **(isolation.env() if isolation else {})}
+    args = ['--file', str(path.resolve()), '--out', str(out), '--clock', clock]
+    if arm is None:
+        env = {**os.environ, **child}
+        command, cwd = [sys.executable, '-m', MODULE, *args], BACKEND
+    else:
+        from testing.pipeline_lab import worktrees
+
+        env = worktrees.arm_env(child)
+        command, cwd = worktrees.arm_command(arm.vendor, arm.backend, MODULE, args), arm.backend
     try:
-        done = subprocess.run(command, cwd=BACKEND, env=env, capture_output=True, text=True, timeout=timeout)
+        done = subprocess.run(command, cwd=cwd, env=env, capture_output=True, text=True, timeout=timeout)
     except subprocess.TimeoutExpired:
         return {'scenario': path.stem, 'outcome': 'error', 'error': f'timed out after {timeout:g}s'}
     (out / 'stderr.log').write_text(done.stderr or '')
@@ -238,33 +535,218 @@ def check_files(names: Sequence[str], *, as_json: bool) -> int:
     return 0
 
 
+def output_root(keep: Optional[str], prefix: str = 'plab-scenario-') -> Path:
+    root = Path(keep).expanduser().resolve() if keep else Path(tempfile.mkdtemp(prefix=prefix))
+    if any((parent / '.git').exists() for parent in (root, *root.parents)):
+        raise ScenarioError('scenario output is written outside every git worktree')
+    root.mkdir(parents=True, exist_ok=True, mode=0o700)
+    return root
+
+
+def backend_identity(backend: Path = BACKEND) -> dict[str, Any]:
+    """``backend_tree`` (git tree of ``backend/`` at HEAD), ``ref`` (branch, else the sha), ``sha``, ``dirty``."""
+    from testing.pipeline_lab import worktrees
+
+    repo = backend.parent
+    try:
+        sha = worktrees.git(repo, 'rev-parse', 'HEAD')
+        branch = worktrees.git(repo, 'rev-parse', '--abbrev-ref', 'HEAD')
+        return {
+            'backend_tree': worktrees.git(repo, 'rev-parse', 'HEAD:backend'),
+            'ref': sha if branch == 'HEAD' else branch,
+            'sha': sha,
+            'dirty': bool(worktrees.git(repo, 'status', '--porcelain', '--untracked-files=no', '--', 'backend')),
+        }
+    except worktrees.WorktreeError:
+        return {'backend_tree': None, 'ref': None, 'sha': None, 'dirty': None}
+
+
+@dataclass
+class _Job:
+    path: Path
+    name: str
+    repeat: int
+
+    def out(self, root: Path) -> Path:
+        base = root / self.name
+        return base if self.repeat == 1 else base / f'repeat-{self.repeat}'
+
+
+@dataclass
+class RunSet:
+    """What :func:`run_set` produced: the verdict, the run metadata and each job's result."""
+
+    root: Path
+    verdict: dict[str, Any]
+    run: dict[str, Any]
+    results: dict[str, list[dict[str, Any]]] = field(default_factory=dict)
+
+    @property
+    def code(self) -> int:
+        return verdicts.exit_code([row['outcome'] for row in self.verdict['scenarios']])
+
+
+def run_set(
+    paths: Sequence[Path],
+    root: Path,
+    peers: Peers,
+    *,
+    timeout: float,
+    clock: str = 'frozen',
+    jobs: int = 1,
+    repeat: int = 1,
+    arm: Optional[Arm] = None,
+    identity: Optional[dict[str, Any]] = None,
+    report=None,
+) -> RunSet:
+    """Run every scenario ``repeat`` times, ``jobs`` at a time, each isolated; write ``root``'s layout."""
+    if jobs < 1 or repeat < 1:
+        raise ScenarioError('--jobs and --repeat must be at least 1')
+    scenarios = {}
+    for path in paths:
+        scenario = load_scenario(path)
+        if scenario.name in scenarios:
+            raise ScenarioError(f'scenario {scenario.name} given twice')
+        scenarios[scenario.name] = (path, scenario)
+    root.mkdir(parents=True, exist_ok=True, mode=0o700)
+    started_at = datetime.now(timezone.utc).isoformat(timespec='seconds')
+    started = time.perf_counter()
+    for name, (path, _) in scenarios.items():
+        (root / name).mkdir(parents=True, exist_ok=True, mode=0o700)
+        shutil.copyfile(path, root / name / 'scenario.json')
+    queued = [_Job(path, name, k) for k in range(1, repeat + 1) for name, (path, _) in scenarios.items()]
+    slots = RedisSlots(peers.redis)
+    runs: list[dict[str, Any]] = []
+    results: dict[tuple[str, int], dict[str, Any]] = {}
+    lock = threading.Lock()
+
+    def one(job: _Job) -> None:
+        out = job.out(root)
+        out.mkdir(parents=True, exist_ok=True, mode=0o700)
+        with isolated_run(peers, slots, timeout + LEASE_GRACE) as isolation:
+            result = run_one(job.path, out, peers.env(), timeout=timeout, clock=clock, isolation=isolation, arm=arm)
+        with lock:
+            results[(job.name, job.repeat)] = result
+            runs.append(
+                {
+                    'scenario': job.name,
+                    'repeat': job.repeat,
+                    'run_id': isolation.run_id,
+                    'project_id': isolation.project_id,
+                    'redis_db': isolation.redis_db,
+                    'blob_root': str(out / 'lab' / 'stack' / 'storage'),
+                }
+            )
+            if report is not None:
+                report(result, job)
+
+    with ThreadPoolExecutor(max_workers=jobs) as pool:
+        for future in [pool.submit(one, job) for job in queued]:
+            future.result()
+
+    rows, by_name = [], {}
+    for name, (_, scenario) in scenarios.items():
+        repeats = [results[(name, k)] for k in range(1, repeat + 1)]
+        by_name[name] = repeats
+        row = verdicts.scenario_verdict(name, repeats[0], scenario)
+        if repeat > 1:
+            differences = verdicts.repeat_differences(repeats)
+            outcomes = sorted({str(r.get('outcome')) for r in repeats})
+            row['repeats'] = repeat
+            row['differences'] = differences
+            row['seconds'] = max(float(r.get('seconds') or 0) for r in repeats)
+            if 'error' in outcomes:
+                row['outcome'] = 'error'
+            elif differences:
+                row['outcome'] = 'nondeterministic'
+        rows.append(row)
+    verdict = verdicts.verdict(rows)
+    run = {
+        'schema': verdicts.SCHEMA,
+        **(identity or backend_identity()),
+        'started_at': started_at,
+        'seconds': round(time.perf_counter() - started, 1),
+        'scenarios': list(scenarios),
+        'jobs': jobs,
+        'repeat': repeat,
+        'clock': clock,
+        'isolation': {
+            'stack': peers.mode,
+            'firestore': peers.firestore,
+            'redis': peers.redis,
+            'redis_databases': slots.databases,
+            'typesense': 'off',
+            'uid': 'local-dev-user',
+            'runs': sorted(runs, key=lambda r: (r['scenario'], r['repeat'])),
+        },
+    }
+    verdicts.write_json(root / 'run.json', run)
+    verdicts.write_json(root / 'verdict.json', verdict)
+    return RunSet(root=root, verdict=verdict, run=run, results=by_name)
+
+
 def run_files(
-    names: Sequence[str], *, keep: Optional[str], timeout: float, as_json: bool, clock: str = 'frozen'
+    names: Sequence[str],
+    *,
+    keep: Optional[str],
+    timeout: float,
+    as_json: bool,
+    clock: str = 'frozen',
+    jobs: int = 1,
+    repeat: int = 1,
 ) -> int:
     paths = [resolve(name) for name in names]
     for path in paths:
         load_scenario(path)  # fail fast on a malformed file, before the stack starts
-    root = Path(keep).expanduser().resolve() if keep else Path(tempfile.mkdtemp(prefix='plab-scenario-'))
-    if any((parent / '.git').exists() for parent in (root, *root.parents)):
-        raise ScenarioError('scenario output is written outside every git worktree')
-    root.mkdir(parents=True, exist_ok=True, mode=0o700)
+    root = output_root(keep)
     started = time.perf_counter()
-    results = []
+    printing = threading.Lock()
+
+    def report(result: dict[str, Any], job: _Job) -> None:
+        if as_json:
+            return
+        with printing:
+            text = format_report(result)
+            if repeat > 1:
+                first, _, rest = text.partition('\n')
+                text = f'{first}  repeat {job.repeat}/{repeat}' + ('\n' + rest if rest else '')
+            print(text, flush=True)
+
     with local_stack(root) as peers:
         stack_seconds = round(time.perf_counter() - started, 1)
-        for path in paths:
-            out = root / path.stem
-            out.mkdir(parents=True, exist_ok=True, mode=0o700)
-            result = run_one(path, out, peers, timeout=timeout, clock=clock)
-            results.append(result)
-            if not as_json:
-                print(format_report(result), flush=True)
+        done = run_set(paths, root, peers, timeout=timeout, clock=clock, jobs=jobs, repeat=repeat, report=report)
     total = round(time.perf_counter() - started, 1)
-    code = max((OUTCOMES.get(r.get('outcome', 'error'), 2) for r in results), default=0)
     if as_json:
-        print(json.dumps({'results': results, 'root': str(root), 'seconds': total, 'stack_seconds': stack_seconds}))
+        print(json.dumps(done.verdict))
     else:
-        summary = ', '.join(f'{r.get("scenario")}={r.get("outcome")}' for r in results)
-        print(f'== {len(results)} scenario(s) in {total:.1f} s (stack up {stack_seconds:.1f} s): {summary}')
+        summary = ', '.join(f'{r["name"]}={r["outcome"]}' for r in done.verdict['scenarios'])
+        for row in done.verdict['scenarios']:
+            if row.get('differences'):
+                print(f'== {row["name"]}: result.json differs between repeats in: {", ".join(row["differences"])}')
+        print(
+            f'== {len(done.verdict["scenarios"])} scenario(s) x{repeat} in {total:.1f} s, jobs {jobs} '
+            f'(stack {peers.mode}, up {stack_seconds:.1f} s): {summary}'
+        )
         print(f'   output: {root}')
-    return code
+    return done.code
+
+
+def stack_command(action: str, *, as_json: bool) -> int:
+    """``scenario stack up|down|status``. ``status`` exits 0 when running, 1 when not."""
+    if action == 'up':
+        value = stack_up()
+    elif action == 'down':
+        value = stack_down()
+    else:
+        value = stack_status()
+    if as_json:
+        print(json.dumps(value))
+    elif value.get('running'):
+        verb = 'started' if value.get('started') else 'running'
+        print(f'shared stack {verb}: firestore {value["firestore"]}, redis {value["redis"]}, pids {value["pids"]}')
+        print(f'   pid file: {value["pid_file"]}')
+    elif action == 'down':
+        print('shared stack: ' + (', '.join(f'{k} {v}' for k, v in value['stopped'].items()) or 'not running'))
+    else:
+        print(f'shared stack: not running ({value.get("pid_file")})')
+    return 0 if value.get('running') or action == 'down' else 1
