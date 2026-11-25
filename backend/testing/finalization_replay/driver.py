@@ -19,7 +19,7 @@ from testing.finalization_replay.candidate import migrate, replay_database, run_
 from testing.finalization_replay.corpus import DEFAULT_TEST_KEY, pack, read_corpus
 from testing.finalization_replay.metrics import install_firestore_meter, measure, suspend_meter
 from testing.finalization_replay.providers import allow_provider_port, provider_server
-from testing.finalization_replay.reference import run_reference
+from testing.finalization_replay.reference import erase_reference, run_reference
 from testing.finalization_replay.state import CaseState, seeded_token_hashes
 from testing.replay_harness.env import emulator_endpoint, replay_environment
 from testing.replay_harness.guard import private_text
@@ -150,7 +150,16 @@ def replay(cases, jobd, dsn, key):
                         server.errors.clear()
                         with ExitStack() as leaves:
                             speaker_trace.record_speaker_trace(state, leaves)
-                            _observe(state, lambda target: run_reference(target, leaves, url), output, 'python')
+
+                            def run_python(target):
+                                status = run_reference(target, leaves, url)
+                                if target.case.get('erase_after'):
+                                    if status not in {'completed', 'discarded'}:
+                                        raise RuntimeError('Python replay did not complete before erase')
+                                    target.effects['erasure'] = erase_reference(target)
+                                return status
+
+                            _observe(state, run_python, output, 'python')
                         if server.errors:
                             output['errors']['python'] = 'ReplayProviderError'
     return outputs
