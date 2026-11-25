@@ -13257,7 +13257,17 @@ class AppLocalizationsNo extends AppLocalizations {
   String get watchCaptureSync => 'Your recording syncs to Omi on this phone.';
 
   @override
-  String get pairingBluetoothOff => 'Turn on Bluetooth on your phone, then try again.';
+  String get turnOnBluetooth => 'Slå på Bluetooth';
+
+  @override
+  String get pairingBluetoothOffAndroid => 'Bluetooth er av. Slå det på, så fortsetter Omi å søke.';
+
+  @override
+  String get pairingBluetoothOffIos =>
+      'Slå på Bluetooth i Kontrollsenter eller Innstillinger. Omi fortsetter å søke så snart det er på.';
+
+  @override
+  String get bluetoothStillOff => 'Bluetooth er fortsatt av.';
 
   @override
   String get pairingBluetoothPermission => 'Allow Bluetooth access for Omi in Settings, then try again.';

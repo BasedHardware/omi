@@ -1,0 +1,33 @@
+{
+  "version": 1,
+  "images": [
+    {
+      "file": "001-mobile-ios-bluetooth-off-before-after.png",
+      "platform": "mobile-ios",
+      "description": "Connect step with Bluetooth off on iOS, main vs this change: copy now says Control Center or Settings and that the search continues by itself",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "002-mobile-android-bluetooth-off-before-after.png",
+      "platform": "mobile-android",
+      "description": "Connect step with Bluetooth off on Android, main vs this change: Turn On Bluetooth is the primary action, Try Again under it",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "003-mobile-android-bluetooth-off-dark-xxxl.png",
+      "platform": "mobile-android",
+      "description": "Android Bluetooth-off card at the largest text size and in dark, main vs this change; the Turn On Bluetooth label wraps instead of cutting off",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "004-mobile-ios-denied-settings-return-sim.png",
+      "platform": "mobile-ios",
+      "description": "iOS simulator, Bluetooth permission denied for good: Open Settings first, and coming back allowed clears the card without a tap; identical on main and this change",
+      "captured_by": "agent",
+      "source": "screencapture"
+    }
+  ]
+}

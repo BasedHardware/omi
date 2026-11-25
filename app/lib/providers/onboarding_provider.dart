@@ -52,12 +52,27 @@ class OnboardingProvider extends BaseProvider with MessageNotifierMixin implemen
       reason == DeviceConnectFailureShownFailureReason.bluetoothPermissionDenied ||
       reason == DeviceConnectFailureShownFailureReason.nearbyDevicesDenied;
 
-  /// Back in the app (from Settings or anywhere else) while a Bluetooth permission block shows:
-  /// reads the permission again without prompting. True when it is now granted, so the page can
-  /// search again by itself.
-  Future<bool> recheckPermissionBlock() async {
-    if (_isDisposed || isConnected || !_isBluetoothPermissionBlock(pairingFailureReason)) return false;
+  /// Back in the app (from Settings, Control Center or anywhere else) while a Bluetooth block shows:
+  /// reads the permission or the radio again without prompting. True when the block is gone, so the
+  /// page can search again by itself.
+  Future<bool> recheckPairingBlock() async {
+    if (_isDisposed || isConnected) return false;
+    if (pairingFailureReason == DeviceConnectFailureShownFailureReason.bluetoothOff) {
+      return await bluetoothIsOn() &&
+          !_isDisposed &&
+          pairingFailureReason == DeviceConnectFailureShownFailureReason.bluetoothOff;
+    }
+    if (!_isBluetoothPermissionBlock(pairingFailureReason)) return false;
     return readBluetoothPermission();
+  }
+
+  /// The phone's Bluetooth radio is on, read without prompting. False when it cannot be read.
+  Future<bool> bluetoothIsOn() async {
+    try {
+      return BluetoothReadiness.parse(await BleHostApi().getBluetoothState()) == BluetoothAdapterState.on;
+    } catch (_) {
+      return false;
+    }
   }
 
   bool isClicked = false;
@@ -231,12 +246,7 @@ class OnboardingProvider extends BaseProvider with MessageNotifierMixin implemen
     if (!await readBluetoothPermission()) return;
     // Only when the radio is already on: an off adapter would raise the shared "Enable Bluetooth"
     // guidance over an unrelated step. "Connect your Omi" handles that case itself.
-    try {
-      if (BluetoothReadiness.parse(await BleHostApi().getBluetoothState()) != BluetoothAdapterState.on) return;
-    } catch (_) {
-      return;
-    }
-    if (_isDisposed) return;
+    if (!await bluetoothIsOn() || _isDisposed) return;
     ServiceManager.instance().device.subscribe(this, this);
     await deviceProvider?.initiateConnection('OnboardingEarlyScan');
   }

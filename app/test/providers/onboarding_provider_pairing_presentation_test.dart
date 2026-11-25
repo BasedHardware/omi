@@ -9,9 +9,11 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/gen/pigeon_communicator.g.dart';
+import 'package:omi/l10n/app_localizations.dart';
 import 'package:omi/l10n/app_localizations_en.dart';
 import 'package:omi/pages/onboarding/find_device/pairing_failure_card.dart';
 import 'package:omi/providers/onboarding_provider.dart';
+import 'package:omi/services/bridges/ble_bridge.dart';
 import 'package:omi/services/devices/pairing_failure.dart';
 import 'package:omi/services/services.dart';
 import 'package:omi/ui/ui.dart';
@@ -408,6 +410,206 @@ void main() {
           tester.widget<OmiButton>(find.byKey(const Key('pairing_failure_retry'))).variant, OmiButtonVariant.primary);
       await tester.pumpWidget(const SizedBox());
     });
+  });
+
+  // A07 on 1.0.598: Bluetooth off, Try Again twice in 5 s with the radio still off, then Later.
+  group('Bluetooth off', () {
+    const enableChannel = BasicMessageChannel<Object?>(
+      'dev.flutter.pigeon.omi_pigeon.BleHostApi.enableBluetooth',
+      BleHostApi.pigeonChannelCodec,
+    );
+    late String radio;
+    late int enableRequests;
+    late bool enableTurnsOn;
+    final searching = AppLocalizationsEn().searchingForDevices;
+    final turnOn = find.byKey(const Key('pairing_failure_turn_on_bluetooth'));
+    final retry = find.byKey(const Key('pairing_failure_retry'));
+
+    setUp(() {
+      radio = 'off';
+      enableRequests = 0;
+      enableTurnsOn = true;
+      binding.defaultBinaryMessenger.setMockDecodedMessageHandler<Object?>(bluetoothChannel, (_) async => [radio]);
+      binding.defaultBinaryMessenger.setMockDecodedMessageHandler<Object?>(enableChannel, (_) async {
+        enableRequests++;
+        if (enableTurnsOn) radio = 'on';
+        return [enableTurnsOn];
+      });
+    });
+    tearDown(() {
+      binding.defaultBinaryMessenger.setMockDecodedMessageHandler<Object?>(enableChannel, null);
+      // Leave the shared adapter state on for the next test.
+      BleBridge.instance.onBluetoothStateChanged('on');
+    });
+
+    Future<int> blockedCount() async {
+      await AnalyticsManager.flushPending(force: true);
+      return adapter.names.where((name) => name == 'Device Pairing Blocked').length;
+    }
+
+    testWidgets('iOS: turning Bluetooth on in Control Center continues the search without a tap', (tester) async {
+      await pumpConnect(tester);
+      expect(provider.pairingFailureReason, Reason.bluetoothOff);
+      // iOS cannot switch the radio on from the app: no Turn On button, and the copy says where.
+      expect(turnOn, findsNothing);
+      expect(find.text('Turn on Bluetooth in Control Center or Settings. Omi keeps searching once it is on.'),
+          findsOneWidget);
+      expect(tester.widget<OmiButton>(retry).variant, OmiButtonVariant.primary);
+
+      radio = 'on';
+      BleBridge.instance.onBluetoothStateChanged('on');
+      await tester.pump();
+      await tester.pump();
+      expect(provider.pairingFailureReason, isNull);
+      expect(find.byType(PairingFailureCard), findsNothing);
+      expect(find.text(searching), findsOneWidget);
+      await tester.pumpWidget(const SizedBox());
+    });
+
+    testWidgets('Try Again while Bluetooth is still off keeps the card and says so', (tester) async {
+      await pumpConnect(tester);
+      final version = provider.pairingFailureVersion;
+      final blocked = await blockedCount();
+      for (var i = 0; i < 2; i++) {
+        await tester.ensureVisible(retry);
+        await tester.tap(retry);
+        await tester.pump();
+        await tester.pump();
+        // The same card, not a re-shown one: no blink, no second shown or blocked event.
+        expect(provider.pairingFailureReason, Reason.bluetoothOff);
+        expect(provider.pairingFailureVersion, version);
+        expect(find.byType(PairingFailureCard), findsOneWidget);
+        expect(find.text('Bluetooth is still off.'), findsOneWidget);
+        await tester.pump(const Duration(seconds: 5));
+      }
+      expect(await blockedCount(), blocked);
+      await tester.pumpWidget(const SizedBox());
+      await tester.pump(const Duration(seconds: 10));
+    });
+
+    testWidgets('coming back to the app with Bluetooth on continues the search', (tester) async {
+      await pumpConnect(tester);
+      expect(provider.pairingFailureReason, Reason.bluetoothOff);
+      // Switched on in Settings; the native callback did not arrive while the app was away.
+      radio = 'on';
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+      await tester.pump();
+      await tester.pump();
+      expect(provider.pairingFailureReason, isNull);
+      expect(find.text(searching), findsOneWidget);
+      await tester.pumpWidget(const SizedBox());
+    });
+
+    testWidgets('Android: Turn On Bluetooth opens the system prompt and the search continues', (tester) async {
+      await pumpConnect(tester, platform: TargetPlatform.android);
+      expect(provider.pairingFailureReason, Reason.bluetoothOff);
+      expect(turnOn, findsOneWidget);
+      expect(find.descendant(of: turnOn, matching: find.text('Turn On Bluetooth')), findsOneWidget);
+      expect(tester.widget<OmiButton>(turnOn).variant, OmiButtonVariant.primary);
+      expect(tester.widget<OmiButton>(retry).variant, OmiButtonVariant.secondary);
+      expect(tester.getRect(turnOn).bottom, lessThan(tester.getRect(retry).top));
+      expect(find.text('Bluetooth is off. Turn it on and Omi keeps searching.'), findsOneWidget);
+
+      // Declined in the system prompt: the card stays, nothing pretends to search.
+      enableTurnsOn = false;
+      await tester.ensureVisible(turnOn);
+      await tester.tap(turnOn);
+      await tester.pump();
+      await tester.pump();
+      expect(enableRequests, 1);
+      expect(provider.pairingFailureReason, Reason.bluetoothOff);
+      expect(find.byType(PairingFailureCard), findsOneWidget);
+
+      enableTurnsOn = true;
+      await tester.tap(turnOn);
+      await tester.pump();
+      await tester.pump();
+      expect(enableRequests, 2);
+      expect(provider.pairingFailureReason, isNull);
+      expect(find.byType(PairingFailureCard), findsNothing);
+      expect(find.text(searching), findsOneWidget);
+      await tester.pumpWidget(const SizedBox());
+    });
+  });
+
+  // Evidence: BT_OFF_RENDER=1 BT_OFF_OUT=<dir> draws the real Connect step with the radio off, per platform,
+  // in light, dark and the largest text size (iOS AX5 body is 53 pt over 17 pt).
+  testWidgets('render the Bluetooth-off Connect step on iOS and Android', (tester) async {
+    if (Platform.environment['BT_OFF_RENDER'] != '1') return;
+    final out = Platform.environment['BT_OFF_OUT']!;
+    // BT_OFF_LOCALE=de draws light only, in that language.
+    final locale = Platform.environment['BT_OFF_LOCALE'];
+    await tester.runAsync(polish.loadFonts);
+    binding.defaultBinaryMessenger.setMockDecodedMessageHandler<Object?>(bluetoothChannel, (_) async => ['off']);
+    tester.view.physicalSize = const Size(1206, 2622);
+    tester.view.devicePixelRatio = 3;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    addTearDown(() => OmiColors.active = OmiPalette.light);
+    const boundary = Key('bt-off-render');
+    for (final platform in [TargetPlatform.iOS, TargetPlatform.android]) {
+      for (final mode in locale == null ? ['light', 'dark', 'xxxl'] : ['locale-$locale']) {
+        final dark = mode == 'dark';
+        OmiColors.active = dark ? OmiPalette.dark : OmiPalette.light;
+        final theme = buildOmiTheme(brightness: dark ? Brightness.dark : Brightness.light);
+        final font = platform == TargetPlatform.iOS ? 'SF Pro Display' : 'Roboto';
+        provider.dispose();
+        provider = OnboardingProvider()
+          ..hasBluetoothPermission = true
+          ..deviceProvider = DiscoveryDeviceProvider();
+        await tester.pumpWidget(const SizedBox());
+        await tester.pumpWidget(RepaintBoundary(
+          key: boundary,
+          child: MaterialApp(
+            debugShowCheckedModeBanner: false,
+            theme: theme.copyWith(
+                platform: platform,
+                textTheme: theme.textTheme.apply(fontFamily: font),
+                appBarTheme: theme.appBarTheme.copyWith(
+                    titleTextStyle: OmiType.headline.copyWith(fontFamily: font, color: OmiColors.textPrimary))),
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
+            supportedLocales: AppLocalizations.supportedLocales,
+            locale: Locale(locale ?? 'en'),
+            home: Builder(
+                builder: (context) => MediaQuery(
+                      data: MediaQuery.of(context).copyWith(
+                          textScaler: TextScaler.linear(mode == 'xxxl' ? 53 / 17 : 1),
+                          padding: const EdgeInsets.only(top: 62, bottom: 34),
+                          viewPadding: const EdgeInsets.only(top: 62, bottom: 34)),
+                      child: Scaffold(body: polish.connect(provider)),
+                    )),
+          ),
+        ));
+        await tester.pump();
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 500));
+        expect(provider.pairingFailureReason, Reason.bluetoothOff);
+        if (mode == 'xxxl') {
+          // The card's actions, centred: the largest text pushes them below the fold.
+          await Scrollable.ensureVisible(tester.element(find.byKey(const Key('pairing_failure_retry'))),
+              alignment: 0.5);
+        }
+        await tester.pump(const Duration(milliseconds: 300));
+        await tester.runAsync(() async {
+          for (final element in find.byType(Image).evaluate()) {
+            await precacheImage((element.widget as Image).image, element);
+          }
+        });
+        await tester.pump();
+        await tester.runAsync(() async {
+          final image = await tester.renderObject<RenderRepaintBoundary>(find.byKey(boundary)).toImage(pixelRatio: 3);
+          final png = await image.toByteData(format: ui.ImageByteFormat.png);
+          image.dispose();
+          final name = platform == TargetPlatform.iOS ? 'ios' : 'android';
+          File('$out/$mode-$name-bluetooth-off.png')
+            ..createSync(recursive: true)
+            ..writeAsBytesSync(png!.buffer.asUint8List());
+        });
+      }
+    }
+    await tester.pumpWidget(const SizedBox());
+    await tester.pump(const Duration(seconds: 10));
   });
 
   test('saved visible devices clear reachability, but stale-bond recovery is retained', () async {

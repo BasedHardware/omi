@@ -13,12 +13,14 @@ import 'package:omi/gen/pigeon_communicator.g.dart';
 import 'package:omi/pages/onboarding/apple_watch_permission_page.dart';
 import 'package:omi/providers/device_provider.dart';
 import 'package:omi/providers/onboarding_provider.dart';
+import 'package:omi/services/devices/bluetooth_readiness.dart';
 import 'package:omi/services/devices/connectors/apple_watch_connection.dart';
 import 'package:omi/services/devices/connectors/device_connection.dart';
 import 'package:omi/services/devices/discovery/rayban_meta_discoverer.dart';
 import 'package:omi/utils/error_message.dart';
 import 'package:omi/widgets/rayban_meta_setup_sheet.dart';
 import 'package:omi/services/services.dart';
+import 'package:omi/utils/analytics/registry/events.g.dart';
 import 'package:omi/utils/device.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/l10n_extensions.dart';
@@ -58,6 +60,7 @@ class _FoundDevicesState extends State<FoundDevices> with WidgetsBindingObserver
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    BluetoothReadiness.instance.addListener(_onAdapterChanged);
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       if (mounted) {
         context.read<DeviceProvider>().initiateConnection('FoundDevices');
@@ -67,18 +70,45 @@ class _FoundDevicesState extends State<FoundDevices> with WidgetsBindingObserver
 
   @override
   void dispose() {
+    BluetoothReadiness.instance.removeListener(_onAdapterChanged);
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
   }
 
-  /// Back from Settings with Bluetooth now allowed: search again without another tap.
+  /// Back from Settings or Control Center with Bluetooth now allowed or on: search again without a tap.
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state != AppLifecycleState.resumed) return;
     unawaited(() async {
-      if (!await context.read<OnboardingProvider>().recheckPermissionBlock() || !mounted) return;
+      if (!await context.read<OnboardingProvider>().recheckPairingBlock() || !mounted) return;
       await widget.onRescan?.call();
     }());
+  }
+
+  bool get _blockedByBluetoothOff {
+    final provider = context.read<OnboardingProvider>();
+    return !provider.isConnected &&
+        provider.pairingFailureReason == DeviceConnectFailureShownFailureReason.bluetoothOff;
+  }
+
+  /// Bluetooth came on while the Bluetooth-off card shows: the search continues by itself.
+  void _onAdapterChanged() {
+    if (!mounted || BluetoothReadiness.instance.state != BluetoothAdapterState.on || !_blockedByBluetoothOff) return;
+    unawaited(widget.onRescan?.call());
+  }
+
+  Future<void> _turnOnBluetooth() async {
+    // The adapter listener continues the search once the radio reports on; a declined prompt keeps the card.
+    await BluetoothReadiness.instance.requestEnable(BluetoothUse.discovery);
+  }
+
+  /// Try Again with Bluetooth still off would hit the same block: keep the card and say why.
+  Future<void> _retry() async {
+    if (_blockedByBluetoothOff && !await context.read<OnboardingProvider>().bluetoothIsOn()) {
+      if (mounted) OmiFeedback.info(context, context.l10n.bluetoothStillOff);
+      return;
+    }
+    await widget.onRescan?.call();
   }
 
   Future<void> _handleRayBanMetaOnboarding(BtDevice device, OnboardingProvider provider) async {
@@ -378,8 +408,9 @@ class _FoundDevicesState extends State<FoundDevices> with WidgetsBindingObserver
                     key: ValueKey(provider.pairingFailureVersion),
                     reason: provider.pairingFailureReason!,
                     onDismiss: provider.dismissPairingFailure,
-                    onRetry: widget.onRescan,
+                    onRetry: widget.onRescan == null ? null : _retry,
                     onOpenSettings: provider.pairingBlockNeedsSettings ? openAppSettings : null,
+                    onTurnOnBluetooth: Theme.of(context).platform == TargetPlatform.android ? _turnOnBluetooth : null,
                     onGuide: () => ConnectionGuideSheet.show(context),
                   ),
                 ),

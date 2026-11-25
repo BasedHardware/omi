@@ -23607,11 +23607,29 @@ abstract class AppLocalizations {
   /// **'Your recording syncs to Omi on this phone.'**
   String get watchCaptureSync;
 
-  /// No description provided for @pairingBluetoothOff.
+  /// No description provided for @turnOnBluetooth.
   ///
   /// In en, this message translates to:
-  /// **'Turn on Bluetooth on your phone, then try again.'**
-  String get pairingBluetoothOff;
+  /// **'Turn On Bluetooth'**
+  String get turnOnBluetooth;
+
+  /// No description provided for @pairingBluetoothOffAndroid.
+  ///
+  /// In en, this message translates to:
+  /// **'Bluetooth is off. Turn it on and Omi keeps searching.'**
+  String get pairingBluetoothOffAndroid;
+
+  /// No description provided for @pairingBluetoothOffIos.
+  ///
+  /// In en, this message translates to:
+  /// **'Turn on Bluetooth in Control Center or Settings. Omi keeps searching once it is on.'**
+  String get pairingBluetoothOffIos;
+
+  /// No description provided for @bluetoothStillOff.
+  ///
+  /// In en, this message translates to:
+  /// **'Bluetooth is still off.'**
+  String get bluetoothStillOff;
 
   /// No description provided for @pairingBluetoothPermission.
   ///

@@ -103,7 +103,9 @@ class PairingProvider extends BaseProvider with MessageNotifierMixin implements 
   @override
   bool get pairingBlockNeedsSettings => false;
   @override
-  Future<bool> recheckPermissionBlock() async => false;
+  Future<bool> recheckPairingBlock() async => false;
+  @override
+  Future<bool> bluetoothIsOn() async => false;
 }
 
 class PairingHomeProvider extends HomeProvider {
@@ -198,7 +200,6 @@ void main() {
     viewport(tester);
     final l10n = AppLocalizationsEn();
     final copies = {
-      Reason.bluetoothOff: 'Turn on Bluetooth on your phone, then try again.',
       Reason.bluetoothPermissionDenied: 'Allow Bluetooth access for Omi in Settings, then try again.',
       Reason.nearbyDevicesDenied: 'Allow Nearby devices access for Omi in Settings, then try again.',
       Reason.locationPermissionMissing:
@@ -209,6 +210,9 @@ void main() {
       Reason.unknown: 'An error occurred. Please try again.',
     };
     for (final platform in [TargetPlatform.iOS, TargetPlatform.android]) {
+      copies[Reason.bluetoothOff] = platform == TargetPlatform.android
+          ? 'Bluetooth is off. Turn it on and Omi keeps searching.'
+          : 'Turn on Bluetooth in Control Center or Settings. Omi keeps searching once it is on.';
       final events = <RegisteredEvent>[];
       for (final reason in Reason.values) {
         var dismissed = 0, guides = 0;
@@ -220,7 +224,7 @@ void main() {
                 onGuide: () => guides++,
                 emit: events.add));
         await tester.pumpWidget(host(page(), platform: platform));
-        expect(pairingFailureCopy(l10n, reason), copies[reason]);
+        expect(pairingFailureCopy(l10n, reason, platform: platform), copies[reason]);
         expect(find.text(copies[reason]!), findsOneWidget);
         final count = events.length;
         await tester.pumpWidget(host(page(), platform: platform));
