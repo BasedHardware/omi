@@ -314,7 +314,7 @@ describe('web checkout completion', () => {
     expect(completions()).toHaveLength(0);
   });
 
-  it('focus while checkout stays open retains the record until the window closes', async () => {
+  it('refreshes on early focus without consuming completion until checkout closes', async () => {
     const checkoutId = stage();
     const checkoutState = { closed: false };
     const checkoutWindow = checkoutState as Window;
@@ -322,7 +322,7 @@ describe('web checkout completion', () => {
     const cleanup = watchCheckoutReturn(refresh, { checkoutWindow, checkoutId });
 
     window.dispatchEvent(new Event('focus'));
-    expect(refresh).not.toHaveBeenCalled();
+    expect(refresh).toHaveBeenCalledOnce();
     expect(completions()).toHaveLength(0);
     expect(window.sessionStorage.getItem('omi.web.checkout.pending.v1')).not.toBeNull();
 
@@ -330,7 +330,7 @@ describe('web checkout completion', () => {
     window.dispatchEvent(new Event('focus'));
     await vi.waitFor(() => expect(completions()).toHaveLength(1));
     window.dispatchEvent(new Event('focus'));
-    expect(refresh).toHaveBeenCalledOnce();
+    expect(refresh).toHaveBeenCalledTimes(2);
     expect(completions()).toHaveLength(1);
     cleanup();
   });

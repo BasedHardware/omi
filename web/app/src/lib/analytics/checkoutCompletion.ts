@@ -172,7 +172,13 @@ export function watchCheckoutReturn(
       cleanup();
       return;
     }
-    if (!closed) return;
+    if (!closed) {
+      // Preserve the existing subscription refresh on every return to the
+      // parent tab. The pending checkout stays staged until its own window
+      // closes, so this refresh cannot emit a completion event.
+      void refreshSafely(refresh);
+      return;
+    }
 
     removeListeners();
     if (checkoutId) {
