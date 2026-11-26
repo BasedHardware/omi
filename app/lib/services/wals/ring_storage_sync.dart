@@ -142,6 +142,7 @@ class _RingPass {
 }
 
 class RingStorageSyncImpl implements RingStorageSync {
+  static const minimumDownloadSeconds = 10;
   static const Duration _fullReadTimeout = Duration(minutes: 30);
   static const Duration _windowReadTimeout = Duration(minutes: 5);
 
@@ -436,7 +437,7 @@ class RingStorageSyncImpl implements RingStorageSync {
       final estimatedSecs = fps > 0 ? estimatedFrames ~/ fps : 0;
 
       // Skip very small rings (<10s of audio) — same threshold as the file-based path.
-      if (estimatedSecs < 10) {
+      if (estimatedSecs < minimumDownloadSeconds) {
         Logger.debug('RingStorageSync.refreshWalsFromDevice: ring too small ($estimatedSecs s), skipping');
         final hadInventory = _wals.isNotEmpty;
         _wals = [];

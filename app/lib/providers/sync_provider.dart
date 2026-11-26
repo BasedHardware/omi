@@ -11,6 +11,7 @@ import 'dart:async';
 import 'package:omi/services/wals/wal_derived_views.dart';
 
 import 'package:omi/services/wals/periodic_recording_sync.dart';
+import 'package:omi/services/wals/ring_storage_sync.dart';
 
 import 'package:flutter/foundation.dart';
 
@@ -707,6 +708,11 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
   }
 
   ({int seconds, int bytes})? get freshRingBacklog => _deviceSyncs?.ring.freshBacklog;
+  int get readyRingSeconds {
+    final seconds = freshRingBacklog?.seconds ?? 0;
+    return seconds >= RingStorageSyncImpl.minimumDownloadSeconds ? seconds : 0;
+  }
+
   bool get isRingDownloading {
     final syncs = _deviceSyncs;
     return syncs != null && syncs.usesIndependentRingDrain && syncs.ring.isSyncing;

@@ -18,6 +18,7 @@ import 'package:omi/pages/conversations/widgets/sync_details_sheet.dart';
 import 'package:omi/providers/device_provider.dart';
 import 'package:omi/providers/sync_provider.dart';
 import 'package:omi/providers/user_provider.dart';
+import 'package:omi/services/devices/connectors/device_connection.dart';
 import 'package:omi/services/wals/wal.dart';
 import 'package:omi/services/wals/wal_derived_sync_views.dart';
 import 'package:omi/ui/ui.dart';
@@ -30,6 +31,8 @@ class _Sync extends ChangeNotifier with WalDerivedSyncViews implements SyncProvi
   SyncState syncState = const SyncState();
   @override
   bool get isRingDownloading => false;
+  @override
+  int get readyRingSeconds => freshRingBacklog?.seconds ?? 0;
   @override
   ({int seconds, int bytes})? freshRingBacklog;
   @override
@@ -106,6 +109,8 @@ class _Device extends ChangeNotifier implements DeviceProvider {
   String currentFirmwareVersion = 'Unknown';
   @override
   bool isConnected = false;
+  @override
+  RingStatus? get ringStatus => null;
   @override
   Future<void> refreshRingStorageStatus() async {}
   @override
@@ -309,19 +314,13 @@ void main() {
     expect(find.text(l.syncCardSyncingTitle), findsOneWidget);
     expect(find.text(l.syncCardProcessing), findsNothing);
     expect(find.text(l.syncDetailsTranscribing), findsNothing);
+    await tester.pump(const Duration(milliseconds: 300));
+    await _capture(tester, '001-mobile-ios-sync-preparation.png');
   });
 
   testWidgets('Sync details shows fresh ring audio without a virtual WAL and otherwise shows unknown', (tester) async {
-    final sync = await _pump(
-      tester,
-      Builder(builder: (context) {
-        final device = context.watch<DeviceProvider>();
-        return SyncDetailsSheet(sync: context.watch<SyncProvider>(), device: device, onHowSyncingWorks: () {});
-      }),
-      WalStatus.miss,
-      recordings: [],
-    );
-    final element = tester.element(find.byType(SyncDetailsSheet));
+    final sync = await _pump(tester, const AutoSyncPage(), WalStatus.miss, recordings: []);
+    final element = tester.element(find.byType(AutoSyncPage));
     final device = element.read<DeviceProvider>() as _Device;
     device.currentFirmwareVersion = '3.0.25';
     device.isConnected = true;
@@ -330,13 +329,25 @@ void main() {
     sync.freshRingBacklog = (seconds: 90, bytes: 800000);
     sync.notifyListeners();
     await tester.pump();
-    expect(find.textContaining(OmiDuration.compact(90, l)), findsOneWidget);
+    expect(find.text(l.syncCardReadyAmount(OmiDuration.compact(90, l))), findsOneWidget);
+    await tester.tap(find.text(l.syncDetailsTitle));
+    await tester.pumpAndSettle();
+    expect(find.byType(SyncDetailsSheet), findsOneWidget);
+    expect(
+      find.descendant(
+        of: find.byType(SyncDetailsSheet),
+        matching: find.textContaining(OmiDuration.compact(90, l)),
+      ),
+      findsOneWidget,
+    );
     expect(find.text(l.unknown), findsNothing);
+    await _capture(tester, '002-mobile-ios-fresh-ring-backlog.png');
 
     sync.freshRingBacklog = null;
     sync.notifyListeners();
     await tester.pump();
     expect(find.text(l.unknown), findsOneWidget);
+    await _capture(tester, '003-mobile-ios-unknown-ring-backlog.png');
   });
 
   testWidgets('Auto Sync reports processing without inventing a conversation result', (tester) async {

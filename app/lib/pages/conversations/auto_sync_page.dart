@@ -101,6 +101,7 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
   Widget build(BuildContext context) {
     return Consumer3<SyncProvider, UserProvider, DeviceProvider>(
       builder: (context, syncProvider, userProvider, deviceProvider, _) {
+        final ringFirmware = WalSyncs.isRingBufferFirmware(deviceProvider.currentFirmwareVersion);
         final syncState = syncProvider.syncState;
         final hasAnyRecording = syncProvider.allWals.isNotEmpty;
         // Compute the lists once per build and pass them down — the
@@ -129,11 +130,10 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
                 sliver: SliverList(
                   delegate: SliverChildListDelegate.fixed([
                     const SizedBox(height: 8),
-                    _buildOverallStatusCard(syncProvider, syncState),
+                    _buildOverallStatusCard(syncProvider, syncState, ringFirmware: ringFirmware),
                     const OnDeviceChargerWaitLine(),
                     if (syncState.hasError) ...[const SizedBox(height: 16), _buildErrorCard(syncState, syncProvider)],
-                    if (WalSyncs.isRingBufferFirmware(deviceProvider.currentFirmwareVersion) &&
-                        deviceProvider.ringStatus != null) ...[
+                    if (ringFirmware && deviceProvider.ringStatus != null) ...[
                       const SizedBox(height: 16),
                       DeviceStorageCard(status: deviceProvider.ringStatus!),
                     ],
@@ -162,7 +162,7 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
 
   /// Every amount on this card is audio length. File, upload-part and server-job
   /// counts used to leak through ("Processing 0/5914"); they are in Sync details now.
-  Widget _buildOverallStatusCard(SyncProvider p, SyncState s) {
+  Widget _buildOverallStatusCard(SyncProvider p, SyncState s, {required bool ringFirmware}) {
     final l = context.l10n;
     String dur(int seconds) => OmiDuration.compact(seconds, l);
     final step = _runTracker.update(s, p.allWals, pendingWork: p.derivedWals.pendingWork);
@@ -179,7 +179,11 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
     final isActive = s.isSyncing || s.isFetchingConversations;
     // An edge throttle clears by itself and needs nothing from the user, so it is not shown (David, 11-02).
     final paused = p.isRateLimited && p.rateLimitReason != RateLimitReason.edgeThrottle;
-    final ringDownloading = p.isRingDownloading;
+    final ringDownloading = ringFirmware && p.isRingDownloading;
+    final unlistedRingSeconds =
+        !ringFirmware || readyWals.any((wal) => wal.storage == WalStorage.sdcard && wal.fileNum == -1)
+            ? 0
+            : p.readyRingSeconds;
     final bool showSpinner = ringDownloading || ((isActive || uploaded > 0) && !paused);
 
     String title;
@@ -247,8 +251,8 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
           }),
         );
       }
-    } else if (readyWals.isNotEmpty) {
-      final seconds = walSeconds(readyWals);
+    } else if (readyWals.isNotEmpty || unlistedRingSeconds > 0) {
+      final seconds = walSeconds(readyWals) + unlistedRingSeconds;
       title = seconds > 0
           ? l.syncCardReadyAmount(dur(seconds))
           : l.syncCardReadyCount(groupRecordingBlocks(readyWals).length);

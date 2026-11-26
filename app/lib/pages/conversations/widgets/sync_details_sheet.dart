@@ -69,16 +69,16 @@ class _SyncDetailsSheetState extends State<SyncDetailsSheet> {
     final jobs = sync.offlineServerProcessingCounts;
     String dur(int seconds) => OmiDuration.compact(seconds, l);
 
-    final speed = sync.isRingDownloading
-        ? sync.ringDownloadSpeedKBps
-        : state.isSyncing && state.phase == SyncPhase.downloadingFromDevice
-            ? state.speedKBps
-            : null;
     final firmware = WalSyncs.resolveDiscoveryFirmware(
       device.currentFirmwareVersion,
       SharedPreferencesUtil().btDevice.firmwareRevision,
     );
     final isRing = WalSyncs.isRingBufferFirmware(firmware);
+    final speed = isRing && sync.isRingDownloading
+        ? sync.ringDownloadSpeedKBps
+        : state.isSyncing && state.phase == SyncPhase.downloadingFromDevice
+            ? state.speedKBps
+            : null;
     final backlog = isRing
         ? (device.isConnected ? sync.freshRingBacklog : null)
         : (seconds: amounts.onDeviceSeconds, bytes: amounts.onDeviceBytes);
