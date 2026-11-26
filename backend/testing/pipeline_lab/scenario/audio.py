@@ -382,7 +382,12 @@ def _prepare_routed(
                 break
             hit = find(pcm16, pin, root=root, fixtures=fixtures)
             if hit is None:
-                misses.append(_miss_message(scenario, rec, pcm16, pin) + f' (routed {engine}: {route.reason})')
+                misses.append(
+                    f'recording {rec.label}: no cassette for its routed engine {engine} ({route.reason}, '
+                    f'audio {audio_sha256(pcm16)[:12]}, pin {pin.get("provider")}/{pin.get("model")}, '
+                    f'language {pin.get("language")}). Record it in a pinned pass with '
+                    f'{routing.ROUTING_ENV} unset (one record-vendor or record-local pass per engine), then rerun'
+                )
                 break
             found[engine] = hit
         if len(found) != len(engines):

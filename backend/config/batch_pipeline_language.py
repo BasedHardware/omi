@@ -2,8 +2,10 @@
 
 import os
 
+from config.prerecorded_language import language_class
 from config.refactor_switches import default_on
 from config.stt_provider_policy import (
+    LANGUAGE_EQUIVALENCE,
     MODULATE_SUPPORTED_LANGUAGES,
     PARAKEET_MODEL_BY_SURFACE,
     PARAKEET_SUPPORTED_LANGUAGES_BY_MODEL,
@@ -63,9 +65,6 @@ def _unsupported_code(code: str) -> bool:
     Unknown codes ('und') are not evidence. Live profiles store canonical codes ('sr' for 'hr'/'bs', 'hi' for
     'ur'), so a code with a Parakeet-supported alias is supported speech, not a reason to leave Parakeet.
     """
-    from config.prerecorded_language import language_class
-    from config.stt_provider_policy import LANGUAGE_EQUIVALENCE
-
     if language_class(code) != 'unsupported':
         return False
     parakeet = _parakeet_batch_languages()
@@ -74,11 +73,10 @@ def _unsupported_code(code: str) -> bool:
 
 def _profile_class(code: str) -> str:
     """'unsupported', 'unknown' or 'supported' for one profile code (a Parakeet alias counts as supported)."""
-    from config.prerecorded_language import language_class
-
-    if _unsupported_code(code):
+    cls = language_class(code)
+    if cls == 'unsupported' and _unsupported_code(code):
         return 'unsupported'
-    return 'unknown' if language_class(code) == 'unknown' else 'supported'
+    return 'unknown' if cls == 'unknown' else 'supported'
 
 
 def profile_speaks_unsupported(user: dict) -> bool:

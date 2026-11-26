@@ -147,12 +147,19 @@ def _batch_admission(user: dict, target: dict) -> tuple[str | None, str | None]:
     return 'multi', 'unknown_multilingual_conversation'
 
 
-def _inherited_language(target: dict, user: dict) -> str | None:
-    """``inherited_language``, except a multilingual-profile user's pin is never inherited.
+def _declared_language(target: dict, user: dict) -> str:
+    """The conversation-or-user declaration; 'multi' for a multilingual-profile user, whose pin is not evidence."""
+    if pin_untrusted(user):
+        return 'multi'
+    return normalized_stt_language(target.get('language') or user.get('language'))
+
+
+def _inherited_language(target: dict, user: dict, inherit: bool) -> str | None:
+    """``inherited_language`` when inheritance is on, except a multilingual-profile user's pin is never inherited.
 
     This covers every legacy mode and an existing ``batch_sync_v1`` owner, which skips admission: such units are
     classified per unit as ``multi``."""
-    if pin_untrusted(user):
+    if not inherit or pin_untrusted(user):
         return None
     return inherited_language(target.get('language'), user.get('language'))
 
@@ -844,13 +851,13 @@ async def accept_upload(
                     total_files=len(paths),
                     lane=lane,
                 )
-        language = normalized_stt_language(target.get('language') or user.get('language'))
+        language = _declared_language(target, user)
         # Switch-off retains legacy sync's input; new custody inherits known
         # context. Previous batch receipts above always keep their original lane.
         prefs = user.get('transcription_preferences') or {}
         input_language = normalized_stt_language(user.get('language')) if prefs.get('single_language_mode') else 'multi'
         inherit = language_inheritance_enabled()
-        inherited = _inherited_language(target, user) if inherit else None
+        inherited = _inherited_language(target, user, inherit)
         if inherited:
             language = inherited
             if language_class(inherited) == 'supported':

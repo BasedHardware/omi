@@ -29,8 +29,10 @@ probes and 50 self-gate windows.
 
 **Rollout.** Ship on behind the kill switch `BATCH_MULTILINGUAL_PROFILE_ROUTING_ENABLED=false`, which trusts
 the pin again (`BATCH_ADMISSION_LANGUAGE_EXCLUSION_ENABLED=false` restores it too). The signal depends on
-`STT_LEARNED_LANGUAGE_PROFILE` staying on: the live session projection is written only while it is, and a
-lapsed profile silently returns flagged users to the pinned route. Readback: `outcome=reclassified` log count, and the multilingual intake route share for
+`STT_LEARNED_LANGUAGE_PROFILE` staying on: the live session projection is written only while it is. Stored rows
+persist without expiry, so turning learning off freezes each user's last profile. Pair that with
+`BATCH_MULTILINGUAL_PROFILE_ROUTING_ENABLED=false`. (backend-sync does not carry the listen setting, so this rule
+cannot read it.) Shadow intake mirrors serving: it does not inherit a flagged user's pin either. Readback: `outcome=reclassified` log count, and the multilingual intake route share for
 profiled users, after backend-sync serves it.
 
 **Not changed.** The multilingual engine choice (Soniox did best on code-switching in the lab), word

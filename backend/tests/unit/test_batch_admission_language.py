@@ -475,6 +475,34 @@ async def test_existing_batch_owner_of_a_multilingual_profile_never_inherits_the
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize('mode', ['on', 'draining', 'dark'])
+@pytest.mark.parametrize('switch, route_language', [(None, 'multi'), ('false', 'en')])
+async def test_inheritance_off_batch_owner_of_a_multilingual_profile_routes_as_multi(
+    monkeypatch, mode, switch, route_language
+):
+    # With inheritance off the input is the multi-language preference either way; the route must not see the pin.
+    monkeypatch.setenv('BATCH_PIPELINE_LANGUAGE_INHERITANCE_ENABLED', 'false')
+    if switch is not None:
+        monkeypatch.setenv('BATCH_MULTILINGUAL_PROFILE_ROUTING_ENABLED', switch)
+    routes = []
+    original = intake.select_route
+    monkeypatch.setattr(
+        intake, 'select_route', lambda language, **kw: routes.append(language) or original(language, **kw)
+    )
+    speaking(monkeypatch)
+    response, staged, probe = await upload(
+        monkeypatch,
+        user_language='en',
+        conversation_language='en',
+        mode=mode,
+        owner='batch_sync_v1',
+        profile=MANDARIN_PROFILE,
+    )
+    assert admitted(response, staged) and probe.call_args.args[0] == 'multi'
+    assert routes == [route_language]
+
+
+@pytest.mark.asyncio
 async def test_multilingual_profile_with_sampling_off_stays_on_legacy(monkeypatch):
     monkeypatch.setenv('BATCH_ADMISSION_LANGUAGE_SAMPLE_ENABLED', 'false')
     excluded = Mock()
