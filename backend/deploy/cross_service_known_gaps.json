@@ -141,7 +141,7 @@
     },
     {
       "key": "reader-split|prod|helm/batch-pipeline-worker/BATCH_PIPELINE_PROJECTION_FOLLOWUP_SLOTS",
-      "why": "SCA-3120/SCA-4454, David 2026-11-26: the halved follow-up slot count belongs only to the in-process projection follow-up sweep that Serving.supervise runs on Cloud Run. The worker entrypoint runs Pump/Scheduler, not the follow-up sweep; the import-closure inventory over-approximates this reader. Keep the worker on the code default."
+      "why": "SCA-3120/SCA-4454, David 2026-11-26: the stepped-down follow-up slot count belongs only to the in-process projection follow-up sweep that Serving.supervise runs on Cloud Run. The worker entrypoint runs Pump/Scheduler, not the follow-up sweep; the import-closure inventory over-approximates this reader. Keep the worker on the code default."
     },
     {
       "key": "reader-split|prod|helm/batch-pipeline-worker/BATCH_PIPELINE_PROJECTION_PHASE_SAMPLE_ENABLED",
