@@ -6,6 +6,7 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
 import pytest
+from google.api_core.exceptions import InvalidArgument
 
 from database import conversations_v3 as store, conversations_v3_leases as leases
 from utils.conversations.v3 import Conflict, UnlockedPage, audio, outline, planner, service
@@ -165,6 +166,8 @@ def owner(monkeypatch):
     rows = three_seeds()
     client = TxMemory(rows)
     passes, wakes = [], []
+    # The document Firestore rejects for size, and whether its error names it (as the real one does).
+    state = SimpleNamespace(oversized='da', named=True)
 
     async def blocking(pool, fn, *args, **kwargs):
         return fn(*args, **kwargs)
@@ -172,9 +175,13 @@ def owner(monkeypatch):
     def commit(uid, token, recordings, existing, planned, cache, **kw):
         loaded = sorted(recordings)
         passes.append((loaded, sorted(existing)))
-        if 'da' in existing:
-            # Firestore rejects the oversize claimant row: the transaction writes nothing.
-            raise Conflict('document_too_large')
+        if state.oversized in existing or state.oversized in recordings:
+            # Firestore rejects the oversize document: the transaction writes nothing.
+            path = f'projects/p/databases/(default)/documents/users/u/conversations/{state.oversized}'
+            text = f"Document '{path}' cannot be written because its size (1,048,611 bytes) exceeds the maximum allowed size"
+            raise Conflict('document_too_large') from InvalidArgument(
+                text if state.named else 'The value of property "transcript_segments" is longer than 1048487 bytes'
+            )
         for rid in recordings:
             rows[C + rid]['v3_pending'] = False
         # The final batch's lease update (commit_projection) clears the park.
@@ -211,7 +218,7 @@ def owner(monkeypatch):
         'outline',
         lambda uid, prompt: '{"conversations":[{"first_line":1,"title":"A plan","line":"A plan.","kind":"conversation"}]}',
     )
-    return SimpleNamespace(rows=rows, passes=passes, wakes=wakes)
+    return SimpleNamespace(rows=rows, passes=passes, wakes=wakes, state=state)
 
 
 @pytest.mark.asyncio
@@ -328,3 +335,76 @@ def test_a_retained_rows_carried_aliases_are_slimmed_and_still_resolve(monkeypat
     parts = audio.playback_snapshot('synthetic', {'id': row['id']})['_v3_playback_parts']
     resolved_parts = [part for part in parts if part.get('recording_id') == 'r']
     assert resolved_parts and all(part['source'] == original for part in resolved_parts)
+
+
+def open_window(rows):
+    """The lease's open window, which load() pulls in on its own on every pass."""
+    rows[C + 'o'] = source('o', started_at=AT + timedelta(hours=9), claims=[claim('do', AT + timedelta(hours=9), 10)])
+    rows[C + 'o']['v3_pending'] = False
+    rows[C + 'do'] = derived('do', AT + timedelta(hours=9), 10, ['o'], status='in_progress')
+    rows[LEASE]['open_id'] = 'do'
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    'oversized,named,expected',
+    [
+        ('do', True, None),  # The open window is the oversize document: no seed answers for it.
+        ('o', True, None),  # So is the open window's own source.
+        ('da', False, None),  # Unnamed (a property-size error) with an open window loaded: unattributable.
+        ('da', True, ['a', 'b']),  # Named, and only the seed's closure holds it.
+    ],
+)
+async def test_an_independently_loaded_open_window_is_never_charged_to_the_seed(owner, oversized, named, expected):
+    open_window(owner.rows)
+    owner.state.oversized, owner.state.named = oversized, named
+    assert await service.reconcile('u') == 'blocked'
+    assert 'do' in owner.passes[0][1]  # The open window was loaded beside the one pending seed.
+    assert owner.rows[LEASE].get(store.SIZE_QUARANTINE_FIELD) == expected
+    if expected is None:
+        # The usual park: the owner backs off instead of walking healthy seeds into the same rejection.
+        assert store.backoff_state('u')[0] is not None
+
+
+def test_a_new_quarantine_reports_a_degraded_fallback_once(strict, monkeypatch):
+    calls = []
+    monkeypatch.setattr(store, 'record_fallback', lambda **kw: calls.append(kw))
+    token = leases.acquire(UID, 'builder', firestore_client=strict)
+    store.record_blocked(UID, token, 'document_too_large', quarantine=('a',), firestore_client=strict)
+    store.record_blocked(UID, token, 'document_too_large', quarantine=('a',), firestore_client=strict)
+    store.record_blocked(UID, token, 'v3_derived_budget', firestore_client=strict)
+    assert calls == [
+        {
+            'component': 'conversations_v3',
+            'from_mode': 'pending_retry',
+            'to_mode': 'size_quarantine',
+            'reason': 'document_size_limit',
+            'outcome': 'degraded',
+            'log': store.logger,
+        }
+    ]
+
+
+def test_the_size_error_names_its_document_or_nothing():
+    path = 'projects/p/databases/(default)/documents/users/u/conversations/da'
+    named = InvalidArgument(
+        f"Document '{path}' cannot be written because its size (1 bytes) exceeds the maximum allowed size"
+    )
+    assert store.size_error_document(named) == 'da'
+    assert store.size_error_document(InvalidArgument('The value of property "x" is longer than 1048487 bytes')) is None
+    assert store.size_error_document(InvalidArgument(f"Document '{path}' is locked")) is None
+    assert store.size_error_document(None) is None
+
+
+def test_quarantined_successors_cannot_hide_a_healthy_page_continuation():
+    rows = {C + 's': source('s', started_at=AT, v3_pending_since=AT)}
+    after = AT + timedelta(seconds=11)
+    for i in range(33):
+        rows[C + f'q{i}'] = source(f'q{i}', started_at=after, v3_pending_since=AT + timedelta(hours=1, seconds=i))
+    rows[C + 'h'] = source('h', started_at=after + timedelta(seconds=1), v3_pending_since=AT + timedelta(hours=2))
+    rows[LEASE] = {store.SIZE_QUARANTINE_FIELD: [f'q{i}' for i in range(33)]}
+    recordings, _existing, _cache = store.load(
+        'u', pending_limit=1, unlocked_page=UnlockedPage(), firestore_client=MemoryQuery(rows)
+    )
+    assert list(recordings) == ['s']
+    assert recordings['s'].get('_v3_page_continues') is True

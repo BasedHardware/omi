@@ -37,6 +37,9 @@ class UnlockedPage:
     seeds: tuple[int, int] = (0, 0)  # (pending, unlocked) seeds this load read
     pending_ids: tuple[str, ...] = ()  # the pending recordings this load seeded
     quarantined: frozenset[str] = frozenset()  # pending recordings set aside for size (v3_size_quarantine)
+    # Documents this load pulled in on their own, not through a pending seed: the lease's open window and
+    # its direct sources. A size rejection of one of them is not the seed's to answer for.
+    independent: frozenset[str] = frozenset()
 
 
 def preview_wakes(rows, recordings) -> dict[str, datetime]:

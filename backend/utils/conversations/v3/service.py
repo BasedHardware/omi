@@ -396,17 +396,21 @@ async def _load_live_batch(uid, token, parked, unlocked_page=None):
     raise AssertionError('bounded pending batch sizes are empty')
 
 
-def _size_quarantine(reason, pending_limit, page, recordings):
+def _size_quarantine(reason, pending_limit, page, recordings, oversized=None):
     """Every pending recording a one-seed pass loaded when Firestore rejected its commit for size (SCA-2918).
 
     A one-seed park otherwise re-seeds the same oldest recording every backoff and freezes the owner's
     whole backlog behind it. Any pending recording in that closure would be seeded into the same rejection
     (closures are followed through claimants, sources and pieces both ways), so the closure is set aside as
-    a whole. An unlocked seed could own the oversize document instead, so it disqualifies.
+    a whole. An unlocked seed could own the oversize document instead, so it disqualifies. So does the
+    lease's open window, which every pass loads on its own: unless Firestore named an oversize document
+    outside it (``oversized``), quarantining seeds would only walk healthy seeds into the same rejection.
     """
     if reason != 'document_too_large' or pending_limit != 1 or page is None or not size_quarantine_enabled():
         return ()
     if page.seeds[1] or len(page.pending_ids) != 1:
+        return ()
+    if page.independent and (oversized is None or oversized in page.independent):
         return ()
     (seed,) = page.pending_ids
     return (seed, *sorted(rid for rid, row in recordings.items() if rid != seed and row.get('v3_pending')))
@@ -1106,7 +1110,13 @@ async def reconcile(
         report['blocked_reason'] = reason
         if not derive:
             # A backfill conflict must not park the owner's live builder.
-            quarantine = _size_quarantine(reason, bounded_pending_limit, unlocked_page, recordings)
+            quarantine = _size_quarantine(
+                reason,
+                bounded_pending_limit,
+                unlocked_page,
+                recordings,
+                store.size_error_document(error.__cause__),
+            )
             await run_blocking(
                 db_executor,
                 store.record_blocked,

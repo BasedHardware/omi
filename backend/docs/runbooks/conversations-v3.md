@@ -229,6 +229,10 @@ seeded into the same rejection. The early attempt is re-armed, so the next seed 
   filtered. The pass chain and the 5-minute sweep don't wake an owner whose only stale pending rows are
   quarantined.
 - A closure that doesn't fit the list parks with the usual backoff.
+- The lease's open window loads on every pass by itself, so it's never charged to the seed. When an open
+  window was loaded, the pass quarantines only if Firestore's error names an oversize document outside that
+  window and its direct sources. Otherwise it parks with the usual backoff.
+- Each new quarantine records `omi_fallback_total{component="conversations_v3",to_mode="size_quarantine",reason="document_size_limit",outcome="degraded"}`.
 - Quarantined rows stay `v3_pending`, and the lease keeps naming them after the park clears. A recovered
   owner is not a repaired recording: count owners whose park cleared separately from quarantined ids, and
   `omi_conversations_v3_reconciles_total{outcome="size_quarantined"}` for parks that set work aside.

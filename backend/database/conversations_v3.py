@@ -7,6 +7,7 @@ codec; cached outlines are encrypted. Nothing is cleared after a lost race.
 import json
 import logging
 import os
+import re
 import time
 from bisect import bisect_right
 from dataclasses import dataclass
@@ -55,6 +56,7 @@ from config.conversations_v3 import (
 )
 from utils.conversations import terminal_settled
 from utils.conversations.v3 import Conflict, UnlockedPage, metrics, policy, preview_wakes, request_log_trace_id
+from utils.observability.fallback import record_fallback
 from utils.open_loops.extraction import OPEN_LOOP_EXTRACTIONS_COMPRESSED_FIELD, OPEN_LOOP_EXTRACTIONS_FIELD
 
 logger = logging.getLogger(__name__)
@@ -316,8 +318,27 @@ def record_blocked(uid, token, reason, *, on_open=False, quarantine=(), firestor
 
     result = run_preloaded_transaction_with_contention_retry(client, park)
     if result == 'quarantined':
+        # The builder stops retrying these obligations and carries on with the rest: a degraded mode,
+        # and it outlives the park (a later commit clears the park, not the quarantine).
         metrics.safe_metric(lambda: metrics.RECONCILES.labels('size_quarantined').inc())
+        record_fallback(
+            component='conversations_v3',
+            from_mode='pending_retry',
+            to_mode='size_quarantine',
+            reason='document_size_limit',
+            outcome='degraded',
+            log=logger,
+        )
     return bool(result)
+
+
+_SIZE_ERROR_DOCUMENT = re.compile(r"/documents/users/[^/]+/conversations/([^/'\"\\\s]+)")
+
+
+def size_error_document(error):
+    """The conversation id a Firestore document-size rejection names, or None (never logged: ids stay in)."""
+    match = _SIZE_ERROR_DOCUMENT.search(str(error)) if error is not None and size_error(error) else None
+    return match.group(1) if match else None
 
 
 def size_quarantined(uid, *, firestore_client=None):
@@ -487,8 +508,8 @@ def load(
                 for doc in coll.where(filter=FieldFilter('v3_pending', '==', True))
                 .where(filter=FieldFilter('started_at', '>=', latest['started_at']))
                 .order_by('started_at')
-                .limit(33)
-                .stream()
+                # Widened by the set-aside ids, so they cannot fill the window and hide a healthy successor.
+                .limit(33 + len(quarantined)).stream()
                 if doc.id not in recordings
                 and doc.id not in quarantined
                 and not (skip_terminal and terminal_recording(doc.to_dict() or {}))
@@ -515,6 +536,14 @@ def load(
         opened = decode_row(uid, coll.document(state['open_id']).get())
         if opened:
             existing[opened['id']] = opened
+            if unlocked_page is not None:
+                unlocked_page.independent = frozenset(
+                    {
+                        opened['id'],
+                        *(opened.get('v3_recording_ids') or ()),
+                        *(p.get('recording_id') for p in opened.get('recording_pieces') or () if p.get('recording_id')),
+                    }
+                )
     queried = set()
     by_claims = closure_by_claims()
     loaded_bytes = sum(_encoded_bytes(row.get('transcript_segments') or []) for row in existing.values())
