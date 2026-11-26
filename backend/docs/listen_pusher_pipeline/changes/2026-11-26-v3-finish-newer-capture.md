@@ -110,18 +110,23 @@ exactly the tail cut.
 
 Provider cost: storing B's request makes B a fast-finish candidate. That adds at
 most one fast-finish pass per stored-both Finish, even when B turns out silent.
-The pass transcribes up to 20 minutes of audio (`MAX_SECONDS`) and sends one
-prerecorded request per batch unit, at most `MAX_UNITS` (8); a single-unit B is
-one call. The lab budget for `finish_after_second_close` shows it as STT 0 → 1.
-Two things bound it:
-- `CONVERSATIONS_V3_FAST_FINISH` (`cohort` by default; production runs `on` for
+With chunking on (`CONVERSATIONS_V3_FAST_FINISH_CHUNKED`, default and production
+`on`, #26344), the pass splits each unit into chunks of at most 5 minutes with
+3 seconds of overlap and sends them concurrently. A B of up to 20 minutes
+(`MAX_SECONDS`) is therefore at most a few prerecorded requests; the lab's
+80-second B is one (STT 0 → 1 in `finish_after_second_close`). With chunking off
+it is one request per unit, at most `MAX_UNITS` (8), up to 20 minutes. Bounds:
+- `CONVERSATIONS_V3_FAST_FINISH`: `cohort` by default; production runs `on` for
   the services that serve Finish and admission, so the cohort does not limit it
-  there).
-- The shared funding gate every fast-finish pass passes before provider spend
+  there.
+- A B over 20 minutes is admitted only for the long canary:
+  `CONVERSATIONS_V3_FAST_FINISH_LONG_PERCENT` of owners (25 in production) and at
+  most `CONVERSATIONS_V3_FAST_FINISH_LONG_DAILY_SECONDS` of such audio per UTC day
+  across the fleet (7200 in production). This is the only fast-finish daily cap;
+  a long pass reserves its planned seconds from it before any spend.
+- The shared funding gate every pass passes before provider spend
   (`fast_finish.funded` → `sync_admission(lane='batch')`): consent and the
   owner's funded STT plan allowance.
-
-There is no fast-finish-specific daily cap.
 
 ## Metrics and switch
 
