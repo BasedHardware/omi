@@ -197,10 +197,12 @@ def promote(service, wire, candidate, transport, guard, *, floor_check, sleep=ti
     fixed. A failed guard or move restores the original map if this operation
     still owns the requested traffic.
 
-    floor_check(revision) must return True only when the revision passes the
-    backend release floor. Every revision this operation can route traffic to
-    (the candidate and each inverse revision it may restore) is checked before
-    the first move, so a TRIP or error can never restore a pre-floor binary.
+    floor_check(revision) must return True only when the revision's proven
+    image source passes the backend release floor. Every revision this
+    operation can leave routable is checked before the first move: the
+    candidate, each inverse revision it may restore, and every tagged revision
+    (a 0% tag stays reachable through its tag URL because replace() keeps it).
+    A TRIP or error can therefore never restore or retain a pre-floor binary.
     """
     plan = decode_plan(service, wire)
     inverse, donor = plan['inverse'], plan['donor']
@@ -215,7 +217,8 @@ def promote(service, wire, candidate, transport, guard, *, floor_check, sleep=ti
         or initial.observed != inverse
     ):
         raise ValueError('named_inverse_mismatch')
-    for revision in (*sorted(inverse), candidate):
+    routable = sorted({*inverse, *(revision for _tag, revision in initial.tags)} - {candidate})
+    for revision in (*routable, candidate):
         if floor_check(revision) is not True:
             raise ValueError('release_floor_rejected')
 
@@ -324,16 +327,42 @@ def guard_command(command, project, region, *, run=subprocess.run):
     return evaluate
 
 
-def release_floor_command(script, project, region, *, run=subprocess.run):
-    """Run the reviewed verify_backend_release_floor.py for one revision."""
+def revision_image_source(revision, project, region, *, repo, describe=None, registry=None):
+    """Full source commit of a revision's application image: pinned digest, then
+    the registry's OCI revision label or commit tags (serving_has). The
+    OMI_BACKEND_RELEASE_SHA env stamp is never read: env merges keep stale
+    values, so it can name a release the revision does not serve. Any read
+    that cannot prove the source raises ValueError (fail closed)."""
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
+    import serving_has
+
+    if describe is None:
+
+        def describe(name):
+            flags = ['--project', project, '--region', region, '--format=json']
+            return json.loads(serving_has.command([serving_has.GCLOUD, 'run', 'revisions', 'describe', name, *flags]))
+
+    document = describe(revision)
+    if (document.get('metadata') or {}).get('name') != revision:
+        raise ValueError('revision_identity_mismatch')
+    # No service argument: the desktop-backend env-stamp fallback never applies here.
+    source = serving_has.image_source(document, repo, registry=registry)
+    if not re.fullmatch(r'[0-9a-f]{40}', source or ''):
+        raise ValueError('image_source_unproven')
+    return source
+
+
+def release_floor_command(script, project, region, *, repo='.', run=subprocess.run, describe=None, registry=None):
+    """Prove each revision's image source, then run the reviewed
+    verify_backend_release_floor.py on that exact commit (--sha)."""
 
     def check(revision):
         try:
-            result = run(
-                [sys.executable, '-I', str(script), '--revision', revision, '--project', project, '--region', region],
-                timeout=120,
+            source = revision_image_source(
+                revision, project, region, repo=str(Path(repo).resolve()), describe=describe, registry=registry
             )
-        except (OSError, subprocess.TimeoutExpired):
+            result = run([sys.executable, '-I', str(script), '--sha', source], timeout=120)
+        except (OSError, ValueError, KeyError, TypeError, AttributeError, IndexError, subprocess.SubprocessError):
             return False
         return result.returncode == 0
 

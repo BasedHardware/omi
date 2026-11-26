@@ -1796,8 +1796,9 @@ runs:
             *) exit 1 ;;
           esac
           executor="$DEPLOY_CONTROL_SCRIPTS/cloud_run_split_canary.py"
-          # The executor checks every revision it may route to (candidate and
-          # each restorable inverse) against origin/main's release floor first.
+          # Before any move the executor proves the image source (digest, then
+          # registry revision) of every routable revision (candidate, restorable
+          # inverse, tagged) and checks it against origin/main's release floor.
           history_args=()
           if [[ "$(git rev-parse --is-shallow-repository)" == true ]]; then
             history_args=(--unshallow)
