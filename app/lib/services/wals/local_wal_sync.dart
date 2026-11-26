@@ -7,6 +7,7 @@
 // never upload, poll or delete audio on their own (CUSTODY.md).
 import 'package:omi/services/capture/local_stt_custody.dart';
 import 'dart:async';
+import 'receipt_waiter.dart';
 import 'native_custody_diagnostics.dart';
 import 'ring_custody_diagnostics.dart';
 import 'recording_inventory.dart';
@@ -72,6 +73,7 @@ import 'package:omi/backend/http/api/sync_upload_refusal.dart';
 import 'package:omi/services/wals/wal_evidence_runs.dart';
 import 'package:omi/utils/debug_log_manager.dart';
 import 'package:omi/utils/logger.dart';
+import 'package:omi/utils/reliability_experiments.dart';
 import 'package:omi/utils/wal_file_manager.dart';
 
 import 'capture_committed_journal.dart';
@@ -337,6 +339,7 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
   void _notifyUpdated(int generation) {
     if (!_isCurrent(generation)) return;
     listener.onWalUpdated();
+    _receiptWaiter?.refresh();
   }
 
   @override
@@ -345,6 +348,7 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
     _backlogTelemetry.clearUserData();
     _heldWalSignal.clearUserData();
     _orphanFrameCache = const OrphanAudioFrameCache.empty();
+    stopReceiptWait();
     _sessionGeneration++;
     _cancelStopRetry();
     _drainGroupBatchCounts.clear();
@@ -397,6 +401,7 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
   final DateTime Function()? _nowOverride;
   final Timer Function(Duration, void Function(Timer))? _periodicOverride;
   final Future<SyncJobFetch> Function(String jobId)? _jobStatusFetcherOverride;
+  final ReceiptWaitFetcher? _receiptWaitFetcherOverride;
   final Future<void> Function(List<Wal> wals)? _persistWalsOverride;
   final Future<bool> Function()? _deltaIndexAllowedOverride;
   final Future<List<Wal>> Function()? _loadWalsOverride;
@@ -427,8 +432,74 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
       (_jobStatusFetcherOverride == null
           ? (SyncJobPoller.instance..persistMissingWith(PreferencesSyncJobMissingStore()))
           : SyncJobPoller(clock: _now));
-  Future<SyncJobFetch> _jobStatusFetcher(String jobId) =>
-      _jobPoller.fetch(jobId, _jobStatusFetcherOverride ?? fetchSyncJobStatus);
+  Future<SyncJobFetch> _jobStatusFetcher(String jobId) {
+    final fetch = _jobPoller.fetch(jobId, _jobStatusFetcherOverride ?? fetchSyncJobStatus);
+    // Baseline: the caller receives the poller's future, errors included.
+    if (!ReliabilityExperiments.enabled('status_fetch_failure_isolated')) return fetch;
+    return () async {
+      try {
+        return await fetch;
+      } on SyncRateLimitedException catch (limit) {
+        return SyncJobFetch.throttled(limit);
+      } on Exception catch (error) {
+        // The poller already deferred this job. A failed GET must not abandon
+        // the remaining jobs or the state changes made earlier in this pass.
+        Logger.debug('LocalWalSync: status fetch for $jobId failed: ${error.runtimeType}');
+        return const SyncJobFetch(SyncJobFetchOutcome.transient);
+      }
+    }();
+  }
+
+  ReceiptWaiter? _receiptWaiter;
+
+  void stopReceiptWait() {
+    _receiptWaiter?.stop();
+    _receiptWaiter = null;
+  }
+
+  void startReceiptWait(Future<void> Function(SyncLocalFilesResponse) surface) {
+    // The only place a waiter is created: with the experiment off none exists,
+    // so refresh/stop/handles below are no-ops and the endpoint is never called.
+    if (!ReliabilityExperiments.enabled('receipt_long_poll')) return;
+    final generation = _sessionGeneration;
+    _receiptWaiter ??= ReceiptWaiter(
+      fetch: _receiptWaitFetcherOverride,
+      jobs: () => {
+        for (final w in _indexInventory.uploaded)
+          if (_activeWals.containsIdentity(w) && w.jobId?.isNotEmpty == true) w.jobId!,
+      },
+      uploadTimes: () {
+        final times = <String, int>{};
+        for (final w in _indexInventory.uploaded) {
+          if (!_activeWals.containsIdentity(w) || w.jobId?.isNotEmpty != true) continue;
+          final known = times[w.jobId!];
+          if (known == null || w.uploadedAt > known) times[w.jobId!] = w.uploadedAt;
+        }
+        return times;
+      },
+      apply: (receipts) async {
+        // Serialize mutations with any legacy/older-server reconciliation.
+        while (_reconcileInFlight != null) {
+          await _reconcileInFlight;
+        }
+        if (!_isCurrent(generation)) return;
+        final pass = _reconcileUploadedWals(receipts: receipts);
+        _reconcileInFlight = pass;
+        late final SyncLocalFilesResponse result;
+        try {
+          result = await pass;
+        } finally {
+          if (identical(_reconcileInFlight, pass)) _reconcileInFlight = null;
+        }
+        if (_isCurrent(generation) &&
+            (result.newConversationIds.isNotEmpty || result.updatedConversationIds.isNotEmpty)) {
+          await surface(result);
+        }
+      },
+    );
+    _receiptWaiter!.refresh();
+  }
+
   bool get hasUploadedWals => _indexInventory.uploaded.any(_activeWals.containsIdentity);
   Future<SyncLocalFilesResponse>? _reconcileInFlight;
   DateTime? _nextReconcilePassAt;
@@ -451,6 +522,7 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
     DateTime Function()? now,
     Timer Function(Duration, void Function(Timer))? periodic,
     Future<SyncJobFetch> Function(String jobId)? jobStatusFetcher,
+    ReceiptWaitFetcher? receiptWaitFetcher,
     Future<void> Function(List<Wal> wals)? persistWals,
     Future<bool> Function()? deltaIndexAllowed,
     Future<List<Wal>> Function()? loadWals,
@@ -474,6 +546,7 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
         _nowOverride = now,
         _periodicOverride = periodic,
         _jobStatusFetcherOverride = jobStatusFetcher,
+        _receiptWaitFetcherOverride = receiptWaitFetcher,
         _persistWalsOverride = persistWals,
         _deltaIndexAllowedOverride = deltaIndexAllowed,
         _loadWalsOverride = loadWals,

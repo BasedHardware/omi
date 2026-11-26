@@ -56,6 +56,77 @@ def indexed(doc):
     return evidence.documents(yaml.safe_dump(doc))
 
 
+@pytest.mark.parametrize('rollback', [False, True])
+@pytest.mark.parametrize('fault', [None, 'admission', 'sibling', 'reconnect', 'ambiguous'])
+def test_image_only_reference_render_and_server_dry_run(rollback, fault):
+    old = 'gcr.io/based-hardware/backend:96f0631'
+    new = 'gcr.io/based-hardware/backend:6790e95'
+    before, after = (new, old) if rollback else (old, new)
+    installed = deployment()
+    primary = installed['spec']['template']['spec']['containers'][0]
+    primary.update(name='backend-listen', image=old)
+    primary['env'] += [
+        {'name': 'SYNC_FUTURE_CAPTURE_CLAMP_ENABLED', 'value': 'false'},
+        {'name': 'SYNC_POLL_BACKOFF_ENABLED', 'value': 'false'},
+    ]
+    if fault == 'reconnect':
+        primary['env'].append({'name': 'LISTEN_BATCH_RECONNECT_ENABLED', 'value': 'true'})
+    if fault == 'ambiguous':
+        installed['spec']['template']['spec']['initContainers'][0]['image'] = old
+    raw = yaml.safe_dump(installed)
+    target = next(iter(indexed(installed)))
+    live = copy.deepcopy(installed)
+    live['spec']['template']['spec']['containers'][0]['image'] = before
+    admitted = copy.deepcopy(live)
+    admitted['spec']['template']['spec']['containers'][0]['image'] = after
+    if fault == 'admission':
+        admitted['spec']['template']['spec']['nodeSelector']['pool'] = 'another-pool'
+    calls = []
+    scopes = []
+
+    class Reader:
+        def run(self, argv):
+            calls.append(argv)
+            if argv[0] == 'helm':
+                return raw.encode()
+            assert argv[-1] == '--dry-run=server'
+            return json.dumps(admitted).encode()
+
+        def reference_objects(self, keys):
+            assert keys == [target]
+            return {target: live}
+
+        def obj(self, kind, name, namespace):
+            scopes.append((kind, name, namespace))
+            return {'data': len(scopes) if fault == 'sibling' else 'unchanged'}
+
+    with patch.object(evidence, 'release_revision', return_value=936):
+        if fault:
+            with pytest.raises(evidence.Refused):
+                evidence.image_only_plan(Reader(), 936, before, after)
+            return
+        command, _, desired, _, proof = evidence.image_only_plan(Reader(), 936, before, after)
+    assert len(calls) == 2 and calls[-1] == [*command, '--dry-run=server']
+    assert json.loads(command[8]) == [
+        {'op': 'test', 'path': '/metadata/uid', 'value': 'uid'},
+        {'op': 'test', 'path': '/metadata/resourceVersion', 'value': '10'},
+        {'op': 'test', 'path': evidence.IMAGE_PATH, 'value': before},
+        {'op': 'replace', 'path': evidence.IMAGE_PATH, 'value': after},
+    ]
+    expected = raw.replace(old, new)
+    assert proof['before_manifest_sha256'] == evidence.sha((expected if rollback else raw).encode())
+    assert proof['after_manifest_sha256'] == evidence.sha((raw if rollback else expected).encode())
+    assert desired == indexed(yaml.safe_load(raw if rollback else expected))
+    assert (
+        scopes
+        == [
+            ('ConfigMap', 'prod-omi-backend-config', 'prod-omi-backend'),
+            ('Deployment', 'prod-omi-neg-coverage-exporter', 'prod-omi-monitoring'),
+        ]
+        * 2
+    )
+
+
 @pytest.mark.parametrize(
     'drift', [None, 'second-key', 'secret', 'live-env', 'field-path', 'field-version', 'image', 'inverse', 'missing']
 )
@@ -285,16 +356,17 @@ def test_rendered_key_union_includes_removed_and_added_keys():
     assert ('ADDED', 'added') in {(r['key'], r['effect']) for r in result['env']}
 
 
-@pytest.mark.parametrize('references', [False, True])
+@pytest.mark.parametrize('references', [False, True, 'image-only'])
 @pytest.mark.parametrize(
     'fault', [None, 'live-movement', 'wrong-source', 'wrong-image', 'wrong-attempt', 'helm-movement', 'missing-runtime']
 )
 def test_complete_producer_uses_only_bounded_reads_and_refuses_changed_binding(tmp_path, fault, references):
+    image_only = references == 'image-only'
     private_file = tmp_path / 'private.yaml'
     private_file.write_text('privateEnv:\n  PRIVATE_TOKEN: "never-publish-this-value"\n')
     event_file = tmp_path / 'event.json'
     inputs = dict(evidence.DISPATCH_DEFAULTS, expected_sha='b' * 40, image_tag='b' * 7)
-    event_file.write_text(json.dumps({'inputs': {**inputs, 'evidence_request_id': 'a' * 32}}))
+    event_file.write_text(json.dumps({'inputs': {**inputs, 'evidence_request_id': 'a' * 32, 'control_sha': ''}}))
     req = {
         'schema': 1,
         'request_id': 'a' * 32,
@@ -343,6 +415,9 @@ def test_complete_producer_uses_only_bounded_reads_and_refuses_changed_binding(t
         private_file.write_text('')
         primary = predecessor['spec']['template']['spec']['containers'][0]
         primary['image'] = 'gcr.io/based-hardware/backend:' + req['image_tag']
+        if image_only:
+            primary.update(name='backend-listen', image='gcr.io/based-hardware/backend:96f0631')
+            req['image_only_from'] = primary['image']
         for row in primary['env']:
             key = row['name']
             row.clear()
@@ -379,6 +454,13 @@ def test_complete_producer_uses_only_bounded_reads_and_refuses_changed_binding(t
                 if 'hooks' in args:
                     return b''
                 return yaml.safe_dump(predecessor).encode()
+            if image_only and args[0] == 'kubectl':
+                assert args[-1] == '--dry-run=server'
+                admitted = copy.deepcopy(predecessor)
+                admitted['spec']['template']['spec']['containers'][0]['image'] = (
+                    'gcr.io/based-hardware/backend:' + req['image_tag']
+                )
+                return json.dumps(admitted).encode()
             assert args[0] == 'helm' and args[-2:] == ['--dry-run=client', '--output=json']
             value = 'never-publish-this-value' if '-f' in args[-4:] else 'chart-private-default'
             return json.dumps(
@@ -408,6 +490,8 @@ def test_complete_producer_uses_only_bounded_reads_and_refuses_changed_binding(t
         'based-hardware',
         [] if references else ['-f', '<private-overlay>'],
     )
+    if image_only:
+        req['helm_args'] = ['helm', '-n', evidence.NS, 'get', 'manifest', evidence.TARGET, '--revision', '1']
     if fault == 'missing-runtime':
         del req['bindings']['runtime_manifest_sha256']
     values = tmp_path / 'backend/charts/backend-listen/prod_omi_backend_listen_values.yaml'
@@ -429,8 +513,12 @@ def test_complete_producer_uses_only_bounded_reads_and_refuses_changed_binding(t
         else:
             result = evidence.produce(req, reader, environment, tmp_path, private_file, overrides, 200)
             assert result['run_attempt'] == '1'
-            assert result['coverage']['env_key_count'] == (4 if references else 3)
-            if references:
+            assert result['coverage']['env_key_count'] == (4 if references and not image_only else 3)
+            if image_only:
+                assert pods.call_count == 1
+                assert result['image_diff']['path'] == evidence.IMAGE_PATH
+                assert result['image_diff']['before'] == req['image_only_from']
+            elif references:
                 assert pods.call_count == 2
                 assert result['inverse'] == [
                     'helm',

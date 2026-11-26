@@ -7,7 +7,7 @@ from utils.conversations.v3.word_floor import text_word_count
 
 from collections.abc import Iterator
 from copy import deepcopy
-from datetime import timedelta
+from datetime import datetime, timedelta
 from uuid import NAMESPACE_URL, uuid5
 from difflib import SequenceMatcher
 from itertools import groupby
@@ -317,11 +317,30 @@ def is_unlocked(row):
     return row.get('status') == 'in_progress' or bool(row.get('v3_unlocked'))
 
 
+# Reliability experiment end_open_conversation: the owner-level End instant that closed a conversation.
+CUT_FIELD = 'v3_manual_cut_at'
+
+
+def ending_cut(finished_at, cuts, silence_gap):
+    """The owner-level cut that ends a stretch whose last speech is ``finished_at``; None when none does.
+
+    The same test ``outline.stretches`` applies: the first cut at or after the last speech, and only
+    while the stretch is still open at that cut (less than ``silence_gap`` after its last speech).
+    """
+    cut = next((c for c in sorted(cuts or ()) if c >= finished_at), None)
+    return cut if cut is not None and cut - finished_at < silence_gap else None
+
+
 def build(uid, window, recordings, existing=None, *, allocated=None, manual_end_home_visible=True):
     lines = window['lines']
     start, end = lines[0]['start'], max(line['end'] for line in lines)
     if existing and (not is_unlocked(existing) or window.get('_held_provisional')):
+        held_end = end
         start, end = existing['started_at'], existing['finished_at']
+        if isinstance(existing.get(CUT_FIELD), datetime) and existing.get('manual_end'):
+            # Experiment end_open_conversation: speech from before the End that landed late is inside
+            # this conversation, so its end follows that speech (it started before the stored cut).
+            end = max(end, held_end)
     cid = existing['id'] if existing else str(uuid5(NAMESPACE_URL, f'v3:{uid}:{start.isoformat()}'))
     first = recordings[lines[0]['conversation_id']]
     segments = []
@@ -631,6 +650,20 @@ class Ownership:
             for claim in recording['claims']:
                 by_row.setdefault(claim['conversation_id'], []).append((claim['start'], claim['end']))
         self._seen: dict[int, tuple[Any, Any]] = {}
+        # Reliability experiment end_open_conversation: a locked row the person ended carries the instant
+        # of that End (``CUT_FIELD``, written only with the experiment on). It keeps owning unclaimed speech
+        # that starts before that instant, even after its last published line: audio the phone was still
+        # holding at End. The reach stops at the next row's start. Without the field (the baseline) every
+        # row's reach is its own window.
+        self._reach: dict[str, Any] = {}
+        ended = [row for row in self.rows if isinstance(row.get(CUT_FIELD), datetime)]
+        starts = sorted(r['started_at'] for r in self.rows) if ended else []
+        for row in ended:
+            cut = row[CUT_FIELD]
+            if row['id'] not in self.locked_ids or not row.get('manual_end'):
+                continue
+            later = next((s for s in starts if s > row['started_at'] and s >= row['finished_at']), None)
+            self._reach[row['id']] = cut if later is None else min(cut, later)
 
     def owner_of(self, line):
         cached = self._seen.get(id(line))
@@ -648,10 +681,29 @@ class Ownership:
         if legacy is not None:
             return legacy
         claims = self._claims.get(rid)
-        return next(
+        owner = next(
             (r for r in self.rows if _contains_line(r, line, None if claims is None else claims.get(r['id'], ()))),
             None,
         )
+        if (
+            owner is None
+            and self._reach
+            # Unclaimed speech only: no stored claim of its recording overlaps the line.
+            and (
+                claims is None
+                or not any(a < line['end'] and line['start'] < b for spans in claims.values() for a, b in spans)
+            )
+        ):
+            # Held audio: after the ended row's last line, before the End that closed it.
+            owner = next(
+                (
+                    r
+                    for r in self.rows
+                    if r['id'] in self._reach and r['finished_at'] <= line['start'] < self._reach[r['id']]
+                ),
+                None,
+            )
+        return owner
 
     def locked_run_end(self, lines, offset):
         """The index after the run of lines one locked row owns from ``offset``; None when it is unowned."""

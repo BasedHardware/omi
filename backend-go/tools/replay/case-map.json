@@ -1,7 +1,7 @@
 {
   "version": 1,
   "active_floor": 50,
-  "active_case_count": 50,
+  "active_case_count": 51,
   "held_out_case_count": 4,
   "oracle_drivable_rules": {
     "F01": "Selected trigger and end reason are accepted and carried into a job.",
@@ -431,6 +431,14 @@
       "held_out": false
     },
     {
+      "name": "revision-two-segment-transcript",
+      "corpus": "conformance-gaps.json",
+      "rules": [
+        "F09"
+      ],
+      "held_out": false
+    },
+    {
       "name": "transcript-standard-protection",
       "corpus": "conformance-gaps.json",
       "rules": [
@@ -501,7 +509,7 @@
     "F02": "Sequential duplicate request and terminal input states are covered; concurrent admission races, lost responses and pre-existing-job reattachment are not.",
     "F04": "Active own-key resume is covered; due reblocking, secret exclusion and 14-day abandonment are not.",
     "F08": "The missing-worker-row fence and simple discarded/empty paths are covered; batch custody and open/closed empty archive distinctions are not.",
-    "F09": "Only one-revision transcript read and persistence are covered; meeting waits, concurrent edits and stale revision refusal are not.",
+    "F09": "Single-revision finalization plus deferred API/MCP reads of revision two are covered; meeting waits, concurrent worker edits and stale revision refusal are not.",
     "F14": "Ordinary integration delivery and final-attempt drop are covered; created-webhook merge-observer deferral and retry progress after process loss are not.",
     "F32": "Post-finalization erase purge is covered; blocking deletion marker and cutover fence races are not."
   }

@@ -13,6 +13,7 @@ from typing import Any
 from google.cloud import firestore
 from prometheus_client import Counter
 
+from database.account_deletion_policy import account_deletion_marker_blocks_access
 from database.quiet_check_retirement import (
     quiet_check_id,
     stop_quiet_check as stop_quiet_check,
@@ -92,6 +93,11 @@ def arm_quiet_check(
             return None
         if any(
             row.get(key) for key in ('deleted', 'discarded', 'sync_merged_into', 'is_locked', 'finalization_job_id')
+        ):
+            return None
+        marker = client.collection('account_deletions').document(uid).get(transaction=transaction)
+        if account_deletion_marker_blocks_access(
+            marker_exists=marker.exists, raw_status=(marker.to_dict() or {}).get('wipe_status')
         ):
             return None
         deadline = quiet_deadline(row, timeout, uid=uid)

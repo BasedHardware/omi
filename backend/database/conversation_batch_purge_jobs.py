@@ -31,6 +31,7 @@ from uuid import uuid4
 
 from google.cloud import firestore
 
+from database.privacy_check_metrics import PURGE_COMPLETED
 from database._client import get_firestore_client
 from database import rpc_deadline
 from database import legal_holds
@@ -539,7 +540,10 @@ def run_job(
         except BaseException:
             _finish_failed(finish)
             raise
-        return 'purged' if finish('completed') else 'superseded'
+        if not finish('completed'):
+            return 'superseded'
+        PURGE_COMPLETED.labels('conversation_job').inc()
+        return 'purged'
 
 
 def _finish_failed(finish: Callable[[str], bool]) -> None:

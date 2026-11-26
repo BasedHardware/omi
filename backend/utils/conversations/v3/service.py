@@ -26,6 +26,7 @@ from uuid import NAMESPACE_URL, uuid5
 
 from google.cloud.firestore_v1 import FieldFilter
 
+from config import reliability_experiments
 from config.conversations_v3 import (
     DEFAULT_BOUNDARY_SECONDS,
     HISTORICAL_SITDOWN_TIMING,
@@ -41,6 +42,7 @@ from utils.conversations.v3.triggers import enqueue, changed
 from utils.conversations.v3.renewal import renew_until_done, leased_work
 from database import conversations as conversations_db, conversations_v3 as store, conversations_v3_fence as fence
 from database import batch_pipeline_purge, conversation_batch_purge_jobs as batch_purge_jobs, legal_holds
+from database.firestore_write_probe import suspend_committed_write_count
 from utils import cloud_tasks
 from utils.other import storage
 from models.conversation import Conversation
@@ -56,7 +58,8 @@ from utils.conversations.v3 import (
     visibility,
     context,
 )
-from utils.conversations.v3 import refinement, preview_wakes
+from utils.conversations.v3 import manual_cuts, refinement, preview_wakes, summary_wake
+from utils.conversations.v3 import capture_device
 from utils.conversations.v3.word_floor import MIN_TASK_WORDS, has_unspaced_script, text_word_count
 from utils.conversations.processing_trigger import ProcessingTrigger
 from utils.conversations.meeting_treatment import deduplicated_transcribed_speech_seconds
@@ -240,6 +243,19 @@ async def _release_reconcile_lease(uid, key, token, *, primary_failed):
         logger.warning('v3 reconcile lease release failed exception_type=%s', type(error).__name__)
 
 
+def _measure_reconcile_writes(run):
+    @wraps(run)
+    async def measured(*args, **kwargs):
+        if kwargs.get('_pass', 0):  # The outer pass owns the measurement for the whole chain.
+            return await run(*args, **kwargs)
+        caller = 'backfill' if kwargs.get('derive') else 'on_open' if kwargs.get('on_open') else 'builder'
+        with metrics.measure_reconcile_writes(caller):
+            return await run(*args, **kwargs)
+
+    return measured
+
+
+@_measure_reconcile_writes
 async def reconcile(
     uid,
     *,
@@ -277,7 +293,8 @@ async def reconcile(
         if backoff and backoff > datetime.now(timezone.utc):
             metrics.RECONCILES.labels('backoff').inc()
             # Rows earlier passes committed still owe notes while the builder is parked.
-            await _drain_blocked(uid, parked)
+            with suspend_committed_write_count():
+                await _drain_blocked(uid, parked)
             return 'backoff'
     token = await run_blocking(db_executor, leases.acquire, uid, key)
     if token is None:
@@ -285,6 +302,9 @@ async def reconcile(
         return 'busy'
     primary_failed = False
     try:
+        # The reliability experiments below are read on this event loop, which answers from what was last
+        # learned for the account. Learn it on a worker thread first, so a pass never misses a switch.
+        await reliability_experiments.warm(uid)
         cohesion = stretch_cohesion_enabled()
         silence_seconds, lock_seconds = boundary_seconds(cohesion=cohesion and not derive)
         if historical_timing is not None:
@@ -322,9 +342,14 @@ async def reconcile(
         eligible = [r for r in recordings.values() if policy.builder_eligible(r)]
         custom_timing = (silence_seconds, lock_seconds) != (DEFAULT_BOUNDARY_SECONDS, DEFAULT_BOUNDARY_SECONDS)
         silence_gap, lock_delay = timedelta(seconds=silence_seconds), timedelta(seconds=lock_seconds)
+        owner_cuts = []
         if historical_timing is not None:
             groups = historical_stretches(eligible, now, since=since, until=until, internal_end=internal_end)
         else:
+            # Experiment end_open_conversation: owner-level End instants cut the live builder's stretches.
+            # Off (the baseline) this reads nothing and passes no cuts. Backfill and re-derive do not read them.
+            if not derive and manual_cuts.enabled(uid):
+                owner_cuts = await run_blocking(db_executor, manual_cuts.load, uid, eligible)
             groups = outline.stretches(
                 eligible,
                 now,
@@ -332,6 +357,7 @@ async def reconcile(
                 lock_delay=lock_delay,
                 settle_on_landing=custom_timing,
                 max_window=timedelta(seconds=max_window_seconds()),
+                **({'manual_cuts': owner_cuts} if owner_cuts else {}),
                 # Live passes only: backfill and re-derive keep their windowing (cuts there are long settled).
                 continuity=capture_continuity_enabled() and not derive,
             )
@@ -567,6 +593,20 @@ async def reconcile(
                     allocated=allocated,
                     manual_end_home_visible=manual_end_home_visible_enabled(),
                 )
+                if owner_cuts and row.get('manual_end') and not row.get(planner.CUT_FIELD):
+                    # Experiment end_open_conversation: remember the End that closed this conversation, so
+                    # speech recorded before it that lands later still belongs here (planner.Ownership).
+                    # Off there are no owner cuts and the field is never written.
+                    closed_by = planner.ending_cut(row['finished_at'], owner_cuts, silence_gap)
+                    if closed_by is not None:
+                        row[planner.CUT_FIELD] = closed_by
+                if row.get('tile_state') == 'live' and reliability_experiments.any_enabled(
+                    uid, 'end_button_by_device', 'instant_live_text', 'vendor_recognizer_on_opened_app'
+                ):
+                    # Experiments end_button_by_device, instant_live_text and vendor_recognizer_on_opened_app:
+                    # an open conversation names the app install behind its latest speech. With all off the
+                    # field is never written.
+                    capture_device.stamp(row, window['lines'], recordings)
                 if opening and prior and planner.is_unlocked(prior):
                     row['v3_open_locked'] = True
                 row.pop('v3_unlocked', None)
@@ -753,6 +793,9 @@ async def reconcile(
                 await run_blocking(db_executor, rederive_store.drop_unwritten_priors, uid, run_id, priors)
             raise
         if not derive and not on_open:
+            # Experiment fast_end_feedback: a client waiting on an ended conversation is woken as soon as
+            # it is committed with its outline, before its summary starts. Off, nothing is published.
+            summary_wake.publish_committed(uid, rows, existing)
             cap_starts = {group['lines'][0]['start'] for group in groups if group['after_window_cap']}
             new_cap_starts = {row['started_at'] for row in rows if row['id'] not in existing} & cap_starts
             metrics.WINDOW_CAP_CUTS.inc(len(new_cap_starts))
@@ -845,7 +888,8 @@ async def reconcile(
     if blocked is not None:
         if not derive and not on_open:
             # Windows earlier passes (or earlier batches) committed still owe their notes.
-            await _drain_blocked(uid, blocked)
+            with suspend_committed_write_count():
+                await _drain_blocked(uid, blocked)
         return 'blocked'
     if on_open:
         await run_blocking(db_executor, enqueue, uid, at=datetime.now(timezone.utc) + timedelta(minutes=1))
@@ -853,7 +897,8 @@ async def reconcile(
     if derive:
         # The backfill task drains its own notes marker within its deadline.
         return 'committed'
-    await drain_processing(uid)
+    with suspend_committed_write_count():
+        await drain_processing(uid)
     if moved:
         return 'committed'
     pending = (
@@ -1211,12 +1256,27 @@ def _process(uid, row, token):
     else:
         notes = True
         persisted = []
+
+        def summary_persisted(current):
+            # process_conversation reports its canonical write here, before folder assignment, memory
+            # extraction and the other derived effects. Experiment fast_end_feedback shows the row as done
+            # at that moment instead of after them; settle_processing below still owns the obligation.
+            # Off, this is the baseline observer and nothing else is written.
+            persisted.append(current)
+            if current and reliability_experiments.enabled('fast_end_feedback', uid):
+                try:
+                    if writers.show_summary_stored(uid, row['id'], token):
+                        logger.info('event=v3_summary_shown_early outcome=shown')
+                        summary_wake.publish(uid, row['id'])
+                except Exception as error:
+                    logger.warning('event=v3_summary_shown_early outcome=error exception_type=%s', type(error).__name__)
+
         with fence.writer(uid, row['id'], token), models.notes_mode(uid):
             result = process_conversation(
                 uid,
                 row.get('language') or 'en',
                 Conversation(**row),
-                persistence_observer=persisted.append,
+                persistence_observer=summary_persisted,
                 # Backfilled rows take the live trigger so relevance, speaker and meeting context and the
                 # short-clip floor match live notes; process_conversation withholds their derived effects.
                 trigger=ProcessingTrigger.CAPTURE_END,
@@ -1252,6 +1312,9 @@ def _process(uid, row, token):
         content_hash=writers.processing_hash(row),
         word_floor_outcomes=word_floor_outcomes,
     )
+    # Experiment fast_end_feedback: a client waiting on this row (GET .../summary/wait) is woken again at
+    # the end of the pass, for the passes that had no early summary write. Off, nothing is published.
+    summary_wake.publish(uid, row['id'])
 
 
 async def sweep():

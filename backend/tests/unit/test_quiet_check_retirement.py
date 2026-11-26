@@ -98,6 +98,15 @@ def test_refused_donor_arm_retires_old_check_and_counts_once():
     assert_retired(store)
 
 
+def test_account_deletion_refuses_late_quiet_arm():
+    store = seeded()
+    del store.rows[JOB]
+    store.rows[('account_deletions', 'synthetic')] = {'wipe_status': 'wiped'}
+
+    assert checks.arm_quiet_check('synthetic', 'capture', 120, firestore_client=store) is None
+    assert JOB not in store.rows
+
+
 def test_expected_vs_actual_reconnect_arms(monkeypatch):
     store = seeded()
     del store.rows[JOB]

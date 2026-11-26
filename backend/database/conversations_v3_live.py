@@ -48,6 +48,8 @@ LIVE_FIELDS = [
     'discarded',
     'is_locked',
     'v3_recording_ids',
+    # Reliability experiment end_button_by_device: absent on every row while it is off.
+    'v3_capture_device_id',
 ]
 # The index is ascending by finished_at, so the newest window comes last and a read cannot
 # stop early once it finds the open one; a reverse-order read would need a new descending

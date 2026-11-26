@@ -5788,6 +5788,28 @@
         "wal-custody-audit"
       ],
       "correlation": null
+    },
+    {
+      "id": "appForegroundEnded",
+      "wire_name": "App Foreground Ended",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {
+        "foregroundSeconds": {
+          "type": "int",
+          "wire_name": "foreground_seconds"
+        },
+        "capturingSeconds": {
+          "type": "int",
+          "wire_name": "capturing_seconds"
+        }
+      },
+      "consumers": [
+        "app-foreground-time"
+      ],
+      "correlation": null
     }
   ],
   "transport_dispositions": {

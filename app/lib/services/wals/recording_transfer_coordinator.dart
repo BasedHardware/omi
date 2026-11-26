@@ -3,7 +3,9 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 
 import 'package:omi/utils/logger.dart';
+import 'package:omi/utils/reliability_experiments.dart';
 import 'package:omi/services/wals/sync_wake_scope.dart';
+import 'package:omi/services/wals/sync_job_poller.dart';
 import 'package:omi/services/wals/upload_trace.dart';
 import 'package:omi/services/wals/ring_drain_policy.dart';
 
@@ -96,6 +98,7 @@ class RecordingTransferCoordinator {
     RecordingTransferPass? onConnectivityRestored,
     Stream<void>? networkChanges,
     bool Function()? hasPendingWork,
+    bool Function()? hasAcceptedJobs,
     RecordingTransferPassTimedOut? onPassTimedOut,
     this.passTimeLimit = defaultPassTimeLimit,
     this.fencedPassTimeLimit = defaultFencedPassTimeLimit,
@@ -114,6 +117,7 @@ class RecordingTransferCoordinator {
         _onTransferFinished = onTransferFinished,
         _onConnectivityRestored = onConnectivityRestored,
         _hasPendingWork = hasPendingWork,
+        _hasAcceptedJobs = hasAcceptedJobs,
         _onPassTimedOut = onPassTimedOut {
     _configured = true;
     _listenToConnectivity(connectivityChanges, initiallyConnected, networkChanges);
@@ -175,6 +179,8 @@ class RecordingTransferCoordinator {
   RecordingTransferKeepAlive? _onTransferFinished;
   RecordingTransferPass? _onConnectivityRestored;
   bool Function()? _hasPendingWork;
+  bool Function()? _hasAcceptedJobs;
+  Timer? _receiptTimer;
   RecordingTransferPassTimedOut? _onPassTimedOut;
 
   StreamSubscription<bool>? _connectivitySubscription;
@@ -257,6 +263,7 @@ class RecordingTransferCoordinator {
     RecordingTransferPass? onConnectivityRestored,
     Stream<void>? networkChanges,
     bool Function()? hasPendingWork,
+    bool Function()? hasAcceptedJobs,
     RecordingTransferPassTimedOut? onPassTimedOut,
   }) {
     _reconcile = reconcile;
@@ -270,6 +277,8 @@ class RecordingTransferCoordinator {
     _onTransferFinished = onTransferFinished ?? _onTransferFinished;
     _onConnectivityRestored = onConnectivityRestored ?? _onConnectivityRestored;
     _hasPendingWork = hasPendingWork ?? _hasPendingWork;
+    _receiptTimer?.cancel();
+    _hasAcceptedJobs = hasAcceptedJobs;
     _onPassTimedOut = onPassTimedOut ?? _onPassTimedOut;
     _configured = true;
     _listenToConnectivity(connectivityChanges, initiallyConnected, networkChanges);
@@ -552,11 +561,32 @@ class RecordingTransferCoordinator {
       final drain = canDrainBacklog() ? _drain : _drainLiveCapture;
       if (drain == null) return;
       final RecordingTransferDrainResult result;
+      // A multipart upload can take minutes. Check already accepted jobs on
+      // their normal budget while this pass owns the transfer lease.
+      Future<void>? readingReceipts;
+      final hasAcceptedJobs = _hasAcceptedJobs;
+      if (hasAcceptedJobs != null && ReliabilityExperiments.enabled('receipt_check_during_drain')) {
+        _receiptTimer = Timer.periodic(SyncJobPoller.minimumInterval, (timer) {
+          if (expired()) {
+            timer.cancel();
+            return;
+          }
+          if (readingReceipts != null || !hasAcceptedJobs()) return;
+          readingReceipts = _tryReconcile().then((ok) {
+            if (!ok) reconcileFailed = true;
+            readingReceipts = null;
+          });
+        });
+      }
       _periodicDrainInFlight = trigger == WakeTrigger.periodic;
       try {
         result = await drain();
       } finally {
         _periodicDrainInFlight = false;
+        _receiptTimer?.cancel();
+        // No await when no receipt check ran: the baseline has no async gap here.
+        final reading = readingReceipts;
+        if (reading != null) await reading;
       }
       if (expired()) return;
       await _refreshPending();
@@ -628,6 +658,7 @@ class RecordingTransferCoordinator {
   }
 
   void dispose() {
+    _receiptTimer?.cancel();
     // Invalidate injected-scheduler callbacks too: those timers are not held
     // in [_cooldownTimer], so cancelling the native timer is not enough.
     _cooldownGeneration++;

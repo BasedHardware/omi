@@ -81,6 +81,10 @@ class RecordUploadWait(StrEnum):
     RECEIPT_STATUS_READ_FAILED = 'receipt_status_read_failed'
 
 
+class _WaitResponse(JSONResponse):
+    retry_conversation: str | None = None
+
+
 def _pending(reason: RecordUploadWait, record: str | None = None, *, path: str = '-', memo: str = '-'):
     # These are custody waits, not evidence of Cloud Run refusing a request.
     # Keep the branch vocabulary static and omit identities/audio/error text.
@@ -106,7 +110,7 @@ def _pending(reason: RecordUploadWait, record: str | None = None, *, path: str =
         path,
         memo,
     )
-    return JSONResponse(
+    return _WaitResponse(
         status_code=503,
         content={
             'code': 'record_capture_pending',
@@ -123,13 +127,21 @@ _MEMOIZED_WAITS = frozenset({RecordUploadWait.RECORD_JOBS_MISSING, RecordUploadW
 
 
 async def conversation_pending(reason: RecordUploadWait, uid: str, conversation_id: str | None):
+    response = _pending(reason, _record_key(uid, conversation_id), path='conversation', memo='miss')
     if reason in _MEMOIZED_WAITS and isinstance(conversation_id, str) and conversation_id:
         await run_blocking(db_executor, remember_record_wait, uid, conversation_id, reason.value)
-    return _pending(reason, _record_key(uid, conversation_id), path='conversation', memo='miss')
+        response.retry_conversation = conversation_id
+    return response
 
 
 def _record_key(uid: str, conversation_id: str | None) -> str | None:
     return record_identity(uid, conversation_id)[0] if isinstance(conversation_id, str) and conversation_id else None
+
+
+async def has_conversation_wait_hint(uid, conversation_id) -> bool:
+    """Cheap invitation only. backend-sync checks handoff and receipts before refusing."""
+    cached = await run_blocking(db_executor, cached_record_wait, uid, conversation_id)
+    return cached in _MEMOIZED_WAITS
 
 
 async def memoized_record_wait(uid, conversation_id) -> JSONResponse | None:

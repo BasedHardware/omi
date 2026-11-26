@@ -3,6 +3,7 @@
 from collections.abc import Callable
 from contextlib import nullcontext
 
+from config.refactor_modes import default_on
 from database.action_item_fence import fenced_action_item_commit
 from database.home_feed_writer import suppress_during_account_erasure
 import logging
@@ -10,8 +11,9 @@ from typing import Any
 from uuid import uuid4
 
 from google.cloud import firestore
+from google.cloud.firestore_v1.base_query import FieldFilter
 
-from database.quiet_check_retirement import stop_quiet_checks_for_account
+from database.conversation_finalization_schema import FINALIZATION_JOBS_COLLECTION
 from database._client import get_data_plane_firestore_client, run_transactional
 from database.batch_account_authority import account_authority_writer_enabled, mutate_account_authority
 from database.memory_collections import RELEASED_MEMORY_CHANGE_HEAD
@@ -19,8 +21,29 @@ from database.people_generation import generation_ref
 from database.staged_promote_cache import invalidate_around_write
 from database.apps import apps_collection, PUBLIC_APPROVED_APPS_CACHE_KEY, search_apps_db
 from database.redis_db import delete_app_cache_by_id, delete_generic_cache
+from utils.observability import speaker_evidence_erasure as metrics
+
+SPEAKER_EVIDENCE_ERASURE_CHECK_ENV = 'SPEAKER_EVIDENCE_ERASURE_CHECK_ENABLED'
 
 logger = logging.getLogger(__name__)
+
+
+def purge_finalization_jobs(uid: str, client: Any) -> None:
+    """Delete every job owned by uid, including on a retry with no user root."""
+    query = (
+        client.collection(FINALIZATION_JOBS_COLLECTION)
+        .where(filter=FieldFilter('uid', '==', uid))
+        .select([])
+        .limit(450)
+    )
+    while True:
+        page = list(query.stream())
+        if not page:
+            return
+        batch = client.batch()
+        for job in page:
+            batch.delete(job.reference)
+        batch.commit()
 
 
 @invalidate_around_write
@@ -97,11 +120,38 @@ def purge_user_subtree(uid: str, client: Any, delete_collection: Callable) -> di
     elif root_exists:
         logger.info(f"Deleting user document: {uid}")
         user_ref.delete()
-    # A child can arrive after its conversation's first sweep but before the
-    # parent delete. list_documents also sees missing parents with descendants,
-    # including on retry after the user root has already been removed.
-    evidence_owner = data_plane.collection('users').document(uid)
-    for conversation in evidence_owner.collection('conversations').list_documents():
-        delete_collection(conversation.collection('speaker_evidence'), client=data_plane)
-    stop_quiet_checks_for_account(uid, firestore_client=client)
+    _sweep_speaker_evidence(uid, data_plane, delete_collection)
+    purge_finalization_jobs(uid, client)
     return {'status': 'ok', 'message': 'Account deleted successfully'}
+
+
+def _sweep_speaker_evidence(uid: str, data_plane: Any, delete_collection: Callable) -> None:
+    # A child can arrive between the first sweep and parent deletion.
+    # list_documents includes missing parents with surviving descendants.
+    metrics.SWEEP_STARTED.inc()
+    verify = default_on(SPEAKER_EVIDENCE_ERASURE_CHECK_ENV)
+    swept = []
+    found_survivor = False
+    try:
+        owner = data_plane.collection('users').document(uid)
+        for conversation in owner.collection('conversations').list_documents():
+            evidence = conversation.collection('speaker_evidence')
+            delete_collection(evidence, client=data_plane)
+            if verify:
+                swept.append(evidence)
+
+        for evidence in swept:
+            # Firestore lists names only and fetches subsequent pages on iteration.
+            for _ in evidence.list_documents():
+                metrics.REMAINING.inc()
+                found_survivor = True
+    except Exception:
+        metrics.SWEEP_FAILED.inc()
+        raise
+
+    if verify:
+        metrics.SWEEP_CHECKED.inc()
+        if found_survivor:
+            raise RuntimeError('speaker evidence survived account erasure')
+    else:
+        metrics.SWEEP_DISABLED.inc()
