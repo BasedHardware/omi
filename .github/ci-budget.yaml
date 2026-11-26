@@ -5095,7 +5095,7 @@
     "gcp_firestore_indexes.yml": {
       "name": "Reconcile Firestore Indexes",
       "owner": "CI maintainers",
-      "rationale": "P65 planned additive index PRs during review; since the 10-22 WIF tightening the deploy pools admit only refs/heads/main, so 2026-10-29 wifidx converts the PR lane to a read-only dry-run plan under a dedicated index-reader identity (check_pr_prod_indexes) and drops the dev prebuild job. Main/manual reconciliation and required prod approval remain unchanged. No new images or vendor calls.",
+      "rationale": "Pull requests plan additive index changes locally, and main pushes validate the production declarations locally and report pending reconciliation. Both checks run without cloud credentials or a schema writer lock. Production reconciliation runs only through confirmed manual dispatches under the shared production schema writer lock. Development push reconciliation uses its own writer lock.",
       "triggers": {
         "pull_request": {
           "branches": [
