@@ -54,8 +54,17 @@ def _day_inputs(ctx: Any) -> dict[str, str]:
     return {
         'timeline_inputs': keys.hash_files(
             [day_dir / 'timeline.json', day_dir / 'baseline' / 'conversations.jsonl', day_dir / 'audio' / 'index.json']
-        )
+        ),
+        'baseline_languages': _baseline_languages(day_dir),
     }
+
+
+def _baseline_languages(day_dir: Any) -> str:
+    """Hash of what the replay reads from the baseline rows ``load_baseline`` returns (raw rows preferred):
+    each conversation's ``language`` (``lanes/day.py``). Other raw fields (transcript text) feed only the chain."""
+    from testing.pipeline_lab.timeline.build import load_baseline
+
+    return keys.hash_json(sorted((str(r.get('id')), r.get('language')) for r in load_baseline(day_dir)))
 
 
 # Replay failures fully determined by the stage key's inputs (audio, cassette inventory, STT selection).

@@ -244,6 +244,15 @@ def test_transcribe_key_follows_cassettes_audio_and_stt_but_ingest_does_not(audi
     run = _transcribe(audio_day)
     assert run.stages['transcribe'].extra['report']['cache'] == 'miss' and len(audio_day['calls']) == 3
 
+    raw = store.day_dir('d1') / 'baseline' / 'raw_conversations.jsonl'
+    raw.parent.mkdir(parents=True, exist_ok=True)
+    raw.write_text('{"id": "conv-1", "language": "ja"}\n')  # a corrected raw baseline (replay reads its language)
+    run = _transcribe(audio_day)
+    assert run.stages['transcribe'].extra['report']['cache'] == 'miss' and len(audio_day['calls']) == 4
+    raw.write_text('{"id": "conv-1", "language": "ja", "transcript_segments": []}\n')  # a field replay ignores
+    run = _transcribe(audio_day)
+    assert run.stages['transcribe'].extra['report']['cache'] == 'hit' and len(audio_day['calls']) == 4
+
     run = _transcribe(audio_day, model='stub-2')
     assert {s: run.stages[s].extra['report']['cache'] for s in LANES} == {
         'ingest': 'hit',
