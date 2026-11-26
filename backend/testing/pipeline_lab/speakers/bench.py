@@ -115,7 +115,7 @@ def words_main(argv: Optional[list[str]] = None) -> int:
     parser.add_argument('--key', action='append', default=[])
     args = parser.parse_args(argv)
     corpus = corpus_mod.load(args.corpus)
-    todo = [c for c in corpus.conversations(args.key or None) if c.words is None]
+    missing = [c for c in corpus.conversations(args.key or None) if c.words is None]
     # One Parakeet process per job: cap each one's threads so the jobs share the machine instead of fighting.
     os.environ.setdefault('OMP_NUM_THREADS', str(max(1, (os.cpu_count() or 2) // max(1, args.jobs))))
 
@@ -123,7 +123,7 @@ def words_main(argv: Optional[list[str]] = None) -> int:
         return len(ensure_words(conversation, record=True, private=not corpus.public))
 
     with ThreadPoolExecutor(max_workers=max(1, args.jobs)) as pool:
-        for conversation, count in zip(todo, pool.map(one, todo)):
+        for conversation, count in zip(missing, pool.map(one, missing)):
             print(json.dumps({'key': conversation.key[:6], 'words': count}), flush=True)
     return 0
 

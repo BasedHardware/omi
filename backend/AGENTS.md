@@ -254,9 +254,6 @@ Before a PR, exercise the endpoint:
 3. **Hit the changed endpoints** with curl and read the server logs — verify the behavior changed as intended, not just that the route returns 200.
 4. **Record the commands and output** in the PR description (root `AGENTS.md` → Definition of Done).
 5. **Capture, Finish, v3, Home**: run `python -m testing.pipeline_lab affected` and its scenarios (`testing/pipeline_lab/`).
-6. **Speaker labels** (diarization, voice matching, owner/people naming): run the speaker scenarios and
-   `python -m testing.pipeline_lab.speakers bench --corpus public-libri`; real-day experiments and read-only
-   production diagnosis: `testing/pipeline_lab/speakers/README.md`.
 
 ## Formatting
 

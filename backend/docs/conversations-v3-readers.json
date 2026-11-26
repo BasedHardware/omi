@@ -711,6 +711,10 @@
     "policy": "both",
     "reason": "Capture, audio, sync, custody, retention, export, deletion or v3 construction owns recording-layer access; all lookups remain scoped to their owner."
   },
+  "backend/utils/conversations/final_pass_batch.py:get_conversation": {
+    "policy": "both",
+    "reason": "Reads a v3 row's source recordings (claims, deleted spans, deleted/locked) to fence their staged units before speaker inference; owner-scoped, no model call on a refusal."
+  },
   "backend/utils/conversations/final_pass_retry.py:get_conversation": {
     "policy": "both",
     "reason": "Explicit recording-layer pipeline/finalization/recovery exception. Reads persisted ownership; recording processing exits before model calls."

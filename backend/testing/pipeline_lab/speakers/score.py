@@ -16,6 +16,7 @@ Metrics, per conversation and pooled (sums, never averages of rates):
 
 from __future__ import annotations
 
+import json
 from typing import Any, Iterable, Optional
 
 IGNORED = {None, '', 'unsure', 'noise', 'mixed'}
@@ -67,10 +68,11 @@ def _claim(turn: Optional[dict]) -> Optional[str]:
 
 
 def _voice(turn: Optional[dict]) -> Optional[str]:
+    """An opaque voice key for scoring (never display text): the persisted id within its scope."""
     if turn is None:
         return None
     if turn.get('speaker_id') is not None:
-        return f"{turn.get('speaker_id_scope') or ''}:{turn['speaker_id']}"
+        return json.dumps([turn.get('speaker_id_scope') or '', turn['speaker_id']])
     return turn.get('speaker')
 
 
