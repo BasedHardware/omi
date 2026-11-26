@@ -41,7 +41,9 @@ from __future__ import annotations
 
 import ast
 import fnmatch
+import os
 import re
+import stat
 import subprocess
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -629,6 +631,35 @@ def format_text(report: dict[str, Any]) -> str:
 # ---- code keys for the stage cache ----------------------------------------------------------------
 
 
+_ENV_NAME = re.compile(r"""['"]([A-Z][A-Z0-9]*_[A-Z0-9_]+)['"]""")
+
+
+def _disk_state(path: Path) -> str:
+    """What a dirty path holds now, for code keys: content and the executable bit for a file, the target for a
+    symlink, a content hash of every file for a directory git lists whole (a nested repository or submodule
+    work tree), else ``deleted``. Mode-only edits and symlink retargets change the state."""
+    import hashlib
+
+    try:
+        info = path.lstat()
+    except FileNotFoundError:
+        return 'deleted'
+    if stat.S_ISLNK(info.st_mode):
+        return 'symlink:' + os.readlink(path)
+    if stat.S_ISREG(info.st_mode):
+        digest = 'sha256:' + hashlib.sha256(path.read_bytes()).hexdigest()
+        return digest + (':x' if info.st_mode & 0o111 else '')
+    if stat.S_ISDIR(info.st_mode):
+        digest = hashlib.sha256()
+        for item in sorted(path.rglob('*')):
+            relative = item.relative_to(path)
+            if '.git' in relative.parts or not item.is_file() or item.is_symlink():
+                continue
+            digest.update(relative.as_posix().encode() + b'\0' + _disk_state(item).encode() + b'\0')
+        return 'dir:' + digest.hexdigest()
+    return 'special'
+
+
 class CodeState:
     """The backend code a run executes: blob ids at ``HEAD`` with uncommitted edits folded in.
 
@@ -655,13 +686,16 @@ class CodeState:
             if len(entry) < 4:
                 continue
             code, rel = entry[:2], entry[3:]
+            paths = [rel]
             if 'R' in code or 'C' in code:
-                index += 1  # the source path of a rename follows; its removal shows up as missing below
-            path = self.repo / rel
-            if path.is_file():
-                self.dirty[rel] = 'sha256:' + hashlib.sha256(path.read_bytes()).hexdigest()
-            else:
-                self.dirty[rel] = 'deleted'
+                # -z puts a rename's or copy's source path next (index or worktree column). A rename's source is
+                # gone and a copy's may be edited: record its disk state too, or "rename A to B" keys the same as
+                # "add B beside an unchanged A".
+                if index < len(entries) and entries[index]:
+                    paths.append(entries[index])
+                index += 1
+            for name in paths:
+                self.dirty[name.rstrip('/')] = _disk_state(self.repo / name)
         self.blobs.update(self.dirty)
         self._map: Optional[StageMap] = None
 
@@ -671,6 +705,32 @@ class CodeState:
         from testing.pipeline_lab.keys import hash_json
 
         return 'dirty:' + hash_json({'tree': self.tree, 'dirty': self.dirty})
+
+    def ambient_env(self, stages: Iterable[str], overlay: Iterable[str] = ()) -> str:
+        """Hash of the ambient env values the code ``stages`` run can read, for a stage that runs with the
+        operator's env (the ``transcribe`` replay; the chain clears its env, ``stack/env.py``).
+
+        Every upper-case quoted name in those files counts, whatever helper reads it. A name the overlay sets is
+        keyed through the overlay; a credential-shaped one is removed before the stage runs, so reads as absent."""
+        from testing.pipeline_lab.keys import hash_json
+        from testing.pipeline_lab.stack.runtime_env import SECRETISH
+        from testing.pipeline_lab.worktrees import _SCRUB_EXACT, _SCRUB_SUFFIXES
+
+        if self._map is None:
+            self._map = StageMap(DiskSource(self.repo))
+        names: set[str] = set()
+        for stage in stages:
+            for rel in self._map.reach(stage):
+                if rel.endswith('.py'):
+                    names.update(_ENV_NAME.findall(self._map.source.read(rel) or ''))
+        skip = set(overlay)
+        values = {
+            name: os.environ[name]
+            for name in sorted(names - skip)
+            if name in os.environ
+            and not (name in _SCRUB_EXACT or name.endswith(_SCRUB_SUFFIXES) or SECRETISH.search(name))
+        }
+        return 'env:' + hash_json(values)
 
     def stage_key(self, stages: Iterable[str]) -> str:
         from testing.pipeline_lab.keys import hash_json

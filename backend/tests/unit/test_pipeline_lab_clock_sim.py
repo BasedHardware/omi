@@ -105,6 +105,7 @@ def test_product_monotonic_is_frozen_within_the_grace(product_module):
     assert clock.late_monotonic_reads == 0
 
 
+@pytest.mark.slow  # near the fast-unit CPU limit on CI runners
 def test_product_monotonic_moves_after_the_grace_so_budget_loops_end(product_module):
     clock = LabClock.for_mode(T0, 'sim', monotonic_grace=0.02)
     with installed_clock(clock, product_monotonic=True):

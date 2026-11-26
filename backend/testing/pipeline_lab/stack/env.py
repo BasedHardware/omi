@@ -31,6 +31,7 @@ from testing.pipeline_lab.stack.overlay import (
     trace_serving_for,
 )
 from testing.pipeline_lab.stack.patching import replace_everywhere
+from testing.pipeline_lab.store import private_subdir
 
 INHERITED_ENV = ('PATH', 'TMPDIR', 'HOME', 'SYSTEMROOT', 'LANG', 'LC_ALL')
 
@@ -135,7 +136,7 @@ def _install_redis_db(stack: ExitStack, db: int) -> None:
 def _install_storage(stack: ExitStack, root: Path) -> Any:
     from utils.other import local_storage, storage as product_storage
 
-    root.mkdir(parents=True, exist_ok=True, mode=0o700)
+    private_subdir(root)
     client = local_storage.LocalStorageClient(root)
     stack.enter_context(patch.object(product_storage, '_get_storage_client', lambda: client))
     stack.enter_context(patch.object(local_storage, 'create_storage_client', lambda: client))

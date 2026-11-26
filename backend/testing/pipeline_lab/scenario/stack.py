@@ -46,6 +46,7 @@ import urllib.request
 
 from testing.pipeline_lab.scenario import verdict as verdicts
 from testing.pipeline_lab.scenario.spec import ScenarioError, describe_plan, load_scenario
+from testing.pipeline_lab.store import StoreRefused, private_dir, private_open, private_write_text
 
 BACKEND = Path(__file__).resolve().parents[3]
 SCENARIO_DIR = Path(__file__).resolve().parent / 'scenarios'
@@ -113,6 +114,14 @@ class Peers:
         return {'FIRESTORE_EMULATOR_HOST': self.firestore, 'OMI_PIPELINE_LAB_REDIS': self.redis}
 
 
+def _private(path: Path, what: str) -> Path:
+    """``store.private_dir`` with the refusal as a ScenarioError (the scenario commands' error type)."""
+    try:
+        return private_dir(path, what)
+    except StoreRefused as refused:
+        raise ScenarioError(str(refused)) from None
+
+
 def _port(hostport: str) -> int:
     return int(hostport.rpartition(':')[2])
 
@@ -125,11 +134,11 @@ def _start_peers(work: Path, redis: Optional[str] = None) -> tuple[list[subproce
     missing += [] if firebase else ['firebase']
     for tool in missing:
         raise RuntimeError(f'{tool} not found on PATH (see the pipeline lab README, "Scenarios")')
-    work.mkdir(parents=True, exist_ok=True, mode=0o700)
+    work = _private(work, 'stack directory')  # emulator logs and data hold what the runs wrote
     fs_port, redis_port = _free_port(), (_port(redis) if redis else _free_port())
     started: list[subprocess.Popen] = []
     try:
-        with open(work / 'redis.log', 'wb') as redis_log:
+        with private_open(work / 'redis.log') as redis_log:
             if redis:
                 redis_log.write(f'redis given: {redis}\n'.encode())
             else:
@@ -141,9 +150,11 @@ def _start_peers(work: Path, redis: Optional[str] = None) -> tuple[list[subproce
                         stdout=redis_log,
                         stderr=subprocess.STDOUT,
                         start_new_session=True,
+                        umask=0o077,  # its files (dumps, logs) are as private as the data it holds
                     )
                 )
-        (work / 'firebase.json').write_text(
+        private_write_text(
+            work / 'firebase.json',
             json.dumps(
                 {
                     'emulators': {
@@ -153,13 +164,13 @@ def _start_peers(work: Path, redis: Optional[str] = None) -> tuple[list[subproce
                         'singleProjectMode': False,
                     }
                 }
-            )
+            ),
         )
         env = dict(os.environ)
         java = next((p for p in JAVA_HOMES if Path(p, 'java').exists()), None)
         if java:
             env['PATH'] = java + os.pathsep + env.get('PATH', '')
-        with open(work / 'firestore.log', 'wb') as emulator_log:
+        with private_open(work / 'firestore.log') as emulator_log:
             started.append(
                 subprocess.Popen(
                     [str(firebase), 'emulators:start', '--only', 'firestore', '--project', PROJECT],
@@ -168,6 +179,7 @@ def _start_peers(work: Path, redis: Optional[str] = None) -> tuple[list[subproce
                     stdout=emulator_log,
                     stderr=subprocess.STDOUT,
                     start_new_session=True,
+                    umask=0o077,  # firestore-debug.log and its exports hold what the runs wrote
                 )
             )
         deadline = time.monotonic() + 120
@@ -218,9 +230,9 @@ def local_stack(work: Path) -> Iterator[Peers]:
 
 
 def stack_dir() -> Path:
-    from testing.pipeline_lab.scenario.paths import scenario_lab_root
+    from testing.pipeline_lab.scenario.paths import private_lab_root
 
-    return scenario_lab_root() / 'scenario-stack'
+    return private_lab_root() / 'scenario-stack'
 
 
 def _pid_command(pid: int) -> str:
@@ -258,8 +270,8 @@ def stack_status(root: Optional[Path] = None) -> dict[str, Any]:
 
 @contextmanager
 def _stack_lock(root: Path) -> Iterator[None]:
-    root.mkdir(parents=True, exist_ok=True, mode=0o700)
-    with open(root / 'lock', 'w') as handle:
+    root = _private(root, 'shared stack directory')
+    with private_open(root / 'lock', 'ab') as handle:
         fcntl.flock(handle, fcntl.LOCK_EX)
         try:
             yield
@@ -285,7 +297,7 @@ def stack_up(root: Optional[Path] = None) -> dict[str, Any]:
             'pids': {'redis': started[0].pid, 'firestore': started[1].pid},
             'logs': str(root),
         }
-        (root / 'stack.json').write_text(json.dumps(record, indent=1) + '\n')
+        private_write_text(root / 'stack.json', json.dumps(record, indent=1) + '\n')
         return {**stack_status(root), 'started': True}
 
 
@@ -473,7 +485,14 @@ def run_one(
     # Its own process group, so a timeout also ends what the scenario started (a local STT worker on its own
     # interpreter, for one) instead of leaving it running without supervision.
     process = subprocess.Popen(
-        command, cwd=cwd, env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, start_new_session=True
+        command,
+        cwd=cwd,
+        env=env,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        start_new_session=True,
+        umask=0o077,
     )
     try:
         stdout, stderr = process.communicate(timeout=timeout)
@@ -481,7 +500,7 @@ def run_one(
         _stop(process)
         process.communicate()
         return {'scenario': path.stem, 'outcome': 'error', 'error': f'timed out after {timeout:g}s'}
-    (out / 'stderr.log').write_text(stderr or '')
+    private_write_text(out / 'stderr.log', stderr or '')  # a traceback can quote transcript text
     lines = (stdout or '').strip().splitlines()
     try:
         return json.loads(lines[-1])
@@ -593,11 +612,18 @@ def check_files(names: Sequence[str], *, as_json: bool) -> int:
 
 
 def output_root(keep: Optional[str], prefix: str = 'plab-scenario-') -> Path:
-    root = Path(keep).expanduser().resolve() if keep else Path(tempfile.mkdtemp(prefix=prefix))
-    if any((parent / '.git').exists() for parent in (root, *root.parents)):
-        raise ScenarioError('scenario output is written outside every git worktree')
-    root.mkdir(parents=True, exist_ok=True, mode=0o700)
-    return root
+    """The run's output directory: ``--keep DIR`` (created 0700; an existing one must already be owner-only),
+    else a new directory under the private scenario lab root, never the system temp directory. Scenario output
+    can hold owner audio transcripts and Home bodies (``audio_file`` recordings), so it is private either way."""
+    if keep:
+        root = Path(keep).expanduser().resolve()
+        if any((parent / '.git').exists() for parent in (root, *root.parents)):
+            raise ScenarioError('scenario output is written outside every git worktree')
+        return _private(root, '--keep')
+    from testing.pipeline_lab.scenario.paths import private_lab_root
+
+    runs = _private(private_lab_root() / 'scenario-runs', 'scenario run directory')
+    return Path(tempfile.mkdtemp(prefix=prefix, dir=runs))
 
 
 def backend_identity(backend: Path = BACKEND) -> dict[str, Any]:
@@ -666,12 +692,12 @@ def run_set(
         if scenario.name in scenarios:
             raise ScenarioError(f'scenario {scenario.name} given twice')
         scenarios[scenario.name] = (path, scenario)
-    root.mkdir(parents=True, exist_ok=True, mode=0o700)
+    root = _private(root, 'scenario output')
     started_at = datetime.now(timezone.utc).isoformat(timespec='seconds')
     started = time.perf_counter()
     for name, (path, _) in scenarios.items():
-        (root / name).mkdir(parents=True, exist_ok=True, mode=0o700)
-        shutil.copyfile(path, root / name / 'scenario.json')
+        # Reused with --keep: each scenario directory must be owner-only too, not only the root.
+        private_write_text(_private(root / name, 'scenario output') / 'scenario.json', path.read_text())
     queued = [_Job(path, name, k) for k in range(1, repeat + 1) for name, (path, _) in scenarios.items()]
     slots = RedisSlots(peers.redis)
     runs: list[dict[str, Any]] = []
@@ -679,8 +705,7 @@ def run_set(
     lock = threading.Lock()
 
     def one(job: _Job) -> None:
-        out = job.out(root)
-        out.mkdir(parents=True, exist_ok=True, mode=0o700)
+        out = _private(job.out(root), 'scenario output')
         with isolated_run(peers, slots, timeout + LEASE_GRACE) as isolation:
             result = run_one(
                 job.path,

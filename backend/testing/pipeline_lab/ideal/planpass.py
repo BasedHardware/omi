@@ -173,7 +173,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     from testing.pipeline_lab import contracts as c
     from testing.pipeline_lab.ledger import SpendLedger
     from testing.pipeline_lab.llm_proxy.server import LlmProxy, ProxyConfig
-    from testing.pipeline_lab.store import Store, atomic_write_json, ensure_private_dir, read_jsonl
+    from testing.pipeline_lab.store import Store, atomic_write_json, ensure_private_dir, private_subdir, read_jsonl
 
     parser = argparse.ArgumentParser(prog='python -m testing.pipeline_lab.ideal.planpass')
     parser.add_argument('--root', required=True)
@@ -220,7 +220,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         )
         # Run from an empty directory so the product's own ``testing`` package cannot shadow anything.
         empty = root / 'private' / 'planpass-cwd'
-        empty.mkdir(parents=True, exist_ok=True)
+        private_subdir(empty)
         done = subprocess.run(
             [sys.executable, '-I', '-c', CHILD], input=payload, capture_output=True, text=True, env=env, cwd=empty
         )

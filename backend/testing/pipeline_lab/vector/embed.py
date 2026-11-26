@@ -27,6 +27,7 @@ from pathlib import Path
 import re
 import threading
 from typing import Any, Protocol, Sequence
+from testing.pipeline_lab.store import private_subdir
 
 _TOKEN = re.compile(r'[a-z0-9]+')
 logger = logging.getLogger(__name__)
@@ -158,7 +159,7 @@ class CachedEmbedder:
             self._memory[key] = values
         path = self._path(key)
         if path is not None:
-            path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+            private_subdir(path.parent)
             tmp = path.with_name(f'.{path.name}.{os.getpid()}.{threading.get_ident()}.tmp')
             fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
             with os.fdopen(fd, 'w', encoding='utf-8') as stream:

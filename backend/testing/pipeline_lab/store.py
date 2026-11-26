@@ -109,15 +109,56 @@ def ensure_private_dir(path: Path) -> Path:
 
 
 def _subdir(path: Path) -> Path:
-    """A directory below an already-validated root: create 0700 without re-walking parents."""
-    path.mkdir(mode=0o700, parents=True, exist_ok=True)
+    """A directory below an already-validated root: create it and every missing parent 0700 (``mkdir -p``
+    would give the parents the umask's default mode), without re-validating existing ones."""
+    path = Path(path)
+    missing = []
+    probe = path
+    while not probe.exists():
+        missing.append(probe)
+        probe = probe.parent
+    for directory in reversed(missing):
+        try:
+            directory.mkdir(mode=0o700)
+        except FileExistsError:
+            continue
+        os.chmod(directory, 0o700)  # mkdir's mode is masked by the umask
     return path
 
 
 private_subdir = _subdir
 
 
+def private_dir(path: Path, what: str = 'lab output') -> Path:
+    """``ensure_private_dir`` for a directory a command was told to write into (``--keep``, ``--out``).
+
+    An existing directory that is group/other accessible, foreign or a symlink is refused, not
+    chmod-ed: it may be someone else's tree. The message names the policy and the path only."""
+    try:
+        return ensure_private_dir(Path(path))
+    except StoreRefused as refused:
+        raise StoreRefused(f'{what} {path}: {refused} (use a new path or chmod 700 it yourself)') from None
+
+
+def private_write_text(path: Path, text: str) -> Path:
+    """Replace ``path`` atomically with ``text``, created 0600 (parents 0700)."""
+    atomic_write_bytes(Path(path), text.encode('utf-8'))
+    return Path(path)
+
+
+def private_open(path: Path, mode: str = 'wb') -> Any:
+    """A file object on ``path`` created 0600 and never through a symlink: ``wb`` truncates, ``ab`` appends.
+
+    For streams another process writes (an emulator's log), where an atomic replace cannot work."""
+    flags = os.O_WRONLY | os.O_CREAT | os.O_NOFOLLOW | (os.O_APPEND if mode.startswith('a') else os.O_TRUNC)
+    _subdir(Path(path).parent)
+    fd = os.open(path, flags, 0o600)
+    os.fchmod(fd, 0o600)  # an existing file keeps its mode through O_CREAT
+    return os.fdopen(fd, mode)
+
+
 def atomic_write_bytes(path: Path, body: bytes) -> None:
+    path = Path(path)
     _subdir(path.parent)
     temp = path.with_name(f'.{path.name}.{secrets.token_hex(6)}.tmp')
     fd = os.open(temp, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)

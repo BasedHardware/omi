@@ -12,15 +12,17 @@
   stages report that rather than pretend to replay them.
 
 All four are cacheable stages (orchestrator stage cache). Their keys hash only what each reads:
-``ingest``, ``boundaries`` and ``speakers`` the day's timeline, audio index and baseline rows (no
-overlay); ``transcribe`` also the audio files (size and mtime), the stored cassette set and the
-overlay's ``model_config.stt``. The code part of each key covers only the files the stage runs
+``ingest``, ``boundaries`` and ``speakers`` the day's timeline, audio index and baseline rows, raw rows
+included (no overlay); ``transcribe`` also the audio files (size and mtime), the stored cassette set, the
+overlay's ``model_config.stt`` and the ambient env values its product STT code can read
+(``CodeState.ambient_env``). The code part of each key covers only the files the stage runs
 (``scoped_code``: ``affected.PRODUCT_SCOPE``), so a change to chain code keeps them cached.
 ``transcribe``'s artifacts (``runs/<id>/ingest/``) are stored with its entry and restored on a hit.
 """
 
 from __future__ import annotations
 
+import json
 from typing import Any, Mapping, Optional
 
 from testing.pipeline_lab import keys
@@ -55,8 +57,23 @@ def _day_inputs(ctx: Any) -> dict[str, str]:
         'timeline_inputs': keys.hash_files(
             [day_dir / 'timeline.json', day_dir / 'baseline' / 'conversations.jsonl', day_dir / 'audio' / 'index.json']
         ),
+        'timeline_rows': _timeline_rows(day_dir),
         'baseline_languages': _baseline_languages(day_dir),
     }
+
+
+def _timeline_rows(day_dir: Any) -> str:
+    """Hash of the baseline fields a missing ``timeline.json`` is built from (``timeline/build.py``). Those rows
+    are the raw rows when the day has them, which ``conversations.jsonl`` does not cover; transcript text is not
+    among the fields, so editing it keeps the ingest stages cached."""
+    from testing.pipeline_lab.timeline.build import TIMELINE_ROW_FIELDS, load_baseline
+
+    return keys.hash_json(
+        sorted(
+            ([str(r.get(f)) if f == 'id' else r.get(f) for f in TIMELINE_ROW_FIELDS] for r in load_baseline(day_dir)),
+            key=lambda row: json.dumps(row, sort_keys=True, default=str),
+        )
+    )
 
 
 def _baseline_languages(day_dir: Any) -> str:
@@ -120,6 +137,10 @@ def cassette_inventory(root: Any) -> str:
 
 class TranscribeStage(_Stage):
     stage = 'transcribe'
+    # The replay runs product STT code under the operator's env (credential-shaped names removed) plus the
+    # overlay, unlike the chain's fresh process with a cleared env: the orchestrator keys the ambient values that
+    # code can read (``affected.CodeState.ambient_env``).
+    ambient_env = True
 
     def inputs(self, ctx: Any) -> dict[str, str]:
         out = _day_inputs(ctx)
