@@ -43,6 +43,7 @@ from config.conversations_v3 import (
     manual_end_home_visible_enabled,
     max_window_seconds,
     settle_on_landing_enabled,
+    size_quarantine_enabled,
     stretch_cohesion_enabled,
 )
 from utils.conversations.v3.triggers import enqueue, changed
@@ -393,6 +394,19 @@ async def _load_live_batch(uid, token, parked, unlocked_page=None):
             # Only a pass that seeded pending rows may change the remembered pending page.
             return (*result, size or None)
     raise AssertionError('bounded pending batch sizes are empty')
+
+
+def _size_quarantine_seed(reason, pending_limit, page):
+    """The one pending seed of a pass Firestore rejected for size, when nothing else seeded it (SCA-2918).
+
+    A one-seed park otherwise re-seeds the same oldest recording every backoff and freezes the owner's
+    whole backlog behind it. An unlocked seed could own the oversize document instead, so it disqualifies.
+    """
+    if reason != 'document_too_large' or pending_limit != 1 or page is None or not size_quarantine_enabled():
+        return None
+    if page.seeds[1] or len(page.pending_ids) != 1:
+        return None
+    return page.pending_ids[0]
 
 
 def _lane_without_seed(options, page):
@@ -1088,7 +1102,16 @@ async def reconcile(
         report['blocked_reason'] = reason
         if not derive:
             # A backfill conflict must not park the owner's live builder.
-            await run_blocking(db_executor, store.record_blocked, uid, token, reason, on_open=on_open)
+            quarantine = _size_quarantine_seed(reason, bounded_pending_limit, unlocked_page)
+            await run_blocking(
+                db_executor,
+                store.record_blocked,
+                uid,
+                token,
+                reason,
+                on_open=on_open,
+                **({'quarantine': quarantine} if quarantine else {}),
+            )
         blocked = reason
         primary_failed = False
     except BaseException as error:
@@ -1116,9 +1139,11 @@ async def reconcile(
         await drain_processing(uid)
     if moved:
         return 'committed'
+    # Size-quarantined recordings stay pending for repair; they must not keep the owner's pass chain hot.
+    skip = {*deferred, *(unlocked_page.quarantined if unlocked_page is not None else ())}
     pending = (
-        await run_blocking(db_executor, has_pending, uid, deferred)
-        if deferred
+        await run_blocking(db_executor, has_pending, uid, skip)
+        if skip
         else await run_blocking(db_executor, has_pending, uid)
     )
     if pending:

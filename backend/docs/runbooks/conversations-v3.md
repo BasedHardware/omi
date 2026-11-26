@@ -218,6 +218,20 @@ rejects for size (whole document or one property) parks the owner as `document_t
 instead of retrying. To roll back, set `CONVERSATIONS_V3_TRANSCRIPT_SIZE_CAP=off` on builder
 and backfill runners.
 
+The cap budgets `transcript_segments` only. A finished row that predates it, a source recording
+already at 1 MiB, or recording aliases can still fill a document. `CONVERSATIONS_V3_SIZE_QUARANTINE`
+defaults to on. When a live pass that seeded exactly one pending recording and no unlocked window
+parks on `document_too_large`, the builder lease records that seed in `v3_size_quarantine` (at most
+64 ids). The early attempt is re-armed, so the next seed runs on the following wake. Live loads and
+the pass chain skip quarantined ids, which stay `v3_pending` until an operator repairs the
+oversize document and removes the id from the list. Set the switch off on live builders to
+restore head-of-line retries; stored ids are then ignored. `CONVERSATIONS_V3_ALIAS_SLIM` (default
+on) stops recording aliases on derived rows from copying the source file's `legacy_ids`. Alias ids
+are `uuid5(recording:file)`, so those superseded source ids never match an alias, and playback
+resolves the original through `recording_file_id`. Set it off on builder and backfill runners to
+copy them again. See the [size quarantine](../listen_pusher_pipeline/changes/2026-11-26-v3-size-quarantine.md)
+change note.
+
 `CONVERSATIONS_V3_MAX_WINDOW_SECONDS` defaults to 10800 (three hours).
 The first transcript line whose recorded start reaches the limit starts a new
 stretch. The earlier live stretch locks and enters normal processing, and the

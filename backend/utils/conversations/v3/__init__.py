@@ -35,6 +35,8 @@ class UnlockedPage:
     remaining: frozenset[str] = frozenset()
     cursor: str | None = None
     seeds: tuple[int, int] = (0, 0)  # (pending, unlocked) seeds this load read
+    pending_ids: tuple[str, ...] = ()  # the pending recordings this load seeded
+    quarantined: frozenset[str] = frozenset()  # pending recordings set aside for size (v3_size_quarantine)
 
 
 def preview_wakes(rows, recordings) -> dict[str, datetime]:

@@ -1,6 +1,6 @@
 """Boundary and late-speech policy for derived conversations."""
 
-from config.conversations_v3 import transcript_size_cap_enabled
+from config.conversations_v3 import alias_slim_enabled, transcript_size_cap_enabled
 from utils.conversations.v3.live import FINISH_RECORDING_FIELD, FINISH_WINDOW_FIELD
 from utils.conversations.v3 import policy, visibility
 from utils.conversations.v3.outline import SILENCE, playback_origin, sitdown as is_sitdown
@@ -27,6 +27,15 @@ def _transcript_bytes(line):
     # it (8/3 expansion). Budget without assuming any compression savings.
     segment = {**line['segment'], 'start': 0.0, 'end': 0.0}
     return 3 * (len(json.dumps(segment)) + 64)
+
+
+def _alias_fields(af):
+    """A source file's fields an alias copies. ``legacy_ids`` name superseded source-file ids: they can never
+    match an alias id (uuid5 of recording and file), and playback resolves the original through
+    ``recording_file_id``. Up to 128 per file, they filled heavy owners' rows past 1 MiB (SCA-2918)."""
+    if not alias_slim_enabled() or 'legacy_ids' not in af:
+        return af
+    return {key: value for key, value in af.items() if key != 'legacy_ids'}
 
 
 def word_count(lines):
@@ -420,7 +429,7 @@ def build(uid, window, recordings, existing=None, *, allocated=None, manual_end_
                 )
                 files.append(
                     {
-                        **af,
+                        **_alias_fields(af),
                         'id': str(uuid5(NAMESPACE_URL, rid + ':' + af['id'])),
                         'recording_id': rid,
                         'recording_file_id': af['id'],
@@ -460,7 +469,11 @@ def build(uid, window, recordings, existing=None, *, allocated=None, manual_end_
         else:
             pieces.extend(piece for piece in previous_pieces if piece not in pieces)
         known_files = {af['id'] for af in files}
-        files.extend(af for af in existing.get('audio_files') or [] if af['id'] not in known_files)
+        files.extend(
+            _alias_fields(af) if af.get('recording_id') else af
+            for af in existing.get('audio_files') or []
+            if af['id'] not in known_files
+        )
     prior = existing or {}
     structured = prior.get('structured', {})
     preview = bool(window.get('_title_preview') or prior.get('v3_unlocked'))

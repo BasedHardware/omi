@@ -49,6 +49,7 @@ from config.record_wal_duplicate import (
 from config.conversations_v3 import (
     bounded_pending_enabled,
     boundary_seconds,
+    size_quarantine_enabled,
     skip_unchanged_writes_enabled,
     stretch_cohesion_enabled,
 )
@@ -259,10 +260,18 @@ def save_outline(uid, token, fingerprint, entries, *, key='builder', preview=Non
 BLOCKED_BACKOFF_MAX = timedelta(hours=1)
 
 
-def record_blocked(uid, token, reason, *, on_open=False, firestore_client=None):
+# Pending recordings a one-seed pass could not commit for size (SCA-2918). Live loads seed past them, so one
+# oversize closure no longer freezes the whole backlog behind it; they stay v3_pending for an operator repair.
+SIZE_QUARANTINE_FIELD = 'v3_size_quarantine'
+SIZE_QUARANTINE_MAX = 64
+
+
+def record_blocked(uid, token, reason, *, on_open=False, quarantine=None, firestore_client=None):
     """Deterministic conflicts back off per owner instead of retrying through the shared queue.
 
     Fenced by the builder token: a stale pass must not park an owner after a successor committed.
+    ``quarantine`` names the one pending seed of a pass Firestore rejected for size: it is set aside (up to
+    SIZE_QUARANTINE_MAX) and the early attempt re-armed, so the next seed runs on the following wake.
     """
     client = firestore_client or get_firestore_client()
     ref = leases.lease_ref(client, uid, 'builder')
@@ -275,21 +284,30 @@ def record_blocked(uid, token, reason, *, on_open=False, firestore_client=None):
             return False
         count = int(row.get('v3_blocked_count') or 0) + 1
         delay = min(BLOCKED_BACKOFF_MAX, timedelta(minutes=5) * (2 ** min(count - 1, 6)))
-        tx.update(
-            ref,
-            {
-                'v3_blocked_count': count,
-                'v3_blocked_reason': reason,
-                'v3_backoff_until': now + delay,
-                'v3_unlocked_paging_attempted': (
-                    bool(row.get('v3_unlocked_paging_attempted'))
-                    or (not on_open and bounded_pending_enabled() and bool(row.get('unlocked_ids')))
-                ),
-                'v3_bounded_pending_attempted': (
-                    bool(row.get('v3_bounded_pending_attempted')) if on_open else bounded_pending_enabled()
-                ),
-            },
-        )
+        update = {
+            'v3_blocked_count': count,
+            'v3_blocked_reason': reason,
+            'v3_backoff_until': now + delay,
+            'v3_unlocked_paging_attempted': (
+                bool(row.get('v3_unlocked_paging_attempted'))
+                or (not on_open and bounded_pending_enabled() and bool(row.get('unlocked_ids')))
+            ),
+            'v3_bounded_pending_attempted': (
+                bool(row.get('v3_bounded_pending_attempted')) if on_open else bounded_pending_enabled()
+            ),
+        }
+        held = list(row.get(SIZE_QUARANTINE_FIELD) or [])
+        if (
+            quarantine
+            and reason == 'document_too_large'
+            and size_quarantine_enabled()
+            and quarantine not in held
+            and len(held) < SIZE_QUARANTINE_MAX
+        ):
+            update[SIZE_QUARANTINE_FIELD] = [*held, quarantine]
+            # The backlog behind the set-aside seed is not blocked: let the next seed run without the backoff.
+            update['v3_bounded_pending_attempted'] = False
+        tx.update(ref, update)
         return True
 
     return run_preloaded_transaction_with_contention_retry(client, park)
@@ -423,12 +441,20 @@ def load(
     margin = max(timedelta(minutes=20), silence_gap)
     opened = decode_row(uid, coll.document(conversation_id).get()) if conversation_id else None
     skip_terminal = not conversation_id and bounded_pending_enabled()
+    state = leases.lease_ref(client, uid, 'builder').get().to_dict() or {}
+    quarantined = (
+        frozenset(state.get(SIZE_QUARANTINE_FIELD) or ())
+        if unlocked_page is not None and not conversation_id and size_quarantine_enabled()
+        else frozenset()
+    )
     if conversation_id:
         ids = (opened or {}).get('v3_recording_ids') or []
         pending = [coll.document(rid).get() for rid in ids]
     else:
         # A zero limit seeds only unlocked windows (the bounded retry's one-lane fallback).
-        pending = list(_oldest_pending(coll, pending_limit).stream()) if pending_limit else []
+        # Over-fetch by the set-aside ids so a quarantined head never hides the backlog behind it.
+        pending = list(_oldest_pending(coll, pending_limit + len(quarantined)).stream()) if pending_limit else []
+        pending = [doc for doc in pending if doc.id not in quarantined][:pending_limit]
     recordings, unreadable = {}, {}
     for doc in pending:
         row = recording_input(uid, doc, skip_terminal=skip_terminal)
@@ -447,7 +473,9 @@ def load(
                 .order_by('started_at')
                 .limit(33)
                 .stream()
-                if doc.id not in recordings and not (skip_terminal and terminal_recording(doc.to_dict() or {}))
+                if doc.id not in recordings
+                and doc.id not in quarantined
+                and not (skip_terminal and terminal_recording(doc.to_dict() or {}))
             ),
             None,
         )
@@ -455,11 +483,12 @@ def load(
             next_start = (following.to_dict() or {}).get('started_at')
             if next_start and next_start - latest['finished_at'] < silence_gap:
                 latest['_v3_page_continues'] = True
-    state = leases.lease_ref(client, uid, 'builder').get().to_dict() or {}
     cache = json.loads(decrypt(state['outline_cache'], uid)) if state.get('outline_cache') else []
     if unlocked_page is not None:
         unlocked_page.remaining, unlocked_page.cursor = frozenset(), None
-        unlocked_page.seeds = (sum(doc.id in recordings or doc.id in unreadable for doc in pending), 0)
+        seeded = tuple(doc.id for doc in pending if doc.id in recordings or doc.id in unreadable)
+        unlocked_page.seeds, unlocked_page.pending_ids = (len(seeded), 0), seeded
+        unlocked_page.quarantined = quarantined
     ordered_unlocked = []
     if not recordings and not state.get('open_id') and not state.get('unlocked_ids') and not opened:
         return unreadable, {}, cache
