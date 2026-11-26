@@ -5,7 +5,7 @@ from datetime import timedelta
 import pytest
 
 from database import conversations_v3 as store, conversations_v3_leases as leases, memories
-from utils.conversations.v3 import Conflict
+from utils.conversations.v3 import Conflict, service
 from tests.unit.test_conversations_v3_claim_growth import T0, UID, path, strict  # noqa: F401
 from tests.unit.test_conversations_v3_review import AT, MemoryQuery, source
 
@@ -249,9 +249,87 @@ def test_missing_sources_count_and_the_source_bound_holds_before_reading(monkeyp
     monkeypatch.setattr(store, 'SOURCE_LIMIT', 3)
     reads = []
     real = store.recording_input
-    monkeypatch.setattr(store, 'recording_input', lambda uid, snap: reads.append(snap.id) or real(uid, snap))
+    monkeypatch.setattr(
+        store, 'recording_input', lambda uid, snap, **kw: reads.append(snap.id) or real(uid, snap, **kw)
+    )
     rows = {C + 'p': source('p', claims=[claim('d', AT, 10)], v3_pending_since=AT)}
     rows[C + 'd'] = derived('d', AT, 10, ['p', 'gone1', 'gone2', 'gone3'])
     with pytest.raises(Conflict, match='v3_source_closure_budget'):
         store.load('u', firestore_client=MemoryQuery(rows))
     assert not any(rid.startswith('gone') for rid in reads)
+
+
+@pytest.mark.asyncio
+async def test_large_pending_backlog_commits_oldest_complete_slice(strict, monkeypatch, caplog):
+
+    rows = {}
+    for i in range(1000):
+        start = AT + timedelta(hours=i)
+        rid, cid = f'r{i}', f'd{i}'
+        rows[C + rid] = source(
+            rid,
+            started_at=start,
+            finished_at=start + timedelta(seconds=10),
+            v3_pending_since=start,
+            claims=[claim(cid, start, 10)],
+        )
+        rows[C + cid] = derived(cid, start, 10, [rid])
+    client = MemoryQuery(rows)
+    monkeypatch.setattr(store, 'DERIVED_LIMIT', 12)
+
+    async def run_fixture(_, fn, *args, **kwargs):
+        return fn(*args, firestore_client=client, **kwargs)
+
+    monkeypatch.setattr(service, 'run_blocking', run_fixture)
+    for _ in range(2):
+        with pytest.raises(Conflict, match='v3_derived_budget'):
+            store.load('u', firestore_client=client)
+    with caplog.at_level('INFO'):
+        recordings, existing, _ = await service._load_live_batch('u', 'v3_derived_budget')
+    assert list(recordings) == [f'r{i}' for i in range(8)]
+    assert set(existing) == {f'd{i}' for i in range(8)}
+    assert 'event=v3_bounded_pending pending_limit=8' in caplog.messages
+
+    for row in (*recordings.values(), *existing.values(), rows[C + 'r8']):
+        rid = row['id']
+        strict.rows[path(rid)] = rows[C + rid].copy()
+    token = leases.acquire(UID, 'builder', firestore_client=strict)
+    store.commit_projection(UID, token, recordings, existing, [], [], firestore_client=strict)
+    for rid, row in recordings.items():
+        stored = strict.rows[path(rid)]
+        assert stored['v3_pending'] is False
+        assert stored['claims'] == row['claims']
+    assert strict.rows[path('r8')]['v3_pending'] is True
+
+
+@pytest.mark.parametrize('terminal', ['discarded', 'deleted'])
+def test_terminal_pending_avoids_transcript_decode_and_claim_closure(monkeypatch, terminal):
+    rows = fragmented(20)
+    rows[C + 'r'][terminal] = True
+    monkeypatch.setattr(store, 'DERIVED_LIMIT', 1)
+    monkeypatch.setattr(store, 'decode_row', lambda *a: pytest.fail('terminal transcript should stay unread'))
+    recordings, existing, _ = store.load('u', firestore_client=MemoryQuery(rows))
+    assert recordings['r']['_v3_unreadable']
+    assert not existing
+
+
+@pytest.mark.parametrize('terminal', ['discarded', 'deleted'])
+def test_projection_clears_only_the_terminal_pending_fields(strict, terminal):
+    rid = 'r'
+    raw = source(rid, v3_pending_since=AT, claims=[claim('held', AT, 10)], **{terminal: True})
+    strict.rows[path(rid)] = raw.copy()
+    token = leases.acquire(UID, 'builder', firestore_client=strict)
+    store.commit_projection(UID, token, {rid: {**raw, '_v3_revision': 1}}, {}, [], [], firestore_client=strict)
+    assert strict.rows[path(rid)] == {**raw, 'v3_pending': False, 'v3_pending_since': None}
+
+
+@pytest.mark.parametrize('reason', ['v3_derived_budget', 'document_too_large'])
+def test_legacy_park_gets_one_early_attempt(strict, monkeypatch, reason):
+    token = leases.acquire(UID, 'builder', firestore_client=strict)
+    monkeypatch.setenv('CONVERSATIONS_V3_BOUNDED_PENDING', 'off')
+    assert store.record_blocked(UID, token, reason, firestore_client=strict)
+    assert store.backoff_until(UID, firestore_client=strict)
+    monkeypatch.delenv('CONVERSATIONS_V3_BOUNDED_PENDING')
+    assert store.backoff_state(UID, firestore_client=strict) == (None, reason)
+    assert store.record_blocked(UID, token, reason, firestore_client=strict)
+    assert store.backoff_until(UID, firestore_client=strict)

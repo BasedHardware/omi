@@ -28,6 +28,7 @@ from google.cloud.firestore_v1 import FieldFilter
 
 from config import reliability_experiments
 from config.conversations_v3 import (
+    bounded_pending_enabled,
     DEFAULT_BOUNDARY_SECONDS,
     HISTORICAL_SITDOWN_TIMING,
     SPEECH_LANDED_FIELD,
@@ -249,6 +250,22 @@ async def _release_reconcile_lease(uid, key, token, *, primary_failed):
         )
 
 
+async def _load_live_batch(uid, parked):
+    """Reduce pending seeds without clipping any selected source's ownership closure."""
+    sizes = (1,) if parked == 'document_too_large' else (32, 8, 1)
+    for size in sizes:
+        try:
+            result = await run_blocking(db_executor, store.load, uid, **({'pending_limit': size} if size < 32 else {}))
+        except Conflict as error:
+            if size == sizes[-1] or str(error) not in {'v3_derived_budget', 'v3_source_closure_budget'}:
+                raise
+        else:
+            if size < 32:
+                logger.info('event=v3_bounded_pending pending_limit=%d', size)
+            return result
+    raise AssertionError('bounded pending batch sizes are empty')
+
+
 def _measure_reconcile_writes(run):
     @wraps(run)
     async def measured(*args, **kwargs):
@@ -290,6 +307,7 @@ async def reconcile(
     report = {} if report is None else report
     key = store.BACKFILL_LEASE if derive else 'builder'
     blocked = None
+    parked = None
     moved = set()
     deferred: dict[str, datetime] = {}
     # Live passes call the outline-cache writers exactly as before; only a backfill names its lease.
@@ -337,6 +355,8 @@ async def reconcile(
                 run_id=run_id,
                 rederive=rederive,
             )
+        elif not on_open and bounded_pending_enabled():
+            recordings, existing, cached = await _load_live_batch(uid, parked)
         else:
             recordings, existing, cached = await run_blocking(
                 db_executor,

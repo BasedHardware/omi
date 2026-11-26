@@ -164,7 +164,7 @@ BODY_DIGEST = {
     'utils.support.holds._held_deferred_deletes': '612a521045553ef1b02d1eb81aac37a3c63a75c598ce5e99484c007c7c87e878',
     'utils.support.retention._select_conversations': 'f36920350f4e3a557e0e474e8801ae414c21ce67203e0627f7a39ba820243d16',
     'database.conversations_v3_live._recent_window_query': '6f2c323bfa8df890362c6bdc4796182a70e4c704376bcb4944358560b12edc75',
-    'database.conversations_v3.commit_projection': '089bd7e2e91ed7ac408dbbbdcb1940889f008525f52bbe06b09b740b2f7ba8b7',
+    'database.conversations_v3.commit_projection': 'a0435600aeff967644d1a5a9ff7a3c04541c0a03e67dab5ac63158bcae0bdf24',
     'database.batch_pipeline_conversation_purge_scans._claim': 'faa5dabcf01dc5bd377b2e14a149282aa2db93b2872cdc97a3b756157701532c',
     'database.batch_pipeline_conversation_purge_scans.run_job': 'fe5d30b77da198a7e0dc188115c8906fb6446925079a4e96339d36675a55faeb',
     'database.batch_pipeline_store.FirestoreStore.protected_retries': 'b55d2960c94057cb8df9b9cdd2e7728b6af63728bc0a2cb6f5bd333efed443a2',
@@ -3726,8 +3726,8 @@ for entry in (
         'The Home index bit is derived from the flags already present in those writes. '
         'Write elision uses only the projection snapshots already read under revision fences. '
         'The collision record and commit meter add no query: on a lock failure the record re-reads by reference '
-        'the documents the commit had already loaded. Re-reviewed 2026-11-26: post-commit telemetry guards and '
-        'diagnostic logging only; query and write shapes remain unchanged.',
+        'the documents the commit had already loaded. Re-reviewed 2026-11-26: discarded sources clear '
+        'their pending marker using the same fenced point update as deleted sources; no new query.',
         expect_observed=False,
         body_digest=BODY_DIGEST['database.conversations_v3.commit_projection'],
     ),

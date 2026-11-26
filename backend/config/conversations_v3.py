@@ -29,6 +29,10 @@ def skip_unchanged_writes_enabled() -> bool:
     return default_on('CONVERSATIONS_V3_SKIP_UNCHANGED_WRITES')
 
 
+def bounded_pending_enabled() -> bool:
+    return default_on('CONVERSATIONS_V3_BOUNDED_PENDING')
+
+
 def transcript_size_cap_enabled() -> bool:
     return default_on('CONVERSATIONS_V3_TRANSCRIPT_SIZE_CAP')
 

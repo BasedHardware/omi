@@ -45,7 +45,12 @@ from config.record_wal_duplicate import (
     SETTLED_FIELD,
     has_retained_custody,
 )
-from config.conversations_v3 import boundary_seconds, skip_unchanged_writes_enabled, stretch_cohesion_enabled
+from config.conversations_v3 import (
+    bounded_pending_enabled,
+    boundary_seconds,
+    skip_unchanged_writes_enabled,
+    stretch_cohesion_enabled,
+)
 from utils.conversations import terminal_settled
 from utils.conversations.v3 import Conflict, metrics, policy, preview_wakes, request_log_trace_id
 from utils.open_loops.extraction import OPEN_LOOP_EXTRACTIONS_COMPRESSED_FIELD, OPEN_LOOP_EXTRACTIONS_FIELD
@@ -135,6 +140,7 @@ def decode_row(uid, snapshot, *, data=None) -> dict[str, Any] | None:
 SOURCE_FENCE_FIELDS = (
     'recording',
     'deleted',
+    'discarded',
     'deleted_spans',
     'sync_merged_into',
     'data_protection_level',
@@ -149,11 +155,19 @@ def source_fence(raw):
     return {key: (raw or {}).get(key) for key in SOURCE_FENCE_FIELDS}
 
 
-def recording_input(uid, snapshot):
+def terminal_recording(row):
+    return row.get('deleted') or row.get('discarded') or row.get('sync_merged_into')
+
+
+def recording_input(uid, snapshot, *, skip_terminal=False):
     if not snapshot.exists:
         return None
     raw = snapshot.to_dict() or {}
-    if raw.get('data_protection_level') != 'private' and raw.get('started_at'):
+    if (
+        not (skip_terminal and terminal_recording(raw))
+        and raw.get('data_protection_level') != 'private'
+        and raw.get('started_at')
+    ):
         try:
             row = decode_row(uid, snapshot)
         except (ValueError, TypeError, FileNotFoundError, TranscriptBlobAbsent, TranscriptShredded, Conflict):
@@ -260,10 +274,21 @@ def record_blocked(uid, token, reason, *, firestore_client=None):
             return False
         count = int(row.get('v3_blocked_count') or 0) + 1
         delay = min(BLOCKED_BACKOFF_MAX, timedelta(minutes=5) * (2 ** min(count - 1, 6)))
-        tx.update(ref, {'v3_blocked_count': count, 'v3_blocked_reason': reason, 'v3_backoff_until': now + delay})
+        tx.update(
+            ref,
+            {
+                'v3_blocked_count': count,
+                'v3_blocked_reason': reason,
+                'v3_backoff_until': now + delay,
+                'v3_bounded_pending_attempted': bounded_pending_enabled(),
+            },
+        )
         return True
 
     return run_preloaded_transaction_with_contention_retry(client, park)
+
+
+BOUNDED_RETRY_REASONS = frozenset({'v3_derived_budget', 'v3_source_closure_budget', 'document_too_large'})
 
 
 def backoff_until(uid, *, firestore_client=None):
@@ -274,10 +299,13 @@ def backoff_state(uid, *, firestore_client=None):
     """(v3_backoff_until, v3_blocked_reason) from the owner's builder lease doc."""
     client = firestore_client or get_firestore_client()
     row = leases.lease_ref(client, uid, 'builder').get().to_dict() or {}
-    return row.get('v3_backoff_until'), row.get('v3_blocked_reason')
+    reason = row.get('v3_blocked_reason')
+    if bounded_pending_enabled() and reason in BOUNDED_RETRY_REASONS and not row.get('v3_bounded_pending_attempted'):
+        return None, reason
+    return row.get('v3_backoff_until'), reason
 
 
-def load(uid, *, conversation_id=None, firestore_client=None):
+def load(uid, *, conversation_id=None, pending_limit=32, firestore_client=None):
     client = firestore_client or get_firestore_client()
     if account_deletion_blocks_user_work(uid):
         raise Conflict('account_deletion')
@@ -285,17 +313,20 @@ def load(uid, *, conversation_id=None, firestore_client=None):
     silence_gap = timedelta(seconds=boundary_seconds(cohesion=stretch_cohesion_enabled())[0])
     margin = max(timedelta(minutes=20), silence_gap)
     opened = decode_row(uid, coll.document(conversation_id).get()) if conversation_id else None
+    skip_terminal = not conversation_id and bounded_pending_enabled()
     if conversation_id:
         ids = (opened or {}).get('v3_recording_ids') or []
         pending = [coll.document(rid).get() for rid in ids]
     else:
         pending = list(
-            coll.where(filter=FieldFilter('v3_pending', '==', True)).order_by('v3_pending_since').limit(33).stream()
+            coll.where(filter=FieldFilter('v3_pending', '==', True))
+            .order_by('v3_pending_since')
+            .limit(pending_limit)
+            .stream()
         )
-    pending = pending[:32] if not conversation_id else pending
     recordings, unreadable = {}, {}
     for doc in pending:
-        row = recording_input(uid, doc)
+        row = recording_input(uid, doc, skip_terminal=skip_terminal)
         if row and row.get('_v3_unreadable'):
             unreadable[doc.id] = row
         elif row:
@@ -311,7 +342,7 @@ def load(uid, *, conversation_id=None, firestore_client=None):
                 .order_by('started_at')
                 .limit(33)
                 .stream()
-                if doc.id not in recordings
+                if doc.id not in recordings and not (skip_terminal and terminal_recording(doc.to_dict() or {}))
             ),
             None,
         )
@@ -379,8 +410,8 @@ def load(uid, *, conversation_id=None, firestore_client=None):
         # Every source read counts, missing ones included, and the bound is checked before reading.
         if len(recordings) + len(unreadable) + len(missing) + len(unseen) > SOURCE_LIMIT:
             raise Conflict('v3_source_closure_budget')
-        for rid in unseen:
-            row = recording_input(uid, coll.document(rid).get())
+        for rid in sorted(unseen):
+            row = recording_input(uid, coll.document(rid).get(), skip_terminal=skip_terminal)
             if not row:
                 missing.add(rid)
             elif row.get('_v3_unreadable'):
@@ -918,7 +949,11 @@ def commit_projection(
                     tx.set(removal_ref(user, cid), {'retired_by_repair': True})
         replaced = {r['id'] for r in batch_rows} | set(absorbed) | deleting | (retired if final else set())
         for rid, recording in recordings.items():
-            if recording.get('deleted') or recording.get('sync_merged_into'):
+            if (
+                recording.get('deleted')
+                or recording.get('sync_merged_into')
+                or (key == 'builder' and clear_pending and bounded_pending_enabled() and recording.get('discarded'))
+            ):
                 update_if_changed(coll.document(rid), observed[rid], {'v3_pending': False, 'v3_pending_since': None})
                 continue
             if rid in batch_moved or rid in moved:
