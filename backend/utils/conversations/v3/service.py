@@ -52,6 +52,7 @@ from models.conversation_enums import ConversationStatus
 from models.finalization_owner import FinalizationOwnedElsewhere, python_owns_finalization
 from utils.conversations.v3 import (
     Conflict,
+    UnlockedPage,
     outline,
     planner,
     models,
@@ -252,7 +253,7 @@ async def _release_reconcile_lease(uid, key, token, *, primary_failed):
         )
 
 
-async def _load_live_batch(uid, token, parked):
+async def _load_live_batch(uid, token, parked, unlocked_page=None):
     """Reduce pending seeds without clipping any selected source's ownership closure."""
     if parked in store.BOUNDED_RETRY_REASONS:
         # Spend a legacy park's one early attempt under this lease before any paid work.
@@ -264,18 +265,68 @@ async def _load_live_batch(uid, token, parked):
         sizes = (1,)
     elif parked in budget_reasons or remembered == 8:
         sizes = (8, 1)
-    for size in sizes:
+    attempts: list[dict[str, Any]] = [{'pending_limit': size} if size < 32 else {} for size in sizes]
+    if unlocked_page is not None:
+        # One pending and one unlocked seed can overflow together while each fits alone. Seed one lane at a
+        # time, leading with the other lane on alternate minutes so neither starves the other.
+        lanes = [{'pending_limit': 1, 'unlocked_limit': 0}, {'pending_limit': 0, 'unlocked_limit': 1}]
+        attempts += lanes[::-1] if datetime.now(timezone.utc).minute % 2 else lanes
+    overflow = None
+    for index, options in enumerate(attempts):
         try:
-            result = await run_blocking(db_executor, store.load, uid, **({'pending_limit': size} if size < 32 else {}))
+            extra = {'unlocked_page': unlocked_page} if unlocked_page is not None else {}
+            result = await run_blocking(db_executor, store.load, uid, **options, **extra)
         except Conflict as error:
-            if size == sizes[-1] or str(error) not in budget_reasons:
+            if index == len(attempts) - 1 or str(error) not in budget_reasons:
                 raise
+            overflow = error
             await run_blocking(db_executor, leases.renew, uid, 'builder', token)
         else:
+            if _lane_without_seed(options, unlocked_page):
+                # A lane with nothing of its own to load is not progress: the overflow still stands and
+                # an empty commit would clear the park. Try the other lane, or park on the overflow.
+                if index == len(attempts) - 1:
+                    raise overflow or Conflict('v3_derived_budget')
+                continue
+            size = options.get('pending_limit', 32)
             if size < 32:
-                logger.info('event=v3_bounded_pending pending_limit=%d', size)
-            return (*result, size)
+                lane = f" unlocked_limit={options['unlocked_limit']}" if 'unlocked_limit' in options else ''
+                logger.info('event=v3_bounded_pending pending_limit=%d%s', size, lane)
+            # Only a pass that seeded pending rows may change the remembered pending page.
+            return (*result, size or None)
     raise AssertionError('bounded pending batch sizes are empty')
+
+
+def _lane_without_seed(options, page):
+    if 'unlocked_limit' not in options or page is None:
+        return False
+    return not page.seeds[0 if options['pending_limit'] else 1]
+
+
+def _keeps_unselected_outlines(custom_timing, on_open, page):
+    """A partial pass keeps the cached outlines of groups it did not select, including unvisited unlocked windows."""
+    return bool(custom_timing and on_open) or bool(page is not None and page.remaining)
+
+
+async def _wake_unvisited_unlocked(uid, page, token, scheduled_at=None):
+    now = datetime.now(timezone.utc)
+    if page is not None and page.remaining and (scheduled_at is None or scheduled_at <= now):
+        # An omitted window may already be due. Its next scan cannot depend on
+        # the selected groups' deadlines or on the presence of pending recordings.
+        scheduled_at = now + timedelta(minutes=1)
+        # The pass's lease token names the task, so an earlier same-minute wake cannot swallow it.
+        await run_blocking(db_executor, enqueue, uid, at=scheduled_at, wake_key=token)
+    return scheduled_at
+
+
+async def _wake_after_backoff(uid, page, token):
+    """A parked paged pass's unlocked windows carry no pending marker for the sweep to find, and its
+    next-minute continuation lands inside the backoff. Wake the owner when the backoff ends."""
+    if page is None:
+        return
+    until, _ = await run_blocking(db_executor, store.backoff_state, uid)
+    at = max(until or datetime.now(timezone.utc), datetime.now(timezone.utc)) + timedelta(seconds=5)
+    await run_blocking(db_executor, enqueue, uid, at=at, wake_key=token)
 
 
 def _measure_reconcile_writes(run):
@@ -350,6 +401,8 @@ async def reconcile(
         return 'busy'
     primary_failed = False
     bounded_pending_limit = None
+    unlocked_page = None
+    unlocked_wake = None
     try:
         # The reliability experiments below are read on this event loop, which answers from what was last
         # learned for the account. Learn it on a worker thread first, so a pass never misses a switch.
@@ -381,7 +434,10 @@ async def reconcile(
                 rederive=rederive,
             )
         elif not on_open and bounded_pending_enabled():
-            recordings, existing, cached, bounded_pending_limit = await _load_live_batch(uid, token, parked)
+            unlocked_page = UnlockedPage()
+            recordings, existing, cached, bounded_pending_limit = await _load_live_batch(
+                uid, token, parked, unlocked_page
+            )
         else:
             recordings, existing, cached = await run_blocking(
                 db_executor,
@@ -533,7 +589,7 @@ async def reconcile(
                     preview_fields = {'preview_key': preview_key, 'anchors': outline.preview_anchors(group, entries)}
                 cache.append({'fingerprint': fingerprint, 'entries': entries, **preview_fields})
 
-        if custom_timing and on_open:
+        if _keeps_unselected_outlines(custom_timing, on_open, unlocked_page):
             replaced = {row['fingerprint'] for row in cache}
             replaced_previews = scoped_preview_keys | consumed_previews
             cache = [
@@ -818,6 +874,7 @@ async def reconcile(
                 stale = sorted({*existing, *(entry['id'] for entry in priors)})
                 await run_blocking(db_executor, rederive_store.drop_stale_priors, uid, run_id, stale)
                 await run_blocking(db_executor, backfill_runs.save_priors, uid, run_id, priors)
+            unlocked_wake = await _wake_unvisited_unlocked(uid, unlocked_page, token)
             await run_blocking(db_executor, leases.renew, uid, key, token)
             moved = await run_blocking(
                 db_executor,
@@ -834,6 +891,7 @@ async def reconcile(
                 retire=retire,
                 key=key,
                 bounded_pending_limit=bounded_pending_limit,
+                unlocked_page=unlocked_page,
             )
         except Exception:
             if live:
@@ -945,7 +1003,9 @@ async def reconcile(
             # Windows earlier passes (or earlier batches) committed still owe their notes.
             with suspend_committed_write_count():
                 await _drain_blocked(uid, blocked)
+            await _wake_after_backoff(uid, unlocked_page, token)
         return 'blocked'
+    await _wake_unvisited_unlocked(uid, unlocked_page, token, unlocked_wake)
     if on_open:
         await run_blocking(db_executor, enqueue, uid, at=datetime.now(timezone.utc) + timedelta(minutes=1))
         return 'committed'
@@ -1198,6 +1258,7 @@ def _commit(
     retire=None,
     key='builder',
     bounded_pending_limit=None,
+    unlocked_page=None,
 ):
     from google.api_core.exceptions import InvalidArgument
 
@@ -1217,6 +1278,7 @@ def _commit(
             retire=retire,
             key=key,
             **({'bounded_pending_limit': bounded_pending_limit} if bounded_pending_limit is not None else {}),
+            **({'unlocked_page': unlocked_page} if unlocked_page is not None else {}),
         )
     except InvalidArgument as error:
         # A document over Firestore's 1 MiB limit, or a commit request over its payload limit, fails the

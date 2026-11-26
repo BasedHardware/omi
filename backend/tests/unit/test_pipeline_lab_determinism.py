@@ -26,6 +26,7 @@ from testing.pipeline_lab.determinism import (
     load_semantic,
     semantic_diff,
 )
+from testing.pipeline_lab.llm_proxy import fake_upstream
 from testing.pipeline_lab.llm_proxy.fake_upstream import FakeUpstream
 from testing.pipeline_lab.seed.synthetic import write_synthetic_snapshot
 from testing.pipeline_lab.stack.clock import LabClock, installed_clock
@@ -134,6 +135,33 @@ def test_a_cached_repeat_without_execution_traces_compares_equal(tmp_path):
     # a product output present on one side only is still a difference
     (b / 'chain.json').write_text('{}')
     assert not compare_runs(a, b).same
+
+
+def test_fake_gateway_answers_the_same_when_only_random_ids_in_the_prompt_differ():
+    # A prompt citing ids the product minted with uuid4 (transcript segment ids) gets one answer on
+    # every repeat; a prompt whose words differ still gets its own.
+    def body(first: str, second: str, words: str = 'we ship the report on friday') -> dict:
+        prompt = f'[{first} SPEAKER_00] {words}\n[{second} SPEAKER_01] sounds good\n[{first}] {words}'
+        return {
+            'messages': [{'role': 'user', 'content': prompt}],
+            'response_format': {
+                'type': 'json_schema',
+                'json_schema': {
+                    'name': 'summary',
+                    'schema': {
+                        'type': 'object',
+                        'properties': {'gist': {'type': 'string'}, 'overview': {'type': 'string'}},
+                    },
+                },
+            },
+        }
+
+    reply = lambda payload: fake_upstream._Handler._reply(None, payload)  # noqa: E731
+    one = reply(body(UUID4, '1d2c3b4a-5e6f-4a7b-8c9d-0e1f2a3b4c5d'))
+    assert one == reply(body('9f8e7d6c-5b4a-4c3d-ae1f-0a9b8c7d6e5f', '2b3c4d5e-6f7a-4b8c-9d0e-1f2a3b4c5d6e'))
+    assert one != reply(body(UUID4, '1d2c3b4a-5e6f-4a7b-8c9d-0e1f2a3b4c5d', 'we cancel the trip next month'))
+    # the same id twice keeps one name; a version-5 (name-based) id is not random and is kept
+    assert fake_upstream._stable_ids(f'{UUID4} {UUID5} {UUID4}') == f'uuid4#1 {UUID5} uuid4#1'
 
 
 def test_compare_runs_requires_conversations(tmp_path):

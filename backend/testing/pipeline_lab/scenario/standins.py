@@ -94,8 +94,9 @@ def stand_in_notes(result: Mapping[str, Any]) -> list[dict[str, Any]]:
         elif name == ADMISSION:
             text = (
                 'Batch record admission (audio listing, units, staging, intake) did not run; the manual-finish '
-                'hook got one unit over the whole recording, a privacy check that allows, and the funding gate '
-                f'open. The fast-finish STT returned {_words_from(sources, lane="batch")}.'
+                'hook got one unit over the whole recording (one retained reference, read as silence), a privacy '
+                'check that allows, and the funding gate open. The fast-finish STT returned '
+                f'{_words_from(sources, lane="batch")}, per chunk on the chunked path, with no language probe.'
             )
         elif name == PROJECTION:
             text = (
