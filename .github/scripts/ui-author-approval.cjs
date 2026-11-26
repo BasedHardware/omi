@@ -168,7 +168,10 @@ async function withStatusLock(github, context, sha, operation) {
         // A previous holder may have released between create and lookup.
         if (lookupError.status !== 404) throw lookupError;
       }
-      if (Date.now() >= deadline) throw new Error(`Could not acquire UI approval status lock: ${ref}`,{cause:error});
+      if (Date.now() >= deadline) {
+        await publishStatus(github,context.repo,sha,'failure','UI approval status lock timed out; see workflow logs');
+        throw new Error(`Could not acquire UI approval status lock: ${ref}`,{cause:error});
+      }
       await delay(200 + Math.random() * 300);
     }
   }
@@ -263,9 +266,8 @@ async function evaluateHead({github, context, headSha, requestId}) {
 }
 async function requestEvaluation({github, context}) {
   const event = context.payload;
-  const pull_number = event.pull_request?.number || event.issue.number;
-  const {data: pr} = await github.rest.pulls.get({...context.repo,pull_number});
-  const heads = new Set([event.pull_request ? event.pull_request.head.sha : pr.head.sha]);
+  const pr = event.pull_request || await resolveCommentPR(github,context,event.issue.number);
+  const heads = new Set([pr.head?.sha]);
   // Synchronize changes membership for both the event head and its predecessor.
   if (event.pull_request && event.action === 'synchronize') heads.add(event.before);
   if ([...heads].some(sha => !/^[a-f0-9]{40}$/.test(sha))) throw new Error('Invalid head SHA');
@@ -273,6 +275,28 @@ async function requestEvaluation({github, context}) {
   const errors = results.filter(result => result.status === 'rejected').map(result => result.reason);
   if (errors.length) throw new AggregateError(errors,errors.map(error => error.message).join('\n'));
   return results.filter(result => result.value).length;
+}
+
+async function resolveCommentPR(github, context, pull_number) {
+  try {
+    const {data: pr} = await github.rest.pulls.get({...context.repo,pull_number});
+    if (!/^[a-f0-9]{40}$/.test(pr.head?.sha)) throw new Error('Invalid head SHA');
+    return pr;
+  } catch (lookupError) {
+    try {
+      // issue_comment has no head SHA. GitHub owns this ref in the base
+      // repository, including for fork PRs. Use it only to invalidate approval.
+      const {data} = await github.rest.git.getRef({...context.repo,ref:`pull/${pull_number}/head`});
+      const sha = data.object?.sha;
+      if (!/^[a-f0-9]{40}$/.test(sha)) throw new Error('Invalid PR head ref');
+      await withStatusLock(github,context,sha,() =>
+        publishStatus(github,context.repo,sha,'failure','Unable to resolve PR for UI approval; see workflow logs'));
+    } catch (invalidationError) {
+      throw new AggregateError([lookupError,invalidationError],
+        `PR #${pull_number} lookup failed and approval invalidation reported an error: ${invalidationError.message}`);
+    }
+    throw lookupError;
+  }
 }
 
 async function requestHead({github, context, pr, sha}) {

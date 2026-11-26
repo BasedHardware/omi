@@ -75,7 +75,7 @@ function fixture() {
   github.paginate.iterator = async function* (method,{ref}) {
     yield {data:statuses.filter(s => s.sha === ref).reverse()};
   };
-  const context = {repo:{owner:'test',repo:'test'},sha:p.base.sha,payload:{pull_request:{number:1,head:p.head}}};
+  const context = {repo:{owner:'test',repo:'test'},sha:p.base.sha,payload:{pull_request:{...p}}};
   return {p,prs,comments,statuses,calls,github,context,refs};
 }
 test('over 100 same-head requests coalesce on main and keep the latest decision', async () => {
@@ -154,6 +154,51 @@ test('a dispatch rejection replaces a same-head approval and cannot be evaluated
   assert.deepEqual(statuses.map(s => s.state),['pending','pending','success','pending','failure']);
   assert.equal(refs.size,0);
 });
+test('a rejection invalidates prior success when the PR lookup fails', async () => {
+  const f = fixture();
+  const {github,context,statuses} = f;
+  let inputs;
+  github.rest.actions = {createWorkflowDispatch:async request => {inputs = request.inputs;}};
+  f.comments[1].push(approve);
+  await run.requestEvaluation(f);
+  const evaluate = () => run.evaluateDispatch({github,context:{...context,payload:{inputs}}});
+  await evaluate();
+  assert.equal(statuses.at(-1).state,'success');
+
+  const comment = {id:2,user:nik,body:`/reject-ui ${f.p.head.sha}`};
+  f.comments[1].push(comment);
+  const payload = {action:'created',issue:{number:1,pull_request:{}},comment};
+  github.rest.pulls.get = async () => {throw new Error('PR lookup unavailable');};
+  const getRef = github.rest.git.getRef;
+  github.rest.git.getRef = async args => args.ref === 'pull/1/head'
+    ? {data:{object:{sha:f.p.head.sha}}} : getRef(args);
+  github.rest.actions.createWorkflowDispatch = async () => assert.fail('unresolved PR was dispatched');
+  await assert.rejects(run.requestEvaluation({github,context:{...context,payload}}),/PR lookup unavailable/);
+  await evaluate();
+  assert.deepEqual(statuses.filter(s => s.state !== 'pending').map(s => [s.sha,s.state]),[
+    [f.p.head.sha,'success'],[f.p.head.sha,'failure'],
+  ]);
+});
+test('a request times out on a leaked lock and supersedes prior success', async t => {
+  const f = fixture();
+  const {github,context,statuses,refs} = f;
+  let inputs;
+  github.rest.actions = {createWorkflowDispatch:async request => {inputs = request.inputs;}};
+  f.comments[1].push(approve);
+  await run.requestEvaluation(f);
+  await run.evaluateDispatch({github,context:{...context,payload:{inputs}}});
+  assert.equal(statuses.at(-1).state,'success');
+
+  const ref = `tags/ui-author-approval-lock/${f.p.head.sha}`;
+  refs.add(ref);
+  let now = 0;
+  t.mock.method(Date,'now',() => (now += 45_000));
+  github.rest.actions.createWorkflowDispatch = async () => assert.fail('blocked request was dispatched');
+  await assert.rejects(run.requestEvaluation(f),/Could not acquire UI approval status lock/);
+  assert.equal(statuses.at(-1).state,'failure');
+  assert.equal(statuses.at(-1).sha,f.p.head.sha);
+  assert.deepEqual([...refs],[ref]);
+});
 test('request admission waits for a success write already in flight', async () => {
   const f = fixture();
   const {github,context,statuses} = f;
@@ -203,7 +248,7 @@ test('synchronize still reconciles both active heads if one dispatch fails', asy
   f.prs.push({...f.p,number:2});
   f.comments[2] = [approve];
   f.p.head = {sha:current};
-  f.context.payload = {action:'synchronize',before,pull_request:{number:1,head:f.p.head}};
+  f.context.payload = {action:'synchronize',before,pull_request:{...f.p}};
   let inputs;
   f.github.rest.actions = {createWorkflowDispatch:async request => {
     if (request.inputs.head_sha === current) throw new Error('dispatch failed for current head');
@@ -219,6 +264,7 @@ test('a closed event only dispatches if its head is still in use', async () => {
   const f = fixture();
   f.p.state = 'closed';
   f.context.payload.action = 'closed';
+  f.context.payload.pull_request.state = 'closed';
   const requests = [];
   f.github.rest.actions = {createWorkflowDispatch:async request => requests.push(request)};
   assert.equal(await run.requestEvaluation(f),0);
