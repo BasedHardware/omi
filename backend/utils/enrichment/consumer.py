@@ -40,6 +40,7 @@ from utils.observability.reasons import ConsumerReason, RetryReason
 from utils.workers.consumer import Result, Role
 from utils.sync import processing_hold
 from utils.sync.assignment_errors import SyncAssignmentConflict, SyncAssignmentConflictReason
+from database.firestore_transaction_retry import is_transaction_retry_failure
 from utils.enrichment import early_abort
 
 logger = logging.getLogger(__name__)
@@ -70,7 +71,7 @@ def _transient_dependency(error: BaseException) -> bool:
     current: BaseException | None = error
     while current is not None and id(current) not in seen:
         seen.add(id(current))
-        if isinstance(current, transient):
+        if is_transaction_retry_failure(current) or isinstance(current, transient):
             return True
         if isinstance(current, httpx.HTTPStatusError):
             return current.response.status_code in _TRANSIENT_HTTP_STATUSES
