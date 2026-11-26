@@ -273,7 +273,8 @@ def test_finish_is_scored_when_the_summary_became_eligible_not_when_home_fetched
     assert result['home_fetch_validation'] == {
         'eligible': 1,
         'fetched': 1,
-        'not_fetched': 0,
+        'eligible_card_not_fetched': 0,
+        'other_linked_card_fetched': 0,
         'fetched_without_eligible': 0,
         'fetch_after_eligible_p95_seconds': 70,
     }
@@ -283,7 +284,8 @@ def test_an_eligible_summary_that_home_never_fetched_is_still_scored():
     result = readback.readback(_linked_finish(('eligible', 20)), START, THROUGH)
     assert result['totals']['within_60s'] == 1
     assert result['totals']['unmatched'] == 0
-    assert result['home_fetch_validation']['not_fetched'] == 1
+    assert result['home_fetch_validation']['eligible_card_not_fetched'] == 1
+    assert result['home_fetch_validation']['other_linked_card_fetched'] == 0
 
 
 @pytest.mark.parametrize('fetched', [False, True])
@@ -295,3 +297,33 @@ def test_a_summary_that_never_became_eligible_is_a_miss(fetched):
     assert result['totals']['unmatched'] == 1
     assert result['totals']['p95_at_or_below_60s'] is False
     assert result['home_fetch_validation']['fetched_without_eligible'] == int(fetched)
+
+
+def test_fetch_validation_follows_the_card_that_won_eligibility():
+    def event(stage, elapsed, **fields):
+        return {'stage': stage, 'observed_at': START + timedelta(seconds=elapsed), **fields}
+
+    # Card A wins eligibility at 20 s but Home never returns it; Home returns linked card B at 30 s.
+    events = [
+        event('cut', 1, cut_at=START.isoformat(), finish='f', source='app', basis='client_cut'),
+        event('binding', 2, finish='f', recording='rec'),
+        event('window', 5, recording='rec', card='card-a'),
+        event('window', 6, recording='rec', card='card-b'),
+        event('eligible', 20, card='card-a'),
+        event('eligible', 25, card='card-b'),
+        event('summary', 30, card='card-b'),
+    ]
+    result = readback.readback(events, START, THROUGH)
+    assert result['totals']['within_60s'] == 1
+    assert result['totals']['matched_client_cut_p95_seconds'] == 20
+    assert result['home_fetch_validation'] == {
+        'eligible': 1,
+        'fetched': 0,
+        'eligible_card_not_fetched': 1,
+        'other_linked_card_fetched': 1,
+        'fetched_without_eligible': 0,
+        'fetch_after_eligible_p95_seconds': None,
+    }
+    # The score never depends on what Home fetched: without the fetch it is the same.
+    unfetched = readback.readback(events[:-1], START, THROUGH)
+    assert unfetched['totals'] == result['totals']

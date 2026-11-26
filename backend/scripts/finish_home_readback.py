@@ -137,7 +137,13 @@ def readback(events, start, through):
     by_route_source = defaultdict(list)
     timing_basis = defaultdict(int)
     all_delays = []
-    validation = {'eligible': 0, 'fetched': 0, 'not_fetched': 0, 'fetched_without_eligible': 0}
+    validation = {
+        'eligible': 0,
+        'fetched': 0,
+        'eligible_card_not_fetched': 0,
+        'other_linked_card_fetched': 0,
+        'fetched_without_eligible': 0,
+    }
     fetch_lags = []
     for finish, (cut, _, source, basis) in cuts.items():
         if not start <= cut < end:
@@ -145,15 +151,23 @@ def readback(events, start, through):
         timing_basis[basis if basis in {'client_cut', 'server_cut'} else 'unknown'] += 1
         recording = bindings[finish][1] if finish in bindings else None
         linked = windows.get(recording, ())
-        first_ready = _first(eligible, linked, cut)
-        first_fetch = _first(fetched, linked, first_ready or cut)
-        if first_ready is None:
-            validation['fetched_without_eligible'] += first_fetch is not None
+        # The score is the first eligibility of any linked card; it never reads fetch timing.
+        winner = _first(eligible, linked, cut)
+        first_ready = winner[0] if winner else None
+        if winner is None:
+            validation['fetched_without_eligible'] += _first(fetched, linked, cut) is not None
         else:
+            # Validation follows the card that won: a fetch of another linked card does not show this one.
+            ready_at, card = winner
+            first_fetch = _first(fetched, [link for link in linked if link[1] == card], ready_at)
             validation['eligible'] += 1
-            validation['fetched' if first_fetch else 'not_fetched'] += 1
             if first_fetch:
-                fetch_lags.append((first_fetch - first_ready).total_seconds())
+                validation['fetched'] += 1
+                fetch_lags.append((first_fetch[0] - ready_at).total_seconds())
+            else:
+                validation['eligible_card_not_fetched'] += 1
+                # A projection mismatch: Home returned a sibling card but suppressed the eligible one.
+                validation['other_linked_card_fetched'] += _first(fetched, linked, ready_at) is not None
         route_signals = {route for t, route in routes.get(recording, ()) if cut <= t <= (first_ready or through)}
         if 'held' in route_signals:
             route = 'held'
@@ -187,9 +201,9 @@ def readback(events, start, through):
 
 
 def _first(observed, linked, after):
-    """The first observation for a card linked to this Finish, at or after its cut and its link."""
+    """``(time, card)`` of the first observation of a card linked to this Finish, at or after ``after`` and the link."""
     return min(
-        (at for linked_at, card in linked for at in observed.get(card, ()) if at >= max(after, linked_at)),
+        ((at, card) for linked_at, card in linked for at in observed.get(card, ()) if at >= max(after, linked_at)),
         default=None,
     )
 

@@ -83,10 +83,14 @@ The readback takes a half-open 24-hour cut cohort. It deduplicates cuts and
 bindings, gates legacy candidates on committed manual-end proof, joins the
 first eligible card, and reports totals, within 60 seconds, late, unmatched,
 timing unknown, and the p95 for each route and source. `home_fetch_validation`
-separately counts eligible Finishes whose summary a Home response later carried
-(`fetched`, `not_fetched`), fetches with no eligibility signal
-(`fetched_without_eligible`, an instrumentation gap to investigate), and the
-p95 lag from eligibility to fetch. Client-only cuts with no
+separately follows the card that won eligibility for each Finish: whether a
+Home response later carried that same card (`fetched`, with the p95 lag from
+eligibility to fetch) or never did (`eligible_card_not_fetched`). Of those,
+`other_linked_card_fetched` counts Finishes where Home returned a different
+card linked to the same recording but not the eligible one, a projection
+mismatch such as a card suppressed after an episode acknowledgement.
+`fetched_without_eligible` counts fetches with no eligibility signal, an
+instrumentation gap to investigate. Client-only cuts with no
 API binding are included as unmatched. An older-build lower bound can establish
 a late finish. A lower bound inside 60 seconds remains timing unknown. The
 all-Finish p95 is reported only when the nearest rank is determined despite
