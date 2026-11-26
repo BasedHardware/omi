@@ -1020,6 +1020,11 @@ class ProcessConversationRequest(BaseModel):
     live_conversation_id: Optional[str] = Field(
         default=None, description='Optional live v3 window to Finish when no active recording is found.'
     )
+    # Reliability experiment live_words_cascade: the live words the phone was showing for the conversation
+    # being ended. Unvalidated on purpose, like client_processing: a malformed one must not 422 an End. It
+    # is checked and bounded in utils/conversations/v3/live_tail.py, kept with the stored End only, and
+    # read by that conversation's summary prompt and nothing else. Off, it is dropped unread.
+    live_tail: SkipJsonSchema[Optional[Any]] = None
 
     @field_validator('calendar_meeting_context', mode='before')
     @classmethod

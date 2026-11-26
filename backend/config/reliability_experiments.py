@@ -39,6 +39,7 @@ INSTANT_LIVE_TEXT_FLAG_KEY = 'instant_live_text'
 COMMIT_WAKE_FLAG_KEY = 'commit_wake'
 VENDOR_RECOGNIZER_ON_OPENED_APP_FLAG_KEY = 'vendor_recognizer_on_opened_app'
 TITLE_AT_END_FLAG_KEY = 'title_at_end'
+LIVE_WORDS_CASCADE_FLAG_KEY = 'live_words_cascade'
 
 # name -> what turning it on changes. Register here before using a name.
 EXPERIMENTS = {
@@ -126,6 +127,23 @@ EXPERIMENTS = {
         'conversation holds three minutes of speech) is skipped, nothing is claimed or written for it, and the '
         'conversation gets its title from the outline when it ends. A title already published on an open row is '
         'left as it is. Off, CONVERSATIONS_V3_LIVE_TITLE alone decides, as on main.'
+    ),
+    LIVE_WORDS_CASCADE_FLAG_KEY: (
+        'Needs vendor_recognizer_on_opened_app, and end_open_conversation for parts 2 and 3 (the tail is kept '
+        'with the End that experiment stores). (1) /v4/live-words accepts a text message {"type":"end"} and '
+        'starts a new line at that point of the audio, so one display line never spans a user End. (2) POST '
+        '/v1/conversations accepts live_tail: the live words the phone was showing for the '
+        'conversation being ended (words with times, plain text, at most 600 words and 6,000 characters, checked '
+        'and bounded on arrival). It is kept, encrypted, with the stored End (end_open_conversation) and nowhere '
+        'else: never in a conversation, a recording row or the transcript. (3) When the conversation that End '
+        'closed is summarised, the notes prompt gets the stored transcript plus the tail words no stored line '
+        'covers in time, and the number of tail words used is stamped on the conversation before the notes are '
+        'written (v3_summary_tail_words); the late-speech rewrite rule counts new stored words only beyond that '
+        'number, and a summary pass still running when such speech lands settles instead of starting again '
+        '(v3_tail_absorbed), so batch landing the same speech does not write a second summary. This is a deliberate, bounded '
+        'exception to "client-authored text is display only": phone-authored words reach the summary prompt, '
+        'and only there. Off, the message is ignored, live_tail is dropped unread, nothing is stored and the '
+        'summary and the rewrite rule are the baseline.'
     ),
 }
 

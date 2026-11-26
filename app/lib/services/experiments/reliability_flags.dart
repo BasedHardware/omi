@@ -21,6 +21,7 @@ abstract final class ReliabilityFlags {
     'vendor_recognizer_on_opened_app': _VendorRecognizerOnOpenedApp.enabledFlag,
     'no_live_player': _NoLivePlayer.enabledFlag,
     'title_at_end': _TitleAtEnd.enabledFlag,
+    'live_words_cascade': _LiveWordsCascade.enabledFlag,
   };
 
   /// The cached answer for [name]; never throws and never waits. False before the account's
@@ -75,4 +76,8 @@ abstract final class _NoLivePlayer {
 
 abstract final class _TitleAtEnd {
   static const enabledFlag = 'title_at_end';
+}
+
+abstract final class _LiveWordsCascade {
+  static const enabledFlag = 'live_words_cascade';
 }

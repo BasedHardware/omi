@@ -68,6 +68,7 @@ from utils.conversations.v3 import (
     context,
 )
 from utils.conversations.v3 import manual_cuts, refinement, preview_wakes, rederive_plan, summary_wake
+from utils.conversations.v3 import live_tail
 from utils.conversations.v3 import capture_device
 from utils.conversations.v3.word_floor import MIN_TASK_WORDS, has_unspaced_script, text_word_count
 from utils.conversations.processing_trigger import ProcessingTrigger
@@ -861,6 +862,26 @@ async def _plan_projection(
             continue
         before = planner.word_count((prior or {}).get('transcript_segments') or [])
         new_words = max(0, planner.word_count(row['transcript_segments']) - before)
+        # Experiment live_words_cascade: the summary of a conversation a user End closed may already
+        # have read its last words from the phone's live tail. Stored words landing afterwards are
+        # first taken to be that same speech, so the rewrite rule below sees only what goes beyond
+        # it. Off, or with no such credit on the conversation, the count is unchanged.
+        unseen_words, tail_credit = live_tail.rewrite_words(prior, new_words, uid)
+        if prior and prior.get(live_tail.CREDIT_FIELD) and tail_credit != prior[live_tail.CREDIT_FIELD]:
+            row[live_tail.CREDIT_FIELD] = tail_credit
+            # A summary pass still running read these words as tail: mark the landing, so its
+            # settle stands instead of writing the notes again. A landing with unseen words drops
+            # the mark, and that pass's settle fails as it always did.
+            live_tail.mark_absorbed(row, prior, unseen_words)
+            if tail_credit <= live_tail.SPENT_CREDIT:
+                # Batch has landed the tail's speech: its words are no longer needed with the End.
+                await run_blocking(db_executor, live_tail.forget, uid, prior.get(planner.CUT_FIELD))
+            logger.info(
+                'event=v3_live_tail outcome=credit new_words=%d unseen_words=%d credit_left=%d',
+                new_words,
+                unseen_words,
+                tail_credit,
+            )
         ended = window['finished'] and not deferred_lock
         if revoked_native:
             # The natural window, not the stale summary attempt, now owns scheduling.
@@ -905,7 +926,7 @@ async def _plan_projection(
             and not custom_timing
             and planner.late_rewrite(
                 previous_words=before,
-                new_words=new_words,
+                new_words=unseen_words,
                 ended_at=prior['finished_at'],
                 now=now,
                 rewrites=prior.get('v3_rewrites', 0),
@@ -1598,6 +1619,7 @@ def _process(uid, row, token):
     passive = row.get('kind') in {'media', 'background'}
     manual = policy.manual_intent(row)
     notes = False
+    tail_words = None
     if passive or (not manual and below_minimum):
         lifecycle.complete(uid, row['id'])
     else:
@@ -1618,6 +1640,19 @@ def _process(uid, row, token):
                 except Exception as error:
                     logger.warning('event=v3_summary_shown_early outcome=error exception_type=%s', type(error).__name__)
 
+        # Experiment live_words_cascade: the live words the phone showed before the End that closed this
+        # conversation, less what stored text covers, follow the transcript in the notes prompt. Off, or
+        # for a conversation no End closed, the text is empty and the prompt is the baseline.
+        tail_text, tail_words = live_tail.for_conversation(uid, row)
+        if tail_words is not None:
+            # The count is stamped before the notes are written, not when the pass settles: the batch
+            # text for the same speech usually lands within seconds, while this pass is still running,
+            # and the grouping pass must already find the count to know that speech is not new to the
+            # notes. A pass that fails is run again and stamps again from what is uncovered then.
+            try:
+                writers.note_summary_tail(uid, row['id'], token, tail_words)
+            except Exception as error:
+                logger.warning('event=v3_live_tail outcome=stamp_error exception_type=%s', type(error).__name__)
         summary_lease = None
         if not (manual or row.get('backfilled') or row.get('v3_unlocked') or policy.live_summary_target(row)):
             summary_lease = (row['id'], token, row.get('finished_at'))
@@ -1625,6 +1660,7 @@ def _process(uid, row, token):
             with (
                 fence.writer(uid, row['id'], token, native_binding=row.get(policy.NATIVE_MANUAL_BINDING)),
                 models.notes_mode(uid, backfilled=bool(row.get('backfilled')), background_lease=summary_lease),
+                live_tail.summarising(tail_text),
             ):
                 result = process_conversation(
                     uid,
@@ -1675,6 +1711,8 @@ def _process(uid, row, token):
         notes=notes,
         content_hash=writers.processing_hash(row),
         word_floor_outcomes=word_floor_outcomes,
+        # Experiment live_words_cascade: how many tail words this summary used, for the rewrite rule.
+        tail_words=tail_words if notes and tail_words is not None else None,
     )
     # Experiment fast_end_feedback: a client waiting on this row (GET .../summary/wait) is woken again at
     # the end of the pass, for the passes that had no early summary write. Off, nothing is published.
