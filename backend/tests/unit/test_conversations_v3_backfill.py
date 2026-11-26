@@ -1558,25 +1558,32 @@ async def test_deletion_between_drain_guard_and_model_dispatch(direct, strict, m
 async def test_slow_notes_admission_spends_one_backfill_retry(direct, strict, monkeypatch):
     models = service.models
     monkeypatch.setattr(models, 'account_deletion_firestore_client', lambda: strict)
-    monkeypatch.setattr(models, 'BACKFILL_NOTES_BUDGET_SECONDS', 0.01)
     monkeypatch.setattr(store, 'pending_backfill_processing', lambda uid, **_: ([{'id': 'a'}], None))
     monkeypatch.setattr(leases, 'acquire', lambda *a: 'token')
     monkeypatch.setattr(leases, 'release', lambda *a: None)
     paid_turns = []
     settled = []
 
+    now = 100.0
+    monkeypatch.setattr(models, 'monotonic', lambda: now)
+
     async def paid_turn(cid):
+        nonlocal now
         paid_turns.append(cid)
-        await asyncio.sleep(1)
-        paid_turns.append(cid)
+        # Expire the actual asyncio timeout after dispatch without waiting on wall time.
+        now += models.BACKFILL_NOTES_BUDGET_SECONDS + 1
+        await asyncio.get_running_loop().create_future()
+        pytest.fail('the expired provider turn completed')
+
+    async def invoke(cid):
+        monkeypatch.setattr(asyncio.get_running_loop(), 'time', lambda: now)
+        await models.within_notes_admission(lambda: paid_turn(cid))
 
     async def process(uid, row, token):
         def dispatch():
             with models.notes_mode(uid, backfilled=True):
                 try:
-                    models.dispatch_notes_model(
-                        lambda: asyncio.run(models.within_notes_admission(lambda: paid_turn(row['id'])))
-                    )
+                    models.dispatch_notes_model(lambda: asyncio.run(invoke(row['id'])))
                 except models.BackfillNotesAdmissionTimeout:
                     raise
                 except Exception as error:
