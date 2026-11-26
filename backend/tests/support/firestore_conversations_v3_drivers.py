@@ -54,6 +54,32 @@ def _finish_source(client, combo, trial):
     )
 
 
+def _named_finish_sources(client, combo, trial):
+    """A just-sealed capture, and another that fed an ended window; Finish may name either one."""
+    base = f'users/{SHAPE_UID}/conversations'
+    capture = {
+        'source': 'omi',
+        'recording': True,
+        'created_at': FROZEN_NOW,
+        'started_at': FROZEN_NOW,
+        'finished_at': FROZEN_NOW,
+        'status': 'completed',
+        'external_data': {'recording_session_id': 'shape-session'},
+    }
+    client.documents[f'{base}/source'] = capture
+    client.documents[f'{base}/tail'] = {
+        **capture,
+        'claims': [{'conversation_id': 'window', 'start': FROZEN_NOW, 'end': FROZEN_NOW}],
+    }
+    client.documents[f'{base}/window'] = {
+        'v3_derived': True,
+        'started_at': FROZEN_NOW,
+        'finished_at': FROZEN_NOW,
+        'status': 'processing',
+        'v3_recording_ids': ['tail'],
+    }
+
+
 def _finish_clock(client):
     """The cut is fresh, so the predecessor read runs."""
 
@@ -87,9 +113,21 @@ def entries():
             neutrals={'budget': (ListReadBudget(deadline_monotonic=10**30, max_documents=53), 'RPC/read budget only')},
         ),
         DriverEntry(
+            'database.conversations_v3.clear_terminal_pending',
+            base={'uid': SHAPE_UID, 'token': 'shape-token'},
+            setup=_pending_source,
+            patchers=(
+                _transaction_without_rpc,
+                lambda client: patch(
+                    'database.conversations_v3.run_preloaded_transaction_with_contention_retry',
+                    return_value=None,
+                ),
+            ),
+        ),
+        DriverEntry(
             'database.conversations_v3.load',
             base={'uid': SHAPE_UID},
-            domains={'conversation_id': [None, 'source']},
+            domains={'conversation_id': [None, 'source'], 'pending_limit': [32, 8, 1]},
             setup=_pending_source,
             patchers=(_decode,),
         ),
@@ -155,10 +193,28 @@ def entries():
             setup=_finish_source,
             patchers=(_transaction_without_rpc,),
         ),
+        DriverEntry(
+            'database.conversations_v3_live.request_named_finish',
+            base={'uid': SHAPE_UID, 'now': FROZEN_NOW},
+            domains={'named_id': ['source', 'window']},
+            setup=_named_finish_sources,
+            patchers=(_transaction_without_rpc,),
+        ),
+        CoveredByEntry(
+            'database.conversations_v3_live._live_window_or_deleting',
+            covered_by=(
+                'database.conversations_v3_live.request_recording_finish',
+                'database.conversations_v3_live.request_named_finish',
+            ),
+            reason='Both recording-scoped Finish transactions run the same live-window recheck before any write.',
+        ),
         CoveredByEntry(
             'database.conversations_v3_live._recent_finish_sources',
-            covered_by=('database.conversations_v3_live.request_recording_finish',),
-            reason='The Finish transaction scans the same bounded source query on every call.',
+            covered_by=(
+                'database.conversations_v3_live.request_recording_finish',
+                'database.conversations_v3_live.request_named_finish',
+            ),
+            reason='Both recording-scoped Finish transactions scan the same bounded source query.',
         ),
         DriverEntry(
             'database.conversations_v3.merge_donors_have_tasks',

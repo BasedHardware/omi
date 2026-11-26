@@ -133,6 +133,12 @@ measures skipped and written rows by caller. `omi_conversations_v3_reconcile_bil
 measures confirmed builder writes, including leases and Home feed writes. Downstream notes
 processing has separate write attribution.
 
+`CONVERSATIONS_V3_SETTLE_ON_LANDING` defaults to on. Live stretch cohesion at the default
+timing settles from the later of recorded speech end and `v3_speech_landed_at`, so a late
+batch of short topics joins its sit-down instead of locking on arrival. Set it to `off` to
+restore the recorded clock at the default timing; custom timing always uses landing. See the
+[short-topic sit-down change note](./listen_pusher_pipeline/changes/2026-11-25-v3-short-topic-sitdown.md).
+
 `POST /v1/conversations-v3/reconcile` returns HTTP 409 with
 `{"status":"retry","reason":"dependency_warming"}` for exhausted Firestore contention,
 expiry, or retry deadlines. Confirmed processing fences use `persistence_fenced` in the
@@ -510,7 +516,12 @@ can suppress at most the batch-admitted 25%. This knob does not expand batch
 admission itself. The rollout lead owns mobile cohort expansion and deployment.
 
 `SYNC_RECORD_COVERAGE_WAIT_MEMO` defaults `true`; set `false` to bypass memo reads
-and writes and restore full WAL coverage checks on each admission.
+and writes, including entries already cached, and restore full WAL coverage
+checks on each admission. `SYNC_RECORD_COVERAGE_WAIT_TTL_SECONDS` defaults to
+21,600 and is bounded to 30–21,600 seconds. It applies at insertion. Hits never
+extend the expiry. `SYNC_RECORD_COVERAGE_WAIT_RETRY_AFTER_SECONDS` defaults to
+1,800 and is bounded to 30–1,800 seconds. It sets the JSON body hint for coverage
+memo hits only. Unset or malformed values use the defaults.
 
 Web uses `SERVER_BATCH_ONLY_WEB_PERCENT` (default 0), a separate salted owner
 cohort keyed on authenticated `client_platform=web`; persisted source may be

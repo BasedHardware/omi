@@ -1,0 +1,19 @@
+{
+  "version": 1,
+  "images": [
+    {
+      "file": "001-mobile-android-open-conversation-live-words-before.png",
+      "platform": "mobile-android",
+      "description": "Open conversation, Transcript tab, on main: the live words sit under a Just now, on this phone heading and start 16 pt right of the transcript line. Widget-test render; the test engine draws the stored transcript text as blocks.",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "002-mobile-android-open-conversation-live-words-after.png",
+      "platform": "mobile-android",
+      "description": "The same screen with this change: no heading, and the live words start at the transcript's left edge. Widget-test render; the test engine draws the stored transcript text as blocks.",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    }
+  ]
+}

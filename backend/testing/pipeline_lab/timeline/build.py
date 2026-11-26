@@ -67,6 +67,22 @@ class AudioEntry:
         return max(0.0, (self.end - self.start).total_seconds())
 
 
+# Every baseline field build_day_timeline reads (lane rules, times, discard flag). Keep in step with LANE_RULES:
+# the ingest stages key on these fields of the rows, so a transcript edit keeps them cached (lanes/plugin.py).
+TIMELINE_ROW_FIELDS = (
+    'id',
+    'started_at',
+    'finished_at',
+    'discarded',
+    'record_lane_owner',
+    'server_batch_audio_start',
+    'server_batch_audio_end',
+    'sync_live_target',
+    'sync_merged_from',
+    'source',
+)
+
+
 def classify_lane(row: dict) -> dict:
     for predicate, lane, evidence in LANE_RULES:
         try:
