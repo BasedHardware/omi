@@ -170,7 +170,7 @@ async def test_short_on_open_does_not_store_empty_outline_as_fresh(monkeypatch):
         'id': 'c',
         'v3_derived': True,
         'kind': 'conversation',
-        'transcript_segments': [{'text': 'word ' * 299}],
+        'transcript_segments': [{'text': 'word ' * 149}],
         'structured': {'sections': [{'heading': 'Plan', 'body_markdown': ''}]},
     }
     assert await summary.prepare('u', row) is None
@@ -201,7 +201,7 @@ def test_v3_short_path_obeys_content_minimum(monkeypatch):
 
 @pytest.mark.parametrize(
     'words,covered,expect_short',
-    [(19, False, False), (20, False, True), (299, False, True), (300, True, False), (599, True, False)],
+    [(19, False, False), (20, False, True), (149, False, True), (150, True, False), (599, True, False)],
 )
 @pytest.mark.parametrize('word', ['speech ', '界', 'あ'])
 def test_short_threshold_and_covered_summary(monkeypatch, word, words, covered, expect_short):
@@ -231,7 +231,7 @@ def test_short_threshold_and_covered_summary(monkeypatch, word, words, covered, 
     assert discarded is (words < 20)
     assert bool(calls) is expect_short
     assert structured.sections[0].body_markdown == 'Real notes.'
-    assert summary.summary_eligible(row.model_dump()) is (words >= 300)
+    assert summary.summary_eligible(row.model_dump()) is (words >= 150)
 
 
 @pytest.mark.asyncio
@@ -621,6 +621,7 @@ async def test_cancelled_builder_keeps_lease_until_paid_outline_exits(monkeypatc
     monkeypatch.setattr(service.store, 'save_outline', lambda *a: None)
     monkeypatch.setattr(service.store, 'adoptable', lambda *a: {})
     monkeypatch.setattr(service.store, 'backoff_state', lambda *a: (None, None))
+    monkeypatch.setattr(service.store, 'clear_terminal_pending', lambda *a: None)
     monkeypatch.setattr(service.models, 'outline', model)
     task = asyncio.create_task(service.reconcile('u'))
     try:

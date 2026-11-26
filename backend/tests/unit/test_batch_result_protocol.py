@@ -136,10 +136,7 @@ NON_INTAKE_VERSION_FIELDS = {
 }
 
 
-def _stamp_calls(source):
-    if 'result_protocol' not in source:
-        return []
-    tree = ast.parse(source)
+def _stamp_calls(tree):
     names = {
         alias.asname or alias.name
         for node in ast.walk(tree)
@@ -179,9 +176,9 @@ def _stamp_calls(source):
     return calls
 
 
-def _version_declarations(source):
+def _version_declarations(tree):
     declarations = set()
-    for node in ast.walk(ast.parse(source)):
+    for node in ast.walk(tree):
         keys = []
         if isinstance(node, ast.keyword):
             if node.arg:
@@ -200,14 +197,10 @@ def _version_declarations(source):
     return {name for name in declarations if name.endswith('_version')}
 
 
-def test_no_intake_marker_declaration_bypasses_the_registry():
+@pytest.fixture(scope='module')
+def intake_marker_declarations():
     backend = Path(__file__).resolve().parents[2]
-    expected = {
-        ('database/batch_pipeline_intake.py', 'admit.commit', 'source_reuse_version'),
-        ('database/batch_pipeline_source_reuse.py', 'enqueue_alias', 'source_alias_version'),
-        ('database/batch_pipeline_source_fallback.py', 'enqueue', 'source_reuse_version'),
-    }
-    observed = set()
+    declarations = {}
     # Discover protocol/job writers across both layers, including future modules.
     # The cheap text prefilter avoids parsing unrelated account-domain sources.
     for directory in ('database', 'utils/batch_pipeline'):
@@ -219,11 +212,25 @@ def test_no_intake_marker_declaration_bypasses_the_registry():
             ):
                 continue
             relative = path.relative_to(backend).as_posix()
-            allowed = {'protocol_version', *SOURCE_MARKERS, *NON_INTAKE_VERSION_FIELDS.get(relative, set())}
-            assert _version_declarations(source) <= allowed, relative
-            for function, marker in _stamp_calls(source):
-                assert marker in SOURCE_MARKERS, (relative, function, marker)
-                observed.add((relative, function, marker))
+            tree = ast.parse(source)
+            calls = _stamp_calls(tree) if 'result_protocol' in source else []
+            declarations[relative] = (_version_declarations(tree), calls)
+    return declarations
+
+
+def test_no_intake_marker_declaration_bypasses_the_registry(intake_marker_declarations):
+    expected = {
+        ('database/batch_pipeline_intake.py', 'admit.commit', 'source_reuse_version'),
+        ('database/batch_pipeline_source_reuse.py', 'enqueue_alias', 'source_alias_version'),
+        ('database/batch_pipeline_source_fallback.py', 'enqueue', 'source_reuse_version'),
+    }
+    observed = set()
+    for relative, (versions, calls) in intake_marker_declarations.items():
+        allowed = {'protocol_version', *SOURCE_MARKERS, *NON_INTAKE_VERSION_FIELDS.get(relative, set())}
+        assert versions <= allowed, relative
+        for function, marker in calls:
+            assert marker in SOURCE_MARKERS, (relative, function, marker)
+            observed.add((relative, function, marker))
     assert expected <= observed
     assert {call for call in observed if call[:2] in {entry[:2] for entry in expected}} == expected
 
@@ -238,7 +245,7 @@ def test_no_intake_marker_declaration_bypasses_the_registry():
     ],
 )
 def test_new_or_computed_producer_marker_cannot_escape_completeness_guard(source):
-    assert not _version_declarations(source) <= {'protocol_version', *SOURCE_MARKERS}
+    assert not _version_declarations(ast.parse(source)) <= {'protocol_version', *SOURCE_MARKERS}
 
 
 def test_new_canonical_intake_survives_scheduler_and_copies_registered_requirements():
@@ -355,7 +362,7 @@ def test_historical_dual_alias_envelope_requires_bound_dormant_slot(section, def
 @pytest.mark.parametrize('marker', ["'wrong_marker'", "'future_version'", 'computed_marker'])
 def test_stamp_positional_marker_arguments_are_checked(marker):
     source = "from utils.batch_pipeline.result_protocol import stamp as mark\n" + f"mark(job, {marker})"
-    assert any(name not in SOURCE_MARKERS for _, name in _stamp_calls(source))
+    assert any(name not in SOURCE_MARKERS for _, name in _stamp_calls(ast.parse(source)))
 
 
 def test_stamping_a_legacy_second_marker_retains_all_known_and_unknown_requirements():

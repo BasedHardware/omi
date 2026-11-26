@@ -181,6 +181,7 @@ Start by exploring the repository structure."""
             }]
 
             iteration = 0
+            completed = False
             while iteration < max_iterations:
                 iteration += 1
                 logger.info(f"Iteration {iteration}/{max_iterations}")
@@ -198,10 +199,11 @@ Start by exploring the repository structure."""
                 # Check if Claude is done
                 if response.stop_reason == "end_turn":
                     # Check if Claude said implementation is complete
-                    for block in response.content:
-                        if hasattr(block, 'text') and 'IMPLEMENTATION_COMPLETE' in block.text:
-                            logger.info("Claude finished implementation")
-                            break
+                    completed = any(
+                        'IMPLEMENTATION_COMPLETE' in (getattr(block, 'text', None) or '') for block in response.content
+                    )
+                    if completed:
+                        logger.info("Claude finished implementation")
                     break
 
                 # Process tool calls
@@ -241,6 +243,12 @@ Start by exploring the repository structure."""
                 else:
                     # Unexpected stop reason
                     break
+
+            if not completed:
+                return {
+                    'success': False,
+                    'message': 'Claude did not report IMPLEMENTATION_COMPLETE; nothing was committed or pushed',
+                }
 
             # Stage and commit all changes
             logger.info("Staging changes...")

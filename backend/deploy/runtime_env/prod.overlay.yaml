@@ -48,6 +48,9 @@ overlay:
       values_file: backend/charts/parakeet/prod_omi_parakeet_lid_values.yaml
     backend-listen:
       env:
+        CONVERSATION_PARKED_TERMINAL_STATUS_ENABLED:
+          value: 'off'
+          category: rollout
         # Unlimited backfill day cap (retryable 503 backfill_capacity until the next UTC day; David 2026-11-18,
         # support-packet decision 13). Listen also admits sync backfill uploads (/v2/sync-local-files), so this
         # pin leaves listen admission uncapped exactly as it is today: serving image 44d0a4f runs it 'false'.
@@ -335,6 +338,9 @@ overlay:
           category: rollout
     pusher:
       env:
+        CONVERSATION_PARKED_TERMINAL_STATUS_ENABLED:
+          value: 'off'
+          category: rollout
         # The conversations v3 reconcile dispatch (utils/conversations/v3/triggers.py) runs on the
         # recording writes pusher makes. Without this binding each enqueue raised RuntimeError and the
         # owner waited for the 5-minute sweeper (rows pending 10+ minutes). HANDLER_URL/INVOKER_SA come
@@ -647,6 +653,11 @@ overlay:
             secret: PLAY_ACCOUNT_ID_HMAC_KEY
             version: latest
         env:
+          CONVERSATIONS_V3_LIVE_TITLE: {value: 'on', category: ops_kill}
+          CONVERSATIONS_V3_FAST_FINISH: {value: 'on', category: ops_kill}
+          CONVERSATION_PARKED_TERMINAL_STATUS_ENABLED:
+            value: 'off'
+            category: rollout
           # Google Play Billing (Android). ANDROID_BILLING=stripe keeps new purchases on Stripe ('play' = everyone).
           # Test accounts go in the android-play-billing rollout cohort (Firestore), never here.
           ANDROID_BILLING: {value: stripe, category: rollout}
@@ -1067,6 +1078,9 @@ overlay:
             secret: DREAM_AGENT_FEEDBACK_SALT
             version: latest
         env:
+          CONVERSATION_PARKED_TERMINAL_STATUS_ENABLED:
+            value: 'off'
+            category: rollout
           # Unlimited backfill day cap, enforced only at sync upload (retryable 503 backfill_capacity until the
           # next UTC day). Rollback: 'false' in one config train (David 2026-11-18, support-packet decision 13).
           UNLIMITED_V2_BACKFILL_HOURS_CAP_ENABLED: {value: 'true', category: rollout}
@@ -1506,6 +1520,10 @@ overlay:
         - SYNC_REPROCESS_COALESCE_ENABLED
         - REPEAT_WORK_REVISION_ENABLED
         env:
+          CONVERSATIONS_V3_LIVE_TITLE: {value: 'on', category: ops_kill}
+          CONVERSATION_PARKED_TERMINAL_STATUS_ENABLED:
+            value: 'off'
+            category: rollout
           # SCA-2283: retain the behavior of the serving pre-flag image until custody admission.
           BATCH_ACCOUNT_PRIVACY_WRITER_ENABLED: {value: 'false', category: ops_kill}
           BATCH_PROJECTION_OUTBOX: {value: 'false', category: ops_kill}
@@ -1896,6 +1914,11 @@ overlay:
         - REPEAT_WORK_REVISION_ENABLED
         - HOSTED_DIARIZATION_API_URL
         env:
+          CONVERSATIONS_V3_LIVE_TITLE: {value: 'off', category: ops_kill}
+          CONVERSATIONS_V3_FAST_FINISH: {value: 'on', category: ops_kill}
+          CONVERSATION_PARKED_TERMINAL_STATUS_ENABLED:
+            value: 'off'
+            category: rollout
           # Unlimited backfill day cap, enforced only at sync upload (retryable 503 backfill_capacity until the
           # next UTC day). Rollback: 'false' in one config train (David 2026-11-18, support-packet decision 13).
           UNLIMITED_V2_BACKFILL_HOURS_CAP_ENABLED: {value: 'true', category: rollout}
@@ -2052,6 +2075,11 @@ overlay:
           BATCH_PIPELINE_PROJECTION_TIMING_ENABLED:
             value: 'true'
             category: rollout
+          # SCA-3664: carry the approved logging reductions on integration through the next deploy.
+          # Rollback: disable sampling and change-only kill-switch logging independently.
+          BATCH_PIPELINE_PROJECTION_PHASE_SAMPLE_ENABLED: {value: 'true', category: ops_kill}
+          BATCH_PIPELINE_PROJECTION_PHASE_SAMPLE_PERCENT: {value: '1', category: ops_kill}
+          BATCH_POLICY_KILL_SWITCH_LOG_ON_CHANGE_ENABLED: {value: 'true', category: ops_kill}
           BATCH_PIPELINE_API_URL:
             value: 'https://backend-sync-hhibjajaja-uc.a.run.app'
             category: service_discovery
@@ -2218,7 +2246,18 @@ overlay:
       # Ramp and rollback: docs/listen_pusher_pipeline/changes/2026-11-19-projection-pump-deploy-target.md.
       backend-projection-pump:
         derive_from: backend-integration
+        # These logging controls are carried by integration only; strip them from the inherited pump env.
+        forbidden_env:
+        - BATCH_PIPELINE_PROJECTION_PHASE_SAMPLE_ENABLED
+        - BATCH_PIPELINE_PROJECTION_PHASE_SAMPLE_PERCENT
+        - BATCH_POLICY_KILL_SWITCH_LOG_ON_CHANGE_ENABLED
         env:
+          CONVERSATIONS_V3_LIVE_TITLE: {value: 'on', category: ops_kill}
+          # The pump derives from integration; keep its own fast finish at the code default (cohort).
+          CONVERSATIONS_V3_FAST_FINISH: {value: 'cohort', category: ops_kill}
+          CONVERSATION_PARKED_TERMINAL_STATUS_ENABLED:
+            value: 'off'
+            category: rollout
           # The two custody switches (BATCH_ACCOUNT_PRIVACY_WRITER_ENABLED, BATCH_PROJECTION_OUTBOX)
           # are inherited from integration's false pins: David 2026-11-21 ~03:45Z (SCA-3318) keeps
           # both off for the pump split; enabling either is its own custody admission.

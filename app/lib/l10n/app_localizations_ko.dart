@@ -15114,9 +15114,6 @@ class AppLocalizationsKo extends AppLocalizations {
   String get stopThese => '이 유형 중지';
 
   @override
-  String get meetingActionItemsTitle => '실행 항목';
-
-  @override
   String get addToTasks => '작업에 추가';
 
   @override
@@ -15597,4 +15594,24 @@ class AppLocalizationsKo extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get playStripeBilledOnWeb => 'omi.me를 통해 청구됩니다. 여기에서 언제든 취소할 수 있습니다.';
+
+  @override
+  String get playStripeBilledOnWebShort => 'omi.me를 통해 청구됩니다.';
+
+  @override
+  String playStripePlanPaused(String plan) {
+    return '$plan 플랜이 일시 중지되었습니다.';
+  }
+
+  @override
+  String get firmwareNewestSupportedForDevice => '기기가 이미 지원되는 최신 펌웨어 버전을 사용하고 있습니다';
+
+  @override
+  String get firmwareSyncRecordingsFirstTitle => '먼저 녹음을 동기화하세요';
+
+  @override
+  String get firmwareSyncRecordingsFirstMessage => '일부 녹음이 아직 기기에 남아 있습니다. 휴대폰으로의 동기화가 완료되면 업데이트를 시작해 주세요.';
 }

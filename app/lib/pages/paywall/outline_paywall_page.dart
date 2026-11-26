@@ -96,9 +96,9 @@ class _OutlinePaywallPageState extends State<OutlinePaywallPage> with TickerProv
       if (outcome == PaywallCheckoutOutcome.failed && _notice == null) {
         setState(() => _notice = context.l10n.anErrorOccurredTryAgain);
       }
-      if (outcome == PaywallCheckoutOutcome.purchased) {
+      if (outcome == PaywallCheckoutOutcome.purchased || outcome == PaywallCheckoutOutcome.alreadyPaid) {
         _dismissed = true;
-        Navigator.of(context).pop(true);
+        Navigator.of(context).pop(outcome == PaywallCheckoutOutcome.purchased);
       }
     } finally {
       if (mounted) setState(() => _busy = false);
@@ -138,6 +138,18 @@ class _OutlinePaywallPageState extends State<OutlinePaywallPage> with TickerProv
   Widget build(BuildContext context) {
     final l10n = context.l10n;
     final top = MediaQuery.paddingOf(context).top;
+    // Paid outside Play on a Play build (the plan or Play setup arrived while open): close, nothing bought.
+    // Only while this page is the top route: a code-success sheet above it stays until Done (ModalRoute.of
+    // rebuilds this page when it is on top again).
+    if (context.select<UsageProvider, bool>((usage) => usage.paywallClosedForPlay) &&
+        !_dismissed &&
+        ModalRoute.of(context)?.isCurrent == true) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted || _dismissed || ModalRoute.of(context)?.isCurrent != true) return;
+        _dismissed = true;
+        Navigator.of(context).pop(false);
+      });
+    }
     return PopScope(
       canPop: false,
       onPopInvokedWithResult: (didPop, _) {

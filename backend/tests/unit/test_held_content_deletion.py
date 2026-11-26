@@ -143,8 +143,8 @@ def test_account_wipe_enumerates_custody_and_choice_subcollections_even_without_
     retirements = []
     monkeypatch.setattr(
         user_data_deletion,
-        'stop_quiet_checks_for_account',
-        lambda uid, **kwargs: retirements.append((uid, kwargs['firestore_client'])),
+        'purge_finalization_jobs',
+        lambda uid, client: retirements.append((uid, client)),
     )
     assert user_data_deletion.purge_user_subtree('synthetic', client, recursive)['status'] == 'ok'
     assert retirements == [('synthetic', client)]

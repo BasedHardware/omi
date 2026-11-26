@@ -8,6 +8,7 @@ import 'package:omi/backend/http/api/sync_upload_refusal.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/services/wals/sync_rate_limiter.dart';
 import 'package:omi/services/wals/sync_upload_gate.dart';
+import 'package:omi/utils/reliability_experiments.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 SyncRateLimiter get limiter => SyncRateLimiter.instance;
@@ -88,6 +89,63 @@ void main() {
     limiter.markDispatchHoldLimited(retryAfterSeconds: 60);
     expect(limiter.activeRetryAfterSeconds, 60);
   });
+
+  for (final on in [false, true]) {
+    test(
+        on
+            ? 'keep_cooldown_after_upload on: upload success preserves a receipt poll cooldown installed while sending'
+            : 'keep_cooldown_after_upload off (baseline): upload success clears a non-edge cooldown installed while sending',
+        () async {
+      ReliabilityExperiments.overrideForTesting(on ? {'keep_cooldown_after_upload'} : {});
+      addTearDown(() => ReliabilityExperiments.overrideForTesting(null));
+      final gate = SyncUploadGate(
+        limiter: limiter,
+        fairUseStatusLoader: () async => null,
+        uploader: (files,
+            {onUploadProgress,
+            conversationId,
+            captureEvidence,
+            recordingSessionId,
+            audioStartSeconds,
+            audioEndSeconds,
+            claimLiveCapture = false,
+            geolocation}) async {
+          limiter.markLimited(retryAfterSeconds: 60, reason: RateLimitReason.backendBusy);
+          return UploadFilesResult.queued('accepted');
+        },
+      );
+      expect((await gate.upload([])).jobId, 'accepted');
+      expect(limiter.isLimited, on);
+      expect(limiter.reason, on ? RateLimitReason.backendBusy : isNull);
+      limiter.clear();
+    });
+
+    test(
+        'keep_cooldown_after_upload ${on ? 'on' : 'off (baseline)'}: an edge throttle installed while sending survives',
+        () async {
+      ReliabilityExperiments.overrideForTesting(on ? {'keep_cooldown_after_upload'} : {});
+      addTearDown(() => ReliabilityExperiments.overrideForTesting(null));
+      final gate = SyncUploadGate(
+        limiter: limiter,
+        fairUseStatusLoader: () async => null,
+        uploader: (files,
+            {onUploadProgress,
+            conversationId,
+            captureEvidence,
+            recordingSessionId,
+            audioStartSeconds,
+            audioEndSeconds,
+            claimLiveCapture = false,
+            geolocation}) async {
+          limiter.markLimited(retryAfterSeconds: 60, reason: RateLimitReason.edgeThrottle);
+          return UploadFilesResult.queued('accepted');
+        },
+      );
+      expect((await gate.upload([])).jobId, 'accepted');
+      expect(limiter.reason, RateLimitReason.edgeThrottle);
+      limiter.clear();
+    });
+  }
 
   test('stale persisted fair-use cooldown self-heals before upload', () async {
     SharedPreferencesUtil().saveInt('syncRateLimitedUntilMs', DateTime.now().millisecondsSinceEpoch - 1000);

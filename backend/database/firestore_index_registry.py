@@ -48,6 +48,12 @@ INDEX_ONLY_REQUIREMENTS = (
         (_asc('age_gate_parked'), _desc('deferred_since'), _desc('__name__')),
     ),
     FirestoreIndexRequirement(
+        'conversations_v3_home_list_visible_page',
+        'conversations',
+        'COLLECTION',
+        (_asc('discarded'), _asc('status'), _asc('home_list_visible'), _desc('created_at'), _desc('__name__')),
+    ),
+    FirestoreIndexRequirement(
         'conversations_v3_pending_capture_continuation',
         'conversations',
         'COLLECTION',

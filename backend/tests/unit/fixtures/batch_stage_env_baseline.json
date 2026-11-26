@@ -237,6 +237,13 @@
       "name": "FIRESTORE_EMULATOR_HOST",
       "count": 1,
       "why": "Moved, not new: relocated by lane 9 C2 (#22431); same reads as before."
+    },
+    {
+      "path": "utils/batch_pipeline/commit_wake_sender.py",
+      "function": "sender_from_env",
+      "name": "BATCH_PIPELINE_SHADOW_RECOVERY_API_URL",
+      "count": 1,
+      "why": "Presence check of the worker's existing serving target (read as compute_client.shadow_from_env reads it), not stage policy: without a target the commit-wake hook is not installed."
     }
   ]
 }

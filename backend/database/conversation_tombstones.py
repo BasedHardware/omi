@@ -7,12 +7,18 @@ from typing import Any, Iterator, List, Optional, Tuple
 
 from google.api_core.exceptions import AlreadyExists, NotFound
 
+from config.parked_conversations import parked_terminal_status_enabled
 from database._client import db
 from database.fsr_read_cache import cache_writer
 from database import privacy_check_metrics as metrics
 from database.privacy_negative_cache import decide
 
 COLLECTION = 'deleted_conversations'
+
+
+class ConversationDeleteTargetChanged(RuntimeError):
+    """The conversation disappeared after the delete request observed it."""
+
 
 _DEFERRED_BATCH_PURGES: ContextVar[Optional[Tuple[str, List[str]]]] = ContextVar(
     'deferred_conversation_batch_purges', default=None
@@ -66,6 +72,7 @@ def accept_deletion(
     firestore_client: Any = None,
     legal_hold_deferred: bool = False,
     arm_erasure: bool = True,
+    expected_exists: bool = False,
 ) -> None:
     """Accept a delete without the account gate: hide it now, owe its erasure durably.
 
@@ -82,6 +89,8 @@ def accept_deletion(
     rejected. The tombstone records it so release can account for it. With
     ``arm_erasure=False`` (a non-cascade delete) no cascade obligation is
     armed, because the runner's erasure is a cascade the user did not ask for.
+    ``expected_exists`` ties a prior route observation to this transaction, so
+    a concurrent backfill undo cannot turn a stale delete into a successful no-op.
     """
     from database._client import get_firestore_client
     from database.conversation_batch_purge_jobs import accept_fields, erasure_job_ref
@@ -97,8 +106,12 @@ def accept_deletion(
 
     def body(transaction):
         row_snapshot = conversation_ref.get(
-            field_paths=['external_data', 'created_at', 'deleted', 'sync_merged_from'], transaction=transaction
+            field_paths=['external_data', 'created_at', 'deleted', 'sync_merged_from', 'status'],
+            transaction=transaction,
         )
+        # If undo removed a row this request already observed, do not acknowledge a tombstone-only delete.
+        if expected_exists and not row_snapshot.exists:
+            raise ConversationDeleteTargetChanged(conversation_id)
         tombstone = tombstone_ref.get(transaction=transaction)
         tombstone_exists = tombstone.exists
         owed = obligation_ref.get(transaction=transaction) if arm_erasure else None
@@ -126,8 +139,12 @@ def accept_deletion(
             armed = existing.get('erasure_armed') is True or arm_erasure or prior_owed
             if existing.get('legal_hold_deferred') is not True or existing.get('erasure_armed') is not armed:
                 transaction.update(tombstone_ref, {'legal_hold_deferred': True, 'erasure_armed': armed})
-        if row_snapshot.exists and not row.get('deleted'):
-            transaction.update(conversation_ref, {'deleted': True})
+        if row_snapshot.exists:
+            updates: dict[str, str | bool] = {} if row.get('deleted') else {'deleted': True}
+            if row.get('status') == 'processing' and parked_terminal_status_enabled():
+                updates['status'] = 'completed'
+            if updates:
+                transaction.update(conversation_ref, updates)
         if owed is None:
             return
         owed_fields = accept_fields(uid, conversation_id, audio_source_ids=sources)
@@ -162,21 +179,46 @@ def _in_transaction(client: Any, body: Any) -> Any:
 
 
 @cache_writer('tombstone_negative_cache')
-def record_deletion(uid: str, conversation_id: str) -> None:
+def record_deletion(uid: str, conversation_id: str, *, expected_exists: bool = False) -> None:
     user = db.collection('users').document(uid)
-    row = user.collection('conversations').document(conversation_id).get().to_dict() or {}
+    conversation_ref = user.collection('conversations').document(conversation_id)
     tombstone_ref = user.collection(COLLECTION).document(conversation_id)
-    tombstone = _tombstone_payload(conversation_id, row)
     deferred = _DEFERRED_BATCH_PURGES.get()
     deferred = deferred if deferred is not None and deferred[0] == uid else None
-    if deferred is not None:
+    tombstone_payload = None
+    if expected_exists:
+        from database.conversation_batch_purge_jobs import arm_fields, job_ref
+
+        obligation_ref = job_ref(db, uid, conversation_id) if deferred is not None else None
+
+        def body(transaction):
+            row_snapshot = conversation_ref.get(transaction=transaction)
+            if not row_snapshot.exists:
+                raise ConversationDeleteTargetChanged(conversation_id)
+            tombstone = tombstone_ref.get(transaction=transaction)
+            row = row_snapshot.to_dict() or {}
+            if obligation_ref is not None:
+                obligation_ref.get(transaction=transaction)
+            if not tombstone.exists:
+                transaction.create(tombstone_ref, _tombstone_payload(conversation_id, row))
+            if obligation_ref is not None:
+                transaction.set(obligation_ref, arm_fields(uid, conversation_id), merge=True)
+            return row
+
+        row = _in_transaction(db, body)
+        if deferred is not None and conversation_id not in deferred[1]:
+            deferred[1].append(conversation_id)
+    else:
+        row = conversation_ref.get().to_dict() or {}
+        tombstone_payload = _tombstone_payload(conversation_id, row)
+    if deferred is not None and tombstone_payload is not None:
         from database.conversation_batch_purge_jobs import arm_fields, job_ref
 
         # The obligation commits with the intent, before any fallible cleanup.
         obligation = (job_ref(db, uid, conversation_id), arm_fields(uid, conversation_id))
         try:
             batch = db.batch()
-            batch.create(tombstone_ref, tombstone)
+            batch.create(tombstone_ref, tombstone_payload)
             batch.set(*obligation, merge=True)
             batch.commit()
         except AlreadyExists:
@@ -184,9 +226,9 @@ def record_deletion(uid: str, conversation_id: str) -> None:
             obligation[0].set(obligation[1], merge=True)
         if conversation_id not in deferred[1]:
             deferred[1].append(conversation_id)
-    else:
+    elif deferred is None and tombstone_payload is not None:
         try:
-            tombstone_ref.create(tombstone)
+            tombstone_ref.create(tombstone_payload)
         except AlreadyExists:
             # A retried delete after hard cleanup must preserve the original binding.
             pass

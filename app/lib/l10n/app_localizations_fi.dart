@@ -15341,9 +15341,6 @@ class AppLocalizationsFi extends AppLocalizations {
   String get stopThese => 'Lopeta nämä';
 
   @override
-  String get meetingActionItemsTitle => 'Toimenpiteet';
-
-  @override
   String get addToTasks => 'Lisää tehtäviin';
 
   @override
@@ -15829,4 +15826,25 @@ class AppLocalizationsFi extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get playStripeBilledOnWeb => 'Laskutetaan omi.me-palvelun kautta. Peru täällä milloin tahansa.';
+
+  @override
+  String get playStripeBilledOnWebShort => 'Laskutetaan omi.me-palvelun kautta.';
+
+  @override
+  String playStripePlanPaused(String plan) {
+    return '$plan-tilauksesi on keskeytetty.';
+  }
+
+  @override
+  String get firmwareNewestSupportedForDevice => 'Laiteellasi on jo uusin tuettu laiteohjelmistoversio';
+
+  @override
+  String get firmwareSyncRecordingsFirstTitle => 'Synkronoi nauhoituksesi ensin';
+
+  @override
+  String get firmwareSyncRecordingsFirstMessage =>
+      'Osaa nauhoituksista on vielä laitteella. Anna niiden synkronoitua puhelimeen loppuun ja käynnistä sitten päivitys.';
 }

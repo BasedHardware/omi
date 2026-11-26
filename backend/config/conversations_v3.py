@@ -2,6 +2,7 @@
 
 import os
 
+from config.refactor_modes import default_on
 from config.rollout_cohorts import in_rollout_cohort, parse_cohort, valid_uid
 from utils.conversations.v3 import client_capability
 from utils.episodes import client_gate
@@ -22,6 +23,22 @@ def conversations_v3_enabled(uid: str) -> bool:
     if stage == 'all' and client_capability.capable_cached(uid):
         return True
     return in_rollout_cohort(uid, 'conversations-v3')
+
+
+def skip_unchanged_writes_enabled() -> bool:
+    return default_on('CONVERSATIONS_V3_SKIP_UNCHANGED_WRITES')
+
+
+def bounded_pending_enabled() -> bool:
+    return default_on('CONVERSATIONS_V3_BOUNDED_PENDING')
+
+
+def transcript_size_cap_enabled() -> bool:
+    return default_on('CONVERSATIONS_V3_TRANSCRIPT_SIZE_CAP')
+
+
+def finish_no_pointer_enabled() -> bool:
+    return os.getenv('CONVERSATIONS_V3_FINISH_NO_POINTER', 'on').strip().lower() not in {'off', 'false', '0', 'no'}
 
 
 def live_recap_enabled(uid: str) -> bool:
@@ -73,13 +90,31 @@ def manual_end_home_visible_enabled() -> bool:
     }
 
 
+def capture_continuity_enabled() -> bool:
+    """Default on. A stream gap inside one capture origin is not silence, and a manual-end cut waits
+    (bounded) for the batch transcript of its own or a preceding sealed recording. Off restores the
+    previous cut and gap rules and skips the predecessor read."""
+    return os.getenv('CONVERSATIONS_V3_CAPTURE_CONTINUITY', 'on').strip().lower() not in {
+        'off',
+        'false',
+        '0',
+        'no',
+    }
+
+
 def stretch_cohesion_enabled() -> bool:
     return os.getenv('CONVERSATIONS_V3_STRETCH_COHESION', 'on').strip().lower() not in {'off', 'false', '0', 'no'}
 
 
+def settle_on_landing_enabled(*, custom_timing: bool, cohesion: bool, derive: bool) -> bool:
+    return custom_timing or (cohesion and not derive and default_on('CONVERSATIONS_V3_SETTLE_ON_LANDING'))
+
+
 DEFAULT_BOUNDARY_SECONDS = 300
+DEFAULT_MAX_WINDOW_SECONDS = 10800
 HISTORICAL_SITDOWN_TIMING = (900, 3600)
-# Stamped by the transaction that makes new recording speech visible; custom lock timing counts from it.
+# Stamped by the transaction that makes new recording speech visible. Live stretch cohesion settles from it
+# (default timing under CONVERSATIONS_V3_SETTLE_ON_LANDING, custom timing always).
 SPEECH_LANDED_FIELD = 'v3_speech_landed_at'
 
 
@@ -98,6 +133,17 @@ def boundary_seconds(*, cohesion: bool) -> tuple[int, int]:
         _boundary_seconds('CONVERSATIONS_V3_SILENCE_GAP_SECONDS', 1800),
         _boundary_seconds('CONVERSATIONS_V3_LOCK_SECONDS', 3600),
     )
+
+
+def max_window_seconds() -> int:
+    raw = os.getenv('CONVERSATIONS_V3_MAX_WINDOW_SECONDS', '').strip().lower()
+    if raw == 'off':
+        return 0
+    try:
+        value = int(raw)
+    except ValueError:
+        return DEFAULT_MAX_WINDOW_SECONDS
+    return value if value == 0 or 120 <= value <= DEFAULT_MAX_WINDOW_SECONDS else DEFAULT_MAX_WINDOW_SECONDS
 
 
 def backfill_enabled() -> bool:

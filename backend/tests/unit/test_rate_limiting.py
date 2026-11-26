@@ -58,6 +58,7 @@ def _rate_limit_stubs():
 
     redis_pkg = ModuleType("redis")
     redis_pkg.Redis = MagicMock
+    redis_pkg.RedisError = _RedisError
     redis_exceptions = ModuleType("redis.exceptions")
     redis_exceptions.RedisError = _RedisError
     redis_pkg.exceptions = redis_exceptions

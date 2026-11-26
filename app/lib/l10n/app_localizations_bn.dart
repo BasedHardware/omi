@@ -15331,9 +15331,6 @@ class AppLocalizationsBn extends AppLocalizations {
   String get stopThese => 'এগুলো বন্ধ করুন';
 
   @override
-  String get meetingActionItemsTitle => 'করণীয় বিষয়';
-
-  @override
   String get addToTasks => 'টাস্কে যোগ করুন';
 
   @override
@@ -15818,4 +15815,26 @@ class AppLocalizationsBn extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get playStripeBilledOnWeb => 'omi.me-এর মাধ্যমে বিল করা হয়। যেকোনো সময় এখান থেকে বাতিল করুন।';
+
+  @override
+  String get playStripeBilledOnWebShort => 'omi.me-এর মাধ্যমে বিল করা হয়।';
+
+  @override
+  String playStripePlanPaused(String plan) {
+    return 'আপনার $plan প্ল্যান বিরতিতে আছে।';
+  }
+
+  @override
+  String get firmwareNewestSupportedForDevice =>
+      'আপনার ডিভাইস ইতিমধ্যেই ফার্মওয়্যারের সর্বশেষ সমর্থিত সংস্করণে রয়েছে';
+
+  @override
+  String get firmwareSyncRecordingsFirstTitle => 'প্রথমে আপনার রেকর্ডিং সিঙ্ক করুন';
+
+  @override
+  String get firmwareSyncRecordingsFirstMessage =>
+      'কিছু রেকর্ডিং এখনও আপনার ডিভাইসে রয়েছে। সেগুলিকে আপনার ফোনে সিঙ্ক শেষ হতে দিন, তারপর আপডেট শুরু করুন।';
 }

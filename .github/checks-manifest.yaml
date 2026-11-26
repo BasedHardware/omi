@@ -4,6 +4,11 @@
 # Checks that consume PR metadata declare `requires_pr_body: true`; post-merge
 # push runs exclude only that category because no authoritative PR body is available.
 checks:
+  - id: notifications-job-image-only-tests
+    command: ["python3", ".github/scripts/test_notifications_job_image_only.py"]
+    triggers: ["backend/scripts/notifications_job_image_only*.py", "backend/scripts/render_backend_runtime_env.py", "backend/scripts/verify-llm-gateway-serving.py", "backend/deploy/runtime_env.yaml", "backend/deploy/runtime_env/**", ".github/scripts/test_notifications_job_image_only.py", ".github/workflows/gcp_notifications_job.yml", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "SCA-4008: prove the prod notifications image-only path rejects stale writes and preserves the rest of the job"
   - id: worker-image-only-tests
     command: ["python3", ".github/scripts/test_worker_image_only.py"]
     triggers: [".github/scripts/worker_image_only.py", ".github/scripts/test_worker_image_only.py", ".github/workflows/gcp_diarizer.yml", ".github/checks-manifest.yaml", "backend/charts/batch-pipeline-worker/**"]
@@ -1811,6 +1816,11 @@ checks:
     triggers: ["plugins/uber_call/**", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "the backend forwards geolocation as free-form JSON, so pydantic does not coerce the values inside it; a coordinate arriving as a list or object reached float(), which raises TypeError rather than the ValueError call_uber handles, so the documented 400 for a bad geolocation became an unhandled 500"
+  - id: github-app-agentic-completion-tests
+    command: ["python3", "plugins/omi-github-app/test_claude_code_agentic.py"]
+    triggers: ["plugins/omi-github-app/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "#25955: the agentic runner discarded the IMPLEMENTATION_COMPLETE check, so a run that ended unfinished or hit the iteration cap committed and pushed the partial tree as success"
   - id: github-app-client-tests
     command: ["python3", "plugins/omi-github-app/test_github_client.py"]
     triggers: ["plugins/omi-github-app/**", ".github/checks-manifest.yaml"]
@@ -2092,6 +2102,8 @@ checks:
     lanes: ["local", "ci"]
     reason: "the MCP tools page hand-paraphrased all 26 advertised tools and had already lagged the registry (missing fields/summary_only/cursor/timezone parameters on conversation and screen-activity tools); the tool inventory (name, description, scope) is now generated from TOOL_SPECS so an undocumented new tool fails the drift check"
 exempt:
+  - path: "backend/scripts/check_cloud_run_env_drift.py"
+    reason: "named only in backend-emulator-proofs.yml's path filter (a proof imports it, #26303); no workflow invokes it as a check"
   - path: ".github/scripts/check-desktop-beta-freshness.py"
     reason: "hourly doctor job hits the public beta appcast; behavioral coverage is desktop-beta-freshness-tests"
   - path: ".github/scripts/check-desktop-prod-promotion-policy.py"

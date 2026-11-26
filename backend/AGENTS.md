@@ -249,10 +249,11 @@ Live suites record `NOT_RUN` when credentials/backend are unavailable — never 
 
 Before a PR, exercise the endpoint:
 
-1. **Serve locally**: `./scripts/dev-serve.sh` (per-worktree port) or `uvicorn main:app --port 8080`. No GCP credentials? Use the offline harness — `PROVIDER_MODE=offline make dev-up` from the repo root (fake providers, no external services).
+1. **Serve locally**: `./scripts/dev-serve.sh` (per-worktree port) or `uvicorn main:app --port 8080`. No GCP credentials? Use the offline harness — `PROVIDER_MODE=offline make dev-up` from the repo root (fake providers).
 2. **Authenticate without a client**: set `ADMIN_KEY` in `.env`, then call endpoints as any uid with `Authorization: Bearer <ADMIN_KEY><uid>` (the key concatenated with the uid).
 3. **Hit the changed endpoints** with curl and read the server logs — verify the behavior changed as intended, not just that the route returns 200.
 4. **Record the commands and output** in the PR description (root `AGENTS.md` → Definition of Done).
+5. **Capture, Finish, v3, Home**: run `python -m testing.pipeline_lab affected` and its scenarios (`testing/pipeline_lab/`).
 
 ## Formatting
 
@@ -319,7 +320,7 @@ WS handlers in `transcribe.py` and `pusher.py` manage 5-11 concurrent tasks per 
 3. **Sync `requests` in async is silent poison** — no error raised, just blocks the entire event loop. All connections freeze, health checks fail, HPA can't scale.
 4. **Semaphores are event-loop-bound** — `http_client.py` handles this via `(loop_id, name)` keying. Don't create raw `asyncio.Semaphore` outside that module.
 5. **Webhook timeout = 30s** — partner integrations depend on this window. Don't change `httpx.Timeout(30.0, connect=2.0)`.
-6. **Sync WAL codec is filename-driven** — `decode_files_to_wav` routes on the filename codec token (`utils/sync/files.py`): `_pcm16_`/`_pcm8_` → PCM decoder, otherwise opus. PCM is fully supported; the real gotcha is a mislabeled/missing codec token silently decodes as the wrong codec (garbage audio, still HTTP 200) — name the codec correctly in the filename
+6. **Sync WAL codec is filename-driven** — `decode_files_to_wav` routes on the filename codec token (`utils/sync/files.py`): `_pcm16_`/`_pcm8_` → PCM decoder, otherwise opus. a mislabeled or missing token silently decodes as the wrong codec (garbage audio, still HTTP 200)
 7. **Firestore collection group queries** need explicit indexes — 500 with no useful error
 8. **Mutable WebSocket state races** — snapshot `nonlocal` variables before spawning async work
 9. **Silent fire-and-forget drops** — functions gating on connection state must log when dropping work

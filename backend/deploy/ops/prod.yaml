@@ -38,7 +38,7 @@ region: us-central1
 # live_only.yaml instead; they belong in runtime_env.
 cloud_run:
   backend:
-    memory: 3Gi
+    memory: 4Gi
     env:
       # live-only, 2026-10-20 inventory
       AUDIO_MERGE_DISPATCH_MODE: cloud_tasks
@@ -54,7 +54,7 @@ cloud_run:
       OMI_LANGSMITH_PROMPT_CACHE_TTL_SECONDS: '3600'
       TYPESENSE_HOST_PORT: '443'
   backend-sync:
-    memory: 3Gi
+    memory: 6Gi
     env:
       # 10-18 18:59Z stall: sync-jobs went into Cloud Tasks system backoff after
       # fast 500s. Root fix is the 409 retry contract (#22371).

@@ -8,6 +8,8 @@ so deployed code must not assume real bucket semantics
 """
 
 from utils.other.private_sync_get_metrics import Reader, object_get_reader
+from config.refactor_modes import default_on
+from utils.other.gcs_read_reuse import ReadMemo
 from utils.observability.sync_phases import sync_phase
 import datetime
 import base64
@@ -1188,6 +1190,7 @@ def list_audio_chunks(
     include_archive: bool = True,
     client: Any = None,
     source_metadata: bool = False,
+    raw_memo: ReadMemo | None = None,
 ) -> List[Dict[str, Any]]:
     """
     List conversation chunks; ``include_archive=False`` selects encoded inventory only.
@@ -1216,6 +1219,7 @@ def list_audio_chunks(
         blobs = chain(blobs, derived_blobs)
 
     chunks: List[Dict[str, Any]] = []
+    memo = None if include_raw or require_archive or deadline is not None else raw_memo
     for index, blob in enumerate(blobs):
         if max_count is not None and index >= max_count:
             raise TimeoutError('speaker audio listing budget exhausted')
@@ -1226,7 +1230,7 @@ def list_audio_chunks(
             if source_metadata and hasattr(blob, 'metadata'):
                 entry['metadata'] = blob.metadata or {}
                 entry['metageneration'] = getattr(blob, 'metageneration', None)
-            append_projection_entries(chunks, bucket, blob, uid, entry, deadline, max_count, include_raw)
+            append_projection_entries(chunks, bucket, blob, uid, entry, deadline, max_count, include_raw, memo=memo)
 
     if regional and regional != private_cloud_sync_bucket:
         chunks = list({(item['path'], item.get('raw_offset_samples')): item for item in chunks}.values())
@@ -1243,6 +1247,8 @@ def list_audio_chunks(
         max_count=max_count,
         require_archive=require_archive,
         list_raw=list_packs,
+        source_metadata=source_metadata and default_on('BATCH_SOURCE_VERIFIED_METADATA_REUSE_ENABLED'),
+        memo=raw_memo,
     )
     return finish_audio_listing(chunks, raw_chunks, source_identity)
 
@@ -1312,13 +1318,14 @@ def download_and_decode_chunk_blob(
     *,
     download_kwargs: Optional[Dict[str, Any]] = None,
     on_failure: Optional[Callable[[str], None]] = None,
+    raw_memo: ReadMemo | None = None,
 ) -> bytes | None:
     """Download one stored chunk blob (single or batch) and decode/decrypt it by extension to PCM16."""
     if path.startswith(f'raw-live/{uid}/'):
         if not audio_archive.admitted(uid, 'READ'):
             return None
         try:
-            return read_pack(bucket, path, uid, download_kwargs, sample_rate)
+            return read_pack(bucket, path, uid, download_kwargs, sample_rate, memo=raw_memo)
         except Exception:
             if on_failure:
                 on_failure('decode_failed')
@@ -1334,6 +1341,7 @@ def download_and_decode_chunk_blob(
                     uid,
                     blob.metadata,
                     sample_rate,
+                    memo=raw_memo,
                 )
                 if has_frame_receipt(blob)
                 else pcm_for_span(
@@ -1342,6 +1350,7 @@ def download_and_decode_chunk_blob(
                     path.split('/')[2],
                     span,
                     expected_sha256=(blob.metadata or {}).get('pcm_sha256'),
+                    memo=raw_memo,
                 )
             )
             if raw_pcm is not None:
@@ -1411,6 +1420,7 @@ def download_audio_chunks_and_merge(
     listed_chunks: Optional[List[Dict[str, Any]]] = None,
     chunk_loader: Optional[Callable[[str], bytes | None]] = None,
     strict_sources: bool = False,
+    raw_memo: ReadMemo | None = None,
 ) -> bytes:
     """Merge selected timestamps with main's format priority and gap semantics.
 
@@ -1420,7 +1430,10 @@ def download_audio_chunks_and_merge(
 
     bucket = _get_storage_client().bucket(private_cloud_sync_bucket)
 
-    actual_chunks = list_audio_chunks(uid, conversation_id) if listed_chunks is None else listed_chunks
+    raw_memo = ReadMemo() if raw_memo is None and chunk_loader is None else raw_memo
+    actual_chunks = (
+        list_audio_chunks(uid, conversation_id, raw_memo=raw_memo) if listed_chunks is None else listed_chunks
+    )
     if strict_sources and (
         listed_chunks is None or chunk_loader is not None or any(not c.get('generation') for c in actual_chunks)
     ):
@@ -1475,6 +1488,7 @@ def download_audio_chunks_and_merge(
             uid,
             sample_rate,
             download_kwargs={'if_generation_match': entry['generation']} if strict_sources else None,
+            raw_memo=raw_memo,
         )
 
     def download_single_chunk(timestamp: float) -> tuple[float, bytes | None]:

@@ -15401,9 +15401,6 @@ class AppLocalizationsRo extends AppLocalizations {
   String get stopThese => 'Oprește acestea';
 
   @override
-  String get meetingActionItemsTitle => 'Elemente de acțiune';
-
-  @override
   String get addToTasks => 'Adaugă la Sarcini';
 
   @override
@@ -15889,4 +15886,26 @@ class AppLocalizationsRo extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get playStripeBilledOnWeb => 'Facturat prin omi.me. Anulează aici oricând.';
+
+  @override
+  String get playStripeBilledOnWebShort => 'Facturat prin omi.me.';
+
+  @override
+  String playStripePlanPaused(String plan) {
+    return 'Planul tău $plan este întrerupt.';
+  }
+
+  @override
+  String get firmwareNewestSupportedForDevice =>
+      'Dispozitivul tău are deja cea mai recentă versiune de firmware acceptată';
+
+  @override
+  String get firmwareSyncRecordingsFirstTitle => 'Sincronizează mai întâi înregistrările';
+
+  @override
+  String get firmwareSyncRecordingsFirstMessage =>
+      'Unele înregistrări sunt încă pe dispozitivul tău. Lasă-le să termine de sincronizat cu telefonul tău, apoi pornește actualizarea.';
 }

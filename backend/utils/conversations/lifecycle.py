@@ -55,6 +55,7 @@ from utils.conversations.finalization_decision import (
 from utils.conversations.processing_trigger import is_recovery_trigger
 from utils.conversations.processing_trigger import ProcessingTrigger
 from utils.conversations.terminal_relevance import stamp_terminal_decision
+from utils.conversations import terminal_settled
 from utils.llm.gateway_error_contract import (
     is_byok_account_state_http_exception,
     is_retryable_processing_http_exception,
@@ -196,7 +197,7 @@ def create_processing_conversation(uid: str, conversation_data: dict[str, Any], 
 
 
 def create_completed_conversation(uid: str, conversation_data: dict[str, Any], *, idempotent: bool = False) -> bool:
-    """Create a fully processed conversation without granting processors recreate authority."""
+    """Create a terminal intake or processing result without granting processors recreate authority."""
     _require_status(conversation_data, ConversationStatus.completed)
     stamp_terminal_decision(
         conversation_data, path='import' if conversation_data.get('imported') else 'lifecycle_terminal'
@@ -206,7 +207,7 @@ def create_completed_conversation(uid: str, conversation_data: dict[str, Any], *
     else:
         conversations_db.upsert_conversation_with_lifecycle(uid, conversation_data)
         created = True
-    if created:
+    if created and not conversation_data.get('deferred'):
         observe_completed_conversation_shape(uid, conversation_data)
     return created
 
@@ -266,7 +267,8 @@ def persist_processed_conversation(
     stamp_terminal_decision(conversation_data, path='lifecycle_terminal')
 
     def _observe_first_completion() -> None:
-        observe_completed_conversation_shape(uid, conversation_data)
+        if not conversation_data.get('deferred'):
+            observe_completed_conversation_shape(uid, conversation_data)
 
     kwargs: dict[str, Any] = {
         'on_first_completion': _observe_first_completion,
@@ -416,6 +418,13 @@ def complete_orphan_batch_capture(
         'relevance_decision': terminal['relevance_decision'],
         'home_transcription_pending_at': now,
         'home_transcription_deadline_at': now + timedelta(seconds=home_transcription_deadline_seconds()),
+        **terminal_settled.settle(
+            current,
+            now=now,
+            enabled=terminal_settled.serving(
+                jobs_db.uid_from_conversation_path(str(getattr(conversation_ref, 'path', ''))) or ''
+            ),
+        ),
     }
     transaction.update(conversation_ref, updates)
 
@@ -629,24 +638,26 @@ def fail_and_discard_processing(uid: str, conversation_id: str) -> bool:
     return claimed
 
 
-def reacquire_deferred_processing(uid: str, conversation_id: str) -> bool:
+def reacquire_deferred_processing(uid: str, conversation_id: str, admitted_at: datetime | None = None) -> bool:
     """Atomically claim deferred ownership and renew the admission lease.
 
     ``deferred=True`` is also the ownership fence, so two concurrent first
     opens cannot both launch enrichment. A completed deferred row is an
     explicit failed-attempt terminal and may be reopened for retry.
     """
-    return jobs_db.reacquire_deferred_processing(uid, conversation_id)
+    return jobs_db.reacquire_deferred_processing(uid, conversation_id, admitted_at=admitted_at)
 
 
-def recover_deferred_processing_failure(uid: str, conversation_id: str) -> bool:
+def recover_deferred_processing_failure(
+    uid: str, conversation_id: str, *, expected_admitted_at: datetime | None = None
+) -> bool:
     """Atomically re-arm deferred enrichment and expose a non-spinning terminal.
 
     The paired status/flag mutation belongs here rather than in a router so a
     partial recovery write cannot strand a row in ``processing`` while the
     stale sweep intentionally excludes deferred conversations.
     """
-    return jobs_db.recover_deferred_processing_failure(uid, conversation_id)
+    return jobs_db.recover_deferred_processing_failure(uid, conversation_id, expected_admitted_at=expected_admitted_at)
 
 
 def begin_merge(uid: str, conversation_id: str) -> bool:
@@ -1430,7 +1441,19 @@ def close_no_speech_capture(
 
 
 def commit_v3_projection(
-    uid, token, recordings, existing, rows, cache, *, clear_pending=True, remove=(), retire=None, key='builder'
+    uid,
+    token,
+    recordings,
+    existing,
+    rows,
+    cache,
+    *,
+    clear_pending=True,
+    remove=(),
+    removed_ids=None,
+    retire=None,
+    key='builder',
+    bounded_pending_limit=None,
 ):
     """The lifecycle owner delegates the atomic derived-row/claim transaction."""
     from database import conversations_v3
@@ -1444,6 +1467,8 @@ def commit_v3_projection(
         cache,
         clear_pending=clear_pending,
         remove=remove,
+        removed_ids=removed_ids,
         retire=retire,
         key=key,
+        **({'bounded_pending_limit': bounded_pending_limit} if bounded_pending_limit is not None else {}),
     )

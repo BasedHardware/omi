@@ -15413,9 +15413,6 @@ class AppLocalizationsCa extends AppLocalizations {
   String get stopThese => 'Atura aquests';
 
   @override
-  String get meetingActionItemsTitle => 'Elements d\'acció';
-
-  @override
   String get addToTasks => 'Afegeix a Tasques';
 
   @override
@@ -15903,4 +15900,26 @@ class AppLocalizationsCa extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get playStripeBilledOnWeb => 'Es factura a través d\'omi.me. Cancel·la-ho aquí quan vulguis.';
+
+  @override
+  String get playStripeBilledOnWebShort => 'Es factura a través d\'omi.me.';
+
+  @override
+  String playStripePlanPaused(String plan) {
+    return 'El teu pla $plan està en pausa.';
+  }
+
+  @override
+  String get firmwareNewestSupportedForDevice =>
+      'El vostre dispositiu ja té la versió més recent de firmware compatible';
+
+  @override
+  String get firmwareSyncRecordingsFirstTitle => 'Primer sincronitzeu els enregistraments';
+
+  @override
+  String get firmwareSyncRecordingsFirstMessage =>
+      'Alguns enregistraments encara són al vostre dispositiu. Deixeu que acabin de sincronitzar-se al telèfon i, després, inicieu l\'actualització.';
 }

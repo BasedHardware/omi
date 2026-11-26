@@ -15395,9 +15395,6 @@ class AppLocalizationsHu extends AppLocalizations {
   String get stopThese => 'Ezek leállítása';
 
   @override
-  String get meetingActionItemsTitle => 'Teendők';
-
-  @override
   String get addToTasks => 'Hozzáadás a feladatokhoz';
 
   @override
@@ -15882,4 +15879,25 @@ class AppLocalizationsHu extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get playStripeBilledOnWeb => 'Számlázás az omi.me-n keresztül. Itt bármikor lemondhatod.';
+
+  @override
+  String get playStripeBilledOnWebShort => 'Számlázás az omi.me-n keresztül.';
+
+  @override
+  String playStripePlanPaused(String plan) {
+    return 'A(z) $plan csomagod szünetel.';
+  }
+
+  @override
+  String get firmwareNewestSupportedForDevice => 'Az eszközödön már a legújabb támogatott firmware-verzió fut';
+
+  @override
+  String get firmwareSyncRecordingsFirstTitle => 'Először szinkronizáld a felvételeidet';
+
+  @override
+  String get firmwareSyncRecordingsFirstMessage =>
+      'Néhány felvétel még az eszközödön van. Várd meg, amíg a telefonodra szinkronizálásuk befejeződik, majd indítsd el a frissítést.';
 }

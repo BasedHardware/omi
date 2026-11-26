@@ -16,7 +16,6 @@ import json
 import os
 import re
 import secrets
-import stat
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Callable, Iterable, Mapping, Optional
@@ -497,13 +496,14 @@ class Reader:
         return rows
 
     def append_verdict(self, row: Mapping[str, Any]) -> None:
-        root = self.verdicts_root
-        root.mkdir(mode=0o700, parents=True, exist_ok=True)
-        info = root.lstat()
-        if stat.S_ISLNK(info.st_mode) or not stat.S_ISDIR(info.st_mode):
-            raise BadRequest('verdict root must be a directory')
+        from testing.pipeline_lab.store import ensure_private_dir
+
+        try:  # created 0700 with its missing parents; an existing open, foreign or symlinked root is refused
+            ensure_private_dir(self.verdicts_root)
+        except StoreRefused as refused:
+            raise BadRequest(f'verdict root: {refused}') from None
         line = (json.dumps(row, ensure_ascii=False, sort_keys=True, separators=(',', ':')) + '\n').encode('utf-8')
-        fd = os.open(self.verdicts_path, os.O_WRONLY | os.O_APPEND | os.O_CREAT, 0o600)
+        fd = os.open(self.verdicts_path, os.O_WRONLY | os.O_APPEND | os.O_CREAT | os.O_NOFOLLOW, 0o600)
         try:
             fcntl.flock(fd, fcntl.LOCK_EX)
             os.write(fd, line)

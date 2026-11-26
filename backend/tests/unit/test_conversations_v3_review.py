@@ -50,6 +50,7 @@ def builder(monkeypatch):
     monkeypatch.setattr(store, 'adoptable', lambda *a: {})
     monkeypatch.setattr(store, 'merge_donors_have_tasks', lambda *a, **kw: False)
     monkeypatch.setattr(store, 'backoff_state', lambda *a: (None, None))
+    monkeypatch.setattr(store, 'clear_terminal_pending', lambda *a: None)
     monkeypatch.setattr(service, '_commit', lambda *a, **kw: committed.append(a))
     monkeypatch.setattr(service, 'has_pending', lambda *a: False)
     monkeypatch.setattr(service, 'enqueue', lambda *a, **kw: None)
@@ -601,6 +602,45 @@ def test_process_applies_word_floor_to_automatic_windows(
     assert settlements[0]['word_floor_outcomes'] == expected_floor
 
 
+def test_processing_metrics_failure_does_not_skip_settlement(monkeypatch):
+    from types import SimpleNamespace
+    from database import conversations_v3_processing as writers
+    from utils.conversations import process_conversation as process
+
+    row = {
+        'id': 'window',
+        'v3_derived': True,
+        'kind': 'conversation',
+        'created_at': AT,
+        'started_at': AT,
+        'finished_at': AT,
+        'structured': {},
+        'transcript_segments': [{'text': 'speech ' * 40, 'start': 0, 'end': 10, 'is_user': False}],
+    }
+    settlements = []
+    metric_failures = []
+    monkeypatch.setattr(writers, 'begin_processing', lambda *a, **kw: True)
+    monkeypatch.setattr(writers, 'settle_processing', lambda *a, **kw: settlements.append(kw))
+
+    def notes(_uid, _language, _conversation, **kwargs):
+        kwargs['persistence_observer'](True)
+        return SimpleNamespace(status='completed')
+
+    def fail_metric(*_args, **_kwargs):
+        metric_failures.append(True)
+        raise OSError('metrics unavailable')
+
+    monkeypatch.setattr(process, 'process_conversation', notes)
+    monkeypatch.setattr(service.metrics.SUMMARY_WRITES.labels('first'), 'inc', fail_metric)
+    monkeypatch.setattr(service.metrics.SUMMARY_LATENCY, 'observe', fail_metric)
+
+    service._process('u', row, 'token')
+
+    assert len(metric_failures) == 2
+    assert len(settlements) == 1
+    assert settlements[0]['notes'] is True
+
+
 @pytest.mark.asyncio
 @pytest.mark.parametrize('failure', ['transcription', 'outline'])
 async def test_builder_terminal_failure_is_visible_and_retryable(builder, monkeypatch, failure):
@@ -1016,7 +1056,7 @@ def test_builder_loads_indexed_provisional_card_without_pending_audio(monkeypatc
     }
     monkeypatch.setattr(store, 'account_deletion_blocks_user_work', lambda *a, **kw: False)
     monkeypatch.setattr(store, 'decode_row', lambda uid, snap: snap.to_dict() if snap.exists else None)
-    monkeypatch.setattr(store, 'recording_input', lambda uid, snap: snap.to_dict() if snap.exists else None)
+    monkeypatch.setattr(store, 'recording_input', lambda uid, snap, **kw: snap.to_dict() if snap.exists else None)
     recordings, existing, _ = store.load('synthetic', firestore_client=MemoryQuery(rows))
     assert set(existing) == {'older'} and set(recordings) == {'r'}
 
@@ -1168,7 +1208,7 @@ async def test_configured_builder_wakes_at_outline_then_lock(builder, monkeypatc
 def test_pending_page_continuation_uses_configured_silence(monkeypatch, gap, continues):
     monkeypatch.setenv('CONVERSATIONS_V3_SILENCE_GAP_SECONDS', '900')
     monkeypatch.setattr(store, 'account_deletion_blocks_user_work', lambda *a, **kw: False)
-    monkeypatch.setattr(store, 'recording_input', lambda uid, snap: snap.to_dict() if snap.exists else None)
+    monkeypatch.setattr(store, 'recording_input', lambda uid, snap, **kw: snap.to_dict() if snap.exists else None)
     prefix = '/users/synthetic/conversations/'
     rows = {}
     for index in range(32):

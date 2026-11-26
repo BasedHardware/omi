@@ -33,7 +33,12 @@ FLUTTER_HTTP_ROOT = ROOT_DIR / 'app' / 'lib' / 'backend' / 'http'
 # /v2/messages/{id}/report and /v2/files) are all modeled in the spec. Add a
 # prefix here only with a live extracted route it excludes; a prefix excluding
 # nothing is a blind spot waiting for a call site.
-OUT_OF_SCOPE_PREFIXES: tuple = ()
+# These flagged long-poll routes deliberately use include_in_schema=False; their typed
+# request/response contracts are covered by their route suites, not the app-client spec.
+OUT_OF_SCOPE_PREFIXES: tuple = (
+    '/v1/conversations/{param}/summary/wait',
+    '/v2/sync-local-files/receipts/wait',
+)
 
 # Client base-url roots: `dev_api.dart` / `mcp_api.dart` declare
 # `'${Env.apiBaseUrl}v1/dev'`-style prefixes and append subpaths at call sites,

@@ -13,6 +13,7 @@ import 'package:package_info_plus/package_info_plus.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'package:omi/utils/firmware_update_hold.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/http/http_pool_manager.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
@@ -173,6 +174,59 @@ void main() {
       image.dispose();
     });
   }
+
+  testWidgets('a CV1 release that uploaded but did not install shows as the newest supported firmware', (tester) async {
+    final holds = await FirmwareUpdateHold.load();
+    await holds.hold(deviceId: 'fixture-pendant', version: '3.0.1');
+    addTearDown(() => holds.clear('fixture-pendant'));
+    await pumpPage(tester, _DeviceProvider(batteryLevel: 80), expectOffer: false);
+    expect(find.text(en.firmwareNewestSupportedForDevice), findsOneWidget);
+    expect(find.text(en.yourDeviceIsUpToDate), findsNothing);
+    await capture(tester, '001-mobile-ios-cv1-held-newest-supported.png');
+    expect(find.byKey(const Key('firmware_update_try_again')), findsNothing);
+    debugDefaultTargetPlatformOverride = null;
+  });
+
+  testWidgets('recordings still on the pendant block the update before the sheet opens', (tester) async {
+    var pending = 2;
+    debugUnsyncedDeviceRecordings = () => pending;
+    addTearDown(() => debugUnsyncedDeviceRecordings = null);
+    final provider = _DeviceProvider(batteryLevel: 80);
+    await pumpPage(tester, provider);
+    await tester.tap(find.byKey(const Key('firmware_update_start')));
+    for (var i = 0; i < 10; i++) {
+      await tester.pump(const Duration(milliseconds: 100));
+    }
+    expect(find.text(en.firmwareSyncRecordingsFirstTitle), findsOneWidget);
+    expect(find.byKey(const Key('firmware_update_sheet_start')), findsNothing);
+    expect(provider.updateStarts, 0);
+    debugDefaultTargetPlatformOverride = null;
+  });
+
+  testWidgets('recordings that appear while the sheet is open block the start with the same message', (tester) async {
+    var pending = 0;
+    debugUnsyncedDeviceRecordings = () => pending;
+    addTearDown(() => debugUnsyncedDeviceRecordings = null);
+    final provider = _DeviceProvider(batteryLevel: 80);
+    await pumpPage(tester, provider);
+    await tester.tap(find.byKey(const Key('firmware_update_start')));
+    await tester.pumpAndSettle();
+    pending = 1;
+    await tester.tap(find.byKey(const Key('firmware_update_sheet_start')));
+    await tester.pumpAndSettle();
+    expect(find.text(en.firmwareSyncRecordingsFirstTitle), findsOneWidget);
+    expect(provider.updateStarts, 0);
+    debugDefaultTargetPlatformOverride = null;
+  });
+
+  testWidgets('a hold for an older release does not hide a newer one', (tester) async {
+    final holds = await FirmwareUpdateHold.load();
+    await holds.hold(deviceId: 'fixture-pendant', version: '3.0.0');
+    addTearDown(() => holds.clear('fixture-pendant'));
+    await pumpPage(tester, _DeviceProvider(batteryLevel: 80));
+    expect(find.text(en.firmwareNewestSupportedForDevice), findsNothing);
+    debugDefaultTargetPlatformOverride = null;
+  });
 
   for (final status in ['verifying', 'not-installed', 'no-reconnect', 'installed']) {
     testWidgets('OTA outcome renders $status', (tester) async {

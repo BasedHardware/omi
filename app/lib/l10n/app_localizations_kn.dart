@@ -15387,9 +15387,6 @@ class AppLocalizationsKn extends AppLocalizations {
   String get stopThese => 'ಇವುಗಳನ್ನು ನಿಲ್ಲಿಸಿ';
 
   @override
-  String get meetingActionItemsTitle => 'ಮಾಡಬೇಕಾದ ಕೆಲಸಗಳು';
-
-  @override
   String get addToTasks => 'ಕಾರ್ಯಗಳಿಗೆ ಸೇರಿಸಿ';
 
   @override
@@ -15876,4 +15873,25 @@ class AppLocalizationsKn extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get playStripeBilledOnWeb => 'omi.me ಮೂಲಕ ಬಿಲ್ ಮಾಡಲಾಗುತ್ತದೆ. ಯಾವಾಗ ಬೇಕಾದರೂ ಇಲ್ಲಿ ರದ್ದುಮಾಡಿ.';
+
+  @override
+  String get playStripeBilledOnWebShort => 'omi.me ಮೂಲಕ ಬಿಲ್ ಮಾಡಲಾಗುತ್ತದೆ.';
+
+  @override
+  String playStripePlanPaused(String plan) {
+    return 'ನಿಮ್ಮ $plan ಯೋಜನೆಯನ್ನು ವಿರಾಮಗೊಳಿಸಲಾಗಿದೆ.';
+  }
+
+  @override
+  String get firmwareNewestSupportedForDevice => 'ನಿಮ್ಮ ಸಾಧನವು ಈಗಾಗಲೇ ಬೆಂಬಲಿತ ಅತ್ಯಂತ ಹೊಸ ಫಾರ್ಮ್‌ವೇರ್ ಆವೃತ್ತಿಯಲ್ಲಿದೆ';
+
+  @override
+  String get firmwareSyncRecordingsFirstTitle => 'ಮೊದಲು ನಿಮ್ಮ ರೆಕಾರ್ಡಿಂಗ್‌ಗಳನ್ನು ಸಿಂಕ್ ಮಾಡಿ';
+
+  @override
+  String get firmwareSyncRecordingsFirstMessage =>
+      'ಕೆಲವು ರೆಕಾರ್ಡಿಂಗ್‌ಗಳು ಇನ್ನೂ ನಿಮ್ಮ ಸಾಧನದಲ್ಲಿವೆ. ಅವುಗಳು ನಿಮ್ಮ ಫೋನ್‌ಗೆ ಸಿಂಕ್ ಆಗಲು ಬಿಡಿ, ನಂತರ ನವೀಕರಣ ಪ್ರಾರಂಭಿಸಿ.';
 }

@@ -18718,6 +18718,43 @@
         "title": "FolderMutationResponse",
         "type": "object"
       },
+      "FrameProcessingRange": {
+        "properties": {
+          "capture_root": {
+            "title": "Capture Root",
+            "type": "string"
+          },
+          "clock_epoch": {
+            "title": "Clock Epoch",
+            "type": "integer"
+          },
+          "end": {
+            "title": "End",
+            "type": "integer"
+          },
+          "start": {
+            "title": "Start",
+            "type": "integer"
+          },
+          "status": {
+            "enum": [
+              "text",
+              "empty"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "capture_root",
+          "clock_epoch",
+          "start",
+          "end",
+          "status"
+        ],
+        "title": "FrameProcessingRange",
+        "type": "object"
+      },
       "FrameRange": {
         "properties": {
           "end": {
@@ -28035,6 +28072,18 @@
             ],
             "description": "Untrusted client-authored display projection. Accepted as a raw payload and validated in the handler so a malformed projection cannot 422 a finished recording. Hash-bound to the persisted transcript. Display only — never an input to intelligence.",
             "title": "Client Processing"
+          },
+          "live_conversation_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Optional live v3 window to Finish when no active recording is found.",
+            "title": "Live Conversation Id"
           }
         },
         "title": "ProcessConversationRequest",
@@ -36537,6 +36586,20 @@
             "default": 0,
             "title": "Failed Segments",
             "type": "integer"
+          },
+          "frame_outcomes_v1": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/FrameProcessingRange"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Frame Outcomes V1"
           },
           "held_audio": {
             "anyOf": [
@@ -71254,7 +71317,7 @@
     },
     "/v1/payments/prepaid-code/redeem": {
       "post": {
-        "description": "Redeem a fully prepaid Omi Pro code with no card. Errors carry a reason code as ``detail``.",
+        "description": "Redeem a fully prepaid Omi Pro code with no card. Errors carry a reason code as ``detail``.\n\nOpen to the switch's readers and to every Google Play build (same helper the subscription response\nuses): a Play build has no other way to activate a code. No payment is taken either way, and the\nlive-plan refusals below cover Stripe and Google Play alike.",
         "operationId": "redeem_prepaid_code_endpoint_v1_payments_prepaid_code_redeem_post",
         "parameters": [
           {
@@ -88424,6 +88487,22 @@
               ],
               "title": "Device Id"
             }
+          },
+          {
+            "in": "query",
+            "name": "bootloader_sha256",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Bootloader Sha256"
+            }
           }
         ],
         "responses": {
@@ -88471,6 +88550,22 @@
             "schema": {
               "title": "Device Model",
               "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "bootloader_sha256",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Bootloader Sha256"
             }
           }
         ],
@@ -88528,6 +88623,22 @@
             "schema": {
               "title": "Version",
               "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "bootloader_sha256",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Bootloader Sha256"
             }
           }
         ],
@@ -90268,6 +90379,101 @@
           }
         ],
         "summary": "Sync Local Files V2"
+      },
+      "put": {
+        "description": "Check a live wait after manifest admission. A 204 directs the client to upload.",
+        "operationId": "check_sync_retry_v2_sync_local_files_put",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Omi-Wal-Retry",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Omi-Wal-Retry"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SyncCaptureManifestRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          },
+          "503": {
+            "description": "Only a typed record_capture_pending response defers the multipart upload"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Check Sync Retry"
       }
     },
     "/v2/sync-local-files/{job_id}": {
