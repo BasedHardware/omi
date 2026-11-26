@@ -22,6 +22,7 @@ from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 from google.api_core.exceptions import AlreadyExists, FailedPrecondition
 
 from config import object_lake as config
+from database import rpc_deadline
 
 logger = logging.getLogger(__name__)
 
@@ -119,7 +120,7 @@ def _space_id(space_id: str) -> str:
 def _key_errors():
     try:
         yield
-    except (SpaceKeyDestroyed, SpaceKeyUnavailable):
+    except (SpaceKeyDestroyed, SpaceKeyUnavailable, rpc_deadline.RpcDeadlineExceeded):
         raise
     except FailedPrecondition as error:
         if any(word in str(error).lower() for word in ('destroyed', 'disabled')):
@@ -173,7 +174,10 @@ def _decode(data: dict, space_id: str) -> SpaceKey:
 def get_space_keys(space_id: str, *, firestore_client=None) -> SpaceKey | None:
     _space_id(space_id)
     with _key_errors():
-        snapshot = space_key_firestore_client(firestore_client).collection('space_keys').document(space_id).get()
+        client = space_key_firestore_client(firestore_client)
+        if rpc_deadline.current() is not None:
+            rpc_deadline.bind_firestore_client(client)
+        snapshot = client.collection('space_keys').document(space_id).get()
         return _decode(snapshot.to_dict(), space_id) if snapshot.exists else None
 
 
@@ -282,11 +286,13 @@ def _unwrap_keys(client, keys: SpaceKey, version: int) -> bytes:
             if cache_key in cache:
                 return cache[cache_key]
         # KMS calls for unrelated spaces must not serialize on the cache lock.
-        raw = (
-            _kms()
-            .decrypt(request={'name': keys.kms_key, 'ciphertext': base64.b64decode(stored.wrapped_b64, validate=True)})
-            .plaintext
-        )
+        client_kms = _kms()
+        remaining = rpc_deadline.remaining()
+        if remaining is not None and remaining <= 0:
+            raise rpc_deadline.RpcDeadlineExceeded('key decrypt deadline passed')
+        options = {'timeout': remaining, 'retry': None} if remaining is not None else {}
+        request = {'name': keys.kms_key, 'ciphertext': base64.b64decode(stored.wrapped_b64, validate=True)}
+        raw = client_kms.decrypt(request=request, **options).plaintext
         if len(raw) != 32:
             raise SpaceKeyUnavailable('Invalid space key length')
         with _cache_lock:

@@ -158,6 +158,7 @@ _DEV_KEY = 'omi_dev_' + 'a' * 32
 _MCP_KEY = 'omi_mcp_' + 'a' * 32
 
 BODY_DIGEST = {
+    'database.recurring_voice_privacy._resume': 'ca26bc4bf706eb8e09c990ab240aadecf4d8af451da252d491bcfad3fff8066c',
     'llm_gateway.gateway.idempotency._request_body': '821d003b89db821c83bd02ba648b9f4a0fba5081d9e450a7cac38192b6382abd',
     'database.legal_holds.list_legal_holds': 'adb83d85cbbabaa98a4d435147d92e2139b4e483c19a9c09e695c5f7fa4c517b',
     'utils.support.holds._events': '360ff57663deaf3c17c934276f219cce74f4a468dc28c8a1145623524625927e',
@@ -1608,11 +1609,46 @@ _add(
         neutrals={'now': (T1, 'claim clock; does not change serving query')},
     )
 )
+
+
+def _queue_recurring_voice_scrub(client, combo, trial):
+    client.queue_results(
+        [
+            client.snapshot(
+                f'users/{UID}',
+                {'speaker_recurring_voice_scrub': {'version': 1, 'cursor': 'conv-1', 'ready_at': T0, 'trace_id': '-'}},
+            )
+        ]
+    )
+
+
 _add(
     DriverEntry(
         'database.recurring_voice_privacy.scrub_transcripts',
         base={'uid': UID},
+        neutrals={
+            'progress': (None, 'the Scheduler driver witnesses the saved conversation cursor'),
+            'expected_job': (None, 'transaction fence only; no query shape change'),
+            'one_page': (False, 'limits the number of pages, not the query shape'),
+        },
         profiles=(CallerProfile('recurring-optout-transcript-scrub', {}),),
+    )
+)
+_add(
+    DriverEntry(
+        'database.recurring_voice_privacy.resume_pending_scrubs',
+        profiles=(CallerProfile('scheduled-recurring-voice-scrub-resume', {}),),
+        setup=_queue_recurring_voice_scrub,
+        patchers=(_stub('database.recurring_voice_privacy.scrub_budget_seconds', 15),),
+    )
+)
+_add(
+    CoveredByEntry(
+        'database.recurring_voice_privacy._resume',
+        covered_by=('database.recurring_voice_privacy.resume_pending_scrubs',),
+        reason='delegates the conversation page query to scrub_transcripts; the scheduled caller supplies its cursor',
+        expect_observed=False,
+        body_digest=BODY_DIGEST['database.recurring_voice_privacy._resume'],
     )
 )
 _add(DriverEntry('database.conversations.iter_all_conversation_photos', base={'uid': UID}))

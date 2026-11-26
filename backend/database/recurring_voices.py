@@ -85,8 +85,9 @@ def read_profiles(transaction, user, owner):
 
 
 def write_profiles(transaction, user, owner, profiles):
+    previous_index = _index(owner)
     index = {}
-    for vid in set(_index(owner)) | set(profiles):
+    for vid in set(previous_index) | set(profiles):
         profile = profiles.get(vid)
         ref = user.collection(COLLECTION).document(vid)
         if not profile:
@@ -101,7 +102,9 @@ def write_profiles(transaction, user, owner, profiles):
             {'sealed': blob, 'expires_at': datetime.fromtimestamp(expiry, timezone.utc)},
         )
         index[vid] = pools.pool_token(blob)
-    transaction.update(user, {INDEX: index})
+    # Avoid materializing an empty index for accounts that never had profiles.
+    if index or previous_index:
+        transaction.update(user, {INDEX: index})
 
 
 def _source_token(source):

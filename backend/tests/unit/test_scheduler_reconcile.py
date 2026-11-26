@@ -57,6 +57,19 @@ def test_dream_sweep_targets_backfill_with_its_sync_oidc_audience():
     assert not cap_hold['target']['uri'].split('/')[2].startswith('backend-sync-backfill-')
 
 
+def test_privacy_scrub_uses_existing_backfill_invoker_and_is_opt_in_for_reconcile():
+    jobs = {job['name']: job for job in reconcile.load_manifest()['environments']['prod']['jobs']}
+    scrub = jobs['recurring-voice-privacy-scrub']
+    target = scrub['target']
+    assert target['oidc'] == jobs['dream-agent-sweep-hourly']['target']['oidc']
+    assert target['uri'] == target['oidc']['audience'].removesuffix('/v2/sync-jobs/run') + (
+        '/v1/users/recurring-voice-privacy/sweep'
+    )
+    assert scrub['lifecycle'] == 'planned'
+    assert scrub['state'] == 'ENABLED'
+    assert scrub['attempt_deadline'] == '60s'
+
+
 def test_secret_headers_are_resolved_in_memory_and_never_in_diff_output():
     session = FakeSession()
     manifest = reconcile.load_manifest()
@@ -122,6 +135,7 @@ def test_manifest_declares_both_projects_and_frame_retention_jobs_without_retire
         "frame-request-retention-hourly",
         "messaging-maintenance-hourly",
         "notifications-job-scheduler-trigger",
+        "recurring-voice-privacy-scrub",
         "omi-admin-stats-precompute",
         "omi-admin-wall-warm",
         "omi-tv-rollup-daily",

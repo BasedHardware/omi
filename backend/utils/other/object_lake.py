@@ -27,6 +27,7 @@ from google.cloud import firestore
 from google.cloud.firestore_v1 import FieldFilter
 
 from config import object_lake as config
+from database import rpc_deadline
 from database.account_deletion_policy import account_deletion_marker_blocks_access
 from utils.other import space_keys
 from utils.other.local_storage import create_storage_client
@@ -703,8 +704,14 @@ def get_space_object(ref: LakeObjectRef) -> bytes:
         raise
     try:
         try:
-            payload = _bucket_for(ref).blob(ref.key).download_as_bytes()
-        except ObjectLakeError:
+            blob = _bucket_for(ref).blob(ref.key)
+            remaining = rpc_deadline.remaining()
+            if remaining is not None and remaining <= 0:
+                raise rpc_deadline.RpcDeadlineExceeded('lake download deadline passed')
+            # The SDK accepts fractional timeouts and None to disable retries.
+            options: dict[str, Any] = {'timeout': remaining, 'retry': None} if remaining is not None else {}
+            payload = blob.download_as_bytes(**options)
+        except (ObjectLakeError, rpc_deadline.RpcDeadlineExceeded):
             raise
         except NotFound:
             raise LakeObjectAbsent('Lake object is absent') from None

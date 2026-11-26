@@ -53,20 +53,19 @@ class Document(StrictFirestoreDocument):
 
 
 class Query:
-    def __init__(self, database, path, *, order=None, descending=False, bound=None, after=None, ids_only=False):
+    def __init__(self, database, path, *, order=None, descending=False, bound=None, after=None, projection=None):
         self.database = database
         self.path = path
         self.order = order
         self.descending = descending
         self.bound = bound
         self.after = after
-        self.ids_only = ids_only
+        self.projection = projection
 
     def document(self, key):
         return Document(self.database, (*self.path, key))
 
     def order_by(self, field, direction='ASCENDING'):
-        assert field in {'last_changed_at', 'created_at', '__name__'}
         return Query(
             self.database,
             self.path,
@@ -74,12 +73,10 @@ class Query:
             descending=direction == 'DESCENDING',
             bound=self.bound,
             after=self.after,
-            ids_only=self.ids_only,
+            projection=self.projection,
         )
 
     def select(self, fields):
-        # Empty ID-only projection is witnessed by the recurring-privacy emulator suite.
-        assert fields in (['id'], [])
         return Query(
             self.database,
             self.path,
@@ -87,7 +84,7 @@ class Query:
             descending=self.descending,
             bound=self.bound,
             after=self.after,
-            ids_only=True,
+            projection=fields,
         )
 
     def start_after(self, cursor):
@@ -99,7 +96,7 @@ class Query:
             descending=self.descending,
             bound=self.bound,
             after=cursor['__name__'].id,
-            ids_only=self.ids_only,
+            projection=self.projection,
         )
 
     def limit(self, count):
@@ -111,7 +108,7 @@ class Query:
             descending=self.descending,
             bound=count,
             after=self.after,
-            ids_only=self.ids_only,
+            projection=self.projection,
         )
 
     def _rows(self):
@@ -126,25 +123,38 @@ class Query:
 
         return SimpleNamespace(get=get)
 
-    def stream(self, transaction=None, timeout=None):
+    def stream(self, transaction=None, timeout=None, retry=None):
         if timeout is not None:
             assert 0 < timeout <= 3
         assert self.order and self.bound
         if transaction is not None:
             assert transaction._database is self.database
             transaction._assert_read_allowed()
+
+        def order_value(path, row):
+            if self.order == '__name__':
+                return path[-1]
+            value = row
+            for field in self.order.split('.'):
+                if not isinstance(value, dict) or field not in value:
+                    return None
+                value = value[field]
+            return value
+
+        ordered = [(order_value(path, row), path, row) for path, row in self._rows()]
         rows = sorted(
-            self._rows(),
-            key=lambda pair: (pair[0][-1] if self.order == '__name__' else pair[1][self.order], pair[0]),
+            ((value, path, row) for value, path, row in ordered if value is not None),
+            key=lambda entry: (entry[0], entry[1]),
             reverse=self.descending,
         )
         if self.after is not None:
-            rows = [pair for pair in rows if pair[0][-1] > self.after]
+            rows = [entry for entry in rows if entry[1][-1] > self.after]
         result = []
-        for path, row in rows[: self.bound]:
-            snapshot = StrictFirestoreSnapshot(
-                {'id': row['id']} if self.ids_only and 'id' in row else {} if self.ids_only else row
+        for _, path, row in rows[: self.bound]:
+            projected = (
+                row if self.projection is None else {field: row[field] for field in self.projection if field in row}
             )
+            snapshot = StrictFirestoreSnapshot(projected)
             snapshot.reference = Document(self.database, path)
             snapshot.id = path[-1]
             result.append(snapshot)
