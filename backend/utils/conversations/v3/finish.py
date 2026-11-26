@@ -80,8 +80,9 @@ def _acknowledge(uid, window, outcome, recording_id):
     metrics.FINISH_NO_POINTER.labels(outcome).inc()
     if not recording_id:
         return None
-    # A Finish moved to a newer capture is counted apart (``newer_*``) and answered like the capture path.
-    outcome = outcome.removeprefix('newer_')
+    # A Finish that found a newer capture is counted apart (``newer_*``; ``newer_dual_*`` when the window tail
+    # was cut and the capture requested too) and answered like the path that stored it.
+    outcome = outcome.removeprefix('newer_').removeprefix('dual_')
     if outcome in {'cut', 'consumed', 'recording_cut', 'named_recording_cut'}:
         triggers.enqueue_pending(uid, manual_end_id=recording_id)
     conversation = deserialize_conversation(window)

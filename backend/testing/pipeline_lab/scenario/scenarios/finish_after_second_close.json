@@ -1,6 +1,6 @@
 {
   "name": "finish_after_second_close",
-  "description": "Recording A closes at 60 s and its transcript lands at 70 s; recording B closes two minutes later, at 180 s. Finish is tapped at 185 s with nothing in progress, before B's transcript lands. Finish must finish B (the newest recording), not A's still-open window.",
+  "description": "Recording A closes at 60 s and its transcript lands at 70 s; recording B closes two minutes later, at 180 s. Finish is tapped at 185 s with nothing in progress, before B's transcript lands. A's window is still live, so Finish cuts it (the answer names it) and also stores B's Finish request, so B gets a fast finish instead of none.",
   "origins": [
     {
       "id": "O",
@@ -73,11 +73,11 @@
   },
   "expect": [
     {
-      "label": "finish_response_names_b",
+      "label": "finish_response_names_a_window",
       "finish_response": 1,
       "outcome": "no_pointer",
       "recordings_include": [
-        "B"
+        "A"
       ]
     },
     {
@@ -98,6 +98,6 @@
   ],
   "budget": {
     "reads": 335, "writes": 80, "deletes": 1, "noop_writes": 12, "vendor_calls": {"stt": 1, "llm": 7},
-    "note": "Measured 2026-11-26 with the SCA-4434 fix and its review round (303 reads, 73 writes, 1 delete(s), 12 no-op, 1 STT, 6 LLM; caps about +10%). The rise over the pre-fix 231 reads / 0 STT is B's fast-finish pass and its reconciles, which the fix exists to start, plus at most 8 reads for the Finish recent-source scan and one account-deletion marker read. noop_writes=12 is the current count, not a target: every one is database/conversations_v3_leases.py:72 renew (service.reconcile run_blocking renew) rewriting the lease until at the instant it was claimed. The lab clock does not move inside one event; production's does, so this is a lab-clock repeat, reported in the PR."
+    "note": "Measured 2026-11-26 with the SCA-4434 fix after its second review round (304 reads, 74 writes, 1 delete(s), 12 no-op, 1 STT, 6 LLM; caps about +10%). The rise over the pre-fix 231 reads / 0 STT is B's fast-finish pass and its reconciles, which the fix exists to start, plus at most 8 reads for the Finish recent-source scan, one account-deletion marker read and B's ledger read; the Finish now writes A's window cut and B's request. noop_writes=12 is the current count, not a target: every one is database/conversations_v3_leases.py:72 renew (service.reconcile run_blocking renew) rewriting the lease until at the instant it was claimed. The lab clock does not move inside one event; production's does, so this is a lab-clock repeat, reported in the PR."
   }
 }

@@ -251,32 +251,59 @@ def request_finish(
         if not _valid_document_id(cid):
             return 'no_recording', '', None
         row = collection.document(cid).get(transaction=tx).to_dict() or {}
-        if newer_capture:
-            newer = _newer_capture(_recent_finish_sources(collection, tx, now), window, now)
-            if isinstance(newer, str):
-                return 'newer_' + newer, '', None
-            if newer is not None:
-                retry, newer_id, newer_row = newer
-                if _account_deleting(client, tx, uid):
-                    return 'newer_recording_ineligible', '', None
-                # Writes only when it answers with a row (and never on ``already_empty``), so a decline
-                # leaves the tail cut below with every read still before any write.
-                outcome, response_row = _finish_capture(client, tx, collection, uid, newer_id, newer_row, now)
-                if retry:
-                    # An earlier tap finished this capture: answer from it and never cut the tail as well.
-                    return 'newer_' + outcome, newer_id if response_row else '', response_row
-                if response_row is not None and outcome != 'already_empty':
+        tail_state = None
+        newer = _newer_capture(_recent_finish_sources(collection, tx, now), window, now) if newer_capture else None
+        if (
+            newer is not None
+            and newer[0]
+            and row.get(FINISH_WINDOW_FIELD) == window_id
+            and (row.get('v3_manual_end') or row.get('v3_manual_end_requested') is True)
+        ):
+            # An earlier tap cut this window's tail and requested the capture: the tail answers.
+            newer = None
+        if newer is not None:
+            retry, newer_id, newer_row = newer
+            if _account_deleting(client, tx, uid):
+                return 'newer_recording_ineligible', '', None
+            # A batch capture whose speech has not landed may hold only silence (the session's last capture
+            # often does), and its request then clears at completion without a cut. So the window's own
+            # tail is cut too, and the capture's request rides along. Both ledger reads come before either
+            # write; every write below follows the last read.
+            both = not retry and server_batch.owned(newer_row) and not _batch_speech_landed(newer_row)
+            newer_state = _native_projection_state(client, tx, uid, newer_id) if both else None
+            tail_state = _batch_state(client, tx, uid, cid, row) if both else None
+            outcome, response_row = _finish_capture(
+                client, tx, collection, uid, newer_id, newer_row, now, state=newer_state
+            )
+            if both and outcome == 'recording_requested':
+                tail_outcome, recording_id = _finish_window_tail(
+                    client, tx, uid, collection, window, window_id, cid, row, now, state=tail_state
+                )
+                if recording_id:
+                    logger.info('v3 Finish cut the live window tail and requested a capture that sealed after it')
+                    return 'newer_dual_' + tail_outcome, recording_id, None
+                return 'newer_recording_requested', newer_id, response_row
+            if response_row is not None and outcome != 'already_empty':
+                if not retry:
                     logger.info('v3 Finish moved from the live window tail to a capture that sealed after it')
-                    return 'newer_' + outcome, newer_id, response_row
-                # No speech to finish on the newer capture: the person's last speech is the window's.
-        outcome, recording_id = _finish_window_tail(client, tx, uid, collection, window, window_id, cid, row, now)
+                return 'newer_' + outcome, newer_id, response_row
+            # Nothing to finish on the newer capture (no landed speech, already empty, declined, or a finished
+            # capture that can no longer take a Finish): _finish_capture wrote nothing, so the tail is cut.
+        outcome, recording_id = _finish_window_tail(
+            client, tx, uid, collection, window, window_id, cid, row, now, state=tail_state
+        )
         return outcome, recording_id, None
 
     return commit(client.transaction())
 
 
-def _finish_window_tail(client, tx, uid, collection, window, window_id, cid, row, now) -> Tuple[str, str]:
-    """Store the Finish on ``window_id``'s tail source ``cid``; every read is already done."""
+def _finish_window_tail(
+    client, tx, uid, collection, window, window_id, cid, row, now, *, state: Optional[str] = None
+) -> Tuple[str, str]:
+    """Store the Finish on ``window_id``'s tail source ``cid``; every read is already done.
+
+    ``state`` is the tail's native ledger state when the caller read it already (``_batch_state``).
+    """
     ref = collection.document(cid)
     if (
         row.get('recording') is not True
@@ -306,7 +333,7 @@ def _finish_window_tail(client, tx, uid, collection, window, window_id, cid, row
     if server_batch.owned(row):
         if row.get('record_audio_partial') or row.get('record_upload_failed'):
             return 'batch_unavailable', ''
-        state = _native_projection_state(client, tx, uid, cid)
+        state = state or _native_projection_state(client, tx, uid, cid)
         if state == 'pending':
             if not server_batch.manual_end_marker_enabled():
                 return 'batch_disabled', ''
@@ -404,8 +431,8 @@ def _newer_capture(docs, window: Mapping[str, Any], now: datetime):
     second tap never cuts the tail as well, unless that Finish resolved empty: then the window's
     speech is the last speech again. ``docs`` is the newest-first recent-source scan.
 
-    Returns ``(retry, cid, row)``, None, or ``'recording_ineligible'`` when the marked capture can no
-    longer take a Finish.
+    Returns ``(retry, cid, row)`` or None. A marked capture that can no longer take a Finish (private,
+    locked, deleted, ...) is None too, so the tail is cut rather than answering a 404.
     """
     members = set(window.get('v3_recording_ids') or ())
     newer = []
@@ -450,8 +477,26 @@ def _newer_capture(docs, window: Mapping[str, Any], now: datetime):
         return None
     cid, row = min(((cid, row) for cid, row in marked if row['finished_at'] == last_mark), key=lambda item: item[0])
     if row.get('data_protection_level') == 'private' or any(row.get(key) for key in _FINISH_BLOCKERS):
-        return 'recording_ineligible'
+        # It can no longer take a Finish. A 404 would read as "already closed" to the app; cut the tail.
+        logger.info('v3 Finish found its earlier capture no longer finishable; cutting the window tail')
+        return None
     return True, cid, row
+
+
+def _batch_speech_landed(row: Mapping[str, Any]) -> bool:
+    """A server-batch capture's speech landed only with its projection, which rewrites ``has_content``.
+
+    ``has_finish_content`` cannot tell for these: ``mark_new`` stamps ``v3_speech_landed_at`` when the
+    recording is created and audio custody sets ``has_content`` on any committed audio, silence included.
+    """
+    return bool(row.get('has_content') is True and row.get('record_projection_revision'))
+
+
+def _batch_state(client, tx, uid, cid, row) -> Optional[str]:
+    """The tail's native ledger state when ``_finish_window_tail`` would read it, read ahead of any write."""
+    if not server_batch.owned(row) or row.get('record_audio_partial') or row.get('record_upload_failed'):
+        return None
+    return _native_projection_state(client, tx, uid, cid)
 
 
 def _account_deleting(client, tx, uid) -> bool:
@@ -543,8 +588,11 @@ def request_recording_finish(uid: str, *, now: datetime, firestore_client: Any =
     return commit(client.transaction())
 
 
-def _finish_capture(client, tx, collection, uid, cid, row, now):
-    """Store the recording-scoped Finish on capture ``cid``; every other read is already done."""
+def _finish_capture(client, tx, collection, uid, cid, row, now, *, state: Optional[str] = None):
+    """Store the recording-scoped Finish on capture ``cid``; every other read is already done.
+
+    ``state`` is the capture's native ledger state when the caller read it already.
+    """
     response_row = {key: row[key] for key in ('created_at', 'started_at', 'finished_at', 'source', 'recording')}
     response_row.update(id=cid, structured={})
     if row.get(FINISH_RECORDING_FIELD):
@@ -557,7 +605,7 @@ def _finish_capture(client, tx, collection, uid, cid, row, now):
 
     ref = collection.document(cid)
     if server_batch.owned(row):
-        state = _native_projection_state(client, tx, uid, cid)
+        state = state or _native_projection_state(client, tx, uid, cid)
         if state == 'pending' and server_batch.has_retained_audio(row):
             if not server_batch.manual_end_marker_enabled():
                 return 'batch_disabled', None
