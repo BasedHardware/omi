@@ -345,3 +345,23 @@ def test_silent_audio_is_reported_not_an_error(tmp_path):
     prepared = prepare(scenario, root=tmp_path / 'absent')
     filled, report = materialize(scenario, prepared, vad=lambda samples: [])
     assert filled.recording('B').lines == () and report['recordings'][0]['outcome'] == 'silence'
+
+
+def test_unpinned_replay_finds_a_cassette_recorded_before_the_index_and_backfills_it(tmp_path):
+    from testing.pipeline_lab.cassette.format import index_path
+    from testing.pipeline_lab.store import atomic_write_json
+
+    root = private_root(tmp_path)
+    pcm16 = b'\1\0' * 16000
+    vendor = make_cassette(pcm16, provider='deepgram', model='nova-3', source='vendor')
+    atomic_write_json(vendor.key.path(root), vendor.to_json())  # how save() stored it before the index
+    other = make_cassette(b'\2\0' * 16000, provider='deepgram', model='nova-3', source='vendor')
+    atomic_write_json(other.key.path(root), other.to_json())  # another audio's cassette: not a match
+    assert not index_path(vendor.key.audio_sha256, root).exists()
+
+    hit = audio.find(pcm16, {'language': 'en'}, root=root, fixtures=tmp_path / 'none')  # no provider/model pin
+    assert hit is not None and hit[0].key == vendor.key and hit[1] == 'lab_root'
+    assert index_path(vendor.key.audio_sha256, root).is_file()  # backfilled: the next lookup reads the index
+    again = audio.find(pcm16, {'language': 'en'}, root=root, fixtures=tmp_path / 'none')
+    assert again is not None and again[0].key == vendor.key
+    assert audio.find(b'\3\0' * 16000, {'language': 'en'}, root=root, fixtures=tmp_path / 'none') is None

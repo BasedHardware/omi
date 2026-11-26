@@ -135,6 +135,7 @@ def find(
             found.append(cassette)
             origin[cassette.key.digest] = 'fixture'
     if root is not None and Path(root).is_dir():
+        # Indexed cassettes, else (pinned or not) ones recorded before the by-audio index existed.
         for cassette in recorded_for_audio(key.audio_sha256, root):
             if _matches(cassette, key, pinned) and cassette.key.digest not in origin:
                 found.append(cassette)
@@ -142,7 +143,8 @@ def find(
         if pinned and not found:
             from testing.pipeline_lab.cassette.format import load
 
-            cassette = load(key, root)  # recorded before the by-audio index existed
+            # A pinned key recorded before the index, while the index lists only other keys of this audio.
+            cassette = load(key, root)
             if cassette is not None:
                 found.append(cassette)
                 origin[cassette.key.digest] = 'lab_root'

@@ -199,7 +199,36 @@ def recorded_for_audio(audio: str, root=None) -> list[Cassette]:
         cassette = load(key, root)
         if cassette is not None:
             seen[key.digest] = cassette
+    if not seen:
+        seen = {c.key.digest: c for c in _unindexed_for_audio(audio, root)}
     return list(seen.values())
+
+
+def _unindexed_for_audio(audio: str, root=None) -> list[Cassette]:
+    """Cassettes of this audio hash saved before the by-audio index existed (``save`` then wrote only the
+    cassette file): a scan of the stored cassettes, oldest first, then the index is backfilled so the scan runs
+    once per audio. Runs only when the index has no live entry for ``audio``."""
+    base = lab_root(root) / 'cache' / STAGE_DIR
+    found: list[Cassette] = []
+    for path in sorted(base.glob('*/*.json')):
+        if path.parent.name == INDEX_DIR:
+            continue
+        try:
+            text = path.read_text(encoding='utf-8')
+            if audio not in text:  # cheap filter before parsing a file of words
+                continue
+            cassette = Cassette.from_json(json.loads(text))
+        except (OSError, ValueError, KeyError, TypeError):
+            continue
+        if cassette.key.audio_sha256 == audio and path == cassette.key.path(root):
+            found.append(cassette)
+    found.sort(key=lambda c: (c.recorded_at, c.key.digest))
+    if found:
+        try:  # an optimization only: a root the lab cannot write to still replays
+            append_jsonl(index_path(audio, root), [c.index_row() for c in found])
+        except OSError:
+            pass
+    return found
 
 
 def derive_segments(words: Iterable[Word], *, max_pause: float = 1.0) -> list[dict]:
