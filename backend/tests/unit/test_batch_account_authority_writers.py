@@ -77,6 +77,11 @@ KNOWN_RAW = {
         1,
         'Feedback can provision a profile. Existing observer records the upsert.',
     ),
+    ('database/users.py', 'update_user_subscription', 'users', 'update'): (
+        1,
+        'Subscription updates may also write the top-level first-paid epoch when the first-week flag is enabled; '
+        'with the flag off the existing subscription-only update remains. The real writer regression is covered.',
+    ),
     ('database/users.py', 'clear_byok_active', 'users', 'set'): (
         1,
         'Entitlement upsert keeps the existing BYOK transaction and can provision a profile.',
