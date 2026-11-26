@@ -350,7 +350,7 @@ class _TrialPaywallPageState extends State<TrialPaywallPage> {
               return Column(
                 children: [
                   Padding(
-                    padding: EdgeInsets.only(top: top + OmiSpacing.sm),
+                    padding: EdgeInsets.only(top: top + OmiSpacing.xs),
                     child: _Header(onClose: _dismiss, onRestore: _restore, brand: l10n.paywallTrialBrand),
                   ),
                   Expanded(

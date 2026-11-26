@@ -97,6 +97,7 @@ void main() {
     final restore = find.byKey(const Key('trial_paywall_restore'));
     final closeBefore = tester.getRect(close);
     final restoreBefore = tester.getRect(restore);
+    expect(closeBefore.top, 70, reason: 'keep the original 8pt inset below the safe area');
     final vertical = find.byWidgetPredicate((w) => w is Scrollable && w.axisDirection == AxisDirection.down);
     await tester.scrollUntilVisible(find.byKey(const Key('trial_paywall_monthly')), 200, scrollable: vertical.first);
     await tester.pumpAndSettle();
