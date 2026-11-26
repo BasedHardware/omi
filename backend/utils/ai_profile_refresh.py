@@ -25,19 +25,28 @@ import os
 import threading
 from datetime import datetime, timedelta, timezone
 from typing import Any, Optional
+from uuid import uuid4
 
 import database.action_items as action_items_db
 import database.chat as chat_db
+import database.conversation_tombstones as conversation_tombstones_db
 import database.conversations as conversations_db
 import database.goals as goals_db
 import database.redis_db as redis_db
 import database.users as users_db
 from database._client import get_firestore_client
+from database.conversation_effect_fence import (
+    ConversationEffectFenced,
+    ConversationEffectSource,
+    ConversationEffectSourceChanged,
+    ProfileConversationInput,
+)
 from models.knowledge_ledger_policy import is_prompt_memory_visible
 from utils.executors import postprocess_executor, submit_with_context
 from utils.generated_compute import generated_compute_allowed
 from utils.llm import ai_user_profile as profile_llm
 from utils.memory.memory_service import MemoryService
+from utils.observability.ai_profile import SOURCE_FENCE_RETRY_EXHAUSTED
 
 logger = logging.getLogger(__name__)
 
@@ -53,6 +62,7 @@ SOURCE_USER_EDIT = 'user_edit'
 IN_PROGRESS_TTL_SECONDS = 10 * 60
 AUTOMATIC_COOLDOWN_SECONDS = 60 * 60
 MAX_CONCURRENT_AUTOMATIC = 2
+MAX_INDEPENDENT_ATTEMPTS = 3
 
 _automatic_slots = threading.BoundedSemaphore(MAX_CONCURRENT_AUTOMATIC)
 
@@ -129,7 +139,7 @@ def _goals(uid: str) -> list[str]:
     return lines
 
 
-def _conversations(uid: str, now: datetime) -> list[str]:
+def _conversations(uid: str, now: datetime) -> tuple[list[str], tuple[ProfileConversationInput, ...]]:
     rows = (
         conversations_db.get_conversations_without_photos(
             uid,
@@ -140,12 +150,19 @@ def _conversations(uid: str, now: datetime) -> list[str]:
         or []
     )
     lines = []
+    inputs = []
     for row in rows:
         structured = (row or {}).get('structured') or {}
         title = structured.get('title')
-        if title:
-            lines.append(f"{title}: {structured.get('overview') or ''}".strip())
-    return lines
+        conversation_id, updated_at = row.get('id'), row.get('updated_at')
+        if not title or not conversation_id or not isinstance(updated_at, datetime):
+            continue
+        # Legacy deletion paths can leave a visible row behind the durable intent.
+        if conversation_tombstones_db.is_deleted(uid, conversation_id):
+            continue
+        lines.append(f"{title}: {structured.get('overview') or ''}".strip())
+        inputs.append(ProfileConversationInput(conversation_id, row.get('sync_content_revision'), updated_at))
+    return lines, tuple(inputs)
 
 
 def _messages(uid: str) -> list[str]:
@@ -153,23 +170,31 @@ def _messages(uid: str) -> list[str]:
     return [f"[{row.get('sender')}] {row.get('text')}" for row in rows if row.get('text')]
 
 
-def collect_sources(uid: str, now: Optional[datetime] = None) -> profile_llm.ProfileSources:
+def collect_sources(
+    uid: str, now: Optional[datetime] = None
+) -> tuple[profile_llm.ProfileSources, tuple[ProfileConversationInput, ...]]:
     now = now or datetime.now(timezone.utc)
-    return profile_llm.ProfileSources(
+    try:
+        conversations, inputs = _conversations(uid, now)
+    except Exception as error:
+        logger.warning('event=ai_profile_source_failed source=conversations uid=%s exc=%s', uid, type(error).__name__)
+        conversations, inputs = [], ()
+    sources = profile_llm.ProfileSources(
         memories=_safe('memories', uid, lambda: _memories(uid)),
         tasks=_safe('tasks', uid, lambda: _tasks(uid)),
         goals=_safe('goals', uid, lambda: _goals(uid)),
-        conversations=_safe('conversations', uid, lambda: _conversations(uid, now)),
+        conversations=conversations,
         messages=_safe('messages', uid, lambda: _messages(uid)),
     )
+    return sources, inputs[: profile_llm.MAX_LINES_PER_SOURCE]
 
 
-def _generate(uid: str) -> tuple[dict, bool]:
+def _generate(uid: str, *, effect_source: ConversationEffectSource | None = None) -> tuple[dict, bool]:
     """Synthesize and write; returns (stored profile, written). Raises ``RefreshError`` without writing."""
     now = datetime.now(timezone.utc)
     previous = users_db.get_ai_user_profile_fresh(uid) or {}
     previous_text = str(previous.get('profile_text') or '').strip()
-    sources = collect_sources(uid, now)
+    sources, conversation_inputs = collect_sources(uid, now)
     if sources.total_items() == 0:
         raise RefreshError('ai_profile_insufficient_data')
     synthesis = profile_llm.synthesize_ai_user_profile(
@@ -190,7 +215,9 @@ def _generate(uid: str) -> tuple[dict, bool]:
     }
     # The user may have edited or deleted the profile while the model ran; their
     # change wins (atomically) and is folded in by the next refresh.
-    if not users_db.write_ai_user_profile_if_unchanged(uid, previous_text, profile):
+    if not users_db.write_ai_user_profile_if_unchanged(
+        uid, previous_text, profile, effect_source=effect_source, conversation_inputs=conversation_inputs
+    ):
         logger.info('event=ai_profile_refresh outcome=superseded uid=%s', uid)
         return users_db.get_ai_user_profile_fresh(uid) or {}, False
     logger.info(
@@ -220,32 +247,78 @@ def refresh_now(uid: str) -> dict:
         raise RefreshError('ai_profile_refresh_in_progress')
     try:
         return _generate(uid)[0]
+    except ConversationEffectFenced as error:
+        raise RefreshError('ai_profile_refresh_superseded') from error
     finally:
         _release_in_progress(uid)
 
 
-def refresh_if_stale(uid: str) -> str:
+def _refresh_under_cooldown(uid: str, effect_source: ConversationEffectSource | None) -> str:
+    try:
+        if not redis_db.try_acquire_ai_profile_refresh_lock(uid, ttl=IN_PROGRESS_TTL_SECONDS):
+            return 'locked'
+    except Exception:
+        return 'lock_unavailable'
+    try:
+        if not is_stale(users_db.get_ai_user_profile_fresh(uid)):
+            return 'fresh'
+        if not generated_compute_allowed(uid, 'memories'):
+            return 'compute_denied'
+        return 'written' if _generate(uid, effect_source=effect_source)[1] else 'superseded'
+    finally:
+        _release_in_progress(uid)
+
+
+def _retry_independent_refresh(uid: str, token: str) -> str:
+    clear_cooldown = False
+    try:
+        # Keep the same Redis reservation across fences. Each attempt reads the
+        # current inputs and uses the ordinary lock, cadence and compute guards.
+        for _ in range(MAX_INDEPENDENT_ATTEMPTS):
+            try:
+                outcome = _refresh_under_cooldown(uid, None)
+            except ConversationEffectSourceChanged:
+                continue
+            clear_cooldown = outcome == 'written'
+            return outcome
+        SOURCE_FENCE_RETRY_EXHAUSTED.inc()
+        clear_cooldown = True
+        return 'source_fence_retry_exhausted'
+    finally:
+        redis_db.finish_ai_profile_auto_retry(uid, token, clear=clear_cooldown)
+
+
+def refresh_if_stale(uid: str, *, effect_source: ConversationEffectSource | None = None) -> str:
     """Automatic refresh; returns an outcome label and never raises."""
     try:
         if not uid or not automatic_refresh_enabled():
             return 'disabled'
         if not is_stale(users_db.get_ai_user_profile(uid)):
             return 'fresh'
+        token = uuid4().hex if effect_source is not None else None
         try:
-            if not redis_db.try_acquire_ai_profile_auto_cooldown(uid, ttl=AUTOMATIC_COOLDOWN_SECONDS):
+            if not redis_db.try_acquire_ai_profile_auto_cooldown(uid, ttl=AUTOMATIC_COOLDOWN_SECONDS, token=token):
                 return 'cooldown'
-            if not redis_db.try_acquire_ai_profile_refresh_lock(uid, ttl=IN_PROGRESS_TTL_SECONDS):
-                return 'locked'
         except Exception:
-            return 'lock_unavailable'  # Fail closed: no lock, no spend.
+            return 'lock_unavailable'
+
+        source_fenced = False
+        retry_independently = False
         try:
-            if not is_stale(users_db.get_ai_user_profile_fresh(uid)):
-                return 'fresh'
-            if not generated_compute_allowed(uid, 'memories'):
-                return 'compute_denied'
-            return 'written' if _generate(uid)[1] else 'superseded'
+            outcome = _refresh_under_cooldown(uid, effect_source)
+        except ConversationEffectSourceChanged:
+            outcome = 'source_fenced'
+            source_fenced = True
         finally:
-            _release_in_progress(uid)
+            if token is not None:
+                retry_independently = redis_db.settle_ai_profile_auto_cooldown(uid, token, source_fenced=source_fenced)
+        if token is not None and retry_independently:
+            return _retry_independent_refresh(uid, token)
+        return outcome
+    except ConversationEffectSourceChanged:
+        return 'source_fenced'
+    except ConversationEffectFenced:
+        return 'account_fenced'
     except RefreshError as error:
         logger.info('event=ai_profile_refresh outcome=%s uid=%s', error.code, uid)
         return error.code
@@ -254,18 +327,24 @@ def refresh_if_stale(uid: str) -> str:
         return 'error'
 
 
-def _run_scheduled(uid: str) -> None:
+def _run_scheduled(uid: str, effect_source: ConversationEffectSource | None = None) -> None:
     try:
-        refresh_if_stale(uid)
+        refresh_if_stale(uid, effect_source=effect_source)
     finally:
         _automatic_slots.release()
 
 
-def schedule_refresh(uid: str, profile: Optional[dict] = None, *, known: bool = False) -> bool:
+def schedule_refresh(
+    uid: str,
+    profile: Optional[dict] = None,
+    *,
+    known: bool = False,
+    effect_source: ConversationEffectSource | None = None,
+) -> bool:
     """Queue an automatic refresh if the profile looks stale and a process slot is free.
 
     ``known`` means ``profile`` is the caller's current read (``None`` = no profile), which
-    saves a cache read. Never blocks and never raises; returns whether work was queued.
+    saves a cache read. Returns whether work was queued.
     """
     try:
         if not uid or not automatic_refresh_enabled():
@@ -275,7 +354,7 @@ def schedule_refresh(uid: str, profile: Optional[dict] = None, *, known: bool = 
         if not _automatic_slots.acquire(blocking=False):
             return False  # Busy: the next trigger retries.
         try:
-            submit_with_context(postprocess_executor, _run_scheduled, uid)
+            submit_with_context(postprocess_executor, _run_scheduled, uid, effect_source)
         except Exception:
             _automatic_slots.release()
             raise

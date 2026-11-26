@@ -16,6 +16,7 @@ import database.goals as goals_db
 import database.conversations as conversations_db
 import database.chat as chat_db
 from database._client import db as firestore_db
+from database.conversation_effect_fence import ConversationEffectFenced, ConversationEffectSource
 from database.vector_db import query_vectors as vector_search
 from models.goal import sanitize_suggestion_dict
 from utils.llm.clients import get_llm
@@ -319,6 +320,7 @@ def extract_and_update_goal_progress(
     *,
     idempotency_key_prefix: Optional[str] = None,
     account_generation: Optional[int] = None,
+    effect_source: ConversationEffectSource | None = None,
 ) -> Optional[Dict[str, Any]]:
     """
     Extract goal progress from text and update if found.
@@ -413,16 +415,15 @@ Only include a goal if you're confident the message is about that SPECIFIC goal.
                 new_value = parsed_val
                 old_value = _safe_optional_float(goal.get('current_value'))
                 if old_value is None or new_value != old_value:
-                    if idempotency_key_prefix is None:
-                        goals_db.update_goal_progress(uid, goal_id, new_value)
-                    else:
-                        goals_db.update_goal_progress(
-                            uid,
-                            goal_id,
-                            new_value,
+                    progress_kwargs = {}
+                    if effect_source is not None:
+                        progress_kwargs['effect_source'] = effect_source
+                    if idempotency_key_prefix is not None:
+                        progress_kwargs.update(
                             idempotency_key=f'{idempotency_key_prefix}:{goal_id}',
                             account_generation=account_generation,
                         )
+                    goals_db.update_goal_progress(uid, goal_id, new_value, **progress_kwargs)
                     goal_title = goal.get('title', '')
                     logger.info(
                         f"[GOAL-AUTO] Updated '{goal_title}': {old_value} -> {new_value} (reasoning: {result_dict.get('reasoning', 'N/A')})"
@@ -442,6 +443,8 @@ Only include a goal if you're confident the message is about that SPECIFIC goal.
         if updates:
             return {"status": "updated", "updates": updates}
         return {"status": "no_update", "message": "No relevant progress mentioned or extracted."}
+    except ConversationEffectFenced:
+        raise
     except Exception as e:
         logger.error(f"Error in extract_and_update_goal_progress: {e}")
         return {"status": "error", "message": str(e)}

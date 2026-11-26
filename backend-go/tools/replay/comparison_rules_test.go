@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -284,5 +285,37 @@ func TestHomeTokensRejectSeedCollisionsAndRunWideDuplicates(t *testing.T) {
 	})
 	if err != nil || result.Unexplained < 2 {
 		t.Fatalf("run-wide duplicate token was excused: unexplained=%d err=%v", result.Unexplained, err)
+	}
+}
+
+func TestPreservedHomeTokensCompareLiterally(t *testing.T) {
+	for _, fixture := range homeFixtures() {
+		t.Run(fixture.path, func(t *testing.T) {
+			const seed = "123e4567e89b42d3a456426614174000"
+			const other = "223e4567e89b42d3a456426614174000"
+			py, goRun := ruleRun(), ruleRun()
+			for _, run := range []*observation{py, goRun} {
+				homeToken(run, fixture, seed)
+				slot, _ := tokenSlotAt(run, fixture.path)
+				run.PreservedFields = map[string][]string{slot.docPath: {slot.field}}
+				run.SeededTokenHashes = []string{tokenDigest(seed)}
+				fixture.breakIt(run)
+			}
+			if diffs := compareObservations(py, goRun); hasUnexplained(diffs) {
+				t.Fatalf("equal preserved values failed: %+v", diffs)
+			}
+			homeToken(goRun, fixture, other)
+			for _, preserved := range []bool{true, false} {
+				if !preserved {
+					goRun.PreservedFields = nil
+				}
+				diffs := compareObservations(py, goRun)
+				if !slices.ContainsFunc(diffs, func(diff difference) bool {
+					return diff.Path == fixture.path && diff.Kind == "different_value" && diff.Reason == ""
+				}) {
+					t.Fatalf("different Home tokens were excused: %+v", diffs)
+				}
+			}
+		})
 	}
 }

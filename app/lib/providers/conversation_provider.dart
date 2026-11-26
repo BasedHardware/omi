@@ -27,6 +27,7 @@ import 'package:omi/services/telemetry/client_telemetry.dart';
 import 'package:omi/services/siri_integration.dart';
 import 'package:omi/services/notifications/merge_notification_handler.dart';
 import 'package:omi/utils/conversations/capture_groups.dart';
+import 'package:omi/utils/conversations/early_title.dart';
 import 'package:omi/utils/conversations/home_member_fallback.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:omi/providers/transcription_pending_conversations.dart';
@@ -946,7 +947,7 @@ class ConversationProvider extends ChangeNotifier {
       _conversationPagedDeeper = false;
     }
     final currentlyProcessingIds = processingConversations
-        .where((conversation) => _isActiveProcessingStatus(conversation.status))
+        .where((conversation) => _isActiveProcessingStatus(conversation.status) && !titledBeforeSummary(conversation))
         .map((conversation) => conversation.id)
         .toSet();
 
@@ -1166,7 +1167,7 @@ class ConversationProvider extends ChangeNotifier {
     // this page, so changed completed rows win. Delete and processing fences
     // apply to cached rows too.
     final currentlyProcessingIds = processingConversations
-        .where((conversation) => _isActiveProcessingStatus(conversation.status))
+        .where((conversation) => _isActiveProcessingStatus(conversation.status) && !titledBeforeSummary(conversation))
         .map((conversation) => conversation.id)
         .toSet();
     final completedById = <String, ServerConversation>{

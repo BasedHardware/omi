@@ -184,6 +184,9 @@ def entries():
         ),
         DriverEntry('database.conversations_v3_backfill_runs.pending_starts', base={'limit': 20}),
         DriverEntry('database.conversations_v3_processing.pending_created', base={'uid': SHAPE_UID}),
+        # Owner-level End instants (flag end_open_conversation): single-field range reads on the cut time.
+        DriverEntry('database.conversations_v3_manual_cuts.around', base={'uid': SHAPE_UID, 'at': FROZEN_NOW}),
+        DriverEntry('database.conversations_v3_manual_cuts.load', base={'uid': SHAPE_UID, 'since': FROZEN_NOW}),
         DriverEntry(
             'utils.conversations.v3.service.has_pending',
             base={'uid': SHAPE_UID},

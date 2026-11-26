@@ -53,6 +53,7 @@ from diarizer.batch_pipeline import is_fatal_cuda_error
 from diarizer.batch_pipeline_startup import ChainMemoryProbe, load_worker, synchronize_gpu
 from utils.batch_pipeline.artifact_policy import create_artifact_store
 from utils.batch_pipeline.capacity import PoolCapacity
+from utils.batch_pipeline.commit_wake_sender import sender_from_env as commit_wake_sender_from_env
 from utils.batch_pipeline.metrics import QueueMetrics
 from utils.batch_pipeline.language_metrics import ROUTES as LANGUAGE_ROUTES
 from utils.batch_pipeline.correctness_metrics import TRANSITIONS, DURATION, LABELS
@@ -308,6 +309,8 @@ async def run_process(store: Any, artifacts: Any, registry: CollectorRegistry, s
             leader=LeaderLease(store, PUMP_RECOVERY, ttl_seconds=30),
             inline_metrics=False,  # supervise() samples on its own task.
             shadow=ShadowRunner(ShadowStore(store), shadow_recover, process_index=process_index()),
+            # Reliability experiment commit_wake: the hook decides per owner and sends nothing while it is off.
+            on_committed=commit_wake_sender_from_env(),
         )
         # Sibling processes share the pod's queue view: one sampler per pod
         # keeps Firestore reads and the HPA's per-pod series as with one process.

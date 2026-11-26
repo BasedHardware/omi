@@ -230,6 +230,7 @@ class ProjectionSession:
                 expected_generation=self.binding.privacy_generation,
                 verified_out=checked,
                 live_version_out=versions,
+                shared_owner_cache=True,
             )
         except BatchPrivacyBlocked as error:
             if error.conversation_id:

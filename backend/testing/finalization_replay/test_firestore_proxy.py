@@ -7,12 +7,17 @@ import subprocess
 from tempfile import TemporaryDirectory
 from threading import Lock
 import unittest
+from unittest.mock import patch
 
 import grpc
 
+from google.auth.credentials import AnonymousCredentials
+from google.cloud.firestore_v1 import Client
 from google.cloud.firestore_v1.types import firestore
 
 from testing.finalization_replay.firestore_proxy import FirestoreProxy, _SERVICE
+from testing.finalization_replay.metrics import install_firestore_meter, measure
+from testing.finalization_replay.state import CaseState
 
 ROOT = 'projects/p/databases/(default)/documents'
 PRIVACY_PATH = 'batch_pipeline_privacy/' + sha256(b'owner').hexdigest()
@@ -39,6 +44,44 @@ def privacy_aggregation():
 
 
 class FirestoreProxyTests(unittest.TestCase):
+    def test_failed_commit_retry_is_counted_on_both_sides(self):
+        attempts = 0
+
+        def commit(_request, context):
+            nonlocal attempts
+            attempts += 1
+            if attempts % 2:
+                context.abort(grpc.StatusCode.UNAVAILABLE, 'synthetic retry')
+            return b''
+
+        install_firestore_meter()
+        server = grpc.server(ThreadPoolExecutor(max_workers=2))
+        endpoint = f"127.0.0.1:{server.add_insecure_port('127.0.0.1:0')}"
+        server.add_generic_rpc_handlers(
+            (grpc.method_handlers_generic_handler(_SERVICE, {'Commit': grpc.unary_unary_rpc_method_handler(commit)}),)
+        )
+        server.start()
+        self.addCleanup(lambda: server.stop(0).wait())
+        request = firestore.CommitRequest(database=ROOT.removesuffix('/documents'))
+        with patch.dict(os.environ, {'FIRESTORE_EMULATOR_HOST': endpoint}):
+            python_client = Client(project='demo-replay', credentials=AnonymousCredentials())
+            self.addCleanup(python_client.close)
+            state = CaseState(python_client, {'name': 'commit-retry', 'uid': 'u'})
+            with measure(state):
+                python_client._firestore_api.commit(request)
+        self.assertEqual(attempts, 2)
+        self.assertEqual(state.cost()['firestore_operations']['failed_commit_rpcs'], 1)
+
+        with FirestoreProxy(endpoint, '', '') as proxy, grpc.insecure_channel(proxy.address) as client:
+            call = client.unary_unary(f'/{_SERVICE}/Commit', request_serializer=firestore.CommitRequest.serialize)
+            with self.assertRaises(grpc.RpcError) as failure:
+                call(request)
+            self.assertEqual(failure.exception.code(), grpc.StatusCode.UNAVAILABLE)
+            call(request)
+            self.assertEqual(attempts, 4)
+            self.assertEqual(proxy.counts()['failed_commit_rpcs'], 1)
+            self.assertEqual(proxy.rpc_failures(), {'commit': {'UNAVAILABLE': 1}})
+
     def test_read_request_shapes_attribute_the_privacy_target(self):
         queries = [
             ('get_document', firestore.GetDocumentRequest(name=PRIVACY_NAME), 1, 0),

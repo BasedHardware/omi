@@ -16,6 +16,7 @@ import 'package:omi/services/wals/sync_rate_limiter.dart';
 import 'package:omi/services/wals/sync_job_poller.dart';
 import 'package:omi/utils/analytics/analytics_manager.dart';
 import 'package:omi/utils/mutex.dart';
+import 'package:omi/utils/reliability_experiments.dart';
 import 'package:uuid/uuid.dart';
 
 typedef SyncFilesUploader = Future<UploadFilesResult> Function(
@@ -253,7 +254,12 @@ class SyncUploadGate {
         );
         SyncJobPoller.instance.validateOwner(result);
         if (owner == SharedPreferencesUtil().uid) await _recordingWaits.clear(waitKeys);
-        if (_limiter.reason != RateLimitReason.edgeThrottle) _limiter.clear();
+        if (ReliabilityExperiments.enabled('keep_cooldown_after_upload')) {
+          // A status GET can establish a new account cooldown during this POST.
+          if (!_limiter.isLimited) _limiter.clear();
+        } else if (_limiter.reason != RateLimitReason.edgeThrottle) {
+          _limiter.clear();
+        }
         final queued = result.isQueued;
         _emitTelemetry(
           RecordingUploadTelemetry.completedEvent,

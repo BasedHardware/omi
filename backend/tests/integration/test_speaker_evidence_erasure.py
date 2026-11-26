@@ -68,7 +68,7 @@ def test_account_erasure_sweeps_late_evidence(client, monkeypatch, retry_with_pa
     monkeypatch.setattr(user_data_deletion, 'account_authority_writer_enabled', lambda: False)
     monkeypatch.setattr(user_data_deletion, 'search_apps_db', lambda *a, **kw: [])
     monkeypatch.setattr(user_data_deletion, 'delete_generic_cache', lambda *a: None)
-    monkeypatch.setattr(user_data_deletion, 'stop_quiet_checks_for_account', lambda *a, **kw: None)
+    monkeypatch.setattr(user_data_deletion, 'purge_finalization_jobs', lambda *a, **kw: None)
     original_collections = firestore.DocumentReference.collections
     injected = False
 

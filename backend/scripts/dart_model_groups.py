@@ -204,6 +204,7 @@ SCHEMA_GROUPS = {
             'ConversationTestPromptResponse',
             'MergeConversationsResponse',
             'SearchConversationsResponse',
+            'FrameProcessingRange',
             'SyncLocalFilesResultResponse',
             'SyncJobStartResponse',
             'SyncRecoveryWindowExceededResponse',

@@ -12,6 +12,8 @@ from uuid import uuid4
 from google.cloud import firestore
 from config.record_wal_duplicate import MERGE_TARGET_FIELD, RETAINED_DONORS_FIELD, SETTLED_FIELD
 
+from config.firestore_read_levers import lever_enabled
+from database.privacy_check_metrics import STATUS_SKIP
 from database._client import run_transactional, get_data_plane_firestore_client
 from database.batch_pipeline_privacy import (
     assert_batch_write_allowed,
@@ -330,7 +332,7 @@ def status(receipt):
     }
 
 
-def read_status(client, namespace, uid, job_id):
+def read_status(client, namespace, uid, job_id, *, poll: bool = False):
     @firestore.transactional
     def read(tx):
         receipt = _ref(client, namespace, job_id).get(transaction=tx).to_dict() or {}
@@ -338,13 +340,16 @@ def read_status(client, namespace, uid, job_id):
             return None
         if receipt.get('schema') != SCHEMA or receipt.get('version') != VERSION:
             raise HandoffConflict('unsupported custody receipt schema')
-        assert_batch_write_allowed(
-            client,
-            tx,
-            uid,
-            conversation_ids=(receipt['conversation_id'],),
-            expected_generation=receipt['privacy_generation'],
-        )
+        if poll and lever_enabled('bpp_status_skip', uid):
+            STATUS_SKIP.labels('wal_receipt').inc()
+        else:
+            assert_batch_write_allowed(
+                client,
+                tx,
+                uid,
+                conversation_ids=(receipt['conversation_id'],),
+                expected_generation=receipt['privacy_generation'],
+            )
         return status(receipt)
 
     return run_transactional(client, read)

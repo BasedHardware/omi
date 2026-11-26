@@ -136,10 +136,7 @@ NON_INTAKE_VERSION_FIELDS = {
 }
 
 
-def _stamp_calls(source):
-    if 'result_protocol' not in source:
-        return []
-    tree = ast.parse(source)
+def _stamp_calls(tree):
     names = {
         alias.asname or alias.name
         for node in ast.walk(tree)
@@ -179,9 +176,9 @@ def _stamp_calls(source):
     return calls
 
 
-def _version_declarations(source):
+def _version_declarations(tree):
     declarations = set()
-    for node in ast.walk(ast.parse(source)):
+    for node in ast.walk(tree):
         keys = []
         if isinstance(node, ast.keyword):
             if node.arg:
@@ -215,7 +212,9 @@ def intake_marker_declarations():
             ):
                 continue
             relative = path.relative_to(backend).as_posix()
-            declarations[relative] = (_version_declarations(source), _stamp_calls(source))
+            tree = ast.parse(source)
+            calls = _stamp_calls(tree) if 'result_protocol' in source else []
+            declarations[relative] = (_version_declarations(tree), calls)
     return declarations
 
 
@@ -246,7 +245,7 @@ def test_no_intake_marker_declaration_bypasses_the_registry(intake_marker_declar
     ],
 )
 def test_new_or_computed_producer_marker_cannot_escape_completeness_guard(source):
-    assert not _version_declarations(source) <= {'protocol_version', *SOURCE_MARKERS}
+    assert not _version_declarations(ast.parse(source)) <= {'protocol_version', *SOURCE_MARKERS}
 
 
 def test_new_canonical_intake_survives_scheduler_and_copies_registered_requirements():
@@ -363,7 +362,7 @@ def test_historical_dual_alias_envelope_requires_bound_dormant_slot(section, def
 @pytest.mark.parametrize('marker', ["'wrong_marker'", "'future_version'", 'computed_marker'])
 def test_stamp_positional_marker_arguments_are_checked(marker):
     source = "from utils.batch_pipeline.result_protocol import stamp as mark\n" + f"mark(job, {marker})"
-    assert any(name not in SOURCE_MARKERS for _, name in _stamp_calls(source))
+    assert any(name not in SOURCE_MARKERS for _, name in _stamp_calls(ast.parse(source)))
 
 
 def test_stamping_a_legacy_second_marker_retains_all_known_and_unknown_requirements():
