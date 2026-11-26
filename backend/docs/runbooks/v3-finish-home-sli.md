@@ -14,16 +14,31 @@ legacy samples use `unknown` source and the server receipt time (`server_cut`),
 which is a lower bound on elapsed time. An untagged request without that proof
 is excluded.
 
-When v3 is active, TestFlight Home uses `GET /v1/conversations` and suppresses
-the compact `/v1/home/feed` reader. Summary readiness is logged only from the
-actual Home response, after ownership and acknowledged-episode projection,
-list filtering, and redaction. A row must still be a completed, settled v3
-manual-end card with an overview or rendered note section. An empty transcript,
-preview, placeholder, hidden, merged, or locked card cannot satisfy the check.
-The reconcile mapping uses the cut that actually closed the window, including
-when the closing recording is silent and its predecessor supplies the speech.
-An unbound Finish, a client-only cut, and a cut with no qualifying Home card
-remain unmatched.
+The scored readiness signal is `eligible`: the first committed server write
+that leaves the Finish window Home-eligible with a summary. The v3 notes
+settlement, the experiment `fast_end_feedback` early-shown write, and an
+on-open notes write each check the row they already read in their transaction.
+Fast-finish and batch admission only write transcripts; their summaries become
+eligible through the same notes writes. A row qualifies only when it is a
+completed, settled v3 manual-end card with an overview or rendered note section
+that passes the Home feed's owner-visibility filters. A hidden (including
+below the word minimum), discarded, merged, locked, deleted or backfilled card,
+or one without readable notes, never emits it. This adds no Firestore reads or
+writes per Finish: one restricted log line per eligible write, emitted after
+commit. A redelivered settlement of an already eligible card emits nothing; a
+later notes rewrite may emit again and the readback keeps the first one after
+the cut.
+
+The Home response is validation only. When v3 is active, TestFlight Home uses
+`GET /v1/conversations` and suppresses the compact `/v1/home/feed` reader. A
+`summary` event is logged from the actual Home response, after ownership and
+acknowledged-episode projection, list filtering and redaction, for the same
+qualifying cards. When the app happens to fetch Home does not change the score:
+an eligible summary that is fetched late or never fetched is still scored at
+eligibility. The reconcile mapping uses the cut that actually closed the
+window, including when the closing recording is silent and its predecessor
+supplies the speech. An unbound Finish, a client-only cut, and a cut whose card
+never became eligible remain unmatched (a miss).
 
 Route is `held` when a predecessor holds the cut, `fast` after a successful
 fast transcript write, `batch` when ordinary batch admitted it and there is no
@@ -66,8 +81,12 @@ gcloud logging read \
 
 The readback takes a half-open 24-hour cut cohort. It deduplicates cuts and
 bindings, gates legacy candidates on committed manual-end proof, joins the
-first qualifying card, and reports totals, within 60 seconds, late, unmatched,
-timing unknown, and the p95 for each route and source. Client-only cuts with no
+first eligible card, and reports totals, within 60 seconds, late, unmatched,
+timing unknown, and the p95 for each route and source. `home_fetch_validation`
+separately counts eligible Finishes whose summary a Home response later carried
+(`fetched`, `not_fetched`), fetches with no eligibility signal
+(`fetched_without_eligible`, an instrumentation gap to investigate), and the
+p95 lag from eligibility to fetch. Client-only cuts with no
 API binding are included as unmatched. An older-build lower bound can establish
 a late finish. A lower bound inside 60 seconds remains timing unknown. The
 all-Finish p95 is reported only when the nearest rank is determined despite

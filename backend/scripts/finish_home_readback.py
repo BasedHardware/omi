@@ -1,4 +1,9 @@
-"""Aggregate a read-only export of SCA-4489 Finish-to-Home observations."""
+"""Aggregate a read-only export of SCA-4489 Finish-to-Home observations.
+
+A Finish is scored from its cut to the first committed write that left its window Home-eligible with a
+summary (``eligible``). A Home response that carried the summary (``summary``) only validates that the
+reader actually showed it; when the app fetches Home does not change the score.
+"""
 
 import argparse
 from collections import defaultdict
@@ -79,7 +84,8 @@ def readback(events, start, through):
     censor_seconds = (through - end).total_seconds()
     cuts, bindings = {}, {}
     legacy_candidates, legacy_proofs = {}, set()
-    summaries, routes, windows = defaultdict(list), defaultdict(list), defaultdict(list)
+    eligible, fetched = defaultdict(list), defaultdict(list)
+    routes, windows = defaultdict(list), defaultdict(list)
     for event in events:
         stage = event['stage']
         observed_at = event['observed_at']
@@ -110,8 +116,10 @@ def readback(events, start, through):
             legacy_proofs.add(event['recording'])
         elif stage == 'window':
             windows[event['recording']].append((observed_at, event['card']))
+        elif stage == 'eligible':
+            eligible[event['card']].append(observed_at)
         elif stage == 'summary':
-            summaries[event['card']].append(observed_at)
+            fetched[event['card']].append(observed_at)
         elif stage == 'route':
             routes[event['recording']].append((observed_at, event['route']))
 
@@ -129,20 +137,23 @@ def readback(events, start, through):
     by_route_source = defaultdict(list)
     timing_basis = defaultdict(int)
     all_delays = []
+    validation = {'eligible': 0, 'fetched': 0, 'not_fetched': 0, 'fetched_without_eligible': 0}
+    fetch_lags = []
     for finish, (cut, _, source, basis) in cuts.items():
         if not start <= cut < end:
             continue
         timing_basis[basis if basis in {'client_cut', 'server_cut'} else 'unknown'] += 1
         recording = bindings[finish][1] if finish in bindings else None
-        first_ready = min(
-            (
-                ready
-                for linked_at, card in windows.get(recording, ())
-                for ready in summaries.get(card, ())
-                if ready >= max(cut, linked_at)
-            ),
-            default=None,
-        )
+        linked = windows.get(recording, ())
+        first_ready = _first(eligible, linked, cut)
+        first_fetch = _first(fetched, linked, first_ready or cut)
+        if first_ready is None:
+            validation['fetched_without_eligible'] += first_fetch is not None
+        else:
+            validation['eligible'] += 1
+            validation['fetched' if first_fetch else 'not_fetched'] += 1
+            if first_fetch:
+                fetch_lags.append((first_fetch - first_ready).total_seconds())
         route_signals = {route for t, route in routes.get(recording, ()) if cut <= t <= (first_ready or through)}
         if 'held' in route_signals:
             route = 'held'
@@ -167,7 +178,20 @@ def readback(events, start, through):
             {'route': route, 'source': source, **counts(delays, censor_seconds)}
             for (route, source), delays in sorted(by_route_source.items())
         ],
+        # Validation, not the score: did a Home response carry each eligible summary to the reader?
+        'home_fetch_validation': {
+            **validation,
+            'fetch_after_eligible_p95_seconds': percentile(sorted(fetch_lags), len(fetch_lags)),
+        },
     }
+
+
+def _first(observed, linked, after):
+    """The first observation for a card linked to this Finish, at or after its cut and its link."""
+    return min(
+        (at for linked_at, card in linked for at in observed.get(card, ()) if at >= max(after, linked_at)),
+        default=None,
+    )
 
 
 def main():

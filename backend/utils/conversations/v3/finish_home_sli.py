@@ -162,23 +162,41 @@ def observe_summary(uid: str, card_id: str) -> None:
         _emit('summary', card=_key('card', uid, card_id))
 
 
-def observe_home_summary(uid, row):
-    """Observe a summary only after it survives the TestFlight Home list projection."""
-    if not enabled():
-        return
+def observe_eligible(uid: str, card_id: str) -> None:
+    """The scored readiness signal: a committed write left this Finish window Home-eligible with a summary."""
+    if enabled():
+        _emit('eligible', card=_key('card', uid, card_id))
+
+
+def home_ready(row: Mapping[str, object]) -> bool:
+    """A Finish window that shows its summary on Home: settled, visible and with readable notes.
+
+    Shared by the write-path eligibility signal and the Home-fetch validation. Owner-visibility filters
+    that need the stored row (relevance discards, settling fragments) are the caller's, as in Home.
+    """
     from utils.conversations.summary_delivery import present
 
-    if (
+    return bool(
         row.get('v3_derived')
         and row.get('manual_end')
-        and row.get('v3_notes_written')
         and row.get('tile_state') == 'done'
         and row.get('status') == 'completed'
-        and not row.get('backfilled')
-        and not row.get('is_locked')
-        and not row.get('sync_merged_into')
+        and not any(
+            row.get(key)
+            for key in ('home_hidden', 'backfilled', 'is_locked', 'sync_merged_into', 'deleted', 'discarded')
+        )
         and present(row.get('structured'))
-    ):
+    )
+
+
+def eligible_after(before: Mapping[str, object], after: Mapping[str, object], *, rewritten: bool, visible) -> bool:
+    """Whether a committed write made a Finish window eligible: newly, or with notes it just rewrote."""
+    return enabled() and home_ready(after) and visible(after) and (rewritten or not home_ready(before))
+
+
+def observe_home_summary(uid, row):
+    """Validation only: a Home response actually carried this summary to the reader."""
+    if enabled() and home_ready(row):
         observe_summary(uid, row['id'])
 
 

@@ -513,3 +513,49 @@ def test_recording_finish_counts_first_settlement_of_its_derived_window(strict, 
         strict.rows[path]['v3_process_pending'] = True
     counter.labels.assert_called_once_with('settled')
     counter.labels.return_value.inc.assert_called_once_with()
+
+
+@pytest.fixture
+def eligible_events(monkeypatch):
+    from utils.conversations.v3 import finish_home_sli
+
+    monkeypatch.setenv('CONVERSATIONS_V3_FINISH_HOME_SLI', 'on')
+    observed = []
+    monkeypatch.setattr(finish_home_sli, 'observe_eligible', lambda uid, cid: observed.append(cid), raising=False)
+    return observed
+
+
+NOTES = {'structured': {'title': 'Plan', 'overview': 'We set a date.'}, 'manual_end': True, 'tile_state': 'writing'}
+
+
+def test_finish_window_is_eligible_when_its_notes_settle_and_only_once(strict, eligible_events):
+    strict.rows[C] = derived(**NOTES, v3_process_pending=True)
+    settle(strict)
+    assert eligible_events == ['c']
+    # A redelivered settle of the same, already shown card is not a second eligibility.
+    settle(strict, notes=False)
+    assert eligible_events == ['c']
+
+
+@pytest.mark.parametrize(
+    'updates',
+    [
+        {'home_hidden': True, 'home_hidden_reason': 'below_word_minimum'},
+        {'discarded': True},
+        {'sync_merged_into': 'survivor'},
+        {'structured': {'title': 'Plan'}},
+        {'manual_end': False},
+    ],
+)
+def test_a_window_that_is_not_home_eligible_emits_nothing(strict, eligible_events, updates):
+    strict.rows[C] = derived(**(NOTES | updates), v3_process_pending=True)
+    settle(strict)
+    assert eligible_events == []
+
+
+def test_early_shown_summary_is_eligible_before_settlement(strict, eligible_events):
+    strict.rows[C] = derived(**NOTES, v3_process_pending=True, summary_output_present=True)
+    token = leases.acquire('synthetic', 'summary-c', firestore_client=strict)
+    assert writers.show_summary_stored('synthetic', 'c', token, firestore_client=strict)
+    assert eligible_events == ['c']
+    leases.release('synthetic', 'summary-c', token, firestore_client=strict)

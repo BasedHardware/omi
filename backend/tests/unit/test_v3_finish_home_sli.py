@@ -100,7 +100,7 @@ def test_readback_only_admits_proven_legacy_candidates():
         ),
         event('legacy_manual_end', 3, recording='recording-a'),
         event('window', 4, recording='recording-a', card='card-a'),
-        event('summary', 20, card='card-a'),
+        event('eligible', 20, card='card-a'),
     ]
     result = readback.readback(events, START, THROUGH)
     assert result['totals']['finishes'] == 1
@@ -128,18 +128,18 @@ def test_readback_keeps_missing_and_late_finishes_in_the_cohort():
         event('binding', 7, finish='a', recording='wrong-rec'),
         event('route', 8, recording='a-rec', route='batch'),
         event('route', 40, recording='a-rec', route='fast'),
-        event('summary', 42, card='a-card'),  # Previous notes on a reused card.
+        event('eligible', 42, card='a-card'),  # Previous notes on a reused card.
         event('window', 45, recording='a-rec', card='a-card'),
-        event('summary', 60, card='a-card'),
-        event('summary', 100, card='a-card'),
+        event('eligible', 60, card='a-card'),
+        event('eligible', 100, card='a-card'),
         event('binding', 25, finish='b', recording='b-rec'),
         event('route', 30, recording='b-rec', route='batch'),
         event('route', 35, recording='b-rec', route='held'),
         event('window', 85, recording='b-rec', card='b-card'),
-        event('summary', 120, card='b-card'),
+        event('eligible', 120, card='b-card'),
         event('binding', 565, finish='d', recording='d-rec'),
         event('window', 575, recording='d-rec', card='d-card'),
-        event('summary', 580, card='d-card'),
+        event('eligible', 580, card='d-card'),
     ]
     result = readback.readback(reversed(events), START, THROUGH)
     assert result['totals'] == {
@@ -251,3 +251,47 @@ def test_home_summary_requires_a_finished_readable_card(monkeypatch, updates, vi
     }
     sli.observe_home_summaries('owner', [row | updates])
     assert observed == (['c'] if visible else [])
+
+
+def _linked_finish(*extra):
+    def event(stage, elapsed, **fields):
+        return {'stage': stage, 'observed_at': START + timedelta(seconds=elapsed), **fields}
+
+    return [
+        event('cut', 1, cut_at=START.isoformat(), finish='f', source='app', basis='client_cut'),
+        event('binding', 2, finish='f', recording='rec'),
+        event('window', 5, recording='rec', card='card'),
+        *(event(stage, elapsed, card='card') for stage, elapsed in extra),
+    ]
+
+
+def test_finish_is_scored_when_the_summary_became_eligible_not_when_home_fetched_it():
+    result = readback.readback(_linked_finish(('eligible', 20), ('summary', 90)), START, THROUGH)
+    assert result['totals']['within_60s'] == 1
+    assert result['totals']['late'] == 0
+    assert result['totals']['matched_client_cut_p95_seconds'] == 20
+    assert result['home_fetch_validation'] == {
+        'eligible': 1,
+        'fetched': 1,
+        'not_fetched': 0,
+        'fetched_without_eligible': 0,
+        'fetch_after_eligible_p95_seconds': 70,
+    }
+
+
+def test_an_eligible_summary_that_home_never_fetched_is_still_scored():
+    result = readback.readback(_linked_finish(('eligible', 20)), START, THROUGH)
+    assert result['totals']['within_60s'] == 1
+    assert result['totals']['unmatched'] == 0
+    assert result['home_fetch_validation']['not_fetched'] == 1
+
+
+@pytest.mark.parametrize('fetched', [False, True])
+def test_a_summary_that_never_became_eligible_is_a_miss(fetched):
+    # Hidden, below the word floor or discarded: the write path never emits ``eligible``.
+    result = readback.readback(_linked_finish(*([('summary', 30)] if fetched else [])), START, THROUGH)
+    assert result['totals']['finishes'] == 1
+    assert result['totals']['within_60s'] == 0
+    assert result['totals']['unmatched'] == 1
+    assert result['totals']['p95_at_or_below_60s'] is False
+    assert result['home_fetch_validation']['fetched_without_eligible'] == int(fetched)
