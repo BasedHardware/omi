@@ -174,3 +174,5 @@ Community: [Discord](http://discord.omi.me) · [Code of Conduct](CODE_OF_CONDUCT
 MIT. See [LICENSE](LICENSE).
 
 <!-- SCA-2129 planted freeze test marker (2026-11-23): a docs-only product PR touching no backend service; it must land during a backend-integration-only incident freeze. -->
+
+<!-- Temporary worker publishing smoke test. -->
