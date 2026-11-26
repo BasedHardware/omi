@@ -1498,3 +1498,196 @@ def test_named_finish_retry_on_later_capture_cuts_once(sealed_named_route, case)
     assert sum(len(tx.updates) for tx in db.transactions) == writes
     assert len(enqueued) == 1 and 'v3_manual_end' not in a
     counter.labels.assert_called_once_with('already_cut')
+
+
+_B = ('users', _UID, 'conversations', 'capture-b')
+
+
+@pytest.fixture
+def newer_capture_route(v3_finish_route, monkeypatch):
+    """A's window is still live, idle two minutes; capture B sealed after it and no window holds B yet."""
+    client, db, paths, enqueued = v3_finish_route
+    window = db.rows[paths['window']]
+    sealed_b = window['finished_at'] - timedelta(seconds=5)
+    end_a = sealed_b - timedelta(minutes=2)
+    window.update(created_at=end_a - timedelta(minutes=1), started_at=end_a - timedelta(minutes=1), finished_at=end_a)
+    db.rows[paths['older']]['finished_at'] = end_a - timedelta(seconds=30)
+    db.rows[paths['latest']]['finished_at'] = end_a
+    db.rows[_B] = {
+        'created_at': sealed_b - timedelta(seconds=80),
+        'started_at': sealed_b - timedelta(seconds=80),
+        'finished_at': sealed_b,
+        'status': 'completed',
+        'recording': True,
+        'source': 'omi',
+        'external_data': {'recording_session_id': 'pendant-session-b'},
+        'v3_pending': True,
+        'has_content': True,
+        'v3_speech_landed_at': sealed_b,
+    }
+    counter = Mock()
+    monkeypatch.setattr(v3_finish.metrics, 'FINISH_NO_POINTER', counter)
+    monkeypatch.delenv('CONVERSATIONS_V3_FINISH_NEWER_CAPTURE', raising=False)
+    return client, db, paths, enqueued, counter
+
+
+def _batch_pending(row):
+    """B is a server-batch capture whose whole-record transcript is still pending (no ledger yet)."""
+    row.pop('v3_speech_landed_at')
+    row.update(
+        record_lane_owner='batch_live_v1', server_batch_only=True, server_batch_audio_start=1, server_batch_audio_end=2
+    )
+
+
+def _writes(db):
+    return sum(len(tx.updates) for tx in db.transactions)
+
+
+@pytest.mark.parametrize('batch', [False, True])
+@pytest.mark.parametrize('body', [{}, {'live_conversation_id': 'window'}])
+def test_live_window_finish_cuts_capture_that_sealed_after_its_tail(newer_capture_route, batch, body):
+    client, db, paths, enqueued, counter = newer_capture_route
+    b = db.rows[_B]
+    if batch:
+        _batch_pending(b)
+
+    response = client.post('/v1/conversations', json=body)
+
+    assert response.status_code == 200
+    conversation = response.json()['conversation']
+    assert conversation['id'] == 'capture-b'
+    assert conversation['tile_state'] == ('transcribing' if batch else 'writing')
+    assert b[FINISH_RECORDING_FIELD] is True and FINISH_WINDOW_FIELD not in b
+    if batch:
+        assert b['v3_manual_end_requested'] is True and 'v3_manual_end' not in b and not enqueued
+        counter.labels.assert_called_once_with('newer_recording_requested')
+    else:
+        assert b['v3_manual_end'] is True and enqueued == [(_UID, {'manual_end_id': 'capture-b'})]
+        counter.labels.assert_called_once_with('newer_recording_cut')
+    for name in ('older', 'latest'):
+        assert 'v3_manual_end' not in db.rows[paths[name]] and 'v3_manual_end_requested' not in db.rows[paths[name]]
+    assert db.rows[paths['window']]['status'] == 'in_progress'
+
+
+@pytest.mark.parametrize(
+    'case', ['none', 'older_than_window', 'in_progress', 'silent', 'private', 'discarded', 'full_scan']
+)
+def test_live_window_finish_cuts_the_tail_without_a_newer_finishable_capture(newer_capture_route, case):
+    client, db, paths, enqueued, counter = newer_capture_route
+    b = db.rows[_B]
+    if case == 'full_scan':
+        # The bounded scan fills with newer rows, so another newer capture may lie past it.
+        for n in range(8):
+            db.rows['users', _UID, 'conversations', f'rotated-{n}'] = {
+                **b,
+                'status': 'in_progress',
+                'external_data': {'recording_session_id': f'rotated-{n}'},
+            }
+    elif case == 'none':
+        del db.rows[_B]
+    elif case == 'older_than_window':
+        # An older overlapping source never moves the cut.
+        b['finished_at'] = db.rows[paths['window']]['finished_at'] - timedelta(seconds=1)
+    elif case == 'in_progress':
+        b.update(status='in_progress')
+    elif case == 'silent':
+        b.update(has_content=False)
+    elif case == 'private':
+        b['data_protection_level'] = 'private'
+    else:
+        b['discarded'] = True
+
+    response = client.post('/v1/conversations', json={})
+
+    assert response.status_code == 200 and response.json()['conversation']['id'] == 'window'
+    assert db.rows[paths['latest']]['v3_manual_end'] is True
+    assert db.rows[paths['latest']][FINISH_WINDOW_FIELD] == 'window'
+    assert 'v3_manual_end' not in b if _B in db.rows else True
+    assert enqueued == [(_UID, {'manual_end_id': 'latest'})]
+    counter.labels.assert_called_once_with('cut')
+
+
+@pytest.mark.parametrize('owner', ['window', 'window-b'])
+def test_live_window_finish_leaves_a_claimed_newer_capture_to_its_window(newer_capture_route, owner):
+    client, db, paths, enqueued, counter = newer_capture_route
+    b = db.rows[_B]
+    b['claims'] = [{'conversation_id': owner, 'start': b['started_at'], 'end': b['finished_at']}]
+
+    response = client.post('/v1/conversations', json={})
+
+    assert response.status_code == 200 and response.json()['conversation']['id'] == 'window'
+    assert db.rows[paths['latest']]['v3_manual_end'] is True and 'v3_manual_end' not in b
+    counter.labels.assert_called_once_with('cut')
+
+
+def test_live_window_finish_declines_two_newer_captures(newer_capture_route):
+    client, db, paths, enqueued, counter = newer_capture_route
+    db.rows['users', _UID, 'conversations', 'capture-c'] = {
+        **db.rows[_B],
+        'finished_at': db.rows[_B]['finished_at'] - timedelta(seconds=10),
+        'external_data': {'recording_session_id': 'phone-session-c'},
+    }
+
+    assert client.post('/v1/conversations', json={}).status_code == 404
+    assert _writes(db) == 0 and not enqueued
+    assert all('v3_manual_end' not in row for row in db.rows.values())
+    counter.labels.assert_called_once_with('recording_ambiguous')
+
+
+@pytest.mark.parametrize('batch', [False, True])
+@pytest.mark.parametrize('between', ['nothing', 'claimed_by_hidden_window', 'joined_live_window'])
+def test_live_window_finish_retry_never_cuts_the_tail_as_well(newer_capture_route, batch, between):
+    client, db, paths, enqueued, counter = newer_capture_route
+    b = db.rows[_B]
+    if batch:
+        _batch_pending(b)
+    assert client.post('/v1/conversations', json={}).json()['conversation']['id'] == 'capture-b'
+    window = db.rows[paths['window']]
+    claim = [{'conversation_id': 'window', 'start': b['started_at'], 'end': b['finished_at']}]
+    if between == 'claimed_by_hidden_window':
+        claim[0]['conversation_id'] = 'window-b'
+        db.rows['users', _UID, 'conversations', 'window-b'] = {
+            **window,
+            'id': 'window-b',
+            'started_at': b['started_at'],
+            'finished_at': b['finished_at'],
+            'home_hidden': True,
+            'v3_recording_ids': ['capture-b'],
+        }
+        b['claims'] = claim
+    elif between == 'joined_live_window':
+        # B's transcript landed and the planner appended it to A's window.
+        window.update(finished_at=b['finished_at'], v3_recording_ids=[*window['v3_recording_ids'], 'capture-b'])
+        b['claims'] = claim
+    counter.reset_mock()
+    writes = _writes(db)
+
+    second = client.post('/v1/conversations', json={})
+
+    assert second.status_code == 200 and second.json()['conversation']['id'] in {'capture-b', 'window'}
+    for name in ('older', 'latest'):
+        assert 'v3_manual_end' not in db.rows[paths[name]] and 'v3_manual_end_requested' not in db.rows[paths[name]]
+    assert len(enqueued) == (0 if batch else 1)
+    if batch and between == 'joined_live_window':
+        # The window-tail path re-stamps the same pending request on B itself; it never cuts A.
+        counter.labels.assert_called_once_with('requested')
+    else:
+        assert _writes(db) == writes
+        counter.labels.assert_called_once_with('already_requested' if batch else 'already_cut')
+
+
+def test_live_window_finish_newer_capture_kill_switch_restores_the_tail_cut(newer_capture_route, monkeypatch):
+    client, db, paths, enqueued, counter = newer_capture_route
+    monkeypatch.setenv('CONVERSATIONS_V3_FINISH_NEWER_CAPTURE', 'off')
+    monkeypatch.setattr(
+        v3_finish.conversations_v3_live,
+        '_recent_finish_sources',
+        lambda *a, **kw: pytest.fail('kill switch off still read recent captures'),
+    )
+
+    response = client.post('/v1/conversations', json={})
+
+    assert response.status_code == 200 and response.json()['conversation']['id'] == 'window'
+    assert db.rows[paths['latest']]['v3_manual_end'] is True and 'v3_manual_end' not in db.rows[_B]
+    assert enqueued == [(_UID, {'manual_end_id': 'latest'})]
+    counter.labels.assert_called_once_with('cut')

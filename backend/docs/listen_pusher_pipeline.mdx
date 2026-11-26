@@ -99,6 +99,14 @@ transaction rechecks its live state and persists the cut or deferred batch
 request on its recording. A multi-unit batch request can cut only after the full
 native binding has projected. Set the switch to `off` on the API service to restore the lookup-miss 404.
 
+`CONVERSATIONS_V3_FINISH_NEWER_CAPTURE` defaults to `on`. When that Finish resolves to a live
+window, the same transaction reads at most `RECENT_FINISH_LIMIT` (8) recent sources. A sealed
+Listen capture that ended after the window's `finished_at`, is not one of its sources, is unclaimed
+and passes the recording-Finish checks takes the recording-scoped cut instead of the window tail,
+and the response names that capture. Two such captures decline as `recording_ambiguous`; a capture
+an earlier tap already finished answers the retry without cutting the tail. Set it to `off` on the
+API service to restore the window-tail cut and skip the read.
+
 `CONVERSATIONS_V3_FAST_FINISH` defaults to `cohort` (the `v3-fast-finish` rollout cohort, empty
 until a member is added). For a member, or for every v3 owner with `on`, a manually
 finished v3 recording of up to 20 minutes is transcribed once through the prerecorded provider

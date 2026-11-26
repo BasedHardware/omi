@@ -88,6 +88,8 @@ for outcome in (
     'recording_cut',
     'named_recording_cut',
     'named_recording_requested',
+    'newer_recording_cut',
+    'newer_recording_requested',
     'named_not_finishable',
     'named_superseded',
     'already_visible',

@@ -3,7 +3,11 @@
 import logging
 from datetime import datetime, timezone
 
-from config.conversations_v3 import conversations_v3_enabled, finish_no_pointer_enabled
+from config.conversations_v3 import (
+    conversations_v3_enabled,
+    finish_newer_capture_enabled,
+    finish_no_pointer_enabled,
+)
 from database import conversations_v3_live
 from models.conversation import CreateConversationResponse
 from models.conversation_enums import ConversationStatus
@@ -25,12 +29,15 @@ def finish_live_window(
         return None
 
     now = datetime.now(timezone.utc)
+    newer_capture = finish_newer_capture_enabled()
     if window_id:
         window = conversations_v3_live.live_window_by_id(uid, window_id, now=now)
         if window is not None:
-            outcome, recording_id = conversations_v3_live.request_finish(uid, window['id'], now=now)
+            outcome, recording_id, capture = conversations_v3_live.request_finish(
+                uid, window['id'], now=now, newer_capture=newer_capture
+            )
             if outcome != 'no_live_window':
-                return _acknowledge(uid, window, outcome, recording_id)
+                return _acknowledge(uid, capture or window, outcome, recording_id)
     window = conversations_v3_live.live_window(uid, now=now, max_idle=live.MAX_IDLE, pick=live.active)
     if window is None:
         named_outcome = None
@@ -52,8 +59,11 @@ def finish_live_window(
             logger.info('v3 named Finish found nothing; single-capture fallback outcome=%s', outcome)
             outcome = named_outcome
         return _acknowledge(uid, recording, outcome, recording['id'] if recording else '')
-    outcome, recording_id = conversations_v3_live.request_finish(uid, window['id'], now=now)
-    return _acknowledge(uid, window, outcome, recording_id)
+    # A capture that sealed after the window's last speech takes the cut, and the answer names it.
+    outcome, recording_id, capture = conversations_v3_live.request_finish(
+        uid, window['id'], now=now, newer_capture=newer_capture
+    )
+    return _acknowledge(uid, capture or window, outcome, recording_id)
 
 
 def _recovered(from_mode):
@@ -70,7 +80,7 @@ def _acknowledge(uid, window, outcome, recording_id):
     metrics.FINISH_NO_POINTER.labels(outcome).inc()
     if not recording_id:
         return None
-    if outcome in {'cut', 'consumed', 'recording_cut', 'named_recording_cut'}:
+    if outcome in {'cut', 'consumed', 'recording_cut', 'named_recording_cut', 'newer_recording_cut'}:
         triggers.enqueue_pending(uid, manual_end_id=recording_id)
     conversation = deserialize_conversation(window)
     if outcome in {'resolved_empty', 'already_empty', 'already_visible'}:
@@ -83,7 +93,14 @@ def _acknowledge(uid, window, outcome, recording_id):
         conversation.status = ConversationStatus.processing
         conversation.tile_state = (
             'transcribing'
-            if outcome in {'requested', 'already_requested', 'recording_requested', 'named_recording_requested'}
+            if outcome
+            in {
+                'requested',
+                'already_requested',
+                'recording_requested',
+                'named_recording_requested',
+                'newer_recording_requested',
+            }
             else 'writing'
         )
     return CreateConversationResponse(conversation=conversation, messages=[])

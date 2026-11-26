@@ -226,8 +226,15 @@ def _can_retarget_finish(row: Mapping[str, Any], previous_id: str, window_id: st
     return all(end < ends[window_id] for cid, end in ends.items() if cid != window_id)
 
 
-def request_finish(uid: str, window_id: str, *, now: datetime, firestore_client: Any = None) -> Tuple[str, str]:
-    """Store a cut on the current tail source, fenced by the live window in the same transaction."""
+def request_finish(
+    uid: str, window_id: str, *, now: datetime, newer_capture: bool = False, firestore_client: Any = None
+) -> Tuple[str, str, Optional[Dict[str, Any]]]:
+    """Store a cut on the current tail source, fenced by the live window in the same transaction.
+
+    With ``newer_capture``, a capture that sealed after the window's last speech and that no window
+    holds yet is the person's last speech, so the cut lands on it instead (``_newer_capture``).
+    Returns ``(outcome, recording id, response row)``; the row is set only when the cut moved.
+    """
     client = firestore_client if firestore_client is not None else get_firestore_client()
     collection = client.collection('users').document(uid).collection(conversations_collection)
     window_ref = collection.document(window_id)
@@ -236,15 +243,29 @@ def request_finish(uid: str, window_id: str, *, now: datetime, firestore_client:
     def commit(tx):
         window = window_ref.get(transaction=tx, field_paths=FINISH_FIELDS).to_dict() or {}
         if not _is_finishable_window(window, now):
-            return 'no_live_window', ''
+            return 'no_live_window', '', None
         members = window.get('v3_recording_ids') or []
         # The planner appends new contributing recordings in speech order. An
         # unavailable tail must not move the cut back to a previous recording.
         cid = members[-1] if isinstance(members, list) and members else None
         if not _valid_document_id(cid):
-            return 'no_recording', ''
+            return 'no_recording', '', None
         row = collection.document(cid).get(transaction=tx).to_dict() or {}
-        return _finish_window_tail(client, tx, uid, collection, window, window_id, cid, row, now)
+        if newer_capture:
+            newer = _newer_capture(_recent_finish_sources(collection, tx, now), window, now)
+            if isinstance(newer, str):
+                return newer, '', None
+            if newer is not None:
+                newer_id, newer_row = newer
+                # Writes only when it returns a row, so a decline leaves the tail cut below its reads.
+                outcome, response_row = _finish_capture(client, tx, collection, uid, newer_id, newer_row, now)
+                if response_row is not None:
+                    logger.info('v3 Finish moved from the live window tail to a capture that sealed after it')
+                    return _NEWER_OUTCOMES.get(outcome, outcome), newer_id, response_row
+                if newer_row.get(FINISH_RECORDING_FIELD):
+                    return outcome, '', None  # An earlier tap finished it; never cut the tail as well.
+        outcome, recording_id = _finish_window_tail(client, tx, uid, collection, window, window_id, cid, row, now)
+        return outcome, recording_id, None
 
     return commit(client.transaction())
 
@@ -353,6 +374,55 @@ def _recent_finish_sources(collection, tx, now):
         .limit(RECENT_FINISH_LIMIT)
         .stream(transaction=tx)
     )
+
+
+_NEWER_OUTCOMES = {'recording_cut': 'newer_recording_cut', 'recording_requested': 'newer_recording_requested'}
+
+
+def _newer_capture(docs, window: Mapping[str, Any], now: datetime):
+    """The capture a live-window Finish cuts instead of the window tail, or None to cut the tail.
+
+    A pendant or server-batch capture can seal after the live window's last speech while its
+    transcript, and so its place in a window, is still pending. Such a capture is the person's last
+    speech. It must be a sealed Listen capture newer than the window's ``finished_at``, not one of
+    the window's sources, unclaimed and eligible for the recording-scoped Finish. A capture that a
+    recording-scoped Finish already marked answers a retry, so a second tap never cuts the tail as
+    well. ``docs`` is the newest-first recent-source scan. Returns ``(cid, row)``, None, or
+    ``'recording_ambiguous'`` when more than one capture qualifies.
+    """
+    members = set(window.get('v3_recording_ids') or ())
+    newer = []
+    for doc in docs:
+        row = doc.to_dict() or {}
+        if (
+            doc.id not in members
+            and _is_sealed_capture(row)
+            and isinstance(row.get('finished_at'), datetime)
+            and row['finished_at'] > window['finished_at']
+            and not any(row.get(key) for key in ('deleted', 'discarded', 'sync_merged_into'))
+        ):
+            newer.append((doc.id, row))
+    oldest = (docs[-1].to_dict() or {}).get('finished_at') if docs else None
+    # A full scan whose oldest row is still newer than the window may hide another newer capture.
+    capped = len(docs) >= RECENT_FINISH_LIMIT and not (isinstance(oldest, datetime) and oldest <= window['finished_at'])
+    marked = [(cid, row) for cid, row in newer if row.get(FINISH_RECORDING_FIELD)]
+    last_mark = max((row['finished_at'] for _, row in marked), default=None)
+    unmarked = [
+        (cid, row)
+        for cid, row in newer
+        # Past a full scan, keep the tail cut rather than guess which capture is the newest.
+        if not capped and not row.get(FINISH_RECORDING_FIELD) and not _capture_ineligible(row, now)
+        # Speech the person already finished after is behind that Finish.
+        and (last_mark is None or row['finished_at'] > last_mark)
+    ]
+    if len(unmarked) > 1:
+        return 'recording_ambiguous'
+    if unmarked:
+        return unmarked[0]
+    top = [(cid, row) for cid, row in marked if row['finished_at'] == last_mark]
+    if len(top) > 1:
+        return 'recording_ambiguous'
+    return top[0] if top else None
 
 
 def _capture_ineligible(row: Mapping[str, Any], now: datetime, *, window_id: Optional[str] = None) -> bool:
