@@ -225,7 +225,7 @@ def test_enrichment_claim_spills_near_limit_row_and_keeps_notes_readable(row, mo
     assert not list(ref.collection(PAYLOAD_CHUNKS).list_documents())
 
 
-def publish(row, *, fields, recording=False, sections=None, protection_level='enhanced'):
+def publish(row, *, fields, recording=False, sections=None, overview=None, protection_level='enhanced'):
     client, uid, ref = row
     # Incompressible synthetic data exercises a real overflow after protection.
     text = Random(2520).randbytes(460_000 if protection_level == 'enhanced' else 970_000).hex()
@@ -241,7 +241,12 @@ def publish(row, *, fields, recording=False, sections=None, protection_level='en
             'v3_derived': not recording,
             'data_protection_level': protection_level,
             'transcript_segments': [{'start': 0.0, 'end': 10.0, 'text': text, 'speaker': 'SPEAKER_0'}],
-            'structured': {'title': 'Locked title', 'emoji': '📝', **({'sections': sections} if sections else {})},
+            'structured': {
+                'title': 'Locked title',
+                'emoji': '📝',
+                **({'sections': sections} if sections else {}),
+                **({'overview': overview} if overview else {}),
+            },
             'title_locked': True,
             'home_content_invalidated': False,
             'claims': [{'conversation_id': 'prior', 'start': AT, 'end': AT}],
@@ -258,6 +263,65 @@ def publish(row, *, fields, recording=False, sections=None, protection_level='en
     seed(client.transaction())
     assert PAYLOAD_FIELD in ref.get().to_dict()
     return prepared
+
+
+def test_agent_and_selfheal_read_committed_payload(row, monkeypatch):
+    from services import conversation_selfheal
+    from utils.agent_capabilities import reads
+    from utils.conversations.recovery import raw_transcript_bytes
+
+    client, uid, ref = row
+    overview = 'Synthetic enriched notes'
+    prepared = publish(
+        row, fields={'transcript_segments', 'structured'}, overview=overview, protection_level='standard'
+    )
+    job_id = 'synthetic-job'
+    ref.update({'finalization_job_id': job_id})
+    parent = ref.get().to_dict()
+    assert 'transcript_segments' not in parent and 'structured' not in parent
+    monkeypatch.setattr(conversations, 'get_firestore_client', lambda: client)
+    monkeypatch.setattr(conversation_selfheal, 'account_deletion_blocks_user_work', lambda *_: False)
+    agent_ref = 'conversations/' + ref.id
+    full = reads.read_record(uid, agent_ref)
+    expected = conversations.decode_transcript_segments_verified(uid, prepared['transcript_segments'], True)
+    if [segment['text'] for segment in full['transcript_segments']] != [segment['text'] for segment in expected]:
+        pytest.fail('agent readback changed the stored transcript')
+    assert full['structured']['overview'] == overview
+    preview = reads.preview_record(uid, agent_ref)
+    assert preview['structured']['overview'] == overview
+    assert 'transcript_segments' not in preview
+    assert reads.read_record('different-owner', agent_ref) is None
+
+    def verify():
+        return conversation_selfheal.run_selfheal_tick(
+            firestore_client=client,
+            now=AT,
+            mode='detect',
+            dry_run=True,
+            use_configured_uid_allowlist=False,
+            scan_fn=lambda **kwargs: {},
+            cursor_getter=lambda **kwargs: {
+                'pending_verifications': [{'uid': uid, 'conversation_id': ref.id, 'job_id': job_id, 'admitted_at': AT}]
+            },
+            job_reader=lambda *args, **kwargs: {
+                'status': 'completed',
+                'selfheal_transcript_bytes': raw_transcript_bytes(prepared),
+            },
+            wedge_runner=lambda **kwargs: {},
+        )
+
+    assert verify()['verified'] == 1
+    next(iter(ref.collection(PAYLOAD_CHUNKS).list_documents())).delete()
+    for reader in (reads.read_record, reads.preview_record):
+        with pytest.raises(reads.AgentTranscriptReadError, match='payload unavailable'):
+            reader(uid, agent_ref)
+    result = verify()
+    assert result['verified'] == 0 and result['errors'] == 1 and result['refused'] == 0
+    ref.update({'is_locked': True})
+    with pytest.raises(reads.HTTPException) as locked:
+        reads.read_record(uid, agent_ref)
+    assert locked.value.status_code == 423
+    assert reads.preview_record(uid, agent_ref) is None
 
 
 def test_projected_readers_keep_their_field_masks_for_spilled_values(row, monkeypatch):
@@ -662,7 +726,26 @@ def test_account_erasure_reaches_payloads_under_missing_conversation_parents(row
         orphan_chunk.delete()
 
 
-def test_backfill_undo_splits_deletes_and_erases_invalid_descriptors(row, monkeypatch):
+def test_recursive_people_delete_still_bumps_generation(row):
+    from database._client import delete_collection_recursive
+    from database.people_generation import generation_ref
+
+    client, _, ref = row
+    owner = ref.parent.parent
+    people = owner.collection('people')
+    generation = generation_ref(owner)
+    people.document('synthetic-person').set({})
+    generation.set({'generation': 4})
+    try:
+        delete_collection_recursive(people, client=client)
+        assert not list(people.stream())
+        assert generation.get().to_dict()['generation'] == 5
+    finally:
+        people.document('synthetic-person').delete()
+        generation.delete()
+
+
+def test_backfill_undo_bounds_group_and_erases_invalid_descriptors(row, monkeypatch):
     client, uid, ref = row
     second = ref.parent.document('second')
     token = leases.acquire(uid, store.BACKFILL_LEASE, firestore_client=client)
@@ -671,23 +754,21 @@ def test_backfill_undo_splits_deletes_and_erases_invalid_descriptors(row, monkey
         for item in (ref, second):
             publish((client, uid, item), fields={'transcript_segments'})
             item.update({'backfilled': True, 'v3_backfill_run': 'synthetic-run', PAYLOAD_FIELD: 'invalid'})
-        monkeypatch.setattr(store, 'BATCH_MAX_WRITES', 8)
+
+        def undo(lease):
+            return store.undo_backfill_group(
+                uid, lease, [], [ref.id, second.id], run_id='synthetic-run', firestore_client=client
+            )
+
         with pytest.raises(store.Conflict, match='lease_lost'):
-            store.delete_backfill_rows(uid, 'expired', [ref.id], firestore_client=client)
-        assert ref.get().exists
-        assert list(ref.collection(PAYLOAD_CHUNKS).list_documents())
-
-        transaction = client.transaction
-        commits = []
-
-        def new_transaction():
-            tx = transaction()
-            commits.append(tx)
-            return tx
-
-        monkeypatch.setattr(client, 'transaction', new_transaction)
-        assert store.delete_backfill_rows(uid, token, [ref.id, second.id], firestore_client=client) == 2
-        assert len(commits) == 2
+            undo('expired')
+        with monkeypatch.context() as bounded:
+            bounded.setattr(store, 'BATCH_MAX_WRITES', 8)
+            with pytest.raises(store.Conflict, match='undo_group_too_large'):
+                undo(token)
+        for item in (ref, second):
+            assert item.get().exists and list(item.collection(PAYLOAD_CHUNKS).list_documents())
+        assert undo(token) == ('undone', 0, 2)
         for item in (ref, second):
             assert not item.get().exists
             assert not list(item.collection(PAYLOAD_CHUNKS).list_documents())

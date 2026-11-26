@@ -61,7 +61,7 @@ from models.conversation_photo import ConversationPhoto
 from models.capture_window_proof import CaptureWindowProof
 from models.transcript_segment import TranscriptSegment, legacy_conversation_segment_id
 from utils import encryption
-from utils.conversation_payload import PAYLOAD_FIELD
+from utils.conversation_payload import PAYLOAD_FIELD, InvalidConversationPayload
 from utils.conversation_page_cursor import BookmarkDict, decode_cursor, encode_cursor, query_scope
 from config.firestore_read_levers import lever_enabled
 from config.recording_speakers import stamp_scope_index, with_creation_scope_index
@@ -2171,6 +2171,24 @@ def get_conversation_raw_snapshot(
     if not getattr(snapshot, 'exists', False):
         return None
     return snapshot.to_dict()
+
+
+def read_authorized_conversation_payload(
+    uid, conversation_id, *, payload_allowed, field_paths=None, firestore_client=None
+):
+    """Recheck the parent and read the current generation in one read-only snapshot."""
+    client = firestore_client if firestore_client is not None else get_firestore_client()
+    ref = client.collection('users').document(uid).collection('conversations').document(conversation_id)
+
+    @firestore.transactional
+    def read(tx):
+        snapshot = ref.get(field_paths=field_paths, transaction=tx)
+        row = snapshot.to_dict()
+        if not row or not payload_allowed(row):
+            raise InvalidConversationPayload('conversation payload unavailable')
+        return read_conversation_payload(client, tx, snapshot, field_paths=field_paths)
+
+    return read(client.transaction(read_only=True))
 
 
 def resolve_sync_conversation_redirect(

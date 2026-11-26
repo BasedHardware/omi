@@ -86,6 +86,8 @@ async def reconcile_at(strict, monkeypatch, now, outline_entries=None, derive_ru
         return recordings, {k: r for k, r in existing.items() if r.get('v3_backfill_run') == derive_run}, cache
 
     async def blocking(pool, fn, *args, **kwargs):
+        if fn is store.clear_terminal_pending:
+            return store.leases.lease_ref(strict, args[0], 'builder').get().to_dict().get('v3_bounded_pending_limit')
         if fn is store.load:
             return (loader or load)(*args, **kwargs)
         if fn is store.load_derive:

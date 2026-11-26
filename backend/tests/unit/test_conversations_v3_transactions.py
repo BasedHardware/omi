@@ -283,6 +283,8 @@ async def test_two_concurrent_reconciles_publish_one_copy(strict, monkeypatch):
     monkeypatch.setattr(store, 'get_firestore_client', lambda: strict)
 
     async def blocking(pool, fn, *args, **kwargs):
+        if fn is store.clear_terminal_pending:
+            return None
         if fn is original_load:
             entered.set()
             await resume.wait()

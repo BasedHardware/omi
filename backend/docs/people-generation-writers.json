@@ -1,5 +1,5 @@
 {
-  "backend/database/_client.py:delete_collection_recursive": "020f43fc0e4d148051db3469545adc5b04a13653c4daa3a0acf57f3501f6f0b9",
+  "backend/database/_client.py:delete_collection_recursive": "e15cf99943a0b3ad18c6c8b686cfda1f4352704a340e6aec4f811c328013892f",
   "backend/database/chat_edits.py:apply_update": "c68866ff82dcf16f9091668161b9bcb90f550ece16d1e6ddce9139c834690f53",
   "backend/database/chat_edits.py:apply_update.apply": "0b4e18d1c76af32beb6b4a82d3537eeb9dece8876bbae205c78f41546d1be9c6",
   "backend/database/chat_edits.py:restore": "df2d867c25eb5d432254f5863a3d19f36cd6cffd4c08e88bb93fae55a7729ac5",

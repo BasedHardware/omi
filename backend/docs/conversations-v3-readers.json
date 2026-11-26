@@ -615,6 +615,10 @@
     "policy": "both",
     "reason": "Explicit recording-layer pipeline/finalization/recovery exception. Reads persisted ownership; recording processing exits before model calls."
   },
+  "backend/services/conversation_selfheal.py:read_authorized_conversation_payload": {
+    "policy": "both",
+    "reason": "Recovery verifies raw content after the account deletion check and revalidates completion, job binding and protection before loading chunks."
+  },
   "backend/services/summary_debt_repair.py:collection": {
     "policy": "conversations",
     "reason": "Product and derived readers must apply is_visible_conversation or the validated by-id boundary; home_hidden is not a general visibility filter."
@@ -626,6 +630,10 @@
   "backend/utils/agent_capabilities/reads.py:get_conversation_raw_snapshot": {
     "policy": "conversations",
     "reason": "Product and derived readers must apply is_visible_conversation or the validated by-id boundary; home_hidden is not a general visibility filter."
+  },
+  "backend/utils/agent_capabilities/reads.py:read_authorized_conversation_payload": {
+    "policy": "conversations",
+    "reason": "Full reads and masked previews recheck owner-scoped product visibility and protection in the same snapshot as the chunks."
   },
   "backend/utils/app_integrations.py:get_conversations_by_id": {
     "policy": "conversations",

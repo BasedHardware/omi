@@ -316,6 +316,7 @@ def test_cursor_collector_only_releases_short_hold_for_product_reads(monkeypatch
         include_discarded=False,
         budget=None,
         bookmark=anchor,
+        read_row=conversations.document_data_with_revision,
         presentation=presentation,
     )
     assert [item['id'] for item in rows] == (['capture'] if presentation else [])

@@ -80,7 +80,7 @@ async def test_deterministic_conflict_answers_the_task_and_backs_the_owner_off(b
 
     monkeypatch.setattr(service, '_commit', conflict)
     blocked = []
-    monkeypatch.setattr(store, 'record_blocked', lambda uid, token, why: blocked.append((token, why)))
+    monkeypatch.setattr(store, 'record_blocked', lambda uid, token, why, **kw: blocked.append((token, why)))
     assert await service.reconcile('u') == 'blocked'
     assert blocked == [('token', reason)]
 
@@ -173,7 +173,7 @@ async def test_paid_outline_is_kept_when_the_commit_conflicts(builder, monkeypat
         raise Conflict('target_exists')
 
     monkeypatch.setattr(service, '_commit', conflict)
-    monkeypatch.setattr(store, 'record_blocked', lambda *a: None)
+    monkeypatch.setattr(store, 'record_blocked', lambda *a, **kw: None)
     await service.reconcile('u')
     assert len(messages) == 1
     assert len(saved) == 1 and saved[0][1][0]['title'] == 'A plan'
@@ -373,7 +373,7 @@ async def test_oversized_document_parks_the_owner_instead_of_retrying(builder, m
 
     monkeypatch.setattr(lifecycle, 'commit_v3_projection', too_large)
     blocked = []
-    monkeypatch.setattr(store, 'record_blocked', lambda uid, token, why: blocked.append(why))
+    monkeypatch.setattr(store, 'record_blocked', lambda uid, token, why, **kw: blocked.append(why))
     assert await service.reconcile('u') == 'blocked'
     assert blocked == ['document_too_large']
 
