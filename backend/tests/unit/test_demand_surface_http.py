@@ -1,6 +1,6 @@
 """Exercise the real surface-intent endpoint over ASGI with synthetic identity."""
 
-from unittest.mock import Mock
+from unittest.mock import Mock, call
 
 import pytest
 from fastapi import FastAPI
@@ -80,11 +80,12 @@ def test_surface_auth_retains_security_fences_without_registration_or_recovery(e
     monkeypatch.setattr(auth, 'record_user_platform', registration)
     monkeypatch.setattr(auth, 'record_client_device', device)
     monkeypatch.setattr(auth, '_recover_locked_content_if_request', recovery)
-    request = SimpleNamespace(url=SimpleNamespace(path='/v1/users/client-state'))
-    assert auth.get_current_user_uid(authorization='Bearer synthetic-token', request=request) == 'synthetic-owner'
-    deletion.assert_called_once_with('synthetic-owner')
-    cutover.assert_called_once_with('synthetic-owner', request)
-    byok.assert_called_once_with('synthetic-owner')
+    for path in ('/v1/users/client-state', '/v1/telemetry/v3-finish-cuts'):
+        request = SimpleNamespace(url=SimpleNamespace(path=path))
+        assert auth.get_current_user_uid(authorization='Bearer synthetic-token', request=request) == 'synthetic-owner'
+        cutover.assert_called_with('synthetic-owner', request)
+    deletion.assert_has_calls([call('synthetic-owner'), call('synthetic-owner')])
+    byok.assert_has_calls([call('synthetic-owner'), call('synthetic-owner')])
     registration.assert_not_called()
     device.assert_not_called()
     recovery.assert_not_called()

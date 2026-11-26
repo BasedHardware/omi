@@ -1177,17 +1177,17 @@ def _complete_server_batch_capture_txn(
     # Only this primitive's committed terminal is an idempotent success. A
     # generic completed/fenced job must never authorize a raw-capture handoff.
     if job.get('status') == 'completed':
-        return (
-            'completed'
-            if bound
+        if not (
+            bound
             and capture_allowed
             and current.get('status') == 'completed'
             and job.get('finalization_outcome') == 'server_batch_capture'
             and job.get('terminal_outcome') == 'success'
             and job.get('fanout_status') == 'completed'
             and job.get('fanout_lease_epoch') == lease_epoch
-            else 'fenced'
-        )
+        ):
+            return 'fenced'
+        return 'completed_manual_end' if current.get('v3_manual_end_requested') is True else 'completed'
     if not _is_current_lease(job, dispatch_generation, lease_epoch):
         return 'lease_conflict'
     if not bound or not capture_allowed or current.get('status') != 'processing':
@@ -1232,7 +1232,7 @@ def _complete_server_batch_capture_txn(
         },
     )
     _record_projection_delta(transaction, projection_collection, job, leased=-1, completed=1, success=1)
-    return 'completed'
+    return 'completed_manual_end' if manual_end_update else 'completed'
 
 
 def complete_server_batch_capture(
@@ -1258,14 +1258,19 @@ def complete_server_batch_capture(
         _now(),
         client.collection(FINALIZATION_PROJECTION_COLLECTION),
     )
-    if result == 'completed':
+    manual_end_proof = result == 'completed_manual_end'
+    if result in {'completed', 'completed_manual_end'}:
         # These observers may read and start their own transactions, so they
         # must run after the atomic owner commit (also safe on redelivery).
         stop_quiet_check_for_conversation(uid, conversation_id, firestore_client=client)
         invalidate_people_stats_cache(uid)
         if conversations_db.serving_for('LIFECYCLE_V2_MODE', uid):
             conversations_db.sync_conversation_search_index_public(uid, conversation_id)
-    return result
+        if manual_end_proof:
+            from utils.conversations.v3 import finish_home_sli
+
+            finish_home_sli.observe_legacy_manual_end(uid, conversation_id)
+    return 'completed' if manual_end_proof else result
 
 
 def _defer_sync_revision_fence_txn(

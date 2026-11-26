@@ -185,7 +185,11 @@ from config.conversations_v3 import conversations_v3_enabled, live_recap_enabled
 from config.app_channel import APP_CHANNEL_HEADER, app_channel
 from utils.episodes import client_gate
 from models.conversation import ConversationsLiveResponse
-from utils.conversations.v3 import audio as v3_audio, client_capability as v3_client_capability, summary as v3_summary
+from utils.conversations.v3 import (
+    audio as v3_audio,
+    client_capability as v3_client_capability,
+    summary as v3_summary,
+)
 from utils.conversations.v3 import live as v3_live, policy as v3_policy
 from utils.conversations.v3 import finish_home_sli
 from utils.conversations.v3.finish import finish_live_window
@@ -685,7 +689,11 @@ def process_in_progress_conversation(
             uid,
             request.live_conversation_id if request else None,
             allow_recording_fallback=request is None or request.empty_body,
-            **({'observe_recording': finish.bind} if finish else {}),
+            **(
+                {'observe_recording': lambda recording_id: finish.bind(recording_id, prove_legacy_manual_end=True)}
+                if finish
+                else {}
+            ),
         )
         if response is not None:
             return response
@@ -1334,6 +1342,15 @@ def get_conversations(
         for row in conversations
     ]
     redact_conversations_for_list(conversations)
+    if (
+        v3_home
+        and request is not None
+        and app_channel(request.headers.get(APP_CHANNEL_HEADER)) == 'beta'
+        and request.headers.get(home_membership.OWNERSHIP_HEADER) == '1'
+    ):
+        # This is the actual TestFlight Home response after owner and acknowledged
+        # episode projection, so readiness reflects what the reader can display.
+        finish_home_sli.observe_home_summaries(uid, conversations)
     if budget.truncated and response is not None:
         response.headers[OMI_LIST_TRUNCATED_HEADER] = OMI_LIST_TRUNCATED_VALUE
     budget.observe('truncated' if budget.truncated else 'complete')

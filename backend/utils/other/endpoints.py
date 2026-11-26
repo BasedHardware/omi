@@ -365,7 +365,11 @@ def _resolve_current_user_uid(
 
     # Content-free telemetry and surface intent avoid customer-store
     # registration/recovery writes; security fences above and BYOK still apply.
-    if getattr(getattr(request, 'url', None), 'path', None) in {'/v1/telemetry/fleet', '/v1/users/client-state'}:
+    if getattr(getattr(request, 'url', None), 'path', None) in {
+        '/v1/telemetry/fleet',
+        '/v1/users/client-state',
+        '/v1/telemetry/v3-finish-cuts',
+    }:
         validate_byok_request(uid)
         return uid
 

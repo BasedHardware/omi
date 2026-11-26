@@ -782,10 +782,6 @@ async def reconcile(
                 finish_sources = finish_windows.get(row['id'], ())
                 for recording_id in finish_sources:
                     finish_home_sli.observe_window(uid, recording_id, row['id'])
-                if finish_sources and not row.get('v3_process_pending'):
-                    # Some visible windows can reuse notes already written while
-                    # hidden. The projection write preserves that receipt.
-                    finish_home_sli.observe_home_summary(uid, {**existing.get(row['id'], {}), **row})
         if not derive and not on_open:
             cap_starts = {group['lines'][0]['start'] for group in groups if group['after_window_cap']}
             new_cap_starts = {row['started_at'] for row in rows if row['id'] not in existing} & cap_starts

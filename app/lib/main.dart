@@ -12,6 +12,8 @@ import 'dart:async';
 import 'package:omi/services/telemetry/client_telemetry.dart';
 import 'package:omi/services/telemetry/client_telemetry_flags.dart';
 import 'package:omi/services/telemetry/client_telemetry_transport.dart';
+import 'package:omi/services/telemetry/finish_home_sli_telemetry.dart';
+import 'package:omi/services/telemetry/finish_home_sli_telemetry_transport.dart';
 import 'dart:ui';
 
 import 'package:flutter/foundation.dart';
@@ -598,6 +600,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
       unawaited(_phoneBatteryTelemetry.start());
       PlatformManager.instance.analytics.recordTelemetryHealth();
       if (ClientTelemetryFlags.migrationEnabled) installClientTelemetryTransport();
+      installFinishHomeSliTelemetryTransport();
     }
     if (SharedPreferencesUtil().devLogsToFileEnabled) {
       DebugLogManager.setEnabled(true);
@@ -664,6 +667,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
     } else if (state == AppLifecycleState.paused) {
       OnboardingSyncRuntime.setActive(false);
       ClientTelemetry.instance.onBackground();
+      FinishHomeSliTelemetry.instance.onBackground();
       if (!PhysicalQualification.enabled) {
         _appSessionTelemetry.recordBackgrounded();
         _performanceTelemetry.onLifecycleState(state);
@@ -672,6 +676,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
       _onAppPaused();
     } else if (state == AppLifecycleState.detached) {
       ClientTelemetry.instance.onBackground();
+      FinishHomeSliTelemetry.instance.onBackground();
       _deinit();
     }
   }

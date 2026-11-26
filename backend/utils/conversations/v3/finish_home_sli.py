@@ -41,15 +41,52 @@ class Finish:
     def cut(self) -> None:
         _emit('cut', finish=self.finish, cut_at=self.cut_at.isoformat(), source=self.source, basis=self.basis)
 
-    def bind(self, recording_id: str) -> None:
+    def bind(self, recording_id: str, *, prove_legacy_manual_end: bool = False) -> None:
         if self.finish is None:
             # Released clients without the header carry no source or device cut
-            # clock. A recording key deduplicates the observable server cut.
+            # clock. Keep the candidate out of the cohort unless a committed
+            # server-side manual-end marker later proves its eligibility.
             finish = _key('legacy-finish', self.uid, recording_id)
-            Finish(self.uid, finish, self.cut_at, self.source, self.basis).cut()
+            recording = _key('recording', self.uid, recording_id)
+            _emit(
+                'legacy_candidate',
+                finish=finish,
+                recording=recording,
+                cut_at=self.cut_at.isoformat(),
+                source='unknown',
+                basis='server_cut',
+            )
+            if prove_legacy_manual_end:
+                observe_legacy_manual_end(self.uid, recording_id)
         else:
             finish = self.finish
-        _emit('binding', finish=finish, recording=_key('recording', self.uid, recording_id))
+            _emit('binding', finish=finish, recording=_key('recording', self.uid, recording_id))
+
+
+def observe_client_cut(uid: str, identifier: str, cut_at: datetime, source: str) -> None:
+    """Record a client cut delivered by the authenticated durable outbox."""
+    if not enabled():
+        return
+    identifier = UUID(identifier).hex
+    now = datetime.now(timezone.utc)
+    cut_at = cut_at.astimezone(timezone.utc)
+    if cut_at > now:
+        cut_at, basis = now, 'server_cut'
+    else:
+        basis = 'client_cut'
+    Finish(
+        uid,
+        _key('finish', uid, identifier),
+        cut_at,
+        source if source in {'app', 'pendant'} else 'unknown',
+        basis,
+    ).cut()
+
+
+def observe_legacy_manual_end(uid: str, recording_id: str) -> None:
+    """Record positive proof only after the server commits its manual-end marker."""
+    if enabled():
+        _emit('legacy_manual_end', recording=_key('recording', uid, recording_id))
 
 
 def from_request(uid: str, request) -> Finish | None:
@@ -97,11 +134,9 @@ def observe_summary(uid: str, card_id: str) -> None:
 
 
 def observe_home_summary(uid, row):
-    """Validate a settled notes row against the v3 Home list's visibility contract."""
+    """Observe a summary only after it survives the TestFlight Home list projection."""
     if not enabled():
         return
-    from database.conversations import is_visible_conversation
-    from utils.conversations.fragment_visibility import is_relevance_discarded
     from utils.conversations.summary_delivery import present
 
     if (
@@ -113,8 +148,12 @@ def observe_home_summary(uid, row):
         and not row.get('backfilled')
         and not row.get('is_locked')
         and not row.get('sync_merged_into')
-        and not is_relevance_discarded(row)
-        and is_visible_conversation(row, hide_home=True, presentation=True)
         and present(row.get('structured'))
     ):
         observe_summary(uid, row['id'])
+
+
+def observe_home_summaries(uid, rows) -> None:
+    """Record qualifying rows from the already projected Home response."""
+    for row in rows:
+        observe_home_summary(uid, row)

@@ -80,7 +80,7 @@ _BOOST_EXEMPT_DEFAULT = (
     "dev:memories,dev:memories_write_burst,dev:conversations,dev:conversations_from_segments,"
     "mcp:oauth_url_client,mcp:oauth_url_client_global,screen_task:gate,screen_task:gate_daily,users:budget_choice,"
     "conversations:task-presence,google_calendar:selection,"
-    "conversations:historical_summary_open,conversations:historical_summary_open_daily"
+    "conversations:historical_summary_open,conversations:historical_summary_open_daily,telemetry:finish_cut"
 )
 _RATE_LIMIT_BOOST_EXEMPT_RAW: str = os.getenv("RATE_LIMIT_BOOST_EXEMPT", _BOOST_EXEMPT_DEFAULT)
 
@@ -104,6 +104,9 @@ RATE_POLICIES: dict[str, tuple[int, int]] = {
     # User edits share the memories/action-items write class.
     "spaces:mutations": (120, 3600),
     "users:surface_state": (60, 60),  # Multiple devices plus foreground transitions; metadata only.
+    # A Finish cut is one small authenticated event. The generous hourly bound
+    # absorbs device retries while bounding log volume from a buggy client.
+    "telemetry:finish_cut": (120, 3600),
     "users:budget_choice": (6, 60),  # Shared GET/PUT ceiling before monthly usage reads.
     # A plans sheet opens on user intent; bound accidental polling before provider reads.
     "storefront:plans": (12, 60),

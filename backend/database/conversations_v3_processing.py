@@ -2,7 +2,7 @@
 
 from database import conversations_v3_leases as leases
 from utils.conversations.v3.live import FINISH_WINDOW_FIELD
-from utils.conversations.v3 import finish_home_sli, metrics
+from utils.conversations.v3 import metrics
 
 import hashlib
 import json
@@ -360,9 +360,6 @@ def settle_processing(
         first, row = outcome
         if first == 'notes':
             _observe_first_notes(row)
-            finish_home_sli.observe_home_summary(
-                uid, {**row, 'id': cid, 'v3_notes_written': True, 'tile_state': 'done'}
-            )
         else:
             summary_delivery.SETTLED_UNSUMMARIZED.labels(_lane(row), first).inc()
     if manual_visibility is not None:

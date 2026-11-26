@@ -142,13 +142,14 @@ class MemoryTelemetryStore implements ClientTelemetryStore {
 /// JSON document on local disk. A failed read starts empty; a failed write
 /// leaves the in-memory outbox intact for the next persist.
 class FileTelemetryStore implements ClientTelemetryStore {
-  FileTelemetryStore(this._directory);
+  FileTelemetryStore(this._directory, {this.fileName = 'client_telemetry_outbox.json'});
 
   final Future<Directory> Function() _directory;
+  final String fileName;
 
   Future<File> _file() async {
     final directory = await _directory();
-    return File('${directory.path}/client_telemetry_outbox.json');
+    return File('${directory.path}/$fileName');
   }
 
   @override

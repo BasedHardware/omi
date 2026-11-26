@@ -63,6 +63,7 @@ import 'package:omi/services/capture/stt_mode_resolver.dart';
 import 'package:omi/services/capture/recording_lifecycle_telemetry.dart';
 import 'package:omi/backend/http/shared.dart' show accountDeletionWebSocketCloseCode;
 import 'package:omi/services/telemetry/client_telemetry.dart';
+import 'package:omi/services/telemetry/finish_home_sli_telemetry.dart';
 import 'package:omi/services/capture/capture_seams.dart';
 import 'package:omi/services/capture/capture_session_owner.dart';
 import 'package:omi/services/capture/capture_wedge_monitor.dart';
@@ -4413,9 +4414,16 @@ class CaptureController extends ChangeNotifier
     // The app's deliberate Finish names the live window. Pendant Finish uses
     // the current recording. Capture the cut before awaiting the WAL snapshot.
     final finishSource = liveConversationId == null ? 'pendant' : 'app';
-    final finishCut = manualFinish && Env.isTestFlight
-        ? '$finishSource,${const Uuid().v4()},${DateTime.now().millisecondsSinceEpoch}'
-        : null;
+    final finishCutAt = DateTime.now();
+    final finishCutId = manualFinish && Env.isTestFlight && !Env.hasApiBaseUrlOverride ? const Uuid().v4() : null;
+    final finishCut = finishCutId == null ? null : '$finishSource,$finishCutId,${finishCutAt.millisecondsSinceEpoch}';
+    if (finishCutId != null) {
+      await FinishHomeSliTelemetry.instance.recordCut(
+        operationId: finishCutId,
+        source: finishSource,
+        occurredAt: finishCutAt,
+      );
+    }
     final close = _admitConversationClose(processNow: true);
     _pendingProcessCloses.add(close);
     final placeholderOwner = ++_processingPlaceholderOwner;

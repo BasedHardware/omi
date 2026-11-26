@@ -78,6 +78,7 @@ def readback(events, start, through):
         raise ValueError('the last Finish in the cohort needs a full 60 seconds')
     censor_seconds = (through - end).total_seconds()
     cuts, bindings = {}, {}
+    legacy_candidates, legacy_proofs = {}, set()
     summaries, routes, windows = defaultdict(list), defaultdict(list), defaultdict(list)
     for event in events:
         stage = event['stage']
@@ -94,12 +95,36 @@ def readback(events, start, through):
             candidate = (observed_at, event['recording'])
             if finish not in bindings or candidate < bindings[finish]:
                 bindings[finish] = candidate
+        elif stage == 'legacy_candidate':
+            finish = event['finish']
+            candidate = (
+                timestamp(event['cut_at']),
+                observed_at,
+                event['source'] if event['source'] in SOURCES else 'unknown',
+                event['basis'],
+                event['recording'],
+            )
+            if finish not in legacy_candidates or candidate < legacy_candidates[finish]:
+                legacy_candidates[finish] = candidate
+        elif stage == 'legacy_manual_end':
+            legacy_proofs.add(event['recording'])
         elif stage == 'window':
             windows[event['recording']].append((observed_at, event['card']))
         elif stage == 'summary':
             summaries[event['card']].append(observed_at)
         elif stage == 'route':
             routes[event['recording']].append((observed_at, event['route']))
+
+    # An older client has no local cut token. Its candidate becomes eligible
+    # only when a committed server manual-end marker names the same recording.
+    for finish, (cut, observed_at, source, basis, recording) in legacy_candidates.items():
+        if recording not in legacy_proofs:
+            continue
+        candidate = (cut, observed_at, source, basis)
+        if finish not in cuts or candidate < cuts[finish]:
+            cuts[finish] = candidate
+        if finish not in bindings or (observed_at, recording) < bindings[finish]:
+            bindings[finish] = (observed_at, recording)
 
     by_route_source = defaultdict(list)
     timing_basis = defaultdict(int)

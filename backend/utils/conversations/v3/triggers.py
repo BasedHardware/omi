@@ -95,7 +95,14 @@ def enqueue(uid, *, at=None, manual_end_id=None):
 
 
 def changed(uid, cid, *, manual_end=False):
-    if store.mark_pending(uid, cid, manual_end=manual_end):
+    should_enqueue = store.mark_pending(uid, cid, manual_end=manual_end)
+    if should_enqueue and manual_end:
+        # Positive proof for an untagged legacy client is recorded only after
+        # mark_pending committed the server's manual-end marker.
+        from utils.conversations.v3 import finish_home_sli
+
+        finish_home_sli.observe_legacy_manual_end(uid, cid)
+    if should_enqueue:
         enqueue_pending(uid, manual_end_id=cid if manual_end else None)
 
 

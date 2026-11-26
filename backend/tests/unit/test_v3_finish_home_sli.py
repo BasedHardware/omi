@@ -52,9 +52,59 @@ def test_legacy_finish_requires_a_bound_recording(monkeypatch, caplog):
         assert not caplog.records
         finish.bind('recording-id')
     records = [json.loads(record.message.split(readback.MARKER)[1]) for record in caplog.records]
+    assert [record['stage'] for record in records] == ['legacy_candidate']
     assert records[0]['source'] == 'unknown'
     assert records[0]['basis'] == 'server_cut'
-    assert records[0]['finish'] == records[1]['finish']
+    assert 'owner' not in caplog.text
+    assert 'recording-id' not in caplog.text
+
+
+def test_client_cut_uses_the_same_key_as_finish_header(monkeypatch, caplog):
+    monkeypatch.setenv('CONVERSATIONS_V3_FINISH_HOME_SLI', 'on')
+    cut_id = str(uuid4())
+    cut_at = datetime.now(timezone.utc)
+    with caplog.at_level('INFO'):
+        sli.observe_client_cut('owner', cut_id, cut_at, 'app')
+    event = json.loads(caplog.records[0].message.split(readback.MARKER)[1])
+    assert event['stage'] == 'cut'
+    assert event['finish'] == sli._key('finish', 'owner', cut_id.replace('-', ''))
+    assert event['source'] == 'app'
+    assert event['basis'] == 'client_cut'
+    assert 'owner' not in caplog.text
+    assert cut_id not in caplog.text
+
+
+def test_readback_only_admits_proven_legacy_candidates():
+    def event(stage, seconds, **fields):
+        return {'stage': stage, 'observed_at': START + timedelta(seconds=seconds), **fields}
+
+    events = [
+        event(
+            'legacy_candidate',
+            1,
+            finish='legacy-a',
+            recording='recording-a',
+            cut_at=(START + timedelta(seconds=1)).isoformat(),
+            source='unknown',
+            basis='server_cut',
+        ),
+        event(
+            'legacy_candidate',
+            2,
+            finish='legacy-b',
+            recording='recording-b',
+            cut_at=(START + timedelta(seconds=2)).isoformat(),
+            source='unknown',
+            basis='server_cut',
+        ),
+        event('legacy_manual_end', 3, recording='recording-a'),
+        event('window', 4, recording='recording-a', card='card-a'),
+        event('summary', 20, card='card-a'),
+    ]
+    result = readback.readback(events, START, THROUGH)
+    assert result['totals']['finishes'] == 1
+    assert result['totals']['timing_unknown'] == 1
+    assert result['by_route_source'][0]['source'] == 'unknown'
 
 
 def test_readback_keeps_missing_and_late_finishes_in_the_cohort():

@@ -56,7 +56,15 @@ def _acknowledge(uid, window, outcome, recording_id, observe_recording):
     metrics.FINISH_NO_POINTER.labels(outcome).inc()
     if not recording_id:
         return None
-    if observe_recording is not None:
+    if observe_recording is not None and outcome in {
+        'already_cut',
+        'already_requested',
+        'consumed',
+        'cut',
+        'recording_cut',
+        'recording_requested',
+        'requested',
+    }:
         observe_recording(recording_id)
     if outcome in {'cut', 'consumed', 'recording_cut'}:
         triggers.enqueue_pending(uid, manual_end_id=recording_id)
