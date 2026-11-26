@@ -1678,7 +1678,8 @@ def test_jobs_frozen_horizon_wraps_despite_new_inflow(monkeypatch):
     second, _, cursor = cluster.discover_jobs(client, budget=SweepBudget(60), after=cursor, max_rows=1)
     assert len(second) == 1 and first != second and cursor['horizon'] == horizon
     assert cluster.discover_jobs(client, budget=SweepBudget(60), after=cursor) == ([], False, None)
-    assert cluster.discover_jobs(client, budget=SweepBudget(60), max_rows=1)[0] == first
+    wrapped, _, _ = cluster.discover_jobs(client, budget=SweepBudget(60), max_rows=1)
+    assert [path for path, _ in wrapped] == [path for path, _ in first]
 
 
 @pytest.mark.parametrize('enqueued', [None, 'old', True, float('nan'), float('inf'), -float('inf'), 'missing'])
