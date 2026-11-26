@@ -19,6 +19,8 @@ def run_external(fn, uid, language, conversation, *args, **kwargs):
         raise RuntimeError('v3_summary_busy')
     row = conversation.model_dump()
     revision, content_hash = row.get('sync_content_revision'), writers.processing_hash(row)
+    backfilled = bool(row.get('backfilled'))
+    backfill_prior: dict | None = {} if backfilled else None
     persisted = []
     armed = False
     observer = kwargs.pop('persistence_observer', None)
@@ -31,7 +33,7 @@ def run_external(fn, uid, language, conversation, *args, **kwargs):
     try:
         retry = policy.explicit_retry(row, kwargs.get('trigger'))
         with leases.keepalive(uid, 'summary-' + conversation.id, token), fence.writer(uid, conversation.id, token):
-            outcome = writers.begin_processing(uid, row, token, force=retry)
+            outcome = writers.begin_processing(uid, row, token, force=retry, backfill_prior=backfill_prior)
             if outcome is not True:
                 # A locked row is owned elsewhere and an exhausted row is already terminal: both are
                 # settled no-ops, so the outbox acknowledges them instead of looping on a 500.
@@ -41,10 +43,14 @@ def run_external(fn, uid, language, conversation, *args, **kwargs):
             conversation.tile_state = 'writing'
             conversation.summary_retryable = False
             try:
-                with models.notes_mode(uid, foreground=retry):
+                with models.notes_mode(uid, foreground=retry, backfilled=backfilled):
                     result = fn(uid, language, conversation, *args, persistence_observer=observed, **kwargs)
                 if not persisted or not persisted[-1] or getattr(result.status, 'value', result.status) != 'completed':
                     raise RuntimeError('v3_processing_not_completed')
+            except (models.BackfillNotesDeletionBlocked, models.BackfillNotesAdmissionTimeout):
+                if backfill_prior is not None:
+                    writers.park_backfill_processing(uid, conversation.id, token, backfill_prior)
+                raise
             except FinalizationOwnedElsewhere:
                 raise
             except Exception:

@@ -445,16 +445,36 @@ PYTHONPATH=backend backend/.venv/bin/python $S run --owners-file $O --since 2026
   builder leases before it lists the run's documents, so no pass commits while it works. It refuses
   while either is held or a notes write for the owner is in flight, and records the refusal in the
   ledger (`undo.reason`); rerun it. `undo` and `resume` exit 1 when no listed owner has the run.
-  Otherwise it restores every donor field exactly, then deletes the run's derived rows. It writes no
-  tombstones and touches no audio. A donor whose backfilled copy the owner deleted is not restored
-  (that would resurrect the deletion): it stays a hidden source, together with every copy it shares
-  and those copies' donors. The ledger and `undo --dry-run` count them (`donors_kept_deleted`,
-  `rows_kept_deleted`, `donors_deleted_by_owner`). Undo a re-derive by undoing the original run;
+  Otherwise it works one connected group at a time (donors and the copies that claim them): in one
+  transaction it restores every donor field exactly and deletes the group's copies, so nothing is
+  hidden or doubled partway. It writes no tombstones and touches no audio. A group in which the owner
+  deleted a copy (a deletion tombstone for a copy id, or a donor deleted span added after the run;
+  both read inside the transaction, so a delete racing undo is seen) stays as backfilled v3, so undo
+  never resurrects a deletion; its surviving copies' owed notes move to the live notes marker (the
+  deleted copy's notes are never written). Totals and removed copy ids are written in each group's own
+  transaction. If the owner deletes a copy in the instant undo removes it (before the delete path
+  writes its tombstone), the legacy row is visible again: undo lists those copy ids as
+  `deleted_during_undo_ids` (every attempt's removals are checked), so delete the matching legacy
+  rows by hand. A run with kept groups or a raced delete ends `undone_partial`, never `undone`, and
+  the operator exits 1. A group whose copy a live builder pass extended with recordings captured
+  after the run (the copy then holds live capture as well as donor lines) also stays as v3, counted
+  as `groups_kept_live`/`donors_kept_live`. A group containing a copy stamped with another run
+  uses the same counters. Undo leaves the other run’s rows and notes obligations untouched. The ledger
+  records `groups_kept_deleted` and `donors_kept_deleted`; `undo --dry-run` prints the group count
+  and `donors_deleted_by_owner_min`, a lower bound (it counts deleted spans and deleted copies
+  recorded on donors, and misses only a delete whose claim release has not run yet). Undoing a run
+  already `undone` or `undone_partial` reports its recorded result and changes nothing. A group
+  that is both live-extended and owner-deleted counts as kept-deleted. A group whose reads (two, plus one per donor and three per copy) would exceed 500 is
+  refused (`undo_group_too_large`); partitions keep groups far below that. Undo a re-derive by undoing the original run;
   `undo` on a re-derive run id says so and exits 1. Not undone: outline cache entries, speaker-resolution and media-boundary
   evidence that the notes path wrote, and gateway spend.
 - **Blocked.** A partition over the loader's 128-document limit, a planned id that is already a live
   row (`target_exists`), a tombstoned window, or a converted donor that no longer reads
-  (`backfill_source_unreadable`; its copies are kept) blocks the run. The partition and its reason are
+  (`backfill_source_unreadable`; its copies are kept), a re-derive in which a converted donor no rebuilt window claims
+  (`backfill_donor_unclaimed`; when the owner deleted that donor's copy, undo keeps it, so undo the
+  run and plan a new one around that range instead of resuming), or account deletion starting mid-drain (`account_deletion`;
+  no further transcript goes to the notes model) blocks the run. One owner's blocked plan prints
+  its reason and the operator continues with the next owner (exit 1). The partition and its reason are
   recorded in the ledger. Fix the cause, then `resume`. Never describe a blocked or partial run as
   complete. `status` shows partitions committed, windows, Home-visible rows, outline calls and
   notes processed or failed.
