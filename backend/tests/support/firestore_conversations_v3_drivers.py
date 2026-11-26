@@ -257,9 +257,7 @@ def entries():
         DriverEntry('database.conversations_v3_manual_cuts.tail', base={'uid': SHAPE_UID, 'at': FROZEN_NOW}),
         DriverEntry('database.conversations_v3_manual_cuts.clear_tail', base={'uid': SHAPE_UID, 'at': FROZEN_NOW}),
         DriverEntry(
-            'database.conversations_v3_manual_cuts.clear_tails_before',
-            base={'uid': SHAPE_UID, 'before': FROZEN_NOW},
-            neutrals={'limit': (3, 'row cap only; the same single-field range read')},
+            'database.conversations_v3_manual_cuts.clear_tails_before', base={'uid': SHAPE_UID, 'before': FROZEN_NOW}
         ),
         DriverEntry(
             'utils.conversations.v3.service.has_pending',

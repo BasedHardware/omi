@@ -88,13 +88,18 @@ def record_end(uid, *, ended_at=None, now=None, live_tail=None):
         at = cut_instant(ended_at, now or datetime.now(timezone.utc))
         tail = tail_lines.accept(live_tail, cut_at=at, uid=uid) if live_tail is not None else None
         if tail:
-            words = tail_lines.word_count(tail)
-            cut_id = cuts_db.record(uid, at, tail=tail, tail_words=words)
-            # The stored words of this owner's Ends from more than a day ago go now.
-            tail_lines.forget_old(uid, at)
-            # Counts only: the words themselves are never logged.
-            logger.info('event=v3_manual_cut outcome=recorded tail_words=%d tail_lines=%d', words, len(tail))
-            return cut_id
+            try:
+                words = tail_lines.word_count(tail)
+                cut_id = cuts_db.record(uid, at, tail=tail, tail_words=words)
+            except Exception as error:
+                # The words could not be kept (encryption, size): the End is stored without them, below.
+                logger.warning('event=v3_manual_cut outcome=tail_error exception_type=%s', type(error).__name__)
+            else:
+                # The stored words of this owner's Ends from more than a day ago go now.
+                tail_lines.forget_old(uid, at)
+                # Counts only: the words themselves are never logged.
+                logger.info('event=v3_manual_cut outcome=recorded tail_words=%d tail_lines=%d', words, len(tail))
+                return cut_id
         cut_id = cuts_db.record(uid, at)
         logger.info('event=v3_manual_cut outcome=recorded')
         return cut_id

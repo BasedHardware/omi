@@ -866,7 +866,7 @@ async def _plan_projection(
         # have read its last words from the phone's live tail. Stored words landing afterwards are
         # first taken to be that same speech, so the rewrite rule below sees only what goes beyond
         # it. Off, or with no such credit on the conversation, the count is unchanged.
-        unseen_words, tail_credit = live_tail.rewrite_words(prior, new_words, uid)
+        unseen_words, tail_credit = live_tail.rewrite_words(prior, row, new_words, uid)
         if prior and prior.get(live_tail.CREDIT_FIELD) and tail_credit != prior[live_tail.CREDIT_FIELD]:
             row[live_tail.CREDIT_FIELD] = tail_credit
             # A summary pass still running read these words as tail: mark the landing, so its
@@ -1643,14 +1643,14 @@ def _process(uid, row, token):
         # Experiment live_words_cascade: the live words the phone showed before the End that closed this
         # conversation, less what stored text covers, follow the transcript in the notes prompt. Off, or
         # for a conversation no End closed, the text is empty and the prompt is the baseline.
-        tail_text, tail_words = live_tail.for_conversation(uid, row)
+        tail_text, tail_words, tail_since = live_tail.for_conversation(uid, row)
         if tail_words is not None:
             # The count is stamped before the notes are written, not when the pass settles: the batch
             # text for the same speech usually lands within seconds, while this pass is still running,
             # and the grouping pass must already find the count to know that speech is not new to the
             # notes. A pass that fails is run again and stamps again from what is uncovered then.
             try:
-                writers.note_summary_tail(uid, row['id'], token, tail_words)
+                writers.note_summary_tail(uid, row['id'], token, tail_words, tail_since)
             except Exception as error:
                 logger.warning('event=v3_live_tail outcome=stamp_error exception_type=%s', type(error).__name__)
         summary_lease = None

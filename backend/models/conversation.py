@@ -1002,7 +1002,9 @@ class ProcessConversationRequest(BaseModel):
         if isinstance(value, dict):
             # Validation ignores unknown keys for wire compatibility. They still make the body nonempty.
             request._has_body_fields = bool(value)
-            request._names_only_live_conversation = set(value) <= {'live_conversation_id'}
+            # live_tail travels with a Finish (reliability experiment live_words_cascade) and is not a
+            # request to process a recording, so a body that adds only it is still the app's Finish body.
+            request._names_only_live_conversation = set(value) <= {'live_conversation_id', 'live_tail'}
         return request
 
     @property
@@ -1013,7 +1015,7 @@ class ProcessConversationRequest(BaseModel):
     def finish_only_body(self) -> bool:
         """The app's Finish body: empty, or only the live window it was showing."""
         return self.empty_body or (
-            self._names_only_live_conversation and self.model_fields_set <= {'live_conversation_id'}
+            self._names_only_live_conversation and self.model_fields_set <= {'live_conversation_id', 'live_tail'}
         )
 
     calendar_meeting_context: Optional[CalendarMeetingContext] = None

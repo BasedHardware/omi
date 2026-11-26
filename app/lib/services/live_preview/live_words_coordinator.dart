@@ -156,16 +156,22 @@ class LiveWordsCoordinator {
   /// and nothing is cut or sent.
   Map<String, Object?>? onEnd(DateTime endedAt) {
     if (!_started || !_enabled() || !_cascade()) return null;
-    final tail = LiveTail.payload(preview.wordsUntil(endedAt), endedAt: endedAt);
-    preview.cutAtEnd(endedAt);
-    vendor.markEnd(endedAt);
-    // Counts only: never a word.
-    _log('end_cut', {
-      'tail_words': LiveTail.wordCount(tail),
-      'tail_lines': (tail?['lines'] as List?)?.length ?? 0,
-      'vendor_connected': vendor.connected,
-    });
-    return tail;
+    try {
+      final tail = LiveTail.payload(preview.wordsUntil(endedAt), endedAt: endedAt);
+      preview.cutAtEnd(endedAt);
+      vendor.markEnd(endedAt);
+      // Counts only: never a word.
+      _log('end_cut', {
+        'tail_words': LiveTail.wordCount(tail),
+        'tail_lines': (tail?['lines'] as List?)?.length ?? 0,
+        'vendor_connected': vendor.connected,
+      });
+      return tail;
+    } catch (error) {
+      // The End itself must go through whatever the live words do: it is then sent without a tail.
+      _log('end_cut_failed', {'type': error.runtimeType.toString()});
+      return null;
+    }
   }
 
   void _reportCounters() {

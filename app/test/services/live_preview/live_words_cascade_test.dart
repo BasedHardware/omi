@@ -594,6 +594,7 @@ void main() {
     late List<(String, Map<String, Object?>)> logged;
     late LiveWordsCoordinator coordinator;
     var cascade = true;
+    var failEndRecord = false;
     var clock = t0;
 
     void speak(int frames) {
@@ -645,10 +646,14 @@ void main() {
         cascade: () => cascade,
         language: () => 'en',
         lifecycleState: () => AppLifecycleState.resumed,
-        log: (event, fields) => logged.add((event, fields)),
+        log: (event, fields) {
+          if (failEndRecord && event == 'end_cut') throw StateError('record unavailable');
+          logged.add((event, fields));
+        },
       )..start();
     });
     tearDown(() {
+      failEndRecord = false;
       coordinator.dispose();
       preview.dispose();
     });
@@ -678,6 +683,16 @@ void main() {
       // The local record holds counts, never a word.
       final entry = logged.lastWhere((entry) => entry.$1 == 'end_cut').$2;
       expect(entry, {'tail_words': 4, 'tail_lines': 1, 'vendor_connected': true});
+    });
+
+    test('a fault in the live-words layer never stops the End: it goes without a tail', () async {
+      capture.set(state: RecordingState.deviceRecord);
+      await pumpEventQueue();
+      speak(50);
+      await pumpEventQueue();
+      failEndRecord = true;
+      expect(coordinator.onEnd(clock), isNull);
+      expect(logged.map((entry) => entry.$1), contains('end_cut_failed'));
     });
 
     test('off, an End returns nothing, cuts nothing and sends nothing', () async {

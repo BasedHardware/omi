@@ -34,6 +34,7 @@ from config import reliability_experiments
 from database import conversations_v3_leases as leases
 from database import conversations_v3_manual_cuts as cuts_db
 from database import conversations_v3_processing as writers
+from models.conversation import ProcessConversationRequest
 from routers.listen import live_words as stream
 from tests.unit.test_conversations_v3_review import AT  # noqa: F401
 from tests.unit.test_conversations_v3_transactions import strict  # noqa: F401
@@ -108,8 +109,8 @@ def test_the_switch_is_per_account(monkeypatch):
         assert live_tail.enabled(None) is False
         assert live_tail.accept(payload(spoken('we ship on Friday', 50)), cut_at=END, uid='out') is None
         assert live_tail.accept(payload(spoken('we ship on Friday', 50)), cut_at=END, uid='in') is not None
-        assert live_tail.rewrite_words({'v3_summary_tail_words': 60}, 60, 'out') == (60, 60)
-        assert live_tail.rewrite_words({'v3_summary_tail_words': 60}, 60, 'in') == (0, 0)
+        assert live_tail.rewrite_words({'v3_summary_tail_words': 60}, {}, 60, 'out') == (60, 60)
+        assert live_tail.rewrite_words({'v3_summary_tail_words': 60}, {}, 60, 'in') == (0, 0)
     finally:
         reliability_experiments.configure_resolver(None)
 
@@ -196,6 +197,7 @@ class Cuts:
         self.reads = 0
 
     def collection(self, name):
+        self._tests = []
         return self
 
     def document(self, name=None):
@@ -206,7 +208,7 @@ class Cuts:
         return SimpleNamespace(id=identifier, set=lambda data: self.rows.__setitem__(identifier, dict(data)))
 
     def where(self, *, filter):
-        self._test = (filter.op_string, filter.value)
+        self._tests.append((filter.op_string, filter.value))
         return self
 
     def order_by(self, field, direction=None):
@@ -217,14 +219,15 @@ class Cuts:
 
     def stream(self):
         self.reads += 1
-        operator, value = self._test
+        compare = {'==': lambda a, b: a == b, '<': lambda a, b: a < b, '>=': lambda a, b: a >= b}
+        tests, self._tests = self._tests, []
         return [
             SimpleNamespace(
                 to_dict=lambda data=data: dict(data),
                 reference=SimpleNamespace(update=lambda patch, key=key: self._update(key, patch)),
             )
             for key, data in sorted(self.rows.items(), key=lambda item: item[1]['at'], reverse=True)
-            if (data['at'] == value if operator == '==' else data['at'] < value)
+            if all(compare[operator](data['at'], value) for operator, value in tests)
         ]
 
     def _update(self, key, patch):
@@ -295,6 +298,42 @@ def test_stored_words_go_when_batch_has_landed_them_and_at_the_next_end_after_a_
     assert any('event=v3_live_tail outcome=expired count=1' in r.getMessage() for r in caplog.records)
 
 
+def test_an_end_request_sent_twice_leaves_no_tail_behind(on, cuts):
+    for _ in range(3):
+        manual_cuts.record_end('owner', ended_at=END, now=END, live_tail=payload(spoken('we ship on Friday', 50)))
+    assert sum('live_tail' in stored for stored in cuts.rows.values()) == 3
+    live_tail.forget('owner', END)
+    assert not any('live_tail' in stored for stored in cuts.rows.values())
+
+
+def test_a_hostile_payload_costs_the_tail_never_the_end(on, cuts, monkeypatch):
+    # A number no float can hold, and nesting deeper than the JSON encoder goes: neither may raise.
+    deep = current = []
+    for _ in range(5000):
+        current.append([])
+        current = current[0]
+    for raw in ({'v': 1, 'lines': [[['word', 10**400, 10**400]]]}, {'v': 1, 'lines': deep}):
+        assert live_tail.accept(raw, cut_at=END, uid='owner') is None
+        cut_id = manual_cuts.record_end('owner', ended_at=END, now=END, live_tail=raw)
+        assert set(cuts.rows[cut_id]) == {'at', 'created_at', 'source'}
+    # The words cannot be stored (the key service is down): the End is stored without them.
+    monkeypatch.setattr(cuts_db.encryption, 'encrypt', Mock(side_effect=RuntimeError('no key')))
+    cut_id = manual_cuts.record_end('owner', ended_at=END, now=END, live_tail=payload(spoken('we ship on Friday', 50)))
+    assert cut_id is not None and set(cuts.rows[cut_id]) == {'at', 'created_at', 'source'}
+
+
+def test_a_finish_that_carries_a_tail_is_still_the_apps_finish_body():
+    """POST /v1/conversations falls back to finishing the recording only for the app's Finish body."""
+    tail = payload(spoken('we ship on Friday', 50))
+    assert ProcessConversationRequest.model_validate({}).finish_only_body is True
+    assert ProcessConversationRequest.model_validate({'live_conversation_id': 'w'}).finish_only_body is True
+    assert ProcessConversationRequest.model_validate({'live_tail': tail}).finish_only_body is True
+    with_window = ProcessConversationRequest.model_validate({'live_conversation_id': 'w', 'live_tail': tail})
+    assert with_window.finish_only_body is True and with_window.live_tail == tail
+    # Anything else in the body is still a request to process, as before.
+    assert ProcessConversationRequest.model_validate({'live_tail': tail, 'other': 1}).finish_only_body is False
+
+
 # --- the summary reads what stored text does not cover -------------------------------------------------
 
 
@@ -308,8 +347,10 @@ def test_words_stored_text_covers_are_dropped_and_the_rest_reach_the_summary(on,
     )
     conversation = row((0, 30, 'Earlier talk.'), (39, 43.5, 'This part landed already.'))
     before = copy.deepcopy(conversation)
-    text, words = live_tail.for_conversation('owner', conversation, now=END + timedelta(seconds=5))
+    text, words, since = live_tail.for_conversation('owner', conversation, now=END + timedelta(seconds=5))
     assert text == 'the budget is forty thousand' and words == 5
+    # When the first of those words was spoken: stored speech from there on is the tail's own.
+    assert since == START + timedelta(seconds=52)
     # The conversation and its transcript are read, never written.
     assert conversation == before
     logged = '\n'.join(record.getMessage() for record in caplog.records)
@@ -324,36 +365,34 @@ def test_words_from_before_the_conversation_are_not_its_tail(on, cuts):
         now=END,
         live_tail=payload([['previous', at(-30), at(-29.5)], ['talk', at(-29), at(-28.5)]], spoken('new point', 50)),
     )
-    text, words = live_tail.for_conversation('owner', row((0, 10, 'Opening.')), now=END)
+    text, words, since = live_tail.for_conversation('owner', row((0, 10, 'Opening.')), now=END)
     assert text == 'new point' and words == 2
 
 
 def test_a_tail_that_stored_text_fully_covers_is_removed_from_the_end(on, cuts):
     cut_id = manual_cuts.record_end('owner', ended_at=END, now=END, live_tail=payload(spoken('all of this landed', 50)))
-    text, words = live_tail.for_conversation('owner', row((49, 53, 'All of this landed.')), now=END)
-    assert (text, words) == ('', 0)
+    text, words, since = live_tail.for_conversation('owner', row((49, 53, 'All of this landed.')), now=END)
+    assert (text, words, since) == ('', 0, None)
     assert 'live_tail' not in cuts.rows[cut_id] and cuts.rows[cut_id]['at'] == END
 
 
 def test_a_tail_is_not_kept_longer_than_the_rewrite_rule_looks_back(on, cuts):
     cut_id = manual_cuts.record_end('owner', ended_at=END, now=END, live_tail=payload(spoken('still uncovered', 50)))
-    assert live_tail.for_conversation('owner', row((0, 10, 'Opening.')), now=END + timedelta(days=1, minutes=1)) == (
-        '',
-        0,
-    )
+    late = END + timedelta(days=1, minutes=1)
+    assert live_tail.for_conversation('owner', row((0, 10, 'Opening.')), now=late) == ('', 0, None)
     assert 'live_tail' not in cuts.rows[cut_id]
 
 
 def test_off_and_without_an_end_nothing_is_read(on, off, cuts, monkeypatch):
-    assert live_tail.for_conversation('owner', row((0, 10, 'Opening.')), now=END) == ('', None)
+    assert live_tail.for_conversation('owner', row((0, 10, 'Opening.')), now=END) == ('', None, None)
     monkeypatch.setenv(reliability_experiments.ENV, BOTH)
-    assert live_tail.for_conversation('owner', row((0, 10, 'Opening.'), cut=None), now=END) == ('', None)
+    assert live_tail.for_conversation('owner', row((0, 10, 'Opening.'), cut=None), now=END) == ('', None, None)
     assert cuts.reads == 0
 
 
 def test_a_fault_while_reading_the_tail_leaves_the_baseline_summary(on, monkeypatch):
     monkeypatch.setattr(cuts_db, 'tail', Mock(side_effect=RuntimeError('database')))
-    assert live_tail.for_conversation('owner', row((0, 10, 'Opening.')), now=END) == ('', 0)
+    assert live_tail.for_conversation('owner', row((0, 10, 'Opening.')), now=END) == ('', 0, None)
 
 
 def test_the_tail_follows_the_transcript_only_while_its_conversation_is_summarised():
@@ -416,7 +455,7 @@ def test_the_notes_prompt_is_the_only_reader_and_the_transcript_is_never_given_t
 
 
 def rewrite(prior, new_words, *, stored=400):
-    unseen, credit = live_tail.rewrite_words(prior, new_words, 'owner')
+    unseen, credit = live_tail.rewrite_words(prior, {}, new_words, 'owner')
     fires = planner.late_rewrite(
         previous_words=stored, new_words=unseen, ended_at=END, now=END + timedelta(minutes=2), rewrites=0
     )
@@ -442,8 +481,28 @@ def test_a_landing_that_brings_substantially_more_than_the_tail_still_rewrites(o
 
 
 def test_off_the_rewrite_rule_counts_every_new_word_and_leaves_the_stamp_alone(off):
-    assert live_tail.rewrite_words({'v3_summary_tail_words': 60}, 60, 'owner') == (60, 60)
-    assert live_tail.rewrite_words({}, 60, 'owner') == (60, 0)
+    assert live_tail.rewrite_words({'v3_summary_tail_words': 60}, {}, 60, 'owner') == (60, 60)
+    assert live_tail.rewrite_words({}, {}, 60, 'owner') == (60, 0)
+    assert live_tail.rewrite_words(None, {}, 60, 'owner') == (60, 0)
+
+
+def words(count):
+    return ' '.join(['word'] * count)
+
+
+def test_only_speech_from_the_tails_own_stretch_is_taken_to_be_the_tails(on):
+    """The notes read 25 tail words spoken from 50 s on. Backlog from before that is new to them."""
+    prior = row((0, 30, words(400)), v3_summary_tail_words=25, v3_summary_tail_since=START + timedelta(seconds=50))
+    # 110 words of earlier audio land late (10-20 s into the conversation): none of it was in the tail.
+    backlog = row((0, 30, words(400)), (10, 20, words(110)))
+    assert live_tail.rewrite_words(prior, backlog, 110, 'owner') == (110, 25)
+    assert planner.late_rewrite(previous_words=400, new_words=110, ended_at=END, now=END, rewrites=0) is True
+    # The tail's own speech lands (from 50 s on): the notes have read it.
+    same = row((0, 30, words(400)), (50, 58, words(24)))
+    assert live_tail.rewrite_words(prior, same, 24, 'owner') == (0, 1)
+    # Both in one pass: only the part from the tail's stretch is taken off.
+    both = row((0, 30, words(400)), (10, 20, words(110)), (50, 58, words(24)))
+    assert live_tail.rewrite_words(prior, both, 134, 'owner') == (110, 1)
 
 
 CONVERSATION = ('users', 'synthetic', 'conversations', 'c')

@@ -12,7 +12,7 @@ field is never written or read.
 """
 
 import json
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from google.cloud import firestore
 from google.cloud.firestore_v1 import FieldFilter
@@ -30,6 +30,11 @@ def _cuts(client, uid):
 
 TAIL_FIELD = 'live_tail'
 TAIL_WORDS_FIELD = 'live_tail_words'
+# A retried End request stores its cut again at the same instant.
+SAME_INSTANT_LIMIT = 5
+# Old tails are looked for this far back from the day-old mark, at most this many Ends per look.
+TAIL_SWEEP_WINDOW = timedelta(days=7)
+TAIL_SWEEP_LIMIT = 50
 
 
 def record(uid, at, *, tail=None, tail_words=0, firestore_client=None) -> str:
@@ -47,7 +52,7 @@ def record(uid, at, *, tail=None, tail_words=0, firestore_client=None) -> str:
 def tail(uid, at, *, firestore_client=None):
     """The live words stored with the cut at exactly ``at``; None when that cut carries none (one read)."""
     client = firestore_client or get_firestore_client()
-    for row in _cuts(client, uid).where(filter=FieldFilter('at', '==', at)).limit(2).stream():
+    for row in _cuts(client, uid).where(filter=FieldFilter('at', '==', at)).limit(SAME_INSTANT_LIMIT).stream():
         stored = (row.to_dict() or {}).get(TAIL_FIELD)
         if isinstance(stored, str) and stored:
             lines = json.loads(encryption.decrypt(stored, uid))
@@ -58,7 +63,7 @@ def tail(uid, at, *, firestore_client=None):
 def clear_tail(uid, at, *, firestore_client=None) -> None:
     """Remove the stored words of the cut at ``at``; the cut itself stays."""
     client = firestore_client or get_firestore_client()
-    for row in _cuts(client, uid).where(filter=FieldFilter('at', '==', at)).limit(2).stream():
+    for row in _cuts(client, uid).where(filter=FieldFilter('at', '==', at)).limit(SAME_INSTANT_LIMIT).stream():
         if TAIL_FIELD in (row.to_dict() or {}):
             row.reference.update({TAIL_FIELD: firestore.DELETE_FIELD})
 
@@ -86,14 +91,19 @@ def load(uid, since, *, firestore_client=None) -> list[datetime]:
     return [at for at in ((row.to_dict() or {}).get('at') for row in rows) if isinstance(at, datetime)]
 
 
-def clear_tails_before(uid, before, *, limit=3, firestore_client=None) -> int:
-    """Remove the stored words of the newest ``limit`` cuts older than ``before``; returns how many held any."""
+def clear_tails_before(uid, before, *, firestore_client=None) -> int:
+    """Remove the stored words of the cuts in the week before ``before``; returns how many held any.
+
+    One range read on the cut time (``TAIL_SWEEP_LIMIT`` rows at most). A tail older than that week is
+    reached only if its conversation is summarised again.
+    """
     client = firestore_client or get_firestore_client()
     rows = (
         _cuts(client, uid)
+        .where(filter=FieldFilter('at', '>=', before - TAIL_SWEEP_WINDOW))
         .where(filter=FieldFilter('at', '<', before))
         .order_by('at', direction='DESCENDING')
-        .limit(limit)
+        .limit(TAIL_SWEEP_LIMIT)
         .stream()
     )
     cleared = 0

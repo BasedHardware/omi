@@ -447,6 +447,7 @@ def settle_processing(
 
 TAIL_WORDS_FIELD = 'v3_summary_tail_words'
 TAIL_ABSORBED_FIELD = 'v3_tail_absorbed'
+TAIL_SINCE_FIELD = 'v3_summary_tail_since'
 
 
 def tail_absorbed(row, revision) -> bool:
@@ -465,7 +466,7 @@ def tail_absorbed(row, revision) -> bool:
     )
 
 
-def note_summary_tail(uid, cid, token, words, *, firestore_client=None) -> bool:
+def note_summary_tail(uid, cid, token, words, since=None, *, firestore_client=None) -> bool:
     """Stamp how many words of the phone's live tail the notes just stored used (a number, never text).
 
     Reliability experiment ``live_words_cascade``. Written by the summary pass under its lease before it
@@ -487,10 +488,19 @@ def note_summary_tail(uid, cid, token, words, *, firestore_client=None) -> bool:
         if not row or not python_owns_finalization(row) or row.get('deleted'):
             return False
         marked = row.get(TAIL_ABSORBED_FIELD) is not None
-        if int(row.get(TAIL_WORDS_FIELD) or 0) == int(words) and not marked:
+        same = int(row.get(TAIL_WORDS_FIELD) or 0) == int(words) and row.get(TAIL_SINCE_FIELD) == since
+        if same and not marked:
             return False
         # A mark left by an earlier summary of this conversation says nothing about this one.
-        tx.update(ref, {TAIL_WORDS_FIELD: int(words), **({TAIL_ABSORBED_FIELD: None} if marked else {})})
+        tx.update(
+            ref,
+            {
+                TAIL_WORDS_FIELD: int(words),
+                # When the first of those words was spoken: stored speech from there on is the tail's.
+                TAIL_SINCE_FIELD: since,
+                **({TAIL_ABSORBED_FIELD: None} if marked else {}),
+            },
+        )
         return True
 
     return note(client.transaction())

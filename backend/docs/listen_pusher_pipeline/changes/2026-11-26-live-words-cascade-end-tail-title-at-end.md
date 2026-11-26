@@ -35,15 +35,18 @@ It is hidden from the published schema and accepted raw, so a malformed one cann
   prompt is the only reader, so what the notes say (title, summary, the action items they propose) can
   reflect those words; the discard and wake-word checks, memory extraction and search read the stored
   transcript alone.
-- The number of tail words the notes read is stamped on the conversation before the notes are written
-  (`v3_summary_tail_words`). Stored words that land afterwards are first taken to be that speech, so the
-  late-speech rewrite rule counts only what goes beyond it. The grouping pass marks such a landing
+- The number of tail words the notes read, and when the first of them was spoken, are stamped on the
+  conversation before the notes are written (`v3_summary_tail_words`, `v3_summary_tail_since`). Stored
+  words that land afterwards in that stretch are taken to be that speech, up to that number, so the
+  late-speech rewrite rule counts only what goes beyond it; speech from before the stretch that lands
+  late counts in full. The grouping pass marks such a landing
   (`v3_tail_absorbed`), and a summary pass that was still running settles instead of failing with
   `processing_source_changed` and writing the notes again. A landing with words the notes have not read
   drops the mark and the settle fails as before.
 - The stored words are removed when a later summary pass finds them all covered, when the credit is
-  used up, or at the owner's next End with a tail once the old End is a day old. There is no timed
-  sweep.
+  used up, or at the owner's next End with a tail, which clears the tails of Ends between one and eight
+  days old. There is no timed sweep: a tail whose speech never lands and whose owner sends no End with
+  a tail in that week stays (encrypted, at most 6,000 characters).
 
 This is a deliberate, bounded exception to the rule that client-authored text is display only (the
 rule `tests/unit/test_client_processing_trust_boundary.py` proves for `client_processing`, which this
@@ -51,11 +54,14 @@ change does not touch): for an admitted account, phone-authored words reach one 
 through it the conversation's notes.
 
 Queries added on `conversation_v3_manual_cuts`: one equality read on `at` per summary pass of a
-conversation an End closed, and one `at <` read (three rows) per End that carries a tail.
+conversation an End closed, and one range read on `at` (at most 50 rows) per End that carries a tail.
 
-Not covered: the credit is a word count, not a time range, so late speech from before the app was
-opened is discounted by the same credit (by at most the tail's word count). The display stream still
-needs a load-balancer path rule before a wide ramp.
+`POST /v1/conversations` treats a body that holds only `live_conversation_id` and `live_tail` as the
+app's Finish body, as it treats one with `live_conversation_id` alone, so an End with a tail takes the
+same path as one without. A backend without this change does not: admit an account only once the
+service that answers `/v1/conversations` runs it (the flag tool's live check enforces this).
+
+Not covered: the display stream still needs a load-balancer path rule before a wide ramp.
 
 ## `title_at_end`
 

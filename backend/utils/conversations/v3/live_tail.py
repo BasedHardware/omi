@@ -16,9 +16,10 @@ with them:
 * when the conversation that End closed is summarised, ``for_conversation`` drops every word a stored
   line already covers in time and ``in_prompt`` adds what is left to the notes prompt, after the
   transcript, marked as a draft;
-* ``credit`` is how many of those words the summary used. The grouping pass counts new stored words
-  only beyond it (``rewrite_words``), so batch landing the same speech does not write a second summary,
-  while a landing that brings substantially more still does.
+* the number of those words the summary used, and when the first of them was spoken, are stamped on
+  the conversation. The grouping pass takes stored words that land in that stretch to be the same
+  speech (``rewrite_words``), so batch landing it does not write a second summary, while a landing
+  that brings substantially more, or speech from before that stretch, still counts in full.
 
 TRUST: this is a deliberate exception to the rule that client-authored text is display only
 (``tests/unit/test_client_processing_trust_boundary.py`` proves that rule for ``client_processing``,
@@ -98,6 +99,14 @@ def accept(raw, *, cut_at: datetime, uid) -> list[list[list]] | None:
     payload exceeds the caps, as the phone does. Words that start at or after the End, or implausibly
     long before it, are dropped: the tail is by definition speech before the End.
     """
+    try:
+        return _accept(raw, cut_at, uid)
+    except Exception as error:  # A hostile or broken payload costs the tail, never the End.
+        logger.warning('event=v3_live_tail outcome=refused exception_type=%s', type(error).__name__)
+        return None
+
+
+def _accept(raw, cut_at: datetime, uid) -> list[list[list]] | None:
     if not enabled(uid) or not isinstance(raw, dict) or raw.get('v') != VERSION:
         return None
     lines = raw.get('lines')
@@ -201,31 +210,33 @@ def text(lines) -> str:
     return '\n'.join(' '.join(entry[0] for entry in line) for line in lines or () if line)
 
 
-def for_conversation(uid, row, *, now=None) -> tuple[str, int | None]:
-    """What the summary of ``row`` gets from the tail of the End that closed it: (text, words).
+def for_conversation(uid, row, *, now=None) -> tuple[str, int | None, datetime | None]:
+    """What the summary of ``row`` gets from the tail of the End that closed it: (text, words, since).
 
-    ('', None) when the experiment is off or no End closed this conversation: nothing is read and
-    nothing is to be recorded. ('', 0) when that End carried no words or stored text covers them all.
-    Reads the one stored End; removes its words once none is left uncovered or the End is older than
-    ``KEEP``. Never raises: on any fault the summary is the baseline.
+    ``since`` is when the first of those words was spoken: stored speech from that moment on is the
+    speech the summary read as tail. ('', None, None) when the experiment is off or no End closed this
+    conversation: nothing is read and nothing is to be recorded. ('', 0, None) when that End carried no
+    words or stored text covers them all. Reads the one stored End; removes its words once none is left
+    uncovered or the End is older than ``KEEP``. Never raises: on any fault the summary is the baseline.
     """
     if not enabled(uid):
-        return '', None
+        return '', None, None
     cut_at = row.get('v3_manual_cut_at')
     if not isinstance(cut_at, datetime):
-        return '', None
+        return '', None, None
     try:
         lines = cuts_db.tail(uid, cut_at)
         if not lines:
-            return '', 0
+            return '', 0, None
         now = now or datetime.now(timezone.utc)
         cut = cut_at if cut_at.tzinfo else cut_at.replace(tzinfo=timezone.utc)
         left = [] if now - cut > KEEP else uncovered(lines, row)
         if not left:
             cuts_db.clear_tail(uid, cut_at)
             logger.info('event=v3_live_tail outcome=covered tail_words=%d', word_count(lines))
-            return '', 0
+            return '', 0, None
         used = word_count(left)
+        since = datetime.fromtimestamp(min(entry[1] for line in left for entry in line), timezone.utc)
         # Counts only: the words themselves are never logged.
         logger.info(
             'event=v3_live_tail outcome=used tail_words=%d used_words=%d stored_lines=%d',
@@ -233,10 +244,10 @@ def for_conversation(uid, row, *, now=None) -> tuple[str, int | None]:
             used,
             len(row.get('transcript_segments') or []),
         )
-        return text(left), used
+        return text(left), used, since
     except Exception as error:
         logger.warning('event=v3_live_tail outcome=error exception_type=%s', type(error).__name__)
-        return '', 0
+        return '', 0, None
 
 
 # --- the notes prompt -----------------------------------------------------------------------------
@@ -265,17 +276,42 @@ def in_prompt(transcript: str) -> str:
 # --- the rewrite rule -----------------------------------------------------------------------------
 
 
-def rewrite_words(prior, new_words: int, uid) -> tuple[int, int]:
+SINCE_FIELD = 'v3_summary_tail_since'
+
+
+def _words_from(conversation, since: datetime) -> int:
+    """Stored words of ``conversation`` spoken at or after ``since`` (less the coverage reach)."""
+    started = conversation.get('started_at')
+    if not isinstance(started, datetime):
+        return 0
+    origin = started if started.tzinfo else started.replace(tzinfo=timezone.utc)
+    floor = (since if since.tzinfo else since.replace(tzinfo=timezone.utc)) - COVER_PAD
+    count = 0
+    for segment in conversation.get('transcript_segments') or []:
+        start = segment.get('start')
+        if isinstance(start, (int, float)) and origin + timedelta(seconds=start) >= floor:
+            count += text_word_count(segment.get('text') or '')
+    return count
+
+
+def rewrite_words(prior, row, new_words: int, uid) -> tuple[int, int]:
     """New stored words the last summary has not seen, and the credit left: (words, credit).
 
-    ``prior`` is the stored conversation. Its credit is the number of tail words its summary used; stored
-    words landing afterwards are first taken to be that same speech. With no credit (always, when the
+    ``prior`` is the stored conversation and ``row`` the same conversation as this pass builds it. The
+    credit is the number of tail words the summary read; only stored words that landed in the stretch
+    the tail covered (from ``v3_summary_tail_since`` on) are taken to be that same speech. Speech from
+    before it that lands late counts in full, as it always did. With no credit (always, when the
     experiment is off) the count is unchanged.
     """
     credit = int((prior or {}).get(CREDIT_FIELD) or 0)
     if credit <= 0 or not enabled(uid):
         return new_words, credit
-    return max(0, new_words - credit), max(0, credit - new_words)
+    in_tail = new_words
+    since = prior.get(SINCE_FIELD)
+    if isinstance(since, datetime):
+        in_tail = max(0, _words_from(row, since) - _words_from(prior, since))
+    seen = min(credit, in_tail, new_words)
+    return new_words - seen, credit - seen
 
 
 ABSORBED_FIELD = 'v3_tail_absorbed'
