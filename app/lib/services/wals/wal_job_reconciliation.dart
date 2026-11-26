@@ -50,10 +50,18 @@ extension _WalJobCompletion on LocalWalSyncImpl {
     // Off, no waiter exists and `receipts` is never passed: every job is polled.
     final longPoll = ReliabilityExperiments.enabled('receipt_long_poll');
     final waited = longPoll ? receipts : null;
+    // Experiment receipt_finished_note: the server's wait reads a job only once it knows the job
+    // finished, so a lost note, a failure or a job that never finishes would never be heard of.
+    // A job the wait covers is therefore also polled here once it is a minute old, at most once a
+    // minute. Off: a job the wait covers is never polled here.
+    final backstop = longPoll && ReliabilityExperiments.enabled('receipt_finished_note');
+    bool polledHere(String id) =>
+        _receiptWaiter?.handles(id) != true ||
+        (backstop && nowSecs - (uploadedAt[id] ?? 0) >= ReceiptWaiter.backstop.inSeconds);
     final ids = waited != null
         ? waited.keys.where(byJob.containsKey)
         : _jobPoller.dueForPass(
-            longPoll ? byJob.keys.where((id) => _receiptWaiter?.handles(id) != true) : byJob.keys,
+            longPoll ? byJob.keys.where(polledHere) : byJob.keys,
             uploadedAtSeconds: uploadedAt,
           );
     final entries = ids.map((id) => MapEntry(id, byJob[id]!)).toList();
@@ -68,6 +76,10 @@ extension _WalJobCompletion on LocalWalSyncImpl {
       for (final (watchedId, members, fetch) in fetched) {
         if (!fetch.pollAdmitted) continue;
         polledJobs++;
+        if (backstop && waited == null && _receiptWaiter?.handles(watchedId) == true) {
+          // Keeps a longer server hint: defer only ever moves a deadline later.
+          _jobPoller.defer(watchedId, ReceiptWaiter.backstop.inMilliseconds);
+        }
         // Baseline reads the handle from the first member after the fetch.
         final jobId = longPoll ? watchedId : members.first.jobId;
         if (longPoll && !members.any((w) => _stillUploadedUnder(w, jobId))) continue;

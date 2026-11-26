@@ -120,7 +120,7 @@ Future<InProgressProcessOutcome> processInProgressConversationOutcome({
   if (response.statusCode == 200) {
     if (endAcceptedWithNoConversationYet(response)) {
       Logger.debug('processInProgressConversation: End stored; its conversation has not landed yet');
-      return const InProgressProcessOutcome(absence: ProcessAbsence.notFound);
+      return InProgressProcessOutcome(absence: ProcessAbsence.notFound, endStoredAt: endedAt);
     }
     final parsed = CreateConversationResponse.fromGeneratedWireJson(jsonDecode(response.body) as Map<String, dynamic>);
     if (parsed.conversation == null) {

@@ -3,7 +3,9 @@
 Off (the default) the endpoint refuses before accepting. On, audio the phone sends is forwarded to
 Soniox in order (what arrived during the dial first), the provider's words come back as lines timed in
 seconds of audio from the connection's first frame, a second connection from the same app install
-replaces the first, and a connection without audio is closed. Nothing is stored and no text is logged.
+replaces the first. Silence closes only the provider stream: the phone's connection stays open and the
+next audio dials again; a connection without audio for much longer is closed. Nothing is stored and no
+text is logged.
 """
 
 import asyncio
@@ -159,7 +161,7 @@ async def test_words_become_lines_with_word_times_and_text_is_never_logged(h, ca
     await asyncio.sleep(0.02)
     assert len(phone.lines()) == 4
     logged = '\n'.join(record.getMessage() for record in caplog.records)
-    assert 'event=live_words action=close' in logged and 'lines=3 words=4' in logged
+    assert 'event=live_words action=close' in logged and 'streams=1' in logged and 'lines=3 words=4' in logged
     for spoken in ('Hello', 'there.', 'Hi.', 'Later'):
         assert spoken not in logged
 
@@ -209,7 +211,7 @@ async def test_a_new_connection_from_the_same_install_replaces_the_old_one(h):
     assert module._sessions == {}
 
 
-async def test_a_connection_without_audio_is_closed(h, monkeypatch):
+async def test_a_connection_without_audio_for_long_is_closed(h, monkeypatch):
     monkeypatch.setattr(module, 'IDLE_SECONDS', 0.05)
     phone = Phone()
     await asyncio.wait_for(start(phone), timeout=1)
@@ -217,23 +219,109 @@ async def test_a_connection_without_audio_is_closed(h, monkeypatch):
     h.raw.finish.assert_called_once()
 
 
-async def test_a_dead_provider_closes_the_connection_so_the_phone_can_reconnect(h):
+def streams(h, count):
+    """Each dial gets a provider stream of its own."""
+    made = [
+        SimpleNamespace(send=Mock(return_value=True), finish=Mock(), is_connection_dead=False) for _ in range(count)
+    ]
+    h.dial.side_effect = made
+    return made
+
+
+async def test_silence_closes_only_the_provider_stream_and_the_next_audio_dials_again(h, monkeypatch):
+    monkeypatch.setattr(module, 'PROVIDER_IDLE_SECONDS', 0.1)
+    monkeypatch.setattr(module, 'RETIRE_GRACE_SECONDS', 0.05)
+    monkeypatch.setattr(module, 'REDIAL_SECONDS', 0.0)
+    first, second = streams(h, 2)
+    phone = Phone()
+    task = start(phone)
+    phone.audio()  # 100 ms
+    phone.audio()
+    await until(lambda: first.send.call_count == 2)
+    h.dial.call_args.args[0]([word('before', 0.0, 0.1)])
+    await until(lambda: len(phone.lines()) == 1)
+    # Quiet: the provider stream is given back, then cut; the phone's connection is still there.
+    await until(lambda: first.finish.called)
+    await until(lambda: h.aborted.await_count == 1)
+    assert phone.closed is None and not task.done()
+    assert h.dial.await_count == 1  # Silence alone dials nothing.
+    # Audio again: a new stream on the same connection, and that audio is its first.
+    later = b'\x07\x00' * 1600
+    phone.audio(later)
+    await until(lambda: second.send.call_count == 1)
+    assert second.send.call_args.args[0] == later
+    assert h.dial.await_count == 2
+    # The new stream counts from its own first sample; the line is timed from the connection's first frame.
+    h.dial.call_args.args[0]([word('after', 0.0, 0.1)])
+    await until(lambda: len(phone.lines()) == 2)
+    before, after = phone.lines()
+    assert (before['start'], after['start'], after['end']) == (0.0, 0.2, 0.3)
+    assert before['id'] != after['id']
+    phone.leave()
+    await asyncio.wait_for(task, timeout=1)
+    assert phone.closed == (1000, 'client')
+    second.finish.assert_called_once()
+
+
+async def test_the_last_words_of_a_stream_given_back_still_reach_the_phone(h, monkeypatch):
+    monkeypatch.setattr(module, 'PROVIDER_IDLE_SECONDS', 0.05)
+    monkeypatch.setattr(module, 'RETIRE_GRACE_SECONDS', 5.0)
     phone = Phone()
     task = start(phone)
     phone.audio()
     await until(lambda: h.raw.send.call_count == 1)
-    h.raw.send.return_value = False
-    phone.audio()
+    await until(lambda: h.raw.finish.called)
+    h.dial.call_args.args[0]([word('last', 0.0, 0.1)])
+    await until(lambda: len(phone.lines()) == 1)
+    phone.leave()
     await asyncio.wait_for(task, timeout=1)
-    assert phone.closed == (1011, 'provider_lost')
 
 
-async def test_a_failed_dial_closes_the_connection(h):
+async def test_a_dead_provider_stream_is_replaced_on_the_same_connection(h, monkeypatch):
+    monkeypatch.setattr(module, 'REDIAL_SECONDS', 0.0)
+    first, second = streams(h, 2)
+    phone = Phone()
+    task = start(phone)
+    phone.audio()
+    await until(lambda: first.send.call_count == 1)
+    first.send.return_value = False
+    phone.audio()  # The stream refuses it: it is lost, and the phone is not disconnected.
+    await asyncio.sleep(0.05)
+    assert phone.closed is None
+    phone.audio()
+    await until(lambda: second.send.call_count == 1)
+    assert h.dial.await_count == 2
+    phone.leave()
+    await asyncio.wait_for(task, timeout=1)
+    assert phone.closed == (1000, 'client')
+
+
+async def test_a_provider_that_keeps_failing_ends_the_connection(h, monkeypatch):
+    monkeypatch.setattr(module, 'REDIAL_SECONDS', 0.0)
     h.dial.side_effect = RuntimeError('no route')
     phone = Phone()
-    await asyncio.wait_for(start(phone), timeout=1)
+    task = start(phone)
+    for _ in range(40):
+        if task.done():
+            break
+        phone.audio()
+        await asyncio.sleep(0.01)
+    await asyncio.wait_for(task, timeout=1)
     assert phone.closed == (1011, 'provider_unavailable')
+    assert h.dial.await_count == module.MAX_PROVIDER_FAILURES
     h.raw.finish.assert_not_called()
+
+
+async def test_dials_are_spaced_so_a_failing_provider_is_not_hammered(h):
+    h.dial.side_effect = RuntimeError('no route')
+    phone = Phone()
+    task = start(phone)
+    for _ in range(20):
+        phone.audio()
+        await asyncio.sleep(0.005)
+    assert h.dial.await_count == 1  # REDIAL_SECONDS has not passed.
+    phone.leave()
+    await asyncio.wait_for(task, timeout=1)
 
 
 async def test_audio_that_fell_out_of_the_dial_buffer_moves_the_line_clock_on(h, monkeypatch):

@@ -1,7 +1,10 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
+
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/services/wals/local_wal_sync.dart';
+import 'package:omi/services/wals/receipt_waiter.dart';
 import 'package:omi/services/wals/recording_transfer_coordinator.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/reliability_experiments.dart';
@@ -33,6 +36,20 @@ class SyncReconciler {
   // Backoff while jobs are still processing server-side. Reset to fast cadence
   // whenever a pass makes progress (surfaces conversations / changes state).
   static const List<int> _backoffSecs = [20, 20, 30, 45, 60, 120];
+
+  /// Seconds until the next foreground pass after [idleStreak] passes without progress.
+  @visibleForTesting
+  static int idleDelaySeconds(int idleStreak) {
+    final secs = _backoffSecs[idleStreak.clamp(0, _backoffSecs.length - 1)];
+    // Experiment receipt_finished_note: the once-a-minute status poll of a waiting job needs a
+    // pass at least that often. Off: the idle backoff grows to two minutes.
+    if (secs > ReceiptWaiter.backstop.inSeconds &&
+        ReliabilityExperiments.enabled('receipt_long_poll') &&
+        ReliabilityExperiments.enabled('receipt_finished_note')) {
+      return ReceiptWaiter.backstop.inSeconds;
+    }
+    return secs;
+  }
 
   void attach(LocalWalSyncImpl phone, ConversationSurfaceCallback onConversations) {
     if (!identical(_phone, phone)) _phone?.stopReceiptWait();
@@ -93,7 +110,7 @@ class SyncReconciler {
       _idleStreak = 0;
       return; // nothing pending — go quiet until the next poke
     }
-    final secs = _backoffSecs[_idleStreak.clamp(0, _backoffSecs.length - 1)];
+    final secs = idleDelaySeconds(_idleStreak);
     _idleStreak++;
     _timer = Timer(Duration(seconds: secs), () {
       unawaited(RecordingTransferCoordinator.instance.wake(WakeTrigger.cooldownElapsed));

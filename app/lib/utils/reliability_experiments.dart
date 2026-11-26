@@ -38,6 +38,12 @@ class ReliabilityExperiments {
   static const Map<String, String> registered = {
     'receipt_long_poll': 'While foregrounded, one open receipts-wait request (waitForSyncReceipts) reports finished '
         'upload jobs; those jobs leave the per-job GET polling. Off: GET polling only, the endpoint is never called.',
+    'receipt_finished_note': 'With receipt_long_poll, against a server running the same experiment (its wait reads '
+        'job state only for a job it knows finished). The receipts wait lists the 16 most recently uploaded jobs '
+        'instead of rotating through all of them, and a job the wait covers also gets an ordinary status GET once '
+        'it is a minute old, at most once a minute (the server\'s longer hints still apply); in the foreground a '
+        'reconcile pass runs at least once a minute while jobs are outstanding. Off: a job the wait covers is '
+        'never status-polled.',
     'receipt_check_during_drain': 'While one upload or drain is in flight, accepted jobs are status-checked every '
         '20 s. Off: no status check until the drain ends.',
     'status_fetch_failure_isolated': 'An exception from one job status GET becomes a transient (or throttled) '
@@ -47,7 +53,9 @@ class ReliabilityExperiments {
     'end_open_conversation': 'Every way of ending a conversation (End Conversation, Finish, Wrap Up, the record '
         'button\'s stop, a pendant double-tap) seals the speech file the phone is still writing, so it uploads in '
         'the normal order instead of running to its 60 s cap, and sends the moment of the End with the request '
-        '(X-Omi-Ended-At). Off: the open file is left to its own rules and no End time is sent.',
+        '(X-Omi-Ended-At). When the server stores the End before its conversation exists, Home\'s Processing row '
+        'is handed to the conversation that carries the same End time (v3_manual_cut_at) and is removed after two '
+        'minutes if none comes. Off: the open file is left to its own rules and no End time is sent.',
     'fast_end_feedback': 'After a conversation is ended (End Conversation, Finish, Wrap Up, the record button\'s '
         'stop or a pendant double-tap), two waiting requests (waitForConversationSummary) return it the moment it is '
         'committed with its outline and the moment its summary is stored; Home, the open conversation page and the '

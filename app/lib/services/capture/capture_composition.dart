@@ -39,7 +39,9 @@ import 'package:omi/services/devices/connectors/device_connection.dart';
 import 'package:omi/services/wals/recording_transfer_coordinator.dart';
 import 'package:omi/services/wals/wal_interfaces.dart';
 import 'package:omi/utils/analytics/analytics_manager.dart';
+import 'package:omi/utils/analytics/app_foreground_time.dart';
 import 'package:omi/utils/audio/foreground.dart';
+import 'package:omi/utils/enums.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:omi/services/wals/local_wal_sync.dart';
 import 'package:omi/services/experiments/capture_end_marker.dart';
@@ -187,12 +189,19 @@ CaptureProvider composeProductionCaptureProvider({
   final livePreview = composeLivePreview();
   if (livePreview != null) provider.installLivePreview(livePreview);
   final liveWords = livePreview == null ? null : _composeLiveWords(provider, livePreview);
+  // Time with the app in front, and how much of it with capture active (App Foreground Ended).
+  final foregroundTime = AppForegroundTime(capturing: () => _captureActive(provider));
+  // omi-perf-allow: unselected-provider-listener -- the callback reads one bool and returns when capture is unchanged or the app is not in front
+  provider.addListener(foregroundTime.onCaptureChanged);
+  provider.lifetime.own(() => provider.removeListener(foregroundTime.onCaptureChanged));
   final lifecycle = AppLifecycleListener(onStateChange: (state) {
     provider.onAppLifecycleChanged(state);
     liveWords?.onLifecycle(state);
+    foregroundTime.onLifecycle(state);
   });
   provider.lifetime.own(lifecycle.dispose);
   final initialLifecycle = WidgetsBinding.instance.lifecycleState;
+  foregroundTime.start(initialLifecycle);
   if (initialLifecycle != null && initialLifecycle != AppLifecycleState.resumed) {
     provider.onAppLifecycleChanged(initialLifecycle);
   }
@@ -201,6 +210,19 @@ CaptureProvider composeProductionCaptureProvider({
     unawaited(CaptureSystemSurface(provider, LiveActivityBridge()).start());
   }
   return provider;
+}
+
+/// A pendant is streaming or the phone is recording, and capture is not paused.
+bool _captureActive(CaptureProvider provider) {
+  if (provider.isPaused) return false;
+  return switch (provider.recordingState) {
+    RecordingState.deviceRecord ||
+    RecordingState.record ||
+    RecordingState.interrupted ||
+    RecordingState.systemAudioRecord =>
+      true,
+    _ => false,
+  };
 }
 
 /// Reliability experiment `vendor_recognizer_on_opened_app`: the vendor stream on the capture audio

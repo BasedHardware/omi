@@ -799,6 +799,10 @@ PINNED_CONVERSATION_FIELDS: FrozenSet[str] = frozenset(
         'tile_state',
         'title_locked',
         'v3_derived',
+        # Reliability experiment end_open_conversation: the End instant that closed the conversation,
+        # stamped by the live builder only. A timestamp, never client-authored text; the app matches
+        # its just-ended Home row by it. NOT projection-family.
+        'v3_manual_cut_at',
         'v3_pending',
         'v3_process_pending',
         'v3_recording_ids',
