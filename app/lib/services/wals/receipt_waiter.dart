@@ -6,15 +6,25 @@ import 'package:omi/services/wals/sync_rate_limiter.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/reliability_experiments.dart';
 
+typedef ReceiptWaitFetcher = Future<SyncReceiptBatch> Function(List<String> jobs, Future<void> abort);
+
 /// A foreground subscription to the accepted jobs on one phone/account generation.
 /// The persisted WAL inventory is the acknowledgement: an interrupted wait can
 /// always be repeated. Unavailable handles use the existing paced GET recovery.
 class ReceiptWaiter {
-  ReceiptWaiter({required this.jobs, required this.apply, this.fetch = waitForSyncReceipts});
+  ReceiptWaiter({required this.jobs, required this.apply, ReceiptWaitFetcher? fetch, this.uploadTimes})
+      : fetch = fetch ?? waitForSyncReceipts;
+
+  /// Experiment receipt_finished_note: a job the wait covers is also status-polled once it is this
+  /// old, at most this often, because the server no longer reads a job it has not seen finish.
+  static const backstop = Duration(minutes: 1);
 
   final Set<String> Function() jobs;
+
+  /// Upload time in seconds per job, for the newest-first selection of receipt_finished_note.
+  final Map<String, int> Function()? uploadTimes;
   final Future<void> Function(Map<String, SyncJobFetch>) apply;
-  final Future<SyncReceiptBatch> Function(List<String>, Future<void>) fetch;
+  final ReceiptWaitFetcher fetch;
   final _fallback = <String>{};
   final _starts = <DateTime>[];
   Set<String> _known = {};
@@ -59,8 +69,19 @@ class ReceiptWaiter {
               : _starts.first.add(const Duration(minutes: 1)).difference(now));
           break;
         }
-        final selected =
-            List.generate(candidates.length.clamp(1, 16), (i) => candidates[(_offset + i) % candidates.length]);
+        // Experiment receipt_finished_note: waiting costs the server nothing per job, so old jobs
+        // would hold the request's slots for good. The newest uploads take them; the rest keep
+        // their paced status polls. Off: every job gets a turn in rotation.
+        final times = ReliabilityExperiments.enabled('receipt_finished_note') ? uploadTimes?.call() : null;
+        if (times != null) {
+          candidates.sort((a, b) {
+            final newer = (times[b] ?? 0).compareTo(times[a] ?? 0);
+            return newer != 0 ? newer : a.compareTo(b);
+          });
+        }
+        final selected = times != null
+            ? candidates.take(16).toList()
+            : List.generate(candidates.length.clamp(1, 16), (i) => candidates[(_offset + i) % candidates.length]);
         final cancel = Completer<void>();
         _cancel = cancel;
         _starts.add(now);

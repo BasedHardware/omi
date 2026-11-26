@@ -30,6 +30,7 @@ ENV = 'OMI_RELIABILITY_EXPERIMENTS'
 
 # Flag store keys. The names double as the experiment names used at call sites.
 RECEIPT_LONG_POLL_FLAG_KEY = 'receipt_long_poll'
+RECEIPT_FINISHED_NOTE_FLAG_KEY = 'receipt_finished_note'
 BATCH_FRAME_OUTCOMES_FLAG_KEY = 'batch_frame_outcomes'
 END_OPEN_CONVERSATION_FLAG_KEY = 'end_open_conversation'
 FAST_END_FEEDBACK_FLAG_KEY = 'fast_end_feedback'
@@ -44,6 +45,13 @@ EXPERIMENTS = {
         'POST /v2/sync-local-files/receipts/wait exists: a client waits up to 20 s on several upload jobs and '
         'gets the finished ones together; a finished legacy job and a batch upload whose ledger just completed '
         'publish a wake. Off, the path is a 404 and nothing is published.'
+    ),
+    RECEIPT_FINISHED_NOTE_FLAG_KEY: (
+        'With receipt_long_poll. A finished upload job also leaves a note in Redis for an hour, written before '
+        'the wake. The receipts wait reads job state only for jobs that have a note (checked once when the '
+        'request starts) or that a wake names, one job at a time, and answers an expired wait without reading '
+        'anything; a noted job whose state is not final is returned as fallback. Jobs without a note are left to '
+        'the client\'s paced status polls. Off, every start, wake and expiry of a wait re-reads every listed job.'
     ),
     BATCH_FRAME_OUTCOMES_FLAG_KEY: (
         'A completed batch upload that carried capture-evidence claims reports frame_outcomes_v1 in its status '
@@ -104,7 +112,9 @@ EXPERIMENTS = {
         'capturing, it sends a copy of the audio there, the audio goes to Soniox and the words come back as '
         'lines for display, timed in seconds of audio from the connection\'s first frame. Nothing is stored, no '
         'text is logged, no conversation, recording row or plan allowance is touched; one connection per account '
-        'and app install, closed after 20 s without audio. The page-only stream of instant_live_text part 3 '
+        'and app install. Silence keeps the connection: after 20 s without audio only the provider stream is '
+        'closed and the next audio dials a new one, and the connection itself closes after 10 minutes without '
+        'audio. The page-only stream of instant_live_text part 3 '
         '(watched_stream.admitted) answers no while this is on, so one phone never has two provider streams. '
         'The open conversation also carries v3_capture_device_id, as under end_button_by_device, so the app can '
         'show the merged live words under a conversation this phone feeds. Off, the endpoint refuses every '

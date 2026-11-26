@@ -393,6 +393,7 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
   final DateTime Function()? _nowOverride;
   final Timer Function(Duration, void Function(Timer))? _periodicOverride;
   final Future<SyncJobFetch> Function(String jobId)? _jobStatusFetcherOverride;
+  final ReceiptWaitFetcher? _receiptWaitFetcherOverride;
   final Future<void> Function(List<Wal> wals)? _persistWalsOverride;
   final Future<bool> Function()? _deltaIndexAllowedOverride;
   final Future<List<Wal>> Function()? _loadWalsOverride;
@@ -451,9 +452,19 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
     if (!ReliabilityExperiments.enabled('receipt_long_poll')) return;
     final generation = _sessionGeneration;
     _receiptWaiter ??= ReceiptWaiter(
+      fetch: _receiptWaitFetcherOverride,
       jobs: () => {
         for (final w in _indexInventory.uploaded)
           if (_activeWals.containsIdentity(w) && w.jobId?.isNotEmpty == true) w.jobId!,
+      },
+      uploadTimes: () {
+        final times = <String, int>{};
+        for (final w in _indexInventory.uploaded) {
+          if (!_activeWals.containsIdentity(w) || w.jobId?.isNotEmpty != true) continue;
+          final known = times[w.jobId!];
+          if (known == null || w.uploadedAt > known) times[w.jobId!] = w.uploadedAt;
+        }
+        return times;
       },
       apply: (receipts) async {
         // Serialize mutations with any legacy/older-server reconciliation.
@@ -500,6 +511,7 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
     DateTime Function()? now,
     Timer Function(Duration, void Function(Timer))? periodic,
     Future<SyncJobFetch> Function(String jobId)? jobStatusFetcher,
+    ReceiptWaitFetcher? receiptWaitFetcher,
     Future<void> Function(List<Wal> wals)? persistWals,
     Future<bool> Function()? deltaIndexAllowed,
     Future<List<Wal>> Function()? loadWals,
@@ -523,6 +535,7 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
         _nowOverride = now,
         _periodicOverride = periodic,
         _jobStatusFetcherOverride = jobStatusFetcher,
+        _receiptWaitFetcherOverride = receiptWaitFetcher,
         _persistWalsOverride = persistWals,
         _deltaIndexAllowedOverride = deltaIndexAllowed,
         _loadWalsOverride = loadWals,

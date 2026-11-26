@@ -2177,7 +2177,7 @@ async def wait_for_sync_receipts(
     body: SyncReceiptsWaitRequest, request: Request, uid: str = Depends(auth.get_current_user_uid)
 ):
     from database.redis_db import get_async_redis_client
-    from database.sync_jobs import receipt_channel, TERMINAL_STATUSES
+    from database.sync_jobs import receipt_channel, receipt_note_key, TERMINAL_STATUSES
 
     # Experiment receipt_long_poll. For an account it is off for, the path answers as an unknown route does.
     await warm_experiments(uid)
@@ -2190,10 +2190,13 @@ async def wait_for_sync_receipts(
             headers={'Retry-After': str(SYNC_POLL_WINDOW_SECONDS)},
         )
     jobs = set(body.job_ids)
+    # Experiment receipt_finished_note: job state is read only for a job that a note or a wake
+    # says finished. Off, every start, wake and expiry reads every listed job.
+    noted = experiment('receipt_finished_note', uid)
 
-    def snapshot():
+    def snapshot(named=None):
         receipts, fallback = [], []
-        for job_id in jobs:
+        for job_id in jobs if named is None else named:
             try:
                 status = _read_sync_job_status(job_id, uid, False, None)
             except HTTPException as error:
@@ -2209,6 +2212,9 @@ async def wait_for_sync_receipts(
                 fallback.append(job_id)
             elif status.get('status') in TERMINAL_STATUSES:
                 receipts.append(status)
+            elif named is not None:
+                # Named as finished but not final: the paced status polls own this handle.
+                fallback.append(job_id)
         return {'receipts': receipts, 'fallback': fallback}
 
     channel = await run_blocking(db_executor, receipt_channel, uid)
@@ -2219,17 +2225,26 @@ async def wait_for_sync_receipts(
         message = await sub.get_message(timeout=3)
         if not message or message['type'] != 'subscribe':
             raise HTTPException(status_code=503, detail='Receipt waiter unavailable')
-        result = await run_blocking(db_executor, snapshot)
+        if noted:
+            # A job that finished before the subscription left a note; a later one publishes a wake.
+            listed = sorted(jobs)
+            notes = await redis.mget([receipt_note_key(uid, job_id) for job_id in listed])
+            finished = [job_id for job_id, note in zip(listed, notes) if note]
+            result = (
+                await run_blocking(db_executor, snapshot, finished) if finished else {'receipts': [], 'fallback': []}
+            )
+        else:
+            result = await run_blocking(db_executor, snapshot)
         deadline = time.monotonic() + 20
         while not result['receipts'] and not result['fallback']:
             remaining = deadline - time.monotonic()
             if remaining <= 0:
-                return await run_blocking(db_executor, snapshot)
+                return result if noted else await run_blocking(db_executor, snapshot)
             if await request.is_disconnected():
                 return result
             message = await sub.get_message(ignore_subscribe_messages=True, timeout=min(1, remaining))
             if message and message['data'] in jobs:
-                result = await run_blocking(db_executor, snapshot)
+                result = await run_blocking(db_executor, snapshot, [message['data']] if noted else None)
         return result
 
 

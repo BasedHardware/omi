@@ -108,4 +108,44 @@ void main() {
     waiter.stop();
     last.complete(const SyncReceiptBatch({}, {}));
   });
+
+  for (final on in [false, true]) {
+    test(
+        on
+            ? 'receipt_finished_note on: the 16 most recently uploaded jobs take every request'
+            : 'receipt_finished_note off (baseline): jobs take turns in rotation', () async {
+      ReliabilityExperiments.overrideForTesting({'receipt_long_poll', if (on) 'receipt_finished_note'});
+      final jobs = {for (var i = 0; i < 20; i++) 'job-${i.toString().padLeft(2, '0')}'};
+      final times = {for (final id in jobs) id: 1000 + int.parse(id.substring(4))};
+      final requests = <List<String>>[];
+      final replies = <Completer<SyncReceiptBatch>>[];
+      final waiter = ReceiptWaiter(
+        jobs: () => {...jobs},
+        uploadTimes: () => times,
+        fetch: (ids, _) {
+          requests.add(ids);
+          replies.add(Completer<SyncReceiptBatch>());
+          return replies.last.future;
+        },
+        apply: (_) async {},
+      );
+      waiter.refresh();
+      await Future<void>.delayed(Duration.zero);
+      replies[0].complete(const SyncReceiptBatch({}, {}));
+      await Future<void>.delayed(Duration.zero);
+      expect(requests.length, 2);
+      final newest = [for (var i = 19; i >= 4; i--) 'job-${i.toString().padLeft(2, '0')}'];
+      if (on) {
+        expect(requests[0], newest);
+        expect(requests[1], newest);
+        // Every job stays the waiter's; the older four are reached by their paced status polls.
+        expect(jobs.every(waiter.handles), isTrue);
+      } else {
+        expect(requests[0].length, 16);
+        expect(requests[1], isNot(unorderedEquals(requests[0])));
+      }
+      waiter.stop();
+      replies[1].complete(const SyncReceiptBatch({}, {}));
+    });
+  }
 }
