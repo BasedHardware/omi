@@ -1,7 +1,12 @@
 """Evaluate a scenario's expectations against the conversations a run produced (pure, stdlib only).
 
 A *snapshot* is the list of v3 conversations at one instant, each summarized by ``conversation_row``:
-recording labels, words, Home visibility and its reason, manual end, kind, status. No text.
+recording labels, words, Home visibility and its reason, manual end, kind, status, whether it has a title
+and notes. No text.
+
+*Facts* are the rest of what a run observed, for the checks that do not read a snapshot: ``fast_finish``
+(recording label -> outcome), ``finish_taps`` (one row per tap, ``finish_tap_row``), ``ops``
+(``scenario/budget.py``) and ``paging`` (``scenario/home.page_to_end``).
 """
 
 from __future__ import annotations
@@ -9,6 +14,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Mapping, Optional, Sequence
 
+from testing.pipeline_lab.scenario import budget as budgets
 from testing.pipeline_lab.scenario.spec import FINISH_ALIAS, Check, Scenario
 
 # Process exit codes for ``scenario run`` (one scenario): passed / xfail 0, failed / xpass 1, error 2.
@@ -26,10 +32,40 @@ class CheckResult:
         return {'check': self.check.describe(), 'ok': self.ok, 'detail': self.detail}
 
 
+def has_title(row: Mapping[str, Any]) -> bool:
+    structured = row.get('structured') or {}
+    return bool(str((structured.get('title') if isinstance(structured, Mapping) else '') or '').strip())
+
+
+def has_notes(row: Mapping[str, Any]) -> bool:
+    structured = row.get('structured') or {}
+    return bool(str((structured.get('overview') if isinstance(structured, Mapping) else '') or '').strip())
+
+
+def finish_tap_row(outcome: str, conversation: Optional[Mapping[str, Any]], label_of) -> dict[str, Any]:
+    """One Finish tap as the checks read it: the branch, and the returned conversation's shape (no text)."""
+    row: dict[str, Any] = {'outcome': outcome}
+    if conversation is not None:
+        row.update(
+            titled=has_title(conversation),
+            has_notes=has_notes(conversation),
+            discarded=bool(conversation.get('discarded')),
+            # A derived window names its sources; the recording fallback (#26288) answers with the recording.
+            recordings=[label_of(str(r)) for r in conversation.get('v3_recording_ids') or []]
+            or (
+                [label_of(str(conversation['id']))] if conversation.get('recording') and conversation.get('id') else []
+            ),
+            tile_state=conversation.get('tile_state'),
+        )
+    return row
+
+
 def conversation_row(row: Mapping[str, Any], label_of, words: int) -> dict[str, Any]:
     """The safe summary of one v3 conversation: no ids beyond the short handle, no text."""
     status = row.get('status')
     return {
+        'titled': has_title(row),
+        'has_notes': has_notes(row),
         'handle': str(row.get('id') or '')[:8],
         'recordings': [label_of(str(r)) for r in row.get('v3_recording_ids') or []],
         'words': words,
@@ -65,6 +101,10 @@ def _matches(conv: Mapping[str, Any], fields: Mapping[str, Any]) -> list[str]:
             # Set by scenario/home.py from the product's Home route; None = the route gave no answer.
             have = conv.get('on_home')
             ok = have is not None and have == want
+        elif key in ('home_titled', 'home_has_notes'):
+            # Set by scenario/home.py from the Home route's row; None when it is not on Home.
+            have = conv.get(key)
+            ok = bool(have) == want
         elif key == 'hidden_reason':
             ok = conv['hidden_reason'] == want
             have = conv['hidden_reason']
@@ -76,7 +116,59 @@ def _matches(conv: Mapping[str, Any], fields: Mapping[str, Any]) -> list[str]:
     return misses
 
 
-def evaluate(check: Check, snapshot: Sequence[Mapping[str, Any]], finish_label: Optional[str]) -> CheckResult:
+def _response_misses(tap: Mapping[str, Any], fields: Mapping[str, Any]) -> list[str]:
+    misses = []
+    for key, want in fields.items():
+        have = tap.get('recordings' if key == 'recordings_include' else key)
+        if key == 'recordings':
+            ok = have is not None and sorted(set(have)) == sorted(set(want))
+        elif key == 'recordings_include':
+            ok = have is not None and set(want) <= set(have)
+        else:
+            ok = have == want
+        if not ok:
+            misses.append(f'{key}={have!r} (want {want!r})')
+    return misses
+
+
+def _paging_result(paging: Optional[Mapping[str, Any]]) -> tuple[bool, str]:
+    if not paging:
+        return False, 'Home was not paged'
+    if paging.get('error'):
+        return False, f'paging stopped: {paging["error"]}'
+    problems = []
+    for key in ('missing', 'duplicated', 'hidden_seen'):
+        if paging.get(key):
+            problems.append(f'{key} {len(paging[key])}')
+    summary = f'{paging.get("pages")} page(s), {paging.get("seen")} of {paging.get("expected")} visible'
+    return (not problems), (summary + ('; ' + ', '.join(problems) if problems else ''))
+
+
+def evaluate(
+    check: Check,
+    snapshot: Sequence[Mapping[str, Any]],
+    finish_label: Optional[str],
+    facts: Optional[Mapping[str, Any]] = None,
+) -> CheckResult:
+    facts = facts or {}
+    if check.budget is not None:
+        key, cap = check.budget
+        ok, detail, _ = budgets.evaluate_budget(key, cap, facts.get('ops'))
+        return CheckResult(check, ok, detail)
+    if check.recording is not None:
+        have = (facts.get('fast_finish') or {}).get(check.recording, 'none')
+        want = check.fields.get('fast_finish')
+        return CheckResult(check, have == want, f'fast_finish={have!r}' + ('' if have == want else f' (want {want!r})'))
+    if check.finish_response is not None:
+        taps = list(facts.get('finish_taps') or [])
+        if len(taps) < check.finish_response:
+            return CheckResult(check, False, f'tap {check.finish_response} did not run')
+        tap = taps[check.finish_response - 1]
+        misses = _response_misses(tap, check.fields)
+        return CheckResult(check, not misses, '; '.join(misses) or f'tap {check.finish_response}: {tap["outcome"]}')
+    if check.home_paging is not None:
+        ok, detail = _paging_result(facts.get('paging'))
+        return CheckResult(check, ok, detail)
     live = [c for c in snapshot if not c.get('deleted')]
     if check.no_hidden_with is not None:
         label = finish_label if check.no_hidden_with == FINISH_ALIAS else check.no_hidden_with
@@ -91,7 +183,14 @@ def evaluate(check: Check, snapshot: Sequence[Mapping[str, Any]], finish_label: 
     holders = [c for c in live if label in c['recordings']]
     if not holders:
         return CheckResult(check, False, f'no conversation holds {label}')
-    misses = {c['handle']: _matches(c, check.fields) for c in holders}
+    fields = dict(check.fields)
+    if 'holders' in fields:
+        want = fields.pop('holders')
+        if len(holders) != want:
+            return CheckResult(check, False, f'holders={len(holders)} (want {want})')
+        if not fields:
+            return CheckResult(check, True, f'{label} in {len(holders)} conversation(s)')
+    misses = {c['handle']: _matches(c, fields) for c in holders}
     good = [handle for handle, miss in misses.items() if not miss]
     if good:
         return CheckResult(check, True, f'{label} in {good[0]}')
@@ -119,18 +218,47 @@ def outcome(scenario: Scenario, results: Sequence[CheckResult], error: Optional[
 # ---- verdict rows (scenario/verdict.py) -----------------------------------------------------------
 
 # What a verdict shows of a conversation: the fields checks and compare read; no handle (it is a random id).
-VERDICT_FIELDS = ('recordings', 'words', 'visible', 'hidden_reason', 'manual_end', 'kind', 'status')
+VERDICT_FIELDS = (
+    'recordings', 'words', 'visible', 'hidden_reason', 'manual_end', 'kind', 'status', 'titled', 'has_notes',
+)  # fmt: skip
 
 
 def expected_of(check: Check) -> dict[str, Any]:
+    if check.budget is not None:
+        return {'budget': check.budget[0], 'at_most': check.budget[1]}
     if check.no_hidden_with is not None:
         return {'no_hidden_with': check.no_hidden_with}
+    if check.recording is not None:
+        return {'recording': check.recording, **dict(check.fields)}
+    if check.finish_response is not None:
+        return {'finish_response': check.finish_response, **dict(check.fields)}
+    if check.home_paging is not None:
+        return {'home_paging': check.home_paging}
     return {'conversation_of': check.conversation_of, **dict(check.fields)}
 
 
-def actual_of(check: Check, snapshot: Sequence[Mapping[str, Any]], finish_label: Optional[str]) -> dict[str, Any]:
+def actual_of(
+    check: Check,
+    snapshot: Sequence[Mapping[str, Any]],
+    finish_label: Optional[str],
+    facts: Optional[Mapping[str, Any]] = None,
+) -> dict[str, Any]:
     """What the run showed for ``check``: the holder conversation that matched (else the first holder), or
     the hidden conversations holding the label. Same selection as :func:`evaluate`."""
+    facts = facts or {}
+    if check.budget is not None:
+        return {'budget': check.budget[0], 'count': budgets.measured(facts.get('ops') or {}, check.budget[0])}
+    if check.recording is not None:
+        return {
+            'recording': check.recording,
+            'fast_finish': (facts.get('fast_finish') or {}).get(check.recording, 'none'),
+        }
+    if check.finish_response is not None:
+        taps = list(facts.get('finish_taps') or [])
+        return {'tap': taps[check.finish_response - 1] if len(taps) >= check.finish_response else None}
+    if check.home_paging is not None:
+        paging = dict(facts.get('paging') or {})
+        return {k: (len(v) if isinstance(v, list) else v) for k, v in paging.items() if k != 'requests'}
     live = [c for c in snapshot if not c.get('deleted')]
     if check.no_hidden_with is not None:
         label = finish_label if check.no_hidden_with == FINISH_ALIAS else check.no_hidden_with

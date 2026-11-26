@@ -130,6 +130,9 @@ button { font: inherit; color: inherit; }
 .checks tr.bad td { background: var(--bad-bg); }
 .checks tr.bad td:first-child { box-shadow: inset 3px 0 0 var(--bad); }
 .checks .when { display: block; color: var(--muted); font-size: 12px; }
+.ops { margin-top: 18px; }
+.ops-title { font-size: 14px; margin: 0; }
+.ops-table { max-width: 520px; }
 .meta-line { margin-top: 10px; font-size: 13px; color: var(--muted); }
 
 /* home */

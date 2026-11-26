@@ -5,7 +5,7 @@ Layout (a contract other tools read; ``schema`` bumps on any incompatible change
     DIR/run.json        {"schema": 1, "backend_tree", "ref", "started_at", "seconds", "scenarios": [...], "isolation": {...}}
     DIR/verdict.json    {"schema": 1, "outcome": "passed|failed|error", "scenarios": [{"name", "outcome", "seconds",
                          "checks": [{"label", "passed", "expected", "actual", "at"}], "stand_ins", "stand_in_notes",
-                         "audio_steps", "error"}]}
+                         "audio_steps", "ops", "ops_table", "budget", "error"}]}
     DIR/<name>/scenario.json   the scenario file as run
     DIR/<name>/result.json     what ``scenario/run.py`` writes
     DIR/<name>/home.json       written by ``scenario/home.HomeRecorder.write_home_snapshot``, not here
@@ -22,7 +22,7 @@ import json
 from pathlib import Path
 from typing import Any, Mapping, Optional, Sequence
 
-from testing.pipeline_lab.scenario import standins
+from testing.pipeline_lab.scenario import budget as budgets, standins
 from testing.pipeline_lab.scenario.checks import OUTCOMES, actual_of, expected_of
 
 SCHEMA = 1
@@ -48,6 +48,12 @@ def scenario_verdict(name: str, result: Mapping[str, Any], scenario: Any = None)
     """One ``verdict.json`` scenario row from a ``result.json`` and the scenario it ran (``spec.Scenario``)."""
     checks = []
     rows = list(result.get('checks') or [])
+    facts = {
+        'ops': result.get('ops'),
+        'fast_finish': result.get('fast_finish') or {},
+        'finish_taps': result.get('finish_taps') or [],
+        'paging': result.get('paging'),
+    }
     if scenario is not None and len(rows) == len(scenario.checks):
         for index, (check, row) in enumerate(zip(scenario.checks, rows)):
             snapshot = _snapshot_for(result, index, check.at)
@@ -56,7 +62,7 @@ def scenario_verdict(name: str, result: Mapping[str, Any], scenario: Any = None)
                     'label': check.label or row.get('check'),
                     'passed': bool(row.get('ok')),
                     'expected': expected_of(check),
-                    'actual': actual_of(check, snapshot, result.get('finish_target')),
+                    'actual': actual_of(check, snapshot, result.get('finish_target'), facts),
                     'at': check.at,
                 }
             )
@@ -74,8 +80,24 @@ def scenario_verdict(name: str, result: Mapping[str, Any], scenario: Any = None)
         'stand_in_notes': [row['text'] for row in result.get('stand_in_notes') or standins.stand_in_notes(result)],
         'audio_steps': [row['text'] for row in result.get('audio_steps') or standins.audio_steps(result)],
         'transcripts': transcript_sources(result),
+        'ops': ops_summary(result.get('ops')),
+        'ops_table': budgets.table_rows(result.get('ops'), result.get('budget')),
+        'budget': result.get('budget'),
         'error': result.get('error'),
     }
+
+
+def ops_summary(ops: Optional[Mapping[str, Any]]) -> Optional[dict[str, Any]]:
+    """The verdict row's copy of ``result.json`` ``ops``: totals, per-collection splits, no-op sites."""
+    if not ops:
+        return None
+    keep = (
+        'reads', 'writes', 'deletes', 'noop_writes', 'by_collection', 'by_path', 'by_scope', 'noop_sites',
+        'wall_clock_reads', 'racy_ops',
+    )  # fmt: skip
+    out = {k: ops.get(k) for k in keep if k in ops}
+    out['vendor_calls'] = ops.get('vendor_calls')
+    return out
 
 
 def verdict(rows: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
@@ -143,13 +165,25 @@ def markdown_summary(run_dir: Path) -> str:
         f'jobs {run.get("jobs", 1)}, stt {run.get("stt", "replay")}, {run.get("seconds", "?")} s, '
         f'ref `{str(ref)[:12]}`{" dirty" if run.get("dirty") else ""})'
     )
-    lines = [head, '', '| scenario | outcome | checks | seconds | transcripts |', '| --- | --- | --- | --- | --- |']
+    lines = [
+        head,
+        '',
+        '| scenario | outcome | checks | seconds | transcripts | reads | writes | no-op writes | stt | llm |',
+        '| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |',
+    ]
     for row in rows:
         checks = row.get('checks') or []
         passed = sum(1 for check in checks if check.get('passed'))
         sources = ', '.join(sorted(set((row.get('transcripts') or {}).values()))) or '-'
+        ops = row.get('ops') or {}
+        vendor = ops.get('vendor_calls') or {}
+        counts = ' | '.join(
+            str(v if v is not None else '-')
+            for v in (ops.get('reads'), ops.get('writes'), ops.get('noop_writes'), vendor.get('stt'), vendor.get('llm'))
+        )
         lines.append(
-            f'| {row["name"]} | {row["outcome"]} | {passed}/{len(checks)} | {row.get("seconds", 0)} | {sources} |'
+            f'| {row["name"]} | {row["outcome"]} | {passed}/{len(checks)} | {row.get("seconds", 0)} | {sources} | '
+            f'{counts} |'
         )
     for row in rows:
         failed = [str(check.get('label')) for check in row.get('checks') or [] if not check.get('passed')]

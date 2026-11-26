@@ -93,10 +93,13 @@ def test_scenarios_follow_their_closure_and_their_own_file(report):
     names = affected.scenario_names(affected.DiskSource(REPO), REPO)
     assert names and all((REPO / affected.SCENARIO_DIR / f'{n}.json').is_file() for n in names)
     scenario_file = f'{affected.SCENARIO_DIR}/{names[0]}.json'
-    out, rows = report(scenario_file, 'backend/testing/pipeline_lab/scenario/ops.py', 'backend/utils/llm/goals.py')
+    # The v3 lease store is in reach.json's common set (every scenario renews a reconcile lease); goals.py was,
+    # until finish_privacy_refused_fast_finish, which builds no conversation.
+    common = 'backend/database/conversations_v3_leases.py'
+    out, rows = report(scenario_file, 'backend/testing/pipeline_lab/scenario/ops.py', common)
     assert rows[scenario_file]['scenarios'] == [names[0]] and rows[scenario_file]['stage'] is None
     assert rows['backend/testing/pipeline_lab/scenario/ops.py']['scenarios'] == names
-    assert rows['backend/utils/llm/goals.py']['scenarios'] == names  # measured: every scenario calls it
+    assert rows[common]['scenarios'] == names  # measured: every scenario calls it
     _, rows = report('backend/testing/pipeline_lab/timeline/build.py')
     assert rows['backend/testing/pipeline_lab/timeline/build.py']['scenarios'] == []
 

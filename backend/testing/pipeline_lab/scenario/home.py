@@ -27,6 +27,15 @@ uid, keeping its ``request_read_scope`` sub-dependency. Every check inside the r
 
 ``on_home`` (a check field) is true when the conversation is in the list body, or is the live conversation the
 live route returns. Disagreements with the lab's ``visible`` are listed in ``home.json`` (``disagreements``).
+``home_titled`` / ``home_has_notes`` say whether the route's own row for it carries a title / an overview.
+
+Paging (``page_to_end``, the ``home_paging`` check): at the end of a run, Home is paged the way
+``ConversationProvider._loadMorePage`` (``app/lib/providers/conversation_provider.dart:1500``) pages it: the
+first page as above, then each next page at ``offset`` + the storage rows the server reported
+(``X-Omi-Conversation-Page-Size``, else the rows returned), with the server's ``X-Omi-Next-Cursor`` and the
+page mode it answered (``X-Omi-Home-Page-Mode``), until ``X-Omi-Has-More`` says no (an older server's
+answer: a page under 50 storage rows, or one the read budget cut, ``X-Omi-List-Truncated``). Ids are
+compared by handle; the walk is written to ``home.json`` (``paging``, counts and handles only).
 """
 
 from __future__ import annotations
@@ -57,6 +66,9 @@ LIVE_PATH = '/v1/conversations/live'
 # Imported under the lab env before the clock is installed, so the routes read the virtual clock.
 HOME_MODULES = ('routers.conversations',)
 FINAL = 'final'
+PAGE_SIZE = 50  # app/lib/providers/conversation_provider.dart _conversationPageSize
+MAX_PAGES = 200
+PAGING_EVIDENCE = 'app/lib/providers/conversation_provider.dart:1500 (_loadMorePage: offset, cursor, has-more)'
 
 
 def handle_of(conversation_id: Any) -> str:
@@ -91,10 +103,37 @@ def home_handles(snapshot: Mapping[str, Any]) -> Optional[set[str]]:
     return handles
 
 
-def annotate(rows: Sequence[dict[str, Any]], handles: Optional[set[str]]) -> list[dict[str, Any]]:
-    """Set ``on_home`` on each conversation row (``None`` when the route gave no answer)."""
+def home_rows(snapshot: Optional[Mapping[str, Any]]) -> dict[str, Mapping[str, Any]]:
+    """The route's rows in one snapshot (list body, then the live conversation), by handle."""
+    out: dict[str, Mapping[str, Any]] = {}
+    if not snapshot or snapshot.get('status') != 200:
+        return out
+    body = snapshot.get('response')
+    for row in body if isinstance(body, list) else []:
+        if isinstance(row, Mapping) and row.get('id'):
+            out.setdefault(handle_of(row['id']), row)
+    live = snapshot.get('live') or {}
+    response = live.get('response') if live.get('status') == 200 else None
+    conversation = response.get('conversation') if isinstance(response, Mapping) else None
+    if isinstance(conversation, Mapping) and conversation.get('id'):
+        out.setdefault(handle_of(conversation['id']), conversation)
+    return out
+
+
+def annotate(
+    rows: Sequence[dict[str, Any]],
+    handles: Optional[set[str]],
+    route_rows: Optional[Mapping[str, Mapping[str, Any]]] = None,
+) -> list[dict[str, Any]]:
+    """Set ``on_home`` on each conversation row (``None`` when the route gave no answer), and
+    ``home_titled`` / ``home_has_notes`` from the route's own row (``None`` when it is not on Home)."""
+    from testing.pipeline_lab.scenario.checks import has_notes, has_title
+
     for row in rows:
         row['on_home'] = None if handles is None else row.get('handle') in handles
+        route = (route_rows or {}).get(row.get('handle'))
+        row['home_titled'] = None if route is None else has_title(route)
+        row['home_has_notes'] = None if route is None else has_notes(route)
     return list(rows)
 
 
@@ -146,6 +185,15 @@ def build_app(uid: str) -> Any:
 
 async def asgi_get(app: Any, path: str, query: Mapping[str, str], headers: Mapping[str, str]) -> tuple[int, Any]:
     """One GET through the ASGI app, no socket. Returns ``(status, parsed JSON body)``."""
+    status, body, _ = await asgi_request(app, path, query, headers)
+    return status, body
+
+
+async def asgi_request(
+    app: Any, path: str, query: Mapping[str, str], headers: Mapping[str, str]
+) -> tuple[int, Any, dict[str, str]]:
+    """One GET through the ASGI app, no socket. Returns ``(status, parsed JSON body, response headers)``
+    with header names lowercased."""
     sent: list[Mapping[str, Any]] = []
     raw_headers = [(b'host', b'lab.local')] + [(k.lower().encode(), v.encode()) for k, v in headers.items()]
     scope = {
@@ -176,12 +224,93 @@ async def asgi_get(app: Any, path: str, query: Mapping[str, str], headers: Mappi
         sent.append(message)
 
     await app(scope, receive, send)
-    status = next((int(m['status']) for m in sent if m['type'] == 'http.response.start'), 0)
+    start = next((m for m in sent if m['type'] == 'http.response.start'), {})
+    status = int(start.get('status') or 0)
+    response_headers = {
+        (k.decode('latin-1') if isinstance(k, bytes) else str(k)).lower(): (
+            v.decode('latin-1') if isinstance(v, bytes) else str(v)
+        )
+        for k, v in start.get('headers') or []
+    }
     body = b''.join(m.get('body', b'') for m in sent if m['type'] == 'http.response.body')
     try:
-        return status, json.loads(body.decode('utf-8')) if body else None
+        return status, (json.loads(body.decode('utf-8')) if body else None), response_headers
     except (UnicodeDecodeError, json.JSONDecodeError):
-        return status, {'unparsed_body_bytes': len(body)}
+        return status, {'unparsed_body_bytes': len(body)}, response_headers
+
+
+def _int(value: Any) -> Optional[int]:
+    try:
+        return int(str(value))
+    except (TypeError, ValueError):
+        return None
+
+
+async def walk_pages(app: Any, *, page_size: int = PAGE_SIZE, max_pages: int = MAX_PAGES) -> dict[str, Any]:
+    """Page ``GET /v1/conversations`` to its end the way the app does. Returns the pages (counts and flags
+    only) and the handles in the order they arrived; ``error`` when a page did not answer 200 or the walk
+    did not end."""
+    offset, cursor, mode = 0, None, LIST_HEADERS['X-Omi-Home-Page-Mode']
+    pages: list[dict[str, Any]] = []
+    handles: list[str] = []
+    for _ in range(max_pages):
+        query = {**LIST_QUERY, 'limit': str(page_size), 'offset': str(offset)}
+        if cursor:
+            query['cursor'] = cursor
+        status, body, headers = await asgi_request(
+            app, LIST_PATH, query, {**LIST_HEADERS, 'X-Omi-Home-Page-Mode': mode}
+        )
+        if status != 200 or not isinstance(body, list):
+            return {'pages': pages, 'handles': handles, 'error': f'{ROUTE} {status} at offset {offset}'}
+        ids = list_ids(body)
+        storage = _int(headers.get('x-omi-conversation-page-size'))
+        storage = len(ids) if storage is None else storage
+        more_header = headers.get('x-omi-has-more')
+        truncated = headers.get('x-omi-list-truncated') == 'true'
+        has_more = (
+            more_header == 'true' if more_header in ('true', 'false') else (not truncated and storage >= page_size)
+        )
+        pages.append(
+            {
+                'offset': offset,
+                'rows': len(ids),
+                'storage_rows': storage,
+                'has_more': has_more,
+                'cursor': bool(cursor),
+                'mode': headers.get('x-omi-home-page-mode'),
+                'truncated': truncated,
+            }
+        )
+        handles.extend(handle_of(i) for i in ids)
+        offset += storage
+        cursor = headers.get('x-omi-next-cursor') or None
+        if headers.get('x-omi-home-page-mode') in ('indexed', 'legacy'):
+            mode = headers['x-omi-home-page-mode']
+        if not has_more:
+            return {'pages': pages, 'handles': handles}
+        if storage <= 0 and not cursor:
+            return {'pages': pages, 'handles': handles, 'error': 'the server said more but did not advance'}
+    return {'pages': pages, 'handles': handles, 'error': f'no end after {max_pages} pages'}
+
+
+def paging_verdict(walk: Mapping[str, Any], visible: Sequence[str], hidden: Sequence[str]) -> dict[str, Any]:
+    """Every handle in ``visible`` exactly once, none of ``hidden``: the ``home_paging`` facts."""
+    seen = list(walk.get('handles') or [])
+    counts: dict[str, int] = {}
+    for handle in seen:
+        counts[handle] = counts.get(handle, 0) + 1
+    out: dict[str, Any] = {
+        'pages': len(walk.get('pages') or []),
+        'expected': len(visible),
+        'seen': sum(1 for h in visible if counts.get(h)),
+        'missing': sorted(h for h in visible if not counts.get(h)),
+        'duplicated': sorted(h for h, n in counts.items() if n > 1),
+        'hidden_seen': sorted(h for h in hidden if counts.get(h)),
+        'requests': walk.get('pages') or [],
+    }
+    if walk.get('error'):
+        out['error'] = walk['error']
+    return out
 
 
 class HomeRecorder:
@@ -213,7 +342,9 @@ class HomeRecorder:
         self.disagreements: list[dict[str, Any]] = []
         self.errors: list[str] = []
         self._handles: Optional[set[str]] = None
+        self._route_rows: dict[str, Mapping[str, Any]] = {}
         self._label: Optional[str] = None
+        self.paging: Optional[dict[str, Any]] = None
 
     # ---- capture
 
@@ -245,8 +376,22 @@ class HomeRecorder:
         snapshot = {'at': at, 'label': label, **called}
         self.snapshots.append(snapshot)
         self._handles = home_handles(snapshot)
+        self._route_rows = home_rows(snapshot)
         self._label = label
         return snapshot
+
+    def page_to_end(self, visible: Sequence[str], hidden: Sequence[str]) -> dict[str, Any]:
+        """Page Home to its end (``walk_pages``) and judge it against ``visible`` / ``hidden`` handles; kept in
+        ``home.json`` (``paging``). Blocking: call it with ``asyncio.to_thread``."""
+        if self._app is None:
+            self._app = self._app_factory(self.uid)
+        try:
+            walk = asyncio.run(walk_pages(self._app))
+        except Exception as error:  # noqa: BLE001 - recorded, the check fails
+            walk = {'pages': [], 'handles': [], 'error': f'{type(error).__name__}: {error}'}
+        self.paging = paging_verdict(walk, visible, hidden)
+        self.write()
+        return self.paging
 
     # ---- called by the run (ops.py at each checkpoint, run.py at the end)
 
@@ -263,7 +408,7 @@ class HomeRecorder:
 
     def annotate_rows(self, rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
         """``on_home`` on each row from the latest capture; disagreements with ``visible`` are kept."""
-        annotated = annotate(rows, self._handles)
+        annotated = annotate(rows, self._handles, self._route_rows)
         found = disagreements(self._label or '', annotated, self._handles)
         new = [d for d in found if d not in self.disagreements]
         if new:
@@ -286,6 +431,8 @@ class HomeRecorder:
         }
         if self.errors:
             doc['errors'] = self.errors
+        if self.paging is not None:
+            doc['paging'] = {'evidence': PAGING_EVIDENCE, **self.paging}
         return doc
 
     def write(self) -> Path:

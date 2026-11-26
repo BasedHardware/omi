@@ -38,7 +38,9 @@ def result(handle: str = 'd66c3117', seconds: float = 12.5, **changes) -> dict:
             {'check': 'c0', 'ok': True, 'detail': f'B in {handle}'},
             {'check': 'c1', 'ok': True, 'detail': f'B in {handle}'},
             {'check': 'c2', 'ok': True, 'detail': 'none hidden'},
-        ],
+        ]
+        # One row per budget key of the committed scenario (its checks after the expect rows).
+        + [{'check': f'b{i}', 'ok': True, 'detail': 'under budget'} for i in range(6)],
         'conversations': [conv],
         'checkpoints': {'0': {'t': 60.0, 'conversations': [conv]}},
         'stand_ins': {'record_admission': 1, 'capture_close': 1},
@@ -52,7 +54,8 @@ def test_scenario_verdict_rows_carry_expected_and_actual():
     row = verdicts.scenario_verdict('finish_single_recording_fast', result(), load_scenario(FAST))
     assert row['outcome'] == 'passed' and row['error'] is None
     assert row['stand_ins'] == ['capture_close', 'record_admission']
-    first, final, hidden = row['checks']
+    first, final, hidden, *budgets = row['checks']
+    assert [b['label'] for b in budgets][:2] == ['budget_reads', 'budget_writes']
     assert first['at'] == 60.0 and final['at'] is None
     assert first['expected'] == {'conversation_of': '@finish', 'recordings': ['B'], 'visible': True, 'manual_end': True}
     assert first['actual']['conversation']['words'] == 100
@@ -71,6 +74,9 @@ def test_scenario_verdict_of_an_error_has_no_checks():
         'stand_in_notes': [],
         'audio_steps': [],
         'transcripts': {},
+        'ops': None,
+        'ops_table': [],
+        'budget': None,
         'error': 'RuntimeError',
     }
 
@@ -174,7 +180,8 @@ def test_run_dir_layout_contract(tmp_path, fake_runs, capsys):
     on_disk = json.loads((out / 'verdict.json').read_text())
     assert printed == on_disk and on_disk['schema'] == 1 and on_disk['outcome'] == 'passed'
     assert set(on_disk['scenarios'][0]) == {
-        'name', 'outcome', 'seconds', 'checks', 'stand_ins', 'stand_in_notes', 'audio_steps', 'transcripts', 'error'
+        'name', 'outcome', 'seconds', 'checks', 'stand_ins', 'stand_in_notes', 'audio_steps', 'transcripts', 'ops',
+        'ops_table', 'budget', 'error',
     }  # fmt: skip
     assert set(on_disk['scenarios'][0]['checks'][0]) == {'label', 'passed', 'expected', 'actual', 'at'}
     run = json.loads((out / 'run.json').read_text())

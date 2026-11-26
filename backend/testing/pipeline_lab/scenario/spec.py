@@ -20,9 +20,16 @@ A scenario is one JSON object. Times are seconds from ``t0`` (a synthetic UTC in
       "gaps": [{"origin": "O", "between": ["A", "B"], "reason": "reconnect"}],   # stream gaps (checked)
       "sync": [{"id": "F", "origin": "O", "audio": [1.5, 2.7], "arrives_at": 162, "speech": [...]}],
       "stt": {"provider": "...", "model": "...", "language": "en", "vocabulary": []},   # audio_file only
-      "finish": {"at": 38, "fast_finish": true, "provisional_latency": 15},
+      "finish": {"at": 38, "fast_finish": true, "provisional_latency": 15,
+                 "again_at": [38.4]},                    # optional: more taps of the same Finish button
+      "account": {"private_cloud_sync_enabled": true,    # optional; false = cloud audio off (live lane)
+                  "sync_off_at": 45},                    # optional: the owner turns sync off at this instant
+      "seed": [{"kind": "visible", "count": 60}, {"kind": "below_word_minimum", "count": 80}],
+                                                         # optional: Home history before t0, in this order
       "expect": [{"at": 60, "label": "finish_visible", "conversation_of": "@finish", "visible": true}],
                                                          # on_home: in the product Home route's response (home.py)
+      "budget": {"writes": 40, "reads": 300, "noop_writes": 0, "vendor_calls": {"stt": 1, "llm": 0},
+                 "note": "..."},                         # optional caps on the run's operation counts
       "expected_failure": {"reason": "SCA-xxxx: ...", "checks": ["finish_visible"], "strict": true},
       "tail_seconds": 1800
     }
@@ -33,6 +40,44 @@ visibility and manual end of one conversation in one row.
 
 ``expected_failure`` names the ``label`` of each check the known bug fails (``checks``). Every other check
 must still pass: a scenario whose unnamed check fails is ``failed``, not ``xfail``.
+
+``expect`` rows, by target (exactly one target key per row):
+
+- ``conversation_of`` (a recording label or ``@finish``): fields ``recordings``, ``recordings_include``,
+  ``visible``, ``on_home``, ``manual_end``, ``hidden_reason``, ``min_words``, ``kind``; ``titled`` and
+  ``has_notes`` (the stored row has a non-empty title, overview); ``home_titled`` and ``home_has_notes``
+  (the same, in the Home route's row; false when it is not on Home); ``holders`` (how many live
+  conversations hold the label: ``1`` means nothing was duplicated). Every field must hold for one holder.
+- ``no_hidden_with`` (a label): no hidden conversation holds its speech.
+- ``recording`` (a label): ``fast_finish``, the outcome ``fast_finish.run`` returned for it (``written``,
+  ``privacy_blocked``, ...), or ``"none"`` when no pass ran.
+- ``finish_response`` (a tap number, 1 = ``finish.at``, 2 = the first ``again_at``, ...): what that tap
+  returned. ``outcome`` (``in_progress``: a capture was in progress, the route's in-progress branch;
+  ``no_pointer``: ``finish_live_window`` answered; ``not_found``: it answered nothing), ``titled``,
+  ``has_notes``, ``discarded``, ``recordings``, ``recordings_include`` (the conversation it returned).
+- ``home_paging: "visible_once"``: at the end, Home is paged to its end as the app pages it
+  (``home.page_to_end``) and every visible conversation (each ``seed`` row of kind ``visible`` and each
+  conversation the run shows as visible) appears exactly once, and no hidden one appears. No ``at``.
+
+``budget`` caps the run's operation counts (``scenario/budget.py``): ``reads``, ``writes``, ``deletes``,
+``noop_writes`` (Firestore documents, product and Home route only) and ``vendor_calls.stt`` /
+``vendor_calls.llm``. Each key becomes a check labelled ``budget_<key>`` (``budget_vendor_stt``,
+``budget_vendor_llm``) that fails when the count exceeds the cap; ``note`` is free text for the reader (say
+why a cap is what it is, e.g. a known no-op write source). Counts are recorded in ``result.json`` (``ops``)
+whether or not a budget is given.
+
+``account`` is the lab account's settings. ``private_cloud_sync_enabled`` (default true) is written through
+the product's settings writer before the first event and stamped on every recording row. Off, Listen takes
+the live lane (``routers/listen/runtime.py`` ``refresh_mobile_batch_admission``): the recording rows carry no
+batch-lane fields, no batch record admission runs (so no manual-finish hook and no fast finish), and
+``transcript_at`` is when the live transcript lands. ``sync_off_at`` turns sync off at that instant through
+the same writer (an ``account`` event); the lab's fast-finish privacy check reads the setting then.
+
+``seed`` writes Home history before ``t0`` (not counted): ``[{"kind", "count"}]`` with kind ``visible`` (a
+finished v3 conversation with a title), ``below_word_minimum`` (a v3 window hidden under the word floor),
+``media`` (a hidden media window), ``recording`` (a raw recording row) or ``discarded``. Rows are one
+minute apart, newest first, in the order the entries list them: list several entries to put runs of hidden
+rows between visible ones (``[visible 30, below_word_minimum 100, visible 30]``).
 
 A recording or sync fragment may give ``"audio_file": "<path relative to this file>"`` instead of
 ``speech`` (exactly one of the two). The file is a PCM WAV; ``audio`` may then be omitted and is
@@ -83,7 +128,7 @@ from typing import Any, Mapping, Optional, Sequence
 DEFAULT_T0 = '2026-03-14T09:00:00+00:00'
 DEFAULT_TAIL_SECONDS = 1800.0
 DEFAULT_ADMISSION_LAG = 5.0
-EVENT_ORDER = ('capture_start', 'finish', 'seal', 'sync', 'admission', 'transcript', 'checkpoint')
+EVENT_ORDER = ('capture_start', 'finish', 'seal', 'sync', 'account', 'admission', 'transcript', 'checkpoint')
 SOURCES = ('omi', 'phone')
 FINISH_ALIAS = '@finish'
 # A neutral, obviously synthetic vocabulary for ``fill`` lines.
@@ -96,7 +141,18 @@ DEFAULT_LANGUAGE = 'en'
 AUDIO_SPAN_TOLERANCE = 0.05
 CHECK_FIELDS = (
     'recordings', 'recordings_include', 'visible', 'on_home', 'manual_end', 'hidden_reason', 'min_words', 'kind',
+    'titled', 'has_notes', 'home_titled', 'home_has_notes', 'holders',
 )  # fmt: skip
+BOOL_FIELDS = ('visible', 'on_home', 'manual_end', 'titled', 'has_notes', 'home_titled', 'home_has_notes')
+RECORDING_FIELDS = ('fast_finish',)
+RESPONSE_FIELDS = ('outcome', 'titled', 'has_notes', 'discarded', 'recordings', 'recordings_include')
+RESPONSE_OUTCOMES = ('in_progress', 'no_pointer', 'not_found')
+PAGING_CHECKS = ('visible_once',)
+TARGETS = ('conversation_of', 'no_hidden_with', 'recording', 'finish_response', 'home_paging')
+BUDGET_KEYS = ('reads', 'writes', 'deletes', 'noop_writes')
+VENDOR_KEYS = ('stt', 'llm')
+SEED_KINDS = ('visible', 'below_word_minimum', 'media', 'recording', 'discarded')
+MAX_SEED_ROWS = 2000
 _LABEL = re.compile(r'^[A-Za-z][A-Za-z0-9_-]{0,31}$')
 
 
@@ -144,6 +200,24 @@ class Finish:
     at: float
     fast_finish: bool = True
     provisional_latency: float = 15.0
+    again_at: tuple[float, ...] = ()
+
+    @property
+    def taps(self) -> tuple[float, ...]:
+        """Every tap, the first one (``at``) first."""
+        return (self.at, *self.again_at)
+
+
+@dataclass(frozen=True)
+class Account:
+    private_cloud_sync_enabled: bool = True
+    sync_off_at: Optional[float] = None
+
+
+@dataclass(frozen=True)
+class SeedRows:
+    kind: str
+    count: int
 
 
 @dataclass(frozen=True)
@@ -157,12 +231,24 @@ class Check:
     conversation_of: Optional[str] = None
     no_hidden_with: Optional[str] = None
     fields: Mapping[str, Any] = field(default_factory=dict)
+    recording: Optional[str] = None
+    finish_response: Optional[int] = None
+    home_paging: Optional[str] = None
+    budget: Optional[tuple[str, int]] = None  # (key, cap): a ``budget`` block entry
 
     def describe(self) -> str:
         when = (f'[{self.label}] ' if self.label else '') + (f'@+{self.at:g}s ' if self.at is not None else '')
+        parts = ', '.join(f'{k}={json.dumps(v)}' for k, v in self.fields.items())
+        if self.budget is not None:
+            return f'{when}{self.budget[0]} <= {self.budget[1]}'
         if self.no_hidden_with:
             return f'{when}no hidden conversation holds {self.no_hidden_with}'
-        parts = ', '.join(f'{k}={json.dumps(v)}' for k, v in self.fields.items())
+        if self.recording is not None:
+            return f'{when}recording {self.recording}: {parts}'
+        if self.finish_response is not None:
+            return f'{when}finish tap {self.finish_response} response: {parts}'
+        if self.home_paging is not None:
+            return f'{when}Home paged to its end: {self.home_paging}'
         return f'{when}conversation of {self.conversation_of}: {parts}'
 
 
@@ -188,6 +274,14 @@ class Scenario:
     admission_lag: float = DEFAULT_ADMISSION_LAG
     path: Optional[str] = None
     stt: Mapping[str, Any] = field(default_factory=dict)
+    account: Account = field(default_factory=Account)
+    seed: tuple[SeedRows, ...] = ()
+    budget: Mapping[str, Any] = field(default_factory=dict)
+
+    @property
+    def batch_lane(self) -> bool:
+        """Recordings take the batch lane (cloud audio on); off, the live lane (no batch admission)."""
+        return self.account.private_cloud_sync_enabled
 
     @property
     def audio_recordings(self) -> tuple[Recording, ...]:
@@ -414,37 +508,155 @@ def _recording(
     )
 
 
-def _check(raw: Any, where: str, labels: set[str], has_finish: bool) -> Check:
+def _check(raw: Any, where: str, labels: set[str], has_finish: bool, taps: int = 0) -> Check:
     if not isinstance(raw, Mapping):
         raise ScenarioError(f'{where}: expected an object')
-    _keys(raw, ('at', 'label', 'conversation_of', 'no_hidden_with', *CHECK_FIELDS), where)
+    _keys(raw, ('at', 'label', *TARGETS, *CHECK_FIELDS, *RECORDING_FIELDS, *RESPONSE_FIELDS), where)
     at = _number(raw['at'], where + '.at') if raw.get('at') is not None else None
-    target, hidden = raw.get('conversation_of'), raw.get('no_hidden_with')
-    if (target is None) == (hidden is None):
-        raise ScenarioError(f'{where}: give exactly one of conversation_of or no_hidden_with')
-    for name in (target, hidden):
-        if name is None:
-            continue
-        if name == FINISH_ALIAS and not has_finish:
-            raise ScenarioError(f'{where}: {FINISH_ALIAS} needs a finish')
-        if name != FINISH_ALIAS and name not in labels:
-            raise ScenarioError(f'{where}: unknown recording {name!r}')
+    given = [key for key in TARGETS if raw.get(key) is not None]
+    if len(given) != 1:
+        raise ScenarioError(f'{where}: give exactly one of {", ".join(TARGETS)}')
+    target_key = given[0]
     label = raw.get('label')
     if label is not None and (not isinstance(label, str) or not re.match(r'^[a-z0-9_]{1,64}$', label)):
         raise ScenarioError(f'{where}.label: lowercase letters, digits and _')
-    fields = {k: raw[k] for k in CHECK_FIELDS if k in raw}
-    if target is not None and not fields:
-        raise ScenarioError(f'{where}: a conversation check names at least one of {list(CHECK_FIELDS)}')
-    if hidden is not None and fields:
-        raise ScenarioError(f'{where}: no_hidden_with takes no other fields')
-    if 'on_home' in fields and not isinstance(fields['on_home'], bool):
-        raise ScenarioError(f'{where}.on_home: true or false (in the Home route\'s response)')
+    allowed = {
+        'conversation_of': CHECK_FIELDS,
+        'no_hidden_with': (),
+        'recording': RECORDING_FIELDS,
+        'finish_response': RESPONSE_FIELDS,
+        'home_paging': (),
+    }[target_key]
+    present = [k for k in (*CHECK_FIELDS, *RECORDING_FIELDS, *RESPONSE_FIELDS) if k in raw]
+    stray = sorted(set(present) - set(allowed))
+    if stray:
+        raise ScenarioError(f'{where}: {target_key} takes {list(allowed) or "no other fields"}, not {stray}')
+    fields = {k: raw[k] for k in allowed if k in raw}
+    if allowed and not fields:
+        raise ScenarioError(f'{where}: a {target_key} check names at least one of {list(allowed)}')
+    for key in BOOL_FIELDS + ('discarded',):
+        if key in fields and not isinstance(fields[key], bool):
+            raise ScenarioError(f'{where}.{key}: true or false')
     for key in ('recordings', 'recordings_include'):
         if key in fields:
             value = fields[key]
             if not isinstance(value, list) or not value or any(v not in labels for v in value):
                 raise ScenarioError(f'{where}.{key}: a list of declared recording labels')
-    return Check(raw=dict(raw), at=at, label=label, conversation_of=target, no_hidden_with=hidden, fields=fields)
+    if 'holders' in fields and (isinstance(fields['holders'], bool) or not isinstance(fields['holders'], int)):
+        raise ScenarioError(f'{where}.holders: a whole number of conversations')
+    if 'outcome' in fields and fields['outcome'] not in RESPONSE_OUTCOMES:
+        raise ScenarioError(f'{where}.outcome: one of {RESPONSE_OUTCOMES}')
+    if 'fast_finish' in fields and (not isinstance(fields['fast_finish'], str) or not fields['fast_finish']):
+        raise ScenarioError(f'{where}.fast_finish: an outcome name, or "none"')
+    kwargs: dict[str, Any] = {}
+    value = raw[target_key]
+    if target_key in ('conversation_of', 'no_hidden_with', 'recording'):
+        if value == FINISH_ALIAS and target_key != 'recording':
+            if not has_finish:
+                raise ScenarioError(f'{where}: {FINISH_ALIAS} needs a finish')
+        elif value not in labels:
+            raise ScenarioError(f'{where}: unknown recording {value!r}')
+        kwargs[target_key] = value
+    elif target_key == 'finish_response':
+        if isinstance(value, bool) or not isinstance(value, int) or not 1 <= value <= max(taps, 0):
+            raise ScenarioError(f'{where}.finish_response: a tap number from 1 to {taps} (finish.at, then again_at)')
+        kwargs['finish_response'] = value
+    else:
+        if value not in PAGING_CHECKS:
+            raise ScenarioError(f'{where}.home_paging: one of {PAGING_CHECKS}')
+        if at is not None:
+            raise ScenarioError(f'{where}: home_paging runs at the end of the run; it takes no at')
+        kwargs['home_paging'] = value
+    return Check(raw=dict(raw), at=at, label=label, fields=fields, **kwargs)
+
+
+def _count(value: Any, where: str) -> int:
+    if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+        raise ScenarioError(f'{where}: a whole number, 0 or more')
+    return value
+
+
+def _budget(raw: Any) -> tuple[dict[str, Any], list[Check]]:
+    """The ``budget`` block and one check per capped key (label ``budget_<key>``)."""
+    if raw is None:
+        return {}, []
+    if not isinstance(raw, Mapping):
+        raise ScenarioError('budget: {"reads": N, "writes": N, "deletes": N, "noop_writes": N, "vendor_calls": {...}}')
+    _keys(raw, (*BUDGET_KEYS, 'vendor_calls', 'note'), 'budget')
+    out: dict[str, Any] = {}
+    checks: list[Check] = []
+    for key in BUDGET_KEYS:
+        if key in raw:
+            out[key] = _count(raw[key], f'budget.{key}')
+            checks.append(Check(raw={'budget': key}, label=f'budget_{key}', budget=(key, out[key])))
+    if 'vendor_calls' in raw:
+        vendor = raw['vendor_calls']
+        if not isinstance(vendor, Mapping) or not vendor:
+            raise ScenarioError('budget.vendor_calls: {"stt": N, "llm": N}')
+        _keys(vendor, VENDOR_KEYS, 'budget.vendor_calls')
+        out['vendor_calls'] = {}
+        for key in VENDOR_KEYS:
+            if key in vendor:
+                out['vendor_calls'][key] = _count(vendor[key], f'budget.vendor_calls.{key}')
+                checks.append(
+                    Check(raw={'budget': key}, label=f'budget_vendor_{key}', budget=(key, out['vendor_calls'][key]))
+                )
+    if 'note' in raw:
+        if not isinstance(raw['note'], str):
+            raise ScenarioError('budget.note: text')
+        out['note'] = raw['note']
+    if not checks:
+        raise ScenarioError('budget: cap at least one count')
+    return out, checks
+
+
+def _account(raw: Any) -> Account:
+    if raw is None:
+        return Account()
+    if not isinstance(raw, Mapping):
+        raise ScenarioError('account: {"private_cloud_sync_enabled": true, "sync_off_at": 45}')
+    _keys(raw, ('private_cloud_sync_enabled', 'sync_off_at'), 'account')
+    enabled = raw.get('private_cloud_sync_enabled', True)
+    if not isinstance(enabled, bool):
+        raise ScenarioError('account.private_cloud_sync_enabled: true or false')
+    off = _number(raw['sync_off_at'], 'account.sync_off_at') if raw.get('sync_off_at') is not None else None
+    if off is not None and not enabled:
+        raise ScenarioError('account.sync_off_at: sync is already off')
+    return Account(private_cloud_sync_enabled=enabled, sync_off_at=off)
+
+
+def _seed(raw: Any) -> tuple[SeedRows, ...]:
+    if raw is None:
+        return ()
+    if not isinstance(raw, list) or not raw:
+        raise ScenarioError('seed: a list of {"kind", "count"}')
+    out = []
+    for i, item in enumerate(raw):
+        where = f'seed[{i}]'
+        if not isinstance(item, Mapping):
+            raise ScenarioError(f'{where}: expected an object')
+        _keys(item, ('kind', 'count'), where)
+        if item.get('kind') not in SEED_KINDS:
+            raise ScenarioError(f'{where}.kind: one of {SEED_KINDS}')
+        count = _count(item.get('count'), where + '.count')
+        if count == 0:
+            raise ScenarioError(f'{where}.count: at least 1')
+        out.append(SeedRows(item['kind'], count))
+    if sum(row.count for row in out) > MAX_SEED_ROWS:
+        raise ScenarioError(f'seed: at most {MAX_SEED_ROWS} rows')
+    return tuple(out)
+
+
+def seed_plan(scenario: 'Scenario') -> list[tuple[str, str, int]]:
+    """``[(doc id, kind, minutes before t0)]``, newest first, in the order the ``seed`` entries list them (so
+    ``[visible 30, below_word_minimum 100, visible 30]`` is a run of 100 hidden rows between visible ones).
+    Ids are unique in their first 8 characters (the short handle checks and the view use)."""
+    out: list[tuple[str, str, int]] = []
+    for row in scenario.seed:
+        for _ in range(row.count):
+            index = len(out) + 1
+            out.append((f'{index:04d}sd-{row.kind.replace("_", "-")}', row.kind, index))
+    return out
 
 
 def parse_scenario(raw: Any, *, path: Optional[str] = None) -> Scenario:
@@ -454,7 +666,7 @@ def parse_scenario(raw: Any, *, path: Optional[str] = None) -> Scenario:
         raw,
         (
             'name', 'description', 't0', 'env', 'origins', 'recordings', 'gaps', 'sync', 'finish', 'expect',
-            'expected_failure', 'tail_seconds', 'admission_lag', 'stt',
+            'expected_failure', 'tail_seconds', 'admission_lag', 'stt', 'budget', 'account', 'seed',
         ),
         'scenario',
     )  # fmt: skip
@@ -505,16 +717,32 @@ def parse_scenario(raw: Any, *, path: Optional[str] = None) -> Scenario:
         item = raw['finish']
         if not isinstance(item, Mapping):
             raise ScenarioError('finish: expected an object')
-        _keys(item, ('at', 'fast_finish', 'provisional_latency'), 'finish')
+        _keys(item, ('at', 'fast_finish', 'provisional_latency', 'again_at'), 'finish')
+        first = _number(item.get('at'), 'finish.at')
+        again = item.get('again_at') or []
+        if not isinstance(again, list):
+            raise ScenarioError('finish.again_at: a list of instants after finish.at')
+        again_at = tuple(_number(v, f'finish.again_at[{i}]') for i, v in enumerate(again))
+        if any(b < a for a, b in zip((first, *again_at), again_at)):
+            raise ScenarioError('finish.again_at: each tap at or after the one before it')
         finish = Finish(
-            at=_number(item.get('at'), 'finish.at'),
+            at=first,
             fast_finish=bool(item.get('fast_finish', True)),
             provisional_latency=_number(item.get('provisional_latency', 15.0), 'finish.provisional_latency'),
+            again_at=again_at,
         )
     gaps = tuple(_gap(item, f'gaps[{i}]', recordings) for i, item in enumerate(raw.get('gaps') or []))
+    taps = len(finish.taps) if finish is not None else 0
     checks = tuple(
-        _check(item, f'expect[{i}]', set(labels), finish is not None) for i, item in enumerate(raw.get('expect') or [])
+        _check(item, f'expect[{i}]', set(labels), finish is not None, taps)
+        for i, item in enumerate(raw.get('expect') or [])
     )
+    budget, budget_checks = _budget(raw.get('budget'))
+    checks += tuple(budget_checks)
+    account = _account(raw.get('account'))
+    seed = _seed(raw.get('seed'))
+    if any(c.home_paging for c in checks) and not any(row.kind == 'visible' for row in seed):
+        raise ScenarioError('home_paging: seed at least one visible row')
     check_labels = [c.label for c in checks if c.label is not None]
     if len(set(check_labels)) != len(check_labels):
         raise ScenarioError('expect: check labels must be unique')
@@ -545,6 +773,9 @@ def parse_scenario(raw: Any, *, path: Optional[str] = None) -> Scenario:
         admission_lag=_number(raw.get('admission_lag', DEFAULT_ADMISSION_LAG), 'admission_lag'),
         path=path,
         stt=stt,
+        account=account,
+        seed=seed,
+        budget=budget,
     )
     if finish is not None:
         capturing = scenario.open_at(finish.at)
@@ -641,11 +872,15 @@ def plan_events(scenario: Scenario) -> list[ScenarioEvent]:
             continue
         add(rec.audio[0], 'capture_start', rec.label)
         add(rec.sealed, 'seal', rec.label)
-        add(admission_offset(scenario, rec), 'admission', rec.label)
+        if scenario.batch_lane:  # the live lane (cloud audio off) has no batch record admission
+            add(admission_offset(scenario, rec), 'admission', rec.label)
         if rec.transcript_at is not None:
             add(rec.transcript_at, 'transcript', rec.label)
     if scenario.finish is not None:
-        add(scenario.finish.at, 'finish', 'finish')
+        for tap, at in enumerate(scenario.finish.taps, start=1):
+            add(at, 'finish', 'finish' if tap == 1 else f'finish#{tap}')
+    if scenario.account.sync_off_at is not None:
+        add(scenario.account.sync_off_at, 'account', 'sync_off')
     for index, check in enumerate(scenario.checks):
         if check.at is not None:
             add(check.at, 'checkpoint', f'expect[{index}]', index)
