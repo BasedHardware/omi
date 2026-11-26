@@ -25,6 +25,8 @@ os.environ.setdefault(
 )
 os.environ.setdefault('OPENAI_API_KEY', 'test-openai-key-not-real')
 
+from database.account_deletion_marker import account_deletion_document
+from database.sync_ledger import sync_content_ledger_ref
 from config import episodes as config
 from config.record_audio import record_identity
 from models.conversation import Conversation
@@ -1057,8 +1059,6 @@ def test_finish_before_first_window_refuses_unproven_recording(pre_window_finish
         for i in range(8):
             db.rows['users', _UID, 'conversations', f'window-{i}'] = {'finished_at': latest['finished_at']}
     elif case == 'deleting':
-        from database.account_deletion_marker import account_deletion_document
-
         db.rows[account_deletion_document(_UID, firestore_client=db).path] = {'wipe_status': 'pending'}
     else:
         request.update(live_conversation_id='missing', unknown_future_client_field=True)
@@ -1265,8 +1265,6 @@ def test_named_finish_refuses_unproven_capture(sealed_named_route, monkeypatch, 
         monkeypatch.setattr(v3_finish.conversations_v3_live, 'live_window', lambda *a, **kw: None)
         expected = 'no_live_window'
     else:
-        from database.account_deletion_marker import account_deletion_document
-
         db.rows[account_deletion_document(_UID, firestore_client=db).path] = {'wipe_status': 'pending'}
         expected = 'recording_ineligible'
 
@@ -1655,8 +1653,10 @@ def test_live_window_finish_retry_after_tail_and_request_never_cuts_again(newer_
 @pytest.mark.parametrize(
     'case', ['none', 'older_than_window', 'in_progress', 'silent', 'private', 'discarded', 'full_scan']
 )
-def test_live_window_finish_cuts_the_tail_without_a_newer_finishable_capture(newer_capture_route, case):
+def test_live_window_finish_cuts_the_tail_without_a_newer_finishable_capture(newer_capture_route, case, monkeypatch):
     client, db, paths, enqueued, counter = newer_capture_route
+    fallback = Mock()
+    monkeypatch.setattr(v3_finish.conversations_v3_live, 'record_fallback', fallback)
     b = db.rows[_B]
     if case == 'full_scan':
         # The bounded scan fills with newer rows, so another newer capture may lie past it.
@@ -1688,6 +1688,16 @@ def test_live_window_finish_cuts_the_tail_without_a_newer_finishable_capture(new
     assert 'v3_manual_end' not in b if _B in db.rows else True
     assert enqueued == [(_UID, {'manual_end_id': 'latest'})]
     counter.labels.assert_called_once_with('cut')
+    if case == 'full_scan':
+        fallback.assert_called_once_with(
+            component='conversation_finalization',
+            from_mode='newer_capture',
+            to_mode='window_tail',
+            reason='other',
+            outcome='degraded',
+        )
+    else:
+        fallback.assert_not_called()
 
 
 @pytest.mark.parametrize('owner', ['window', 'window-b'])
@@ -1704,8 +1714,10 @@ def test_live_window_finish_leaves_a_claimed_newer_capture_to_its_window(newer_c
 
 
 @pytest.mark.parametrize('tie', [False, True])
-def test_live_window_finish_cuts_the_newest_of_two_newer_captures(newer_capture_route, tie):
+def test_live_window_finish_cuts_the_newest_of_two_newer_captures(newer_capture_route, tie, monkeypatch):
     client, db, paths, enqueued, counter = newer_capture_route
+    fallback = Mock()
+    monkeypatch.setattr(v3_finish.conversations_v3_live, 'record_fallback', fallback)
     b = db.rows[_B]
     c = db.rows['users', _UID, 'conversations', 'capture-c'] = {
         **b,
@@ -1722,14 +1734,20 @@ def test_live_window_finish_cuts_the_newest_of_two_newer_captures(newer_capture_
     if tie:
         assert db.rows[paths['latest']]['v3_manual_end'] is True and 'v3_manual_end' not in b
         counter.labels.assert_called_once_with('cut')
+        fallback.assert_called_once_with(
+            component='conversation_finalization',
+            from_mode='newer_capture',
+            to_mode='window_tail',
+            reason='other',
+            outcome='degraded',
+        )
     else:
         assert b['v3_manual_end'] is True and 'v3_manual_end' not in db.rows[paths['latest']]
         counter.labels.assert_called_once_with('newer_recording_cut')
+        fallback.assert_not_called()
 
 
 def _ledger(db, cid, **fields):
-    from database.sync_ledger import sync_content_ledger_ref
-
     content, _ = record_identity(_UID, cid)
     db.rows[sync_content_ledger_ref(db, _UID, content).path] = {
         'dispatch_protocol': 'batch_v1',
@@ -1882,8 +1900,6 @@ def test_live_window_finish_ignores_an_unmarked_capture_older_than_an_active_fin
 
 
 def test_live_window_finish_newer_capture_refuses_an_account_being_deleted(newer_capture_route):
-    from database.account_deletion_marker import account_deletion_document
-
     client, db, paths, enqueued, counter = newer_capture_route
     db.rows[account_deletion_document(_UID, firestore_client=db).path] = {'wipe_status': 'pending'}
 

@@ -20,6 +20,7 @@ from database.account_deletion_marker import account_deletion_document
 from database.account_deletion_policy import account_deletion_marker_blocks_access
 from database.conversations import conversations_collection, prepare_conversation_for_read
 from database.sync_ledger import sync_content_ledger_ref
+from utils.observability.fallback import record_fallback
 from utils.conversations.v3.live import (
     FINISH_FIELDS,
     FINISH_RECORDING_FIELD,
@@ -470,10 +471,14 @@ def _newer_capture(docs, window: Mapping[str, Any], now: datetime):
         newest = max(row['finished_at'] for _, row in unmarked)
         top = [(cid, row) for cid, row in unmarked if row['finished_at'] == newest]
         if len(top) > 1:
-            logger.info('v3 Finish found newer captures that sealed together; cutting the window tail')
+            _record_newer_capture_fallback()
             return None
         return False, *top[0]
     if not marked:
+        if capped:
+            # The bounded scan may have omitted a newer capture, so keep the safe tail cut and expose the
+            # degraded targeting through shared fallback telemetry.
+            _record_newer_capture_fallback()
         return None
     cid, row = min(((cid, row) for cid, row in marked if row['finished_at'] == last_mark), key=lambda item: item[0])
     if row.get('data_protection_level') == 'private' or any(row.get(key) for key in _FINISH_BLOCKERS):
@@ -481,6 +486,16 @@ def _newer_capture(docs, window: Mapping[str, Any], now: datetime):
         logger.info('v3 Finish found its earlier capture no longer finishable; cutting the window tail')
         return None
     return True, cid, row
+
+
+def _record_newer_capture_fallback() -> None:
+    record_fallback(
+        component='conversation_finalization',
+        from_mode='newer_capture',
+        to_mode='window_tail',
+        reason='other',
+        outcome='degraded',
+    )
 
 
 def _batch_speech_landed(row: Mapping[str, Any]) -> bool:
