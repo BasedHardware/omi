@@ -181,6 +181,7 @@ def client(monkeypatch, tmp_path):
         lambda _: Mock(managed=False, reason='plan_allowance_exhausted'),
     )
     monkeypatch.setattr(router, 'archive_mobile_batch_raw_files', lambda *_a, **_k: [])
+    monkeypatch.setattr(router.legacy_dark, 'read_ledger_row', lambda _uid, _content_id: None)
     monkeypatch.setattr(router, '_cleanup_files', Mock())
     monkeypatch.setattr(router, 'is_cloud_tasks_dispatch_enabled', lambda: False)
     monkeypatch.setattr(router, 'has_byok_keys', lambda: False)

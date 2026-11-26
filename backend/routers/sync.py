@@ -1249,7 +1249,7 @@ async def sync_local_files_v2(
 
         async def erase_rejected_archives():
             if archive_paths:
-                await run_blocking(storage_executor, delete_rejected_upload_archives, uid, job_id, archive_paths)
+                await run_blocking(sync_executor, delete_rejected_upload_archives, uid, job_id, archive_paths)
 
         async def archive_originals():
             nonlocal archive_paths

@@ -100,6 +100,7 @@ def test_handle_only_after_exact_nonempty_verified_post(case, poll_client, monke
     monkeypatch.setattr(sync, 'get_sync_ledger_fence_mode', lambda: sync.SyncLedgerFenceMode.ACTIVE)
     monkeypatch.setattr(sync, '_capture_matches_server_conversation', lambda *a, **kw: True)
     monkeypatch.setattr(sync.legacy_dark, 'current_mode', lambda *_: sync.legacy_dark.LegacySyncMode.ON)
+    monkeypatch.setattr(sync.legacy_dark, 'read_ledger_row', lambda _uid, _content_id: None)
     monkeypatch.setattr(sync, 'get_hard_restriction_status', lambda *_: (False, None))
     monkeypatch.setattr(sync, 'is_daily_audio_ceiling_exceeded', lambda *_: False)
     monkeypatch.setattr(sync, 'lever_enabled', lambda *_: True)
