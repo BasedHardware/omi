@@ -31,3 +31,18 @@ manifest, and redeploy the same set, including a separate desktop-backend run.
 For a hard stop on new v3 admission, deploy `CONVERSATIONS_V3=off` through the
 production overlay across the same set. Previously marked recordings continue
 draining.
+
+### Desktop-backend recovery while stage is `all`
+
+Traffic rollback or recovery can route desktop-backend to a retained revision
+with its original `beta` environment. After any desktop traffic rollback or
+recovery, take one of these actions.
+
+- Forward-redeploy desktop-backend through its production workflow with the
+  admitted image needed for recovery and the current manifest's v3 environment.
+- Restore the shared stage to `beta` and redeploy the full set listed above,
+  including a separate desktop-backend production run.
+
+Collect fresh serving state and rerun the
+[activation parity check](../../runbooks/conversations-v3.md#desktop-backend-recovery-while-stage-is-all).
+Confirm stage equality and a `READY` verdict before closing recovery.

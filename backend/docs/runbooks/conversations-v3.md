@@ -36,6 +36,23 @@ worktree. Leave `CONVERSATIONS_V3_FIRST_APP_BUILD` unset in source. At rollout,
 lead2 sets it through the shared runtime source from the first TestFlight build
 containing this PR; unset/invalid yields unknown and cannot qualify deletion evidence.
 
+### Desktop-backend recovery while stage is `all`
+
+A desktop traffic rollback or recovery restores the selected revision's environment.
+A retained revision can serve `beta` while the other runtimes serve `all`.
+
+1. After any desktop traffic rollback or recovery, choose one way to restore parity.
+   - Forward-redeploy desktop-backend through its production workflow. Select the
+     admitted image needed for recovery and apply the current manifest's v3 environment.
+   - Restore `conversations_v3_stage: beta` in the shared source, regenerate the
+     manifest, and deploy the full set from the
+     [stage-all rollout note](../listen_pusher_pipeline/changes/2026-11-25-conversations-v3-stage-all.md#rollout),
+     including a separate desktop-backend production run.
+2. Collect fresh serving state with `activation_collect.py` and run
+   `activation_check.py` against `backend/deploy/activation/conversations-v3.yaml`.
+   Confirm `env-equal:v3-stage:CONVERSATIONS_V3_STAGE` is satisfied and the verdict
+   is `READY` before closing recovery.
+
 ## Internal live recap beta
 
 `CONVERSATIONS_V3_LIVE_RECAP_COHORT` controls the authenticated API detail
