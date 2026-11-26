@@ -45,6 +45,7 @@ WALL_CLOCK_FIELDS: frozenset[str] = frozenset(
         'export_seconds',
         'timings',  # per-phase durations (time.perf_counter)
         'wall_clock_reads',  # scenario/budget.py: reads through a real-time TTL cache (host speed)
+        'racy_ops',  # scenario/budget.py: account-document ops of detached work whose timing varies
         'window',  # chain driver real_now() window per conversation
         'stored_at',  # stage cache write time (store.py)
         'ms',  # LLM proxy call latency

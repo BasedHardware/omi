@@ -24,7 +24,8 @@ What is counted (``result.json`` ``ops``; the verdict row's ``ops``; the web vie
   scripted recording is a lab write (``batch_projection``), not an STT call, and is not counted.
 
 Reads of a collection in :data:`WALL_CLOCK_COLLECTIONS` (a real-time TTL cache) are kept apart in
-``wall_clock_reads``: shown, never totalled, budgeted or compared between repeats.
+``wall_clock_reads``, and account-document operations of a :data:`RACY_CALLERS` caller (detached work whose
+writes depend on thread timing) in ``racy_ops``: shown, never totalled, budgeted or compared between repeats.
 
 Scopes: ``pipeline`` (the product, and the lab stand-ins that write in its place), ``home`` (the Home route
 calls of ``scenario/home.py``) and ``lab`` (the lab's own reads: snapshots, flags, the driver's pending
@@ -62,6 +63,13 @@ _PLUMBING = (
     ('database/transcript_pointer.py', '<lambda>'),
 )
 SITE_FRAMES = 3
+# Callers whose operations on the account document (``users/<uid>``) depend on thread timing inside one event:
+# detached work fenced against concurrent effects, so whether it reads and writes varies between repeats. Their
+# operations are shown (``racy_ops``) but never totalled, budgeted or compared (``determinism.WALL_CLOCK_FIELDS``).
+RACY_CALLERS = {
+    'utils/ai_profile_refresh.py': 'AI profile refresh: a detached postprocess job whose write is fenced against '
+    'concurrent effects on its source conversation (database/users.py write_ai_user_profile_if_unchanged)',
+}
 # ``OMI_PIPELINE_LAB_WRITE_SITES=1``: also name the call site of every write (``write_sites``), for finding
 # where a count comes from. Off by default: it walks the stack on every commit.
 WRITE_SITES_ENV = 'OMI_PIPELINE_LAB_WRITE_SITES'
@@ -120,6 +128,17 @@ def call_site(stack: Optional[list] = None, frames: int = SITE_FRAMES) -> str:
     return ' <- '.join(out) or '(outside backend)'
 
 
+def racy_caller(stack: Optional[list] = None) -> Optional[str]:
+    """The :data:`RACY_CALLERS` file on the current stack, if any."""
+    stack = traceback.extract_stack() if stack is None else stack
+    root = str(BACKEND) + os.sep
+    for frame in stack:
+        filename = str(frame.filename)
+        if filename.startswith(root) and filename[len(root) :] in RACY_CALLERS:
+            return filename[len(root) :]
+    return None
+
+
 class OpCounter:
     """Thread-safe Firestore operation counts by scope, kind, collection and path."""
 
@@ -129,6 +148,7 @@ class OpCounter:
         self.counts: dict[str, dict[str, dict[str, dict[str, int]]]] = {}
         self.noop_sites: dict[str, int] = {}
         self.wall_clock_reads: dict[str, int] = {}
+        self.racy_ops: dict[str, dict[str, int]] = {}
         if write_sites is None:
             write_sites = os.environ.get(WRITE_SITES_ENV) == '1'
         self.write_sites: Optional[dict[str, int]] = {} if write_sites else None
@@ -148,6 +168,13 @@ class OpCounter:
             with self._lock:
                 self.wall_clock_reads[top] = self.wall_clock_reads.get(top, 0) + n
             return
+        if path == 'users':  # the account document: only here is the stack walked for a racy caller
+            racy = racy_caller()
+            if racy is not None:
+                with self._lock:
+                    self.racy_ops.setdefault(racy, {}).setdefault(kind, 0)
+                    self.racy_ops[racy][kind] += n
+                return
         with self._lock:
             by_kind = self.counts.setdefault(where, {}).setdefault(kind, {})
             by_kind.setdefault('by_collection', {})
@@ -181,6 +208,7 @@ class OpCounter:
             }
             out['noop_sites'] = dict(sorted(self.noop_sites.items(), key=lambda kv: (-kv[1], kv[0])))
             out['wall_clock_reads'] = dict(sorted(self.wall_clock_reads.items()))
+            out['racy_ops'] = {k: dict(v) for k, v in sorted(self.racy_ops.items())}
             if self.write_sites is not None:
                 out['write_sites'] = dict(sorted(self.write_sites.items(), key=lambda kv: (-kv[1], kv[0])))
         return out

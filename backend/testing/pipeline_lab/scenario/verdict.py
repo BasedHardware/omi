@@ -93,7 +93,7 @@ def ops_summary(ops: Optional[Mapping[str, Any]]) -> Optional[dict[str, Any]]:
         return None
     keep = (
         'reads', 'writes', 'deletes', 'noop_writes', 'by_collection', 'by_path', 'by_scope', 'noop_sites',
-        'wall_clock_reads',
+        'wall_clock_reads', 'racy_ops',
     )  # fmt: skip
     out = {k: ops.get(k) for k in keep if k in ops}
     out['vendor_calls'] = ops.get('vendor_calls')

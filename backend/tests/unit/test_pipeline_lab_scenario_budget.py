@@ -390,3 +390,24 @@ def test_write_sites_are_traced_only_when_asked():
         if traced:
             (site,) = summary['write_sites']
             assert site.startswith('users writes: tests/unit/test_pipeline_lab_scenario_budget.py:')
+
+
+def test_account_document_ops_of_a_racy_caller_are_kept_apart():
+    from testing.pipeline_lab.determinism import WALL_CLOCK_FIELDS
+
+    racy = SimpleNamespace(filename=str(budget.BACKEND / 'utils/ai_profile_refresh.py'), lineno=1, name='_generate')
+    assert budget.racy_caller([racy]) == 'utils/ai_profile_refresh.py'
+    assert budget.racy_caller([]) is None
+    counter = budget.OpCounter()
+    counter.start()
+    original = budget.racy_caller
+    budget.racy_caller = lambda: 'utils/ai_profile_refresh.py'
+    try:
+        counter.add('writes', doc('users/u'))
+        counter.add('writes', doc('users/u/conversations/c'))  # not the account document: counted
+    finally:
+        budget.racy_caller = original
+    summary = counter.summary()
+    assert summary['writes'] == 1
+    assert summary['racy_ops'] == {'utils/ai_profile_refresh.py': {'writes': 1}}
+    assert 'racy_ops' in WALL_CLOCK_FIELDS
