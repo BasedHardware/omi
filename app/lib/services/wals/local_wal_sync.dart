@@ -1416,7 +1416,7 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
     return File(path).exists();
   }
 
-  Future _flush(int generation) async {
+  Future _flush(int generation, {void Function(String stage)? onIndexSave}) async {
     _backlogTelemetry.flushPendantDrops();
     Logger.debug("_flushing");
     int flushedCount = 0;
@@ -1503,7 +1503,9 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
 
     await _persistCaptureCommits(generation);
     await _evaluateRetentionPressure();
+    onIndexSave?.call('index_save_started');
     final indexSaved = await _saveWalsToFile(generation);
+    onIndexSave?.call('index_save_finished');
     if (indexSaved && flushedCount > 0) _pendantBlockedByStorage = false;
 
     if (indexSaved) {
@@ -2511,8 +2513,23 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
     // Start the pass before yielding to queued IO. A cancel during the flush
     // belongs to this pass and must never be cleared when the flush completes.
     _isCancelled = false;
-    await _enqueueBuffer(() => _flush(generation));
+    final preamble = Stopwatch()..start();
+    void notePreamble(String stage) {
+      if (!liveCaptureOnly) return;
+      DebugLogManager.logEvent('local_upload_preamble', {'stage': stage, 'elapsed_ms': preamble.elapsedMilliseconds});
+    }
+
+    notePreamble('buffer_queued');
+    await _enqueueBuffer(() async {
+      if (!_isCurrent(generation) || passCancelled()) return;
+      notePreamble('flush_started');
+      await _flush(generation, onIndexSave: liveCaptureOnly ? notePreamble : null);
+      notePreamble('flush_finished');
+    });
+    if (!_isCurrent(generation) || passCancelled()) return null;
+    notePreamble('discard_started');
     await _dropDiscardedWals(generation);
+    notePreamble('discard_finished');
     if (!_isCurrent(generation) || passCancelled()) return null;
     _accumulatedResponse = null;
 

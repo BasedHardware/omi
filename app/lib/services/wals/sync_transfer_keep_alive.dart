@@ -42,6 +42,7 @@ class SyncTransferKeepAlive {
   final Future<void> Function()? _stop;
 
   int _refs = 0;
+  int _leaseGeneration = 0;
 
   /// Visible to tests and diagnostics.
   int get refCount => _refs;
@@ -50,6 +51,7 @@ class SyncTransferKeepAlive {
 
   Future<dynamic> _handleNativeCall(MethodCall call) async {
     if (call.method != 'expired') return null;
+    _leaseGeneration++;
     _refs = 0;
     final arguments = call.arguments;
     final reason = arguments is Map ? arguments['reason'] : null;
@@ -63,6 +65,16 @@ class SyncTransferKeepAlive {
     await _invokeStart();
   }
 
+  /// Holds one reference for the independent reader. A forced reset retires
+  /// it even if STOP and uncancellable disk writes settle much later.
+  Future<Future<void> Function()> acquireScoped() async {
+    final generation = _leaseGeneration;
+    await acquire();
+    return () async {
+      if (generation == _leaseGeneration) await release();
+    };
+  }
+
   Future<void> release() async {
     if (_refs == 0) return;
     _refs--;
@@ -73,6 +85,7 @@ class SyncTransferKeepAlive {
   /// Drop every ref and stop the native service. Used by cancel and dispose so
   /// the notification cannot outlive the transfer the user just stopped.
   Future<void> releaseAll() async {
+    _leaseGeneration++;
     if (_refs == 0) return;
     _refs = 0;
     await _invokeStop();

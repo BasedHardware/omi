@@ -23,6 +23,7 @@ enum WakeTrigger {
   dataStalled,
   cooldownElapsed,
   userRetry,
+  ringChunkDurable,
 
   /// Periodic in-process wake while recordings wait to upload. Wake sources
   /// are all event-driven otherwise, and a missed event stranded rows for hours.
@@ -181,6 +182,16 @@ class RecordingTransferCoordinator {
   bool Function()? _hasAcceptedJobs;
   Timer? _receiptTimer;
   RecordingTransferPassTimedOut? _onPassTimedOut;
+  void Function({bool manual, String? deviceId, bool fromBle})? onRingWake;
+
+  /// A storage notification can reach Dart in the background while HTTP is
+  /// waiting. Never enqueue this on the upload pass.
+  void wakeRingFromBle(String deviceId) => onRingWake?.call(deviceId: deviceId, fromBle: true);
+
+  void wakeForRingChunk() {
+    if (_abandonedPassRunning || nextCooldownAt != null || !_autoUploadEnabled()) return;
+    unawaited(wake(WakeTrigger.ringChunkDurable));
+  }
 
   StreamSubscription<bool>? _connectivitySubscription;
   StreamSubscription<void>? _networkChangeSubscription;
@@ -337,6 +348,16 @@ class RecordingTransferCoordinator {
   /// during one pass therefore run at most two passes and never parallel drains,
   /// including while backgrounded.
   Future<void> wake(WakeTrigger trigger) {
+    switch (trigger) {
+      case WakeTrigger.deviceConnected:
+      case WakeTrigger.foregrounded:
+      case WakeTrigger.startup:
+        onRingWake?.call();
+      case WakeTrigger.userRetry:
+        onRingWake?.call(manual: true);
+      default:
+        break;
+    }
     // Reconnect and periodic background wakes discover device storage and drain
     // backlog inside a sync-only scope. Other eligible background recovery is
     // limited to recent conversation-bound phone WALs. All are bounded in _run.
@@ -379,6 +400,7 @@ class RecordingTransferCoordinator {
 
   bool _isBackgroundEligible(WakeTrigger trigger) =>
       trigger == WakeTrigger.periodic ||
+      trigger == WakeTrigger.ringChunkDurable ||
       trigger == WakeTrigger.deviceConnected ||
       trigger == WakeTrigger.connectivityRestored ||
       trigger == WakeTrigger.socketReconnected ||
@@ -396,7 +418,8 @@ class RecordingTransferCoordinator {
         WakeTrigger.periodic ||
         WakeTrigger.deviceConnected ||
         WakeTrigger.connectivityRestored ||
-        WakeTrigger.watchdog =>
+        WakeTrigger.watchdog ||
+        WakeTrigger.ringChunkDurable =>
           2,
         WakeTrigger.socketReconnected || WakeTrigger.dataStalled => 1,
         _ => 0,
@@ -443,7 +466,7 @@ class RecordingTransferCoordinator {
     final generation = ++_passGeneration;
     Future<void>? running;
     Future<void> body() => _limitedPass(limit, running = _runPassBody(trigger, generation),
-        progressBased: ringDrainRecoveryEnabled && !fenced);
+        progressBased: ringDrainRecoveryEnabled && !fenced && onRingWake == null);
     try {
       if (fenced) {
         await SyncWakeScope.run(body);
@@ -457,12 +480,12 @@ class RecordingTransferCoordinator {
       // until it really exits, and let no later pass discover or drain beside it.
       _passGeneration++;
       final abandoned = running;
-      if (abandoned != null) await _holdAbandonedPass(abandoned);
       try {
         _onPassTimedOut?.call(trigger, limit);
       } catch (error) {
         Logger.debug('RecordingTransferCoordinator: pass timeout hook failed: $error');
       }
+      if (abandoned != null) await _holdAbandonedPass(abandoned);
       _scheduleRetry('pass exceeded its time limit');
     }
   }
@@ -526,11 +549,14 @@ class RecordingTransferCoordinator {
       _scheduleRetry('an abandoned pass has not exited yet');
       return;
     }
-    final backlogWake =
-        trigger == WakeTrigger.periodic || trigger == WakeTrigger.deviceConnected || trigger == WakeTrigger.watchdog;
+    final backlogWake = trigger == WakeTrigger.periodic ||
+        trigger == WakeTrigger.deviceConnected ||
+        trigger == WakeTrigger.ringChunkDurable ||
+        trigger == WakeTrigger.watchdog;
     try {
       if (trigger == WakeTrigger.connectivityRestored) {
         await _onConnectivityRestored?.call();
+        if (expired()) return;
       }
       // Uploaded jobs are resolved before a whole-WAL drain can offer any
       // retryable bytes. `syncAll` only uploads `miss`, preserving job ids.

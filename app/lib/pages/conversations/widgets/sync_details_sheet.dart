@@ -1,9 +1,13 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import 'package:omi/backend/preferences.dart';
 import 'package:omi/models/sync_state.dart';
 import 'package:omi/providers/device_provider.dart';
 import 'package:omi/providers/sync_provider.dart';
+import 'package:omi/services/wals/wal_syncs.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/audio/wav_bytes.dart';
 import 'package:omi/utils/l10n_extensions.dart';
@@ -29,7 +33,7 @@ Future<void> showSyncDetailsSheet(BuildContext context, {required VoidCallback o
 /// Where unsynced audio is right now. Transfer speed, file and server-job counts
 /// and the firmware version are diagnostics, not progress: they are not shown,
 /// only included in the text the copy button puts on the clipboard for support.
-class SyncDetailsSheet extends StatelessWidget {
+class SyncDetailsSheet extends StatefulWidget {
   const SyncDetailsSheet({super.key, required this.sync, required this.device, required this.onHowSyncingWorks});
 
   final SyncProvider sync;
@@ -37,17 +41,55 @@ class SyncDetailsSheet extends StatelessWidget {
   final VoidCallback onHowSyncingWorks;
 
   @override
+  State<SyncDetailsSheet> createState() => _SyncDetailsSheetState();
+}
+
+class _SyncDetailsSheetState extends State<SyncDetailsSheet> {
+  Timer? _freshness;
+
+  @override
+  void initState() {
+    super.initState();
+    _freshness = Timer.periodic(const Duration(seconds: 15), (_) => setState(() {}));
+  }
+
+  @override
+  void dispose() {
+    _freshness?.cancel();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final sync = widget.sync;
+    final device = widget.device;
     final l = context.l10n;
     final amounts = SyncPipelineAmounts.fromPending(sync.derivedWals.pendingWork);
     final state = sync.syncState;
     final jobs = sync.offlineServerProcessingCounts;
     String dur(int seconds) => OmiDuration.compact(seconds, l);
 
-    final speed = state.isSyncing && state.phase == SyncPhase.downloadingFromDevice ? state.speedKBps : null;
-    final onDevice = amounts.onDeviceBytes > 0
-        ? '${dur(amounts.onDeviceSeconds)} · ${WavBytesUtil.formatBytes(amounts.onDeviceBytes, decimals: 1)}'
-        : dur(amounts.onDeviceSeconds);
+    final speed = sync.isRingDownloading
+        ? sync.ringDownloadSpeedKBps
+        : state.isSyncing && state.phase == SyncPhase.downloadingFromDevice
+            ? state.speedKBps
+            : null;
+    final firmware = WalSyncs.resolveDiscoveryFirmware(
+      device.currentFirmwareVersion,
+      SharedPreferencesUtil().btDevice.firmwareRevision,
+    );
+    final isRing = WalSyncs.isRingBufferFirmware(firmware);
+    final backlog = isRing
+        ? (device.isConnected ? sync.freshRingBacklog : null)
+        : (seconds: amounts.onDeviceSeconds, bytes: amounts.onDeviceBytes);
+    final String onDevice;
+    if (backlog == null) {
+      onDevice = l.unknown;
+    } else if (backlog.bytes > 0) {
+      onDevice = '${dur(backlog.seconds)} · ${WavBytesUtil.formatBytes(backlog.bytes, decimals: 1)}';
+    } else {
+      onDevice = dur(backlog.seconds);
+    }
 
     final rightNow = <(String, String)>[
       (l.syncDetailsYourOmi, device.isConnected ? l.connected : l.disconnected),
@@ -81,7 +123,7 @@ class SyncDetailsSheet extends StatelessWidget {
             ),
           ),
           const SizedBox(height: OmiSpacing.sm),
-          OmiButton.secondary(label: l.howSyncingWorks, expand: true, onPressed: onHowSyncingWorks),
+          OmiButton.secondary(label: l.howSyncingWorks, expand: true, onPressed: widget.onHowSyncingWorks),
         ],
       ),
     );

@@ -457,11 +457,36 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
     notifyListeners();
   }
 
+  WalSyncs? get _deviceSyncs {
+    final syncs = _walService.getSyncs();
+    return syncs is WalSyncs ? syncs : null;
+  }
+
+  void _cancelUploadPass() {
+    final syncs = _deviceSyncs;
+    if (syncs != null) {
+      syncs.cancelUploadPass();
+    } else {
+      _walService.getSyncs().cancelSync();
+    }
+  }
+
   Future<void> _initializeProvider() async {
     final generation = _sessionGeneration;
     try {
       await _refreshWals(generation);
       if (!_isCurrent(generation)) return;
+      final syncs = _deviceSyncs;
+      if (_startBackgroundSync && syncs != null) {
+        RecordingTransferCoordinator.instance.onRingWake = syncs.wakeRingDrain;
+        syncs.enableRingDrain(
+          () =>
+              !_isDisposed &&
+              !SharedPreferencesUtil().useCustomStt &&
+              SharedPreferencesUtil().autoSyncOfflineRecordings,
+          onDurableChunk: RecordingTransferCoordinator.instance.wakeForRingChunk,
+        );
+      }
       await _uploadGate.reconcileFairUseStatus();
       if (!_isCurrent(generation)) return;
       if (_startBackgroundSync) {
@@ -522,7 +547,7 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
       _periodicSync?.dispose();
       _periodicSync = PeriodicRecordingSync(
         coordinator: RecordingTransferCoordinator.instance,
-        cancel: () => _walService.getSyncs().cancelSync(),
+        cancel: _cancelUploadPass,
       );
       unawaited(_periodicSync!.start());
       unawaited(_startRecovery());
@@ -535,7 +560,8 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
   /// it so the next pass does not contend with it.
   void _onTransferPassTimedOut(WakeTrigger trigger, Duration limit) {
     if (!_isCurrent(_admittedWorkGeneration)) return;
-    _walService.getSyncs().cancelSync();
+    _cancelUploadPass();
+    if (_syncState.isProcessing) _updateSyncState(_syncState.toIdle(), _admittedWorkGeneration);
     unawaited(DebugLogManager.logWarning('transfer_pass_stuck', {'trigger': trigger.name, 'limit_s': limit.inSeconds}));
     const TypedEvents().emit(CaptureRecoveryObserved(
       kind: CaptureRecoveryObservedKind.transferPassTimedOut,
@@ -595,7 +621,8 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
   Future<void> _discoverPendingWals() async {
     final generation = _admittedWorkGeneration;
     if (!_isCurrent(generation)) return;
-    await _walService.getSyncs().refreshWalsFromDevice();
+    final syncs = _walService.getSyncs();
+    if (_deviceSyncs?.usesIndependentRingDrain != true) await syncs.refreshWalsFromDevice();
   }
 
   Future<RecordingTransferDrainResult> _drainEligibleWals() async {
@@ -618,7 +645,10 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
     if (!_isCurrent(generation) || _syncState.isProcessing) {
       return const RecordingTransferDrainResult.contended();
     }
-    if (_walService.getSyncs().isStorageSyncing || _walService.getSyncs().isSdCardSyncing) {
+    final syncs = _walService.getSyncs();
+    final deviceSyncs = _deviceSyncs;
+    final storageSyncing = deviceSyncs?.isLegacyStorageSyncing ?? (syncs.isStorageSyncing == true);
+    if (storageSyncing || syncs.isSdCardSyncing) {
       return const RecordingTransferDrainResult.contended();
     }
 
@@ -626,7 +656,12 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
     final eligibleWals = [
       ...missingWals,
       ..._allWals.where((wal) => wal.status == WalStatus.uploadRejected && isAutoUploadEligible(wal)),
-    ].where((wal) => !wal.holdForUser && (!liveCaptureOnly || isLiveCaptureWal(wal, nowSeconds))).toList();
+    ]
+        .where((wal) =>
+            !wal.holdForUser &&
+            !(deviceSyncs?.usesIndependentRingDrain == true && wal.storage == WalStorage.sdcard && wal.fileNum == -1) &&
+            (!liveCaptureOnly || isLiveCaptureWal(wal, nowSeconds)))
+        .toList();
     final hadEligibleWals = eligibleWals.isNotEmpty;
     if (!hadEligibleWals) return const RecordingTransferDrainResult.skipped();
 
@@ -634,8 +669,10 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
     // lifted; without it a stale local deadline outlives the restriction.
     // Deliberately does not gate the drain: pulling audio off the device
     // consumes no upload quota, and the upload phases carry their own guard.
+    final cancellation = deviceSyncs?.uploadCancellation;
+    bool cancelled() => cancellation != deviceSyncs?.uploadCancellation;
     await _uploadGate.prepareToUpload();
-    if (!_isCurrent(generation)) return const RecordingTransferDrainResult.contended();
+    if (!_isCurrent(generation) || cancelled()) return const RecordingTransferDrainResult.contended();
 
     _admittedWorkGeneration = generation;
     _updateSyncState(_syncState.toIdle(), generation);
@@ -647,6 +684,7 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
           : _walService.getSyncs().syncAll(progress: this),
       context: liveCaptureOnly ? 'background live-capture transfer' : 'coordinated recording transfer',
       rethrowOnError: true,
+      cancelled: cancelled,
       generation: generation,
     );
     await _refreshWals(generation);
@@ -667,6 +705,14 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
     _syncState = newState;
     notifyListeners();
   }
+
+  ({int seconds, int bytes})? get freshRingBacklog => _deviceSyncs?.ring.freshBacklog;
+  bool get isRingDownloading {
+    final syncs = _deviceSyncs;
+    return syncs != null && syncs.usesIndependentRingDrain && syncs.ring.isSyncing;
+  }
+
+  double? get ringDownloadSpeedKBps => _deviceSyncs?.ring.currentSpeedKBps;
 
   Future<void> refreshWals() => _refreshWals(_sessionGeneration);
 
@@ -861,6 +907,17 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
   }
 
   Future<void> syncWal(Wal wal) async {
+    if (_deviceSyncs?.usesIndependentRingDrain == true && wal.storage == WalStorage.sdcard && wal.fileNum == -1) {
+      final generation = _sessionGeneration;
+      try {
+        await transferWalToPhone(wal);
+      } catch (error) {
+        if (_isCurrent(generation) && !_syncState.isProcessing) {
+          _updateSyncState(_syncState.toError(message: _formatSyncError(error, wal), failedWal: wal), generation);
+        }
+      }
+      return;
+    }
     if (wal.status == WalStatus.uploadRejected) return;
     final generation = _sessionGeneration;
     wal.prepareManualRetry();
@@ -901,7 +958,7 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
   bool _isTransferSeamBusy() {
     if (_syncState.isProcessing) return true;
     final syncs = _walService.getSyncs();
-    return syncs.isStorageSyncing == true || syncs.isSdCardSyncing == true;
+    return (_deviceSyncs?.isLegacyStorageSyncing ?? (syncs.isStorageSyncing == true)) || syncs.isSdCardSyncing == true;
   }
 
   Future<SyncLocalFilesResponse?> _performSync({
@@ -911,11 +968,16 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
     Wal? failedWal,
     bool rethrowOnError = false,
     bool checkFlashStall = false,
+    bool Function()? cancelled,
   }) async {
     if (!_isCurrent(generation)) return null;
     _admittedWorkGeneration = generation;
     _uploadedWalIdsAtSyncStart = uploadedWals.map((w) => w.id).toSet();
     await _keepAlive.acquire();
+    if (!_isCurrent(generation) || cancelled?.call() == true) {
+      await _keepAlive.release();
+      return null;
+    }
     final work = _syncWorkToken = lagWork.begin(LagWork.sync);
     try {
       _updateSyncState(_syncState.toSyncing(), generation);
@@ -1001,7 +1063,7 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
       }
       return result;
     } catch (e) {
-      if (!_isCurrent(generation)) {
+      if (!_isCurrent(generation) || cancelled?.call() == true) {
         if (rethrowOnError) rethrow;
         return null;
       }
@@ -1381,6 +1443,20 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
     if (wal.storage != WalStorage.sdcard && wal.storage != WalStorage.flashPage) {
       throw Exception('This recording is already on phone');
     }
+    final syncs = _deviceSyncs;
+    if (syncs != null && syncs.usesIndependentRingDrain && wal.storage == WalStorage.sdcard && wal.fileNum == -1) {
+      final cancellation = syncs.ringCancellation;
+      final release = await _keepAlive.acquireScoped();
+      try {
+        if (!_isCurrent(generation) || cancellation != syncs.ringCancellation) {
+          throw StateError('Ring transfer cancelled');
+        }
+        await syncs.syncWal(wal: wal);
+      } finally {
+        await release();
+      }
+      return;
+    }
 
     _admittedWorkGeneration = generation;
     _updateSyncState(_syncState.toSyncing(), generation);
@@ -1437,6 +1513,11 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
     _progressNotifyTimer?.cancel();
     _progressNotifyTimer = null;
     _periodicSync?.dispose();
+    final syncs = _deviceSyncs;
+    if (_startBackgroundSync && syncs != null) {
+      syncs.disableRingDrain();
+      RecordingTransferCoordinator.instance.onRingWake = null;
+    }
     _isDisposed = true;
     _sessionGeneration++;
     _admittedWorkGeneration = -1;

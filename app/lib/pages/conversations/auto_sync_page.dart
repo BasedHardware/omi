@@ -179,7 +179,8 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
     final isActive = s.isSyncing || s.isFetchingConversations;
     // An edge throttle clears by itself and needs nothing from the user, so it is not shown (David, 11-02).
     final paused = p.isRateLimited && p.rateLimitReason != RateLimitReason.edgeThrottle;
-    final bool showSpinner = (isActive || uploaded > 0) && !paused;
+    final ringDownloading = p.isRingDownloading;
+    final bool showSpinner = ringDownloading || ((isActive || uploaded > 0) && !paused);
 
     String title;
     String? subtitle;
@@ -212,9 +213,16 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
       // Live-capture uploads run before the device drain: the bar stays on the device step, unfilled.
       if (barStep != step.step) barFraction = 0;
       action = statusActionPill(l.cancel, Colors.redAccent, () => _confirmCancel(context, p));
+    } else if (ringDownloading && (paused || !isActive || s.phase == SyncPhase.idle)) {
+      title = l.syncCardDownloadingTitle;
+      barStep = SyncStep.download;
+      action = statusActionPill(l.cancel, Colors.redAccent, () => _confirmCancel(context, p));
     } else if (paused) {
       title = syncCooldownTitle(p.rateLimitReason, l);
       titleColor = Colors.orangeAccent;
+    } else if (isActive && step == null) {
+      title = l.syncCardSyncingTitle;
+      action = statusActionPill(l.cancel, Colors.redAccent, () => _confirmCancel(context, p));
     } else if (isActive || uploaded > 0) {
       // Uploads finished; the server is turning them into conversations.
       final job = p.offlineServerProcessingSeconds;
