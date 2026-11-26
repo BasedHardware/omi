@@ -179,6 +179,7 @@ def record_deletion(uid: str, conversation_id: str, *, expected_exists: bool = F
     tombstone_ref = user.collection(COLLECTION).document(conversation_id)
     deferred = _DEFERRED_BATCH_PURGES.get()
     deferred = deferred if deferred is not None and deferred[0] == uid else None
+    tombstone_payload = None
     if expected_exists:
         from database.conversation_batch_purge_jobs import arm_fields, job_ref
 
@@ -203,30 +204,28 @@ def record_deletion(uid: str, conversation_id: str, *, expected_exists: bool = F
             deferred[1].append(conversation_id)
     else:
         row = conversation_ref.get().to_dict() or {}
-        tombstone = _tombstone_payload(conversation_id, row)
-    if deferred is not None:
-        if not expected_exists:
-            from database.conversation_batch_purge_jobs import arm_fields, job_ref
+        tombstone_payload = _tombstone_payload(conversation_id, row)
+    if deferred is not None and tombstone_payload is not None:
+        from database.conversation_batch_purge_jobs import arm_fields, job_ref
 
-            # The obligation commits with the intent, before any fallible cleanup.
-            obligation = (job_ref(db, uid, conversation_id), arm_fields(uid, conversation_id))
-            try:
-                batch = db.batch()
-                batch.create(tombstone_ref, tombstone)
-                batch.set(*obligation, merge=True)
-                batch.commit()
-            except AlreadyExists:
-                # A retried delete keeps the original tombstone and re-arms the obligation.
-                obligation[0].set(obligation[1], merge=True)
-            if conversation_id not in deferred[1]:
-                deferred[1].append(conversation_id)
-    else:
-        if not expected_exists:
-            try:
-                tombstone_ref.create(tombstone)
-            except AlreadyExists:
-                # A retried delete after hard cleanup must preserve the original binding.
-                pass
+        # The obligation commits with the intent, before any fallible cleanup.
+        obligation = (job_ref(db, uid, conversation_id), arm_fields(uid, conversation_id))
+        try:
+            batch = db.batch()
+            batch.create(tombstone_ref, tombstone_payload)
+            batch.set(*obligation, merge=True)
+            batch.commit()
+        except AlreadyExists:
+            # A retried delete keeps the original tombstone and re-arms the obligation.
+            obligation[0].set(obligation[1], merge=True)
+        if conversation_id not in deferred[1]:
+            deferred[1].append(conversation_id)
+    elif deferred is None and tombstone_payload is not None:
+        try:
+            tombstone_ref.create(tombstone_payload)
+        except AlreadyExists:
+            # A retried delete after hard cleanup must preserve the original binding.
+            pass
     # Staged chunks are siblings, including when no conversation was ever created.
     # The tombstone transaction fence prevents a racing upload from restaging them.
     from database.from_segments_chunks import purge_chunks
