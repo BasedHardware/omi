@@ -795,7 +795,8 @@ def test_an_expired_admission_budget_reads_no_audio():
 def test_a_stalled_audio_read_releases_the_slot_within_the_deadline_plus_grace(monkeypatch):
     unit, _ = recording(1100)
     live._FAST_FINISH_STARTED.clear()
-    monkeypatch.setattr(fast_finish, 'PASS_DEADLINE_SECONDS', 0.3)
+    # At least 0.5 s (test_real_clock_budget_ratchet); the stub still stalls 5 s, far past it.
+    monkeypatch.setattr(fast_finish, 'PASS_DEADLINE_SECONDS', 0.6)
     monkeypatch.setattr(
         conversations_db, 'get_conversation', lambda uid, cid, **kwargs: row(_recovery_transcript_decoded=True)
     )
@@ -813,8 +814,8 @@ def test_a_stalled_audio_read_releases_the_slot_within_the_deadline_plus_grace(m
     started = time.monotonic()
     _admit_all([('stalled-read', [unit])])
     elapsed = time.monotonic() - started
-    assert elapsed < 0.3 + fast_finish.STOP_GRACE_SECONDS
-    assert len(timeouts) == 1 and timeouts[0] <= 0.3
+    assert elapsed < 0.6 + fast_finish.STOP_GRACE_SECONDS
+    assert len(timeouts) == 1 and timeouts[0] <= 0.6
     assert fast_finish.OUTCOMES.labels('deadline')._value.get() == before + 1
     # Both short slots are free again.
     assert live._FAST_FINISH_SLOTS.acquire(blocking=False) and live._FAST_FINISH_SLOTS.acquire(blocking=False)
@@ -825,7 +826,8 @@ def test_a_stalled_audio_read_releases_the_slot_within_the_deadline_plus_grace(m
 def test_a_stalled_firestore_refresh_releases_the_slot_within_the_deadline_plus_grace(monkeypatch):
     unit, _ = recording(1100)
     live._FAST_FINISH_STARTED.clear()
-    monkeypatch.setattr(fast_finish, 'PASS_DEADLINE_SECONDS', 0.3)
+    # At least 0.5 s (test_real_clock_budget_ratchet); the stub still stalls 5 s, far past it.
+    monkeypatch.setattr(fast_finish, 'PASS_DEADLINE_SECONDS', 0.6)
     stall = threading.Event()
 
     def stalled(uid, cid, **kwargs):
@@ -842,7 +844,7 @@ def test_a_stalled_firestore_refresh_releases_the_slot_within_the_deadline_plus_
         elapsed = time.monotonic() - started
     finally:
         stall.set()
-    assert elapsed < 0.3 + fast_finish.STOP_GRACE_SECONDS
+    assert elapsed < 0.6 + fast_finish.STOP_GRACE_SECONDS
     assert fast_finish.OUTCOMES.labels('deadline')._value.get() == before + 1
     assert live._FAST_FINISH_SLOTS.acquire(blocking=False) and live._FAST_FINISH_SLOTS.acquire(blocking=False)
     live._FAST_FINISH_SLOTS.release()
