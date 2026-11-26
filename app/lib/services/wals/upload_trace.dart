@@ -1,4 +1,12 @@
-typedef UploadTraceSnapshot = ({String trace, String? holdState, int? holdSealedAtMs, bool recovered});
+enum WalJournalRecovery { fresh, recovered, mixed }
+
+typedef UploadTraceSnapshot = ({
+  String trace,
+  String? holdState,
+  int? holdSealedAtMs,
+  bool recovered,
+  WalJournalRecovery? journalRecovery,
+});
 
 /// Measures how long a sealed recording file waits on the phone before the
 /// server accepts it, and which upload gate last held it. Measurement only: it
@@ -47,6 +55,7 @@ class UploadTrace {
     String? holdState,
     int? holdSealedAtMs,
     bool recovered = false,
+    WalJournalRecovery? journalRecovery,
   }) {
     if (sealedAtSeconds <= 0) return;
     final nowSeconds = _now().millisecondsSinceEpoch ~/ 1000;
@@ -64,6 +73,7 @@ class UploadTrace {
       holdState: holdState,
       holdSealedAtMs: holdSealedAtMs,
       recovered: recovered,
+      journalRecovery: journalRecovery,
     );
   }
 
@@ -75,9 +85,12 @@ class UploadTrace {
     final state = upload?.holdState;
     if (state == null) return const {};
     final sealedAtMs = upload?.holdSealedAtMs;
+    final journalRecovery = holdEnabled ? upload?.journalRecovery : null;
     return {
       'X-Omi-Upload-Hold': holdEnabled ? state : 'none',
-      if (upload?.recovered == true) 'X-Omi-Upload-Recovered': '1',
+      if (upload?.recovered == true || journalRecovery != null)
+        'X-Omi-Upload-Recovered': upload?.recovered == true ? '1' : '0',
+      if (journalRecovery != null) 'X-Omi-Upload-Journal-Recovery': journalRecovery.name,
       if (holdEnabled && state != 'none' && sealedAtMs != null)
         'X-Omi-Upload-Hold-Age-Ms': (_now().millisecondsSinceEpoch - sealedAtMs).clamp(0, 86400000).toString(),
     };
