@@ -54,7 +54,6 @@ steps:
         min: 3
     evidence:
       - screenshot: step-S3.webp
-    note: "The LiveEpisodePage is identical for device and phone mic recording. The difference is in the mute behavior: device mute calls pauseDeviceRecording() (cancels BLE audio stream but keeps connection), phone mute calls stopStreamRecording() (stops mic completely). The page has 2 tabs: Transcripts (tab 0) and Summary (tab 1)."
 
   - id: S4
     name: Test mute — pause device recording
@@ -115,7 +114,6 @@ steps:
         min: 5
     evidence:
       - screenshot: step-S8.webp
-    note: "After processing one conversation, the device immediately begins a new recording session. This is the key difference from phone mic: device recording is continuous — conversations are segmented by silence gaps. The new conversation source is ConversationSource.omi. The device battery indicator continues showing in the top-left."
 
   - id: S9
     name: Open conversation detail

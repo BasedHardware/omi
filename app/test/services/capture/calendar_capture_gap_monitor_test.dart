@@ -1,13 +1,9 @@
 import 'dart:async';
-import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:omi/gen/phone_mic_pigeon.g.dart';
 import 'package:omi/services/capture/calendar_capture_gap_monitor.dart';
 import 'package:omi/services/integrations/google_calendar_service.dart';
-
-import '../../support/capture/capture_replay_world.dart';
 
 void main() {
   final now = DateTime.utc(2026, 10, 7, 10);
@@ -157,35 +153,5 @@ void main() {
         now: now);
     expect(GoogleCalendarService.knownMeetings.value.windows, hasLength(64));
     GoogleCalendarService.knownMeetings.value = const CalendarMeetingSnapshot(owner: '', windows: []);
-  });
-  test('real idle controller has no polling timer; local meeting schedules, live capture cancels it', () async {
-    final dir = await Directory.systemTemp.createTemp('meeting_gap_gate_');
-    addTearDown(() => dir.delete(recursive: true));
-    known.value = const CalendarMeetingSnapshot(owner: 'uid', windows: []);
-    var fetches = 0;
-    final gap = monitor(load: (_, __) async {
-      fetches++;
-      return [meeting];
-    });
-    final world = await CaptureReplayWorld.boot(tempDir: dir, startTime: now, calendarGapMonitor: gap);
-    addTearDown(world.dispose);
-    expect(world.scheduler.pendingTimerLabels.where((l) => l == 'periodic(0:00:15.000000)'), isEmpty);
-    await world.elapse(const Duration(minutes: 10));
-    expect(fetches, 0);
-    known.value = CalendarMeetingSnapshot(owner: 'uid', windows: [meeting]);
-    await world.elapse(Duration.zero);
-    expect(fetches, 1);
-    await world.startLiveCapture();
-    world.emitNativeState(PhoneMicCaptureState.running);
-    for (var second = 0; second < 60; second++) {
-      world.injectAudioFrames(100, sessionId: world.hostApi.lastStartSessionId!);
-      await world.elapse(const Duration(seconds: 1));
-    }
-    expect(fetches, 1);
-    await world.controller.pauseCapture();
-    await world.elapse(const Duration(minutes: 2));
-    expect(fetches, 1, reason: 'a deliberately paused session still owns capture');
-    world.disposeController();
-    await world.settle();
   });
 }

@@ -74,14 +74,12 @@ void main() {
   group('promptsBlocked', () {
     bool blocked({
       RecordingState recording = RecordingState.stop,
-      bool batch = false,
       bool micInterrupted = false,
       PhoneCallState call = PhoneCallState.idle,
       bool firmware = false,
     }) =>
         promptsBlocked(
           recordingState: recording,
-          phoneMicBatchRecording: batch,
           micInterruptedByCall: micInterrupted,
           callState: call,
           firmwareUpdateInProgress: firmware,
@@ -97,7 +95,6 @@ void main() {
       expect(blocked(recording: RecordingState.record), isTrue);
       expect(blocked(recording: RecordingState.initialising), isTrue);
       expect(blocked(recording: RecordingState.systemAudioRecord), isTrue);
-      expect(blocked(batch: true), isTrue);
       expect(blocked(micInterrupted: true), isTrue);
       expect(blocked(call: PhoneCallState.active), isTrue);
       expect(blocked(call: PhoneCallState.ringing), isTrue);

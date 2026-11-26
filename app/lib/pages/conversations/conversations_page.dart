@@ -1,5 +1,6 @@
 import 'package:clock/clock.dart';
 import 'package:omi/utils/local_day_rollover.dart';
+import 'package:omi/utils/other/temp.dart';
 // The conversations list page: paged list with filter-keyed load-more state,
 // plus the capture-status surfaces stacked above it (processing card, held
 // audio, on-device queue banners).
@@ -19,6 +20,8 @@ import 'package:visibility_detector/visibility_detector.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/pages/capture/widgets/widgets.dart';
+import 'package:omi/pages/capture/connect.dart';
+import 'package:omi/providers/device_provider.dart';
 import 'package:omi/pages/held_audio/held_audio_views.dart';
 import 'package:omi/pages/conversations/widgets/processing_capture.dart';
 import 'package:omi/pages/conversations/widgets/v3_live_placeholder_row.dart';
@@ -943,6 +946,9 @@ class _ConversationsPageState extends State<ConversationsPage>
           });
         }
         final defaultHome = convoProvider.showsDefaultHome;
+        final needsDevice = context.select<DeviceProvider?, bool>(
+          (device) => device != null && device.connectedDevice == null && device.pairedDevice == null,
+        );
         final hiddenByLive =
             episodeLive && defaultHome ? hiddenLiveConversations(episodes!.liveConversationIds) : const <String>{};
         final v3Home = v3On && defaultHome;
@@ -1328,6 +1334,22 @@ class _ConversationsPageState extends State<ConversationsPage>
                 child: ConversationCaptureWidget(
                     showsCall: true, deferStreamingToEpisode: episodeLive || v3Live != null || (v3Home && streaming)),
               ),
+              if (defaultHome && needsDevice && !streaming)
+                SliverToBoxAdapter(
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.md, vertical: OmiSpacing.sm),
+                    child: Row(
+                      children: [
+                        Expanded(child: Text(context.l10n.firstCaptureConnectDescription, style: OmiType.footnote)),
+                        const SizedBox(width: OmiSpacing.sm),
+                        OmiButton.secondary(
+                          label: context.l10n.connectDevice,
+                          onPressed: () => routeToPage(context, const ConnectDevicePage()),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
               // A declined renewal the user can still pay: one row, Update opens Stripe's billing portal.
               const SliverToBoxAdapter(child: PaymentIssueRow()),
               // A paying monthly reader whose Omi recorded nothing for 5 days: one quiet row, Check opens the device.

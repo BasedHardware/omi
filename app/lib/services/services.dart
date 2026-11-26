@@ -9,15 +9,12 @@ import 'package:flutter_sound/flutter_sound.dart';
 import 'package:omi/backend/http/http_pool_manager.dart';
 import 'package:omi/services/connectivity_service.dart';
 import 'package:omi/services/devices.dart';
-import 'package:omi/services/mic/mic_arbiter.dart';
-import 'package:omi/services/mic/native_mic_recorder_service.dart';
 import 'package:omi/services/sockets.dart';
 import 'package:omi/services/wals.dart';
 import 'package:omi/utils/logger.dart';
 
 class ServiceManager {
   late IMicRecorderService _mic;
-  late IMicRecorderService _phoneMic;
   late DeviceService _device;
   late ISocketService _socket;
   late IWalService _wal;
@@ -25,26 +22,7 @@ class ServiceManager {
 
   static ServiceManager _create() {
     ServiceManager sm = ServiceManager();
-    final micArbiter = MicArbiter();
-    sm._mic = ArbitratedMic(
-      inner: MicRecorderBackgroundService(runner: BackgroundService()),
-      arbiter: micArbiter,
-      owner: 'mic',
-    );
-    // Conversation capture uses the native recorder on iOS (AVAudioEngine) and
-    // Android (AudioRecord); chat voice memos and the speech profile stay on the
-    // flutter_sound path via [mic]. The shared arbiter keeps the two stacks from
-    // contending for the microphone.
-    // iOS lengthens the healthy-state watchdog poll (5s, deadline-capped).
-    // Android keeps the 1s poll; its native heartbeat also does mode checks
-    // that this flag must not slow down.
-    sm._phoneMic = (Platform.isIOS || Platform.isAndroid)
-        ? ArbitratedMic(
-            inner: NativeMicRecorderService(paceHealthyChecks: Platform.isIOS),
-            arbiter: micArbiter,
-            owner: 'conversation',
-          )
-        : sm._mic;
+    sm._mic = MicRecorderBackgroundService(runner: BackgroundService());
     sm._device = DeviceService();
     sm._socket = SocketServicePool();
     sm._wal = WalService();
@@ -61,10 +39,6 @@ class ServiceManager {
   }
 
   IMicRecorderService get mic => _mic;
-
-  /// The recorder for conversation capture: native on iOS and Android,
-  /// flutter_sound elsewhere. Chat voice memos and speech profile keep using [mic].
-  IMicRecorderService get phoneMic => _phoneMic;
 
   DeviceService get device => _device;
 
@@ -92,9 +66,6 @@ class ServiceManager {
     if (!LocalWalSyncImpl.stopTailDrainEnabled) await _wal.stop();
     try {
       _mic.stop();
-      if (!identical(_phoneMic, _mic)) {
-        _phoneMic.stop();
-      }
       await _device.stop();
     } finally {
       if (LocalWalSyncImpl.stopTailDrainEnabled) await _wal.stop();

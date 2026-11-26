@@ -1,3 +1,4 @@
+import 'package:omi/services/capture/scenarios/native_event_vector.dart';
 import 'dart:async';
 
 import 'package:omi/services/devices/connectors/device_connection.dart';
@@ -25,7 +26,18 @@ class ScriptedDeviceConnection implements DeviceConnection {
   /// Audio subscriptions the controller currently holds.
   int get openAudioSubscriptions => _open;
 
-  /// A BLE audio packet: a 3-byte header then [payloadLength] bytes of [value].
+  /// Deterministic byte fixtures with distinct BLE packet ids for WAL matching.
+  List<List<int>> emitFixtureFrames(int count, {required int firstFrameIndex}) {
+    final frames = <List<int>>[];
+    for (var i = firstFrameIndex; i < firstFrameIndex + count; i++) {
+      final payload = NativeEventVector.synthesizePcmFrame(i);
+      frames.add(payload);
+      emitRawAudio([i & 255, (i >> 8) & 255, 0, ...payload]);
+    }
+    return frames;
+  }
+
+  /// A BLE audio packet with a three-byte header and a fixed-fill payload.
   void emitAudio({int value = 7, int payloadLength = 80}) {
     emitRawAudio([0, 0, 0, ...List<int>.filled(payloadLength, value)]);
   }

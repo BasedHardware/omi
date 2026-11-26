@@ -13,7 +13,6 @@ import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/backend/schema/conversation.dart' show SyncLocalFilesResponse;
 import 'package:omi/backend/schema/geolocation.dart';
-import 'package:omi/gen/phone_mic_pigeon.g.dart';
 import 'package:omi/models/custom_stt_config.dart';
 import 'package:omi/env/env.dart';
 import 'package:omi/services/capture/capture_controller.dart';
@@ -21,9 +20,7 @@ import 'package:omi/services/capture/capture_wedge_monitor.dart';
 import 'package:omi/services/capture/empty_recording_notice.dart';
 import 'package:omi/services/capture/capture_seams.dart';
 import 'package:omi/services/capture/conversation_location_capture.dart';
-import 'package:omi/services/capture/scenarios/native_event_vector.dart';
 import 'package:omi/services/capture/stt_mode_resolver.dart';
-import 'package:omi/services/mic/native_mic_recorder_service.dart';
 import 'package:omi/services/sockets/pure_socket.dart';
 import 'package:omi/services/sockets/transcription_service.dart';
 import 'package:omi/services/wals/recording_transfer_coordinator.dart';
@@ -37,47 +34,6 @@ import 'package:omi/services/wals/wal_service.dart';
 import 'scripted_device_connection.dart';
 
 import 'virtual_capture_time.dart';
-
-class FakePhoneMicHostApi extends PhoneMicHostApi {
-  int startCalls = 0;
-  int stopCalls = 0;
-  PhoneMicCaptureMode? lastStartMode;
-  int? lastStartSessionId;
-  final List<int> startSessionIds = [];
-  final List<String> startStacks = [];
-  bool nativeRecording = false;
-  Object Function()? nextStartError;
-  Completer<void>? holdNextStart;
-  Completer<void>? nextStartEntered;
-
-  @override
-  Future<void> start(PhoneMicCaptureMode mode, int sessionId) async {
-    startStacks.add(StackTrace.current.toString());
-    startCalls++;
-    lastStartMode = mode;
-    lastStartSessionId = sessionId;
-    startSessionIds.add(sessionId);
-    final entered = nextStartEntered;
-    nextStartEntered = null;
-    entered?.complete();
-    final held = holdNextStart;
-    holdNextStart = null;
-    if (held != null) await held.future;
-    nativeRecording = true;
-    final error = nextStartError;
-    nextStartError = null;
-    if (error != null) throw error();
-  }
-
-  @override
-  Future<void> stop() async {
-    stopCalls++;
-    nativeRecording = false;
-  }
-
-  @override
-  Future<bool> isRecording() async => nativeRecording;
-}
 
 /// Fake transport under the REAL [TranscriptSegmentSocketService]. Connects
 /// and closes only when the scenario says so; records every payload sent.
@@ -280,8 +236,6 @@ class CaptureReplayWorld {
   final BleAudioCodec pendantCodec;
 
   late ManualScheduler scheduler;
-  late FakePhoneMicHostApi hostApi;
-  late NativeMicRecorderService mic;
   late WalService wal;
   late StreamController<bool> connectivityStream;
   late StreamController<void> networkChangeStream;
@@ -306,7 +260,6 @@ class CaptureReplayWorld {
 
   bool connected = true;
   bool signedIn = true;
-  bool allowMic = true;
   int processCalls = 0;
 
   /// Runs when the controller asks the server to process the in-progress conversation.
@@ -353,7 +306,6 @@ class CaptureReplayWorld {
     DateTime? startTime,
     Map<String, Object> initialPrefs = const {},
     bool initiallyConnected = true,
-    bool supportsBatch = true,
     BleAudioCodec pendantCodec = BleAudioCodec.pcm16,
     CalendarCaptureGapMonitor? calendarGapMonitor,
     Future<void> Function(String, bool)? deviceMuteWriter,
@@ -375,12 +327,11 @@ class CaptureReplayWorld {
     world.captureWedgeMonitor = captureWedgeMonitor;
     world.phonePersistWals = phonePersistWals;
     world.connected = initiallyConnected;
-    await world._bootGeneration(supportsBatch: supportsBatch, initialPrefs: initialPrefs, firstBoot: true);
+    await world._bootGeneration(initialPrefs: initialPrefs, firstBoot: true);
     return world;
   }
 
   Future<void> _bootGeneration({
-    bool supportsBatch = true,
     Map<String, Object> initialPrefs = const {},
     bool firstBoot = false,
   }) async {
@@ -411,13 +362,6 @@ class CaptureReplayWorld {
     );
 
     scheduler = ManualScheduler(clock: clock);
-    hostApi = FakePhoneMicHostApi();
-    mic = NativeMicRecorderService(
-      hostApi: hostApi,
-      registerFlutterApi: false,
-      now: clock.now,
-      periodic: scheduler.periodic,
-    );
     wal = WalService(
       phonePersistWals: phonePersistWals,
       phoneUploadGate: uploads.buildGate(),
@@ -441,8 +385,6 @@ class CaptureReplayWorld {
       calendarGapMonitor: calendarGapMonitor,
       captureWedgeMonitor: captureWedgeMonitor,
       walService: wal,
-      phoneMicRecorder: mic,
-      phoneMicBatchSupported: supportsBatch,
       connectivity: CaptureConnectivityBoundary(
         initiallyConnected: connected,
         changes: connectivityStream.stream,
@@ -476,7 +418,6 @@ class CaptureReplayWorld {
         return const InProgressProcessOutcome(absence: ProcessAbsence.transport);
       },
       audioCodecLoader: (deviceId) => audioCodecLoader?.call(deviceId) ?? Future.value(pendantCodec),
-      microphonePermissionRequester: () async => allowMic,
       conversationLocationCapture: ConversationLocationCapture(
         isLocationServiceEnabled: () async => false,
         checkPermission: () async => LocationPermission.denied,
@@ -511,49 +452,6 @@ class CaptureReplayWorld {
   }
 
   CaptureController get controller => _controller!;
-
-  // -- Native event injection (drives the REAL NativeMicRecorderService) -----
-
-  /// Injects [frameCount] deterministic PCM frames (10ms each) belonging to
-  /// [sessionId]. Returns the injected audio bytes for later identity checks.
-  List<List<int>> injectAudioFrames(int frameCount, {required int sessionId, int firstFrameIndex = 0}) {
-    final frames = <List<int>>[];
-    for (var i = 0; i < frameCount; i++) {
-      final bytes = NativeEventVector.synthesizePcmFrame(firstFrameIndex + i);
-      frames.add(bytes);
-      mic.onAudioFrame(bytes, sessionId);
-    }
-    return frames;
-  }
-
-  void emitNativeState(PhoneMicCaptureState state, {int? sessionId}) {
-    mic.onStateChanged(state, sessionId ?? hostApi.lastStartSessionId ?? 0);
-  }
-
-  void emitNativeError(String code, String message, {int? sessionId}) {
-    mic.onCaptureError(code, message, sessionId ?? hostApi.lastStartSessionId ?? 0);
-  }
-
-  void emitBatchProgress(double seconds, {int? sessionId}) {
-    mic.onBatchProgress(seconds, sessionId ?? hostApi.lastStartSessionId ?? 0);
-  }
-
-  // -- Scenario controls ------------------------------------------------------
-
-  Future<void> startLiveCapture() async {
-    await controller.streamRecording();
-    await settle();
-  }
-
-  Future<void> stopLiveCapture({String reason = 'user_stopped'}) async {
-    await controller.stopStreamRecording(reason: reason);
-    await settle();
-  }
-
-  Future<void> startBatchCapture() async {
-    await controller.startPhoneMicBatchForTesting();
-    await settle();
-  }
 
   void setConnected(bool value) {
     if (connected == value) return;
@@ -607,9 +505,9 @@ class CaptureReplayWorld {
   /// Rebuilds the entire production graph from the same temp directory: a new
   /// [WalService] reloads wals.json + audio files from disk, a new controller
   /// and recorder start from that persisted state.
-  Future<void> reconstructProcess({bool supportsBatch = true}) async {
+  Future<void> reconstructProcess() async {
     timeline.add('process_reconstructed');
-    await _bootGeneration(supportsBatch: supportsBatch);
+    await _bootGeneration();
     await settle();
   }
 
@@ -663,15 +561,12 @@ class _ReplayCaptureController extends CaptureController {
   _ReplayCaptureController({
     required this.world,
     required super.walService,
-    required super.phoneMicRecorder,
-    required super.phoneMicBatchSupported,
     required super.connectivity,
     required super.authBoundary,
     required super.now,
     required super.scheduling,
     super.inProgressConversationLoader,
     super.audioCodecLoader,
-    super.microphonePermissionRequester,
     super.conversationLocationCapture,
     super.deviceConnectionLoader,
     super.processInProgressOutcome,

@@ -6,7 +6,6 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
-import 'package:permission_handler/permission_handler.dart';
 import 'package:omi/utils/conversations/conversation_title.dart';
 import 'package:omi/app_globals.dart';
 import 'package:omi/pages/home/home_navigation.dart';
@@ -32,12 +31,9 @@ import 'package:omi/utils/platform/platform_manager.dart';
 /// Start/Stop actions. Production resolves these callbacks from CaptureProvider.
 typedef SiriListeningCapture = ({
   Future<void> Function() start,
-  Future<bool> Function() stop,
-  String? Function() source,
+  Future<void> Function() stop,
+  bool Function() listening,
   bool Function() deviceConnected,
-  bool Function() phoneBatchRecording,
-  bool Function() deviceBatchRecording,
-  bool Function() phonePaused,
 });
 
 typedef SiriMemoryPageFetcher = Future<GetMemoriesResult> Function(
@@ -1060,46 +1056,20 @@ class SiriIntegration extends SiriEventsApi {
           final provider = context.read<CaptureProvider>();
           final device = context.read<DeviceProvider>();
           return (
-            start: () async {
-              await provider.streamRecording();
-            },
-            stop: () => provider.stopStreamRecording(),
-            source: () => provider.liveCaptureSource,
+            start: provider.resumeDeviceRecording,
+            stop: provider.pauseCapture,
+            listening: () =>
+                !provider.isPaused && (provider.liveCaptureSource != null || provider.isPendantBatchRecording),
             deviceConnected: () => device.isConnected,
-            phoneBatchRecording: () => provider.isPhoneMicBatchRecording,
-            deviceBatchRecording: () => provider.isPendantBatchRecording,
-            phonePaused: () =>
-                provider.isPhoneMicPaused || (provider.liveCaptureSource == 'phone' && provider.isPaused),
           );
         })();
+    if (!capture.deviceConnected()) {
+      throw PlatformException(code: 'device_required', message: 'Connect an Omi device to record conversations.');
+    }
     if (enabled) {
-      if (capture.deviceConnected() &&
-          (capture.deviceBatchRecording() || (capture.source() != null && capture.source() != 'phone'))) {
-        throw PlatformException(
-          code: 'device_already_listening',
-          message: 'Omi is already listening from your device.',
-        );
-      }
-      if ((capture.source() == 'phone' || capture.phoneBatchRecording()) && capture.phonePaused()) {
-        throw PlatformException(code: 'capture_paused', message: 'Omi is paused. Open Omi to resume.');
-      }
-      if (capture.source() == 'phone' || capture.phoneBatchRecording()) return;
-      try {
-        await capture.start();
-      } catch (_) {
-        if (_testListeningCapture == null) {
-          final status = await Permission.microphone.status;
-          if (status.isDenied || status.isPermanentlyDenied || status.isRestricted) {
-            throw PlatformException(code: 'mic_permission_denied', message: 'Allow microphone access in Omi first.');
-          }
-        }
-        rethrow;
-      }
-    } else {
-      if (capture.source() != 'phone' && !capture.phoneBatchRecording()) {
-        throw PlatformException(code: 'nothing_to_stop', message: "Omi isn't listening right now.");
-      }
-      if (!await capture.stop()) throw StateError('Phone conversation capture did not stop');
+      if (!capture.listening()) await capture.start();
+    } else if (capture.listening()) {
+      await capture.stop();
     }
   }
 

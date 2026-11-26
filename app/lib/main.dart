@@ -567,11 +567,9 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
       final context = globalNavigatorKey.currentContext;
       if (context == null) return (source: 'unknown', mode: 'unknown');
       final capture = context.read<CaptureProvider>();
-      if (capture.isPhoneMicBatchRecording) return (source: 'phone_mic', mode: 'batch');
       if (capture.isPendantBatchRecording) return (source: 'pendant', mode: 'batch');
       final source = capture.liveCaptureSource;
       if (source == null) return (source: 'none', mode: 'none');
-      if (source == 'phone') return (source: 'phone_mic', mode: 'live');
       if (source == 'apple_watch') return (source: 'watch', mode: 'live');
       if (source == 'omi' || source == 'friend') return (source: 'pendant', mode: 'live');
       return (source: 'other', mode: 'live');

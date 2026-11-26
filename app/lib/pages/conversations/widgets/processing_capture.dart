@@ -124,20 +124,9 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
 
     return Consumer<CaptureProvider>(
       builder: (context, provider, child) {
-        // The card means "what's recording now": hidden when nothing is (a connected pendant that
-        // is not capturing, a stopped phone, or a pendant that dropped mid-capture — the header
-        // chip already says Disconnected / Connecting… for that, and the drop needs no action, so
-        // a row here would only repeat the chip). Transcribe Later keeps its own card.
-        final batch = provider.isPhoneMicBatchRecording ||
-            (SharedPreferencesUtil().batchModeEnabled && provider.havingRecordingDevice);
-        final phoneLive = provider.recordingState == RecordingState.record ||
-            provider.recordingState == RecordingState.initialising ||
-            provider.recordingState == RecordingState.interrupted ||
-            provider.recordingState == RecordingState.systemAudioRecord ||
-            provider.isPhoneMicPaused;
-        if (provider.liveCaptureSource == null && !phoneLive && !batch) {
-          return const SizedBox.shrink();
-        }
+        final batch = SharedPreferencesUtil().batchModeEnabled && provider.havingRecordingDevice;
+        final systemAudio = provider.recordingState == RecordingState.systemAudioRecord;
+        if (provider.liveCaptureSource == null && !systemAudio && !batch) return const SizedBox.shrink();
         if (widget.deferStreamingToEpisode && EpisodePresentation.streamingSource(provider) != null) {
           return switch (provider.localSttFailure) {
             final failure? => LocalSttRecoveryNotice(
@@ -156,13 +145,7 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
                 onSetup: () => routeToPage(context, const TranscriptionSettingsPage())),
           GestureDetector(
             onTap: () async {
-              // Offline/batch mode has no live transcript — the card is informational,
-              // so swallow taps instead of opening the (empty) capturing page. Covers both
-              // device batch and the phone-mic Transcribe Later session.
-              if (provider.isPhoneMicBatchRecording ||
-                  (SharedPreferencesUtil().batchModeEnabled && provider.havingRecordingDevice)) {
-                return;
-              }
+              if (batch) return;
               final isCaptureActive = provider.recordingState == RecordingState.record ||
                   provider.recordingState == RecordingState.systemAudioRecord ||
                   provider.recordingState == RecordingState.deviceRecord ||
@@ -206,15 +189,12 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
       );
 
   Future<void> _togglePause(CaptureProvider provider) async {
-    final phone = provider.liveCaptureSource == 'phone';
     try {
       OmiHaptics.medium();
       if (provider.isPaused) {
         await provider.resumeCapture();
-        if (phone && !provider.isPaused) PlatformManager.instance.analytics.phoneMicRecordingStarted();
       } else {
         await provider.pauseCapture();
-        if (phone) PlatformManager.instance.analytics.phoneMicRecordingStopped();
       }
     } catch (_) {
       // Same as the live page's control: say so rather than leave an unhandled future.
@@ -223,53 +203,28 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
     }
     PlatformManager.instance.analytics.recordingMuteToggled(
       isMuted: provider.isPaused,
-      recordingType: phone ? 'phone_mic' : 'device',
+      recordingType: 'device',
     );
   }
 
   Widget _buildUnifiedRecordingUI(CaptureProvider provider) {
-    // The controller names the source that owns the capture: a connected pendant the phone took
-    // over from is not "device recording".
     final liveSource = provider.liveCaptureSource;
-    bool isDeviceRecording = liveSource != null && liveSource != 'phone';
+    final isDeviceRecording = liveSource != null;
     // Keep automatic repair and legitimate pendant sleep quiet. In particular,
     // never animate a Listening timer solely because a restored link is ready.
     // An exhausted recovery is not a wait: it reads as the failure it is.
     final noAudio = isDeviceRecording && !provider.isPaused && provider.pendantCaptureActionRequired;
     final unverified = isDeviceRecording && !provider.isPaused && !provider.pendantCaptureVerified && !noAudio;
 
-    // Offline/batch mode: device or phone-mic audio is saved locally with no live
+    // Offline/batch mode saves audio locally with no live
     // transcription, so show a dedicated, self-explanatory card instead of the
     // "Listening" + transcript UI.
-    if ((isDeviceRecording && SharedPreferencesUtil().batchModeEnabled) || provider.isPhoneMicBatchRecording) {
+    if (isDeviceRecording && SharedPreferencesUtil().batchModeEnabled) {
       return _buildBatchRecordingUI(provider, unverified: unverified);
     }
 
-    // A phone-mic batch session reports RecordingState.record too; exclude it here so
-    // the Live "Listening" card never renders for it (it is handled above).
-    bool isPhoneRecording = !provider.isPhoneMicBatchRecording &&
-        (provider.recordingState == RecordingState.record ||
-            provider.recordingState == RecordingState.systemAudioRecord ||
-            provider.recordingState == RecordingState.initialising ||
-            provider.recordingState == RecordingState.interrupted ||
-            provider.isPhoneMicPaused);
-
-    // A pause the reader chose (the control reads Resume only then).
-    final isAudioInterrupted = provider.recordingState == RecordingState.interrupted;
-    bool isPaused = false;
-    if (isDeviceRecording) {
-      isPaused = provider.isPaused && provider.recordingState == RecordingState.pause;
-    } else if (isPhoneRecording) {
-      isPaused = provider.isPhoneMicPaused || provider.isPaused;
-    }
-    // `interrupted` is the OS holding the mic (explained, no control) or capture recovering on its
-    // own (Reconnecting, Pause still works); a reader pause keeps Resume either way.
-    final interruption = captureInterruption(
-      interrupted: isPhoneRecording && isAudioInterrupted,
-      readerPaused: isPaused,
-      osHoldsMic: provider.isCallActive,
-    );
-    final micTaken = interruption == CaptureInterruption.micTaken;
+    final systemAudio = provider.recordingState == RecordingState.systemAudioRecord;
+    final isPaused = provider.isPaused && provider.recordingState == RecordingState.pause;
     final hasTerminalTranscriptionFailure =
         provider.terminalTranscriptionFailure != null || provider.localSttFailure != null;
     final bufferingFor = provider.customSttBufferingDuration;
@@ -279,36 +234,27 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
     // WAL saves audio locally whatever the transcription connection does, so a degraded
     // transcription names the consequence ("Audio saved, transcribes later"), not a stop.
     final displayState = liveCaptureDisplayState(
-      audioInterrupted: micTaken,
       paused: isPaused,
       pendantNoAudio: noAudio,
       pendantUnverified: unverified,
       transcriptionUnavailable: hasTerminalTranscriptionFailure,
       bufferingFor: bufferingFor,
-      reconnecting: interruption == CaptureInterruption.recovering,
       capturingPhotos: hasPhotos,
     );
-    // Initialising: the microphone is opening and no audio flows yet, so it is not Listening.
-    final starting = isPhoneRecording &&
-        provider.recordingState == RecordingState.initialising &&
-        displayState == CaptureDisplayState.listening;
     final copy = provider.localSttFailure != null
         ? CaptureCardCopy(context.l10n.transcriptionUnavailable,
             detail: context.l10n.setupOnDevice, explanation: context.l10n.transcriptionUnavailableRecordingSaved)
         : unverified
             ? CaptureCardCopy(context.l10n.captureSourcePendant)
-            : starting
-                ? CaptureCardCopy(context.l10n.captureStarting)
-                : captureCardCopy(context.l10n, displayState,
-                    micTaken: micTaken, socketDown: !provider.transcriptServiceReady);
+            : captureCardCopy(context.l10n, displayState, socketDown: !provider.transcriptServiceReady);
 
     // When recording is active: the one capture status and control surface.
-    if (isDeviceRecording || isPhoneRecording) {
+    if (isDeviceRecording || systemAudio) {
       // A local-preview session has no cloud lines yet: the card's existing
       // last-line slot shows the newest on-device preview line instead.
       final preview = provider.livePreview;
       Widget buildCard(String? lastLine) => LiveCaptureCard(
-            source: isDeviceRecording ? liveSource : 'phone',
+            source: liveSource ?? 'system_audio',
             status: copy.status,
             detail: copy.detail,
             explanation: copy.explanation,
@@ -318,11 +264,8 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
             // The session clock (how long the pendant has been connected) is not the conversation.
             compact: true,
             lastLine: lastLine,
-            note: isPhoneRecording && provider.pendantPausedForPhone
-                ? context.l10n.pendantPausedResumesWhenYouFinish
-                : null,
             // Photo-capture devices (OmiGlass) keep capturing photos; there is nothing to pause.
-            onPauseToggle: !LiveCaptureCard.canPause(provider.recordingDevice, source: liveSource) || micTaken
+            onPauseToggle: !LiveCaptureCard.canPause(provider.recordingDevice, source: liveSource)
                 ? null
                 : () => _togglePause(provider),
           );
@@ -367,9 +310,7 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
     // Native low-storage flag: capture is paused, so the card must not look healthy.
     // Read directly in build — CaptureController reloads prefs + notifies when it flips.
     final storageFull = !isLimitless && prefs.getBool('batchStorageFull');
-    final source = provider.isPhoneMicBatchRecording
-        ? 'phone'
-        : (provider.liveCaptureSource ?? (isLimitless ? 'limitless' : 'omi'));
+    final source = provider.liveCaptureSource ?? (isLimitless ? 'limitless' : 'omi');
     final elapsedSeconds = provider.offlineRecordingElapsedSeconds;
 
     final CaptureCardCopy copy;
@@ -413,20 +354,6 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
       // use — that pendant records on its own.
       if (!isLimitless)
         (icon: Icons.add_circle_outline_rounded, label: l10n.newRecording, onTap: provider.startNewOfflineRecording),
-      // Phone-mic batch is user-driven (not ambient like BLE), so it needs an explicit Stop that ends
-      // the session. BLE batch has no Stop by design.
-      if (provider.isPhoneMicBatchRecording)
-        (
-          icon: Icons.stop_rounded,
-          label: l10n.stop,
-          onTap: () async {
-            try {
-              await provider.stopStreamRecording();
-            } catch (_) {
-              if (mounted) AppSnackbar.showSnackbar(context.l10n.somethingWentWrong);
-            }
-          },
-        ),
     ];
 
     return Column(
@@ -581,69 +508,4 @@ class _PausedStatusIndicatorState extends State<PausedStatusIndicator> with Sing
       child: const Icon(Icons.fiber_manual_record, color: Colors.orange, size: 16.0),
     );
   }
-}
-
-getPhoneMicRecordingButton(
-  BuildContext context,
-  VoidCallback toggleRecordingCb,
-  RecordingState currentActualState, {
-  bool isPhoneMicPaused = false,
-}) {
-  if (SharedPreferencesUtil().btDevice.id.isNotEmpty) {
-    // If a BT device is configured and we are NOT on desktop, don't show this button.
-    return const SizedBox.shrink();
-  }
-  String text;
-  Widget icon;
-  bool isLoading = currentActualState == RecordingState.initialising;
-
-  // Phone Mic
-  {
-    if (isLoading) {
-      text = context.l10n.initialisingRecorder;
-      icon = const OmiSpinner(size: OmiSpinnerSize.small);
-    } else if (currentActualState == RecordingState.record) {
-      text = context.l10n.pauseRecording;
-      icon = Container(
-        margin: const EdgeInsets.only(right: 4),
-        width: 24,
-        height: 24,
-        decoration: const BoxDecoration(color: Colors.orange, shape: BoxShape.circle),
-        child: const Center(child: Icon(Icons.pause, color: Colors.white, size: 14)),
-      );
-    } else if (isPhoneMicPaused) {
-      text = context.l10n.resumeRecording;
-      icon = Container(
-        margin: const EdgeInsets.only(right: 4),
-        width: 24,
-        height: 24,
-        decoration: BoxDecoration(color: OmiColors.accent, shape: BoxShape.circle),
-        child: Center(child: Icon(Icons.play_arrow, color: OmiColors.onAccent, size: 14)),
-      );
-    } else {
-      text = context.l10n.continueRecording;
-      icon = const Icon(Icons.mic, size: 18);
-    }
-  }
-
-  return MaterialButton(
-    onPressed: isLoading ? null : toggleRecordingCb,
-    child: Row(
-      mainAxisSize: MainAxisSize.min,
-      mainAxisAlignment: MainAxisAlignment.start,
-      crossAxisAlignment: CrossAxisAlignment.center,
-      children: [
-        icon,
-        const SizedBox(width: 4),
-        Text(
-          text,
-          style: Theme.of(context)
-              .textTheme
-              .bodyMedium!
-              .copyWith(color: OmiColors.textPrimary, fontWeight: FontWeight.w500),
-        ),
-        const SizedBox(width: 4),
-      ],
-    ),
-  );
 }

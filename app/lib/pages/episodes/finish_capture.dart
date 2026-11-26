@@ -2,14 +2,12 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
-import 'package:permission_handler/permission_handler.dart';
 import 'package:provider/provider.dart';
 
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/transcript_segment.dart';
 import 'package:omi/pages/conversation_detail/page.dart';
 import 'package:omi/pages/conversations/widgets/live_conversation_end_button.dart';
-import 'package:omi/pages/episodes/episode_presentation.dart';
 import 'package:omi/pages/episodes/finished_capture_page.dart';
 import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/providers/conversation_provider.dart';
@@ -70,13 +68,8 @@ Future<FinishOutcome> finishLiveCapture(
           ? preview.lines.isNotEmpty
           : preview.totalWordsSeen > baseline.words);
   final hadContent = provider.segments.isNotEmpty || provider.photos.isNotEmpty || heardSinceClose;
-  // The phone's own recording always stops through Process Now (Transcribe Later finalizes its file
-  // instead): the server, not the page, knows whether speech arrived that has no line yet.
-  // A phone recorder still restoring coordinator ownership has no source yet, but is still this phone's.
-  final phoneOwns = provider.liveCaptureSource == ConversationSource.phone.name ||
-      (provider.liveCaptureSource == null && EpisodePresentation.streamingSource(provider) == 'phone');
   final owned = liveConversationId != null;
-  if (hadContent || retry || phoneOwns || owned || (v3Feedback && provider.verifiedLiveServerRecordingId != null)) {
+  if (hadContent || retry || owned || (v3Feedback && provider.verifiedLiveServerRecordingId != null)) {
     final previousFinish = provider.lastClientFinish;
     // Process Now can close a recording before Listen announces its successor: a verified recording
     // the server already closed is the previous window's, not the one this tap finishes.
@@ -111,11 +104,6 @@ Future<FinishOutcome> finishLiveCapture(
     // Nothing was processed, so the next Finish must still send it.
     if (outcome is FinishFailed || outcome is FinishNotReceived) provider.lastClientFinish = previousFinish;
     return outcome;
-  }
-  try {
-    if (provider.liveCaptureSource == null) await provider.stopStreamRecording();
-  } catch (_) {
-    return const FinishFailed(FinishFailure.exception);
   }
   if (episodes != null && episodes.enabled) episodes.onLiveFinalized();
   // The server closed it on its own just before the tap: open that one.
@@ -218,12 +206,3 @@ Future<void> retryFinishFromHome(BuildContext context, CaptureProvider provider,
       entry: FinishEntry.home,
       onRetry: () => retryFinishFromHome(context, provider, liveConversationId: liveConversationId));
 }
-
-/// The record button with the microphone blocked: say so, and offer the one way to fix it
-/// (ux-contract §15). Every tap answers the same way until it is allowed.
-void showMicBlocked(BuildContext context) => OmiFeedback.error(
-      context,
-      context.l10n.micBlockedCannotRecord,
-      actionLabel: context.l10n.openSettings,
-      onAction: () => unawaited(openAppSettings()),
-    );

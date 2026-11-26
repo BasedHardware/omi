@@ -18,7 +18,7 @@ import 'package:omi/providers/phone_call_provider.dart';
 import 'package:omi/services/sockets/local_stt_failure.dart';
 import 'package:omi/utils/enums.dart';
 
-enum _Live { idle, idleDeviceConnected, pendant, pendantPaused, pendantBatch, phone, phoneAfterPendant }
+enum _Live { idle, idleDeviceConnected, pendant, pendantPaused, pendantBatch, phone }
 
 class _Capture extends ChangeNotifier implements CaptureProvider {
   @override
@@ -82,13 +82,7 @@ class _Capture extends ChangeNotifier implements CaptureProvider {
   @override
   bool get isPaused => live == _Live.pendantPaused || readerPaused;
   @override
-  bool get isPhoneMicPaused => readerPaused;
-  @override
-  bool get pendantPausedForPhone => live == _Live.phoneAfterPendant;
-  @override
   bool get isCallActive => callActive;
-  @override
-  bool get isPhoneMicBatchRecording => batch;
   bool offlineMutedState = false;
   int offlineMuteToggles = 0;
   @override
@@ -146,12 +140,6 @@ class _Capture extends ChangeNotifier implements CaptureProvider {
   Future<void> pauseCapture() async => pauses++;
   @override
   Future<void> resumeCapture() async => resumes++;
-  @override
-  Future<void> streamRecording({bool resumeCapture = true}) async {
-    phoneStarts++;
-    final failure = phoneStartFailure;
-    if (failure != null) throw failure;
-  }
 
   @override
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
@@ -200,7 +188,7 @@ void main() {
   });
   for (final hidden in [false, true]) {
     testWidgets('compact capture has no clock rebuilds (hidden=$hidden)', (tester) async {
-      final capture = _Capture(_Live.phone);
+      final capture = _Capture(_Live.pendant);
       final device = _Device(paired: false);
       final call = _Call(PhoneCallState.idle);
       addTearDown(capture.dispose);
@@ -245,7 +233,8 @@ void main() {
   }
   for (final batch in [false, true]) {
     testWidgets('visible ${batch ? 'batch' : 'call'} clock ticks and catches up after a hidden tab', (tester) async {
-      final capture = _Capture(_Live.phone, batch: batch)..offlineElapsedOverride = 125;
+      SharedPreferencesUtil().batchModeEnabled = batch;
+      final capture = _Capture(_Live.pendant, batch: batch)..offlineElapsedOverride = 125;
       final call = _Call(batch ? PhoneCallState.idle : PhoneCallState.active);
       final device = _Device(paired: false);
       final visible = ValueNotifier(true);

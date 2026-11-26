@@ -628,126 +628,51 @@ void main() {
     expect(host.publications, 1);
   });
 
-  test('Siri Start and Stop use conversation capture and finalize the phone session', () async {
-    final calls = <String>[];
-    String? source;
-    final siri = SiriIntegration.forTest(
-      RecordingSiriHost(),
-      'owner-capture',
-      listeningCapture: (
-        start: () async {
-          calls.add('streamRecording');
-          source = 'phone';
-        },
-        stop: () async {
-          calls.add('stopStreamRecording');
-          source = null;
-          return true;
-        },
-        source: () => source,
-        deviceConnected: () => false,
-        phoneBatchRecording: () => false,
-        deviceBatchRecording: () => false,
-        phonePaused: () => false,
-      ),
-    );
-
-    await siri.setListening(true);
-    await siri.setListening(false);
-    expect(calls, ['streamRecording', 'stopStreamRecording']);
-  });
-
-  test('Siri Start does not report success for paused phone stream or batch capture', () async {
-    for (final batch in [false, true]) {
-      var starts = 0;
-      final siri = SiriIntegration.forTest(
-        RecordingSiriHost(),
-        'owner-paused',
-        listeningCapture: (
-          start: () async {
-            starts++;
-          },
-          stop: () async => true,
-          source: () => 'phone',
-          deviceConnected: () => false,
-          phoneBatchRecording: () => batch,
-          deviceBatchRecording: () => false,
-          phonePaused: () => true,
-        ),
-      );
-      await expectLater(
-        siri.setListening(true),
-        throwsA(isA<PlatformException>().having((error) => error.code, 'code', 'capture_paused')),
-      );
-      expect(starts, 0);
-    }
-  });
-
-  test('Siri Start reports an already-streaming BLE device without opening phone capture', () async {
-    var phoneStarts = 0;
+  test('Siri listening requires a connected recording device', () async {
     final siri = SiriIntegration.forTest(
       RecordingSiriHost(),
       'owner-device',
       listeningCapture: (
-        start: () async {
-          phoneStarts++;
-        },
-        stop: () async => true,
-        source: () => 'omi',
-        deviceConnected: () => true,
-        phoneBatchRecording: () => false,
-        deviceBatchRecording: () => false,
-        phonePaused: () => false,
+        start: () async => fail('capture started without a connected device'),
+        stop: () async => fail('capture stopped without a connected device'),
+        listening: () => false,
+        deviceConnected: () => false,
       ),
     );
 
     await expectLater(
       siri.setListening(true),
-      throwsA(isA<PlatformException>().having((error) => error.code, 'code', 'device_already_listening')),
+      throwsA(isA<PlatformException>().having((error) => error.code, 'code', 'device_required')),
     );
-    expect(phoneStarts, 0);
   });
 
-  test('connected idle device does not block phone conversation capture', () async {
-    var phoneStarts = 0;
+  test('Siri starts and stops device listening only when needed', () async {
+    var listening = false;
+    var starts = 0;
+    var stops = 0;
     final siri = SiriIntegration.forTest(
       RecordingSiriHost(),
       'owner-device',
       listeningCapture: (
         start: () async {
-          phoneStarts++;
+          listening = true;
+          starts++;
         },
-        stop: () async => true,
-        source: () => null,
+        stop: () async {
+          listening = false;
+          stops++;
+        },
+        listening: () => listening,
         deviceConnected: () => true,
-        phoneBatchRecording: () => false,
-        deviceBatchRecording: () => false,
-        phonePaused: () => false,
       ),
     );
 
     await siri.setListening(true);
-    expect(phoneStarts, 1);
-  });
-
-  test('Siri Stop reports nothing to stop with a typed listening outcome', () async {
-    final siri = SiriIntegration.forTest(
-      RecordingSiriHost(),
-      'owner-stop',
-      listeningCapture: (
-        start: () async {},
-        stop: () async => true,
-        source: () => null,
-        deviceConnected: () => false,
-        phoneBatchRecording: () => false,
-        deviceBatchRecording: () => false,
-        phonePaused: () => false,
-      ),
-    );
-    await expectLater(
-      siri.setListening(false),
-      throwsA(isA<PlatformException>().having((error) => error.code, 'code', 'nothing_to_stop')),
-    );
+    await siri.setListening(true);
+    expect(starts, 1);
+    await siri.setListening(false);
+    await siri.setListening(false);
+    expect(stops, 1);
   });
 
   test('sign-out ordered after an in-flight native session publication', () async {

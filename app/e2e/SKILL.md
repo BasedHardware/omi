@@ -139,7 +139,6 @@ Home (home/page.dart) — main app after auth, 4-slot bottom nav
 ├── [battery/record widget, top left] (battery_info_widget.dart)
 │   ├── Device connected → battery pill → Connected Device (home/device.dart); phone icon → Phone Calls
 │   └── No device → Connect → Connect Device page; Record pill → Conversation Capturing (episodes/live_episode_page.dart)
-│       └── Chevron → record options sheet (Phone Mic record / Phone Call)
 ├── [settings gear, top right] → Settings sheet (settings_drawer.dart) — present on every slot
 │
 ├── [slot 0] Home (home/home_content.dart)

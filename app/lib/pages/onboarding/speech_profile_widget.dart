@@ -159,15 +159,6 @@ class _SpeechProfileWidgetState extends State<SpeechProfileWidget> with WidgetsB
             await capture.streamDeviceRecording(device: device);
           };
           await capture.stopStreamDeviceRecording();
-        } else if (capture.recordingState == RecordingState.record ||
-            capture.recordingState == RecordingState.interrupted ||
-            capture.isPhoneMicPaused) {
-          _resumeCapture = () async {
-            await capture.streamRecording();
-          };
-          // The voice profile needs the phone mic; a pendant the phone recording took over from
-          // stays paused until the phone recording resumes and finishes.
-          await capture.stopStreamRecording(resumeHandedOffPendant: false);
         }
       }
       if (mounted) await flow.start();

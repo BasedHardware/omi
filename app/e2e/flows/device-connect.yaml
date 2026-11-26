@@ -5,7 +5,7 @@
 
 version: 2
 name: device-connect
-description: Device connect/disconnect flow — scan for Omi BLE device, pair, verify connected state with battery/listening, view device details page, disconnect device, verify phone mic button appears
+description: Device connect/disconnect flow — scan for Omi BLE device, pair, verify connected state with battery/listening, view device details page, disconnect device and verify the prompt to connect a recording device
 app: com.friend.ios.dev
 evidence:
   video: true
@@ -132,11 +132,11 @@ steps:
         min: 5
     evidence:
       - screenshot: step-S9.webp
-    note: "Disconnect Device calls: (1) SharedPreferencesUtil().btDeviceSet(BtDevice.empty()) to clear saved device, (2) connection.disconnect() to close BLE connection, (3) DeviceProvider.setIsConnected(false) and setConnectedDevice(null), (4) navigates back to home. After disconnect, the central mic button reappears in the bottom nav bar and the battery indicator reverts to Omi logo only."
+    note: "Disconnect Device calls: (1) SharedPreferencesUtil().btDeviceSet(BtDevice.empty()) to clear saved device, (2) connection.disconnect() to close BLE connection, (3) DeviceProvider.setIsConnected(false) and setConnectedDevice(null), (4) navigates back to home. After disconnect, Home shows the device connection prompt."
 
   - id: S10
-    name: Verify home screen — device disconnected, mic button visible
-    do: "Verify the home screen now shows: (1) Omi logo without battery percentage in top-left (no device connected), (2) No 'Listening' or 'Connecting' status row, (3) The central purple mic button (microphone icon) is visible again in the bottom navigation bar between the 4 tab icons. This confirms the device has been successfully disconnected."
+    name: Verify Home explains how to record
+    do: "Verify Home has no active capture row. The Connect Device action explains that a device records conversations and opens device pairing."
     verify: true
     expect:
       - kind: text_visible
@@ -145,4 +145,4 @@ steps:
         min: 5
     evidence:
       - screenshot: step-S10.webp
-    note: "The mic button reappears because isOmiDeviceConnected is now false (isConnected=false AND connectedDevice=null). The user can now use phone mic recording by tapping the central mic button, or reconnect the Omi device by tapping the Omi logo in the top-left corner."
+    note: "The former phone microphone control is absent and the device connection action remains available."

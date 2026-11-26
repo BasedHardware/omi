@@ -33,7 +33,6 @@ Prioritized feature map to guide flow-walker E2E coverage of core Omi mobile app
 |---|---------|-------|----------|--------|-----------------|
 | 1 | Conversation list & browse | capture (5) | 15 | 3 | ✅ flow: conversations.yaml (9 steps) |
 | 2 | Conversation detail (transcript/summary/actions tabs) | capture (5) | 15 | 2 | ✅ flow: conversations.yaml |
-| 3 | Conversation recording (phone mic) | capture (5) | 15 | 1 | ✅ flow: phone-capture.yaml (9 steps) |
 | 4 | Conversation recording (Omi device) | capture (5) | 15 | 1 | ✅ flow: device-capture.yaml (10 steps) |
 | 5 | Device discover & connect (BLE) | capture (5) | 15 | 1 | ✅ flow: device-connect.yaml (10 steps) |
 | 6 | Device disconnect & reconnect | capture (5) | 15 | 1 | ✅ flow: device-connect.yaml |

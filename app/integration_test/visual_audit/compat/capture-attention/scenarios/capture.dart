@@ -83,13 +83,7 @@ class AuditCaptureProvider extends ChangeNotifier implements CaptureProvider {
   @override
   bool get isPaused => live == AuditLive.pendantPaused || live == AuditLive.phonePaused;
   @override
-  bool get isPhoneMicPaused => live == AuditLive.phonePaused;
-  @override
-  bool get pendantPausedForPhone => live == AuditLive.phoneAfterPendant;
-  @override
   bool get isCallActive => false;
-  @override
-  bool get isPhoneMicBatchRecording => false;
   @override
   bool get isPendantBatchRecording => false;
   @override
@@ -156,10 +150,6 @@ class AuditCaptureProvider extends ChangeNotifier implements CaptureProvider {
   int get inFlightAudioSeconds => 0;
   // Capture actions a tap may reach; the audit shows the screen the tap leads to, it does not
   // capture audio.
-  @override
-  Future<void> streamRecording({bool resumeCapture = true}) async {}
-  @override
-  Future<bool> stopStreamRecording({String reason = 'user_stopped', bool resumeHandedOffPendant = true}) async => true;
   @override
   Future<void> finishCapture() async {}
   @override
@@ -256,7 +246,7 @@ class HomeFrame extends StatelessWidget {
             left: 16,
             right: 16,
             bottom: homeChatBarOffset(context),
-            child: const Row(children: [Expanded(child: _AskOmiBar()), SizedBox(width: 10), HomeRecordButton()]),
+            child: const _AskOmiBar(),
           ),
       ]),
     );
@@ -457,28 +447,6 @@ final captureScenarios = <AuditScenario>[
     run: (a) => _runHome(a, AuditLive.pendantPaused, pendantConnected: true),
   ),
   AuditScenario(
-    id: 'home-capture-pendant-tap',
-    title: 'Tap the record button while the pendant records',
-    page: _home,
-    state: 'The pendant streams; the record button is tapped',
-    run: (a) => _runHome(a, AuditLive.pendant,
-        pendantConnected: true, tap: find.byType(HomeRecordButton), action: 'Tap the record button'),
-  ),
-  AuditScenario(
-    id: 'home-capture-phone-after-pendant',
-    title: 'Phone recording after taking over from the pendant',
-    page: _home,
-    state: 'The phone records; the pendant waits for it',
-    run: (a) => _runHome(a, AuditLive.phoneAfterPendant, pendantConnected: true),
-  ),
-  AuditScenario(
-    id: 'home-capture-phone-live',
-    title: 'Phone recording, no pendant',
-    page: _home,
-    state: 'The phone records; 2:14 in',
-    run: (a) => _runHome(a, AuditLive.phone),
-  ),
-  AuditScenario(
     id: 'home-capture-call-live',
     title: 'Omi phone call',
     page: _home,
@@ -486,27 +454,11 @@ final captureScenarios = <AuditScenario>[
     run: (a) => _runHome(a, AuditLive.idle, call: true),
   ),
   AuditScenario(
-    id: 'home-capture-options',
-    title: 'Other ways to record',
-    page: _home,
-    state: 'Nothing recording; the record button is held (the ⌄ badge opens the same sheet)',
-    run: (a) async {
-      await _runHome(a, AuditLive.idle, longPress: find.byType(HomeRecordButton), action: 'Hold the record button');
-    },
-  ),
-  AuditScenario(
     id: 'conversation-live-pendant',
     title: 'Live page, pendant',
     page: _live,
     state: 'The pendant records; two transcript lines',
     run: (a) => _runLivePage(a, AuditLive.pendant),
-  ),
-  AuditScenario(
-    id: 'conversation-live-phone-paused',
-    title: 'Live page, phone paused',
-    page: _live,
-    state: 'The phone recording is paused; two transcript lines',
-    run: (a) => _runLivePage(a, AuditLive.phonePaused),
   ),
   AuditScenario(
     id: 'conversation-live-recovery-banner',

@@ -28,13 +28,11 @@ const Set<PhoneCallState> kPromptBlockingCallStates = {
 /// or a firmware update running.
 bool promptsBlocked({
   required RecordingState recordingState,
-  required bool phoneMicBatchRecording,
   required bool micInterruptedByCall,
   required PhoneCallState callState,
   required bool firmwareUpdateInProgress,
 }) {
   return kPromptBlockingRecordingStates.contains(recordingState) ||
-      phoneMicBatchRecording ||
       micInterruptedByCall ||
       kPromptBlockingCallStates.contains(callState) ||
       firmwareUpdateInProgress;
@@ -58,7 +56,6 @@ class HomePromptGate {
     final device = _device;
     return promptsBlocked(
       recordingState: capture?.recordingState ?? RecordingState.stop,
-      phoneMicBatchRecording: capture?.isPhoneMicBatchRecording ?? false,
       micInterruptedByCall: capture?.isCallActive ?? false,
       callState: _callState.value,
       firmwareUpdateInProgress: device?.isFirmwareUpdateInProgress ?? false,

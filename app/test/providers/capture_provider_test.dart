@@ -270,39 +270,6 @@ class _HangingConversationLocationCapture extends ConversationLocationCapture {
   }
 }
 
-class _FakeBatchMicRecorder implements IMicRecorderService {
-  int startBatchCalls = 0;
-  bool emitRecordingOnStart = false;
-
-  @override
-  Future<void> start({
-    required Function(Uint8List bytes) onByteReceived,
-    Function()? onRecording,
-    Function()? onStop,
-    Function()? onInitializing,
-    Function()? onStalled,
-    Function(bool began)? onInterruption,
-  }) async {
-    if (emitRecordingOnStart) onRecording?.call();
-  }
-
-  @override
-  Future<void> startBatch({
-    Function()? onStop,
-    Function(bool began)? onInterruption,
-    Function()? onBatchStalled,
-    Function(String code, String message)? onError,
-  }) async {
-    startBatchCalls++;
-  }
-
-  @override
-  void stop() {}
-
-  @override
-  void probeStallAfterForeground() {}
-}
-
 class _IdentifiedSocketService extends TranscriptSegmentSocketService {
   _IdentifiedSocketService(this.id, this.onSubscribed)
       : super.withSocket(16000, BleAudioCodec.pcm16, 'en', _TrackingSocket());
@@ -780,35 +747,6 @@ void main() {
         );
     expect(locationCapture.calls, 1);
     locationCapture.complete();
-    provider.dispose();
-  });
-
-  test('phone batch starts native audio before waiting for location metadata', () async {
-    await SharedPreferencesUtil().remove('phoneBatchGeolocation');
-    final locationCapture = _HangingConversationLocationCapture();
-    final micRecorder = _FakeBatchMicRecorder();
-    final provider = CaptureProvider(
-      conversationLocationCapture: locationCapture,
-      microphonePermissionRequester: () async => true,
-      phoneMicBatchRecorder: micRecorder,
-    );
-
-    await provider.startPhoneMicBatchForTesting().timeout(
-          const Duration(seconds: 2),
-          onTimeout: () => fail('phone batch start blocked on location capture'),
-        );
-
-    expect(micRecorder.startBatchCalls, 1);
-    expect(provider.recordingState, RecordingState.record);
-    expect(locationCapture.calls, 1);
-    var preferences = await SharedPreferences.getInstance();
-    expect(preferences.getString('phoneBatchGeolocation'), isNull);
-
-    locationCapture.complete();
-    await Future<void>.delayed(Duration.zero);
-    await Future<void>.delayed(Duration.zero);
-    preferences = await SharedPreferences.getInstance();
-    expect(preferences.getString('phoneBatchGeolocation'), isNotNull);
     provider.dispose();
   });
 
@@ -1551,39 +1489,6 @@ void main() {
 
       expect(provider.openCalls, 1);
       provider.dispose();
-    });
-
-    test('onConnected restores record from interrupted', () async {
-      final mic = _FakeBatchMicRecorder()..emitRecordingOnStart = true;
-      final provider = CaptureProvider(
-        phoneMicRecorder: mic,
-        microphonePermissionRequester: () async => true,
-        openSocket: ({
-          required codec,
-          required sampleRate,
-          required language,
-          required force,
-          source,
-          clientConversationId,
-          customSttConfig,
-          geolocation,
-        }) async =>
-            null,
-      );
-      addTearDown(provider.dispose);
-      provider.onConnectionStateChanged(true);
-      await provider.streamRecording();
-      expect(provider.liveCaptureSource, 'phone');
-      expect(provider.recordingState, RecordingState.record);
-
-      provider.onClosed();
-      await provider.pendingSourceSwitch;
-      expect(provider.recordingState, RecordingState.interrupted);
-
-      provider.onConnected();
-      await provider.pendingSourceSwitch;
-      expect(provider.recordingState, RecordingState.record);
-      await provider.stopStreamRecording();
     });
 
     test('onConnected does not alter stop state', () {

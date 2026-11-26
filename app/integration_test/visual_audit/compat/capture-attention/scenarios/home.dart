@@ -63,23 +63,6 @@ final homeScenarios = <AuditScenario>[
     },
   ),
   AuditScenario(
-    id: 'home-record-options',
-    title: 'Recording source sheet',
-    page: 'lib/pages/home/widgets/battery_info_widget.dart (RecordOptionsSheet)',
-    state: 'Opened on a neutral black host; capture is not started',
-    run: (a) async {
-      await a.pumpHost(
-        (context) => showModalBottomSheet(
-          context: context,
-          backgroundColor: Colors.transparent,
-          builder: (_) => RecordOptionsSheet(onPickPhoneMic: () {}, onPickPhoneCall: () {}),
-        ),
-        background: Colors.black,
-      );
-      await a.shot('Open the recording source sheet');
-    },
-  ),
-  AuditScenario(
     id: 'home-announcement',
     title: 'Announcement dialog',
     page: 'lib/pages/announcements/announcement_dialog.dart (AnnouncementDialog)',

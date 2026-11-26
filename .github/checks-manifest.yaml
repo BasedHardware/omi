@@ -973,22 +973,16 @@ checks:
     reason: "CV1 DFU stale iOS bonds surface as CB error 14; native reconnect must classify pairing_lost reliably"
   - id: ios-native-probe-compile
     command: ["python3", "app/ios/test/phone_mic_probe/build.py", "--check"]
-    triggers: ["app/ios/Runner/PhoneMic/**", "app/ios/test/phone_mic_probe/**", "app/ios/test/audio_interruption_driver/**", "app/lib/services/devices/models.dart", ".github/checks-manifest.yaml"]
+    triggers: ["app/ios/test/phone_mic_probe/**", "app/ios/test/audio_interruption_driver/**", "app/lib/services/devices/models.dart", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     platforms: ["macos"]
     reason: "the native diagnostic app must compile with real UIKit/CoreBluetooth dependencies even when agents have no iPhone or signing identity"
-  - id: ios-phone-mic-lifecycle-replay
-    command: ["ruby", "app/ios/test/phone_mic_lifecycle_replay_test.rb"]
-    triggers: ["app/ios/Runner/PhoneMic/**", "app/ios/test/phone_mic_lifecycle_replay_test.*", "app/ios/test/phone_mic_probe/**", "app/test/fixtures/phone_mic_native_events/**", ".github/checks-manifest.yaml"]
-    lanes: ["local", "ci"]
-    platforms: ["macos"]
-    reason: "native capture changes must preserve foreground continuity, interruption recovery, and stale-frame rejection without requiring a physical iPhone"
   - id: ios-batch-audio-energy
     command: ["ruby", "app/ios/test/batch_audio_energy_test.rb"]
-    triggers: ["app/ios/Runner/Batch/BaseBatchAudioWriter.swift", "app/ios/Runner/Batch/BatchAudioWriter.swift", "app/ios/Runner/PhoneMic/PhoneMicBatchAudioWriter.swift", "app/ios/test/batch_audio_energy_test.*", "app/test/fixtures/capture_policy.json", ".github/checks-manifest.yaml"]
+    triggers: ["app/ios/Runner/Batch/BaseBatchAudioWriter.swift", "app/ios/Runner/Batch/BatchAudioWriter.swift", "app/ios/test/batch_audio_energy_test.*", "app/test/fixtures/capture_policy.json", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     platforms: ["macos"]
-    reason: "c04b703719 writes each native batch frame in two calls; 370b1045a0 rereads saved phone location each append; exercise those production writers while preserving frame durability and metadata freshness"
+    reason: "c04b703719 writes each native batch frame in two calls; exercise the production writer while preserving frame durability and metadata freshness"
   - id: deferred-work-markers
     command: ["python3", ".github/scripts/deferred-work-marker-count.py", "--changed-files", "{changed_files}", "--base", "{base}", "--check-new"]
     triggers: ["all"]

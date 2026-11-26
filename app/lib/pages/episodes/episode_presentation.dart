@@ -26,9 +26,6 @@ abstract final class EpisodePresentation {
     final start = (anchor ?? LiveStartAnchor()).resolve(
       episode: episode,
       captureStart: capture.liveCaptureStartedAt,
-      // Phone recordings have a stable per-recording identity through pause/reconnect.
-      // Pendant session rolls remain part of the continuous wear timer.
-      captureId: capture.liveCaptureSource == 'phone' ? capture.activeRecordingId : null,
       streaming: streamingSource(capture) != null,
       now: now,
     );
@@ -75,38 +72,27 @@ abstract final class EpisodePresentation {
 
   /// The source capturing right now, or null when nothing is streaming live (Transcribe Later,
   /// a dropped pendant and a call keep their own Home card).
-  static String? streamingSource(CaptureProvider provider) {
-    if (provider.isPhoneMicBatchRecording) return null;
-    final source = provider.liveCaptureSource;
-    if (source != null && source != 'phone') {
-      return SharedPreferencesUtil().batchModeEnabled ? null : source;
-    }
-    final phone = provider.recordingState == RecordingState.record ||
-        provider.recordingState == RecordingState.systemAudioRecord ||
-        provider.recordingState == RecordingState.initialising ||
-        provider.recordingState == RecordingState.interrupted ||
-        provider.isPhoneMicPaused;
-    return phone ? 'phone' : null;
-  }
+  static String? streamingSource(CaptureProvider provider) =>
+      SharedPreferencesUtil().batchModeEnabled ? null : provider.liveCaptureSource;
 
   /// The capture's state, resolved exactly as the Home capture card and the live page resolve it.
   static CaptureDisplayState displayState(CaptureProvider provider) {
     if (provider.localSttFailure != null) return CaptureDisplayState.recording;
     final interruption = captureInterruption(
       interrupted: provider.recordingState == RecordingState.interrupted,
-      readerPaused: provider.isPaused || provider.isPhoneMicPaused,
+      readerPaused: provider.isPaused,
       osHoldsMic: provider.isCallActive,
     );
     // The pendant's own audio health outranks the transcription connection: a
     // link that owes audio is either failing (recovery exhausted) or still being
     // verified, and neither may claim Listening. A confirmed-subscription quiet
     // verifies (CaptureIngressHealth), so silence between words stays Listening.
-    final pendantLive = provider.liveCaptureSource != null && provider.liveCaptureSource != 'phone';
-    final pendantPaused = provider.isPaused || provider.isPhoneMicPaused || provider.isCallActive;
+    final pendantLive = provider.liveCaptureSource != null;
+    final pendantPaused = provider.isPaused || provider.isCallActive;
     return liveCaptureDisplayState(
       audioInterrupted: interruption == CaptureInterruption.micTaken,
       reconnecting: interruption == CaptureInterruption.recovering,
-      paused: provider.isPaused || provider.isPhoneMicPaused || provider.isCallActive,
+      paused: provider.isPaused || provider.isCallActive,
       pendantNoAudio: pendantLive && !pendantPaused && provider.pendantCaptureActionRequired,
       pendantUnverified: pendantLive && !pendantPaused && !provider.pendantCaptureVerified,
       transcriptionUnavailable: provider.terminalTranscriptionFailure != null || provider.localSttFailure != null,

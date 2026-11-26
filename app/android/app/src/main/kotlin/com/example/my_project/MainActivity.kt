@@ -15,7 +15,6 @@ import com.friend.ios.ble.OmiCompanionManager
 import com.friend.ios.batch.CaptureAdmissionPolicy
 import com.friend.ios.batch.OmiBackgroundAudioStreamer
 import com.friend.ios.batch.CaptureAdmissionLatch
-import com.friend.ios.phonemic.*
 import com.friend.ios.sync.SyncTransferForegroundService
 import com.friend.ios.sync.SyncTransferPlugin
 import android.os.Bundle
@@ -67,10 +66,6 @@ class MainActivity: FlutterActivity() {
         bleHostApiImpl = hostApi
         BleHostApi.setUp(flutterEngine.dartExecutor.binaryMessenger, hostApi)
 
-        // Register Native Phone Mic Pigeon APIs
-        PhoneMicController.initialize(application)
-        PhoneMicController.instance.bindFlutterApi(PhoneMicFlutterApi(flutterEngine.dartExecutor.binaryMessenger))
-        PhoneMicHostApi.setUp(flutterEngine.dartExecutor.binaryMessenger, PhoneMicHostApiImpl(PhoneMicController.instance))
         SyncTransferPlugin.register(flutterEngine, this)
         TtsMp3DecoderPlugin.register(flutterEngine)
         ChatVideoSamplerPlugin.register(flutterEngine, this)
@@ -180,8 +175,6 @@ class MainActivity: FlutterActivity() {
             .putBoolean("flutter.nativeBleForegroundReady", false)
             .apply()
         if (isFinishing) {
-            // Engine + main isolate die with the activity; a live capture session must not outlive its consumer.
-            if (PhoneMicController.isInitialized) PhoneMicController.instance.onFlutterEngineDestroyed()
             // Background Mode and Transcribe Later both need the foreground service to keep
             // the device connected/capturing after a task close. With both off (default),
             // tear it down so the device disconnects when the app is closed.

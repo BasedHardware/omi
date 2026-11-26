@@ -17,7 +17,6 @@ import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/l10n/app_localizations.dart';
 import 'package:omi/pages/action_items/widgets/goal_form_sheet.dart';
-import 'package:omi/pages/episodes/finish_capture.dart';
 import 'package:omi/pages/home/firmware_mixin.dart';
 import 'package:omi/pages/home/firmware_update.dart';
 import 'package:omi/pages/settings/notifications_settings_page.dart';
@@ -217,23 +216,5 @@ void main() {
     await tester.pump(const Duration(milliseconds: 600));
     expect(find.byKey(const Key('goal_save_failed')), findsOneWidget, reason: 'said inside the sheet, not under it');
     await shoot(tester, '003-mobile-ios-goal-save-failed');
-  });
-
-  testWidgets('C2 record button with the microphone blocked', (tester) async {
-    await pump(
-      tester,
-      Scaffold(
-        body: Builder(
-          builder: (context) => Center(
-            child: TextButton(onPressed: () => showMicBlocked(context), child: const Text('record')),
-          ),
-        ),
-      ),
-    );
-    await tester.tap(find.text('record'));
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 600));
-    await shoot(tester, '004-mobile-ios-mic-blocked');
-    await tester.pump(const Duration(seconds: 9));
   });
 }

@@ -177,7 +177,7 @@ class _RecordingGroupPageState extends State<RecordingGroupPage> with _GroupRows
   Future<void> _setTranscribeLater(bool value) async {
     final accepted = await context.read<CaptureProvider>().setBatchMode(value);
     if (!mounted) return;
-    if (!accepted) OmiFeedback.error(context, context.l10n.transcribeLaterNote);
+    if (!accepted) OmiFeedback.error(context, context.l10n.firstCaptureConnectDescription);
     setState(() {});
   }
 
@@ -240,9 +240,15 @@ class _RecordingGroupPageState extends State<RecordingGroupPage> with _GroupRows
               key: const ValueKey('settings_row_transcribeLater'),
               leading: const FaIcon(FontAwesomeIcons.floppyDisk),
               title: l10n.transcribeLaterTitle,
-              subtitle: batchStorageFull ? l10n.transcribeLaterStorageFull : l10n.transcribeLaterDescription,
+              subtitle: batchStorageFull
+                  ? l10n.transcribeLaterStorageFull
+                  : captureProvider.deviceSupportsTranscribeLater
+                      ? l10n.transcribeLaterDescription
+                      : l10n.firstCaptureConnectTitle,
               value: _prefs.batchModeEnabled,
-              onChanged: _setTranscribeLater,
+              onChanged: (_prefs.batchModeEnabled || captureProvider.deviceSupportsTranscribeLater)
+                  ? _setTranscribeLater
+                  : null,
             ),
             if (PlatformService.isAndroid)
               OmiSettingsRow.toggle(

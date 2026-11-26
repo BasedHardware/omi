@@ -15,7 +15,6 @@ import 'package:omi/services/capture/capture_session_owner.dart';
 import 'package:omi/services/capture/conversation_location_capture.dart';
 import 'package:omi/services/capture/local_segment_store.dart';
 import 'package:omi/services/capture/recording_lifecycle_telemetry.dart';
-import 'package:omi/services/services.dart';
 import 'package:omi/services/wals/recording_transfer_coordinator.dart';
 import 'package:omi/services/wals/wal_interfaces.dart';
 
@@ -39,11 +38,6 @@ class _InertWal implements IWalService {
   dynamic noSuchMethod(Invocation i) => throw StateError('Construction must not start WAL: ${i.memberName}');
 }
 
-class _InertMic implements IMicRecorderService {
-  @override
-  dynamic noSuchMethod(Invocation i) => throw StateError('Construction must not start mic: ${i.memberName}');
-}
-
 CaptureDependencies _deps({
   SharedPreferencesUtil? preferences,
   CaptureConnectivityBoundary? connectivity,
@@ -54,8 +48,6 @@ CaptureDependencies _deps({
   return CaptureDependencies(
     ensureDeviceConnection: (_) async => null,
     wal: _InertWal(),
-    phoneMic: _InertMic(),
-    batchSupported: false,
     auth: CaptureAuthBoundary(isSignedIn: () => true, refreshIdToken: () async => null),
     connectivity: connectivity ??
         CaptureConnectivityBoundary(initiallyConnected: true, changes: const Stream.empty(), isConnected: () => true),
@@ -93,7 +85,6 @@ CaptureDependencies _deps({
     ),
     localSegments: LocalSegmentStore.disabled(),
     codec: (_) async => BleAudioCodec.pcm16,
-    microphonePermission: () async => true,
     refreshConversation: () async {},
     telemetry: RecordingLifecycleTelemetry(emitter: (_, __) {}, idFactory: () => 'synthetic', clock: clock.now),
     excludeSpeaker: excludeSpeaker ?? (_, __) async => false,
@@ -110,13 +101,12 @@ class _NoopBle implements CaptureBleListeners {
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  test('composeCaptureProvider routes wal/mic/auth/clock/scheduling/connectivity/prefs/ble/socket', () {
+  test('composeCaptureProvider routes wal/auth/clock/scheduling/connectivity/prefs/ble/socket', () {
     final source = File('lib/services/capture/capture_composition.dart').readAsStringSync();
     final start = source.indexOf('CaptureProvider composeCaptureProvider');
     final end = source.indexOf('CaptureProvider composeProductionCaptureProvider');
     final body = source.substring(start, end);
     expect(body, contains('walService: dependencies.wal'));
-    expect(body, contains('phoneMicRecorder: dependencies.phoneMic'));
     expect(body, contains('authBoundary: dependencies.auth'));
     expect(body, contains('now: dependencies.now'));
     expect(body, contains('scheduling: dependencies.scheduling'));
@@ -130,8 +120,6 @@ void main() {
     expect(body, contains('excludeSpeaker: dependencies.excludeSpeaker'));
     final providerSource = File('lib/providers/capture_provider.dart').readAsStringSync();
     expect(providerSource, contains('super.walService'));
-    expect(providerSource, contains('super.phoneMicRecorder'));
-    expect(providerSource, contains('super.phoneMicBatchSupported'));
     expect(providerSource, contains('super.authBoundary'));
     expect(providerSource, contains('super.now'));
     expect(providerSource, contains('super.scheduling'));

@@ -1,7 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:omi/services/audio_sources/audio_source.dart';
 import 'package:omi/services/audio_sources/ble_device_source.dart';
-import 'package:omi/services/audio_sources/phone_mic_source.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 
 void main() {
@@ -95,87 +94,6 @@ void main() {
 
       expect(newBehavior, equals(oldBehavior));
       expect(newBehavior.length, 80);
-    });
-  });
-
-  group('PhoneMicSource', () {
-    late PhoneMicSource source;
-
-    setUp(() {
-      source = PhoneMicSource();
-    });
-
-    test('buffers until 320 bytes accumulated', () {
-      // Send 200 bytes — not enough for a frame
-      final frames1 = source.processBytes(List.filled(200, 0x42));
-      expect(frames1, isEmpty);
-
-      // Send 200 more — now 400 total, enough for 1 frame + 80 leftover
-      final frames2 = source.processBytes(List.filled(200, 0x43));
-      expect(frames2.length, 1);
-      expect(frames2[0].payload.length, 320);
-      // First 200 bytes are 0x42, next 120 are 0x43
-      expect(frames2[0].payload[0], 0x42);
-      expect(frames2[0].payload[199], 0x42);
-      expect(frames2[0].payload[200], 0x43);
-    });
-
-    test('produces multiple frames from large input', () {
-      // Send 960 bytes = exactly 3 frames
-      final frames = source.processBytes(List.filled(960, 0xAA));
-      expect(frames.length, 3);
-      for (final frame in frames) {
-        expect(frame.payload.length, 320);
-      }
-    });
-
-    test('sync key is monotonic and wraps at 255', () {
-      // Process enough bytes for 256 frames
-      final allFrames = <WalFrame>[];
-      for (int i = 0; i < 256; i++) {
-        allFrames.addAll(source.processBytes(List.filled(320, i % 256)));
-      }
-      expect(allFrames.length, 256);
-
-      // Keys should be 0, 1, 2, ..., 255
-      for (int i = 0; i < 256; i++) {
-        expect(allFrames[i].syncKey.bytes, [i]);
-      }
-
-      // Next frame wraps to 0
-      final wrapped = source.processBytes(List.filled(320, 0));
-      expect(wrapped[0].syncKey.bytes, [0]);
-    });
-
-    test('getSocketPayload returns raw bytes unchanged', () {
-      final raw = [1, 2, 3, 4, 5];
-      expect(source.getSocketPayload(raw), raw);
-    });
-
-    test('flush produces padded frame from remaining buffer', () {
-      source.processBytes(List.filled(100, 0x55));
-      final flushed = source.flush();
-
-      expect(flushed.length, 1);
-      expect(flushed[0].payload.length, 320);
-      // First 100 bytes are 0x55, rest are 0
-      expect(flushed[0].payload[0], 0x55);
-      expect(flushed[0].payload[99], 0x55);
-      expect(flushed[0].payload[100], 0);
-    });
-
-    test('flush returns empty when buffer is empty', () {
-      expect(source.flush(), isEmpty);
-    });
-
-    test('exposes correct codec and device info', () {
-      expect(source.codec, BleAudioCodec.pcm16);
-      expect(source.deviceId, 'phone-mic');
-      expect(source.deviceModel, 'Phone Microphone');
-    });
-
-    test('frame size is 320 bytes (10ms at 16kHz 16-bit mono)', () {
-      expect(PhoneMicSource.frameSize, 320);
     });
   });
 

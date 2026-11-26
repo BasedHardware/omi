@@ -19,7 +19,6 @@ import 'package:omi/pages/conversations/widgets/live_conversation_end_button.dar
 import 'package:omi/pages/episodes/finish_capture.dart';
 import 'package:omi/pages/episodes/finished_capture_page.dart';
 import 'package:omi/pages/episodes/live_episode_page.dart';
-import 'package:omi/pages/home/widgets/home_recording_bar.dart';
 import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/providers/conversations_v3_provider.dart';
@@ -337,46 +336,6 @@ void main() {
     capture.receivedSegmentIds.add(window('next').transcriptSegments.single.id);
     expect(LiveConversationEndButton.phoneCaptures(window('closed'), capture, currentLiveId: 'live'), isFalse);
     expect(LiveConversationEndButton.phoneCaptures(window('next'), capture, currentLiveId: 'live'), isTrue);
-  });
-
-  testWidgets('Home Wrap Up keeps the owned live window id on retry', (tester) async {
-    final live = _conversation('owned-window', extra: {
-      'kind': 'conversation',
-      'tile_state': 'live',
-      'status': 'in_progress',
-      'v3_recording_ids': ['rec-1'],
-    });
-    final v3 = ConversationsV3Provider(
-      uid: () => 'owner',
-      cached: 'owner:1',
-      fetchLive: () async => ApiSuccess(ConversationsLiveRead(v3: true, conversation: live)),
-    );
-    final capture = _Capture()..verifiedLiveServerRecordingId = 'rec-1';
-    addTearDown(v3.dispose);
-    addTearDown(capture.dispose);
-    await v3.refresh();
-    await tester.pumpWidget(MultiProvider(
-      providers: [
-        ChangeNotifierProvider<CaptureProvider>.value(value: capture),
-        ChangeNotifierProvider<ConversationsV3Provider>.value(value: v3),
-      ],
-      child: const MaterialApp(
-        localizationsDelegates: AppLocalizations.localizationsDelegates,
-        supportedLocales: [Locale('en')],
-        home: Scaffold(body: HomeRecordingBar()),
-      ),
-    ));
-
-    await tester.tap(find.byKey(const ValueKey('home_recording_bar_wrap_up')));
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 400));
-    expect(capture.finishWindowIds, ['owned-window']);
-
-    capture.verifiedLiveServerRecordingId = null;
-    await tester.tap(find.text('Try Again'));
-    await tester.pump();
-    expect(capture.finishWindowIds, ['owned-window', 'owned-window']);
-    await tester.pumpWidget(const SizedBox());
   });
 
   testWidgets('a pending v3 Finish returns to default Home from a filtered view', (tester) async {

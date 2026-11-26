@@ -1,30 +1,26 @@
+import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'dart:async';
-import 'dart:convert';
 import 'dart:io';
-import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:omi/backend/schema/conversation.dart' show SyncJobStatusResponse;
-import 'package:omi/gen/phone_mic_pigeon.g.dart';
 import 'package:omi/services/capture/scenarios/capture_scenario.dart';
-import 'package:omi/services/capture/scenarios/native_event_vector.dart';
-import 'package:omi/services/mic/native_mic_recorder_service.dart';
 import 'package:omi/services/wals/recording_transfer_coordinator.dart';
 import 'package:omi/services/wals/wal.dart';
 import 'package:omi/services/wals/wal_interfaces.dart';
-import 'package:omi/utils/enums.dart';
 
 import '../support/capture/capture_replay_world.dart';
+import '../support/capture/scripted_device_connection.dart';
 
 /// Deterministic capture -> frame processing -> file-backed WAL ->
 /// recovery/upload replay schedules (SCA-489 / C3).
 ///
 /// Every schedule runs the REAL production objects (CaptureController,
-/// NativeMicRecorderService, TranscriptSegmentSocketService, WalService,
+/// BLE device source, TranscriptSegmentSocketService, WalService,
 /// LocalWalSyncImpl, RecordingTransferCoordinator) against controlled
 /// external I/O only: virtual clock, manual scheduler, scripted transport,
-/// scripted upload boundary, fake native host. No wall-clock waits, no
+/// scripted upload boundary, scripted BLE connection. No wall-clock waits, no
 /// network, no devices, synthetic audio only. Restart evidence reconstructs
 /// production objects from real temp files, never reusing memory state.
 ///
@@ -35,7 +31,7 @@ void main() {
 
   setUp(() async {
     tempDir = await Directory.systemTemp.createTemp('capture_replay_');
-    world = await CaptureReplayWorld.boot(tempDir: tempDir);
+    world = await CaptureReplayWorld.boot(tempDir: tempDir, pendantCodec: BleAudioCodec.opus);
   });
 
   tearDown(() async {
@@ -46,9 +42,9 @@ void main() {
   /// Keeps a live session healthy while advancing virtual time: 100 frames
   /// (10ms each = 1s of audio) per virtual second, matching the stall
   /// watchdog's expectations.
-  Future<void> captureSeconds(int seconds, {required int sessionId, required int frameCursor}) async {
+  Future<void> captureSeconds(int seconds, {required int frameCursor}) async {
     for (var s = 0; s < seconds; s++) {
-      world.injectAudioFrames(100, sessionId: sessionId, firstFrameIndex: frameCursor + s * 100);
+      world.deviceConnection!.emitFixtureFrames(100, firstFrameIndex: frameCursor + s * 100);
       await world.elapse(const Duration(seconds: 1));
     }
   }
@@ -61,309 +57,29 @@ void main() {
   /// outcome; pass false when a later live session must start online again
   /// (the restored connectivity will legitimately upload the finished WAL).
   Future<void> produceWalOnDisk(int seconds, {int frameCursor = 0, bool leaveOffline = true}) async {
-    await world.startLiveCapture();
-    final sessionId = world.hostApi.lastStartSessionId!;
-    world.emitNativeState(PhoneMicCaptureState.running);
-    await captureSeconds(2, sessionId: sessionId, frameCursor: frameCursor);
+    world.deviceConnection = ScriptedDeviceConnection();
+    await world.controller.streamDeviceRecording(
+      device: BtDevice(id: 'recovery-pendant', name: 'Omi', type: DeviceType.omi, rssi: -40),
+    );
+    await world.settle();
+    await captureSeconds(2, frameCursor: frameCursor);
     world.setConnected(false);
     world.socket!.emitClose();
     await world.settle();
-    await captureSeconds(seconds, sessionId: sessionId, frameCursor: frameCursor + 200);
-    await world.stopLiveCapture();
+    await captureSeconds(seconds, frameCursor: frameCursor + 200);
+    await world.controller.stopStreamDeviceRecording(cleanDevice: true);
+    await world.settle();
     if (!leaveOffline) {
       world.setConnected(true);
       await world.settle();
     }
   }
 
-  Future<List<List<int>>> readStoredWalFrames(Wal wal) async {
-    final path = await Wal.getFilePath(wal.filePath);
-    expect(path, isNotNull, reason: 'WAL must reference a real file on disk');
-    final bytes = File(path!).readAsBytesSync();
-    final frames = <List<int>>[];
-    var offset = 0;
-    while (offset + 4 <= bytes.length) {
-      final length = ByteData.sublistView(bytes, offset, offset + 4).getUint32(0, Endian.little);
-      offset += 4;
-      frames.add(bytes.sublist(offset, offset + length));
-      offset += length;
-    }
-    return frames;
-  }
-
-  Future<List<List<int>>> readStoredFramesFromWals(Iterable<Wal> wals) async {
-    final frames = <List<int>>[];
-    for (final wal in wals) {
-      frames.addAll(await readStoredWalFrames(wal));
-    }
-    return frames;
-  }
-
-  List<List<int>> expectedFrames(int from, int to) =>
-      List.generate(to - from, (i) => NativeEventVector.synthesizePcmFrame(from + i));
-
-  // ---------------------------------------------------------------------------
-  // 1. network-loss-reconnect-during-capture
-  // ---------------------------------------------------------------------------
-
-  test('network loss mid-capture retains unsynced frames in the WAL; recovery uploads them exactly once', () async {
-    await world.startLiveCapture();
-    final session1 = world.hostApi.lastStartSessionId!;
-    world.emitNativeState(PhoneMicCaptureState.running);
-    // 10s online: every frame is sent and marked synced.
-    await captureSeconds(10, sessionId: session1, frameCursor: 0);
-    final onlineSocket = world.socket!;
-    expect(onlineSocket.sentBinary.length, 1000);
-
-    // Network dies: transport drops, connectivity flips, capture continues.
-    world.setConnected(false);
-    onlineSocket.emitClose();
-    await world.settle();
-    // 15s offline: frames keep flowing into the WAL buffer; nothing is sent.
-    await captureSeconds(15, sessionId: session1, frameCursor: 1000);
-    expect(onlineSocket.sentBinary.length, 1000, reason: 'dead transport must not receive frames');
-
-    // Connectivity returns mid-capture: the recovery coordinator wakes, but
-    // live in-memory audio is still owned by the running session — nothing
-    // can be uploaded yet.
-    world.setConnected(true);
-    await world.settle();
-    expect(world.uploads.attempts.length, greaterThan(0),
-        reason: 'only already-checkpointed safety copies drain while the live tail stays in memory');
-
-    // Restored connectivity kicks one immediate reconnect; the 15s keepalive
-    // remains the bounded fallback cadence.
-    // Frames keep flowing throughout — a real mic does not pause for recovery.
-    final createsAfterRestore = world.socketCreates;
-    for (var s = 0; s < 16; s++) {
-      world.injectAudioFrames(100, sessionId: world.hostApi.lastStartSessionId!, firstFrameIndex: 2500 + s * 100);
-      await world.elapse(const Duration(seconds: 1));
-    }
-    expect(world.socketCreates - createsAfterRestore, lessThanOrEqualTo(2),
-        reason: 'reconnect attempts are rate-limited to the 15s keepalive cadence');
-    await world.controller.pendingSourceSwitch; // WAL recovery finishes before native reports the fresh session.
-    world.emitNativeState(PhoneMicCaptureState.running); // native engine is up on the fresh session
-    await world.settle();
-    expect(world.controller.recordingState, RecordingState.record,
-        reason: 'the reconnected session returns to recording');
-    final session2 = world.hostApi.lastStartSessionId!;
-    expect(session2, session1 + 1);
-    expect(world.hostApi.startSessionIds, [session1, session2], reason: 'one authoritative active session');
-
-    // Streaming resumed on the reconnected transport.
-    await captureSeconds(5, sessionId: session2, frameCursor: 4100);
-    final reconnectedSocket = world.socket!;
-    expect(reconnectedSocket, isNot(same(onlineSocket)));
-    expect(reconnectedSocket.sentBinary.length, 2000,
-        reason: 'connectivity restore reconnects within a second, not at the next 15s keepalive tick: '
-            'the last 15 restore-window seconds plus the recovered 5s stream on the new socket');
-
-    // Session ends: the whole capture (online + offline + recovered windows) lands on disk.
-    await world.stopLiveCapture();
-    final createsAtStop = world.socketCreates;
-    await world.elapse(const Duration(seconds: 20));
-    expect(world.socketCreates, createsAtStop, reason: 'the keepalive dies with the session');
-
-    final allWals = await world.wal.syncs.phone.getAllWals();
-    expect(allWals.length, greaterThan(1), reason: 'live safety copies are checkpointed in bounded chunks');
-    final storedFrames = await readStoredFramesFromWals(allWals);
-    // Lossless canonical strings keep exact bytes and multiplicity, while
-    // sorting avoids the unordered matcher's pairwise frame comparisons.
-    final actualMultiset = storedFrames.map(base64Encode).toList()..sort();
-    final expectedMultiset = expectedFrames(0, 4600).map(base64Encode).toList()..sort();
-    expect(actualMultiset, expectedMultiset,
-        reason: 'recoverable audio identity: WAL chunks must contain every injected frame exactly once');
-
-    final missing = await world.wal.syncs.phone.getMissingWals();
-    expect(missing, isNotEmpty);
-    // Recovery drains every unconfirmed chunk exactly once; a second wake is a no-op.
-    final attemptsBeforeRecovery = world.uploads.attempts.length;
-    await world.coordinator.wake(WakeTrigger.userRetry);
-    await world.settle();
-    expect(world.uploads.attempts, hasLength(attemptsBeforeRecovery + 1));
-    var missingBytes = 0;
-    for (final wal in missing) {
-      final walPath = (await Wal.getFilePath(wal.filePath))!;
-      missingBytes += File(walPath).lengthSync();
-    }
-    expect(world.uploads.attempts.last.totalBytes, missingBytes);
-    expect((await world.walCounts())[WalStatus.synced], allWals.length);
-
-    await world.coordinator.wake(WakeTrigger.userRetry);
-    await world.settle();
-    expect(world.uploads.attempts, hasLength(attemptsBeforeRecovery + 1),
-        reason: 'synced WAL must never be re-uploaded locally');
-  });
-
-  test('stale native events carrying a retired session id are dropped, not applied', () async {
-    await world.startLiveCapture();
-    final session1 = world.hostApi.lastStartSessionId!;
-    world.emitNativeState(PhoneMicCaptureState.running);
-    world.injectAudioFrames(100, sessionId: session1);
-    await world.stopLiveCapture();
-    expect(world.hostApi.stopCalls, 1);
-
-    // Fresh session on the same world.
-    await world.startLiveCapture();
-    final session2 = world.hostApi.lastStartSessionId!;
-    world.emitNativeState(PhoneMicCaptureState.running);
-    await world.settle();
-    expect(world.controller.recordingState, RecordingState.record);
-
-    // Stale terminal idle from session 1 must not stop the fresh session.
-    world.emitNativeState(PhoneMicCaptureState.idle, sessionId: session1);
-    await world.settle();
-    expect(world.controller.recordingState, RecordingState.record,
-        reason: 'a stale terminal idle must never clobber the current session');
-    expect(world.hostApi.stopCalls, 1, reason: 'stale idle must not trigger a second native stop');
-
-    // Stale audio frames are dropped: WAL sees only fresh-session frames.
-    final framesBefore = world.wal.syncs.phone.testFrames.length;
-    world.injectAudioFrames(10, sessionId: session1);
-    expect(world.wal.syncs.phone.testFrames.length, framesBefore, reason: 'stale frames must not enter the WAL');
-    world.injectAudioFrames(10, sessionId: session2);
-    expect(world.wal.syncs.phone.testFrames.length, framesBefore + 10);
-
-    // Foreign session ids are rejected entirely.
-    world.emitNativeState(PhoneMicCaptureState.interrupted, sessionId: 999);
-    world.emitNativeError('converter_failed', 'x', sessionId: 999);
-    await world.settle();
-    expect(world.controller.recordingState, RecordingState.record);
-  });
-
-  test('native terminal idle followed by Dart stop runs local teardown exactly once', () async {
-    final host = FakePhoneMicHostApi();
-    final service = NativeMicRecorderService(hostApi: host, registerFlutterApi: false);
-    var stops = 0;
-    await service.start(
-      onByteReceived: (_) {},
-      onRecording: () {},
-      onStop: () => stops++,
-      onInitializing: () {},
-      onStalled: () {},
-    );
-    final sessionId = host.lastStartSessionId!;
-
-    service.onStateChanged(PhoneMicCaptureState.idle, sessionId); // native-side terminal stop
-    expect(stops, 1);
-    service.stop(); // Dart-side redundancy must not double-fire teardown
-    expect(stops, 1);
-    expect(host.stopCalls, 1, reason: 'stop always forwards to native so an orphaned session dies');
-  });
-
-  // ---------------------------------------------------------------------------
-  // 3. interruption-resumption
-  // ---------------------------------------------------------------------------
-
-  test('audio interruption mirrors state without teardown and resumes the same session', () async {
-    await world.startLiveCapture();
-    final sessionId = world.hostApi.lastStartSessionId!;
-    world.emitNativeState(PhoneMicCaptureState.running);
-    await captureSeconds(2, sessionId: sessionId, frameCursor: 0);
-
-    world.emitNativeState(PhoneMicCaptureState.interrupted);
-    await world.settle();
-    expect(world.controller.recordingState, RecordingState.interrupted);
-    expect(world.controller.isCallActive, isTrue);
-
-    // Long silence during the interruption must NOT escalate to a stop/start
-    // (native owns recovery; the stall watchdog stays silent).
-    await world.elapse(const Duration(seconds: 8));
-    expect(world.controller.recordingState, RecordingState.interrupted);
-    expect(world.hostApi.startCalls, 1, reason: 'interruption is not a stall; no restart may occur');
-
-    // Native resumes: state returns to record on the SAME session.
-    world.emitNativeState(PhoneMicCaptureState.running);
-    await world.settle();
-    expect(world.controller.recordingState, RecordingState.record);
-    expect(world.hostApi.lastStartSessionId, sessionId);
-    await captureSeconds(2, sessionId: sessionId, frameCursor: 200);
-    expect(world.socket!.sentBinary.length, 400);
-
-    await world.stopLiveCapture();
-    expect(world.hostApi.startCalls, 1);
-    expect(world.hostApi.stopCalls, 1);
-  });
-
-  test('batch session survives interruption on progress liveness and escalates only on silence', () async {
-    await world.startBatchCapture();
-    final session1 = world.hostApi.lastStartSessionId!;
-    expect(world.hostApi.lastStartMode, PhoneMicCaptureMode.batch);
-    world.emitNativeState(PhoneMicCaptureState.running);
-
-    world.emitNativeState(PhoneMicCaptureState.interrupted);
-    await world.settle();
-    expect(world.controller.recordingState, RecordingState.interrupted);
-
-    // Progress keeps arriving through the interruption: liveness holds.
-    for (var s = 0; s < 3; s++) {
-      world.emitBatchProgress(1.0 * (s + 1));
-      await world.elapse(const Duration(seconds: 1));
-    }
-    expect(world.controller.recordingState, RecordingState.interrupted);
-    expect(world.hostApi.startCalls, 1);
-
-    world.emitNativeState(PhoneMicCaptureState.running);
-    await world.settle();
-    expect(world.controller.recordingState, RecordingState.record);
-
-    // Silence beyond the batch stall threshold (10s): bounded escalation —
-    // tear down the dead session, start exactly one fresh one.
-    await world.elapse(const Duration(seconds: 11));
-    expect(world.hostApi.startCalls, 2, reason: 'stalled batch must escalate to a single fresh session');
-    expect(world.hostApi.startSessionIds, [session1, session1 + 1]);
-    world.emitNativeState(PhoneMicCaptureState.running);
-    await world.settle();
-    expect(world.controller.recordingState, RecordingState.record);
-  });
-
-  // ---------------------------------------------------------------------------
-  // 4. partial-torn-persistence-reconstruction
-  // ---------------------------------------------------------------------------
-
-  test('process kill mid-capture: reconstruction reloads WAL state from real temp files', () async {
-    await world.startLiveCapture();
-    final sessionId = world.hostApi.lastStartSessionId!;
-    world.emitNativeState(PhoneMicCaptureState.running);
-
-    // 5s online, then the network dies but capture keeps running through
-    // multiple 10s phone safety checkpoints before the process is killed.
-    await captureSeconds(5, sessionId: sessionId, frameCursor: 0);
-    world.setConnected(false);
-    world.socket!.emitClose();
-    await world.settle();
-    await captureSeconds(25, sessionId: sessionId, frameCursor: 500);
-
-    expect(File('${tempDir.path}/wals.json').existsSync(), isTrue, reason: 'WAL index must be on disk');
-    final walIndexFiles = tempDir.listSync().whereType<File>().map((f) => f.path.split('/').last).toList();
-    expect(walIndexFiles.any((n) => n.startsWith('audio_')), isTrue, reason: 'audio .bin must be on disk');
-
-    world.killProcess();
-    await world.reconstructProcess();
-
-    final wals = await world.wal.syncs.phone.getAllWals();
-    expect(wals.length, greaterThan(1));
-    expect(wals.every((wal) => wal.storage == WalStorage.disk), isTrue);
-    expect(
-      await readStoredFramesFromWals(wals),
-      unorderedEquals(expectedFrames(0, 3000)),
-      reason: 'all acknowledged and pending chunks survive process restart exactly once',
-    );
-    final missing = await world.wal.syncs.phone.getMissingWals();
-    expect(missing, isNotEmpty);
-    // Recovery after restart uploads each still-pending chunk once.
-    final attemptsBeforeRecovery = world.uploads.attempts.length;
-    await world.coordinator.wake(WakeTrigger.userRetry);
-    await world.settle();
-    expect(world.uploads.attempts, hasLength(attemptsBeforeRecovery + 1));
-    expect((await world.walCounts())[WalStatus.synced], wals.length);
-  });
-
   test('torn wals.json falls back to the backup file and keeps recoverable work', () async {
     // Batch-less world: a capture started while offline stays on the live WAL
     // path, so both saved generations below are deterministic.
     await world.dispose();
-    world = await CaptureReplayWorld.boot(tempDir: tempDir, supportsBatch: false);
+    world = await CaptureReplayWorld.boot(tempDir: tempDir, pendantCodec: BleAudioCodec.opus);
     // Two saved generations => wals.json has 2 WALs, wals_backup.json has 1.
     await produceWalOnDisk(2, frameCursor: 0);
     await produceWalOnDisk(2, frameCursor: 2000);
@@ -646,156 +362,8 @@ void main() {
   });
 
   // ---------------------------------------------------------------------------
-  // 6. ownership-transition-outstanding-work
-  // ---------------------------------------------------------------------------
-
-  test('sign-out during outstanding WAL work stops reconnects and uploads; re-sign-in completes them', () async {
-    await produceWalOnDisk(5); // leaves the network down and the WAL retryable
-
-    final walBefore = (await world.wal.syncs.phone.getMissingWals()).single;
-    final bytesBefore = File((await Wal.getFilePath(walBefore.filePath))!).lengthSync();
-
-    // Account leaves (signed out) with retryable work outstanding; every
-    // server interaction is refused while no account owns the device.
-    world.signedIn = false;
-    world.uploads.failAll = true;
-
-    // Connectivity returning wakes recovery, but the server refuses the
-    // upload: work stays local and retryable, the file untouched.
-    world.setConnected(true);
-    await world.settle();
-    expect(world.uploads.attempts, isNotEmpty, reason: 'the refused attempt is visible');
-    expect((await world.walCounts())[WalStatus.miss], 1, reason: 'refused upload keeps work local and retryable');
-    expect(File((await Wal.getFilePath(walBefore.filePath))!).lengthSync(), bytesBefore,
-        reason: 'refused attempts must not mutate the local artifact');
-
-    // Socket reconnects are cancelled while signed out: after a transport
-    // drop, the keepalive must not create new connections.
-    await world.startLiveCapture();
-    world.emitNativeState(PhoneMicCaptureState.running);
-    final createsBefore = world.socketCreates;
-    world.socket!.emitClose();
-    await world.settle();
-    await world.elapse(const Duration(seconds: 31));
-    expect(world.socketCreates, createsBefore, reason: 'signed-out keepalive must cancel reconnects, not retry them');
-    await world.stopLiveCapture();
-
-    // A new account signs in on the same device: outstanding work completes.
-    world.signedIn = true;
-    world.uploads.failAll = false;
-    await world.coordinator.wake(WakeTrigger.userRetry);
-    await world.settle();
-    expect((await world.walCounts())[WalStatus.synced], 1);
-    expect(world.uploads.attempts.last.totalBytes, bytesBefore,
-        reason: 'the acknowledged upload carries exactly the persisted bytes');
-  });
-
-  test('websocket close 4001 refreshes the rejected token at most once per 30s window', () async {
-    Future<void> flowFor(int seconds, int fromFrame) async {
-      for (var s = 0; s < seconds; s++) {
-        world.injectAudioFrames(100,
-            sessionId: world.hostApi.lastStartSessionId!, firstFrameIndex: fromFrame + s * 100);
-        await world.elapse(const Duration(seconds: 1));
-      }
-    }
-
-    await world.startLiveCapture();
-    world.emitNativeState(PhoneMicCaptureState.running);
-    await flowFor(1, 0);
-
-    world.socket!.emitClose(4001);
-    await world.settle();
-    expect(world.tokenRefreshCalls, 1);
-
-    // The keepalive reconnects within ~15s and the session resumes; a second
-    // rejection inside the 30s window must not refresh again.
-    await flowFor(16, 100);
-    await world.controller.pendingSourceSwitch;
-    world.emitNativeState(PhoneMicCaptureState.running);
-    await world.settle();
-    expect(world.controller.recordingState, RecordingState.record);
-    world.socket!.emitClose(4001);
-    await world.settle();
-    expect(world.tokenRefreshCalls, 1, reason: 'refresh is bounded within the 30s window');
-
-    // Outside the window a further rejection refreshes again.
-    await flowFor(31, 1700);
-    world.emitNativeState(PhoneMicCaptureState.running);
-    await world.settle();
-    expect(world.controller.recordingState, RecordingState.record);
-    world.socket!.emitClose(4001);
-    await world.settle();
-    expect(world.tokenRefreshCalls, 2);
-
-    await world.stopLiveCapture();
-  });
-
-  // ---------------------------------------------------------------------------
   // Cleanup, clock advancement, session ownership
   // ---------------------------------------------------------------------------
-
-  test('stop and dispose leave no pending capture timers and stop the recorder', () async {
-    await world.startLiveCapture();
-    final sessionId = world.hostApi.lastStartSessionId!;
-    world.emitNativeState(PhoneMicCaptureState.running);
-    await captureSeconds(2, sessionId: sessionId, frameCursor: 0);
-    world.socket!.emitClose(); // arms the keepalive
-    await world.settle();
-
-    await world.stopLiveCapture();
-    world.disposeController();
-    await world.settle();
-
-    // Only the WAL chunk/flush timers may remain; they die with wal.stop().
-    final labels = world.scheduler.pendingTimerLabels;
-    expect(labels, everyElement(matches('periodic')), reason: 'controller-owned one-shot timers must be gone: $labels');
-
-    await world.wal.stop();
-    expect(world.scheduler.hasPendingTimers, isFalse, reason: 'a stopped world must leave zero pending timers');
-    expect(world.hostApi.stopCalls, greaterThanOrEqualTo(1));
-  });
-
-  test('sequential sessions mint strictly increasing session ids and distinct recording identities', () async {
-    // Session 1: capture the identity while the session is live —
-    // RecordingLifecycleTelemetry clears it when the session completes.
-    await world.startLiveCapture();
-    final first = world.hostApi.lastStartSessionId!;
-    final firstRecordingId = world.controller.activeRecordingId;
-    final firstCaptureSessionId = world.controller.activeCaptureSessionId;
-    expect(firstRecordingId, isNotNull);
-    expect(firstCaptureSessionId, isNotNull);
-    world.emitNativeState(PhoneMicCaptureState.running);
-    await captureSeconds(1, sessionId: first, frameCursor: 0);
-    world.setConnected(false);
-    world.socket!.emitClose();
-    await world.settle();
-    await captureSeconds(12, sessionId: first, frameCursor: 100);
-    await world.stopLiveCapture();
-    world.setConnected(true);
-    await world.settle();
-
-    // Session 2 on the same device.
-    await world.startLiveCapture();
-    final second = world.hostApi.lastStartSessionId!;
-    final secondRecordingId = world.controller.activeRecordingId;
-    final secondCaptureSessionId = world.controller.activeCaptureSessionId;
-    expect(secondRecordingId, isNotNull);
-    world.emitNativeState(PhoneMicCaptureState.running);
-    await captureSeconds(1, sessionId: second, frameCursor: 1400);
-    world.setConnected(false);
-    world.socket!.emitClose();
-    await world.settle();
-    await captureSeconds(12, sessionId: second, frameCursor: 1500);
-    await world.stopLiveCapture();
-
-    expect(second, greaterThan(first));
-    expect(world.hostApi.startSessionIds, [first, second],
-        reason: 'exactly one authoritative native session at a time');
-    expect(secondRecordingId, isNot(firstRecordingId), reason: 'each capture session mints a fresh recording identity');
-    expect(secondCaptureSessionId, firstCaptureSessionId,
-        reason: 'activeCaptureSessionId is the conversation/WAL window and is not '
-            'reset on phone-mic stop/next-start; C2 must consume activeRecordingId');
-  });
 
   // ---------------------------------------------------------------------------
   // Contracts: catalog, results, native event vectors (C2/C4/C5 surfaces)
@@ -827,57 +395,5 @@ void main() {
     final json = result.toJsonString();
     expect(json, contains('"contract_version": "capture-scenario/v1"'));
     expect(json, contains('"outcome": "passed"'));
-  });
-
-  test('native event vectors are deterministic and replay identically through the Dart seam', () async {
-    // Identical seeds produce identical audio; adjacent frames differ.
-    expect(NativeEventVector.synthesizePcmFrame(7), NativeEventVector.synthesizePcmFrame(7));
-    expect(NativeEventVector.synthesizePcmFrame(7), isNot(equals(NativeEventVector.synthesizePcmFrame(8))));
-
-    // A vector built with stale/fresh session ids replays with the exact
-    // accept/drop decisions the session-identity gate mandates.
-    final vector = NativeEventVector(
-      id: 'stale-idle-after-restart',
-      revision: 1,
-      startSessionId: 1,
-      events: [
-        NativeCaptureEvent.state('running', 1),
-        NativeCaptureEvent.frame([], 1),
-        NativeCaptureEvent.state('idle', 1),
-        NativeCaptureEvent.state('idle', 2),
-      ],
-    );
-
-    final host = FakePhoneMicHostApi();
-    final service = NativeMicRecorderService(hostApi: host, registerFlutterApi: false);
-    var stops = 0;
-    await service.start(onByteReceived: (_) {}, onStop: () => stops++);
-    await service.start(onByteReceived: (_) {}, onStop: () => stops++); // session 2 now current
-
-    for (final event in vector.events) {
-      switch (event.kind) {
-        case NativeCaptureEventKind.audioFrame:
-          service.onAudioFrame(Uint8List.fromList(event.pcmFrame ?? const []), event.sessionId);
-        case NativeCaptureEventKind.stateChanged:
-          service.onStateChanged(
-            PhoneMicCaptureState.values.byName(event.state ?? 'idle'),
-            event.sessionId,
-          );
-        case NativeCaptureEventKind.captureError:
-          service.onCaptureError(event.errorCode ?? '', event.errorMessage ?? '', event.sessionId);
-        case NativeCaptureEventKind.batchProgress:
-          service.onBatchProgress(event.capturedSeconds ?? 0, event.sessionId);
-      }
-    }
-    // Session-1 idle is dropped; session-2 idle (current) stops once.
-    expect(stops, 1);
-    expect(host.startSessionIds, [1, 2]);
-
-    // JSON round-trip preserves the replay inputs exactly.
-    final decoded = NativeEventVector.fromJson(vector.toJson());
-    expect(decoded.id, vector.id);
-    expect(decoded.revision, vector.revision);
-    expect(decoded.events.length, vector.events.length);
-    expect(decoded.schemaVersion, nativeEventVectorSchemaVersion);
   });
 }

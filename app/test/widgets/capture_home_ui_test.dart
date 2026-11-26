@@ -6,7 +6,6 @@ import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:omi/services/live_preview/live_preview_controller.dart';
-import 'package:omi/pages/phone_calls/phone_calls_feature.dart';
 import 'package:omi/backend/http/api_result.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
@@ -18,7 +17,6 @@ import 'package:omi/backend/schema/transcript_segment.dart';
 import 'package:omi/l10n/app_localizations.dart';
 import 'package:omi/pages/conversations/widgets/live_capture_card.dart';
 import 'package:omi/pages/conversations/widgets/processing_capture.dart';
-import 'package:omi/pages/episodes/live_episode_page.dart';
 import 'package:omi/pages/home/widgets/battery_info_widget.dart';
 import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/providers/conversation_provider.dart';
@@ -32,7 +30,7 @@ import 'package:omi/providers/phone_call_provider.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/enums.dart';
 
-enum _Live { idle, idleDeviceConnected, pendant, pendantPaused, pendantBatch, phone, phoneAfterPendant }
+enum _Live { idle, idleDeviceConnected, pendant, pendantPaused, pendantBatch }
 
 class _Capture extends ChangeNotifier implements CaptureProvider {
   @override
@@ -40,12 +38,8 @@ class _Capture extends ChangeNotifier implements CaptureProvider {
   @override
   bool get localPreviewAdmitted => false;
 
-  _Capture(this.live,
-      {this.failure = false,
-      this.batch = false,
-      this.interrupted = false,
-      this.callActive = false,
-      this.readerPaused = false});
+  _Capture(this.live, {this.failure = false, this.batch = false});
+
   @override
   LocalSttFailure? localSttFailure;
   int localRetries = 0;
@@ -64,56 +58,29 @@ class _Capture extends ChangeNotifier implements CaptureProvider {
   final bool failure;
   final bool batch;
 
-  /// Phone capture marked `interrupted` by the controller.
-  final bool interrupted;
-
-  /// The OS holds the microphone (`isCallActive`).
-  final bool callActive;
-
-  /// The reader paused the phone recording.
-  final bool readerPaused;
   int pauses = 0;
   int resumes = 0;
-  int phoneStarts = 0;
-  Object? phoneStartFailure;
-
-  /// A start that succeeds hands this phone the live recording.
-  bool phoneStartTakesOwnership = false;
-  bool _phoneOwns = false;
 
   @override
-  String? get liveCaptureSource => _phoneOwns
-      ? 'phone'
-      : switch (live) {
-          _Live.idle || _Live.idleDeviceConnected => null,
-          _Live.pendant || _Live.pendantPaused || _Live.pendantBatch => 'omi',
-          _ => 'phone',
-        };
+  String? get liveCaptureSource => switch (live) {
+        _Live.idle || _Live.idleDeviceConnected => null,
+        _ => 'omi',
+      };
   @override
-  RecordingState get recordingState => interrupted
-      ? RecordingState.interrupted
-      : readerPaused
-          ? RecordingState.pause
-          : switch (live) {
-              _Live.idle || _Live.idleDeviceConnected => RecordingState.stop,
-              _Live.pendant || _Live.pendantBatch => RecordingState.deviceRecord,
-              _Live.pendantPaused => RecordingState.pause,
-              _ => RecordingState.record,
-            };
+  RecordingState get recordingState => switch (live) {
+        _Live.idle || _Live.idleDeviceConnected => RecordingState.stop,
+        _Live.pendantPaused => RecordingState.pause,
+        _ => RecordingState.deviceRecord,
+      };
   @override
-  bool get havingRecordingDevice => live != _Live.idle && live != _Live.phone;
+  bool get havingRecordingDevice => live != _Live.idle;
   @override
   BtDevice? get recordingDevice => null;
   @override
-  bool get isPaused => live == _Live.pendantPaused || readerPaused;
+  bool get isPaused => live == _Live.pendantPaused;
   @override
-  bool get isPhoneMicPaused => readerPaused;
-  @override
-  bool get pendantPausedForPhone => live == _Live.phoneAfterPendant;
-  @override
-  bool get isCallActive => callActive;
-  @override
-  bool get isPhoneMicBatchRecording => batch;
+  bool get isCallActive => false;
+
   bool offlineMutedState = false;
   int offlineMuteToggles = 0;
   @override
@@ -171,14 +138,6 @@ class _Capture extends ChangeNotifier implements CaptureProvider {
   Future<void> pauseCapture() async => pauses++;
   @override
   Future<void> resumeCapture() async => resumes++;
-  @override
-  Future<void> streamRecording({bool resumeCapture = true}) async {
-    phoneStarts++;
-    final failure = phoneStartFailure;
-    if (failure != null) throw failure;
-    _phoneOwns = phoneStartTakesOwnership;
-  }
-
   @override
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }
@@ -301,9 +260,9 @@ void main() {
     await tester.pump();
   }
 
-  testWidgets('permanent local failure keeps phone capture visible with saved audio and a working retry',
+  testWidgets('permanent local failure keeps device capture visible with saved audio and a working retry',
       (tester) async {
-    final capture = _Capture(_Live.phone)
+    final capture = _Capture(_Live.pendant)
       ..localSttFailure = const LocalSttFailure('permission_denied', canProbeRecovery: true);
     await pump(tester, const ConversationCaptureWidget(showsCall: true), capture: capture);
     expect(find.text(en.transcriptionUnavailableRecordingSaved), findsWidgets);
@@ -311,8 +270,8 @@ void main() {
     await tester.tap(find.byKey(const ValueKey('local_stt_retry')));
     await tester.pumpAndSettle();
     expect(capture.localRetries, 1);
-    expect(capture.recordingState, RecordingState.record);
-    expect(capture.liveCaptureSource, 'phone');
+    expect(capture.recordingState, RecordingState.deviceRecord);
+    expect(capture.liveCaptureSource, 'omi');
     expect(tester.takeException(), isNull);
   });
 
@@ -346,18 +305,6 @@ void main() {
       await tester.tap(find.bySemanticsLabel(en.resume));
       await tester.pump();
       expect(capture.resumes, 1);
-    });
-
-    testWidgets('the phone mic recording still shows the Listening row', (tester) async {
-      await pump(tester, const ConversationCaptureWidget(showsCall: true), capture: _Capture(_Live.phone));
-      expect(find.text(en.listening), findsOneWidget);
-      expect(find.bySemanticsLabel(en.pause), findsOneWidget);
-    });
-
-    testWidgets('the phone taking over from the pendant says the pendant waits', (tester) async {
-      await pump(tester, const ConversationCaptureWidget(showsCall: true), capture: _Capture(_Live.phoneAfterPendant));
-      expect(find.bySemanticsLabel(RegExp('^${en.phone}\n')), findsOneWidget);
-      expect(find.text(en.pendantPausedResumesWhenYouFinish), findsOneWidget);
     });
 
     testWidgets('an Omi call shows on Home as the live card, and not on the Conversations tab', (tester) async {
@@ -431,26 +378,6 @@ void main() {
               source: 'openglass'),
           isFalse);
       expect(LiveCaptureCard.canPause(null, source: 'phone'), isTrue);
-    });
-  });
-
-  group('phone interruptions', () {
-    testWidgets('the OS holding the mic: Paused, the cause, a sheet, and no control', (tester) async {
-      await pump(tester, const ConversationCaptureWidget(showsCall: true),
-          capture: _Capture(_Live.phone, interrupted: true, callActive: true));
-      expect(find.text(en.paused), findsOneWidget);
-      expect(find.textContaining(en.captureMicInUseElsewhere), findsOneWidget);
-      expect(find.byType(OmiIconButton), findsNothing, reason: 'the OS resumes capture itself');
-    });
-
-    testWidgets('an interruption on a recording the reader paused keeps Resume', (tester) async {
-      final capture = _Capture(_Live.phone, interrupted: true, callActive: true, readerPaused: true);
-      await pump(tester, const ConversationCaptureWidget(showsCall: true), capture: capture);
-      expect(find.text(en.paused), findsOneWidget);
-      expect(find.textContaining(en.captureMicInUseElsewhere), findsNothing);
-      await tester.tap(find.bySemanticsLabel(en.resume));
-      await tester.pump();
-      expect(capture.resumes, 1);
     });
   });
 
@@ -563,13 +490,14 @@ void main() {
 
   group('Transcribe Later card', () {
     testWidgets('storage full: no Pause, a warning that explains, controls at least 44pt', (tester) async {
-      SharedPreferences.setMockInitialValues({'batchStorageFull': true});
+      SharedPreferences.setMockInitialValues({'batchStorageFull': true, 'batchModeEnabled': true});
       await SharedPreferencesUtil.init();
-      await pump(tester, const ConversationCaptureWidget(showsCall: true), capture: _Capture(_Live.phone, batch: true));
+      await pump(tester, const ConversationCaptureWidget(showsCall: true),
+          capture: _Capture(_Live.pendantBatch, batch: true));
       expect(find.text(en.paused), findsOneWidget);
       expect(find.textContaining(en.capturePhoneStorageFull), findsOneWidget);
       expect(find.bySemanticsLabel(en.pause), findsNothing);
-      for (final label in [en.newRecording, en.stop]) {
+      for (final label in [en.newRecording]) {
         final size = tester.getSize(find.ancestor(of: find.text(label), matching: find.byType(TextButton)));
         expect(size.height, greaterThanOrEqualTo(44));
       }
@@ -594,8 +522,10 @@ void main() {
       await tester.pumpWidget(const SizedBox.shrink());
     });
 
-    testWidgets('recording: the live card layout with a 0:14-style timer', (tester) async {
-      await pump(tester, const ConversationCaptureWidget(showsCall: true), capture: _Capture(_Live.phone, batch: true));
+    testWidgets('recording: the live card layout with an elapsed timer', (tester) async {
+      SharedPreferencesUtil().batchModeEnabled = true;
+      await pump(tester, const ConversationCaptureWidget(showsCall: true),
+          capture: _Capture(_Live.pendantBatch, batch: true));
       expect(find.text(en.recording), findsOneWidget);
       expect(find.text('2:05  ·  ${en.captureAudioSavedTranscribesLater}'), findsOneWidget);
       expect(find.text(en.pause), findsOneWidget);
@@ -637,109 +567,6 @@ void main() {
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
-  group('record-with-this-phone button', () {
-    testWidgets('idle with calls hidden: a white dot and no ways-to-record badge', (tester) async {
-      await pump(tester, const HomeRecordButton(), capture: _Capture(_Live.idle));
-      expect(find.bySemanticsLabel(en.startRecording), findsOneWidget);
-      expect(find.bySemanticsLabel(en.moreWaysToRecord), findsNothing);
-      expect(find.byIcon(Icons.keyboard_arrow_down_rounded), findsNothing);
-      await tester.longPress(find.byType(HomeRecordButton));
-      await tester.pumpAndSettle();
-      expect(find.text(en.recordWith), findsNothing, reason: 'the only extra way to record was a phone call');
-    }, skip: PhoneCallsFeature.visible);
-
-    testWidgets('idle: a white dot and a badge that opens the ways to record', (tester) async {
-      await pump(tester, const HomeRecordButton(), capture: _Capture(_Live.idle));
-      expect(find.bySemanticsLabel(en.startRecording), findsOneWidget);
-      await tester.tap(find.bySemanticsLabel(en.moreWaysToRecord));
-      await tester.pumpAndSettle();
-      expect(find.text(en.recordWith), findsOneWidget);
-      expect(find.text(en.captureSourcePhoneMic), findsOneWidget);
-      expect(find.text(en.phoneCall), findsOneWidget);
-    }, skip: !PhoneCallsFeature.visible);
-
-    testWidgets('while the pendant records, a tap explains instead of taking over', (tester) async {
-      final capture = _Capture(_Live.pendant);
-      await pump(tester, const HomeRecordButton(), capture: capture);
-      await tester.tap(find.bySemanticsLabel(en.startRecording));
-      await tester.pumpAndSettle();
-      expect(find.text(en.pendantIsListeningTitle), findsOneWidget);
-      expect(capture.phoneStarts, 0, reason: 'never a silent takeover');
-
-      await tester.tap(find.text(en.keepUsingPendant));
-      await tester.pumpAndSettle();
-      expect(find.text(en.pendantIsListeningTitle), findsNothing);
-      expect(capture.phoneStarts, 0);
-    });
-
-    testWidgets('a Transcribe Later pendant rejects phone takeover with visible feedback', (tester) async {
-      final capture = _Capture(_Live.pendantBatch);
-      await pump(tester, const HomeRecordButton(), capture: capture);
-      await tester.tap(find.bySemanticsLabel(en.startRecording));
-      await tester.pump();
-      expect(find.text(en.phoneRecordingBlockedByPendantBatch), findsOneWidget);
-      expect(capture.phoneStarts, 0);
-      expect(find.text(en.recordWith), findsNothing);
-    });
-
-    testWidgets('a start that fails says so and never opens the capturing page', (tester) async {
-      final capture = _Capture(_Live.idle)..phoneStartFailure = StateError('refused');
-      await pump(tester, const HomeRecordButton(), capture: capture);
-      await tester.tap(find.bySemanticsLabel(en.startRecording));
-      await tester.pump();
-      expect(capture.phoneStarts, 1);
-      expect(find.text(en.couldNotStartRecording), findsOneWidget);
-      expect(find.text(en.tryAgain), findsOneWidget, reason: 'ux-contract §17: an error offers the way forward');
-      expect(find.byType(LiveEpisodePage), findsNothing);
-    });
-
-    testWidgets('a live phone start keeps the reader on Home', (tester) async {
-      final capture = _Capture(_Live.idle)..phoneStartTakesOwnership = true;
-      await pump(tester, const HomeRecordButton(), capture: capture);
-      await tester.tap(find.bySemanticsLabel(en.startRecording));
-      await tester.pumpAndSettle();
-      expect(capture.phoneStarts, 1);
-      expect(capture.liveCaptureSource, 'phone');
-      expect(find.byType(LiveEpisodePage), findsNothing, reason: "Home's recording bar confirms the start instead");
-    });
-
-    testWidgets('a start that resolves without phone ownership navigates nowhere', (tester) async {
-      final capture = _Capture(_Live.idle);
-      await pump(tester, const HomeRecordButton(), capture: capture);
-      await tester.tap(find.bySemanticsLabel(en.startRecording));
-      await tester.pump();
-      expect(capture.phoneStarts, 1);
-      expect(find.byType(LiveEpisodePage), findsNothing);
-      expect(find.text(en.somethingWentWrong), findsNothing, reason: 'a refusal is not an error toast');
-    });
-
-    testWidgets('during an Omi call the button never starts a recording', (tester) async {
-      final capture = _Capture(_Live.idle);
-      await pump(tester, const HomeRecordButton(), capture: capture, call: _Call(PhoneCallState.active));
-      await tester.tap(find.bySemanticsLabel(en.startRecording));
-      expect(capture.phoneStarts, 0, reason: 'the tap opens the call page instead');
-      await tester.pumpWidget(const SizedBox()); // the call page itself is not under test here
-    });
-
-    testWidgets('the badge is fully tappable and does not cover the circle\'s centre', (tester) async {
-      await pump(tester, const HomeRecordButton(), capture: _Capture(_Live.idle));
-      final badge = tester.getRect(find
-          .ancestor(of: find.byIcon(Icons.keyboard_arrow_down_rounded), matching: find.byType(GestureDetector))
-          .first);
-      final button = tester.getRect(find.byType(HomeRecordButton));
-      expect(badge.width, greaterThanOrEqualTo(30));
-      expect(button.inflate(0.1).contains(badge.topLeft) && button.inflate(0.1).contains(badge.bottomRight), isTrue,
-          reason: 'a Stack only hit-tests inside its own box');
-      expect(badge.contains(button.center), isFalse);
-    }, skip: !PhoneCallsFeature.visible);
-
-    testWidgets('while the phone records, the button is its stop', (tester) async {
-      await pump(tester, const HomeRecordButton(), capture: _Capture(_Live.phone));
-      expect(find.bySemanticsLabel(en.stopRecording), findsOneWidget);
-      expect(find.bySemanticsLabel(en.moreWaysToRecord), findsNothing);
-    });
-  });
-
   group('battery glyph', () {
     testWidgets('red only when critically low', (tester) async {
       await tester.pumpWidget(const Directionality(
@@ -753,6 +580,8 @@ void main() {
   });
 
   group('Transcribe Later (batch) card controls', () {
+    setUp(() => SharedPreferencesUtil().batchModeEnabled = true);
+
     testWidgets('tapping Pause in batch mode transitions button to Resume, clears spinner, and freezes elapsed timer',
         (tester) async {
       final capture = _Capture(_Live.pendantBatch, batch: true);

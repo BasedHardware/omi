@@ -10,7 +10,6 @@ import 'package:geolocator/geolocator.dart';
 import 'package:omi/backend/http/shared.dart' show accountDeletionWebSocketCloseCode;
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
-import 'package:omi/backend/schema/geolocation.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/structured.dart';
 import 'package:omi/backend/schema/message_event.dart';
@@ -23,7 +22,6 @@ import 'package:omi/services/capture/capture_system_surface.dart';
 import 'package:omi/services/capture/conversation_location_capture.dart';
 import 'package:omi/services/capture/local_segment_store.dart';
 import 'package:omi/services/capture/recording_lifecycle_telemetry.dart';
-import 'package:omi/services/services.dart';
 import 'package:omi/services/sockets/transcription_service.dart';
 import 'package:omi/services/wals/recording_transfer_coordinator.dart';
 import 'package:omi/services/wals/wal_interfaces.dart';
@@ -32,7 +30,6 @@ import 'package:omi/utils/enums.dart';
 import '../../support/capture/capture_replay_world.dart';
 import '../../support/capture/scripted_device_connection.dart';
 import '../../support/capture/virtual_capture_time.dart';
-import '../../spine/c1_async_boundaries_test.dart' show HeldLocation;
 import '../../spine/c1_location_completion_test.dart' show PhoneSpy, WalSpy;
 
 CaptureDependencies _deps({
@@ -53,8 +50,6 @@ CaptureDependencies _deps({
   return CaptureDependencies(
     ensureDeviceConnection: (_) async => world?.deviceConnection,
     wal: world?.wal ?? _InertWal(),
-    phoneMic: world?.mic ?? _InertMic(),
-    batchSupported: false,
     auth: auth ?? CaptureAuthBoundary(isSignedIn: () => true, refreshIdToken: () async => null),
     connectivity: CaptureConnectivityBoundary(
       initiallyConnected: true,
@@ -101,7 +96,6 @@ CaptureDependencies _deps({
     pendantReconnect: pendantReconnect,
     pendantReconnectBlocked: pendantReconnectBlocked,
     codec: codec ?? (_) async => BleAudioCodec.pcm16,
-    microphonePermission: () async => true,
     refreshConversation: () async {},
     excludeSpeaker: (_, __) async => false,
     telemetry:
@@ -137,11 +131,6 @@ class _InertWal implements IWalService {
   dynamic noSuchMethod(Invocation i) => throw StateError('Unexpected WAL operation: ${i.memberName}');
 }
 
-class _InertMic implements IMicRecorderService {
-  @override
-  dynamic noSuchMethod(Invocation i) => throw StateError('Unexpected mic operation: ${i.memberName}');
-}
-
 class _NoopBle implements CaptureBleListeners {
   @override
   void addBatchRecordingFinalizedListener(void Function(String) callback) {}
@@ -166,19 +155,6 @@ class _IngressBle extends ChangeNotifier implements CaptureBleListeners, Capture
   void addBatchRecordingFinalizedListener(void Function(String) callback) {}
   @override
   void removeBatchRecordingFinalizedListener(void Function(String) callback) {}
-}
-
-class _ImmediateLocation extends ConversationLocationCapture {
-  _ImmediateLocation(this.fix)
-      : super(
-          isLocationServiceEnabled: () async => true,
-          checkPermission: () async => LocationPermission.always,
-          requestPermission: () async => LocationPermission.always,
-          upload: (_) async => true,
-        );
-  final Geolocation fix;
-  @override
-  Future<Geolocation?> capture({bool promptIfDenied = true}) async => fix;
 }
 
 class HeldStore implements LocalSegmentStore {
@@ -986,81 +962,6 @@ void main() {
     }
   });
 
-  test('location fix from an obsolete session does not start compatibility upload', () async {
-    final dir = await Directory.systemTemp.createTemp('c1-location-');
-    final world = await CaptureReplayWorld.boot(tempDir: dir);
-    try {
-      world.disposeController();
-      final location = HeldLocation();
-      final deps = _deps(world: world, location: location);
-      final p = composeCaptureProvider(deps);
-      await p.streamRecording();
-      await pumpEventQueue();
-      expect(location.captures, 1);
-      deps.owner.replaceSession('different-account');
-      location.fix.complete(Geolocation(latitude: 1, longitude: 2, time: world.clock.now()));
-      location.upload.complete();
-      await pumpEventQueue();
-      expect(location.uploads, 0);
-      p.dispose();
-    } finally {
-      await world.dispose();
-      await dir.delete(recursive: true);
-    }
-  });
-
-  test('old upload completion cannot publish geolocation into a new capture WAL', () async {
-    final dir = await Directory.systemTemp.createTemp('c1-upload-');
-    final world = await CaptureReplayWorld.boot(tempDir: dir);
-    try {
-      world.disposeController();
-      final location = HeldLocation();
-      final d = _deps(world: world, location: location);
-      final phone = PhoneSpy(world.wal.getSyncs().phone);
-      final deps = CaptureDependencies(
-        wal: WalSpy(phone),
-        phoneMic: d.phoneMic,
-        batchSupported: d.batchSupported,
-        auth: d.auth,
-        connectivity: d.connectivity,
-        now: d.now,
-        scheduling: d.scheduling,
-        preferences: d.preferences,
-        ble: d.ble,
-        openSocket: d.openSocket,
-        openConversationSocket: d.openConversationSocket,
-        owner: d.owner,
-        location: location,
-        localSegments: d.localSegments,
-        codec: d.codec,
-        microphonePermission: d.microphonePermission,
-        refreshConversation: d.refreshConversation,
-        telemetry: d.telemetry,
-        ensureDeviceConnection: d.ensureDeviceConnection,
-        excludeSpeaker: d.excludeSpeaker,
-      );
-      final p = composeCaptureProvider(deps);
-      await p.streamRecording();
-      await pumpEventQueue();
-      expect(location.captures, 1);
-      location.fix.complete(Geolocation(latitude: 1, longitude: 2, time: world.clock.now()));
-      await pumpEventQueue();
-      expect(location.uploads, 1);
-      d.owner.replaceSession('new-generation');
-      location.upload.complete();
-      await pumpEventQueue();
-      expect(phone.published.whereType<Geolocation>(), isEmpty);
-      await p.streamRecording();
-      await pumpEventQueue();
-      expect(location.captures, 2);
-      expect(phone.published.whereType<Geolocation>().single.latitude, 1);
-      p.dispose();
-    } finally {
-      await world.dispose();
-      await dir.delete(recursive: true);
-    }
-  });
-
   test('queued replaceSession drops after a generation roll but keeps the issued write', () async {
     final dir = await Directory.systemTemp.createTemp('c1-store-');
     final world = await CaptureReplayWorld.boot(tempDir: dir);
@@ -1252,8 +1153,6 @@ void main() {
       );
       final deps = CaptureDependencies(
         wal: WalSpy(phone),
-        phoneMic: d.phoneMic,
-        batchSupported: d.batchSupported,
         auth: d.auth,
         connectivity: d.connectivity,
         now: d.now,
@@ -1266,7 +1165,6 @@ void main() {
         location: d.location,
         localSegments: d.localSegments,
         codec: d.codec,
-        microphonePermission: d.microphonePermission,
         refreshConversation: d.refreshConversation,
         telemetry: d.telemetry,
         ensureDeviceConnection: d.ensureDeviceConnection,
@@ -1297,43 +1195,6 @@ void main() {
       expect(drains, 1);
       p.dispose();
       await owner.close();
-    } finally {
-      await world.dispose();
-      await dir.delete(recursive: true);
-    }
-  });
-
-  test('composeCaptureProvider socket open receives the captured session geolocation', () async {
-    final dir = await Directory.systemTemp.createTemp('c1-geo-');
-    final world = await CaptureReplayWorld.boot(tempDir: dir);
-    try {
-      world.disposeController();
-      final geo = Geolocation(latitude: 37.5, longitude: -122.3, time: world.clock.now());
-      final received = <Geolocation?>[];
-      final deps = _deps(
-        world: world,
-        location: _ImmediateLocation(geo),
-        open: ({
-          required codec,
-          required sampleRate,
-          required language,
-          required force,
-          source,
-          clientConversationId,
-          customSttConfig,
-          geolocation,
-        }) async {
-          received.add(geolocation);
-          return null;
-        },
-      );
-      final p = composeCaptureProvider(deps);
-      await p.streamRecording();
-      await pumpEventQueue();
-      p.updateRecordingState(RecordingState.systemAudioRecord);
-      await p.reconnectActiveCaptureForTesting();
-      expect(received.where((value) => value?.latitude == 37.5 && value?.longitude == -122.3), isNotEmpty);
-      p.dispose();
     } finally {
       await world.dispose();
       await dir.delete(recursive: true);
@@ -1411,37 +1272,6 @@ void main() {
         expect(detected.single['source'], 'omi');
         expect(detected.single['trigger'], 'zero_byte_streak');
         expect(monitor.visiblePrompt, isNotNull);
-        p.dispose();
-      } finally {
-        await world.dispose();
-        await dir.delete(recursive: true);
-      }
-    });
-
-    test('a phone-mic session while a pendant is paired does not feed the detector', () async {
-      final dir = await Directory.systemTemp.createTemp('c1-wedge-phone-');
-      final world = await CaptureReplayWorld.boot(tempDir: dir);
-      try {
-        world.disposeController();
-        final detected = <Map<String, Object>>[];
-        installMonitor(detected);
-        final transports = <ScriptedPureSocket>[];
-        final p = composeCaptureProvider(wedgeDeps(world, transports));
-        final device = BtDevice(id: 'omi-2', name: 'Omi', type: DeviceType.omi, rssi: -50);
-        p.updateRecordingDevice(device);
-
-        await p.streamRecording();
-        await pumpEventQueue();
-        expect(transports, isNotEmpty);
-
-        for (var i = 0; i < 3; i++) {
-          transports.last.emitClose();
-          await pumpEventQueue();
-          world.scheduler.elapse(const Duration(seconds: 30));
-          await pumpEventQueue();
-        }
-
-        expect(detected, isEmpty);
         p.dispose();
       } finally {
         await world.dispose();

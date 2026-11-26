@@ -329,8 +329,6 @@ class _ReviewCapture extends ChangeNotifier implements CaptureProvider {
   RecordingState get recordingState => _state;
   @override
   bool get isCallActive => false;
-  @override
-  bool get isPhoneMicBatchRecording => false;
   void pause() {
     _state = RecordingState.pause;
     notifyListeners();

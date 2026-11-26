@@ -319,7 +319,7 @@ private struct CaptureStatus: View {
     }
 
     private var source: LocalizedStringKey {
-        state.source == "phone" ? "Phone microphone" : "Omi pendant"
+        "Omi pendant"
     }
 
     /// What is happening to the audio right now; nil falls back to the source.
@@ -643,14 +643,9 @@ private struct CaptureActions: View {
                 if state.canPause {
                     if state.status != "paused" {
                         action("Stop", value: "pause", enabled: true)
-                    } else if state.source != "phone" {
+                    } else {
                         action("Start", value: "resume", enabled: true)
-                    } else if #available(iOS 18.0, *) {
-                        button("Start", intent: OmiCaptureRecordingIntent(
-                            recordingId: snapshot.recordingId, revision: state.conversationRevision))
                     }
-                    // iOS 17 has no audio recording intent, so a stopped phone mic starts again
-                    // only in Omi, which tapping the card opens.
                 }
                 // End always closes this card, saving the conversation first when there is one
                 // (LiveActivityManager).
