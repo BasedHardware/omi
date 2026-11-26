@@ -434,13 +434,9 @@ def request_recording_finish(uid: str, *, now: datetime, firestore_client: Any =
         if len(docs) >= RECENT_FINISH_LIMIT:
             return 'recording_lookup_capped', None
         rows = [(doc.id, doc.to_dict() or {}) for doc in docs]
-        captures = [
-            (cid, row)
-            for cid, row in rows
-            if not row.get('v3_derived')
-            and row.get('source') in {'omi', 'phone'}
-            and (row.get('external_data') or {}).get('recording_session_id')
-        ]
+        # A speech-pause rotation writes the next capture in progress before it seals the last one;
+        # only sealed captures compete.
+        captures = [(cid, row) for cid, row in rows if _is_sealed_capture(row)]
         if len(captures) != 1:
             return ('recording_ambiguous' if captures else 'no_live_window'), None
         cid, row = captures[0]
@@ -498,7 +494,9 @@ def _finish_capture(client, tx, collection, uid, cid, row, now):
     return ('consumed' if row.get('v3_manual_end_requested') is True else 'recording_cut'), response_row
 
 
-NAMED_FINISH_FIELDS = list(dict.fromkeys([*RECENT_FINISH_FIELDS, *FINISH_FIELDS]))
+# The card fields let a completed, visible window answer with the card it already shows.
+CARD_FIELDS = ['structured', 'user_title', 'starred']
+NAMED_FINISH_FIELDS = list(dict.fromkeys([*RECENT_FINISH_FIELDS, *FINISH_FIELDS, *CARD_FIELDS]))
 _NAMED_OUTCOMES = {
     'cut': 'named_recording_cut',
     'recording_cut': 'named_recording_cut',
@@ -513,6 +511,10 @@ def _is_listen_capture(row: Mapping[str, Any]) -> bool:
         and row.get('source') in {'omi', 'phone'}
         and (row.get('external_data') or {}).get('recording_session_id')
     )
+
+
+def _is_sealed_capture(row: Mapping[str, Any]) -> bool:
+    return _is_listen_capture(row) and row.get('status') == 'completed' and row.get('recording') is True
 
 
 def _window_unfit(window: Mapping[str, Any]) -> bool:
@@ -542,7 +544,9 @@ def _latest_capture(docs, cid, row):
     captures = [
         (rid, source)
         for rid, source in rows
-        if _is_listen_capture(source)
+        # Only a sealed capture supersedes: a speech-pause rotation writes the next capture in
+        # progress (stamped with a later clock) before it seals the one the person finished.
+        if _is_sealed_capture(source)
         # Dropped or absorbed captures carry no speech the person could be finishing.
         and not any(source.get(key) for key in ('deleted', 'discarded', 'sync_merged_into'))
     ]
@@ -613,8 +617,8 @@ def request_named_finish(
         if _capture_ineligible(row, now, window_id=window_id):
             return refusal, None, ''
         if window is not None and window_id and window.get('status') == 'completed' and not window.get('home_hidden'):
-            # Already on Home with its notes: a cut would only regenerate them.
-            return 'already_visible', _window_response(window_id, window), cid
+            # Already on Home with its notes: a cut would only regenerate them. Answer with the card.
+            return 'already_visible', {**window, 'id': window_id}, cid
         blocked = _live_window_or_deleting(client, tx, collection, uid, now)
         if blocked:
             return blocked, None, ''
@@ -626,7 +630,15 @@ def request_named_finish(
             return outcome, None, ''
         return _NAMED_OUTCOMES.get(outcome, outcome), _window_response(window_id, window), recording_id
 
-    return commit(client.transaction())
+    outcome, response_row, recording_id = commit(client.transaction())
+    if outcome == 'already_visible' and response_row is not None:
+        # The same read projection the live tile uses, after the transaction: the app replaces the
+        # card it shows with this row, so title, overview and starring must match it.
+        card = prepare_conversation_for_read(response_row, uid, firestore_client=client)
+        if card is None:
+            return 'named_not_finishable', None, ''
+        response_row = {**_window_response(card['id'], card), **card}
+    return outcome, response_row, recording_id
 
 
 def _window_response(window_id: str, window: Mapping[str, Any]) -> Dict[str, Any]:

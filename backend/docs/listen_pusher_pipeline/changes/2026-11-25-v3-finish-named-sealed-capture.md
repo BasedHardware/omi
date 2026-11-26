@@ -16,7 +16,11 @@ not be deleted, discarded, locked, merged or private.
 The transaction then scans the recent sources. A capture that sealed after the
 named one is what the person just finished: a later capture can feed a window
 that never goes live (hidden under the word floor), so the app keeps naming the
-earlier window. The newest such capture is cut instead. If it is claimed, its
+earlier window. The newest such capture is cut instead. Only a sealed capture
+(`completed`, `recording`) supersedes: a speech-pause rotation writes the next
+capture in progress, stamped with a later clock, before it seals the one the
+person finished. The unnamed fallback likewise counts only sealed captures, so
+an in-progress successor no longer makes it ambiguous. If the newer capture is claimed, its
 single claiming window must list it as the tail. Finish declines without
 writing (`named_superseded`, `recording_ambiguous` or `recording_lookup_capped`)
 when the newest capture is ineligible, claimed by several windows, not the tail
@@ -27,7 +31,9 @@ The capture that is cut must be a Listen capture sealed within
 deleted, discarded, locked, merged, a partial archive or a failed upload. A
 window tail must carry a claim by that window and no other. A completed window
 already on Home (not hidden) is answered as it is (`already_visible`) and
-nothing is written, so its notes are not regenerated. Otherwise the same
+nothing is written, so its notes are not regenerated. The app replaces the card
+with that answer, so the window read also masks in `structured`, `user_title`
+and `starred`, and the answer goes through the live tile's read projection. Otherwise the same
 transaction rechecks the two-hour live horizon and the account-deletion marker
 before it writes. A window tail gets the window-scoped cut
 (`v3_finish_no_pointer_window_id`), so the planner re-derives the window with
@@ -44,7 +50,8 @@ Reads per Finish on this path are bounded: at most two transactions. The named
 transaction reads the named document and at most two more by reference (the
 tail or the later capture's window). It scans at most 8 recent sources, at most
 200 windows on the live horizon, and one deletion marker; a batch capture adds
-one ledger read. The fallback transaction, for the app's Finish body only, reads
+one ledger read. An `already_visible` answer adds the live tile's read
+projection of that one window (as `GET /v1/conversations/live` does). The fallback transaction, for the app's Finish body only, reads
 at most 8 recent sources, 200 windows, one deletion marker and one ledger. Each
 transaction writes at most one recording and enqueues at most one reconcile.
 
