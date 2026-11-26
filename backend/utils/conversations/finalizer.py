@@ -15,6 +15,7 @@ from enum import Enum
 from fastapi import HTTPException
 from config.batch_pipeline import RecordOwnerContention
 from config.merge_before_processing import enabled as merge_before_processing_enabled
+from utils.llm.background_flex import background_flex
 from utils.enrichment.admission import ConversationAbsorbed
 from config.server_batch import owned as server_batch_owned
 from config.server_batch import has_audio as server_batch_has_audio
@@ -319,6 +320,7 @@ async def finalize_persisted_conversation(
     lease_epoch: int,
     trigger: ProcessingTrigger = ProcessingTrigger.CAPTURE_END,
     final_attempt: bool = False,
+    background_flex_eligible: bool = False,
 ) -> ConversationFinalizationDisposition:
     """Finalize persisted data once the caller has acquired the job lease.
 
@@ -501,23 +503,26 @@ async def finalize_persisted_conversation(
         if conversation.status != ConversationStatus.completed or finalization_pending(
             conversation_data, uid, finalization_job_id
         ):
-            conversation = await run_blocking(
-                lifecycle_executor(uid),
-                process_with_episode_budget,
-                process_conversation,
-                uid,
-                resolved_language,
-                conversation,
-                trigger=trigger,
-                user_kept=bool(conversation_data.get('sync_relevance_user_kept')),
-                recovery_transcript_decoded=conversation_data.get('_recovery_transcript_decoded') is True,
-                defer_derived_effects=True,
-                finalization_fence=(finalization_job_id, dispatch_generation, lease_epoch),
-                recovery_final_attempt=final_attempt or recovery_minimum_terminal_enabled(),
-                persistence_observer=lambda owned: persistence.__setitem__('owned', owned),
-                derived_effects_observer=derived_effects.append,
-                derived_effects_disposition_observer=lambda d: derived_disposition.__setitem__(0, d),
-            )
+            with background_flex(
+                conversation.finished_at if background_flex_eligible else None, features=frozenset({'conv_structure'})
+            ):
+                conversation = await run_blocking(
+                    lifecycle_executor(uid),
+                    process_with_episode_budget,
+                    process_conversation,
+                    uid,
+                    resolved_language,
+                    conversation,
+                    trigger=trigger,
+                    user_kept=bool(conversation_data.get('sync_relevance_user_kept')),
+                    recovery_transcript_decoded=conversation_data.get('_recovery_transcript_decoded') is True,
+                    defer_derived_effects=True,
+                    finalization_fence=(finalization_job_id, dispatch_generation, lease_epoch),
+                    recovery_final_attempt=final_attempt or recovery_minimum_terminal_enabled(),
+                    persistence_observer=lambda owned: persistence.__setitem__('owned', owned),
+                    derived_effects_observer=derived_effects.append,
+                    derived_effects_disposition_observer=lambda d: derived_disposition.__setitem__(0, d),
+                )
         elif conversation_data.get(TERMINAL_NO_DERIVED_EFFECTS_FIELD) or conversation_data.get('recording'):
             # The coordinator persisted a no-effects result (including budget waiting).
             # That write is durable; this request-scoped default is not. A
@@ -726,13 +731,19 @@ async def finalize_persisted_conversation(
                 conversation_id,
             )
         elif derived_effects:
-            await run_blocking(lifecycle_executor(uid), derived_effects[0])
+            with background_flex(
+                conversation.finished_at if background_flex_eligible else None, features=frozenset({'memory_l1'})
+            ):
+                await run_blocking(lifecycle_executor(uid), derived_effects[0])
         elif not lazy_effects and not getattr(conversation, 'discarded', False):
             # A finalization job owns a durable lease. Keep canonical memory
             # extraction inside that lease so a temporary fail-closed gate
             # leaves the job retryable instead of dropping the source.
             stage = 'memory_extraction'
-            await run_blocking(lifecycle_executor(uid), extract_memories, uid, conversation)
+            with background_flex(
+                conversation.finished_at if background_flex_eligible else None, features=frozenset({'memory_l1'})
+            ):
+                await run_blocking(lifecycle_executor(uid), extract_memories, uid, conversation)
         stage = 'integrations'
         if not skip_derived_effects:
             await trigger_external_integrations(
