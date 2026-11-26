@@ -14,6 +14,7 @@ import wave
 import pytest
 from google.api_core.exceptions import PreconditionFailed
 
+
 from config.policy import BatchUnitPolicy
 from database import sync_record_wait_cache
 from database.audio_chunk_metadata import audio_chunk_entry
@@ -25,6 +26,13 @@ from utils.batch_pipeline.audio import audio_unit
 from utils.batch_pipeline.record_barrier import validate_record_tail
 from utils.batch_pipeline.source_audio import MAGIC, decode_source, materialize
 from utils.other import storage
+
+
+@pytest.fixture(autouse=True)
+def strict_coverage_rollback(monkeypatch):
+    """These regressions exercise the strict path retained by the kill switch."""
+    monkeypatch.setenv('RECORD_WAL_HANDOFF_ENABLED', 'false')
+
 
 UID, CID = 'synthetic-owner', 'synthetic-conversation'
 REAL_SOURCE_UNITS = record_gap_fill.source_units

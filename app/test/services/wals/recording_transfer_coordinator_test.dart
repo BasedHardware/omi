@@ -3,9 +3,120 @@ import 'dart:async';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:omi/services/wals/recording_transfer_coordinator.dart';
 import 'package:omi/services/wals/sync_wake_scope.dart';
+import 'package:omi/utils/reliability_experiments.dart';
+import 'package:omi/services/wals/pendant_ring_custody.dart' show ringDrainRecoveryEnabled;
 
 void main() {
   group('RecordingTransferCoordinator', () {
+    testWidgets('receipt_check_during_drain off (baseline): accepted jobs are not checked while a drain is in flight',
+        (tester) async {
+      ReliabilityExperiments.overrideForTesting({});
+      addTearDown(() => ReliabilityExperiments.overrideForTesting(null));
+      final upload = Completer<RecordingTransferDrainResult>();
+      var polls = 0, drains = 0, asked = 0;
+      final coordinator = RecordingTransferCoordinator(
+        reconcile: () async => polls++,
+        discover: () async {},
+        refreshPending: () async {},
+        drain: () {
+          drains++;
+          return upload.future;
+        },
+        hasAcceptedJobs: () {
+          asked++;
+          return true;
+        },
+        autoUploadEnabled: () => true,
+      );
+      addTearDown(coordinator.dispose);
+      final pass = coordinator.wake(WakeTrigger.startup);
+      await tester.pump();
+      expect(polls, 1, reason: 'the pass reconciles once before its drain');
+      await tester.pump(const Duration(minutes: 2));
+      expect(polls, 1, reason: 'no status check while the upload is in flight');
+      expect(asked, 0, reason: 'no receipt timer exists');
+      upload.complete(const RecordingTransferDrainResult.skipped());
+      await tester.pump();
+      await pass;
+      await tester.pump(const Duration(minutes: 1));
+      expect(polls, 1);
+      expect(drains, 1);
+    });
+
+    testWidgets(
+        'receipt_check_during_drain on: receipts advance during a stalled drain without overlapping polls or uploads',
+        (tester) async {
+      ReliabilityExperiments.overrideForTesting({'receipt_check_during_drain'});
+      addTearDown(() => ReliabilityExperiments.overrideForTesting(null));
+      final upload = Completer<RecordingTransferDrainResult>();
+      final reading = Completer<void>();
+      var hasJobs = false, polls = 0, drains = 0;
+      final coordinator = RecordingTransferCoordinator(
+        reconcile: () async {
+          polls++;
+          if (polls == 2) await reading.future;
+        },
+        discover: () async {},
+        refreshPending: () async {},
+        drain: () {
+          drains++;
+          return upload.future;
+        },
+        hasAcceptedJobs: () => hasJobs,
+        autoUploadEnabled: () => true,
+      );
+      addTearDown(coordinator.dispose);
+      final pass = coordinator.wake(WakeTrigger.startup);
+      await tester.pump();
+      await tester.pump(const Duration(seconds: 20));
+      expect(polls, 1, reason: 'no accepted jobs yet');
+      hasJobs = true;
+      await tester.pump(const Duration(seconds: 20));
+      expect(polls, 2, reason: 'the upload is still in flight');
+      await tester.pump(const Duration(minutes: 1));
+      expect(polls, 2, reason: 'a slow status GET cannot start another pass');
+      reading.complete();
+      await tester.pump();
+      await tester.pump(const Duration(seconds: 20));
+      expect(polls, 3);
+      expect(drains, 1);
+      upload.complete(const RecordingTransferDrainResult.skipped());
+      await tester.pump();
+      await pass;
+      await tester.pump(const Duration(minutes: 1));
+      expect(polls, 3, reason: 'receipt checks end with the drain');
+    });
+
+    test('continuing device DATA renews ordinary pass deadline; silence still times out', () async {
+      final work = Completer<void>();
+      final deadlines = <void Function()>[];
+      final timedOut = <WakeTrigger>[];
+      final coordinator = RecordingTransferCoordinator(
+        reconcile: () => work.future,
+        discover: () async {},
+        refreshPending: () async {},
+        drain: () async => const RecordingTransferDrainResult.skipped(),
+        autoUploadEnabled: () => true,
+        scheduleTimeout: (_, callback) => deadlines.add(callback),
+        onPassTimedOut: (trigger, _) => timedOut.add(trigger),
+        scheduleCooldown: (_, callback) {},
+      );
+      addTearDown(coordinator.dispose);
+      final pass = coordinator.wake(WakeTrigger.startup);
+      await _settle();
+      for (var i = 0; i < 3; i++) {
+        coordinator.noteDeviceProgress();
+        deadlines[i]();
+        await _settle();
+        expect(timedOut, isEmpty);
+      }
+      expect(deadlines, hasLength(4), reason: 'three hours with DATA have no total pass cap');
+      deadlines.last();
+      await pass;
+      expect(timedOut, [WakeTrigger.startup]);
+      work.complete();
+      await _settle();
+    }, skip: !ringDrainRecoveryEnabled);
     test('connectivity restoration drains without a Bluetooth event (#7373)', () async {
       final harness = _TransferHarness();
       addTearDown(harness.dispose);
@@ -184,8 +295,10 @@ void main() {
         onPassTimedOut: (trigger, _) => timedOut.add(trigger),
         scheduleCooldown: (_, callback) => retries.add(callback),
         onTransferAdmitted: () => admissions++,
-        onTransferStarted: () async => holds++,
-        onTransferFinished: () async => releases++,
+        acquireTransferLease: () async {
+          holds++;
+          return () async => releases++;
+        },
       );
       addTearDown(coordinator.dispose);
 
@@ -292,15 +405,32 @@ void main() {
       expect(harness.backlog, ['wal-after-lock']);
     });
 
+    test('cancel retires the manual upload authorization while its reader settles', () async {
+      final ring = Completer<bool>();
+      final harness = _TransferHarness(autoUploadEnabled: false);
+      addTearDown(harness.dispose);
+      final coordinator = harness.coordinator..onManualRingWake = () => ring.future;
+
+      final manual = coordinator.wake(WakeTrigger.userRetry);
+      await coordinator.waitUntilIdle();
+      expect(harness.drainedWalIds, ['wal-1']);
+
+      coordinator.cancelManualRingSync();
+      harness.backlog.add('late-ring-wal');
+      ring.complete(true);
+      await manual;
+
+      expect(harness.drainPasses, 1);
+      expect(harness.backlog, ['late-ring-wal']);
+    });
+
     test('a transfer pass acquires keep-alive and releases it when the pass ends', () async {
       var acquired = 0;
       var released = 0;
       final harness = _TransferHarness(
-        onTransferStarted: () async {
+        acquireTransferLease: () async {
           acquired++;
-        },
-        onTransferFinished: () async {
-          released++;
+          return () async => released++;
         },
       );
       addTearDown(harness.dispose);
@@ -314,9 +444,7 @@ void main() {
     test('keep-alive is released when a pass throws', () async {
       var released = 0;
       final harness = _TransferHarness(
-        onTransferFinished: () async {
-          released++;
-        },
+        acquireTransferLease: () async => () async => released++,
       )..drainThrows = true;
       addTearDown(harness.dispose);
 
@@ -336,8 +464,10 @@ void main() {
         }
 
         final harness = _TransferHarness(
-          onTransferStarted: hook == 'start' ? failingOnceHook : null,
-          onTransferFinished: hook == 'finish' ? failingOnceHook : null,
+          acquireTransferLease: () async {
+            if (hook == 'start') await failingOnceHook();
+            return hook == 'finish' ? failingOnceHook : () async {};
+          },
         );
         addTearDown(harness.dispose);
 
@@ -416,6 +546,29 @@ void main() {
       expect(harness.discoveryPasses, 0);
       expect(harness.liveCaptureDrainPasses, 1);
       expect(harness.drainedWalIds, ['wal-1']);
+    });
+
+    test('a due mobile batch wakes only the phone drain while a background pass is finishing', () async {
+      final finishing = Completer<void>();
+      final finishEntered = Completer<void>();
+      final harness = _TransferHarness(
+          acquireTransferLease: () async => () async {
+                if (!finishEntered.isCompleted) finishEntered.complete();
+                await finishing.future;
+              });
+      addTearDown(harness.dispose);
+      harness.coordinator.setForeground(false);
+      final current = harness.coordinator.wake(WakeTrigger.socketReconnected);
+      await finishEntered.future;
+      harness.backlog.add('due-mobile-batch');
+      unawaited(harness.coordinator.wake(WakeTrigger.mobileBatchReady));
+      finishing.complete();
+      await current;
+      await harness.coordinator.waitUntilIdle();
+      expect(harness.discoveryPasses, 0);
+      expect(harness.drainPasses, 0);
+      expect(harness.liveCaptureDrainPasses, 2);
+      expect(harness.drainedWalIds, ['wal-1', 'due-mobile-batch']);
     });
 
     test('startup resumes a pending backlog once without loss or duplication', () async {
@@ -551,8 +704,7 @@ class _TransferHarness {
     bool autoUploadEnabled = true,
     List<String>? backlog,
     List<String>? drainedWalIds,
-    Future<void> Function()? onTransferStarted,
-    Future<void> Function()? onTransferFinished,
+    AcquireTransferLease? acquireTransferLease,
   })  : _autoUploadEnabled = autoUploadEnabled,
         backlog = backlog ?? <String>['wal-1'],
         drainedWalIds = drainedWalIds ?? <String>[] {
@@ -569,8 +721,7 @@ class _TransferHarness {
       initiallyConnected: true,
       clock: () => DateTime.utc(2026, 1, 1),
       scheduleCooldown: (delay, callback) => scheduledCooldowns.add(_ScheduledCooldown(delay, callback)),
-      onTransferStarted: onTransferStarted,
-      onTransferFinished: onTransferFinished,
+      acquireTransferLease: acquireTransferLease,
       onConnectivityRestored: () async {
         retryBudgetResets++;
       },

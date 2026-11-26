@@ -351,6 +351,8 @@ def test_default_gate_keeps_fail_fast_contract(gate_client, fast_clock):
 
 
 def _route_app(monkeypatch, body):
+    monkeypatch.setattr(conversations.conversation_tombstones, 'is_deleted', lambda *args: False)
+    monkeypatch.setattr(conversations.conversations_db, 'get_conversation_raw_snapshot', lambda *args, **kwargs: {})
     for name in (
         'delete_owner_prompt_embedding_cache',
         'delete_conversation_screen_frames',
@@ -364,6 +366,7 @@ def _route_app(monkeypatch, body):
     ):
         monkeypatch.setattr(conversations, name, MagicMock())
     monkeypatch.setattr(conversations, '_delete_conversation_under_gate', body)
+    monkeypatch.setattr(conversations, '_legal_hold_defers_delete', lambda uid: False)
     monkeypatch.setattr(deletion_batch_purge, 'is_conversation_batch_purge_dispatch_configured', lambda: False)
     app = FastAPI()
     app.include_router(conversations.router)
@@ -376,7 +379,7 @@ def test_concurrent_same_account_cascade_deletes_all_return_204_serialized(monke
     inside, peak, deleted = [0], [0], []
     counter = threading.Lock()
 
-    def body(conversation_id, *args):
+    def body(conversation_id, *args, **kwargs):
         with counter:
             inside[0] += 1
             peak[0] = max(peak[0], inside[0])
@@ -449,7 +452,9 @@ def test_legal_hold_still_blocks_cascade_delete(monkeypatch, gate_client, fast_c
 def tombstone_db(monkeypatch):
     """One fake plane for tombstones, obligations and the gate; transactions run inline."""
     client = _Client()
+    client.docs[f'users/{UID}/conversations/c1'] = {'created_at': 'original'}
     monkeypatch.setattr(conversation_tombstones, 'db', client)
+    monkeypatch.setattr(conversation_tombstones, '_in_transaction', lambda _client, body: body(_Transaction(client)))
     monkeypatch.setattr(purge_jobs, 'get_firestore_client', lambda: client)
     monkeypatch.setattr(purge_jobs, '_in_transaction', lambda _client, body: body(_Transaction(client)))
     monkeypatch.setattr(
@@ -509,6 +514,7 @@ def test_obligation_is_written_before_fallible_cleanup(monkeypatch, tombstone_db
 
 def _real_route_app(monkeypatch):
     """Real route + tombstone writer; only storage side effects are stubbed."""
+    monkeypatch.setattr(conversations, '_legal_hold_defers_delete', lambda uid: False)
     for name in (
         'delete_owner_prompt_embedding_cache',
         'delete_conversation_screen_frames',
@@ -849,14 +855,31 @@ class _Request:
     [
         (lambda *a: 'purged', 200, 'done'),
         (lambda *a: 'held', 200, 'done'),
+        (lambda *a: 'busy', 200, 'done'),  # lost the gate to a same-account peer: redriven, not retried
         (MagicMock(side_effect=RuntimeError('firestore down')), 500, 'retry'),
     ],
 )
 def test_task_handler_maps_run_outcomes_to_queue_retry(monkeypatch, effect, status, body_status):
-    monkeypatch.setattr(purge_jobs, 'run_job', effect)
+    monkeypatch.setattr(users_router.batch_pipeline_conversation_purge_scans, 'run_job', effect)
     response = asyncio.run(users_router.run_conversation_batch_purge(_Request({'job_id': 'j1', 'generation': 1}), 0))
     assert response.status_code == status
     assert body_status.encode() in response.body
+
+
+def test_task_handler_logs_why_a_run_failed(monkeypatch, caplog):
+    """Every 500 carries its reason: the obligation kind, generation, error type and sanitized message."""
+    secret = 'tok_9f8e7d6c5b4a3f2e1d0c'
+    error = legal_holds.DestructiveOperationInProgress(f'another destructive operation owns the account gate {secret}')
+    monkeypatch.setattr(users_router.batch_pipeline_conversation_purge_scans, 'run_job', MagicMock(side_effect=error))
+    with caplog.at_level('WARNING', logger='routers.users'):
+        response = asyncio.run(
+            users_router.run_conversation_batch_purge(_Request({'job_id': 'j1', 'generation': 4}), 2)
+        )
+    assert response.status_code == 500
+    line = next(record.getMessage() for record in caplog.records if 'attempt 3 failed' in record.getMessage())
+    assert 'kind=batch_purge job=j1 generation=4' in line
+    assert 'DestructiveOperationInProgress: another destructive operation owns the account gate' in line
+    assert secret not in line
 
 
 def test_task_handler_runs_on_its_own_pool_not_the_account_wipe_pool(monkeypatch):
@@ -869,7 +892,7 @@ def test_task_handler_runs_on_its_own_pool_not_the_account_wipe_pool(monkeypatch
         return fn(*args)
 
     monkeypatch.setattr(users_router, 'run_blocking', run_blocking)
-    monkeypatch.setattr(purge_jobs, 'run_job', lambda *a: 'purged')
+    monkeypatch.setattr(users_router.batch_pipeline_conversation_purge_scans, 'run_job', lambda *a: 'purged')
     asyncio.run(users_router.run_conversation_batch_purge(_Request({'job_id': 'j1', 'generation': 1}), 0))
     assert pools == [executors.erasure_executor]
     assert executors.erasure_executor is not executors.cleanup_executor
@@ -880,7 +903,7 @@ def test_task_handler_runs_on_its_own_pool_not_the_account_wipe_pool(monkeypatch
 @pytest.mark.parametrize('payload', [{'job_id': 'j1'}, {'generation': 1}, {'job_id': 'j1', 'generation': 0}, ['x']])
 def test_task_handler_drops_invalid_payloads(monkeypatch, payload):
     runner = MagicMock()
-    monkeypatch.setattr(purge_jobs, 'run_job', runner)
+    monkeypatch.setattr(users_router.batch_pipeline_conversation_purge_scans, 'run_job', runner)
     response = asyncio.run(users_router.run_conversation_batch_purge(_Request(payload), 0))
     assert response.status_code == 200
     runner.assert_not_called()

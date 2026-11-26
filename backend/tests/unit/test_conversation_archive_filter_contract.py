@@ -9,6 +9,7 @@ from unittest.mock import MagicMock
 import pytest
 
 from testing.import_isolation import AutoMockModule, load_module_fresh, stub_modules
+from utils.other import request_deadline as request_deadline_real
 
 _BACKEND = Path(__file__).resolve().parents[2]
 
@@ -157,9 +158,13 @@ def conversations_db():
     """Load the production query function against a minimal in-memory Firestore seam."""
     # Load the pure policy/registry before the fixture closes the utils import path.
     import config.dream_agent  # noqa: F401
-    from utils.conversations import summary_delivery, lifecycle_clocks, home_titles, transcribing_hold
+    from utils.conversations import summary_delivery, lifecycle_clocks, home_titles, transcribing_hold, llm_input_dedupe
+    from utils.conversations import terminal_settled
+    from utils import summary_quality
+    from models import structured
     from database import sync_live_overlap, transcript_pointer
     from utils.sync import live_overlap, stage
+    from utils.home_feed import projection as home_feed_projection
 
     firestore = _Firestore([])
 
@@ -231,6 +236,8 @@ def conversations_db():
         # The write-only restore-obligation lookup imports the real stage
         # helper; load its env-loader dependency before closing utils paths.
         "utils.sync.stage": stage,
+        # The archive read contract does not use the V3 repair ledger.
+        "database.conversations_v3_backfill_runs": ModuleType("database.conversations_v3_backfill_runs"),
         "database.speaker_assignment_effects": AutoMockModule("database.speaker_assignment_effects"),
         # Archive queries never invoke the separate speaker publication/revocation IO seam.
         "database.speaker_auto_enroll": ModuleType("database.speaker_auto_enroll"),
@@ -238,14 +245,20 @@ def conversations_db():
         "database.users": AutoMockModule("database.users"),
         "models": models,
         "models.audio_file": AutoMockModule("models.audio_file"),
+        "models.structured": structured,
         "models.conversation_enums": AutoMockModule("models.conversation_enums"),
         "models.conversation_photo": AutoMockModule("models.conversation_photo"),
         "models.transcript_segment": AutoMockModule("models.transcript_segment"),
         "utils": utils,
+        # Archive reads do not execute notes writes; retain the module-level pure seams.
+        "utils.summary_quality": summary_quality,
+        "utils.conversations.llm_input_dedupe": llm_input_dedupe,
+        "utils.home_feed.projection": home_feed_projection,
         "utils.conversations": utils_conversations,
         "utils.conversations.summary_delivery": summary_delivery,
         "utils.conversations.transcribing_hold": transcribing_hold,
         "utils.conversations.lifecycle_clocks": lifecycle_clocks,
+        "utils.conversations.terminal_settled": terminal_settled,
         "utils.conversations.home_titles": home_titles,
         "utils.llm": utils_llm,
         "utils.llm.model_constants": utils_llm_model_constants,
@@ -266,6 +279,7 @@ def conversations_db():
         "utils.other.hume": AutoMockModule("utils.other.hume"),
         "utils.other.list_budget": list_budget_real,
         "utils.other.portability_read": portability_read_real,
+        "utils.other.request_deadline": request_deadline_real,
         "utils.other.storage": AutoMockModule("utils.other.storage"),
     }
 
@@ -343,7 +357,7 @@ def _conversation(conversation_id, *, created_at, source, status="completed", di
     }
 
 
-def test_archive_filter_precedes_pagination_and_matches_count(conversations_db):
+def test_archive_filter_precedes_pagination_and_matches_count(conversations_db, monkeypatch):
     module, _pages_module, firestore = conversations_db
     firestore.rows = [
         _conversation("discarded-omi", created_at=8, source="omi", discarded=True),
@@ -388,6 +402,26 @@ def test_archive_filter_precedes_pagination_and_matches_count(conversations_db):
         "offset",
         "stream",
     ]
+
+    # The actual slim query must keep the evidence needed by both old-client wires.
+    # Reuse this query fixture so the contract adds no heavy import/setup per test.
+    model = ModuleType('models.conversation')
+    model.Conversation = SimpleNamespace(model_fields={})
+    monkeypatch.setitem(sys.modules, 'models.conversation', model)
+    monkeypatch.setenv('OMI_INDEXED_LIST_READS_ENABLED', 'true')
+    module.get_conversations_without_photos('user-1', list_fields_only=True)
+    assert {
+        'record_transcription_empty',
+        'record_projection_revision',
+        'home_transcription_pending_at',
+        'episode_transcription_pending_at',
+        'server_batch_audio_closed',
+        'server_batch_audio_start',
+        'server_batch_audio_end',
+        'record_audio_closed',
+        'record_upload_sessions',
+        'record_audio_partial',
+    } <= set(firestore.queries[-1].selected_fields)
 
 
 def test_sources_honor_legacy_include_discarded_default(conversations_db):
@@ -472,6 +506,15 @@ def test_hosted_mcp_list_uses_transcript_and_photo_free_projection(conversations
                 'record_projection_revision',
                 'record_upload_failed',
                 'finalization_status',
+                'record_admitted_at',
+                'home_transcription_queue_observed_at',
+                'has_content',
+                'episode_transcription_pending_at',
+                'episode_transcription_deadline_at',
+                'sync_content_revision',
+                'is_locked',
+                'server_batch_audio_received',
+                'server_batch_audio_closed',
             ]
         )
     assert ("select", tuple(dict.fromkeys(expected_fields))) in firestore.queries[0].events

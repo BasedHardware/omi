@@ -31,12 +31,16 @@ export const DAYS_PER_MONTH = 30.44;
  * proposal until David confirms it in the render review (see PR body). */
 export const LISTEN_LINE_PREFIX = "stt_";
 
+/** The measured Soniox STT line in the settled table (variable basis). */
+export const SONIOX_LINE = "stt_soniox";
+
 /**
  * One day's totals from the settled table. `variableUsd` covers the
  * `basis_class = 'variable'` rows the margin basis counts (`in_margin_basis`),
  * so the cash/modelled and actual/estimated alternatives are never summed
  * together; `listenUsd` covers the STT lines within it; `allInUsd` covers rows
- * flagged `in_all_in`. `rows` is the row count, so a day with no rows is
+ * flagged `in_all_in`; `sonioxUsd` is the measured Soniox line alone. `rows` is
+ * the row count, so a day with no rows is
  * distinguishable from a day that sums to $0.
  */
 export interface SpendDay {
@@ -44,6 +48,7 @@ export interface SpendDay {
   variableUsd: number | null;
   listenUsd: number | null;
   allInUsd: number | null;
+  sonioxUsd: number | null;
   rows: number;
 }
 
@@ -53,6 +58,7 @@ export interface SpendDayRow {
   variable_usd: string | number | null;
   listen_usd: string | number | null;
   all_in_usd: string | number | null;
+  soniox_usd: string | number | null;
   rows: string | number;
 }
 
@@ -95,6 +101,7 @@ SELECT
   SUM(IF(basis_class = 'variable' AND in_margin_basis, usd, NULL)) AS variable_usd,
   SUM(IF(basis_class = 'variable' AND in_margin_basis AND STARTS_WITH(line, '${LISTEN_LINE_PREFIX}'), usd, NULL)) AS listen_usd,
   SUM(IF(in_all_in, usd, NULL)) AS all_in_usd,
+  SUM(IF(basis_class = 'variable' AND line = '${SONIOX_LINE}', usd, NULL)) AS soniox_usd,
   COUNT(*) AS rows
 FROM latest
 WHERE inputs_settled AND status != 'provisional'
@@ -111,9 +118,18 @@ export function spendDays(rows: SpendDayRow[]): SpendDay[] {
       variableUsd: num(r.variable_usd),
       listenUsd: num(r.listen_usd),
       allInUsd: num(r.all_in_usd),
+      sonioxUsd: num(r.soniox_usd),
       rows: Number(r.rows),
     }))
     .sort((a, b) => (a.day < b.day ? -1 : a.day > b.day ? 1 : 0));
+}
+
+/** Measured Soniox USD per day from the settled table. A day is present only
+ * when its stt_soniox row exists; a missing day is absent, never $0. */
+export function sonioxSpendByDay(days: SpendDay[]): Record<string, number> {
+  const out: Record<string, number> = {};
+  for (const d of days) if (d.sonioxUsd != null) out[d.day] = d.sonioxUsd;
+  return out;
 }
 
 /** Parity: the all-in total for the anchor day against the producer's contract

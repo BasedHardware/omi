@@ -69,6 +69,7 @@ class AnalyticsManager {
   static const Set<String> _captureWedgeFamilyEvents = {
     'Capture Wedge Detected',
     'Local WAL Stuck',
+    'Mobile Held WAL Backlog',
     'Recording Start Failed',
     'Capture Recovery Prompt Shown',
     'Capture Recovery Actioned',
@@ -596,6 +597,18 @@ class AnalyticsManager {
       }, timeout: const Duration(seconds: 6)) ??
       false;
 
+  /// Returns null while an authenticated flag answer is unavailable.
+  Future<bool?> resolvedBooleanFeatureFlag(String key, {required bool refresh}) => _readFlag<bool?>((adapter) async {
+        if (adapter is! AnalyticsBooleanFlagAdapter) return null;
+        final boolean = adapter as AnalyticsBooleanFlagAdapter;
+        if (refresh && await adapter.reloadFeatureFlags()) return boolean.isBooleanFeatureEnabledCached(key);
+        if (adapter is AnalyticsResolvedFlagAdapter &&
+            await (adapter as AnalyticsResolvedFlagAdapter).resolvedFeatureEnabled(key) != null) {
+          return boolean.isBooleanFeatureEnabledCached(key);
+        }
+        return null;
+      }, timeout: const Duration(seconds: 6));
+
   bool isBooleanFeatureEnabledCached(String key) {
     final adapter = _adapter;
     return _trackingEnabled &&
@@ -829,14 +842,8 @@ class AnalyticsManager {
     const TypedEvents().emit(SignInStarted(provider: value));
   }
 
-  void signInFailed(String provider, {Object? error, bool cancelled = false}) {
-    final value = signInFailedProvider(provider);
-    if (value == null) return;
-    const TypedEvents().emit(SignInFailed(
-      provider: value,
-      errorClass: cancelled || error == null ? SignInFailedErrorClass.cancelled : classifySignInFailure(error),
-    ));
-  }
+  void signInFailed(String provider, {Object? error, bool cancelled = false}) =>
+      signInFailureEvents(provider, error: error, cancelled: cancelled).forEach(const TypedEvents().emit);
 
   void onboardingPermissionResult({
     required OnboardingPermissionResultPermission permission,
@@ -1921,6 +1928,21 @@ class AnalyticsManager {
   }
 
   void upgradeCancelled() => const TypedEvents().emit(const UpgradeCancelled());
+
+  /// Google Play Billing purchase step, emitted next to the existing purchase events (Play path only).
+  void playBillingStage({required UpgradeBillingProviderStage stage, required String billingInterval}) =>
+      const TypedEvents().emit(
+        UpgradeBillingProvider(
+          provider: UpgradeBillingProviderProvider.play,
+          stage: stage,
+          billingInterval: _closedEnum(
+            UpgradeBillingProviderBillingInterval.values,
+            _intervalWire(billingInterval),
+            UpgradeBillingProviderBillingInterval.unknown,
+            (value) => value.wireName,
+          ),
+        ),
+      );
 
   /// Store-update prompt (`upgrade_alert.dart`), not the subscription paywall.
   void upgradeModalDismissed() => const TypedEvents().emit(const UpgradeModalDismissed());

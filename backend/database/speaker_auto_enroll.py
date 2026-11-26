@@ -3,9 +3,12 @@
 from datetime import datetime, timezone
 import logging
 from typing import Any
+from uuid import uuid4
 
 from google.cloud import firestore
 
+from database.batch_account_authority import account_authority_writer_enabled, mutate_account_authority
+from database.batch_account_authority_schema import ACCOUNT_FIELD_GROUPS, SPEAKER_PRIVACY_VERSION, USER_COLLECTION
 from database.people_generation import bump_people_generation
 from database._client import get_firestore_client
 from database import _client, speaker_profile_authority, recurring_voices, transcript_pointer
@@ -14,7 +17,7 @@ from utils.speakers import auto_enroll as policy
 from utils.stt.voiceprints import usable_person_voiceprint
 
 OWNER_INDEX = 'speaker_auto_enroll_people'
-PRIVACY_VERSION = 'speaker_auto_enroll_privacy_version'
+PRIVACY_VERSION = SPEAKER_PRIVACY_VERSION
 MAX_PEOPLE = policy.MAX_PEOPLE
 MAX_SOURCE_PEOPLE = 32
 logger = logging.getLogger(__name__)
@@ -193,15 +196,21 @@ def publish(
     return stored
 
 
-def update_privacy(uid: str, updates: dict, *, firestore_client: Any = None) -> None:
+def update_privacy(uid: str, updates: dict, *, firestore_client: Any = None, operation_id: str | None = None) -> None:
     """Privacy opt-out clears the indexed pools in the same transaction as consent."""
-    client = firestore_client if firestore_client is not None else get_firestore_client()
+    enabled = account_authority_writer_enabled()
+    if firestore_client is not None:
+        client = firestore_client
+    else:
+        client = _client.get_data_plane_firestore_client() if enabled else get_firestore_client()
+    stable_id = operation_id or uuid4().hex
     user = client.collection('users').document(uid)
 
     @firestore.transactional
     def commit(transaction):
         with external_write_fence(uid, transaction=transaction, firestore_client=client):
-            owner = user.get(transaction=transaction).to_dict() or {}
+            snapshot = user.get(transaction=transaction)
+            owner = snapshot.to_dict() or {}
             following = {**owner, **updates}
             people = []
             if not policy.retained(following):
@@ -214,13 +223,6 @@ def update_privacy(uid: str, updates: dict, *, firestore_client: Any = None) -> 
                 if not policy.retained(following)
                 else None
             )
-            if recurring is not None and owner:
-                recurring_voices.write_profiles(transaction, user, owner, recurring)
-            for ref in people:
-                transaction.update(
-                    ref, {policy.POOL_FIELD: firestore.DELETE_FIELD, 'updated_at': datetime.now(timezone.utc)}
-                )
-                bump_people_generation(transaction, ref)
             version = owner.get(PRIVACY_VERSION, 0)
             if type(version) is not int:
                 raise ValueError('Invalid speaker enrollment privacy version')
@@ -229,10 +231,31 @@ def update_privacy(uid: str, updates: dict, *, firestore_client: Any = None) -> 
                 PRIVACY_VERSION: version + 1,
                 **({OWNER_INDEX: [], policy.AUTHORITY_FIELD: {}} if not policy.retained(following) else {}),
             }
-            if owner:
-                transaction.update(user, patch)
-            else:
-                transaction.set(user, patch)
+            certify = enabled and (not owner or bool(ACCOUNT_FIELD_GROUPS[USER_COLLECTION].keys() & updates.keys()))
+            if certify:
+                result = mutate_account_authority(
+                    transaction,
+                    user,
+                    stable_id,
+                    patch,
+                    client=client,
+                    preimage=snapshot,
+                    merge=None if owner else False,
+                )
+                if not result.applied:
+                    return not policy.retained(owner) and recurring_voices.INDEX in owner
+            if recurring is not None and owner:
+                recurring_voices.write_profiles(transaction, user, owner, recurring)
+            for ref in people:
+                transaction.update(
+                    ref, {policy.POOL_FIELD: firestore.DELETE_FIELD, 'updated_at': datetime.now(timezone.utc)}
+                )
+                bump_people_generation(transaction, ref)
+            if not certify:
+                if owner:
+                    transaction.update(user, patch)
+                else:
+                    transaction.set(user, patch)
             return not policy.retained(following) and recurring_voices.INDEX in owner
 
     if _client.run_transactional(client, commit):

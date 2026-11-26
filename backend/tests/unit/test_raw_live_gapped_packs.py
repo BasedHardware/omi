@@ -17,15 +17,21 @@ import wave
 import io
 from pathlib import Path
 from types import SimpleNamespace
+from unittest.mock import Mock
 
 import pytest
+from google.api_core.exceptions import NotFound, PreconditionFailed
 
 from utils.batch_pipeline import live, source_audio
-from utils.other import audio_opus, raw_audio_read, storage
+from utils.batch_pipeline.artifacts import ArtifactStore, ProtectionContext
+from utils.other import audio_frame_table, audio_opus, raw_audio_read, storage
 from utils.other.audio_frame_table import FRAME_SCHEMA
+from utils.other.gcs_read_reuse import ReadMemo
 from utils.other.audio_outbox import commit_capture, commit_pcm_window
 from utils.other.raw_audio import CapturePack, _get_opuslib
 from utils.batch_pipeline import record_orphan_repair as repair
+from tests.unit.test_batch_pipeline_invalid_manifest_hold import serve
+from tests.unit.test_batch_pipeline_quarantine_recovery import row, setup  # noqa: F401
 from tests.unit.test_audio_durable_outbox import remote  # noqa: F401
 
 UID, CID = 'owner', 'conversation'
@@ -149,6 +155,195 @@ def test_listing_keeps_every_real_gap_and_its_true_position(remote, monkeypatch,
     assert [p['raw_end'] for p in packs] == [1000.04, 1003.03]
 
 
+@pytest.mark.parametrize('change', ['unchanged', 'generation', 'metadata', 'unversioned', 'deleted', 'media_changed'])
+@pytest.mark.parametrize('protection', ['standard', 'enhanced'])
+def test_inventory_manifest_body_reuse_checks_the_current_object(remote, monkeypatch, native_opus, change, protection):
+    wire(remote, monkeypatch)
+    monkeypatch.setenv('BUCKET_PRIVATE_CLOUD_SYNC', remote.name)
+    monkeypatch.delenv('PRIVATE_SYNC_LISTED_MANIFEST_READ_ENABLED', raising=False)
+    monkeypatch.delenv('PRIVATE_SYNC_INVENTORY_MANIFEST_BODY_CACHE_ENABLED', raising=False)
+    monkeypatch.setattr(audio_frame_table, '_inventory_bodies', {})
+    receipt, _, _, _ = build_pack(remote, gapped_frames(), protection=protection)
+    manifest = remote.blob(receipt.manifest_path)
+    decrypt = Mock(wraps=audio_frame_table.encryption.decrypt_audio_file)
+    monkeypatch.setattr(audio_frame_table.encryption, 'decrypt_audio_file', decrypt)
+    manifest.metageneration = None if change == 'unversioned' else 1
+    manifest.reload = Mock(wraps=manifest.reload)
+    manifest.download_as_bytes = Mock(wraps=manifest.download_as_bytes)
+
+    def inventory(**kwargs):
+        raw_audio_read.invalidate_pack_index(remote, UID, CID)
+        return raw_audio_read.list_packs(remote, UID, CID, reuse_manifest_bodies=True, **kwargs)
+
+    first = inventory()
+    assert len(first) == 2
+    if change == 'generation':
+        manifest.generation += 1
+    elif change == 'metadata':
+        manifest.metageneration += 1
+    elif change == 'deleted':
+        manifest.reload.side_effect = NotFound('deleted after listing')
+    elif change == 'media_changed':
+        remote.blob(receipt.path).generation += 1
+
+    assert inventory() == ([] if change in {'deleted', 'media_changed'} else first)
+    warm = change in {'unchanged', 'deleted', 'media_changed'}
+    assert manifest.reload.call_count == (2 if change == 'unversioned' else int(warm))
+    if warm:
+        assert manifest.reload.call_args.kwargs['if_generation_match'] == manifest.generation
+        assert manifest.reload.call_args.kwargs['if_metageneration_match'] == manifest.metageneration
+    expected_reads = 1 if change in {'unchanged', 'deleted', 'media_changed'} else 2
+    assert manifest.download_as_bytes.call_count == expected_reads
+    if change == 'unchanged' and protection == 'enhanced':
+        assert manifest.metadata['encrypted'] == 'true'
+        assert b'"schema"' not in manifest.data
+        assert decrypt.call_count == 2
+    if change == 'unversioned':
+        assert 'if_metageneration_match' not in manifest.download_as_bytes.call_args.kwargs
+    else:
+        assert manifest.download_as_bytes.call_args.kwargs['if_metageneration_match'] == manifest.metageneration
+
+
+@pytest.mark.parametrize(
+    'mode', ['fresh', 'strict', 'deadline', 'disabled', 'not_inventory', 'listed_disabled', 'cold_race', 'warm_race']
+)
+def test_gapped_manifest_body_bypass_and_version_race(remote, monkeypatch, native_opus, mode):
+    wire(remote, monkeypatch)
+    monkeypatch.setenv('BUCKET_PRIVATE_CLOUD_SYNC', remote.name)
+    monkeypatch.delenv('PRIVATE_SYNC_LISTED_MANIFEST_READ_ENABLED', raising=False)
+    monkeypatch.delenv('PRIVATE_SYNC_INVENTORY_MANIFEST_BODY_CACHE_ENABLED', raising=False)
+    monkeypatch.setattr(audio_frame_table, '_inventory_bodies', {})
+    receipt, _, _, _ = build_pack(remote, gapped_frames())
+    manifest = remote.blob(receipt.manifest_path)
+    manifest.metageneration = 1
+    manifest.download_as_bytes = Mock(wraps=manifest.download_as_bytes)
+    expected = raw_audio_read.list_packs(remote, UID, CID, reuse_manifest_bodies=True)
+    assert len(expected) == 2
+    raw_audio_read.invalidate_pack_index(remote, UID, CID)
+    if mode == 'disabled':
+        monkeypatch.setenv('PRIVATE_SYNC_INVENTORY_MANIFEST_BODY_CACHE_ENABLED', 'false')
+    if mode == 'listed_disabled':
+        monkeypatch.setenv('PRIVATE_SYNC_LISTED_MANIFEST_READ_ENABLED', 'false')
+    if mode == 'cold_race':
+        manifest.metageneration = 2
+        manifest.download_as_bytes.side_effect = [PreconditionFailed('metadata changed'), manifest.data]
+    if mode == 'warm_race':
+        manifest.reload = Mock(side_effect=[PreconditionFailed('metadata changed'), None])
+    actual = raw_audio_read.list_packs(
+        remote,
+        UID,
+        CID,
+        reuse_manifest_bodies=mode != 'not_inventory',
+        fresh=mode == 'fresh',
+        strict=mode == 'strict',
+        deadline=audio_frame_table.time.monotonic() + 10 if mode == 'deadline' else None,
+    )
+    assert actual == expected
+    assert manifest.download_as_bytes.call_count == (3 if mode == 'cold_race' else 2)
+    assert ('if_metageneration_match' in manifest.download_as_bytes.call_args.kwargs) == (
+        mode not in {'listed_disabled', 'cold_race', 'warm_race'}
+    )
+
+
+@pytest.fixture
+def manifest_cache(remote, monkeypatch):
+    wire(remote, monkeypatch)
+    monkeypatch.setenv('BUCKET_PRIVATE_CLOUD_SYNC', remote.name)
+    monkeypatch.setenv('PRIVATE_SYNC_INVENTORY_MANIFEST_BODY_CACHE_ENABLED', 'true')
+    monkeypatch.setenv('PRIVATE_SYNC_LISTED_MANIFEST_READ_ENABLED', 'true')
+    monkeypatch.setenv('PUSHER_INVENTORY_MANIFEST_LONG_TTL_ENABLED', 'true')
+    clock = SimpleNamespace(now=0)
+    cache = audio_frame_table._InventoryBodyCache(
+        maxsize=audio_frame_table._inventory_bodies.maxsize,
+        ttu=audio_frame_table._inventory_body_expires,
+        timer=lambda: clock.now,
+        getsizeof=audio_frame_table._inventory_body_size,
+    )
+    monkeypatch.setattr(audio_frame_table, '_inventory_bodies', cache)
+    return cache, clock
+
+
+@pytest.mark.parametrize('extended', [False, True])
+def test_inventory_manifest_body_lifetime_spans_refresh_only_when_enabled(
+    remote, monkeypatch, native_opus, manifest_cache, extended
+):
+    _, clock = manifest_cache
+    if not extended:
+        monkeypatch.delenv('PUSHER_INVENTORY_MANIFEST_LONG_TTL_ENABLED')
+    receipt, _, _, _ = build_pack(remote, gapped_frames())
+    manifest = remote.blob(receipt.manifest_path)
+    manifest.metageneration = 1
+    manifest.reload = Mock(wraps=manifest.reload)
+    manifest.download_as_bytes = Mock(wraps=manifest.download_as_bytes)
+    for tick in (0, 300, 600, 900):
+        clock.now = tick
+        raw_audio_read.invalidate_pack_index(remote, UID, CID)
+        packs = raw_audio_read.list_packs(remote, UID, CID, reuse_manifest_bodies=True)
+        assert len(packs) == 2
+    assert manifest.download_as_bytes.call_count == (2 if extended else 4)
+    assert manifest.reload.call_count == (2 if extended else 0)
+
+
+def test_inventory_manifest_cache_evicts_at_byte_budget(manifest_cache, monkeypatch):
+    cache, _ = manifest_cache
+    body = b'x' * (2 * 1024 * 1024)
+    events = Mock()
+    monkeypatch.setattr(audio_frame_table, '_INVENTORY_CACHE', events)
+    for key in range(3):
+        cache[key] = body
+    assert cache.get(0) == body  # A recently used entry survives pressure.
+    cache[3] = body
+    assert cache.get(1) is None
+    assert cache.get(0) == body
+    assert cache.currsize == 3 * (len(body) + 256) <= cache.maxsize
+    events.labels.assert_called_once_with(event='eviction')
+    events.labels.return_value.inc.assert_called_once()
+
+
+@pytest.mark.parametrize('change', ['binding', 'gap_count'])
+def test_inventory_manifest_cache_admits_only_full_custody_proofs(remote, native_opus, manifest_cache, change):
+    cache, _ = manifest_cache
+    receipt, _, _, _ = build_pack(remote, gapped_frames())
+    manifest = remote.blob(receipt.manifest_path)
+    manifest.metageneration = 1
+    media = remote.blob(receipt.path)
+    if change == 'binding':
+        media.generation += 1
+    else:
+        media.metadata['gap_count'] = '2'
+    assert raw_audio_read.list_packs(remote, UID, CID, reuse_manifest_bodies=True) == []
+    assert not cache
+
+
+def test_warm_inventory_manifest_cache_requires_unique_current_manifest(remote, native_opus, manifest_cache):
+    _, clock = manifest_cache
+    receipt, _, _, _ = build_pack(remote, gapped_frames())
+    manifest = remote.blob(receipt.manifest_path)
+    manifest.metageneration = 1
+    assert len(raw_audio_read.list_packs(remote, UID, CID, reuse_manifest_bodies=True)) == 2
+    directory = manifest.name.rsplit('/', 1)[0]
+    duplicate = remote.blob(f'{directory}/duplicate.json')
+    duplicate.metadata = dict(manifest.metadata)
+    duplicate.upload_from_string(manifest.data, if_generation_match=0)
+    clock.now = 300
+    raw_audio_read.invalidate_pack_index(remote, UID, CID)
+    assert raw_audio_read.list_packs(remote, UID, CID, reuse_manifest_bodies=True) == []
+
+
+def test_inventory_manifest_cache_isolates_owners(remote, monkeypatch, native_opus, manifest_cache):
+    cache, clock = manifest_cache
+    for owner in ('owner-a', 'owner-b'):
+        monkeypatch.setattr(sys.modules[__name__], 'UID', owner)
+        receipt, _, _, _ = build_pack(remote, gapped_frames())
+        manifest = remote.blob(receipt.manifest_path)
+        manifest.metageneration = 1
+        manifest.download_as_bytes = Mock(wraps=manifest.download_as_bytes)
+        assert len(raw_audio_read.list_packs(remote, owner, CID, reuse_manifest_bodies=True)) == 2
+        manifest.download_as_bytes.assert_called_once()
+        clock.now += 300
+    assert {key[1] for key in cache} == {'owner-a', 'owner-b'}
+
+
 def test_decode_returns_captured_samples_without_shifting_the_clock(remote, monkeypatch, native_opus):
     wire(remote, monkeypatch)
     receipt, _, _, packets = build_pack(remote, gapped_frames())
@@ -203,6 +398,70 @@ def test_materialized_unit_places_audio_at_its_capture_position(remote, monkeypa
     assert pcm[: 640 * 2] == captured[: 640 * 2]
     assert pcm[640 * 2 : (640 + gap) * 2] == b'\x00' * (gap * 2)
     assert pcm[(640 + gap) * 2 :] == captured[640 * 2 :]
+
+
+def test_pinned_gapped_unframed_pack_recovers_without_digest_refusal(remote, monkeypatch, native_opus, setup):
+    """Recovery must decode the pinned WAL pack with admission's frame-table semantics."""
+    wire(remote, monkeypatch)
+    monkeypatch.setenv('BUCKET_PRIVATE_CLOUD_SYNC', remote.name)
+    monkeypatch.delenv('BUCKET_AUDIO_DERIVED', raising=False)
+    monkeypatch.setattr(sys.modules[__name__], 'UID', 'synthetic-owner')
+    monkeypatch.setattr(sys.modules[__name__], 'CID', 'c')
+    monkeypatch.setattr(sys.modules[__name__], 'NAME', 'c/0/0/session/0')
+
+    receipt, _, _, packets = build_pack(remote, gapped_frames())
+    storage_client = client(remote)
+    chunks = storage.list_audio_chunks(
+        UID, CID, include_raw=True, require_archive=True, client=storage_client, source_metadata=True
+    )
+    units = list(live.retained_record_units(UID, CID, chunks, storage_client, b'0' * 32))
+    assert len(units) == 1
+    start, duration, references = units[0]
+    assert {ref['generation'] for ref in references} == {int(receipt.generation)}
+    body = (
+        source_audio.MAGIC
+        + json.dumps(
+            {
+                'owner_id': UID,
+                'conversation_id': CID,
+                'capture_at': start,
+                'context': {},
+                'references': references,
+            }
+        ).encode()
+    )
+
+    db_client, _, _, artifacts, stt, _ = setup
+    row(db_client).update(conversation_id=CID, capture_at=start, duration_seconds=duration)
+    source = ArtifactStore(
+        storage_client,
+        bucket='synthetic',
+        namespace='batch_pipeline_prod',
+        authorize=lambda _: ProtectionContext('standard', 0),
+        key_for_owner=lambda _: b'0' * 32,
+        register_artifact=lambda *args: None,
+    )
+    source._read = Mock(return_value=body)
+    artifacts.fetch_audio.side_effect = source.fetch_audio
+
+    media = remote.blob(receipt.path)
+    media.download_as_bytes = Mock(wraps=media.download_as_bytes)
+    response = serve(setup, monkeypatch).post(
+        '/v2/batch-pipeline/recover-quarantine', json={'stage': 'prod', 'segment_id': 'bad'}
+    )
+
+    assert response.status_code == 200 and response.json() == {'status': 'recovered'}
+    assert row(db_client)['recovery_state'] == 'recovered'
+    assert 'refusal' not in row(db_client)['recovery']
+    stt.assert_called_once()
+    assert media.download_as_bytes.call_count == 1
+    assert media.download_as_bytes.call_args.kwargs['if_generation_match'] == int(receipt.generation)
+    audio = stt.call_args.args[2]
+    with wave.open(io.BytesIO(audio), 'rb') as stream:
+        recovered = stream.readframes(stream.getnframes())
+    captured = decode_packets(packets)
+    gap = round((1003.02 - 1000.04) * RATE)
+    assert recovered == captured[: 640 * 2] + b'\x00' * (gap * 2) + captured[640 * 2 :]
 
 
 def test_retained_zero_sample_frame_is_kept_but_contributes_no_audio(remote, monkeypatch, native_opus):
@@ -293,3 +552,160 @@ def test_framed_pack_still_uses_its_declared_frame_schema(remote, monkeypatch, n
     packs = raw_audio_read.list_packs(remote, UID, CID)
     assert [(p['timestamp'], p['span']['samples']) for p in packs] == [(1000.0, 320), (1003.02, 160)]
     assert raw_audio_read.read_pack(remote, receipt.path, UID) == first + second
+
+
+@pytest.mark.parametrize('mode', ['on', 'off', 'stale', 'missing_metageneration', 'deleted', 'corrupt'])
+@pytest.mark.parametrize('per_pack', [False, True])
+def test_gapped_manifest_can_use_versioned_listing_without_skipping_payload_proof(monkeypatch, mode, per_pack):
+    from unittest.mock import Mock
+
+    from google.api_core.exceptions import NotFound, PreconditionFailed
+
+    from utils.other.audio_frame_table import gapped_frames, unframed_frames
+
+    path = 'audio-outbox/owner/pack/manifest'
+    media = SimpleNamespace(name='raw-live/owner/pack/object', generation=9, metadata={'sha256': 'media-digest'})
+    table = [
+        {'sequence': 0, 'start': 1.0, 'samples': 16, 'gap_before': False},
+    ]
+    manifest = json.dumps(
+        {
+            'schema': 'audio_custody_v1',
+            'capture': {'sample_rate': RATE},
+            'frames': table,
+            'media': {'bucket': 'private-synthetic', 'path': media.name, 'generation': '9', 'sha256': 'media-digest'},
+        }
+    ).encode()
+    properties = {
+        'encrypted': 'false',
+        'sha256': hashlib.sha256(manifest).hexdigest(),
+        'format': 'audio-custody-manifest-v1',
+    }
+    listed = SimpleNamespace(
+        name=path,
+        generation=3,
+        metageneration=None if mode == 'missing_metageneration' else 2,
+        size=len(manifest),
+        metadata=properties,
+    )
+    loaded = SimpleNamespace(
+        name=path,
+        generation=4,
+        size=len(manifest),
+        metadata=properties,
+        reload=Mock(),
+        download_as_bytes=Mock(return_value=manifest),
+    )
+    bucket = SimpleNamespace(
+        name='private-synthetic', blob=Mock(return_value=loaded), list_blobs=Mock(return_value=[listed])
+    )
+    if mode == 'stale':
+        loaded.download_as_bytes.side_effect = [PreconditionFailed('synthetic stale listing'), manifest]
+    if mode == 'deleted':
+        loaded.download_as_bytes.side_effect = NotFound('synthetic deletion')
+    if mode == 'corrupt':
+        loaded.download_as_bytes.return_value = b'wrong hash'
+    monkeypatch.setenv('BUCKET_PRIVATE_CLOUD_SYNC', bucket.name)
+    monkeypatch.setenv('PRIVATE_SYNC_LISTED_MANIFEST_READ_ENABLED', 'false' if mode == 'off' else 'true')
+
+    def resolve():
+        if per_pack:
+            return gapped_frames(bucket, media, UID)
+        return unframed_frames(bucket, media, UID, path, listed_manifest=listed)
+
+    if mode == 'deleted':
+        with pytest.raises(NotFound):
+            resolve()
+    elif mode == 'corrupt':
+        with pytest.raises(ValueError, match='checksum mismatch'):
+            resolve()
+    else:
+        assert resolve() == (table, RATE)
+    if per_pack:
+        assert bucket.list_blobs.call_args.kwargs['prefix'] == 'audio-outbox/owner/pack/'
+    bucket.blob.assert_called_once_with(path)
+    conditions = [
+        {key: value for key, value in call.kwargs.items() if key.startswith('if_')}
+        for call in loaded.download_as_bytes.call_args_list
+    ]
+    fast = {'if_generation_match': 3, 'if_metageneration_match': 2}
+    legacy = {'if_generation_match': 4}
+    if mode == 'stale':
+        loaded.reload.assert_called_once()
+        assert conditions == [fast, legacy]
+    elif mode in ('off', 'missing_metageneration'):
+        loaded.reload.assert_called_once()
+        assert conditions == [legacy]
+    else:
+        loaded.reload.assert_not_called()
+        assert conditions == [fast]
+
+
+@pytest.mark.parametrize('mode', ['on', 'list_off', 'memo_off', 'stale_key'])
+def test_operation_reuses_verified_pack_and_manifest_with_live_proof(remote, monkeypatch, native_opus, mode):
+    wire(remote, monkeypatch)
+    monkeypatch.setenv('BUCKET_PRIVATE_CLOUD_SYNC', remote.name)
+    receipt, _, _, packets = build_pack(remote, gapped_frames())
+    pack, manifest = remote.blob(receipt.path), remote.blob(receipt.manifest_path)
+    pack.metageneration = manifest.metageneration = 1
+    manifest_reload = manifest.reload
+
+    def conditional_reload(**kwargs):
+        if kwargs.get('if_metageneration_match', manifest.metageneration) != manifest.metageneration:
+            raise PreconditionFailed('manifest metadata changed')
+        manifest_reload(**kwargs)
+
+    manifest.reload = Mock(side_effect=conditional_reload)
+    manifest.download_as_bytes = Mock(wraps=manifest.download_as_bytes)
+    pack.reload = Mock(wraps=pack.reload)
+    pack.download_as_bytes = Mock(wraps=pack.download_as_bytes)
+    remote.list_blobs = Mock(wraps=remote.list_blobs)
+    if mode == 'list_off':
+        monkeypatch.setenv('PRIVATE_SYNC_KNOWN_KEY_LIST_REUSE_ENABLED', 'false')
+    if mode == 'memo_off':
+        monkeypatch.setenv('PRIVATE_SYNC_REQUEST_READ_MEMO_ENABLED', 'false')
+    memo = ReadMemo()
+    assert len(raw_audio_read.list_packs(remote, UID, CID, memo=memo)) == 2
+    expected = decode_packets(packets)
+    assert raw_audio_read.read_pack(remote, receipt.path, UID, memo=memo) == expected
+    if mode == 'stale_key':
+        manifest.metageneration = 2
+    assert raw_audio_read.read_pack(remote, receipt.path, UID, memo=memo) == expected
+    assert pack.reload.call_count == 2
+    assert pack.download_as_bytes.call_count == (2 if mode == 'memo_off' else 1)
+    assert manifest.download_as_bytes.call_count == (3 if mode == 'memo_off' else 2 if mode == 'stale_key' else 1)
+    assert remote.list_blobs.call_count == (4 if mode == 'list_off' else 3 if mode == 'stale_key' else 2)
+
+
+def test_new_manifest_precondition_race_restarts_the_live_read(remote, monkeypatch, native_opus):
+    wire(remote, monkeypatch)
+    receipt, _, _, _ = build_pack(remote, gapped_frames())
+    manifest = remote.blob(receipt.manifest_path)
+    manifest.metageneration = 1
+    manifest.reload = Mock(wraps=manifest.reload)
+    manifest.download_as_bytes = Mock(side_effect=[PreconditionFailed('metadata changed'), manifest.data])
+    decoded = audio_frame_table._manifest(
+        remote, UID, receipt.manifest_path, require_frame_schema=False, memo=ReadMemo()
+    )
+    assert decoded['media']['generation'] == receipt.generation
+    first, second = manifest.download_as_bytes.call_args_list
+    assert first.kwargs['if_metageneration_match'] == 1
+    assert 'if_metageneration_match' not in second.kwargs
+    assert manifest.reload.call_count == 2
+
+
+def test_new_pack_precondition_race_restarts_the_live_read(remote, monkeypatch, native_opus):
+    wire(remote, monkeypatch)
+    receipt, _, _, packets = build_pack(remote, gapped_frames())
+    pack = remote.blob(receipt.path)
+    pack.metageneration = 1
+    pack.reload = Mock(wraps=pack.reload)
+    pack.download_as_bytes = Mock(side_effect=[PreconditionFailed('metadata changed'), pack.data])
+    pcm = raw_audio_read.read_pack(
+        remote, receipt.path, UID, {'if_generation_match': int(receipt.generation)}, memo=ReadMemo()
+    )
+    assert pcm == decode_packets(packets)
+    assert pack.reload.call_count == 2
+    first, second = pack.download_as_bytes.call_args_list
+    assert first.kwargs['if_metageneration_match'] == 1
+    assert first.kwargs['if_generation_match'] == second.kwargs['if_generation_match'] == int(receipt.generation)

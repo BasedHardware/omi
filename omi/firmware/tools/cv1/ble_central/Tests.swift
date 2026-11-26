@@ -82,7 +82,13 @@ enum Tests {
         check(decodeDiagnostics(unknown).fields.isEmpty && decodeDiagnostics(unknown).rawHex == hex(unknown), "Unknown version raw")
         unknown = diagnostic; unknown[12] = 1
         check(decodeDiagnostics(unknown).fields.isEmpty, "Reserved flags unknown")
-        check(decodeDiagnostics(diagnostic + Data([0])).fields.isEmpty, "Oversized diagnostics raw")
+        check(decodeDiagnostics(diagnostic + Data([0])).fields == fields, "Appended diagnostics preserves base")
+        let connection = diagnostic + Data([255, 255, 255, 255, 255, 0x34, 0x12, 0x78, 0x56, 0x58, 2, 2, 4])
+        let connectionFields = decodeDiagnostics(connection).fields
+        check(connectionFields["conn_interval"] == 0x1234 && connectionFields["conn_latency"] == 0x5678 && connectionFields["conn_timeout"] == 600, "Connection units/endian")
+        check(connectionFields["tx_phy"] == 2 && connectionFields["rx_phy"] == 4, "Connection PHY")
+        for length in 25..<38 { check(decodeDiagnostics(connection.prefix(length)).fields["conn_interval"] == nil, "Incomplete connection tail") }
+        check(decodeDiagnostics(diagnostic + Data(repeating: 255, count: 13)).fields["conn_interval"] == nil, "Unknown connection")
         check(decodeFeatures(Data([0x80, 0x05, 0, 0])).fields["bitmask"] == 0x580, "Features endian")
         for length in [0, 1, 3, 5] { check(decodeFeatures(Data(repeating: 0, count: length)).fields.isEmpty, "Unknown features size") }
         check(decodeText(Data([0xff])).text == nil, "Reject invalid DIS UTF-8")

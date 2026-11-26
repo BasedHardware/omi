@@ -531,7 +531,7 @@ class AppState: ObservableObject {
         && (isLiveCapturing || meetingDetector?.resumeOffAt != nil))
   }
   var meetingDetectorMode: AssistantSettings.AudioRecordingMode?
-  var (meetingBoundaryInProgress, meetingBoundaryEvidence) = (false, MeetingBoundaryEvidence())
+  var meetingBoundaryInProgress = false
   var pendingMeetingState: Bool?
   var pendingMeetingEndedAt: Date?
   var meetingRelaunchChecked = false
@@ -720,7 +720,7 @@ class AppState: ObservableObject {
   /// switch posts only .runtimeOwnerDidChange, so without this the previous
   /// account's folders, filters, counts, and people kept rendering.
   func resetOwnerScopedContent() {
-    (ownerScopeGeneration, meetingBoundaryEvidence) = (ownerScopeGeneration &+ 1, MeetingBoundaryEvidence())
+    ownerScopeGeneration &+= 1
     folders = []
     selectedFolderId = nil
     selectedDateFilter = nil
@@ -749,6 +749,12 @@ class AppState: ObservableObject {
       MainActor.assumeIsolated {
         self?.resetOwnerScopedContent()
       }
+    }
+    conversationRepository.activeLocalCaptureIds = { [weak self] in
+      guard let self, self.isLiveCapturing, self.currentSessionId != nil,
+        let id = self.currentBackendConversationId, !id.isEmpty
+      else { return [] }
+      return [id]
     }
     conversationRepository.onSnapshot = { [weak self] snapshot in
       guard let self else { return }
@@ -945,8 +951,6 @@ class AppState: ObservableObject {
             finishSession: false
           )
         }
-        // Flush final sync changes before sleep
-        await AgentSyncService.shared.stop()
         self.armDarkWakeCaptureRearm()
       }
     }

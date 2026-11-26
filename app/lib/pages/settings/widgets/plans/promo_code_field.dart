@@ -14,7 +14,8 @@ class PlanPromoCodeField extends StatefulWidget {
       required this.applyEnabled,
       required this.applied,
       required this.onApply,
-      required this.onChanged});
+      required this.onChanged,
+      this.initiallyExpanded = false});
 
   final TextEditingController controller;
   final String? error;
@@ -24,13 +25,14 @@ class PlanPromoCodeField extends StatefulWidget {
   final bool applied;
   final Future<void> Function() onApply;
   final VoidCallback onChanged;
+  final bool initiallyExpanded;
 
   @override
   State<PlanPromoCodeField> createState() => _PlanPromoCodeFieldState();
 }
 
 class _PlanPromoCodeFieldState extends State<PlanPromoCodeField> {
-  bool _expanded = false;
+  late bool _expanded = widget.initiallyExpanded;
 
   @override
   Widget build(BuildContext context) {

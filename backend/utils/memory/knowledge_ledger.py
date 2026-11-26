@@ -14,6 +14,7 @@ from typing import Any, Dict, Iterable, List, Literal, Optional, cast
 from pydantic import BaseModel, Field, field_validator, model_validator
 
 from models.knowledge_ledger_policy import (
+    LEDGER_SCHEMA_VERSION,
     PLAYBOOK_HANDLE_CHARACTER_LIMIT,
     PROFILE_CHARACTER_BUDGET,
     canonicalize_ledger_slot,
@@ -44,7 +45,6 @@ from utils.memory.canonical_memory_adapter import (
 )
 from utils.memory.memory_system import ensure_canonical_apply_control_state
 
-LEDGER_SCHEMA_VERSION = "knowledge_ledger.v1"
 DEFAULT_PROFILE_CHARACTER_BUDGET = PROFILE_CHARACTER_BUDGET
 MAX_PLAYBOOK_BODY_CHARACTERS = MAX_LEDGER_PLAYBOOK_BODY_CHARACTERS
 MAX_TRIGGER_CONDITION_KEYS = MAX_LEDGER_TRIGGER_CONDITION_KEYS

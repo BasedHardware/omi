@@ -80,8 +80,10 @@ def test_only_user_actions_skip_assessment():
     # retained recording. CAPTURE_GROUP regenerates a primary whose transcript
     # is unchanged — only confirmed same-event meeting context is new — so
     # grouping must never re-judge (and possibly hide) the rendered row.
+    # HISTORICAL_OPEN is the owner opening a historical-tier row for its summary.
     assert keep == {
         ProcessingTrigger.FIRST_OPEN,
+        ProcessingTrigger.HISTORICAL_OPEN,
         ProcessingTrigger.USER_REPROCESS,
         ProcessingTrigger.MERGE,
         ProcessingTrigger.SMART_MERGE,

@@ -5,15 +5,18 @@ import 'package:omi/backend/http/api/conversations.dart';
 import 'package:omi/backend/http/api/sync_upload_refusal.dart';
 import 'package:omi/backend/http/api/users.dart';
 import 'package:omi/backend/http/shared.dart';
+import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/geolocation.dart';
 import 'package:omi/services/account_cutover/account_cutover_runtime.dart';
 import 'package:omi/services/telemetry/client_telemetry.dart';
 import 'package:omi/services/telemetry/client_telemetry_flags.dart';
+import 'package:omi/services/wals/recording_wait_deferrals.dart';
 import 'package:omi/services/wals/sync_rate_limit_reconciliation.dart';
 import 'package:omi/services/wals/sync_rate_limiter.dart';
 import 'package:omi/services/wals/sync_job_poller.dart';
 import 'package:omi/utils/analytics/analytics_manager.dart';
 import 'package:omi/utils/mutex.dart';
+import 'package:omi/utils/reliability_experiments.dart';
 import 'package:uuid/uuid.dart';
 
 typedef SyncFilesUploader = Future<UploadFilesResult> Function(
@@ -32,6 +35,11 @@ typedef UploadTelemetryEmitter = void Function(String eventName, Map<String, dyn
 typedef UploadAttemptIdFactory = String Function();
 typedef UploadClock = DateTime Function();
 
+/// Raised before dispatch when this recording has an active custody wait.
+class SyncRecordingWaitException extends SyncUploadHttpException {
+  const SyncRecordingWaitException() : super(503, 'Recording custody is pending', reasonCode: recordCapturePending);
+}
+
 /// Account-global admission gate for every `custody upload` upload.
 ///
 /// Uploads are serialized so independent WAL, live-capture, and Transcribe
@@ -47,19 +55,22 @@ class SyncUploadGate {
     UploadAttemptIdFactory? attemptIdFactory,
     UploadClock? clock,
     ClientTelemetry? clientTelemetry,
+    RecordingWaitDeferrals? recordingWaits,
   })  : _limiter = limiter,
         _uploader = uploader,
         _fairUseStatusLoader = fairUseStatusLoader,
         _telemetryEmitter = telemetryEmitter,
         _attemptIdFactory = attemptIdFactory ?? _defaultAttemptId,
         _clock = clock ?? DateTime.now,
-        _clientTelemetry = clientTelemetry;
+        _clientTelemetry = clientTelemetry,
+        _recordingWaits = recordingWaits ?? RecordingWaitDeferrals(clock ?? DateTime.now);
 
   static final SyncUploadGate instance = SyncUploadGate(
     limiter: SyncRateLimiter.instance,
     uploader: uploadLocalFilesV2,
     fairUseStatusLoader: getFairUseStatus,
     telemetryEmitter: _emitProductionTelemetry,
+    recordingWaits: RecordingWaitDeferrals(DateTime.now, persist: true),
   );
 
   static const int _statusRetryCooldownSeconds = 60;
@@ -71,8 +82,12 @@ class SyncUploadGate {
   final UploadAttemptIdFactory _attemptIdFactory;
   final UploadClock _clock;
   final ClientTelemetry? _clientTelemetry;
+  final RecordingWaitDeferrals _recordingWaits;
   final Mutex _uploadMutex = Mutex();
   Future<bool>? _reconciliation;
+
+  bool isRecordingWaiting({String? recordingGroup, String? filePath}) =>
+      _recordingWaits.isWaiting(RecordingWaitDeferrals.key(recordingGroup: recordingGroup, filePath: filePath));
 
   static String _defaultAttemptId() => const Uuid().v4();
 
@@ -162,6 +177,7 @@ class SyncUploadGate {
     String? conversationId,
     String? captureEvidence,
     String? recordingSessionId,
+    String? recordingGroup,
     double? audioStartSeconds,
     double? audioEndSeconds,
     bool claimLiveCapture = false,
@@ -193,6 +209,17 @@ class SyncUploadGate {
         );
       }
 
+      final recordingKey = RecordingWaitDeferrals.key(recordingGroup: recordingGroup);
+      final waitKeys = {
+        if (recordingKey != null)
+          recordingKey
+        else
+          for (final file in files)
+            if (RecordingWaitDeferrals.key(filePath: file.path) case final key?) key,
+      };
+      if (waitKeys.any(_recordingWaits.isWaiting)) throw const SyncRecordingWaitException();
+
+      final owner = SharedPreferencesUtil().uid;
       final attemptId = _attemptIdFactory();
       final startedAt = _clock();
       final totalBytes = await RecordingUploadTelemetry.totalBytes(files);
@@ -226,7 +253,13 @@ class SyncUploadGate {
           geolocation: geolocation,
         );
         SyncJobPoller.instance.validateOwner(result);
-        if (_limiter.reason != RateLimitReason.edgeThrottle) _limiter.clear();
+        if (owner == SharedPreferencesUtil().uid) await _recordingWaits.clear(waitKeys);
+        if (ReliabilityExperiments.enabled('keep_cooldown_after_upload')) {
+          // A status GET can establish a new account cooldown during this POST.
+          if (!_limiter.isLimited) _limiter.clear();
+        } else if (_limiter.reason != RateLimitReason.edgeThrottle) {
+          _limiter.clear();
+        }
         final queued = result.isQueued;
         _emitTelemetry(
           RecordingUploadTelemetry.completedEvent,
@@ -304,7 +337,11 @@ class SyncUploadGate {
           );
         }
         if (error is SyncUploadHttpException && isRecordingScopedSyncWaitReasonCode(error.reasonCode)) {
-          // The WAL stays pending until its record is complete: a wait, not a failure.
+          if (owner == SharedPreferencesUtil().uid) {
+            // Install pacing under the same mutex that admits subsequent uploads.
+            await _recordingWaits.defer(waitKeys, error.recordingWaitSeconds ?? error.retryAfterSeconds);
+          }
+          // The WAL stays pending until its record is complete.
           _mirrorUpload(
             attemptId: attemptId,
             phase: 'deferred',

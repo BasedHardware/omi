@@ -180,4 +180,39 @@ void main() {
     expect(find.descendant(of: find.byKey(const ValueKey('recent_change_toggle_t1')), matching: find.text('Undo')),
         findsOneWidget);
   });
+
+  testWidgets('V3: a failed refresh or Show More keeps the rows and says so with Try Again', (tester) async {
+    tester.view.physicalSize = const Size(900, 2400);
+    tester.view.devicePixelRatio = 2;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    OmiColors.active = OmiColors.forBrightness(Brightness.dark);
+    var fail = false;
+    await tester.pumpWidget(MaterialApp(
+      theme: buildOmiTheme(brightness: Brightness.dark),
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
+      home: RecentChangesPage(
+        loadChanges: ({cursor}) async => fail
+            ? const ApiFailure(ApiProblem(ApiProblemKind.server))
+            : ApiSuccess(ReviewChangesPage(changes: [_memory], nextCursor: 'next')),
+        setUndone: (id, {required undone}) async => ApiSuccess(_memory.copyWith(undone: undone)),
+        openConversation: (_, __) {},
+      ),
+    ));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('recent_change_toggle_memory-1')), findsOneWidget);
+
+    fail = true;
+    await tester.tap(find.text('Show More'));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('recent_changes_more_failed')), findsOneWidget, reason: 'not a silent end');
+    expect(find.byKey(const ValueKey('recent_change_toggle_memory-1')), findsOneWidget);
+
+    await tester.drag(find.byType(ListView), const Offset(0, 400));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('recent_changes_refresh_failed')), findsOneWidget);
+    expect(find.byKey(const ValueKey('recent_change_toggle_memory-1')), findsOneWidget,
+        reason: 'a failed refresh keeps the rows it had');
+  });
 }

@@ -298,6 +298,7 @@ class Features:
     CONVERSATION_ACTION_ITEMS = "conv_action_items"
     WAKE_WORD_ADJUDICATION = "wake_word_adjudication"
     CONVERSATION_FOLDER = "conv_folder"
+    HISTORICAL_SUMMARY = "historical_summary"
     CONVERSATION_APPS = "conv_apps"
     OPEN_LOOP_CARD = "open_loop_card"
     OPEN_LOOP_DAILY = "open_loop_daily"

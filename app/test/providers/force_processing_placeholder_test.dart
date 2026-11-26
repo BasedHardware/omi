@@ -2,23 +2,53 @@ import 'dart:async';
 
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'package:omi/backend/http/api/conversations.dart';
+import 'package:omi/backend/http/api_result.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/message.dart';
+import 'package:omi/backend/schema/message_event.dart';
 import 'package:omi/backend/schema/structured.dart';
+import 'package:omi/env/env.dart';
 import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/services/capture/capture_external_actions.dart';
 import 'package:omi/services/capture/capture_seams.dart';
+import 'package:omi/services/capture/empty_recording_notice.dart';
 import 'package:omi/services/capture/local_segment_store.dart';
 import 'package:omi/services/wals/wal_interfaces.dart';
+import 'package:omi/utils/reliability_experiments.dart';
 
 import '../support/crashlytics_recorder.dart';
 
 class _RecordingActions extends NoopCaptureExternalActions {
   final processing = <ServerConversation>[];
   final upserted = <ServerConversation>[];
+  final ended = <(String, String?)>[];
+  ServerConversation? manualFinishRow;
+  bool? manualFinishFailed;
+  ProcessAbsence? manualFinishAbsence;
+
+  @override
+  void onManualFinishStarted(ServerConversation placeholder, String? recordingId,
+      {String? liveConversationId, String? captureId}) {
+    manualFinishRow = placeholder;
+  }
+
+  @override
+  void onManualFinishSettled(ServerConversation placeholder, InProgressProcessOutcome? outcome,
+      {required bool showFailure}) {
+    if (!identical(placeholder, manualFinishRow)) return;
+    manualFinishFailed = outcome?.response?.conversation == null && showFailure;
+    manualFinishAbsence = outcome?.absence;
+  }
+
+  @override
+  void onEndAccepted(ServerConversation saved, {String? liveConversationId}) {
+    ended.add((saved.id, liveConversationId));
+  }
 
   @override
   void addProcessingConversation(ServerConversation conversation) {
@@ -121,7 +151,8 @@ Future<({List<Object> unhandled, Object? harnessError})> _runInGuardedZone(Futur
 CaptureProvider _provider({
   required _RecordingActions actions,
   required Completer<void> finalizeGate,
-  required Future<CreateConversationResponse?> Function() process,
+  Future<CreateConversationResponse?> Function()? process,
+  InProgressConversationRequestSender? processRequestSender,
   List<Completer<void>> laterFinalizeGates = const [],
   _GatedPhoneSync? phone,
 }) {
@@ -130,6 +161,7 @@ CaptureProvider _provider({
     externalActions: actions,
     walService: _GatedWal(resolvedPhone),
     processInProgressConversation: process,
+    processRequestSender: processRequestSender,
     connectivity: CaptureConnectivityBoundary(
       initiallyConnected: true,
       changes: const Stream.empty(),
@@ -177,6 +209,75 @@ void main() {
     await SharedPreferencesUtil.init();
   });
 
+  test('manual Finish serializes its optional window in the outbound POST', () async {
+    Env.overrideApiBaseUrl('https://finish.test/');
+    addTearDown(Env.clearApiBaseUrlOverride);
+    final requests = <ApiRequest>[];
+    final actions = _RecordingActions();
+    final provider = _provider(
+      actions: actions,
+      finalizeGate: Completer<void>()..complete(),
+      processRequestSender: (request) async {
+        requests.add(request);
+        return http.Response('', 404);
+      },
+    );
+    addTearDown(provider.dispose);
+
+    await provider.forceProcessingCurrentConversation(manualFinish: true, liveConversationId: 'window-1');
+    await _flushEventQueue();
+    await provider.forceProcessingCurrentConversation(manualFinish: true);
+    await _flushEventQueue();
+    final result = await provider.finishCaptureWithOutcome(liveConversationId: 'window-2');
+
+    expect(requests.map((request) => request.method), ['POST', 'POST', 'POST']);
+    expect(requests.map((request) => request.url).toSet(), {'https://finish.test/v1/conversations'});
+    expect(requests.map((request) => request.body), [
+      '{"live_conversation_id":"window-1"}',
+      '{}',
+      '{"live_conversation_id":"window-2"}',
+    ]);
+    expect(result.absence, ProcessAbsence.notFound);
+  });
+
+  test('end_open_conversation: every End carries the moment it was asked for; off, no header is sent', () async {
+    Env.overrideApiBaseUrl('https://finish.test/');
+    addTearDown(Env.clearApiBaseUrlOverride);
+    addTearDown(() => ReliabilityExperiments.overrideForTesting(null));
+    final requests = <ApiRequest>[];
+    final finalize = Completer<void>();
+    final provider = _provider(
+      actions: _RecordingActions(),
+      finalizeGate: finalize,
+      laterFinalizeGates: [Completer<void>()..complete()],
+      processRequestSender: (request) async {
+        requests.add(request);
+        return http.Response('', 404);
+      },
+    );
+    addTearDown(provider.dispose);
+
+    ReliabilityExperiments.overrideForTesting(const {});
+    final baseline = provider.forceProcessingCurrentConversation(manualFinish: true);
+    finalize.complete();
+    await baseline;
+    await _flushEventQueue();
+    expect(requests.single.headers.containsKey(endedAtHeader), isFalse);
+
+    ReliabilityExperiments.overrideForTesting({'end_open_conversation'});
+    final before = DateTime.now();
+    await provider.forceProcessingCurrentConversation(manualFinish: true);
+    await _flushEventQueue();
+    await provider.finishCaptureWithOutcome(liveConversationId: 'window-2');
+    final after = DateTime.now();
+    expect(requests, hasLength(3));
+    for (final request in requests.skip(1)) {
+      final sent = double.parse(request.headers[endedAtHeader]!);
+      expect(sent, greaterThanOrEqualTo(before.millisecondsSinceEpoch / 1000 - 0.001));
+      expect(sent, lessThanOrEqualTo(after.millisecondsSinceEpoch / 1000 + 0.001));
+    }
+  });
+
   test('adds the processing placeholder before finalizeCurrentSession completes', () async {
     final finalize = Completer<void>();
     final actions = _RecordingActions();
@@ -195,6 +296,7 @@ void main() {
 
     expect(actions.processing.map((conversation) => conversation.id), ['0']);
     expect(actions.processing.single.status, ConversationStatus.processing);
+    expect(actions.manualFinishRow, isNull, reason: 'a coordinator close must remain silent');
     expect(finalize.isCompleted, isFalse);
     expect(processStarted.isCompleted, isFalse);
 
@@ -217,6 +319,46 @@ void main() {
 
     expect(actions.processing, isEmpty);
     expect(actions.upserted, isEmpty);
+  });
+
+  for (final status in [ConversationStatus.processing, ConversationStatus.in_progress]) {
+    test('Process Now tracks an exact recording as closed only after acceptance (${status.name})', () async {
+      final provider = _provider(
+        actions: _RecordingActions(),
+        finalizeGate: Completer<void>()..complete(),
+        process: () async => CreateConversationResponse(
+          messages: [],
+          conversation: _conversation(id: 'recording-1', status: status),
+        ),
+      );
+      addTearDown(provider.dispose);
+
+      expect(provider.hasClosedServerRecording('recording-1'), isFalse);
+      await provider.forceProcessingCurrentConversation(manualFinish: true);
+      await _flushEventQueue();
+
+      expect(provider.hasClosedServerRecording('recording-1'), status == ConversationStatus.processing);
+      expect(provider.hasClosedServerRecording('recording-2'), isFalse);
+    });
+  }
+
+  test('pendant double tap publishes manual finish before the drain and reports an unanswered request', () async {
+    final finalize = Completer<void>();
+    final actions = _RecordingActions();
+    final provider = _provider(actions: actions, finalizeGate: finalize, process: () async => null);
+    addTearDown(provider.dispose);
+    SharedPreferencesUtil().omiButtonActionsEnabled = true;
+    SharedPreferencesUtil().doubleTapAction = 0;
+
+    provider.handleButtonEventForTesting('synthetic-pendant', 2);
+    expect(actions.manualFinishRow, same(actions.processing.single));
+    expect(actions.manualFinishFailed, isNull);
+
+    finalize.complete();
+    await _flushEventQueue();
+    expect(actions.manualFinishFailed, isTrue);
+    expect(actions.manualFinishAbsence, ProcessAbsence.transport);
+    expect(actions.processing, isEmpty);
   });
 
   test('a conversation that changes during the drain removes the skeleton without processing', () async {
@@ -275,6 +417,36 @@ void main() {
     await second;
     expect(processCalls, 1);
     expect(actions.processing.map((conversation) => conversation.id), ['0']);
+  });
+
+  test('every accepted End reports its conversation once, with the window it named; an unanswered one does not',
+      () async {
+    final finalize = Completer<void>()..complete();
+    final actions = _RecordingActions();
+    final provider = _provider(
+      actions: actions,
+      finalizeGate: finalize,
+      process: () async => CreateConversationResponse(
+          messages: <ServerMessage>[], conversation: _conversation(id: 'real', status: ConversationStatus.processing)),
+    );
+    addTearDown(provider.dispose);
+
+    // The shared path behind Finish, Wrap Up and the record button's stop: no manual-finish flag.
+    await provider.forceProcessingCurrentConversation();
+    await _flushEventQueue();
+    expect(actions.ended, [('real', null)]);
+
+    // End Conversation and a pendant double-tap: the manual finish, here naming its window.
+    await provider.forceProcessingCurrentConversation(manualFinish: true, liveConversationId: 'window');
+    await _flushEventQueue();
+    expect(actions.ended, [('real', null), ('real', 'window')]);
+
+    final unanswered = _RecordingActions();
+    final silent = _provider(actions: unanswered, finalizeGate: finalize, process: () async => null);
+    addTearDown(silent.dispose);
+    await silent.forceProcessingCurrentConversation(manualFinish: true);
+    await _flushEventQueue();
+    expect(unanswered.ended, isEmpty);
   });
 
   test('a contentless completed response settles into the real row', () async {
@@ -385,6 +557,52 @@ void main() {
     });
 
     expect(phone.stampCalls, 1);
+    expect(outcome.harnessError, isNull);
+    expect(outcome.unhandled, isEmpty);
+    _expectSingleReport('capture_process_now: StateError');
+  });
+
+  test('a failed middle drain cannot let a later server close bypass an unresolved predecessor', () async {
+    final sentinel = StateError('middle-drain-boom');
+    late _GatedPhoneSync phone;
+    late int stampsBeforeFirstDrain;
+    final outcome = await _runInGuardedZone(() async {
+      final firstDrain = Completer<void>();
+      final secondDrain = Completer<void>();
+      final thirdDrain = Completer<void>()..complete();
+      phone = _GatedPhoneSync(firstDrain, laterFinalizeGates: [secondDrain, thirdDrain]);
+      final provider = _provider(
+        actions: _RecordingActions(),
+        finalizeGate: firstDrain,
+        phone: phone,
+        process: () async => null,
+      );
+      try {
+        provider.testSessionStartSeconds = 777;
+        provider.onMessageEventReceived(ConversationProcessingStartedEvent(memory: _conversation(id: 'a')));
+
+        provider.testSessionStartSeconds = 778;
+        final second = provider.forceProcessingCurrentConversation();
+        final expectedFailure = expectLater(second, throwsA(same(sentinel)));
+        secondDrain.completeError(sentinel, StackTrace.fromString('#0      _fail (package:omi/fake.dart:1:1)'));
+        await expectedFailure;
+
+        provider.testSessionStartSeconds = 779;
+        provider.onMessageEventReceived(ConversationProcessingStartedEvent(memory: _conversation(id: 'c')));
+        await _flushEventQueue();
+        stampsBeforeFirstDrain = phone.stampCalls;
+
+        firstDrain.complete();
+        await _flushEventQueue();
+      } finally {
+        if (!firstDrain.isCompleted) firstDrain.complete();
+        if (!secondDrain.isCompleted) secondDrain.complete();
+        provider.dispose();
+      }
+    });
+
+    expect(stampsBeforeFirstDrain, 0, reason: 'the failed middle slot must retain the first close as its predecessor');
+    expect(phone.stampCalls, 2, reason: 'both valid closes stamp after the first drain completes');
     expect(outcome.harnessError, isNull);
     expect(outcome.unhandled, isEmpty);
     _expectSingleReport('capture_process_now: StateError');

@@ -1,0 +1,11 @@
+{
+  "schema_version": 1,
+  "id": "FC-deploy-target-scope-not-propagated",
+  "family": "cross-boundary-contract",
+  "violated_contract": "A deployment naming one service must carry that exact target set through validation, every mutation, status, serving verification and the saved inverse; omitted services remain unchanged.",
+  "canonical_prevention": "Use a closed typed selector at the existing workflow and composite boundary, propagate it through shared loops and release-vector validation, and execute target-exclusion regressions against actual shell steps.",
+  "canonical_prevention_artifact": ["backend/tests/unit/test_cloud_run_service_selection.py"],
+  "evidence_prs": [],
+  "scope_hints": [".github/actions/deploy-backend-stack/", ".github/workflows/gcp_backend.yml", "backend/scripts/cloud_run_scope.py"],
+  "status": "open"
+}

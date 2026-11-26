@@ -21,6 +21,7 @@ from google.cloud import firestore
 
 from database._client import get_firestore_client
 from utils.conversations.recovery import TERMINAL_NO_DERIVED_EFFECTS_FIELD
+from utils.conversations import terminal_settled
 
 MARKER = 'no_speech_terminal'
 POLICY = 'batch_live_no_speech_v1'
@@ -99,12 +100,14 @@ def _close_txn(
         )
         if int(privacy.get('generation', 0)) != expected_privacy_generation:
             raise NoSpeechConflict('privacy_changed')
+    settled = terminal_settled.settle(row, now=now, enabled=terminal_settled.serving(uid))
     transaction.update(
         ref,
         {
             'status': 'completed',
             'discarded': True,
             TERMINAL_NO_DERIVED_EFFECTS_FIELD: True,
+            **settled,
             MARKER: {
                 'version': 1,
                 'policy': POLICY,
@@ -114,6 +117,8 @@ def _close_txn(
                 'speech_seconds': speech_seconds,
                 'audio_seconds': audio_seconds,
                 'prior': _prior(row),
+                # Restore removes the settle time it added, so a later close stamps its own.
+                'settled_stamped': bool(settled),
             },
         },
     )
@@ -193,6 +198,7 @@ def _restore_txn(
         ref,
         {
             **{key: saved['value'] if saved['present'] else firestore.DELETE_FIELD for key, saved in prior.items()},
+            **({terminal_settled.FIELD: firestore.DELETE_FIELD} if marker.get('settled_stamped') else {}),
             MARKER: firestore.DELETE_FIELD,
         },
     )

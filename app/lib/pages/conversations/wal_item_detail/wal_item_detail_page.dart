@@ -12,6 +12,7 @@ import 'package:omi/services/wals.dart';
 import 'package:omi/utils/device.dart';
 import 'package:omi/widgets/waveform_section.dart';
 import 'package:omi/ui/ui.dart';
+import 'package:omi/pages/conversations/wal_delete_confirmation.dart';
 
 class WalItemDetailPage extends StatefulWidget {
   final Wal wal;
@@ -147,7 +148,7 @@ class _WalItemDetailPageState extends State<WalItemDetailPage> {
       builder: (context, syncProvider, child) {
         final currentWal = syncProvider.getWalById(widget.wal.id) ?? widget.wal;
         final isTransferring = currentWal.isSyncing;
-        final transferProgress = syncProvider.walsSyncedProgress;
+        final double? transferProgress = currentWal.deviceDownloadFraction?.clamp(0.0, 1.0);
         final transferSpeedKBps = currentWal.syncSpeedKBps;
         final transferEtaSeconds = currentWal.syncEtaSeconds;
 
@@ -208,7 +209,7 @@ class _WalItemDetailPageState extends State<WalItemDetailPage> {
             // Center content - Transfer UI
             Expanded(
               child: Center(
-                child: Padding(
+                child: SingleChildScrollView(
                   padding: const EdgeInsets.symmetric(horizontal: 40),
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
@@ -252,27 +253,27 @@ class _WalItemDetailPageState extends State<WalItemDetailPage> {
                         ClipRRect(
                           borderRadius: BorderRadius.circular(4),
                           child: LinearProgressIndicator(
-                            value: transferProgress > 0 ? transferProgress : null,
+                            value: transferProgress,
                             backgroundColor: Colors.grey.shade800,
                             color: OmiColors.accent,
                             minHeight: 6,
                           ),
                         ),
                         const SizedBox(height: 12),
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
+                        Wrap(
+                          alignment: WrapAlignment.center,
+                          spacing: 16,
+                          runSpacing: 4,
                           children: [
                             Text(
-                              '${(transferProgress * 100).toInt()}%',
+                              transferProgress != null ? '${(transferProgress * 100).toInt()}%' : context.l10n.unknown,
                               style: TextStyle(color: Colors.grey.shade400, fontSize: 14, fontWeight: FontWeight.w500),
                             ),
-                            if (transferSpeedKBps != null && transferSpeedKBps > 0) ...[
-                              const SizedBox(width: 16),
+                            if (transferSpeedKBps != null && transferSpeedKBps > 0)
                               Text(
                                 '${transferSpeedKBps.toStringAsFixed(1)} KB/s',
                                 style: TextStyle(color: Colors.grey.shade500, fontSize: 14),
                               ),
-                            ],
                           ],
                         ),
                         if (transferEtaSeconds != null && transferEtaSeconds > 0) ...[
@@ -571,11 +572,12 @@ class _WalItemDetailPageState extends State<WalItemDetailPage> {
   }
 
   void _showDeleteDialog(BuildContext context) async {
-    final uploading = widget.wal.syncDisplayState == WalSyncDisplayState.uploaded;
+    final copy =
+        walDeleteConfirmation(context.l10n, [widget.wal], notUploadedMessage: context.l10n.deleteRecordingConfirmation);
     final confirmed = await showOmiConfirm(
       context,
-      title: uploading ? context.l10n.deleteWhileProcessingTitle : context.l10n.deleteRecording,
-      message: uploading ? context.l10n.deleteWhileProcessingMessage : context.l10n.deleteRecordingConfirmation,
+      title: copy.title,
+      message: copy.message,
       confirmLabel: context.l10n.delete,
       destructive: true,
     );

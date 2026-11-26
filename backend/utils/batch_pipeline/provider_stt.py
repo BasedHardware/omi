@@ -43,6 +43,7 @@ from config.batch_pipeline_vendor_failover import (
 )
 from database.batch_pipeline_privacy import BatchPrivacyBlocked, BatchPrivacyReason
 from database.batch_pipeline_projection_protocol import ProjectionBlocked
+from database.firestore_transaction_retry import is_transaction_retry_failure
 from database.outbox import Claim, OutboxKind, Outcome
 from database.batch_pipeline_quarantine_recovery import RecoveryStore
 from utils.batch_pipeline import vendor_route_contracts as contracts
@@ -718,8 +719,8 @@ def _default_allowed(owner_id: str, seconds: float, service: str) -> tuple[bool,
 _DURABLE_DENIALS = frozenset({DispatchReason.ALLOWANCE_EXHAUSTED.value, DispatchReason.BUDGET_EXHAUSTED.value})
 
 
-# A held unit's staged audio is deleted by the bucket lifecycle at 30 days; the pipeline treats
-# 29 days as the end (input_retention.TERMINAL_SECONDS). Inside the unit's last day before that,
+# The retention contract defines the staged-audio lifecycle; the pipeline treats one day
+# before deletion as the end (input_retention.TERMINAL_SECONDS). Inside the unit's last day before that,
 # the hold re-checks at this interval whatever the configured window, and a longer window is cut
 # so the next re-check lands no later than the start of that day. A renewal in the last day is
 # then seen as soon as it was when the window was 2 h.
@@ -856,6 +857,12 @@ class ProviderSttStage:
                 return UnitOutcome('retry', 'dependency_warming')
             self._log('superseded', 'projection_blocked')
             return UnitOutcome('discarded', 'superseded')
+        except Exception as error:
+            if not is_transaction_retry_failure(error):
+                raise
+            # The provider intent and any result artifact stay durable. Release only
+            # the outbox lease so redelivery can resume the same provider attempt.
+            return UnitOutcome('retry', 'dependency_warming')
 
     def _call_sync(self, plan: _Call) -> dict | RecoveryFailure:
         if plan.failure is not None or plan.inspected is None:

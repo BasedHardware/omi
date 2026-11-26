@@ -22,14 +22,25 @@ COUNTERS = frozenset(
         'privacy_check_reads',
         'privacy_conversations_walked',
         'privacy_decision_mismatch',
+        'privacy_decision_comparison',
+        'privacy_owner_comparison',
+        'privacy_owner_shadow_error',
+        'privacy_ttl_cache_switch_reads',
         'privacy_shadow_checks',
         'privacy_memo_requests',
         'privacy_memo_ineligible',
         'privacy_negative_lookup',
+        'omi_batch_pipeline_privacy_owner_cache',
+        'omi_batch_pipeline_privacy_owner_shadow',
     }
 )
 RUNTIME_GAUGES = frozenset(
-    {'omi_runtime_percent', 'omi_runtime_percent_source', 'omi_runtime_percent_read_error_seconds'}
+    {
+        'omi_runtime_percent',
+        'omi_runtime_percent_source',
+        'omi_runtime_percent_read_error_seconds',
+        'privacy_ttl_cache_disabled',
+    }
 )
 
 

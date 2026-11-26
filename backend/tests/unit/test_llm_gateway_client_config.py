@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import importlib.util
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
@@ -11,7 +12,7 @@ from langchain_core.outputs import ChatGeneration, ChatResult
 from langchain_core.runnables import Runnable
 import pytest
 
-from utils.llm import clients, gateway_serving, model_config
+from utils.llm import background_flex, clients, gateway_serving, model_config
 from utils.llm import providers
 from utils.llm.gateway_client import DEFAULT_LLM_GATEWAY_URL, GatewayContextChatOpenAI, get_llm_gateway_base_url
 from utils.llm.gateway_client import (
@@ -679,3 +680,23 @@ def test_llm_gateway_headers_never_forward_client_supplied_junk_platform() -> No
     """A client-controlled header value must not reach an outbound header verbatim."""
     for junk in ('nintendo-switch', 'desktop\nX-Injected: 1', 'デスクトップ', 'desktop; drop table'):
         assert LLM_GATEWAY_APP_PLATFORM_HEADER not in llm_gateway_headers(feature='chat_agent', platform=junk)
+
+
+def test_gateway_client_sends_budget_only_for_live_eligible_scope():
+    model = GatewayContextChatOpenAI(
+        api_key='test', model='omi:auto:conv-structure', omi_gateway_feature='conv_structure'
+    )
+    now = datetime.now(timezone.utc)
+    feature = frozenset({'conv_structure'})
+    header = background_flex.BUDGET_HEADER
+
+    def headers():
+        return model._get_request_payload([HumanMessage(content='Synthetic prompt')]).get('extra_headers', {})
+
+    assert header not in headers()
+    with background_flex.background_flex(now, features=feature):
+        assert 0 < int(headers()[header]) <= 57_000
+    with background_flex.background_flex(now, features=frozenset({'memory_l1'})):
+        assert header not in headers()
+    with background_flex.background_flex(now - timedelta(hours=2), features=feature):
+        assert header not in headers()

@@ -560,11 +560,11 @@ class AppLocalizationsCs extends AppLocalizations {
   String get hardwareSection => 'Hardware';
 
   @override
-  String get v2Undetected => 'V2 nedetekováno';
+  String get v2Undetected => 'Offline synchronizace není k dispozici';
 
   @override
   String get v2UndetectedMessage =>
-      'Vidíme, že máte buď zařízení V1, nebo vaše zařízení není připojeno. Funkce SD karty je dostupná pouze pro zařízení V2.';
+      'Offline synchronizace vyžaduje připojené zařízení Omi s úložištěm na SD kartě. Vaše aktuální zařízení ji nepodporuje.';
 
   @override
   String get endConversation => 'Ukončit konverzaci';
@@ -1123,6 +1123,11 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String get nameUpdatedSuccessfully => 'Jméno úspěšně aktualizováno!';
+
+  @override
+  String calendarReadSelectionHelp(String calendar) {
+    return 'Číst vybrané kalendáře. Nové události používají $calendar.';
+  }
 
   @override
   String get calendarSettings => 'Nastavení kalendáře';
@@ -1989,6 +1994,15 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String get memoryHistory => 'Historie';
+
+  @override
+  String get recordingWithYourPhone => 'Nahrává se telefonem';
+
+  @override
+  String get wrapUp => 'Uzavřít';
+
+  @override
+  String get recordingDiscarded => 'Nahrávka zahozena';
 
   @override
   String get undo => 'Vrátit zpět';
@@ -7023,6 +7037,10 @@ class AppLocalizationsCs extends AppLocalizations {
   String get authFailedToSignInWithApple => 'Přihlášení přes Apple se nezdařilo, zkuste to prosím znovu.';
 
   @override
+  String get authAppleSignInFailedUseGoogle =>
+      'Přihlášení přes Apple se nezdařilo. Zkuste to znovu nebo pokračujte přes Google.';
+
+  @override
   String get authFailedToRetrieveToken => 'Nepodařilo se získat Firebase token, zkuste to prosím znovu.';
 
   @override
@@ -7031,6 +7049,26 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String get authUnexpectedError => 'Neočekávaná chyba při přihlašování, zkuste to prosím znovu';
+
+  @override
+  String get accountSignInMethods => 'Způsoby přihlášení';
+
+  @override
+  String get accountAddSignInMethod => 'Přidat způsob přihlášení';
+
+  @override
+  String get accountAddSignInMethodDetails =>
+      'Přidejte způsob přihlášení k tomuto účtu Omi. Tarif, nahrávky a integrace zůstanou u tohoto účtu.';
+
+  @override
+  String get accountSignInConflictTitle => 'Tento způsob přihlášení je spojen s jiným účtem';
+
+  @override
+  String get accountSignInConflictDetails =>
+      'Stále jste přihlášeni k tomuto účtu. Každý účet Omi si zachovává svůj tarif, nahrávky a integrace.';
+
+  @override
+  String get accountSignInMethodAdded => 'Způsob přihlášení byl přidán';
 
   @override
   String get authFailedToLinkGoogle => 'Propojení s Google se nezdařilo, zkuste to prosím znovu.';
@@ -9063,7 +9101,7 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String get deleteWhileProcessingMessage =>
-      'Tato nahrávka je nahraná, ale Omi stále vytváří konverzaci. Pokud ji nyní smažete a zpracování selže, nepůjde obnovit. Přesto smazat?';
+      'Tento záznam je už nahraný a Omi ho zpracovává. Smazáním zde odstraníte kopii v telefonu. Pokud zpracování selže, Omi to z tohoto telefonu nebude moct zkusit znovu.';
 
   @override
   String get syncCardAllBackedUp => 'Všechny nahrávky synchronizovány';
@@ -12215,7 +12253,7 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String diagnosticsSincePairingSummary(int drops, int failed) {
-    return 'Od spárování: výpadků $drops, neúspěšných připojení $failed.';
+    return 'Od spárování: $drops opětovných připojení, $failed neúspěšných připojení.';
   }
 
   @override
@@ -13403,6 +13441,9 @@ class AppLocalizationsCs extends AppLocalizations {
   }
 
   @override
+  String get paywallTrialCodeHint => 'Máte kód Omi Pro? Zadejte ho na další obrazovce.';
+
+  @override
   String get paywallTrialCancelNote => 'Zrušte kdykoli. Žádné poplatky, žádné sankce.';
 
   @override
@@ -13449,16 +13490,6 @@ class AppLocalizationsCs extends AppLocalizations {
   }
 
   @override
-  String syncCardTranscribingAmount(String amount) {
-    return 'Převod $amount na konverzace';
-  }
-
-  @override
-  String syncCardTranscribedOf(String done, String total) {
-    return 'Hotovo $done z $total · tuto obrazovku můžete opustit';
-  }
-
-  @override
   String syncCardReadyAmount(String amount) {
     return '$amount připraveno k synchronizaci';
   }
@@ -13482,7 +13513,7 @@ class AppLocalizationsCs extends AppLocalizations {
   String get syncDetailsWaitingOnPhone => 'Čeká v tomto telefonu';
 
   @override
-  String get syncDetailsTranscribing => 'Přepisuje se v Omi';
+  String get syncDetailsTranscribing => 'Nahráno, čeká na server';
 
   @override
   String get syncDetailsAudioFiles => 'Zvukové soubory';
@@ -13941,6 +13972,12 @@ class AppLocalizationsCs extends AppLocalizations {
   String get summaryBusyBody => 'Omi už na této konverzaci pracuje. Shrnutí se zde zobrazí, až bude hotové.';
 
   @override
+  String get summaryTranscriptionPendingTitle => 'Zatím nepřepsáno';
+
+  @override
+  String get summaryTranscriptionPendingBody => 'Shrnutí se zobrazí, až bude přepis hotový.';
+
+  @override
   String get summaryCheckAgain => 'Zkontrolovat znovu';
 
   @override
@@ -14342,6 +14379,9 @@ class AppLocalizationsCs extends AppLocalizations {
   String get processingProgress => 'Zpracovávání čekajících nahrávek…';
 
   @override
+  String get waitingForTranscriptionAllowance => 'Čeká se na dostupný limit přepisu';
+
+  @override
   String get processingDeferred => 'Čeká na zpracování';
 
   @override
@@ -14470,14 +14510,6 @@ class AppLocalizationsCs extends AppLocalizations {
   @override
   String deviceCatchingUpProgress(int done, int total) {
     return '$done z $total min';
-  }
-
-  @override
-  String get deviceRecently => 'Nedávno';
-
-  @override
-  String deviceDisconnectedFor(String duration) {
-    return 'Odpojeno na $duration';
   }
 
   @override
@@ -15304,9 +15336,6 @@ class AppLocalizationsCs extends AppLocalizations {
   String get stopThese => 'Zastavit tyto';
 
   @override
-  String get meetingActionItemsTitle => 'Akční položky';
-
-  @override
   String get addToTasks => 'Přidat do úkolů';
 
   @override
@@ -15418,6 +15447,11 @@ class AppLocalizationsCs extends AppLocalizations {
   }
 
   @override
+  String firmwareUpdateNotInstalledCv1Message(String version) {
+    return 'Aktualizace se nenainstalovala. Přívěsek dál funguje na současném firmwaru ($version). Místo opakování aktualizace prosím kontaktujte podporu.';
+  }
+
+  @override
   String get firmwareUpdateUnconfirmedMessage =>
       'Couldn\'t confirm the update. Your pendant hasn\'t reconnected yet. Keep it nearby and check its firmware version before trying again.';
 
@@ -15453,4 +15487,358 @@ class AppLocalizationsCs extends AppLocalizations {
   String monthlySwitchDoneBody(String price) {
     return 'Dnes zaplaceno $price. Obnovuje se měsíčně.';
   }
+
+  @override
+  String get processingDeleteScopeChanged => 'Seznam zpracování se změnil. Zkontrolujte jej a zkuste to znovu.';
+
+  @override
+  String get syncTooOldExplanation =>
+      'This recording is older than Omi\'s sync window, so Omi can\'t transcribe it. Download the audio to keep it, then delete it here.';
+
+  @override
+  String freeCapTitle(int minutes) {
+    return 'Využili jste letošních měsíčních $minutes minut';
+  }
+
+  @override
+  String get freeCapBody => 'Omi stále nahrává. Vyberte, jak pokračovat v přepisu.';
+
+  @override
+  String get omiProPlanName => 'Omi Pro';
+
+  @override
+  String get freeCapProUnlimited => 'Neomezený přepis v cloudu';
+
+  @override
+  String get freeCapProAccuracy => 'Nejvyšší přesnost';
+
+  @override
+  String get freeCapProWaiting => 'Přepíše vaše čekající nahrávky';
+
+  @override
+  String get freeCapPhoneSubtitle => 'Zdarma. Zůstane zapnuté, dokud se nepřepnete zpět.';
+
+  @override
+  String get transcribingOnThisPhone => 'Přepis v tomto telefonu';
+
+  @override
+  String get getPro => 'Získat Pro';
+
+  @override
+  String get unlock => 'Odemknout';
+
+  @override
+  String get transcribeWith => 'Přepisovat pomocí';
+
+  @override
+  String get omiCloud => 'Cloud Omi';
+
+  @override
+  String get thisPhone => 'Tento telefon';
+
+  @override
+  String get onDeviceReady => 'Připraveno';
+
+  @override
+  String cloudMinutesLeft(int left, int limit, String date) {
+    return 'Zbývá $left z $limit min · obnoví se $date';
+  }
+
+  @override
+  String cloudMinutesAvailable(int minutes) {
+    return 'K dispozici $minutes cloudových minut';
+  }
+
+  @override
+  String get switchBack => 'Přepnout zpět';
+
+  @override
+  String get setUpThisPhone => 'Nastavit tento telefon';
+
+  @override
+  String get speechRecognition => 'Rozpoznávání řeči';
+
+  @override
+  String get audioStaysOnPhone => 'Zvuk zůstává v telefonu';
+
+  @override
+  String onDeviceModelDownloadSize(int size) {
+    return 'Stažení $size MB';
+  }
+
+  @override
+  String get downloadNow => 'Stáhnout nyní';
+
+  @override
+  String get onWifiLater => 'Později přes Wi-Fi';
+
+  @override
+  String get conversationWritingSummary => 'Píšeme vaše shrnutí…';
+
+  @override
+  String get onTheWayServerWork => 'Práce hlášená serverem';
+
+  @override
+  String get finishNothingToProcess => 'Zatím není co zpracovat.';
+
+  @override
+  String get finishStillProcessing => 'Stále se zpracovává. Objeví se na domovské stránce.';
+
+  @override
+  String get finishBackToHome => 'Zpět domů';
+
+  @override
+  String get conversationSummaryWhenItEnds => 'Shrnutí po skončení tohoto rozhovoru';
+
+  @override
+  String get deviceUploadsWaitingOnServer => 'Nahrávky čekající na serveru';
+
+  @override
+  String get deviceUploadsWaitingOnServerSubtitle => 'Váš zvuk je v bezpečí na vašem zařízení nebo telefonu';
+
+  @override
+  String conversationSummaryThrough(String time) {
+    return 'Shrnutí do $time';
+  }
+
+  @override
+  String get conversationRecentTranscript => 'Nejnovější přepis';
+
+  @override
+  String get finishAlreadySaved => 'Už je uloženo. Najdete ho v sekci Domů.';
+
+  @override
+  String get finishAudioNotReceived => 'Zvuk je ještě na cestě.';
+
+  @override
+  String get finishFailedOffline => 'Nepodařilo se to odeslat. Váš zvuk je v bezpečí.';
+
+  @override
+  String get finishFailed => 'Nepodařilo se to odeslat. Váš zvuk je v bezpečí.';
+
+  @override
+  String get micBlockedCannotRecord => 'Pro nahrávání povolte mikrofon.';
+
+  @override
+  String get couldNotStartRecording => 'Nahrávání se nepodařilo spustit.';
+
+  @override
+  String get restorePurchasesFailed => 'Nepodařilo se zkontrolovat váš plán.';
+
+  @override
+  String get firmwareCheckFailed => 'Nepodařilo se zkontrolovat aktualizace.';
+
+  @override
+  String get conversationStillPublic => 'Stále je sdíleno odkazem.';
+
+  @override
+  String get goalSaveFailed => 'Cíl se nepodařilo uložit.';
+
+  @override
+  String get goalDeleteFailed => 'Smazání se nezdařilo. Cíl byl obnoven.';
+
+  @override
+  String get goalsLoadFailed => 'Cíle se nepodařilo načíst.';
+
+  @override
+  String get missingTargetEndedRecording => 'Toto nahrávání už skončilo.';
+
+  @override
+  String get missingTargetMemory => 'Tato vzpomínka už neexistuje.';
+
+  @override
+  String get missingTargetTask => 'Tento úkol už neexistuje.';
+
+  @override
+  String get missingTargetConversation => 'Tuto konverzaci se nepodařilo otevřít.';
+
+  @override
+  String get couldNotRefreshConversations => 'Nepodařilo se obnovit.';
+
+  @override
+  String get connectDeviceForOfflineSync => 'Pro synchronizaci připojte své Omi.';
+
+  @override
+  String get useDifferentAccountMessage => 'Budete odhlášeni a nastavení Omi na tomto telefonu bude resetováno.';
+
+  @override
+  String get rayBanMetaNotFoundAfterSetup => 'Brýle nebyly nalezeny. Jsou zapnuté?';
+
+  @override
+  String get couldNotMoveTask => 'Úkol se nepodařilo přesunout.';
+
+  @override
+  String lockedTasksKept(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Smazáno. $count uzamčených úkolů zůstalo zachováno.',
+      one: 'Smazáno. 1 uzamčený úkol zůstal zachován.',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get settingNotSaved => 'Změnu se nepodařilo uložit.';
+
+  @override
+  String get couldNotLoadNotificationSettings => 'Nastavení se nepodařilo načíst.';
+
+  @override
+  String get waitForOmiToFinish => 'Počkejte, až Omi dokončí.';
+
+  @override
+  String get voiceNoteTooShort => 'Příliš krátké. Nahrávejte podržením.';
+
+  @override
+  String get submitAppMissingFields => 'Pro odeslání přidejte název, popis, obrázek, kategorii a schopnost.';
+
+  @override
+  String get appSetupNotFinished => 'Nastavení ještě není dokončeno.';
+
+  @override
+  String get finishNothingKeptTitle => 'Není co ponechat';
+
+  @override
+  String get submitAppFinishDetails => 'Pro odeslání doplňte výše uvedené údaje o schopnosti a cenách.';
+
+  @override
+  String get finishNothingNew => 'Zatím není nic nového.';
+
+  @override
+  String get takingLongerThanUsual => 'Trvá to déle než obvykle. Bude to ve sekci Domů.';
+
+  @override
+  String get couldNotCheckOnIt => 'Nepodařilo se to zkontrolovat. Zkuste to znovu.';
+
+  @override
+  String get upgradeToOpenThisOne => 'Pro otevření upgradujte svůj plán.';
+
+  @override
+  String get missingTargetConversationGone => 'Tato konverzace byla smazána.';
+
+  @override
+  String get cantConnectRightNow => 'Právě teď se nelze připojit.';
+
+  @override
+  String get loadOlderFailed => 'Starší položky se nepodařilo načíst. Klepnutím to zkusíte znovu.';
+
+  @override
+  String listeningWithDuration(String duration) {
+    return 'Poslouchám · $duration';
+  }
+
+  @override
+  String get conversationLiveNoEdits => 'Počkejte s úpravou, až skončí.';
+
+  @override
+  String get finishedSummaryReady => 'Shrnutí je připraveno';
+
+  @override
+  String get writingSummaryStatus => 'Vytváří se shrnutí…';
+
+  @override
+  String get stillWorkingOnIt => 'Stále na tom pracujeme.';
+
+  @override
+  String get deviceReadyToUse => 'Připraveno k použití';
+
+  @override
+  String get firmwareUpdateFirmwareTooOld =>
+      'Firmware vašeho zařízení je pro tuto aktualizaci příliš starý. Obraťte se na podporu, která vám s aktualizací zařízení pomůže.';
+
+  @override
+  String get firmwareUpdateAppRequired =>
+      'Tato aktualizace firmwaru vyžaduje novější verzi aplikace Omi. Aktualizujte aplikaci v obchodě s aplikacemi a poté proveďte kontrolu znovu.';
+
+  @override
+  String get quietPayerTitle => 'Žádné nahrávky za 5 dní';
+
+  @override
+  String get quietPayerMessage => 'Zkontrolujte svůj Omi.';
+
+  @override
+  String get quietPayerCheck => 'Zkontrolovat';
+
+  @override
+  String get playManageSubscription => 'Spravovat předplatné';
+
+  @override
+  String get playBilledByGoogle => 'Účtováno přes Google Play';
+
+  @override
+  String get playPurchasePending => 'Platba čeká na vyřízení. Omi Pro začne, jakmile ji Google Play potvrdí.';
+
+  @override
+  String get playPurchaseOtherAccount => 'Tento nákup v Google Play patří jinému účtu Omi.';
+
+  @override
+  String get playPurchaseNotConfirmed => 'Nákup se zatím nepodařilo potvrdit. Zkusíme to znovu automaticky.';
+
+  @override
+  String get playRenewalTerms =>
+      'Automaticky se obnovuje za uvedenou cenu, dokud ho nezrušíte. Spravovat nebo zrušit ho můžete kdykoli v Google Play.';
+
+  @override
+  String get playPaidAppUnavailable => 'Na Androidu není k dispozici';
+
+  @override
+  String get pageNotAvailableInApp => 'Tato stránka není v aplikaci dostupná.';
+
+  @override
+  String get shopOrderPlacedCheckEmail => 'Objednávka byla odeslána. Potvrzení najdete v e-mailu.';
+
+  @override
+  String get prepaidCodeEntry => 'Máte kód?';
+
+  @override
+  String get prepaidCodeTitle => 'Uplatnit kód';
+
+  @override
+  String get prepaidCodeFieldHint => 'Zadejte svůj kód';
+
+  @override
+  String get prepaidCodeRedeem => 'Uplatnit';
+
+  @override
+  String get prepaidCodeRedeemed => 'Kód uplatněn';
+
+  @override
+  String prepaidCodeResult(String reason) {
+    String _temp0 = intl.Intl.selectLogic(
+      reason,
+      {
+        'invalid': 'Tento kód není platný. Zkontrolujte ho a zkuste to znovu.',
+        'used': 'Tento kód už byl použit.',
+        'expired': 'Platnost tohoto kódu vypršela.',
+        'hasPlan': 'Už máte plán. Váš kód nebyl použit. Uplatněte ho, až váš plán skončí.',
+        'notPrepaid': 'Tento kód zde nelze uplatnit. Použijte ho při výběru plánu.',
+        'notEligible': 'Tento kód nelze použít v tomto účtu.',
+        'rateLimited': 'Příliš mnoho pokusů. Zkuste to později.',
+        'other': 'Něco se pokazilo. Zkuste to znovu.',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get playStripeBilledOnWeb => 'Účtováno přes omi.me. Zrušit můžete kdykoli zde.';
+
+  @override
+  String get playStripeBilledOnWebShort => 'Účtováno přes omi.me.';
+
+  @override
+  String playStripePlanPaused(String plan) {
+    return 'Váš tarif $plan je pozastaven.';
+  }
+
+  @override
+  String get firmwareNewestSupportedForDevice => 'Vaše zařízení už používá nejnovější podporovanou verzi firmwaru';
+
+  @override
+  String get firmwareSyncRecordingsFirstTitle => 'Nejprve synchronizujte své nahrávky';
+
+  @override
+  String get firmwareSyncRecordingsFirstMessage =>
+      'Některé nahrávky jsou stále ve vašem zařízení. Počkejte, až se synchronizují do telefonu, a potom spusťte aktualizaci.';
 }

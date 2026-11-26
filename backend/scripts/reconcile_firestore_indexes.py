@@ -31,6 +31,13 @@ MAX_PROPOSAL_TTL_SECONDS = 3600
 MAX_PROPOSAL_BYTES = 1_000_000
 
 IndexSignature = tuple[str, str, tuple[tuple[str, str], ...]]
+# These two historic Firebase declarations omit the terminal document ordering
+# that Admin API appends. Do not generalize this compatibility set to new shapes.
+# Resource identity, API scope, ambiguity and readiness checks still apply below.
+HISTORIC_IMPLICIT_DOCUMENT_ID_SIGNATURES: frozenset[IndexSignature] = frozenset(
+    (collection, 'COLLECTION', (('state', 'ASCENDING'), ('enqueued_at', 'ASCENDING')))
+    for collection in ('batch_pipeline_dev_jobs', 'batch_pipeline_prod_jobs')
+)
 CommandRunner = Callable[..., Any]
 Clock = Callable[[], datetime]
 
@@ -450,7 +457,7 @@ def expected_index_states(
     database: str,
     allow_implicit_terminal_document_id_alias: bool = False,
 ) -> dict[IndexSignature, str]:
-    """Return exact Admin API readiness states, failing closed on any ambiguity."""
+    """Qualify exact shapes plus two historic implicit-name forms; reject ambiguity."""
     states: dict[IndexSignature, str] = {}
     inventory = list(live_indexes)
     for signature in set(expected):
@@ -461,7 +468,7 @@ def expected_index_states(
             and (
                 index.signature == signature
                 or (
-                    allow_implicit_terminal_document_id_alias
+                    (allow_implicit_terminal_document_id_alias or signature in HISTORIC_IMPLICIT_DOCUMENT_ID_SIGNATURES)
                     and _implicit_terminal_document_id_alias(index.signature) == signature
                 )
             )

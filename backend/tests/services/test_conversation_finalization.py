@@ -10,6 +10,11 @@ from services.conversation_finalization import reconcile_listen_finalization_job
 @pytest.fixture
 def mock_dependencies(monkeypatch):
     monkeypatch.setattr(
+        conversation_finalization.due_marker_sweep,
+        'remark_missing_due_markers',
+        mock.Mock(return_value={'remarked': 0, 'skipped': 0, 'error': 0}),
+    )
+    monkeypatch.setattr(
         conversation_finalization.quiet_checks_db, 'ensure_quiet_check_progress', mock.Mock(return_value=False)
     )
     monkeypatch.setattr(

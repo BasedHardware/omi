@@ -12,12 +12,19 @@ import 'package:omi/backend/http/shared.dart';
 import 'package:omi/backend/http/streaming_error.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/message.dart';
+import 'package:omi/backend/schema/conversation_v3_wire.dart';
+import 'package:omi/services/conversation_summary_stream.dart';
 import 'package:omi/env/env.dart';
 import 'package:omi/services/auth/auth_token_result.dart';
 import 'package:omi/services/auth_service.dart';
 
 void main() {
   const messagesUrl = 'http://127.0.0.1:9/v2/messages';
+  const recapProof = (
+    trigger: LiveRecapTrigger.firstOpen,
+    requestId: '89abcde0-0000-4000-8000-000000000000',
+    intervalId: 'deafbee0-0000-4000-8000-000000000000',
+  );
 
   setUpAll(() async {
     Env.init(const _EnvFields());
@@ -41,6 +48,118 @@ void main() {
       auth: auth,
     );
   }
+
+  test('live catch-up 404 never falls back to the final-summary endpoint', () async {
+    final requests = <http.BaseRequest>[];
+    final transport = ApiStreamingSeams(
+      headers: (request) async => {...request.headers, 'Authorization': 'Bearer token'},
+      transport: (request) async {
+        requests.add(request);
+        return sse(const [], status: 404);
+      },
+    );
+    expect(
+      await streamConversationSummary('conversation', recap: recapProof, canDispatch: () => true, seams: transport)
+          .toList(),
+      [isA<SummaryFailed>()],
+    );
+    expect(requests.map((request) => request.url.path), [
+      '/v1/conversations/conversation/summary/live-catchup/stream',
+    ]);
+    await streamConversationSummary('conversation', seams: transport).toList();
+    expect(requests.last.url.path, '/v1/conversations/conversation/summary/stream');
+    expect(requests.last.headers['X-Omi-Recording-Detail'], '1');
+  });
+
+  test('live recap sends proof once per logical request and recognizes only typed denial', () async {
+    final requests = <http.BaseRequest>[];
+    const recap = (
+      trigger: LiveRecapTrigger.timedRefresh,
+      requestId: '89abcde0-0000-4000-8000-000000000000',
+      intervalId: 'deafbee0-0000-4000-8000-000000000000',
+    );
+    final auth = AuthService.forTesting(tokenGateway: _Gateway(), refreshDelay: (_) async {});
+    final transport = ApiStreamingSeams(
+      headers: (request) async => {...request.headers, 'Authorization': 'Bearer token'},
+      auth: auth,
+      transport: (request) async {
+        requests.add(request);
+        return requests.length == 1
+            ? sse(const [], status: 401)
+            : http.StreamedResponse(
+                Stream.value(utf8.encode('{"detail":"live_recap_unavailable"}')),
+                404,
+              );
+      },
+    );
+    final events =
+        await streamConversationSummary('conversation', recap: recap, canDispatch: () => true, seams: transport)
+            .toList();
+    expect(events.single, isA<SummaryFailed>().having((e) => e.detail, 'detail', 'live_recap_unavailable'));
+    expect(requests, hasLength(2));
+    for (final request in requests) {
+      expect(request.headers['X-Omi-Recap-Trigger'], 'timed_refresh');
+      expect(request.headers['X-Omi-Recap-Request'], recap.requestId);
+      expect(request.headers['X-Omi-Recap-Interval'], recap.intervalId);
+      expect(request.headers['X-Omi-Recap-Foreground'], 'true');
+      expect(request.headers['X-Omi-Recap-Speech-Eligible'], 'true');
+    }
+  });
+
+  test('live catch-up refuses stale dispatch after asynchronous header preparation', () async {
+    var stillCurrent = true;
+    var sends = 0;
+    final transport = seams(
+      (request) async {
+        sends++;
+        return sse(const [], status: 404);
+      },
+      headers: () async {
+        stillCurrent = false;
+        return const {'Authorization': 'Bearer stale'};
+      },
+    );
+    expect(
+      await streamConversationSummary(
+        'conversation',
+        recap: recapProof,
+        seams: transport,
+        canDispatch: () => stillCurrent,
+      ).toList(),
+      [isA<SummaryFailed>()],
+    );
+    expect(sends, 0);
+  });
+
+  test('live catch-up refuses an authenticated replay after the target changes', () async {
+    final auth = AuthService.forTesting(tokenGateway: _Gateway(), refreshDelay: (_) async {});
+    var stillCurrent = true;
+    var headersRead = 0;
+    var sends = 0;
+    final transport = seams(
+      (request) async {
+        sends++;
+        return sse(const [], status: 401);
+      },
+      auth: auth,
+      headers: () async {
+        headersRead++;
+        if (headersRead == 2) stillCurrent = false;
+        return const {'Authorization': 'Bearer token'};
+      },
+    );
+    expect(
+      await streamConversationSummary(
+        'conversation',
+        recap: recapProof,
+        seams: transport,
+        canDispatch: () => stillCurrent,
+      ).toList(),
+      [isA<SummaryFailed>()],
+    );
+    expect(headersRead, 2);
+    expect(sends, 1);
+  });
 
   test('401 then refreshed replay delivers the response frames', () async {
     final service = AuthService.forTesting(tokenGateway: _Gateway(), refreshDelay: (_) async {});

@@ -214,7 +214,7 @@ class _YearlySwitchSheetState extends State<YearlySwitchSheet> {
       widget.onSwitched?.call();
       final usage = context.read<UsageProvider?>();
       if (usage != null) {
-        unawaited(usage.fetchSubscription());
+        unawaited(usage.fetchSubscription(fresh: true));
         unawaited(usage.loadAvailablePlans());
       }
       setState(() {
@@ -229,7 +229,7 @@ class _YearlySwitchSheetState extends State<YearlySwitchSheet> {
       widget.surface,
       declined
           ? SubscriptionYearlySwitchFailedReason.declined
-          : (status == 400 || status == 409)
+          : (status == 400 || status == 403 || status == 409)
               ? SubscriptionYearlySwitchFailedReason.refused
               : SubscriptionYearlySwitchFailedReason.error,
     );
@@ -238,9 +238,8 @@ class _YearlySwitchSheetState extends State<YearlySwitchSheet> {
       _stale = true;
       _error = declined
           ? l10n.yearlySwitchDeclined
-          : outcome == _Outcome.unknown
-              ? l10n.somethingWentWrong
-              : l10n.yearlySwitchFailed;
+          : payment_api.paymentRefusalMessage(result) ??
+              (outcome == _Outcome.unknown ? l10n.somethingWentWrong : l10n.yearlySwitchFailed);
     });
   }
 
@@ -518,7 +517,9 @@ class _YearlySwitchPlansRowState extends State<YearlySwitchPlansRow> {
 
   @override
   Widget build(BuildContext context) {
-    final candidate = context.select<UsageProvider?, String?>(yearlySwitchCandidate);
+    // The switch charges Stripe; a build that sells through Google Play never offers it.
+    final candidate = context.select<UsageProvider?, String?>(
+        (usage) => usage?.buysThroughPlay == true ? null : yearlySwitchCandidate(usage));
     if (candidate == null || _switched) return const SizedBox.shrink();
     if (_loadedFor != candidate) {
       _loadedFor = candidate;

@@ -4,7 +4,12 @@ Ancestry is persisted with the transcript. Donor retraction that collides with
 the exclusive destructive-operation gate is deferred onto the revision-fenced
 receipt and retried on a later append; original audio and redirect tombstones
 are never removed. Copy and checkpoint failures still propagate to the job
-retry path.
+retry path. A lineage entry that no longer redirects at its survivor (missing,
+hard-deleted, or no longer a tombstone) is terminal: it is counted and logged as
+``outcome=source_terminal`` and skipped, never raised into the enrichment resume,
+because no writer repairs it and no effect is safe for it. That disposition ships
+behind ``SYNC_FINALIZE_TARGET_RECOVERY_ENABLED`` (default on); an explicit off
+restores the strict ``source_rejected`` failure.
 """
 
 from __future__ import annotations
@@ -25,6 +30,8 @@ from config.sync_bridge_containment import (
     contained_donor_merge_mode,
 )
 from config.sync_finalize import sync_finalize_target_recovery_enabled
+from models.finalization_owner import python_owns_finalization
+from prometheus_client import Counter
 from utils.conversations.recorded_time import segment_span, segment_span_is_exact
 from utils.conversations.smart_merge_policy import user_managed as _policy_user_managed
 from database.action_item_refresh import RefreshConversationUnavailable
@@ -40,7 +47,12 @@ from utils.conversations.action_item_refresh import transfer_donor
 from utils.conversations.merge_conversations import copy_sync_bridge_audio, retract_sync_bridge_source
 from utils.metrics import OMI_SYNC_BRIDGE_CONTAINED_DONOR_SHADOW_TOTAL, OMI_SYNC_BRIDGE_RETRACTION_TOTAL
 from utils.observability.fallback import record_fallback
-from utils.observability.reasons import ContainedDonorShadowOutcome, ReasonFamily, reason_label
+from utils.observability.reasons import (
+    ContainedDonorShadowOutcome,
+    ReasonFamily,
+    SyncBridgeTerminalOutcome,
+    reason_label,
+)
 from utils.sync.assignment import auto_mergeable
 from utils.sync.assignment_errors import (
     SyncAssignmentConflict,
@@ -49,11 +61,23 @@ from utils.sync.assignment_errors import (
 )
 from utils.sync.telemetry import bounded_exception_reason, bounded_exception_type
 from utils.sync.fsr_metadata import read_metadata
-from utils.sync import bridge_pending
+from utils.sync import bridge_pending, processing_hold
 from utils.sync.live_overlap import choose_live_overlap, span_contained
 from utils.conversations.fragment_visibility import is_user_curated
 
 logger = logging.getLogger(__name__)
+
+OMI_SYNC_BRIDGE_TERMINAL_TOTAL = Counter(
+    'omi_sync_bridge_terminal_total',
+    (
+        'Sync-bridge donors left terminally unresolved because they no longer redirect at the survivor. '
+        'Labels are a closed set: '
+        'outcome=missing|not_tombstone|redirect_elsewhere|chain|chain_broken. '
+        'The bridge skips them, leaves both rows untouched, and counts them instead of failing the '
+        'enrichment resume. Never labeled by uid, conversation id, or content.'
+    ),
+    ['outcome'],
+)
 
 _DEFERRED_RETRACTION_REASONS: dict[type[BaseException], str] = {
     DestructiveOperationInProgress: 'gate_busy',
@@ -78,6 +102,16 @@ class SyncSegmentResponse(TypedDict):
 def _record_bridge_retraction(outcome: str, reason: str = 'none') -> None:
     try:
         OMI_SYNC_BRIDGE_RETRACTION_TOTAL.labels(outcome=outcome, reason=reason).inc()
+    except Exception:
+        pass
+
+
+def _record_bridge_source_terminal(kind: str) -> None:
+    """Count one donor that can never redirect at its survivor; never raises."""
+    try:
+        OMI_SYNC_BRIDGE_TERMINAL_TOTAL.labels(
+            outcome=reason_label(ReasonFamily.SYNC_BRIDGE_TERMINAL, kind, SyncBridgeTerminalOutcome)
+        ).inc()
     except Exception:
         pass
 
@@ -193,7 +227,7 @@ def _shadow_contained_donor(uid: str, source: dict, target_id: str) -> None:
     logger.info('event=sync_bridge_contained_donor_shadow outcome=%s', outcome.value)
 
 
-def _finish_pending_live_bridge(uid: str, conversation_id: str) -> str:
+def _finish_pending_live_bridge(uid: str, conversation_id: str, *, require_python_owner: bool = False) -> str:
     """Retry the ordinary assignment transaction once live recording proof lands.
 
     A pending hint never authorizes a merge by itself. Re-read both records;
@@ -202,6 +236,8 @@ def _finish_pending_live_bridge(uid: str, conversation_id: str) -> str:
     source = conversations_db.get_conversation(uid, conversation_id)
     if not source or source.get('deleted') or not source.get(bridge_pending.FIELD):
         return conversation_id
+    if require_python_owner and not python_owns_finalization(source):
+        raise processing_hold.finalization_owner_deferral()
     target_id = source[bridge_pending.FIELD].get('target_id')
     if not isinstance(target_id, str) or target_id == conversation_id or is_user_curated(source):
         return conversation_id
@@ -215,6 +251,8 @@ def _finish_pending_live_bridge(uid: str, conversation_id: str) -> str:
         _shadow_contained_donor(uid, source, target_id)
         return conversation_id
     target = conversations_db.get_conversation(uid, target_id)
+    if target is not None and require_python_owner and not python_owns_finalization(target):
+        raise processing_hold.finalization_owner_deferral()
     if not target or target.get('status') == 'in_progress':
         return conversation_id
     if choose_live_overlap([target], source, uid=uid) != target_id:
@@ -234,6 +272,13 @@ def _finish_pending_live_bridge(uid: str, conversation_id: str) -> str:
             )
         else:
             assigned, _, _ = conversations_db.assign_sync_conversation(uid, source, target_id=target_id)
+    except SyncAssignmentSuperseded:
+        # User authority owns the pending source row, so the bridge can never
+        # fold it into the target. That is terminal for this attempt: keep the
+        # source as its own record (the pending marker expires on its own) and
+        # never replay the assignment or fail the caller's request.
+        logger.debug('event=sync_bridge outcome=superseded reason=pending_live_anchor')
+        return conversation_id
     except SyncAssignmentConflict as error:
         if error.subtype != SyncAssignmentConflictReason.CONTAINED_DONOR_NOT_CONTAINED:
             raise
@@ -245,7 +290,12 @@ def _finish_pending_live_bridge(uid: str, conversation_id: str) -> str:
 
 @read_origin('job:sync_operation_snapshot')
 def finish_sync_bridges(
-    uid: str, conversation_id: str, *, audio_source_id: str | None = None, silent: bool = False
+    uid: str,
+    conversation_id: str,
+    *,
+    audio_source_id: str | None = None,
+    silent: bool = False,
+    require_python_owner: bool = False,
 ) -> str:
     recovery = sync_finalize_target_recovery_enabled()
     # The legacy hydrated reader can do photo/correction IO after its document
@@ -259,11 +309,13 @@ def finish_sync_bridges(
         row = read_metadata(conversations_db, uid, conversation_id, operation='bridge')
         if not row or (row.get('deleted') and not row.get('sync_merged_into')):
             raise SyncAssignmentSuperseded('sync conversation deleted during bridge')
+        if require_python_owner and not python_owns_finalization(row):
+            raise processing_hold.finalization_owner_deferral()
         if row.get('sync_merged_into'):
             conversation_id = row['sync_merged_into']
             continue
         if recovery and row.get(bridge_pending.FIELD):
-            canonical = _finish_pending_live_bridge(uid, conversation_id)
+            canonical = _finish_pending_live_bridge(uid, conversation_id, require_python_owner=require_python_owner)
             if canonical != conversation_id:
                 conversation_id = canonical
                 continue
@@ -282,14 +334,33 @@ def finish_sync_bridges(
             source = load(source_id)
             kind = _bridge_source_defect(source, conversation_id, lineage, load) if flatten else None
             if not source or not source.get('deleted') or not source.get('sync_merged_into') or kind:
+                # The donor no longer redirects at this survivor: it is hard-deleted,
+                # its tombstone/redirect was cleared, or a repaired chain left the
+                # lineage. Retraction needs the tombstone and late audio copy needs the
+                # source row, so there is no safe effect left to run, and no writer
+                # repairs this lineage. Raising here escaped enrichment's resume as an
+                # unhandled 500 on every append that replayed the bridge (SCA-4336 /
+                # error group CKLRpLeLz8KwFA). Record the terminal disposition, leave
+                # the row untouched, and still settle the sources that resolve; a later
+                # append re-reads this entry, so a donor that does become a tombstone is
+                # cleaned up then.
+                terminal = kind or ('missing' if not source else 'not_tombstone')
+                if not sync_finalize_target_recovery_enabled():
+                    # Kill switch: an explicit off restores the pre-SCA-4336 strict
+                    # bridge failure for every caller of this helper.
+                    logger.warning('event=sync_bridge outcome=source_rejected kind=%s', terminal)
+                    raise SyncAssignmentConflict(
+                        'sync bridge source missing or not a tombstone',
+                        subtype=SyncAssignmentConflictReason.BRIDGE_SOURCE_NOT_TOMBSTONE,
+                    )
+                _record_bridge_source_terminal(terminal)
                 logger.warning(
-                    'event=sync_bridge outcome=source_rejected kind=%s',
-                    kind or ('missing' if not source else 'not_tombstone'),
+                    'event=sync_bridge outcome=source_terminal kind=%s uid=%s source_id=%s',
+                    terminal,
+                    uid,
+                    source_id,
                 )
-                raise SyncAssignmentConflict(
-                    'sync bridge source missing or not a tombstone',
-                    subtype=SyncAssignmentConflictReason.BRIDGE_SOURCE_NOT_TOMBSTONE,
-                )
+                continue
             revision = source['sync_content_revision']
             needs_cleanup = source.get('sync_bridge_cleaned_revision') != revision
             audio_target = conversation_id if row.get('private_cloud_sync_enabled') else None
@@ -384,6 +455,8 @@ def finish_sync_bridges(
             sync_operation_snapshot.avoided('bridge_no_effect')
         else:
             current = read_metadata(conversations_db, uid, conversation_id, operation='bridge')
+        if current is not None and require_python_owner and not python_owns_finalization(current):
+            raise processing_hold.finalization_owner_deferral()
         if current and current.get('sync_merged_into'):
             conversation_id = current['sync_merged_into']
             continue
@@ -401,14 +474,16 @@ def resume_pending(uid: str, conversation_id: str, row: dict, context: dict | No
     if not row.get(bridge_pending.FIELD) or is_user_curated(row):
         return conversation_id, row
     canonical = (
-        finish_sync_bridges(uid, conversation_id) if sync_finalize_target_recovery_enabled() else conversation_id
+        finish_sync_bridges(uid, conversation_id, require_python_owner=True)
+        if sync_finalize_target_recovery_enabled()
+        else conversation_id
     )
     if canonical != conversation_id:
         if context is not None:
             context['redirect_to'] = canonical
             return canonical, None
         conversation_id = canonical
-        current = conversations_db.get_conversation(uid, canonical)
+        current = conversations_db.get_conversation(uid, canonical, include_transcript_decode_status=True)
         if not current or current.get('deleted'):
             return canonical, None
         row = current
@@ -417,6 +492,8 @@ def resume_pending(uid: str, conversation_id: str, row: dict, context: dict | No
         if row.get(bridge_pending.FIELD)
         else None
     )
+    if target is not None and not python_owns_finalization(target):
+        raise processing_hold.finalization_owner_deferral()
     target_active = bool(target and not target.get('deleted') and target.get('status') in ('in_progress', 'processing'))
     if bridge_pending.hidden(row) or target_active:
         if context is not None:

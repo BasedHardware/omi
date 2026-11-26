@@ -15,6 +15,7 @@ METRICS = {
     'unprojected_window_total': 'Fresh results in the commit window still pending projection',
     'unprojected_ratio': 'Pending share of fresh results in the commit window',
     'guard_sample_age_seconds': 'Seconds since the last successful fresh-delivery count pair',
+    'guard_sample_timestamp_seconds': 'Unix time anchoring the last successful fresh-delivery commit window',
 }
 
 
@@ -57,10 +58,12 @@ class FreshGuard:
                 self._due = time.monotonic() + 60
                 self._counts = None
             try:
-                total, pending = fresh_committed_counts(store.client, store.namespace, time.time())
+                sample_time = time.time()
+                total, pending = fresh_committed_counts(store.client, store.namespace, sample_time)
                 with self._lock:
                     self._counts = (total, pending)
                     self._observed = time.monotonic()
+                    self._sample_time = sample_time
             except Exception as error:
                 logging.getLogger(__name__).warning(
                     'event=batch_fresh_guard outcome=retry exception_type=%s', type(error).__name__
@@ -78,6 +81,7 @@ class FreshGuard:
             if self._counts is not None and age < 120:
                 total, pending = self._counts
                 values.update(committed_window_total=total, unprojected_window_total=pending)
+                values['guard_sample_timestamp_seconds'] = self._sample_time
                 if total:
                     values['unprojected_ratio'] = pending / total
         for name, value in values.items():

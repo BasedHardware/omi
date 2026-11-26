@@ -7,7 +7,7 @@ Everything else takes existing per-upload admission. No encoded audio is
 concatenated: the sealed raw files use the existing canonical decoder.
 """
 
-from dataclasses import asdict, replace
+from dataclasses import replace
 import base64
 import hashlib
 import json
@@ -16,17 +16,23 @@ from pathlib import Path
 import tempfile
 import time
 
-from prometheus_client import Counter
+from prometheus_client import Counter, Gauge, Histogram
 
 from config import batch_pipeline_coalescing as config
 from config.policy import BatchUnitPolicy
 from database import batch_pipeline_coalescing as rows
+from database.batch_pipeline_coalescing_identity import compatibility_key, digest
+from database.batch_pipeline_leader import LeaseLost
 from utils.batch_pipeline.contracts import WorkItem
+from config.request_clock import context_fields
 from utils.batch_pipeline.capture_decode import decode_units
 from utils.batch_pipeline.scheduler import owner_key
 from utils.executors import run_blocking, db_executor, storage_executor, sync_executor
 
 EVENTS = Counter('omi_batch_upload_coalescing_total', 'Pre-unit custody outcomes; no identities', ['outcome'])
+SCAN_EVENTS = Counter('omi_batch_upload_coalescing_scan_total', 'Strict scan outcomes; no identities', ['outcome'])
+SCAN_SECONDS = Histogram('omi_batch_upload_coalescing_scan_seconds', 'Leader scan pass duration including group IO')
+SCAN_SUCCESS = Gauge('omi_batch_upload_coalescing_scan_last_success_seconds', 'Last completed healthy leader scan')
 
 
 def queued(member):
@@ -61,6 +67,7 @@ def member_status(store, uid, intake, read_status):
             **queued(intake),
             'status': 'completed',
             'result': content['result'],
+            'completed_at': content.get('completed_at'),
             'total_segments': intake['original_units'],
             'processed_segments': intake['original_units'],
             'successful_segments': intake['original_units'],
@@ -77,7 +84,7 @@ def member_status(store, uid, intake, read_status):
     result = status.get('result') if complete else None
     if result is not None:
         result = {**result, 'total_segments': intake['original_units']}
-        rows.checkpoint_completion(store, intake, result, time.time())
+        rows.checkpoint_completion(store, intake, result, time.time(), completed_at=status.get('completed_at'))
     return {
         **status,
         'job_id': intake['job_id'],
@@ -146,7 +153,7 @@ def _pack(paths, arguments):
         end,
         sum(d for _, d in spans),
         len(spans),
-        [rows.digest(f['name']) for f in files],
+        [digest(f['name']) for f in files],
         source_frames,
     )
 
@@ -176,13 +183,16 @@ async def offer(store, artifacts, seed, *, arguments, context, language, policy,
         EVENTS.labels(outcome='bounded_bypass').inc()
         return None
     body, size, start, end, seconds, unit_count, filenames, source_frames = packed
-    hold = config.hold_seconds(now=now, batch_pre_unit=True)
+    hold = config.window_seconds(
+        upload_context.get('upload_entitlement', 'unknown'),
+        backlog=arguments['lane'] == 'backfill' or int(seed.priority) != 0,
+    )
     if hold <= 0:
         return None
     # This source item is a deletion-outbox identity, never a scheduler job.
     item = replace(
         seed,
-        segment_id=await run_blocking(sync_executor, rows.digest, ['held-source', arguments['content_id']]),
+        segment_id=await run_blocking(sync_executor, digest, ['held-source', arguments['content_id']]),
         capture_at=start,
         duration_seconds=seconds,
         privacy_generation=context.generation,
@@ -195,7 +205,7 @@ async def offer(store, artifacts, seed, *, arguments, context, language, policy,
         'privacy_generation': context.generation,
         'content_id': arguments['content_id'],
         'job_id': 'bp_' + arguments['job_id'],
-        'item': asdict(replace(item, audio_uri=uri)),
+        'item': replace(item, audio_uri=uri).to_dict(include_nulls=True),
         'uri': uri,
         'bytes': size,
         'files': len(arguments['paths']),
@@ -209,30 +219,20 @@ async def offer(store, artifacts, seed, *, arguments, context, language, policy,
         'lane': arguments['lane'],
         'hold_seconds': hold,
         'accepted_at': now,
+        **context_fields(upload_context),
         'policy': policy.to_dict(),
         'language': language,
     }
     # Metadata is hashed for identity; private context remains encrypted in body.
     key = await run_blocking(
         sync_executor,
-        rows.digest,
-        [
-            arguments['uid'],
-            session,
-            arguments['conversation_id'],
-            arguments['source'],
-            arguments['client_device_id'],
-            arguments['client_platform'],
-            arguments['should_lock'],
-            context.level,
-            context.generation,
-            language,
-            policy.policy_id,
-            arguments['lane'],
-            int(seed.priority),
-            sorted({tuple(Path(p).name.split('_')[1:4]) for p in arguments['paths']}),
-            upload_context.get('geolocation'),
-        ],
+        compatibility_key,
+        arguments,
+        privacy_level=context.level,
+        generation=context.generation,
+        language=language,
+        policy_id=policy.policy_id,
+        priority=seed.priority,
     )
     admitted = await run_blocking(db_executor, rows.enqueue, store, member, key, now)
     if admitted == 'wait':
@@ -284,22 +284,25 @@ def _unpack(body, directory):
     return package['arguments'], paths
 
 
-async def drain_group(store, artifacts, group_id, *, admit_upload=None, now=None):
+async def drain_group(store, artifacts, group_id, *, admit_upload=None, now=None, scan=None):
     if admit_upload is None:
         from utils.batch_pipeline.intake import accept_upload
 
         admit_upload = accept_upload
     clock = time.time if now is None else lambda: now
-    group = await run_blocking(db_executor, rows.claim, store, group_id, clock(), producer_enabled=config.enabled())
+    group = await run_blocking(
+        db_executor, rows.claim, store, group_id, clock(), producer_enabled=config.enabled(), scan=scan
+    )
     if group is None:
         return False
+    EVENTS.labels(outcome='claimed').inc()
     # Temporary files are reconstructible copies of the encrypted, generation-
     # pinned originals. A crash leaves sources and the sealed membership intact.
     directory = tempfile.TemporaryDirectory(prefix='batch-coalesce-')
     try:
         uploads = []
         for index, member in enumerate(group['members']):
-            item = WorkItem(**member['item'])
+            item = WorkItem.from_dict(member['item'])
             body = await run_blocking(storage_executor, artifacts.fetch_audio, item)
             destination = Path(directory.name) / str(index)
             await run_blocking(storage_executor, destination.mkdir)
@@ -311,7 +314,7 @@ async def drain_group(store, artifacts, group_id, *, admit_upload=None, now=None
             args = dict(batch[0][0])
             args['paths'] = [path for _, paths in batch for path in paths]
             if group['mode'] == 'merged':
-                content = await run_blocking(sync_executor, rows.digest, [group['id'], 'merged'])
+                content = await run_blocking(sync_executor, digest, [group['id'], 'merged'])
                 args.update(job_id=content, content_id=content)
                 args['intake_context'] = {
                     **(args.get('intake_context') or {}),
@@ -341,33 +344,54 @@ async def drain_group(store, artifacts, group_id, *, admit_upload=None, now=None
         await run_blocking(storage_executor, directory.cleanup)
 
 
-async def drain(store):
-    # Readers/drainers intentionally operate with producer OFF. An empty scan
-    # is bounded; no process dictionary is authoritative for accepted audio.
+async def drain(store, *, leader):
+    # Election remains active OFF: accepted holds still require compatible draining.
+    if not await run_blocking(db_executor, leader.acquire):
+        return
+    scan = leader.guard()
+    started = time.monotonic()
+    try:
+        await _drain_scan(store, scan)
+    except LeaseLost:
+        SCAN_EVENTS.labels(outcome='ownership_lost').inc()
+    except Exception:
+        SCAN_EVENTS.labels(outcome='failed').inc()
+        raise
+    finally:
+        SCAN_SECONDS.observe(time.monotonic() - started)
+
+
+async def _drain_scan(store, scan):
     from utils.batch_pipeline.artifact_policy import artifacts_for
 
     enabled = config.enabled()
-    epoch, after = await run_blocking(db_executor, rows.scan_position, store)
+    epoch, after = await run_blocking(db_executor, rows.scan_position, store, scan=scan)
     page = await run_blocking(
         db_executor, lambda: rows.due(store.client, store.namespace, time.time(), producer_enabled=enabled, after=after)
     )
+    SCAN_EVENTS.labels(outcome='query_completed').inc()
     if page or after is not None:
-        await run_blocking(db_executor, rows.advance_scan, store, epoch, page[-1] if page else None)
-    if not page:
-        await run_blocking(db_executor, rows.note_scan, store, time.time(), producer_enabled=enabled)
-        return
-    artifacts = await run_blocking(storage_executor, artifacts_for, store)
-    failed = False
-    for entry in page:
-        try:
-            await drain_group(store, artifacts, entry['id'])
-        except Exception as error:
-            failed = True
-            import logging
+        await run_blocking(db_executor, rows.advance_scan, store, epoch, page[-1] if page else None, scan=scan)
+        SCAN_EVENTS.labels(outcome='cursor_advanced').inc()
+    if page:
+        artifacts = await run_blocking(storage_executor, artifacts_for, store)
+        failed = False
+        for entry in page:
+            try:
+                await drain_group(store, artifacts, entry['id'], scan=scan)
+            except LeaseLost:
+                raise
+            except Exception as error:
+                failed = True
+                import logging
 
-            EVENTS.labels(outcome='drain_retry').inc()
-            logging.getLogger(__name__).warning(
-                'event=batch_coalescing outcome=retry exception_type=%s', type(error).__name__
-            )
-    if not failed:
-        await run_blocking(db_executor, rows.note_scan, store, time.time(), producer_enabled=enabled)
+                EVENTS.labels(outcome='drain_retry').inc()
+                logging.getLogger(__name__).warning(
+                    'event=batch_coalescing outcome=retry exception_type=%s', type(error).__name__
+                )
+        if failed:
+            SCAN_EVENTS.labels(outcome='group_retry').inc()
+            return
+    await run_blocking(db_executor, rows.note_scan, store, producer_enabled=enabled, scan=scan)
+    SCAN_EVENTS.labels(outcome='success').inc()
+    SCAN_SUCCESS.set(time.time())

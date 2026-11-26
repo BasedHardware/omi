@@ -10,6 +10,7 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from types import ModuleType
 from unittest.mock import MagicMock, Mock, call, patch
 
 _SPEC = importlib.util.spec_from_file_location(
@@ -22,9 +23,84 @@ BUILD_ID = "00000000-0000-4000-8000-000000000001"
 BUILD_TAG = "v1.2.3+456-android-cm"
 
 
+def _fake_play_sdk_modules():
+    class Credentials:
+        @staticmethod
+        def from_service_account_info(_info):
+            raise AssertionError("test must replace credential construction")
+
+    service_account = ModuleType("google.oauth2.service_account")
+    service_account.Credentials = Credentials
+    oauth2 = ModuleType("google.oauth2")
+    oauth2.__path__ = []
+    oauth2.service_account = service_account
+    google = ModuleType("google")
+    google.__path__ = []
+    google.oauth2 = oauth2
+
+    discovery = ModuleType("googleapiclient.discovery")
+    discovery.build = None
+    googleapiclient = ModuleType("googleapiclient")
+    googleapiclient.__path__ = []
+    googleapiclient.discovery = discovery
+    return (
+        {
+            "google": google,
+            "google.oauth2": oauth2,
+            "google.oauth2.service_account": service_account,
+            "googleapiclient": googleapiclient,
+            "googleapiclient.discovery": discovery,
+        },
+        Credentials,
+        discovery,
+    )
+
+
 class InputTests(unittest.TestCase):
     def test_play_commits_are_held_for_console_review_by_default(self):
         self.assertTrue(promote.CHANGES_NOT_SENT_FOR_REVIEW)
+
+    def test_play_edit_retries_concurrent_edit_conflicts_and_reports_persistent_failure(self):
+        class Conflict(Exception):
+            def __init__(self):
+                self.resp = Mock(status=409)
+                super().__init__("HTTP 409")
+
+        client = Mock()
+        execute = client.edits.return_value.insert.return_value.execute
+        execute.side_effect = [Conflict(), Conflict(), Conflict(), Conflict(), {"id": "retry-edit"}]
+        sleeps = []
+        sdk_modules, credentials, discovery = _fake_play_sdk_modules()
+        original_sdk_modules = {name: sys.modules.get(name) for name in sdk_modules}
+        with (
+            patch.dict(sys.modules, sdk_modules),
+            patch.dict(promote.os.environ, {"GCLOUD_SERVICE_ACCOUNT_CREDENTIALS": "{}"}),
+            patch.object(
+                credentials, "from_service_account_info", return_value=object()
+            ) as from_service_account_info,
+            patch.object(discovery, "build", return_value=client),
+            patch.object(promote.time, "sleep", sleeps.append),
+        ):
+            self.assertEqual(promote.play_edit(), (client, "retry-edit"))
+        from_service_account_info.assert_called_once_with(
+            {}, scopes=["https://www.googleapis.com/auth/androidpublisher"]
+        )
+        self.assertEqual(execute.call_count, 5)
+        self.assertEqual(sleeps, [1, 2, 4, 8])
+
+        execute.reset_mock()
+        execute.side_effect = [Conflict()] * promote.PLAY_EDIT_CREATE_ATTEMPTS
+        with (
+            patch.dict(sys.modules, sdk_modules),
+            patch.dict(promote.os.environ, {"GCLOUD_SERVICE_ACCOUNT_CREDENTIALS": "{}"}),
+            patch.object(credentials, "from_service_account_info", return_value=object()),
+            patch.object(discovery, "build", return_value=client),
+            patch.object(promote.time, "sleep"),
+        ):
+            with self.assertRaisesRegex(promote.PromotionError, "Google Play edit creation failed"):
+                promote.play_edit()
+        for name, original_module in original_sdk_modules.items():
+            self.assertIs(sys.modules.get(name), original_module)
 
     def test_android_build_tag_must_bind_to_the_promoted_version(self):
         self.assertEqual(promote.require_build_tag(BUILD_TAG, "1.2.3"), BUILD_TAG)
@@ -86,9 +162,9 @@ class InputTests(unittest.TestCase):
             "--build-id",
             BUILD_ID,
         ]
-        with patch.object(sys, "argv", args), patch.object(promote, "play_edit", return_value=(client, "edit")), patch.object(
-            promote, "promote_internal_android_to_alpha"
-        ) as run_promotion:
+        with patch.object(sys, "argv", args), patch.object(
+            promote, "play_edit", return_value=(client, "edit")
+        ), patch.object(promote, "promote_internal_android_to_alpha") as run_promotion:
             self.assertEqual(promote.main(), 0)
         run_promotion.assert_called_once_with(client, "edit", "1.2.3", "23", BUILD_TAG, BUILD_ID)
 
@@ -222,7 +298,13 @@ class IOSChecks(unittest.TestCase):
                     {"id": "v563", "attributes": {"versionString": "1.0.563"}},
                 ]
             self.assertEqual(args, ("app-store-versions", "localizations", "v563"))
-            return {"data": [{"attributes": {"locale": "en-US"}}, {"attributes": {"locale": "fr-FR"}}, {"attributes": {"locale": "en-US"}}]}
+            return {
+                "data": [
+                    {"attributes": {"locale": "en-US"}},
+                    {"attributes": {"locale": "fr-FR"}},
+                    {"attributes": {"locale": "en-US"}},
+                ]
+            }
 
         with patch.object(promote, "cli_json", side_effect=lookup):
             self.assertEqual(promote.ios_live_locales(), ["en-US", "fr-FR"])
@@ -290,6 +372,14 @@ class AndroidChecks(unittest.TestCase):
         self.production["releases"][0]["name"] = "not-a-version"
         promote.select_play_release(self.alpha, self.production, "1.2.3", "23")
 
+    def test_code_first_production_name_is_a_roll_forward_floor(self):
+        live = self.production["releases"][0]
+        live.update(name="30 (1.2.10)", versionCodes=["30"])
+        with self.assertRaisesRegex(promote.PromotionError, "older than"):
+            promote.select_play_release(self.alpha, self.production, "1.2.3", "23")
+        live["name"] = "30 (1.2.2)"
+        promote.select_play_release(self.alpha, self.production, "1.2.3", "23")
+
     def test_production_release_version_parses_play_console_names(self) -> None:
         self.assertEqual(promote.production_release_version("1.0.552"), "1.0.552")
         self.assertEqual(promote.production_release_version("1.0.552 (1246)"), "1.0.552")
@@ -297,6 +387,56 @@ class AndroidChecks(unittest.TestCase):
         self.assertEqual(promote.production_release_version(f"{BUILD_TAG} [{BUILD_ID}]"), "1.2.3")
         self.assertIsNone(promote.production_release_version("not-a-version"))
         self.assertIsNone(promote.production_release_version("1.0"))
+
+    def test_code_first_play_console_name_requires_a_matching_version_code(self):
+        name = "1605 (1.0.595)"
+        self.assertEqual(promote.production_release_version(name, ["1604", "1605"]), "1.0.595")
+        self.assertEqual(promote.production_release_version(name, [1605]), "1.0.595")
+        self.assertIsNone(promote.production_release_version(name, ["1604"]))
+        self.assertIsNone(promote.production_release_version(name))
+        self.assertIsNone(promote.production_release_version("1605 (1.0)", ["1605"]))
+
+    def test_manual_cli_keeps_held_android_release_as_draft(self):
+        client = Mock()
+        argv = [
+            "promote.py",
+            "--confirm",
+            "submit-for-review",
+            "--platform",
+            "android",
+            "--version",
+            "1.2.3",
+            "--android-build",
+            "23",
+        ]
+        with patch.object(promote, "CHANGES_NOT_SENT_FOR_REVIEW", True), patch.object(
+            promote, "require_notes", return_value="New line"
+        ), patch.object(promote, "prepare_android", return_value=(client, "edit-id")), patch.object(sys, "argv", argv):
+            self.assertEqual(promote.main(), 0)
+
+        release = client.edits().tracks().update.call_args.kwargs["body"]["releases"][0]
+        self.assertEqual(release["status"], "draft")
+        client.edits().commit.assert_called_once_with(
+            packageName="com.friend.ios", editId="edit-id", changesNotSentForReview=True
+        )
+
+    def test_prepare_android_discards_edit_when_validation_fails(self):
+        client = Mock()
+        with (
+            patch.object(promote, "play_edit", return_value=(client, "edit-id")),
+            patch.object(promote, "play_track", return_value={"releases": []}),
+            self.assertRaises(promote.PromotionError),
+        ):
+            promote.prepare_android("1.2.3", "23")
+        client.edits().delete.assert_called_once_with(packageName="com.friend.ios", editId="edit-id")
+        client.edits().commit.assert_not_called()
+
+    def test_failed_android_commit_discards_edit_without_replacing_root_error(self):
+        client = Mock()
+        client.edits().commit.return_value.execute.side_effect = RuntimeError("commit failed")
+        with self.assertRaisesRegex(promote.PromotionError, "commit failed"):
+            promote.submit_android(client, "edit-id", "1.2.3", "23", "New line")
+        client.edits().delete.assert_called_once_with(packageName="com.friend.ios", editId="edit-id")
 
     def test_internal_to_alpha_promotes_only_exact_completed_build_and_holds_commit(self):
         client = Mock()
@@ -430,9 +570,7 @@ class AndroidChecks(unittest.TestCase):
             side_effect=[
                 {
                     "track": "internal",
-                    "releases": [
-                        {"name": f"{BUILD_TAG} [{BUILD_ID}]", "versionCodes": ["23"], "status": "completed"}
-                    ],
+                    "releases": [{"name": f"{BUILD_TAG} [{BUILD_ID}]", "versionCodes": ["23"], "status": "completed"}],
                 },
                 {"track": "alpha", "releases": []},
             ],
@@ -441,7 +579,7 @@ class AndroidChecks(unittest.TestCase):
                 promote.promote_internal_android_to_alpha(client, "edit-id", "1.2.3", "23", BUILD_TAG, BUILD_ID)
         client.edits().commit.assert_not_called()
 
-    def test_promotion_updates_only_production_using_existing_code_and_derived_notes(self):
+    def test_held_manual_promotion_writes_draft_and_holds_commit(self):
         client = Mock()
         promote.submit_android(client, "edit-id", "1.2.3", "23", "New line")
         client.edits().tracks().update.assert_called_once_with(
@@ -454,7 +592,7 @@ class AndroidChecks(unittest.TestCase):
                     {
                         "name": "1.2.3",
                         "versionCodes": ["23"],
-                        "status": "completed",
+                        "status": "draft",
                         "releaseNotes": [{"language": "en-US", "text": "New line"}],
                     }
                 ],
@@ -464,6 +602,14 @@ class AndroidChecks(unittest.TestCase):
             packageName="com.friend.ios", editId="edit-id", changesNotSentForReview=True
         )
         self.assertFalse(client.edits().bundles.upload.called)
+
+    def test_unheld_manual_promotion_writes_completed(self):
+        client = Mock()
+        with patch.object(promote, "CHANGES_NOT_SENT_FOR_REVIEW", False):
+            promote.submit_android(client, "edit-id", "1.2.3", "23", "New line")
+        release = client.edits().tracks().update.call_args.kwargs["body"]["releases"][0]
+        self.assertEqual(release["status"], "completed")
+        client.edits().commit.assert_called_once_with(packageName="com.friend.ios", editId="edit-id")
 
     def test_staged_and_halted_are_the_alternatives_to_completed(self):
         client = Mock()
@@ -491,7 +637,14 @@ class AndroidChecks(unittest.TestCase):
         client.edits().commit.assert_called_once()
         with self.assertRaisesRegex(promote.PromotionError, "unique"):
             promote.submit_android(
-                Mock(), "edit-id", "1.2.3", "23", "New line", status="inProgress", user_fraction=0.25, extra_codes=("23",)
+                Mock(),
+                "edit-id",
+                "1.2.3",
+                "23",
+                "New line",
+                status="inProgress",
+                user_fraction=0.25,
+                extra_codes=("23",),
             )
 
     def test_retained_releases_ride_along_unchanged(self):
@@ -562,7 +715,13 @@ class AndroidChecks(unittest.TestCase):
             ],
         }
         promote.submit_android(
-            client, "edit-id", "1.2.3", "23", "ignored when notes exist", status="inProgress", user_fraction=0.25,
+            client,
+            "edit-id",
+            "1.2.3",
+            "23",
+            "ignored when notes exist",
+            status="inProgress",
+            user_fraction=0.25,
             base_release=staged,
         )
         release = client.edits().tracks().update.call_args.kwargs["body"]["releases"][0]

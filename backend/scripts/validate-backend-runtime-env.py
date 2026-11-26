@@ -132,6 +132,8 @@ def main() -> int:
     parser = argparse.ArgumentParser(description='Validate backend runtime env manifests against GKE and Cloud Run.')
     parser.add_argument('--env', choices=('dev', 'prod'), required=True)
     parser.add_argument('--manifest', type=Path, default=DEFAULT_MANIFEST)
+    parser.add_argument('--integration-canary-state', type=Path)
+    parser.add_argument('--integration-canary-source')
     parser.add_argument(
         '--cloud-run-state',
         type=Path,
@@ -153,9 +155,32 @@ def main() -> int:
         help='Immutable source root for workflow YAML and local composite actions; defaults to the runtime root.',
     )
     parser.add_argument(
+        '--chart-root',
+        type=Path,
+        default=ROOT,
+        help='Checkout root for Helm values paired with the manifest; defaults to the validator checkout.',
+    )
+    parser.add_argument(
         '--strict-provisional',
         action='store_true',
         help='Require provisional manifest values to match exactly. By default they only require presence.',
+    )
+    parser.add_argument(
+        '--cloud-run-service',
+        choices=(
+            'all',
+            'backend',
+            'backend-sync',
+            'backend-sync-backfill',
+            'backend-integration',
+            'backend-projection-pump',
+        ),
+        default='all',
+    )
+    parser.add_argument(
+        '--sync-routing-env-file',
+        type=Path,
+        help='Exact control-produced three-key sync routing overlay for live validation only.',
     )
     args = parser.parse_args()
 
@@ -166,7 +191,12 @@ def main() -> int:
         check_live_cloud_run=args.check_live_cloud_run,
         check_workflows=args.check_workflows,
         workflow_root=args.workflow_root,
+        chart_root=args.chart_root,
         strict_provisional=args.strict_provisional,
+        integration_canary_state=args.integration_canary_state,
+        integration_canary_source=args.integration_canary_source,
+        cloud_run_service=args.cloud_run_service,
+        sync_routing_env_path=args.sync_routing_env_file,
     )
     for error in errors:
         print(f'ERROR [{error.scope}]: {error.message}', file=sys.stderr)

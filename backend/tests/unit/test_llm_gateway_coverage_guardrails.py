@@ -82,6 +82,16 @@ DIRECT_PROVIDER_ALLOWLIST = {
     # (OpenAI-compatible surface); these never reach a provider directly.
     DirectUse('utils/llm/gateway_client.py', 'AsyncOpenAI'),
     DirectUse('utils/llm/gateway_client.py', 'OpenAI'),
+    # summary_embeddings.py is the single bounded embedding request the episode
+    # composer makes for owner-memory retrieval. It enforces the generated-compute
+    # budget and resolves the BYOK key before any IO, and routes through the
+    # gateway whenever gateway feature mode is on (production). The direct client
+    # is the non-gateway (dev/local) branch only: same provider, key custody and
+    # model as clients.py OpenAIEmbeddings, with SDK retries off and the caller's
+    # absolute deadline. It lives outside clients.py so the notes routing digest
+    # and paid checkpoints stay unchanged (#25340). Both branches are exercised by
+    # tests/unit/test_episode_summary_provider_bounds.py.
+    DirectUse('utils/llm/summary_embeddings.py', 'AsyncOpenAI'),
     DirectUse('utils/retrieval/agentic.py', 'anthropic_client.messages'),
     DirectUse('routers/omni_relay.py', 'GEMINI_API_KEY'),
     DirectUse('routers/omni_relay.py', 'OPENAI_API_KEY'),

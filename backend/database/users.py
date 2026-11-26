@@ -13,19 +13,31 @@ from config.firestore_read_levers import lever_enabled
 import uuid
 from database.fsr_read_cache import cache_writer, cached_read, memo, plane_id, ttl, user_snapshot, writing
 from datetime import datetime, timedelta, timezone
-from typing import Any, Literal, Optional, TypedDict
+from typing import Any, Literal, NotRequired, Optional, TypedDict
 
 from google.cloud import firestore
 from google.cloud.firestore_v1 import FieldFilter, transactional
 from ._client import db, delete_collection_recursive, document_id_from_seed, get_firestore_client
 from ._client import get_data_plane_firestore_client
+from database.go_queue_erase import ARMED_AT, PROTECTED_ATTEMPT, mark_wipe_running, running_stale_window
 from database.account_deletion_marker import (
     account_deletion_collection,
     account_deletion_document,
     account_deletion_firestore_client,
-    get_user_deletion_wipe_status,
+    get_user_deletion_wipe_status as get_user_deletion_wipe_status,
 )
 import database.account_deletion_grace as account_deletion_grace_db
+from database.batch_account_authority import (
+    account_authority_writer_enabled,
+    merge_account_authority,
+    mutate_account_authority,
+    write_account_authority,
+)
+from database.conversation_effect_fence import (
+    ConversationEffectSource,
+    ProfileConversationInput,
+    require_active_account,
+)
 from database.account_deletion_policy import (
     ACCOUNT_DELETION_GRACE_STATUS,
     deletion_billing_error_is_already_gone,
@@ -54,6 +66,7 @@ from database.redis_db import (
     try_acquire_client_device_write_lock,
     try_acquire_user_platform_write_lock,
 )
+from utils.other.request_deadline import request_deadline_remaining_seconds
 from models.users import (
     LOCATION_CONTEXT_DISCLOSED_PROVIDERS,
     LOCATION_CONTEXT_PURPOSE,
@@ -67,6 +80,18 @@ from models.other import Person
 import logging
 
 logger = logging.getLogger(__name__)
+
+
+def _request_deadline_firestore_kwargs() -> dict[str, float]:
+    """Pass the active route budget to Firestore, or skip work after expiry."""
+    remaining = request_deadline_remaining_seconds()
+    if remaining is None:
+        return {}
+    if remaining <= 0.0:
+        raise TimeoutError('request deadline expired before Firestore call')
+    return {'timeout': remaining}
+
+
 # Run-lock TTL (30 minutes) plus grace for a dead worker's last heartbeat.
 DELETION_WIPE_RUNNING_STALE_AFTER = timedelta(minutes=45)
 _DELETION_WIPE_TERMINAL_STATUSES = frozenset({'completed', 'cancelled'})
@@ -78,6 +103,7 @@ ONBOARDING_ADMISSION_TTL = timedelta(minutes=20)
 class DeletionWipeTaskResolution(TypedDict):
     outcome: Literal['resolved', 'missing', 'ambiguous', 'completed', 'not_actionable']
     uid: str | None
+    erase_armed: NotRequired[bool]
 
 
 class DeletionWipeIntent(TypedDict):
@@ -166,11 +192,11 @@ def record_client_device(
         if label:
             updates['label'] = label
 
-        snapshot = doc_ref.get()
+        snapshot = doc_ref.get(**_request_deadline_firestore_kwargs())
         if not snapshot.exists:
             updates['first_seen_at'] = now
 
-        doc_ref.set(updates, merge=True)
+        doc_ref.set(updates, merge=True, **_request_deadline_firestore_kwargs())
     except Exception as e:  # noqa: BLE001
         logger.warning("record_client_device failed for uid=%s: %s", uid, e)
 
@@ -211,7 +237,7 @@ def record_user_platform(uid: str, raw_platform: Optional[str]) -> None:
         # `signup_platform` is set_once. Read the doc (single read) and only
         # include the field in the write if it's not already present. Cheaper
         # than a transaction for a field that almost never changes.
-        snapshot = user_ref.get()
+        snapshot = user_ref.get(**_request_deadline_firestore_kwargs())
         if snapshot.exists:
             data = snapshot.to_dict() or {}
             if not data.get('signup_platform'):
@@ -224,7 +250,7 @@ def record_user_platform(uid: str, raw_platform: Optional[str]) -> None:
             updates['signup_os'] = os_value
             updates['signup_platform_at'] = now
 
-        user_ref.set(updates, merge=True)
+        user_ref.set(updates, merge=True, **_request_deadline_firestore_kwargs())
     except Exception as e:  # noqa: BLE001
         logger.warning("record_user_platform failed for uid=%s: %s", uid, e)
 
@@ -278,9 +304,12 @@ def get_user_private_cloud_sync_enabled(uid: str) -> bool:
     return user_data.get('private_cloud_sync_enabled', True)
 
 
-def set_user_private_cloud_sync_enabled(uid: str, value: bool):
+def set_user_private_cloud_sync_enabled(uid: str, value: bool, *, operation_id: str | None = None):
     """Enable or disable private cloud sync for a user."""
-    auto_enroll_db.update_privacy(uid, {'private_cloud_sync_enabled': value}, firestore_client=db)
+    client = get_data_plane_firestore_client() if account_authority_writer_enabled() else db
+    auto_enroll_db.update_privacy(
+        uid, {'private_cloud_sync_enabled': value}, firestore_client=client, operation_id=operation_id
+    )
 
 
 def set_user_cancellation_feedback(uid: str, reason: str, reason_details: Optional[str] = None):
@@ -408,43 +437,52 @@ def set_user_deletion_feedback(uid: str, reason: Optional[str], reason_details: 
 
 
 @cache_writer('deletion_marker_cache')
-def mark_user_deletion_wipe_running(uid: str):
-    """Transition a queued wipe marker to ``running`` once the worker starts.
-
-    Called by ``background_wipe_user_data`` at the top of the wipe worker.
-    This lets the reconciler distinguish a genuinely orphaned ``pending`` wipe
-    (queued but never picked up — safe to re-enqueue)
-    from a ``running`` wipe (actively executing — only recovered if the claim
-    is stale, i.e. the worker probably crashed).
-
-    Without this, a slow but live wipe could be reclaimed as orphaned after
-    ``stale_after`` (default 10 min) and re-enqueued concurrently, leading to
-    duplicate work where a later failure overwrites a successful completion.
-    """
-    account_deletion_document(uid).set(
-        {'wipe_status': 'running', 'wipe_running_at': datetime.now(timezone.utc)},
-        merge=True,
-    )
+def mark_user_deletion_wipe_running(uid: str, job_id: str | None = None, claim: str | None = None) -> bool | None:
+    """Mark a legacy wipe running or bind a protected wipe to its current claim."""
+    client = account_deletion_firestore_client()
+    ref = account_deletion_document(uid, firestore_client=client)
+    if job_id is None:
+        merge_account_authority(client, ref, {'wipe_status': 'running', 'wipe_running_at': datetime.now(timezone.utc)})
+        return None
+    if claim is None:
+        raise RuntimeError('Go queue erase requires a durable task claim')
+    return mark_wipe_running(client.transaction(), ref, job_id, claim, uuid.uuid4().hex)
 
 
 @transactional
-def _heartbeat_user_deletion_wipe_txn(transaction, doc_ref) -> None:
+def _heartbeat_user_deletion_wipe_txn(transaction, doc_ref, protected: bool = False) -> bool | None:
     snapshot = doc_ref.get(transaction=transaction)
-    if snapshot.exists and (snapshot.to_dict() or {}).get('wipe_status') == 'running':
-        transaction.update(doc_ref, {'wipe_running_at': datetime.now(timezone.utc)})
+    data = (snapshot.to_dict() or {}) if snapshot.exists else {}
+    if not protected and data.get(ARMED_AT) is not None:
+        return False
+    if data.get('wipe_status') == 'running':
+        now = datetime.now(timezone.utc)
+        fields = {'wipe_running_at': now}
+        previous = data.get('wipe_running_at')
+        if protected and previous and data.get(PROTECTED_ATTEMPT) == previous:
+            fields[PROTECTED_ATTEMPT] = now
+        transaction.update(doc_ref, fields)
+    return None
 
 
 @cache_writer('deletion_marker_cache')
-def heartbeat_user_deletion_wipe(uid: str) -> None:
+def heartbeat_user_deletion_wipe(uid: str, protected: bool = False) -> bool | None:
     """Refresh a live wipe without resurrecting a failed/completed marker."""
     client = account_deletion_firestore_client()
-    _heartbeat_user_deletion_wipe_txn(client.transaction(), account_deletion_document(uid, firestore_client=client))
+    return _heartbeat_user_deletion_wipe_txn(
+        client.transaction(), account_deletion_document(uid, firestore_client=client), protected
+    )
 
 
 @cache_writer('deletion_marker_cache')
 def mark_user_deletion_auth_deleted(uid: str) -> None:
     """Keep retries fenced once Firebase Auth deletion has succeeded."""
-    account_deletion_document(uid).set({'wipe_auth_deleted_at': datetime.now(timezone.utc)}, merge=True)
+    client = account_deletion_firestore_client()
+    merge_account_authority(
+        client,
+        account_deletion_document(uid, firestore_client=client),
+        {'wipe_auth_deleted_at': datetime.now(timezone.utc)},
+    )
 
 
 @transactional
@@ -462,14 +500,18 @@ def _mark_user_deletion_wipe_intent_txn(transaction, doc_ref, wipe_job_id: str) 
             # older durable intent because the worker owns Firebase Auth
             # deletion.
             if status == 'deleting_auth':
-                transaction.update(
+                write_account_authority(
+                    transaction,
                     doc_ref,
                     {'wipe_status': 'pending', 'wipe_queued_at': datetime.now(timezone.utc)},
+                    preimage=snapshot,
+                    operation_id=f'wipe-intent-promote:{wipe_job_id}',
                 )
                 return {'wipe_job_id': existing_job_id, 'dispatch_claimed': True}
             if status in {'pending', 'retrying', 'running', 'failed', 'completed'}:
                 return {'wipe_job_id': existing_job_id, 'dispatch_claimed': False}
-    transaction.set(
+    write_account_authority(
+        transaction,
         doc_ref,
         {
             'wipe_status': 'pending',
@@ -478,6 +520,8 @@ def _mark_user_deletion_wipe_intent_txn(transaction, doc_ref, wipe_job_id: str) 
             'wipe_job_id': wipe_job_id,
         },
         merge=True,
+        preimage=snapshot,
+        operation_id=f'wipe-intent:{wipe_job_id}',
     )
     return {'wipe_job_id': wipe_job_id, 'dispatch_claimed': True}
 
@@ -513,9 +557,12 @@ def _mark_user_deletion_wipe_started_txn(transaction, doc_ref, wipe_job_id: str)
     data = snapshot.to_dict() or {}
     if data.get('wipe_status') != 'deleting_auth' or data.get('wipe_job_id') != wipe_job_id:
         return False
-    transaction.update(
+    write_account_authority(
+        transaction,
         doc_ref,
         {'wipe_status': 'pending', 'wipe_queued_at': datetime.now(timezone.utc)},
+        preimage=snapshot,
+        operation_id=f'wipe-started:{wipe_job_id}',
     )
     return True
 
@@ -532,22 +579,25 @@ def mark_user_deletion_wipe_started(uid: str, wipe_job_id: str) -> bool:
 @cache_writer('deletion_marker_cache')
 def mark_user_deletion_wipe_completed(uid: str) -> bool:
     """Complete the wipe only if no provider cleanup remains outstanding."""
+    operation_id = uuid.uuid4().hex
     client = account_deletion_firestore_client()
     return _mark_user_deletion_wipe_completed_txn(
-        client.transaction(), account_deletion_document(uid, firestore_client=client)
+        client.transaction(), account_deletion_document(uid, firestore_client=client), operation_id=operation_id
     )
 
 
 @cache_writer('deletion_marker_cache')
 def mark_user_deletion_wipe_failed(uid: str):
     """Mark the background data wipe as failed so a reconciliation worker can retry."""
-    account_deletion_document(uid).set(
+    client = account_deletion_firestore_client()
+    merge_account_authority(
+        client,
+        account_deletion_document(uid, firestore_client=client),
         {
             'wipe_status': 'failed',
             'wipe_failed_at': datetime.now(timezone.utc),
             'wipe_attempts': firestore.Increment(1),
         },
-        merge=True,
     )
 
 
@@ -559,6 +609,7 @@ def record_late_agent_vm_cleanup(
     expected_instance_id: str | None = None,
 ) -> bool:
     """Persist a late VM only when an admitted deletion owns its cleanup."""
+    operation_id = uuid.uuid4().hex
     client = account_deletion_firestore_client()
     doc_ref = account_deletion_document(uid, firestore_client=client)
     return _record_late_agent_vm_cleanup_txn(
@@ -567,6 +618,7 @@ def record_late_agent_vm_cleanup(
         vm_name,
         zone,
         expected_instance_id,
+        operation_id=operation_id,
     )
 
 
@@ -647,23 +699,33 @@ def resolve_deletion_wipe_job_id(wipe_job_id: str) -> DeletionWipeTaskResolution
         return {'outcome': 'ambiguous', 'uid': None}
 
     doc = docs[0]
-    status = (doc.to_dict() or {}).get('wipe_status')
+    marker = doc.to_dict() or {}
+    status = marker.get('wipe_status')
     if status == 'completed':
         return {'outcome': 'completed', 'uid': None}
     if status in _DELETION_WIPE_TERMINAL_STATUSES:
         return {'outcome': 'not_actionable', 'uid': None}
+    if marker.get(ARMED_AT) is not None:
+        return {'outcome': 'resolved', 'uid': doc.id, 'erase_armed': True}
     return {'outcome': 'resolved', 'uid': doc.id}
 
 
 @transactional
-def _mark_user_deletion_billing_failed_txn(transaction, doc_ref, uid: str, subscription_id: str | None, error: str):
+def _mark_user_deletion_billing_failed_txn(
+    transaction, doc_ref, uid: str, subscription_id: str | None, error: str, *, operation_id: str
+):
     snapshot = doc_ref.get(transaction=transaction)
     if snapshot.exists:
         data = snapshot.to_dict() or {}
-        if data.get('wipe_status') in ('cancelled', 'completed') or data.get('wipe_auth_deleted_at'):
+        if (
+            data.get('wipe_status') in ('cancelled', 'completed')
+            or data.get('wipe_auth_deleted_at')
+            or data.get(ARMED_AT) is not None
+        ):
             return False
 
-    transaction.set(
+    write_account_authority(
+        transaction,
         doc_ref,
         {
             'wipe_status': 'billing_failed',
@@ -672,6 +734,8 @@ def _mark_user_deletion_billing_failed_txn(transaction, doc_ref, uid: str, subsc
             'billing_error': error,
         },
         merge=True,
+        preimage=snapshot,
+        operation_id=operation_id,
     )
     return True
 
@@ -683,10 +747,13 @@ def mark_user_deletion_billing_failed(uid: str, subscription_id: str | None, err
     The worker must first verify Firebase Auth still exists. Started wipes may
     park here before Auth deletion; a post-Auth or terminal marker stays fenced.
     """
+    operation_id = uuid.uuid4().hex
     client = account_deletion_firestore_client()
     doc_ref = account_deletion_document(uid, firestore_client=client)
     transaction = client.transaction()
-    return _mark_user_deletion_billing_failed_txn(transaction, doc_ref, uid, subscription_id, error)
+    return _mark_user_deletion_billing_failed_txn(
+        transaction, doc_ref, uid, subscription_id, error, operation_id=operation_id
+    )
 
 
 @cache_writer('deletion_marker_cache')
@@ -697,9 +764,11 @@ def cancel_user_deletion_wipe(uid: str):
     persisted. Without this, the reconciliation worker would later wipe the
     user's data even though their Firebase account still exists.
     """
-    account_deletion_document(uid).set(
+    client = account_deletion_firestore_client()
+    merge_account_authority(
+        client,
+        account_deletion_document(uid, firestore_client=client),
         {'wipe_status': 'cancelled', 'wipe_cancelled_at': datetime.now(timezone.utc)},
-        merge=True,
     )
 
 
@@ -732,7 +801,6 @@ def get_pending_deletion_wipes(
     requiring Firestore composite indexes. Age filtering is done in Python.
     """
     stale_cutoff = datetime.now(timezone.utc) - stale_after
-    running_cutoff = datetime.now(timezone.utc) - running_stale_after
     budget = limit
 
     # Over-fetch *all* failed docs and back-off-filter in Python, for the same reason the
@@ -793,7 +861,7 @@ def get_pending_deletion_wipes(
                 break
             data = doc.to_dict()
             running_at = data.get('wipe_running_at')
-            if running_at and running_at < running_cutoff:
+            if running_at and running_at < now - running_stale_window(data, running_stale_after):
                 result.append(data | {'uid': doc.id})
 
     if len(result) < limit:
@@ -821,7 +889,7 @@ def get_pending_deletion_wipes(
             # Use the longer ``running_stale_after`` window so a queued-but-
             # not-yet-running retrying claim is not returned as a candidate
             # before the worker has had a chance to start.
-            if claimed_at and claimed_at < running_cutoff:
+            if claimed_at and claimed_at < now - running_stale_window(data, running_stale_after):
                 result.append(data | {'uid': doc.id})
 
     return result
@@ -829,7 +897,7 @@ def get_pending_deletion_wipes(
 
 @transactional
 def _claim_deletion_wipe_txn(
-    transaction, doc_ref, stale_after: timedelta, running_stale_after: timedelta
+    transaction, doc_ref, stale_after: timedelta, running_stale_after: timedelta, *, operation_id: str
 ) -> str | None:
     """Atomically claim a wipe for re-enqueueing inside a Firestore transaction.
 
@@ -852,10 +920,18 @@ def _claim_deletion_wipe_txn(
     if status == 'billing_failed':
         if not deletion_billing_error_is_already_gone(data.get('billing_error')):
             return None
-        transaction.update(doc_ref, {'wipe_status': 'retrying', 'wipe_claimed_at': now})
+        write_account_authority(
+            transaction,
+            doc_ref,
+            {'wipe_status': 'retrying', 'wipe_claimed_at': now},
+            preimage=snapshot,
+            operation_id=operation_id,
+        )
         return snapshot.id
     if status == ACCOUNT_DELETION_GRACE_STATUS:
-        return account_deletion_grace_db.claim_due_grace_txn(transaction, doc_ref, snapshot.id, data, now)
+        return account_deletion_grace_db.claim_due_grace_txn(
+            transaction, doc_ref, snapshot.id, data, now, preimage=snapshot, operation_id=operation_id
+        )
     if status == 'deleting_auth':
         # Recoverable only after the caller verified the Firebase auth user is
         # gone. Re-validate the age inside the transaction so a fresh intent
@@ -863,7 +939,13 @@ def _claim_deletion_wipe_txn(
         intent_at = data.get('wipe_intent_at')
         if intent_at and intent_at >= now - stale_after:
             return None
-        transaction.update(doc_ref, {'wipe_status': 'retrying', 'wipe_claimed_at': now})
+        write_account_authority(
+            transaction,
+            doc_ref,
+            {'wipe_status': 'retrying', 'wipe_claimed_at': now},
+            preimage=snapshot,
+            operation_id=operation_id,
+        )
         return snapshot.id
     if status == 'pending':
         # Re-validate the pending marker age *inside* the transaction. The
@@ -873,7 +955,13 @@ def _claim_deletion_wipe_txn(
         queued_at = data.get('wipe_queued_at')
         if queued_at and queued_at >= now - stale_after:
             return None
-        transaction.update(doc_ref, {'wipe_status': 'retrying', 'wipe_claimed_at': now})
+        write_account_authority(
+            transaction,
+            doc_ref,
+            {'wipe_status': 'retrying', 'wipe_claimed_at': now},
+            preimage=snapshot,
+            operation_id=operation_id,
+        )
         return snapshot.id
     if status == 'running':
         # A ``running`` marker means the worker started executing. Only reclaim
@@ -881,12 +969,24 @@ def _claim_deletion_wipe_txn(
         # certainly crashed or the pod was killed mid-execution. A fresh or
         # moderately recent ``running`` marker belongs to a live worker.
         running_at = data.get('wipe_running_at')
-        if running_at and running_at >= now - running_stale_after:
+        if running_at and running_at >= now - running_stale_window(data, running_stale_after):
             return None
-        transaction.update(doc_ref, {'wipe_status': 'retrying', 'wipe_claimed_at': now})
+        write_account_authority(
+            transaction,
+            doc_ref,
+            {'wipe_status': 'retrying', 'wipe_claimed_at': now},
+            preimage=snapshot,
+            operation_id=operation_id,
+        )
         return snapshot.id
     if status == 'failed':
-        transaction.update(doc_ref, {'wipe_status': 'retrying', 'wipe_claimed_at': now})
+        write_account_authority(
+            transaction,
+            doc_ref,
+            {'wipe_status': 'retrying', 'wipe_claimed_at': now},
+            preimage=snapshot,
+            operation_id=operation_id,
+        )
         return snapshot.id
     if status == 'retrying':
         claimed_at = data.get('wipe_claimed_at')
@@ -896,7 +996,7 @@ def _claim_deletion_wipe_txn(
         # beyond ``stale_after`` (10 min) without transitioning to ``running``.
         # Using the short window would let the periodic reconciler enqueue
         # another copy every pass, causing duplicate wipes to race.
-        if claimed_at and claimed_at < now - running_stale_after:
+        if claimed_at and claimed_at < now - running_stale_window(data, running_stale_after):
             # Stale claim (worker probably crashed). Re-claim it.
             transaction.update(doc_ref, {'wipe_claimed_at': now})
             return snapshot.id
@@ -915,14 +1015,17 @@ def claim_deletion_wipe(
     another worker already owns a non-stale claim. This prevents the same wipe
     from being re-enqueued concurrently by multiple workers or scheduler runs.
     """
+    operation_id = uuid.uuid4().hex
     client = account_deletion_firestore_client()
     doc_ref = account_deletion_document(uid, firestore_client=client)
     transaction = client.transaction()
-    return _claim_deletion_wipe_txn(transaction, doc_ref, stale_after, running_stale_after)
+    return _claim_deletion_wipe_txn(transaction, doc_ref, stale_after, running_stale_after, operation_id=operation_id)
 
 
 @transactional
-def _claim_deletion_wipe_task_txn(transaction, doc_ref, running_stale_after: timedelta) -> str:
+def _claim_deletion_wipe_task_txn(
+    transaction, doc_ref, running_stale_after: timedelta, *, operation_id: str, expected_job_id: str | None = None
+) -> str:
     """Claim a Cloud Tasks delivery before running an account-deletion wipe.
 
     The claim intentionally stays in ``retrying`` until the cleanup worker
@@ -935,6 +1038,8 @@ def _claim_deletion_wipe_task_txn(transaction, doc_ref, running_stale_after: tim
         return 'missing'
 
     data = snapshot.to_dict()
+    if expected_job_id is not None and data.get('wipe_job_id') != expected_job_id:
+        return 'not_actionable'
     status = data.get('wipe_status')
     now = datetime.now(timezone.utc)
 
@@ -942,34 +1047,43 @@ def _claim_deletion_wipe_task_txn(transaction, doc_ref, running_stale_after: tim
         return 'completed'
     if status in ('cancelled', 'deleting_auth'):
         return 'not_actionable'
+    if expected_job_id is None and data.get(ARMED_AT) is not None:
+        return 'erase_required'
     if status == ACCOUNT_DELETION_GRACE_STATUS:
         if not account_deletion_grace_db.grace_wipe_is_due(data, now):
             return 'not_actionable'
     if status == 'running':
         running_at = data.get('wipe_running_at')
-        if running_at and running_at >= now - running_stale_after:
+        if running_at and running_at >= now - running_stale_window(data, running_stale_after):
             return 'running'
 
     # A queued task retries transient pre-Auth billing failures. The reconciler
     # only recovers historical already-gone billing errors, never an outage.
     if status in ('pending', 'retrying', 'failed', 'running', 'billing_failed', ACCOUNT_DELETION_GRACE_STATUS):
-        transaction.update(doc_ref, {'wipe_status': 'retrying', 'wipe_claimed_at': now})
+        write_account_authority(
+            transaction,
+            doc_ref,
+            {'wipe_status': 'retrying', 'wipe_claimed_at': now},
+            preimage=snapshot,
+            operation_id=operation_id,
+        )
         return 'claimed'
 
     return 'not_actionable'
 
 
 @cache_writer('deletion_marker_cache')
-def claim_deletion_wipe_for_task(uid: str, running_stale_after: timedelta = DELETION_WIPE_RUNNING_STALE_AFTER) -> str:
-    """Claim an account-deletion wipe for a Cloud Tasks worker.
-
-    Returns one of: ``claimed``, ``running``, ``completed``, ``missing``, or
-    ``not_actionable``. Only ``claimed`` callers may run the destructive wipe.
-    """
+def claim_deletion_wipe_for_task(
+    uid: str, running_stale_after: timedelta = DELETION_WIPE_RUNNING_STALE_AFTER, *, expected_job_id: str | None = None
+) -> str:
+    """Claim a Cloud Tasks wipe; only a claimed delivery may run the wipe."""
+    operation_id = uuid.uuid4().hex
     client = account_deletion_firestore_client()
     doc_ref = account_deletion_document(uid, firestore_client=client)
     transaction = client.transaction()
-    return _claim_deletion_wipe_task_txn(transaction, doc_ref, running_stale_after)
+    return _claim_deletion_wipe_task_txn(
+        transaction, doc_ref, running_stale_after, operation_id=operation_id, expected_job_id=expected_job_id
+    )
 
 
 def create_person(uid: str, data: dict):
@@ -1448,7 +1562,8 @@ def update_person_speech_samples_version(uid: str, person_id: str, version: int)
 def delete_user_data(uid: str):
     from database.user_data_deletion import purge_user_subtree
 
-    return purge_user_subtree(uid, db, delete_collection_recursive)
+    client = get_data_plane_firestore_client() if account_authority_writer_enabled() else db
+    return purge_user_subtree(uid, client, delete_collection_recursive)
 
 
 # **************************************
@@ -1646,37 +1761,80 @@ def get_data_protection_level(uid: str) -> str:
     return 'enhanced'
 
 
-def set_data_protection_level(uid: str, level: str) -> None:
-    """
-    Set the user's data protection level.
+def _set_protection_and_purge(uid: str, patch: dict, operation_id: str | None) -> None:
+    from database.batch_pipeline_purge import purge_batch_owner
 
-    Args:
-        uid: User ID
-        level: 'enhanced', or 'e2ee'
-    """
-    if level not in ['enhanced', 'e2ee']:
+    if not account_authority_writer_enabled():
+        db.collection('users').document(uid).set(patch, merge=True)
+        purge_batch_owner(uid, reason='data_protection')
+        return
+
+    from database._client import run_transactional
+
+    client = get_data_plane_firestore_client()
+    user = client.collection('users').document(uid)
+    stable_id = operation_id or uuid.uuid4().hex
+
+    @transactional
+    def begin(transaction):
+        return mutate_account_authority(
+            transaction, user, stable_id, patch, client=client, merge=True, begin_purge=True
+        )
+
+    intent = run_transactional(client, begin, transient=True)
+    purge_batch_owner(
+        uid, firestore_client=client, reason='data_protection', protection_generation=intent.purge_generation
+    )
+
+
+def set_data_protection_level(uid: str, level: str, *, operation_id: str | None = None) -> None:
+    """Set the supported user protection level and erase stale batch state."""
+    if level not in {'enhanced', 'e2ee'}:
         raise ValueError("Invalid data protection level. Only 'enhanced' or 'e2ee' are supported.")
-    user_ref = db.collection('users').document(uid)
-    user_ref.set({'data_protection_level': level}, merge=True)
-    from database.batch_pipeline_purge import purge_batch_owner
-
-    purge_batch_owner(uid, reason='data_protection')
+    _set_protection_and_purge(uid, {'data_protection_level': level}, operation_id)
 
 
-def set_migration_status(uid: str, target_level: str):
-    """Sets the migration status on the user's profile."""
-    user_ref = db.collection('users').document(uid)
-    migration_status = {'target_level': target_level, 'status': 'in_progress', 'started_at': datetime.now(timezone.utc)}
-    user_ref.set({'migration_status': migration_status}, merge=True)
-    from database.batch_pipeline_purge import purge_batch_owner
-
-    purge_batch_owner(uid, reason='data_protection')
+def set_migration_status(uid: str, target_level: str, *, operation_id: str | None = None) -> None:
+    """Set migration status and begin erasing batch state before acknowledging."""
+    migration = {'target_level': target_level, 'status': 'in_progress', 'started_at': datetime.now(timezone.utc)}
+    _set_protection_and_purge(uid, {'migration_status': migration}, operation_id)
 
 
-def finalize_migration(uid: str, target_level: str):
-    """Atomically sets the new protection level and removes the migration status field."""
-    user_ref = db.collection('users').document(uid)
-    user_ref.update({'data_protection_level': target_level, 'migration_status': firestore.DELETE_FIELD})
+class MigrationSuperseded(RuntimeError):
+    """The requested finalizer no longer matches the active privacy choice."""
+
+
+def finalize_migration(uid: str, target_level: str, *, operation_id: str | None = None) -> None:
+    """Set the protection level and remove the migration marker in one commit."""
+    patch = {'data_protection_level': target_level, 'migration_status': firestore.DELETE_FIELD}
+    if not account_authority_writer_enabled():
+        db.collection('users').document(uid).update(patch)
+        return
+
+    from database._client import run_transactional
+
+    client = get_data_plane_firestore_client()
+    user = client.collection('users').document(uid)
+    stable_id = operation_id or uuid.uuid4().hex
+
+    def validate(snapshot, privacy):
+        data = snapshot.to_dict() or {}
+        migration = data.get('migration_status')
+        if migration is not None:
+            if not isinstance(migration, dict) or migration.get('target_level') != target_level:
+                raise MigrationSuperseded('migration target changed')
+            binding = migration.get('batch_purge_binding')
+            if isinstance(binding, dict) and binding.get('started_at') == migration.get('started_at'):
+                if privacy.get('generation') != binding.get('generation'):
+                    raise MigrationSuperseded('migration was superseded by a protection change')
+        elif data.get('data_protection_level') == 'e2ee' and target_level != 'e2ee':
+            raise MigrationSuperseded('removing end-to-end encryption requires an active migration')
+
+    @transactional
+    def finalize(transaction):
+        mutate_account_authority(transaction, user, stable_id, patch, client=client, validate=validate)
+
+    run_transactional(client, finalize, transient=True)
 
 
 # **************************************
@@ -1926,16 +2084,24 @@ def _s4_get_user_subscription_uncached(
 
 def get_existing_user_subscription(uid: str, *, firestore_client: Any | None = None) -> Optional[Subscription]:
     """Gets the user's stored subscription without creating a default record."""
+    return get_existing_user_subscription_and_fields(uid, (), firestore_client=firestore_client)[0]
+
+
+def get_existing_user_subscription_and_fields(
+    uid: str, fields: tuple[str, ...], *, firestore_client: Any | None = None
+) -> tuple[Optional[Subscription], dict]:
+    """The stored subscription plus top-level ``fields`` of the user document, in the same single read."""
     user_ref = (firestore_client or db).collection('users').document(uid)
-    user_doc = user_ref.get(['subscription'])
+    user_doc = user_ref.get(['subscription', *fields])
     if not user_doc.exists:
         observe_subscription(uid, None)
-        return None
+        return None, {}
 
     user_data = user_doc.to_dict()
+    extra = {name: user_data.get(name) for name in fields}
     if 'subscription' not in user_data:
         observe_subscription(uid, None)
-        return None
+        return None, extra
 
     sub_data = user_data['subscription']
 
@@ -1949,7 +2115,7 @@ def get_existing_user_subscription(uid: str, *, firestore_client: Any | None = N
 
     subscription = parse_snapshot_strict(Subscription, user_doc, payload_from_snapshot=subscription_payload)
     observe_subscription(uid, subscription)
-    return subscription
+    return subscription, extra
 
 
 def get_user_training_data_opt_in(uid: str) -> Optional[dict]:
@@ -2501,21 +2667,86 @@ def get_ai_user_profile(uid: str) -> Optional[dict]:
     return get_or_fetch(_USER_AI_PROFILE_CACHE, uid, lambda: _get_ai_user_profile_from_firestore(uid))
 
 
+def get_ai_user_profile_fresh(uid: str) -> Optional[dict]:
+    """Uncached read for read-modify-write and refresh cadence decisions."""
+    return _get_ai_user_profile_from_firestore(uid)
+
+
 def update_ai_user_profile(
-    uid: str, profile_text: str = None, generated_at=None, data_sources_used: int = None
+    uid: str,
+    profile_text: str = None,
+    generated_at=None,
+    data_sources_used: int = None,
+    source: Optional[str] = None,
 ) -> dict:
-    """Update AI user profile.  Only writes non-None fields (partial update)."""
+    """Update AI user profile.  Only writes non-None fields (partial update).
+
+    ``source`` records who wrote the text (``user_edit``/``exploration`` from clients);
+    a legacy PATCH without one is recorded as ``client``.
+    """
     # Read existing profile directly from Firestore — never from cache — because
     # this is a read-modify-write path. Using a stale cached projection here
     # could overwrite newer profile fields.
     existing = _get_ai_user_profile_from_firestore(uid) or {}
     if profile_text is not None:
         existing['profile_text'] = profile_text
+        existing['source'] = source or 'client'
     if generated_at is not None:
         existing['generated_at'] = generated_at
+    elif profile_text is not None and source:
+        existing['generated_at'] = datetime.now(timezone.utc).isoformat()
     if data_sources_used is not None:
         existing['data_sources_used'] = data_sources_used
     user_ref = db.collection('users').document(uid)
     user_ref.update({'ai_user_profile': existing})
     invalidate(_USER_AI_PROFILE_CACHE, uid)
     return existing
+
+
+@transactional
+def _write_ai_user_profile_if_unchanged_txn(
+    transaction,
+    client,
+    uid: str,
+    expected_text: str,
+    profile: dict,
+    effect_source: ConversationEffectSource | None,
+    conversation_inputs: tuple[ProfileConversationInput, ...],
+) -> bool:
+    require_active_account(transaction, client, uid)
+    if effect_source is not None:
+        effect_source.validate(transaction, client, uid)
+    for source in conversation_inputs:
+        source.validate(transaction, client, uid)
+    user_ref = client.collection('users').document(uid)
+    snapshot = user_ref.get(transaction=transaction)
+    if not snapshot.exists:
+        return False
+    current = (snapshot.to_dict() or {}).get('ai_user_profile') or {}
+    if str(current.get('profile_text') or '').strip() != expected_text:
+        return False
+    transaction.update(user_ref, {'ai_user_profile': profile})
+    return True
+
+
+def write_ai_user_profile_if_unchanged(
+    uid: str,
+    expected_text: str,
+    profile: dict,
+    *,
+    effect_source: ConversationEffectSource | None = None,
+    conversation_inputs: tuple[ProfileConversationInput, ...] = (),
+    firestore_client: Any = None,
+) -> bool:
+    """Replace the generated profile if the account, source inputs and stored text are current."""
+    client = firestore_client if firestore_client is not None else get_data_plane_firestore_client()
+    written = _write_ai_user_profile_if_unchanged_txn(
+        client.transaction(), client, uid, expected_text, profile, effect_source, conversation_inputs
+    )
+    invalidate(_USER_AI_PROFILE_CACHE, uid)
+    return written
+
+
+def delete_ai_user_profile(uid: str) -> None:
+    db.collection('users').document(uid).update({'ai_user_profile': firestore.DELETE_FIELD})
+    invalidate(_USER_AI_PROFILE_CACHE, uid)

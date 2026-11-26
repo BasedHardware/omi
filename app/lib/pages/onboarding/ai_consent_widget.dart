@@ -23,6 +23,19 @@ class AiConsentWidget extends StatefulWidget {
 }
 
 class _AiConsentWidgetState extends State<AiConsentWidget> {
+  /// Signing out here also resets this phone's settings, so it asks first (ux-contract §4, D5).
+  Future<void> _confirmUseDifferentAccount() async {
+    final l10n = context.l10n;
+    final confirmed = await showOmiConfirm(
+      context,
+      title: l10n.signOutQuestion,
+      message: l10n.useDifferentAccountMessage,
+      confirmLabel: l10n.signOut,
+      destructive: true,
+    );
+    if (confirmed && mounted) await widget.onUseDifferentAccount();
+  }
+
   final TapGestureRecognizer _privacyRecognizer = TapGestureRecognizer();
   final TapGestureRecognizer _termsRecognizer = TapGestureRecognizer();
 
@@ -71,6 +84,7 @@ class _AiConsentWidgetState extends State<AiConsentWidget> {
             key: const Key('ai_consent_agree'),
             label: context.l10n.agreeAndContinue,
             expand: true,
+            maxLines: null,
             onPressed: () {
               OmiHaptics.selection();
               widget.onAgree();
@@ -81,7 +95,8 @@ class _AiConsentWidgetState extends State<AiConsentWidget> {
             key: const Key('ai_consent_use_different_account'),
             label: context.l10n.useDifferentAccount,
             expand: true,
-            onPressed: widget.onUseDifferentAccount,
+            maxLines: null,
+            onPressed: _confirmUseDifferentAccount,
           ),
         ],
       ),

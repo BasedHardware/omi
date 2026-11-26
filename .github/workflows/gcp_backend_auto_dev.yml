@@ -53,7 +53,7 @@ env:
 
 jobs:
   scope:
-    name: Decide backend deployment scope
+    name: Decide backend build and deployment scope
     # This unprivileged decision runs before source admission, Firestore
     # readiness, image work, or any cloud mutation. workflow_run does not
     # support a safe workflow-level paths filter, so inspect its immutable SHA.
@@ -62,6 +62,7 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       applies: ${{ steps.scope.outputs.applies }}
+      workerd: ${{ steps.scope.outputs.workerd }}
     steps:
       - name: Checkout triggering main commit for scope decision
         uses: actions/checkout@v7
@@ -71,7 +72,7 @@ jobs:
           # main/supersession proof below is bounded to read-only GitHub API calls.
           fetch-depth: 2
 
-      - name: Decide whether the triggering commit can affect the backend deployment
+      - name: Decide backend and workerd build scope
         id: scope
         env:
           RELEASE_SHA: ${{ github.event.workflow_run.head_sha }}
@@ -90,19 +91,24 @@ jobs:
           # never deploys. Admission now resolves the newest eligible commit
           # instead, which subsumes supersession without that hole.
           if ! parent_sha="$(git rev-parse "${RELEASE_SHA}^" 2>/dev/null)"; then
-            # An unavailable parent is uncertain scope: retain the existing
-            # exact-SHA admission and deployment path rather than skip.
-            echo "applies=true" >> "$GITHUB_OUTPUT"
-            {
-              echo "### Backend development deploy scope"
-              echo "In scope: could not resolve the triggering commit parent."
-            } >> "$GITHUB_STEP_SUMMARY"
-            exit 0
+            echo "Cannot determine backend scope without the triggering commit parent." >&2
+            exit 1
           fi
 
           changed_files="$(git diff --name-only "$parent_sha" "$RELEASE_SHA")"
           printf 'Changed files for %s:\n%s\n' "$RELEASE_SHA" "$changed_files"
-          if grep -Eq '^(backend/|\.github/workflows/(gcp_backend_auto_dev|gcp_llm_gateway|release-eligibility)\.yml$|\.github/actions/(release-eligibility|sync-backfill-lifecycle|deploy-backend-stack|firestore-readiness)/|\.github/scripts/(verify_auto_backend_release_admission|desktop_release_manifest)\.py$)' <<<"$changed_files"; then
+          if grep -Eq '^backend-go/' <<<"$changed_files"; then
+            echo "workerd=true" >> "$GITHUB_OUTPUT"
+            echo "Workerd image publishing is in scope for this admitted source SHA."
+            # Go changes may carry workflow validation and tests. Those changes
+            # alone do not authorize a backend service rollout.
+            changed_files="$(sed '/^backend\/tests\//d; /^backend\/scripts\/runtime_env_validation\/workflows\.py$/d' <<<"$changed_files")"
+          else
+            echo "workerd=false" >> "$GITHUB_OUTPUT"
+          fi
+          # Workerd source changes publish only the dev image. Edits to this
+          # workflow itself also must not roll out the unrelated backend stack.
+          if grep -Eq '^(backend/|\.github/workflows/(gcp_llm_gateway|release-eligibility)\.yml$|\.github/actions/(release-eligibility|sync-backfill-lifecycle|deploy-backend-stack|firestore-readiness)/|\.github/scripts/(verify_auto_backend_release_admission|desktop_release_manifest)\.py$)' <<<"$changed_files"; then
             echo "applies=true" >> "$GITHUB_OUTPUT"
             {
               echo "### Backend development deploy scope"
@@ -116,30 +122,22 @@ jobs:
             } >> "$GITHUB_STEP_SUMMARY"
           fi
 
-  firestore_readiness:
+  admit_source:
     # A workflow_run can access deployment credentials, so never run source
     # code until the first completed proof identifies the exact current commit
     # on this repository's main branch. Every later checkout and release vector
     # uses that admitted SHA rather than a mutable default branch ref.
     needs: scope
     if: >-
-      needs.scope.outputs.applies == 'true' &&
+      (needs.scope.outputs.applies == 'true' || needs.scope.outputs.workerd == 'true') &&
       github.event.workflow_run.conclusion == 'success' &&
       github.event.workflow_run.event == 'push' &&
       github.event.workflow_run.run_attempt == 1 &&
       github.event.workflow_run.head_branch == 'main' &&
       github.event.workflow_run.head_repository.full_name == github.repository
-    environment: development
     permissions:
-      # actions:read lists Release Eligibility proofs, exactly as the manual
-      # deploy lane's readiness job already does.
       actions: 'read'
       contents: 'read'
-      # Keyless index check (2026-11-01): the readiness composite now mints its
-      # OIDC token through the dev deploy pool, so this boundary job needs
-      # id-token: write. The token still impersonates only omi-ci-index-check@
-      # (ciFirestoreIndexReader), never the deployer.
-      id-token: 'write'
     runs-on: ubuntu-latest
     outputs:
       admitted_sha: ${{ steps.admitted_source.outputs.admitted_sha }}
@@ -217,10 +215,21 @@ jobs:
             --trigger-is-ancestor-of-sha "$trigger_is_ancestor_of_sha"
           printf 'admitted_sha=%s\n' "$admitted_sha" >> "$GITHUB_OUTPUT"
 
+  firestore_readiness:
+    needs: [scope, admit_source]
+    if: needs.scope.outputs.applies == 'true'
+    environment: development
+    permissions:
+      contents: 'read'
+      id-token: 'write'
+    runs-on: ubuntu-latest
+    outputs:
+      admitted_sha: ${{ needs.admit_source.outputs.admitted_sha }}
+    steps:
       - name: Checkout admitted Firestore source
         uses: actions/checkout@v7
         with:
-          ref: ${{ steps.admitted_source.outputs.admitted_sha }}
+          ref: ${{ needs.admit_source.outputs.admitted_sha }}
 
       - name: Checkout immutable Firestore gate controls
         uses: actions/checkout@v7
@@ -237,14 +246,15 @@ jobs:
       - name: Verify serving Firestore indexes
         uses: ./.github/firestore-workflow/.github/actions/firestore-readiness
         with:
-          source_sha: ${{ steps.admitted_source.outputs.admitted_sha }}
+          source_sha: ${{ needs.admit_source.outputs.admitted_sha }}
           project_id: ${{ vars.RUNTIME_GCP_PROJECT_ID }}
           workload_identity_provider: projects/1031333818730/locations/global/workloadIdentityPools/omi-gha-deploy-dev/providers/github
           service_account: omi-ci-index-check@based-hardware.iam.gserviceaccount.com
           verify_credential_project: 'true'
 
   deploy:
-    needs: firestore_readiness
+    needs: [scope, firestore_readiness]
+    if: needs.scope.outputs.applies == 'true'
     environment: development
     permissions:
       contents: 'read'
@@ -279,3 +289,62 @@ jobs:
           region: ${{ env.REGION }}
           service: ${{ env.SERVICE }}
           candidate_tag: ${{ env.CANDIDATE_TAG }}
+
+  publish_workerd:
+    name: Build and publish workerd development image
+    needs: [scope, admit_source]
+    if: needs.scope.outputs.workerd == 'true'
+    environment: development
+    permissions:
+      contents: 'read'
+      id-token: 'write'
+    runs-on: ubuntu-latest
+    outputs:
+      image_digest: ${{ steps.publish.outputs.digest }}
+    steps:
+      - name: Checkout admitted workerd source
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.admit_source.outputs.admitted_sha }}
+          persist-credentials: false
+
+      - name: Google Auth
+        uses: google-github-actions/auth@v3
+        with:
+          workload_identity_provider: projects/1031333818730/locations/global/workloadIdentityPools/omi-gha-deploy-dev/providers/github
+          service_account: omi-ci-deployer-dev@based-hardware-dev.iam.gserviceaccount.com
+
+      - name: Set up gcloud
+        uses: google-github-actions/setup-gcloud@v3
+        with:
+          project_id: based-hardware-dev
+
+      - name: Configure Docker for GCR
+        run: gcloud auth configure-docker --quiet
+
+      - name: Build and publish admitted workerd image
+        id: publish
+        env:
+          ADMITTED_SHA: ${{ needs.admit_source.outputs.admitted_sha }}
+        run: |
+          set -euo pipefail
+          if [[ ! "$ADMITTED_SHA" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "Invalid admitted source SHA for workerd image." >&2
+            exit 1
+          fi
+          short_sha="${ADMITTED_SHA:0:7}"
+          image="gcr.io/based-hardware-dev/workerd:${short_sha}"
+          docker build --platform linux/amd64 --tag "$image" --file backend-go/Dockerfile backend-go
+          docker push "$image"
+          digest="$(gcloud container images describe "$image" --format='value(image_summary.digest)')"
+          if [[ ! "$digest" =~ ^sha256:[a-f0-9]{64}$ ]]; then
+            echo "Development registry did not return a valid workerd image digest." >&2
+            exit 1
+          fi
+          echo "digest=$digest" >> "$GITHUB_OUTPUT"
+          {
+            echo "### Workerd development image published"
+            echo "- Source SHA: \`$ADMITTED_SHA\`"
+            echo "- Image: \`gcr.io/based-hardware-dev/workerd@$digest\`"
+            echo "- Deployment: none; dev services were not changed."
+          } >> "$GITHUB_STEP_SUMMARY"

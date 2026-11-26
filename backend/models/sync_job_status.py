@@ -1,9 +1,17 @@
 """Client-visible sync job response shapes shared by both dispatch protocols."""
 
-from typing import List
+from typing import Annotated, List, Literal, Optional
 
 from pydantic import BaseModel, Field
 from utils.sync.lanes import SyncLane
+
+
+class FrameProcessingRange(BaseModel):
+    capture_root: str
+    clock_epoch: int
+    start: int
+    end: int
+    status: Literal['text', 'empty']
 
 
 class SyncLocalFilesResultResponse(BaseModel):
@@ -13,6 +21,7 @@ class SyncLocalFilesResultResponse(BaseModel):
     total_segments: int = 0
     errors: list[str] = Field(default_factory=list)
     held_audio: bool | None = None
+    frame_outcomes_v1: list[FrameProcessingRange] | None = None
 
 
 class SyncJobStartResponse(BaseModel):
@@ -41,6 +50,18 @@ class SyncJobStatusResponse(BaseModel):
     poll_after_ms: int | None = None
 
 
+class SyncReceiptsWaitRequest(BaseModel):
+    job_ids: list[Annotated[str, Field(min_length=1, max_length=128, pattern=r'^[a-zA-Z0-9_-]+$')]] = Field(
+        min_length=1, max_length=16
+    )
+
+
+class SyncReceiptsWaitResponse(BaseModel):
+    receipts: list[SyncJobStatusResponse]
+    # These handles require the existing, individually paced recovery path.
+    fallback: list[str]
+
+
 class SyncCaptureManifestFile(BaseModel):
     name: str = Field(min_length=1, max_length=255)
     sha256: str = Field(pattern=r'^[0-9a-fA-F]{64}$')
@@ -53,6 +74,23 @@ class SyncCaptureManifestRequest(BaseModel):
 
 class SyncCaptureManifestResponse(BaseModel):
     manifest: str
+
+
+class SyncCaptureEndRequest(BaseModel):
+    """The phone's statement that a recording ended. Times are device-clock epoch seconds."""
+
+    recording_session_id: str = Field(min_length=1, max_length=128)
+    end_type: Literal['user_initiated', 'silence_backstop', 'disconnect']
+    # None when the phone's VAD never scored speech in this recording.
+    last_speech_at: Optional[float] = Field(default=None, gt=0)
+    end_decided_at: float = Field(gt=0)
+    sent_at: float = Field(gt=0)
+    pending_wals: int = Field(ge=0, le=100000)
+
+
+class SyncCaptureEndResponse(BaseModel):
+    accepted: bool
+    retry: bool = False
 
 
 class SyncUploadHoldReleaseResponse(BaseModel):

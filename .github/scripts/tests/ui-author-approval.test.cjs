@@ -20,13 +20,25 @@ test('other accounts and non-UI work pass; renamed UI is gated', () => {
   }
   assert.equal(decision({...pr,user:actor},[{filename:'archive/file',previous_filename:ui[0].filename}],[],[]).allowed,false);
 });
-test('only Nik current-head explicit approval passes; revocation wins', () => {
+test('Nik and David can approve only the current head; third accounts are ignored', () => {
   const p = {...pr,user:actor};
-  for (const comment of [{...approve,user:actor},{...approve,body:'/approve-ui '+ 'b'.repeat(40)}]) {
-    assert.equal(decision(p,ui,[],[comment]).allowed,false);
+  for (const user of [nik,actor]) {
+    assert.equal(decision(p,ui,[],[{...approve,user}]).allowed,true);
+    assert.equal(decision(p,ui,[],[{...approve,user,body:'/approve-ui '+ 'b'.repeat(40)}]).allowed,false);
   }
-  assert.equal(decision(p,ui,[],[approve,{...approve,id:2,body:`/reject-ui ${pr.head.sha}`}]).allowed,false);
+  assert.equal(decision(p,ui,[],[{...approve,user:{id:3}}]).allowed,false);
   assert.equal(decision(p,ui,[],[]).allowed,false);
+});
+test('newest head command wins across either approver regardless of API order', () => {
+  const p = {...pr,user:actor};
+  for (const user of [nik,actor]) {
+    const earlier = {...approve,user:user === nik ? actor : nik};
+    const reject = {...approve,id:2,user,body:`/reject-ui ${pr.head.sha}`};
+    assert.equal(decision(p,ui,[],[reject,earlier]).allowed,false);
+    assert.equal(decision(p,ui,[],[reject,{...earlier,id:3}]).allowed,true);
+    assert.equal(decision(p,ui,[],[earlier,{...reject,user:{id:3}}]).allowed,true);
+    assert.equal(decision(p,ui,[],[earlier,{...reject,body:'/reject-ui '+ 'b'.repeat(40)}]).allowed,true);
+  }
 });
 test('API truncation fails closed even with approval', () => {
   assert.equal(decision({...pr,commits:250},ui,[],[approve]).allowed,false);
@@ -44,7 +56,8 @@ function fixture() {
       comments[issue_number].push({id:10,user:{type:'Bot'},body});
     }},repos:{createCommitStatus:async s => statuses.push(s),compareCommitsWithBasehead:async args => {
       calls.push(args);return {data:{files:ui,commits:[{sha:'d'.repeat(40)}],total_commits:1}};
-    }}},paginate:async (method,args) => method === 'prs' ? prs.map(p => ({...p})) : comments[args.issue_number],
+    }}},paginate:async (method,args) => method === 'prs'
+      ? prs.filter(p => p.state === args.state).map(p => ({...p})) : comments[args.issue_number],
     graphql:async (query,args) => ({repository:{object:{oid:args.oid,authors:{totalCount:0,nodes:[]}}}})};
   const context = {repo:{owner:'test',repo:'test'},payload:{pull_request:{number:1}}};
   return {p,prs,comments,statuses,calls,github,context};
@@ -75,6 +88,77 @@ test('another opener sharing SHA cannot clear the actor PR requirement', async (
   f.comments[1].push(approve);
   await run(f); assert.equal(f.statuses.at(-1).state,'success');
 });
+function stackFixture() {
+  const f = fixture();
+  f.p.base = {ref:'lane/firestore',sha:'b'.repeat(40)};
+  f.context.payload = {issue:{number:1,pull_request:{}}};
+  const main = 'c'.repeat(40);
+  f.github.rest.git = {getRef:async ({ref}) => {
+    assert.equal(ref,'heads/main');
+    return {data:{object:{sha:main}}};
+  }};
+  return {...f,main,headSha:f.p.head.sha};
+}
+test('stacked non-UI PR clears approval using the immutable diff against main', async () => {
+  const f = stackFixture();
+  f.github.rest.repos.compareCommitsWithBasehead = async args => {
+    f.calls.push(args);
+    return {data:{files:[{filename:'backend/router.py'}],commits:[],total_commits:0}};
+  };
+  await run(f);
+  assert.equal(f.statuses.at(-1).state,'success');
+  assert.equal(f.calls[0].basehead,`${f.main}...${f.headSha}`);
+  assert.equal(f.comments[1].length,0);
+});
+test('stacked UI inherited from the lane still requires approval at the exact head', async () => {
+  const f = stackFixture();
+  await run(f);
+  assert.equal(f.calls[0].basehead,`${f.main}...${f.headSha}`);
+  assert.equal(f.statuses.at(-1).state,'failure');
+  f.comments[1].push(approve);
+  await run(f);
+  assert.equal(f.statuses.at(-1).state,'success');
+});
+test('a main-target PR sharing the stack head takes precedence over stack approval', async () => {
+  const f = stackFixture();
+  f.prs.push({...f.p,number:2,base:{ref:'main',sha:f.main}});
+  f.comments[1].push(approve);
+  f.comments[2] = [];
+  f.github.rest.git.getRef = async () => assert.fail('stack fallback used despite a main PR');
+  await run(f);
+  assert.equal(f.statuses.at(-1).state,'failure');
+});
+test('same-head stacks require an approval on each affected PR', async () => {
+  const f = stackFixture();
+  f.prs.push({...f.p,number:2,base:{ref:'lane/batch',sha:'e'.repeat(40)}});
+  f.comments[1].push(approve);
+  f.comments[2] = [];
+  await run(f);
+  assert.equal(f.statuses.at(-1).state,'failure');
+  assert.equal(f.calls.length,1);
+  f.comments[2].push(approve);
+  await run(f);
+  assert.equal(f.statuses.at(-1).state,'success');
+});
+test('stack approval refuses if main or the lane moves during verification', async () => {
+  for (const moved of ['main','lane']) {
+    const f = stackFixture();
+    f.comments[1].push(approve);
+    const paginate = f.github.paginate;
+    f.github.paginate = (method,args) => {
+      if (method === 'comments') {
+        if (moved === 'main') {
+          f.github.rest.git.getRef = async () => ({data:{object:{sha:'d'.repeat(40)}}});
+        } else {
+          f.prs[0] = {...f.p,base:{...f.p.base,sha:'d'.repeat(40)}};
+        }
+      }
+      return paginate(method,args);
+    };
+    await assert.rejects(run(f),/moved during verification/);
+    assert.equal(f.statuses.at(-1).state,'failure');
+  }
+});
 test('all evidence is immutable across H -> B -> H movement', async () => {
   const f = fixture();
   f.github.rest.pulls.listFiles = () => {throw new Error('mutable files forbidden');};
@@ -97,10 +181,26 @@ test('actual desktop view locations are gated, services stay out', () => {
   }
 });
 
-test('resolved SHA mismatch cannot evaluate another concurrency group', async () => {
-  const f = fixture(); await run({...f,headSha:'e'.repeat(40)});
-  assert.ok(f.statuses.every(s => s.sha === 'e'.repeat(40)));
-  assert.equal(f.statuses.at(-1).state,'failure');
+test('an unused locked SHA leaves its status and the current head alone', async () => {
+  const f = stackFixture();
+  await run({...f,headSha:'e'.repeat(40)});
+  assert.equal(f.statuses.length,0);
+  assert.equal(f.calls.length,0);
+});
+test('a comment on a closed PR preserves its historical status', async () => {
+  const f = stackFixture();
+  f.p.state = 'closed';
+  await run(f);
+  assert.deepEqual(f.statuses,[]);
+  assert.deepEqual(f.calls,[]);
+
+  // A closed trigger can still share the head with an open stack.
+  f.prs.push({...f.p,number:2,state:'open'});
+  f.comments[2] = [approve];
+  await run(f);
+  assert.deepEqual(f.statuses.map(s => [s.sha,s.state]),[
+    [f.headSha,'pending'], [f.headSha,'success'],
+  ]);
 });
 test('arbitrarily named SwiftUI file is gated by immutable contents', async () => {
   const f = fixture();
@@ -130,9 +230,8 @@ test('moved trigger still reconciles revoked approval on remaining locked-head P
   assert.ok(f.statuses.every(s => s.sha === locked));
 });
 
-function largeSwiftFixture(source) {
+function largeSwiftFixture(source, filename = 'desktop/macos/Desktop/Sources/Services/Large.generated.swift') {
   const f = fixture();
-  const filename = 'desktop/macos/Desktop/Sources/Generated/OmiApi.generated.swift';
   f.github.rest.repos.compareCommitsWithBasehead = async () => ({data:{files:[{filename}],commits:[],total_commits:0}});
   const body = source + ' '.repeat(1128966 - Buffer.byteLength(source));
   const sha = require('node:crypto').createHash('sha1').update(`blob ${Buffer.byteLength(body)}\0${body}`).digest('hex');
@@ -147,7 +246,7 @@ function largeSwiftFixture(source) {
   }};
   return {...f,metadata,refs,blobs};
 }
-test('large generated Swift is scanned at both immutable refs without a waiver', async () => {
+test('other large generated Swift is scanned at both immutable refs without a waiver', async () => {
   const f = largeSwiftFixture('import Foundation\n');
   await run(f);
   assert.equal(f.statuses.at(-1).state,'success');
@@ -174,4 +273,125 @@ test('large Swift rejects absent, oversized, mismatched and truncated blob evide
     await assert.rejects(run(f));
     assert.equal(f.statuses.at(-1).state,'failure',mutation);
   }
+});
+
+const generatedApiFiles = [
+  'desktop/windows/src/renderer/src/lib/omiApi.generated.ts',
+  'web/app/src/lib/omiApi.generated.ts',
+  'web/admin/lib/services/omi-api/omiApi.generated.ts',
+  'web/personas-open-source/src/lib/omiApi.generated.ts',
+  'desktop/macos/Desktop/Sources/Generated/OmiApi.generated.swift',
+];
+test('generated API outputs alone pass without approval or Swift source fetches', async () => {
+  const f = fixture();
+  f.github.rest.repos.compareCommitsWithBasehead = async () => ({data:{
+    files:generatedApiFiles.map(filename => ({filename})),commits:[],total_commits:0,
+  }});
+  f.github.rest.repos.getContent = async () => assert.fail('generated API source must not be fetched');
+  await run(f);
+  assert.equal(f.statuses.at(-1).state,'success');
+  assert.equal(f.comments[1].length,0);
+  const large = largeSwiftFixture('import SwiftUI\n',generatedApiFiles.at(-1));
+  await run(large);
+  assert.equal(large.statuses.at(-1).state,'success');
+  assert.deepEqual(large.refs,[]);
+  assert.deepEqual(large.blobs,[]);
+});
+test('generated API outputs do not exempt real UI, other generated UI, or renamed UI', () => {
+  const p = {...pr,user:actor};
+  const files = generatedApiFiles.map(filename => ({filename}));
+  for (const filename of [
+    'web/app/src/features/settings/Settings.tsx',
+    'web/personas-open-source/src/components/Profile.generated.tsx',
+    'desktop/macos/Desktop/Sources/Views/Other.generated.swift',
+  ]) {
+    assert.equal(decision(p,[...files,{filename}],[],[]).required,true,filename);
+    assert.equal(decision(p,[...files,{filename}],[],[]).allowed,false,filename);
+  }
+  assert.equal(decision(p,[{filename:generatedApiFiles[0],previous_filename:ui[0].filename}],[],[]).required,true);
+});
+test('renames to or from the exempt Swift output still inspect the other Swift path', async () => {
+  for (const reverse of [false,true]) {
+    const f = fixture();
+    const paths = [generatedApiFiles.at(-1),'desktop/macos/Desktop/Sources/Services/Custom.swift'];
+    if (reverse) paths.reverse();
+    f.github.rest.repos.compareCommitsWithBasehead = async () => ({data:{
+      files:[{filename:paths[0],previous_filename:paths[1]}],commits:[],total_commits:0,
+    }});
+    const refs = [];
+    f.github.rest.repos.getContent = async ({path,ref}) => {
+      assert.equal(path,'desktop/macos/Desktop/Sources/Services/Custom.swift');
+      refs.push(ref);
+      const source = 'import SwiftUI';
+      return {data:{encoding:'base64',size:Buffer.byteLength(source),content:Buffer.from(source).toString('base64')}};
+    };
+    await run(f);
+    assert.equal(f.statuses.at(-1).state,'failure');
+    assert.deepEqual(refs,[f.p.base.sha,f.p.head.sha]);
+  }
+});
+
+const {carryCandidate} = require('../ui-author-approval.cjs');
+const A = 'a'.repeat(40), B = 'b'.repeat(40), C = 'c'.repeat(40);
+const cmd = (id, verb, sha, user = nik) => ({id, user, body:`/${verb}-ui ${sha}`});
+test('R29 carry candidate: newest approver command must approve an earlier head', () => {
+  assert.equal(carryCandidate([cmd(1,'approve',A)],B),A);
+  assert.equal(carryCandidate([cmd(1,'approve',A,actor)],B),A);
+  assert.equal(carryCandidate([cmd(2,'reject',C),cmd(1,'approve',A)],B),null);
+  assert.equal(carryCandidate([cmd(1,'approve',A),cmd(2,'reject',B)],B),null);
+  assert.equal(carryCandidate([cmd(1,'approve',A),cmd(2,'approve',B)],B),null);
+  assert.equal(carryCandidate([cmd(1,'approve',A,{id:3})],B),null);
+  assert.equal(carryCandidate([],B),null);
+  assert.equal(carryCandidate([{id:1,user:nik,body:`/approve-ui ${A} please`}],B),null);
+});
+test('decision uses a carried approval only without a current-head command', () => {
+  const p = {...pr,user:actor};
+  assert.equal(decision(p,ui,[],[],true).allowed,true);
+  assert.equal(decision(p,ui,[],[{...approve,body:`/reject-ui ${pr.head.sha}`}],true).allowed,false);
+  assert.equal(decision({...p,commits:250},ui,[],[],true).allowed,false);
+});
+function carryFixture({rangeFiles, status = 'ahead'}) {
+  const f = fixture();
+  const approved = f.p.head.sha;
+  f.p.head = {sha:B};
+  f.comments[1].push(cmd(1,'approve',approved));
+  f.github.rest.repos.compareCommitsWithBasehead = async args => {
+    f.calls.push(args);
+    if (args.basehead === `${approved}...${B}`) {
+      return {data:{files:rangeFiles,commits:[{sha:B}],total_commits:1,status}};
+    }
+    return {data:{files:ui,commits:[{sha:B}],total_commits:1}};
+  };
+  return {...f,approved};
+}
+test('R29 workflow carries approval across a descendant head with no UI change', async () => {
+  const f = carryFixture({rangeFiles:[{filename:'backend/router.py'}]});
+  await run(f);
+  assert.equal(f.statuses.at(-1).state,'success');
+  assert.ok(f.calls.some(c => c.basehead === `${f.approved}...${B}`));
+  assert.equal(f.comments[1].filter(c => c.user.type === 'Bot').length,0);
+});
+test('R29 carry refuses UI changes, rebases, unreadable ranges and later rejects', async () => {
+  for (const [label, opts] of [
+    ['ui', {rangeFiles:[{filename:'app/lib/pages/home.dart'}]}],
+    ['renamed-ui', {rangeFiles:[{filename:'archive/x',previous_filename:'app/lib/widgets/x.dart'}]}],
+    ['rebase', {rangeFiles:[{filename:'backend/router.py'}],status:'diverged'}],
+    ['behind', {rangeFiles:[],status:'behind'}],
+    ['truncated', {rangeFiles:Array(300).fill({filename:'backend/router.py'})}],
+  ]) {
+    const f = carryFixture(opts);
+    await run(f);
+    assert.equal(f.statuses.at(-1).state,'failure',label);
+  }
+  const f = carryFixture({rangeFiles:[{filename:'backend/router.py'}]});
+  f.comments[1].push(cmd(2,'reject',f.approved));
+  await run(f);
+  assert.equal(f.statuses.at(-1).state,'failure');
+});
+test('R29 carry scans Swift in the range by content', async () => {
+  const f = carryFixture({rangeFiles:[{filename:'desktop/macos/Desktop/Sources/Chrome/Custom.swift'}]});
+  const source = 'import SwiftUI';
+  f.github.rest.repos.getContent = async () => ({data:{encoding:'base64',size:Buffer.byteLength(source),content:Buffer.from(source).toString('base64')}});
+  await run(f);
+  assert.equal(f.statuses.at(-1).state,'failure');
 });

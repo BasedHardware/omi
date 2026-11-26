@@ -30,7 +30,7 @@ from __future__ import annotations
 from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 from typing import Any
-from unittest.mock import MagicMock
+from unittest.mock import ANY, MagicMock
 
 from utils.conversations.relevance_rules import RULES_VERSION
 from database import conversation_finalization_jobs as jobs
@@ -363,6 +363,7 @@ def test_stranded_job_and_its_processing_conversation_reach_one_atomic_terminal(
         conversation_ref,
         {
             'status': 'completed',
+            'terminal_family_at': ANY,
             'finalization_status': 'dead_letter',
             'structured': {'title': 'Recording', 'overview': ''},
             'discarded': False,
@@ -767,3 +768,15 @@ def test_conversion_counter_counts_only_committed_abandonments(monkeypatch):
 
     assert result == {'abandoned': 2, 'conversations_closed': 1, 'skipped': 1, 'error': 1}
     assert counter._value.get() - before == 2
+
+
+def test_byok_abandonment_refuses_foreign_job_or_conversation():
+    for marked_row in ('job', 'conversation'):
+        transaction = _OrderedTransaction()
+        job = _Ref('job-1', _stranded_job())
+        conversation = _bound_conversation()
+        marked = job if marked_row == 'job' else conversation
+        marked.data.update(finalization_engine='go', finalization_owner_epoch=1)
+
+        assert _abandon(transaction, job, conversation)['status'] == 'fenced'
+        assert transaction.updates == transaction.sets == []

@@ -142,7 +142,7 @@ def lane(monkeypatch):
             'provenance': {'backend': 'pyannote'},
         }
 
-    monkeypatch.setattr(final, 'diarize_with_speech_compaction', diarize)
+    monkeypatch.setattr(final, 'diarize', diarize)
     return SimpleNamespace(
         conversation=conversation,
         items=items,
@@ -297,7 +297,7 @@ def test_diarizer_error_falls_back_to_current_resolver(lane, monkeypatch):
         lane.gpu.append('attempt')
         raise RuntimeError('synthetic diarizer failure')
 
-    monkeypatch.setattr(final, 'diarize_with_speech_compaction', failed)
+    monkeypatch.setattr(final, 'diarize', failed)
     assert all(s.person_id == 'resolver-person' for s in resolve(lane))
     assert lane.gpu == ['attempt']
     assert any(f['from_mode'] == 'whole_conversation_diarizer' for f in lane.fallbacks)
@@ -313,14 +313,14 @@ def test_revocation_during_gpu_does_not_publish(lane, monkeypatch):
 
 
 def test_gap_words_abstain_whole_segment(lane, monkeypatch):
-    original = final.diarize_with_speech_compaction
+    original = final.diarize
 
     def gap(*args, **kwargs):
         output = original(*args, **kwargs)
         output['turns'][0]['start'] = 4
         return output
 
-    monkeypatch.setattr(final, 'diarize_with_speech_compaction', gap)
+    monkeypatch.setattr(final, 'diarize', gap)
     segments = resolve(lane)
     assert segments[0].person_id == 'resolver-person'
     assert segments[1].is_user
@@ -439,6 +439,144 @@ def test_reference_refuses_expired_erasing_or_changed_artifacts(reference_store,
             references.load_reference(store, UID, 'unit-a', 'conversation')
 
 
+def _v3_conversation_row(client, cid='v3-conversation'):
+    client.rows[('users', UID, 'conversations', cid)] = {'id': cid, 'v3_recording_ids': ['conversation']}
+    return cid
+
+
+def test_v3_conversation_reads_units_projected_onto_its_source_recording(reference_store):
+    # A conversations-v3 row copies its recording's projected segments; the unit's receipts keep naming the
+    # recording. Before the fix every v3 row refused with skipped_merged (owner corpus 2026-11-26: 24 of 24).
+    store, client = reference_store
+    cid = _v3_conversation_row(client)
+    before = deepcopy(client.rows)
+    with pytest.raises(references.ReferenceUnavailable, match='skipped_merged'):
+        references.load_reference(store, UID, 'unit-a', cid)
+    assert references.load_reference(store, UID, 'unit-a', cid, source_ids=('conversation',)) is not None
+    # A recording the row was not built from is still another conversation's audio.
+    with pytest.raises(references.ReferenceUnavailable, match='skipped_merged'):
+        references.load_reference(store, UID, 'unit-a', cid, source_ids=('other-recording',))
+    assert client.rows == before
+
+
+def test_v3_source_recording_keeps_shared_unit_and_privacy_fences(reference_store):
+    store, client = reference_store
+    cid = _v3_conversation_row(client)
+    receipts = client.rows[('batch_pipeline_dev_results', 'unit-a')]['projection_parts']
+    receipts['1'] = {'conversation_id': 'foreign', 'speaker_scope': 'final:batch:unit-a'}
+    with pytest.raises(references.ReferenceUnavailable, match='skipped_shared_unit'):
+        references.load_reference(store, UID, 'unit-a', cid, source_ids=('conversation',))
+    del receipts['1']
+    client.rows[('users', UID, 'conversations', 'conversation')]['deleted'] = True
+    with pytest.raises(BatchPrivacyBlocked):
+        references.load_reference(store, UID, 'unit-a', cid, source_ids=('conversation',))
+
+
+def test_receipt_sources_are_the_rows_own_v3_recordings():
+    assert batch.receipt_sources(SimpleNamespace(v3_recording_ids=['r2', 'r1', 'r1', None])) == ('r1', 'r2')
+    assert batch.receipt_sources(SimpleNamespace(v3_recording_ids=None)) == ()
+    assert batch.receipt_sources(SimpleNamespace()) == ()
+
+
+def _recordings(monkeypatch, rows):
+    monkeypatch.setattr(batch, 'source_recording_fence', lambda uid, rid: deepcopy(rows.get(rid)))
+
+
+def _at(seconds):
+    return datetime.fromtimestamp(seconds, timezone.utc)
+
+
+def test_v3_source_live_hold_reads_claims_minus_deleted_spans(monkeypatch):
+    conversation = SimpleNamespace(id='mine', v3_recording_ids=['R'])
+    _recordings(
+        monkeypatch,
+        {
+            'R': {
+                'claims': [
+                    {'conversation_id': 'mine', 'start': _at(1010), 'end': _at(1020)},
+                    {'conversation_id': 'sibling', 'start': _at(1020), 'end': _at(1030)},
+                ],
+                'deleted_spans': [{'start': _at(1014), 'end': _at(1016), 'conversation_id': 'mine'}],
+            }
+        },
+    )
+    assert batch.source_scope(UID, conversation).intervals == ((1010.0, 1014.0), (1016.0, 1020.0))
+
+
+def test_only_own_speech_reaches_the_diarizer():
+    # A source recording's unit: this conversation spoke at 2-4 s and 5-6 s (unit clock); a sibling at 10-14 s
+    # and deleted speech sat at 20-22 s. Only the padded own-word stretches keep their samples.
+    words = [{'timestamp': [2.0, 2.5]}, {'timestamp': [3.0, 4.0]}, {'timestamp': [5.0, 6.0]}]
+    spans = batch.own_speech_spans(words)
+    assert spans == [(1.75, 6.25)]
+    pcm = b'\x01\x00' * (30 * 16000)
+    masked = batch.masked_pcm(pcm, spans)
+    assert len(masked) == len(pcm)
+    at = lambda t: masked[int(t * 16000) * 2 : int(t * 16000) * 2 + 2]  # noqa: E731
+    assert at(3) == at(5.5) == b'\x01\x00'
+    assert at(1) == at(12) == at(21) == b'\x00\x00'
+    turns = [{'start': 0, 'end': 30, 'speaker': 'A'}, {'start': 10, 'end': 14, 'speaker': 'B'}]
+    assert batch.clip_turns(turns, spans) == [{'start': 1.75, 'end': 6.25, 'speaker': 'A'}]
+
+
+@pytest.mark.parametrize('row', [None, {'deleted': True, 'claims': []}, {'is_locked': True}, {'claims': []}])
+def test_v3_source_recording_gone_locked_or_unclaimed_refuses(monkeypatch, row):
+    _recordings(monkeypatch, {'R': row} if row is not None else {})
+    with pytest.raises(references.ReferenceUnavailable, match='skipped_merged'):
+        batch.source_scope(UID, SimpleNamespace(id='mine', v3_recording_ids=['R']))
+
+
+def test_v3_source_scope_fingerprint_changes_when_a_claim_or_deletion_changes(monkeypatch):
+    rows = {'R': {'claims': [{'conversation_id': 'mine', 'start': _at(1010), 'end': _at(1020)}]}}
+    _recordings(monkeypatch, rows)
+    conversation = SimpleNamespace(id='mine', v3_recording_ids=['R'])
+    first = batch.source_scope(UID, conversation)
+    rows['R']['deleted_spans'] = [{'start': _at(1012), 'end': _at(1013)}]
+    assert batch.source_scope(UID, conversation).fingerprint != first.fingerprint
+    rows['R'] = {'claims': [{'conversation_id': 'mine', 'start': _at(1010), 'end': _at(1018)}]}
+    assert batch.source_scope(UID, conversation).fingerprint != first.fingerprint
+    assert batch.source_scope(UID, SimpleNamespace(id='legacy', v3_recording_ids=None)) is None
+
+
+def test_appended_units_never_collide_with_later_native_units():
+    # 0-5 s, a 2-6 s unit whose samples differ (appended), and a 6-7 s unit at its own clock.
+    def unit(start, seconds, sample):
+        item = SimpleNamespace(capture_at=1000.0 + start)
+        words = [{'timestamp': [0.0, 0.5], 'text': 'w', 'segment_id': f's{start}'}]
+        return item, sample * (seconds * 16000), words, lambda: True
+
+    capacity = 7 * 32000
+    stream = batch.UnitStream(
+        1000.0,
+        capacity,
+        iter([unit(0, 5, b'\x01\x00'), unit(2, 4, b'\x02\x00'), unit(6, 1, b'\x03\x00')]),
+        SimpleNamespace(timeout=lambda seconds: None),
+    )
+    pcm, words, checks = batch._assemble(stream)
+    pcm = bytes(pcm)
+    appended = capacity + batch.APPEND_GAP_BYTES
+    assert pcm[: 5 * 32000] == b'\x01\x00' * (5 * 16000)
+    assert pcm[6 * 32000 : 7 * 32000] == b'\x03\x00' * 16000  # the native unit stays at its own clock
+    assert pcm[appended:] == b'\x02\x00' * (4 * 16000)
+    assert [w['timestamp'][0] for w in words] == [0.0, appended / 32000, 6.0]
+    assert len(checks) == 3
+
+
+def test_v3_source_passes_learn_no_recurring_profile_and_get_a_fresh_obligation(monkeypatch):
+    from utils.conversations import final_pass_retry as retry
+
+    monkeypatch.setattr(retry, 'batch_unit_scope', lambda s: s.speaker_id_scope)
+    segment = SimpleNamespace(id='s1', speaker_id_scope='final:batch:u1')
+    legacy = SimpleNamespace(transcript_segments=[segment], v3_recording_ids=None)
+    v3 = SimpleNamespace(transcript_segments=[segment], v3_recording_ids=['R'])
+    assert retry.scope_key(legacy) != retry.scope_key(v3)
+    assert retry.scope_key(v3) == retry.scope_key(
+        SimpleNamespace(transcript_segments=[segment], v3_recording_ids=['R'])
+    )
+    source = __import__('inspect').getsource(batch._run)
+    assert 'and not receipt_sources(conversation)' in source
+
+
 def test_reference_privacy_deletion_fence(reference_store):
     store, client = reference_store
     assert references.load_reference(store, UID, 'unit-a', 'conversation') is not None
@@ -469,14 +607,14 @@ def test_identity_only_retry_keeps_its_budget_without_whole_pass(lane):
 
 
 def test_incompatible_final_embedding_space_keeps_resolver_labels(lane, monkeypatch):
-    original = final.diarize_with_speech_compaction
+    original = final.diarize
 
     def incompatible(*args, **kwargs):
         output = original(*args, **kwargs)
         output['embedding_space'] = 'incompatible'
         return output
 
-    monkeypatch.setattr(final, 'diarize_with_speech_compaction', incompatible)
+    monkeypatch.setattr(final, 'diarize', incompatible)
     assert all(s.person_id == 'resolver-person' for s in resolve(lane))
     assert lane.gpu and lane.fallbacks
 
@@ -546,7 +684,6 @@ def test_each_http_retry_is_charged_before_request(lane, monkeypatch, limited_by
     else:
         monkeypatch.setenv('BATCH_FINAL_PASS_' + limited_by.upper() + '_AUDIO_HOURS', str(16 * allowed_attempts / 3600))
     monkeypatch.setenv('HOSTED_DIARIZATION_API_URL', 'http://synthetic.invalid')
-    monkeypatch.setenv('TRANSCRIPTION_FINAL_PASS_VAD_COMPACTION_ENABLED', 'false')
     calls = []
 
     def post(url, **kwargs):
@@ -567,9 +704,7 @@ def test_each_http_retry_is_charged_before_request(lane, monkeypatch, limited_by
 
     monkeypatch.setattr(httpx, 'post', post)
     # Exercise the real HTTP adapter rather than the lane's fake diarizer.
-    monkeypatch.setattr(
-        final, 'diarize_with_speech_compaction', lambda pcm, backend, *a, **kw: backend.diarize(pcm, **kw).model_dump()
-    )
+    monkeypatch.setattr(final, 'diarize', lambda pcm, backend, *a, **kw: backend.diarize(pcm, **kw).model_dump())
     segments = resolve(lane)
     assert len(calls) == allowed_attempts
     assert all(s.is_user for s in segments) == (allowed_attempts == 2)
@@ -599,13 +734,16 @@ def test_capture_clock_places_staged_pcm_and_words_across_gap(lane, monkeypatch)
     assert [w['timestamp'] for w in received] == [[0.2, 2.8], [3, 5.8], [10.2, 12.8], [13, 15.8]]
 
 
-def test_overlapping_incompatible_unit_clocks_keep_all_labels(lane):
+def test_overlapping_incompatible_unit_clocks_append_after_timeline(lane):
+    # unit-b's clock overlaps unit-a with different samples. Labels need each unit's words on its own audio,
+    # so unit-b is appended after the timeline and the pass runs, instead of refusing the conversation
+    # (9 of 24 owner v3 conversations refused this way on 2026-11-26).
     lane.items['unit-b'] = replace(lane.items['unit-b'], capture_at=CAPTURE + 4)
     metric = batch.OUTCOMES.labels(lane='batch', outcome='failed_incomplete_coverage')
     before = metric._value.get()
-    assert all(s.person_id == 'resolver-person' for s in resolve(lane))
-    assert not lane.gpu and lane.fallbacks
-    assert metric._value.get() == before + 1
+    assert all(s.is_user for s in resolve(lane))
+    assert len(lane.gpu) == 1
+    assert metric._value.get() == before
 
 
 def test_staged_read_budget_can_exceed_playback_64_mib_limit(lane, monkeypatch):
@@ -631,7 +769,7 @@ def test_failed_pass_never_publishes_recurring_profile(lane, monkeypatch, failur
         def fail(*a, **kw):
             raise RuntimeError('synthetic failure')
 
-        monkeypatch.setattr(final, 'diarize_with_speech_compaction', fail)
+        monkeypatch.setattr(final, 'diarize', fail)
     elif failure == 'revoked':
         original = batch.load_reference
 
@@ -788,7 +926,7 @@ def prod_shaped(monkeypatch):
     monkeypatch.setattr(batch, 'record_fallback', lambda **kw: fallbacks.append(kw))
     monkeypatch.setattr(batch.recurring_voices, 'checkpoint', lambda *a, **kw: None)
     monkeypatch.setattr(final, 'record_fallback', lambda **kw: fallbacks.append(kw))
-    monkeypatch.setattr(final, 'diarize_with_speech_compaction', diarize)
+    monkeypatch.setattr(final, 'diarize', diarize)
     monkeypatch.setattr(batch, 'emit_product_event', lambda **kw: None)
     return lane
 
@@ -1044,20 +1182,20 @@ def test_exactly_one_terminal_outcome_per_conversation(prod_shaped, monkeypatch,
     second.start, second.end = 908.2, 913.8
     lane.conversation.transcript_segments.append(second)
     if failure == 'unassigned':
-        original = final.diarize_with_speech_compaction
+        original = final.diarize
 
         def gap(*args, **kwargs):
             result = original(*args, **kwargs)
             result['turns'] = []
             return result
 
-        monkeypatch.setattr(final, 'diarize_with_speech_compaction', gap)
+        monkeypatch.setattr(final, 'diarize', gap)
     elif failure == 'budget':
         monkeypatch.setattr(batch, '_reserve_budget', lambda _: False)
     elif failure == 'diarizer':
         monkeypatch.setattr(
             final,
-            'diarize_with_speech_compaction',
+            'diarize',
             lambda *a, **kw: (_ for _ in ()).throw(ValueError('synthetic PRIVATE text')),
         )
     before = batch_outcome_counts()
@@ -1089,11 +1227,11 @@ def test_owner_lab_stub_runs_real_units_assembly_and_runner(prod_shaped, monkeyp
         return original(*args, **kwargs)
 
     monkeypatch.setattr(batch, 'run_final_pass', runner)
-    # The lane fixture replaces compaction; restore the production path so the
-    # lab's DiarizerBackend is actually consumed by the shared runner.
-    from utils.stt.vad_compaction import diarize_with_speech_compaction
+    # The lane fixture replaces the diarizer seam; restore the production path
+    # so the lab's DiarizerBackend is actually consumed by the shared runner.
+    from utils.stt.diarization import diarize
 
-    monkeypatch.setattr(final, 'diarize_with_speech_compaction', diarize_with_speech_compaction)
+    monkeypatch.setattr(final, 'diarize', diarize)
     monkeypatch.setattr(batch.recurring_voices, 'checkpoint', lambda *a, **kw: ('synthetic',))
     result = lab.reproduce(UID, lane.conversation, {}, load_prints=lambda *a, **kw: {})
     assert result['outcome'] == 'success'
@@ -1106,10 +1244,9 @@ def test_owner_lab_stub_runs_real_units_assembly_and_runner(prod_shaped, monkeyp
 
 def test_owner_lab_http_uses_real_http_diarizer_and_captures_learning(prod_shaped, monkeypatch, tmp_path):
     from testing.owner_lab import final_pass_repro as lab
-    from utils.stt.vad_compaction import diarize_with_speech_compaction
+    from utils.stt.diarization import diarize
 
-    monkeypatch.setattr(final, 'diarize_with_speech_compaction', diarize_with_speech_compaction)
-    monkeypatch.setenv('TRANSCRIPTION_FINAL_PASS_VAD_COMPACTION_ENABLED', 'false')
+    monkeypatch.setattr(final, 'diarize', diarize)
     monkeypatch.setenv('HOSTED_DIARIZATION_API_URL', 'http://synthetic.invalid')
     monkeypatch.setattr(batch.recurring_voices, 'checkpoint', lambda *a, **kw: ('synthetic',))
     monkeypatch.setattr(batch.recurring_voices, 'learn', lambda *a, **kw: pytest.fail('real learning called'))
@@ -1175,7 +1312,7 @@ def test_owner_lab_cli_outputs_cases_and_success_rate_without_private_logs(prod_
     from types import ModuleType
     from testing.owner_lab import final_pass_repro as lab
     from database import conversations as db
-    from utils.stt.vad_compaction import diarize_with_speech_compaction
+    from utils.stt.diarization import diarize
 
     guard = ModuleType('testing.owner_lab.guard')
     reads = []
@@ -1192,7 +1329,7 @@ def test_owner_lab_cli_outputs_cases_and_success_rate_without_private_logs(prod_
     monkeypatch.setattr(db, 'get_conversation', get)
     monkeypatch.setattr(db, 'get_manual_speaker_receipt', lambda *a: {})
     monkeypatch.setattr(stage, 'load_voiceprints_for_resolution', lambda *a, **kw: {})
-    monkeypatch.setattr(final, 'diarize_with_speech_compaction', diarize_with_speech_compaction)
+    monkeypatch.setattr(final, 'diarize', diarize)
     with monkeypatch.context() as context:
         # main is a CLI process; restore its global logging suppression in this test process.
         import logging
@@ -1262,7 +1399,7 @@ def test_shared_unit_never_reads_or_diarizes_other_conversation_audio(
 
 
 def test_centroid_without_conversation_assignments_is_never_learned(prod_shaped, monkeypatch):
-    original = final.diarize_with_speech_compaction
+    original = final.diarize
 
     def diarize(*args, **kwargs):
         output = original(*args, **kwargs)
@@ -1271,7 +1408,7 @@ def test_centroid_without_conversation_assignments_is_never_learned(prod_shaped,
         return output
 
     learned = []
-    monkeypatch.setattr(final, 'diarize_with_speech_compaction', diarize)
+    monkeypatch.setattr(final, 'diarize', diarize)
     monkeypatch.setattr(batch.recurring_voices, 'checkpoint', lambda *a, **kw: ('synthetic',))
     monkeypatch.setattr(
         batch.recurring_voices, 'learn', lambda uid, c, centroids, *a, **kw: learned.append(centroids) or {}
@@ -1299,9 +1436,9 @@ def test_owner_lab_reproduce_does_not_change_default_registry(prod_shaped, monke
     from prometheus_client import REGISTRY
     from testing.owner_lab import final_pass_repro as lab
     from utils.observability.fallback import record_fallback
-    from utils.stt.vad_compaction import diarize_with_speech_compaction
+    from utils.stt.diarization import diarize
 
-    monkeypatch.setattr(final, 'diarize_with_speech_compaction', diarize_with_speech_compaction)
+    monkeypatch.setattr(final, 'diarize', diarize)
     # Exercise real fallback metrics too, rather than the fixture's telemetry spy.
     monkeypatch.setattr(batch, 'record_fallback', record_fallback)
     monkeypatch.setattr(final, 'record_fallback', record_fallback)
@@ -1390,3 +1527,94 @@ def test_shared_units_count_one_conversation_and_each_omitted_unit(prod_shaped, 
     assert after['shared_unit'] - before_units.get('shared_unit', 0) == 2
     assert after['blocked_by_shared_unit'] - before_units.get('blocked_by_shared_unit', 0) == 1
     assert sum(batch_outcome_counts().values()) - sum(before_conversations.values()) == 1
+
+
+def _final_pass_with(evidence_seconds, vector, prints):
+    from models.diarization import DiarizationResult
+
+    class Backend:
+        def diarize(self, pcm, **_):
+            return DiarizationResult.model_validate(
+                {
+                    'turns': [{'start': 0.0, 'end': 4.0, 'speaker': 'SPEAKER_00'}],
+                    'overlaps': [],
+                    'centroids': {'SPEAKER_00': {'embedding': vector, 'evidence_seconds': evidence_seconds}},
+                    'embedding_space': OMI_EMBEDDING_SPACE,
+                    'version': 'test',
+                    'provenance': {'backend': 'pyannote'},
+                }
+            )
+
+    words = [{'timestamp': [0.5, 1.0], 'text': 'hi'}, {'timestamp': [1.5, 2.0], 'text': 'there'}]
+    segments, _ = final.run_final_pass(
+        b'\0\0' * 64000,
+        words,
+        None,
+        {k: {'embedding': v} for k, v in prints.items()},
+        deadline=time.monotonic() + 30,
+        conversation_id='c',
+        diarizer_backend=Backend(),
+        record_outcome=False,
+    )
+    return segments
+
+
+def test_final_pass_voice_without_enough_evidence_is_unknown_not_no_match():
+    # Owner corpus 2026-11-26: on short v3 conversations the final pass labeled voices under the 5 s evidence
+    # floor no_match, and apply_speaker_resolution cleared the resolver's correct owner labels with it.
+    owner = [1.0] + [0.0] * 255
+    stranger = [0.0, 1.0] + [0.0] * 254
+    short = _final_pass_with(2.0, owner, {'user': owner})
+    assert {s.speaker_identity_status for s in short} == {'unknown'}
+    rejected = _final_pass_with(8.0, stranger, {'user': owner})
+    assert {s.speaker_identity_status for s in rejected} == {'no_match'}
+    named = _final_pass_with(8.0, owner, {'user': owner})
+    assert all(s.is_user for s in named)
+
+
+def test_unknown_final_pass_voice_keeps_the_resolvers_owner_label():
+    conversation = Conversation(
+        id='c',
+        created_at=datetime(2026, 1, 1, tzinfo=timezone.utc),
+        started_at=datetime(2026, 1, 1, tzinfo=timezone.utc),
+        finished_at=datetime(2026, 1, 1, 0, 1, tzinfo=timezone.utc),
+        structured=Structured(),
+        transcript_segments=[
+            {'id': 's1', 'text': 'hi', 'speaker': 'SPEAKER_00', 'speaker_id': 0, 'is_user': True, 'start': 0, 'end': 2}
+        ],
+    )
+    stage.apply_speaker_resolution(conversation, {'s1': 3}, {}, {3: 'unknown'}, owner_voiceprint_available=True)
+    assert conversation.transcript_segments[0].is_user is True
+    stage.apply_speaker_resolution(conversation, {'s1': 3}, {}, {3: 'no_match'}, owner_voiceprint_available=True)
+    assert conversation.transcript_segments[0].is_user is False
+
+
+def test_v3_sources_kill_switch_restores_the_refusal(monkeypatch):
+    from utils.conversations import final_pass_retry as retry
+
+    monkeypatch.setattr(retry, 'batch_unit_scope', lambda s: s.speaker_id_scope)
+    row = SimpleNamespace(
+        id='mine',
+        v3_recording_ids=['R'],
+        transcript_segments=[SimpleNamespace(id='s1', speaker_id_scope='final:batch:u1')],
+    )
+    on_key = retry.scope_key(row)
+    monkeypatch.setenv('BATCH_FINAL_PASS_V3_SOURCES_ENABLED', 'false')
+    assert batch.receipt_sources(row) == ()
+    assert batch.source_scope(UID, row) is None
+    assert retry.scope_key(row) != on_key  # the legacy key, as before the change
+
+
+def test_append_kill_switch_restores_the_clock_conflict_refusal(monkeypatch):
+    monkeypatch.setenv('BATCH_FINAL_PASS_APPEND_CONFLICTING_UNITS_ENABLED', 'false')
+    item = lambda start: SimpleNamespace(capture_at=1000.0 + start)  # noqa: E731
+    stream = batch.UnitStream(
+        1000.0,
+        6 * 32000,
+        iter(
+            [(item(0), b'\x01\x00' * 5 * 16000, [], lambda: True), (item(2), b'\x02\x00' * 4 * 16000, [], lambda: True)]
+        ),
+        SimpleNamespace(timeout=lambda seconds: None),
+    )
+    with pytest.raises(batch.IncompleteCoverage, match='conflicting capture clocks'):
+        batch._assemble(stream)

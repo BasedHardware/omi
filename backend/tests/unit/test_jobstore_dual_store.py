@@ -12,6 +12,7 @@ from datetime import datetime, timezone
 import pytest
 
 import database.batch_pipeline_store as batch_store
+from database import batch_pipeline_projection_outbox as projection_outbox
 from database.jobstore import dual_store
 from database.jobstore.dual_store import SHADOW_PARITY_TOTAL, DualStore, ShadowParityOutcome, compare
 from testing.pipeline_sim.store import CustomerData, SimStore
@@ -27,7 +28,7 @@ class FakeConn:
         self.statements: list[str] = []
 
     def execute(self, sql: str, *args):
-        self.statements.append(sql)
+        self.statements.append(sql.as_string(None) if hasattr(sql, 'as_string') else sql)
 
     @contextmanager
     def transaction(self):
@@ -101,6 +102,27 @@ def test_writes_mirror_after_commit_and_reads_match(stores):
     assert store.drain(5)
     assert count('queues', 'write', 'mirrored') == before[0] + 1
     assert count('queues', 'read', 'match') == before[1] + 1
+
+
+def test_projection_outbox_metadata_patches_refresh_the_result_mirror(stores):
+    primary, shadow, store = stores
+    key = projection_outbox.Obligation('synthetic', 1)
+    address = ('results', key.segment_id)
+    row = {
+        'log_sequence': key.revision,
+        'projection_state': 'pending',
+        projection_outbox.KIND_FIELD: projection_outbox.KIND,
+        **projection_outbox.metadata(10.0, None, None),
+    }
+    primary.apply(address, row)
+    shadow.rows[address] = row.copy()
+    token = projection_outbox.claim(store, key, lambda: 10.0)
+    assert token is not None and store.drain(5)
+    assert shadow.rows[address][projection_outbox.TOKEN_FIELD] == token
+    assert projection_outbox.settle(store, key, token, lambda: 11.0, 'incomplete') == 'incomplete'
+    assert store.drain(5)
+    assert shadow.rows[address] == primary.rows[address]
+    assert shadow.rows[address][projection_outbox.DUE_FIELD] == 71.0
 
 
 def test_repair_lineage_stays_firestore_only_and_reads_still_match(stores):
@@ -199,7 +221,7 @@ def test_mirror_is_bounded(stores):
     real = FakeConn.execute
 
     def spy(self, sql, *args):
-        conn_statements.append(sql)
+        conn_statements.append(sql.as_string(None) if hasattr(sql, 'as_string') else sql)
         return real(self, sql, *args)
 
     FakeConn.execute = spy
@@ -321,6 +343,9 @@ class TestSelection:
     def configure(self, monkeypatch, mode='shadow'):
         monkeypatch.setattr(dual_store, '_SHADOWED', {})
         monkeypatch.setenv('BATCH_JOBSTORE_MODE', mode)
+        monkeypatch.setenv(
+            'JOBSTORE_SHADOW_NAMESPACES', 'batch_pipeline_dev,batch_pipeline_prod,batch_pipeline_test_other'
+        )
         monkeypatch.setenv('JOBSTORE_PG_HOST', '10.0.0.1')
         monkeypatch.setenv('JOBSTORE_PG_DATABASE', 'jobstore_staging')
         monkeypatch.setenv('JOBSTORE_PG_USER', 'svc@example.iam')
@@ -443,6 +468,7 @@ class TestMirrorRefreshHook:
 
     def test_shadow_mode_refreshes_through_the_process_shadow(self, monkeypatch):
         monkeypatch.setenv('BATCH_JOBSTORE_MODE', 'shadow')
+        monkeypatch.setenv('JOBSTORE_SHADOW_NAMESPACES', 'batch_pipeline_dev,batch_pipeline_prod')
         monkeypatch.setenv('OMI_ENV_STAGE', 'dev')
         primary, shadow = SimStore(CustomerData()), FakeShadow()
         store = DualStore(primary, shadow)
@@ -459,6 +485,7 @@ class TestMirrorRefreshHook:
     )
     def test_prod_namespace_is_refused_outside_the_staging_db(self, monkeypatch, deployment, database_id):
         monkeypatch.setenv('BATCH_JOBSTORE_MODE', 'shadow')
+        monkeypatch.setenv('JOBSTORE_SHADOW_NAMESPACES', 'batch_pipeline_dev,batch_pipeline_prod')
         for name, value in (('OMI_DEPLOYMENT', deployment), ('FIRESTORE_DATABASE_ID', database_id)):
             if value is None:
                 monkeypatch.delenv(name, raising=False)
@@ -470,6 +497,7 @@ class TestMirrorRefreshHook:
 
     def test_staging_on_the_staging_db_refreshes_the_prod_namespace(self, monkeypatch):
         monkeypatch.setenv('BATCH_JOBSTORE_MODE', 'shadow')
+        monkeypatch.setenv('JOBSTORE_SHADOW_NAMESPACES', 'batch_pipeline_dev,batch_pipeline_prod')
         monkeypatch.setenv('OMI_DEPLOYMENT', 'staging')
         monkeypatch.setenv('FIRESTORE_DATABASE_ID', 'staging')
         monkeypatch.setenv('OMI_ENV_STAGE', 'prod')  # staging takes prod code paths
@@ -484,6 +512,7 @@ class TestMirrorRefreshHook:
 
     def test_hook_never_raises(self, monkeypatch):
         monkeypatch.setenv('BATCH_JOBSTORE_MODE', 'shadow')
+        monkeypatch.setenv('JOBSTORE_SHADOW_NAMESPACES', 'batch_pipeline_dev,batch_pipeline_prod')
         monkeypatch.setattr(dual_store, 'shadow_from_env', lambda _primary: (_ for _ in ()).throw(RuntimeError('x')))
         dual_store.mirror_refresh('batch_pipeline_dev', [('jobs', 'j')])
 
@@ -502,6 +531,7 @@ class TestLightHook:
         from database import batch_pipeline_shadow_hook as hook
 
         monkeypatch.setenv('BATCH_JOBSTORE_MODE', 'shadow')
+        monkeypatch.setenv('JOBSTORE_SHADOW_NAMESPACES', 'batch_pipeline_dev,batch_pipeline_prod')
         monkeypatch.delenv('OMI_DEPLOYMENT', raising=False)
         monkeypatch.delenv('FIRESTORE_DATABASE_ID', raising=False)
         monkeypatch.setattr(dual_store, 'mirror_refresh', lambda *a: pytest.fail('reached the job store'))
@@ -511,6 +541,7 @@ class TestLightHook:
         from database import batch_pipeline_shadow_hook as hook
 
         monkeypatch.setenv('BATCH_JOBSTORE_MODE', 'shadow')
+        monkeypatch.setenv('JOBSTORE_SHADOW_NAMESPACES', 'batch_pipeline_dev,batch_pipeline_prod')
         monkeypatch.setenv('OMI_DEPLOYMENT', 'staging')
         monkeypatch.setenv('FIRESTORE_DATABASE_ID', '(default)')
         monkeypatch.setattr(dual_store, 'mirror_refresh', lambda *a: pytest.fail('reached the job store'))
@@ -521,6 +552,7 @@ class TestLightHook:
 
         calls = []
         monkeypatch.setenv('BATCH_JOBSTORE_MODE', 'shadow')
+        monkeypatch.setenv('JOBSTORE_SHADOW_NAMESPACES', 'batch_pipeline_dev,batch_pipeline_prod')
         monkeypatch.setenv('OMI_DEPLOYMENT', 'staging')
         monkeypatch.setenv('FIRESTORE_DATABASE_ID', 'staging')
         monkeypatch.setattr(dual_store, 'mirror_refresh', lambda ns, keys: calls.append((ns, keys)))
@@ -532,6 +564,7 @@ class TestLightHook:
 
         calls = []
         monkeypatch.setenv('BATCH_JOBSTORE_MODE', 'shadow')
+        monkeypatch.setenv('JOBSTORE_SHADOW_NAMESPACES', 'batch_pipeline_dev,batch_pipeline_prod')
         monkeypatch.setattr(dual_store, 'mirror_refresh', lambda ns, keys: calls.append((ns, keys)))
         hook.mirror_refresh('batch_pipeline_dev', iter([('jobs', 'j')]))
         assert calls == [('batch_pipeline_dev', [('jobs', 'j')])]
@@ -794,3 +827,128 @@ class TestConvergence:
         store.run(lambda tx: tx.get('queues', 'm'))
         assert store.drain(5) and store.drain_convergence(5)
         assert self.all_tracked() == totals
+
+
+@pytest.mark.parametrize('mode', ['firestore', 'shadow'])
+def test_empty_namespace_admission_never_constructs_a_copy(monkeypatch, mode):
+    monkeypatch.setenv('BATCH_JOBSTORE_MODE', mode)
+    monkeypatch.delenv('JOBSTORE_SHADOW_NAMESPACES', raising=False)
+    monkeypatch.setattr(dual_store, '_configured_copy', lambda *a: pytest.fail('not admitted'))
+    primary = SimStore(CustomerData())
+    assert dual_store.shadow_from_env(primary) is primary
+
+
+def test_partial_purge_configuration_raises_instead_of_claiming_erasure(monkeypatch):
+    monkeypatch.setattr(dual_store, '_SHADOWED', {})
+    monkeypatch.setenv('JOBSTORE_PG_HOST', 'synthetic-never-dialed')
+    monkeypatch.delenv('JOBSTORE_PG_DATABASE', raising=False)
+    monkeypatch.delenv('JOBSTORE_PG_USER', raising=False)
+    monkeypatch.setenv('BATCH_JOBSTORE_MODE', 'firestore')
+    with pytest.raises(RuntimeError, match='incomplete jobstore purge target'):
+        dual_store.purge_owner('batch_pipeline_dev', 'synthetic')
+
+
+@pytest.mark.parametrize('query', ['projection_finish_backfill_complete', 'projection_followup_backfill_complete'])
+def test_observing_the_marker_uses_the_bounded_connection_and_takes_no_lock(monkeypatch, query):
+    from contextlib import nullcontext
+
+    from database.jobstore import serving_parity
+    from database.jobstore.postgres_store import PostgresStore
+
+    statements = []
+
+    class Conn:
+        def execute(self, query, params=None):
+            statements.append(str(query))
+            return self
+
+        def fetchone(self):
+            return ({'version': 1, 'complete': True},)
+
+        def transaction(self):
+            return nullcontext()
+
+    class Pool:
+        def connection(self, timeout=None, existing_only=False):
+            assert existing_only is True  # an observation never opens a connection
+            return nullcontext(Conn())
+
+    store = PostgresStore('batch_pipeline_test_marker', pool=Pool(), customer_client=None)
+    monkeypatch.setattr(PostgresStore, 'run', lambda *a, **k: pytest.fail('observation opened a serving transaction'))
+    assert serving_parity.query_value(store, query, (), {}, transaction=False, budget_s=1.0) is True
+    assert any('control' in s or 'docs' in s for s in statements)
+    assert not any('FOR UPDATE' in s for s in statements)
+
+
+def test_serving_parity_reports_changing_pairs_and_refuses_mutations():
+    from database.jobstore.serving_parity import compare_serving_query
+
+    class Changing:
+        namespace = 'batch_pipeline_test_parity'
+
+        def __init__(self):
+            self.n = 0
+
+        def due(self, *args):
+            self.n += 1
+            return [str(self.n)]
+
+    assert compare_serving_query(Changing(), Changing(), 'due', 'retry', 10, 1) == 'unknown'
+    with pytest.raises(ValueError):
+        compare_serving_query(Changing(), Changing(), 'acquire_pull_claim', 'shard', 'token', 1, 30)
+
+
+def test_packing_telemetry_uses_only_the_primary_projected_read(stores, monkeypatch):
+    primary, _, store = stores
+    rows = [{'segment_id': 'synthetic'}]
+    read = Mock(return_value=rows)
+    compare = Mock()
+    monkeypatch.setenv('JOBSTORE_SHADOW_QUERY_PARITY', 'on')
+    monkeypatch.setattr(primary, 'packing_candidates', read)
+    monkeypatch.setattr(store, 'observe_discovery', compare)
+
+    assert store.packing_candidates('owner') is rows
+    read.assert_called_once_with('owner')
+    compare.assert_not_called()
+
+
+@pytest.mark.parametrize('stage,namespace', [('prod', 'batch_pipeline_dev'), ('dev', 'batch_pipeline_prod')])
+def test_erasure_of_both_namespaces_is_independent_of_serving_stage(monkeypatch, stage, namespace):
+    monkeypatch.setenv('OMI_ENV_STAGE', stage)
+    monkeypatch.setenv('JOBSTORE_PG_HOST', 'synthetic-target-not-dialed')
+    monkeypatch.setattr(dual_store, '_SHADOWED', {})
+    seen = []
+    monkeypatch.setattr(dual_store, '_configured_copy', lambda primary: seen.append(primary) or None)
+    assert dual_store.purge_owner(namespace, 'synthetic') == 0
+    assert seen[0].namespace == namespace
+    assert not hasattr(seen[0], 'run')  # an erasure handle cannot authorize serving writes
+
+
+def test_slow_serving_comparison_cannot_block_document_mirroring(stores, monkeypatch):
+    from database.jobstore import serving_parity
+
+    _, shadow, store = stores
+    comparing, release, mirrored = threading.Event(), threading.Event(), threading.Event()
+
+    def slow(*args, **kwargs):
+        comparing.set()
+        assert release.wait(10)
+        return 'match'
+
+    write = shadow.write_doc
+
+    def signal_write(*args):
+        write(*args)
+        mirrored.set()
+
+    monkeypatch.setattr(serving_parity, 'compare_serving_query', slow)
+    monkeypatch.setattr(shadow, 'write_doc', signal_write)
+    monkeypatch.setenv('JOBSTORE_SHADOW_QUERY_PARITY', 'on')
+    try:
+        assert store.due('retry', 10, 1) == []
+        assert comparing.wait(5)
+        store.run(lambda tx: tx.put('owners', 'o', {'revision': 1}))
+        assert mirrored.wait(5), 'query latency must not hold the mirror queue'
+    finally:
+        release.set()
+    assert store.drain(5)

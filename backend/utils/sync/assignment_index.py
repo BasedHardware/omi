@@ -44,6 +44,8 @@ class AssignmentIndex:
         if result.get(SYNC_CLOCK_RUN_FIELD):
             # Only estimated-clock rows carry a run; absent equals device-clocked.
             entry[SYNC_CLOCK_RUN_FIELD] = result[SYNC_CLOCK_RUN_FIELD]
+        if result.get('capture_time_trust') == 'untrusted':
+            entry['capture_time_trust'] = 'untrusted'
         occupied = set(days_for(result))
         for day, rows in self.buckets.items():
             rows = [row for row in rows if row['id'] not in replaced]

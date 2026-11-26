@@ -9,20 +9,23 @@ import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
 
 /// The downsell shown once when the sign-up trial paywall is closed without a purchase: the same
-/// Stripe checkout, with a 30-day trial instead of 7. Returns true when a trial was started.
+/// Stripe checkout, with a 30-day trial instead of 7. Returns true when a trial was started, false
+/// when the sheet was declined, and null when nothing was shown.
 abstract final class TrialUpsellSheet {
   static const int trialDays = 30;
 
-  static Future<bool> show(BuildContext context, {required String source}) async {
+  static Future<bool?> show(BuildContext context, {required String source}) async {
     final usage = context.read<UsageProvider>();
-    if (!usage.showSubscriptionUI) return false;
-    if (usage.subscription?.subscription.plan.isPaid == true) return false;
-    if (usage.subscription?.trialEligible != true) return false;
+    if (!usage.showSubscriptionUI) return null;
+    if (usage.subscription?.subscription.plan.isPaid == true) return null;
+    if (usage.subscription?.trialEligible != true) return null;
+    // Stripe-only 30-day trial: Google Play sells only its own 7-day trial offer.
+    if (usage.playBilledPurchaser) return null;
     if (usage.availablePlans == null) await usage.loadAvailablePlans();
-    if (!context.mounted) return false;
+    if (!context.mounted) return null;
     final offer = PaywallOffer.fromCatalog(usage.availablePlans);
     final price = offer?.yearly ?? offer?.monthly;
-    if (offer == null || price == null) return false;
+    if (offer == null || price == null) return null;
     PlatformManager.instance.analytics
         .track('Trial Upsell Shown', properties: {'source': source, 'trial_days': trialDays});
     final started = await showOmiSheet<bool>(
@@ -53,6 +56,7 @@ class TrialUpsellContent extends StatefulWidget {
 
 class TrialUpsellContentState extends State<TrialUpsellContent> {
   bool _busy = false;
+  bool _closed = false;
 
   Future<void> _claim() async {
     if (_busy) return;
@@ -70,7 +74,11 @@ class TrialUpsellContentState extends State<TrialUpsellContent> {
               trialDays: TrialUpsellSheet.trialDays,
             );
       if (!mounted) return;
-      if (outcome == PaywallCheckoutOutcome.purchased) Navigator.of(context).pop(true);
+      if (_closed) return;
+      if (outcome == PaywallCheckoutOutcome.purchased || outcome == PaywallCheckoutOutcome.alreadyPaid) {
+        _closed = true;
+        Navigator.of(context).pop(outcome == PaywallCheckoutOutcome.purchased);
+      }
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -79,7 +87,19 @@ class TrialUpsellContentState extends State<TrialUpsellContent> {
   @override
   Widget build(BuildContext context) {
     final l10n = context.l10n;
-    return Padding(
+    // This Stripe trial is never sold on a Play build: close if Play setup arrives while it is open.
+    // Only while this sheet is the top route, so it never pops a route above it.
+    if (context.select<UsageProvider, bool>((usage) => usage.buysThroughPlay) &&
+        !_closed &&
+        ModalRoute.of(context)?.isCurrent == true) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted || _closed || ModalRoute.of(context)?.isCurrent != true) return;
+        _closed = true;
+        Navigator.of(context).pop(false);
+      });
+    }
+    // Scrolls so Claim and No Thanks stay reachable at the largest text sizes.
+    return SingleChildScrollView(
       padding: const EdgeInsets.fromLTRB(OmiSpacing.md, OmiSpacing.lg, OmiSpacing.md, OmiSpacing.md),
       child: Column(
         mainAxisSize: MainAxisSize.min,

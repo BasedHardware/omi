@@ -78,6 +78,15 @@ enum OmiBleFirmwareDiagnostics {
             }
             if data[29] == 0 || data[29] == 1 { result["soc_frozen"] = NSNumber(value: data[29] == 1) }
         }
+        if data.count >= 38 {
+            for (key, offset) in [("conn_interval", 30), ("conn_latency", 32), ("conn_timeout", 34)] {
+                let value = Int(data[offset]) | (Int(data[offset + 1]) << 8)
+                if value != 0xffff { result[key] = NSNumber(value: value) }
+            }
+            for (key, offset) in [("tx_phy", 36), ("rx_phy", 37)] {
+                if data[offset] != 0xff { result[key] = NSNumber(value: data[offset]) }
+            }
+        }
         return result
     }
 }
@@ -121,8 +130,14 @@ struct OmiBleReconnectDiagnostics {
         return (timestamp, max(0, atMs - timestamp))
     }
 
-    /// Start timestamp of one disconnect-history row, used to match a reconnect
-    /// interval back to the event that started it.
+    /// Legacy audio-recovery stamps are not BLE disconnects.
+    static func eventType(_ entry: [String: Any]) -> String {
+        if let type = entry["eventType"] as? String { return type }
+        // Older iOS audio-recovery stamps have no BLE event metadata.
+        return entry["lostAudioResolvedAt"] != nil && entry["reasonCode"] == nil ? "audio_recovered" : "disconnect"
+    }
+
+    /// The event row timestamp is the reconnect-matching key.
     static func eventTimestamp(_ entry: [String: Any]) -> Int64 {
         entry["timestamp"] as? Int64 ?? 0
     }
@@ -164,5 +179,69 @@ struct OmiBleReconnectDiagnostics {
         let duration = resolvedAtOf(history[index]).map { max(0, $0 - recovery.eventTimestampMs) } ?? recovery.durationMs
         result[index] = withDuration(history[index], duration)
         return result
+    }
+}
+
+/// Metadata only: firmware READ_BEGIN (0x05) through DONE (0x04, including STOP).
+/// Uses monotonic time, never retains notification bodies, and never grants custody.
+/// An unobserved/restored link stays unknown until a protocol boundary is seen.
+final class OmiRingReadDiagnostics {
+    static let characteristic = "30295781-4301-eabd-2904-2849adfeae43"
+    private static let secondsPerTick: Double = {
+        var timebase = mach_timebase_info_data_t()
+        mach_timebase_info(&timebase)
+        return Double(timebase.numer) / Double(timebase.denom) / 1_000_000_000
+    }()
+
+    /// Like Android elapsedRealtime, this clock advances during system sleep.
+    static func now() -> TimeInterval { Double(mach_continuous_time()) * secondsPerTick }
+    private var known = Set<String>()
+    private var pending: [String: Data] = [:]
+    private var beganAt: [String: TimeInterval] = [:]
+
+    func connected(_ uuid: String) {
+        known.insert(uuid)
+        pending.removeValue(forKey: uuid)
+        beganAt.removeValue(forKey: uuid)
+    }
+
+    /// Legacy file data shares this characteristic and can start with 0x05.
+    /// Only ring READ writes (0x11 + u64 seq, optionally u32 count) arm BEGIN.
+    func requested(_ uuid: String, characteristic: String, data: Data) {
+        guard characteristic.lowercased() == Self.characteristic, data.first == 0x11 else { return }
+        if data.count == 9 || data.count == 13 { pending[uuid] = Data(data.dropFirst().prefix(8)) }
+        else { pending.removeValue(forKey: uuid) }
+    }
+
+    func rejected(_ uuid: String, characteristic: String, data: Data) {
+        guard characteristic.lowercased() == Self.characteristic,
+              data.first == 0x11, data.count == 9 || data.count == 13,
+              pending[uuid] == Data(data.dropFirst().prefix(8)) else { return }
+        pending.removeValue(forKey: uuid)
+    }
+
+    func received(_ uuid: String, characteristic: String, data: Data, now: TimeInterval) {
+        guard characteristic.lowercased() == Self.characteristic else { return }
+        if data.count >= 13, data.first == 0x05,
+           pending[uuid] == Data(data.dropFirst().prefix(8)) {
+            pending.removeValue(forKey: uuid)
+            known.insert(uuid)
+            beganAt[uuid] = now
+        } else if data.count >= 10, data.first == 0x04,
+                  pending[uuid] != nil || beganAt[uuid] != nil {
+            connected(uuid)
+        }
+    }
+
+    /// Consume before link teardown; a later reconnect starts a new observation.
+    func disconnected(_ uuid: String, now: TimeInterval) -> [String: Any] {
+        let began = beganAt.removeValue(forKey: uuid)
+        pending.removeValue(forKey: uuid)
+        guard known.remove(uuid) != nil else { return [:] }
+        var fields: [String: Any] = ["ring_read_active": began != nil]
+        if let began {
+            fields["ring_read_age_ms"] = Int64(max(0, (now - began) * 1000).rounded(.down))
+        }
+        return fields
     }
 }

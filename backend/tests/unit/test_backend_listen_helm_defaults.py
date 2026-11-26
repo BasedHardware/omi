@@ -87,6 +87,7 @@ def test_backend_listen_helm_template_uses_runtime_project_for_google_cloud_proj
     assert f'name: GOOGLE_CLOUD_PROJECT\n              value: "{expected["runtime_gcp_project_id"]}"' in rendered
     assert 'name: OMI_FIRESTORE_DATA_PLANE_PROJECT\n              value: "based-hardware"' in rendered
     assert 'name: POSTHOG_PROJECT_API_KEY' in rendered
+    assert 'name: SONIOX_IDLE_COHORT_' not in rendered
     if env_name == 'prod':
         assert 'name: SERVER_BATCH_ONLY_VISIBLE_RESTORE_PERCENT' not in rendered
         token = _env_value(_load_values(expected['values_file']), 'POSTHOG_PRODUCT_CAPTURE_TOKEN')
@@ -281,7 +282,6 @@ def test_windowed_live_rollout_is_prod_canary_and_bounded():
     assert _env_value(prod, 'PARAKEET_WINDOW_MAX_EMPTY_STREAK') == '4'
     assert _env_value(dev, 'PARAKEET_WINDOW_MAX_SESSIONS') == '1'
     for values in (prod, dev):
-        assert _env_value(values, 'PARAKEET_WINDOW_DIARIZATION') == 'false'
         assert _env_value(values, 'PARAKEET_WINDOW_PACE_SECONDS') == '6'
         assert _env_value(values, 'PARAKEET_WINDOW_MAX_CONTEXT_SECONDS') == '24'
         assert _env_value(values, 'STT_CIRCUIT_HALF_OPEN_PROBES') == '1'

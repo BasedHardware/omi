@@ -4,6 +4,7 @@ After successful revalidation, retained private recurring profiles may be publis
 Only batch-backed positive-duration segments are candidates for relabeling.
 """
 
+import hashlib
 import io
 import math
 import logging
@@ -21,12 +22,14 @@ from prometheus_client import Counter
 from datetime import datetime, timezone
 
 from config.batch_conversation_speakers import (
+    append_conflicting_units_enabled,
+    v3_sources_enabled,
     BATCH_CONVERSATION_SCOPE,
     batch_unit_scope,
     final_pass_enabled_for,
     recurring_enabled_for,
 )
-from database.batch_final_pass import load_reference, ReferenceUnavailable
+from database.batch_final_pass import load_reference, ReferenceUnavailable, source_recording_fence
 from database import recurring_voices
 from utils.observability.recurring_voices import identity_speech
 from utils.speakers.recurring_voices import near_misses
@@ -153,6 +156,10 @@ class FinalPassResult(TypedDict, total=False):
 
 
 def record_final_pass_failure(outcome: str, **details) -> FinalPassResult:
+    if details.get('reason') == 'diarizer_unconfigured':
+        from utils.observability.owner_recognition_diagnostics import final_pass_availability
+
+        final_pass_availability('dependency_unavailable')
     count_terminal(outcome)
     logger.info(
         'event=batch_final_pass outcome=%s exception_type=%s reason=%s location=%s',
@@ -194,40 +201,162 @@ class UnitStream:
     read_budget: ArtifactReadBudget
 
 
+APPEND_GAP_BYTES = 32000  # one second of silence before a unit placed after the timeline
+
+
 def _assemble(stream):
+    """One PCM buffer for the diarizer: each unit at its capture clock, words shifted with it.
+
+    A unit whose capture clock overlaps audio already placed with different samples (measured 2026-11-26 on
+    owner v3 conversations: a 131 s unit inside a 298 s unit of the same recording, correlation 0 at every lag
+    within 0.5 s) cannot sit at that clock. Labels do not need the conversation's timeline: words are
+    assigned to turns on the unit's own audio and the result maps back by segment id. So that unit is
+    appended after the timeline (one second of silence first) instead of refusing the whole conversation.
+    Identical overlaps still share their samples.
+    """
     stream.read_budget.timeout(60)
     # Metadata is small and sorted before decoding. Only one decoded unit lives
-    # alongside this buffer; the returned read-only view never copies it.
-    pcm = memoryview(bytearray(stream.capacity))
-    used, words, checks = 0, [], []
+    # alongside this buffer; it grows only for appended units.
+    pcm = bytearray(stream.capacity)
+    used, native, words, checks, appended = 0, 0, [], [], 0
+    # Appended units go after the whole native timeline (its capacity), so a later unit at its own clock never
+    # collides with one placed there.
+    append_at = stream.capacity
     for item, audio, local_words, validate in stream.units:
         stream.read_budget.timeout(60)
         position = round((item.capture_at - stream.origin) * 16000) * 2
+        overlap = max(0, min(native - position, len(audio)))
+        if overlap:
+            with memoryview(pcm) as placed, memoryview(audio) as source:
+                same = placed[position : position + overlap] == source[:overlap]
+            if not same:
+                if not append_conflicting_units_enabled():
+                    raise IncompleteCoverage('conflicting capture clocks')
+                position, overlap = max(append_at, used) + APPEND_GAP_BYTES, 0
+                appended += 1
+        if position < append_at:
+            native = max(native, position + len(audio))
         end = position + len(audio)
-        if end > len(pcm):
+        if end > MAX_AUDIO_SECONDS * 32000:
             raise OverflowError('audio timeline too long')
-        overlap = max(0, min(used - position, len(audio)))
-        source = memoryview(audio)
-        if overlap and pcm[position : position + overlap] != source[:overlap]:
-            raise IncompleteCoverage('conflicting capture clocks')
-        pcm[position + overlap : end] = source[overlap:]
+        if end > len(pcm):
+            pcm.extend(bytes(end - len(pcm)))
+        with memoryview(audio) as source:
+            pcm[position + overlap : end] = source[overlap:]
         used = max(used, end)
         for word in local_words:
             word['timestamp'][0] += position / 32000
             word['timestamp'][1] += position / 32000
         words.extend(local_words)
         checks.append(validate)
-        del source, audio, local_words
+        del audio, local_words
+    if appended:
+        logger.info('event=batch_final_pass unit_placement=appended_after_timeline units=%d', appended)
     stream.read_budget.timeout(60)
-    return pcm[:used].toreadonly(), words, checks
+    return memoryview(pcm)[:used].toreadonly(), words, checks
 
 
-def _references(store, uid, conversation, units, read_budget, diagnostics, failure_context: UnitFailureContext):
+def receipt_sources(conversation) -> tuple[str, ...]:
+    """Recordings a conversations-v3 row was built from: their projection receipts are this row's (empty when
+    ``BATCH_FINAL_PASS_V3_SOURCES_ENABLED`` is false)."""
+    if not v3_sources_enabled():
+        return ()
+    return tuple(sorted({str(rid) for rid in (getattr(conversation, 'v3_recording_ids', None) or []) if rid}))
+
+
+def _epoch(value) -> float:
+    if isinstance(value, datetime):
+        return (value if value.tzinfo else value.replace(tzinfo=timezone.utc)).timestamp()
+    if isinstance(value, (int, float)):
+        return float(value)
+    parsed = datetime.fromisoformat(str(value).replace('Z', '+00:00'))
+    return (parsed if parsed.tzinfo else parsed.replace(tzinfo=timezone.utc)).timestamp()
+
+
+def _subtract(start: float, end: float, holes) -> list[tuple[float, float]]:
+    pieces = [(start, end)]
+    for left, right in sorted(holes):
+        pieces = [(a, b) for x, y in pieces for a, b in ((x, min(y, left)), (max(x, right), y)) if b > a]
+    return pieces
+
+
+@dataclass(frozen=True)
+class SourceScope:
+    """A conversations-v3 row's live hold on its source recordings: its claims minus deleted spans (epoch seconds,
+    on the stored clock) and a fingerprint of that evidence. Reading it refuses a deleted, locked or unclaiming
+    recording; the fingerprint is re-checked after inference so a revoked claim or a new deletion refuses."""
+
+    intervals: tuple[tuple[float, float], ...]
+    fingerprint: str
+
+
+def source_scope(uid, conversation) -> SourceScope | None:
+    sources = receipt_sources(conversation)
+    if not sources:
+        return None
+    intervals, evidence = [], []
+    for rid in sources:
+        recording = source_recording_fence(uid, rid)
+        if not recording or recording.get('deleted') or recording.get('is_locked'):
+            raise ReferenceUnavailable('skipped_merged')
+        claims = [c for c in recording.get('claims') or [] if c.get('conversation_id') == conversation.id]
+        if not claims:
+            raise ReferenceUnavailable('skipped_merged')
+        deleted = [(_epoch(d['start']), _epoch(d['end'])) for d in recording.get('deleted_spans') or []]
+        for claim in claims:
+            intervals.extend(_subtract(_epoch(claim['start']), _epoch(claim['end']), deleted))
+        evidence.append((rid, sorted((_epoch(c['start']), _epoch(c['end'])) for c in claims), sorted(deleted)))
+    fingerprint = hashlib.sha256(repr(sorted(evidence)).encode()).hexdigest()
+    return SourceScope(tuple(sorted(intervals)), fingerprint)
+
+
+OWN_SPEECH_PAD_SECONDS = 0.25
+OWN_SPEECH_JOIN_SECONDS = 1.0
+
+
+def own_speech_spans(words) -> list[tuple[float, float]]:
+    """Unit-clock stretches around this conversation's own words (``timestamp`` on the unit's audio), joined
+    across short pauses and padded. Claim times come from stored segment clocks, which need not match the
+    unit's capture clock, so the words, not the claims, say where this conversation's speech is."""
+    spans: list[list[float]] = []
+    for left, right in sorted((float(w['timestamp'][0]), float(w['timestamp'][1])) for w in words):
+        left, right = max(0.0, left - OWN_SPEECH_PAD_SECONDS), right + OWN_SPEECH_PAD_SECONDS
+        if spans and left - spans[-1][1] <= OWN_SPEECH_JOIN_SECONDS:
+            spans[-1][1] = max(spans[-1][1], right)
+        else:
+            spans.append([left, right])
+    return [(a, b) for a, b in spans]
+
+
+def masked_pcm(pcm: bytes, spans) -> bytes:
+    """``pcm`` with every sample outside ``spans`` (unit seconds) silenced; length and clock unchanged."""
+    keep = bytearray(len(pcm))
+    for start, end in spans:
+        left, right = max(0, round(start * 16000)) * 2, min(len(pcm), round(end * 16000) * 2)
+        if right > left:
+            keep[left:right] = pcm[left:right]
+    return bytes(keep)
+
+
+def clip_turns(turns, spans) -> list[dict]:
+    return [
+        {**turn, 'start': max(turn['start'], a), 'end': min(turn['end'], b)}
+        for turn in turns
+        for a, b in spans
+        if min(turn['end'], b) > max(turn['start'], a)
+    ]
+
+
+def read_unit_references(
+    store, uid, conversation, units, read_budget, diagnostics, failure_context: UnitFailureContext
+):
     references, errors, shared, absent = {}, [], [], []
     for unit in units:
         read_budget.timeout(3)
         try:
-            reference = load_reference(store, uid, unit, conversation.id, read_budget=read_budget)
+            reference = load_reference(
+                store, uid, unit, conversation.id, read_budget=read_budget, source_ids=receipt_sources(conversation)
+            )
             if reference is None:
                 raise IncompleteCoverage('no_job')
             references[unit] = reference
@@ -283,7 +412,7 @@ def _units(
     read_budget.timeout(3)
     store = FirestoreStore(f'batch_pipeline_{current_stage()}')
     artifacts = artifacts_for(store)
-    references = _references(store, uid, conversation, units, read_budget, diagnostics, failure_context)
+    references = read_unit_references(store, uid, conversation, units, read_budget, diagnostics, failure_context)
     if sum(max(1, ref[0].duration_seconds) for ref in references.values()) > MAX_AUDIO_SECONDS:
         raise OverflowError('audio too long')
     if not references:
@@ -301,14 +430,14 @@ def _units(
     return UnitStream(
         origin,
         capacity,
-        _decode_units(
+        decode_unit_evidence(
             uid, conversation, references, store, artifacts, read_budget, deadline, diagnostics, failure_context
         ),
         read_budget,
     )
 
 
-def _decode_units(
+def decode_unit_evidence(
     uid,
     conversation,
     references,
@@ -318,8 +447,11 @@ def _decode_units(
     deadline,
     diagnostics,
     failure_context: UnitFailureContext,
+    *,
+    identity_turns=None,
 ):
     total_bytes = 0
+    owned = source_scope(uid, conversation)
     for unit, reference in references.items():
         read_budget.timeout(60)
         try:
@@ -391,14 +523,30 @@ def _decode_units(
                 if reason:
                     diagnostics[sid] = reason
             words = [word for word in words if word['segment_id'] not in diagnostics]
+            spans: list[tuple[float, float]] = []
+            if owned is not None:
+                # A source recording's unit also holds sibling conversations' speech and speech the owner
+                # deleted: only this conversation's own speech (its own segments' words, on the unit clock)
+                # reaches the diarizer and voice evidence.
+                words = [word for word in words if word['segment_id'] in stored]
+                spans = own_speech_spans(words)
+                pcm = masked_pcm(pcm, spans)
+            if identity_turns is not None:
+                turns = payload['diarization']['turns']
+                identity_turns[unit] = clip_turns(turns, spans) if owned is not None else turns
 
-            def validate(unit=unit, reference=reference):
+            def validate(unit=unit, reference=reference, owned=owned):
                 try:
-                    return (
-                        load_reference(
-                            store, uid, unit, conversation.id, read_budget=ArtifactReadBudget(deadline, 0, 0)
-                        )
-                        == reference
+                    current = source_scope(uid, conversation)
+                    return load_reference(
+                        store,
+                        uid,
+                        unit,
+                        conversation.id,
+                        read_budget=ArtifactReadBudget(deadline, 0, 0),
+                        source_ids=receipt_sources(conversation),
+                    ) == reference and (current.fingerprint if current else None) == (
+                        owned.fingerprint if owned else None
                     )
                 except Exception:
                     failure_context.unit = unit
@@ -456,8 +604,17 @@ def run_batch_final_pass(uid, conversation, receipt, *, load_prints, apply, requ
     Non-cohort calls and durable deferrals are outside that contract. A
     deferral records fallback telemetry; its later admitted retry owns the result.
     """
+    from utils.observability.owner_recognition_diagnostics import final_pass_availability
+    from config.batch_conversation_speakers import has_batch_authority, final_pass_switch_enabled
+
     if not final_pass_enabled_for(uid, conversation.transcript_segments):
+        final_pass_availability(
+            'disabled'
+            if has_batch_authority(conversation.transcript_segments) and not final_pass_switch_enabled()
+            else 'ineligible'
+        )
         return {'outcome': 'skipped_ineligible'}
+    final_pass_availability('admitted')
     if not _SLOTS.acquire(blocking=False):
         # The processing boundary supplies a dedicated, capped speaker-only
         # obligation. Retry deliveries settle their own existing obligation.
@@ -466,6 +623,8 @@ def run_batch_final_pass(uid, conversation, receipt, *, load_prints, apply, requ
     try:
         return _run(uid, conversation, receipt, load_prints, apply, failure_context)
     except Exception as error:
+        if transient_cause(error) is not None:
+            final_pass_availability('dependency_unavailable')
         transient = transient_cause(error)
         if transient is not None:
             return _defer(
@@ -532,7 +691,9 @@ def _run(uid, conversation, receipt, load_prints, apply, failure_context: UnitFa
         return _reserve_budget(seconds)
 
     expected = None
-    if recurring_enabled_for(uid, conversation.transcript_segments):
+    # Units of source recordings: the live-claim bound is checked before inference, not inside the profile
+    # publish transaction, so no recurring profile is learned from them.
+    if recurring_enabled_for(uid, conversation.transcript_segments) and not receipt_sources(conversation):
         try:
             expected = recurring_voices.checkpoint(uid, conversation.id, receipt=receipt)
         except Exception:

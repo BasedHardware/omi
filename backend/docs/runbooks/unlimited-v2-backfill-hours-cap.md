@@ -2,8 +2,9 @@
 
 Default-off admission cap for the `unlimited_v2` plan: no more than
 `UNLIMITED_V2_BACKFILL_HOURS_CAP_HOURS` (default `24`) of managed
-**backfill/import** transcription per UTC user-day. The flag ships `false`;
-activation is a separate owner decision and is not part of the shipping change.
+**backfill/import** transcription per UTC user-day. The code default is `false`;
+prod turned it on at 24 h on 2026-11-18 (PR #25677, David's decision). Rollback:
+set it `false` in one config train.
 
 ## Settings
 
@@ -42,18 +43,24 @@ missing meter is never evidence the cap was reached.
 
 ## Behavior above the cap
 
-The refusal reuses the existing exhausted-allowance contract:
+Enforced at exactly one point, sync upload admission (`routers/sync.py`,
+`backfill_hours_cap.defers_upload`), since 2026-11-18 (PR #25677):
 
-- **Sync** (`funded_allowance`): denied segments take the existing durable hold
-  path; nothing is deleted and no billing path changes.
-- **Batch** (`funded_allowance`): the CPU admission holds the unit for the
-  existing allowance hold window; the GPU dispatch re-check keeps its own
-  contract for units already admitted.
-- **Live listen**: unchanged. The cap is never evaluated on the live plane.
+- **Sync upload:** a `backfill`-lane upload (not an exact custody repair) for an
+  `unlimited_v2` owner whose UTC day already reached the cap gets
+  `503` with `X-Omi-Rate-Limit-Reason: backfill_capacity` and `Retry-After` to the
+  next UTC midnight, before any audio is archived or a job exists. The app treats
+  it as paced admission: the recording stays pending on the phone and retries
+  without spending a WAL retry. The cap check sees only already-metered seconds, so
+  one admitted upload can carry a day past the cap by at most its own length.
+- **Sync segments and batch units:** never consult the cap. An earlier design
+  refused at segment/unit time and parked audio in `stt_cap_holds` or batch
+  staging; prod has no automatic release for those holds (empty STT-cap cohort,
+  `live`-only lanes), so that path was removed.
+- **Live listen:** unchanged. The cap is never evaluated on the live plane.
 
-The cap is independent of the legacy/offline dispatch scope: with the flag on, a
-backfill admission still resolves the allowance and is refused even on a host
-where `STT_CAP_OFFLINE_ENFORCEMENT` is off.
+The upload check is independent of the legacy/offline dispatch scope: with the
+flag on, it applies even on a host where `STT_CAP_OFFLINE_ENFORCEMENT` is off.
 
 Refusals increment `omi_unlimited_v2_backfill_day_cap_blocks_total{plane}` with a
 bounded plane label (`sync`, `batch`) and are logged once per admission. Offline

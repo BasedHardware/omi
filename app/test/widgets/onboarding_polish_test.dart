@@ -100,6 +100,10 @@ class PairingProvider extends BaseProvider with MessageNotifierMixin implements 
   Future<void> scanDevices({required VoidCallback onShowDialog, VoidCallback? onShowLocationDialog}) async {}
   @override
   void cancelActiveScan() {}
+  @override
+  bool get pairingBlockNeedsSettings => false;
+  @override
+  Future<bool> recheckPermissionBlock() async => false;
 }
 
 class PairingHomeProvider extends HomeProvider {
@@ -107,9 +111,12 @@ class PairingHomeProvider extends HomeProvider {
   Future<void> setupHasSpeakerProfile() async {}
 }
 
-Widget connect(OnboardingProvider pairing) => MultiProvider(providers: [
+Widget connect(OnboardingProvider pairing, {DeviceProvider? device}) => MultiProvider(providers: [
       ChangeNotifierProvider<OnboardingProvider>.value(value: pairing),
-      ChangeNotifierProvider<DeviceProvider>(create: (_) => AuditDeviceProvider()),
+      if (device == null)
+        ChangeNotifierProvider<DeviceProvider>(create: (_) => AuditDeviceProvider())
+      else
+        ChangeNotifierProvider<DeviceProvider>.value(value: device),
       ChangeNotifierProvider<HomeProvider>(create: (_) => PairingHomeProvider()),
     ], child: const ConnectDevicePage());
 
@@ -231,6 +238,69 @@ void main() {
       }
       await tester.pumpWidget(const SizedBox());
     }
+  });
+
+  testWidgets('a Bluetooth permission block leads with Open Settings; Try Again and the guide stay under it',
+      (tester) async {
+    viewport(tester);
+    for (final platform in [TargetPlatform.iOS, TargetPlatform.android]) {
+      for (final reason in Reason.values) {
+        final events = <RegisteredEvent>[];
+        var settings = 0, retries = 0;
+        await tester.pumpWidget(host(
+            Center(
+                child: PairingFailureCard(
+                    key: ValueKey('$platform$reason'),
+                    reason: reason,
+                    onDismiss: () {},
+                    onGuide: () {},
+                    onRetry: () async => retries++,
+                    onOpenSettings: () async => settings++,
+                    emit: events.add)),
+            platform: platform));
+        // MaterialApp animates the theme (and its platform) between iterations.
+        await tester.pump(const Duration(milliseconds: 300));
+        final permission = reason == Reason.bluetoothPermissionDenied || reason == Reason.nearbyDevicesDenied;
+        final openSettings = find.byKey(const Key('pairing_failure_open_settings'));
+        final retry = tester.widget<OmiButton>(find.byKey(const Key('pairing_failure_retry')));
+        expect(tester.widget<OmiButton>(find.byKey(const Key('pairing_failure_guide'))).variant,
+            OmiButtonVariant.secondary);
+        if (!permission) {
+          // Other blocks keep their own recovery: Try Again stays the one primary.
+          expect(openSettings, findsNothing, reason: '$reason');
+          expect(retry.variant, OmiButtonVariant.primary);
+          continue;
+        }
+        expect(openSettings, findsOneWidget, reason: '$reason');
+        expect(find.descendant(of: openSettings, matching: find.text('Open Settings')), findsOneWidget);
+        expect(tester.widget<OmiButton>(openSettings).variant, OmiButtonVariant.primary);
+        expect(retry.variant, OmiButtonVariant.secondary);
+        expect(tester.getRect(openSettings).bottom,
+            lessThan(tester.getRect(find.byKey(const Key('pairing_failure_retry'))).top));
+        await tester.tap(openSettings);
+        await tester.pump();
+        expect(settings, 1);
+        expect(events.last.wireName, 'Device Pairing Settings Opened');
+        expect(events.last.properties, {
+          'failure_reason': reason.wireName,
+          'platform': platform == TargetPlatform.iOS ? 'ios' : 'android',
+        });
+        await tester.tap(find.byKey(const Key('pairing_failure_retry')));
+        expect(retries, 1);
+        expect(tester.takeException(), isNull);
+      }
+    }
+    // Without a Settings route (the OS can still ask), the card is unchanged: Try Again leads.
+    await tester.pumpWidget(host(Center(
+        child: PairingFailureCard(
+            reason: Reason.nearbyDevicesDenied,
+            onDismiss: () {},
+            onGuide: () {},
+            onRetry: () async {},
+            emit: (_) {}))));
+    expect(find.byKey(const Key('pairing_failure_open_settings')), findsNothing);
+    expect(tester.widget<OmiButton>(find.byKey(const Key('pairing_failure_retry'))).variant, OmiButtonVariant.primary);
+    await tester.pumpWidget(const SizedBox());
   });
 
   testWidgets('device-first step: Connect is the primary at the bottom inset, store and skip sit under it',

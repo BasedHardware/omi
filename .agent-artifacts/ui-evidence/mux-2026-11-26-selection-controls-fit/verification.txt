@@ -1,0 +1,67 @@
+Verified locally on iPhone 17 Pro, iOS 26.4, English, lane sim.2, Flutter 3.44.5. Synthetic local account mux-design-targeted, four seeded conversations. No live writes or flags.
+
+Check | BEFORE 65d789439081 | AFTER
+AX one selected: full count + all actions fit | FAIL | PASS
+AX two selected: full count + all actions fit | FAIL | PASS
+Light/dark one/two selected | PASS | PASS
+One disabled / two enabled Merge | visually verified | native disabled tap inert / confirmation opens
+Merge confirmation Cancel | not replayed | PASS; selection retained
+Toolbar Cancel exit | original script exits at default | PASS at AX; bar gone, chat restored
+Move picker + cancellation | unchanged handler, not replayed | PASS; selection retained
+Delete confirmation + cancellation | unchanged handler, not replayed | PASS; selection retained
+Repeats 2 / 3 | not replayed | PASS; same four conversations
+Relaunch, select again, Cancel | not replayed | PASS; no stale bar
+44pt targets, no overlapping controls, full text at 402/320pt widths | focused regression FAILS on original source | PASS, scale 1/3.2, English/German, selections 0/1/2
+Focused Flutter suites | original new geometry test fails | 33 tests PASS after final test-only edits
+Focused analyzer | n/a | No issues found
+
+If selection controls fit at large text, free→paid (device owners) goes 29.889% → 29.889% (booked range 29.889–29.889%).
+ACTUAL baseline: 3326 / 11128 * 100, metrics.json as_of 2026-11-26T11:01Z, window 2026-10-27 to 2026-11-26.
+ACTUAL audited fit: 0/2 → 2/2. Affected-owner prevalence and downstream outcomes UNKNOWN. No global lift booked.
+MODELED conditional retention sensitivity: 0–1 percentage point among affected AX-selection users only, if repairing a blocked organizing task prevents departure. No measured global churn effect.
+
+Build/provenance: before frames/receipts reused verbatim per brief. Same original targeted.sh and explicit Nov25 helper unchanged. Candidate build was dirty against 65d789 and completed before source commit 3dc5dff615; product-source SHA-256 matches that commit and both native runs. See candidate-provenance.json, before/reuse-receipt.json, build-receipt.json, and scenarios/reused-originals.json. Generated signing config diff saved then restored; no xcconfig/plist/Podfile.lock/debug entrypoint committed.
+
+Demo: demo.mp4 = 14.9s raw simctl h264 recording plus 2s hold of the actual settled native exit screenshot (original recording ends during exit). demo.gif is 402px wide, under 8MB. Raw recording retained at after/confirm/demo.mp4.
+
+UNVERIFIED: physical iPhone, Android native rendering, VoiceOver spoken navigation, native German rendering, confirmed destructive/merge/move writes and their remote failures, real owner prevalence or retention impact. German long labels verified in focused widget geometry only. Existing dialog title wrapping and unrelated Home/paywall layout are out of scope.
+
+Image inspection (each image opened and inspected):
+before/t01-home-selection-one-light.png: one selected on Home in light; full count/actions visible; Merge disabled.
+after/targeted/t01-home-selection-one-light.png: one selected on Home in light; full count, Cancel, Move/Delete, and disabled Merge visible without overflow; compact single row retained.
+before/t01-home-selection-one-dark.png: one selected on Home in dark; full count/actions visible; Merge disabled.
+after/targeted/t01-home-selection-one-dark.png: one selected on Home in dark; full count, Cancel, Move/Delete, and disabled Merge visible without overflow; compact single row retained.
+before/t01-home-selection-one-max.png: one selected on Home in max; count missing and Merge clipped with overflow stripe.
+after/targeted/t01-home-selection-one-max.png: one selected on Home in max; full count, Cancel, Move/Delete, and disabled Merge visible without overflow; toolbar expands to three runs.
+before/t02-home-selection-two-light.png: two selected on Home in light; full count/actions visible; Merge enabled.
+after/targeted/t02-home-selection-two-light.png: two selected on Home in light; full count, Cancel, Move/Delete, and enabled Merge visible without overflow; compact single row retained.
+before/t02-home-selection-two-dark.png: two selected on Home in dark; full count/actions visible; Merge enabled.
+after/targeted/t02-home-selection-two-dark.png: two selected on Home in dark; full count, Cancel, Move/Delete, and enabled Merge visible without overflow; compact single row retained.
+before/t02-home-selection-two-max.png: two selected on Home in max; count missing and Merge clipped with overflow stripe.
+after/targeted/t02-home-selection-two-max.png: two selected on Home in max; full count, Cancel, Move/Delete, and enabled Merge visible without overflow; toolbar expands to three runs.
+after/targeted/t03-paywall-monthly-light.png: Unchanged paywall scene captured by original script. Existing scrolled header/date layout remains outside this proposal; excluded from PR images.
+after/targeted/t03-paywall-monthly-dark.png: Unchanged paywall scene captured by original script. Existing scrolled header/date layout remains outside this proposal; excluded from PR images.
+after/targeted/t03-paywall-monthly-max.png: Unchanged paywall scene captured by original script. Existing scrolled header/date layout remains outside this proposal; excluded from PR images.
+after/targeted/t04-paywall-max-bottom.png: Unchanged paywall scene captured by original script. Existing scrolled header/date layout remains outside this proposal; excluded from PR images.
+after/confirm/one-max-disabled.png: AX one selected; full count and disabled Merge, all targets on screen.
+after/confirm/two-max-enabled.png: AX two selected; full count and enabled Merge, all targets on screen.
+after/confirm/merge-confirm-max.png: Existing AX merge dialog opens. Cancel and Merge reachable; long title still breaks across lines and body scrolls. Dialog layout unchanged.
+after/confirm/merge-cancel-max.png: AX merge dialog dismissed; two selections and enabled Merge retained.
+after/confirm/selection-exit-max.png: AX toolbar fully gone; unselected Home and Ask anything visible.
+after/confirm/move-picker.png: Existing Move 2 conversations to sheet opens with Work/Personal/Social folders and close X.
+after/confirm/move-cancel.png: Sheet dismissed; same two selections and actions retained.
+after/confirm/delete-confirm.png: Existing Delete 2 Conversations? dialog names related memories/tasks/audio; Cancel/Delete visible.
+after/confirm/delete-cancel.png: Dialog dismissed; same two selections retained.
+after/confirm/relaunch.png: Home after relaunch: all four seeded conversations, no stale toolbar.
+after/confirm/relaunch-selected.png: Two real rows selected after relaunch; full compact toolbar and enabled Merge.
+after/confirm/relaunch-exit.png: Cancel after relaunch restores unselected Home and Ask anything.
+evidence/001-mobile-ios-selection-one-light.png: One selected, light. Left: source-verified native original on 65d789439081. Right: native candidate, identical targeted scenario on iPhone 17 Pro / iOS 26.4. Original pixels joined under labels. Visually inspected; labels match raw images.
+evidence/002-mobile-ios-selection-one-dark.png: One selected, dark. Left: source-verified native original on 65d789439081. Right: native candidate, identical targeted scenario on iPhone 17 Pro / iOS 26.4. Original pixels joined under labels. Visually inspected; labels match raw images.
+evidence/003-mobile-ios-selection-one-max.png: One selected, max. Left: source-verified native original on 65d789439081. Right: native candidate, identical targeted scenario on iPhone 17 Pro / iOS 26.4. Original pixels joined under labels. Visually inspected; labels match raw images.
+evidence/004-mobile-ios-selection-two-light.png: Two selected, light. Left: source-verified native original on 65d789439081. Right: native candidate, identical targeted scenario on iPhone 17 Pro / iOS 26.4. Original pixels joined under labels. Visually inspected; labels match raw images.
+evidence/005-mobile-ios-selection-two-dark.png: Two selected, dark. Left: source-verified native original on 65d789439081. Right: native candidate, identical targeted scenario on iPhone 17 Pro / iOS 26.4. Original pixels joined under labels. Visually inspected; labels match raw images.
+evidence/006-mobile-ios-selection-two-max.png: Two selected, max. Left: source-verified native original on 65d789439081. Right: native candidate, identical targeted scenario on iPhone 17 Pro / iOS 26.4. Original pixels joined under labels. Visually inspected; labels match raw images.
+before-after.png: Two selected in light: full-screen BEFORE | AFTER, compact layout retained.
+before-after-max.png: Two selected at AX: original count absent and Merge offscreen, candidate full count and actions visible.
+demo-inspection.png: Eight sampled native video frames: row menu, one/two AX selections, merge dialog, cancel back to selection.
+demo-last-frame.png: Original native recording ends during slide-out, with zero selected; final settled screenshot is held for two seconds in exported demo.

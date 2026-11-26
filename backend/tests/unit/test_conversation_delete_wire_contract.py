@@ -74,8 +74,10 @@ def _delete_client(monkeypatch) -> TestClient:
         'MemoryService',
     ):
         monkeypatch.setattr(conversations, name, MagicMock())
+    monkeypatch.setattr(conversations.conversation_tombstones, 'is_deleted', lambda *args: False)
     monkeypatch.setattr(conversations.conversation_tombstones, 'record_deletion', MagicMock())
     monkeypatch.setattr(conversations, 'destructive_operation_gate', lambda *args, **kwargs: nullcontext())
+    monkeypatch.setattr(conversations, '_legal_hold_defers_delete', lambda uid: False)
     monkeypatch.setattr(conversations.conversations_db, 'get_conversation', lambda *args: {})
     monkeypatch.setattr(conversations.conversations_db, 'get_conversation_raw_snapshot', lambda *args, **kwargs: {})
     monkeypatch.setattr(conversations, 'retraction_can_be_skipped', lambda *args, **kwargs: True)
@@ -135,7 +137,9 @@ def test_cascade_gate_precedes_intent_and_covers_retraction_and_cleanup(monkeypa
             events.append('release')
 
         monkeypatch.setattr(conversations, 'destructive_operation_gate', gate)
-        conversations.conversation_tombstones.record_deletion.side_effect = lambda *args: events.append('intent')
+        conversations.conversation_tombstones.record_deletion.side_effect = lambda *args, **kwargs: events.append(
+            'intent'
+        )
         conversations.MemoryService.return_value.retract_conversation_memories.side_effect = (
             lambda *args: events.append('retract')
         )
@@ -243,13 +247,13 @@ def test_lake_failure_answers_retryable_503_with_intent_and_documents_intact(mon
             monkeypatch.setattr(
                 conversation_frame_evidence.conversations_db,
                 'get_conversation_raw_snapshot',
-                MagicMock(side_effect=RuntimeError('synthetic Firestore read failure')),
+                MagicMock(side_effect=[{}, RuntimeError('synthetic Firestore read failure')]),
             )
         response = client.delete(f'/v1/conversations/conversation-1?cascade={cascade}')
     assert response.status_code == 503
     assert response.json()['detail'] == 'Conversation storage deletion is busy, please retry'
     conversations.conversation_tombstones.record_deletion.assert_called_once_with(
-        'uid-delete-contract', 'conversation-1'
+        'uid-delete-contract', 'conversation-1', expected_exists=True
     )
     deleted.assert_not_called()
 
@@ -285,11 +289,12 @@ def test_cascade_retry_preserves_canonical_audio_donors_after_partial_lake_purge
 def test_cascade_donor_inventory_read_failure_is_retryable_503(monkeypatch):
     with _delete_client(monkeypatch) as client:
         monkeypatch.setenv('BUCKET_CANONICAL_AUDIO', 'synthetic-canonical')
-        read = MagicMock(side_effect=RuntimeError('synthetic Firestore read failure'))
+        read = MagicMock(side_effect=[{}, RuntimeError('synthetic Firestore read failure')])
         monkeypatch.setattr(conversations.conversations_db, 'get_conversation_raw_snapshot', read)
         response = client.delete('/v1/conversations/conversation-1?cascade=true')
     assert response.status_code == 503
     assert response.json()['detail'] == 'Conversation storage deletion is busy, please retry'
+    assert read.call_count == 2
     assert read.call_args.kwargs == {'field_paths': ['sync_merged_from']}
     conversations.delete_privacy_conversation_audio.assert_not_called()
     conversations.delete_conversation_and_frame_evidence.assert_not_called()
@@ -388,3 +393,36 @@ def test_upload_finishing_after_http_delete_final_listing_leaves_no_object(monke
         assert statuses == [204]
         assert not doc.get().exists and not list(bucket.list_blobs())
         deleted.assert_called_once()
+
+
+@pytest.mark.parametrize('cascade', ['false', 'true'])
+def test_already_deleted_skips_gate_and_obligation_rearm(monkeypatch, cascade):
+    with _delete_client(monkeypatch) as client:
+        monkeypatch.setattr(conversations.conversation_tombstones, 'is_deleted', lambda *args: True)
+        monkeypatch.setattr(conversations.conversations_db, 'get_conversation_raw_snapshot', lambda *a, **k: None)
+        gate = MagicMock(side_effect=AssertionError('must not acquire gate'))
+        deferred = MagicMock(side_effect=AssertionError('must not arm deferred purge'))
+        accept = MagicMock(side_effect=AssertionError('must not accept again'))
+        monkeypatch.setattr(conversations, 'destructive_operation_gate', gate)
+        monkeypatch.setattr(conversations, 'deferred_batch_purges', deferred)
+        monkeypatch.setattr(conversations.conversation_tombstones, 'accept_deletion', accept)
+        response = client.delete(f'/v1/conversations/gone?cascade={cascade}')
+
+    assert response.status_code == 204
+    assert response.content == b''
+    assert response.headers['X-Omi-Delete-Outcome'] == 'already_deleted'
+    gate.assert_not_called()
+    deferred.assert_not_called()
+    accept.assert_not_called()
+    conversations.conversation_tombstones.record_deletion.assert_not_called()
+    conversations.delete_conversation_and_frame_evidence.assert_not_called()
+
+
+def test_tombstone_with_remaining_live_row_still_runs_cleanup(monkeypatch):
+    with _delete_client(monkeypatch) as client:
+        monkeypatch.setattr(conversations.conversation_tombstones, 'is_deleted', lambda *args: True)
+        monkeypatch.setattr(conversations.conversations_db, 'get_conversation_raw_snapshot', lambda *a, **k: {})
+        response = client.delete('/v1/conversations/remaining?cascade=false')
+    assert response.status_code == 204
+    assert response.headers['X-Omi-Delete-Outcome'] == 'tombstoned'
+    conversations.conversation_tombstones.record_deletion.assert_called_once()

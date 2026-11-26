@@ -2,6 +2,7 @@
 Tools for accessing and managing user action items.
 """
 
+from utils.conversations.layer import read_product as read_product_conversation
 from datetime import datetime, timedelta, timezone
 import re
 from typing import Any, Dict, List, Optional, Tuple, cast
@@ -460,7 +461,7 @@ def create_action_item_tool(
         conv_db = conversations_db
         if conv_db is None:
             import database.conversations as conv_db
-        conversation = conv_db.get_conversation(uid, conversation_id)
+        conversation = read_product_conversation(conv_db.get_conversation, uid, conversation_id)
         if not conversation or conv_db.is_soft_deleted(conversation):
             return f"Error: Conversation with ID '{conversation_id}' not found."
 
@@ -764,6 +765,15 @@ def update_action_item_tool(
 
         return result
 
+    except chat_edits.UnsupportedChatEditField as e:
+        # The fence refused a field the chat editor cannot write. Name it so the
+        # model can retry with a supported argument instead of the user's edit
+        # failing opaquely.
+        logger.warning(f"⚠️ update_action_item_tool - refused unsupported field(s): {', '.join(e.fields)}")
+        return (
+            f"Error: the chat editor cannot change {', '.join(e.fields)}. "
+            "Retry with completed, description, due_at, clear_due_date, or delete."
+        )
     except Exception as e:
         logger.error(f"❌ Error updating action item: {e}", exc_info=True)
         return "Error updating action item. Please try again."

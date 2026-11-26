@@ -1,0 +1,1024 @@
+"""The scenario file: a declarative capture -> Finish -> Home story, validated into an ordered event plan.
+
+Stdlib only (no product imports), so the format and the plan are unit-tested without a stack.
+
+A scenario is one JSON object. Times are seconds from ``t0`` (a synthetic UTC instant)::
+
+    {
+      "name": "finish_single_recording_fast",
+      "description": "...",
+      "t0": "2026-03-14T09:00:00Z",                    # optional, this default
+      "env": {"CONVERSATIONS_V3_...": "on"},            # overlay env on top of the production profile
+      "origins": [{"id": "O", "source": "omi"}],         # capture devices (source omi|phone)
+      "recordings": [                                    # batch-lane captures (audio now, transcript later)
+        {"id": "B", "origin": "O", "session": "S1", "audio": [0, 40],
+         "sealed_at": 41,                                 # capture close; default: audio end
+         "transcript_at": 120,                            # canonical batch transcript lands; null = never
+         "speech": [ {"at": 0.5, "end": 3.5, "text": "...", "speaker": "SPEAKER_00", "is_user": true},
+                     {"fill": [4, 40], "every": 4, "words": 10, "speakers": ["SPEAKER_00", "SPEAKER_01"]} ]}
+      ],
+      "gaps": [{"origin": "O", "between": ["A", "B"], "reason": "reconnect"}],   # stream gaps (checked)
+      "sync": [{"id": "F", "origin": "O", "audio": [1.5, 2.7], "arrives_at": 162, "speech": [...]}],
+      "stt": {"provider": "...", "model": "...", "language": "en", "vocabulary": []},   # audio_file only
+      "finish": {"at": 38, "fast_finish": true, "provisional_latency": 15,
+                 "again_at": [38.4]},                    # optional: more taps of the same Finish button
+      "account": {"private_cloud_sync_enabled": true,    # optional; false = cloud audio off (live lane)
+                  "sync_off_at": 45},                    # optional: the owner turns sync off at this instant
+      "seed": [{"kind": "visible", "count": 60}, {"kind": "below_word_minimum", "count": 80}],
+                                                         # optional: Home history before t0, in this order
+      "expect": [{"at": 60, "label": "finish_visible", "conversation_of": "@finish", "visible": true}],
+                                                         # on_home: in the product Home route's response (home.py)
+      "budget": {"writes": 40, "reads": 300, "noop_writes": 0, "vendor_calls": {"stt": 1, "llm": 0},
+                 "note": "..."},                         # optional caps on the run's operation counts
+      "expected_failure": {"reason": "SCA-xxxx: ...", "checks": ["finish_visible"], "strict": true},
+      "speakers": {"peer": true, "gallery": {"user": "owner.wav", "person-a": "a.wav"},   # optional, see below
+                   "truth": "truth.json", "recording": "B"},
+      "tail_seconds": 1800
+    }
+
+Labels name documents (``scn-<label lowercased>``), so recording ids, and origin ids, must differ in more
+than case. Every field of one ``expect`` row must hold for the same conversation, so put membership,
+visibility and manual end of one conversation in one row.
+
+``expected_failure`` names the ``label`` of each check the known bug fails (``checks``). Every other check
+must still pass: a scenario whose unnamed check fails is ``failed``, not ``xfail``.
+
+``expect`` rows, by target (exactly one target key per row):
+
+- ``conversation_of`` (a recording label or ``@finish``): fields ``recordings``, ``recordings_include``,
+  ``visible``, ``on_home``, ``manual_end``, ``hidden_reason``, ``min_words``, ``kind``; ``titled`` and
+  ``has_notes`` (the stored row has a non-empty title, overview); ``home_titled`` and ``home_has_notes``
+  (the same, in the Home route's row; false when it is not on Home); ``holders`` (how many live
+  conversations hold the label: ``1`` means nothing was duplicated). Every field must hold for one holder.
+- ``no_hidden_with`` (a label): no hidden conversation holds its speech.
+- ``recording`` (a label): ``fast_finish``, the outcome ``fast_finish.run`` returned for it (``written``,
+  ``privacy_blocked``, ...), or ``"none"`` when no pass ran.
+- ``finish_response`` (a tap number, 1 = ``finish.at``, 2 = the first ``again_at``, ...): what that tap
+  returned. ``outcome`` (``in_progress``: a capture was in progress, the route's in-progress branch;
+  ``no_pointer``: ``finish_live_window`` answered; ``not_found``: it answered nothing), ``titled``,
+  ``has_notes``, ``discarded``, ``recordings``, ``recordings_include`` (the conversation it returned).
+- ``home_paging: "visible_once"``: at the end, Home is paged to its end as the app pages it
+  (``home.page_to_end``) and every visible conversation (each ``seed`` row of kind ``visible`` and each
+  conversation the run shows as visible) appears exactly once, and no hidden one appears. No ``at``.
+
+``budget`` caps the run's operation counts (``scenario/budget.py``): ``reads``, ``writes``, ``deletes``,
+``noop_writes`` (Firestore documents, product and Home route only) and ``vendor_calls.stt`` /
+``vendor_calls.llm``. Each key becomes a check labelled ``budget_<key>`` (``budget_vendor_stt``,
+``budget_vendor_llm``) that fails when the count exceeds the cap; ``note`` is free text for the reader (say
+why a cap is what it is, e.g. a known no-op write source). Counts are recorded in ``result.json`` (``ops``)
+whether or not a budget is given.
+
+``speakers`` runs the product's speaker code (``speakers/scenario.py``): ``peer`` (default true) starts the
+loopback stand-in for the hosted diarizer (``--speakers replay|record-local``) and points the product's
+``HOSTED_DIARIZATION_API_URL`` / ``HOSTED_SPEAKER_EMBEDDING_API_URL`` at it; the batch lane then diarizes each
+unit through it instead of reading speaker labels off the STT cassette. ``gallery`` maps identities to
+enrollment WAVs (relative to this file): ``user`` is the owner, any other label (lowercase letters, digits,
+``-``) an enrolled person whose id is that label. ``truth`` is a speaker truth file (``speakers/corpus.py``:
+``{"turns": [{start, end, speaker}], "identities": {speaker: "user"|person label|null}}``) on the clock of
+``recording``'s audio file (default: the one audio recording). It needs at least one batch ``audio_file``
+recording; the run's diarization, gallery, resolver and final pass are reported in ``result.json``
+``speakers``. ``receipts`` says whom the staged-unit stand-in's projection receipts name: ``recording``
+(default; what ``batch_pipeline/projection.py`` writes: the recording the unit was projected into, so a
+speaker pass on the v3 conversation is answered ``skipped_merged`` as production's ``load_reference`` answers)
+or ``processed`` (a counterfactual, reported as a stand-in: the receipt names whichever conversation the speaker
+pass runs on, so the rest of the chain can be measured).
+
+A ``conversation_of`` row may carry ``speakers``: the conversation's persisted segments scored against the
+truth with ``speakers/score.score_conversation`` (segment clocks moved onto the recording's audio clock):
+``{"attribution_min", "owner_precision_min", "owner_recall_min", "named_accuracy_min", "named_coverage_min",
+"wrong_name_max", "owner_words_max", "voices": N | [N, tolerance]}``. A rate with nothing to measure (no
+owner words claimed, for ``owner_precision``) is ``null`` and fails a ``_min``. Verdicts hold numbers only.
+
+``account`` is the lab account's settings. ``private_cloud_sync_enabled`` (default true) is written through
+the product's settings writer before the first event and stamped on every recording row. Off, Listen takes
+the live lane (``routers/listen/runtime.py`` ``refresh_mobile_batch_admission``): the recording rows carry no
+batch-lane fields, no batch record admission runs (so no manual-finish hook and no fast finish), and
+``transcript_at`` is when the live transcript lands. ``sync_off_at`` turns sync off at that instant through
+the same writer (an ``account`` event); the lab's fast-finish privacy check reads the setting then.
+
+``seed`` writes Home history before ``t0`` (not counted): ``[{"kind", "count"}]`` with kind ``visible`` (a
+finished v3 conversation with a title), ``below_word_minimum`` (a v3 window hidden under the word floor),
+``media`` (a hidden media window), ``recording`` (a raw recording row) or ``discarded``. Rows are one
+minute apart, newest first, in the order the entries list them: list several entries to put runs of hidden
+rows between visible ones (``[visible 30, below_word_minimum 100, visible 30]``).
+
+A recording or sync fragment may give ``"audio_file": "<path relative to this file>"`` instead of
+``speech`` (exactly one of the two). The file is a PCM WAV; ``audio`` may then be omitted and is
+``[0, duration]``, or given as ``[start, start + duration]``. Its words come from an STT cassette for that
+exact audio (``scenario/audio.py``): a committed ``synthetic`` fixture, or one recorded into the lab root
+with ``--stt record-local`` or ``--stt record-vendor``. ``stt`` pins the cassette's provider and model;
+without it the run takes the best recorded cassette of the file (vendor, then local, then synthetic).
+
+Speech text must be synthetic. ``fill`` writes placeholder lines from a fixed word list; a line whose
+text contains ``switching topics`` makes the lab's fake outline start a new conversation there.
+
+The plan (``plan_events``) is what the runner feeds the v3 driver, earliest first:
+
+- ``capture_start`` (each recording's first audio): the live row is created through capture admission;
+- ``finish`` (the tap): the product's Finish branch is taken at that instant; a batch recording is still
+  capturing from its first audio until its seal (inclusive, since a tie runs the tap first), and the tap
+  ends the latest-started one, as ``get_in_progress_conversation`` orders by ``created_at``;
+- ``seal`` (capture close): the row completes; a Finish that landed while it was capturing is stored on it;
+- ``sync`` (a device-sync fragment arrives): a completed recording with its transcript;
+- ``admission`` (batch record admission): the manual-finish hook runs; with fast finish on it is placed at
+  ``finish.at + provisional_latency`` for the recording the Finish cut, so the provisional transcript
+  lands at that instant;
+- ``transcript`` (the canonical batch transcript lands);
+- ``checkpoint`` (an ``expect`` row with ``at``): the conversations are read and the checks evaluated.
+
+Ties at one instant run in that order. Two ties are lab choices, not production behaviour:
+
+- A Finish tap at the same instant as a seal. Production has no ordering between the two:
+  ``retrieve_in_progress_conversation`` follows the Redis in-progress pointer and requires the row to be
+  ``in_progress``, so whichever write lands first decides the branch. The lab runs the tap first (the
+  recording is still capturing and the tap is stored on it at the seal). A scenario that needs the other
+  order, the seal first and then a tap with nothing in progress, puts the tap after the seal (for example
+  ``finish.at`` = seal + 0.1).
+- Two recordings that start at the same instant, both capturing at the tap. Production resolves it (the
+  Redis pointer, then ``created_at`` descending, then document id); the lab refuses the file ("the target
+  is ambiguous") so the author states which recording the tap ends: start the intended one later.
+"""
+
+from __future__ import annotations
+
+from dataclasses import dataclass, field
+from datetime import datetime, timedelta, timezone
+import json
+from pathlib import Path
+import re
+from typing import Any, Mapping, Optional, Sequence
+
+DEFAULT_T0 = '2026-03-14T09:00:00+00:00'
+DEFAULT_TAIL_SECONDS = 1800.0
+DEFAULT_ADMISSION_LAG = 5.0
+EVENT_ORDER = ('capture_start', 'finish', 'seal', 'sync', 'account', 'admission', 'transcript', 'checkpoint')
+SOURCES = ('omi', 'phone')
+FINISH_ALIAS = '@finish'
+# A neutral, obviously synthetic vocabulary for ``fill`` lines.
+FILL_WORDS = (
+    'lantern', 'harbor', 'maple', 'pebble', 'orchard', 'canvas', 'meadow', 'copper', 'willow', 'saffron',
+    'beacon', 'thistle', 'juniper', 'quarry', 'marble', 'hazel', 'tundra', 'velvet', 'cobalt', 'fennel',
+)  # fmt: skip
+STT_KEYS = ('provider', 'model', 'language', 'vocabulary')
+DEFAULT_LANGUAGE = 'en'
+AUDIO_SPAN_TOLERANCE = 0.05
+CHECK_FIELDS = (
+    'recordings', 'recordings_include', 'visible', 'on_home', 'manual_end', 'hidden_reason', 'min_words', 'kind',
+    'titled', 'has_notes', 'home_titled', 'home_has_notes', 'holders', 'speakers',
+)  # fmt: skip
+# ``speakers`` expect keys: a minimum on a rate, a maximum on a rate or count, and the voice count.
+SPEAKER_MIN = ('attribution', 'owner_precision', 'owner_recall', 'named_accuracy', 'named_coverage')
+SPEAKER_MAX = ('wrong_name', 'owner_words')
+SPEAKER_KEYS = (*(f'{k}_min' for k in SPEAKER_MIN), *(f'{k}_max' for k in SPEAKER_MAX), 'voices', 'final_pass')
+SPEAKER_BLOCK_KEYS = ('peer', 'gallery', 'truth', 'recording', 'receipts')
+SPEAKER_RECEIPTS = ('recording', 'processed')
+_IDENTITY = re.compile(r'^[a-z][a-z0-9-]{0,31}$')
+BOOL_FIELDS = ('visible', 'on_home', 'manual_end', 'titled', 'has_notes', 'home_titled', 'home_has_notes')
+RECORDING_FIELDS = ('fast_finish',)
+RESPONSE_FIELDS = ('outcome', 'titled', 'has_notes', 'discarded', 'recordings', 'recordings_include')
+RESPONSE_OUTCOMES = ('in_progress', 'no_pointer', 'not_found')
+PAGING_CHECKS = ('visible_once',)
+TARGETS = ('conversation_of', 'no_hidden_with', 'recording', 'finish_response', 'home_paging')
+BUDGET_KEYS = ('reads', 'writes', 'deletes', 'noop_writes')
+VENDOR_KEYS = ('stt', 'llm')
+SEED_KINDS = ('visible', 'below_word_minimum', 'media', 'recording', 'discarded')
+MAX_SEED_ROWS = 2000
+_LABEL = re.compile(r'^[A-Za-z][A-Za-z0-9_-]{0,31}$')
+
+
+class ScenarioError(ValueError):
+    """The scenario file is malformed."""
+
+
+@dataclass(frozen=True)
+class Line:
+    start: float
+    end: float
+    text: str
+    speaker: str = 'SPEAKER_00'
+    is_user: bool = True
+    # An audio recording with ``speakers``: the batch projection's own segment (ids, scopes, provider markers),
+    # written as stored instead of a segment rebuilt from the line.
+    product: Optional[Mapping[str, Any]] = field(default=None, compare=False, hash=False)
+
+
+@dataclass(frozen=True)
+class Recording:
+    label: str
+    origin: str
+    lane: str  # batch | sync
+    audio: tuple[float, float]
+    lines: tuple[Line, ...]
+    session: Optional[str] = None
+    sealed_at: Optional[float] = None  # batch
+    transcript_at: Optional[float] = None  # batch; None = never lands
+    arrives_at: Optional[float] = None  # sync
+    audio_file: Optional[str] = None  # absolute path; ``lines`` are filled from its cassette at run time
+
+    @property
+    def doc_id(self) -> str:
+        return 'scn-' + self.label.lower()
+
+    @property
+    def sealed(self) -> float:
+        """When the capture closes (batch): ``sealed_at``, else the end of its audio."""
+        return float(self.sealed_at if self.sealed_at is not None else self.audio[1])
+
+    def words(self) -> int:
+        return sum(len(line.text.split()) for line in self.lines)
+
+
+@dataclass(frozen=True)
+class Finish:
+    at: float
+    fast_finish: bool = True
+    provisional_latency: float = 15.0
+    again_at: tuple[float, ...] = ()
+
+    @property
+    def taps(self) -> tuple[float, ...]:
+        """Every tap, the first one (``at``) first."""
+        return (self.at, *self.again_at)
+
+
+@dataclass(frozen=True)
+class Account:
+    private_cloud_sync_enabled: bool = True
+    sync_off_at: Optional[float] = None
+
+
+@dataclass(frozen=True)
+class SeedRows:
+    kind: str
+    count: int
+
+
+@dataclass(frozen=True)
+class Check:
+    """One expectation. ``conversation_of`` names a recording label or ``@finish``; ``no_hidden_with`` is
+    the label whose speech no hidden conversation may hold."""
+
+    raw: Mapping[str, Any]
+    at: Optional[float] = None
+    label: Optional[str] = None
+    conversation_of: Optional[str] = None
+    no_hidden_with: Optional[str] = None
+    fields: Mapping[str, Any] = field(default_factory=dict)
+    recording: Optional[str] = None
+    finish_response: Optional[int] = None
+    home_paging: Optional[str] = None
+    budget: Optional[tuple[str, int]] = None  # (key, cap): a ``budget`` block entry
+
+    def describe(self) -> str:
+        when = (f'[{self.label}] ' if self.label else '') + (f'@+{self.at:g}s ' if self.at is not None else '')
+        parts = ', '.join(f'{k}={json.dumps(v)}' for k, v in self.fields.items())
+        if self.budget is not None:
+            return f'{when}{self.budget[0]} <= {self.budget[1]}'
+        if self.no_hidden_with:
+            return f'{when}no hidden conversation holds {self.no_hidden_with}'
+        if self.recording is not None:
+            return f'{when}recording {self.recording}: {parts}'
+        if self.finish_response is not None:
+            return f'{when}finish tap {self.finish_response} response: {parts}'
+        if self.home_paging is not None:
+            return f'{when}Home paged to its end: {self.home_paging}'
+        return f'{when}conversation of {self.conversation_of}: {parts}'
+
+
+@dataclass(frozen=True)
+class Speakers:
+    """The ``speakers`` block: absolute paths, validated."""
+
+    peer: bool = True
+    gallery: Mapping[str, str] = field(default_factory=dict)  # identity (``user`` = owner) -> WAV path
+    truth: Optional[str] = None  # truth.json path
+    recording: Optional[str] = None  # the recording whose audio clock the truth is on
+    receipts: str = 'recording'  # whom the staged-unit stand-in's projection receipts name (see below)
+
+
+@dataclass(frozen=True)
+class Origin:
+    label: str
+    source: str = 'omi'
+
+
+@dataclass(frozen=True)
+class Scenario:
+    name: str
+    description: str
+    t0: datetime
+    origins: Mapping[str, Origin]
+    recordings: tuple[Recording, ...]
+    finish: Optional[Finish]
+    checks: tuple[Check, ...]
+    env: Mapping[str, str]
+    gaps: tuple[Mapping[str, Any], ...] = ()
+    expected_failure: Optional[Mapping[str, Any]] = None
+    tail_seconds: float = DEFAULT_TAIL_SECONDS
+    admission_lag: float = DEFAULT_ADMISSION_LAG
+    path: Optional[str] = None
+    stt: Mapping[str, Any] = field(default_factory=dict)
+    account: Account = field(default_factory=Account)
+    seed: tuple[SeedRows, ...] = ()
+    budget: Mapping[str, Any] = field(default_factory=dict)
+    speakers: Optional[Speakers] = None
+
+    @property
+    def batch_lane(self) -> bool:
+        """Recordings take the batch lane (cloud audio on); off, the live lane (no batch admission)."""
+        return self.account.private_cloud_sync_enabled
+
+    @property
+    def audio_recordings(self) -> tuple[Recording, ...]:
+        return tuple(rec for rec in self.recordings if rec.audio_file is not None)
+
+    def at(self, seconds: float) -> datetime:
+        return self.t0 + timedelta(seconds=seconds)
+
+    def offset(self, instant: datetime) -> float:
+        return round((instant - self.t0).total_seconds(), 3)
+
+    def recording(self, label: str) -> Recording:
+        for rec in self.recordings:
+            if rec.label == label:
+                return rec
+        raise KeyError(label)
+
+    def label_of(self, doc_id: str) -> str:
+        for rec in self.recordings:
+            if rec.doc_id == doc_id:
+                return rec.label
+        return '?' + doc_id[:8]
+
+    def open_at(self, seconds: float) -> list[Recording]:
+        """Batch recordings still ``in_progress`` at a Finish tap at ``seconds``: from their first audio
+        (``capture_start`` runs before a tied tap) through their seal (the tap runs before a tied seal)."""
+        return [rec for rec in self.recordings if rec.lane == 'batch' and rec.audio[0] <= seconds <= rec.sealed]
+
+    def finish_target(self) -> Optional[Recording]:
+        """The batch recording the tap ends: production's in-progress branch takes the newest in-progress
+        row (``created_at`` = first audio)."""
+        if self.finish is None:
+            return None
+        capturing = self.open_at(self.finish.at)
+        return max(capturing, key=lambda rec: rec.audio[0]) if capturing else None
+
+
+@dataclass(frozen=True)
+class ScenarioEvent:
+    """One scripted event. ``instant``/``recording_id``/``instant_source`` are what ``v3.driver.V3Driver``
+    reads from an arrival, so the real driver loop runs these unchanged."""
+
+    instant: datetime
+    kind: str
+    ref: str
+    check_index: Optional[int] = None
+
+    @property
+    def recording_id(self) -> str:
+        return self.ref
+
+    @property
+    def instant_source(self) -> str:
+        return self.kind
+
+
+# ---- parsing ------------------------------------------------------------------------------------
+
+
+def _number(value: Any, where: str) -> float:
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        raise ScenarioError(f'{where}: expected a number of seconds')
+    return float(value)
+
+
+def _span(value: Any, where: str) -> tuple[float, float]:
+    if not isinstance(value, (list, tuple)) or len(value) != 2:
+        raise ScenarioError(f'{where}: expected [start, end] seconds')
+    start, end = _number(value[0], where), _number(value[1], where)
+    if not start < end:
+        raise ScenarioError(f'{where}: start must be before end')
+    return start, end
+
+
+def _label(value: Any, where: str) -> str:
+    if not isinstance(value, str) or not _LABEL.match(value):
+        raise ScenarioError(f'{where}: a label is a letter then up to 31 letters, digits, - or _')
+    return value
+
+
+def _keys(raw: Mapping[str, Any], allowed: Sequence[str], where: str) -> None:
+    unknown = sorted(set(raw) - set(allowed))
+    if unknown:
+        raise ScenarioError(f'{where}: unknown keys {unknown}')
+
+
+def fill_lines(
+    span: tuple[float, float], *, every: float, words: int, speakers: Sequence[str], seed: int
+) -> list[Line]:
+    """Placeholder lines over ``span``: one per ``every`` seconds, ``words`` words each, speakers in turn
+    (the first speaker is the wearer)."""
+    if every <= 0.5 or words <= 0:
+        raise ScenarioError('fill: every must exceed 0.5 s and words must be positive')
+    out: list[Line] = []
+    at, index = span[0], 0
+    while at + 0.5 <= span[1]:
+        speaker = speakers[index % len(speakers)]
+        text = ' '.join(FILL_WORDS[(seed + index * words + k) % len(FILL_WORDS)] for k in range(words))
+        out.append(Line(at, min(at + every - 0.5, span[1]), text.capitalize() + '.', speaker, speaker == speakers[0]))
+        at += every
+        index += 1
+    return out
+
+
+def _lines(raw: Any, where: str, audio: tuple[float, float], seed: int) -> tuple[Line, ...]:
+    if not isinstance(raw, list) or not raw:
+        raise ScenarioError(f'{where}: speech must be a non-empty list')
+    lines: list[Line] = []
+    for i, item in enumerate(raw):
+        here = f'{where}[{i}]'
+        if not isinstance(item, Mapping):
+            raise ScenarioError(f'{here}: expected an object')
+        if 'fill' in item:
+            _keys(item, ('fill', 'every', 'words', 'speakers'), here)
+            speakers = item.get('speakers') or ['SPEAKER_00']
+            if not isinstance(speakers, list) or not all(isinstance(s, str) and s for s in speakers):
+                raise ScenarioError(f'{here}: speakers must be a list of labels')
+            lines.extend(
+                fill_lines(
+                    _span(item['fill'], here + '.fill'),
+                    every=_number(item.get('every', 4), here + '.every'),
+                    words=int(_number(item.get('words', 10), here + '.words')),
+                    speakers=speakers,
+                    seed=seed + i,
+                )
+            )
+            continue
+        _keys(item, ('at', 'end', 'text', 'speaker', 'is_user'), here)
+        start, end = _span([item.get('at'), item.get('end')], here)
+        text = item.get('text')
+        if not isinstance(text, str) or not text.strip():
+            raise ScenarioError(f'{here}: text must be non-empty synthetic text')
+        lines.append(
+            Line(start, end, text.strip(), str(item.get('speaker') or 'SPEAKER_00'), bool(item.get('is_user', True)))
+        )
+    lines.sort(key=lambda line: (line.start, line.end))
+    for line in lines:
+        if line.start < audio[0] - 0.01 or line.end > audio[1] + 0.01:
+            raise ScenarioError(f'{where}: a line at {line.start:g}-{line.end:g}s is outside the audio {audio}')
+    return tuple(lines)
+
+
+def wav_seconds(path: Path) -> float:
+    """Duration of a PCM WAV file (stdlib ``wave``; any rate or channel count)."""
+    import wave
+
+    with wave.open(str(path), 'rb') as handle:
+        rate = handle.getframerate()
+        return handle.getnframes() / float(rate) if rate else 0.0
+
+
+def _audio_file(value: Any, where: str, base: Path) -> tuple[Path, float]:
+    if not isinstance(value, str) or not value.strip():
+        raise ScenarioError(f'{where}: a path to a WAV file, relative to the scenario file')
+    path = (base / value).resolve()
+    if not path.is_file():
+        raise ScenarioError(f'{where}: no such file {value!r} (paths are relative to the scenario file)')
+    try:
+        seconds = wav_seconds(path)
+    except Exception:  # noqa: BLE001 - wave raises several types on a non-WAV file
+        raise ScenarioError(
+            f'{where}: {value!r} is not a PCM WAV file; convert it with '
+            '`afconvert -f WAVE -d LEI16@16000 -c 1 IN OUT.wav` or `ffmpeg -i IN -ac 1 -ar 16000 OUT.wav`'
+        ) from None
+    if seconds <= 0:
+        raise ScenarioError(f'{where}: {value!r} holds no audio')
+    return path, seconds
+
+
+def _recording(
+    raw: Any, where: str, origins: Mapping[str, Origin], lane: str, seed: int, base: Optional[Path] = None
+) -> Recording:
+    if not isinstance(raw, Mapping):
+        raise ScenarioError(f'{where}: expected an object')
+    allowed = ('id', 'origin', 'audio', 'speech', 'audio_file', 'session')
+    allowed += ('sealed_at', 'transcript_at') if lane == 'batch' else ('arrives_at',)
+    _keys(raw, allowed, where)
+    label = _label(raw.get('id'), where + '.id')
+    origin = raw.get('origin')
+    if origin not in origins:
+        raise ScenarioError(f'{where}: origin {origin!r} is not declared in origins')
+    if ('speech' in raw) == ('audio_file' in raw):
+        raise ScenarioError(f'{where}: give exactly one of speech (scripted lines) or audio_file (a WAV file)')
+    audio_file: Optional[str] = None
+    if 'audio_file' in raw:
+        path, seconds = _audio_file(raw['audio_file'], where + '.audio_file', base or Path.cwd())
+        audio_file = str(path)
+        if raw.get('audio') is None:
+            audio = (0.0, round(seconds, 3))
+        else:
+            audio = _span(raw.get('audio'), where + '.audio')
+            if abs((audio[1] - audio[0]) - seconds) > AUDIO_SPAN_TOLERANCE:
+                raise ScenarioError(
+                    f'{where}.audio: spans {audio[1] - audio[0]:g} s but audio_file lasts {seconds:.3f} s; '
+                    f'omit audio to take the file\'s duration, or give [start, start + {seconds:.3f}]'
+                )
+        lines: tuple[Line, ...] = ()
+    else:
+        audio = _span(raw.get('audio'), where + '.audio')
+        lines = _lines(raw.get('speech'), where + '.speech', audio, seed)
+    if lane == 'sync':
+        arrives = _number(raw.get('arrives_at'), where + '.arrives_at')
+        if arrives < audio[1]:
+            raise ScenarioError(f'{where}: a sync fragment arrives after its audio ends')
+        return Recording(
+            label, origin, lane, audio, lines, session=raw.get('session'), arrives_at=arrives, audio_file=audio_file
+        )
+    sealed = _number(raw['sealed_at'], where + '.sealed_at') if raw.get('sealed_at') is not None else audio[1]
+    if sealed < audio[1]:
+        raise ScenarioError(f'{where}: sealed_at is before the audio ends')
+    landed = _number(raw['transcript_at'], where + '.transcript_at') if raw.get('transcript_at') is not None else None
+    if landed is not None and landed < sealed:
+        raise ScenarioError(f'{where}: the batch transcript lands before the capture is sealed')
+    return Recording(
+        label,
+        origin,
+        lane,
+        audio,
+        lines,
+        session=raw.get('session'),
+        sealed_at=sealed,
+        transcript_at=landed,
+        audio_file=audio_file,
+    )
+
+
+def _check(raw: Any, where: str, labels: set[str], has_finish: bool, taps: int = 0) -> Check:
+    if not isinstance(raw, Mapping):
+        raise ScenarioError(f'{where}: expected an object')
+    _keys(raw, ('at', 'label', *TARGETS, *CHECK_FIELDS, *RECORDING_FIELDS, *RESPONSE_FIELDS), where)
+    at = _number(raw['at'], where + '.at') if raw.get('at') is not None else None
+    given = [key for key in TARGETS if raw.get(key) is not None]
+    if len(given) != 1:
+        raise ScenarioError(f'{where}: give exactly one of {", ".join(TARGETS)}')
+    target_key = given[0]
+    label = raw.get('label')
+    if label is not None and (not isinstance(label, str) or not re.match(r'^[a-z0-9_]{1,64}$', label)):
+        raise ScenarioError(f'{where}.label: lowercase letters, digits and _')
+    allowed = {
+        'conversation_of': CHECK_FIELDS,
+        'no_hidden_with': (),
+        'recording': RECORDING_FIELDS,
+        'finish_response': RESPONSE_FIELDS,
+        'home_paging': (),
+    }[target_key]
+    present = [k for k in (*CHECK_FIELDS, *RECORDING_FIELDS, *RESPONSE_FIELDS) if k in raw]
+    stray = sorted(set(present) - set(allowed))
+    if stray:
+        raise ScenarioError(f'{where}: {target_key} takes {list(allowed) or "no other fields"}, not {stray}')
+    fields = {k: raw[k] for k in allowed if k in raw}
+    if allowed and not fields:
+        raise ScenarioError(f'{where}: a {target_key} check names at least one of {list(allowed)}')
+    for key in BOOL_FIELDS + ('discarded',):
+        if key in fields and not isinstance(fields[key], bool):
+            raise ScenarioError(f'{where}.{key}: true or false')
+    for key in ('recordings', 'recordings_include'):
+        if key in fields:
+            value = fields[key]
+            if not isinstance(value, list) or not value or any(v not in labels for v in value):
+                raise ScenarioError(f'{where}.{key}: a list of declared recording labels')
+    if 'speakers' in fields:
+        fields['speakers'] = _speaker_expect(fields['speakers'], where + '.speakers')
+    if 'holders' in fields and (isinstance(fields['holders'], bool) or not isinstance(fields['holders'], int)):
+        raise ScenarioError(f'{where}.holders: a whole number of conversations')
+    if 'outcome' in fields and fields['outcome'] not in RESPONSE_OUTCOMES:
+        raise ScenarioError(f'{where}.outcome: one of {RESPONSE_OUTCOMES}')
+    if 'fast_finish' in fields and (not isinstance(fields['fast_finish'], str) or not fields['fast_finish']):
+        raise ScenarioError(f'{where}.fast_finish: an outcome name, or "none"')
+    kwargs: dict[str, Any] = {}
+    value = raw[target_key]
+    if target_key in ('conversation_of', 'no_hidden_with', 'recording'):
+        if value == FINISH_ALIAS and target_key != 'recording':
+            if not has_finish:
+                raise ScenarioError(f'{where}: {FINISH_ALIAS} needs a finish')
+        elif value not in labels:
+            raise ScenarioError(f'{where}: unknown recording {value!r}')
+        kwargs[target_key] = value
+    elif target_key == 'finish_response':
+        if isinstance(value, bool) or not isinstance(value, int) or not 1 <= value <= max(taps, 0):
+            raise ScenarioError(f'{where}.finish_response: a tap number from 1 to {taps} (finish.at, then again_at)')
+        kwargs['finish_response'] = value
+    else:
+        if value not in PAGING_CHECKS:
+            raise ScenarioError(f'{where}.home_paging: one of {PAGING_CHECKS}')
+        if at is not None:
+            raise ScenarioError(f'{where}: home_paging runs at the end of the run; it takes no at')
+        kwargs['home_paging'] = value
+    return Check(raw=dict(raw), at=at, label=label, fields=fields, **kwargs)
+
+
+def _speaker_expect(raw: Any, where: str) -> dict[str, Any]:
+    if not isinstance(raw, Mapping) or not raw:
+        raise ScenarioError(f'{where}: an object of {list(SPEAKER_KEYS)}')
+    _keys(raw, SPEAKER_KEYS, where)
+    out: dict[str, Any] = {}
+    for key, value in raw.items():
+        if key == 'voices':
+            pair = [value, 0] if isinstance(value, int) and not isinstance(value, bool) else value
+            if (
+                not isinstance(pair, list)
+                or len(pair) != 2
+                or any(isinstance(v, bool) or not isinstance(v, int) or v < 0 for v in pair)
+            ):
+                raise ScenarioError(f'{where}.voices: a voice count N, or [N, tolerance]')
+            out[key] = list(pair)
+        elif key == 'owner_words_max':
+            out[key] = _count(value, f'{where}.{key}')
+        elif key == 'final_pass':
+            if not isinstance(value, str) or not value:
+                raise ScenarioError(f'{where}.final_pass: the expected run_batch_final_pass outcome, e.g. "success"')
+            out[key] = value
+        else:
+            number = _number(value, f'{where}.{key}')
+            if not 0.0 <= number <= 1.0:
+                raise ScenarioError(f'{where}.{key}: a rate from 0 to 1')
+            out[key] = number
+    return out
+
+
+def _speakers(raw: Any, base: Path, recordings: Sequence[Recording]) -> Optional[Speakers]:
+    if raw is None:
+        return None
+    if not isinstance(raw, Mapping):
+        raise ScenarioError('speakers: {"peer": true, "gallery": {"user": "owner.wav"}, "truth": "truth.json"}')
+    _keys(raw, SPEAKER_BLOCK_KEYS, 'speakers')
+    peer = raw.get('peer', True)
+    if not isinstance(peer, bool):
+        raise ScenarioError('speakers.peer: true or false')
+    audio = [rec for rec in recordings if rec.audio_file is not None and rec.lane == 'batch']
+    if not audio:
+        raise ScenarioError('speakers: needs a batch recording with an audio_file (the voices come from audio)')
+    gallery_raw = raw.get('gallery') or {}
+    if not isinstance(gallery_raw, Mapping):
+        raise ScenarioError('speakers.gallery: {"user": "owner.wav", "person-a": "a.wav"}')
+    gallery: dict[str, str] = {}
+    for label, value in gallery_raw.items():
+        if not isinstance(label, str) or not _IDENTITY.match(label):
+            raise ScenarioError(f'speakers.gallery: {label!r} is not an identity (user, or lowercase-letters-digits-)')
+        path, _ = _audio_file(value, f'speakers.gallery.{label}', base)
+        gallery[label] = str(path)
+    if gallery and not peer:
+        raise ScenarioError('speakers.gallery: enrollment embeds through the peer; set peer true')
+    label = raw.get('recording')
+    if label is None:
+        if len(audio) != 1:
+            raise ScenarioError('speakers.recording: name the audio recording the truth is on')
+        label = audio[0].label
+    elif label not in {rec.label for rec in audio}:
+        raise ScenarioError('speakers.recording: a batch recording with an audio_file')
+    truth = None
+    if raw.get('truth') is not None:
+        if not isinstance(raw['truth'], str):
+            raise ScenarioError('speakers.truth: a path to a truth.json, relative to the scenario file')
+        path = (base / raw['truth']).resolve()
+        try:
+            value = json.loads(path.read_text(encoding='utf-8'))
+        except (OSError, json.JSONDecodeError):
+            raise ScenarioError(f'speakers.truth: {raw["truth"]!r} is not a readable JSON file') from None
+        if not isinstance(value, Mapping) or not isinstance(value.get('turns'), list):
+            raise ScenarioError('speakers.truth: {"turns": [{start, end, speaker}], "identities": {...}}')
+        truth = str(path)
+    receipts = raw.get('receipts', 'recording')
+    if receipts not in SPEAKER_RECEIPTS:
+        raise ScenarioError(f'speakers.receipts: one of {SPEAKER_RECEIPTS}')
+    return Speakers(peer=peer, gallery=gallery, truth=truth, recording=label, receipts=receipts)
+
+
+def _count(value: Any, where: str) -> int:
+    if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+        raise ScenarioError(f'{where}: a whole number, 0 or more')
+    return value
+
+
+def _budget(raw: Any) -> tuple[dict[str, Any], list[Check]]:
+    """The ``budget`` block and one check per capped key (label ``budget_<key>``)."""
+    if raw is None:
+        return {}, []
+    if not isinstance(raw, Mapping):
+        raise ScenarioError('budget: {"reads": N, "writes": N, "deletes": N, "noop_writes": N, "vendor_calls": {...}}')
+    _keys(raw, (*BUDGET_KEYS, 'vendor_calls', 'note'), 'budget')
+    out: dict[str, Any] = {}
+    checks: list[Check] = []
+    for key in BUDGET_KEYS:
+        if key in raw:
+            out[key] = _count(raw[key], f'budget.{key}')
+            checks.append(Check(raw={'budget': key}, label=f'budget_{key}', budget=(key, out[key])))
+    if 'vendor_calls' in raw:
+        vendor = raw['vendor_calls']
+        if not isinstance(vendor, Mapping) or not vendor:
+            raise ScenarioError('budget.vendor_calls: {"stt": N, "llm": N}')
+        _keys(vendor, VENDOR_KEYS, 'budget.vendor_calls')
+        out['vendor_calls'] = {}
+        for key in VENDOR_KEYS:
+            if key in vendor:
+                out['vendor_calls'][key] = _count(vendor[key], f'budget.vendor_calls.{key}')
+                checks.append(
+                    Check(raw={'budget': key}, label=f'budget_vendor_{key}', budget=(key, out['vendor_calls'][key]))
+                )
+    if 'note' in raw:
+        if not isinstance(raw['note'], str):
+            raise ScenarioError('budget.note: text')
+        out['note'] = raw['note']
+    if not checks:
+        raise ScenarioError('budget: cap at least one count')
+    return out, checks
+
+
+def _account(raw: Any) -> Account:
+    if raw is None:
+        return Account()
+    if not isinstance(raw, Mapping):
+        raise ScenarioError('account: {"private_cloud_sync_enabled": true, "sync_off_at": 45}')
+    _keys(raw, ('private_cloud_sync_enabled', 'sync_off_at'), 'account')
+    enabled = raw.get('private_cloud_sync_enabled', True)
+    if not isinstance(enabled, bool):
+        raise ScenarioError('account.private_cloud_sync_enabled: true or false')
+    off = _number(raw['sync_off_at'], 'account.sync_off_at') if raw.get('sync_off_at') is not None else None
+    if off is not None and not enabled:
+        raise ScenarioError('account.sync_off_at: sync is already off')
+    return Account(private_cloud_sync_enabled=enabled, sync_off_at=off)
+
+
+def _seed(raw: Any) -> tuple[SeedRows, ...]:
+    if raw is None:
+        return ()
+    if not isinstance(raw, list) or not raw:
+        raise ScenarioError('seed: a list of {"kind", "count"}')
+    out = []
+    for i, item in enumerate(raw):
+        where = f'seed[{i}]'
+        if not isinstance(item, Mapping):
+            raise ScenarioError(f'{where}: expected an object')
+        _keys(item, ('kind', 'count'), where)
+        if item.get('kind') not in SEED_KINDS:
+            raise ScenarioError(f'{where}.kind: one of {SEED_KINDS}')
+        count = _count(item.get('count'), where + '.count')
+        if count == 0:
+            raise ScenarioError(f'{where}.count: at least 1')
+        out.append(SeedRows(item['kind'], count))
+    if sum(row.count for row in out) > MAX_SEED_ROWS:
+        raise ScenarioError(f'seed: at most {MAX_SEED_ROWS} rows')
+    return tuple(out)
+
+
+def seed_plan(scenario: 'Scenario') -> list[tuple[str, str, int]]:
+    """``[(doc id, kind, minutes before t0)]``, newest first, in the order the ``seed`` entries list them (so
+    ``[visible 30, below_word_minimum 100, visible 30]`` is a run of 100 hidden rows between visible ones).
+    Ids are unique in their first 8 characters (the short handle checks and the view use)."""
+    out: list[tuple[str, str, int]] = []
+    for row in scenario.seed:
+        for _ in range(row.count):
+            index = len(out) + 1
+            out.append((f'{index:04d}sd-{row.kind.replace("_", "-")}', row.kind, index))
+    return out
+
+
+def parse_scenario(raw: Any, *, path: Optional[str] = None) -> Scenario:
+    if not isinstance(raw, Mapping):
+        raise ScenarioError('a scenario is a JSON object')
+    _keys(
+        raw,
+        (
+            'name', 'description', 't0', 'env', 'origins', 'recordings', 'gaps', 'sync', 'finish', 'expect',
+            'expected_failure', 'tail_seconds', 'admission_lag', 'stt', 'budget', 'account', 'seed', 'speakers',
+        ),
+        'scenario',
+    )  # fmt: skip
+    name = raw.get('name')
+    if not isinstance(name, str) or not re.match(r'^[a-z0-9_]{1,80}$', name):
+        raise ScenarioError('name: lowercase letters, digits and _')
+    try:
+        t0 = datetime.fromisoformat(str(raw.get('t0') or DEFAULT_T0).replace('Z', '+00:00'))
+    except ValueError:
+        raise ScenarioError('t0: an ISO-8601 UTC instant') from None
+    if t0.tzinfo is None:
+        raise ScenarioError('t0: give a timezone (Z)')
+    t0 = t0.astimezone(timezone.utc)
+    env = raw.get('env') or {}
+    if not isinstance(env, Mapping) or not all(isinstance(k, str) and isinstance(v, str) for k, v in env.items()):
+        raise ScenarioError('env: an object of string values')
+    origins: dict[str, Origin] = {}
+    for i, item in enumerate(raw.get('origins') or []):
+        if not isinstance(item, Mapping):
+            raise ScenarioError(f'origins[{i}]: expected an object')
+        _keys(item, ('id', 'source'), f'origins[{i}]')
+        source = item.get('source', 'omi')
+        if source not in SOURCES:
+            raise ScenarioError(f'origins[{i}].source: one of {SOURCES}')
+        label = _label(item.get('id'), f'origins[{i}].id')
+        if label.lower() in {o.lower() for o in origins}:
+            raise ScenarioError(f'origins[{i}].id: origin ids must be unique, ignoring case')
+        origins[label] = Origin(label, source)
+    if not origins:
+        raise ScenarioError('origins: declare at least one capture origin')
+    base = Path(path).resolve().parent if path else Path.cwd()
+    recordings = [
+        _recording(item, f'recordings[{i}]', origins, 'batch', seed=i * 7, base=base)
+        for i, item in enumerate(raw.get('recordings') or [])
+    ]
+    recordings += [
+        _recording(item, f'sync[{i}]', origins, 'sync', seed=100 + i * 7, base=base)
+        for i, item in enumerate(raw.get('sync') or [])
+    ]
+    stt = _stt(raw.get('stt'), any(r.audio_file for r in recordings))
+    if not any(r.lane == 'batch' for r in recordings):
+        raise ScenarioError('recordings: at least one')
+    labels = [r.label for r in recordings]
+    if len({r.doc_id for r in recordings}) != len(recordings):
+        raise ScenarioError('recording ids must be unique across recordings and sync, ignoring case')
+    finish = None
+    if raw.get('finish') is not None:
+        item = raw['finish']
+        if not isinstance(item, Mapping):
+            raise ScenarioError('finish: expected an object')
+        _keys(item, ('at', 'fast_finish', 'provisional_latency', 'again_at'), 'finish')
+        first = _number(item.get('at'), 'finish.at')
+        again = item.get('again_at') or []
+        if not isinstance(again, list):
+            raise ScenarioError('finish.again_at: a list of instants after finish.at')
+        again_at = tuple(_number(v, f'finish.again_at[{i}]') for i, v in enumerate(again))
+        if any(b < a for a, b in zip((first, *again_at), again_at)):
+            raise ScenarioError('finish.again_at: each tap at or after the one before it')
+        finish = Finish(
+            at=first,
+            fast_finish=bool(item.get('fast_finish', True)),
+            provisional_latency=_number(item.get('provisional_latency', 15.0), 'finish.provisional_latency'),
+            again_at=again_at,
+        )
+    gaps = tuple(_gap(item, f'gaps[{i}]', recordings) for i, item in enumerate(raw.get('gaps') or []))
+    taps = len(finish.taps) if finish is not None else 0
+    checks = tuple(
+        _check(item, f'expect[{i}]', set(labels), finish is not None, taps)
+        for i, item in enumerate(raw.get('expect') or [])
+    )
+    budget, budget_checks = _budget(raw.get('budget'))
+    checks += tuple(budget_checks)
+    speakers = _speakers(raw.get('speakers'), base, recordings)
+    if any('speakers' in c.fields for c in checks) and (speakers is None or speakers.truth is None):
+        raise ScenarioError('expect: a speakers check needs speakers.truth')
+    account = _account(raw.get('account'))
+    seed = _seed(raw.get('seed'))
+    if any(c.home_paging for c in checks) and not any(row.kind == 'visible' for row in seed):
+        raise ScenarioError('home_paging: seed at least one visible row')
+    check_labels = [c.label for c in checks if c.label is not None]
+    if len(set(check_labels)) != len(check_labels):
+        raise ScenarioError('expect: check labels must be unique')
+    failure = raw.get('expected_failure')
+    if failure is not None:
+        if not isinstance(failure, Mapping) or not str(failure.get('reason') or '').strip():
+            raise ScenarioError('expected_failure: {"reason": "...", "checks": ["label"], "strict": true}')
+        _keys(failure, ('reason', 'checks', 'strict'), 'expected_failure')
+        named = failure.get('checks')
+        if not isinstance(named, list) or not named or not all(isinstance(n, str) for n in named):
+            raise ScenarioError('expected_failure.checks: the labels of the checks the known bug fails')
+        if any(n not in check_labels for n in named):
+            raise ScenarioError(f'expected_failure.checks: unknown check label in {named}')
+        if len(set(named)) == len(checks):
+            raise ScenarioError('expected_failure.checks: leave at least one check that must pass')
+    scenario = Scenario(
+        name=name,
+        description=str(raw.get('description') or ''),
+        t0=t0,
+        origins=origins,
+        recordings=tuple(recordings),
+        finish=finish,
+        checks=checks,
+        env=dict(env),
+        gaps=gaps,
+        expected_failure=dict(failure) if failure else None,
+        tail_seconds=_number(raw.get('tail_seconds', DEFAULT_TAIL_SECONDS), 'tail_seconds'),
+        admission_lag=_number(raw.get('admission_lag', DEFAULT_ADMISSION_LAG), 'admission_lag'),
+        path=path,
+        stt=stt,
+        account=account,
+        seed=seed,
+        budget=budget,
+        speakers=speakers,
+    )
+    if finish is not None:
+        capturing = scenario.open_at(finish.at)
+        if len({rec.audio[0] for rec in capturing}) != len(capturing):
+            raise ScenarioError('finish: two capturing recordings started at the same instant; the target is ambiguous')
+    target = scenario.finish_target()
+    if finish is not None and target is not None and finish.fast_finish:
+        if finish.at + finish.provisional_latency < target.sealed:
+            raise ScenarioError('finish: the provisional transcript cannot land before the capture is sealed')
+    return scenario
+
+
+def _stt(raw: Any, has_audio: bool) -> dict[str, Any]:
+    """The cassette selection for ``audio_file`` recordings: language (default en), vocabulary, and an
+    optional provider + model pin."""
+    if raw is None:
+        return {'language': DEFAULT_LANGUAGE, 'vocabulary': []} if has_audio else {}
+    if not has_audio:
+        raise ScenarioError('stt: only a scenario with an audio_file recording uses it')
+    if not isinstance(raw, Mapping):
+        raise ScenarioError('stt: {"provider": "...", "model": "...", "language": "en", "vocabulary": []}')
+    _keys(raw, STT_KEYS, 'stt')
+    for key in ('provider', 'model', 'language'):
+        if key in raw and (not isinstance(raw[key], str) or not raw[key].strip()):
+            raise ScenarioError(f'stt.{key}: a non-empty string')
+    if ('provider' in raw) != ('model' in raw):
+        raise ScenarioError('stt: pin both provider and model, or neither')
+    vocabulary = raw.get('vocabulary', [])
+    if not isinstance(vocabulary, list) or not all(isinstance(v, str) and v for v in vocabulary):
+        raise ScenarioError('stt.vocabulary: a list of words, in production order')
+    out: dict[str, Any] = {'language': raw.get('language', DEFAULT_LANGUAGE), 'vocabulary': list(vocabulary)}
+    if 'provider' in raw:
+        out.update(provider=raw['provider'], model=raw['model'])
+    return out
+
+
+def _gap(raw: Any, where: str, recordings: Sequence[Recording]) -> Mapping[str, Any]:
+    """A stream gap between two batch recordings of one origin: a reconnect opens a new session."""
+    if not isinstance(raw, Mapping):
+        raise ScenarioError(f'{where}: expected an object')
+    _keys(raw, ('origin', 'between', 'reason'), where)
+    pair = raw.get('between')
+    if not isinstance(pair, list) or len(pair) != 2:
+        raise ScenarioError(f'{where}.between: [earlier recording, later recording]')
+    by_label = {r.label: r for r in recordings if r.lane == 'batch'}
+    if any(p not in by_label for p in pair):
+        raise ScenarioError(f'{where}.between: two declared batch recordings')
+    first, second = by_label[pair[0]], by_label[pair[1]]
+    if first.origin != raw.get('origin') or second.origin != raw.get('origin'):
+        raise ScenarioError(f'{where}: both recordings must come from origin {raw.get("origin")!r}')
+    if not first.audio[1] < second.audio[0]:
+        raise ScenarioError(f'{where}: the earlier recording must end before the later one starts')
+    if raw.get('reason', 'reconnect') == 'reconnect' and first.session == second.session:
+        raise ScenarioError(f'{where}: a reconnect starts a new recording session')
+    return {
+        'origin': raw.get('origin'),
+        'between': list(pair),
+        'reason': raw.get('reason', 'reconnect'),
+        'seconds': round(second.audio[0] - first.audio[1], 3),
+    }
+
+
+def load_scenario(path: str | Path) -> Scenario:
+    path = Path(path)
+    try:
+        raw = json.loads(path.read_text(encoding='utf-8'))
+    except json.JSONDecodeError as error:
+        raise ScenarioError(f'{path.name}: not valid JSON ({error.msg} at line {error.lineno})') from None
+    return parse_scenario(raw, path=str(path))
+
+
+# ---- plan ---------------------------------------------------------------------------------------
+
+
+def admission_offset(scenario: Scenario, rec: Recording) -> float:
+    """When batch record admission (and with it the manual-finish hook) runs for a batch recording."""
+    target = scenario.finish_target()
+    finish = scenario.finish
+    if finish is not None and target is not None and rec.label == target.label and finish.fast_finish:
+        return finish.at + finish.provisional_latency
+    return rec.sealed + scenario.admission_lag
+
+
+def plan_events(scenario: Scenario) -> list[ScenarioEvent]:
+    events: list[tuple[float, int, int, ScenarioEvent]] = []
+
+    def add(seconds: float, kind: str, ref: str, check_index: Optional[int] = None) -> None:
+        event = ScenarioEvent(scenario.at(seconds), kind, ref, check_index)
+        events.append((seconds, EVENT_ORDER.index(kind), len(events), event))
+
+    for rec in scenario.recordings:
+        if rec.lane == 'sync':
+            add(float(rec.audio[1] if rec.arrives_at is None else rec.arrives_at), 'sync', rec.label)
+            continue
+        add(rec.audio[0], 'capture_start', rec.label)
+        add(rec.sealed, 'seal', rec.label)
+        if scenario.batch_lane:  # the live lane (cloud audio off) has no batch record admission
+            add(admission_offset(scenario, rec), 'admission', rec.label)
+        if rec.transcript_at is not None:
+            add(rec.transcript_at, 'transcript', rec.label)
+    if scenario.finish is not None:
+        for tap, at in enumerate(scenario.finish.taps, start=1):
+            add(at, 'finish', 'finish' if tap == 1 else f'finish#{tap}')
+    if scenario.account.sync_off_at is not None:
+        add(scenario.account.sync_off_at, 'account', 'sync_off')
+    for index, check in enumerate(scenario.checks):
+        if check.at is not None:
+            add(check.at, 'checkpoint', f'expect[{index}]', index)
+    events.sort(key=lambda row: row[:3])
+    return [row[3] for row in events]
+
+
+def describe_plan(scenario: Scenario) -> list[str]:
+    """The planned timeline, one line per event (no product state)."""
+    out = []
+    for event in plan_events(scenario):
+        out.append(f'+{scenario.offset(event.instant):>8.1f}s  {event.kind:<13} {event.ref}')
+    return out

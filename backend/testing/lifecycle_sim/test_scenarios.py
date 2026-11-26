@@ -474,6 +474,9 @@ def test_empty_projection_retirement_rechecks_producer_fence(lifecycle_sim, monk
     if ending in {'aged_fenced', 'pressure_fenced', 'tail'}:
         row['record_upload_sessions'] = {'live': True}
     ref.set(row)
+    # Full source writes mint their own Home version. Compare subsequent
+    # housekeeping against the committed source, including that version.
+    row = ref.get().to_dict()
     # CI shares this collection with earlier stack scenarios. Include a clear
     # peer locally too, so the test cannot assume aggregate counts belong only
     # to its fenced owner. Only clear candidates may be pressure-evicted.
@@ -481,6 +484,7 @@ def test_empty_projection_retirement_rechecks_producer_fence(lifecycle_sim, monk
     peer_ref = sim.ref.parent.document(peer_cid)
     peer_row = {**row, 'id': peer_cid, 'record_upload_sessions': {}}
     peer_ref.set(peer_row)
+    peer_row = peer_ref.get().to_dict()
     peer_marker = sim.stack.firestore.collection(jobs.COLLECTION).document(jobs.marker_id(sim.uid, peer_cid))
     jobs.mark_due(sim.uid, peer_cid, firestore_client=sim.stack.firestore)
     marker = sim.stack.firestore.collection(jobs.COLLECTION).document(jobs.marker_id(sim.uid, cid))

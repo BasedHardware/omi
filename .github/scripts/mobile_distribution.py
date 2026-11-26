@@ -26,18 +26,15 @@ import re
 from typing import Any, Optional
 
 SCHEMA = "omi-mobile-distribution/v1"
-# Play holds this app's automated edits for manual review submission
-# (changesNotSentForReview) 2026-10-26 -> 2026-10-27 and again since
-# 2026-10-28, so a settled Android publishing action proves the edit
-# committed, not that testers received it. While the mode is on, the baseline
-# still advances on that settled action — a held publish is not a failed
-# publish, and rebuilding the same source would not unhold it — but
-# dispatchers must say so every run. Flip together with
-# mobile_store_promote.CHANGES_NOT_SENT_FOR_REVIEW and the codemagic.yaml
-# changes_not_sent_for_review flags; test_check_release_process_guards pins
-# that they agree (2026-10-28 -> 11-01 this stayed False while the others
-# were True, and the held distribution stalled silently).
-ANDROID_HELD_CHANGES_MODE = True
+# android-internal-auto publishes through a script step that follows Play's
+# current review mode (app/scripts/play_internal_publish.py) and records it as
+# an artifact named play-internal-publish-<normal|held>.json. A held publish
+# proves the edit committed, not that testers received it; the baseline still
+# advances on it (rebuilding would not unhold it), and the dispatcher reminds
+# every scheduled run while the newest distributed build is held.
+PLAY_INTERNAL_PUBLISH_STEP = "Publish to Google Play internal (self-healing review mode)"
+PLAY_REVIEW_MODE_ARTIFACT_RE = re.compile(r"^play-internal-publish-(normal|held)\.json$")
+PLAY_REVIEW_MODE_KEY = "play_review_mode"
 PLATFORMS = frozenset({"ios", "android"})
 SUCCESS_STATUSES = frozenset({"finished", "success", "succeeded"})
 SETTLED_STATUSES = SUCCESS_STATUSES | {"skipped"}
@@ -179,14 +176,30 @@ def is_baseline_eligible(build: Any, *, platform: str) -> bool:
     return distribution_decision(build, platform=platform).eligible
 
 
+def _play_review_mode(build: dict[str, Any]) -> Optional[str]:
+    """Return the single recorded Play review mode artifact, or None."""
+    artefacts = build.get("artefacts")
+    if not isinstance(artefacts, list):
+        return None
+    modes = [
+        match.group(1)
+        for artefact in artefacts
+        if isinstance(artefact, dict)
+        and isinstance(artefact.get("name"), str)
+        and (match := PLAY_REVIEW_MODE_ARTIFACT_RE.fullmatch(artefact["name"]))
+    ]
+    return modes[0] if len(modes) == 1 else None
+
+
 def normalize_codemagic_build(build: Any, *, platform: str, workflow_id: str | None = None) -> Any:
     """Attach verified evidence from a Codemagic build-detail response.
 
     The list-build response only says that the build finished. The detail
     response has a settled ``Publishing`` action; iOS additionally exposes the
     App Store Connect task list whose failure was the original false-green
-    incident. Android's current Codemagic response has no separate Play task
-    list, so its settled publishing action is the provider evidence there.
+    incident. Android has no Play task list: android-internal-auto's
+    self-healing publish step and its single mode artifact are the evidence
+    (a build without that step falls back to the settled publishing action).
     """
     if not isinstance(build, dict):
         return build
@@ -219,7 +232,18 @@ def normalize_codemagic_build(build: Any, *, platform: str, workflow_id: str | N
         return build
     if platform == "ios" and workflow_id not in {None, "ios-internal-auto"}:
         return build
+    review_mode = None
+    if platform == "android":
+        publish_steps = [action for action in actions if action.get("name") == PLAY_INTERNAL_PUBLISH_STEP]
+        if publish_steps:
+            # The Publishing action no longer talks to Play, so the script step
+            # and its mode artifact are the Play evidence.
+            review_mode = _play_review_mode(build)
+            if len(publish_steps) != 1 or publish_steps[0].get("status") != "success" or review_mode is None:
+                return build
     result = dict(build)
+    if review_mode is not None:
+        result[PLAY_REVIEW_MODE_KEY] = review_mode
     source_sha = _source_sha(build)
     if source_sha is None:
         return build

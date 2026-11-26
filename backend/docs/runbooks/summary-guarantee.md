@@ -88,9 +88,8 @@ Version 2 of the same cursor document stores independent `near_expiry` and
 the existing lease/next-tick fence; flat fields are cleared so older readers also
 rewind on rollback. Each phase wraps at exhaustion and passes blocked rows.
 A phase stopped by the attempt cap resumes at the last examined row, never the
-unattempted fetched tail. Per-owner deferrals retain the cursor immediately
-before the first skipped candidate, so it is eligible again next tick even while
-other owners later in this bounded page can be served. Near-expiry admissions
+unattempted fetched tail. Per-owner deferrals retain their original debt and
+can be revisited on wrap, while later owners remain discoverable. Near-expiry admissions
 consume capacity first; only remaining reads and attempts go to newest-first. A large newer pile cannot
 consume the expiry band's budget. Urgent overload can consume all capacity.
 
@@ -127,6 +126,12 @@ or wrap selects them again without a retry queue or a new debt generation.
 This keeps an owner quota from pinning discovery before another owner. The
 version-2 phase cursor and gate-disabled flat due/path shapes stay unchanged;
 older readers can continue them or safely rewind.
+
+Each phase starts with a page target of twice the remaining admission attempts,
+with a floor of 16 rows. A full page that leaves attempts available grows that
+target fourfold. The page-size and total document caps still apply. This limits
+the unread tail when eligible rows are dense and preserves bounded discovery
+through sparse pages and owner deferrals.
 
 At 720 ticks/day, each 100 returned documents/tick means 72,000 document
 reads/day at full scan utilization. The 2,800-row target means 2,800 document
@@ -204,6 +209,15 @@ read `rate(omi_summary_debt_repair_total{outcome="admitted"}[10m])` and the
 `near_expiry_admitted` outcome alongside release identity and summary receipts.
 These are repair redrive admissions, not completed summaries.
 
+`omi_summary_debt_repair_discovery_total{phase,outcome}` breaks down the same
+ticks by discovery phase. The counters distinguish query attempts, fetched
+rows, examined rows, unexamined page tails, discovery refusals, age and owner
+skips, and redrive attempts and outcomes. A row can appear again on a later
+tick. Compare fetched and unexamined rows per attempted redrive alongside
+query volume and tick runtime; these counters do not measure billed index-entry
+reads or successful Cloud Tasks delivery. The durable receipt remains the
+success signal for a summary.
+
 The ASC `(summary_first_pending_at, summary_due_at, __name__)` composite remains
 for the expiry phase. The additional DESC/ASC/ASC collection-group composite
 must be **READY before deploying** this query change. Declare and provision it
@@ -249,9 +263,15 @@ metadata fields.
 `omi_closed_to_summary_seconds` supplements the existing acceptance histogram
 using the later of acceptance and `finished_at` (last speech). This excludes
 open-speech overlap while retaining silence-close and provider/queue delay.
-Missing acceptance/finish or a finish in the future produces no sample. It
+When acceptance metadata is missing, `arrival_at` (server receipt) stands in for
+acceptance. Missing finish, or a finish in the future, produces no sample. It
 does not reconstruct a historical close timestamp or prove fleet-wide SLO
 coverage before all processing hosts run the instrumentation.
+
+For "share processed within N seconds", use
+`omi_conversation_processed_seconds{basis="finished"|"end_or_sync"}`. It is observed
+once per conversation in both the legacy and v3 lanes. Its denominator adds
+`omi_conversation_settled_unsummarized_total`.
 
 ## Original qualification sequence (historical)
 

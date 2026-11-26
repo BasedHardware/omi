@@ -1,0 +1,593 @@
+{
+  "version": 1,
+  "cases": [
+    {
+      "name": "kept-with-effects",
+      "recording": {
+        "duration_s": 25,
+        "segments": [
+          {
+            "text": "This is a synthetic roadmap planning conversation for the hermetic replay oracle."
+          },
+          {
+            "text": "We decided to review the plan and send the meeting notes."
+          },
+          {
+            "text": "Our test lab opens on Tuesday and the team will bring the completed synthetic planning worksheet."
+          }
+        ]
+      },
+      "apps": [
+        "fixture",
+        "audit"
+      ],
+      "memories": [
+        "Our test lab opens on Tuesday"
+      ],
+      "repeat": true,
+      "responses": {
+        "conv-structure": {
+          "title": "Synthetic replay",
+          "overview": "Reviewed two agendas and assigned the synthetic planning worksheet.",
+          "action_items": [
+            {
+              "description": "Send the meeting notes",
+              "capture_kind": "clear_commitment",
+              "capture_owner": "user",
+              "capture_confidence": 1,
+              "ownership_confidence": 1,
+              "concrete_deliverable": true,
+              "source_segment_ids": [
+                "segment-1"
+              ]
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "word-floor",
+      "recording": {
+        "duration_s": 25,
+        "segments": [
+          {
+            "text": "Only a few words."
+          }
+        ]
+      },
+      "min_words": 12
+    },
+    {
+      "name": "empty-capture",
+      "recording": {
+        "duration_s": 1,
+        "segments": []
+      }
+    },
+    {
+      "name": "unicode-transcript",
+      "recording": {
+        "duration_s": 25,
+        "segments": [
+          {
+            "text": "Mañana revisamos la agenda del equipo y enviamos el plan de pruebas."
+          },
+          {
+            "text": "合成テストの議事録を保存します。"
+          }
+        ]
+      }
+    },
+    {
+      "name": "compressed-standard",
+      "document": {
+        "transcript_segments_compressed": true,
+        "transcript_segments": {
+          "$bytes": "eJxFTTsOwjAMvYqVGVAHJi7CgBCyklewaJPIdqVWiLvjTmzv/26fJCVdKOU2d4UZynFIB0pij8WgYbkuCMGc1YMOgVH3zjmQY93FdAV1zm8U8pcYjZJdWuWJFLlpkfokqd6I6X8Uy1wtq3SnsLBCsxhiAWTeNBKKPvFGY9OZ/ZS+9x/FjTwj"
+        }
+      }
+    },
+    {
+      "name": "enhanced-compressed",
+      "document": {
+        "transcript_segments": "qJs/QB5O0MEOAucZqHyMnCJJSN4uwWJi2yirSuHU2Spcy3EcU4mM99nku30A5uN1WC3aqWKnPJ2+tek3wQ21iQ2sCdl4mTqSntP/TEs6ROaAThzEBYXhIMu8GnZzO8ngRJjhPWCQLilBFR05iOgaoMrBfoVPP1JdPgJ6fNXt/5PU2CiY2/DkR6y917dKjbDjM7Fr7fTqVutj6pnWL1QahocjVZxSZmgfQn94hku2/Tdc51qJAF68g5aZAXx2/s1CUuWCq9YIpWRgEi1pfNmQak05ax4oJsBIFr6bL8g8Ji5KgbogwOrG5XprdgiaUg5On0Fq6lsgkJUGuRhlP62Gv2hOFsU8nuOTCRzgWT9GmMO1tI8PA95cFHqsQhXBkMKccDk=",
+        "transcript_segments_compressed": true,
+        "data_protection_level": "enhanced"
+      }
+    },
+    {
+      "name": "own-key-resume",
+      "own_key": true,
+      "recording": {
+        "duration_s": 28,
+        "segments": [
+          {
+            "text": "We finished testing own key admission for the synthetic conversation. This sentence records enough words to send the notes request."
+          }
+        ]
+      }
+    },
+    {
+      "name": "last-attempt-webhook",
+      "final_attempt": true,
+      "apps": [
+        "unavailable-fixture"
+      ],
+      "unavailable_app": "unavailable-fixture",
+      "recording": {
+        "duration_s": 61,
+        "segments": [
+          {
+            "text": "This synthetic recording tests the last delivery attempt. We reviewed both agendas, finished the worksheet, and agreed to post the test report once everyone has confirmed the final schedule."
+          }
+        ]
+      }
+    },
+    {
+      "name": "trigger-capture-end",
+      "recording": {
+        "duration_s": 25,
+        "segments": [
+          {
+            "text": "Synthetic contract replay for trigger-capture-end. The test fixture records the conversation outcome without customer data."
+          }
+        ]
+      },
+      "trigger": "capture_end"
+    },
+    {
+      "name": "trigger-client-finalize",
+      "recording": {
+        "duration_s": 25,
+        "segments": [
+          {
+            "text": "Synthetic contract replay for trigger-client-finalize. The test fixture records the conversation outcome without customer data."
+          }
+        ]
+      },
+      "trigger": "client_finalize"
+    },
+    {
+      "name": "trigger-server-recovery",
+      "recording": {
+        "duration_s": 25,
+        "segments": [
+          {
+            "text": "Synthetic contract replay for trigger-server-recovery. The test fixture records the conversation outcome without customer data."
+          }
+        ]
+      },
+      "trigger": "server_recovery"
+    },
+    {
+      "name": "trigger-user-reprocess",
+      "recording": {
+        "duration_s": 25,
+        "segments": [
+          {
+            "text": "Synthetic contract replay for trigger-user-reprocess. The test fixture records the conversation outcome without customer data."
+          }
+        ]
+      },
+      "trigger": "user_reprocess"
+    },
+    {
+      "name": "end-reason-disconnect",
+      "recording": {
+        "duration_s": 25,
+        "segments": [
+          {
+            "text": "Synthetic contract replay for end-reason-disconnect. The test fixture records the conversation outcome without customer data."
+          }
+        ]
+      },
+      "end_reason": "disconnect"
+    },
+    {
+      "name": "end-reason-silence",
+      "recording": {
+        "duration_s": 25,
+        "segments": [
+          {
+            "text": "Synthetic contract replay for end-reason-silence. The test fixture records the conversation outcome without customer data."
+          }
+        ]
+      },
+      "end_reason": "silence"
+    },
+    {
+      "name": "end-reason-timeout",
+      "recording": {
+        "duration_s": 25,
+        "segments": [
+          {
+            "text": "Synthetic contract replay for end-reason-timeout. The test fixture records the conversation outcome without customer data."
+          }
+        ]
+      },
+      "end_reason": "timeout"
+    },
+    {
+      "name": "end-reason-server-shutdown",
+      "recording": {
+        "duration_s": 25,
+        "segments": [
+          {
+            "text": "Synthetic contract replay for end-reason-server-shutdown. The test fixture records the conversation outcome without customer data."
+          }
+        ]
+      },
+      "end_reason": "server_shutdown"
+    },
+    {
+      "name": "end-reason-unknown",
+      "recording": {
+        "duration_s": 25,
+        "segments": [
+          {
+            "text": "Synthetic contract replay for end-reason-unknown. The test fixture records the conversation outcome without customer data."
+          }
+        ]
+      },
+      "end_reason": "unknown"
+    },
+    {
+      "name": "repeated-admission-1",
+      "recording": {
+        "duration_s": 25,
+        "segments": [
+          {
+            "text": "Synthetic contract replay for repeated-admission-1. The test fixture records the conversation outcome without customer data."
+          }
+        ]
+      },
+      "trigger": "capture_end",
+      "repeat": true
+    },
+    {
+      "name": "repeated-admission-2",
+      "recording": {
+        "duration_s": 25,
+        "segments": [
+          {
+            "text": "Synthetic contract replay for repeated-admission-2. The test fixture records the conversation outcome without customer data."
+          }
+        ]
+      },
+      "trigger": "client_finalize",
+      "repeat": true
+    },
+    {
+      "name": "repeated-admission-3",
+      "recording": {
+        "duration_s": 25,
+        "segments": [
+          {
+            "text": "Synthetic contract replay for repeated-admission-3. The test fixture records the conversation outcome without customer data."
+          }
+        ]
+      },
+      "trigger": "server_recovery",
+      "repeat": true
+    },
+    {
+      "name": "repeated-admission-4",
+      "recording": {
+        "duration_s": 25,
+        "segments": [
+          {
+            "text": "Synthetic contract replay for repeated-admission-4. The test fixture records the conversation outcome without customer data."
+          }
+        ]
+      },
+      "trigger": "user_reprocess",
+      "repeat": true
+    },
+    {
+      "name": "byok-resume-1",
+      "recording": {
+        "duration_s": 25,
+        "segments": [
+          {
+            "text": "Synthetic contract replay for byok-resume-1. The test fixture records the conversation outcome without customer data."
+          }
+        ]
+      },
+      "trigger": "capture_end",
+      "own_key": true
+    },
+    {
+      "name": "byok-resume-2",
+      "recording": {
+        "duration_s": 25,
+        "segments": [
+          {
+            "text": "Synthetic contract replay for byok-resume-2. The test fixture records the conversation outcome without customer data."
+          }
+        ]
+      },
+      "trigger": "client_finalize",
+      "own_key": true
+    },
+    {
+      "name": "byok-resume-3",
+      "recording": {
+        "duration_s": 25,
+        "segments": [
+          {
+            "text": "Synthetic contract replay for byok-resume-3. The test fixture records the conversation outcome without customer data."
+          }
+        ]
+      },
+      "trigger": "server_recovery",
+      "own_key": true
+    },
+    {
+      "name": "byok-resume-4",
+      "recording": {
+        "duration_s": 25,
+        "segments": [
+          {
+            "text": "Synthetic contract replay for byok-resume-4. The test fixture records the conversation outcome without customer data."
+          }
+        ]
+      },
+      "trigger": "user_reprocess",
+      "own_key": true
+    },
+    {
+      "name": "integration-one-success",
+      "recording": {
+        "duration_s": 25,
+        "segments": [
+          {
+            "text": "Synthetic contract replay for integration-one-success. The test fixture records the conversation outcome without customer data."
+          }
+        ]
+      },
+      "apps": [
+        "fixture-one"
+      ],
+      "memories": [
+        "A synthetic memory for the replay."
+      ]
+    },
+    {
+      "name": "integration-two-success",
+      "recording": {
+        "duration_s": 25,
+        "segments": [
+          {
+            "text": "Synthetic contract replay for integration-two-success. The test fixture records the conversation outcome without customer data."
+          }
+        ]
+      },
+      "apps": [
+        "audit-two",
+        "fixture-two"
+      ],
+      "memories": [
+        "The second replay stores a synthetic memory."
+      ]
+    },
+    {
+      "name": "integration-final-drop-one",
+      "recording": {
+        "duration_s": 25,
+        "segments": [
+          {
+            "text": "Synthetic contract replay for integration-final-drop-one. The test fixture records the conversation outcome without customer data."
+          }
+        ]
+      },
+      "apps": [
+        "unavailable-fixture-one"
+      ],
+      "unavailable_app": "unavailable-fixture-one",
+      "final_attempt": true
+    },
+    {
+      "name": "integration-final-drop-two",
+      "recording": {
+        "duration_s": 25,
+        "segments": [
+          {
+            "text": "Synthetic contract replay for integration-final-drop-two. The test fixture records the conversation outcome without customer data."
+          }
+        ]
+      },
+      "apps": [
+        "audit-final",
+        "unavailable-fixture-two"
+      ],
+      "unavailable_app": "unavailable-fixture-two",
+      "final_attempt": true
+    },
+    {
+      "name": "integration-final-drop-three",
+      "recording": {
+        "duration_s": 25,
+        "segments": [
+          {
+            "text": "Synthetic contract replay for integration-final-drop-three. The test fixture records the conversation outcome without customer data."
+          }
+        ]
+      },
+      "apps": [
+        "unavailable-fixture-three"
+      ],
+      "unavailable_app": "unavailable-fixture-three",
+      "final_attempt": true
+    },
+    {
+      "name": "multisegment-ascii",
+      "recording": {
+        "duration_s": 90,
+        "segments": [
+          {
+            "text": "First synthetic segment."
+          },
+          {
+            "text": "Second synthetic segment."
+          },
+          {
+            "text": "Third synthetic segment."
+          }
+        ]
+      }
+    },
+    {
+      "name": "multisegment-unicode",
+      "recording": {
+        "duration_s": 90,
+        "segments": [
+          {
+            "text": "Mañana revisamos el plan de pruebas."
+          },
+          {
+            "text": "合成テストの議事録を保存します。"
+          }
+        ]
+      }
+    },
+    {
+      "name": "transcript-whitespace",
+      "recording": {
+        "duration_s": 12,
+        "segments": [
+          {
+            "text": "   "
+          },
+          {
+            "text": "\t\n"
+          },
+          {
+            "text": "A useful synthetic segment follows whitespace."
+          }
+        ]
+      }
+    },
+    {
+      "name": "transcript-punctuation",
+      "recording": {
+        "duration_s": 18,
+        "segments": [
+          {
+            "text": "Hello—world! Does this remain one conversation? Yes."
+          }
+        ]
+      }
+    },
+    {
+      "name": "transcript-empty-text",
+      "recording": {
+        "duration_s": 5,
+        "segments": [
+          {
+            "text": ""
+          }
+        ]
+      }
+    },
+    {
+      "name": "transcript-stored-segments",
+      "recording": {
+        "duration_s": 25,
+        "segments": [
+          {
+            "text": "Synthetic contract replay for transcript-stored-segments. The test fixture records the conversation outcome without customer data."
+          }
+        ]
+      },
+      "document": {
+        "transcript_segments": [
+          {
+            "id": "stored-segment-a",
+            "is_user": true,
+            "start": 1,
+            "end": 3,
+            "text": "The first stored segment remains readable."
+          },
+          {
+            "id": "stored-segment-b",
+            "is_user": true,
+            "start": 5,
+            "end": 8,
+            "text": "The second stored segment is persisted in order."
+          }
+        ]
+      }
+    },
+    {
+      "name": "revision-two-segment-transcript",
+      "recording": {
+        "duration_s": 19,
+        "segments": [
+          {
+            "text": "Synthetic live receipt transcript at the first stored revision."
+          },
+          {
+            "text": "Synthetic batch receipt tail appended as the second segment revision."
+          }
+        ]
+      },
+      "document": {
+        "sync_content_revision": 2
+      }
+    },
+    {
+      "name": "transcript-standard-protection",
+      "recording": {
+        "duration_s": 25,
+        "segments": [
+          {
+            "text": "Synthetic contract replay for transcript-standard-protection. The test fixture records the conversation outcome without customer data."
+          }
+        ]
+      },
+      "document": {
+        "data_protection_level": "standard"
+      }
+    },
+    {
+      "name": "worker-missing-row-fence",
+      "recording": {
+        "duration_s": 25,
+        "segments": [
+          {
+            "text": "Synthetic contract replay for worker-missing-row-fence. The test fixture records the conversation outcome without customer data."
+          }
+        ]
+      },
+      "trigger": "client_finalize",
+      "delete_before_worker_read": true
+    },
+    {
+      "name": "unreadable-ciphertext-dead-letters",
+      "recording": {
+        "duration_s": 25,
+        "segments": [
+          {
+            "text": "Synthetic contract replay for unreadable-ciphertext-dead-letters. The test fixture records the conversation outcome without customer data."
+          }
+        ]
+      },
+      "document": {
+        "data_protection_level": "enhanced",
+        "transcript_segments": "bm90LWF1dGhlbnRpY2F0ZWQtY2lwaGVydGV4dA=="
+      }
+    },
+    {
+      "name": "erase-removes-owner-and-jobs",
+      "recording": {
+        "duration_s": 25,
+        "segments": [
+          {
+            "text": "Synthetic contract replay for erase-removes-owner-and-jobs. The test fixture records the conversation outcome without customer data."
+          }
+        ]
+      },
+      "erase_after": true
+    }
+  ]
+}

@@ -1,0 +1,25 @@
+{
+  "conversation_id": "fixture-conversation",
+  "dispatch": {
+    "audience": "https://worker.fixture.invalid/v2/enrichment/run",
+    "handler": "https://worker.fixture.invalid/v2/enrichment/run",
+    "invoker_sa": "enrichment@fixture.invalid",
+    "queue": "projects/fixture/locations/test/queues/enrichment"
+  },
+  "document_id": "21cddadd046eac66195effb2625e1846239523c030e00c581619976be210d8cb",
+  "dormant": false,
+  "due_at": 2000,
+  "effects_only": false,
+  "first_pending_at": 1800,
+  "language": "en",
+  "latest_pending_at": 2000,
+  "summary_deadline_at": 2000,
+  "summary_expected_revision": 4,
+  "summary_lane": "unknown",
+  "summary_repair": true,
+  "task_due_at": 2000,
+  "task_token": "bound",
+  "uid": "fixture-owner",
+  "version": 1,
+  "wake_generation": 3
+}

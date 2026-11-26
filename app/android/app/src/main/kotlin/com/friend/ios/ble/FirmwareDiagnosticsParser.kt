@@ -3,7 +3,7 @@ package com.friend.ios.ble
 import org.json.JSONArray
 import org.json.JSONObject
 
-/** The append-only 25-byte Omi Diagnostics characteristic (contract v1). */
+/** Append-only Omi Diagnostics v1: 25-byte base, optional battery and connection tails. */
 internal object FirmwareDiagnosticsParser {
     private val flags = listOf(
         "RESET_PIN", "RESET_SOFTWARE", "RESET_BROWNOUT", "RESET_POR",
@@ -42,6 +42,14 @@ internal object FirmwareDiagnosticsParser {
                     u16(25).takeUnless { it == 0xffff }?.let { put("last_off_charger_mv", it) }
                     u16(27).takeUnless { it == 0xffff }?.let { put("charge_pin_edges", it) }
                     when (u8(29)) { 0 -> put("soc_frozen", false); 1 -> put("soc_frozen", true) }
+                }
+                if (data.size >= 38) {
+                    for ((key, offset) in listOf("conn_interval" to 30, "conn_latency" to 32, "conn_timeout" to 34)) {
+                        u16(offset).takeUnless { it == 0xffff }?.let { put(key, it) }
+                    }
+                    for ((key, offset) in listOf("tx_phy" to 36, "rx_phy" to 37)) {
+                        u8(offset).takeUnless { it == 0xff }?.let { put(key, it) }
+                    }
                 }
             }
     }

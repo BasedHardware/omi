@@ -321,9 +321,16 @@ def _resolve_interval(subscription_obj: Mapping[str, Any]) -> str:
     return interval if interval in _INTERVALS else 'unknown'
 
 
+# Stripe's cancellation_details.reason enum spells the dunning cancel
+# `payment_failed`; the bounded label (and dashboards) keep `payment_failure`.
+_STRIPE_REASON_ALIASES = {'payment_failed': 'payment_failure'}
+
+
 def _resolve_cancellation_reason(subscription_obj: Mapping[str, Any]) -> str:
     details = subscription_obj.get('cancellation_details')
     reason = details.get('reason') if isinstance(details, Mapping) else None
+    if isinstance(reason, str):
+        reason = _STRIPE_REASON_ALIASES.get(reason, reason)
     return reason if reason in _REASONS else 'none'
 
 

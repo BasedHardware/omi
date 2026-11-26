@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
-"""Safely smoke-test the deployed dev Cloud Run batch-STT route with a spoken fixture.
+"""Smoke-test a local batch-STT route with a spoken fixture.
 
-The command is dry-run by default.  ``--execute`` accepts only the dev public
-endpoint (or localhost), synthesizes a short spoken PCM clip with macOS ``say``,
-and asserts that the routed batch endpoint reports Parakeet plus the expected
-transcript.  Pass an already-generated 16 kHz mono PCM file on non-macOS hosts.
+Remote execution is suspended pending verification of the dev upstream.
+The command is dry-run by default. With ``--execute`` it synthesizes a short
+clip with macOS ``say`` and checks the provider and transcript. Pass an
+already-generated 16 kHz mono PCM file on non-macOS hosts.
 """
 
 from __future__ import annotations
@@ -20,9 +20,8 @@ import urllib.request
 import wave
 from pathlib import Path
 
-DEFAULT_DEV_URL = 'https://api.omiapi.com'
 FIXTURE_TEXT = 'Omi Parakeet health check one two three'
-ALLOWED_HOSTS = frozenset({'api.omiapi.com', 'localhost', '127.0.0.1', '::1'})
+LOOPBACK_HOSTS = frozenset({'localhost', '127.0.0.1', '::1'})
 
 
 def _normalize(text: str) -> str:
@@ -31,8 +30,8 @@ def _normalize(text: str) -> str:
 
 def _validate_dev_url(base_url: str) -> str:
     parsed = urllib.parse.urlparse(base_url)
-    if parsed.scheme not in {'http', 'https'} or parsed.hostname not in ALLOWED_HOSTS:
-        raise ValueError('refusing to target anything other than the dev endpoint or localhost')
+    if parsed.scheme not in {'http', 'https'} or parsed.hostname not in LOOPBACK_HOSTS:
+        raise ValueError('remote dev smoke is suspended; specify a loopback URL')
     return base_url.rstrip('/')
 
 
@@ -60,6 +59,11 @@ def _load_pcm(pcm_file: Path | None, fixture_text: str) -> bytes:
     return _synthesize_pcm(fixture_text)
 
 
+class _NoRedirect(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        return None
+
+
 def _execute(base_url: str, authorization: str, pcm: bytes, expected_transcript: str) -> None:
     query = urllib.parse.urlencode({'language': 'en', 'sample_rate': '16000', 'encoding': 'linear16', 'channels': '1'})
     request = urllib.request.Request(
@@ -68,8 +72,9 @@ def _execute(base_url: str, authorization: str, pcm: bytes, expected_transcript:
         headers={'Authorization': authorization, 'Content-Type': 'application/octet-stream'},
         method='POST',
     )
+    opener = urllib.request.build_opener(urllib.request.ProxyHandler({}), _NoRedirect())
     try:
-        with urllib.request.urlopen(request, timeout=90) as response:
+        with opener.open(request, timeout=90) as response:
             payload = json.loads(response.read())
     except urllib.error.HTTPError as error:
         raise RuntimeError(f'dev batch-STT request failed with HTTP {error.code}') from error
@@ -87,8 +92,8 @@ def _execute(base_url: str, authorization: str, pcm: bytes, expected_transcript:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--url', default=DEFAULT_DEV_URL, help=f'dev Cloud Run base URL (default: {DEFAULT_DEV_URL})')
-    parser.add_argument('--authorization', help='Authorization header value for the dev endpoint')
+    parser.add_argument('--url', required=True, help='loopback backend base URL')
+    parser.add_argument('--authorization', help='Authorization header value for the local backend')
     parser.add_argument('--pcm-file', type=Path, help='16 kHz mono PCM fixture; skips macOS speech synthesis')
     parser.add_argument('--expected-transcript', default=FIXTURE_TEXT)
     parser.add_argument(

@@ -1,0 +1,11 @@
+{
+  "schema_version": 1,
+  "id": "FC-derived-conversation-match-requires-audio",
+  "family": "cross-boundary-contract",
+  "violated_contract": "A client waiting for a finished capture must correlate its source recording ID with the derived conversation even when the server has no audio files and generates no recording pieces.",
+  "canonical_prevention": "Match the source recording IDs returned by the conversation list and cover a transcript-only derived row and an unrelated row in a hermetic test.",
+  "canonical_prevention_artifact": ["app/test/widgets/finish_opens_conversation_test.dart"],
+  "evidence_prs": [],
+  "scope_hints": ["app/lib/pages/episodes/finished_capture_page.dart"],
+  "status": "open"
+}

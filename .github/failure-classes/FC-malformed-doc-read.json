@@ -1,6 +1,7 @@
 {
   "schema_version": 1,
   "id": "FC-malformed-doc-read",
+  "family": "input-tolerance",
   "violated_contract": "A malformed persisted document must not turn a read path into a 500 response.",
   "canonical_prevention": "Validate persisted documents at the shared read boundary and treat invalid records according to that boundary's explicit absent-or-skipped policy.",
   "canonical_prevention_artifact": [

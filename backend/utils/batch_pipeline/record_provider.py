@@ -9,6 +9,7 @@ import logging
 
 from config.server_batch import UNSUPPORTED
 from config.stt_provider_policy import normalized_stt_language
+from config.record_drain import record_intake_priority
 from database.batch_pipeline_intake import admit
 from utils.batch_pipeline.language_metrics import record_route
 from utils.batch_pipeline.provider_stt_admission import provider_enqueue, resolve_route
@@ -17,6 +18,12 @@ logger = logging.getLogger(__name__)
 
 
 def admit_record_units(store, items, binding, now, *, policy, provider_outbox_factory=None, **kwargs):
+    if getattr(binding, 'native_record', False):
+        # Both full captures and partial pages pass the canonical barrier.
+        # Admission rechecks that exact finish snapshot transactionally.
+        # Demote old units before queueing; never promote a caller's priority.
+        priority = record_intake_priority((kwargs.get('record_barrier') or {}).get('finished_at'), now)
+        items = [replace(item, priority=max(item.priority, priority)) for item in items]
     language = normalized_stt_language(binding.language)
     if language not in UNSUPPORTED:
         return admit(store, items, binding, now, policy=policy, **kwargs)

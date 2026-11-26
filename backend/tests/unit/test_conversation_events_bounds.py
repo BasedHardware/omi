@@ -142,6 +142,14 @@ def router():
     deletion_marker = ModuleType("database.account_deletion_marker")
     deletion_marker.account_deletion_blocks_user_work = lambda _uid: False
 
+    legal_holds = _pkg("database.legal_holds")
+    for error_name in (
+        "DestructiveGateTakeover",
+        "DestructiveOperationInProgress",
+        "LegalHoldAuthorityUnavailable",
+    ):
+        setattr(legal_holds, error_name, type(error_name, (RuntimeError,), {}))
+
     fakes = {
         # top-level third-party
         "ulid": _pkg("ulid"),
@@ -151,7 +159,7 @@ def router():
         "database": _pkg("database"),
         "database._client": client_mod,
         "database.account_deletion_marker": deletion_marker,
-        "database.legal_holds": _pkg("database.legal_holds"),
+        "database.legal_holds": legal_holds,
         "database.conversations": _pkg("database.conversations"),
         "database.conversation_scan": _pkg("database.conversation_scan"),
         "database.hidden_noise_counts": _pkg("database.hidden_noise_counts"),
@@ -201,7 +209,6 @@ def router():
         "utils.other.list_budget": list_budget_real,
         # These tests exercise event/speaker handlers, not list serving. Keep
         # the new router collaborator inside this fixture's existing isolation.
-        "utils.list_version_check": _pkg("utils.list_version_check"),
         "utils.cloud_tasks": cloud_tasks,
         "utils.other.storage": _pkg("utils.other.storage"),
         # utils.conversations.* is DERIVED, not listed: a new module in that package

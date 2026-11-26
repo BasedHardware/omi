@@ -21,17 +21,28 @@ import 'package:omi/backend/preferences.dart';
 import 'package:omi/pages/capture/widgets/widgets.dart';
 import 'package:omi/pages/held_audio/held_audio_views.dart';
 import 'package:omi/pages/conversations/widgets/processing_capture.dart';
+import 'package:omi/pages/conversations/widgets/v3_live_placeholder_row.dart';
+import 'package:omi/backend/schema/phone_call.dart';
+import 'package:omi/providers/phone_call_provider.dart';
 import 'package:omi/pages/review/widgets/review_entry_card.dart';
 import 'package:omi/pages/episodes/episode_presentation.dart';
 import 'live_episode_visibility.dart';
+import 'v3_live_row_visibility.dart';
 import 'home_rows.dart';
+import 'home_card_rows.dart';
+import 'package:omi/providers/home_feed_provider.dart';
+import 'package:omi/backend/schema/home_feed.dart';
 import 'home_rows_health.dart';
 import 'package:omi/pages/episodes/live_episode_row.dart';
 import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/providers/conversation_provider.dart';
+import 'package:omi/providers/conversations_v3_provider.dart';
 import 'package:omi/providers/episode_provider.dart';
 import 'package:omi/providers/home_provider.dart';
 import 'package:omi/services/capture/empty_recording_notice.dart';
+import 'package:omi/services/live_preview/live_preview_controller.dart';
+import 'package:omi/services/live_preview/live_words_log.dart';
+import 'package:omi/services/live_preview/speech_after_end.dart';
 import 'package:omi/providers/local_recordings_provider.dart';
 import 'package:omi/providers/review_provider.dart';
 import 'package:omi/services/pending_work/pending_work_store.dart';
@@ -44,15 +55,18 @@ import 'package:omi/pages/conversations/background_conversations.dart';
 import 'package:omi/pages/conversations/widgets/processing_conversation_row.dart';
 import 'package:omi/pages/conversations/widgets/conversation_list_item.dart';
 import 'package:omi/pages/conversations/widgets/date_list_item.dart';
+import 'package:omi/pages/conversations/widgets/day_summary_link.dart';
 import 'package:omi/pages/conversations/widgets/empty_conversations.dart';
 import 'package:omi/pages/conversations/widgets/recording_list_item.dart';
 import 'package:omi/pages/home/widgets/home_daily_recaps.dart';
 import 'package:omi/pages/home/widgets/home_daily_recaps_setting.dart';
 import 'package:omi/models/subscription.dart';
 import 'package:omi/pages/home/widgets/payment_issue_row.dart';
+import 'package:omi/pages/home/widgets/quiet_payer_row.dart';
 import 'package:omi/providers/usage_provider.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/l10n_extensions.dart';
+import 'package:omi/utils/reliability_experiments.dart';
 
 import 'package:omi/widgets/home_bottom_bar.dart';
 
@@ -70,6 +84,7 @@ enum _ConversationListRowKind {
   topSpacer,
   dateHeader,
   liveEpisode,
+  v3LivePlaceholder,
   processing,
   conversation,
   recording,
@@ -260,6 +275,22 @@ List<_ConversationListRow> _buildConversationListRows({
   return rows;
 }
 
+/// [rows] with conversation [id] moved to the top of its day, right under the day's header: the
+/// conversation in progress leads its day even when a later call or import started after it.
+List<_ConversationListRow> _pinFirstInDay(List<_ConversationListRow> rows, String id) {
+  final at = rows.indexWhere((r) => r.kind == _ConversationListRowKind.conversation && r.conversation?.id == id);
+  if (at < 0) return rows;
+  final row = rows[at];
+  final header = rows.lastIndexWhere((r) => r.kind == _ConversationListRowKind.dateHeader && r.date == row.date, at);
+  if (header < 0 || header == at - 1) return rows;
+  return [
+    ...rows.take(header + 1),
+    row,
+    for (var i = header + 1; i < rows.length; i++)
+      if (i != at) rows[i]
+  ];
+}
+
 /// [rows] with the live episode right under today's header. With no today in the list,
 /// the episode opens Today itself, carrying its own header.
 /// [byDate] without the conversations Home leaves to the daily recap (background notes,
@@ -296,7 +327,8 @@ List<ServerConversation>? _lockedRunAt(List<_ConversationListRow> rows, int inde
 /// more as it scrolls. Search, folders, starred and places live in the search overlay the header's
 /// search button opens, so this list is never filtered in place.
 class ConversationsPage extends StatefulWidget {
-  const ConversationsPage({super.key, this.requestInitialLoad = true, this.loadRecaps, this.pendingWork});
+  const ConversationsPage(
+      {super.key, this.requestInitialLoad = true, this.loadRecaps, this.pendingWork, this.openDaySummary});
 
   /// Production stays true. Widget tests that already call
   /// [ConversationProvider.getInitialConversations] inside `runAsync` pass
@@ -305,6 +337,9 @@ class ConversationsPage extends StatefulWidget {
 
   /// Injectable for tests and the visual audit; defaults to the recaps endpoint.
   final RecentRecapsLoader? loadRecaps;
+
+  /// Test seam for a v3 day header's tap.
+  final DaySummaryOpener? openDaySummary;
 
   /// Injectable for tests; defaults to [PendingWorkStore.instance].
   final PendingWorkStore? pendingWork;
@@ -317,6 +352,36 @@ class _ConversationsPageState extends State<ConversationsPage>
     with AutomaticKeepAliveClientMixin, WidgetsBindingObserver {
   TextEditingController textController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
+  HomeFeedProvider? _feed;
+  bool _usesCards(ConversationProvider p) =>
+      _feed != null &&
+      context.read<ConversationsV3Provider?>()?.suppressesLegacy != true &&
+      !_feed!.unsupported &&
+      !p.hasActiveSearch &&
+      !p.hasActiveHomeFilter &&
+      !p.showShortConversations &&
+      !p.showDiscardedConversations;
+
+  /// Follow-up pages asked for without a new scroll since the reader last moved; see
+  /// [_requestMoreIfNeeded].
+  int _autoLoadMorePages = 0;
+  static const _maxAutoLoadMorePages = 4;
+
+  void _prefetchCards({bool fromScroll = true}) {
+    if (!_scrollController.hasClients) return;
+    if (fromScroll) _autoLoadMorePages = 0;
+    final source = context.read<ConversationProvider>();
+    _feed?.continuePreparation();
+    if (!_usesCards(source)) {
+      if (_scrollController.position.extentAfter < _scrollController.position.viewportDimension * 2) {
+        _requestMoreIfNeeded(source);
+      }
+      return;
+    }
+    final position = _scrollController.position;
+    if (position.extentAfter < position.viewportDimension * 2 && _feed!.problem == null) unawaited(_feed!.loadMore());
+  }
+
   final GlobalKey<HomeDailyRecapsState> _recapsKey = GlobalKey<HomeDailyRecapsState>();
   String? _loadMoreFilterKey;
   String? _lastLoadMoreRequestKey;
@@ -327,6 +392,166 @@ class _ConversationsPageState extends State<ConversationsPage>
   final Set<String> _paintedStandaloneIds = {};
   bool _homeTabActive = true;
   bool _wasBackgrounded = false;
+
+  /// v3: the live conversation is re-read only while Home is on screen; a pendant keeps the app
+  /// alive in the background all day.
+  ConversationsV3Provider? _v3;
+  bool _v3Watching = false;
+  Timer? _v3Quick;
+  DateTime? _v3QuickSince;
+  int? _v3ProcessingSignature;
+  String? _v3LiveId;
+  DateTime? _v3LiveCreatedAt;
+  DateTime? _v3EventRefreshAt;
+
+  // Reliability experiment instant_live_text: while an End hides the Listening row, the phone's own
+  // recogniser is watched, and the first words spoken after that End bring the row back.
+  LivePreviewController? _afterEndPreview;
+  ({DateTime since, String? captureId})? _afterEnd;
+
+  void _watchSpeechAfterEnd(LivePreviewController? preview, DateTime? since, String? captureId) {
+    final watched = since == null ? null : preview;
+    _afterEnd = watched == null ? null : (since: since!, captureId: captureId);
+    if (identical(_afterEndPreview, watched)) return;
+    _afterEndPreview?.removeListener(_onPreviewAfterEnd);
+    _afterEndPreview = watched;
+    watched?.addListener(_onPreviewAfterEnd);
+    // Words may already be there (the End was pressed on another page); never notify during a build.
+    if (watched != null) WidgetsBinding.instance.addPostFrameCallback((_) => _onPreviewAfterEnd());
+  }
+
+  void _onPreviewAfterEnd() {
+    final preview = _afterEndPreview;
+    final target = _afterEnd;
+    if (!mounted || preview == null || target == null) return;
+    final spokenAt = SpeechAfterEnd.firstHeard(preview.lines, target.since);
+    if (spokenAt != null) {
+      final resumed = context.read<ConversationsV3Provider?>()?.resumeListeningAfterFinish(target.captureId) ?? false;
+      if (resumed && ReliabilityExperiments.enabled('vendor_recognizer_on_opened_app')) {
+        // Local timing record (no text): how long after the End, and after the first word spoken after
+        // it, the Listening row came back.
+        LiveWordsLog.event('listening_row_back', {
+          'after_end_ms': DateTime.now().difference(target.since).inMilliseconds,
+          'after_first_word_ms': DateTime.now().difference(spokenAt).inMilliseconds,
+          'own_results': preview.ownResultsHeard,
+          'vendor_words': preview.vendorWordsSeen,
+        });
+      }
+    }
+  }
+
+  /// Episodes were asked for before the switch answered (and so made no call); ask again once it says
+  /// this account is not on v3.
+  bool _legacyAfterAnswer = false;
+
+  void _syncV3Watch() {
+    final want = mounted && _v3 != null && !_wasBackgrounded && _homeTabActive;
+    if (want == _v3Watching) return;
+    _v3Watching = want;
+    if (want) {
+      // Skip ticks while a pushed page (a conversation, settings) covers Home.
+      _v3!.watch(
+        when: () => mounted && (ModalRoute.of(context)?.isCurrent ?? true),
+        // X7: a row that went to transcribing or writing within the last hour re-reads the recent
+        // rows on the same 15 s tick. An older stuck row no longer keeps the list re-reading.
+        rowsPending: () =>
+            mounted &&
+            (_v3?.finishRow != null ||
+                ConversationsV3Provider.recentlyMidPipeline(
+                  context.read<ConversationProvider>().conversations,
+                  clock.now(),
+                ).isNotEmpty),
+        refreshRows: _refreshRecentV3Rows,
+      );
+    } else {
+      _v3?.unwatch();
+      _stopV3Quick();
+    }
+  }
+
+  /// Re-reads the rows that can be changing (created since the earliest recent pending row, the
+  /// rows this phone is processing, and [touched]) instead of the whole newest page, and leaves the
+  /// scroll position's paging alone.
+  Future<void> _refreshRecentV3Rows({Iterable<DateTime> touched = const []}) {
+    if (!mounted) return Future.value();
+    final provider = context.read<ConversationProvider>();
+    final now = clock.now();
+    return provider.refreshRecentConversations(ConversationsV3Provider.recentRefreshSince([
+      ...touched,
+      for (final row in ConversationsV3Provider.recentlyMidPipeline(provider.conversations, now)) row.createdAt,
+      for (final row in provider.processingConversations) row.createdAt,
+    ], now));
+  }
+
+  void _stopV3Quick() {
+    _v3Quick?.cancel();
+    _v3Quick = null;
+    _v3QuickSince = null;
+  }
+
+  /// v3 Home after a frame. Until the server shows the conversation in progress, a streaming capture
+  /// re-reads it every 5 s for up to 3 minutes. A capture event (a recording ended or was processed)
+  /// re-reads the list and the live conversation instead of adding the recording as a row.
+  void _afterV3Frame(
+      {required bool waitingForLive,
+      required int processingSignature,
+      required String? liveId,
+      DateTime? liveCreatedAt}) {
+    final v3 = _v3;
+    if (v3 == null || !mounted) return;
+    if (waitingForLive && _v3Watching) {
+      final since = _v3QuickSince ??= clock.now();
+      if (_v3Quick == null && clock.now().difference(since) < const Duration(minutes: 3)) {
+        _v3Quick = Timer.periodic(const Duration(seconds: 5), (_) {
+          if (!mounted || clock.now().difference(since) >= const Duration(minutes: 3)) {
+            _v3Quick?.cancel();
+            _v3Quick = null;
+            return;
+          }
+          // Covered by another page (the live page re-reads for itself): skip, as the 15 s read does.
+          if (ModalRoute.of(context)?.isCurrent == false) return;
+          unawaited(v3.refresh());
+        });
+      }
+    } else if (!waitingForLive) {
+      _stopV3Quick();
+    }
+    // A capture event changed what is processing (ids, statuses, steps — never object identities, which
+    // every list read renews): re-read the list and the live conversation, at most every 10 s.
+    final previous = _v3ProcessingSignature;
+    _v3ProcessingSignature = processingSignature;
+    final last = _v3EventRefreshAt;
+    if (previous != null &&
+        previous != processingSignature &&
+        v3.finishRow == null &&
+        (last == null || clock.now().difference(last) >= const Duration(seconds: 10))) {
+      _v3EventRefreshAt = clock.now();
+      unawaited(v3.refresh());
+      unawaited(_refreshRecentV3Rows(touched: [if (liveCreatedAt != null) liveCreatedAt]));
+    }
+    // The conversation in progress closed (it left the live slot or another took it): re-read the list
+    // so it appears as an ordinary row, whatever the processing signature did.
+    final previousLive = _v3LiveId;
+    final previousLiveCreatedAt = _v3LiveCreatedAt;
+    _v3LiveId = liveId;
+    _v3LiveCreatedAt = liveCreatedAt;
+    if (previousLive != null && previousLive != liveId && v3.finishRow == null) {
+      // The closed conversation was created when it opened, possibly hours ago: start there
+      // (at most a day back; a longer one is picked up by the next full read).
+      unawaited(_refreshRecentV3Rows(touched: [if (previousLiveCreatedAt != null) previousLiveCreatedAt]));
+    }
+  }
+
+  /// The switch answered "not v3" after Home started: start the episode reads it held back.
+  void _afterLegacyAnswer() {
+    if (!_legacyAfterAnswer || !mounted) return;
+    final v3 = _v3;
+    if (v3 == null || !v3.resolved || v3.v3) return;
+    _legacyAfterAnswer = false;
+    final episodes = context.read<EpisodeProvider?>();
+    if (episodes != null) unawaited(episodes.refreshLive());
+  }
+
   HomeProvider? _watchedHome;
 
   void _releaseHomeLayout() {
@@ -340,9 +565,18 @@ class _ConversationsPageState extends State<ConversationsPage>
     final active = home.selectedIndex == HomeProvider.homeTab;
     if (active == _homeTabActive) return;
     _homeTabActive = active;
-    // Re-entering Home releases an outage-era grouping. With nothing held,
-    // a tab switch must not rebuild this page (tab_switch perf budget).
-    if (active && (_fallbackHomeLayout != null || _paintedStandaloneIds.isNotEmpty) && mounted) {
+    _syncV3Watch();
+    final source = context.read<ConversationProvider>();
+    _feed?.setActive(active &&
+        !_wasBackgrounded &&
+        !source.hasActiveSearch &&
+        !source.hasActiveHomeFilter &&
+        !source.showShortConversations &&
+        !source.showDiscardedConversations);
+    if (active && _feed?.preparationReady == true) unawaited(_feed!.refresh());
+    // Re-entering Home releases an outage-era grouping.
+    // Skip the rebuild when there is nothing to update (tab_switch perf budget).
+    if (active && mounted && (_fallbackHomeLayout != null || _paintedStandaloneIds.isNotEmpty)) {
       setState(_releaseHomeLayout);
     }
   }
@@ -360,9 +594,20 @@ class _ConversationsPageState extends State<ConversationsPage>
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.paused || state == AppLifecycleState.hidden) _wasBackgrounded = true;
+    if (state == AppLifecycleState.paused || state == AppLifecycleState.hidden) {
+      _wasBackgrounded = true;
+      _feed?.setActive(false);
+      _syncV3Watch();
+    }
     if (state == AppLifecycleState.resumed && _wasBackgrounded) {
       _wasBackgrounded = false;
+      _syncV3Watch();
+      final source = context.read<ConversationProvider>();
+      _feed?.setActive(_homeTabActive &&
+          !source.hasActiveSearch &&
+          !source.hasActiveHomeFilter &&
+          !source.showShortConversations &&
+          !source.showDiscardedConversations);
       _scheduleDayRollover();
       if (mounted) setState(_releaseHomeLayout);
     }
@@ -390,6 +635,7 @@ class _ConversationsPageState extends State<ConversationsPage>
   @override
   void initState() {
     super.initState();
+    _scrollController.addListener(_prefetchCards);
     WidgetsBinding.instance.addObserver(this);
     final lifecycle = WidgetsBinding.instance.lifecycleState;
     _wasBackgrounded = lifecycle == AppLifecycleState.paused || lifecycle == AppLifecycleState.hidden;
@@ -399,11 +645,31 @@ class _ConversationsPageState extends State<ConversationsPage>
     unawaited(_pendingWork.refresh());
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       if (!mounted) return;
+      _v3 = context.read<ConversationsV3Provider?>();
+      _syncV3Watch();
+      // First launch after this build: learn which Home this account has before any episode or feed
+      // read (a v3 account makes none). Later launches know it from the remembered answer.
+      if (_v3 case final v3? when !v3.resolved) {
+        await v3.refresh().timeout(const Duration(seconds: 3), onTimeout: () {});
+        if (!mounted) return;
+        if (!v3.resolved) _legacyAfterAnswer = true;
+      }
       // The episodes capability (and any live episode) decides how the live capture reads on Home.
       final episodes = context.read<EpisodeProvider?>();
       if (episodes != null) unawaited(episodes.refreshLive());
       final conversationProvider = context.read<ConversationProvider>();
       episodes?.observeHomeConversations(conversationProvider);
+      _feed = context.read<HomeFeedProvider?>();
+      _feed?.setActive(!_wasBackgrounded && _homeTabActive);
+      if (widget.requestInitialLoad && _feed != null && _usesCards(conversationProvider)) {
+        await _feed!.start();
+        if (!mounted) return;
+        if (!_feed!.unsupported) {
+          setState(() => _isBootstrapping = false);
+          _scheduleDeferred(context.read<LocalRecordingsProvider>().refresh);
+          return;
+        }
+      }
       final today = DateUtils.dateOnly(clock.now());
       final initialFrom = conversationProvider.groupedConversations.keys.fold<DateTime>(
         today.subtract(const Duration(days: 7)),
@@ -558,6 +824,15 @@ class _ConversationsPageState extends State<ConversationsPage>
             // the latch so the next scroll can retry the same offset.
             _lastLoadMoreRequestKey = null;
           }
+          // A page can come back short (hidden rows) or add nothing new. With the reader still
+          // near the end, ask for the next one now instead of waiting for another scroll. Bounded:
+          // each page through a hidden run costs hundreds of reads, so one scroll buys a few pages.
+          if (mounted && succeeded && _autoLoadMorePages < _maxAutoLoadMorePages) {
+            _autoLoadMorePages++;
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              if (mounted) _prefetchCards(fromScroll: false);
+            });
+          }
         }),
       );
     }
@@ -572,6 +847,11 @@ class _ConversationsPageState extends State<ConversationsPage>
 
   @override
   void dispose() {
+    if (_v3Watching) _v3?.unwatch();
+    _v3Watching = false;
+    _stopV3Quick();
+    _afterEndPreview?.removeListener(_onPreviewAfterEnd);
+    _afterEndPreview = null;
     WidgetsBinding.instance.removeObserver(this);
     _watchedHome?.removeListener(_onHomeProviderChanged);
     _watchedHome = null;
@@ -632,15 +912,6 @@ class _ConversationsPageState extends State<ConversationsPage>
     return provider.conversations.where((c) => !c.discarded).length;
   }
 
-  // True when any conversation filter is active. When filters are on, the
-  // `conversations` list reflects filtered server results (e.g. an empty list
-  // when "Starred" + a folder yield no matches). Without this, the title and
-  // folder-tab chips would hide on empty filtered results, leaving no way to
-  // clear filters short of restarting the app.
-  bool _hasActiveFilter(ConversationProvider provider) {
-    return provider.showStarredOnly || provider.selectedFolderId != null || provider.selectedStartDate != null;
-  }
-
   Widget _buildLoadingShimmer() {
     return SliverList(
       delegate: SliverChildBuilderDelegate(
@@ -673,20 +944,106 @@ class _ConversationsPageState extends State<ConversationsPage>
     final episodes = context.watch<EpisodeProvider?>();
     final episodesOn = episodes?.enabled == true;
     final streaming = context.select<CaptureProvider, bool>((c) => EpisodePresentation.streamingSource(c) != null);
+    final captureId = context.select<CaptureProvider, String?>((c) => c.activeRecordingId);
     final episodeLive = episodesOn && streaming;
     final filling = episodesOn ? fillingSeconds(_pendingWork.pending) : const <String, int>{};
+    // Recordings and conversations (v3): a flat list of conversations, the one in progress on top.
+    final v3 = context.watch<ConversationsV3Provider?>();
+    final v3On = v3?.v3 == true;
+    // Under vendor_recognizer_on_opened_app the watched lines are the merged ones: the phone's own
+    // recogniser's, and the vendor's where it returned nothing.
+    if (ReliabilityExperiments.enabled('instant_live_text') ||
+        ReliabilityExperiments.enabled('vendor_recognizer_on_opened_app')) {
+      _watchSpeechAfterEnd(context.select<CaptureProvider, LivePreviewController?>((c) => c.livePreview),
+          v3?.listeningSuppressedSince(captureId), captureId);
+    }
+    // No answer yet (first launch): the plain list, with no feed or episode reads.
+    final v3Pending = v3 != null && !v3.resolved;
+    if (_legacyAfterAnswer) WidgetsBinding.instance.addPostFrameCallback((_) => _afterLegacyAnswer());
     return Selector2<ConversationProvider, LocalRecordingsProvider, _ConversationPageSnapshot>(
       selector: (_, conversationProvider, recordingsProvider) =>
           _conversationPageSnapshot(conversationProvider, recordingsProvider),
       builder: (context, snapshot, child) {
         final convoProvider = context.read<ConversationProvider>();
-        final defaultHome = !convoProvider.hasActiveSearch &&
-            !_hasActiveFilter(convoProvider) &&
+        final feed = context.watch<HomeFeedProvider?>();
+        final cardsOn = feed != null &&
+            !v3On &&
+            !v3Pending &&
+            !feed.unsupported &&
+            !convoProvider.hasActiveSearch &&
+            !convoProvider.hasActiveHomeFilter &&
             !convoProvider.showShortConversations &&
-            !convoProvider.showDiscardedConversations &&
-            !convoProvider.isSelectionModeActive;
+            !convoProvider.showDiscardedConversations;
+        if (feed != null) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (!mounted) return;
+            feed.setActive(!_wasBackgrounded &&
+                _homeTabActive &&
+                !convoProvider.hasActiveSearch &&
+                !convoProvider.hasActiveHomeFilter &&
+                !convoProvider.showShortConversations &&
+                !convoProvider.showDiscardedConversations);
+            if (feed.preparationReady &&
+                feed.unsupported &&
+                (!_scrollController.hasClients || _scrollController.offset <= 20)) {
+              unawaited(feed.refresh());
+            }
+            if (cardsOn && widget.requestInitialLoad && !feed.initialized) unawaited(feed.start());
+          });
+        }
+        final defaultHome = convoProvider.showsDefaultHome;
         final hiddenByLive =
             episodeLive && defaultHome ? hiddenLiveConversations(episodes!.liveConversationIds) : const <String>{};
+        final v3Home = v3On && defaultHome;
+        final activityOnlyFailures = v3On || _pendingWork.homeProcessingToday;
+        final v3Live = v3Home ? v3!.live : null;
+        final manualFinish = v3On ? v3!.finishRow : null;
+        if (v3On && v3!.takeHomeReconcile()) {
+          // An accepted finish reached its deadline: read the list once, wherever the reader is.
+          WidgetsBinding.instance.addPostFrameCallback(
+              (_) => unawaited(convoProvider.forceRefreshConversations().then<void>((_) {}, onError: (Object _) {})));
+        }
+        final terminalFinish = manualFinish == null ? null : v3!.finishTerminalMatch(convoProvider.conversations);
+        final finishHandedOff = convoProvider.showsPendingFinishOnHome &&
+            manualFinish != null &&
+            v3!.finishHasSuccessor(
+                convoProvider.groupedConversations.values.expand((rows) => rows).where(shownOnV3Home));
+        final finishSettled = finishHandedOff || terminalFinish != null;
+        final showManualFinish = convoProvider.showsPendingFinishOnHome && manualFinish != null && !finishSettled;
+        if (manualFinish != null && finishSettled) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (mounted) v3!.acknowledgeManualFinish(manualFinish);
+          });
+        }
+        final callActive = context.select<PhoneCallProvider?, bool>((p) => switch (p?.callState) {
+              PhoneCallState.active || PhoneCallState.connecting || PhoneCallState.ringing => true,
+              _ => false,
+            });
+        final liveRemoved = v3Live != null &&
+            (v3Live.discarded ||
+                convoProvider.memoriesToDelete.containsKey(v3Live.id) ||
+                SharedPreferencesUtil().isConversationDeleteConfirmed(v3Live.id));
+        final liveRow = v3HomeLiveRow(
+          v3Home: v3Home,
+          streaming: streaming,
+          serverUsable: v3Live != null && v3Live.v3?.homeHidden != true && !isFailedConversation(v3Live),
+          liveRemoved: liveRemoved,
+          callActive: callActive,
+          listeningSuppressed: v3Home && v3!.suppressListeningAfterFinish(captureId),
+        );
+        final liveServerRow = liveRow == V3HomeLiveRow.server ? v3Live : null;
+        final livePlaceholder = liveRow == V3HomeLiveRow.placeholder;
+        if (v3Home) {
+          final waiting = streaming && v3Live == null;
+          final signature =
+              Object.hashAll(snapshot.processingConversations.map((c) => Object.hash(c.id, c.status, c.homeStep)));
+          WidgetsBinding.instance.addPostFrameCallback((_) => _afterV3Frame(
+                waitingForLive: waiting,
+                processingSignature: signature,
+                liveId: v3Live?.id,
+                liveCreatedAt: v3Live?.createdAt,
+              ));
+        }
         // Unsynced local recordings (batch/offline mode) shown inline with conversations,
         // grouped into the same date buckets. Only in the default view (no search/folder/
         // starred/daily-summaries filter).
@@ -703,7 +1060,9 @@ class _ConversationsPageState extends State<ConversationsPage>
           }
         }
         final bool hasRecordings = recordingsByDate.isNotEmpty;
-        final bool hasProcessingConversations = snapshot.processingConversations.isNotEmpty;
+        // v3: a conversation's tile shows its processing; capture-side processing rows are recordings.
+        final bool hasProcessingConversations = showManualFinish ||
+            (!v3Home && snapshot.processingConversations.any((c) => !activityOnlyFailures || !isFailedConversation(c)));
         final apiPhase = snapshot.apiViewPhase;
         final bool showTypedStatus = apiPhase == ApiViewPhase.error ||
             apiPhase == ApiViewPhase.locked ||
@@ -724,14 +1083,15 @@ class _ConversationsPageState extends State<ConversationsPage>
                       if (!hiddenByLive.contains(c.id)) c,
                   ],
               };
-        if (!defaultHome && _pendingWork.homeProcessingToday) {
+        if (!defaultHome && activityOnlyFailures) {
           final today = localHomeDay(clock.now());
           conversationsByDate = {
             for (final entry in conversationsByDate.entries)
               entry.key: [
                 for (final c in entry.value)
-                  if (!isFailedHomeConversation(c) &&
-                      (!showRecordings ||
+                  if (!isFailedConversation(c) &&
+                      (!_pendingWork.homeProcessingToday ||
+                          !showRecordings ||
                           convoProvider.isSelectionModeActive ||
                           localHomeDay(c.startedAt ?? c.createdAt) == today ||
                           !{HomeStep.transcribing, HomeStep.writingNotes}.contains(homeStepOf(c))))
@@ -739,10 +1099,49 @@ class _ConversationsPageState extends State<ConversationsPage>
               ],
           };
         }
+        if (v3Home) {
+          // The server lists Home-visible conversations; the in-progress one comes from the live read
+          // and leads its day.
+          conversationsByDate = {
+            for (final entry in conversationsByDate.entries)
+              entry.key: [
+                for (final c in entry.value)
+                  if (c.id != v3Live?.id && shownOnV3Home(c)) c,
+              ],
+          };
+          if (liveServerRow != null) {
+            // The conversation in progress always leads Today, even when it started before midnight:
+            // the live row never sits in an earlier day or above the day list (David, 2026-11-21).
+            final day = localHomeDay(clock.now());
+            conversationsByDate[day] = [liveServerRow, ...?conversationsByDate[day]];
+          }
+        }
+        final cardById = <String, HomeFeedCard>{};
+        final unknownCardDay = DateTime(1);
+        if (cardsOn) {
+          conversationsByDate = {};
+          final hidden = {...convoProvider.memoriesToDelete.keys, ...hiddenByLive};
+          for (final card in feed.items) {
+            if (card.kind == 'conversation' &&
+                (convoProvider.memoriesToDelete.containsKey(card.detailId) ||
+                    (hidden.contains(card.detailId) && card.homeStep != 'ready'))) {
+              continue;
+            }
+            if (card.kind == 'episode' && episodeLive && card.detailId == episodes?.live?.id) continue;
+            final seed = card.displaySeed();
+            cardById[seed.id] = card;
+            (conversationsByDate[card.startedAt == null ? unknownCardDay : localHomeDay(card.startedAt!)] ??= [])
+                .add(seed);
+          }
+          convoProvider.setHomeCardSelectionSeeds([
+            for (final card in feed.items)
+              if (card.kind == 'conversation') card.displaySeed(),
+          ]);
+        }
         final projectedEpisodes = <String, HomeRow>{};
         final projectedMemberIds = <String>{...hiddenByLive};
         final projectedProcessingIds = <String>{};
-        if (defaultHome) {
+        if (defaultHome && !cardsOn && !v3Home) {
           final today = clock.now();
           final days = conversationsByDate.keys;
           final from = days.isEmpty
@@ -783,7 +1182,10 @@ class _ConversationsPageState extends State<ConversationsPage>
             groupAwaitingTranscript: true,
             now: clock.now(),
             processingTodayOnly: _pendingWork.homeProcessingToday,
-            activityOnlyFailures: _pendingWork.homeProcessingToday,
+            singleProcessingRow: true,
+            neutralUnknownSteps: true,
+            processingDay: localHomeDay(clock.now()),
+            activityOnlyFailures: activityOnlyFailures,
             processingTitle: context.l10n.wrappedProcessingDefault,
             finishingTitle: context.l10n.episodeFinishingUp,
             liveConversationIds: hiddenByLive,
@@ -813,6 +1215,22 @@ class _ConversationsPageState extends State<ConversationsPage>
                 .map((row) => row.id));
           }
         }
+        if (defaultHome && cardsOn) {
+          final projected = buildHomeCardRows(cardById.values.toList(), snapshot.processingConversations,
+              now: clock.now(),
+              processingTitle: context.l10n.wrappedProcessingDefault,
+              liveIds: hiddenByLive,
+              processingTodayOnly: _pendingWork.homeProcessingToday);
+          conversationsByDate = {};
+          for (final row in projected) {
+            final card = cardById[row.conversation.id];
+            final day = card?.startedAt == null && card != null ? unknownCardDay : row.day;
+            (conversationsByDate[day] ??= []).add(row.conversation);
+            projectedMemberIds.addAll(row.episodeConversationIds);
+            if (row.isProcessing) projectedProcessingIds.add(row.conversation.id);
+            if (row.episode != null) projectedEpisodes[row.conversation.id] = row;
+          }
+        }
         // Only the default view: a search or folder shows what it matched.
         final usage = context.watch<UsageProvider?>()?.subscription;
         final heldRecordings = showRecordings && !convoProvider.isSelectionModeActive
@@ -828,29 +1246,48 @@ class _ConversationsPageState extends State<ConversationsPage>
             .toList()
           ..sort((a, b) => b.compareTo(a));
         // Episodes beta, default view: background conversations live in the day's recap, not on Home.
-        final hidingBackground = episodesOn && showRecordings && !convoProvider.isSelectionModeActive;
-        final builtRows = _buildConversationListRows(
-          dates: mergedDates,
-          conversationsByDate: hidingBackground ? _withoutBackground(conversationsByDate) : conversationsByDate,
-          recordingsByDate: recordingsByDate,
-          heldByDate: heldByDate,
-        );
+        final hidingBackground = !cardsOn && episodesOn && showRecordings && !convoProvider.isSelectionModeActive;
+        final builtRows = _processingFirst(
+            _buildConversationListRows(
+              dates: mergedDates,
+              conversationsByDate: hidingBackground ? _withoutBackground(conversationsByDate) : conversationsByDate,
+              recordingsByDate: recordingsByDate,
+              heldByDate: heldByDate,
+            ),
+            projectedProcessingIds,
+            enabled: defaultHome);
         final localToday = localHomeDay(clock.now());
-        final withLive =
-            episodeLive ? _withTodayRow(builtRows, clock.now(), _ConversationListRowKind.liveEpisode) : builtRows;
-        // Only the default view: a search or folder shows what it matched.
-        final conversationRows = showRecordings && !convoProvider.isSelectionModeActive
+        final withLive = episodeLive
+            ? _withTodayRow(builtRows, clock.now(), _ConversationListRowKind.liveEpisode)
+            : livePlaceholder
+                ? _withTodayRow(builtRows, clock.now(), _ConversationListRowKind.v3LivePlaceholder)
+                : builtRows;
+        // Default Home already projected every local entry together with server
+        // rows. A second insertion can resurrect stale ready/noise entries and
+        // bypass the one-row fold. Filtered views keep their adapter; capability negotiation never disables the fold.
+        final rowsWithLocalProcessing = showRecordings && !convoProvider.isSelectionModeActive && !defaultHome
             ? _withProcessingRows(
                 withLive,
                 [
                   for (final c in snapshot.processingConversations)
-                    if (!projectedMemberIds.contains(c.id) &&
-                        (!_pendingWork.homeProcessingToday ||
-                            (!isFailedHomeConversation(c) && localHomeDay(c.startedAt ?? c.createdAt) == localToday)))
+                    if ((!cardsOn ||
+                            (!cardById.containsKey(c.id) &&
+                                !cardById.values
+                                    .any((card) => card.kind == 'episode' && card.detailId == c.episodeId))) &&
+                        !projectedMemberIds.contains(c.id) &&
+                        (!activityOnlyFailures || !isFailedConversation(c)) &&
+                        (!_pendingWork.homeProcessingToday || localHomeDay(c.startedAt ?? c.createdAt) == localToday))
                       c,
                 ],
                 clock.now())
             : withLive;
+        final rowsWithManualFinish = showManualFinish
+            ? _withProcessingRows(rowsWithLocalProcessing, [manualFinish], clock.now())
+            : rowsWithLocalProcessing;
+        // Pin the server live row after inserting Processing, which treats it as an ordinary conversation.
+        final conversationRows = !episodeLive && liveServerRow != null
+            ? _pinFirstInDay(rowsWithManualFinish, liveServerRow.id)
+            : rowsWithManualFinish;
 
         if (showRecordings &&
             !convoProvider.isSelectionModeActive &&
@@ -860,6 +1297,7 @@ class _ConversationsPageState extends State<ConversationsPage>
               .where((row) =>
                   row.kind == _ConversationListRowKind.conversation ||
                   row.kind == _ConversationListRowKind.liveEpisode ||
+                  row.kind == _ConversationListRowKind.v3LivePlaceholder ||
                   row.kind == _ConversationListRowKind.processing ||
                   row.kind == _ConversationListRowKind.recording)
               .length;
@@ -869,7 +1307,21 @@ class _ConversationsPageState extends State<ConversationsPage>
         return RefreshIndicator(
           onRefresh: () async {
             HapticFeedback.mediumImpact();
+            if (!cardsOn && feed?.unsupported == true) {
+              await feed!.refresh();
+              if (!feed.unsupported) return;
+              if (!context.mounted) return;
+            }
+            if (cardsOn) {
+              await Future.wait([
+                feed.refresh(),
+                context.read<LocalRecordingsProvider>().refresh(),
+                if (_recapsKey.currentState != null) _recapsKey.currentState!.refresh()
+              ]);
+              return;
+            }
             _lastLoadMoreRequestKey = null;
+            if (v3On) unawaited(v3!.refresh());
             unawaited(_pendingWork.refresh());
             // Pull-to-refresh is an explicit layout boundary. Keep the held
             // projection until both reads finish, so provider notifications
@@ -895,6 +1347,15 @@ class _ConversationsPageState extends State<ConversationsPage>
                   when review.availability != ReviewAvailability.off)
                 review.load(),
             ]);
+            // The reader pulled; a refresh that failed says so above the rows it kept (§17.4).
+            if (context.mounted && convoProvider.conversationsLoadFailed && convoProvider.conversations.isNotEmpty) {
+              OmiFeedback.error(
+                context,
+                context.l10n.couldNotRefreshConversations,
+                actionLabel: context.l10n.tryAgain,
+                onAction: () => unawaited(convoProvider.getInitialConversations()),
+              );
+            }
             final historyReady = await history;
             if (mounted && historyReady) {
               if (_initialOverlayReady case final ready? when !ready.isCompleted) ready.complete();
@@ -908,12 +1369,18 @@ class _ConversationsPageState extends State<ConversationsPage>
             physics: const AlwaysScrollableScrollPhysics(),
             slivers: [
               // The live capture row: recording, a call, or a conversation being captured. With episodes
-              // on, a streaming capture is the live episode row in Today instead.
+              // on, a streaming capture is the live episode row in Today instead. On v3 Home a streaming
+              // capture is always the live conversation row: the server's window once it has one, and a
+              // placeholder row until then (or between windows), never the pendant capture card, so the
+              // two do not swap each time the live read comes back empty.
               SliverToBoxAdapter(
-                child: ConversationCaptureWidget(showsCall: true, deferStreamingToEpisode: episodeLive),
+                child: ConversationCaptureWidget(
+                    showsCall: true, deferStreamingToEpisode: episodeLive || v3Live != null || (v3Home && streaming)),
               ),
               // A declined renewal the user can still pay: one row, Update opens Stripe's billing portal.
               const SliverToBoxAdapter(child: PaymentIssueRow()),
+              // A paying monthly reader whose Omi recorded nothing for 5 days: one quiet row, Check opens the device.
+              const SliverToBoxAdapter(child: QuietPayerRow()),
               const SliverToBoxAdapter(child: SpeechProfileCardWidget()),
               const SliverToBoxAdapter(child: UpdateFirmwareCardWidget()),
               // Review absorbs the voice prompts; the old card shows only while Review is off.
@@ -929,6 +1396,29 @@ class _ConversationsPageState extends State<ConversationsPage>
                           : HomeDailyRecaps(key: _recapsKey, load: widget.loadRecaps!),
                 ),
               ),
+              // With no list rows to sit in (still loading, or nothing listed yet), the live placeholder
+              // opens Today itself, the same Today header and slot it takes in the list.
+              // The list below renders only when there is something to list; otherwise an empty, hero or
+              // status branch takes its place (held recordings alone do not keep the list up).
+              if (livePlaceholder &&
+                  (_isBootstrapping ||
+                      _initialOverlayPending ||
+                      (conversationsByDate.values.every((list) => list.isEmpty) &&
+                          !hasRecordings &&
+                          !hasProcessingConversations) ||
+                      !conversationRows.any((r) => r.kind == _ConversationListRowKind.v3LivePlaceholder)))
+                SliverToBoxAdapter(
+                  child: Padding(
+                    padding: const EdgeInsets.only(top: 10),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        DateListItem(date: DateUtils.dateOnly(clock.now()), isFirst: true),
+                        const V3LivePlaceholderRow(),
+                      ],
+                    ),
+                  ),
+                ),
               // With no list yet, the live episode opens Today itself.
               if (episodeLive && builtRows.isEmpty)
                 SliverToBoxAdapter(
@@ -947,24 +1437,36 @@ class _ConversationsPageState extends State<ConversationsPage>
               // never the new-account empty state. Unset (data) keeps production.
               // The skeleton is Home's only loading state: it stays up until the first
               // episode read settles, so no second loader replaces it.
-              if (_isBootstrapping || _initialOverlayPending)
+              if (cardsOn && feed.partial)
+                SliverToBoxAdapter(
+                    child: feed.items.isEmpty && feed.problem != null
+                        ? OmiErrorState(message: context.l10n.somethingWentWrong, onRetry: feed.refresh)
+                        : OmiPartialNotice(message: context.l10n.somethingWentWrong, onRetry: feed.retry)),
+              if (!cardsOn && showManualFinish && showTypedStatus && apiPhase != ApiViewPhase.empty)
+                SliverToBoxAdapter(child: ConversationApiStatus(provider: convoProvider)),
+              if ((_isBootstrapping && (!cardsOn || feed.items.isEmpty)) || _initialOverlayPending)
                 _buildLoadingShimmer()
-              else if (showTypedStatus &&
+              else if (cardsOn && feed.items.isEmpty && feed.partial)
+                const SliverToBoxAdapter(child: SizedBox.shrink())
+              else if (!cardsOn &&
+                  showTypedStatus &&
                   conversationsByDate.values.every((list) => list.isEmpty) &&
                   snapshot.conversations.isEmpty &&
                   !hasProcessingConversations &&
                   !hasRecordings &&
-                  !_hasActiveFilter(convoProvider))
+                  !convoProvider.hasActiveHomeFilter)
                 SliverFillRemaining(
                   hasScrollBody: false,
                   child: Center(child: ConversationApiStatus(provider: convoProvider)),
                 )
-              else if (_nonDiscardedConversationCount(convoProvider) == 0 &&
+              else if (!livePlaceholder &&
+                  _nonDiscardedConversationCount(convoProvider) == 0 &&
                   conversationsByDate.values.every((list) => list.isEmpty) &&
                   !hasProcessingConversations &&
                   !hasRecordings &&
                   !isShowingConversationSkeleton &&
-                  !_hasActiveFilter(convoProvider))
+                  !convoProvider.hasActiveHomeFilter &&
+                  (!cardsOn || (feed.initialized && !feed.partial)))
                 // Friendly hero for brand-new users with zero conversations —
                 // matches the polished Tasks empty state.
                 SliverFillRemaining(
@@ -979,7 +1481,8 @@ class _ConversationsPageState extends State<ConversationsPage>
                     ),
                   ),
                 )
-              else if (conversationsByDate.values.every((list) => list.isEmpty) &&
+              else if (!livePlaceholder &&
+                  conversationsByDate.values.every((list) => list.isEmpty) &&
                   !hasRecordings &&
                   !hasProcessingConversations &&
                   !isShowingConversationSkeleton)
@@ -1010,8 +1513,21 @@ class _ConversationsPageState extends State<ConversationsPage>
                   delegate: SliverChildBuilderDelegate(childCount: conversationRows.length + 1, (context, index) {
                     if (index == conversationRows.length) {
                       Logger.debug('loading more conversations');
+                      if (cardsOn) return feed.loading ? _buildLoadMoreShimmer() : const SizedBox(height: 20);
                       if (convoProvider.isLoadingConversations) {
                         return _buildLoadMoreShimmer();
+                      }
+                      // A failed older page ends the list with one quiet line, not silence (X6);
+                      // scrolling does not retry it on its own.
+                      if (convoProvider.loadMoreFailed) {
+                        return OmiLoadMoreFailed(
+                          key: const Key('conversations_load_more_failed'),
+                          onRetry: () async {
+                            _lastLoadMoreRequestKey = null;
+                            final provider = context.read<ConversationProvider>();
+                            if (provider.hasMoreConversations) await provider.getMoreConversationsFromServer();
+                          },
+                        );
                       }
                       // widget.loadMoreMemories(); // CALL this only when visible
                       return VisibilityDetector(
@@ -1037,9 +1553,18 @@ class _ConversationsPageState extends State<ConversationsPage>
                           more: row.conversationIndex == heldRecordings.length - 1 ? heldMore : 0,
                         );
                       case _ConversationListRowKind.dateHeader:
+                        if (v3Home && row.date != unknownCardDay && row.date.isBefore(localHomeDay(clock.now()))) {
+                          return DaySummaryHeader(
+                            key: ValueKey('date_${row.date.toIso8601String()}'),
+                            date: row.date,
+                            isFirst: row.isFirst,
+                            open: widget.openDaySummary,
+                          );
+                        }
                         return DateListItem(
                           key: ValueKey('date_${row.date.toIso8601String()}'),
                           date: row.date,
+                          label: cardsOn && row.date == unknownCardDay ? context.l10n.unknown : null,
                           isFirst: row.isFirst,
                         );
                       case _ConversationListRowKind.liveEpisode:
@@ -1051,13 +1576,25 @@ class _ConversationsPageState extends State<ConversationsPage>
                             const LiveEpisodeRow(),
                           ],
                         );
+                      case _ConversationListRowKind.v3LivePlaceholder:
+                        return Column(
+                          key: const ValueKey('v3_live_placeholder_row'),
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            if (row.isFirst) DateListItem(date: row.date, isFirst: true),
+                            const V3LivePlaceholderRow(),
+                          ],
+                        );
                       case _ConversationListRowKind.processing:
                         return Column(
                           key: ValueKey('processing_${row.conversation!.id}'),
                           crossAxisAlignment: CrossAxisAlignment.stretch,
                           children: [
                             if (row.isFirst) DateListItem(date: row.date, isFirst: true),
-                            ProcessingConversationRow(conversation: row.conversation!),
+                            ProcessingConversationRow(
+                                conversation: row.conversation!,
+                                openable: !identical(row.conversation, manualFinish),
+                                step: homeStepOf(row.conversation!) ?? HomeStep.transcribing),
                           ],
                         );
                       case _ConversationListRowKind.conversation:
@@ -1067,13 +1604,14 @@ class _ConversationsPageState extends State<ConversationsPage>
                             key: ValueKey('processing_${row.conversation!.id}'),
                             conversation: row.conversation!,
                             episode: projectedRow?.episode,
+                            processingEpisodes: projectedRow?.processingEpisodes ?? const [],
                             step: projectedRow?.step ?? HomeStep.writingNotes,
                             count: projectedRow?.count ?? 1,
                           );
                         }
                         // Consecutive locked rows share one frosted card and one upgrade action;
                         // the run's first row draws it and the rest of the run draws nothing.
-                        final lockedRun = _lockedRunAt(conversationRows, index);
+                        final lockedRun = cardsOn ? null : _lockedRunAt(conversationRows, index);
                         if (lockedRun != null) {
                           if (lockedRun.isEmpty) return const SizedBox.shrink();
                           return LockedConversationRun(
@@ -1083,16 +1621,19 @@ class _ConversationsPageState extends State<ConversationsPage>
                           );
                         }
                         return ConversationListItem(
-                          key: ValueKey(row.conversation!.id),
+                          key: ValueKey(cardById[row.conversation!.id]?.id ?? row.conversation!.id),
                           conversation: row.conversation!,
                           conversationIdx: row.conversationIndex,
+                          homeCard: cardById[row.conversation!.id],
                           date: row.date,
                           fillingSeconds: homeRowFilling(
                             filling,
                             row.conversation!.id,
                             projectedEpisodes[row.conversation!.id]?.episodeConversationIds,
                           ),
-                          homeEpisode: projectedEpisodes[row.conversation!.id]?.episode,
+                          homeEpisode: projectedEpisodes[row.conversation!.id]?.isTemporaryMember == true
+                              ? null
+                              : projectedEpisodes[row.conversation!.id]?.episode,
                         );
                       case _ConversationListRowKind.recording:
                         return RecordingListItem(key: ValueKey('rec_${row.recording!.id}'), recording: row.recording!);

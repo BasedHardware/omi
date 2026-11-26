@@ -1,5 +1,8 @@
 """Scoped read of canonical saved audio, not an independent capture buffer."""
 
+import hashlib
+from urllib.parse import urlsplit
+
 import jwt
 from fastapi import HTTPException
 
@@ -37,4 +40,13 @@ def backup_audio_manifest(app_id: str, conversation_id: str, authorization: str,
         raise HTTPException(status_code=404, detail='This conversation is not available for backup')
     if not include_audio:
         return {'authorized': True}
-    return get_audio_signed_urls(uid, conversation_id, conversation.get('audio_files') or [], conversation)
+    result = get_audio_signed_urls(uid, conversation_id, conversation.get('audio_files') or [], conversation)
+    if conversation.get('recording_pieces') is not None:
+        # Released backup workers consume audio_files, not conversation_audio.
+        # Give them exactly one immutable, window-exact artifact once ready.
+        artifact = result.get('conversation_audio') or {}
+        if artifact.get('status') == 'cached' and artifact.get('signed_url'):
+            identity = hashlib.sha256(urlsplit(artifact['signed_url']).path.encode()).hexdigest()[:16]
+            return {**result, 'audio_files': [{'id': 'conversation-' + identity, **artifact}]}
+        return result
+    return result

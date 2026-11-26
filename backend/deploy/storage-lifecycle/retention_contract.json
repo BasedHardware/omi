@@ -2,7 +2,7 @@
   "schema": "omi.retention/v1",
   "_doc": "The one threshold source for audio-bucket retention, both ways. Floor: every lifecycle Delete that can reach a protected prefix has age >= max(hold days) + margin_days; a hold with days=null (or a pending ruling) forbids any age Delete there. Ceiling: soft delete, versioning and cache max ages a bucket may not exceed. Read by backend/scripts/check_sync_staging_lifecycle.py (release prerequisite; floors enforce, ceilings report) and by the workspace's infra/rollout/bin/retention_check.py and drift.sh (git show origin/main:<this file>). 11-01: a whole-bucket 7-day Delete on the batch staging bucket removed 161 failed_held sync uploads held 8+ days, the only server copy.",
   "margin_days": 7,
-  "batch_staging_delete_age_days": 30,
+  "batch_staging_delete_age_days": 60,
   "holds": {
     "allowance_hold_retry_max": {
       "days": 1,
@@ -82,7 +82,7 @@
       "protected_prefixes": [""],
       "holds": ["allowance_hold_retry_max", "vendor_failover_held_stale_grace_max", "scheduler_requeue_delay_max",
                 "artifact_cleanup_after_projection", "upload_pending", "batch_finalization_alarm"],
-      "ceiling": {"soft_delete_seconds_max": 0, "max_age_days": {"": 30}, "source": ["voice_evidence"]}
+      "ceiling": {"soft_delete_seconds_max": 0, "max_age_days": {"": 60}, "source": ["voice_evidence"]}
     },
     "based-hardware-dev-batch-pipeline-staging": {
       "env": "BUCKET_BATCH_PIPELINE",
@@ -96,9 +96,9 @@
       "env": "BUCKET_PRIVATE_CLOUD_SYNC",
       "project": "based-hardware",
       "note": "2026-11-02: David dropped the existing-stock Coldline-to-Archive proposal (large one-time operation cost); prod.json and validate_storage_lifecycle.py permit only the Coldline transition. The rollout handoff reports only playback Delete 30 d and batch Coldline live. prod.json still declares merged/ Delete 3 d and noncurrent .opus.enc Delete; a prod apply would install both, pending explicit clearance. The new-empty-bucket canonical-forward policy is separate.",
-      "protected_prefixes": ["chunks/"],
+      "protected_prefixes": ["chunks/", "record-wal/"],
       "holds": ["source_audio"],
-      "ceiling": {"soft_delete_seconds_max": 0, "retain_until_user_deletes": ["chunks/", "raw-live/"],
+      "ceiling": {"soft_delete_seconds_max": 0, "retain_until_user_deletes": ["audio-outbox/", "chunks/", "raw-live/", "record-wal/"],
                   "max_age_days": {"merged/": 3, "playback/": 30}, "noncurrent_cleanup": true,
                   "ruling": "pending", "source": ["erasure_immediate", "declared_caches", "user_controlled_voice"]}
     },

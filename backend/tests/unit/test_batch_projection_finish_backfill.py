@@ -48,6 +48,20 @@ def test_dry_run_and_atomic_checkpoint_use_strict_read_before_write_fixture():
     assert stamp_page(store, 200.0, apply=True)['scanned'] == 0
 
 
+def test_apply_refreshes_the_mirror_for_the_marker_and_the_page_and_a_dry_run_does_not(monkeypatch):
+    from database import batch_pipeline_projection_finish_backfill as module
+
+    refreshed = Mock()
+    monkeypatch.setattr(module, 'mirror_refresh', refreshed)
+    store = fixture()
+    stamp_page(store, 100.0)
+    refreshed.assert_not_called()
+    stamp_page(store, 100.0, apply=True)
+    refreshed.assert_called_once_with(
+        'batch_pipeline_dev', [('control', module.BACKFILL_KEY), ('results', 'a'), ('results', 'b'), ('results', 'c')]
+    )
+
+
 def test_apply_reads_the_page_in_one_batch_get_inside_the_transaction():
     store = fixture()
     batch_get = Mock(wraps=store.client.get_all)

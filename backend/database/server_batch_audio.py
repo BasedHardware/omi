@@ -1,5 +1,7 @@
 """Committed original-audio content and bounds for server batch capture."""
 
+from config import listen_reconnect
+
 import math
 from datetime import datetime, timezone
 
@@ -9,7 +11,15 @@ from config.server_batch import MARKER, PREVIEW_CUSTODY_MARKER, language_compati
 from database._client import get_firestore_client, run_transactional, is_retryable_firestore_transaction_error
 
 
-def note_server_batch_audio(uid: str, conversation_id: str, start: float, end: float, *, firestore_client=None) -> bool:
+def note_server_batch_audio(
+    uid: str,
+    conversation_id: str,
+    start: float,
+    end: float,
+    *,
+    firestore_client=None,
+    producer_token: str | None = None
+) -> bool:
     """Retain audio-only content after a committed original-audio window.
 
     Window/reconnect bounds merge monotonically in the same transaction that
@@ -27,6 +37,11 @@ def note_server_batch_audio(uid: str, conversation_id: str, start: float, end: f
         if (
             not snapshot.exists
             or not server_batch_owned(row)
+            or (
+                listen_reconnect.producer(row)
+                and (row.get('status') != 'in_progress' or row.get('server_batch_audio_closed'))
+            )
+            or not listen_reconnect.write_owned(row, producer_token)
             or not row.get('private_cloud_sync_enabled')
             or row.get('uses_custom_stt')
             or row.get('data_protection_level', 'enhanced') not in {'standard', 'enhanced'}
@@ -51,7 +66,9 @@ def note_server_batch_audio(uid: str, conversation_id: str, start: float, end: f
     return run_transactional(client, note)
 
 
-def close_server_batch_audio(uid: str, conversation_id: str, *, firestore_client=None) -> bool:
+def close_server_batch_audio(
+    uid: str, conversation_id: str, *, firestore_client=None, producer_token: str | None = None
+) -> bool:
     """Publish the archive-close barrier before empty cleanup or batch handoff."""
     client = firestore_client if firestore_client is not None else get_firestore_client()
     ref = client.collection('users').document(uid).collection('conversations').document(conversation_id)
@@ -63,6 +80,8 @@ def close_server_batch_audio(uid: str, conversation_id: str, *, firestore_client
         if (
             not snapshot.exists
             or not server_batch_owned(row)
+            or (listen_reconnect.producer(row) and row.get('status') != 'in_progress')
+            or (listen_reconnect.producer(row) and listen_reconnect.producer(row).get('token') != producer_token)
             or any(row.get(key) for key in ('deleted', 'discarded', 'is_locked'))
         ):
             return False
@@ -72,7 +91,9 @@ def close_server_batch_audio(uid: str, conversation_id: str, *, firestore_client
     return run_transactional(client, close)
 
 
-def note_server_batch_audio_received(uid: str, conversation_id: str, *, firestore_client=None) -> bool:
+def note_server_batch_audio_received(
+    uid: str, conversation_id: str, *, firestore_client=None, producer_token: str | None = None
+) -> bool:
     """Fence lease cleanup once the first frame is buffered, even before commit."""
     client = firestore_client if firestore_client is not None else get_firestore_client()
     ref = client.collection('users').document(uid).collection('conversations').document(conversation_id)
@@ -84,6 +105,11 @@ def note_server_batch_audio_received(uid: str, conversation_id: str, *, firestor
         if (
             not snapshot.exists
             or not server_batch_owned(row)
+            or (
+                listen_reconnect.producer(row)
+                and (row.get('status') != 'in_progress' or row.get('server_batch_audio_closed'))
+            )
+            or not listen_reconnect.write_owned(row, producer_token)
             or any(row.get(key) for key in ('deleted', 'discarded', 'is_locked'))
         ):
             return False

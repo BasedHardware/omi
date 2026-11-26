@@ -1,0 +1,1098 @@
+{
+  "backend/database/action_item_refresh.py:collection": {
+    "policy": "storage",
+    "reason": "Persistence boundary: user-scoped storage and authoritative lifecycle/privacy/custody metadata. Public-facing methods apply the central visibility predicate."
+  },
+  "backend/database/action_items.py:collection": {
+    "policy": "conversations",
+    "reason": "After a V3 refinement, repair retirement or undo marker hit, the task transaction checks only deletion and recording fields to allow an active product card with the same ID."
+  },
+  "backend/database/batch_final_pass.py:collection": {
+    "policy": "both",
+    "reason": "Reads only the fence fields (claims, deleted spans, deleted, locked) of a v3 row's source recordings, by id and owner-scoped, before speaker inference."
+  },
+  "backend/database/batch_pipeline_privacy.py:collection": {
+    "policy": "both",
+    "reason": "Capture, audio, sync, custody, retention, export, deletion or v3 construction owns recording-layer access; all lookups remain scoped to their owner."
+  },
+  "backend/database/batch_pipeline_projection.py:collection": {
+    "policy": "storage",
+    "reason": "Persistence boundary: user-scoped storage and authoritative lifecycle/privacy/custody metadata. Public-facing methods apply the central visibility predicate."
+  },
+  "backend/database/batch_pipeline_projection_release.py:collection": {
+    "policy": "storage",
+    "reason": "Persistence boundary: user-scoped storage and authoritative lifecycle/privacy/custody metadata. Public-facing methods apply the central visibility predicate."
+  },
+  "backend/database/batch_pipeline_projection_session.py:collection": {
+    "policy": "storage",
+    "reason": "Persistence boundary: user-scoped storage and authoritative lifecycle/privacy/custody metadata. Public-facing methods apply the central visibility predicate."
+  },
+  "backend/database/batch_pipeline_store.py:collection": {
+    "policy": "storage",
+    "reason": "Persistence boundary: user-scoped storage and authoritative lifecycle/privacy/custody metadata. Public-facing methods apply the central visibility predicate."
+  },
+  "backend/database/batch_ramp.py:collection": {
+    "policy": "storage",
+    "reason": "Persistence boundary: user-scoped storage and authoritative lifecycle/privacy/custody metadata. Public-facing methods apply the central visibility predicate."
+  },
+  "backend/database/capture_coverage.py:collection": {
+    "policy": "both",
+    "reason": "Capture, audio, sync, custody, retention, export, deletion or v3 construction owns recording-layer access; all lookups remain scoped to their owner."
+  },
+  "backend/database/capture_group_notes.py:collection": {
+    "policy": "both",
+    "reason": "Capture, audio, sync, custody, retention, export, deletion or v3 construction owns recording-layer access; all lookups remain scoped to their owner."
+  },
+  "backend/database/capture_groups.py:collection": {
+    "policy": "both",
+    "reason": "Explicit capture, recording, sync, finalization, custody, export or lifecycle-metadata storage exception."
+  },
+  "backend/database/capture_speech.py:collection": {
+    "policy": "both",
+    "reason": "Capture, audio, sync, custody, retention, export, deletion or v3 construction owns recording-layer access; all lookups remain scoped to their owner."
+  },
+  "backend/database/chat.py:collection": {
+    "policy": "storage",
+    "reason": "Persistence boundary: user-scoped storage and authoritative lifecycle/privacy/custody metadata. Public-facing methods apply the central visibility predicate."
+  },
+  "backend/database/conversation_effect_fence.py:collection": {
+    "policy": "storage",
+    "reason": "Reads authority fields from an exact source inside its derived-write transaction."
+  },
+  "backend/database/conversation_finalization_jobs.py:collection": {
+    "policy": "both",
+    "reason": "Explicit capture, recording, sync, finalization, custody, export or lifecycle-metadata storage exception."
+  },
+  "backend/database/conversation_finalization_jobs.py:collection_group": {
+    "policy": "both",
+    "reason": "Explicit capture, recording, sync, finalization, custody, export or lifecycle-metadata storage exception."
+  },
+  "backend/database/conversation_merge_jobs.py:collection": {
+    "policy": "storage",
+    "reason": "Persistence boundary: user-scoped storage and authoritative lifecycle/privacy/custody metadata. Public-facing methods apply the central visibility predicate."
+  },
+  "backend/database/conversation_mutations.py:collection": {
+    "policy": "storage",
+    "reason": "Persistence boundary: user-scoped storage and authoritative lifecycle/privacy/custody metadata. Public-facing methods apply the central visibility predicate."
+  },
+  "backend/database/conversation_processing_recovery.py:collection": {
+    "policy": "both",
+    "reason": "Owner-scoped orphan/finalization recovery metadata; terminalize capture rows without product reads or model work."
+  },
+  "backend/database/conversation_quiet_checks.py:collection": {
+    "policy": "storage",
+    "reason": "Persistence boundary: user-scoped storage and authoritative lifecycle/privacy/custody metadata. Public-facing methods apply the central visibility predicate."
+  },
+  "backend/database/conversation_recorded_time.py:collection": {
+    "policy": "both",
+    "reason": "Capture, audio, sync, custody, retention, export, deletion or v3 construction owns recording-layer access; all lookups remain scoped to their owner."
+  },
+  "backend/database/conversation_scan.py:collection": {
+    "policy": "storage",
+    "reason": "Persistence boundary: user-scoped storage and authoritative lifecycle/privacy/custody metadata. Public-facing methods apply the central visibility predicate."
+  },
+  "backend/database/conversation_task_links.py:collection": {
+    "policy": "storage",
+    "reason": "Persistence boundary: user-scoped storage and authoritative lifecycle/privacy/custody metadata. Public-facing methods apply the central visibility predicate."
+  },
+  "backend/database/conversation_tombstones.py:collection": {
+    "policy": "both",
+    "reason": "Capture, audio, sync, custody, retention, export, deletion or v3 construction owns recording-layer access; all lookups remain scoped to their owner."
+  },
+  "backend/database/conversations.py:collection": {
+    "policy": "storage",
+    "reason": "Persistence boundary: user-scoped storage and authoritative lifecycle/privacy/custody metadata. Public-facing methods apply the central visibility predicate."
+  },
+  "backend/database/conversations.py:collection_group": {
+    "policy": "storage",
+    "reason": "Persistence boundary: user-scoped storage and authoritative lifecycle/privacy/custody metadata. Public-facing methods apply the central visibility predicate."
+  },
+  "backend/database/conversations.py:document_path": {
+    "policy": "both",
+    "reason": "Explicit capture, recording, sync, finalization, custody, export or lifecycle-metadata storage exception."
+  },
+  "backend/database/conversations_v3.py:collection": {
+    "policy": "storage",
+    "reason": "Transaction-fenced builder, summary and recording claims; all data is owner scoped."
+  },
+  "backend/database/conversations_v3_context.py:collection": {
+    "policy": "conversations",
+    "reason": "Owner-scoped bounded title projection excludes recordings, hidden, deleted, locked and absorbed rows before decoding."
+  },
+  "backend/database/conversations_v3_live.py:collection": {
+    "policy": "conversations",
+    "reason": "Owner-scoped live-tile read through the v3 window index, projected to the route's fields; the caller serves only an open v3 window that is not a recording, hidden, deleted or discarded."
+  },
+  "backend/database/conversations_v3_processing.py:user_conversations": {
+    "policy": "both",
+    "reason": "Owner-scoped v3 projection/summary/pending transactions through the explicit recording-aware storage helper."
+  },
+  "backend/database/conversations_v3_backfill_runs.py:collection": {
+    "policy": "storage",
+    "reason": "Live re-derive undo priors: save_priors reads only the protection level of each row it copies, inside its transaction, so no copy is recorded at a level the row has left."
+  },
+  "backend/database/conversations_v3_rederive.py:user_conversations": {
+    "policy": "storage",
+    "reason": "Operator live re-derive and its undo: one owner's window and claim closure under the backfill-builder lease; transaction-fenced, owner scoped, rows written only through commit_projection or the exact undo restore."
+  },
+  "backend/database/conversations_v3_sync_repair.py:collection": {
+    "policy": "operator",
+    "reason": "Explicit owner-scoped point reads of one sync redirect chain and its claimants, fenced by source/card revisions and tombstones."
+  },
+  "backend/database/daily_summaries.py:collection": {
+    "policy": "storage",
+    "reason": "Persistence boundary: user-scoped storage and authoritative lifecycle/privacy/custody metadata. Public-facing methods apply the central visibility predicate."
+  },
+  "backend/database/episode_attach_memo.py:collection": {
+    "policy": "storage",
+    "reason": "Persistence boundary: user-scoped storage and authoritative lifecycle/privacy/custody metadata. Public-facing methods apply the central visibility predicate."
+  },
+  "backend/database/episode_batch_pending.py:collection": {
+    "policy": "storage",
+    "reason": "Persistence boundary: user-scoped storage and authoritative lifecycle/privacy/custody metadata. Public-facing methods apply the central visibility predicate."
+  },
+  "backend/database/episode_live_members.py:collection": {
+    "policy": "storage",
+    "reason": "Episode live-member transactions by id for accounts not on v3; episode admission rejects recordings as members and v3 owners make no episode writes. Persistence boundary: user-scoped storage and authoritative lifecycle/privacy/custody metadata. Public-facing methods apply the central visibility predicate."
+  },
+  "backend/database/episode_recorded_components.py:collection": {
+    "policy": "storage",
+    "reason": "Persistence boundary: user-scoped storage and authoritative lifecycle/privacy/custody metadata. Public-facing methods apply the central visibility predicate."
+  },
+  "backend/database/episode_timeline.py:collection": {
+    "policy": "storage",
+    "reason": "Persistence boundary: user-scoped storage and authoritative lifecycle/privacy/custody metadata. Public-facing methods apply the central visibility predicate."
+  },
+  "backend/database/episodes.py:collection": {
+    "policy": "storage",
+    "reason": "Persistence boundary: user-scoped storage and authoritative lifecycle/privacy/custody metadata. Public-facing methods apply the central visibility predicate."
+  },
+  "backend/database/folders.py:collection": {
+    "policy": "storage",
+    "reason": "Persistence boundary: user-scoped storage and authoritative lifecycle/privacy/custody metadata. Public-facing methods apply the central visibility predicate."
+  },
+  "backend/database/frame_requests.py:collection": {
+    "policy": "storage",
+    "reason": "Persistence boundary: user-scoped storage and authoritative lifecycle/privacy/custody metadata. Public-facing methods apply the central visibility predicate."
+  },
+  "backend/database/hidden_noise_counts.py:collection": {
+    "policy": "storage",
+    "reason": "Persistence boundary: user-scoped storage and authoritative lifecycle/privacy/custody metadata. Public-facing methods apply the central visibility predicate."
+  },
+  "backend/database/home_feed.py:collection": {
+    "policy": "storage",
+    "reason": "Persistence boundary: user-scoped storage and authoritative lifecycle/privacy/custody metadata. Public-facing methods apply the central visibility predicate."
+  },
+  "backend/database/lifecycle_metrics_queries.py:collection_group": {
+    "policy": "storage",
+    "reason": "Persistence boundary: user-scoped storage and authoritative lifecycle/privacy/custody metadata. Public-facing methods apply the central visibility predicate."
+  },
+  "backend/database/listen_batch_reconnect.py:collection": {
+    "policy": "both",
+    "reason": "Listen batch reconnect continuity resumes the open capture document by id. Capture, audio, sync, custody, retention, export, deletion or v3 construction owns recording-layer access; all lookups remain scoped to their owner."
+  },
+  "backend/database/listen_continuations.py:collection": {
+    "policy": "storage",
+    "reason": "Persistence boundary: user-scoped storage and authoritative lifecycle/privacy/custody metadata. Public-facing methods apply the central visibility predicate."
+  },
+  "backend/database/live_member_notes.py:collection": {
+    "policy": "storage",
+    "reason": "Persistence boundary: user-scoped storage and authoritative lifecycle/privacy/custody metadata. Public-facing methods apply the central visibility predicate."
+  },
+  "backend/database/live_owner_continuity.py:collection": {
+    "policy": "storage",
+    "reason": "Persistence boundary: user-scoped storage and authoritative lifecycle/privacy/custody metadata. Public-facing methods apply the central visibility predicate."
+  },
+  "backend/database/locked_content.py:collection": {
+    "policy": "storage",
+    "reason": "Persistence boundary: user-scoped storage and authoritative lifecycle/privacy/custody metadata. Public-facing methods apply the central visibility predicate."
+  },
+  "backend/database/mcp_conversation_pages.py:collection": {
+    "policy": "storage",
+    "reason": "Persistence boundary: user-scoped storage and authoritative lifecycle/privacy/custody metadata. Public-facing methods apply the central visibility predicate."
+  },
+  "backend/database/no_speech_terminal.py:collection": {
+    "policy": "storage",
+    "reason": "Persistence boundary: user-scoped storage and authoritative lifecycle/privacy/custody metadata. Public-facing methods apply the central visibility predicate."
+  },
+  "backend/database/notes_quality_repair.py:collection": {
+    "policy": "storage",
+    "reason": "Notes repair writes one processed conversation by id; recordings never get notes, so it never targets one. Persistence boundary: user-scoped storage and authoritative lifecycle/privacy/custody metadata. Public-facing methods apply the central visibility predicate."
+  },
+  "backend/database/oversized_conversation_terminal.py:collection": {
+    "policy": "storage",
+    "reason": "Persistence boundary: user-scoped storage and authoritative lifecycle/privacy/custody metadata. Public-facing methods apply the central visibility predicate."
+  },
+  "backend/database/pipeline_ledger_census.py:collection_group": {
+    "policy": "storage",
+    "reason": "Persistence boundary: user-scoped storage and authoritative lifecycle/privacy/custody metadata. Public-facing methods apply the central visibility predicate."
+  },
+  "backend/database/pipeline_ledger_census.py:get_conversation_raw_snapshot": {
+    "policy": "storage",
+    "reason": "Persistence boundary: user-scoped storage and authoritative lifecycle/privacy/custody metadata. Public-facing methods apply the central visibility predicate."
+  },
+  "backend/database/processing_attention.py:collection": {
+    "policy": "storage",
+    "reason": "Persistence boundary: user-scoped storage and authoritative lifecycle/privacy/custody metadata. Public-facing methods apply the central visibility predicate."
+  },
+  "backend/database/quiet_check_retirement.py:collection": {
+    "policy": "storage",
+    "reason": "Persistence boundary: user-scoped storage and authoritative lifecycle/privacy/custody metadata. Public-facing methods apply the central visibility predicate."
+  },
+  "backend/database/record_audio.py:collection": {
+    "policy": "storage",
+    "reason": "Persistence boundary: user-scoped storage and authoritative lifecycle/privacy/custody metadata. Public-facing methods apply the central visibility predicate."
+  },
+  "backend/database/record_custody_append.py:collection": {
+    "policy": "storage",
+    "reason": "Persistence boundary: user-scoped storage and authoritative lifecycle/privacy/custody metadata. Public-facing methods apply the central visibility predicate."
+  },
+  "backend/database/record_notes_hold.py:collection": {
+    "policy": "storage",
+    "reason": "Persistence boundary: user-scoped storage and authoritative lifecycle/privacy/custody metadata. Public-facing methods apply the central visibility predicate."
+  },
+  "backend/database/record_partial.py:collection": {
+    "policy": "storage",
+    "reason": "Persistence boundary: user-scoped storage and authoritative lifecycle/privacy/custody metadata. Public-facing methods apply the central visibility predicate."
+  },
+  "backend/database/record_pending_repair.py:collection": {
+    "policy": "storage",
+    "reason": "Persistence boundary: user-scoped storage and authoritative lifecycle/privacy/custody metadata. Public-facing methods apply the central visibility predicate."
+  },
+  "backend/database/record_projection_rebuild.py:collection": {
+    "policy": "storage",
+    "reason": "Persistence boundary: user-scoped storage and authoritative lifecycle/privacy/custody metadata. Public-facing methods apply the central visibility predicate."
+  },
+  "backend/database/record_seal_worker.py:collection": {
+    "policy": "storage",
+    "reason": "Persistence boundary: user-scoped storage and authoritative lifecycle/privacy/custody metadata. Public-facing methods apply the central visibility predicate."
+  },
+  "backend/database/record_wal_duplicate.py:collection": {
+    "policy": "storage",
+    "reason": "Marks settled custody on the owner-scoped donor row in the receipt transaction after rechecking the original processing and privacy authority."
+  },
+  "backend/database/record_wal_handoff.py:collection": {
+    "policy": "storage",
+    "reason": "Persistence boundary: user-scoped storage and authoritative lifecycle/privacy/custody metadata. Public-facing methods apply the central visibility predicate."
+  },
+  "backend/database/record_wal_merge.py:collection": {
+    "policy": "storage",
+    "reason": "Reads bounded owner-scoped retained donors and their erasure fences before publishing the merge binding."
+  },
+  "backend/database/recording_sessions.py:collection": {
+    "policy": "both",
+    "reason": "Explicit capture, recording, sync, finalization, custody, export or lifecycle-metadata storage exception."
+  },
+  "backend/database/recording_speakers.py:collection": {
+    "policy": "storage",
+    "reason": "Persistence boundary: user-scoped storage and authoritative lifecycle/privacy/custody metadata. Public-facing methods apply the central visibility predicate."
+  },
+  "backend/database/recurring_voice_privacy.py:collection": {
+    "policy": "both",
+    "reason": "Capture, audio, sync, custody, retention, export, deletion or v3 construction owns recording-layer access; all lookups remain scoped to their owner."
+  },
+  "backend/database/recurring_voices.py:collection": {
+    "policy": "storage",
+    "reason": "Persistence boundary: user-scoped storage and authoritative lifecycle/privacy/custody metadata. Public-facing methods apply the central visibility predicate."
+  },
+  "backend/database/review_overlay_merge.py:collection": {
+    "policy": "storage",
+    "reason": "Persistence boundary: user-scoped storage and authoritative lifecycle/privacy/custody metadata. Public-facing methods apply the central visibility predicate."
+  },
+  "backend/database/review_transcript_changes.py:collection": {
+    "policy": "storage",
+    "reason": "Persistence boundary: user-scoped storage and authoritative lifecycle/privacy/custody metadata. Public-facing methods apply the central visibility predicate."
+  },
+  "backend/database/screen_frames.py:collection": {
+    "policy": "storage",
+    "reason": "Persistence boundary: user-scoped storage and authoritative lifecycle/privacy/custody metadata. Public-facing methods apply the central visibility predicate."
+  },
+  "backend/database/server_batch_audio.py:collection": {
+    "policy": "storage",
+    "reason": "Persistence boundary: user-scoped storage and authoritative lifecycle/privacy/custody metadata. Public-facing methods apply the central visibility predicate."
+  },
+  "backend/database/smart_merge.py:collection": {
+    "policy": "both",
+    "reason": "Explicit capture, recording, sync, finalization, custody, export or lifecycle-metadata storage exception."
+  },
+  "backend/database/speaker_assignment_effects.py:collection": {
+    "policy": "storage",
+    "reason": "Persistence boundary: user-scoped storage and authoritative lifecycle/privacy/custody metadata. Public-facing methods apply the central visibility predicate."
+  },
+  "backend/database/speaker_auto_enroll.py:collection": {
+    "policy": "storage",
+    "reason": "Persistence boundary: user-scoped storage and authoritative lifecycle/privacy/custody metadata. Public-facing methods apply the central visibility predicate."
+  },
+  "backend/database/speaker_evidence.py:collection": {
+    "policy": "storage",
+    "reason": "Persistence boundary: user-scoped storage and authoritative lifecycle/privacy/custody metadata. Public-facing methods apply the central visibility predicate."
+  },
+  "backend/database/speaker_learning_jobs.py:collection": {
+    "policy": "storage",
+    "reason": "Persistence boundary: user-scoped storage and authoritative lifecycle/privacy/custody metadata. Public-facing methods apply the central visibility predicate."
+  },
+  "backend/database/speaker_profile_authority.py:collection": {
+    "policy": "storage",
+    "reason": "Persistence boundary: user-scoped storage and authoritative lifecycle/privacy/custody metadata. Public-facing methods apply the central visibility predicate."
+  },
+  "backend/database/stale_conversation_recovery.py:collection": {
+    "policy": "storage",
+    "reason": "Persistence boundary: user-scoped storage and authoritative lifecycle/privacy/custody metadata. Public-facing methods apply the central visibility predicate."
+  },
+  "backend/database/stuck_backfill.py:collection": {
+    "policy": "storage",
+    "reason": "Persistence boundary: user-scoped storage and authoritative lifecycle/privacy/custody metadata. Public-facing methods apply the central visibility predicate."
+  },
+  "backend/database/summary_debt_queries.py:collection_group": {
+    "policy": "storage",
+    "reason": "Persistence boundary: user-scoped storage and authoritative lifecycle/privacy/custody metadata. Public-facing methods apply the central visibility predicate."
+  },
+  "backend/database/user_data_deletion.py:collection": {
+    "policy": "storage",
+    "reason": "Account erasure enumerates owner-scoped conversation references to purge speaker evidence children, including orphaned parents."
+  },
+  "backend/database/summary_processing.py:collection": {
+    "policy": "storage",
+    "reason": "Persistence boundary: user-scoped storage and authoritative lifecycle/privacy/custody metadata. Public-facing methods apply the central visibility predicate."
+  },
+  "backend/database/summary_task_links.py:collection": {
+    "policy": "storage",
+    "reason": "Persistence boundary: user-scoped storage and authoritative lifecycle/privacy/custody metadata. Public-facing methods apply the central visibility predicate."
+  },
+  "backend/database/sync_bridges.py:collection": {
+    "policy": "both",
+    "reason": "Capture, audio, sync, custody, retention, export, deletion or v3 construction owns recording-layer access; all lookups remain scoped to their owner."
+  },
+  "backend/database/sync_conversation_snapshot.py:collection": {
+    "policy": "both",
+    "reason": "Capture, audio, sync, custody, retention, export, deletion or v3 construction owns recording-layer access; all lookups remain scoped to their owner."
+  },
+  "backend/database/sync_live_overlap.py:collection": {
+    "policy": "both",
+    "reason": "Capture, audio, sync, custody, retention, export, deletion or v3 construction owns recording-layer access; all lookups remain scoped to their owner."
+  },
+  "backend/database/sync_recording_lineage.py:collection": {
+    "policy": "both",
+    "reason": "Explicit capture, recording, sync, finalization, custody, export or lifecycle-metadata storage exception."
+  },
+  "backend/database/transcript_pointer.py:collection": {
+    "policy": "storage",
+    "reason": "Persistence boundary: user-scoped storage and authoritative lifecycle/privacy/custody metadata. Public-facing methods apply the central visibility predicate."
+  },
+  "backend/database/transcript_search.py:collection": {
+    "policy": "storage",
+    "reason": "Persistence boundary: user-scoped storage and authoritative lifecycle/privacy/custody metadata. Public-facing methods apply the central visibility predicate."
+  },
+  "backend/database/transcription_wait_repair.py:collection": {
+    "policy": "storage",
+    "reason": "Persistence boundary: user-scoped storage and authoritative lifecycle/privacy/custody metadata. Public-facing methods apply the central visibility predicate."
+  },
+  "backend/database/voice_profiles.py:collection": {
+    "policy": "storage",
+    "reason": "Persistence boundary: user-scoped storage and authoritative lifecycle/privacy/custody metadata. Public-facing methods apply the central visibility predicate."
+  },
+  "backend/routers/action_items.py:get_conversation": {
+    "policy": "conversations",
+    "reason": "Product and derived readers must apply is_visible_conversation or the validated by-id boundary; home_hidden is not a general visibility filter."
+  },
+  "backend/routers/chat_first.py:get_conversation": {
+    "policy": "conversations",
+    "reason": "Product and derived readers must apply is_visible_conversation or the validated by-id boundary; home_hidden is not a general visibility filter."
+  },
+  "backend/routers/conversations.py:get_conversation": {
+    "policy": "both",
+    "reason": "Mixed boundary: capture/finalize/audio opt in; product operations reject recordings. The processor has a no-model recording guard."
+  },
+  "backend/routers/conversations.py:get_conversation_raw_snapshot": {
+    "policy": "both",
+    "reason": "Mixed boundary: capture/finalize/audio opt in; product operations reject recordings. The processor has a no-model recording guard."
+  },
+  "backend/routers/developer.py:get_conversation": {
+    "policy": "conversations",
+    "reason": "Product and derived readers must apply is_visible_conversation or the validated by-id boundary; home_hidden is not a general visibility filter."
+  },
+  "backend/routers/developer.py:get_conversations_by_id": {
+    "policy": "conversations",
+    "reason": "Product and derived readers must apply is_visible_conversation or the validated by-id boundary; home_hidden is not a general visibility filter."
+  },
+  "backend/routers/folders.py:get_conversation": {
+    "policy": "conversations",
+    "reason": "Product and derived readers must apply is_visible_conversation or the validated by-id boundary; home_hidden is not a general visibility filter."
+  },
+  "backend/routers/integration.py:get_conversations_by_id": {
+    "policy": "conversations",
+    "reason": "Product and derived readers must apply is_visible_conversation or the validated by-id boundary; home_hidden is not a general visibility filter."
+  },
+  "backend/routers/listen/batch_close.py:get_conversation": {
+    "policy": "both",
+    "reason": "Explicit capture, audio, recording, sync or finalization metadata exception; recording processing has a no-model exit."
+  },
+  "backend/routers/listen/conversations.py:get_conversation": {
+    "policy": "both",
+    "reason": "Explicit capture, audio, recording, sync or finalization metadata exception; recording processing has a no-model exit."
+  },
+  "backend/routers/listen/conversations.py:get_processing_conversations": {
+    "policy": "both",
+    "reason": "Explicit capture, audio, recording, sync or finalization metadata exception; recording processing has a no-model exit."
+  },
+  "backend/routers/listen/runtime.py:get_conversation": {
+    "policy": "both",
+    "reason": "Explicit capture, audio, recording, sync or finalization metadata exception; recording processing has a no-model exit."
+  },
+  "backend/routers/listen/speakers.py:get_conversation": {
+    "policy": "both",
+    "reason": "Explicit capture, audio, recording, sync or finalization metadata exception; recording processing has a no-model exit."
+  },
+  "backend/routers/listen/transcripts.py:get_conversation": {
+    "policy": "both",
+    "reason": "Explicit capture, audio, recording, sync or finalization metadata exception; recording processing has a no-model exit."
+  },
+  "backend/routers/mobile_feedback.py:get_conversation": {
+    "policy": "conversations",
+    "reason": "Product and derived readers must apply is_visible_conversation or the validated by-id boundary; home_hidden is not a general visibility filter."
+  },
+  "backend/routers/pending_work.py:collection": {
+    "policy": "conversations",
+    "reason": "Product and derived readers must apply is_visible_conversation or the validated by-id boundary; home_hidden is not a general visibility filter."
+  },
+  "backend/routers/pending_work.py:get_conversation": {
+    "policy": "conversations",
+    "reason": "Product and derived readers must apply is_visible_conversation or the validated by-id boundary; home_hidden is not a general visibility filter."
+  },
+  "backend/routers/pusher.py:get_conversation_raw_snapshot": {
+    "policy": "both",
+    "reason": "Explicit capture, audio, recording, sync or finalization metadata exception; recording processing has a no-model exit."
+  },
+  "backend/routers/screen_frames.py:get_conversation": {
+    "policy": "conversations",
+    "reason": "Product and derived readers must apply is_visible_conversation or the validated by-id boundary; home_hidden is not a general visibility filter."
+  },
+  "backend/routers/speaker_tag_prompts.py:get_conversation": {
+    "policy": "conversations",
+    "reason": "Product and derived readers must apply is_visible_conversation or the validated by-id boundary; home_hidden is not a general visibility filter."
+  },
+  "backend/routers/sync.py:get_conversation": {
+    "policy": "both",
+    "reason": "Mixed boundary: capture/finalize/audio opt in; product operations reject recordings. The processor has a no-model recording guard."
+  },
+  "backend/routers/users.py:get_conversation": {
+    "policy": "both",
+    "reason": "Explicit capture, recording, sync, finalization, custody, export or lifecycle-metadata storage exception."
+  },
+  "backend/routers/users.py:get_in_progress_conversation": {
+    "policy": "both",
+    "reason": "Explicit capture, recording, sync, finalization, custody, export or lifecycle-metadata storage exception."
+  },
+  "backend/scripts/backfill_clear_refused_summary_due.py:collection_group": {
+    "policy": "operator",
+    "reason": "Offline operator utility; explicit raw ownership/recovery inspection, never a product read."
+  },
+  "backend/scripts/backfill_conversation_owner_uid.py:collection_group": {
+    "policy": "operator",
+    "reason": "Offline operator utility; explicit raw ownership/recovery inspection, never a product read."
+  },
+  "backend/scripts/backfill_home_visibility_index.py:collection": {
+    "policy": "operator",
+    "reason": "Owner-scoped Home index migration reads only the two visibility flags and their derived index bit."
+  },
+  "backend/scripts/backfill_notes_v2_default_emoji.py:collection": {
+    "policy": "operator",
+    "reason": "Offline operator utility; explicit raw ownership/recovery inspection, never a product read."
+  },
+  "backend/scripts/backfill_summary_vectors.py:collection": {
+    "policy": "operator",
+    "reason": "Offline operator utility; explicit raw ownership/recovery inspection, never a product read."
+  },
+  "backend/scripts/backfill_summary_vectors.py:get_conversation": {
+    "policy": "operator",
+    "reason": "Offline operator utility; explicit raw ownership/recovery inspection, never a product read."
+  },
+  "backend/scripts/backfill_sync_donor_tombstone_discarded.py:collection": {
+    "policy": "operator",
+    "reason": "Explicit offline repair/operator tool; no product read surface."
+  },
+  "backend/scripts/backfill_transcript_chunk_vectors.py:get_conversation": {
+    "policy": "operator",
+    "reason": "Offline operator utility; explicit raw ownership/recovery inspection, never a product read."
+  },
+  "backend/scripts/backfill_transcript_chunk_vectors.py:iter_all_conversations": {
+    "policy": "operator",
+    "reason": "Offline operator utility; explicit raw ownership/recovery inspection, never a product read."
+  },
+  "backend/scripts/backfill_user_signup_platform.py:collection": {
+    "policy": "operator",
+    "reason": "Offline operator utility; explicit raw ownership/recovery inspection, never a product read."
+  },
+  "backend/scripts/capture_empty_recovery.py:collection": {
+    "policy": "both",
+    "reason": "Capture, audio, sync, custody, retention, export, deletion or v3 construction owns recording-layer access; all lookups remain scoped to their owner."
+  },
+  "backend/scripts/complete_half_deleted_conversations.py:collection": {
+    "policy": "operator",
+    "reason": "Offline operator utility; explicit raw ownership/recovery inspection, never a product read."
+  },
+  "backend/scripts/conversation_relevance_backfill.py:iter_all_conversations": {
+    "policy": "operator",
+    "reason": "Offline operator utility; explicit raw ownership/recovery inspection, never a product read."
+  },
+  "backend/scripts/conversation_transaction_expiry_emulator_test.py:collection": {
+    "policy": "operator",
+    "reason": "Offline operator utility; explicit raw ownership/recovery inspection, never a product read."
+  },
+  "backend/scripts/fsr_people_generation_emulator_test.py:collection": {
+    "policy": "operator",
+    "reason": "Offline operator utility; explicit raw ownership/recovery inspection, never a product read."
+  },
+  "backend/scripts/home_health_worker.py:collection_group": {
+    "policy": "operator",
+    "reason": "Bounded diagnostic of raw batch capture cohorts using a field mask; emits aggregate Home symptoms only."
+  },
+  "backend/scripts/legacy_dark/final_pass_rehome.py:collection_group": {
+    "policy": "operator",
+    "reason": "Offline operator utility; explicit raw ownership/recovery inspection, never a product read."
+  },
+  "backend/scripts/listen_lifecycle_emulator_test.py:collection": {
+    "policy": "operator",
+    "reason": "Offline operator utility; explicit raw ownership/recovery inspection, never a product read."
+  },
+  "backend/scripts/migrate_conversation_timestamps.py:collection": {
+    "policy": "operator",
+    "reason": "Offline operator utility; explicit raw ownership/recovery inspection, never a product read."
+  },
+  "backend/scripts/patch_phone_call_source.py:collection": {
+    "policy": "operator",
+    "reason": "Offline operator utility; explicit raw ownership/recovery inspection, never a product read."
+  },
+  "backend/scripts/processing_backlog_emulator_test.py:collection": {
+    "policy": "operator",
+    "reason": "Offline operator utility; explicit raw ownership/recovery inspection, never a product read."
+  },
+  "backend/scripts/quiet_finalization_replay_emulator_test.py:collection": {
+    "policy": "both",
+    "reason": "Capture, audio, sync, custody, retention, export, deletion or v3 construction owns recording-layer access; all lookups remain scoped to their owner."
+  },
+  "backend/scripts/read_transcription_shadow_result.py:collection": {
+    "policy": "operator",
+    "reason": "Offline operator utility; explicit raw ownership/recovery inspection, never a product read."
+  },
+  "backend/scripts/repair_legacy_transcription_wait.py:collection": {
+    "policy": "operator",
+    "reason": "Offline operator utility; explicit raw ownership/recovery inspection, never a product read."
+  },
+  "backend/scripts/repair_recovery_dead_letter_untitled.py:document_path": {
+    "policy": "operator",
+    "reason": "Explicit offline repair/operator tool; no product read surface."
+  },
+  "backend/scripts/scan_wake_word_variants.py:collection": {
+    "policy": "operator",
+    "reason": "Offline operator utility; explicit raw ownership/recovery inspection, never a product read."
+  },
+  "backend/scripts/settle_parked_conversations.py:collection_group": {
+    "policy": "operator",
+    "reason": "SCA-3590 one-time parked-status migration. Bounded projected scan, with lifecycle and custody rechecked transactionally before status-only writes."
+  },
+  "backend/scripts/staging/replay.py:collection": {
+    "policy": "operator",
+    "reason": "Offline operator utility; explicit raw ownership/recovery inspection, never a product read."
+  },
+  "backend/scripts/stuck_backfill.py:collection": {
+    "policy": "operator",
+    "reason": "Offline operator utility; explicit raw ownership/recovery inspection, never a product read."
+  },
+  "backend/scripts/sync_assignment_contention_emulator_test.py:collection": {
+    "policy": "both",
+    "reason": "Capture, audio, sync, custody, retention, export, deletion or v3 construction owns recording-layer access; all lookups remain scoped to their owner."
+  },
+  "backend/scripts/sync_live_overlap_contention_emulator_test.py:collection": {
+    "policy": "both",
+    "reason": "Capture, audio, sync, custody, retention, export, deletion or v3 construction owns recording-layer access; all lookups remain scoped to their owner."
+  },
+  "backend/services/conversation_frame_evidence.py:get_conversation": {
+    "policy": "conversations",
+    "reason": "Product and derived readers must apply is_visible_conversation or the validated by-id boundary; home_hidden is not a general visibility filter."
+  },
+  "backend/services/conversation_frame_evidence.py:get_conversation_raw_snapshot": {
+    "policy": "conversations",
+    "reason": "Product and derived readers must apply is_visible_conversation or the validated by-id boundary; home_hidden is not a general visibility filter."
+  },
+  "backend/services/conversation_selfheal.py:get_conversation_raw_snapshot": {
+    "policy": "both",
+    "reason": "Explicit recording-layer pipeline/finalization/recovery exception. Reads persisted ownership; recording processing exits before model calls."
+  },
+  "backend/services/summary_debt_repair.py:collection": {
+    "policy": "conversations",
+    "reason": "Product and derived readers must apply is_visible_conversation or the validated by-id boundary; home_hidden is not a general visibility filter."
+  },
+  "backend/services/users/data_export.py:iter_all_conversations": {
+    "policy": "both",
+    "reason": "Capture, audio, sync, custody, retention, export, deletion or v3 construction owns recording-layer access; all lookups remain scoped to their owner."
+  },
+  "backend/utils/agent_capabilities/reads.py:get_conversation_raw_snapshot": {
+    "policy": "conversations",
+    "reason": "Product and derived readers must apply is_visible_conversation or the validated by-id boundary; home_hidden is not a general visibility filter."
+  },
+  "backend/utils/app_integrations.py:get_conversations_by_id": {
+    "policy": "conversations",
+    "reason": "Product and derived readers must apply is_visible_conversation or the validated by-id boundary; home_hidden is not a general visibility filter."
+  },
+  "backend/utils/batch_pipeline/live.py:collection": {
+    "policy": "both",
+    "reason": "Capture, audio, sync, custody, retention, export, deletion or v3 construction owns recording-layer access; all lookups remain scoped to their owner."
+  },
+  "backend/utils/batch_pipeline/live_upload.py:collection": {
+    "policy": "both",
+    "reason": "Capture, audio, sync, custody, retention, export, deletion or v3 construction owns recording-layer access; all lookups remain scoped to their owner."
+  },
+  "backend/utils/batch_pipeline/no_speech.py:collection": {
+    "policy": "both",
+    "reason": "Capture, audio, sync, custody, retention, export, deletion or v3 construction owns recording-layer access; all lookups remain scoped to their owner."
+  },
+  "backend/utils/batch_pipeline/no_speech.py:collection_group": {
+    "policy": "both",
+    "reason": "Capture, audio, sync, custody, retention, export, deletion or v3 construction owns recording-layer access; all lookups remain scoped to their owner."
+  },
+  "backend/utils/batch_pipeline/no_speech_undo.py:collection": {
+    "policy": "both",
+    "reason": "Capture, audio, sync, custody, retention, export, deletion or v3 construction owns recording-layer access; all lookups remain scoped to their owner."
+  },
+  "backend/utils/batch_pipeline/projection.py:collection": {
+    "policy": "both",
+    "reason": "Capture, audio, sync, custody, retention, export, deletion or v3 construction owns recording-layer access; all lookups remain scoped to their owner."
+  },
+  "backend/utils/batch_pipeline/record_gap_fill.py:collection": {
+    "policy": "both",
+    "reason": "Capture, audio, sync, custody, retention, export, deletion or v3 construction owns recording-layer access; all lookups remain scoped to their owner."
+  },
+  "backend/utils/batch_pipeline/record_orphan_repair.py:collection": {
+    "policy": "both",
+    "reason": "Capture, audio, sync, custody, retention, export, deletion or v3 construction owns recording-layer access; all lookups remain scoped to their owner."
+  },
+  "backend/utils/batch_pipeline/record_projection_rebuild.py:collection": {
+    "policy": "both",
+    "reason": "Capture, audio, sync, custody, retention, export, deletion or v3 construction owns recording-layer access; all lookups remain scoped to their owner."
+  },
+  "backend/utils/batch_pipeline/record_projection_rebuild.py:get_conversation_raw_snapshot": {
+    "policy": "both",
+    "reason": "Capture, audio, sync, custody, retention, export, deletion or v3 construction owns recording-layer access; all lookups remain scoped to their owner."
+  },
+  "backend/utils/batch_pipeline/record_seal_cluster_repair.py:collection_group": {
+    "policy": "both",
+    "reason": "Capture, audio, sync, custody, retention, export, deletion or v3 construction owns recording-layer access; all lookups remain scoped to their owner."
+  },
+  "backend/utils/batch_pipeline/record_seal_nojob.py:collection": {
+    "policy": "both",
+    "reason": "Capture, audio, sync, custody, retention, export, deletion or v3 construction owns recording-layer access; all lookups remain scoped to their owner."
+  },
+  "backend/utils/batch_pipeline/record_seal_nojob.py:collection_group": {
+    "policy": "both",
+    "reason": "Capture, audio, sync, custody, retention, export, deletion or v3 construction owns recording-layer access; all lookups remain scoped to their owner."
+  },
+  "backend/utils/batch_pipeline/record_seal_repair.py:collection": {
+    "policy": "both",
+    "reason": "Capture, audio, sync, custody, retention, export, deletion or v3 construction owns recording-layer access; all lookups remain scoped to their owner."
+  },
+  "backend/utils/batch_pipeline/record_seal_sweeper.py:collection": {
+    "policy": "both",
+    "reason": "Capture, audio, sync, custody, retention, export, deletion or v3 construction owns recording-layer access; all lookups remain scoped to their owner."
+  },
+  "backend/utils/batch_pipeline/retention.py:collection": {
+    "policy": "both",
+    "reason": "Capture, audio, sync, custody, retention, export, deletion or v3 construction owns recording-layer access; all lookups remain scoped to their owner."
+  },
+  "backend/utils/batch_pipeline/shadow_projection.py:collection": {
+    "policy": "both",
+    "reason": "Capture, audio, sync, custody, retention, export, deletion or v3 construction owns recording-layer access; all lookups remain scoped to their owner."
+  },
+  "backend/utils/conversations/capture_group_meeting_context.py:get_conversation_raw_snapshot": {
+    "policy": "both",
+    "reason": "Capture, audio, sync, custody, retention, export, deletion or v3 construction owns recording-layer access; all lookups remain scoped to their owner."
+  },
+  "backend/utils/conversations/capture_group_notes_refresh.py:get_conversation": {
+    "policy": "both",
+    "reason": "Capture, audio, sync, custody, retention, export, deletion or v3 construction owns recording-layer access; all lookups remain scoped to their owner."
+  },
+  "backend/utils/conversations/capture_group_notes_refresh.py:get_conversation_raw_snapshot": {
+    "policy": "both",
+    "reason": "Capture, audio, sync, custody, retention, export, deletion or v3 construction owns recording-layer access; all lookups remain scoped to their owner."
+  },
+  "backend/utils/conversations/final_pass_retry.py:get_conversation": {
+    "policy": "both",
+    "reason": "Explicit recording-layer pipeline/finalization/recovery exception. Reads persisted ownership; recording processing exits before model calls."
+  },
+  "backend/utils/conversations/finalizer.py:get_conversation": {
+    "policy": "both",
+    "reason": "Explicit capture, audio, recording, sync or finalization metadata exception; recording processing has a no-model exit."
+  },
+  "backend/utils/conversations/historical_summary.py:get_conversation": {
+    "policy": "conversations",
+    "reason": "Owner open-time summary: validated by-id read that refuses soft-deleted rows and recordings before any generation."
+  },
+  "backend/utils/conversations/late_meeting_notes.py:collection": {
+    "policy": "conversations",
+    "reason": "Product and derived readers must apply is_visible_conversation or the validated by-id boundary; home_hidden is not a general visibility filter."
+  },
+  "backend/utils/conversations/late_meeting_notes.py:get_conversation": {
+    "policy": "both",
+    "reason": "Explicit capture, audio, recording, sync or finalization metadata exception; recording processing has a no-model exit."
+  },
+  "backend/utils/conversations/lazy_enrichment.py:get_conversation": {
+    "policy": "conversations",
+    "reason": "Product and derived readers must apply is_visible_conversation or the validated by-id boundary; home_hidden is not a general visibility filter."
+  },
+  "backend/utils/conversations/lifecycle.py:collection": {
+    "policy": "both",
+    "reason": "Lifecycle/capture/finalization raw metadata exception; downstream recording guards suppress all paid/derived work."
+  },
+  "backend/utils/conversations/lifecycle.py:get_conversation": {
+    "policy": "both",
+    "reason": "Lifecycle/capture/finalization raw metadata exception; downstream recording guards suppress all paid/derived work."
+  },
+  "backend/utils/conversations/llm_input_dedupe.py:collection": {
+    "policy": "conversations",
+    "reason": "Product and derived readers must apply is_visible_conversation or the validated by-id boundary; home_hidden is not a general visibility filter."
+  },
+  "backend/utils/conversations/llm_input_dedupe.py:get_conversation": {
+    "policy": "both",
+    "reason": "Explicit recording-layer pipeline/finalization/recovery exception. Reads persisted ownership; recording processing exits before model calls."
+  },
+  "backend/utils/conversations/llm_input_dedupe.py:get_conversation_raw_snapshot": {
+    "policy": "both",
+    "reason": "Explicit recording-layer pipeline/finalization/recovery exception. Reads persisted ownership; recording processing exits before model calls."
+  },
+  "backend/utils/conversations/merge_conversations.py:get_conversation": {
+    "policy": "conversations",
+    "reason": "Product and derived readers must apply is_visible_conversation or the validated by-id boundary; home_hidden is not a general visibility filter."
+  },
+  "backend/utils/conversations/merge_conversations_job.py:collection": {
+    "policy": "conversations",
+    "reason": "Product and derived readers must apply is_visible_conversation or the validated by-id boundary; home_hidden is not a general visibility filter."
+  },
+  "backend/utils/conversations/merge_conversations_job.py:get_conversation": {
+    "policy": "both",
+    "reason": "Explicit recording-layer pipeline/finalization/recovery exception. Reads persisted ownership; recording processing exits before model calls."
+  },
+  "backend/utils/conversations/process_conversation.py:get_conversation": {
+    "policy": "both",
+    "reason": "Mixed boundary: capture/finalize/audio opt in; product operations reject recordings. The processor has a no-model recording guard."
+  },
+  "backend/utils/conversations/process_conversation.py:get_in_progress_conversation": {
+    "policy": "both",
+    "reason": "Mixed boundary: capture/finalize/audio opt in; product operations reject recordings. The processor has a no-model recording guard."
+  },
+  "backend/utils/conversations/quiet_finalization.py:collection": {
+    "policy": "both",
+    "reason": "Capture, audio, sync, custody, retention, export, deletion or v3 construction owns recording-layer access; all lookups remain scoped to their owner."
+  },
+  "backend/utils/conversations/relevance_io.py:get_conversation_raw_snapshot": {
+    "policy": "conversations",
+    "reason": "Product and derived readers must apply is_visible_conversation or the validated by-id boundary; home_hidden is not a general visibility filter."
+  },
+  "backend/utils/conversations/screen_frame_evidence.py:get_conversation_raw_snapshot": {
+    "policy": "conversations",
+    "reason": "Product and derived readers must apply is_visible_conversation or the validated by-id boundary; home_hidden is not a general visibility filter."
+  },
+  "backend/utils/conversations/smart_merge.py:get_conversation": {
+    "policy": "both",
+    "reason": "Explicit recording-layer pipeline/finalization/recovery exception. Reads persisted ownership; recording processing exits before model calls."
+  },
+  "backend/utils/conversations/speaker_identity_retry.py:get_conversation": {
+    "policy": "both",
+    "reason": "Explicit recording-layer pipeline/finalization/recovery exception. Reads persisted ownership; recording processing exits before model calls."
+  },
+  "backend/utils/conversations/speaker_resolution.py:get_conversation": {
+    "policy": "both",
+    "reason": "Explicit recording-layer pipeline/finalization/recovery exception. Reads persisted ownership; recording processing exits before model calls."
+  },
+  "backend/utils/conversations/sync_hold_completion.py:get_conversation": {
+    "policy": "both",
+    "reason": "Capture, audio, sync, custody, retention, export, deletion or v3 construction owns recording-layer access; all lookups remain scoped to their owner."
+  },
+  "backend/utils/conversations/transcript_chunks.py:get_conversations_by_id": {
+    "policy": "conversations",
+    "reason": "Product and derived readers must apply is_visible_conversation or the validated by-id boundary; home_hidden is not a general visibility filter."
+  },
+  "backend/utils/conversations/transcription_shadow.py:collection": {
+    "policy": "conversations",
+    "reason": "Product and derived readers must apply is_visible_conversation or the validated by-id boundary; home_hidden is not a general visibility filter."
+  },
+  "backend/utils/conversations/transcription_shadow.py:get_conversation": {
+    "policy": "both",
+    "reason": "Explicit recording-layer pipeline/finalization/recovery exception. Reads persisted ownership; recording processing exits before model calls."
+  },
+  "backend/utils/conversations/typesense_index.py:collection": {
+    "policy": "both",
+    "reason": "Index projection reads the recording marker and deletes recording documents from the first-party index."
+  },
+  "backend/utils/conversations/v3/audio.py:get_conversation": {
+    "policy": "both",
+    "reason": "Capture, audio, sync, custody, retention, export, deletion or v3 construction owns recording-layer access; all lookups remain scoped to their owner."
+  },
+  "backend/utils/conversations/v3/created.py:get_conversation": {
+    "policy": "conversations",
+    "reason": "Owner-scoped re-read of one claimed v3-derived conversation (claim requires v3_derived and not recording) for its conversation-created webhook payload."
+  },
+  "backend/utils/conversations/v3/service.py:collection_group": {
+    "policy": "both",
+    "reason": "Capture, audio, sync, custody, retention, export, deletion or v3 construction owns recording-layer access; all lookups remain scoped to their owner."
+  },
+  "backend/utils/conversations/v3/service.py:get_conversation": {
+    "policy": "both",
+    "reason": "Capture, audio, sync, custody, retention, export, deletion or v3 construction owns recording-layer access; all lookups remain scoped to their owner."
+  },
+  "backend/utils/conversations/v3/service.py:user_conversations": {
+    "policy": "both",
+    "reason": "Owner-scoped v3 projection/summary/pending transactions through the explicit recording-aware storage helper."
+  },
+  "backend/utils/conversations/v3/summary.py:user_conversations": {
+    "policy": "both",
+    "reason": "Owner-scoped v3 projection/summary/pending transactions through the explicit recording-aware storage helper."
+  },
+  "backend/utils/developer_item_reads.py:get_conversation": {
+    "policy": "conversations",
+    "reason": "Product and derived readers must apply is_visible_conversation or the validated by-id boundary; home_hidden is not a general visibility filter."
+  },
+  "backend/utils/dream_canary.py:get_conversation_raw_snapshot": {
+    "policy": "operator",
+    "reason": "Internal canary metadata validation; not a user-facing reader or model input."
+  },
+  "backend/utils/dream_state_pass.py:collection": {
+    "policy": "conversations",
+    "reason": "Product and derived readers must apply is_visible_conversation or the validated by-id boundary; home_hidden is not a general visibility filter."
+  },
+  "backend/utils/email/day3_reengagement.py:collection": {
+    "policy": "conversations",
+    "reason": "Product and derived readers must apply is_visible_conversation or the validated by-id boundary; home_hidden is not a general visibility filter."
+  },
+  "backend/utils/enrichment/age_gate.py:collection": {
+    "policy": "conversations",
+    "reason": "Product and derived readers must apply is_visible_conversation or the validated by-id boundary; home_hidden is not a general visibility filter."
+  },
+  "backend/utils/enrichment/callback.py:get_conversation": {
+    "policy": "both",
+    "reason": "Explicit recording-layer pipeline/finalization/recovery exception. Reads persisted ownership; recording processing exits before model calls."
+  },
+  "backend/utils/enrichment/consumer.py:get_conversation_raw_snapshot": {
+    "policy": "both",
+    "reason": "Explicit recording-layer pipeline/finalization/recovery exception. Reads persisted ownership; recording processing exits before model calls."
+  },
+  "backend/utils/enrichment/custody.py:collection": {
+    "policy": "both",
+    "reason": "Enrichment custody follows the donor's redirect hop by id. Capture, audio, sync, custody, retention, export, deletion or v3 construction owns recording-layer access; all lookups remain scoped to their owner."
+  },
+  "backend/utils/enrichment/early_abort.py:get_conversation_raw_snapshot": {
+    "policy": "both",
+    "reason": "Explicit recording-layer pipeline/finalization/recovery exception. Reads persisted ownership; recording processing exits before model calls."
+  },
+  "backend/utils/enrichment/outbox.py:document_path": {
+    "policy": "both",
+    "reason": "Explicit capture, recording, sync, finalization, custody, export or lifecycle-metadata storage exception."
+  },
+  "backend/utils/enrichment/outbox.py:get_conversation_raw_snapshot": {
+    "policy": "both",
+    "reason": "Enrichment custody checks only ownership and routing fields on parked work before allowing a Python wake."
+  },
+  "backend/utils/enrichment/redrive.py:collection": {
+    "policy": "conversations",
+    "reason": "Product and derived readers must apply is_visible_conversation or the validated by-id boundary; home_hidden is not a general visibility filter."
+  },
+  "backend/utils/enrichment/unpark.py:collection": {
+    "policy": "conversations",
+    "reason": "The unpark transaction reads the conversation by exact ID after validating the user and conversation IDs against the outbox row key."
+  },
+  "backend/utils/entity_pages.py:collection": {
+    "policy": "conversations",
+    "reason": "Product and derived readers must apply is_visible_conversation or the validated by-id boundary; home_hidden is not a general visibility filter."
+  },
+  "backend/utils/entity_pages.py:get_conversation": {
+    "policy": "conversations",
+    "reason": "Product and derived readers must apply is_visible_conversation or the validated by-id boundary; home_hidden is not a general visibility filter."
+  },
+  "backend/utils/episodes/capture_groups.py:get_conversation": {
+    "policy": "both",
+    "reason": "Capture, audio, sync, custody, retention, export, deletion or v3 construction owns recording-layer access; all lookups remain scoped to their owner."
+  },
+  "backend/utils/episodes/composer.py:get_conversation": {
+    "policy": "conversations",
+    "reason": "Product and derived readers must apply is_visible_conversation or the validated by-id boundary; home_hidden is not a general visibility filter."
+  },
+  "backend/utils/episodes/composer_default_context_io.py:collection": {
+    "policy": "conversations",
+    "reason": "Product and derived readers must apply is_visible_conversation or the validated by-id boundary; home_hidden is not a general visibility filter."
+  },
+  "backend/utils/episodes/f_join.py:get_conversation_raw_snapshot": {
+    "policy": "conversations",
+    "reason": "Product and derived readers must apply is_visible_conversation or the validated by-id boundary; home_hidden is not a general visibility filter."
+  },
+  "backend/utils/episodes/finalize.py:get_conversation": {
+    "policy": "both",
+    "reason": "Lifecycle/capture/finalization raw metadata exception; downstream recording guards suppress all paid/derived work."
+  },
+  "backend/utils/episodes/finalize.py:get_conversation_raw_snapshot": {
+    "policy": "both",
+    "reason": "Lifecycle/capture/finalization raw metadata exception; downstream recording guards suppress all paid/derived work."
+  },
+  "backend/utils/episodes/home_read.py:collection": {
+    "policy": "conversations",
+    "reason": "Product and derived readers must apply is_visible_conversation or the validated by-id boundary; home_hidden is not a general visibility filter."
+  },
+  "backend/utils/episodes/intake_worker.py:collection": {
+    "policy": "storage",
+    "reason": "Owner-scoped sync revision receipt for authenticated workerd membership repair. Reads storage version metadata only."
+  },
+  "backend/utils/episodes/live.py:get_conversation_raw_snapshot": {
+    "policy": "both",
+    "reason": "Explicit capture, audio, recording, sync or finalization metadata exception; recording processing has a no-model exit."
+  },
+  "backend/utils/episodes/output_language.py:get_conversation_raw_snapshot": {
+    "policy": "conversations",
+    "reason": "Product and derived readers must apply is_visible_conversation or the validated by-id boundary; home_hidden is not a general visibility filter."
+  },
+  "backend/utils/episodes/service.py:get_conversation": {
+    "policy": "conversations",
+    "reason": "Product and derived readers must apply is_visible_conversation or the validated by-id boundary; home_hidden is not a general visibility filter."
+  },
+  "backend/utils/episodes/service.py:get_conversation_raw_snapshot": {
+    "policy": "conversations",
+    "reason": "Product and derived readers must apply is_visible_conversation or the validated by-id boundary; home_hidden is not a general visibility filter."
+  },
+  "backend/utils/episodes/visibility.py:get_conversation_raw_snapshot": {
+    "policy": "conversations",
+    "reason": "Product and derived readers must apply is_visible_conversation or the validated by-id boundary; home_hidden is not a general visibility filter."
+  },
+  "backend/utils/lifecycle_pair_census.py:collection_group": {
+    "policy": "conversations",
+    "reason": "Product and derived readers must apply is_visible_conversation or the validated by-id boundary; home_hidden is not a general visibility filter."
+  },
+  "backend/utils/lifecycle_pair_census.py:document_path": {
+    "policy": "both",
+    "reason": "Explicit capture, recording, sync, finalization, custody, export or lifecycle-metadata storage exception."
+  },
+  "backend/utils/llm/goals.py:get_conversations_by_id": {
+    "policy": "conversations",
+    "reason": "Product and derived readers must apply is_visible_conversation or the validated by-id boundary; home_hidden is not a general visibility filter."
+  },
+  "backend/utils/plugin_backup_audio.py:get_conversation": {
+    "policy": "both",
+    "reason": "Explicit capture, recording, sync, finalization, custody, export or lifecycle-metadata storage exception."
+  },
+  "backend/utils/processing_backlog_worker.py:get_conversation": {
+    "policy": "both",
+    "reason": "Explicit recording-layer pipeline/finalization/recovery exception. Reads persisted ownership; recording processing exits before model calls."
+  },
+  "backend/utils/pusher_audio_projection.py:get_conversation_raw_snapshot": {
+    "policy": "both",
+    "reason": "Capture, audio, sync, custody, retention, export, deletion or v3 construction owns recording-layer access; all lookups remain scoped to their owner."
+  },
+  "backend/utils/recording_speakers.py:get_conversation": {
+    "policy": "conversations",
+    "reason": "Product and derived readers must apply is_visible_conversation or the validated by-id boundary; home_hidden is not a general visibility filter."
+  },
+  "backend/utils/retrieval/rag.py:get_conversations_by_id": {
+    "policy": "conversations",
+    "reason": "Batch hydration inherits the default recording exclusion."
+  },
+  "backend/utils/retrieval/tool_services/action_items.py:get_conversation": {
+    "policy": "conversations",
+    "reason": "Product and derived readers must apply is_visible_conversation or the validated by-id boundary; home_hidden is not a general visibility filter."
+  },
+  "backend/utils/retrieval/tool_services/conversations.py:get_conversations_by_id": {
+    "policy": "conversations",
+    "reason": "Product and derived readers must apply is_visible_conversation or the validated by-id boundary; home_hidden is not a general visibility filter."
+  },
+  "backend/utils/retrieval/tools/action_item_tools.py:get_conversation": {
+    "policy": "conversations",
+    "reason": "Product and derived readers must apply is_visible_conversation or the validated by-id boundary; home_hidden is not a general visibility filter."
+  },
+  "backend/utils/retrieval/tools/conversation_tools.py:get_conversations_by_id": {
+    "policy": "conversations",
+    "reason": "Product and derived readers must apply is_visible_conversation or the validated by-id boundary; home_hidden is not a general visibility filter."
+  },
+  "backend/utils/retrieval/tools/edit_tools.py:get_conversation": {
+    "policy": "conversations",
+    "reason": "Product and derived readers must apply is_visible_conversation or the validated by-id boundary; home_hidden is not a general visibility filter."
+  },
+  "backend/utils/review.py:get_conversation": {
+    "policy": "conversations",
+    "reason": "Product and derived readers must apply is_visible_conversation or the validated by-id boundary; home_hidden is not a general visibility filter."
+  },
+  "backend/utils/review_projection.py:collection": {
+    "policy": "conversations",
+    "reason": "Product and derived readers must apply is_visible_conversation or the validated by-id boundary; home_hidden is not a general visibility filter."
+  },
+  "backend/utils/speaker_auto_enroll.py:get_conversation": {
+    "policy": "conversations",
+    "reason": "Product and derived readers must apply is_visible_conversation or the validated by-id boundary; home_hidden is not a general visibility filter."
+  },
+  "backend/utils/speaker_identification.py:get_conversation": {
+    "policy": "both",
+    "reason": "Explicit capture, audio, recording, sync or finalization metadata exception; recording processing has a no-model exit."
+  },
+  "backend/utils/speaker_tag_prompts/embedding_cache.py:get_conversation": {
+    "policy": "conversations",
+    "reason": "Product and derived readers must apply is_visible_conversation or the validated by-id boundary; home_hidden is not a general visibility filter."
+  },
+  "backend/utils/speaker_tag_prompts/service.py:get_conversation": {
+    "policy": "conversations",
+    "reason": "Product and derived readers must apply is_visible_conversation or the validated by-id boundary; home_hidden is not a general visibility filter."
+  },
+  "backend/utils/support/retention.py:collection": {
+    "policy": "operator",
+    "reason": "Support operator CLI retention check (scripts/support/ops.py); audited raw inspection of what survives for one account, including deleted rows, never a product read."
+  },
+  "backend/utils/sync/assignment.py:collection": {
+    "policy": "both",
+    "reason": "Capture, audio, sync, custody, retention, export, deletion or v3 construction owns recording-layer access; all lookups remain scoped to their owner."
+  },
+  "backend/utils/sync/bridge.py:get_conversation": {
+    "policy": "both",
+    "reason": "Capture, audio, sync, custody, retention, export, deletion or v3 construction owns recording-layer access; all lookups remain scoped to their owner."
+  },
+  "backend/utils/sync/fsr_metadata.py:get_conversation": {
+    "policy": "both",
+    "reason": "Capture, audio, sync, custody, retention, export, deletion or v3 construction owns recording-layer access; all lookups remain scoped to their owner."
+  },
+  "backend/utils/sync/fsr_metadata.py:get_conversation_raw_snapshot": {
+    "policy": "both",
+    "reason": "Capture, audio, sync, custody, retention, export, deletion or v3 construction owns recording-layer access; all lookups remain scoped to their owner."
+  },
+  "backend/utils/sync/minimal_redrive.py:get_conversation": {
+    "policy": "both",
+    "reason": "Capture, audio, sync, custody, retention, export, deletion or v3 construction owns recording-layer access; all lookups remain scoped to their owner."
+  },
+  "backend/utils/sync/pipeline.py:get_conversation": {
+    "policy": "both",
+    "reason": "Capture, audio, sync, custody, retention, export, deletion or v3 construction owns recording-layer access; all lookups remain scoped to their owner."
+  },
+  "backend/utils/sync/playback.py:get_conversation": {
+    "policy": "both",
+    "reason": "Capture, audio, sync, custody, retention, export, deletion or v3 construction owns recording-layer access; all lookups remain scoped to their owner."
+  },
+  "backend/utils/sync/playback_build.py:get_conversation_raw_snapshot": {
+    "policy": "both",
+    "reason": "Capture, audio, sync, custody, retention, export, deletion or v3 construction owns recording-layer access; all lookups remain scoped to their owner."
+  },
+  "backend/utils/sync/playback_metadata.py:get_conversation_raw_snapshot": {
+    "policy": "both",
+    "reason": "Capture, audio, sync, custody, retention, export, deletion or v3 construction owns recording-layer access; all lookups remain scoped to their owner."
+  },
+  "backend/utils/sync/recording_session_target.py:collection": {
+    "policy": "both",
+    "reason": "Capture, audio, sync, custody, retention, export, deletion or v3 construction owns recording-layer access; all lookups remain scoped to their owner."
+  },
+  "backend/utils/sync/safety_wal_coverage.py:get_conversation": {
+    "policy": "both",
+    "reason": "Explicit capture, audio, recording, sync or finalization metadata exception; recording processing has a no-model exit."
+  },
+  "backend/utils/task_intelligence/chat_first_e2e_fixture.py:collection": {
+    "policy": "conversations",
+    "reason": "Product and derived readers must apply is_visible_conversation or the validated by-id boundary; home_hidden is not a general visibility filter."
+  },
+  "backend/utils/task_intelligence/task_source_validation.py:get_conversation": {
+    "policy": "conversations",
+    "reason": "Product and derived readers must apply is_visible_conversation or the validated by-id boundary; home_hidden is not a general visibility filter."
+  },
+  "backend/utils/batch_pipeline/live.py:get_conversation": {
+    "policy": "both",
+    "reason": "Record admission's manual-finish first transcript re-reads one owner-scoped recording, decoded, to decide whether it still has no transcript before any provider call and again before the provisional write; recording-layer access by its capture owner."
+  }
+}

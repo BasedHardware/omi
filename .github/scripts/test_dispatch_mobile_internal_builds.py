@@ -6,6 +6,7 @@ import io
 import os
 import pathlib
 import subprocess
+import sys
 import tempfile
 from contextlib import redirect_stdout
 from types import SimpleNamespace
@@ -219,7 +220,7 @@ class TestNewestBuiltSha(unittest.TestCase):
         build["distribution_evidence"]["source_sha"] = "7" * 40
         self.assertIsNone(mod.newest_built_sha([build]))
 
-    def test_last_built_sha_adapts_codemagic_build_detail(self):
+    def test_last_built_adapts_codemagic_build_detail(self):
         build_id = "build-1"
         detail = {
             "build": {
@@ -229,9 +230,9 @@ class TestNewestBuiltSha(unittest.TestCase):
             }
         }
         with patch.object(mod, "_api_get", side_effect=[{"builds": [{"_id": build_id}]}, detail]):
-            self.assertEqual(mod.last_built_sha("app", "android-internal-auto", "token", platform="android"), IOS_SHA)
+            self.assertEqual(mod.build_sha(mod.last_built("app", "android-internal-auto", "token", platform="android")), IOS_SHA)
 
-    def test_last_built_sha_does_not_adapt_failed_ios_store_task(self):
+    def test_last_built_does_not_adapt_failed_ios_store_task(self):
         detail = {
             "build": {
                 "status": "finished",
@@ -241,7 +242,7 @@ class TestNewestBuiltSha(unittest.TestCase):
             }
         }
         with patch.object(mod, "_api_get", side_effect=[{"builds": [{"_id": "build-1"}]}, detail]):
-            self.assertIsNone(mod.last_built_sha("app", "ios-internal-auto", "token", platform="ios"))
+            self.assertIsNone(mod.last_built("app", "ios-internal-auto", "token", platform="ios"))
 
     def test_malformed_ios_store_task_does_not_block_android_baseline(self):
         detail = {
@@ -262,9 +263,9 @@ class TestNewestBuiltSha(unittest.TestCase):
                 detail,
             ],
         ):
-            self.assertIsNone(mod.last_built_sha("app", "ios-internal-auto", "token", platform="ios"))
+            self.assertIsNone(mod.last_built("app", "ios-internal-auto", "token", platform="ios"))
             self.assertEqual(
-                mod.last_built_sha("app", "android-internal-auto", "token", platform="android"),
+                mod.build_sha(mod.last_built("app", "android-internal-auto", "token", platform="android")),
                 ANDROID_SHA,
             )
 
@@ -332,10 +333,30 @@ class TestSourceIdentity(unittest.TestCase):
 
 
 class TestHeldChangesReminder(unittest.TestCase):
-    def _schedule_dry_run(self):
+    def _android_detail(self, mode, step_status="success"):
+        return {
+            "build": {
+                "status": "finished",
+                "commit": {"hash": ANDROID_SHA},
+                "buildActions": [
+                    {"name": sys.modules["mobile_distribution"].PLAY_INTERNAL_PUBLISH_STEP, "status": step_status},
+                    {"type": "publishing", "status": "success"},
+                ],
+                "artefacts": [{"name": f"play-internal-publish-{mode}.json"}],
+            }
+        }
+
+    def _schedule_dry_run(self, android_detail=None):
+        def api_get(url, token):
+            if "workflowId=android-internal-auto" in url and android_detail is not None:
+                return {"builds": [{"_id": "android-build"}]}
+            if url.endswith("/android-build"):
+                return android_detail
+            return {"builds": []}
+
         with patch.dict(mod.os.environ, {"CODEMAGIC_API_TOKEN": "secret"}), patch.object(
-            mod, "_api_get", return_value={"builds": []}
-        ), patch.object(
+            mod, "_api_get", side_effect=api_get
+        ), patch.object(mod, "app_commits_since", return_value=[]), patch.object(
             mod.subprocess, "run", return_value=SimpleNamespace(stdout="a" * 40 + "\n")
         ):
             with redirect_stdout(io.StringIO()) as captured:
@@ -345,21 +366,22 @@ class TestHeldChangesReminder(unittest.TestCase):
         self.assertEqual(rc, 0)
         return captured.getvalue()
 
-    def test_no_held_line_while_the_mode_is_off(self):
-        # With held-changes mode off (Play auto-sends changes for review) a
-        # settled Android publish is tester-visible distribution, so scheduled
-        # runs stay silent about held changes.
-        with patch.object(mod, "ANDROID_HELD_CHANGES_MODE", False):
-            self.assertNotIn("held-changes-mode", self._schedule_dry_run())
+    def test_no_held_line_without_android_evidence(self):
+        self.assertNotIn("held-changes-mode", self._schedule_dry_run())
 
-    def test_a_schedule_run_names_the_held_android_distribution(self):
-        # Held-changes mode is on since 2026-10-28: a settled Android publish
-        # is not tester-visible distribution, so every scheduled run must say
-        # so instead of stalling silently on an advanced baseline. No patch:
-        # this pins the shipped default.
-        captured = self._schedule_dry_run()
+    def test_no_held_line_after_a_normal_publish(self):
+        self.assertNotIn("held-changes-mode", self._schedule_dry_run(self._android_detail("normal")))
+
+    def test_a_held_publish_names_the_held_android_distribution(self):
+        # A held publish committed the edit, but testers cannot install it until
+        # the Console press; every scheduled run must say so.
+        captured = self._schedule_dry_run(self._android_detail("held"))
         self.assertIn("android_distribution=held-changes-mode", captured)
         self.assertIn("Send for review", captured)
+
+    def test_a_failed_publish_step_is_not_a_baseline(self):
+        captured = self._schedule_dry_run(self._android_detail("held", step_status="failed"))
+        self.assertNotIn("held-changes-mode", captured)
 
 
 REPO_ROOT = pathlib.Path(__file__).resolve().parents[2]

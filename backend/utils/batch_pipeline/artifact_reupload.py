@@ -1,6 +1,7 @@
 """Exact-content missing-input repair, without a new projection or ledger owner."""
 
 from dataclasses import fields
+from functools import partial
 import logging
 import math
 from pathlib import Path
@@ -11,6 +12,8 @@ from database.batch_pipeline_projection_protocol import ProjectionBlocked
 from utils.batch_pipeline.audio import with_context
 from utils.batch_pipeline.contracts import WorkItem
 from utils.batch_pipeline.capture_decode import decode_units
+from utils.batch_pipeline.future_capture_decode import decode_future_units
+from utils.sync.source_reuse_decode import decode_for_intake
 from utils.batch_pipeline.repair_lineage import LANGUAGE_KEYS, LINEAGE_KEYS, recorded_lineage
 from utils.executors import run_blocking, db_executor, storage_executor, sync_executor
 
@@ -71,7 +74,8 @@ def _original_unit(jobs, index, unit):
     if index >= len(jobs):
         raise ProjectionBlocked('re-upload unit count changed')
     job = jobs[index]
-    if not math.isclose(unit.capture_at, job['capture_at'], rel_tol=0, abs_tol=1 / 16000) or not math.isclose(
+    capture_at = unit.stored_capture_at if unit.stored_capture_at is not None else unit.capture_at
+    if not math.isclose(capture_at, job['capture_at'], rel_tol=0, abs_tol=1 / 16000) or not math.isclose(
         unit.duration_seconds, job['duration_seconds'], rel_tol=0, abs_tol=1 / 16000
     ):
         raise ProjectionBlocked('re-upload capture boundaries changed')
@@ -124,7 +128,45 @@ async def restore_upload(
     binding, jobs, snapshots = plan
     context, languages = await run_blocking(db_executor, _repair_evidence, store, binding, snapshots, intake_context)
     ceiling = max(job['duration_seconds'] for job in jobs)
-    iterator = decode(ceiling) if decode is not None else decode_units(paths, max_seconds=ceiling)
+    if decode is not None:
+        iterator = decode(ceiling)
+    elif any(job.get('capture_time_trust') == 'untrusted' for job in jobs):
+        # The original durable jobs select repair semantics, even after a kill
+        # switch or retry context changes. Retained anchors freeze placement.
+        context = {**context, 'capture_received_at': context.get('capture_received_at') or time.time()}
+        iterator = decode_for_intake(
+            paths,
+            ceiling,
+            uid,
+            context,
+            decoder=partial(
+                decode_future_units,
+                uid=uid,
+                device_id=binding.client_device_id,
+                retained_offsets_by_name=context.get('retained_capture_offsets_by_name'),
+                durable_repair=True,
+            ),
+        )
+    elif any(job.get('source_reuse_key') for job in jobs):
+        from utils.sync.source_reuse_decode import decode_sources
+
+        # Accepted units pin per-file packing, even when new reuse is OFF.
+        # The original content HMAC already proves the complete bytes/names;
+        # _original_unit rechecks every original unit boundary before the CAS.
+        iterator = decode_sources(
+            paths,
+            uid=uid,
+            max_seconds=ceiling,
+            decoder=decode_units,
+            context={
+                **context,
+                'client_device_id': binding.client_device_id,
+                'source': binding.source,
+                'should_lock': binding.is_locked,
+            },
+        )
+    else:
+        iterator = decode_units(paths, max_seconds=ceiling)
     uris, count = {}, 0
     try:
         while (unit := await run_blocking(sync_executor, next, iterator, None)) is not None:

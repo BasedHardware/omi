@@ -1,9 +1,15 @@
+import 'dart:async';
+
 import 'package:flutter_test/flutter_test.dart';
+import 'package:omi/services/experiments/pendant_ring_drain_gate.dart';
+import 'package:omi/services/wals/ring_drain_policy.dart';
+import 'package:omi/services/wals/ring_storage_sync.dart';
 import 'package:omi/services/wals/wal_syncs.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/services/wals/sdcard_wal_sync.dart';
 import 'package:omi/services/wals/local_wal_sync.dart';
+import 'package:omi/services/wals/storage_sync.dart';
 import 'package:omi/services/wals/wal.dart';
 import 'package:omi/services/wals/wal_interfaces.dart';
 
@@ -15,16 +21,88 @@ class _Listener implements IWalSyncListener {
 }
 
 class _PhoneSync extends LocalWalSyncImpl {
-  _PhoneSync() : super(_Listener());
+  _PhoneSync({this.events}) : super(_Listener());
+
+  final List<String>? events;
 
   @override
   void start() {}
 
   @override
-  Future<SyncLocalFilesResponse?> syncAll({IWalSyncProgressListener? progress}) async => null;
+  Future<SyncLocalFilesResponse?> syncAll({IWalSyncProgressListener? progress}) async {
+    events?.add('phone-history');
+    return null;
+  }
 
   @override
-  Future<SyncLocalFilesResponse?> syncLiveCaptureOnly({IWalSyncProgressListener? progress}) async => null;
+  Future<SyncLocalFilesResponse?> syncLiveCaptureOnly({IWalSyncProgressListener? progress}) async {
+    events?.add('phone-live');
+    return null;
+  }
+}
+
+class _RingSync extends RingStorageSyncImpl {
+  _RingSync(this.events) : super(_Listener());
+
+  final List<String> events;
+  final pending = Wal(
+    timerStart: 1704067200,
+    codec: BleAudioCodec.opus,
+    seconds: 60,
+    storage: WalStorage.sdcard,
+    status: WalStatus.miss,
+    fileNum: -1,
+  );
+
+  @override
+  Future<void> refreshWalsFromDevice() async {}
+
+  @override
+  Future<List<Wal>> getMissingWals() async => pending.status == WalStatus.miss ? [pending] : [];
+
+  @override
+  Future<SyncLocalFilesResponse?> syncAll({IWalSyncProgressListener? progress}) async {
+    events.add(independentDiscovery ? 'independent-ring' : 'legacy-ring');
+    pending.status = WalStatus.synced;
+    return null;
+  }
+}
+
+class _SettlingStorage extends StorageSyncImpl {
+  _SettlingStorage(this.events, this.settled) : super(_Listener());
+
+  final List<String> events;
+  final Future<void> settled;
+  final started = Completer<void>();
+  bool fail = true;
+  final pending = Wal(timerStart: 1704067200, codec: BleAudioCodec.opus, seconds: 60, status: WalStatus.miss);
+
+  @override
+  Future<void> refreshWalsFromDevice() async {}
+
+  @override
+  Future<List<Wal>> getMissingWals() async => [pending];
+
+  @override
+  Future<SyncLocalFilesResponse?> syncAll({IWalSyncProgressListener? progress}) async {
+    events.add('device-start');
+    started.complete();
+    await settled;
+    events.add('device-settled');
+    if (fail) throw TimeoutException('No data from device');
+    return null;
+  }
+}
+
+class _FailingSdcard extends _SpySdcard {
+  _FailingSdcard(this.events);
+  final List<String> events;
+
+  @override
+  Future<SyncLocalFilesResponse?> syncAll({IWalSyncProgressListener? progress}) async {
+    events.add('sd-failed');
+    throw StateError('device read incomplete');
+  }
 }
 
 class _SpySdcard extends SDCardWalSyncImpl {
@@ -78,6 +156,102 @@ class _SpySdcard extends SDCardWalSyncImpl {
 // the enriched firmware first; only the Auto Sync page used to pass it.
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+
+  group('remote pendant drain route', () {
+    final cases = <(String, Future<bool?> Function(String), bool)>[
+      ('missing flag', (_) async => null, true),
+      ('resolved on', (_) async => true, true),
+      ('resolved off', (_) async => false, false),
+      ('failed read', (_) async => throw StateError('flags unavailable'), true),
+    ];
+    for (final (name, read, independent) in cases) {
+      test('$name selects the effective cohort and reader', () async {
+        final events = <String>[];
+        final syncs = WalSyncs(
+          _Listener(),
+          phoneSync: _PhoneSync(events: events),
+          ringSync: _RingSync(events),
+          sdcardSync: _SpySdcard(),
+        );
+        addTearDown(syncs.disableRingDrain);
+        final allowed = await PendantRingDrainGate.independentDrainAllowed(readFlag: (key) {
+          expect(key, 'mobile-pendant-independent-ring-drain');
+          return read(key);
+        });
+        final expectedIndependent = independent && ringDrainRecoveryEnabled;
+        expect(allowed, independent);
+
+        final pendant = BtDevice(id: 'pendant', name: 'Omi', type: DeviceType.omi, rssi: -40);
+        syncs.setDevice(pendant, firmwareVersion: '3.0.19');
+        syncs.configureRingDrain(() => true, independentDrainAllowed: allowed);
+        expect(syncs.drainCohort, isNull);
+        syncs.updateFirmwareVersion(pendant.id, '3.0.25');
+        await syncs.wakeRingDrain();
+        expect(syncs.drainCohort, expectedIndependent ? 'on' : 'holdout');
+        expect(events, expectedIndependent ? ['independent-ring'] : isEmpty);
+
+        await syncs.syncAll();
+        expect(
+          events,
+          expectedIndependent
+              ? ['independent-ring', 'phone-live', 'phone-history']
+              : ['phone-live', 'legacy-ring', 'phone-history'],
+        );
+
+        syncs.setDevice(null);
+        expect(syncs.drainCohort, isNull);
+      });
+    }
+
+    testWidgets('unresolved read defaults on after its deadline', (tester) async {
+      final never = Completer<bool?>();
+      final decision = PendantRingDrainGate.independentDrainAllowed(readFlag: (_) => never.future);
+      await tester.pump(const Duration(seconds: 2));
+      expect(await decision, isTrue);
+    });
+  });
+
+  group('phone history after device failures', () {
+    test('bounded stalled read settles before history uploads and the failure remains visible', () async {
+      final events = <String>[];
+      final settled = Completer<void>();
+      final device = _SettlingStorage(events, settled.future);
+      final syncs = WalSyncs(_Listener(), phoneSync: _PhoneSync(events: events), storageSync: device);
+      final pass = syncs.syncAll();
+      final failure = expectLater(pass, throwsA(isA<TimeoutException>()));
+      await device.started.future;
+      expect(events, ['phone-live', 'device-start']);
+      settled.complete(); // The protocol's first-data/idle deadline has finished cleanup.
+      await failure;
+      expect(events, ['phone-live', 'device-start', 'device-settled', 'phone-history']);
+      expect(device.pending.status, WalStatus.miss);
+    });
+
+    test('legacy SD exception cannot skip the independent phone backlog', () async {
+      final events = <String>[];
+      final syncs = WalSyncs(
+        _Listener(),
+        phoneSync: _PhoneSync(events: events),
+        sdcardSync: _FailingSdcard(events),
+      );
+      syncs.setDevice(BtDevice(id: 'pendant', name: 'Omi', type: DeviceType.omi, rssi: -40), firmwareVersion: '3.0.16');
+      await expectLater(syncs.syncAll(), throwsStateError);
+      expect(events, ['phone-live', 'sd-failed', 'phone-history']);
+    });
+
+    test('user cancellation while device settles does not start a phone upload', () async {
+      final events = <String>[];
+      final settled = Completer<void>();
+      final device = _SettlingStorage(events, settled.future)..fail = false;
+      final syncs = WalSyncs(_Listener(), phoneSync: _PhoneSync(events: events), storageSync: device);
+      final pass = syncs.syncAll();
+      await device.started.future;
+      syncs.cancelSync();
+      settled.complete();
+      await pass;
+      expect(events, ['phone-live', 'device-start', 'device-settled']);
+    });
+  });
 
   group('legacy SD isolation', () {
     for (final firmware in [null, '', 'Unknown']) {

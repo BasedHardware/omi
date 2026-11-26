@@ -8,9 +8,28 @@ import os
 from collections.abc import Mapping
 from typing import Any
 
+from config.historical_tier import STAND_IN_TITLE_PROVENANCES
+
 
 def enabled() -> bool:
     return os.getenv('CONVERSATION_MERGE_BEFORE_PROCESSING', 'true').strip().lower() not in {'false', '0', 'off', 'no'}
+
+
+def v3_excluded() -> bool:
+    """Default-on kill switch: v3-owned rows never enter the pre-notes absorb.
+
+    Smart merge's donor redirect keeps ``v3_derived`` and moves no claims, unlike
+    v3's own retire (``_retire_patch``); v3 owns its window boundaries. Off
+    restores the absorb (and the v3 drain's ``ConversationAbsorbed`` 500s).
+    """
+    value = os.getenv('CONVERSATION_MERGE_BEFORE_PROCESSING_V3_EXCLUSION', 'true')
+    return value.strip().lower() not in {'false', '0', 'off', 'no'}
+
+
+def v3_owned(row: Any) -> bool:
+    """v3 derived rows and v3 recordings, from a stored row or a model: v3 owns their boundaries and claims."""
+    get = row.get if isinstance(row, Mapping) else (lambda key: getattr(row, key, None))
+    return get('v3_derived') is True or get('recording') is True
 
 
 def already_processed(row: Mapping[str, Any]) -> bool:
@@ -33,7 +52,7 @@ def already_processed(row: Mapping[str, Any]) -> bool:
         isinstance(structured, Mapping)
         and structured.get('title')
         and not (
-            structured.get('title_provenance') == 'server_minimum'
+            structured.get('title_provenance') in STAND_IN_TITLE_PROVENANCES
             or row.get('summary_title_provenance') == 'server_minimum'
         )
     ):

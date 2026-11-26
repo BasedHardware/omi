@@ -72,9 +72,13 @@ void main() {
     await pump(tester, HeldRecordingLockedRow(recording: recordings.first, onPressed: () => pressed++));
     expect(find.byKey(const Key('held_recording_locked_newer')), findsOneWidget);
     expect(find.byKey(const Key('held_audio_more')), findsNothing);
-    await tester.tap(find.text('Upgrade'));
+    expect(find.textContaining('· Saved'), findsOneWidget, reason: 'held audio is saved, not promised for a date');
+    await tester.tap(find.text('Unlock'));
     await tester.pump();
     expect(pressed, 1);
+    await tester.tap(find.byKey(const Key('held_recording_locked_newer')));
+    await tester.pump();
+    expect(pressed, 2, reason: 'the whole row opens the plans');
   });
 
   testWidgets('the last row says how many more the server did not list', (tester) async {
