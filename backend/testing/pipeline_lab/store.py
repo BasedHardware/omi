@@ -320,6 +320,46 @@ class Store:
         atomic_write_json(path, {**value, 'key': key, 'stage': stage, 'stored_at': utc_iso()})
         return path
 
+    def cache_files_dir(self, stage: str, key: str) -> Path:
+        """Where a cache entry's stored artifacts live (run files, by path relative to the run dir)."""
+        return self.cache_path(stage, key).with_suffix('.files')
+
+    @staticmethod
+    def _artifact_parts(relative: str) -> tuple[str, ...]:
+        parts = Path(relative).parts
+        if not parts or Path(relative).is_absolute():
+            raise StoreRefused('artifact path must be relative to the run directory')
+        for part in parts:
+            safe_segment(part, 'artifact path segment')
+        return parts
+
+    def cache_put_files(self, stage: str, key: str, source_dir: Path, relatives: Sequence[str]) -> dict[str, str]:
+        """Copy run files into the entry's artifact directory; returns ``{relative: sha256}``."""
+        import hashlib
+
+        base = self.cache_files_dir(stage, key)
+        digests: dict[str, str] = {}
+        for relative in relatives:
+            parts = self._artifact_parts(relative)
+            body = Path(source_dir).joinpath(*parts).read_bytes()
+            atomic_write_bytes(base.joinpath(*parts), body)
+            digests[relative] = hashlib.sha256(body).hexdigest()
+        return digests
+
+    def cache_files_present(self, stage: str, key: str, relatives: Sequence[str]) -> bool:
+        base = self.cache_files_dir(stage, key)
+        try:
+            return all(base.joinpath(*self._artifact_parts(r)).is_file() for r in relatives)
+        except StoreRefused:
+            return False
+
+    def cache_restore_files(self, stage: str, key: str, target_dir: Path, relatives: Sequence[str]) -> None:
+        """Write an entry's artifacts back into a run directory (same relative paths)."""
+        base = self.cache_files_dir(stage, key)
+        for relative in relatives:
+            parts = self._artifact_parts(relative)
+            atomic_write_bytes(Path(target_dir).joinpath(*parts), base.joinpath(*parts).read_bytes())
+
     # ---- runs ------------------------------------------------------------------
 
     def run_dir(self, run_id: str) -> Path:

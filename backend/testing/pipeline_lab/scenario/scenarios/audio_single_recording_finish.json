@@ -1,0 +1,20 @@
+{
+  "name": "audio_single_recording_finish",
+  "description": "One batch-lane recording from a committed synthetic WAV (macOS say, two voices, 8.9 s), Finish tapped at 8.5 s while capturing, fast finish on. Its words come from the STT cassette for that exact audio (a committed synthetic one unless a local or vendor cassette was recorded) and pass through the batch lane's real PipelineWorker and projection before landing. The Finish conversation is visible on Home from the provisional transcript on.",
+  "origins": [{"id": "O", "source": "omi"}],
+  "recordings": [
+    {
+      "id": "B",
+      "origin": "O",
+      "session": "S1",
+      "audio_file": "../fixtures/audio/synthetic_two_voices.wav",
+      "transcript_at": 60
+    }
+  ],
+  "finish": {"at": 8.5, "fast_finish": true, "provisional_latency": 5},
+  "expect": [
+    {"at": 20, "label": "visible_after_provisional", "conversation_of": "@finish", "recordings": ["B"], "visible": true, "manual_end": true, "min_words": 10},
+    {"label": "visible_at_end", "conversation_of": "@finish", "recordings": ["B"], "visible": true, "manual_end": true, "min_words": 10},
+    {"no_hidden_with": "B"}
+  ]
+}

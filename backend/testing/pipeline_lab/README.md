@@ -1,12 +1,35 @@
 # Pipeline lab
 
-Replays one recorded day through code as close to the production pipeline as
-possible (conversation boundaries, speakers, transcript, notes, memories, tasks,
-would-have-fired notifications, goals, daily summary, chat index), caches every
-stage's output, and lets people and agents browse the result next to what
-production produced that day. Engine code lives here. **Data and verdicts never do.**
+## Start here
 
-Agents: read [AGENTS.md](AGENTS.md) before running a replay or judging a change with one.
+Run from `backend/`. Three commands cover most work:
+
+```bash
+python -m testing.pipeline_lab affected                       # which scenarios and stages your diff can change
+python -m testing.pipeline_lab scenario run [NAME ...] --keep DIR   # run them (default: every committed scenario)
+python -m testing.pipeline_lab view DIR                        # look at the result in a browser (loopback)
+```
+
+- **A pass** means every `expect` row of the scenario held on the conversations the real v3 code built, and
+  on the answer the product's Home route gave (exit 0). `failed` (exit 1) is a check that did not hold, or
+  `nondeterministic` when `--repeat` runs disagree; `error` (exit 2) is a run that could not finish.
+- **The run directory** goes to `--keep DIR`, else a fresh temp dir (printed at the end); never into git.
+  `view` takes it, a `scenario compare` directory, the lab store root, or one day-replay run, and opens
+  the matching page. `python -m testing.pipeline_lab scenario summary DIR` prints the verdict as markdown
+  for a pull request.
+- Agents: read [AGENTS.md](AGENTS.md) before judging a change with the lab.
+
+## What the lab is
+
+Two tools share this package. **Scenarios** script one capture -> Finish -> Home story in a small JSON
+file and run it through the real conversations v3 code on a local emulator in well under a minute.
+**Day replays** replay one recorded day and cache every stage's output so people and agents can browse
+the result next to what production produced that day. In a classic day replay, transcripts come from
+STT cassettes when the overlay selects them (else the stored production transcripts), and conversation
+boundaries and speakers are production's own, taken from the stored rows; the chain then runs the real
+product code for discard, notes, memories, tasks, would-have-fired notifications, goals, the daily summary
+and the chat index. A v3 day replay runs the real v3 builder, so its boundaries are the product's.
+Engine code lives here. **Data and verdicts never do.**
 
 ## Privacy (hard rules)
 
@@ -37,6 +60,7 @@ synthetic uid `local-dev-user`.
 | `timeline/`, `cassette/`, `lanes/` | Day timeline and lanes; STT cassettes (vendor prerecorded and Parakeet batch adapters); record/batch and sync replay; `lanes/plugin.py`. |
 | `inspector/` | Stdlib server and static UI; `sample_run.py` (synthetic Lumen Bay day). |
 | `v3/` | Conversations v3 replay: `feed.py` (recordings, arrival instants), `tasks.py` (loopback Cloud Tasks), `driver.py` (event loop), `product.py` + `run.py` + `entry.py` (real v3 code), `export.py` (contract rows, pairing by recording), `corpus.py` (add-day ingest), `select.py` (pipeline choice), `fake.py`, `smoke.py`, `prod_export.py` (read-only v3 exporter). |
+| `scenario/` | Scripted capture -> Finish -> Home stories (see [Scenarios](#scenarios)): `spec.py` (file format, event plan), `checks.py` (expectations, outcomes), `ops.py` (events as product calls), `run.py` (one scenario in process), `stack.py` (command, emulator bring-up, report), `scenarios/` (committed synthetic scenarios), `IMPORTER.md` (slice 2 design). |
 | `ideal/` | Ideal days: `packet.py` (numbered lines), `schema.py` (validator), `score.py` (structure scoring), `runs.py` (score table and per-card diff across runs, no text), drafting passes. |
 | `sample.py` | Minimal synthetic run, used only when the inspector plugin is absent. |
 
@@ -132,6 +156,121 @@ lane adds survives another lane's round trip. Item `key`s come from
 casefold, collapsed whitespace, edge punctuation trimmed), so a verdict on a task
 or memory still matches after a re-run that produces the same text.
 
+## Scenarios
+
+A scenario reproduces one capture -> Finish -> Home incident from a small JSON file, through the real v3
+code. No deploy, no production data: the text is synthetic and the run uses the lab uid on a local emulator.
+
+```bash
+cd backend
+python -m testing.pipeline_lab scenario check finish_after_reconnect_late_transcript   # validate, print the plan
+<workspace>/bin/omi-heavy run -- python -m testing.pipeline_lab scenario run [NAME|FILE ...] \
+    [--keep DIR] [--jobs N] [--repeat N] [--stt replay|record-local|record-vendor] [--json]
+```
+
+`run` with no names runs every committed scenario (`scenario/scenarios/*.json`). It needs `firebase`,
+Java 21 (a Homebrew `openjdk@21` is used when present) and `redis-server`, runs each scenario in a fresh
+process, prints a timeline, the resulting conversations and each check. Exit: 0 when every scenario passed
+or failed as expected, 1 on a failure, an unexpected pass or a repeat that differs, 2 on an error.
+
+**Format.** Documented at the top of `scenario/spec.py`: origins, batch-lane recordings (audio span,
+recording session, seal, batch transcript landing, scripted lines with speaker and `is_user`), stream gaps,
+device-sync fragments with arrival instants, a Finish tap (fast finish on or off, provisional latency), an
+`env` overlay on top of this checkout's production `backend-sync` profile, and `expect` rows
+(`conversation_of` a label or `@finish`: `recordings`, `recordings_include`, `visible`, `on_home`,
+`manual_end`, `hidden_reason`, `min_words`, `kind`; or `no_hidden_with`), each optionally checked at an
+instant (`at`) and named (`label`). Every field of one row must hold for the same conversation.
+`expected_failure: {"reason", "checks": [labels], "strict": true}` marks a known bug; the fix PR deletes it.
+The two tie rules (a tap at a seal's instant runs first; two recordings starting together are refused) are
+explained there too. Events run at their scripted instants (`--clock tick` adds real elapsed time).
+
+**Audio.** A recording or sync fragment may give `audio_file` (a PCM WAV, relative to the scenario file)
+instead of `speech`. Its words come from an STT cassette for that exact audio, then pass through the lane
+code a day replay runs: production's decode, the real `PipelineWorker` (windows, packing, validation) and
+`projection_segments` for batch recordings; `retrieve_vad_segments` and `postprocess_words` for sync. VAD is
+the local Silero model; speaker labels come from the cassette; speaker identification does not run.
+`--stt` picks how words are found:
+
+- `replay` (default): committed `synthetic` cassettes (`scenario/fixtures/stt_cassette/`) and the lab
+  root's cache; a miss is an error naming the command that would record it. No network.
+- `record-local`: local Parakeet (production's `parakeet-tdt-0.6b-v3` checkpoint on CPU, the product's
+  decoding, 30 s windows). An optional extra in its own venv (`requirements-local-stt.txt`), never imported by
+  the default lab. Measured word error rate on synthetic speech: 2.3% on 60 s, 7.2% on 10 min. Local
+  cassettes are evidence for everything after the words, not for transcription quality.
+- `record-vendor`: the vendor prerecorded adapter with a spend cap (`--stt-budget-usd`); needs credentials
+  and an `stt` provider and model pin in the scenario.
+
+Without an `stt` pin the run takes the best cassette recorded for the file: vendor, then local, then synthetic.
+
+**What runs as product code.** Each run lists its stand-ins in words, from its own counters, in
+`result.json` (`stand_in_notes`, `audio_steps`), `verdict.json`, the text report and the web view. In short:
+
+| Step | Product code | Stand-in |
+|---|---|---|
+| Capture admission, recording rows | `triggers.mark_new`, `upsert_conversation_with_lifecycle` | none |
+| Finish tap | `retrieve_in_progress_conversation` picks the branch; with nothing in progress, `finish.finish_live_window` | Capture in progress: the finalization job's capture close is written as its outcome at the seal; the job does not run. |
+| Record admission, fast finish | `batch_pipeline.live._manual_finish_admitted` -> `promote_manual_end` -> `fast_finish.run` | `admit_recording` does not run; one unit over the whole recording, a privacy check that allows, funding open. STT returns the recording's lines: scripted, or the cassette words of an audio recording. |
+| Batch transcript landing | `update_conversation_segments`, `triggers.committed_sync_assignment` | The projection transaction (`replace_record`, its manual-end promotion, receipts) does not run. |
+| Device-sync fragment | `mark_new`, `upsert_conversation_with_lifecycle`, `committed_sync_assignment` | `/v2/sync-local-files` intake and its job do not run. |
+| Reconcile, planner, notes, Home | `service.reconcile`, `service.sweep`, loopback named Cloud Tasks, the Home routes | Every LLM answer is the lab's fake gateway: one conversation per stretch, a new one at a line containing `switching topics`. |
+
+**Isolation, `--jobs`, `--repeat`.** Each scenario process (each repeat too) gets its own Firestore project
+`demo-lab-<run id>` on one multi-project emulator, its own leased Redis database, its own blob root and
+Typesense writes off, so `--jobs N` runs N at once on one stack. `--repeat N` runs each scenario N times and
+compares the repeats with `determinism.compare_runs`; any difference makes it `nondeterministic`. Peers, in
+order: `FIRESTORE_EMULATOR_HOST` + `OMI_PIPELINE_LAB_REDIS` when both are given; the host's shared stack
+(`scenario stack up|down|status`, pid file under the lab root); else an emulator and `redis-server` started
+for the run (with only `OMI_PIPELINE_LAB_REDIS` given, that Redis and a started emulator).
+
+**Run directory.** `run.json` (ref, tree, jobs, repeat, isolation), `verdict.json` (outcome and per-check
+expected and actual), and per scenario `scenario.json`, `result.json`, `home.json`, `v3_tasks.jsonl`,
+`decisions.jsonl`, `repeat-<k>/`.
+
+**`scenario compare BASE [HEAD|--worktree]`** runs the same scenarios against two backend trees (a ref runs
+in a pinned worktree with this checkout's lab vendored in) and writes `base/`, `head/` and `compare.json`.
+Exit 0 when nothing differs, 1 when an outcome or conversation differs.
+
+**The web view** (`view DIR`, or `scenario view DIR`) is a stateless read-only page on loopback: the verdict
+and checks, Home as the route returned it with a snapshot picker and a "Not on Home" group, a timeline of
+recordings, seals, landings, sync arrivals, gaps, Finish and checkpoints, a detail drawer, the stand-ins, and
+base/head for a compare. "On Home" means the server's Home routes returned the conversation
+(`GET /v1/conversations` and `/v1/conversations/live`, as the app calls them for a v3 account); the phone's
+own client-side filtering is not modelled.
+
+**CI.** The advisory job "Pipeline Lab Scenarios" (`.github/workflows/backend-hermetic-e2e.yml`) runs every
+committed scenario with `--jobs 4 --repeat 2 --stt replay` on every backend pull request and merge-queue run,
+writes the summary to the job page and uploads the run directory (artifact `pipeline-lab-scenarios`):
+download it and run `view` on it.
+
+Turning a production incident into a scenario: [scenario/IMPORTER.md](scenario/IMPORTER.md).
+
+## affected
+
+`python -m testing.pipeline_lab affected [BASE..HEAD | BASE]` (default: the merge base with `origin/main` to
+the working tree) maps every changed path to the scenarios worth running and the earliest day-replay stage
+it can change, and prints the commands. Scenarios are named by `SCENARIO_TABLE` first (v3 runtime, Finish,
+fast finish, visibility, the Home routes, the manual-finish hook, the production profile, the scenario harness
+and view: every scenario; audio fixtures, cassette and lane code: the audio scenarios), then by measured
+reach: `scenario/reach.json` lists the backend files in which a function ran during each scenario. Refresh it
+after adding a scenario or when a scenario's product path changes:
+
+```bash
+python -m testing.pipeline_lab scenario run --trace-calls --keep DIR
+python -m testing.pipeline_lab scenario reach DIR      # rewrites scenario/reach.json
+```
+
+An unmeasured scenario is named for any file the scenario runner imports. Stages come from import closures
+of each stage's driver, an explicit table, and a run-everything default for unmapped backend paths; paths
+outside `backend/` reach nothing.
+
+## Stage cache
+
+A day replay caches each stage's output under the stage key (below). The ingest-lane stages key only the
+code they run, so an unrelated change still hits. `discard` through `chat_index` are one unit: production
+runs them in one `process_conversation` per conversation and the day stages after it on the same emulator
+state, so the lab caches, restores and re-runs them together; `--from-stage notes` re-runs from `discard`.
+Every run reports hit or miss, seconds and LLM calls per stage. `--llm-mode refresh` never takes a stored stage.
+
 ## Cache key
 
 `keys.stage_key(stage, backend_tree=, inputs=, overlay=, model_config=, schema_version=)`
@@ -209,6 +348,7 @@ python -m testing.pipeline_lab corpus add-day --snapshot DIR --date YYYY-MM-DD -
 python -m testing.pipeline_lab record-stt --day <day> --adapter prerecorded|parakeet_batch [--provider P] --model M --budget-usd N
 python -m testing.pipeline_lab overlay from-runtime-env [--runtime-env ARM/backend/deploy/runtime_env.yaml] [--owner-uid-file F] --out overlay.json
 python -m testing.pipeline_lab serve [--port 8765] [--allow-login LOGIN]
+python -m testing.pipeline_lab view PATH [--port N]   # scenario run/compare dir, store root, or runs/<run id>
 ```
 
 `run` also takes `--in-place` (run this checkout's backend unpinned, in a fresh process),
