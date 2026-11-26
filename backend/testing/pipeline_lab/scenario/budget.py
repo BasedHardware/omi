@@ -62,6 +62,9 @@ _PLUMBING = (
     ('database/transcript_pointer.py', '<lambda>'),
 )
 SITE_FRAMES = 3
+# ``OMI_PIPELINE_LAB_WRITE_SITES=1``: also name the call site of every write (``write_sites``), for finding
+# where a count comes from. Off by default: it walks the stack on every commit.
+WRITE_SITES_ENV = 'OMI_PIPELINE_LAB_WRITE_SITES'
 # Collections read through a real-time (``time.monotonic``) TTL cache: how often the cache expires depends on
 # host speed, not on the scenario, so these reads are shown (``wall_clock_reads``) but never totalled,
 # budgeted or compared between repeats (``determinism.WALL_CLOCK_FIELDS``).
@@ -120,12 +123,15 @@ def call_site(stack: Optional[list] = None, frames: int = SITE_FRAMES) -> str:
 class OpCounter:
     """Thread-safe Firestore operation counts by scope, kind, collection and path."""
 
-    def __init__(self) -> None:
+    def __init__(self, *, write_sites: Optional[bool] = None) -> None:
         self._lock = threading.Lock()
         self.active = False
         self.counts: dict[str, dict[str, dict[str, dict[str, int]]]] = {}
         self.noop_sites: dict[str, int] = {}
         self.wall_clock_reads: dict[str, int] = {}
+        if write_sites is None:
+            write_sites = os.environ.get(WRITE_SITES_ENV) == '1'
+        self.write_sites: Optional[dict[str, int]] = {} if write_sites else None
 
     def start(self) -> None:
         self.active = True
@@ -175,6 +181,8 @@ class OpCounter:
             }
             out['noop_sites'] = dict(sorted(self.noop_sites.items(), key=lambda kv: (-kv[1], kv[0])))
             out['wall_clock_reads'] = dict(sorted(self.wall_clock_reads.items()))
+            if self.write_sites is not None:
+                out['write_sites'] = dict(sorted(self.write_sites.items(), key=lambda kv: (-kv[1], kv[0])))
         return out
 
 
@@ -313,9 +321,14 @@ class CountingFirestoreApi:
         results = list(getattr(raw, 'write_results', None) or ())
         committed = _stamp(raw.commit_time) if raw is not None and raw.HasField('commit_time') else (0, 0)
         site: Optional[str] = None
+        traced = self._counter.write_sites is not None and self._counter.active
         for index, write in enumerate(writes):
             kind, name = _write_target(write)
             self._counter.add(kind, name)
+            if traced:
+                key = f'{collection_path(name)[1]} {kind}: {call_site()}'
+                with self._counter._lock:
+                    self._counter.write_sites[key] = self._counter.write_sites.get(key, 0) + 1
             if kind != 'writes' or index >= len(results):
                 continue
             result = results[index]

@@ -172,6 +172,7 @@ async def run_scenario(
 
     config = replace(LabStackConfig.from_env(), llm_proxy_url=llm_url, lab_root=out_dir / 'lab')
     redis_lease = os.environ.get(REDIS_LEASE_ENV) or None  # read now: the lab environment clears os.environ
+    trace_writes = os.environ.get(budgets.WRITE_SITES_ENV) == '1'
     events = plan_events(scenario)
     start = min(scenario.t0, events[0].instant) - timedelta(seconds=1)
     clock = LabClock(start, tick=tick)
@@ -197,7 +198,7 @@ async def run_scenario(
         tasks = LoopbackTasks(clock.now, log=lambda row: append_jsonl(out_dir / 'v3_tasks.jsonl', row))
         tasks.install(stack)
         install_emulator_size_errors(stack)
-        counter = budgets.install(stack, env.firestore, budgets.OpCounter())
+        counter = budgets.install(stack, env.firestore, budgets.OpCounter(write_sites=trace_writes))
         stack.enter_context(installed_clock(clock))
         # --trace-calls (scenario/reach.py): files with a function called from here to the final snapshot.
         trace = None

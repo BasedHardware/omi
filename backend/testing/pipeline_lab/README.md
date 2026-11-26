@@ -196,7 +196,8 @@ counts are taken at the emulator client's GAPIC API, the client `database._clien
 every SDK path is seen once; reads are counted as Firestore bills them. Each no-op write names its call
 site. The lab's own reads (snapshots, flags, the driver's pending check) are shown under `by_scope.lab` and
 never budgeted; Home route calls count under `home`. Reads through a real-time TTL cache (`dream_control`, a ten-second `time.monotonic` cache) depend on
-host speed, so they are kept apart in `wall_clock_reads`: shown, never totalled, budgeted or compared. The counts are in `result.json` and the verdict row
+host speed, so they are kept apart in `wall_clock_reads`: shown, never totalled, budgeted or compared. To find where a count comes from, run with `OMI_PIPELINE_LAB_WRITE_SITES=1`: `ops.write_sites` then names the
+call site of every write (it walks the stack on each commit, so it is off by default). The counts are in `result.json` and the verdict row
 (`ops`), a column of `scenario summary`, a line of the text report and a table under the verdict in the web
 view, and they are compared between `--repeat` runs like every other result field. A scenario's `budget`
 (`{"reads": N, "writes": N, "deletes": N, "noop_writes": N, "vendor_calls": {"stt": N, "llm": N}, "note"}`)

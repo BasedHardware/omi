@@ -373,3 +373,20 @@ def test_reads_through_a_wall_clock_cache_are_kept_apart():
     assert 'dream_control' not in summary['by_collection']
     assert 'wall_clock_reads' in WALL_CLOCK_FIELDS
     stack.close()
+
+
+def test_write_sites_are_traced_only_when_asked():
+    api = FakeApi()
+    api.commit_results = [stamp(100, 5)]
+    client = SimpleNamespace(_firestore_api=api, _firestore_api_internal=api)
+    for traced in (False, True):
+        counter = budget.OpCounter(write_sites=traced)
+        with ExitStack() as stack:
+            budget.install(stack, client, counter)
+            counter.start()
+            client._firestore_api_internal.commit(request={'writes': [update(doc('users/u'))]})
+        summary = counter.summary()
+        assert ('write_sites' in summary) is traced
+        if traced:
+            (site,) = summary['write_sites']
+            assert site.startswith('users writes: tests/unit/test_pipeline_lab_scenario_budget.py:')

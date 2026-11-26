@@ -88,7 +88,7 @@
     }
   ],
   "budget": {
-    "reads": 265, "writes": 75, "deletes": 1, "noop_writes": 7, "vendor_calls": {"stt": 1, "llm": 7},
-    "note": "Measured 2026-11-26 (237 reads, 65 writes, 1 delete(s), 7 no-op, 1 STT, 7 LLM; caps about +10%). noop_writes=7 is the current count, not a target: every one is database/conversations_v3_leases.py:72 renew (service.reconcile run_blocking renew) rewriting the lease until at the instant it was claimed. The lab clock does not move inside one event; production's does, so this is a lab-clock repeat, reported in the PR."
+    "reads": 260, "writes": 75, "deletes": 1, "noop_writes": 7, "vendor_calls": {"stt": 1, "llm": 7},
+    "note": "Measured 2026-11-26 at the merged head (236 reads, 65 writes, 1 delete(s), 7 no-op, 1 STT, 7 LLM; caps about +10%). noop_writes=7 is the current count, not a target: every one is database/conversations_v3_leases.py:72 renew (service.reconcile run_blocking renew) rewriting the lease until at the instant it was claimed. The lab clock does not move inside one event; production's does, so this is a lab-clock repeat, reported in the PR."
   }
 }
