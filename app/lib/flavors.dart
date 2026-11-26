@@ -6,14 +6,20 @@ enum Environment {
   prod,
   dev;
 
+  static Environment? tryFromFlavor(String? flavor) {
+    return switch (flavor?.toLowerCase()) {
+      'prod' => Environment.prod,
+      'dev' || 'raybandat' => Environment.dev,
+      _ => null,
+    };
+  }
+
   static Environment fromFlavor() {
-    return Environment.values.firstWhere(
-      (e) => e.name == appFlavor?.toLowerCase(),
-      orElse: () {
-        Logger.debug('Warning: Unknown flavor "$appFlavor", defaulting to dev');
-        return Environment.dev;
-      },
-    );
+    final environment = tryFromFlavor(appFlavor);
+    if (environment != null) return environment;
+
+    Logger.debug('Warning: Unknown flavor "$appFlavor", defaulting to dev');
+    return Environment.dev;
   }
 }
 
