@@ -1527,6 +1527,14 @@
       "shape": "name",
       "count": 1,
       "why": "Flag vendor_recognizer_on_opened_app: the close reason is one of the module's own literal stop reasons (client, idle, replaced, provider and so on), never free text."
+    },
+    {
+      "path": "routers/listen/live_words.py",
+      "function": "LiveWordsSession._retire_provider",
+      "label": "outcome",
+      "shape": "name",
+      "count": 1,
+      "why": "Flag vendor_recognizer_on_opened_app: the reason a provider stream is given back is one of the module's own literal reasons, never free text."
     }
   ]
 }
