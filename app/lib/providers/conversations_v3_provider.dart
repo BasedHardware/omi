@@ -223,10 +223,8 @@ class ConversationsV3Provider extends ChangeNotifier {
   /// Episode and Home-feed reads wait for this: off for a v3 account, and until the first answer.
   bool get suppressesLegacy => !resolved || v3;
 
-  /// The live ID hidden during Finish, including any stale copy in the day list.
-  String? get finishHiddenLiveId => v3 && !(_finishExpired && !_finishAccepted) ? _finishLiveId : null;
-
-  ServerConversation? get live => v3 && _live?.id != finishHiddenLiveId ? _live : null;
+  ServerConversation? get live =>
+      v3 && ((_finishExpired && !_finishAccepted) || _live?.id != _finishLiveId) ? _live : null;
 
   @visibleForTesting
   bool get polling => _poll != null;

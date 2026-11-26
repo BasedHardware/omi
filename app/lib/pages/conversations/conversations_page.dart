@@ -1052,17 +1052,12 @@ class _ConversationsPageState extends State<ConversationsPage>
           };
         }
         if (v3Home) {
-          // The server lists Home-visible conversations; the in-progress one comes from the live read
-          // and leads its day. A finished window can still have a live copy in the day list.
-          final finishHiddenLiveId = v3!.finishHiddenLiveId;
+          // Only the live read supplies a live row. Day lists can still carry stale live copies.
           conversationsByDate = {
             for (final entry in conversationsByDate.entries)
               entry.key: [
                 for (final c in entry.value)
-                  if (c.id != v3Live?.id &&
-                      (c.id != finishHiddenLiveId || !conversationIsLive(c, v3: true)) &&
-                      shownOnV3Home(c))
-                    c,
+                  if (c.id != v3Live?.id && !conversationIsLive(c, v3: true) && shownOnV3Home(c)) c,
               ],
           };
           if (liveServerRow != null) {

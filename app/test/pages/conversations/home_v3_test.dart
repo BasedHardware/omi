@@ -839,7 +839,7 @@ void main() {
         ..conversations.add(finishedLive)
         ..groupConversationsByDate();
       home.publishManualEnds();
-      home.capture.onManualEnd!(finishedLive.id);
+      final pending = home.capture.onManualEnd!(finishedLive.id);
       home.capture
         ..streaming = false
         ..ping();
@@ -847,6 +847,10 @@ void main() {
       expect(find.byKey(ValueKey(finishedLive.id)), findsNothing);
       expect(find.byType(V3LivePlaceholderRow), findsNothing);
 
+      expect(home.conversationsV3.settleManualFinish(pending, null, alreadyClosed: true), isTrue);
+      expect(home.conversationsV3.acknowledgeManualFinish(pending), isTrue);
+      // A stale day-list copy can outlive both Finish feedback and the next live read.
+      expect(home.conversations.conversations, contains(finishedLive));
       home
         ..liveId = 'live-2'
         ..liveRecordingIds = ['rec-2'];
