@@ -886,8 +886,17 @@ class RecoveryFailureReason(StrEnum):
     ABANDONED_RUNNING = 'abandoned_running'
 
 
+class FlexFirstOutcome(StrEnum):
+    UNKNOWN = 'unknown'
+    ATTEMPT = 'attempt'
+    FLEX = 'flex'
+    UNCONFIRMED_TIER = 'unconfirmed_tier'
+    STOPPED_AFTER_ERROR = 'stopped_after_error'
+    FALLBACK_STANDARD = 'fallback_standard'
+
+
 class ConvStructureFlexFallbackReason(StrEnum):
-    """Why a conversation structure request fell back from Flex to Standard."""
+    """Why a request fell back from Flex to Standard."""
 
     UNKNOWN = 'unknown'
     TIMEOUT = 'timeout'

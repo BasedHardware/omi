@@ -98,7 +98,9 @@ SCENARIO_ARTIFACTS: tuple[Artifact, ...] = (
     # ``cassette_origin`` is STT cache provenance (scenario/audio.py ``PreparedAudio.summary``): under
     # ``--stt record-local|record-vendor`` the first run records (``recorded``) and its repeat replays that
     # cassette (``lab_root``). The cassette itself (``cassette`` digest, words, source) is still compared.
-    Artifact('result.json', drop=frozenset({'log', 'cassette_origin'}), optional=False),
+    # ``cassette_outcomes``: the speaker peer's hit/miss/recorded counts (speakers/scenario.py), the same kind of
+    # provenance: a ``--speakers record-local`` repeat replays what its first run recorded.
+    Artifact('result.json', drop=frozenset({'log', 'cassette_origin', 'cassette_outcomes'}), optional=False),
     # The product's Home route bodies (scenario/home.py). ``updated_at`` is the Firestore document's
     # ``update_time`` (database/conversations.py ``document_data_with_revision``): the emulator's real wall
     # clock at the write, not the lab clock, so it differs on every run (seen with --repeat 3, 2026-11-25).

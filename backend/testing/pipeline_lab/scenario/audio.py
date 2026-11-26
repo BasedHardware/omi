@@ -11,7 +11,9 @@ Two steps, because they run in different environments:
      ``cassette.recorder.Recorder``, the persistent ``ledger.SpendLedger`` under
      ``$ROOT/stt_records/scenario-<name>/`` with ``--stt-budget-usd`` as its cap). Needs vendor
      credentials and an ``stt`` provider + model pin in the scenario.
-   - ``record-local``: the registered local model (``cassette/local.py``), free, on this machine.
+   - ``record-local``: the registered local model (``cassette/local.py``), free, on this machine. Local
+     Parakeet transcribes VAD-packed speech spans by default (``--windows vad``); ``--windows fixed`` cuts
+     plain 30 s windows. The mode is part of the local model key and recorded in ``source_detail``.
 
    ``replay`` looks in the committed fixtures (``scenario/fixtures/stt_cassette/``, which must be
    ``synthetic``: real transcripts never go in git) and the lab root's cassette cache. With a provider +
@@ -46,6 +48,9 @@ from testing.pipeline_lab.cassette.format import SOURCES, Cassette, CassetteKey,
 STT_MODES = ('replay', 'record-vendor', 'record-local')
 DEFAULT_STT_MODE = 'replay'
 FIXTURE_CASSETTES = Path(__file__).resolve().parent / 'fixtures' / 'stt_cassette'
+# Local-model cassettes of committed public audio (speakers/fixtures/<corpus>/, openly licensed speech): the
+# only non-synthetic transcripts allowed in git, and only for audio whose hash is a committed public file.
+PUBLIC_CASSETTES = Path(__file__).resolve().parents[1] / 'speakers' / 'fixtures' / 'stt_cassette'
 SOURCE_PREFERENCE = ('vendor', 'local', 'synthetic')  # closest to production first
 COMMAND = 'python -m testing.pipeline_lab scenario run'
 
@@ -85,13 +90,40 @@ class PreparedAudio:
 # ---- lookup ---------------------------------------------------------------------------------------
 
 
-def _fixture_cassettes(directory: Path) -> list[Cassette]:
+def public_audio_hashes() -> frozenset[str]:
+    """PCM hashes of every committed public speaker-corpus WAV (``speakers/fixtures/<corpus>/``, manifest
+    ``kind: public``): conversations and enrollment audio."""
+    import json
+
+    from testing.pipeline_lab.lanes.audio import load_pcm16
+    from testing.pipeline_lab.speakers.corpus import PUBLIC_ROOT
+
+    out = set()
+    for manifest in sorted(PUBLIC_ROOT.glob('*/manifest.json')):
+        if json.loads(manifest.read_text(encoding='utf-8')).get('kind') != 'public':
+            continue
+        for wav in sorted(manifest.parent.glob('**/*.wav')):
+            out.add(audio_sha256(load_pcm16(str(wav))))
+    return frozenset(out)
+
+
+def _fixture_cassettes(directory: Path, *, public: bool = False) -> list[Cassette]:
+    """Committed cassettes: ``synthetic`` ones, and with ``public`` (``PUBLIC_CASSETTES``) ``local`` ones whose
+    audio is a committed public corpus file."""
     import json
 
     out = []
+    allowed: Optional[frozenset[str]] = None
     for path in sorted(directory.glob('*/*.json')) if directory.is_dir() else []:
         cassette = Cassette.from_json(json.loads(path.read_text(encoding='utf-8')))
-        if cassette.source != 'synthetic':
+        if public and cassette.source == 'local':
+            allowed = public_audio_hashes() if allowed is None else allowed
+            if cassette.key.audio_sha256 not in allowed:
+                raise AudioError(
+                    f'committed cassette {path.name[:12]} is local, but its audio is not a committed public corpus '
+                    'file (only synthetic cassettes, or local ones of public audio, may be committed)'
+                )
+        elif cassette.source != 'synthetic':
             raise AudioError(
                 f'committed cassette {path.name[:12]} has source {cassette.source!r}; only synthetic cassettes '
                 'may be committed (real transcripts never go in git)'
@@ -128,14 +160,22 @@ def _key(pcm16: bytes, stt: dict[str, Any], provider: str, model: str) -> Casset
 
 
 def find(
-    pcm16: bytes, stt: dict[str, Any], *, root: Optional[Path], fixtures: Path = FIXTURE_CASSETTES
+    pcm16: bytes,
+    stt: dict[str, Any],
+    *,
+    root: Optional[Path],
+    fixtures: Path = FIXTURE_CASSETTES,
+    public: Optional[Path] = PUBLIC_CASSETTES,
 ) -> Optional[tuple[Cassette, str]]:
     pinned = bool(stt.get('provider'))
     key = _key(pcm16, stt, stt.get('provider') or '-', stt.get('model') or '-')
     origin: dict[str, str] = {}
     found = []
-    for cassette in _fixture_cassettes(fixtures):
-        if _matches(cassette, key, pinned):
+    committed = _fixture_cassettes(fixtures)
+    if public is not None:
+        committed += _fixture_cassettes(public, public=True)
+    for cassette in committed:
+        if _matches(cassette, key, pinned) and cassette.key.digest not in origin:
             found.append(cassette)
             origin[cassette.key.digest] = 'fixture'
     if root is not None and Path(root).is_dir():
@@ -199,11 +239,11 @@ def _vendor_recorder(scenario: Any, stt: dict[str, Any], root: Path, budget_usd:
     return Recorder(adapter, ledger, vendor_log=directory / 'vendor_log.jsonl', root=root)
 
 
-def _local_recorder(scenario: Any, stt: dict[str, Any], root: Path, local: Any):
+def _local_recorder(scenario: Any, stt: dict[str, Any], root: Path, local: Any, windows: Optional[str] = None):
     from testing.pipeline_lab.cassette.local import LocalAdapter, local_recorder
     from testing.pipeline_lab.cassette.recorder import InMemoryLedger, Recorder
 
-    recorder = local or local_recorder()
+    recorder = local or local_recorder(windows)
     if not recorder.installed:
         recorder.recognize(b'', None)  # raises LocalRecorderNotInstalled with the install hint
     if stt.get('provider') and (stt['provider'], stt['model']) != (recorder.provider, recorder.model):
@@ -224,9 +264,11 @@ def prepare(
     fixtures: Path = FIXTURE_CASSETTES,
     local: Any = None,
     vendor_adapter: Any = None,
+    windows: Optional[str] = None,
     env: Optional[dict[str, str]] = None,
 ) -> dict[str, PreparedAudio]:
-    """Every ``audio_file`` recording's PCM and cassette, recording on a miss per ``mode``.
+    """Every ``audio_file`` recording's PCM and cassette, recording on a miss per ``mode``. ``windows``: how
+    ``record-local`` cuts the audio (``vad`` spans by default, or ``fixed`` 30 s windows).
 
     ``env`` is the scenario env with the arm's on top. With ``OMI_PIPELINE_LAB_STT_ROUTING=product`` in it,
     each recording is routed by production's batch routing (``stt_routing/routing.py``) and plays the
@@ -269,7 +311,7 @@ def prepare(
                 recorder = (
                     _vendor_recorder(scenario, stt, private, budget_usd, vendor_adapter)
                     if mode == 'record-vendor'
-                    else _local_recorder(scenario, stt, private, local)
+                    else _local_recorder(scenario, stt, private, local, windows)
                 )
             except LocalRecorderNotInstalled as error:
                 raise AudioError(f'record-local: {error}') from None
@@ -423,6 +465,16 @@ STAND_INS = {
     'batch': ['speaker_identification(not run: no voiceprints; projection marks every segment is_user=false)'],
     'sync': ['speaker_identification(not run: no voiceprints)', 'sync intake and job (scenario STAND_IN_SYNC)'],
 }
+# A scenario with ``speakers`` (speakers/scenario.py): the batch lane diarizes through the peer and the
+# product's speaker passes run later on the conversation; only the staged-unit reads are stood in.
+SPEAKER_STAND_INS = {
+    'batch': ['staged unit store reads (load_reference, load_result, fetch_audio) answered from this lane run'],
+    'sync': STAND_INS['sync'],
+}
+SPEAKER_PRODUCT = [
+    'HttpDiarizer -> speaker peer /v2/diarization (community-1)',
+    'projection_segments(batch_segment_id)',
+]
 
 
 def _lines(segments: Sequence[dict[str, Any]], origin: float) -> tuple[Any, ...]:
@@ -440,6 +492,7 @@ def _lines(segments: Sequence[dict[str, Any]], origin: float) -> tuple[Any, ...]
                 text,
                 str(seg.get('speaker') or 'SPEAKER_00'),
                 bool(seg.get('is_user', False)),
+                seg.get('product'),
             )
         )
     return tuple(sorted(out, key=lambda line: (line.start, line.end)))
@@ -452,10 +505,12 @@ def materialize(
     vad: Optional[Callable] = None,
     file_vad: Optional[Callable] = None,
     scratch_root: Optional[Path] = None,
+    speakers: Any = None,
 ) -> tuple[Any, dict[str, Any]]:
     """The scenario with every audio recording's ``lines`` filled from its lane replay, and the report.
 
-    ``scratch_root``: where the sync lane's work files go (``<root>/tmp/sync``); default the scenario lab root."""
+    ``scratch_root``: where the sync lane's work files go (``<root>/tmp/sync``); default the scenario lab root.
+    ``speakers`` (``speakers/scenario.ScenarioSpeakers``): batch recordings diarize through the speaker peer."""
     from testing.pipeline_lab.cassette.player import SpanSource
     from testing.pipeline_lab.contracts import utc_iso
     from testing.pipeline_lab.lanes.batch import BatchConversation, replay_record_lane
@@ -478,6 +533,7 @@ def materialize(
                 vad=vad,
                 stt=stt,
                 capture_epoch=start.timestamp(),
+                speakers=speakers,
             )
         else:
             result = replay_sync_lane(
@@ -501,8 +557,14 @@ def materialize(
                 'segments': len(lines),
                 'words': sum(len(line.text.split()) for line in lines),
                 'driver': result.driver.get('name'),
-                'product': list(result.driver.get('production') or []),
-                'simulated': list(result.driver.get('simulated') or []) + STAND_INS[rec.lane],
+                'product': list(result.driver.get('production') or [])
+                + (SPEAKER_PRODUCT if speakers is not None and rec.lane == 'batch' else []),
+                'simulated': [
+                    step
+                    for step in result.driver.get('simulated') or []
+                    if not (speakers is not None and rec.lane == 'batch' and step == 'diarization(cassette)')
+                ]
+                + (SPEAKER_STAND_INS if speakers is not None else STAND_INS)[rec.lane],
                 **({'worker': result.driver.get('worker_counts')} if result.driver.get('worker_counts') else {}),
             }
         )

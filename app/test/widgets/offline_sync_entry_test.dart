@@ -90,6 +90,10 @@ class _Sync extends ChangeNotifier with WalDerivedSyncViews implements SyncProvi
   @override
   bool get isSyncing => false;
   @override
+  bool get isRingDownloading => false;
+  @override
+  int get readyRingSeconds => 0;
+  @override
   bool get isLoadingWals => false;
   @override
   bool get syncCompleted => false;

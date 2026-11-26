@@ -182,6 +182,7 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+from config.llm_spend import v3_summary_first_open_gating_enabled
 from config.conversations_v3 import conversations_v3_enabled, live_recap_enabled
 from config.app_channel import APP_CHANNEL_HEADER, app_channel
 from utils.episodes import client_gate
@@ -1487,7 +1488,7 @@ def get_conversation_by_id(
     if request is not None and request.headers.get('X-Omi-Recording-Detail') == '1':
         open_recording(uid, conversation)
     # A desktop conversation stored raw (deferred) for a freemium/Neo user is
-    # enriched on first open. Other conversations are returned unchanged.
+    # enriched on first detail read except for explicit status polling.
     polling = request is not None and request.query_params.get('status_poll') == '1'
     if not polling and conversation.get('deferred') and not conversation.get('processing_deferred'):
         conversation = _enrich_deferred_conversation(uid, conversation, include_discarded=include_discarded)
@@ -3205,7 +3206,11 @@ def open_historical_summary(
         },
     },
 )
-async def conversation_summary_stream(conversation_id: str, uid: str = Depends(auth.get_current_user_uid)):
+async def conversation_summary_stream(
+    conversation_id: str,
+    uid: str = Depends(auth.get_current_user_uid),
+    request: Request = cast(Request, None),
+):
     def reject_live_target(conversation):
         if v3_policy.live_summary_target(conversation) and not conversation.get('v3_unlocked'):
             detail = 'use_live_recap_stream' if live_recap_enabled(uid) else 'live_recap_unavailable'
@@ -3214,14 +3219,21 @@ async def conversation_summary_stream(conversation_id: str, uid: str = Depends(a
     conversation = await run_blocking(db_executor, _get_valid_conversation_by_id, uid, conversation_id)
     reject_live_target(conversation)
     await run_blocking(db_executor, require_generated_compute, uid, 'conversation_v3_summary_open')
-    if v3_summary.needs_open_reconcile(conversation):
+    detail_intent = (
+        request.headers.get('X-Omi-Recording-Detail')
+        if request is not None and v3_summary_first_open_gating_enabled()
+        else None
+    )
+    promote_llm = detail_intent == '1'
+    allow_generation = detail_intent != '0'
+    if allow_generation and v3_summary.needs_open_reconcile(conversation):
         from utils.conversations.v3.service import reconcile
 
         try:
             from utils.executors import start_background_task
 
             work = start_background_task(
-                reconcile(uid, on_open=True, conversation_id=conversation_id),
+                reconcile(uid, on_open=True, promote_llm=promote_llm, conversation_id=conversation_id),
                 name='v3-reconcile-open',
                 bounded_provider_failure=True,
             )
@@ -3230,9 +3242,9 @@ async def conversation_summary_stream(conversation_id: str, uid: str = Depends(a
             logger.warning('event=v3_on_open_reconcile outcome=stored exception_type=%s', type(exc).__name__)
         conversation = await run_blocking(db_executor, _get_valid_conversation_by_id, uid, conversation_id)
         reject_live_target(conversation)
-    token = await v3_summary.prepare(uid, conversation)
+    token = await v3_summary.prepare(uid, conversation, promote_llm=promote_llm) if allow_generation else None
     return StreamingResponse(
-        v3_summary.stream(uid, conversation, token=token),
+        v3_summary.stream(uid, conversation, token=token, allow_generation=allow_generation),
         media_type='text/event-stream',
         headers={'Cache-Control': 'no-cache'},
     )
