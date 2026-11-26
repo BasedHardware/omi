@@ -227,6 +227,9 @@ class _LiveCapture extends CaptureProvider {
   bool streaming = true;
 
   @override
+  bool isPhoneMicBatchRecording = false;
+
+  @override
   String? activeRecordingId = 'capture-1';
   ServerConversation Function(String?)? onManualEnd;
   void Function(ServerConversation)? onDrainFailed;
@@ -824,6 +827,60 @@ void main() {
       expect(home.conversationsV3.live!.discarded, isTrue);
       expect(find.byKey(const ValueKey('live-1')), findsNothing);
       expect(find.byType(V3LivePlaceholderRow), findsNothing);
+      await _dispose(tester, home);
+    });
+  });
+
+  testWidgets('v3: Finish hides the stale live copy and shows a successor when streaming resumes', (tester) async {
+    await withClock(Clock.fixed(_now), () async {
+      final home = await _pumpHome(tester, v3: true);
+      final finishedLive = home.conversationsV3.live!;
+      home.conversations
+        ..conversations.add(finishedLive)
+        ..groupConversationsByDate();
+      home.publishManualEnds();
+      home.capture.onManualEnd!(finishedLive.id);
+      home.capture
+        ..streaming = false
+        ..ping();
+      await tester.pump();
+      expect(find.byKey(ValueKey(finishedLive.id)), findsNothing);
+      expect(find.byType(V3LivePlaceholderRow), findsNothing);
+
+      home
+        ..liveId = 'live-2'
+        ..liveRecordingIds = ['rec-2'];
+      await home.conversationsV3.refresh();
+      await tester.pump();
+      expect(home.conversationsV3.suppressListeningAfterFinish(home.capture.activeRecordingId), isFalse);
+      expect(find.byKey(ValueKey(finishedLive.id)), findsNothing);
+      expect(find.byKey(const ValueKey('live-2')), findsNothing);
+      expect(find.byType(V3LivePlaceholderRow), findsNothing);
+
+      home.capture
+        ..recordingState = RecordingState.record
+        ..isPhoneMicBatchRecording = true
+        ..ping();
+      await tester.pump();
+      expect(find.byKey(const ValueKey('live-2')), findsNothing);
+      expect(find.byType(V3LivePlaceholderRow), findsNothing);
+
+      home.capture
+        ..recordingState = RecordingState.stop
+        ..isPhoneMicBatchRecording = false
+        ..streaming = true
+        ..ping();
+      await tester.pump();
+      expect(find.byKey(ValueKey(finishedLive.id)), findsNothing);
+      expect(find.byKey(const ValueKey('live-2')), findsOneWidget);
+      expect(find.byType(V3LivePlaceholderRow), findsNothing);
+
+      home.conversations
+        ..conversations.remove(finishedLive)
+        ..conversations.add(_conversation(finishedLive.id, home.liveStart, 'Finished notes', v3: _done))
+        ..groupConversationsByDate();
+      await tester.pump();
+      expect(find.text('Finished notes'), findsOneWidget);
       await _dispose(tester, home);
     });
   });

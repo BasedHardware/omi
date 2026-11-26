@@ -19,7 +19,7 @@ void main() {
         (true, true, false, false, 'removed', V3HomeLiveRow.none),
         (true, false, true, false, 'call active', V3HomeLiveRow.none),
         (true, false, true, true, 'call active after Finish', V3HomeLiveRow.none),
-        (true, false, false, true, 'after Finish', serverOrNone),
+        (true, false, false, true, 'after Finish', streaming ? serverOrNone : V3HomeLiveRow.none),
       ]) {
         test('$reason, streaming=$streaming, usable server=$serverUsable shows ${expected.name}', () {
           expect(

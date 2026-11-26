@@ -8,10 +8,7 @@ V3HomeLiveRow v3HomeLiveRow({
   required bool callActive,
   required bool listeningSuppressed,
 }) {
-  if (!v3Home || liveRemoved || callActive) return V3HomeLiveRow.none;
-  // During Finish suppression the provider hides the finished window. Preserve
-  // any other usable window it exposes, and keep the Listening placeholder suppressed.
-  if (listeningSuppressed) return serverUsable ? V3HomeLiveRow.server : V3HomeLiveRow.none;
-  if (!streaming) return V3HomeLiveRow.none;
-  return serverUsable ? V3HomeLiveRow.server : V3HomeLiveRow.placeholder;
+  if (!v3Home || !streaming || liveRemoved || callActive) return V3HomeLiveRow.none;
+  if (serverUsable) return V3HomeLiveRow.server;
+  return listeningSuppressed ? V3HomeLiveRow.none : V3HomeLiveRow.placeholder;
 }
