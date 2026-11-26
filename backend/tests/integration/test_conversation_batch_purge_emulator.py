@@ -39,8 +39,13 @@ from dataclasses import asdict
 from utils.stt import batch_language
 from utils.other.local_storage import LocalBlob, LocalStorageClient
 
-pytestmark = pytest.mark.integration
+pytestmark = [pytest.mark.integration, pytest.mark.usefixtures('delayed_execution')]
 ERASURE_ON = '{"bpp_late_erasure_execute":100}'
+
+
+@pytest.fixture
+def delayed_execution(monkeypatch):
+    monkeypatch.setenv('FIRESTORE_READ_LEVERS', ERASURE_ON)
 
 
 @pytest.fixture
@@ -48,7 +53,6 @@ def plane(monkeypatch, tmp_path):
     host = os.getenv('FIRESTORE_EMULATOR_HOST', '')
     if not host.startswith(('127.0.0.1:', 'localhost:')):
         pytest.skip('loopback emulator required; no cloud fallback')
-    monkeypatch.setenv('FIRESTORE_READ_LEVERS', ERASURE_ON)
     monkeypatch.setenv('MEMORY_ENABLED', 'on')
     # WAL orphan sweeps use their own imported factory. Keep storage synthetic
     # even when a test separately replaces the artifact-delete transport.
