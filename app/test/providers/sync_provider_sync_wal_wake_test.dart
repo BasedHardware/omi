@@ -408,7 +408,7 @@ void main() {
     provider.dispose();
   });
 
-  test('cancelSync drops transfer keep-alive immediately (#5221)', () async {
+  test('Cancel drops the upload lease and delayed provider cleanup leaves a new reader lease held', () async {
     SharedPreferences.setMockInitialValues({});
     await SharedPreferencesUtil.init();
     SyncRateLimiter.instance.clear();
@@ -441,9 +441,13 @@ void main() {
     expect(keepAlive.isHeld, isFalse);
     expect(stops, 1);
 
+    final releaseReader = await keepAlive.acquireScoped();
     hang.complete(SyncLocalFilesResponse(newConversationIds: [], updatedConversationIds: []));
     await upload;
-    expect(stops, 1, reason: 'the in-flight finally must not stop a second time after cancel');
+    expect(keepAlive.refCount, 1);
+    expect(stops, 1, reason: 'the cancelled upload cannot stop the new reader lease');
+    await releaseReader();
+    expect(stops, 2);
     provider.dispose();
   });
 }
