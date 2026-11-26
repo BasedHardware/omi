@@ -83,6 +83,7 @@ class Route:
     lid_confidence: Optional[float] = None
     lid_seconds: Optional[float] = None
     self_lid_windows: Optional[int] = None
+    lid_probes: Optional[int] = None  # vendor LID probes production pays for this upload (sample and legacy files)
     pieces: Optional[tuple[tuple[float, float, str], ...]] = None  # legacy: (start, end, route) per file
 
     def summary(self) -> dict[str, Any]:
@@ -372,6 +373,7 @@ def _legacy(pcm16: bytes, reason: str, *, lid: Callable[[bytes], Any], file_seco
     from config.prerecorded_language import language_guard_enabled
 
     guarded = language_guard_enabled()
+    probes = 0
     step = max(1, int(file_seconds * 16000)) * 2
     pieces = []
     engines = []  # (route, service, model, sent) per file, in file order
@@ -382,6 +384,7 @@ def _legacy(pcm16: bytes, reason: str, *, lid: Callable[[bytes], Any], file_seco
             pieces[-1] = (a, (offset + len(chunk)) / 32000, r)
             continue
         decision = lid(chunk) if guarded else None
+        probes += int(guarded)
         safe = decision is not None and decision.parakeet_safe
         service, model, sent = _service(decision.language) if safe else _service('multi')
         route = _route_of(service)
@@ -393,9 +396,9 @@ def _legacy(pcm16: bytes, reason: str, *, lid: Callable[[bytes], Any], file_seco
     if len(routes) == 1:
         # The first file's engine and language: deterministic across runs, unlike a set's order.
         route, service, model, sent = engines[0]
-        return Route(route, f'legacy:{reason}', service, model, sent, pieces=tuple(pieces))
+        return Route(route, f'legacy:{reason}', service, model, sent, lid_probes=probes, pieces=tuple(pieces))
     service, model, sent = _service('multi')
-    return Route(MIXED, f'legacy:{reason}', service, model, sent, pieces=tuple(pieces))
+    return Route(MIXED, f'legacy:{reason}', service, model, sent, lid_probes=probes, pieces=tuple(pieces))
 
 
 def decide(
@@ -429,7 +432,7 @@ def decide(
         return Route(PARAKEET, 'admitted_pinned', service, model, sent, admission_language=admission)
     if reason in ('unknown_multilingual_conversation', MULTILINGUAL_PROFILE) and admission_language_sample_enabled():
         admitted, refusal, first, windows = _sample(pcm16, lid=lid, self_lid=self_lid)
-        lid_fields = {'self_lid_windows': windows}
+        lid_fields = {'self_lid_windows': windows, 'lid_probes': int(first is not None)}
         if first is not None:
             lid_fields.update(
                 lid_language=first.language,
@@ -440,6 +443,7 @@ def decide(
             service, model, sent = _batch(first.language)
             return Route(PARAKEET, 'sampled:admitted', service, model, sent, **lid_fields)
         legacy = _legacy(pcm16, f'sampled_{refusal}', lid=lid, file_seconds=legacy_file_seconds)
+        lid_fields['lid_probes'] += legacy.lid_probes or 0
         return Route(**{**asdict(legacy), **lid_fields, 'pieces': legacy.pieces})
     return _legacy(pcm16, reason, lid=lid, file_seconds=legacy_file_seconds)
 

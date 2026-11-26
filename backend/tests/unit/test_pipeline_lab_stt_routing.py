@@ -135,6 +135,7 @@ def test_legacy_files_route_separately_and_mix():
     with routing.patched_environ(LEGACY):
         route = decide(USER, {'language': 'zz-unknown'}, two_files, lid=per_file, legacy_file_seconds=2)
     assert route.route == routing.MIXED and [p[2] for p in route.pieces] == [PARAKEET, MULTILINGUAL]
+    assert route.lid_probes == 2
 
 
 def test_patched_environ_restores_and_skips_lab_keys(monkeypatch):
@@ -191,7 +192,10 @@ def test_compare_metric_counts_unsupported_speech_on_parakeet(tmp_path, monkeypa
     (run / 'verdict.json').write_text(json.dumps({'scenarios': [{'name': 'evening'}]}))
     rows = [
         {'audio_seconds': 60.0, 'route': {'route': 'parakeet', 'reason': 'admitted_pinned', 'audio_sha256': 'aaaa'}},
-        {'audio_seconds': 30.0, 'route': {'route': 'multilingual', 'lid_language': 'zh', 'audio_sha256': 'bbbb'}},
+        {
+            'audio_seconds': 30.0,
+            'route': {'route': 'multilingual', 'lid_language': 'zh', 'lid_probes': 1, 'audio_sha256': 'bbbb'},
+        },
         {'audio_seconds': 10.0, 'route': {'route': 'parakeet', 'audio_sha256': 'cccc'}},
     ]
     (run / 'evening' / 'result.json').write_text(json.dumps({'audio': {'recordings': rows}}))
@@ -220,7 +224,7 @@ def test_a_profiled_upload_carries_the_multilingual_profile_reason():
     long_pcm = bytes(32000 * 601)
     with routing.patched_environ(LEGACY):
         route = decide(USER, {'language': 'en'}, long_pcm, lid=lid('zh'), self_lid=self_lid('en'))
-    assert route.reason == 'legacy:sampled_over_scan_limit' and MULTILINGUAL_PROFILE == 'multilingual_profile'
+    assert route.reason == 'legacy:sampled_over_scan_limit'
     with routing.patched_environ({**LEGACY, 'BATCH_ADMISSION_LANGUAGE_SAMPLE_ENABLED': 'false'}):
         assert decide(USER, {'language': 'en'}, PCM, lid=lid('zh')).reason == f'legacy:{MULTILINGUAL_PROFILE}'
 
@@ -297,8 +301,13 @@ def test_routed_record_run_needs_a_spend_cap(tmp_path, monkeypatch):
     (tmp_path / 'case.json').write_text(json.dumps(raw))
     (tmp_path / 'inputs.json').write_text(json.dumps({'user': USER}))
     env = {routing.ROUTING_ENV: 'product', routing.INPUTS_ENV: str(tmp_path / 'inputs.json')}
+    scenario = load_scenario(tmp_path / 'case.json')
+    with pytest.raises(AudioError, match='to map parakeet, multilingual before any paid probe'):
+        prepare(scenario, mode='record-vendor', root=tmp_path / 'lab', env=env)
+    pins = {PARAKEET: {'provider': 'parakeet_local', 'model': 'cpu'}, MULTILINGUAL: {'provider': 'm', 'model': 'v'}}
+    env[routing.CASSETTES_ENV] = json.dumps(pins)
     with pytest.raises(AudioError, match='stt-budget-usd'):
-        prepare(load_scenario(tmp_path / 'case.json'), mode='record-vendor', root=tmp_path / 'lab', env=env)
+        prepare(scenario, mode='record-vendor', root=tmp_path / 'lab', env=env)
 
 
 def test_legacy_files_take_multi_without_a_probe_when_the_language_guard_is_off():
@@ -306,7 +315,7 @@ def test_legacy_files_take_multi_without_a_probe_when_the_language_guard_is_off(
     with routing.patched_environ({**LEGACY, 'STT_PRERECORDED_LANGUAGE_GUARD_ENABLED': 'false'}):
         route = decide(USER, {'language': 'zz-unknown'}, bytes(32000 * 4), lid=probe, legacy_file_seconds=2)
         selected = routing._service('multi')  # resolve_file: the selector's own answer for 'multi'
-    assert probe.calls == [] and (route.provider, route.model) == selected[:2]
+    assert probe.calls == [] and (route.provider, route.model) == selected[:2] and route.lid_probes == 0
 
 
 def test_a_sub_second_legacy_recording_still_has_a_route():

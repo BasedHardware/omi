@@ -311,6 +311,14 @@ def _prepare_routed(
     try:
         inputs = routing.Inputs.load(env)
         mapping = routing.route_cassettes(env)
+        if mode == 'record-vendor':
+            # A legacy upload split across engines plays each engine's cassette; an unmapped engine would only be
+            # found after every paid probe ran. Refuse before spending.
+            missing = [r for r in (routing.PARAKEET, routing.MULTILINGUAL) if not mapping.get(r)]
+            if missing:
+                raise routing.RoutingError(
+                    f'record-vendor needs {routing.CASSETTES_ENV} to map {", ".join(missing)} before any paid probe'
+                )
         file_seconds = float(env.get(routing.LEGACY_FILE_SECONDS_ENV) or routing.LEGACY_FILE_SECONDS)
     except (routing.RoutingError, ValueError) as error:
         raise AudioError(f'stt routing: {error}') from None

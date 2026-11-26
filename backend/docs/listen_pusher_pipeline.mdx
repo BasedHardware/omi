@@ -7421,8 +7421,10 @@ default on). With legacy ON, sync intake samples it exactly like
 `unknown_multilingual_conversation`, input `multi`, and logs
 `event=batch_admission_language outcome=reclassified`. The record lane has no sampler, so a new
 owner claim gives it to `legacy_final_pass_v1` like any exclusion. With legacy
-draining or dark it is admitted to batch with input `multi`, classified per unit
-instead of inheriting the pin. Explicit `single_language_mode` and an existing owner win.
+draining or dark, a sync upload without a batch owner is admitted to batch with
+input `multi`, classified per unit instead of inheriting the pin. A conversation
+the record lane already gave to `batch_sync_v1` skips admission and keeps its pin:
+covering it is part of qualifying multilingual routing before legacy drain (SCA-4810). Explicit `single_language_mode` and an existing owner win.
 False trusts the pin again (2026-11-26, changes note `2026-11-26-multilingual-profile-routing.md`).
 
 Batch self-LID evidence is bound to the authenticated item's owner, segment and

@@ -54,7 +54,7 @@ def stt_routing_metrics(run_dir: Path) -> dict[str, Any]:
             parakeet_s = sum(b - a for a, b in on_parakeet)
             totals['parakeet_recordings'] += int(route.get('route') == 'parakeet')
             totals['mixed_recordings'] += int(route.get('route') == 'mixed')
-            totals['lid_probes'] += int('lid_language' in route) + len(route.get('pieces') or [])
+            totals['lid_probes'] += int(route.get('lid_probes') or 0)
             totals['self_lid_windows'] += int(route.get('self_lid_windows') or 0)
             totals['parakeet_audio_s'] += parakeet_s
             totals['multi_audio_s'] += max(0.0, seconds - parakeet_s)

@@ -414,6 +414,22 @@ async def test_multilingual_profile_en_pin_is_sampled_and_chinese_stays_on_legac
 
 
 @pytest.mark.asyncio
+async def test_multilingual_profile_upload_logs_the_reclassification_the_readback_counts(monkeypatch, caplog):
+    speaking(monkeypatch)
+    with caplog.at_level('INFO', logger=intake.logger.name):
+        await upload(
+            monkeypatch,
+            user_language='en',
+            conversation_language='en',
+            mode='on',
+            profile=MANDARIN_PROFILE,
+            decision=decision('zh', False),
+        )
+    lines = [r.getMessage() for r in caplog.records if 'outcome=reclassified' in r.getMessage()]
+    assert lines == ['event=batch_admission_language outcome=reclassified reason=multilingual_profile']
+
+
+@pytest.mark.asyncio
 async def test_multilingual_profile_en_pin_admits_english_speech_after_the_sample(monkeypatch):
     speaking(monkeypatch, [SPEECH, pcm_wav(30)])
     gate = self_lid(monkeypatch, 'en')
