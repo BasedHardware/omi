@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "id": "FC-v3-live-row-leaves-today",
+  "family": "ui-surface-contract",
+  "violated_contract": "The conversation in progress on v3 Home is one row that always sits first under Today, from the first streamed audio through the server window's arrival and app reopen, and reads either its real title or the placeholder's Listening title (never a recording date or transcript snippet); an open live page takes the server's title when it lands.",
+  "canonical_prevention": "Render the live placeholder as a Today list row in the slot the server's live row takes, bucket the live row into Today regardless of start time, fall back to Listening for an untitled live row, and refresh title fields from re-reads; pin each with widget tests that compare the placeholder and live row positions and the title before and after the server names it.",
+  "canonical_prevention_artifact": ["app/test/pages/conversations/home_v3_test.dart"],
+  "evidence_prs": [],
+  "scope_hints": [
+    "app/lib/pages/conversations/conversations_page.dart",
+    "app/lib/pages/conversations/widgets/conversation_list_item.dart",
+    "app/lib/pages/conversation_detail/conversation_detail_provider.dart",
+    "app/lib/pages/episodes/live_episode_page.dart"
+  ],
+  "status": "open"
+}

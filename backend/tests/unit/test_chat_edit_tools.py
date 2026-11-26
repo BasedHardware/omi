@@ -318,3 +318,51 @@ def test_create_action_item_tool_accepts_valid_conversation(monkeypatch):
     assert 'Added' in result
     create_mock.assert_called_once()
     assert create_mock.call_args[0][1]['conversation_id'] == 'conv-1'
+
+
+@pytest.mark.parametrize(
+    'patch',
+    [
+        {'completed': True},
+        {'completed': False},
+        {'description': 'New description'},
+        {'due_at': datetime(2099, 10, 11, 12, 0, tzinfo=timezone.utc)},
+        {'due_at': None},
+        {'deleted': True, 'deleted_at': datetime(2026, 11, 23, tzinfo=timezone.utc)},
+    ],
+)
+def test_tool_update_fields_stay_inside_the_chat_edit_fence(patch):
+    """Every key the tool can put in `updates` survives the write codec and the fence.
+
+    The codec derives canonical mirrors (`status` from `completed`, `due` from
+    `due_at`); the fence must accept them or every completion/due edit from chat
+    is refused with `Unsupported chat edit field`.
+    """
+    from database.action_item_codec import prepare_action_item_for_write
+
+    prepared = prepare_action_item_for_write({**patch, 'updated_at': datetime.now(timezone.utc)}, partial=True)
+    assert set(prepared) <= set(chat_edits.FIELDS['task'])
+
+
+def test_unsupported_chat_edit_field_names_the_field():
+    from unittest.mock import MagicMock
+
+    with pytest.raises(chat_edits.UnsupportedChatEditField) as excinfo:
+        chat_edits.apply_update('owner', 'task', 'task', {}, {'exported': True}, firestore_client=MagicMock())
+    assert excinfo.value.fields == ('exported',)
+    assert 'exported' in str(excinfo.value)
+
+
+def test_update_action_item_tool_reports_unsupported_field_to_model(monkeypatch, receipts):
+    row = {'id': 'task', 'description': 'Task', 'completed': False, 'due_at': None}
+    monkeypatch.setattr(action_item_tools.action_items_db, 'get_action_item', lambda *args: dict(row))
+    monkeypatch.setattr(chat_edits, 'snapshot', lambda *args: chat_edits.encode(dict(row)))
+
+    def refuse(*args, **kwargs):
+        raise chat_edits.UnsupportedChatEditField({'exported'})
+
+    monkeypatch.setattr(action_item_tools.action_items_db, 'update_action_item', refuse)
+    result = action_item_tools.update_action_item_tool.func('task', completed=True, config=CONFIG)
+    assert 'exported' in result
+    assert 'completed' in result
+    assert not receipts

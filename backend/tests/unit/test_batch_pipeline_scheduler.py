@@ -416,8 +416,8 @@ def test_admission_deferred_re_lease_records_relet_true_first_lease_false(monkey
     # the recorded refusal streak.
     assert second.attempt == 1 and second.token != first.token
     count = 'omi_batch_pipeline_owner_wait_seconds_count'
-    assert registry.get_sample_value(count, {'relet': 'false'}) == 1
-    assert registry.get_sample_value(count, {'relet': 'true'}) == 1
+    assert registry.get_sample_value(count, {'relet': 'false', 'priority': 'deep'}) == 1
+    assert registry.get_sample_value(count, {'relet': 'true', 'priority': 'deep'}) == 1
 
 
 def test_attempt_charged_re_lease_records_relet_true():
@@ -435,8 +435,8 @@ def test_attempt_charged_re_lease_records_relet_true():
     second = queue.pull(186)[0]
     assert second.attempt == 2
     count = 'omi_batch_pipeline_owner_wait_seconds_count'
-    assert registry.get_sample_value(count, {'relet': 'false'}) == 1
-    assert registry.get_sample_value(count, {'relet': 'true'}) == 1
+    assert registry.get_sample_value(count, {'relet': 'false', 'priority': 'deep'}) == 1
+    assert registry.get_sample_value(count, {'relet': 'true', 'priority': 'deep'}) == 1
 
 
 @pytest.mark.parametrize('mode', ['off', 'shadow'])
@@ -480,6 +480,13 @@ def test_enforced_cap_quarantines_at_cap_lease_expiry(mode, monkeypatch):
     assert queue.recover(LEASE_SECONDS + 1) == 1
     held = store.rows['jobs', 'at-cap']
     assert held['state'] == 'quarantined' and held['recovery_state'] == 'held'
+    assert held['quarantine_diagnostic'] == {
+        'exception_class': 'lease_expired',
+        'stage': 'scheduler',
+        'worker_reason': 'unknown',
+        'provider_error': 'unknown',
+        'artifact_kind': 'unknown',
+    }
     assert held['audio_uri']
 
 

@@ -135,6 +135,7 @@ surfaces:
   - utils/llm/conversation_folder.py::feature:conv_folder
   - utils/open_loops/card.py::feature:open_loop_card
   - utils/open_loops/daily.py::feature:open_loop_daily
+  - utils/open_loops/daily.py::feature:daily_summary_simple
   - utils/llm/conversation_processing.py::feature:conv_discard
   - utils/sync/minimal_redrive.py::feature:sync_redrive_title
   - utils/episodes/incremental.py::feature:episode_incremental

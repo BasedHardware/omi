@@ -1,6 +1,7 @@
 {
   "schema_version": 1,
   "id": "FC-qualification-swift-cache-promisor-clone",
+  "family": "ci-merge-integrity",
   "violated_contract": "Trusted qualification must materialize an exact candidate-SHA source tree for the Swift cache even when the Actions/worktree checkout is a partial or promisor clone whose local no-hardlinks clone cannot fetch missing objects.",
   "canonical_prevention": "The dedicated qualification lane is removed. Reintroduction is rejected by the desktop release-process guards.",
   "canonical_prevention_artifact": [

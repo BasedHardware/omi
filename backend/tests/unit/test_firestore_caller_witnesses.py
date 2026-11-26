@@ -183,9 +183,11 @@ def test_profile_membership_rejects_widened_domains():
         'folder_id': None,
         'starred': None,
         'sources': None,
+        'indexed_home': False,
     }
     assert matching_profile(target, dict(base), names) is not None
     assert matching_profile(target, dict(base, categories=['unreviewed-category']), names) is None
     assert matching_profile(target, dict(base, statuses=['failed']), names) is None
+    assert matching_profile(target, dict(base, indexed_home=True), names) is None
     assert matching_profile(target, dict(base, sources=['unreviewed-source']), names) is None
     assert matching_profile(target, dict(base, starred=True, include_discarded=True), names) is None

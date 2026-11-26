@@ -41,6 +41,46 @@ class TestMobileDistribution(unittest.TestCase):
         normalized = mod.normalize_codemagic_build(detail, platform="android", workflow_id="android-internal-auto")
         self.assertTrue(mod.is_baseline_eligible(normalized, platform="android"))
 
+    def _self_healing_detail(self, *, step_status="success", artefacts=("play-internal-publish-normal.json",)):
+        return {
+            "status": "finished",
+            "commit": {"hash": SHA},
+            "buildActions": [
+                {"name": mod.PLAY_INTERNAL_PUBLISH_STEP, "status": step_status},
+                {"type": "publishing", "status": "success"},
+            ],
+            "artefacts": [{"name": "app-prod-release.aab"}, *({"name": name} for name in artefacts)],
+        }
+
+    def test_self_healing_publish_records_the_observed_review_mode(self):
+        for mode in ("normal", "held"):
+            with self.subTest(mode=mode):
+                detail = self._self_healing_detail(artefacts=(f"play-internal-publish-{mode}.json",))
+                normalized = mod.normalize_codemagic_build(
+                    detail, platform="android", workflow_id="android-internal-auto"
+                )
+                # A held publish still advances the baseline; the dispatcher reminds about it.
+                self.assertTrue(mod.is_baseline_eligible(normalized, platform="android"))
+                self.assertEqual(normalized[mod.PLAY_REVIEW_MODE_KEY], mode)
+
+    def test_self_healing_publish_without_one_mode_artifact_is_unverified(self):
+        cases = {
+            "failed step": self._self_healing_detail(step_status="failed"),
+            "skipped step": self._self_healing_detail(step_status="skipped"),
+            "no artifact": self._self_healing_detail(artefacts=()),
+            "two artifacts": self._self_healing_detail(
+                artefacts=("play-internal-publish-normal.json", "play-internal-publish-held.json")
+            ),
+            "unknown mode": self._self_healing_detail(artefacts=("play-internal-publish-maybe.json",)),
+        }
+        for name, detail in cases.items():
+            with self.subTest(name):
+                normalized = mod.normalize_codemagic_build(
+                    detail, platform="android", workflow_id="android-internal-auto"
+                )
+                self.assertFalse(mod.is_baseline_eligible(normalized, platform="android"))
+                self.assertNotIn(mod.PLAY_REVIEW_MODE_KEY, normalized)
+
     def test_android_without_provider_distribution_evidence_is_unverified(self):
         detail = {"status": "finished", "commit": {"hash": SHA}}
         normalized = mod.normalize_codemagic_build(detail, platform="android", workflow_id="android-internal-auto")

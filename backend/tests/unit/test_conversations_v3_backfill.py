@@ -5,10 +5,15 @@ derive pass and require identical windows, Home decisions and notes inputs; the 
 allowed are the backfill stamps and the notes marker the backfill drains itself.
 """
 
+import asyncio
+import os
+from concurrent.futures import ThreadPoolExecutor
 from copy import deepcopy
 from datetime import datetime, timedelta, timezone
+from threading import Event
 from types import SimpleNamespace
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, Mock
+from uuid import uuid4
 
 import pytest
 
@@ -189,9 +194,18 @@ async def test_rederive_retires_prior_copies_no_new_window_claims(builder, monke
     )
     monkeypatch.setattr(service.models, 'outline', lambda *a: SCENARIOS['long_visible'][1])
     seen = {}
-    monkeypatch.setattr(service, '_commit', lambda *a, **kw: seen.update(kw))
-    await service.reconcile('u', derive=True, since=AT, until=AT + timedelta(days=1), run_id=RUN, rederive=True)
+
+    def commit(*args, **kwargs):
+        seen.update(kwargs)
+        return set()
+
+    monkeypatch.setattr(service, '_commit', commit)
+    report = {}
+    await service.reconcile(
+        'u', derive=True, since=AT, until=AT + timedelta(days=1), run_id=RUN, rederive=True, report=report
+    )
     assert seen['remove'] == ['stale'] and seen['key'] == store.BACKFILL_LEASE
+    assert report['rows_removed'] == 0
 
 
 @pytest.mark.asyncio
@@ -356,6 +370,24 @@ def test_estimate_prices_each_stretch_on_the_live_notes_floors(monkeypatch):
     expected = sum(usd(1100 + w * 1.4, 350) for w in (1600, 400, 50, 5))
     expected += 0.02 + usd(5000 + 400 * 1.4, 1500) + usd(1500 + 50 * 1.4, 250)
     assert est['usd'] == pytest.approx(expected)
+
+
+@pytest.mark.parametrize('letter', ['界', 'あ'])
+def test_backfill_estimate_uses_script_aware_notes_floors(monkeypatch, letter):
+    sources = {}
+    for index, words in enumerate((19, 20, 149, 150)):
+        cid = f'capture-{index}'
+        row = legacy(cid, AT + timedelta(minutes=10 * index), words)
+        row['transcript_segments'][0]['text'] = letter * words
+        sources[cid] = as_derive(row)
+    monkeypatch.setattr(store, 'load_derive', lambda *a, **kw: (sources, {}, []))
+    estimate = backfill.estimate_partition(
+        'u', {'since': AT, 'until': AT + timedelta(days=1)}, RUN, now=AT + timedelta(days=2)
+    )
+    assert estimate['words'] == 19 + 20 + 149 + 150
+    assert estimate['no_model_windows'] == 1
+    assert estimate['short_task_calls'] == 2
+    assert estimate['notes_calls'] == 1
 
 
 # ---- loader ---------------------------------------------------------------------------------
@@ -546,9 +578,15 @@ def stored(row):
 def test_conversion_keeps_legacy_notes_and_undo_restores_the_donor_exactly(strict):
     token = convert(strict)
     assert strict.rows[R]['recording'] is True and strict.rows[R]['structured'] == LEGACY_DONOR['structured']
+    assert strict.rows[R]['home_list_visible'] is False
+    assert strict.rows[COPY]['home_list_visible'] is True
     assert strict.rows[R]['claims'] and strict.rows[COPY]['backfilled'] is True
-    assert store.undo_backfill_group('synthetic', token, ['r'], ['c0'], firestore_client=strict) == ('undone', 1, 1)
-    assert stored(strict.rows[R]) == LEGACY_DONOR
+    assert store.undo_backfill_group('synthetic', token, ['r'], ['c0'], run_id=RUN, firestore_client=strict) == (
+        'undone',
+        1,
+        1,
+    )
+    assert stored(strict.rows[R]) == {**LEGACY_DONOR, 'home_list_visible': True}
     assert COPY not in strict.rows
     # No tombstone: the window can be derived again later.
     assert ('users', 'synthetic', 'deleted_conversations', 'c0') not in strict.rows
@@ -558,10 +596,14 @@ def test_undo_never_touches_live_rows_and_requires_its_lease(strict):
     token = convert(strict)
     live = ('users', 'synthetic', 'conversations', 'live')
     strict.rows[live] = {'id': 'live', 'v3_derived': True, 'status': 'completed'}
-    assert store.undo_backfill_group('synthetic', token, [], ['live'], firestore_client=strict) == ('undone', 0, 0)
+    assert store.undo_backfill_group('synthetic', token, [], ['live'], run_id=RUN, firestore_client=strict) == (
+        'undone',
+        0,
+        0,
+    )
     assert live in strict.rows
     with pytest.raises(store.Conflict, match='lease_lost'):
-        store.undo_backfill_group('synthetic', 'stale-token', ['r'], ['c0'], firestore_client=strict)
+        store.undo_backfill_group('synthetic', 'stale-token', ['r'], ['c0'], run_id=RUN, firestore_client=strict)
 
 
 def test_deleting_a_backfilled_copy_never_arms_the_donor_audio_purge(strict):
@@ -620,7 +662,7 @@ def direct(monkeypatch):
 async def test_drain_runs_live_notes_and_settles_each_row(direct, monkeypatch):
     rows = [{'id': 'ok'}, {'id': 'boom'}]
     pending = [rows, []]
-    monkeypatch.setattr(store, 'pending_backfill_processing', lambda uid: pending.pop(0))
+    monkeypatch.setattr(store, 'pending_backfill_processing', lambda uid, **_: (pending.pop(0), None))
     monkeypatch.setattr(leases, 'acquire', lambda *a: 'token')
     released = []
     monkeypatch.setattr(leases, 'release', lambda *a: released.append(a[1]))
@@ -643,6 +685,67 @@ async def test_drain_runs_live_notes_and_settles_each_row(direct, monkeypatch):
     assert sorted(released) == ['summary-boom', 'summary-ok']
 
 
+@pytest.mark.asyncio
+@pytest.mark.parametrize('engine', ['go', 'pending', None])
+async def test_drain_reaches_python_notes_behind_saturated_foreign_page(direct, monkeypatch, engine):
+    prefix_ownership = {'finalization_engine': engine, 'finalization_owner_epoch': 1} if engine else {}
+    first = [SimpleNamespace(id=f'prefix-{n:03d}', to_dict=lambda: prefix_ownership) for n in range(128)]
+    tail = SimpleNamespace(id='tail', to_dict=lambda: {})
+    pending = {doc.id for doc in first + [tail]}
+    collection = Mock()
+    query = collection.where.return_value
+    page = query.limit.return_value
+    page.stream.side_effect = lambda **_: [doc for doc in first + [tail] if doc.id in pending][:128]
+    seek = query.order_by.return_value.start_after
+    seek.return_value.limit.return_value.stream.side_effect = lambda **_: [tail] if tail.id in pending else []
+
+    monkeypatch.setattr(store, 'get_firestore_client', lambda: object())
+    monkeypatch.setattr(store, 'user_conversations', lambda *_: collection)
+    decode = Mock(side_effect=lambda _, doc, *, data: {'id': doc.id, **data})
+    monkeypatch.setattr(store, 'decode_row', decode)
+    monkeypatch.setattr(leases, 'acquire', lambda *args: 'token')
+    monkeypatch.setattr(leases, 'release', lambda *args: None)
+    process = AsyncMock()
+    monkeypatch.setattr(service, '_process_leased', process)
+
+    def settle(_uid, cid, **_kwargs):
+        pending.remove(cid)
+        return 'settled'
+
+    monkeypatch.setattr(writers, 'settle_backfill_processing', settle)
+    counts = await service.drain_backfill('u', deadline=float('inf'))
+    if engine is None:
+        # The original full unmarked page still uses only the two existing scans.
+        assert counts['processed'] == 128 and counts['remaining'] == 1
+        assert page.stream.call_count == 2
+        query.order_by.assert_not_called()
+    else:
+        process.assert_awaited_once_with('u', {'id': 'tail'}, 'token')
+        assert counts['processed'] == 1
+        assert counts['remaining'] == counts['ownership_blocked'] == 128
+        assert seek.call_args_list == [(({'__name__': collection.document.return_value},), {})] * 2
+        assert collection.document.call_args_list == [((first[-1].id,), {})] * 2
+        decode.assert_called_once_with('u', tail, data={})
+        assert pending == {doc.id for doc in first}
+
+
+def test_expired_backfill_page_never_calls_firestore(monkeypatch):
+    client = Mock(side_effect=AssertionError('expired scan acquired a Firestore client'))
+    monkeypatch.setattr(store, 'get_firestore_client', client)
+    assert store.pending_backfill_processing('u', deadline=0) is None
+    client.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_expired_drain_leaves_scan_for_continuation(direct, monkeypatch):
+    read = Mock(side_effect=AssertionError('expired drain started a scan'))
+    monkeypatch.setattr(store, 'pending_backfill_processing', read)
+    counts = await service.drain_backfill('u', deadline=0, after='checkpoint')
+    assert counts['remaining'] == 1 and counts['scan_pending']
+    assert 'scan_after' not in counts  # Keep the durable cursor.
+    read.assert_not_called()
+
+
 class Ledger:
     def __init__(self, partitions, status='planned', mode='derive'):
         self.run = {
@@ -657,9 +760,12 @@ class Ledger:
     def get(self, uid, run_id):
         return deepcopy(self.run)
 
-    def update(self, uid, run_id, *, status=None, partition=None, patch=None, expect=None):
+    def update(self, uid, run_id, *, status=None, partition=None, patch=None, expect=None, expected_drain_seq=None):
         if expect is not None and self.run['status'] not in expect:
             return None
+        if expected_drain_seq is not None:
+            part = self.run['partitions'][partition[0]]
+            assert int(part.get('drain_seq') or 0) == expected_drain_seq
         if status:
             self.run['status'] = status
         if partition:
@@ -667,6 +773,71 @@ class Ledger:
             self.run['partitions'][index].update(fields)
         self.run.update(patch or {})
         return self.run
+
+
+def test_late_continuation_cannot_replace_a_newer_cursor(strict):
+    uid = 'synthetic'
+    path = ('users', uid, runs.COLLECTION, RUN)
+    part = {'status': 'notes', 'drain_seq': 2, 'notes_scan_after': 'new'}
+    strict.rows[path] = {'status': 'running', 'partitions': [dict(part)]}
+
+    assert (
+        runs.update_run(
+            uid, RUN, partition=(0, {'notes_scan_after': 'old'}), expected_drain_seq=1, firestore_client=strict
+        )
+        is None
+    )
+    assert strict.rows[path]['partitions'] == [part]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('stale_remaining', [1, 0], ids=['deadline-before-first-page', 'stale-completion'])
+async def test_stale_drain_cannot_overwrite_newer_progress(direct, strict, monkeypatch, stale_remaining):
+    uid = 'synthetic'
+    path = ('users', uid, runs.COLLECTION, RUN)
+    strict.rows[path] = {'status': 'running', 'partitions': [{'status': 'notes'}, {'status': 'pending'}]}
+    monkeypatch.setattr(runs, 'get_firestore_client', lambda: strict)
+    enqueue = Mock()
+    monkeypatch.setattr(backfill, 'enqueue_step', enqueue)
+    stale_started, finish_stale = asyncio.Event(), asyncio.Event()
+    active_started, finish_active = asyncio.Event(), asyncio.Event()
+    pending = {'processed': 0, 'failed': 0, 'remaining': 1, 'scan_pending': True}
+
+    async def stale_drain(uid, **kwargs):
+        stale_started.set()
+        await finish_stale.wait()
+        return {**pending, 'remaining': stale_remaining, 'scan_pending': bool(stale_remaining)}
+
+    async def active_drain(uid, **kwargs):
+        active_started.set()
+        await finish_active.wait()
+        return {**pending, 'scan_after': 'third'}
+
+    drain = AsyncMock(side_effect=[pending, {**pending, 'scan_after': 'second'}])
+    results = iter([stale_drain, drain, drain, active_drain])
+
+    async def interleaved_drain(uid, **kwargs):
+        return await next(results)(uid, **kwargs)
+
+    monkeypatch.setattr(service, 'drain_backfill', interleaved_drain)
+    stale = asyncio.create_task(backfill.run_step(uid, RUN, 0, 'drain'))
+    await stale_started.wait()
+    await backfill.run_step(uid, RUN, 0, 'drain')
+    await backfill.run_step(uid, RUN, 0, 'drain')
+    active = asyncio.create_task(backfill.run_step(uid, RUN, 0, 'drain'))
+    await active_started.wait()
+    finish_stale.set()
+    stale_result = await stale
+    after_stale = deepcopy(strict.rows[path]['partitions'][0])
+    finish_active.set()
+    active_result = await active
+
+    assert stale_result['outcome'] == 'stopped'
+    assert (after_stale['status'], after_stale['drain_seq'], after_stale['notes_scan_after']) == ('notes', 2, 'second')
+    assert active_result['outcome'] == 'draining'
+    final = strict.rows[path]['partitions'][0]
+    assert (final['status'], final['drain_seq'], final['notes_scan_after']) == ('notes', 3, 'third')
+    assert [call.args[2:5] for call in enqueue.call_args_list] == [(0, 'drain', seq) for seq in (1, 2, 3)]
 
 
 @pytest.fixture
@@ -746,6 +917,117 @@ async def test_unfinished_notes_continue_on_a_new_named_drain_task(chain, monkey
     service.drain_backfill.return_value = {'processed': 1, 'failed': 0, 'remaining': 5}
     assert (await backfill.run_step('u', RUN, 0, 'drain'))['outcome'] == 'draining'
     assert steps == [(0, 'drain', 1)] and ledger.run['partitions'][0]['notes_remaining'] == 5
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('budget', ['pages', 'deadline'])
+async def test_backfill_resumes_its_persisted_cursor_after_scan_budget(direct, monkeypatch, budget):
+    uid = 'synthetic'
+    ledger = Ledger(1, status='running')
+    part = ledger.run['partitions'][0]
+    part['status'] = 'notes'
+    monkeypatch.setattr(runs, 'get_run', ledger.get)
+    monkeypatch.setattr(runs, 'update_run', ledger.update)
+    clock = [50.0]
+    monkeypatch.setattr(service, 'time', SimpleNamespace(monotonic=lambda: clock[0]))
+    monkeypatch.setattr(backfill, 'time', SimpleNamespace(monotonic=lambda: clock[0], time=lambda: 12345))
+    if budget == 'pages':
+        monkeypatch.setattr(service, 'BACKFILL_SCAN_MAX_PAGES', 1)
+    foreign = {'id': 'foreign', 'finalization_engine': 'go', 'finalization_owner_epoch': 1}
+    python = {'id': 'python'}
+    owes_python = True
+    reads = []
+
+    def read(_uid, *, after, deadline):
+        assert clock[0] < deadline
+        reads.append(after)
+        if after is None:
+            if budget == 'deadline':
+                clock[0] = deadline
+            return [foreign], 'foreign'
+        assert after == 'foreign'
+        return ([python] if owes_python else []), None
+
+    def settle(_uid, cid, **_):
+        nonlocal owes_python
+        assert cid == python['id']
+        owes_python = False
+        return 'settled'
+
+    monkeypatch.setattr(store, 'pending_backfill_processing', read)
+    monkeypatch.setattr(leases, 'acquire', lambda *args: 'token')
+    monkeypatch.setattr(leases, 'release', lambda *args: None)
+    monkeypatch.setattr(writers, 'settle_backfill_processing', settle)
+    process = AsyncMock()
+    monkeypatch.setattr(service, '_process_leased', process)
+    enqueue = Mock()
+    monkeypatch.setattr(backfill, 'enqueue_step', enqueue)
+
+    assert await backfill.run_step(uid, RUN, 0, 'drain') == {'outcome': 'draining', 'remaining': 1}
+    assert reads == [None]
+    assert part['notes_scan_after'] == 'foreign'
+    enqueue.assert_called_once_with(uid, RUN, 0, 'drain', 1, 0)
+    process.assert_not_awaited()
+
+    if budget == 'pages':
+        monkeypatch.setattr(service, 'BACKFILL_SCAN_MAX_PAGES', 2)
+    assert await backfill.run_step(uid, RUN, 0, 'drain') == {'outcome': 'draining', 'remaining': 1}
+    assert reads == [None, 'foreign', 'foreign']
+    assert part['notes_scan_after'] is None
+    assert part['status'] == 'notes' and part['notes_processed'] == 1
+    process.assert_awaited_once_with(uid, python, 'token')
+    assert enqueue.call_args.kwargs == {'schedule_at': 12345 + backfill.OWNERSHIP_RECHECK_SECONDS}
+
+
+@pytest.mark.asyncio
+async def test_foreign_notes_keep_partition_open_until_handback(direct, strict, monkeypatch):
+    uid = 'synthetic'
+    path = ('users', uid, 'conversations', 'c')
+    strict.rows[path] = {
+        'id': 'c',
+        'v3_backfill_process_pending': True,
+        'finalization_engine': 'go',
+        'finalization_owner_epoch': 1,
+    }
+    ledger = Ledger(1, status='running')
+    part = ledger.run['partitions'][0]
+    part['status'] = 'notes'
+    monkeypatch.setattr(runs, 'get_run', ledger.get)
+    monkeypatch.setattr(runs, 'update_run', ledger.update)
+    monkeypatch.setattr(store, 'get_firestore_client', lambda: strict)
+    monkeypatch.setattr(
+        store,
+        'pending_backfill_processing',
+        lambda _, **_kwargs: (
+            [dict(strict.rows[path])] if strict.rows[path]['v3_backfill_process_pending'] else [],
+            None,
+        ),
+    )
+    process = AsyncMock()
+    monkeypatch.setattr(service, '_process_leased', process)
+    wakes = []
+    monkeypatch.setattr(backfill, 'task_base', lambda: 'https://worker.invalid')
+    monkeypatch.setattr(backfill, 'enqueue_named_task', lambda *args, **kwargs: wakes.append((args, kwargs)))
+    clock = backfill.time.time()
+
+    assert await backfill.run_step(uid, RUN, 0, 'drain') == {'outcome': 'draining', 'remaining': 1}
+    assert part['status'] == 'notes' and part['notes_remaining'] == 1
+    assert strict.rows[path]['v3_backfill_process_pending']
+    process.assert_not_awaited()
+    assert len(wakes) == 1
+    args, kwargs = wakes.pop()
+    assert kwargs['schedule_at'] >= int(clock) + backfill.OWNERSHIP_RECHECK_SECONDS
+
+    strict.rows[path].update(finalization_engine='python', finalization_owner_epoch=2)
+    payload = args[3]
+    assert await backfill.run_step(payload['uid'], payload['run_id'], payload['partition'], payload['phase']) == {
+        'outcome': 'committed',
+        'last': True,
+    }
+    assert part['notes_processed'] == 1 and part['notes_remaining'] == 0
+    assert not strict.rows[path]['v3_backfill_process_pending']
+    process.assert_awaited_once()
+    assert not wakes
 
 
 @pytest.mark.asyncio
@@ -973,7 +1255,7 @@ def test_a_deletion_racing_undo_keeps_the_group_and_hands_owed_notes_to_live(str
     strict.rows[COPY] = {**strict.rows[COPY], 'v3_backfill_process_pending': True, 'v3_process_pending': True}
     sibling = ('users', 'synthetic', 'conversations', 'c1')
     strict.rows[sibling] = {**strict.rows[COPY], 'id': 'c1', 'v3_process_pending': False}
-    result = store.undo_backfill_group('synthetic', token, ['r'], ['c0', 'c1'], firestore_client=strict)
+    result = store.undo_backfill_group('synthetic', token, ['r'], ['c0', 'c1'], run_id=RUN, firestore_client=strict)
     assert result == ('kept', 1, 0)
     assert strict.rows[R]['recording'] is True and COPY in strict.rows
     # The deleted copy never goes to the notes model; a kept sibling's owed notes move to the live drain.
@@ -989,7 +1271,11 @@ def test_a_kept_group_clears_the_live_notes_marker_of_a_deleted_copy(strict):
     token = convert(strict)
     strict.rows[('users', 'synthetic', 'deleted_conversations', 'c0')] = {'conversation_id': 'c0'}
     strict.rows[COPY] = {**strict.rows[COPY], 'v3_backfill_process_pending': False, 'v3_process_pending': True}
-    assert store.undo_backfill_group('synthetic', token, ['r'], ['c0'], firestore_client=strict) == ('kept', 1, 0)
+    assert store.undo_backfill_group('synthetic', token, ['r'], ['c0'], run_id=RUN, firestore_client=strict) == (
+        'kept',
+        1,
+        0,
+    )
     assert strict.rows[COPY]['v3_process_pending'] is False
 
 
@@ -1006,7 +1292,11 @@ def test_undo_keeps_a_copy_a_live_pass_extended_with_live_capture(strict, monkey
     token = convert(strict)
     # A live pass after the run merged a new recording into the run-tagged copy.
     strict.rows[COPY] = {**strict.rows[COPY], 'v3_recording_ids': ['r', 'live-rec']}
-    assert store.undo_backfill_group('synthetic', token, ['r'], ['c0'], firestore_client=strict) == ('kept_live', 1, 0)
+    assert store.undo_backfill_group('synthetic', token, ['r'], ['c0'], run_id=RUN, firestore_client=strict) == (
+        'kept_live',
+        1,
+        0,
+    )
     assert COPY in strict.rows and strict.rows[R]['recording'] is True
     store.leases.release('synthetic', store.BACKFILL_LEASE, token, firestore_client=strict)
     _strict_undo(strict, monkeypatch)
@@ -1018,8 +1308,12 @@ def test_undo_keeps_a_copy_a_live_pass_extended_with_live_capture(strict, monkey
 def test_an_interrupted_conversion_with_no_claim_is_restored(strict):
     token = convert(strict)
     strict.rows[R] = {**strict.rows[R], 'claims': []}
-    assert store.undo_backfill_group('synthetic', token, ['r'], ['c0'], firestore_client=strict) == ('undone', 1, 1)
-    assert stored(strict.rows[R]) == LEGACY_DONOR
+    assert store.undo_backfill_group('synthetic', token, ['r'], ['c0'], run_id=RUN, firestore_client=strict) == (
+        'undone',
+        1,
+        1,
+    )
+    assert stored(strict.rows[R]) == {**LEGACY_DONOR, 'home_list_visible': True}
 
 
 @pytest.mark.asyncio
@@ -1144,7 +1438,7 @@ def test_undo_of_a_rederive_run_names_the_original_run_and_fails(tmp_path, monke
 
 @pytest.mark.asyncio
 async def test_the_drain_stops_once_account_deletion_starts(direct, monkeypatch):
-    monkeypatch.setattr(store, 'pending_backfill_processing', lambda uid: [{'id': 'a'}])
+    monkeypatch.setattr(store, 'pending_backfill_processing', lambda uid, **_: ([{'id': 'a'}], None))
     fresh = []
     monkeypatch.setattr(store, 'account_deletion_blocks_user_work', lambda uid, **kw: fresh.append(kw) or True)
     monkeypatch.setattr(service, '_process_leased', AsyncMock(side_effect=AssertionError('sent a transcript')))
@@ -1188,11 +1482,20 @@ def test_one_owners_blocked_plan_never_stops_the_others(tmp_path, monkeypatch, c
 
 @pytest.mark.asyncio
 async def test_a_row_rechecks_account_deletion_right_before_its_notes_call(direct, monkeypatch):
-    monkeypatch.setattr(store, 'pending_backfill_processing', lambda uid: [{'id': 'a'}, {'id': 'b'}])
-    # One chunk of two: the chunk check passes, then deletion starts between row a and row b.
-    checks = iter([False, False, True])
-    monkeypatch.setattr(store, 'account_deletion_blocks_user_work', lambda uid, **kw: next(checks, True))
-    monkeypatch.setattr(leases, 'acquire', lambda *a: 'token')
+    rows = [{'id': 'a'}, {'id': 'b'}]
+    monkeypatch.setattr(store, 'pending_backfill_processing', lambda uid, **_: (rows, None))
+    admitted_row = {}
+
+    async def blocking(pool, fn, *args, **kwargs):
+        task = asyncio.current_task()
+        if fn is leases.acquire:
+            admitted_row[task] = args[1]
+            return 'token'
+        if fn is store.account_deletion_blocks_user_work:
+            return admitted_row.get(task) == 'summary-b'
+        return fn(*args, **kwargs)
+
+    monkeypatch.setattr(service, 'run_blocking', blocking)
     released = []
     monkeypatch.setattr(leases, 'release', lambda *a: released.append(a[1]))
     processed = []
@@ -1203,21 +1506,34 @@ async def test_a_row_rechecks_account_deletion_right_before_its_notes_call(direc
     monkeypatch.setattr(service, '_process_leased', process)
     monkeypatch.setattr(writers, 'settle_backfill_processing', lambda *a, **kw: 'settled')
     counts = await service.drain_backfill('u', deadline=float('inf'), concurrency=2)
-    assert processed == ['a'] and counts['account_deletion'] == 1 and 'summary-b' in released
+    assert processed == ['a'] and counts['account_deletion'] == 1
+    assert sorted(released) == ['summary-a', 'summary-b']
 
 
 @pytest.mark.asyncio
 async def test_deletion_between_drain_guard_and_model_dispatch(direct, strict, monkeypatch):
     from utils.conversations import process_conversation as process
 
-    row = legacy('a', AT, 400, created_at=AT, v3_derived=True, backfilled=True)
+    row = legacy(
+        'a',
+        AT,
+        400,
+        created_at=AT,
+        v3_derived=True,
+        backfilled=True,
+        v3_backfill_process_pending=True,
+        tile_state='done',
+        summary_retryable=True,
+        v3_process_attempts=1,
+    )
+    row['v3_process_fingerprint'] = writers.processing_hash(row)
     path = ('users', 'u', 'conversations', 'a')
-    strict.rows[path] = {**row, 'v3_backfill_process_pending': True, 'v3_process_pending': True}
-    monkeypatch.setattr(store, 'pending_backfill_processing', lambda uid: [row])
+    strict.rows[path] = dict(row)
+    monkeypatch.setattr(store, 'pending_backfill_processing', lambda uid, **_: ([row], None))
     monkeypatch.setattr(store, 'get_firestore_client', lambda: strict)
     monkeypatch.setattr(service.models, 'account_deletion_firestore_client', lambda: strict)
-    monkeypatch.setattr(writers, 'begin_processing', lambda *a: True)
-    monkeypatch.setattr(leases, 'acquire', lambda *a: 'token')
+    token = leases.acquire('u', 'summary-a', firestore_client=strict)
+    monkeypatch.setattr(leases, 'acquire', lambda *a: token)
     released = []
     monkeypatch.setattr(leases, 'release', lambda *a: released.append(a[1]))
 
@@ -1232,16 +1548,60 @@ async def test_deletion_between_drain_guard_and_model_dispatch(direct, strict, m
     )
 
     counts = await service.drain_backfill('u', deadline=float('inf'))
-    assert counts == {'processed': 0, 'failed': 0, 'retry': 0, 'busy': 0, 'remaining': 1, 'account_deletion': 1}
+    assert counts['account_deletion'] == counts['remaining'] == 1
+    assert counts['processed'] == counts['failed'] == counts['retry'] == 0
     assert released == ['summary-a']
-    assert strict.rows[path]['v3_backfill_process_pending'] is True
-    assert strict.rows[path]['v3_process_pending'] is False
+    assert stored(strict.rows[path]) == {**row, 'v3_process_pending': False}
+
+
+@pytest.mark.asyncio
+async def test_slow_notes_admission_spends_one_backfill_retry(direct, strict, monkeypatch):
+    models = service.models
+    monkeypatch.setattr(models, 'account_deletion_firestore_client', lambda: strict)
+    monkeypatch.setattr(models, 'BACKFILL_NOTES_BUDGET_SECONDS', 0.01)
+    monkeypatch.setattr(store, 'pending_backfill_processing', lambda uid, **_: ([{'id': 'a'}], None))
+    monkeypatch.setattr(leases, 'acquire', lambda *a: 'token')
+    monkeypatch.setattr(leases, 'release', lambda *a: None)
+    paid_turns = []
+    settled = []
+
+    async def paid_turn(cid):
+        paid_turns.append(cid)
+        await asyncio.sleep(1)
+        paid_turns.append(cid)
+
+    async def process(uid, row, token):
+        def dispatch():
+            with models.notes_mode(uid, backfilled=True):
+                try:
+                    models.dispatch_notes_model(
+                        lambda: asyncio.run(models.within_notes_admission(lambda: paid_turn(row['id'])))
+                    )
+                except models.BackfillNotesAdmissionTimeout:
+                    raise
+                except Exception as error:
+                    pytest.fail(f'unexpected timeout type: {type(error).__name__}')
+
+        await asyncio.to_thread(dispatch)
+
+    def settle(uid, cid, *, failed, max_attempts):
+        settled.append((cid, failed))
+        return 'retry' if failed else 'settled'
+
+    monkeypatch.setattr(service, '_process_leased', process)
+    monkeypatch.setattr(writers, 'settle_backfill_processing', settle)
+    counts = await service.drain_backfill('u', deadline=float('inf'))
+    assert paid_turns == ['a']
+    assert settled == [('a', True)]
+    assert counts['processed'] == 0 and counts['retry'] == 1
 
 
 def test_an_oversized_undo_group_is_refused_whole(strict):
     # Reads per copy are three (row, tombstone, notes lease): 167 copies plus 2 exceed 500.
     with pytest.raises(store.Conflict, match='undo_group_too_large'):
-        store.undo_backfill_group('synthetic', 'token', [], [f'c{i}' for i in range(167)], firestore_client=strict)
+        store.undo_backfill_group(
+            'synthetic', 'token', [], [f'c{i}' for i in range(167)], run_id=RUN, firestore_client=strict
+        )
 
 
 @pytest.mark.asyncio
@@ -1254,7 +1614,7 @@ async def test_a_failed_deletion_read_releases_the_rows_summary_lease(direct, mo
         except StopIteration:
             raise RuntimeError('marker authority unavailable') from None
 
-    monkeypatch.setattr(store, 'pending_backfill_processing', lambda uid: [{'id': 'a'}])
+    monkeypatch.setattr(store, 'pending_backfill_processing', lambda uid, **_: ([{'id': 'a'}], None))
     monkeypatch.setattr(store, 'account_deletion_blocks_user_work', marker)
     monkeypatch.setattr(leases, 'acquire', lambda *a: 'token')
     released = []
@@ -1355,7 +1715,7 @@ def test_undo_refuses_a_group_whose_copy_took_a_notes_lease_after_the_first_chec
         'until': datetime.now(timezone.utc) + timedelta(minutes=4),
     }
     with pytest.raises(store.Conflict, match='notes_in_flight'):
-        store.undo_backfill_group('synthetic', token, ['r'], ['c0'], firestore_client=strict)
+        store.undo_backfill_group('synthetic', token, ['r'], ['c0'], run_id=RUN, firestore_client=strict)
     assert strict.rows[R]['recording'] is True and COPY in strict.rows
 
 
@@ -1483,3 +1843,94 @@ def test_an_unexpected_plan_error_is_not_reported_as_a_blocked_owner(tmp_path, m
     monkeypatch.setattr(script, 'plan_owner', plan)
     with pytest.raises(ValueError, match='bug'):
         script.main(['run', '--owners-file', str(owners), '--dry-run'])
+
+
+@pytest.mark.parametrize('foreign_target', [R, COPY])
+def test_undo_keeps_a_group_linked_to_another_run(strict, foreign_target):
+    token = convert(strict)
+    strict.rows[foreign_target]['v3_backfill_run'] = 'another-run'
+    strict.rows[COPY]['v3_backfill_process_pending'] = True
+    foreign_before = deepcopy(strict.rows[foreign_target])
+    result = store.undo_backfill_group('synthetic', token, ['r'], ['c0'], run_id=RUN, firestore_client=strict)
+    assert result == ('kept_live', int(foreign_target != R), 0)
+    assert strict.rows[foreign_target] == foreign_before
+    assert strict.rows[R]['recording'] is True
+    assert strict.rows[COPY]['v3_backfill_process_pending'] is (foreign_target == COPY)
+
+
+@pytest.mark.parametrize('marker_state', ['absent', 'cancelled'])
+@pytest.mark.parametrize('grace', [False, True], ids=['immediate', 'grace'])
+def test_backfill_notes_admission_orders_on_firestore_emulator(monkeypatch, marker_state, grace):
+    host = os.environ.get('FIRESTORE_EMULATOR_HOST', '').rpartition(':')[0]
+    if host not in ('127.0.0.1', 'localhost', '[::1]'):
+        pytest.skip('requires a loopback Firestore emulator')
+
+    from google.cloud.firestore import Client
+    from database import account_deletion_grace, users
+
+    client = Client(project='demo-backfill-notes')
+    uid = uuid4().hex
+    models = service.models
+    marker = models.account_deletion_document(uid, firestore_client=client)
+    monkeypatch.setattr(models, 'account_deletion_firestore_client', lambda: client)
+    monkeypatch.setenv('BATCH_ACCOUNT_PRIVACY_WRITER_ENABLED', 'off')
+
+    def reset_marker():
+        if marker_state == 'absent':
+            marker.delete()
+        else:
+            marker.set({'wipe_status': 'cancelled'})
+
+    def delete_account():
+        if grace:
+            return account_deletion_grace._mark_user_deletion_grace_intent_txn(
+                client.transaction(), marker, 'job', datetime.now(timezone.utc) + timedelta(days=1)
+            )
+        return users._mark_user_deletion_wipe_intent_txn(client.transaction(), marker, 'job')
+
+    def dispatch(invoke):
+        with models.notes_mode(uid, backfilled=True):
+            return models.dispatch_notes_model(invoke)
+
+    try:
+        reset_marker()
+        delete_account()
+        with pytest.raises(models.BackfillNotesDeletionBlocked):
+            dispatch(lambda: pytest.fail('deletion won admission but the model was called'))
+
+        reset_marker()
+        model_entered = Event()
+        release_model = Event()
+        deletion_started = Event()
+
+        def invoke():
+            model_entered.set()
+            assert release_model.wait(5)
+            return 'notes'
+
+        def concurrent_delete():
+            deletion_started.set()
+            return delete_account()
+
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            notes = pool.submit(dispatch, invoke)
+            try:
+                assert model_entered.wait(5)
+                deletion = pool.submit(concurrent_delete)
+                assert deletion_started.wait(5)
+                # The intent writer may read the marker, but cannot commit while admission locks it.
+                try:
+                    deletion.result(timeout=0.25)
+                except TimeoutError:
+                    pass
+                else:
+                    pytest.fail('deletion committed while notes held the admission fence')
+            finally:
+                release_model.set()
+            assert notes.result(timeout=5) == 'notes'
+            deletion.result(timeout=10)
+        with pytest.raises(models.BackfillNotesDeletionBlocked):
+            dispatch(lambda: pytest.fail('a later model call was admitted during deletion'))
+    finally:
+        marker.delete()
+        client.close()

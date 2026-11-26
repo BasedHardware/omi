@@ -498,18 +498,25 @@ def test_eraser_owes_merge_donor_audio_recorded_at_acceptance(plane, cascade):
     assert audio.call_args.kwargs['source_ids'] == ['donor-a']
 
 
-def test_accept_transaction_reads_before_it_writes_and_keeps_the_first_tombstone(monkeypatch):
+@pytest.mark.parametrize(
+    'enabled, status', [('true', 'completed'), ('off', 'processing'), (None, 'processing'), ('unknown', 'processing')]
+)
+def test_accept_transaction_reads_before_it_writes_and_keeps_the_first_tombstone(monkeypatch, enabled, status):
     from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
 
-    store = StrictFirestore(
-        {('users', UID, 'conversations', 'c1'): {'created_at': 'original', 'sync_merged_from': ['donor']}}
-    )
+    if enabled is None:
+        monkeypatch.delenv('CONVERSATION_PARKED_TERMINAL_STATUS_ENABLED', raising=False)
+    else:
+        monkeypatch.setenv('CONVERSATION_PARKED_TERMINAL_STATUS_ENABLED', enabled)
+    path = ('users', UID, 'conversations', 'c1')
+    store = StrictFirestore({path: {'created_at': 'original', 'sync_merged_from': ['donor'], 'status': 'processing'}})
     monkeypatch.setattr(legal_holds, 'assert_account_deletion_permitted', lambda *a, **k: None)
     conversation_tombstones.accept_deletion(UID, 'c1', firestore_client=store, expected_exists=True)
     first = dict(store.rows[('users', UID, conversation_tombstones.COLLECTION, 'c1')])
     conversation_tombstones.accept_deletion(UID, 'c1', firestore_client=store)
     assert store.rows[('users', UID, conversation_tombstones.COLLECTION, 'c1')] == first
-    assert store.rows[('users', UID, 'conversations', 'c1')]['deleted'] is True
+    assert store.rows[path]['deleted'] is True
+    assert store.rows[path]['status'] == status
     owed = store.rows[(ERASURES, purge_jobs.erasure_job_id(UID, 'c1'))]
     assert owed['audio_source_ids'] == ['donor'] and owed['uid'] == UID
 

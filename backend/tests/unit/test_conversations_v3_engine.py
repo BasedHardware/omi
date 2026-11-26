@@ -1,8 +1,11 @@
 """Synthetic recorded-clock contracts; no model calls or customer fixtures."""
 
 from copy import deepcopy
+import base64
 from datetime import datetime, timedelta, timezone
 import json
+import random
+import zlib
 
 import pytest
 
@@ -40,6 +43,44 @@ def test_five_minute_silence_boundary():
     assert len(outline.stretches([row], NOW + timedelta(hours=1))) == 2
     row['transcript_segments'][1]['start'] = 309.999
     assert len(outline.stretches([row], NOW + timedelta(hours=1))) == 1
+
+
+def test_three_hour_window_cap_is_deterministic_on_the_recorded_clock():
+    def turns(start, stop):
+        return [{'text': str(t), 'start': t, 'end': t + 10} for t in range(start, stop, 60)]
+
+    rows = [
+        recording('a', segments=turns(0, 5400)),
+        recording('b', NOW + timedelta(seconds=5400), segments=turns(0, 5520)),
+    ]
+    now = NOW + timedelta(hours=3, minutes=2)
+    cap = timedelta(hours=3)
+    groups = outline.stretches(rows, now, max_window=cap)
+    assert groups == outline.stretches(rows[::-1], now, max_window=cap)
+    earlier, later = groups
+    assert earlier['finished'] and earlier['outline_ready']
+    assert earlier['window_cap_end'] and not earlier['manual_end']
+    assert len(earlier['lines']) == 180
+    assert later['after_window_cap'] and not later['finished']
+    assert later['lines'][0]['start'] == NOW + cap
+
+    (uncapped,) = outline.stretches(rows, now, max_window=timedelta(0))
+    assert uncapped['key'] == earlier['key']
+    assert uncapped['lines'] == earlier['lines'] + later['lines']
+    assert not uncapped['finished']
+
+
+@pytest.mark.parametrize('cohesion', [False, True])
+def test_resume_does_not_rejoin_the_window_cap(cohesion):
+    # After the existing two-hour card split, the tail and successor fit together
+    # within two hours. Without the cap guard, resumes_previous can join them.
+    row = recording(segments=[{'text': str(t), 'start': t, 'end': t + 10} for t in range(0, 10920, 60)])
+    groups = outline.stretches([row], NOW + timedelta(hours=3, minutes=2), max_window=timedelta(hours=3))
+    windows = planner.windows(
+        groups, [[entry()], [entry(resumes_previous=True)]], cohesion=cohesion, silence_gap=timedelta(minutes=15)
+    )
+    assert [w['lines'][0]['start'] for w in windows] == [NOW, NOW + timedelta(hours=2), NOW + timedelta(hours=3)]
+    assert [w['finished'] for w in windows] == [True, True, False]
 
 
 def test_recorded_clock_and_near_duplicate():
@@ -411,6 +452,39 @@ def test_outline_fallback_is_valid_and_deterministic():
     assert outline.parse(json.dumps({'conversations': entries}), group)
 
 
+@pytest.mark.parametrize(
+    'text,words',
+    [
+        ('hello世界', 3),
+        ('会議の時間です。', 7),
+        ('今天开会。', 4),
+        ('カタカナとｶﾅ', 7),
+        ('한국어', 3),
+        ('한국어', 3),
+        ('ภาษาไทย', 7),
+        ('สวัสดี', 4),
+        ('ASCII\twith\nspace !', 4),
+        ('Latin 世界，again', 4),
+        ('', 0),
+    ],
+)
+def test_transcript_word_floor_counts_mixed_script_without_punctuation(text, words):
+    assert planner.word_count([{'text': text}]) == words
+
+
+@pytest.mark.parametrize('letter', ['界', 'あ'])
+@pytest.mark.parametrize('words', [149, 150])
+def test_finished_script_aware_window_respects_home_word_floor(letter, words):
+    row = recording(segments=[{'text': letter * words, 'start': 0, 'end': 10}])
+    group = outline.stretches([row], NOW + timedelta(minutes=10))[0]
+    window = planner.windows([group], [[entry()]])[0]
+    assert window['finished']
+    assert planner.build('u', window, {'r': row})['home_hidden'] is (words < 150)
+    # Some projection callers supply no stretch count and use the copied segments.
+    window.pop('_stretch_words', None)
+    assert planner.build('u', window, {'r': row})['home_hidden'] is (words < 150)
+
+
 @pytest.mark.parametrize('words', [5, 40])
 def test_manual_end_with_any_speech_is_visible_and_sticky(words):
     row = recording(
@@ -429,11 +503,37 @@ def test_manual_end_with_any_speech_is_visible_and_sticky(words):
 
 
 @pytest.mark.parametrize('kind', ['media', 'background'])
-def test_manual_end_does_not_promote_recognized_media_or_background(kind):
+@pytest.mark.parametrize('enabled,expected_hidden', [(True, False), (False, True)])
+def test_manual_end_visibility_preserves_media_and_background_classification(kind, enabled, expected_hidden):
     row = recording(finished_at=NOW + timedelta(seconds=10), v3_manual_end=True)
     group = outline.stretches([row], NOW + timedelta(seconds=11))[0]
-    built = planner.build('u', planner.windows([group], [[entry(kind=kind)]])[0], {'r': row})
-    assert built['manual_end'] is True and built['home_hidden'] is True
+    built = planner.build(
+        'u', planner.windows([group], [[entry(kind=kind)]])[0], {'r': row}, manual_end_home_visible=enabled
+    )
+    assert built['manual_end'] is True and built['home_hidden'] is expected_hidden
+    assert built['kind'] == built['outline_kind'] == kind
+    assert built['home_hidden_reason'] == ('media' if kind == 'media' else 'background_wearer_recognized')
+
+    # Rebuilding a retained row can lack the cut on this pass. The row still owns the manual end.
+    window = planner.windows([group], [[entry(kind=kind)]])[0]
+    window['manual_end'] = False
+    rebuilt = planner.build('u', window, {'r': row}, built, manual_end_home_visible=enabled)
+    assert rebuilt['manual_end'] is True and rebuilt['home_hidden'] is expected_hidden
+
+
+def test_only_final_fragment_of_manual_end_bypasses_classification():
+    row = recording(
+        segments=[
+            {'text': 'broadcast', 'start': 0, 'end': 7190},
+            {'text': 'another broadcast', 'start': 7200, 'end': 7210},
+        ],
+        finished_at=NOW + timedelta(seconds=7210),
+        v3_manual_end=True,
+    )
+    groups = outline.stretches([row], NOW + timedelta(seconds=7211))
+    windows = planner.windows(groups, [[entry(kind='media'), entry(2, kind='media')]])
+    built = [planner.build('u', window, {'r': row}) for window in windows]
+    assert [(r['manual_end'], r['home_hidden']) for r in built] == [(False, True), (True, False)]
 
 
 def test_manual_end_without_speech_creates_no_window():
@@ -443,7 +543,7 @@ def test_manual_end_without_speech_creates_no_window():
 
 
 @pytest.mark.parametrize(
-    'recognized,words,expected_hidden', [(False, 300, False), (True, 300, True), (False, 40, True)]
+    'recognized,words,expected_hidden', [(False, 150, False), (True, 150, True), (False, 149, True)]
 )
 def test_background_visibility_requires_wearer_recognition(recognized, words, expected_hidden):
     row = recording(segments=[{'id': 's', 'text': 'speech ' * words, 'start': 0, 'end': 10, 'is_user': recognized}])
@@ -454,7 +554,7 @@ def test_background_visibility_requires_wearer_recognition(recognized, words, ex
     assert result['home_hidden_reason'] == (
         'background_wearer_recognized'
         if recognized
-        else 'wearer_recognition_uncertain' if words >= 300 else 'below_word_minimum'
+        else 'wearer_recognition_uncertain' if words >= 150 else 'below_word_minimum'
     )
 
 
@@ -555,3 +655,42 @@ def test_copy_carries_the_recording_location_and_keeps_its_own():
         'geolocation': kept,
     }
     assert planner.build('u', window, {'r': row}, prior)['geolocation'] == kept
+
+
+@pytest.mark.parametrize('cohesion', [False, True])
+def test_transcript_size_cap_replans_failed_projection(monkeypatch, cohesion):
+
+    rng = random.Random(2918)
+    segments = [
+        {
+            'text': ' '.join(base64.b64encode(rng.randbytes(21)).decode() for _ in range(500)),
+            'start': i * 10,
+            'end': i * 10 + 8,
+            'id': str(i),
+        }
+        for i in range(100)
+    ]
+    source = recording(segments=segments)
+    recordings = {'r': source}
+    groups = outline.stretches([source], NOW + timedelta(hours=1))
+    outlines = [[entry()]]
+    monkeypatch.setenv('CONVERSATIONS_V3_TRANSCRIPT_SIZE_CAP', 'off')
+    (oversized,) = planner.windows(groups, outlines, cohesion=cohesion)
+    raw = planner.build('u', oversized, recordings)
+    assert len(zlib.compress(json.dumps(raw['transcript_segments']).encode())) > 1048487
+
+    monkeypatch.delenv('CONVERSATIONS_V3_TRANSCRIPT_SIZE_CAP')
+
+    def replan():
+        planned = planner.windows(groups, outlines, cohesion=cohesion)
+        return [planner.build('u', window, recordings) for window in planned]
+
+    recovered = replan()
+    assert len(recovered) > 1
+    assert [row['id'] for row in recovered] == [row['id'] for row in replan()]
+    assert [segment['id'] for row in recovered for segment in row['transcript_segments']] == [
+        segment['id'] for segment in segments
+    ]
+    for row in recovered:
+        compressed = zlib.compress(json.dumps(row['transcript_segments']).encode())
+        assert len(base64.b64encode(bytes(28) + compressed.hex().encode())) < planner.TRANSCRIPT_BUDGET

@@ -9,6 +9,7 @@ after dead_letter), and the recovery metadata persisted on the job.
 
 from __future__ import annotations
 
+import zlib
 from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 from unittest.mock import MagicMock
@@ -103,6 +104,31 @@ def _recover(conversation_ref: _Ref, *, cutoff=CUTOFF, jobs_collection=None, rec
         recording_sessions_collection=recording_sessions_collection,
     )
     return transaction, intent
+
+
+@pytest.mark.parametrize('closed', [False, True])
+def test_server_batch_audio_files_need_committed_bounds_or_preview(closed):
+    row = _recovery_conversation(
+        {
+            'record_lane_owner': 'batch_live_v1',
+            'server_batch_only': True,
+            'server_batch_audio_received': True,
+            'server_batch_audio_closed': closed,
+            'transcript_segments': zlib.compress(b'[]'),
+            'transcript_segments_compressed': True,
+            'audio_files': [{'id': 'retained-audio'}],
+        }
+    )
+    transaction, intent = _recover(row)
+    assert intent['status'] == 'refused_server_batch_archive_unready'
+    assert transaction.sets == transaction.updates == []
+
+    row.data.update(has_content=True, server_batch_audio_start=1000, server_batch_audio_end=1002)
+    row.data['server_batch_audio_closed'] = True
+    transaction, intent = _recover(row)
+    assert intent['created'] is True
+    assert transaction.sets[0][1]['processing_trigger'] == 'server_recovery'
+    assert transaction.sets[0][1]['selfheal_audio_file_ids'] == ['retained-audio']
 
 
 def test_recovery_admits_stale_content_row_and_stamps_metadata():

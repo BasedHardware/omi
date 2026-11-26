@@ -52,8 +52,14 @@ async def consume(wire, message):
     await asyncio.sleep(0)
 
 
-async def setup_peer(monkeypatch):
+def use_ordered_clock(monkeypatch):
+    monkeypatch.setattr(soniox, 'SonioxProviderClock', soniox.OrderedSonioxProviderClock)
+
+
+async def setup_peer(monkeypatch, *, ordered=False):
     monkeypatch.setenv('SONIOX_WIRE_LEDGER', 'true')
+    if ordered:
+        use_ordered_clock(monkeypatch)
     result = await managed(monkeypatch, True)
     leg, wire = result[4:6]
     leg.gate = None

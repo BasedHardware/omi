@@ -22,6 +22,7 @@
 
 #include "accel.h"
 #include "battery_guard.h"
+#include "boot_identity.h"
 #include "button.h"
 #include "config.h"
 #include "custody.h"
@@ -433,6 +434,17 @@ static struct bt_uuid_128 diagnostics_characteristic_uuid =
 static struct bt_uuid_128 recovery_diagnostics_characteristic_uuid =
     BT_UUID_INIT_128(BT_UUID_128_ENCODE(0x19B10042, 0xE8F2, 0x537E, 0x4F6C, 0xD104768A1214));
 
+static struct bt_uuid_128 boot_identity_characteristic_uuid =
+    BT_UUID_INIT_128(BT_UUID_128_ENCODE(0x19B10043, 0xE8F2, 0x537E, 0x4F6C, 0xD104768A1214));
+
+static ssize_t
+boot_identity_read(struct bt_conn *conn, const struct bt_gatt_attr *attr, void *buf, uint16_t len, uint16_t offset)
+{
+    uint8_t value[OMI_BOOT_IDENTITY_SIZE];
+    omi_boot_identity_snapshot(value);
+    return bt_gatt_attr_read(conn, attr, buf, len, offset, value, sizeof(value));
+}
+
 /* Recovery also needs a coherent value across ATT Read Blob requests. */
 static struct {
     bool valid;
@@ -574,6 +586,12 @@ static struct bt_gatt_attr diagnostics_service_attr[] = {
                            recovery_diagnostics_read,
                            NULL,
                            NULL),
+    BT_GATT_CHARACTERISTIC(&boot_identity_characteristic_uuid.uuid,
+                           BT_GATT_CHRC_READ,
+                           BT_GATT_PERM_READ,
+                           boot_identity_read,
+                           NULL,
+                           NULL),
 };
 static struct bt_gatt_service diagnostics_service = BT_GATT_SERVICE(diagnostics_service_attr);
 
@@ -584,6 +602,12 @@ static struct bt_gatt_attr safe_diagnostics_service_attr[] = {
                            BT_GATT_CHRC_READ,
                            BT_GATT_PERM_READ,
                            recovery_diagnostics_read,
+                           NULL,
+                           NULL),
+    BT_GATT_CHARACTERISTIC(&boot_identity_characteristic_uuid.uuid,
+                           BT_GATT_CHRC_READ,
+                           BT_GATT_PERM_READ,
+                           boot_identity_read,
                            NULL,
                            NULL),
 };
@@ -1935,6 +1959,7 @@ int transport_off()
 
 int transport_start_safe(void)
 {
+    omi_boot_identity_prepare();
     int err;
     bt_conn_cb_register(&recovery_callbacks);
 #ifdef CONFIG_OMI_ENABLE_RFSW_CTRL
@@ -1975,6 +2000,7 @@ int transport_start_safe(void)
 // periodic advertising
 int transport_start()
 {
+    omi_boot_identity_prepare();
     int err = 0;
 
     k_thread_start(power_off_thread);

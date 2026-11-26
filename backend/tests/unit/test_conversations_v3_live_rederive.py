@@ -11,13 +11,14 @@ from contextlib import contextmanager, nullcontext
 from copy import deepcopy
 from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 import pytest
 from google.api_core.exceptions import InvalidArgument
 
 from database import action_items as tasks_db
 from database import conversations as conversations_db
+from database import home_visibility_index
 from database import conversations_v3 as store
 from database import conversations_v3_backfill_runs as runs
 from database import conversations_v3_leases as leases
@@ -29,7 +30,7 @@ from routers import conversations as conversation_routes
 from scripts import conversations_v3_backfill as script
 from services import conversation_frame_evidence
 from utils.conversations import merge_conversations
-from utils.conversations.v3 import Conflict, backfill, service
+from utils.conversations.v3 import Conflict, backfill, metrics, service
 from utils.other import lake_wipe
 from utils.retrieval.tool_services import action_items as task_service
 from utils.task_intelligence import task_source_validation
@@ -189,7 +190,12 @@ def owner(strict, monkeypatch):
 
 
 def conversations(strict):
-    return {p[-1]: deepcopy(row) for p, row in strict.rows.items() if p[:3] == ('users', UID, 'conversations')}
+    # Compare conversation data independently of the backfilled derived index bit.
+    return {
+        p[-1]: deepcopy({key: value for key, value in row.items() if key != home_visibility_index.FIELD})
+        for p, row in strict.rows.items()
+        if p[:3] == ('users', UID, 'conversations')
+    }
 
 
 async def rederive(report=None):
@@ -253,6 +259,24 @@ def claims_by_row(rows):
 
 
 # ---- replans ----------------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('mode,hidden', [(None, False), ('off', True)])
+async def test_manual_end_home_switch_reaches_the_planner_through_reconcile(owner, strict, monkeypatch, mode, hidden):
+    if mode is None:
+        monkeypatch.delenv('CONVERSATIONS_V3_MANUAL_END_HOME_VISIBLE', raising=False)
+    else:
+        monkeypatch.setenv('CONVERSATIONS_V3_MANUAL_END_HOME_VISIBLE', mode)
+    media = reply({'first_line': 1, 'title': 'A podcast', 'line': 'Playback.', 'kind': 'media'})
+    monkeypatch.setattr(service.models, 'outline', lambda uid, messages: media)
+    sources, rows = lunch()
+    owner(*sources, *rows)
+    outcome, _ = await rederive()
+    assert outcome == 'committed'
+    card = conversations(strict)['c0']
+    assert card['manual_end'] is True and card['kind'] == card['outline_kind'] == 'media'
+    assert card['home_hidden'] is hidden and card['home_hidden_reason'] == 'media'
 
 
 @pytest.mark.asyncio
@@ -329,7 +353,7 @@ async def test_rederive_preserves_cards_with_owner_events(owner, strict, set_eve
 
 @pytest.mark.asyncio
 async def test_hidden_topic_pieces_of_one_stretch_become_one_visible_card(owner, strict, monkeypatch):
-    # Eight 50-word captures over eight minutes; the pre-fix planner hid each topic piece (< 300 words).
+    # Eight 50-word captures over eight minutes; the pre-fix planner hid each topic piece (under the Home word minimum).
     sources = [source(f'r{i}', AT + timedelta(minutes=i), words=50) for i in range(8)]
     rows = [
         fragment(f'c{i}', src, manual_end=False, home_hidden=True, home_hidden_reason='below_word_minimum')
@@ -544,6 +568,10 @@ async def test_undo_restores_every_row_and_claim_exactly(owner, strict, ledger):
     # The created row leaves through the conversation deletion helper (children included).
     assert len(ledger.erased) == 1 and ledger.erased[0] not in before
     assert conversations(strict) == before
+    for entry in priors(strict):
+        if not entry.get('created'):
+            restored = strict.rows[path(entry['id'])]
+            assert restored['home_list_visible'] is home_visibility_index.visible(restored)
     assert ledger.run['status'] == 'undone'
     # Restored exactly, the run keeps no copies of the owner's rows.
     assert not priors(strict)
@@ -754,6 +782,7 @@ async def test_undo_refuses_to_remove_a_task_bearing_created_card(undo_task_card
     groups = backfill._undo_groups(priors(strict))
     assert len(groups) > 1 and cid not in {entry['id'] for entry in groups[0]}
     before_undo = conversations(strict)
+    card_before_undo = deepcopy(strict.rows[path(cid)])
 
     def link_task():
         task_service.create_action_item(UID, {'description': 'Owner task', 'conversation_id': cid})
@@ -769,7 +798,7 @@ async def test_undo_refuses_to_remove_a_task_bearing_created_card(undo_task_card
     else:
         link_task()
     assert backfill.undo_run(UID, RUN) == UNDO_TASK_BLOCK
-    assert not ledger.erased and strict.rows[path(cid)] == before_undo[cid]
+    assert not ledger.erased and strict.rows[path(cid)] == card_before_undo
     assert strict.rows[path('r9')]['claims'] == before_undo['r9']['claims']
     assert strict.rows[('users', UID, 'action_items', 'linked-task')]['conversation_id'] == cid
     if not late:
@@ -1340,7 +1369,16 @@ def test_refinement_preflight_reserves_marker_write(commit_refinement, strict, m
 def test_refinement_batch_reserves_marker_with_donor(commit_refinement, strict, monkeypatch):
     cap = 6
     monkeypatch.setattr(store, 'BATCH_MAX_WRITES', cap)
-    commit_refinement({'id': 'unrelated', 'status': 'completed', 'started_at': AT, 'finished_at': AT})
+    # Give the second batch a real source claim so write elision cannot hide its claim update.
+    commit_refinement(
+        {
+            'id': 'unrelated',
+            'status': 'completed',
+            'started_at': AT + timedelta(seconds=15),
+            'finished_at': AT + timedelta(seconds=20),
+            'v3_recording_ids': ['r0'],
+        }
+    )
 
     batches = [tx for tx in strict.transactions if any('claims' in patch for _, patch in tx.updates)]
     assert len(batches) == 2
@@ -1349,7 +1387,11 @@ def test_refinement_batch_reserves_marker_with_donor(commit_refinement, strict, 
     assert {path('c0'), marker} <= {doc for doc, _ in survivor_batch.sets}
     assert any(doc == path('c1') and patch.get('deleted') for doc, patch in survivor_batch.updates)
     assert path('unrelated') in {doc for doc, _ in other_batch.sets}
-    assert len(survivor_batch.sets) + len(survivor_batch.updates) <= cap
+    assert any(
+        doc == path('r0') and any(claim['conversation_id'] == 'unrelated' for claim in patch.get('claims', ()))
+        for doc, patch in other_batch.updates
+    )
+    assert all(len(tx.sets) + len(tx.updates) + len(tx.deletes) <= cap for tx in batches)
 
 
 @pytest.mark.asyncio
@@ -1992,3 +2034,104 @@ async def test_undo_transaction_checks_both_builder_tokens(owner, strict, ledger
     assert backfill.undo_run(UID, RUN, firestore_client=strict) == {'outcome': 'busy', 'reason': 'lease_lost'}
     assert conversations(strict) == before_undo
     assert priors(strict)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('installed', [False, True], ids=['missing-probe-counter', 'billed-write-histogram'])
+async def test_reconcile_runs_when_write_probe_telemetry_raises(owner, strict, installed):
+    sources, rows = lunch(count=3)
+    owner(*sources, *rows)
+    before = conversations(strict)
+    metric = metrics.RECONCILE_BILLED_WRITES.labels('backfill') if installed else metrics.RECONCILE_PROBE_MISSING
+    with (
+        patch.object(metrics, 'probe_enabled', return_value=True),
+        patch.object(metrics, 'probe_installed', return_value=installed),
+        patch.object(metric, 'observe' if installed else 'inc', side_effect=OSError('metrics unavailable')) as emit,
+    ):
+        outcome, _ = await rederive()
+    emit.assert_called_once()
+    assert outcome == 'committed'
+    assert conversations(strict) != before
+
+
+@pytest.mark.asyncio
+async def test_reconcile_returns_after_post_commit_projection_histogram_raises(owner, strict):
+    sources, rows = lunch(count=3)
+    owner(*sources, *rows)
+    before = conversations(strict)
+    histogram = metrics.PROJECTION_ROWS.labels('commit_projection', 'written')
+    committed_at_observe = []
+
+    def fail_after_commit(*args):
+        committed_at_observe.append(conversations(strict) != before)
+        raise OSError('metrics unavailable')
+
+    with patch.object(histogram, 'observe', side_effect=fail_after_commit) as observe:
+        outcome, _ = await rederive()
+    observe.assert_called_once()
+    assert committed_at_observe == [True]
+    assert outcome == 'committed'
+    assert conversations(strict) != before
+
+
+@pytest.mark.asyncio
+async def test_reconcile_returns_after_committed_outcome_counter_raises(owner, strict):
+    sources, rows = lunch(count=3)
+    owner(*sources, *rows)
+    before = conversations(strict)
+    counter = metrics.RECONCILES.labels('committed')
+    committed_at_increment = []
+
+    def fail_after_commit(*_args):
+        committed_at_increment.append(conversations(strict) != before)
+        raise OSError('metrics unavailable')
+
+    with patch.object(counter, 'inc', side_effect=fail_after_commit) as inc:
+        outcome, _ = await rederive()
+
+    inc.assert_called_once()
+    assert committed_at_increment == [True]
+    assert outcome == 'committed'
+    assert conversations(strict) != before
+
+
+@pytest.mark.asyncio
+async def test_reconcile_preserves_primary_exception_when_error_counter_raises(owner, strict, monkeypatch):
+    primary = RuntimeError('projection load failed')
+
+    def fail_load(*_args, **_kwargs):
+        raise primary
+
+    monkeypatch.setattr(rederive_store, 'load_live_rederive', fail_load)
+    counter = metrics.RECONCILES.labels('error')
+
+    with (
+        patch.object(counter, 'inc', side_effect=OSError('metrics unavailable')) as inc,
+        pytest.raises(RuntimeError) as raised,
+    ):
+        await rederive()
+
+    inc.assert_called_once()
+    assert raised.value is primary
+
+
+@pytest.mark.asyncio
+async def test_reconcile_writes_when_equality_fallback_telemetry_raises(owner, strict):
+    sources, rows = lunch(count=3)
+    owner(*sources, *rows)
+    before = conversations(strict)
+    equality = store.write_equality
+    with (
+        patch.object(equality, 'same_patch', side_effect=RuntimeError('cannot compare')),
+        patch.object(equality, '_fallback_reported', False),
+        patch.object(metrics.EQUALITY_UNAVAILABLE, 'inc', side_effect=OSError('counter unavailable')) as inc,
+        patch.object(equality, 'record_fallback', side_effect=OSError('event unavailable')) as fallback,
+        patch.object(metrics, '_metric_warning_logged', False),
+        patch.object(metrics.logger, 'warning') as warning,
+    ):
+        outcome, _ = await rederive()
+    assert inc.call_count > 0
+    fallback.assert_called_once()
+    warning.assert_called_once_with('v3 reconcile telemetry failed exception_type=%s', 'OSError')
+    assert outcome == 'committed'
+    assert conversations(strict) != before

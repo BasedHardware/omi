@@ -47,13 +47,13 @@ from utils.episodes import live as episode_live
 from utils.conversations.factory import deserialize_conversation
 from utils.conversations.recorded_time import is_late, recorded_span
 from utils.sync.late_audio import ingest_late_transcript
+from utils.sync.assignment_errors import SyncAssignmentSuperseded
 from utils.metrics import (
     OMI_AUDIO_TIMELINE_SEGMENTS_TOTAL,
     OMI_LIVE_AUDIO_CAPTURE_WINDOWS_TOTAL,
     OMI_LIVE_AUDIO_CAPTURE_ATTRIBUTION_TOTAL,
 )
 from utils.observability.fallback import record_fallback
-from utils.observability.soniox_idle_arm import note_segments
 from utils.manual_speaker_assignments import LiveTranscriptMerge
 import config.speaker_match_scores as match_scores
 from utils.speaker_assignment import process_speaker_assigned_segments, should_update_speaker_to_person_map
@@ -128,6 +128,10 @@ def _observe_embedding_admission(speaker, raw, enabled):
 
 class LateTranscriptReplyError(RuntimeError):
     """Late speech committed, but its read-side reply could not be built."""
+
+
+class LateTranscriptSuperseded(LateTranscriptReplyError):
+    """Late speech's anchor is user-managed: acknowledge it, never replay it."""
 
 
 class LegacyPhotoPersistError(RuntimeError):
@@ -494,9 +498,18 @@ class TranscriptProcessor:
             snapshot = conversation.model_dump()
             snapshot['started_at'] = origin
             snapshot['data_protection_level'] = self.cache.protection_level
-            assigned = await self.host.persistence.call(
-                ingest_late_transcript, self.host.request.uid, snapshot, fresh_segments
-            )
+            try:
+                assigned = await self.host.persistence.call(
+                    ingest_late_transcript, self.host.request.uid, snapshot, fresh_segments
+                )
+            except SyncAssignmentSuperseded:
+                # The retry anchor is user-managed, so the chunk is already
+                # owned by that row. Acknowledge the batch and stop: replaying
+                # it can only raise the same user-authority guard again.
+                if getattr(self.host.state, 'capture_timeline_v2', False):
+                    self._v2_committed_ids.update(str(segment.id) for segment in segments)
+                logger.debug('event=late_transcript outcome=superseded')
+                raise LateTranscriptSuperseded('late transcript anchor is user managed') from None
             if getattr(self.host.state, 'capture_timeline_v2', False):
                 self._v2_committed_ids.update(str(segment.id) for segment in segments)
             try:
@@ -901,8 +914,6 @@ class TranscriptProcessor:
         delivered = await self._deliver_segments(client_segments)
         if delivered and client_segments:
             self.host.complete_live_transcription()
-        if delivered:
-            note_segments(self.host, client_segments, removed)
         if self.host.transcript_send is not None and self.host.user_has_credits:
             self.host.transcript_send([transcript_segment_for_client(segment.model_dump()) for segment in new_segments])
         elif not self.host.pusher_enabled and self.host.user_has_credits:

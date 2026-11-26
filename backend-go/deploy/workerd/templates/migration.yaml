@@ -1,3 +1,6 @@
+{{- if not (kindIs "bool" .Values.migration.enabled) }}
+{{- fail "migration.enabled: expected a boolean" }}
+{{- end }}
 {{- if .Values.migration.enabled }}
 apiVersion: batch/v1
 kind: Job
@@ -25,7 +28,7 @@ spec:
             - name: DATABASE_URL
               valueFrom:
                 secretKeyRef:
-                  name: dev-omi-workerd-migrator
+                  name: {{ printf "%s-omi-workerd-migrator" .Values.environment }}
                   key: DATABASE_URL
           resources:
             requests: {cpu: 100m, memory: 64Mi}

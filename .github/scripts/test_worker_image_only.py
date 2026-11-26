@@ -1071,7 +1071,10 @@ class WorkflowTests(unittest.TestCase):
     def test_default_helm_path_and_success_only_writer_keep_existing_controls(self):
         helm = self.step("Deploy Diarizer to GKE cluster using Helm")
         writer = self.step("Deploy worker image preserving live runtime")
-        self.assertEqual(helm["if"], "inputs.preserve_live_worker != true && inputs.worker_dry_run != true")
+        self.assertEqual(
+            helm["if"],
+            "inputs.mode != 'worker-depth-only' && inputs.preserve_live_worker != true && inputs.worker_dry_run != true",
+        )
         self.assertEqual(writer["if"], "inputs.preserve_live_worker == true && inputs.worker_dry_run != true")
         self.assertIn('helm -n "$DEPLOY_NAMESPACE" upgrade --install', helm["run"])
         self.assertIn("environment", self.workflow["jobs"]["deploy"])
@@ -1319,13 +1322,13 @@ class WorkflowTests(unittest.TestCase):
     # sha256 of its exact script. A new or moved step, or any edit to one of these scripts, fails here until it
     # is reviewed for writes (fail closed), whatever it calls.
     DRY_RUN_REACHABLE_RUN_STEPS = {
-        ("deploy", 0, "Validate Environment Input"): "acfe38168b5679eccd7f1529ea4a79de772ede5a255ae5eabaf22c9ab1b8bd6a",
+        ("deploy", 0, "Validate Environment Input"): "72be50fd7a2df45c8ed4d49faf9b1afba93ef11ea22ce103e2997db61ae78e3b",
         ("deploy", 1, "Delete huge unnecessary tools folder"): "5a5faacb04df5aab268eb9209ca091013f37c875222610c5a0ddd92bbd270e8a",
         ("deploy", 3, "Select merged production source and image tag"): "22f8a15c2be33be8006fc5a2a8d85f4365193ad0d5f53bcd858cb7567dae70a5",
         ("deploy", 7, "Resolve deployment target"): "70e03ebe8dfbbf768522c6bc295b2c93c160c8e9346d29e3946a3afe55df14b5",
-        ("deploy", 11, None): "b887a196f21fac03886c7dfbfae52c6b842028be839d6f96d5f07d74ba87c79c",  # gcloud auth configure-docker
-        ("deploy", 13, "Verify promoted worker digest"): "cdc8a53e12e5dc8956abc88a2c11185c6a908728d7bb8a8965d018a6d3d536d1",
-        ("deploy", 16, "Dry-run worker image preserving live runtime"): "344ade981770f2dbfb00d02bca7c30a8cf24000b144de5410256f0ac44f5a40e",
+        ("deploy", 11, None): "37e80faecb6c46539e3d79a02169716302de6d9ec0e83e2b7ad178fbf2a580ad",  # gcloud auth configure-docker
+        ("deploy", 13, "Verify promoted worker digest"): "b785655ffe66200fcb07ff9ae3cb1b59712edc7ff104cc875077996818b43f65",
+        ("deploy", 18, "Dry-run worker image preserving live runtime"): "344ade981770f2dbfb00d02bca7c30a8cf24000b144de5410256f0ac44f5a40e",
     }
 
     @staticmethod
@@ -1368,8 +1371,8 @@ class WorkflowTests(unittest.TestCase):
         ("deploy", 9, "google-github-actions/auth@v3"): "6fc980f3f5bfc28ac2316bf7d0b0a8d3742dcb06f095984d3b19f5db6849f6b4",
         ("deploy", 10, "google-github-actions/setup-gcloud@v3"): "81788bbf5c63a19208a6c40180026073562ec37f254843f07dfeae9348f616c9",
         ("deploy", 14, "google-github-actions/get-gke-credentials@v3"): "45f3c39c6de870255d441dea6ea993c5cceb60a5c0b034d9d3563ec03f331090",
-        ("deploy", 20, "BasedHardware/omi/.github/actions/deployment-summary@979b573718fd74b31edab3530adf2ed6082622dc"): "4cd14521853a508ad41a70b493185a7088ac3d4ecb72865472d638d12ede1a3c",
-        ("deploy", 21, "BasedHardware/omi/.github/actions/deployment-notifier@979b573718fd74b31edab3530adf2ed6082622dc"): "5ccc2df60e2e5e011fbd5aa099e2cf1ece1803a96706acce85599e596c935609",
+        ("deploy", 22, "BasedHardware/omi/.github/actions/deployment-summary@979b573718fd74b31edab3530adf2ed6082622dc"): "c257060cea729ac65883e35ee3b6903cac984e060e3fdc1dbf89194ad3e89c76",
+        ("deploy", 23, "BasedHardware/omi/.github/actions/deployment-notifier@979b573718fd74b31edab3530adf2ed6082622dc"): "06ded6f4ab1d55dfa518648cb4d7bb066492375329d6b87b320750b4f8fa8276",
     }
 
     @staticmethod
@@ -1473,7 +1476,7 @@ class WorkflowTests(unittest.TestCase):
             self.assertLess(names.index(gate), names.index(step["name"]))
         self.assertNotIn("continue-on-error", step)
 
-    INPUTS_DIGEST = "dadaf25a68f829315917b6df7ce00546bbd752e7900df5aced1ea20c5b99e701"
+    INPUTS_DIGEST = "03239026b4b53b9df4c367f6adc2265fbab28a33f7eebc196e2dc60a885fd4d4"
 
     def test_registry_read_reachable_in_dry_run_is_time_bounded(self):
         # The mode holds prod-train; a hung registry read must not hold it for the whole job cap.
@@ -1484,7 +1487,8 @@ class WorkflowTests(unittest.TestCase):
         inputs = self.workflow[True]["workflow_dispatch"]["inputs"] if True in self.workflow else self.workflow["on"]["workflow_dispatch"]["inputs"]
         self.assertEqual(inputs["worker_dry_run"]["type"], "boolean")
         self.assertFalse(inputs["worker_dry_run"]["default"])
-        self.assertLessEqual(len(inputs), 10)  # GitHub's workflow_dispatch input limit
+        # https://docs.github.com/en/actions/reference/workflows-and-actions/workflow-syntax#onworkflow_dispatchinputs
+        self.assertLessEqual(len(inputs), 25)  # GitHub.com workflow_dispatch input limit
         # Every input's declaration (type, default, required, options) is reviewed with this mode.
         self.assertEqual(hashlib.sha256(json.dumps(inputs, sort_keys=True).encode()).hexdigest(), self.INPUTS_DIGEST)
         step = self.step("Validate Environment Input")

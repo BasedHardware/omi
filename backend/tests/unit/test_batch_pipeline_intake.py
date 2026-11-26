@@ -2,6 +2,7 @@
 
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import replace
+from datetime import datetime, timezone
 
 import pytest
 
@@ -213,16 +214,61 @@ def test_lost_admission_ack_retries_without_duplicate_queue_or_binding(cohort):
     assert sum(table == 'jobs' for table, _ in store.rows) == 1
 
 
+def test_state_only_poll_skips_privacy_but_upload_and_rollback_keep_it(cohort, monkeypatch):
+    from fastapi import HTTPException
+    from database.batch_pipeline_privacy import BatchPrivacyBlocked
+    from tests.unit.test_batch_pipeline_scheduler import MemoryTransaction
+
+    store = MemoryStore()
+    submit(store, *proposal())
+
+    def reject(*args, **kwargs):
+        raise BatchPrivacyBlocked('account_deleted')
+
+    monkeypatch.setattr(MemoryTransaction, 'check_privacy', reject)
+    answer = durable_status(store, 'synthetic-owner', 'bp_first', poll=True)
+    assert answer['status'] == 'queued' and answer['result'] is None
+    with pytest.raises(HTTPException) as foreign_owner:
+        durable_status(store, 'other-owner', 'bp_first', poll=True)
+    assert foreign_owner.value.status_code == 403
+    with pytest.raises(BatchPrivacyBlocked, match='account_deleted'):
+        durable_status(store, 'synthetic-owner', 'bp_first')
+    monkeypatch.setenv('FIRESTORE_READ_LEVERS', '{"bpp_status_skip":0}')
+    with pytest.raises(BatchPrivacyBlocked, match='account_deleted'):
+        durable_status(store, 'synthetic-owner', 'bp_first', poll=True)
+
+
+def test_state_poll_keeps_fence_when_it_may_redrive(cohort, monkeypatch):
+    from database.batch_pipeline_privacy import BatchPrivacyBlocked
+    from tests.unit.test_batch_pipeline_scheduler import MemoryTransaction
+
+    store = MemoryStore()
+    submit(store, *proposal())
+    store.rows['jobs', 'segment'].update(state='dead', merge_pending=True)
+
+    def reject(*args, **kwargs):
+        raise BatchPrivacyBlocked('account_deleted')
+
+    monkeypatch.setattr(MemoryTransaction, 'check_privacy', reject)
+    with pytest.raises(BatchPrivacyBlocked, match='account_deleted'):
+        durable_status(store, 'synthetic-owner', 'bp_first', poll=True)
+    assert store.rows['jobs', 'segment']['state'] == 'dead'
+
+
 def test_status_is_durable_and_completed_result_is_authoritative(cohort):
     store = MemoryStore()
     submit(store, *proposal())
     assert durable_status(store, 'synthetic-owner', 'bp_first')['status'] == 'queued'
     ledger = store.rows['content', 'synthetic-owner/content']
+    completed_at = datetime(2026, 11, 22, 1, 0, tzinfo=timezone.utc)
     ledger.update(
         status='completed',
+        completed_at=completed_at,
         result={'new_memories': [], 'updated_memories': [], 'failed_segments': 0, 'total_segments': 1, 'errors': []},
     )
-    assert durable_status(store, 'synthetic-owner', 'bp_first')['status'] == 'completed'
+    status = durable_status(store, 'synthetic-owner', 'bp_first')
+    assert status['status'] == 'completed'
+    assert status['completed_at'] == completed_at
     with pytest.raises(Exception) as error:
         durable_status(store, 'foreign-owner', 'bp_first')
     assert error.value.status_code == 403
@@ -563,7 +609,7 @@ def test_other_privacy_denials_still_raise(cohort, monkeypatch, reason):
     }
     deleting_privacy(monkeypatch, reason)
     with pytest.raises(BatchPrivacyBlocked):
-        durable_status(store, 'synthetic-owner', 'bp_cached')
+        durable_status(store, 'synthetic-owner', 'bp_cached', poll=True)
 
 
 def test_deletion_beside_another_denial_never_acks(cohort, monkeypatch):

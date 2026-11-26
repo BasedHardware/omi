@@ -656,6 +656,9 @@ class Wal {
   /// A replayed journal is recoverable audio, not yet a persisted index row.
   bool recoveredBatchJournal = false;
 
+  /// A prior process durably held this file. Upload telemetry only.
+  bool recoveredMobileBatchHold = false;
+
   // Ring download coordinates commit atomically with the WAL index. They are
   // independent of transient BLE epochs and survive a crash before custody save.
   int? _downloadRingId;
@@ -682,6 +685,14 @@ class Wal {
     _changed();
   }
 
+  String? _liveFileWriteId;
+  String? get liveFileWriteId => _liveFileWriteId;
+  set liveFileWriteId(String? value) {
+    if (_liveFileWriteId == value) return;
+    _liveFileWriteId = value;
+    _changed();
+  }
+
   /// SHA-256 of the immutable fsynced file, using the upload manifest digest.
   /// Absent on legacy indexes: they cannot supply pendant reclaim authority.
   String? _fileSha256;
@@ -689,6 +700,15 @@ class Wal {
   set fileSha256(String? value) {
     if (_fileSha256 == value) return;
     _fileSha256 = value;
+    _changed();
+  }
+
+  // Measurement only. A recovered WAL remains immediately eligible to upload.
+  ({int sealedAtMs, String state})? _mobileBatchHold;
+  ({int sealedAtMs, String state})? get mobileBatchHold => _mobileBatchHold;
+  set mobileBatchHold(({int sealedAtMs, String state})? value) {
+    if (_mobileBatchHold == value) return;
+    _mobileBatchHold = value;
     _changed();
   }
 
@@ -1016,6 +1036,8 @@ class Wal {
     int? downloadSeqEnd,
     int? downloadFileBytes,
     String? fileSha256,
+    ({int sealedAtMs, String state})? mobileBatchHold,
+    String? liveFileWriteId,
     Geolocation? geolocation,
     int retryCount = 0,
     int lastRetryAt = 0,
@@ -1069,6 +1091,8 @@ class Wal {
         _downloadSeqEnd = downloadSeqEnd,
         _downloadFileBytes = downloadFileBytes,
         _fileSha256 = fileSha256,
+        _mobileBatchHold = mobileBatchHold,
+        _liveFileWriteId = liveFileWriteId,
         _geolocation = geolocation,
         _retryCount = retryCount,
         _lastRetryAt = lastRetryAt,
@@ -1133,6 +1157,11 @@ class Wal {
       downloadSeqEnd: json['download_seq_end'],
       downloadFileBytes: json['download_file_bytes'],
       fileSha256: json['file_sha256'],
+      mobileBatchHold: switch ((json['mobile_batch_hold_sealed_at_ms'], json['mobile_batch_hold_state'])) {
+        (final int sealedAtMs, final String state) => (sealedAtMs: sealedAtMs, state: state),
+        _ => null,
+      },
+      liveFileWriteId: json['live_file_write_id'],
       geolocation: json['geolocation'] is Map<String, dynamic>
           ? Geolocation.fromJson(json['geolocation'] as Map<String, dynamic>)
           : null,
@@ -1199,6 +1228,11 @@ class Wal {
       if (downloadSeqEnd != null) 'download_seq_end': downloadSeqEnd,
       if (downloadFileBytes != null) 'download_file_bytes': downloadFileBytes,
       if (fileSha256 != null) 'file_sha256': fileSha256,
+      if (mobileBatchHold case final hold?) ...{
+        'mobile_batch_hold_sealed_at_ms': hold.sealedAtMs,
+        'mobile_batch_hold_state': hold.state,
+      },
+      if (liveFileWriteId != null) 'live_file_write_id': liveFileWriteId,
       'geolocation': geolocation?.toJson(),
       'retry_count': retryCount,
       'last_retry_at': lastRetryAt,
@@ -1268,6 +1302,8 @@ class Wal {
     h = _mixFingerprint(h, downloadSeqEnd ?? -1);
     h = _mixFingerprint(h, downloadFileBytes ?? -1);
     h = _mixFingerprint(h, fileSha256?.hashCode ?? 0);
+    if (mobileBatchHold case final hold?) h = _mixFingerprint(h, hold.hashCode);
+    h = _mixFingerprint(h, liveFileWriteId?.hashCode ?? 0);
     h = _mixFingerprint(h, identityHashCode(geolocation));
     h = _mixFingerprint(h, retryCount);
     h = _mixFingerprint(h, lastRetryAt);

@@ -3,11 +3,13 @@
 import asyncio
 import json
 from types import SimpleNamespace
+from unittest.mock import AsyncMock
 
 import pytest
 
 from routers.listen.receiver import ListenReceiver
 from utils.product_telemetry import set_product_telemetry_client_for_tests
+from utils.sync.live_cap_capacity import StorageQuotaExceeded
 
 
 @pytest.fixture
@@ -253,3 +255,50 @@ async def test_archive_wait_starts_after_transcript_drain(monkeypatch):
     finally:
         release_archive.set()
         await asyncio.wait_for(task, timeout=1)
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize('refusal_during_receive', [False, True])
+async def test_storage_quota_refusal_does_not_escape_shutdown(monkeypatch, caplog, refusal_during_receive):
+    message = {'text': 'synthetic'} if refusal_during_receive else {'type': 'websocket.disconnect', 'code': 1000}
+    state = SimpleNamespace(active=True, close_code=1001, stt_terminal_failure=False)
+    tasks = {}
+
+    def spawn(coro, name):
+        task = asyncio.create_task(coro, name=name)
+        tasks[name] = task
+        return task
+
+    host = SimpleNamespace(
+        request=SimpleNamespace(
+            websocket=_FramesWebSocket([message]),
+            uid='synthetic',
+            codec='pcm16',
+            owner_persistence_blocked=asyncio.Event(),
+        ),
+        state=state,
+        limits=SimpleNamespace(ws_receive_timeout=1.0),
+        is_multi_channel=False,
+        use_custom_stt=False,
+        audio_bytes_send=None,
+        start_live_transcription=lambda: None,
+        spawn=spawn,
+    )
+    receiver = ListenReceiver(host, [], {})
+    receiver.recovery = SimpleNamespace(mark_client_leaving=lambda: None)
+    quota = StorageQuotaExceeded('synthetic quota refusal')
+    monkeypatch.setattr(receiver, '_handle_text', AsyncMock(side_effect=quota))
+    monkeypatch.setattr(receiver, '_flush_stt_buffer', AsyncMock(side_effect=quota))
+    drain = AsyncMock()
+    archive_close = AsyncMock()
+    monkeypatch.setattr(receiver, '_drain_stt_sockets', drain)
+    monkeypatch.setattr(receiver.raw_archive, 'close', archive_close)
+
+    await receiver.receive_data()
+
+    assert tasks['stt_shutdown'].exception() is None
+    drain.assert_awaited_once()
+    archive_close.assert_awaited_once()
+    assert receiver.stt_drain_complete.is_set()
+    assert not state.active and state.close_code == 1011
+    assert 'Listen receive failure' not in caplog.text

@@ -10,6 +10,7 @@ region: us-central1
 
 cloud_run:
   backend-staging:
+    memory: 4Gi
     env:
       # live-only on prod, 2026-10-20 inventory (see prod.yaml)
       AUDIO_MERGE_DISPATCH_MODE: cloud_tasks
@@ -25,6 +26,7 @@ cloud_run:
       OMI_LANGSMITH_PROMPT_CACHE_TTL_SECONDS: '3600'
       TYPESENSE_HOST_PORT: '443'
   backend-sync-staging:
+    memory: 6Gi
     env:
       SYNC_TASKS_QUEUE: staging-sync-jobs-fresh
       SYNC_BACKFILL_TASKS_QUEUE: staging-sync-backfill-fresh
@@ -133,7 +135,7 @@ cloud_tasks:
     min_backoff: 10s
     max_backoff: 300s
   staging-provider-stt:
-    # Mirrors prod's provider-stt queue; create_queues.sh made it at 16/5 and the config-train raises it.
+    # Staging keeps its lower dispatch capacity (SCA-3552).
     max_concurrent_dispatches: 48
     max_dispatches_per_second: 10
     max_attempts: -1

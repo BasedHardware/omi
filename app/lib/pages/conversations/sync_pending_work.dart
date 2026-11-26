@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import 'package:provider/provider.dart';
@@ -10,6 +12,7 @@ import 'package:omi/pages/conversations/sync_cooldown_copy.dart';
 import 'package:omi/pages/conversations/sync_page.dart';
 import 'package:omi/providers/device_provider.dart';
 import 'package:omi/providers/sync_provider.dart';
+import 'package:omi/services/devices/connectors/device_connection.dart';
 import 'package:omi/services/wals/sync_rate_limiter.dart' show RateLimitReason;
 import 'package:omi/services/wals/wal.dart';
 import 'package:omi/services/wals/wal_derived_views.dart';
@@ -128,8 +131,38 @@ abstract final class SyncPendingWork {
   }
 }
 
-/// Opens the Offline Sync page the device settings open, behind the same gate:
-/// work that lives on a storage-less pendant has no Offline Sync screen.
+/// Both device entry points use the current link's storage check.
+Future<void> openDeviceOfflineSync(
+  BuildContext context,
+  DeviceProvider device, {
+  bool? multiFileSync,
+}) async {
+  while (true) {
+    if (!context.mounted) return;
+    if (ModalRoute.isCurrentOf(context) == false) return;
+    if (device.connectedDevice == null) {
+      OmiFeedback.info(context, context.l10n.connectDeviceForOfflineSync);
+      return;
+    }
+    final l = context.l10n;
+    switch (device.offlineStorageCapability) {
+      case OfflineStorageCapability.supported:
+        final multi = multiFileSync ?? device.supportsMultiFileSync;
+        routeToPage(context, multi ? const AutoSyncPage() : const SyncPage());
+        return;
+      case OfflineStorageCapability.unsupported:
+        await showOmiAlert(context, title: l.v2Undetected, message: l.v2UndetectedMessage);
+        return;
+      case OfflineStorageCapability.unverified:
+        final retry =
+            await showOmiConfirm(context, title: l.activityAttentionStorageUnknownTitle, confirmLabel: l.retry);
+        if (!retry || !context.mounted) return;
+        await device.refreshOfflineStorageCapability();
+    }
+  }
+}
+
+/// Opens Offline Sync from Pending or Activity.
 ///
 /// [phoneLocal] bypasses that gate for the Activity page's capture rows: a
 /// phone-local problem (full phone disk, stalled phone upload) must reach the
@@ -139,10 +172,10 @@ abstract final class SyncPendingWork {
 void openOfflineSyncDetails(BuildContext context, SyncProvider p, {bool? multiFileSync, bool phoneLocal = false}) {
   final hidden = SyncPendingWork.hiddenDeviceTwinIds(p.allWals);
   final hasDeviceWork = p.allWals.any((w) => w.status == WalStatus.miss && walIsOnDevice(w) && !hidden.contains(w.id));
-  if (!phoneLocal && hasDeviceWork && !context.read<DeviceProvider>().isDeviceStorageSupport) {
-    showOmiAlert(context, title: context.l10n.v2Undetected, message: context.l10n.v2UndetectedMessage);
+  final multi = multiFileSync ?? SharedPreferencesUtil().deviceSupportsMultiFileSync;
+  if (!phoneLocal && hasDeviceWork) {
+    unawaited(openDeviceOfflineSync(context, context.read<DeviceProvider>(), multiFileSync: multi));
     return;
   }
-  final multi = multiFileSync ?? SharedPreferencesUtil().deviceSupportsMultiFileSync;
   routeToPage(context, multi ? const AutoSyncPage() : const SyncPage());
 }

@@ -218,3 +218,49 @@ def test_review_resolve_route_maps_takeover_to_409(monkeypatch):
     assert response.status_code == 409
     assert response.json() == {"detail": "account_gate_busy"}
     assert response.headers["Retry-After"] == "2"
+
+
+@pytest.mark.parametrize(
+    "error_type", [DestructiveGateTakeover, DestructiveOperationInProgress, LegalHoldAuthorityUnavailable]
+)
+def test_conversation_assign_speaker_route_maps_destructive_gate_to_409(monkeypatch, conversation_routes, error_type):
+    """A manual speaker assignment blocked by the account fence is retryable, not a 500 (SCA-4074)."""
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+
+    def blocked(*args, **kwargs):
+        raise error_type("external data write blocked by destructive operation")
+
+    monkeypatch.setattr(conversation_routes, "commit_manual_assignment", blocked)
+    app = FastAPI()
+    app.include_router(conversation_routes.router)
+    app.dependency_overrides[conversation_routes.auth.get_current_user_uid] = lambda: "uid"
+    response = TestClient(app).patch(
+        "/v1/conversations/conv/assign-speaker/3",
+        params={"assign_type": "is_user", "value": "true"},
+    )
+    assert response.status_code == 409
+    assert response.json() == {"detail": ACCOUNT_GATE_BUSY_DETAIL}
+    assert response.headers["Retry-After"] == str(ACCOUNT_GATE_BUSY_RETRY_AFTER_SECONDS)
+
+
+def test_review_answer_route_maps_destructive_gate_to_409(monkeypatch):
+    """A Review speaker answer applies an assignment through the same fence."""
+    from unittest.mock import MagicMock
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+
+    from routers import review as review_routes
+
+    monkeypatch.setenv("REVIEW_SURFACE_MODE", "on")
+    blocked = MagicMock(
+        side_effect=DestructiveOperationInProgress("external data write blocked by destructive operation")
+    )
+    monkeypatch.setattr(review_routes.review, "answer_item", blocked)
+    app = FastAPI()
+    app.include_router(review_routes.router)
+    app.dependency_overrides[review_routes.auth.get_current_user_uid] = lambda: "uid"
+    response = TestClient(app).post("/v2/review/items/same_person:toy/answer", json={"not_sure": True})
+    assert response.status_code == 409
+    assert response.json() == {"detail": ACCOUNT_GATE_BUSY_DETAIL}
+    assert response.headers["Retry-After"] == str(ACCOUNT_GATE_BUSY_RETRY_AFTER_SECONDS)

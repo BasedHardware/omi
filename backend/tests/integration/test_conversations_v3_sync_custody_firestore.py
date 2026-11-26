@@ -1,17 +1,32 @@
 """Emulator tests for Firestore revisions and rollback across V3 and sync writers."""
 
+import hashlib
+import json
 import os
 from copy import deepcopy
 from datetime import datetime, timedelta, timezone
 from uuid import uuid4
+from unittest.mock import AsyncMock
 
+from fastapi import FastAPI
+from google.api_core.exceptions import Aborted, InvalidArgument
 from google.auth.credentials import AnonymousCredentials
 from google.cloud import firestore
+from google.cloud.firestore_v1.types import BeginTransactionRequest
+import httpx
 import pytest
 
+from database import conversations as db
 from database import conversations_v3 as v3, conversations_v3_leases as leases
+from database import conversations_v3_fence as fence, conversations_v3_processing as writers
+from database._client import in_transaction_body
+from database.conversations_v3_fence import PersistenceDecline, ProcessingPersistenceFenced
 from database.conversations_v3_sync_repair import repair
-from utils.conversations.v3 import Conflict
+from models.finalization_owner import ENGINE_FIELD, EPOCH_FIELD
+from routers import conversations_v3_tasks as route
+from utils.conversations import process_conversation
+from utils.conversations.v3 import Conflict, created, metrics, service
+from utils.other import object_lake
 from utils.sync.assignment import assign_in_transaction
 
 
@@ -148,3 +163,303 @@ def test_historical_repair_preview_retry_rollback_and_races(owner):
     user.collection('deleted_conversations').document('card').set({'conversation_id': 'card'})
     assert run('rollback', receipt) == {'outcome': 'skipped', 'reason': 'tombstoned'}
     assert early.get().to_dict()['claims'] == claims
+
+
+@pytest.mark.parametrize('failure', ['expired_read', 'aborted_commit'])
+def test_projection_restarts_with_fresh_transaction(owner, monkeypatch, failure):
+
+    client, user, coll = owner
+    seed(owner)
+    token = leases.acquire(user.id, 'builder', firestore_client=client)
+    source_snapshot = coll.document('early').get()
+    recording = v3.recording_input(user.id, source_snapshot)
+    api = client._firestore_api
+    original_begin = api.begin_transaction
+    began = []
+    retry_ids = []
+
+    def begin(*args, **kwargs):
+        request = BeginTransactionRequest(kwargs['request'])
+        retry_ids.append(request.options.read_write.retry_transaction)
+        result = original_begin(*args, **kwargs)
+        began.append(result.transaction)
+        return result
+
+    monkeypatch.setattr(api, 'begin_transaction', begin)
+    method = 'batch_get_documents' if failure == 'expired_read' else 'commit'
+    original = getattr(api, method)
+
+    def fail_once(*args, **kwargs):
+        if len(began) == 1:
+            if failure == 'expired_read':
+                raise InvalidArgument('The referenced transaction has expired or is no longer valid')
+            raise Aborted('cross-transaction contention')
+        return original(*args, **kwargs)
+
+    monkeypatch.setattr(api, method, fail_once)
+    original_rollback = api.rollback
+
+    def rollback(*args, **kwargs):
+        original_rollback(*args, **kwargs)
+        raise InvalidArgument('The referenced transaction has expired or is no longer valid')
+
+    monkeypatch.setattr(api, 'rollback', rollback)
+    assert v3.commit_projection(user.id, token, {'early': recording}, {}, [], [], firestore_client=client) == set()
+    assert len(began) == 2 and began[0] != began[1]
+    assert retry_ids == [b'', b'']
+    assert coll.document('early').get().to_dict()['v3_pending'] is False
+
+
+def test_projection_splits_33_pointer_backed_rows(owner, monkeypatch):
+    client, user, coll = owner
+    begin, _ = seed(owner)
+    source_ref = coll.document('early')
+    source_ref.update({'v3_pending': True})
+    recording = v3.recording_input(user.id, source_ref.get())
+    token = leases.acquire(user.id, 'builder', firestore_client=client)
+    rows = [
+        {
+            'id': f'derived-{index}',
+            'status': 'completed',
+            'started_at': begin,
+            'finished_at': begin + timedelta(seconds=20),
+            'v3_recording_ids': ['early'],
+            'transcript_segments': recording['transcript_segments'],
+        }
+        for index in range(33)
+    ]
+    bucket = 'test-transcript-lake'
+    monkeypatch.setenv('BUCKET_OBJECT_LAKE', bucket)
+    monkeypatch.setenv('OBJECT_LAKE_READ_ENABLED', 'true')
+    blob = json.dumps(recording['transcript_segments']).encode()
+    digest = hashlib.sha256(blob).hexdigest()
+    reads = []
+
+    def encode(row, uid, *_args, **_kwargs):
+        ref = object_lake.LakeObjectRef(
+            bucket, f'v1/spaces/{uid}/transcript/{row["id"]}/{digest}', digest, len(blob) + 64, 'transcript', 1
+        )
+        return {**row, 'transcript_segments': ref.to_pointer_dict(), 'transcript_segments_compressed': True}
+
+    def read(ref):
+        assert not in_transaction_body()
+        reads.append(ref.key)
+        return blob
+
+    monkeypatch.setattr(v3.conversations, '_prepare_conversation_for_write', encode)
+    monkeypatch.setattr(object_lake, 'get_space_object', read)
+    assert v3.commit_projection(user.id, token, {'early': recording}, {}, rows, [], firestore_client=client) == set()
+    assert len(reads) == len(set(reads)) == 33
+    stored = source_ref.get().to_dict()
+    assert stored['v3_pending'] is False
+    assert {claim['conversation_id'] for claim in stored['claims']} == {row['id'] for row in rows}
+    assert all(isinstance(coll.document(row['id']).get().get('transcript_segments'), dict) for row in rows)
+
+
+@pytest.fixture
+def processing_store(owner, monkeypatch):
+
+    client, user, coll = owner
+    monkeypatch.setattr(db, 'db', client)
+    monkeypatch.setattr(v3, 'get_firestore_client', lambda: client)
+    monkeypatch.setattr(leases, 'get_firestore_client', lambda: client)
+    for name in (
+        'stop_quiet_check_for_conversation',
+        '_sync_conversation_search_index',
+        '_delete_conversation_search_index',
+    ):
+        monkeypatch.setattr(db, name, lambda *a, **kw: None)
+    return db, user, coll
+
+
+@pytest.mark.parametrize('decline', ['lease', 'revision', 'deleted', 'missing', 'foreign_owner', 'capture_group'])
+def test_v3_processing_persist_distinguishes_retryable_and_terminal_declines(processing_store, decline):
+
+    db, user, coll = processing_store
+    cid = 'capture'
+    token = leases.acquire(user.id, 'summary-' + cid)
+    stored = {'status': 'processing', 'sync_content_revision': 2}
+    if decline == 'deleted':
+        stored['deleted'] = True
+    if decline == 'foreign_owner':
+        stored.update({ENGINE_FIELD: 'go', EPOCH_FIELD: 1})
+    if decline != 'missing':
+        coll.document(cid).set(stored)
+    before = coll.document(cid).get().to_dict()
+    kwargs = {'expected_capture_group': ('missing-group', 1)} if decline == 'capture_group' else {}
+    payload = {
+        'id': cid,
+        'status': 'completed',
+        'data_protection_level': 'standard',
+        'sync_content_revision': 1,
+    }
+    # Outside the v3 context, the stale revision or terminal refusal remains False.
+    assert db.persist_processing_result_with_lifecycle(user.id, dict(payload), **kwargs) is False
+    with fence.writer(user.id, cid, 'replaced-token' if decline == 'lease' else token):
+        if decline in {'lease', 'revision'}:
+            with pytest.raises(ProcessingPersistenceFenced, match='v3_processing_not_completed'):
+                db.persist_processing_result_with_lifecycle(user.id, dict(payload), **kwargs)
+        else:
+            assert db.persist_processing_result_with_lifecycle(user.id, dict(payload), **kwargs) is False
+            assert fence.persistence_declined()
+    assert not fence.persistence_declined()
+    assert coll.document(cid).get().to_dict() == before
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    'outcome', ['stale_revision', 'deleted', 'capture_group', 'transient', 'nested_other', 'nested_same']
+)
+async def test_reconcile_route_uses_real_processing_persistence_outcome(processing_store, monkeypatch, outcome):
+    db, user, coll = processing_store
+    now = datetime.now(timezone.utc)
+    row = {
+        'id': 'capture',
+        'created_at': now,
+        'started_at': now,
+        'finished_at': now,
+        'status': 'processing',
+        'sync_content_revision': 1,
+        'v3_derived': True,
+        'manual_end': True,
+        'structured': {},
+        'v3_process_pending': True,
+    }
+    stored = {
+        **row,
+        'sync_content_revision': 2 if outcome in {'stale_revision', 'deleted'} else 1,
+        'deleted': outcome == 'deleted',
+    }
+    coll.document(row['id']).set(stored)
+    before_row = coll.document(row['id']).get().to_dict()
+    if outcome == 'nested_other':
+        coll.document('deleted-primary').set({'deleted': True, 'sync_content_revision': 1})
+    if outcome.startswith('nested_'):
+        # This test exercises persistence and notes settlement without ledger fanout.
+        monkeypatch.setattr(db.pipeline_ledger, 'record_summary', lambda *a, **kw: None)
+        monkeypatch.setattr(db, 'invalidate_people_stats_cache', lambda *_: None)
+    monkeypatch.setattr(v3, 'backoff_state', lambda *_: (None, None))
+    monkeypatch.setattr(v3, 'load', lambda *_: ({}, {}, []))
+    monkeypatch.setattr(service.context, 'outline_sources', lambda *_: ({}, [], []))
+    monkeypatch.setattr(service, '_commit', lambda *a, **kw: set())
+    original_pending_processing = service.pending_processing
+    monkeypatch.setattr(service, 'pending_processing', lambda *_: [row])
+    if outcome == 'transient':
+        monkeypatch.setattr(db, '_batch_identity_membership_current', lambda *_: False)
+    monkeypatch.setattr(service, 'has_pending', lambda *_: False)
+    original_begin_processing = service.writers.begin_processing
+    monkeypatch.setattr(service.writers, 'begin_processing', lambda *_, **__: True)
+    monkeypatch.setattr(created, 'deliver', AsyncMock())
+
+    def persist(_uid, _language, conversation, *, persistence_observer, **_kwargs):
+        payload = {**row, 'status': 'completed', 'data_protection_level': 'standard'}
+        kwargs = {'expected_capture_group': ('old-group', 1)} if outcome == 'capture_group' else {}
+        persistence_observer(db.persist_processing_result_with_lifecycle(user.id, payload, **kwargs))
+        if outcome.startswith('nested_'):
+            # After the outer persist, report_persistence can dispatch a primary
+            # refresh synchronously, including one for the same conversation.
+            nested = {**payload, 'id': 'deleted-primary' if outcome == 'nested_other' else row['id']}
+            assert not db.persist_processing_result_with_lifecycle(
+                user.id, nested, expected_capture_group=('old-group', 1) if outcome == 'nested_same' else None
+            )
+        return conversation.model_copy(update={'status': 'completed'})
+
+    monkeypatch.setattr(process_conversation, 'process_conversation', persist)
+    app = FastAPI()
+    app.include_router(route.router)
+    app.dependency_overrides[route.verify_cloud_tasks_oidc] = lambda: 0
+    counter = metrics.RACES.labels('v3_processing_not_completed')
+    before = counter._value.get()
+    skipped_reason = 'capture_group_changed' if outcome == 'capture_group' else 'deleted'
+    skipped = metrics.RECONCILES.labels('processing_skipped_' + skipped_reason)
+    skipped_before = skipped._value.get()
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url='http://test') as client:
+        response = await client.post('/v1/conversations-v3/reconcile', json={'uid': user.id})
+
+    if outcome == 'stale_revision':
+        assert response.status_code == 409 and response.json() == {'status': 'retry', 'reason': 'persistence_fenced'}
+        assert coll.document(row['id']).get().to_dict() == before_row
+    else:
+        assert response.status_code == 200 and response.json() == {'outcome': 'committed'}
+        after_row = coll.document(row['id']).get().to_dict()
+        assert after_row['v3_process_pending'] is (outcome == 'transient')
+        assert original_pending_processing(user.id) == []
+        if outcome.startswith('nested_'):
+            assert after_row['v3_notes_written'] is True
+            assert after_row['v3_created_pending'] is True
+            assert after_row['v3_process_failed'] is False
+            created.deliver.assert_awaited_once_with(user.id)
+        if outcome == 'transient':
+            assert after_row['v3_process_retry_after'] > datetime.now(timezone.utc)
+        enqueued = []
+        monkeypatch.setattr(service, 'enqueue', enqueued.append)
+        await service.sweep()
+        assert user.id not in enqueued
+        if outcome == 'transient':
+            token = leases.acquire(user.id, 'summary-capture')
+            assert token is not None
+            assert not original_begin_processing(user.id, row, token)
+            leases.release(user.id, 'summary-capture', token)
+            coll.document(row['id']).update({'v3_process_retry_after': now - timedelta(seconds=1)})
+            await service.sweep()
+            assert enqueued == [user.id]
+    assert counter._value.get() == before + (outcome == 'stale_revision')
+    assert skipped._value.get() == skipped_before + (outcome in {'deleted', 'capture_group'})
+    assert not leases.held(user.id, 'summary-capture')
+
+
+def test_decline_cannot_settle_replacement_obligation(processing_store):
+
+    _, user, coll = processing_store
+    ref = coll.document('capture')
+    ref.set({'sync_content_revision': 1, 'v3_process_pending': True, 'tile_state': 'writing'})
+    old = ref.get()
+    token = leases.acquire(user.id, 'summary-capture')
+    ref.update({'tile_state': 'queued'})
+    writers.settle_processing(
+        user.id,
+        'capture',
+        token,
+        1,
+        None,
+        skipped=True,
+        decline=PersistenceDecline('capture_group_changed', old.update_time),
+    )
+    assert ref.get().get('v3_process_pending') is True
+    assert ref.get().get('tile_state') == 'queued'
+
+
+@pytest.mark.parametrize('cooling_pages', [1, service.PROCESSING_SCAN_MAX_PAGES])
+def test_pending_processing_pages_past_cooldown_within_read_budget(processing_store, monkeypatch, cooling_pages):
+    db, user, coll = processing_store
+    now = datetime.now(timezone.utc)
+    for page in range(cooling_pages):
+        batch = db.db.batch()
+        for offset in range(v3.LIMIT):
+            cid = f'a-{page:02d}-{offset:03d}'
+            batch.set(
+                coll.document(cid),
+                {'v3_process_pending': True, 'v3_process_retry_after': now + timedelta(minutes=15)},
+            )
+        batch.commit()
+    coll.document('z-due').set({'v3_process_pending': True})
+    query_class = type(coll.limit(1))
+    original_stream = query_class.stream
+    reads = []
+
+    def count_reads(query, *args, **kwargs):
+        for snapshot in original_stream(query, *args, **kwargs):
+            reads.append(snapshot.id)
+            yield snapshot
+
+    monkeypatch.setattr(query_class, 'stream', count_reads)
+    monkeypatch.setattr(v3, 'decode_row', lambda _uid, doc, **_kw: doc.id)
+    due = service.pending_processing(user.id)
+
+    if cooling_pages == 1:
+        assert due == ['z-due']
+        assert len(reads) == v3.LIMIT + 1
+    else:
+        assert due == []
+        assert len(reads) == service.PROCESSING_SCAN_MAX_PAGES * v3.LIMIT
+    assert len(reads) == len(set(reads))

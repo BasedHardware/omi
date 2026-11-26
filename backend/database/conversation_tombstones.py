@@ -7,6 +7,7 @@ from typing import Any, Iterator, List, Optional, Tuple
 
 from google.api_core.exceptions import AlreadyExists, NotFound
 
+from config.parked_conversations import parked_terminal_status_enabled
 from database._client import db
 from database.fsr_read_cache import cache_writer
 from database import privacy_check_metrics as metrics
@@ -105,7 +106,8 @@ def accept_deletion(
 
     def body(transaction):
         row_snapshot = conversation_ref.get(
-            field_paths=['external_data', 'created_at', 'deleted', 'sync_merged_from'], transaction=transaction
+            field_paths=['external_data', 'created_at', 'deleted', 'sync_merged_from', 'status'],
+            transaction=transaction,
         )
         # If undo removed a row this request already observed, do not acknowledge a tombstone-only delete.
         if expected_exists and not row_snapshot.exists:
@@ -137,8 +139,12 @@ def accept_deletion(
             armed = existing.get('erasure_armed') is True or arm_erasure or prior_owed
             if existing.get('legal_hold_deferred') is not True or existing.get('erasure_armed') is not armed:
                 transaction.update(tombstone_ref, {'legal_hold_deferred': True, 'erasure_armed': armed})
-        if row_snapshot.exists and not row.get('deleted'):
-            transaction.update(conversation_ref, {'deleted': True})
+        if row_snapshot.exists:
+            updates: dict[str, str | bool] = {} if row.get('deleted') else {'deleted': True}
+            if row.get('status') == 'processing' and parked_terminal_status_enabled():
+                updates['status'] = 'completed'
+            if updates:
+                transaction.update(conversation_ref, updates)
         if owed is None:
             return
         owed_fields = accept_fields(uid, conversation_id, audio_source_ids=sources)

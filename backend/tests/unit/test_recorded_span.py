@@ -60,7 +60,6 @@ def test_boundary_modules_cannot_read_ambient_wall_clock():
     root = Path(__file__).resolve().parents[2]
     files = [
         'utils/episodes/boundaries.py',
-        'utils/episodes/boundary_runtime.py',
         'utils/episodes/policy.py',
         'utils/episodes/timeline.py',
         'utils/conversations/recorded_time.py',

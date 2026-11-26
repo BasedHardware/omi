@@ -36,7 +36,7 @@ class _Usage extends UsageProvider {
   int restores = 0;
 
   @override
-  Future<void> fetchSubscription() async {
+  Future<void> fetchSubscription({bool fresh = false}) async {
     restores++;
   }
 }

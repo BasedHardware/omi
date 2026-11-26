@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:connectivity_plus_platform_interface/connectivity_plus_platform_interface.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:omi/app_globals.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/services/services.dart';
 import 'package:flutter/material.dart';
@@ -24,8 +25,22 @@ class _Device extends ChangeNotifier implements DeviceProvider {
 
 class _Capture extends ChangeNotifier implements CaptureProvider {
   RecordingState state = RecordingState.stop;
+  Object? toggleError;
+  final toggles = <String>[];
   @override
   RecordingState get recordingState => state;
+  @override
+  Future<void> pauseCapture() async {
+    toggles.add('pause');
+    if (toggleError != null) throw toggleError!;
+  }
+
+  @override
+  Future<void> resumeCapture() async {
+    toggles.add('resume');
+    if (toggleError != null) throw toggleError!;
+  }
+
   @override
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }
@@ -38,8 +53,9 @@ class _Recordings implements LocalRecordingsProvider {
 class _QuickActions extends QuickActions {
   final publications = <List<ShortcutItem>>[];
   Completer<void>? nextCompletion;
+  QuickActionHandler? handler;
   @override
-  Future<void> initialize(QuickActionHandler handler) async {}
+  Future<void> initialize(QuickActionHandler handler) async => this.handler = handler;
   @override
   Future<void> setShortcutItems(List<ShortcutItem> items) {
     publications.add(items);
@@ -236,6 +252,48 @@ void main() {
     // The dedupe cache must still hold B's projection, not be rolled back to A.
     service.updateShortcuts(context);
     expect(native.publications, hasLength(3), reason: 'the superseding projection must keep deduping later updates');
+    await tester.pumpWidget(const SizedBox());
+    device.dispose();
+    capture.dispose();
+  });
+
+  testWidgets('a failed mute or unmute shortcut is reported as a non-fatal, not left uncaught', (tester) async {
+    final device = _Device()..connected = true;
+    final capture = _Capture()..toggleError = StateError('Unable to confirm device mute capabilities');
+    final native = _QuickActions();
+    final reports = <(Object, Map<String, String>)>[];
+    final service = QuickActionsService.forTesting(
+      quickActions: native,
+      reportNonFatal: (error, stack, {userAttributes = const {}}) async => reports.add((error, userAttributes)),
+    );
+    late BuildContext context;
+    await tester.pumpWidget(MultiProvider(
+      providers: [
+        ChangeNotifierProvider<DeviceProvider>.value(value: device),
+        ChangeNotifierProvider<CaptureProvider>.value(value: capture),
+      ],
+      child: MaterialApp(
+        navigatorKey: globalNavigatorKey,
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        home: Builder(builder: (ctx) {
+          context = ctx;
+          return const SizedBox();
+        }),
+      ),
+    ));
+    service.initialize(context);
+
+    native.handler!('mute');
+    await tester.pump();
+    native.handler!('unmute');
+    await tester.pump();
+
+    expect(tester.takeException(), isNull);
+    expect(capture.toggles, ['pause', 'resume']);
+    expect(reports.map((r) => r.$1), everyElement(isStateError));
+    expect(reports.map((r) => r.$2['capture_mute_action']), ['mute', 'unmute']);
+    expect(reports.map((r) => r.$2['capture_mute_source']), everyElement('quick_action'));
     await tester.pumpWidget(const SizedBox());
     device.dispose();
     capture.dispose();

@@ -16,6 +16,8 @@ class RolloutCohortUnavailable(RuntimeError):
 COHORT_ENVS = {
     'conversations-v3': lambda: os.getenv('CONVERSATIONS_V3_UID_ALLOWLIST', ''),
     'v3-recording-rotation': lambda: '',
+    # Manual-finish first transcript (SCA-3024): runtime membership only, no env fallback.
+    'v3-fast-finish': lambda: '',
     'batch-pipeline-shadow': lambda: '',
     # The composition root injects scoped policy env readers with the runtime.
     'batch-pipeline': lambda: '',
@@ -28,8 +30,12 @@ COHORT_ENVS = {
     'transcription-final-pass': lambda: os.getenv('TRANSCRIPTION_FINAL_PASS_UID_ALLOWLIST', ''),
     'transcription-shadow': lambda: os.getenv('TRANSCRIPTION_SHADOW_UID_ALLOWLIST', ''),
     'mobile-standard-batch': lambda: '',
+    'android-play-billing': lambda: '',
+    'prepaid-code-redeem': lambda: '',
     'messaging-telegram': lambda: os.getenv('OMI_MESSAGING_CHANNELS_UIDS', ''),
     'messaging-imessage': lambda: os.getenv('OMI_MESSAGING_CHANNELS_UIDS', ''),
+    # Go ordinary-sync finalization (SCA-3883): runtime membership only, no env fallback.
+    'go-finalization': lambda: '',
 }
 
 
@@ -88,6 +94,9 @@ def in_rollout_cohort(uid: str, name: str, *, legacy_members=None, legacy_all=Fa
     if _membership_resolver is None:
         if name == 'dream-agent':
             raise RolloutCohortUnavailable('dream cohort resolver is unbound')
+        if name == 'go-finalization':
+            # Go admission reports an unknown membership as a fallback, never as a plain miss.
+            raise RolloutCohortUnavailable('go finalization cohort resolver is unbound')
         return False
     return _membership_resolver(uid, name, legacy_members=legacy_members, legacy_all=legacy_all)
 

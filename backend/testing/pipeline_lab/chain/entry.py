@@ -96,6 +96,9 @@ def _production_recap_at(store: Any, day_id: str) -> Any:
 
 
 def run(root: Path, run_id: str, engine: str) -> dict[str, Any]:
+    import time
+
+    started = time.monotonic()
     from testing.pipeline_lab.baseline.build import build_baseline
     from testing.pipeline_lab.seed.corpus import DayWindow, load_start_state
     from testing.pipeline_lab.stack import LAB_UID
@@ -158,9 +161,15 @@ def run(root: Path, run_id: str, engine: str) -> dict[str, Any]:
         result['engine'] = 'product'
     else:
         raise ValueError(f'unknown chain engine {engine!r}')
+    chain_done = time.monotonic()
     view = build_baseline(run_dir, store.baseline_dir(day.day_id))
+    timings = dict(result.get('timings') or {})
+    timings['baseline_view'] = round(time.monotonic() - chain_done, 3)
+    timings['entry_total'] = round(time.monotonic() - started, 3)
     summary = {
         'engine': engine,
+        'clock': result.get('clock'),
+        'late_monotonic_reads': result.get('late_monotonic_reads'),
         'transcripts': transcripts,
         'chain': (result.get('chain') or {}).get('summary'),
         'day': result.get('day'),
@@ -169,6 +178,7 @@ def run(root: Path, run_id: str, engine: str) -> dict[str, Any]:
         'baseline_counts': view.get('counts'),
         'seed': {k: (result.get('seed') or {}).get(k) for k in ('written', 'skipped', 'cleared', 'timings')},
         'warnings': list((result.get('seed') or {}).get('warnings') or []),
+        'timings': timings,
     }
     atomic_write_json(run_dir / 'chain_entry.json', summary)
     return summary
@@ -180,8 +190,11 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     parser.add_argument('--run', required=True)
     parser.add_argument('--engine', choices=('product', 'fake'), default='product')
     args = parser.parse_args(argv)
+    from testing.pipeline_lab.store import private_tempdir
+
     try:
-        summary = run(Path(args.root), args.run, args.engine)
+        with private_tempdir(Path(args.root)):  # the product's own temp files stay inside the lab root
+            summary = run(Path(args.root), args.run, args.engine)
     except Exception:  # noqa: BLE001 - the traceback goes to chain_errors.log
         trace = traceback.format_exc()
         try:

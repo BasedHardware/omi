@@ -2024,7 +2024,20 @@ def test_gke_template_comparison_includes_envfrom_identities(checker) -> None:
     assert rebound.template_matches_serving is False
 
 
-def test_gke_helm_render_accepts_deployed_override_args(checker, tmp_path: Path, monkeypatch) -> None:
+@pytest.fixture
+def pusher_override_state():
+    deployment = 'prod-omi-pusher'
+    return {
+        'pusher': {
+            'deployment': {},
+            'replicasets': [
+                _replicaset(f'{deployment}-a', deployment, 2, [{'name': 'X', 'value': 'override'}], 'pusher')
+            ],
+        },
+    }
+
+
+def test_gke_helm_render_accepts_deployed_override_args(checker, pusher_override_state) -> None:
     # Thread: the listen deploy workflow appends dispatch --set-string
     # env[i].value=... tokens (and private -f values) that a repository-default
     # `helm template` never sees; an intentionally overridden rollout then read
@@ -2050,24 +2063,11 @@ def test_gke_helm_render_accepts_deployed_override_args(checker, tmp_path: Path,
         calls.append(list(argv))
         return subprocess.CompletedProcess(argv, 0, stdout=rendered_override, stderr='')
 
-    gke_state = {
-        'pusher': {
-            'deployment': {},
-            'replicasets': [
-                _replicaset(f'{deployment}-a', deployment, 2, [{'name': 'X', 'value': 'override'}], 'pusher')
-            ],
-        },
-    }
-    # The argv file format written by listen_helm_env_overrides.py: one token
-    # per line.
-    argv_file = tmp_path / 'overrides.argv'
-    argv_file.write_text('--set-string\nenv[0].value=override\n', encoding='utf-8')
-
     (result,) = checker.inspect_gke_drift(
         env='prod',
         workloads=('pusher',),
         render='helm',
-        gke_state=gke_state,
+        gke_state=pusher_override_state,
         runner=runner,
         helm_args_for={'pusher': ('--set-string', 'env[0].value=override')},
     )
@@ -2078,13 +2078,17 @@ def test_gke_helm_render_accepts_deployed_override_args(checker, tmp_path: Path,
     assert [m.key for m in result.value_mismatches] == []
     assert result.status == 'OK', result
 
-    # main() plumbing: --gke-helm-arg-file tokens (the argv format
-    # listen_helm_env_overrides.py writes in the deploy workflow) join any
-    # --gke-helm-arg tokens and reach the render.
+
+@pytest.mark.parametrize('override_workload', ['pusher', 'backend-listen'])
+def test_gke_cli_scopes_deployed_override_args(
+    checker, tmp_path: Path, monkeypatch, pusher_override_state, override_workload: str
+) -> None:
+    # The deploy workflow writes one argv token per line. The file and inline
+    # tokens are forwarded together only for the selected workload.
     argv_file = tmp_path / 'overrides.argv'
     argv_file.write_text('--set-string\nenv[0].value=override\n', encoding='utf-8')
     state_file = tmp_path / 'gke.json'
-    state_file.write_text(json.dumps(gke_state), encoding='utf-8')
+    state_file.write_text(json.dumps(pusher_override_state), encoding='utf-8')
     captured: dict[str, list[str]] = {}
 
     def helm_spy(workload, *, env, root, runner, helm_args=()):
@@ -2103,7 +2107,7 @@ def test_gke_helm_render_accepts_deployed_override_args(checker, tmp_path: Path,
             '--gke-helm-arg=-f',
             f'--gke-helm-arg={tmp_path / "private-values.yaml"}',
             '--gke-helm-arg-workload',
-            'pusher',
+            override_workload,
             '--gke-helm-arg-file',
             str(argv_file),
             '--gke-state',
@@ -2111,35 +2115,13 @@ def test_gke_helm_render_accepts_deployed_override_args(checker, tmp_path: Path,
         ]
     )
     assert rc == 0
-    # Only this workload's tokens reach its render; the argv-file tokens ride
-    # along because the workload scope matches.
-    assert captured['helm_args'] == [
+    expected = [
         '-f',
         str(tmp_path / 'private-values.yaml'),
         '--set-string',
         'env[0].value=override',
     ]
-
-    # Scoping: the same invocation scoped to another workload forwards nothing
-    # to this workload's render (the argv encodes backend-listen env indices).
-    rc = checker.main(
-        [
-            '--no-cloud-run',
-            '--gke-workload',
-            'pusher',
-            '--gke-render',
-            'helm',
-            '--gke-helm-arg=--set-string',
-            '--gke-helm-arg',
-            'env[80].value=listen-only',
-            '--gke-helm-arg-workload',
-            'backend-listen',
-            '--gke-state',
-            str(state_file),
-        ]
-    )
-    assert rc == 0
-    assert captured['helm_args'] == []
+    assert captured['helm_args'] == (expected if override_workload == 'pusher' else [])
 
 
 def test_gke_helm_failure_never_discloses_override_values(checker) -> None:

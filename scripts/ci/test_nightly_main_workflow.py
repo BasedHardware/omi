@@ -26,10 +26,16 @@ def jobs(text):
 PR_SCHEMA_WRITERS = {"gcp_firestore_indexes.yml"}
 
 INTENTIONAL_BUDGET_CHANGES = {
+    # #26303 adds the advisory Pipeline Lab Scenarios job to the hermetic workflow: the committed lab
+    # scenarios twice each on a local emulator and a Redis service. Budgeted in ci-budget.yaml (p50 7).
+    ("backend-hermetic-e2e.yml", "pipeline-lab-scenarios", "runs-on"): "ubuntu-latest",
+    ("backend-hermetic-e2e.yml", "pipeline-lab-scenarios", "timeout-minutes"): "25",
     # Lane 8 adds a port-map job to the reusable workflow. It is skipped on
     # the pinned nightly, and its PR and main-push budget is fixed here.
     ("backend-go-checks.yml", "port-tasks", "runs-on"): "ubuntu-latest",
-    ("backend-go-checks.yml", "port-tasks", "timeout-minutes"): "15",
+    ("backend-go-checks.yml", "port-tasks", "timeout-minutes"): "90",
+    ("backend-go-checks.yml", "port-task-tests", "runs-on"): "ubuntu-latest",
+    ("backend-go-checks.yml", "port-task-tests", "timeout-minutes"): "15",
     # #25814 adds locked Python setup and an emulator replay to the Go check.
     ("backend-go-checks.yml", "check", "timeout-minutes"): "30",
     # iOS Compile Check: the 40-min ceiling sat below the measured cold path
@@ -43,6 +49,12 @@ INTENTIONAL_BUDGET_CHANGES = {
     # executed tests passing and ~360 unexecuted, failing Mobile Release
     # Eligibility downstream. 40 restores wedge headroom; budget_p50 stays 17.
     ("mobile-app-checks.yml", "analyze-and-test", "timeout-minutes"): "40",
+    # SCA-3899 splits the far-timezone pass into one job per zone so each suite
+    # owns a 60-minute ceiling. The sequential pair spent 59m51s of steps on
+    # top of a 2m36s prelude on the 2026-11-23 scheduled run (45113684750) and
+    # was cancelled at the cap after both steps had passed.
+    ("mobile-app-checks.yml", "dart-tests-pago-pago", "runs-on"): "ubuntu-latest",
+    ("mobile-app-checks.yml", "dart-tests-pago-pago", "timeout-minutes"): "60",
     # Backend unit shard: the 15-min job ceiling includes runner setup, but
     # the step regression budget excludes it, leaving 180s for setup.
     # Setup measured 73-92s typical, 227s worst (run 39741901310 attempt 2:
@@ -123,8 +135,14 @@ class WorkflowTests(unittest.TestCase):
             text = (WORKFLOWS / filename).read_text()
             with self.subTest(workflow=filename):
                 self.assertIn("  workflow_call:", text)
-                self.assertEqual(len(re.findall(r"uses: actions/checkout@", text)),
-                                 text.count("ref: ${{ inputs.nightly_main_sha || github.sha }}"))
+                checkout_scope = text
+                if filename == "backend-go-checks.yml":
+                    # Main-push port processing and pull-request scoping are
+                    # event-specific. Only the reusable check job participates
+                    # in the pinned nightly checkout contract.
+                    checkout_scope = jobs(text)["check"]
+                self.assertEqual(len(re.findall(r"uses: actions/checkout@", checkout_scope)),
+                                 checkout_scope.count("ref: ${{ inputs.nightly_main_sha || github.sha }}"))
                 # Scripts that read GITHUB_SHA see the workflow-file commit, not the checkout.
                 if "preflight_public_build_config.py" in text:
                     self.assertIn('--ref "${{ inputs.nightly_main_sha || github.sha }}"', text)

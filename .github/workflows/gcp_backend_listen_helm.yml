@@ -28,8 +28,13 @@ on:
         required: false
         default: ''
         type: string
+      control_sha:
+        description: 'Exact admitted workflow and checkout SHA for a direct production deploy (blank keeps legacy checkout behavior)'
+        required: false
+        default: ''
+        type: string
       mode:
-        description: 'deploy applies the chart; rollback restores an earlier Helm revision; private-env-migrate copies the retired private overlay into Secret Manager (prod, no roll)'
+        description: 'deploy applies the chart; image-only replaces the primary Listen image; rollback restores an earlier Helm revision; private-env-migrate syncs private references without rolling'
         required: true
         default: 'deploy'
         type: choice
@@ -37,13 +42,14 @@ on:
           - deploy
           - rollback
           - evidence
+          - image-only
           - private-env-migrate
       evidence_request_id:
         description: 'Single-use Release evidence request ID; evidence mode only'
         required: false
         default: ''
       evidence_request:
-        description: 'Nonsecret Release request bindings; evidence mode only, no overlay payload'
+        description: 'Nonsecret Release evidence request or admitted image-only proof'
         required: false
         default: ''
       image_tag:
@@ -141,7 +147,7 @@ jobs:
       id-token: 'write'
 
     timeout-minutes: ${{ inputs.mode == 'evidence' && 10 || 360 }}
-    runs-on: ubuntu-latest
+    runs-on: ${{ (inputs.mode == 'evidence' || inputs.mode == 'image-only') && 'ubuntu-22.04' || 'ubuntu-latest' }}
     steps:
       - name: Validate Environment Input
         if: github.event_name == 'workflow_dispatch'
@@ -151,10 +157,42 @@ jobs:
             exit 1
           fi
       - name: Checkout
-        uses: actions/checkout@v7
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
         with:
-          ref: ${{ inputs.mode == 'evidence' && inputs.expected_sha || (github.event.inputs.environment == 'prod' && 'main' || github.event.inputs.branch) }}
+          ref: ${{ inputs.control_sha != '' && github.sha || (inputs.mode == 'evidence' && inputs.expected_sha || (github.event.inputs.environment == 'prod' && 'main' || github.event.inputs.branch)) }}
           fetch-depth: 0
+
+      - name: Verify exact listen control SHA
+        if: ${{ inputs.control_sha != '' }}
+        shell: bash
+        env:
+          CONTROL_SHA: ${{ inputs.control_sha }}
+          DEPLOY_ENV: ${{ inputs.environment }}
+          DEPLOY_MODE: ${{ inputs.mode }}
+        run: |
+          set -euo pipefail
+          if [[ "$GITHUB_EVENT_NAME" != workflow_dispatch || "$DEPLOY_ENV" != prod || "$DEPLOY_MODE" != deploy ||
+                ! "$CONTROL_SHA" =~ ^[0-9a-f]{40}$ || "$CONTROL_SHA" == 0000000000000000000000000000000000000000 ||
+                "$CONTROL_SHA" != "$GITHUB_SHA" || "$CONTROL_SHA" != "$(git rev-parse HEAD)" ]]; then
+            echo "::error title=Listen control mismatch::The production workflow and checkout must match the admitted control SHA."
+            exit 1
+          fi
+      - name: Validate image-only Listen admission
+        if: ${{ inputs.mode != 'evidence' && inputs.mode == 'image-only' }}
+        env:
+          DEPLOY_ENV: ${{ inputs.environment }}
+        run: |
+          set -euo pipefail
+          [[ "$GITHUB_EVENT_NAME" == workflow_dispatch && "$GITHUB_REF" == refs/heads/main &&
+             "$GITHUB_RUN_ATTEMPT" == 1 && "$DEPLOY_ENV" == prod &&
+             "$GITHUB_SHA" == "$(git rev-parse HEAD)" ]]
+          jq -e --arg control "$GITHUB_SHA" '.inputs | .branch == "main" and (.image_tag | test("^[0-9a-f]{7}$"))
+              and (.expected_sha | test("^[0-9a-f]{40}$")) and .break_glass_lock == "false"
+              and .helm_revision == "" and .listen_edge_image_digest == "" and .evidence_request_id == ""
+              and .gateway_feature_mode == "chart-default" and .chat_agent_route == "chart-default"
+              and .allow_direct_model_exception == "chart-default" and .stt_service_models == ""
+              and .translation_service_models == "" and (.control_sha // "") == ""
+              and (.evidence_request | fromjson | .control_sha == $control)' "$GITHUB_EVENT_PATH" >/dev/null
 
       - name: Bind shared record token lease rollout inputs
         if: ${{ inputs.mode != 'evidence' && ((github.event.inputs.mode || 'deploy') == 'deploy') }}
@@ -227,41 +265,9 @@ jobs:
           echo "IMAGE_TAG=$IMAGE_TAG" >> "$GITHUB_ENV"
           echo "checked_out_sha=$CHECKED_OUT_SHA" >> "$GITHUB_OUTPUT"
 
-      - name: Install Helm
-        uses: azure/setup-helm@v5
-
-      # Prod: GitHub WIF as omi-ci-deployer-prod@ (credential-hygiene WS-C, plan v2 Phase E).
-      # Development keeps its JSON lane.
-      - name: Google Auth (prod WIF)
-        id: auth-wif
-        if: github.event.inputs.environment == 'prod'
-        uses: google-github-actions/auth@v3
-        with:
-          workload_identity_provider: projects/208440318997/locations/global/workloadIdentityPools/omi-gha-deploy-prod/providers/github
-          service_account: omi-ci-deployer-prod@based-hardware.iam.gserviceaccount.com
-
-      - name: Google Auth
-        id: auth
-        if: github.event.inputs.environment != 'prod'
-        uses: google-github-actions/auth@v3
-        with:
-          # Development: GitHub WIF as the dev deployer, no JSON key (credential hygiene WS-D).
-          workload_identity_provider: projects/1031333818730/locations/global/workloadIdentityPools/omi-gha-deploy-dev/providers/github
-          service_account: omi-ci-deployer-dev@based-hardware-dev.iam.gserviceaccount.com
-
-      - name: Set up gcloud
-        uses: google-github-actions/setup-gcloud@v3
-
-      - name: Get GKE credentials
-        uses: google-github-actions/get-gke-credentials@v3
-        with:
-          cluster_name: ${{ vars.GKE_CLUSTER }}
-          location: ${{ env.REGION }}
-          project_id: ${{ vars.GCP_PROJECT_ID }}
-
       - name: Checkout trusted overlay evidence controls
         if: ${{ inputs.mode == 'evidence' }}
-        uses: actions/checkout@v7
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
         with:
           ref: ${{ github.workflow_sha }}
           path: .github/listen-evidence-control
@@ -270,24 +276,67 @@ jobs:
             .github/scripts
             .github/workflows/gcp_backend_listen_helm.yml
 
-      - name: Install evidence parser before secret injection
+      - name: Reconstruct evidence runtime before credentials
         if: ${{ inputs.mode == 'evidence' }}
-        run: python3 -m pip install -q pyyaml
+        run: |
+          python3 .github/listen-evidence-control/.github/scripts/listen_runtime.py reconstruct --root "$RUNNER_TEMP/listen-runtime"
+          echo "$RUNNER_TEMP/listen-runtime/helm/linux-amd64" >> "$GITHUB_PATH"
+
+      - name: Reconstruct image-only runtime before credentials
+        if: ${{ inputs.mode != 'evidence' && inputs.mode == 'image-only' }}
+        run: |
+          python3 .github/scripts/listen_runtime.py reconstruct --root "$RUNNER_TEMP/listen-runtime"
+          echo "$RUNNER_TEMP/listen-runtime/helm/linux-amd64" >> "$GITHUB_PATH"
+
+      - name: Install Helm
+        if: ${{ inputs.mode != 'evidence' && inputs.mode != 'image-only' }}
+        uses: azure/setup-helm@v5
+
+      # Prod: GitHub WIF as omi-ci-deployer-prod@ (credential-hygiene WS-C, plan v2 Phase E).
+      # Development keeps its JSON lane.
+      - name: Google Auth (prod WIF)
+        id: auth-wif
+        if: github.event.inputs.environment == 'prod'
+        uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093 # v3
+        with:
+          workload_identity_provider: projects/208440318997/locations/global/workloadIdentityPools/omi-gha-deploy-prod/providers/github
+          service_account: omi-ci-deployer-prod@based-hardware.iam.gserviceaccount.com
+
+      - name: Google Auth
+        id: auth
+        if: github.event.inputs.environment != 'prod'
+        uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093 # v3
+        with:
+          # Development: GitHub WIF as the dev deployer, no JSON key (credential hygiene WS-D).
+          workload_identity_provider: projects/1031333818730/locations/global/workloadIdentityPools/omi-gha-deploy-dev/providers/github
+          service_account: omi-ci-deployer-dev@based-hardware-dev.iam.gserviceaccount.com
+
+      - name: Set up gcloud
+        uses: google-github-actions/setup-gcloud@aa5489c8933f4cc7a4f7d45035b3b1440c9c10db # v3
+
+      - name: Get GKE credentials
+        uses: google-github-actions/get-gke-credentials@3da1e46a907576cefaa90c484278bb5b259dd395 # v3
+        with:
+          cluster_name: ${{ vars.GKE_CLUSTER }}
+          location: ${{ env.REGION }}
+          project_id: ${{ vars.GCP_PROJECT_ID }}
 
       - name: Produce private-overlay effect receipt without mutation
         if: ${{ inputs.mode == 'evidence' }}
         env:
           EVIDENCE_REQUEST: ${{ inputs.evidence_request }}
-          LISTEN_PRIVATE_VALUES_YAML: ${{ secrets.LISTEN_PRIVATE_VALUES_YAML }}
+          LISTEN_PRIVATE_VALUES_YAML: ${{ fromJSON(inputs.evidence_request).overlay_state != 'references' && secrets.LISTEN_PRIVATE_VALUES_YAML || '' }}
         run: |
           set -euo pipefail
           umask 077
-          python3 .github/listen-evidence-control/.github/scripts/listen_overlay_evidence.py job \
+          export LD_LIBRARY_PATH="$RUNNER_TEMP/listen-runtime/python/lib"
+          unset LD_PRELOAD PYTHONHOME PYTHONPATH
+          "$RUNNER_TEMP/listen-runtime/python/bin/python3.12" -I -B .github/listen-evidence-control/.github/scripts/listen_overlay_evidence.py job \
             --root "$GITHUB_WORKSPACE" --output "$RUNNER_TEMP/listen-overlay-receipt.json"
 
       - name: Upload only the sanitized overlay receipt
         if: ${{ inputs.mode == 'evidence' && success() }}
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: listen-overlay-${{ inputs.evidence_request_id }}-${{ github.run_attempt }}
           path: ${{ runner.temp }}/listen-overlay-receipt.json
@@ -307,9 +356,11 @@ jobs:
 
       - name: Resolve backend-listen image tag
         id: resolve-listen-image
-        if: ${{ (github.event.inputs.mode || 'deploy') == 'deploy' }}
+        if: ${{ (github.event.inputs.mode || 'deploy') == 'deploy' || inputs.mode == 'image-only' }}
         env:
           REQUESTED_TAG: ${{ github.event.inputs.image_tag }}
+          EXPECTED_SHA: ${{ inputs.expected_sha }}
+          DEPLOY_MODE: ${{ inputs.mode }}
         run: |
           set -euo pipefail
           IMAGE="$(kubectl -n ${{ vars.ENV }}-omi-backend get deploy/${{ vars.ENV }}-omi-backend-listen -o jsonpath='{.spec.template.spec.containers[0].image}' 2>/dev/null || true)"
@@ -349,6 +400,10 @@ jobs:
               echo "ERROR: image_tag ${REQUESTED_TAG} is not an ancestor of origin/main." >&2
               exit 1
             fi
+          fi
+          if [[ "${DEPLOY_MODE:-deploy}" == image-only && "$(git rev-parse "${REQUESTED_TAG}^{commit}")" != "$EXPECTED_SHA" ]]; then
+            echo "::error::The image tag must resolve to the exact admitted source."
+            exit 1
           fi
           echo "BACKEND_LISTEN_SOURCE_SHA=$(git rev-parse "${REQUESTED_TAG}^{commit}")" >> "$GITHUB_ENV"
           RESOLVED_TAG=$(git rev-parse --short=7 "${REQUESTED_TAG}^{commit}")
@@ -683,6 +738,16 @@ jobs:
           echo "Image after rollback: $AFTER"
           helm -n "$NS" history "$RELEASE" --max 10
 
+      - name: Replace only the admitted Listen image
+        if: ${{ inputs.mode != 'evidence' && inputs.mode == 'image-only' }}
+        env:
+          IMAGE_ONLY_PROOF: ${{ inputs.evidence_request }}
+        run: |
+          set -euo pipefail
+          export LD_LIBRARY_PATH="$RUNNER_TEMP/listen-runtime/python/lib"
+          unset LD_PRELOAD PYTHONHOME PYTHONPATH
+          "$RUNNER_TEMP/listen-runtime/python/bin/python3.12" -I -B .github/scripts/listen_overlay_evidence.py apply-image-only
+
       - name: Verify rollout
         if: ${{ inputs.mode != 'evidence' && inputs.mode != 'private-env-migrate' }}
         run: |
@@ -693,6 +758,16 @@ jobs:
             exit 1
           fi
           python3 backend/scripts/deploy_status_report.py --env ${{ vars.ENV }} --include-gke --gke-service backend-listen
+
+      - name: Verify admitted Listen digest on every serving pod
+        if: ${{ inputs.mode != 'evidence' && inputs.mode == 'image-only' }}
+        env:
+          IMAGE_ONLY_PROOF: ${{ inputs.evidence_request }}
+        run: |
+          set -euo pipefail
+          export LD_LIBRARY_PATH="$RUNNER_TEMP/listen-runtime/python/lib"
+          unset LD_PRELOAD PYTHONHOME PYTHONPATH
+          "$RUNNER_TEMP/listen-runtime/python/bin/python3.12" -I -B .github/scripts/listen_overlay_evidence.py verify-image-only
 
       # GKE creates standalone NEGs from the Service annotation but does not
       # attach every newly appearing zone to this manually managed LB backend.
@@ -766,7 +841,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v7
+        uses: actions/checkout@v7 # v7
         with:
           ref: ${{ needs.helm-upgrade.outputs.checked_out_sha }}
 
@@ -774,16 +849,16 @@ jobs:
         uses: azure/setup-helm@v5
 
       - name: Google Auth (prod WIF)
-        uses: google-github-actions/auth@v3
+        uses: google-github-actions/auth@v3 # v3
         with:
           workload_identity_provider: projects/208440318997/locations/global/workloadIdentityPools/omi-gha-deploy-prod/providers/github
           service_account: omi-ci-deployer-prod@based-hardware.iam.gserviceaccount.com
 
       - name: Set up gcloud
-        uses: google-github-actions/setup-gcloud@v3
+        uses: google-github-actions/setup-gcloud@v3 # v3
 
       - name: Get GKE credentials
-        uses: google-github-actions/get-gke-credentials@v3
+        uses: google-github-actions/get-gke-credentials@v3 # v3
         with:
           cluster_name: ${{ vars.GKE_CLUSTER }}
           location: us-central1

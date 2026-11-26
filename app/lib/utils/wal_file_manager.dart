@@ -11,10 +11,12 @@ import 'package:pool/pool.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/services/wals.dart';
+import 'package:omi/services/wals/live_wal_receipt.dart';
 import 'package:omi/services/wals/mobile_batch_buffer.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/off_ui_isolate.dart';
 import 'package:omi/utils/wal_index_worker.dart';
+import 'package:omi/utils/wal_index_row.dart';
 import 'package:omi/startup/boot_journal.dart';
 
 class WalFileManager {
@@ -47,6 +49,36 @@ class WalFileManager {
   /// Custody must never mistake a replayed, unindexed journal for an index
   /// commit. This reader deliberately excludes journal discovery/repair.
   static Future<List<Wal>> loadIndexedWals() => _saveLock.withResource(_loadIndexedWals);
+
+  /// Only a startup read can retire receipts that both restart indexes
+  /// already cover. Use the index lock so neither file can change mid-proof.
+  static Future<void> retireCommittedLiveWalReceipts() => _saveLock.withResource(() async {
+        final primary = _walFile;
+        final backup = _walBackupFile;
+        if (primary != null && backup != null) {
+          await LiveWalReceipt.retireCommitted(primary, backup);
+        }
+      });
+
+  static Future<int> purgeUnindexedLiveWalReceipts({
+    required Set<String> owners,
+    required Set<String> reservedNames,
+    required bool Function(String) mayDelete,
+  }) =>
+      _saveLock.withResource(() async {
+        final primary = _walFile;
+        final backup = _walBackupFile;
+        if (primary == null || backup == null) return 0;
+        return LiveWalReceipt.purgeUnindexed(primary, backup,
+            owners: owners, reservedNames: reservedNames, mayDelete: mayDelete);
+      });
+
+  static Future<bool> matchesPendingLiveWalPurge(File audio, Wal wal) => _saveLock.withResource(() async {
+        final primary = _walFile;
+        final backup = _walBackupFile;
+        if (primary == null || backup == null) return false;
+        return LiveWalReceipt.matchesPendingPurge(audio, wal, primary, backup);
+      });
 
   static Future<List<Wal>> _loadWals() async {
     final indexed = await _loadIndexedWals();
@@ -116,49 +148,7 @@ class WalFileManager {
     var invalid = false;
     for (final entry in decoded['wals'] as List) {
       try {
-        if (entry is! Map<String, dynamic>) throw const FormatException();
-        // Old indices can omit new optional fields, but a WAL without its
-        // identity or with a wrong scalar type must never enter sync admission.
-        if (entry['timer_start'] is! int || entry['codec'] is! String) throw const FormatException();
-        for (final key in [
-          'channel',
-          'sample_rate',
-          'seconds',
-          'storage_offset',
-          'storage_total_bytes',
-          'file_num',
-          'total_frames',
-          'synced_frame_offset',
-          'retry_count',
-          'last_retry_at',
-          'uploaded_at',
-          'source_frame_start',
-          'source_clock_epoch',
-          'live_ring_id',
-          'live_ordinal_start',
-          'live_ordinal_end',
-          'download_ring_id',
-          'download_seq_start',
-          'download_seq_end',
-          'download_file_bytes',
-        ]) {
-          if (entry[key] != null && entry[key] is! int) throw const FormatException();
-        }
-        for (final key in [
-          'file_path',
-          'device',
-          'device_model',
-          'conversation_id',
-          'recording_session_id',
-          'owner_uid',
-          'capture_root',
-          'job_id',
-          'batch_live_session',
-          'live_device_id',
-        ]) {
-          if (entry[key] != null && entry[key] is! String) throw const FormatException();
-        }
-        loaded.add(Wal.fromJson(entry));
+        loaded.add(decodeWalIndexRow(entry));
       } catch (_) {
         invalid = true;
       }
@@ -183,7 +173,7 @@ class WalFileManager {
         if (rename != null) {
           await rename(file);
         } else {
-          await file.rename('${file.path}.corrupt-${DateTime.now().microsecondsSinceEpoch}');
+          await file.rename('${walIndexQuarantinePrefix(file.path)}${DateTime.now().microsecondsSinceEpoch}');
         }
       }
       await BootJournal.instance.record('quarantine:${file.uri.pathSegments.last}', reason);

@@ -44,6 +44,7 @@ from typing import Any, Iterable, Mapping
 
 from testing.pipeline_lab.chain.order import CAPTURE_FIELDS, pre_finalization_row
 from testing.pipeline_lab.stack.io import parse_time
+from utils.conversations.v3.word_floor import text_word_count
 
 DEFAULT_LAG = timedelta(seconds=60)
 # A production stamp further than this after ``finished_at`` is not the capture's arrival (backfill
@@ -95,7 +96,7 @@ class FeedPlan:
 
 
 def word_count(row: Mapping[str, Any]) -> int:
-    return sum(len(str(s.get('text') or '').split()) for s in row.get('transcript_segments') or [])
+    return sum(text_word_count(str(s.get('text') or '')) for s in row.get('transcript_segments') or [])
 
 
 def _epoch(value: Any) -> datetime | None:
@@ -209,7 +210,7 @@ def plan_arrivals(
                         instant=at,
                         instant_source='partial',
                         manual_end=False,
-                        words=sum(len(str(s.get('text') or '').split()) for s in segments[:count]),
+                        words=sum(text_word_count(str(s.get('text') or '')) for s in segments[:count]),
                         segments=count,
                     )
                 )

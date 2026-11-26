@@ -157,7 +157,6 @@ finalization:
   - backend/utils/episodes/__init__.py
   - backend/utils/episodes/batch_close.py
   - backend/utils/episodes/boundaries.py
-  - backend/utils/episodes/boundary_runtime.py
   - backend/utils/episodes/capture_groups.py
   - backend/utils/episodes/client_gate.py
   - backend/utils/episodes/composer.py
@@ -290,7 +289,7 @@ batch:
   - backend/utils/batch_pipeline/projection_disposition.py
   - backend/utils/batch_pipeline/projection_drain.py
   - backend/utils/batch_pipeline/projection_drain_diagnostics.py
-  - backend/utils/batch_pipeline/projection_finish_backoff.py
+  - backend/utils/batch_pipeline/projection_finish_page.py
   - backend/utils/batch_pipeline/projection_followup.py
   - backend/utils/batch_pipeline/projection_hold_observability.py
   - backend/utils/batch_pipeline/projection_hold_policy.py

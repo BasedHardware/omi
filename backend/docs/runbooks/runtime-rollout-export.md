@@ -2,10 +2,30 @@
 
 `omi_runtime_percent{name,revision,revision_name}` reports the numeric control
 used after the process's `_ramp` TTL read, including environment fallback and
-batch nesting. It exports all six registered `RAMP_NAMES`: batch-pipeline,
-first-summary, batch-live-stt-retire, legacy-sync, batch-vendor-routing and
-new-owner-cell1. Enable switches, explicit owner allowlists and the legacy mode
+batch nesting. It exports all seven registered `RAMP_NAMES`: batch-pipeline,
+first-summary, batch-live-stt-retire, legacy-sync, batch-vendor-routing,
+new-owner-cell1 and go-finalization. Enable switches, explicit owner allowlists and the legacy mode
 remain separate controls; this gauge is not a count of admitted owners.
+
+`go-finalization` is the Go finalization kill switch. Admission does not use this
+gauge's last-known-good value: `utils/rollout/go_finalization_admission.py` opens only
+at exactly 100 from a successful read no older than 30 seconds, and treats anything
+else as closed. Write the name only after every `_ramp` reader runs a build that
+knows it (backend, backend-listen, pusher, backend-sync, notifications job), because
+older readers reject the whole document. Change cohort membership only with
+`scripts/rollout/go_finalization_cohort.py`, which writes the flag and its audit row
+(`rollout_cohorts/{uid}/go_finalization_audit`, erased with the account) in one
+transaction; allow 60 seconds for membership caches.
+
+Opening: `ramp_set.py --percent go-finalization=100` needs `--accept-not-live "<reason>"`
+on the first open, because the live preflight requires a non-zero
+`omi_runtime_percent{name="go-finalization"}` series and that gauge is 0 until the switch
+opens. Name the release issue's go-ahead in the reason. Rollback: write
+`go-finalization=0` (a narrowing write, no preflight); the tooling never removes a name.
+
+Environments: the switch reads `_ramp.envs.<deployment_env>` while membership reads
+`cohorts.<rollout_environment>`, and the CLI writes only `prod` and `dev`. Staging
+therefore has no admissible members; rehearse on dev.
 
 The exporter uses the serving cache (30 seconds, existing pending/LKG rules),
 not a second Firestore reader. A scrape refreshes that cache even on an idle

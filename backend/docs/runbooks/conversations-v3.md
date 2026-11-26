@@ -15,6 +15,11 @@ episode callers too. Owners whose apps all predate v3 keep legacy intake: their 
 would show the raw recording a capture ends with as a blank card that 404s. An owner
 with a v3 app on one device and a pre-v3 app on another gets that card on the old device.
 
+Before a stage or kill-switch move, and before each service in its move order, check live prod against
+`backend/deploy/activation/conversations-v3.yaml` (services and minimum commits, order, env, gateway
+lanes, queue, scheduler jobs): `activation_collect.py` then `activation_check.py`; see
+`backend/deploy/activation/README.md`.
+
 Provision the dedicated queue on dev/prod before enabling admission; the prod
 ops manifest declares its bounded concurrency/retry policy. The same stage must reach backend/API, backend-listen (including realtime role),
 backend-sync, backend-sync-backfill, sync-backfill-worker, backend-integration,
@@ -92,15 +97,47 @@ context, and pre-notes merge work. Finished notes keep the full path.
 Only new `omi`/`phone` capture/sync creates become recordings. Existing documents
 keep their layer through stage changes. A recording is not a product item;
 `home_hidden` only removes a conversation from unfiltered Home and its count.
-A manually ended window with any speech is Home-visible regardless of length,
-unless media or positively recognized background; no speech creates no window.
-The persisted manual_end follows late rewrites, merges and backfill and requires
-full notes even below 20 words. Background hides only with positive wearer
-recognition somewhere in the contributing recordings: is_user:true or a
-segment-bound wearer label from the authoritative speaker-evidence projection.
-Without it, background becomes conversation and uses the normal 300-word rule
-(or the manual-end override). Media stays hidden. home_hidden_reason records
-this decision and outline_kind retains the original classification.
+The derived fragment reaching an explicit manual cut is Home-visible regardless
+of length or media/background classification. The normal delete, discard and
+failed-summary filters still apply. A capture with no speech creates no window.
+The persisted `manual_end` survives rebuilds and allows conversational notes
+even below 20 words. Naturally ended media is hidden. Background hides only
+with positive wearer recognition somewhere in the contributing recordings:
+`is_user: true` or a segment-bound wearer label from authoritative speaker
+evidence. Without it, background becomes conversation and uses the normal
+150-word rule or the manual-end override. `kind`, `outline_kind` and the
+classification reason remain available for analytics.
+Set `CONVERSATIONS_V3_MANUAL_END_HOME_VISIBLE=off` on every service that runs the
+v3 reconcile (`backend` for on-open rebuilds, `backend-sync`, `backend-sync-backfill`)
+to restore classification-based hiding for manually ended media and recognized
+background on subsequent projections. The service reads the switch and passes it to
+the pure planner. Previously written rows keep their stored visibility until rebuilt.
+A mobile capture is audio-only when the user finishes it: the transcript is produced by the
+batch pipeline afterwards. The finalization worker closes such a recording through
+`complete_server_batch_capture`, which stores `v3_manual_end_requested` for a `client_finalize` job.
+Record admission promotes the request to `v3_manual_end` when the recording is a single batch unit,
+so the window is cut and locked when its one transcript lands. A recording of several units (an
+audio gap over 30 s, or over an hour) projects one unit at a time; cutting on the first would lock
+a partial window, so it keeps the silence and lock timers unless the fast first transcript below
+takes it. `omi_conversations_v3_batch_manual_end_total{outcome}` counts `promoted`, `fast_finish`,
+`multi_unit_deferred`, `not_promoted` and `error`. Set `CONVERSATIONS_V3_BATCH_MANUAL_END=off` on
+`backend` (finalization worker) and `backend-integration` (record admission) to stop both the
+request and the promotion for later finishes. Stored markers remain.
+`CONVERSATIONS_V3_FAST_FINISH` (default `cohort`: members of the `v3-fast-finish` rollout cohort,
+added with `scripts/rollout_cohort.py --add`, no roll; `on` for every v3 owner; `off`) adds a first
+transcript for a manually finished recording. When batch record admission stages the sealed audio,
+`utils/conversations/v3/fast_finish.py` transcribes it once through the prerecorded provider for the
+recording's language and writes the result with `update_conversation_segments`. That write marks the
+recording pending and wakes reconcile, and the stored manual end cuts the window, so notes start
+without waiting for the batch merge and delivery. The batch record projection later replaces the
+provisional segments; once `record_projection_revision` is set the fast write is refused. Recordings
+over 20 minutes, partial records, custom STT, locked rows and private rows are skipped. Read
+`omi_conversations_v3_fast_finish_total{outcome}` and `omi_conversations_v3_fast_finish_seconds{stage}`.
+A manual finish that never starts the pass is counted in
+`omi_conversations_v3_fast_finish_skipped_total{reason}`: `mode_off`, `already_started`, or the first
+failing `fast_finish.candidate_rejection` predicate (`not_recording`, `no_manual_end`,
+`status_in_progress`, `status_processing`, `status_other`, `no_private_cloud_sync`, `protection_level`,
+`projection_revision`, `audio_partial`, `deleted`, `discarded`, `locked`, `custom_stt`).
 Five minutes of placed-speech silence is a hard window boundary. An outline's
 `resumes_previous` may undo a topic split within that interval, never rejoin
 windows across the silence boundary, even with the same people. Short socket
@@ -121,7 +158,7 @@ proof of acoustic silence; qualify transcript completeness separately.
 `CONVERSATIONS_V3_STRETCH_COHESION` defaults to `on`. The outline renders
 stretch-local speaker labels, and short conversational topics fold within the
 same silence, manual-end and two-hour cap boundaries. Home evaluates the
-300-word threshold against that fresh stretch. Media, recognized background
+150-word threshold against that fresh stretch. Media, recognized background
 and late fragments around published claims retain their own visibility rules.
 Set the switch to `off` on v3 builder and backfill runners to restore the prior
 prompt and per-topic Home minimum for subsequent passes. Existing published
@@ -132,12 +169,33 @@ controls recorded-speech grouping (120–1800 seconds), and `CONVERSATIONS_V3_LO
 controls when a card locks and owes notes (120–3600 seconds). Both default to
 300. Invalid values use the defaults. When either value differs from its
 default, the existing summary-open path and explicit End bypass the lock timer.
-Setting both values back to 300 or disabling cohesion restores the prior
-timing; provisional rows remain reachable for the builder to finish.
+Setting both values back to 300 restores the default lock delay, still counted
+from landing unless `CONVERSATIONS_V3_SETTLE_ON_LANDING=off`; disabling cohesion
+restores the prior timing. Provisional rows remain reachable for the builder to finish.
 A lock delay shorter than the silence threshold can finalize an initial card
 while later speech still belongs to the same outline stretch. Later speech
 gets its own continuation. Reconciliation can merge settled cards when the
 outline and the loaded source claims cover the complete merge.
+
+`CONVERSATIONS_V3_TRANSCRIPT_SIZE_CAP` defaults to on. A new derived window also splits
+before its estimated encoded `transcript_segments` (enhanced encryption included) passes
+900 KiB, below Firestore's 1,048,487-byte per-field limit. Splits use the duration cap's
+continuation path; only unpublished windows split, and locked rows keep their boundaries.
+Count `event=v3_transcript_size_cap_split` log lines to see splits. A commit Firestore still
+rejects for size (whole document or one property) parks the owner as `document_too_large`
+instead of retrying. To roll back, set `CONVERSATIONS_V3_TRANSCRIPT_SIZE_CAP=off` on builder
+and backfill runners.
+
+`CONVERSATIONS_V3_MAX_WINDOW_SECONDS` defaults to 10800 (three hours).
+The first transcript line whose recorded start reaches the limit starts a new
+stretch. The earlier live stretch locks and enters normal processing, and the
+successor owns the live row. This boundary applies with either cohesion setting
+and in historical planning. Values from 120 to 10800 set a shorter or equal
+limit. Invalid values use 10800. To roll back, set
+`CONVERSATIONS_V3_MAX_WINDOW_SECONDS=0` on builder and backfill runners
+(`off` is also accepted). Stored windows and claims retain their existing
+ownership. Track `omi_conversations_v3_window_cap_cuts_total` and verify that
+live windows stay within three hours plus the configured lock delay.
 
 A silence gap above 300 seconds also switches on sit-down cutting:
 - The outline sees pauses of 2 minutes or more as `---- N min without speech ----`
@@ -164,13 +222,16 @@ rows cut by earlier code or an earlier pass keep their cut (even when a turn
 straddles it or a held turn is revised) and the cap counts from there. A locked
 row that owns none of the stretch's lines never cuts it.
 
-Under custom timing (either setting differs from 300), the lock delay counts
+With stretch cohesion on, live passes count the lock delay
 from the later of the stretch's last speech and when that speech landed
 (`v3_speech_landed_at`, written in the same transaction as the speech by the
 live transcript write and sync assignment, and only when the speech changed). A
 batch of old speech from
 offline sync then waits the lock delay after landing instead of locking on
-arrival. Default timing still counts from the last speech.
+arrival. Custom timing (either setting differs from 300) always uses this clock.
+At the default timing, `CONVERSATIONS_V3_SETTLE_ON_LANDING` (default on) selects it;
+set it to `off` to count from the last speech again. Backfill and re-derive keep the
+recorded clock.
 
 The recording-speaker picker for a derived conversation reads and edits only
 that copied window. Shared source scopes cannot expand it into other product
@@ -235,9 +296,10 @@ Finished-window copies retain user edits and stable titles. Recordings never
 enter model processing, apps, memories or webhooks. Automatically ended short speech of at least 20
 words uses the existing task extraction rules and memory processing without a
 summary call. Media/background have no derived processing. Summaries reuse the
-existing notes prompt; the v3 background lane is Luna/low, gateway Flex-first,
-then Standard. The on-open lane is Standard. Metering stays in the gateway and
-usage tracker. The section stream uses the chat `data:` / base64 `done:` /
+existing notes prompt; the v3 background lane and the on-open lane are both
+Luna/low on the Standard tier (the background lane left the gateway's Flex-first
+list on 2026-11-24; `LLM_GATEWAY_FLEX_FIRST_LANES` can name it again). Metering
+stays in the gateway and usage tracker. The section stream uses the chat `data:` / base64 `done:` /
 JSON `error:` protocol and stores only a complete revision-fenced result.
 Terminal processing/outline retry exhaustion and affirmative transcription
 failure show tile_state:failed, status:completed and summary_retryable when
@@ -396,7 +458,8 @@ PYTHONPATH=backend backend/.venv/bin/python $S run --owners-file $O --since 2026
   rows by hand. A run with kept groups or a raced delete ends `undone_partial`, never `undone`, and
   the operator exits 1. A group whose copy a live builder pass extended with recordings captured
   after the run (the copy then holds live capture as well as donor lines) also stays as v3, counted
-  as `groups_kept_live`/`donors_kept_live`, so undo never deletes live capture. The ledger
+  as `groups_kept_live`/`donors_kept_live`. A group containing a copy stamped with another run
+  uses the same counters. Undo leaves the other run’s rows and notes obligations untouched. The ledger
   records `groups_kept_deleted` and `donors_kept_deleted`; `undo --dry-run` prints the group count
   and `donors_deleted_by_owner_min`, a lower bound (it counts deleted spans and deleted copies
   recorded on donors, and misses only a delete whose claim release has not run yet). Undoing a run
