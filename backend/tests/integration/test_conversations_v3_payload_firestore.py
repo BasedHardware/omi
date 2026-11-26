@@ -571,8 +571,6 @@ def test_account_erasure_reaches_payloads_under_missing_conversation_parents(row
     monkeypatch.setattr(user_data_deletion, 'get_data_plane_firestore_client', lambda: client)
     monkeypatch.setattr(user_data_deletion, 'search_apps_db', lambda *_, **__: [])
     monkeypatch.setattr(user_data_deletion, 'delete_generic_cache', lambda *_: None)
-    monkeypatch.setattr(user_data_deletion, 'stop_quiet_checks_for_account', lambda *_, **__: None)
-
     try:
         assert user_data_deletion.purge_user_subtree(uid, client, delete_collection_recursive)['status'] == 'ok'
         assert not orphan_chunk.get().exists
