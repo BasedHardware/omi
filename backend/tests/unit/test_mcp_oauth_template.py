@@ -6,7 +6,10 @@ from pathlib import Path
 import pytest
 from jinja2 import Environment, FileSystemLoader
 
-TEMPLATES_DIR = Path(__file__).resolve().parents[2] / "templates"
+TEMPLATES = Environment(
+    loader=FileSystemLoader(str(Path(__file__).resolve().parents[2] / "templates")),
+    autoescape=True,
+)
 
 
 def _render_mcp_template() -> str:
@@ -14,8 +17,7 @@ def _render_mcp_template() -> str:
 
 
 def _render_mcp_template_for_client(client_name: str) -> str:
-    env = Environment(loader=FileSystemLoader(str(TEMPLATES_DIR)), autoescape=True)
-    return env.get_template("mcp_oauth_authorize.html").render(
+    return TEMPLATES.get_template("mcp_oauth_authorize.html").render(
         client_name=client_name,
         permissions=[
             "Read your Omi memories",
@@ -40,8 +42,7 @@ def _render_mcp_template_for_client(client_name: str) -> str:
 
 
 def _render_oauth_authenticate_template() -> str:
-    env = Environment(loader=FileSystemLoader(str(TEMPLATES_DIR)), autoescape=True)
-    return env.get_template("oauth_authenticate.html").render(
+    return TEMPLATES.get_template("oauth_authenticate.html").render(
         app_name="Test App",
         app_image=None,
         app_id="test-app",
@@ -117,6 +118,14 @@ runInNewContext(require('node:fs').readFileSync(0, 'utf8'), context);
         "selector": "#firebaseui-auth-container",
         "providers": ["google.com", "apple.com"],
     }
+
+
+def test_oauth_pages_share_the_apple_icon_theme():
+    theme = TEMPLATES.get_template("_oauth_shared_styles.html").render().strip()
+    assert '[data-provider-id="apple.com"] .firebaseui-idp-icon' in theme
+    assert "filter: var(--apple-icon-filter)" in theme
+    assert theme in _render_mcp_template()
+    assert theme in _render_oauth_authenticate_template()
 
 
 def test_mcp_oauth_template_places_email_sign_in_below_social_options():
