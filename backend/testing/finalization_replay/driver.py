@@ -19,15 +19,15 @@ from testing.finalization_replay.candidate import migrate, replay_database, run_
 from testing.finalization_replay.corpus import DEFAULT_TEST_KEY, pack, read_corpus
 from testing.finalization_replay.metrics import install_firestore_meter, measure, suspend_meter
 from testing.finalization_replay.providers import allow_provider_port, provider_server
-from testing.finalization_replay.reference import run_reference
-from testing.finalization_replay.state import CaseState, seeded_token_hashes
+from testing.finalization_replay.reference import erase_reference, run_reference
+from testing.finalization_replay.state import CaseState, load_memo_bindings, seeded_token_hashes
 from testing.replay_harness.env import emulator_endpoint, replay_environment
 from testing.replay_harness.guard import private_text
 
 
 def _observe(state, run, output, side, *, setup=None):
     try:
-        before = state.documents()
+        state.initial_documents = state.documents()
         state.start()
         with measure(state):
             if setup is not None:
@@ -35,7 +35,7 @@ def _observe(state, run, output, side, *, setup=None):
                     setup(state)
             status = run(state)
         with suspend_meter():
-            output[side] = state.observe(status, before, load_memo_bindings=_memo_bindings)
+            output[side] = state.observe(status, state.initial_documents, load_memo_bindings=load_memo_bindings)
     except Exception as error:
         output['errors'][side] = type(error).__name__
         finished = datetime.now(timezone.utc)
@@ -57,10 +57,6 @@ def _observe(state, run, output, side, *, setup=None):
             'cost': state.cost(),
             'go_evidence': state.go_evidence,
         }
-
-
-def _memo_bindings():
-    return importlib.import_module('testing.finalization_replay.memo_bindings')
 
 
 def _clear(client):
@@ -150,7 +146,18 @@ def replay(cases, jobd, dsn, key):
                         server.errors.clear()
                         with ExitStack() as leaves:
                             speaker_trace.record_speaker_trace(state, leaves)
-                            _observe(state, lambda target: run_reference(target, leaves, url), output, 'python')
+
+                            def run_python(target):
+                                status = run_reference(target, leaves, url)
+                                if target.case.get('erase_after'):
+                                    if status not in {'completed', 'discarded'}:
+                                        raise RuntimeError('Python replay did not complete before erase')
+                                    with suspend_meter():
+                                        target.capture_before_erasure()
+                                    target.effects['erasure'] = erase_reference(target)
+                                return status
+
+                            _observe(state, run_python, output, 'python')
                         if server.errors:
                             output['errors']['python'] = 'ReplayProviderError'
     return outputs

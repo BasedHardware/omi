@@ -128,6 +128,12 @@ measures skipped and written rows by caller. `omi_conversations_v3_reconcile_bil
 measures confirmed builder writes, including leases and Home feed writes. Downstream notes
 processing has separate write attribution.
 
+`CONVERSATIONS_V3_SETTLE_ON_LANDING` defaults to on. Live stretch cohesion at the default
+timing settles from the later of recorded speech end and `v3_speech_landed_at`, so a late
+batch of short topics joins its sit-down instead of locking on arrival. Set it to `off` to
+restore the recorded clock at the default timing; custom timing always uses landing. See the
+[short-topic sit-down change note](./listen_pusher_pipeline/changes/2026-11-25-v3-short-topic-sitdown.md).
+
 `POST /v1/conversations-v3/reconcile` returns HTTP 409 with
 `{"status":"retry","reason":"dependency_warming"}` for exhausted Firestore contention,
 expiry, or retry deadlines. Confirmed processing fences use `persistence_fenced` in the
@@ -9393,6 +9399,15 @@ admission. In a mixed request, nonempty members continue through normal intake.
 A short encoded recording is never discarded because of its byte size; decoded
 silence still goes through VAD. Empty admission creates no job, transcript or
 conversation. These no-audio clips need no raw-audio archive.
+
+An updated manifest-capable client opts in with `X-Omi-Wal-Retry: 1` on the
+multipart POST. An eligible 503 can return an opaque two-minute handle in
+that header. On an exact retry the ordinary capture-manifest POST accepts
+the handle and can return `X-Omi-Wal-Retry: check` alongside its manifest.
+Only then may the client PUT the same manifest claims and handle to
+`/v2/sync-local-files`. A typed 503 with recording-scoped pacing keeps the
+WAL pending. A 204 or inconclusive probe continues to full multipart
+admission. Only the multipart route issues audio acknowledgments.
 
 Other 400 refusals expose closed codes for malformed multipart, part count,
 part size, invalid filenames and invalid capture time. Filename/time refusals

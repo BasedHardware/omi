@@ -23,6 +23,7 @@ import 'package:omi/services/capture/capture_seams.dart';
 import 'package:omi/services/capture/conversation_location_capture.dart';
 import 'package:omi/services/capture/scenarios/native_event_vector.dart';
 import 'package:omi/services/capture/stt_mode_resolver.dart';
+import 'package:omi/services/devices/connectors/device_connection.dart';
 import 'package:omi/services/mic/native_mic_recorder_service.dart';
 import 'package:omi/services/sockets/pure_socket.dart';
 import 'package:omi/services/sockets/transcription_service.dart';
@@ -93,6 +94,11 @@ class ScriptedPureSocket implements IPureSocket {
   /// [emitClose] instead).
   bool Function()? connectAllowed;
 
+  /// When true, a local [stop] reports the close to the listener, as the
+  /// production `PureSocket.stop` does (`disconnect` calls `onClosed`). The
+  /// default keeps the silent stop the host scenarios were written against.
+  bool reportCloseOnStop = false;
+
   int connectAttempts = 0;
   int closeCalls = 0;
   final List<List<int>> sentBinary = <List<int>>[];
@@ -132,6 +138,12 @@ class ScriptedPureSocket implements IPureSocket {
   Future stop() async {
     closeCalls++;
     wire.add('<close>');
+    if (reportCloseOnStop) {
+      final wasOpen = _status == PureSocketStatus.connected;
+      _status = PureSocketStatus.disconnected;
+      if (wasOpen) _listener?.onClosed();
+      return;
+    }
     _status = PureSocketStatus.notConnected;
     return;
   }
@@ -213,6 +225,11 @@ class ScriptedUploads {
   /// delete them), e.g. to follow audio custody into the server.
   void Function(List<File> files)? onUploadFiles;
 
+  /// When set, every attempt is forwarded to this uploader after it is
+  /// recorded (for example the production multipart client against a loopback
+  /// server). [failAll] and [script] are ignored while a delegate is installed.
+  SyncFilesUploader? delegate;
+
   ScriptedUploads(this.clock);
 
   void enqueueOutcome(Object Function() outcome) => script.add(outcome);
@@ -249,6 +266,20 @@ class ScriptedUploads {
             captureEvidence: captureEvidence,
           ),
         );
+        final forward = delegate;
+        if (forward != null) {
+          return forward(
+            files,
+            onUploadProgress: onUploadProgress,
+            conversationId: conversationId,
+            captureEvidence: captureEvidence,
+            recordingSessionId: recordingSessionId,
+            audioStartSeconds: audioStartSeconds,
+            audioEndSeconds: audioEndSeconds,
+            claimLiveCapture: claimLiveCapture,
+            geolocation: geolocation,
+          );
+        }
         if (failAll) {
           throw StateError('synthetic refused upload');
         }
@@ -290,6 +321,11 @@ class CaptureReplayWorld {
   int socketCreates = 0;
   bool autoUploadAllowed = true;
 
+  /// Scripted transports report a local stop as a close, like the production
+  /// socket: the controller then ends that socket's capture-wedge session. Set
+  /// by lanes that put the production `CaptureWedgeMonitor` in the loop.
+  bool socketStopReportsClose = false;
+
   /// The local_preview declaration of each socket the controller opened.
   final List<bool> localPreviewRequests = [];
   final List<String?> socketRecordingIds = [];
@@ -300,9 +336,37 @@ class CaptureReplayWorld {
   /// The pendant's BLE link, when a scenario connects one.
   ScriptedDeviceConnection? deviceConnection;
 
+  /// A scenario-owned device connection, used instead of [deviceConnection]
+  /// when set: the virtual-pendant lane hands the controller the production
+  /// connection that `DeviceService.ensureConnection` returns over the real
+  /// Android Bluetooth stack.
+  Future<DeviceConnection?> Function(String deviceId)? deviceConnectionOverride;
+
   /// The Omi phone-call state capture observes (PhoneCallProvider.callStateListenable in the app).
   final ValueNotifier<PhoneCallState> omiCall = ValueNotifier(PhoneCallState.idle);
   bool nextConnectFailsOnce = false;
+
+  /// Test-owned transport readiness gate. Does not replace capture or WAL logic.
+  Future<void> Function()? beforeSocketConnect;
+
+  /// Device lanes (iOS simulator, Android emulator) keep the platform's own
+  /// preference store: native capture admission reads it, so a Dart-only mock
+  /// cannot satisfy the real `com.omi/capture_policy` bridge. The store is
+  /// cleared at first boot. Host lanes leave this false and use the mock.
+  static bool useRealPreferences = false;
+
+  /// Free phone storage reported to WAL admission, in bytes.
+  int freeDiskBytes = 1 << 40;
+
+  /// Scripted pendant codec read (the GATT codec characteristic). Throw to
+  /// model a failed read; return null for the world's [pendantCodec].
+  Future<BleAudioCodec?> Function(String deviceId)? audioCodecRead;
+
+  /// BLE listener/ingress port handed to the controller at boot. Null keeps
+  /// the production default (the shared BleBridge), which on an iOS device
+  /// calls the native BLE bridge; scenarios that script a pendant pass a
+  /// scripted port instead so both platform policies run without a radio.
+  static CaptureBleListeners? bleListenersForNextBoot;
 
   bool connected = true;
   bool signedIn = true;
@@ -385,9 +449,32 @@ class CaptureReplayWorld {
     bool firstBoot = false,
   }) async {
     if (firstBoot) {
-      SharedPreferences.setMockInitialValues(initialPrefs);
+      if (useRealPreferences) {
+        final prefs = await SharedPreferences.getInstance();
+        // The native capture-policy latch keeps its revision for the life of
+        // the process, so the durable policy must survive this reset: a store
+        // wiped under a live process re-initialises fail-closed (muted).
+        final policy = prefs.getString(SharedPreferencesUtil.capturePolicyKey);
+        await prefs.clear();
+        if (policy != null) await prefs.setString(SharedPreferencesUtil.capturePolicyKey, policy);
+        for (final entry in initialPrefs.entries) {
+          final value = entry.value;
+          if (value is bool) await prefs.setBool(entry.key, value);
+          if (value is int) await prefs.setInt(entry.key, value);
+          if (value is double) await prefs.setDouble(entry.key, value);
+          if (value is String) await prefs.setString(entry.key, value);
+          if (value is List<String>) await prefs.setStringList(entry.key, value);
+        }
+      } else {
+        SharedPreferences.setMockInitialValues(initialPrefs);
+      }
     }
     await SharedPreferencesUtil.init();
+    if (firstBoot && useRealPreferences && SharedPreferencesUtil().capturePolicy.muted) {
+      // An earlier scenario in this process may have ended paused; each world
+      // starts from the reader's explicit "capture on".
+      await SharedPreferencesUtil().setCaptureMuted(false);
+    }
     if (firstBoot) {
       SyncRateLimiter.instance.clear();
       SyncRateLimiter.instance.clockForTesting = clock.now;
@@ -397,7 +484,11 @@ class CaptureReplayWorld {
     if (firstBoot) {
       SttModeResolver.instance = SttModeResolver(flagReader: () => false);
       if (!_envInitialized) {
-        Env.init(const _SyntheticEnvFields());
+        try {
+          Env.init(const _SyntheticEnvFields());
+        } on Error {
+          // Another scenario in this isolate already initialised Env.
+        }
         _envInitialized = true;
       }
     }
@@ -430,7 +521,7 @@ class CaptureReplayWorld {
       phoneCoverageTelemetry: coverageEvents.add,
       // The replay world has no real disk-space plugin; report ample space so
       // the storage-admission gate proves capacity instead of failing closed.
-      phoneFreeDiskBytes: () async => 1 << 40,
+      phoneFreeDiskBytes: () async => freeDiskBytes,
     );
     wal.start();
     await wal.syncs.phone.walReady;
@@ -459,7 +550,7 @@ class CaptureReplayWorld {
       now: clock.now,
       scheduling: scheduler,
       inProgressConversationLoader: () async {},
-      deviceConnectionLoader: (deviceId) async => deviceConnection,
+      deviceConnectionLoader: (deviceId) async => await deviceConnectionOverride?.call(deviceId) ?? deviceConnection,
       deviceMuteWriter: deviceMuteWriter,
       deviceMuteReader: deviceMuteReader,
       omiCallState: omiCall,
@@ -468,6 +559,7 @@ class CaptureReplayWorld {
         return deleteDiscardedResult?.call(id) ?? true;
       },
       discardDeleteRetryDelays: const [Duration.zero, Duration.zero, Duration.zero],
+      bleListeners: bleListenersForNextBoot,
       processInProgressOutcome: () async {
         processCalls++;
         onProcessInProgress?.call();
@@ -475,7 +567,11 @@ class CaptureReplayWorld {
         if (custom != null) return custom();
         return const InProgressProcessOutcome(absence: ProcessAbsence.transport);
       },
-      audioCodecLoader: (deviceId) => audioCodecLoader?.call(deviceId) ?? Future.value(pendantCodec),
+      audioCodecLoader: (deviceId) async {
+        final loader = audioCodecLoader;
+        if (loader != null) return loader(deviceId);
+        return (await audioCodecRead?.call(deviceId)) ?? pendantCodec;
+      },
       microphonePermissionRequester: () async => allowMic,
       conversationLocationCapture: ConversationLocationCapture(
         isLocationServiceEnabled: () async => false,
@@ -682,6 +778,7 @@ class _ReplayCaptureController extends CaptureController {
     super.deviceMuteWriter,
     super.deviceMuteReader,
     super.captureWedgeMonitor,
+    super.bleListeners,
   });
 
   @override
@@ -696,7 +793,8 @@ class _ReplayCaptureController extends CaptureController {
     Geolocation? geolocation,
     bool localPreview = false,
   }) async {
-    final transport = ScriptedPureSocket();
+    await world.beforeSocketConnect?.call();
+    final transport = ScriptedPureSocket()..reportCloseOnStop = world.socketStopReportsClose;
     world.localPreviewRequests.add(localPreview);
     world.socketRecordingIds.add(clientConversationId);
     transport.connectAllowed = () => world.connected;

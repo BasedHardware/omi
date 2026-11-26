@@ -14,6 +14,8 @@ import 'package:omi/providers/conversations_v3_provider.dart';
 import 'package:omi/providers/home_provider.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/l10n_extensions.dart';
+import 'package:omi/utils/platform/platform_manager.dart';
+import 'package:omi/utils/reliability_experiments.dart';
 
 /// Ends the conversation this phone is capturing: the same action as a pendant double-tap
 /// (`CaptureProvider.forceProcessingCurrentConversation`). It sits in the live conversation's detail
@@ -40,8 +42,40 @@ class LiveConversationEndButton extends StatefulWidget {
     return conversation.transcriptSegments.any((segment) => captured.contains(segment.id));
   }
 
-  /// Whether the current capture can finish this window.
-  static bool phoneCaptures(ServerConversation conversation, CaptureProvider capture, {String? currentLiveId}) {
+  /// This app install as the server records it on every recording it receives from this phone, over the
+  /// listening connection or an upload: the two headers of each request, joined (`{platform}_{hash}`).
+  /// Null until start-up has read the hash.
+  @visibleForTesting
+  static String? Function() ownDeviceId = _platformDeviceId;
+
+  static String? _platformDeviceId() {
+    try {
+      final hash = PlatformManager.instance.deviceIdHash;
+      return hash.isEmpty ? null : '${PlatformManager.instance.platform}_$hash';
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// The server says the latest speech of the account's open conversation ([currentLiveId]) came from
+  /// this app install. Read only by reliability experiments (`end_button_by_device`, `instant_live_text`).
+  static bool latestSpeechFromThisDevice(ServerConversation conversation,
+          {String? currentLiveId, String? liveCaptureDeviceId}) =>
+      conversation.id == currentLiveId && liveCaptureDeviceId != null && liveCaptureDeviceId == ownDeviceId();
+
+  /// Reliability experiment `end_button_by_device`: [latestSpeechFromThisDevice] decides End.
+  static bool fedByThisDevice(ServerConversation conversation, {String? currentLiveId, String? liveCaptureDeviceId}) =>
+      ReliabilityExperiments.enabled('end_button_by_device') &&
+      latestSpeechFromThisDevice(conversation, currentLiveId: currentLiveId, liveCaptureDeviceId: liveCaptureDeviceId);
+
+  /// Whether the current capture can finish this window. [liveCaptureDeviceId] is the live read's
+  /// device for [currentLiveId], read only by the experiment above.
+  static bool phoneCaptures(ServerConversation conversation, CaptureProvider capture,
+      {String? currentLiveId, String? liveCaptureDeviceId}) {
+    // The device match needs no listening session: uploaded files carry the same device id.
+    if (fedByThisDevice(conversation, currentLiveId: currentLiveId, liveCaptureDeviceId: liveCaptureDeviceId)) {
+      return true;
+    }
     final verified = capture.verifiedLiveServerRecordingId;
     final recordings = conversation.v3?.recordingIds ?? const <String>[];
     if (verified != null && capture.hasClosedServerRecording(verified)) {
@@ -75,10 +109,12 @@ class _LiveConversationEndButtonState extends State<LiveConversationEndButton> {
   Widget build(BuildContext context) {
     final conversation = widget.conversation;
     final currentLiveId = context.select<ConversationsV3Provider?, String?>((v3) => v3?.live?.id);
+    final liveDevice = context.select<ConversationsV3Provider?, String?>((v3) => v3?.live?.v3?.captureDeviceId);
     final mine = context.select<CaptureProvider?, bool>(
       (capture) =>
           capture != null &&
-          LiveConversationEndButton.phoneCaptures(conversation, capture, currentLiveId: currentLiveId),
+          LiveConversationEndButton.phoneCaptures(conversation, capture,
+              currentLiveId: currentLiveId, liveCaptureDeviceId: liveDevice),
     );
     final failures = context.select<ConversationsV3Provider?, int>((v3) => v3?.finishFailures ?? 0);
     if (_ended && _latchedFailures != null && failures != _latchedFailures) {
@@ -113,7 +149,8 @@ class _LiveConversationEndButtonState extends State<LiveConversationEndButton> {
                 // Checked again at the tap: the capture may have moved on since the last build.
                 final v3 = context.read<ConversationsV3Provider?>();
                 if (_ended ||
-                    !LiveConversationEndButton.phoneCaptures(conversation, capture, currentLiveId: v3?.live?.id)) {
+                    !LiveConversationEndButton.phoneCaptures(conversation, capture,
+                        currentLiveId: v3?.live?.id, liveCaptureDeviceId: v3?.live?.v3?.captureDeviceId)) {
                   return;
                 }
                 _ended = true;

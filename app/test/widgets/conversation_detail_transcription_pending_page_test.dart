@@ -195,6 +195,8 @@ class _LiveCapture extends ChangeNotifier implements CaptureProvider {
   @override
   bool get localPreviewAdmitted => true;
   @override
+  bool get liveWordsShown => true;
+  @override
   String? get verifiedLiveServerRecordingId => SharedPreferencesUtil().uid == ownerUid ? recordingId : null;
   @override
   bool hasClosedServerRecording(String recordingId) => false;

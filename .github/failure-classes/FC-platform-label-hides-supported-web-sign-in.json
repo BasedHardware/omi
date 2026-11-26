@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "id": "FC-platform-label-hides-supported-web-sign-in",
+  "family": "vendor-platform-behavior",
+  "violated_contract": "An authentication option supported by the configured web provider must be offered across supported browsers. A native device label does not determine whether a browser can run that provider's hosted sign-in.",
+  "canonical_prevention": "Configure the web sign-in provider independently of the device label. Exercise the rendered provider configuration on both Windows and Apple browser profiles.",
+  "canonical_prevention_artifact": [
+    "backend/tests/unit/test_mcp_oauth_template.py"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "backend/templates/mcp_oauth_authorize.html",
+    "backend/tests/unit/test_mcp_oauth_template.py"
+  ],
+  "status": "open"
+}

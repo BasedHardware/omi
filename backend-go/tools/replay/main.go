@@ -160,15 +160,18 @@ func failure(stderr io.Writer, err error) int {
 
 func summarize(stdout io.Writer, result report) error {
 	var pythonTokens, goTokens, pythonFirestore, goFirestore int64
+	var pythonFailedCommits, goFailedCommits int64
 	for _, replayCase := range result.Cases {
 		pythonTokens += replayCase.Cost.Python.LLMTokens.Total + replayCase.Cost.Python.EmbeddingTokens
 		goTokens += replayCase.Cost.Go.LLMTokens.Total + replayCase.Cost.Go.EmbeddingTokens
 		pythonFirestore += replayCase.Cost.Python.Firestore.Total()
 		goFirestore += replayCase.Cost.Go.Firestore.Total()
+		pythonFailedCommits += replayCase.Cost.Python.Firestore.FailedCommitRPCs
+		goFailedCommits += replayCase.Cost.Go.Firestore.FailedCommitRPCs
 	}
-	_, err := fmt.Fprintf(stdout, "Replay: %d cases, %d matched, %d unexplained differences, %d allowed differences, %d execution errors; tokens Python=%d Go=%d; Firestore ops Python=%d Go=%d\n",
+	_, err := fmt.Fprintf(stdout, "Replay: %d cases, %d matched, %d unexplained differences, %d allowed differences, %d execution errors; tokens Python=%d Go=%d; Firestore ops Python=%d Go=%d; failed Firestore Commit RPCs Python=%d Go=%d\n",
 		len(result.Cases), result.Matched, result.Unexplained, result.Expected, result.Failed,
-		pythonTokens, goTokens, pythonFirestore, goFirestore)
+		pythonTokens, goTokens, pythonFirestore, goFirestore, pythonFailedCommits, goFailedCommits)
 	return err
 }
 

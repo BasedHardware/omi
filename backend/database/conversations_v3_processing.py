@@ -373,6 +373,41 @@ def settle_processing(
     return armed
 
 
+def show_summary_stored(uid, cid, token, *, firestore_client=None):
+    """Show a row as done once its summary is stored, while the pass that wrote it is still running.
+
+    Reliability experiment ``fast_end_feedback``. Only the visible state moves. The processing
+    obligation (``v3_process_pending``), the attempt budget, the coverage stamp, the title lock and the
+    created delivery stay with ``settle_processing`` at the end of the pass, so work that fails after
+    this point is retried exactly as before (the next attempt shows ``writing`` again). Returns True
+    when it wrote; any row that is not a freshly written summary under this pass's lease is left alone.
+    """
+    client = firestore_client or store.get_firestore_client()
+    ref = store.user_conversations(client, uid).document(cid)
+    held = leases.lease_ref(client, uid, 'summary-' + cid)
+
+    @firestore.transactional
+    def show(tx):
+        row = ref.get(transaction=tx).to_dict() or {}
+        lease = held.get(transaction=tx).to_dict() or {}
+        if lease.get('token') != token or not lease.get('until') or lease['until'] <= datetime.now(timezone.utc):
+            return False
+        if (
+            not row
+            or not python_owns_finalization(row)
+            or row.get('deleted')
+            or row.get('status') != 'completed'
+            or row.get('tile_state') != 'writing'
+            or row.get('v3_process_pending') is not True
+            or not row.get('summary_output_present')
+        ):
+            return False
+        tx.update(ref, {'tile_state': 'done'})
+        return True
+
+    return show(client.transaction())
+
+
 CREATED_CLAIM = timedelta(minutes=5)
 CREATED_MAX_ATTEMPTS = 5
 CREATED_PAGE = 8
