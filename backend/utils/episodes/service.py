@@ -54,7 +54,7 @@ from utils.conversations.fragment_visibility import is_relevance_discarded
 from utils.sync.repeat_work_metrics import conversation_scope
 from utils.episodes.timeline import episode_owning_recorded_time, choose_recorded_episode
 from utils.episodes.timeline import episode_at as episode_at, episodes_between as episodes_between
-from database import episode_timeline, episode_attach_memo
+from database import episode_timeline, episode_attach_memo, episode_write_fence
 from database.episode_finalization_fence import EpisodeFinalizationDeleted
 from database import episode_live_members as live_members_db
 from config import episode_live_members as live_members
@@ -142,6 +142,7 @@ class Collaborators:
     now: Optional[Callable[[], datetime]] = None
     extras: dict[str, Any] = field(default_factory=dict)
     finalizing_conversation_id: Optional[str] = None
+    finalized_memo: Optional[Callable[[Mapping[str, Any]], None]] = None
 
 
 def _now(c: Collaborators) -> datetime:
@@ -1277,18 +1278,24 @@ def on_conversation_finalized(
             # No app of this user can show episodes: no tail update, no reconciliation reads.
             metrics.record_moment_skipped_no_client('finalize')
             return 'skipped_no_client'
-        c = replace(c, finalizing_conversation_id=conversation_id)
+        if not episode_write_fence.active():
+            c = replace(c, finalizing_conversation_id=conversation_id)
         outcome = _on_finalized(uid, conversation_id, row, trigger, absorbed_from, c)
         if outcome == 'skipped_deleted':
             return outcome
         outcome = composer.after_finalized(uid, conversation_id, outcome, c, row=row if not absorbed_from else None)
         if trigger == SYNC_UPDATE and not absorbed_from and outcome not in {'error', 'conflict', 'skipped_discarded'}:
-            episode_attach_memo.complete(
-                uid, conversation_id, row, None, finalized=True, firestore_client=c.firestore_client
-            )
+            if c.finalized_memo is not None:
+                c.finalized_memo(row)
+            else:
+                episode_attach_memo.complete(
+                    uid, conversation_id, row, None, finalized=True, firestore_client=c.firestore_client
+                )
         return outcome
     except EpisodeFinalizationDeleted:
         return 'skipped_deleted'
+    except episode_write_fence.EpisodeWriteRefused:
+        raise
     except Exception as error:
         logger.warning('event=episode_finalize outcome=error exception_type=%s', type(error).__name__)
         return 'error'
@@ -1930,8 +1937,15 @@ def _on_finalized(
         return _attach_synced(uid, conversation_id, row, c)
     started = policy.utc(row.get('started_at')) or policy.utc(row.get('created_at'))
     segments = [s for s in row.get('transcript_segments') or [] if isinstance(s, Mapping)]
-    episode = episodes_db.get_episode_for_conversation(
-        uid, absorbed_from or conversation_id, firestore_client=c.firestore_client
+    recorded_sync = trigger == SYNC_UPDATE and recorded_episodes_enabled()
+    # Recorded sync resolves membership after attaching. The preceding lookup
+    # was only used by the legacy no-owner branch or non-sync donor recovery.
+    episode = (
+        None
+        if recorded_sync and episode_write_fence.active()
+        else episodes_db.get_episode_for_conversation(
+            uid, absorbed_from or conversation_id, firestore_client=c.firestore_client
+        )
     )
     if absorbed_from and episode and trigger != SYNC_UPDATE:
         _repoint_absorbed(uid, episode, absorbed_from, conversation_id, c)
@@ -1949,9 +1963,7 @@ def _on_finalized(
             else row
         )
         outcome = _attach_synced(uid, conversation_id, sync_row, c, absorbed_from=absorbed_from)
-        if outcome in {'conflict', 'skipped_discarded', 'skipped_deleted'} or (
-            episode is None and not recorded_episodes_enabled()
-        ):
+        if outcome in {'conflict', 'skipped_discarded', 'skipped_deleted'} or (episode is None and not recorded_sync):
             return outcome
         episode = episodes_db.get_episode_for_conversation(uid, conversation_id, firestore_client=c.firestore_client)
     if (

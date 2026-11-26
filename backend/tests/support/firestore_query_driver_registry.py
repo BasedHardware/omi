@@ -1495,6 +1495,7 @@ _add(
             'pending_at': (T0, 'membership deadline metadata only; no query filter or ordering effect'),
             'deadline_floor': (T0, 'membership deadline metadata only; no query filter or ordering effect'),
             'detach_from': (None, 'document gets for the old provisional membership; no query shape effect'),
+            'writes_follow': (False, 'checks transactional by-ID ownership and deletion fences before later writes'),
         },
         patchers=(_stub('database.episodes.seal', {'id': 'recorded-1'}),),
     )

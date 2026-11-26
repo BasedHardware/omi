@@ -31,37 +31,49 @@ type Claim struct {
 // Conversation is the guarded document snapshot used by ordinary finalization.
 // The opaque comparison token maps to lane 2's document-bound revision at wiring.
 type Conversation struct {
-	Comparison       any
-	Status           rules.Status
-	JobID            string
-	Revision         int64
-	SyncRevision     int64
-	Transcript       []json.RawMessage
-	Batch            rules.BatchFacts
-	AppPlatform      string
-	Discarded        bool
-	RecordingLayer   bool
-	UntrustedCapture bool
-	NoDerivedEffects bool
-	LazyEffects      bool
-	PendingMinimum   bool
-	Notes            Notes
-	NotesDedupe      bool
-	NotesInputHash   string
-	NotesOutputHash  string
+	Comparison         any
+	Status             rules.Status
+	JobID              string
+	Revision           int64
+	SyncRevision       int64
+	Transcript         []json.RawMessage
+	Batch              rules.BatchFacts
+	AppPlatform        string
+	Discarded          bool
+	RecordingLayer     bool
+	UntrustedCapture   bool
+	NoDerivedEffects   bool
+	LazyEffects        bool
+	PendingMinimum     bool
+	SyncMinimumApplied bool
+	Notes              Notes
+	NotesDedupe        bool
+	NotesInputHash     string
+	NotesOutputHash    string
+	Relevance          *RelevanceDecision
+	SourceProjection   *SyncSourceProjection
+	StampTerminal      bool
+	InlineFanout       bool
+	sectionMode        sectionKindMode
+	openLoopsEnabled   bool
 }
 
 // Notes holds generated content in memory and in the owning document only.
 type Notes struct {
 	Title, Overview string
-	Sections        []string
+	Sections        []NoteSection
+	ActionItems     *[]map[string]any
+	Minimum         *NotesMinimum
+	TitleUpdate     *SyncTitleUpdate
+	OpenLoops       *SyncOpenLoops
 }
 
 // Documents uses the guarded Load and compare-and-apply pattern from lane 2.
 // ApplyFinalization atomically persists completion and, when supplied, generated
 // notes with their hashes. It preserves owner edits and rejects stale input.
 type Documents interface {
-	CheckLive(ctx context.Context, g queue.Guarded, intent Intent) error
+	CheckNotesRecovery(ctx context.Context, g queue.Guarded, intent Intent) error
+	CheckLive(ctx context.Context, g queue.Guarded, intent Intent, syncRevision int64) error
 	Load(ctx context.Context, g queue.Guarded, ref Ref) (Conversation, error)
 	ApplyFinalization(ctx context.Context, g queue.Guarded, claim Claim, before Conversation, notes *Notes, inputHash string, outputHash string) error
 }
@@ -106,9 +118,10 @@ const (
 // transcript and prior output. Fence closes a stale job without mutating a
 // replacement conversation. Both recheck the fanout journal before closing.
 type Lifecycle interface {
-	Begin(ctx context.Context, g queue.Guarded, claim Claim) error
+	// Begin returns whether the job snapshot requires prior completion reconciliation.
+	Begin(ctx context.Context, g queue.Guarded, claim Claim) (bool, error)
 	ClaimFanout(ctx context.Context, g queue.Guarded, claim Claim) (Fanout, error)
-	CompleteFanout(ctx context.Context, g queue.Guarded, claim Claim, dropped bool) error
+	CompleteFanout(ctx context.Context, g queue.Guarded, claim Claim, dropped bool) (TerminalState, error)
 	ReconcileCompletion(ctx context.Context, g queue.Guarded, claim Claim) (TerminalState, error)
 	Fence(ctx context.Context, g queue.Guarded, claim Claim) (TerminalState, error)
 	DeadLetter(ctx context.Context, g queue.Guarded, claim Claim, cause queue.Cause, transient bool) (TerminalState, error)
@@ -124,6 +137,93 @@ type MeetingEvidence interface {
 // envelope. BYOK is per invocation. It is never included in the job metadata.
 type Message struct {
 	Role, Text string
+}
+
+// NotesPrompt renders a serving text request for an already claimed sync row.
+type NotesPrompt interface {
+	PrepareNotes(ctx context.Context, g queue.Guarded, claim Claim, row Conversation) (NotesPlan, error)
+}
+
+// NotesPlan is either one paid turn or an already decided minimum.
+type NotesPlan struct {
+	Messages         []Message             `json:"messages"`
+	Minimum          *NotesMinimum         `json:"minimum"`
+	Relevance        *RelevanceDecision    `json:"relevance"`
+	RichSections     bool                  `json:"rich_sections"`
+	SourceProjection *SyncSourceProjection `json:"source_projection"`
+	StampTerminal    bool                  `json:"terminal_family_enabled"`
+	OpenLoopsEnabled bool                  `json:"open_loops_enabled"`
+	EpisodeChecked   bool                  `json:"episode_checked"`
+	InlineFanout     bool                  `json:"inline_fanout"`
+}
+
+// SyncSourceProjection carries Python's recorded-span and content units for the notes snapshot.
+type SyncSourceProjection struct {
+	EmptyDiscardHome *SyncDiscardHome   `json:"empty_discard_home"`
+	RecordedStart    *time.Time         `json:"recorded_start"`
+	RecordedEnd      *time.Time         `json:"recorded_end"`
+	ArrivalAt        *time.Time         `json:"arrival_at"`
+	Clock            string             `json:"clock"`
+	ContentUnits     int64              `json:"content_word_units"`
+	TitleEvidence    *SyncTitleEvidence `json:"title_evidence"`
+}
+
+// SyncDiscardHome is the reference-rendered, encrypted Home card for an
+// exact empty discard. It is committed with the same source revision.
+type SyncDiscardHome struct {
+	Display   string     `json:"home_display"`
+	Version   string     `json:"home_display_version"`
+	SortAt    time.Time  `json:"home_sort_at"`
+	StartedAt *time.Time `json:"home_started_at"`
+	Schema    int64      `json:"home_projection_schema"`
+	HasTasks  bool       `json:"home_has_tasks"`
+}
+
+// SyncTitleEvidence is Python's interpretation of the prior title on the
+// same source revision. Stand-ins and legacy previews have no stable title.
+type SyncTitleEvidence struct {
+	Prior         string  `json:"prior"`
+	ValidPrior    string  `json:"valid_prior"`
+	PreviousUnits float64 `json:"previous_units"`
+}
+
+// SyncTitleUpdate is the bookkeeping for the title committed with the notes.
+type SyncTitleUpdate struct {
+	SetBasis bool
+	Basis    int64
+	Reason   string
+}
+
+// RelevanceDecision carries the serving policy's completed, content-free verdict.
+type RelevanceDecision struct {
+	NeighborID   string         `json:"neighbor_id"`
+	Arm          string         `json:"arm"`
+	Jev          map[string]any `json:"jev"`
+	Verdict      string         `json:"verdict"`
+	DecidedBy    string         `json:"decided_by"`
+	Reason       string         `json:"reason"`
+	RulesVersion int64          `json:"rules_version"`
+}
+
+// The CAS stamps the revision before a short-clip retry can skip the notes provider.
+const (
+	SyncMinimumRevisionField     = "go_sync_minimum_revision"
+	SyncMinimumDiscardedField    = "go_sync_minimum_discarded"
+	EmptyDiscardFanoutEpochField = "go_empty_discard_fanout_epoch"
+)
+
+// NotesMinimum is the outcome of a deterministic serving notes decision.
+type NotesMinimum struct {
+	DecidedBy    string `json:"decided_by"`
+	Title        string `json:"title"`
+	Discarded    bool   `json:"discarded"`
+	Reason       string `json:"reason"`
+	RulesVersion int64  `json:"rules_version"`
+}
+
+// EmptyTranscriptDiscard reports the blank structured result of Python's empty-speech rule.
+func (n NotesMinimum) EmptyTranscriptDiscard() bool {
+	return n.Discarded && n.Reason == "empty_transcript" && n.Title == ""
 }
 
 // CompletionRequest describes one guarded text call.

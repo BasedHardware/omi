@@ -25,9 +25,9 @@ var errSyncWait = errors.New("finalization documents: sync revision quiet window
 // Firestore remembers the deadline across a crash before the SQL yield.
 func (s Store) DeferSyncRevision(ctx context.Context, g queue.Guarded, claim finalization.Claim, expected int64) (time.Duration, error) {
 	var delay time.Duration
-	err := s.withJob(ctx, g, claim, func(tx *docstore.Tx, ref docstore.Ref, job document, now time.Time) error {
+	err := s.withJob(ctx, g, claim, func(tx *docstore.Tx, ref docstore.Ref, job document, now time.Time, bound boundReader) error {
 		var deferErr error
-		delay, deferErr = deferSync(tx, ref, job, claim, expected, now)
+		delay, deferErr = deferSync(tx, ref, job, claim, expected, now, bound)
 		return deferErr
 	})
 	if err != nil {
@@ -39,17 +39,18 @@ func (s Store) DeferSyncRevision(ctx context.Context, g queue.Guarded, claim fin
 	return delay, nil
 }
 
-func deferSync(tx *docstore.Tx, ref docstore.Ref, job document, claim finalization.Claim, expected int64, now time.Time) (time.Duration, error) {
+func deferSync(tx *docstore.Tx, ref docstore.Ref, job document, claim finalization.Claim, expected int64, now time.Time, bound boundReader) (time.Duration, error) {
 	if !owns(job, claim) {
 		return 0, queue.ErrLease
 	}
 	if fanout := field[string](job, "fanout_status"); fanout != "" && fanout != "pending" {
 		return 0, changed()
 	}
-	_, row, err := boundConversation(tx, claim)
-	if err != nil {
-		return 0, err
+	snapshot := bound()
+	if snapshot.err != nil {
+		return 0, snapshot.err
 	}
+	row := snapshot.row
 	if row == nil {
 		return 0, closeJob(tx, ref, job, finalization.TerminalStale, "", now)
 	}

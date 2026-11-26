@@ -21,7 +21,7 @@ func (s Store) RepointEpisode(ctx context.Context, g queue.Guarded, claim finali
 	if donor.Owner != result.Survivor.Owner || donor.ID == result.Survivor.ID || result.Revision <= 0 {
 		return finalization.ErrInvalid
 	}
-	return s.withJob(ctx, g, claim, func(tx *docstore.Tx, _ docstore.Ref, job document, now time.Time) error {
+	return s.withJob(ctx, g, claim, func(tx *docstore.Tx, _ docstore.Ref, job document, now time.Time, _ boundReader) error {
 		if !owns(job, claim) || !field[time.Time](job, "lease_expires_at").After(now) {
 			return queue.ErrLease
 		}

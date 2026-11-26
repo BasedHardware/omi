@@ -411,6 +411,53 @@ def test_scheduled_profile_revalidates_trigger_and_actual_inputs(wired, monkeypa
     assert bool(client.rows[user]['ai_user_profile']) is (expected == 'written')
 
 
+@pytest.mark.parametrize(
+    'changed',
+    [
+        {},
+        {'finalization_engine': 'python'},
+        {'finalization_owner_epoch': 3},
+        {'finalization_job_id': 'replacement-job'},
+        {'finalization_revision': 4},
+        {'sync_content_revision': 5},
+    ],
+)
+def test_go_finalization_profile_refresh_checks_source_at_commit(wired, monkeypatch, changed):
+    from database.conversation_effect_fence import GoConversationEffectSource
+    from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
+
+    _, lock, _ = wired
+    user = ('users', UID)
+    source = (*user, 'conversations', 'trigger')
+    client = StrictFirestore(
+        {
+            user: {'ai_user_profile': {}},
+            source: {
+                'finalization_engine': 'go',
+                'finalization_owner_epoch': 2,
+                'finalization_job_id': 'claimed-job',
+                'finalization_revision': 3,
+                'sync_content_revision': 4,
+            },
+        }
+    )
+
+    def synthesize(*args, **kwargs):
+        client.rows[source].update(changed)
+        return ProfileSynthesis(profile_text='Fixture profile', data_sources_used=['memories'], item_count=1)
+
+    monkeypatch.setattr(refresh.users_db, 'get_data_plane_firestore_client', lambda: client)
+    monkeypatch.setattr(refresh.users_db, 'write_ai_user_profile_if_unchanged', REAL_PROFILE_WRITE)
+    monkeypatch.setattr(refresh.redis_db, 'settle_ai_profile_auto_cooldown', lambda *a, **k: False)
+    monkeypatch.setattr(refresh.profile_llm, 'synthesize_ai_user_profile', synthesize)
+
+    effect_source = GoConversationEffectSource('trigger', 4, 2, 'claimed-job', 3)
+    outcome = refresh.refresh_for_finalization(UID, effect_source=effect_source)
+    assert outcome == ('source_fenced' if changed else 'written')
+    assert bool(client.rows[user]['ai_user_profile']) is not bool(changed)
+    assert lock.released == 1
+
+
 # Save the Redis adapters before the cadence fixture replaces them.
 REAL_ADMIT = refresh.redis_db.try_acquire_ai_profile_auto_cooldown
 REAL_SETTLE = refresh.redis_db.settle_ai_profile_auto_cooldown

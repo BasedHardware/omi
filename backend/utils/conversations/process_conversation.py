@@ -450,7 +450,7 @@ def _get_structured(
             )
         )
         if minimum is not None:
-            decision = short_clip_relevance(uid, conversation, trigger, _calendar_overlap_retains_conversation)
+            decision = short_clip_relevance(uid, conversation, trigger, calendar_overlap_retains_conversation)
             if relevance_observer is not None:
                 relevance_observer(decision)
             if not decision.discard and is_recovery_trigger(trigger) and recovery_minimum_fallback_observer is not None:
@@ -613,7 +613,7 @@ def _get_structured(
                 trusted_wake_word=has_wake_word_marker,
                 model_discards=None,
                 occasion_retains=occasion_reason,
-                calendar_retains=lambda: _calendar_overlap_retains_conversation(
+                calendar_retains=lambda: calendar_overlap_retains_conversation(
                     uid, main_conv.started_at, main_conv.finished_at
                 ),
             )
@@ -674,7 +674,7 @@ def _get_structured(
             trusted_wake_word=has_wake_word_marker,
             model_discards=None if live_recap else model_discards,
             occasion_retains=occasion_reason,
-            calendar_retains=lambda: _calendar_overlap_retains_conversation(
+            calendar_retains=lambda: calendar_overlap_retains_conversation(
                 uid, main_conv.started_at, main_conv.finished_at
             ),
             neighbor=lambda: adjacent_conversation(uid, main_conv, conversation_id),
@@ -2238,14 +2238,32 @@ def _write_action_items(uid: str, conversation: Conversation, trigger: Optional[
         submit_with_context(postprocess_executor, _run_auto_sync)
 
 
-def apply_settled_enrichment(uid: str, conversation: Conversation) -> None:
-    """Apply invisible effects using the same canonical and capture-policy writers."""
+def _conversation_people(uid: str, conversation: Conversation) -> list[Person]:
+    person_ids = conversation.get_person_ids()
+    return Person.deserialize_many_safe(users_db.get_people_by_ids(uid, list(set(person_ids)))) if person_ids else []
+
+
+def apply_settled_enrichment(
+    uid: str, conversation: Conversation, *, include_vector: bool = True, people: Sequence[Person] | None = None
+) -> None:
+    """Apply canonical enrichment and refresh the vector for demand enrichment by default."""
     extract_memories(uid, conversation)
-    person_ids = list(set(conversation.get_person_ids()))
-    people = Person.deserialize_many_safe(users_db.get_people_by_ids(uid, person_ids)) if person_ids else []
+    if people is None:
+        people = _conversation_people(uid, conversation)
     _save_action_items(uid, conversation, people, ProcessingTrigger.SYNC_UPDATE)
-    if save_structured_vector(uid, conversation) is False:
+    if include_vector and save_structured_vector(uid, conversation) is False:
         raise RuntimeError('conversation vector is not ready')
+
+
+def apply_eager_sync_enrichment(
+    uid: str, conversation: Conversation, *, effect_source: ConversationEffectSource
+) -> None:
+    """Generate the ordinary sync effects for a revision reserved by workerd."""
+    people = _conversation_people(uid, conversation)
+    trigger_conversation_apps(uid, conversation, is_reprocess=True, people=people)
+    apply_settled_enrichment(uid, conversation, include_vector=False, people=people)
+    update_goal_progress(uid, conversation)
+    ai_profile_refresh.refresh_for_finalization(uid, effect_source=effect_source)
 
 
 def _save_action_items(
@@ -2468,7 +2486,7 @@ def _store_deferred_conversation(
         conversation,
         trigger,
         user_kept,
-        lambda: _calendar_overlap_retains_conversation(
+        lambda: calendar_overlap_retains_conversation(
             uid, getattr(conversation, 'started_at', None), getattr(conversation, 'finished_at', None)
         ),
     )
@@ -2541,7 +2559,7 @@ def _normal_persist_payload(conversation: Conversation, *, clear_terminal_marker
     return clear_summary_retryable(strip_client_processing(payload))
 
 
-def _calendar_overlap_retains_conversation(
+def calendar_overlap_retains_conversation(
     uid: str, started_at: Optional[datetime], finished_at: Optional[datetime]
 ) -> bool:
     """Whether a non-declined calendar meeting overlaps [started_at, finished_at].
@@ -2975,11 +2993,7 @@ def process_conversation(
     if speaker_receipt_observer is not None:
         speaker_receipt_observer(speaker_receipt_applied)
 
-    person_ids = conversation.get_person_ids()
-    people: List[Person] = []
-    if person_ids:
-        people_data = users_db.get_people_by_ids(uid, list(set(person_ids)))
-        people = Person.deserialize_many_safe(people_data)
+    people = _conversation_people(uid, conversation)
 
     decisions: list[RelevanceDecision] = []
     llm_hashes: dict[str, str] = {}

@@ -28,7 +28,7 @@ from utils.summary_quality import episode_quality
 import json
 import uuid
 from datetime import datetime, timedelta, timezone
-from typing import Any, Mapping, Optional, Sequence
+from typing import Callable, Any, Mapping, Optional, Sequence
 
 from google.cloud import firestore
 from config.recorded_time import recorded_episodes_enabled
@@ -42,7 +42,7 @@ from config.episodes import (
 from utils.conversations.recorded_time import conversation_span, sync_recorded_end
 from utils.conversations.fragment_visibility import is_relevance_discarded
 
-from database import episode_receipts, episode_timeline
+from database import episode_receipts, episode_timeline, episode_write_fence
 from database._client import get_firestore_client
 from database.transcript_pointer import run_preloaded_transactional as run_transactional
 from database.conversations import decode_transcript_segments_verified
@@ -407,6 +407,7 @@ def _record_activity(
     prior_member = members.get(conversation_id)
     members[conversation_id] = max(prior_member, member_at) if isinstance(prior_member, datetime) else member_at
     if activity != last or members != raw.get('member_activity'):
+        episode_write_fence.check(transaction, client, uid, source_id=conversation_id, source_row=conversation)
         if recorded_episodes_enabled() and activity != last:
             fence = episode_timeline.check_window(
                 transaction, client, uid, {**raw, 'last_activity_at': activity}, fence_row=timeline_row
@@ -476,23 +477,40 @@ class MembershipLink(dict):
     """Link data plus the reverse field read in the same transaction."""
 
     conversation_episode_id: Any = None
+    conversation_row: Optional[dict[str, Any]] = None
 
 
-def read_memberships(transaction, client, uid, conversation_ids, *, admit_conversation_id=None):
+def read_memberships(
+    transaction,
+    client,
+    uid,
+    conversation_ids,
+    *,
+    admit_conversation_id=None,
+    admitted_snapshot=None,
+    admitted_link=None,
+):
     ids = [cid for cid in dict.fromkeys(conversation_ids) if cid and cid not in {CURRENT, LAST_CLOSED}]
     if len(ids) > MEMBERSHIP_BATCH_LIMIT:
         raise EpisodeConflict('membership_batch_exhausted')
     root = client.collection('users').document(uid)
     members = {}
     for cid in ids:
-        snapshot = root.collection('conversations').document(cid).get(transaction=transaction)
+        snapshot = admitted_snapshot if cid == admit_conversation_id else None
+        if snapshot is None:
+            snapshot = root.collection('conversations').document(cid).get(transaction=transaction)
         row = snapshot.to_dict() or {}
         if cid == admit_conversation_id and (
             is_relevance_discarded(row) or row.get('deleted') or row.get('sync_merged_into')
         ):
             raise EpisodeConflict('conversation_hidden')
-        previous = MembershipLink(_links(client, uid).document(cid).get(transaction=transaction).to_dict() or {})
+        link = admitted_link if cid == admit_conversation_id else None
+        if link is None:
+            link = _links(client, uid).document(cid).get(transaction=transaction).to_dict() or {}
+        previous = MembershipLink(link)
         previous.conversation_episode_id = row.get('episode_id')
+        if episode_write_fence.active():
+            previous.conversation_row = row
         members[cid] = (snapshot.exists, previous)
     return members
 
@@ -606,6 +624,7 @@ def _commit(
     members = read_memberships(transaction, client, uid, links)
     if timeline_enabled:
         episode_timeline.check_window(transaction, client, uid, target, fence_row=timeline_row)
+    episode_write_fence.check(transaction, client, uid, memberships=members)
     if new_episode is not None:
         if current_ref is not None and current_raw and current_raw.get('status') == 'live':
             transaction.update(current_ref, _closed_fields(close_reason or 'gap', closed_at or now))
@@ -716,6 +735,7 @@ def _reopen(
     links = _member_links(raw, merged, link_conversation_ids)
     _check_membership(transaction, client, uid, episode_id, [*links, *(merged.get('conversation_ids') or [])])
     members = read_memberships(transaction, client, uid, links)
+    episode_write_fence.check(transaction, client, uid, memberships=members)
     if timeline_enabled:
         fence = episode_timeline.check_window(transaction, client, uid, merged, fence_row=timeline_row)
         if fence:
@@ -881,10 +901,12 @@ def _close(
             fence_row=timeline_row,
             **({'candidate_limit': episode_timeline.F_JOIN_CANDIDATE_LIMIT} if synced_f else {}),
         )
-        if fence:
-            transaction.set(fence[0], {'version': fence[1]})
     else:
         merged['recorded_end'] = end
+        fence = None
+    episode_write_fence.check(transaction, client, uid)
+    if fence:
+        transaction.set(fence[0], {'version': fence[1]})
     merged['last_activity_at'] = end
     merged['state_version'] = int(raw.get('state_version') or 0) + 1
     transaction.set(ref, seal(uid, merged))
@@ -966,14 +988,47 @@ def _update(
         require_not_deleted(
             transaction, client, uid, finalizing_conversation_id, FirestoreReadSite.EPISODE_FINALIZATION_UPDATE_FENCE
         )
+    ref = _episodes(client, uid).document(episode_id)
+    snapshot = ref.get(transaction=transaction)
+    raw = snapshot.to_dict() if snapshot.exists else None
+    return _stage_update(
+        transaction,
+        client,
+        uid,
+        episode_id,
+        expected_version,
+        updates,
+        link_conversation_ids,
+        segment_receipts,
+        recovery_conversation_id,
+        expected_member_revisions,
+        raw=raw,
+    )
+
+
+def _stage_update(
+    transaction: Any,
+    client: Any,
+    uid: str,
+    episode_id: str,
+    expected_version: int,
+    updates: Mapping[str, Any],
+    link_conversation_ids: Sequence[str],
+    segment_receipts: Optional[Mapping[str, Sequence[str]]] = None,
+    recovery_conversation_id: Optional[str] = None,
+    expected_member_revisions: Optional[Mapping[str, live_members.MemberRevision]] = None,
+    *,
+    raw: Optional[dict[str, Any]],
+    member_link: Optional[tuple[str, dict[str, Any]]] = None,
+    after_discard: Optional[Callable[[dict[str, Any]], dict[str, Any]]] = None,
+) -> dict[str, Any]:
     timeline_enabled = recorded_episodes_enabled()
     timeline_row = None
     if timeline_enabled:
         timeline_row = _links(client, uid).document('recorded_timeline').get(transaction=transaction).to_dict() or {}
     ref = _episodes(client, uid).document(episode_id)
-    snapshot = ref.get(transaction=transaction)
-    raw = snapshot.to_dict() if snapshot.exists else None
     receipts_raw = _read_receipts(transaction, client, uid, segment_receipts)
+    current = None
     if recovery_conversation_id:
         current = (
             client.collection('users')
@@ -1047,13 +1102,22 @@ def _update(
     prior = set(raw.get('discarded_conversation_ids') or []) | set(raw.get('duplicate_conversation_ids') or [])
     for cid in sorted(excluded - prior):
         link_ref = _links(client, uid).document(cid)
-        link = link_ref.get(transaction=transaction).to_dict() or {}
+        link = (
+            member_link[1]
+            if member_link is not None and member_link[0] == cid
+            else link_ref.get(transaction=transaction).to_dict() or {}
+        )
         if link.get('attach_revision'):
             invalidated.append(link_ref)
+    episode_write_fence.check(
+        transaction, client, uid, source_id=recovery_conversation_id, source_row=current, memberships=members
+    )
     if moves and timeline_enabled:
         fence = episode_timeline.check_window(transaction, client, uid, merged, fence_row=timeline_row)
         if fence:
             transaction.set(fence[0], {'version': fence[1]})
+    if after_discard is not None:
+        merged.update(after_discard(merged))
     transaction.set(ref, seal(uid, merged))
     now = datetime.now(timezone.utc)
     _write_receipts(transaction, client, uid, segment_receipts, receipts_raw, now)
@@ -1061,6 +1125,57 @@ def _update(
     for link_ref in invalidated:
         transaction.update(link_ref, {'attach_revision': None, 'attach_completed': None, 'attach_finalized': None})
     return merged
+
+
+def stage_discarded_member(
+    transaction, client, uid: str, conversation_id: str, *, after_discard=None
+) -> Optional[dict[str, Any]]:
+    """Remove a discarded member in the caller's source-fenced transaction."""
+    if conversation_id in {CURRENT, LAST_CLOSED}:
+        return None
+    link = _links(client, uid).document(conversation_id).get(transaction=transaction).to_dict() or {}
+    episode_id = link.get('episode_id')
+    visited = set()
+    while isinstance(episode_id, str) and episode_id:
+        if episode_id in visited or len(visited) >= 128:
+            raise EpisodeConflict('recorded_redirect_cycle')
+        visited.add(episode_id)
+        raw = _episodes(client, uid).document(episode_id).get(transaction=transaction).to_dict()
+        if not raw:
+            return None
+        target = raw.get('recorded_merged_into')
+        if target:
+            episode_id = str(target)
+            continue
+        if conversation_id not in (raw.get('conversation_ids') or []):
+            return None
+        if conversation_id in (raw.get('discarded_conversation_ids') or []):
+            # A lost response may rerun scheduling, but never rewrites the episode.
+            return unseal(uid, raw)
+        return _stage_update(
+            transaction,
+            client,
+            uid,
+            episode_id,
+            raw.get('state_version', 0),
+            {'discarded_conversation_ids': [*(raw.get('discarded_conversation_ids') or []), conversation_id]},
+            (),
+            raw=raw,
+            member_link=(conversation_id, link),
+            after_discard=after_discard,
+        )
+    return None
+
+
+def stage_uncomposed_deferral(transaction, client, uid, episode_id, fields):
+    """Stage the late, never-composed episode's deferral under the receiver's output fence."""
+    raw = _episodes(client, uid).document(episode_id).get(transaction=transaction).to_dict() or {}
+    if not raw or raw.get('status') != 'closed' or raw.get('composed_fingerprint'):
+        return False
+    if raw.get('compose_deferred_at'):
+        return True
+    _stage_update(transaction, client, uid, episode_id, int(raw.get('state_version') or 0), fields, (), raw=raw)
+    return True
 
 
 def update_episode(

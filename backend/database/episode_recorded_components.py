@@ -14,6 +14,7 @@ from google.cloud import firestore
 
 from config.episode_attach import optimizations_enabled
 from config.recorded_time_tolerances import CLOSE_GAP_SECONDS, MAX_EPISODE_SECONDS
+from database import episode_write_fence
 from database._client import run_transactional
 from database import episodes, episode_batch_pending
 from utils.conversations.recorded_time import conversation_span
@@ -164,24 +165,42 @@ def attach(
     deadline_floor=None,
     detach_from=None,
     admission=False,
+    writes_follow=False,
+    source_snapshot=None,
 ) -> dict[str, Any] | str | None:
-    """One fenced transaction, or None when an established boundary owns intake."""
+    """One fenced transaction, or None when an established boundary owns intake.
+
+    A supplied source snapshot must have been read in the caller's transaction.
+    """
     client = firestore_client
     root = client.collection('users').document(uid)
     collection = root.collection('episodes')
     fence = root.collection('episode_links').document('recorded_timeline')
 
     def commit(transaction):
+        reuse_reads = episode_write_fence.active()
+        member_snapshot = source_snapshot
         if admission:
             # Read the member inside the same transaction as the attach. The
             # scheduled admission task may run after the audio close committed;
             # in that case the close-time window is final, and the admission's
             # stale provisional bounds must never re-enter placement.
-            member = root.collection('conversations').document(cid).get(transaction=transaction).to_dict() or {}
+            if member_snapshot is None:
+                member_snapshot = root.collection('conversations').document(cid).get(transaction=transaction)
+            member = member_snapshot.to_dict() or {}
             if episode_batch_pending.audio_finalized(member):
                 return ADMISSION_CLOSED
         revision = fence_row if fence_row is not None else (fence.get(transaction=transaction).to_dict() or {})
         linked = root.collection('episode_links').document(cid).get(transaction=transaction).to_dict() or {}
+        loaded = {}
+
+        def load_episode(episode_id):
+            if not reuse_reads:
+                return collection.document(episode_id).get(transaction=transaction).to_dict() or {}
+            if episode_id not in loaded:
+                loaded[episode_id] = collection.document(episode_id).get(transaction=transaction).to_dict() or {}
+            return loaded[episode_id]
+
         pending_patch = episode_batch_pending.read_patch(
             transaction, client, uid, cid, pending_at, deadline_floor=deadline_floor
         )
@@ -192,7 +211,7 @@ def attach(
             # membership in the same transaction.
             linked_owner = None
         if linked_owner:
-            owner = collection.document(linked_owner).get(transaction=transaction).to_dict() or {}
+            owner = load_episode(linked_owner)
             if not _automatic(owner):
                 return None
             # Proof is written only by a complete canonical repartition. A note,
@@ -214,7 +233,9 @@ def attach(
             ):
                 # Do not trust the caller's stale row across a delete/discard or
                 # another WAL append. This get also joins the transaction read set.
-                member = root.collection('conversations').document(cid).get(transaction=transaction).to_dict()
+                if member_snapshot is None:
+                    member_snapshot = root.collection('conversations').document(cid).get(transaction=transaction)
+                member = member_snapshot.to_dict()
                 span = conversation_span(member) if member and pending_at is None else None
                 # Before transcription, committed archive bounds are the only
                 # audio clock. Legacy started_at/finished_at can be arrival time.
@@ -243,6 +264,8 @@ def attach(
                 ):
                     full = episodes.unseal(uid, owner)
                     if full is not None:
+                        if pending_patch or writes_follow:
+                            episode_write_fence.check(transaction, client, uid, source_id=cid, source_row=member)
                         if pending_patch:
                             transaction.update(root.collection('conversations').document(cid), pending_patch)
                         return {**full, '_recorded_windows': [full]}
@@ -263,7 +286,7 @@ def attach(
             for row in rows:
                 if not _automatic(row) or row['id'] in previous or not _connected(row, lo, hi):
                     continue
-                full = episodes.unseal(uid, collection.document(row['id']).get(transaction=transaction).to_dict())
+                full = episodes.unseal(uid, load_episode(row['id']))
                 if full is None:
                     raise episodes.EpisodeConflict('recorded_owner_missing')
                 previous[row['id']] = full
@@ -290,7 +313,7 @@ def attach(
             # its original deterministic ID. Never reuse that occupied ID (or
             # a redirect) for a disconnected component at the former start.
             for attempt in range(page_limit):
-                target = collection.document(window['id']).get(transaction=transaction).to_dict() or {}
+                target = load_episode(window['id'])
                 if not target or window['id'] in previous:
                     targets[window['id']] = target
                     break
@@ -308,7 +331,17 @@ def attach(
         # membership read bounded, with every chunk in the transaction's read phase.
         for index in range(0, len(member_ids), episodes.MEMBERSHIP_BATCH_LIMIT):
             chunk = member_ids[index : index + episodes.MEMBERSHIP_BATCH_LIMIT]
-            members.update(episodes.read_memberships(transaction, client, uid, chunk, admit_conversation_id=cid))
+            members.update(
+                episodes.read_memberships(
+                    transaction,
+                    client,
+                    uid,
+                    chunk,
+                    admit_conversation_id=cid,
+                    admitted_snapshot=member_snapshot if reuse_reads else None,
+                    admitted_link=linked if reuse_reads else None,
+                )
+            )
         result = [_state(template, window, list(previous.values()), facts) for window in windows]
         for row in result:
             row['state_version'] = max(row['state_version'], int(targets[row['id']].get('state_version') or 0) + 1)
@@ -324,6 +357,7 @@ def attach(
         assignments = {member: [row['id'] for row in result if member in row['conversation_ids']] for member in members}
         if any(not ids for ids in assignments.values()):
             raise episodes.EpisodeConflict('recorded_member_unassigned')
+        episode_write_fence.check(transaction, client, uid, memberships=members)
         for row in previous.values():
             if row['id'] not in new_ids:
                 owner = next(

@@ -4,7 +4,7 @@ from google.cloud import firestore
 
 from config.episode_attach import content_gate_enabled
 from database._client import get_firestore_client
-from database import transcript_pointer
+from database import episode_write_fence, transcript_pointer
 from database.transcript_pointer import run_preloaded_transactional
 from database.conversations import decode_transcript_segments_verified
 from database.episode_finalization_fence import EpisodeFinalizationDeleted, require_not_deleted
@@ -82,38 +82,51 @@ def stamp(transaction, client, uid, cid, key, owner_id):
         )
 
 
-def complete(uid, cid, row, owner, *, firestore_client=None, finalized=False):
+def completion_write(transaction, client, uid, cid, row, owner, *, finalized=False, current=None):
+    """Plan a memo update using the source already read by the caller, if available."""
     key = content_key(row) if content_gate_enabled() and memo_eligible(row) else None
     if key is None:
+        return None
+    root = client.collection('users').document(uid)
+    ref = root.collection('episode_links').document(cid)
+    link = ref.get(transaction=transaction).to_dict() or {}
+    if current is None:
+        current = root.collection('conversations').document(cid).get(transaction=transaction).to_dict() or {}
+    owner_id = owner['id'] if owner is not None else link.get('episode_id')
+    marker = 'attach_finalized' if finalized else 'attach_completed'
+    if (
+        owner_id
+        and link.get('episode_id') == owner_id == current.get('episode_id')
+        and link.get('attach_owner_id') == owner_id
+        and link.get('attach_revision') == key
+        and current_key(uid, current) == key
+        and (not finalized or link.get('attach_completed') == key)
+        and link.get(marker) != key
+    ):
+        return ref, {marker: key}, current
+    return None
+
+
+def complete(uid, cid, row, owner, *, firestore_client=None, finalized=False):
+    if not content_gate_enabled() or not memo_eligible(row) or content_key(row) is None:
         return
     client = firestore_client if firestore_client is not None else get_firestore_client()
-    root = client.collection('users').document(uid)
 
     @firestore.transactional
     def finish(transaction):
         if finalized:
             require_not_deleted(transaction, client, uid, cid, FirestoreReadSite.EPISODE_FINALIZATION_MEMO_FENCE)
-        ref = root.collection('episode_links').document(cid)
-        link = ref.get(transaction=transaction).to_dict() or {}
-        current = root.collection('conversations').document(cid).get(transaction=transaction).to_dict() or {}
-        owner_id = owner['id'] if owner is not None else link.get('episode_id')
-        marker = 'attach_finalized' if finalized else 'attach_completed'
-        if (
-            owner_id
-            and link.get('episode_id') == owner_id == current.get('episode_id')
-            and link.get('attach_owner_id') == owner_id
-            and link.get('attach_revision') == key
-            and current_key(uid, current) == key
-            and (not finalized or link.get('attach_completed') == key)
-            and link.get(marker) != key
-        ):
-            transaction.update(ref, {marker: key})
+        write = completion_write(transaction, client, uid, cid, row, owner, finalized=finalized)
+        if write is not None:
+            ref, fields, current = write
+            episode_write_fence.check(transaction, client, uid, source_id=cid, source_row=current)
+            transaction.update(ref, fields)
 
     try:
         run_preloaded_transactional(client, finish, transient=True)
     except EpisodeFinalizationDeleted:
         return
-    except transcript_pointer.TranscriptPointerError:
+    except (episode_write_fence.EpisodeWriteRefused, transcript_pointer.TranscriptPointerError):
         raise
     except Exception:
         # The recovery already committed. An absent completion stamp keeps

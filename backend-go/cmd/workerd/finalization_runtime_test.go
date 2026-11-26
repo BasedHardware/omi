@@ -175,3 +175,24 @@ func TestWorkerdMergeRetractionRequiresExplicitOptIn(t *testing.T) {
 		})
 	}
 }
+
+func TestSyncFinalizationReferenceRequiresPrivateOriginAndKeyedGateway(t *testing.T) {
+	t.Parallel()
+	env := fixtureEnv()
+	env["WORKER_SYNC_FINALIZATION_REFERENCE_ORIGIN"] = "https://backend.fixture.test"
+	env["WORKER_SYNC_FINALIZATION_REFERENCE_AUDIENCE"] = "https://backend.fixture.test"
+	if _, err := readConfig(envLookup(env), false); err == nil {
+		t.Fatal("accepted sync reference without a keyed gateway")
+	}
+	env["WORKER_FINALIZATION_GATEWAY_ENABLED"] = "true"
+	env["OMI_LLM_GATEWAY_URL"] = "https://gateway.fixture.test"
+	env["OMI_LLM_GATEWAY_SERVICE_TOKEN"] = "fixture-token"
+	cfg, err := readConfig(envLookup(env), false)
+	if err != nil || cfg.referenceOrigin == "" {
+		t.Fatalf("did not bind configured private reference: %v", err)
+	}
+	env["WORKER_SYNC_FINALIZATION_REFERENCE_ORIGIN"] = "http://backend.fixture.test"
+	if _, err := readConfig(envLookup(env), false); err == nil {
+		t.Fatal("accepted plaintext sync reference")
+	}
+}

@@ -39,6 +39,35 @@ class ConversationEffectSource:
             raise ConversationEffectSourceChanged('conversation effect source changed')
 
 
+@dataclass(frozen=True)
+class GoConversationEffectSource(ConversationEffectSource):
+    """Commit authority for a serving effect routed through the Go receiver."""
+
+    job_id: str
+    finalization_revision: int
+
+    def validate(self, transaction, client, uid: str) -> None:
+        snapshot = _read_current_conversation(
+            transaction,
+            client,
+            uid,
+            self.conversation_id,
+            field_paths=[*_SOURCE_FIELDS, 'finalization_job_id', 'finalization_revision'],
+        )
+        row = snapshot.to_dict() or {}
+        epoch, finalization_revision = row.get(EPOCH_FIELD), row.get('finalization_revision')
+        if (
+            row.get(ENGINE_FIELD) != 'go'
+            or type(epoch) is not int
+            or epoch != self.owner_epoch
+            or row.get('finalization_job_id') != self.job_id
+            or type(finalization_revision) is not int
+            or finalization_revision != self.finalization_revision
+            or not _revision_matches(row, self.revision)
+        ):
+            raise ConversationEffectSourceChanged('Go conversation effect source changed')
+
+
 def _revision_matches(row: Mapping[str, Any], expected: int | None) -> bool:
     revision = row.get('sync_content_revision')
     return (revision is None or type(revision) is int) and revision == expected
@@ -58,7 +87,7 @@ class ProfileConversationInput:
             raise ConversationEffectSourceChanged('profile conversation input changed')
 
 
-def _read_current_conversation(transaction, client, uid: str, conversation_id: str):
+def _read_current_conversation(transaction, client, uid: str, conversation_id: str, *, field_paths=None):
     user = client.collection('users').document(uid)
     tombstone = user.collection(TOMBSTONES).document(conversation_id).get(transaction=transaction)
     if tombstone.exists:
@@ -66,7 +95,7 @@ def _read_current_conversation(transaction, client, uid: str, conversation_id: s
     snapshot = (
         user.collection('conversations')
         .document(conversation_id)
-        .get(transaction=transaction, field_paths=_SOURCE_FIELDS)
+        .get(transaction=transaction, field_paths=_SOURCE_FIELDS if field_paths is None else field_paths)
     )
     row = snapshot.to_dict() or {}
     if not snapshot.exists or row.get('deleted') or row.get('discarded') or row.get('sync_merged_into'):

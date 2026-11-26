@@ -110,3 +110,20 @@ The empty-cohort Python path reads and writes the same Firestore documents as
 before. This change adds no Firestore queries, calls, or persisted fields to that
 path. Sync source assignment and intake episode attachment remain separate from
 finalization.
+
+### Slice B Go-owned coordination fields
+
+These integer fields live on `users/{uid}/conversations/{id}`. They coordinate
+the Go-owned ordinary-sync worker and its private receiver at
+`backend/routers/sync_finalization_reference.py`. The receiver checks the
+current Go ownership and conversation revision before using them.
+
+| Exact field | Writer | Purpose |
+| --- | --- | --- |
+| `go_sync_inline_fanout_epoch` | Go finalization transaction | Bind the inline effects and episode claim to the current Go queue lease epoch. |
+| `go_sync_inline_fanout_revision` | Go finalization transaction | Bind that claim to the exact `sync_content_revision` persisted with the finalization result. The epoch and revision must match together. |
+| `go_empty_discard_fanout_epoch` | Go empty-transcript discard transaction | Bind episode reconciliation for the deterministic empty discard to the current Go queue lease epoch. |
+| `go_sync_empty_discard_home_revision` | Go empty-transcript discard transaction or its Go-owned receiver recovery transaction | Record the sync revision whose Home display was written. Recovery uses this field to avoid repeating the projection for the same revision. |
+
+Python-owned finalization and app and web clients have no dependency on these
+fields. Capture-end and legacy rows can omit them.

@@ -34,9 +34,9 @@ type terminalRequest struct {
 
 func (s Store) finish(ctx context.Context, g queue.Guarded, claim finalization.Claim, request terminalRequest) (finalization.TerminalState, error) {
 	var state finalization.TerminalState
-	err := s.withJob(ctx, g, claim, func(tx *docstore.Tx, ref docstore.Ref, job document, now time.Time) error {
+	err := s.withJob(ctx, g, claim, func(tx *docstore.Tx, ref docstore.Ref, job document, now time.Time, bound boundReader) error {
 		var finishErr error
-		state, finishErr = finish(tx, ref, job, claim, request, now)
+		state, finishErr = finish(tx, ref, job, claim, request, now, bound)
 		return finishErr
 	})
 	if errors.Is(err, finalization.ErrStale) {
@@ -48,7 +48,7 @@ func (s Store) finish(ctx context.Context, g queue.Guarded, claim finalization.C
 	return state, nil
 }
 
-func finish(tx *docstore.Tx, ref docstore.Ref, job document, claim finalization.Claim, req terminalRequest, now time.Time) (finalization.TerminalState, error) {
+func finish(tx *docstore.Tx, ref docstore.Ref, job document, claim finalization.Claim, req terminalRequest, now time.Time, bound boundReader) (finalization.TerminalState, error) {
 	if state := terminal(job); state != finalization.TerminalPending {
 		return state, nil
 	}
@@ -64,7 +64,7 @@ func finish(tx *docstore.Tx, ref docstore.Ref, job document, claim finalization.
 		return state, nil
 	case state == finalization.TerminalStale || state == finalization.TerminalDeadLetter:
 		var finishErr error
-		state, update, finishErr = prepareTerminalConversation(tx, claim, req, now)
+		state, update, finishErr = prepareTerminalConversation(tx, claim, req, now, bound())
 		if finishErr != nil || state == finalization.TerminalPending {
 			return state, finishErr
 		}
@@ -75,8 +75,8 @@ func finish(tx *docstore.Tx, ref docstore.Ref, job document, claim finalization.
 	return state, update()
 }
 
-func prepareTerminalConversation(tx *docstore.Tx, claim finalization.Claim, req terminalRequest, now time.Time) (finalization.TerminalState, func() error, error) {
-	ref, row, err := boundConversation(tx, claim)
+func prepareTerminalConversation(tx *docstore.Tx, claim finalization.Claim, req terminalRequest, now time.Time, snapshot boundSnapshot) (finalization.TerminalState, func() error, error) {
+	ref, row, err := snapshot.ref, snapshot.row, snapshot.err
 	if err != nil || row == nil {
 		return finalization.TerminalStale, nil, err
 	}

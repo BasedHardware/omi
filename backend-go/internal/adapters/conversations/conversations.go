@@ -8,6 +8,7 @@ import (
 	"errors"
 	"time"
 
+	"github.com/BasedHardware/omi/backend-go/internal/finalization"
 	"github.com/BasedHardware/omi/backend-go/internal/platform/crypt"
 	"github.com/BasedHardware/omi/backend-go/internal/platform/docstore"
 	"github.com/BasedHardware/omi/backend-go/internal/platform/objectlake"
@@ -60,9 +61,16 @@ type Conversation struct {
 	SyncContentRevision             int64
 	ProtectionLevel                 string
 	Discarded                       bool
+	RecordingLayer                  bool
+	NoDerivedEffects                bool
+	UntrustedCapture                bool
+	PendingMinimum                  bool
+	SyncMinimumApplied              bool
+	BatchOwned, HasAudio, HasPhotos bool
+	AppPlatform                     string
 	Title                           string
 	Overview                        string
-	Sections                        []string
+	Sections                        []finalization.NoteSection
 	NotesInputHash, NotesOutputHash string
 	CreatedAt                       time.Time
 	StartedAt                       time.Time
@@ -76,9 +84,22 @@ type Finalization struct {
 	Status                          *Status
 	FinalizationStatus              *FinalizationStatus
 	Discarded                       *bool
+	SyncMinimum                     *finalization.NotesMinimum
+	ServingSyncNotes                bool
+	SyncFieldMask                   bool
+	SyncSourceProjection            *finalization.SyncSourceProjection
+	SyncSpeakerScopes               []string
+	SyncNotesWrittenAt              *time.Time
+	SyncTerminalFamilyEnabled       bool
+	SyncRelevance                   *finalization.RelevanceDecision
+	SyncTitleUpdate                 *finalization.SyncTitleUpdate
+	SyncOpenLoops                   *finalization.SyncOpenLoops
+	EmptyDiscardFanoutEpoch         int64
+	InlineFanoutEpoch               int64
 	Title                           *string
 	Overview                        *string
-	Sections                        *[]string
+	Sections                        *[]finalization.NoteSection
+	ActionItems                     *[]map[string]any
 	NotesInputHash, NotesOutputHash *string
 	FinishedAt                      *time.Time
 	SummaryCoversThrough            *time.Time
@@ -112,6 +133,18 @@ func (s Store) Load(ctx context.Context, g queue.Guarded, ref Ref) (Conversation
 	if err != nil {
 		return Conversation{}, classify(err)
 	}
+	return s.DecodeFencedSnapshot(ctx, g, ref, row)
+}
+
+// DecodeFencedSnapshot hydrates a source already read with the owner and
+// tombstone fences inside the caller's transaction.
+func (s Store) DecodeFencedSnapshot(ctx context.Context, g queue.Guarded, ref Ref, row map[string]any) (Conversation, error) {
+	if g.Tenant() != ref.Owner {
+		return Conversation{}, classify(docstore.ErrOwnerMismatch)
+	}
+	if err := g.Err(); err != nil {
+		return Conversation{}, err
+	}
 	result, err := s.decode(ctx, g, ref, row)
 	if err != nil {
 		return Conversation{}, classify(err)
@@ -123,7 +156,7 @@ func (s Store) Load(ctx context.Context, g queue.Guarded, ref Ref) (Conversation
 }
 
 // CheckLive rechecks the primary row and deletion intent before a gateway call.
-func (s Store) CheckLive(ctx context.Context, g queue.Guarded, ref Ref, jobID string, revision int64) error {
+func (s Store) CheckLive(ctx context.Context, g queue.Guarded, ref Ref, jobID string, revision, syncRevision int64) error {
 	path, err := docstore.Doc("users", ref.Owner, "conversations", ref.ID)
 	if err != nil {
 		return classify(err)
@@ -133,13 +166,36 @@ func (s Store) CheckLive(ctx context.Context, g queue.Guarded, ref Ref, jobID st
 		if err != nil {
 			return err
 		}
-		status := Status(field[string](row, "status"))
-		if (status != Processing && status != Completed) || field[bool](row, "discarded") ||
-			field[string](row, "finalization_job_id") != jobID || field[int64](row, "finalization_revision") != revision {
-			return docstore.ErrMissing
-		}
-		return nil
+		return checkNotesSource(row, jobID, revision, syncRevision, syncRevision > 0)
 	}))
+}
+
+// CheckSyncNotesRecoverySource checks the binding for a gateway receipt GET.
+// A subsequent paid call or write independently checks deletion authority.
+func (s Store) CheckSyncNotesRecoverySource(ctx context.Context, g queue.Guarded, ref Ref, jobID string, revision int64) error {
+	var row map[string]any
+	found, err := s.Docs.ReadGuarded(ctx, g, ref.Owner, "conversations", ref.ID, &row)
+	if err != nil {
+		return classify(err)
+	}
+	if err := readable(found, row); err != nil {
+		return classify(err)
+	}
+	// Recovery may fetch an earlier operation to reconcile a revision change.
+	return classify(checkNotesSource(row, jobID, revision, 0, true))
+}
+
+func checkNotesSource(row map[string]any, jobID string, revision, syncRevision int64, requireGo bool) error {
+	status := Status(field[string](row, "status"))
+	if (status != Processing && status != Completed) || field[bool](row, "discarded") ||
+		field[string](row, "finalization_job_id") != jobID || field[int64](row, "finalization_revision") != revision ||
+		requireGo && field[string](row, "finalization_engine") != "go" {
+		return docstore.ErrMissing
+	}
+	if syncRevision > 0 && field[int64](row, "sync_content_revision") != syncRevision {
+		return ErrChanged
+	}
+	return nil
 }
 
 // ApplyFinalization updates the existing conversation if its stored contents still match
@@ -158,27 +214,51 @@ func (s Store) ApplyFinalization(ctx context.Context, g queue.Guarded, revision 
 		if getErr != nil {
 			return getErr
 		}
-		current, revisionErr := rowRevision(ref, row)
-		if revisionErr != nil {
-			return revisionErr
-		}
-		if current != revision {
-			return ErrChanged
-		}
-		if statusErr := validateStatus(patch); statusErr != nil {
-			return statusErr
-		}
-		fields, lifecycleRefused := finalizationFields(row, patch)
-		refused = lifecycleRefused
-		if len(fields) == 0 {
-			return nil
-		}
-		return updateWithHome(tx, ref, path, fields)
+		var stageErr error
+		refused, stageErr = s.StageFinalization(tx, ref, revision, row, patch)
+		return stageErr
 	})
 	if err == nil && refused {
 		err = ErrLifecycleRefused
 	}
 	return classify(err)
+}
+
+// StageFinalization applies the revision-checked update inside an already
+// fenced transaction, letting a caller commit dependent job state atomically.
+func (s Store) StageFinalization(tx *docstore.Tx, ref Ref, revision Revision, row map[string]any, patch Finalization) (bool, error) {
+	if ref != revision.ref {
+		return false, ErrChanged
+	}
+	path, err := docstore.Doc("users", ref.Owner, "conversations", ref.ID)
+	if err != nil {
+		return false, err
+	}
+	current, revisionErr := rowRevision(ref, row)
+	if revisionErr != nil {
+		return false, revisionErr
+	}
+	if current != revision {
+		return false, ErrChanged
+	}
+	if statusErr := validateStatus(patch); statusErr != nil {
+		return false, statusErr
+	}
+	fields, lifecycleRefused := finalizationFields(row, patch)
+	if patch.SyncFieldMask && !lifecycleRefused {
+		if maskErr := s.stageSyncFields(ref.Owner, fields, row, patch); maskErr != nil {
+			return false, maskErr
+		}
+		// The notes replace the structured content for the checked sync
+		// revision even when the existing corrections blob is reused.
+		if patch.Sections != nil {
+			fields["home_content_invalidated"] = false
+		}
+	}
+	if len(fields) == 0 {
+		return lifecycleRefused, nil
+	}
+	return lifecycleRefused, updateWithHome(tx, ref, path, fields, patch.SyncFieldMask && !lifecycleRefused)
 }
 
 func get(tx *docstore.Tx, ref Ref, path docstore.Ref) (map[string]any, error) {
@@ -199,13 +279,17 @@ func get(tx *docstore.Tx, ref Ref, path docstore.Ref) (map[string]any, error) {
 	if err != nil {
 		return nil, err
 	}
+	return row, readable(found, row)
+}
+
+func readable(found bool, row map[string]any) error {
 	if !found || field[bool](row, "deleted") || field[bool](row, "is_deleted") {
-		return nil, docstore.ErrMissing
+		return docstore.ErrMissing
 	}
 	if field[bool](row, "is_locked") || field[string](row, "data_protection_level") == "private" {
-		return nil, ErrRestricted
+		return ErrRestricted
 	}
-	return row, nil
+	return nil
 }
 
 func field[T any](row map[string]any, name string) T {

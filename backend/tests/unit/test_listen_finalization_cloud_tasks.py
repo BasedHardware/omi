@@ -525,6 +525,56 @@ def test_finalization_status_distinguishes_success_from_fenced_completion(monkey
     assert status['fanout_status'] == 'fenced'
 
 
+def test_go_finalization_status_uses_workerd_for_current_binding(monkeypatch):
+    from utils.conversations import workerd_finalization_status
+
+    binding = {
+        'finalization_engine': 'go',
+        'finalization_owner_epoch': 2,
+        'finalization_revision': 3,
+    }
+    job = {
+        **binding,
+        'uid': 'uid-1',
+        'conversation_id': 'conversation-1',
+        'processing_trigger': 'sync_update',
+        'status': 'leased',
+        'attempt_count': 0,
+    }
+    monkeypatch.setattr(
+        lifecycle_service.conversations_db,
+        'get_conversation',
+        lambda *_: {**binding, 'finalization_job_id': 'job-1'},
+    )
+    monkeypatch.setattr(lifecycle_service.jobs_db, 'get_finalization_job', lambda _: job)
+    read = MagicMock(return_value={'status': 'queued', 'attempt_count': 2, 'terminal_outcome': 'unknown'})
+    monkeypatch.setattr(workerd_finalization_status, 'read_status', read)
+    status = lifecycle_service.get_finalization_status('uid-1', 'conversation-1')
+    read.assert_called_once_with('uid-1', 'conversation-1', 'job-1', 3)
+    assert status is not None
+    assert (status['status'], status['terminal'], status['retryable'], status['attempt_count']) == (
+        'queued',
+        False,
+        True,
+        2,
+    )
+
+    read.side_effect = workerd_finalization_status.StatusUnavailable()
+    status = lifecycle_service.get_finalization_status('uid-1', 'conversation-1')
+    assert status is not None
+    assert (status['status'], status['terminal'], status['retryable'], status['attempt_count']) == (
+        'leased',
+        False,
+        True,
+        0,
+    )
+
+    read.reset_mock()
+    job['finalization_owner_epoch'] = 1
+    assert lifecycle_service.get_finalization_status('uid-1', 'conversation-1') is None
+    read.assert_not_called()
+
+
 def test_byok_live_session_uses_pusher_even_when_platform_jobs_use_cloud_tasks(monkeypatch):
     intent = {'job_id': 'job-1', 'status': 'blocked_byok', 'dispatch_generation': 1, 'requires_byok': True}
     enqueue = MagicMock()

@@ -334,6 +334,16 @@ def _run_scheduled(uid: str, effect_source: ConversationEffectSource | None = No
         _automatic_slots.release()
 
 
+def refresh_for_finalization(uid: str, *, effect_source: ConversationEffectSource) -> str:
+    """Run the bounded automatic refresh under the finalization's source fence."""
+    if not _automatic_slots.acquire(blocking=False):
+        return 'busy'
+    try:
+        return refresh_if_stale(uid, effect_source=effect_source)
+    finally:
+        _automatic_slots.release()
+
+
 def schedule_refresh(
     uid: str,
     profile: Optional[dict] = None,

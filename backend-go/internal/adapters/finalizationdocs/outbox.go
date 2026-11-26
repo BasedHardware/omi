@@ -35,6 +35,7 @@ type Store struct {
 	Clock           clock.Clock
 	Archive         ClosedArchive
 	MergeRetraction MergeRetraction
+	SyncOnly        bool
 }
 
 // ErrUnsupported identifies admission paths needing recovery or backfill evidence
@@ -82,6 +83,10 @@ func field[T any](row document, key string) T {
 // Admit binds an ordinary capture intent and its deterministic job in one
 // transaction. The Firestore job exists before the service attempts SQL enqueue.
 func (s Store) Admit(ctx context.Context, a queue.Admitting, req finalization.AdmissionRequest, decide func(rules.AdmissionFacts) rules.AdmissionAction) (finalization.Intent, error) {
+	if s.SyncOnly {
+		// Producer admission and the handback protocol are wired separately.
+		return finalization.Intent{}, ErrUnsupported
+	}
 	if req.Trigger != rules.CaptureEnd && req.Trigger != rules.ClientFinalize && req.Trigger != rules.ServerRecovery {
 		return finalization.Intent{}, ErrUnsupported
 	}
