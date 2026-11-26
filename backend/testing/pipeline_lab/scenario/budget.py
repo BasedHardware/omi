@@ -41,6 +41,8 @@ from __future__ import annotations
 
 from contextlib import contextmanager
 from contextvars import ContextVar
+import functools
+import importlib.util
 import os
 from pathlib import Path
 import threading
@@ -53,8 +55,8 @@ KINDS = ('reads', 'writes', 'deletes', 'noop_writes')
 BUDGET_KEYS = ('reads', 'writes', 'deletes', 'noop_writes')
 VENDOR_KEYS = ('stt', 'llm')
 _SCOPE: ContextVar[str] = ContextVar('pipeline_lab_op_scope', default='pipeline')
-BACKEND = Path(__file__).resolve().parents[3]
-_LAB_DIR = str(BACKEND / 'testing' / 'pipeline_lab')
+BACKEND = Path(__file__).resolve().parents[3]  # the tree this lab file is in: a vendor dir under ``scenario compare``
+_LAB_DIR = str(Path(__file__).resolve().parents[1])  # this lab package, wherever it runs from
 # Transaction plumbing: a frame here names how a write is retried, not who asked for it.
 _PLUMBING = (
     ('database/_client.py', ''),
@@ -110,14 +112,32 @@ def collection_path(name: str) -> tuple[str, str]:
     return collections[0], '/'.join(collections)
 
 
-def call_site(stack: Optional[list] = None, frames: int = SITE_FRAMES) -> str:
-    """The innermost backend frames outside the lab and the libraries: ``path:line function <- ...``."""
+@functools.lru_cache(maxsize=1)
+def product_backend() -> Path:
+    """The backend tree the product is imported from: a ``scenario compare`` arm's, not the vendored lab's
+    (``worktrees.vendor_lab``; ``scenario/run.py`` ``product_runtime_env`` resolves it the same way)."""
+    spec = importlib.util.find_spec('database')
+    if spec is not None and spec.origin and spec.origin.endswith('.py'):
+        return Path(spec.origin).resolve().parents[1]
+    return BACKEND
+
+
+def _lab_frame(filename: str, backend: Path) -> bool:
+    """A frame of the running lab or of the product arm's own copy of it: neither is a product call site."""
+    return filename.startswith(_LAB_DIR + os.sep) or filename.startswith(
+        str(backend / 'testing' / 'pipeline_lab') + os.sep
+    )
+
+
+def call_site(stack: Optional[list] = None, frames: int = SITE_FRAMES, backend: Optional[Path] = None) -> str:
+    """The innermost product backend frames outside the lab and the libraries: ``path:line function <- ...``."""
     stack = traceback.extract_stack() if stack is None else stack
+    backend = product_backend() if backend is None else backend
     out = []
-    root = str(BACKEND) + os.sep
+    root = str(backend) + os.sep
     for frame in reversed(stack):
         filename = str(frame.filename)
-        if not filename.startswith(root) or filename.startswith(_LAB_DIR) or '/.venv/' in filename:
+        if not filename.startswith(root) or _lab_frame(filename, backend) or '/.venv/' in filename:
             continue
         relative = filename[len(root) :]
         if any(relative == path and str(frame.name).startswith(prefix) for path, prefix in _PLUMBING):
@@ -128,10 +148,10 @@ def call_site(stack: Optional[list] = None, frames: int = SITE_FRAMES) -> str:
     return ' <- '.join(out) or '(outside backend)'
 
 
-def racy_caller(stack: Optional[list] = None) -> Optional[str]:
-    """The :data:`RACY_CALLERS` file on the current stack, if any."""
+def racy_caller(stack: Optional[list] = None, backend: Optional[Path] = None) -> Optional[str]:
+    """The :data:`RACY_CALLERS` file of the product backend on the current stack, if any."""
     stack = traceback.extract_stack() if stack is None else stack
-    root = str(BACKEND) + os.sep
+    root = str(product_backend() if backend is None else backend) + os.sep
     for frame in stack:
         filename = str(frame.filename)
         if filename.startswith(root) and filename[len(root) :] in RACY_CALLERS:

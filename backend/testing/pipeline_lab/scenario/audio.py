@@ -66,7 +66,9 @@ class PreparedAudio:
         c = self.cassette
         return {
             'source': c.source,
-            'origin': self.origin,
+            # Provenance (fixture | lab_root | recorded): kept for inspection, not compared across repeats
+            # (determinism.SCENARIO_ARTIFACTS), since a record-mode repeat replays what its first run recorded.
+            'cassette_origin': self.origin,
             'provider': c.key.provider,
             'model': c.key.model,
             'language': c.key.language,

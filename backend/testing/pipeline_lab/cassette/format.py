@@ -186,10 +186,17 @@ def index_path(audio: str, root=None) -> Path:
     return lab_root(root) / 'cache' / STAGE_DIR / INDEX_DIR / audio[:2] / f'{audio}.jsonl'
 
 
+# The index row that says the one-time scan for cassettes saved before the index ran for this audio. Without
+# it, an index holding only cassettes saved since would hide the older ones (``recorded_for_audio``).
+BACKFILL_MARKER = {'backfill': 'complete'}
+
+
 def recorded_for_audio(audio: str, root=None) -> list[Cassette]:
-    """Every indexed cassette of this audio hash under ``root`` that is still on disk, oldest first."""
+    """Every cassette of this audio hash under ``root`` that is still on disk, oldest first: the indexed ones,
+    plus (once per audio, until the index records :data:`BACKFILL_MARKER`) those saved before the index."""
     seen: dict[str, Cassette] = {}
-    for row in read_jsonl(index_path(audio, root)):
+    rows = read_jsonl(index_path(audio, root))
+    for row in rows:
         try:
             key = CassetteKey(**{k: row[k] for k in CassetteKey.__dataclass_fields__})
         except (KeyError, TypeError):
@@ -199,15 +206,17 @@ def recorded_for_audio(audio: str, root=None) -> list[Cassette]:
         cassette = load(key, root)
         if cassette is not None:
             seen[key.digest] = cassette
-    if not seen:
-        seen = {c.key.digest: c for c in _unindexed_for_audio(audio, root)}
-    return list(seen.values())
+    if BACKFILL_MARKER not in rows:
+        for cassette in _unindexed_for_audio(audio, root, indexed=set(seen)):
+            seen.setdefault(cassette.key.digest, cassette)
+    return sorted(seen.values(), key=lambda c: (c.recorded_at, c.key.digest))
 
 
-def _unindexed_for_audio(audio: str, root=None) -> list[Cassette]:
+def _unindexed_for_audio(audio: str, root=None, *, indexed: Iterable[str] = ()) -> list[Cassette]:
     """Cassettes of this audio hash saved before the by-audio index existed (``save`` then wrote only the
-    cassette file): a scan of the stored cassettes, oldest first, then the index is backfilled so the scan runs
-    once per audio. Runs only when the index has no live entry for ``audio``."""
+    cassette file): a scan of the stored cassettes, oldest first. The index is then backfilled with the ones it
+    lacks and :data:`BACKFILL_MARKER`, so the scan runs once per audio, even when the index already had live
+    entries saved since (a local cassette recorded after an older, unindexed vendor one)."""
     base = lab_root(root) / 'cache' / STAGE_DIR
     found: list[Cassette] = []
     for path in sorted(base.glob('*/*.json')):
@@ -223,11 +232,12 @@ def _unindexed_for_audio(audio: str, root=None) -> list[Cassette]:
         if cassette.key.audio_sha256 == audio and path == cassette.key.path(root):
             found.append(cassette)
     found.sort(key=lambda c: (c.recorded_at, c.key.digest))
-    if found:
-        try:  # an optimization only: a root the lab cannot write to still replays
-            append_jsonl(index_path(audio, root), [c.index_row() for c in found])
-        except OSError:
-            pass
+    try:  # an optimization only: a root the lab cannot write to still replays (and scans again next time)
+        known = set(indexed)
+        rows = [c.index_row() for c in found if c.key.digest not in known]
+        append_jsonl(index_path(audio, root), [*rows, BACKFILL_MARKER])
+    except OSError:
+        pass
     return found
 
 

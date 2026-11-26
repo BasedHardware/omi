@@ -411,3 +411,34 @@ def test_account_document_ops_of_a_racy_caller_are_kept_apart():
     assert summary['writes'] == 1
     assert summary['racy_ops'] == {'utils/ai_profile_refresh.py': {'writes': 1}}
     assert 'racy_ops' in WALL_CLOCK_FIELDS
+
+
+def test_frames_resolve_against_the_product_arm_not_the_vendored_lab(tmp_path, monkeypatch):
+    # Codex 4705338171: under ``scenario compare`` a pinned arm runs a vendored copy of this lab
+    # (``worktrees.vendor_lab``), so the product tree is the one ``database`` imports from, not ``__file__``'s.
+    arm, vendor = tmp_path / 'arm' / 'backend', tmp_path / 'vendor'
+    (arm / 'database').mkdir(parents=True)
+    (arm / 'database' / '__init__.py').write_text('')
+    monkeypatch.setattr(budget, 'BACKEND', vendor)
+    monkeypatch.setattr(budget, '_LAB_DIR', str(vendor / 'testing' / 'pipeline_lab'))
+    spec = SimpleNamespace(origin=str(arm / 'database' / '__init__.py'))
+    monkeypatch.setattr(budget.importlib.util, 'find_spec', lambda name: spec if name == 'database' else None)
+    budget.product_backend.cache_clear()
+    try:
+        assert budget.product_backend() == arm.resolve()
+        frames = [
+            SimpleNamespace(filename=str(arm / 'utils/ai_profile_refresh.py'), lineno=7, name='_generate'),
+            SimpleNamespace(filename=str(arm / 'database/users.py'), lineno=9, name='write'),
+            SimpleNamespace(filename=str(vendor / 'testing/pipeline_lab/scenario/budget.py'), lineno=1, name='add'),
+            SimpleNamespace(filename=str(arm / 'testing/pipeline_lab/scenario/budget.py'), lineno=1, name='add'),
+        ]
+        for backend in (None, arm):  # resolved, and passed explicitly
+            assert budget.racy_caller(frames, backend=backend) == 'utils/ai_profile_refresh.py'
+            assert budget.call_site(frames, backend=backend) == (
+                'database/users.py:9 write <- utils/ai_profile_refresh.py:7 _generate'
+            )
+        # The vendored tree is not the product: against it nothing is attributed.
+        assert budget.racy_caller(frames, backend=vendor) is None
+        assert budget.call_site(frames, backend=vendor) == '(outside backend)'
+    finally:
+        budget.product_backend.cache_clear()

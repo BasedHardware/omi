@@ -564,7 +564,7 @@ def format_report(result: dict[str, Any]) -> str:
     for row in (result.get('audio') or {}).get('recordings', []):
         lines.append(
             f'  audio {row["label"]}: {row["audio_file"]} {row["audio_seconds"]:g}s, {row["source"]} cassette '
-            f'{row["cassette"]} ({row["provider"]}/{row["model"]}, {row["origin"]}), {row["words"]} words, '
+            f'{row["cassette"]} ({row["provider"]}/{row["model"]}, {row.get("cassette_origin") or row.get("origin")}), {row["words"]} words, '
             f'driver {row["driver"]}'
         )
     if 'stand_ins' in result or (result.get('audio') or {}).get('recordings'):

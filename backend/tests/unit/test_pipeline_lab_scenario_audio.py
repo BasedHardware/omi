@@ -365,3 +365,54 @@ def test_unpinned_replay_finds_a_cassette_recorded_before_the_index_and_backfill
     again = audio.find(pcm16, {'language': 'en'}, root=root, fixtures=tmp_path / 'none')
     assert again is not None and again[0].key == vendor.key
     assert audio.find(b'\3\0' * 16000, {'language': 'en'}, root=root, fixtures=tmp_path / 'none') is None
+
+
+def test_unpinned_replay_finds_a_pre_index_vendor_cassette_after_a_local_one_was_indexed(tmp_path):
+    # Codex 4705338146: a local cassette saved after the index existed must not hide an older, unindexed
+    # vendor cassette of the same audio; the one-time scan runs until the index records it ran.
+    from testing.pipeline_lab.cassette.format import BACKFILL_MARKER, index_path, recorded_for_audio
+    from testing.pipeline_lab.store import atomic_write_json, read_jsonl
+
+    root = private_root(tmp_path)
+    pcm16 = b'\1\0' * 16000
+    vendor = make_cassette(
+        pcm16, provider='deepgram', model='nova-3', source='vendor', recorded_at='2026-11-01T00:00:00Z'
+    )
+    atomic_write_json(vendor.key.path(root), vendor.to_json())  # how save() stored it before the index
+    local = make_cassette(pcm16, provider='parakeet', model='tdt', source='local', recorded_at='2026-11-25T00:00:00Z')
+    local.save(root)  # the index now has one live entry: the local cassette
+
+    hit = audio.find(pcm16, {'language': 'en'}, root=root, fixtures=tmp_path / 'none')
+    assert hit is not None and hit[0].key == vendor.key and hit[1] == 'lab_root'  # vendor preferred
+    rows = read_jsonl(index_path(vendor.key.audio_sha256, root))
+    assert BACKFILL_MARKER in rows and sum(r.get('key_digest') == vendor.key.digest for r in rows) == 1
+    again = recorded_for_audio(vendor.key.audio_sha256, root)
+    assert [c.key for c in again] == [vendor.key, local.key]  # from the index alone, oldest first
+    assert len(read_jsonl(index_path(vendor.key.audio_sha256, root))) == len(rows)  # no second scan
+
+
+def test_record_mode_repeat_is_deterministic_despite_cache_provenance(tmp_path):
+    # Codex 4705338153: --repeat 2 --stt record-local records on the first run and replays on the second; only
+    # the provenance differs, so the repeat comparison must not call it nondeterministic. The cassette's
+    # identity and words stay compared, and a recording origin (a device, not provenance) still counts.
+    from testing.pipeline_lab.determinism import SCENARIO_ARTIFACTS, compare_runs
+
+    register_local_recorder(LocalRecorder('fake_local', 'f-1', lambda pcm16, language: [LocalWord(0.5, 0.9, 'w')]))
+    scenario = load_scenario(COMMITTED)
+    root = private_root(tmp_path)
+    runs = [prepare(scenario, mode='record-local', root=root)['B'] for _ in range(2)]
+    assert [r.summary()['cassette_origin'] for r in runs] == ['recorded', 'lab_root']
+
+    def write(name, summary, gap_origin='O'):
+        run = tmp_path / name
+        run.mkdir()
+        result = {'audio': {'recordings': [summary]}, 'gaps': [{'origin': gap_origin}]}
+        (run / 'result.json').write_text(json.dumps(result))
+        return run
+
+    first, second = write('a', runs[0].summary()), write('b', runs[1].summary())
+    assert compare_runs(first, second, SCENARIO_ARTIFACTS).same
+    other = write('c', {**runs[1].summary(), 'cassette': 'f' * 12, 'cassette_words': 9})
+    paths = {d.path for d in compare_runs(first, other, SCENARIO_ARTIFACTS).differences}
+    assert paths == {'$.audio.recordings[0].cassette', '$.audio.recordings[0].cassette_words'}
+    assert not compare_runs(first, write('d', runs[1].summary(), gap_origin='P'), SCENARIO_ARTIFACTS).same
