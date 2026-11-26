@@ -293,3 +293,27 @@ def test_transcribe_keys_the_ambient_env_its_product_code_reads(monkeypatch):
     monkeypatch.setenv('PIPELINE_LAB_UNREAD_NAME', 'x')
     assert code.ambient_env(['transcribe'], overlay=[names]) == base
     assert getattr(lanes_plugin.TranscribeStage(), 'ambient_env', False)
+
+
+@pytest.mark.slow  # imports the product sync pipeline; over the fast-unit CPU limit
+def test_sync_lane_work_files_default_to_the_private_lab_root(tmp_path, monkeypatch):
+    import tempfile
+
+    from testing.pipeline_lab.lanes import sync
+
+    monkeypatch.setenv('OMI_PIPELINE_LAB_ROOT', str(tmp_path / 'lab'))
+    made = []
+    real = tempfile.mkdtemp
+
+    def mkdtemp(*args, **kwargs):
+        made.append(kwargs.get('dir'))
+        return real(*args, **kwargs)
+
+    monkeypatch.setattr(sync.tempfile, 'mkdtemp', mkdtemp)
+    from testing.pipeline_lab.cassette.player import PlaybackConfig, Player
+
+    conversation = sync.SyncConversation('c1', b'\0' * 3200, '2026-01-02T10:00:00Z', None, 'en')
+    player = Player(PlaybackConfig('stub', 'stub-1', 'en'), root=tmp_path / 'lab')
+    sync.replay_sync_lane(conversation, player=player, file_vad=lambda path: [])
+    assert made and Path(made[0]) == tmp_path / 'lab' / 'tmp' / 'sync'
+    assert mode(tmp_path / 'lab' / 'tmp' / 'sync') == 0o700
