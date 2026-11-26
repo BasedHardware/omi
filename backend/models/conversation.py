@@ -991,6 +991,7 @@ class CreateConversation(BaseModel):
 
 class ProcessConversationRequest(BaseModel):
     _has_body_fields: bool = PrivateAttr(default=False)
+    _names_only_live_conversation: bool = PrivateAttr(default=False)
 
     @model_validator(mode='wrap')
     @classmethod
@@ -1001,11 +1002,19 @@ class ProcessConversationRequest(BaseModel):
         if isinstance(value, dict):
             # Validation ignores unknown keys for wire compatibility. They still make the body nonempty.
             request._has_body_fields = bool(value)
+            request._names_only_live_conversation = set(value) <= {'live_conversation_id'}
         return request
 
     @property
     def empty_body(self) -> bool:
         return not (self._has_body_fields or self.model_fields_set)
+
+    @property
+    def finish_only_body(self) -> bool:
+        """The app's Finish body: empty, or only the live window it was showing."""
+        return self.empty_body or (
+            self._names_only_live_conversation and self.model_fields_set <= {'live_conversation_id'}
+        )
 
     calendar_meeting_context: Optional[CalendarMeetingContext] = None
     live_conversation_id: Optional[str] = Field(
