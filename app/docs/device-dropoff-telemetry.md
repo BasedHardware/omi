@@ -20,7 +20,8 @@ Kill switch: PostHog flag `device_dropoff_telemetry_off`. True omits every field
 
 ## Gap
 
-A gap is a `disconnect` row whose next connection starts at least 30 minutes later, or has not started by the
+A gap is a `disconnect` row whose next connection (its measured reconnect, audio resuming on its outage, or the
+next session start) starts at least 30 minutes later, or has not started by the
 snapshot time. Every day's event describes the **most recent gap that started before the day's end**, so a
 fully disconnected day still carries the cause of the gap the device is in.
 
@@ -30,7 +31,7 @@ fully disconnected day still carries the cause of the gap the device is in.
 |---|---|
 | `manual` | The user disconnected. |
 | `pairing_lost` | `pairing_lost`, `paired_to_another_phone` or `link_key_mismatch`. |
-| `phone_side` | `bluetooth_off` or `app_closed`. |
+| `phone_side` | `bluetooth_off` or `app_closed` (Android only; iOS rows carry neither reason). |
 | `battery_flat` | Last battery sample at most 60 min before the loss was ≤ 5% and not charging. |
 | `out_of_range` | RSSI trend `fading`, or an RSSI sample at most 30 s old ≤ −85 dBm. |
 | `power_off` | An RSSI sample at most 30 s old ≥ −75 dBm: an abrupt loss at strong signal (powered off, reset or crashed). |
@@ -42,7 +43,7 @@ fully disconnected day still carries the cause of the gap the device is in.
 |---|---|
 | `connected_seconds`, `disconnected_seconds` | The day split by link state (local day). |
 | `short_sessions` | Links that dropped within 30 s of connecting ("keeps disconnecting seconds after connecting"). A put-down pendant does not reconnect at all. |
-| `connected_no_audio_seconds`, `connected_no_audio_sessions` | Time and count of link sessions of at least 60 s that delivered zero audio packets. Only reported for a device that has delivered audio in retained history. |
+| `connected_no_audio_seconds`, `connected_no_audio_sessions` | Time and count of link sessions of at least 60 s that delivered zero audio packets, and whose day bucket saw no packet inside the session (a restarted counter is not silence). Only reported for a device that has delivered audio in retained history. Capture being off is not recorded, so treat it as zero-packet time, not proof of a broken mic. |
 | `audio_packets_per_connected_minute` | Audio packets received per connected minute; null under one connected minute. A mic that stops mid-session lowers it. |
 | `long_gaps`, `long_gaps_by_cause` | Gaps that started this day, and their causes. |
 | `gap_cause` | See above. |
@@ -73,6 +74,8 @@ the next 2 days also at zero. The stop day's gap fields describe the stop; the 3
 audio, battery or resets were already failing.
 
 ```sql
+-- Bucket on properties.day (emission can be up to 7 days late). Days the app never ran emit nothing, so a
+-- missing day is not a zero day; restrict to a cohort with person_id IN (...) for population rates.
 WITH per_day AS (
   SELECT person_id,
          dateDiff('day', toDate('2020-01-01'), toDate(properties.day)) AS d,
@@ -87,7 +90,8 @@ WITH per_day AS (
          max(toFloat(properties.battery_low_seconds)) AS low_s,
          max(toFloat(properties.battery_erratic_steps)) AS erratic,
          max(if(toString(properties.device_resets_by_reason) NOT IN ('', '{}', 'null'), 1, 0)) AS resets,
-         argMax(toFloat(properties.gap_short_sessions_24h), timestamp) AS gap_short
+         argMax(toFloat(properties.gap_short_sessions_24h), timestamp) AS gap_short,
+         argMax(toFloat(properties.gap_battery_age_min), timestamp) AS gap_batt_age
   FROM events
   WHERE event = 'Mobile Device Health Daily'
     AND toInt(properties.schema_version) >= 3
@@ -97,7 +101,7 @@ WITH per_day AS (
 per_person AS (
   SELECT person_id,
          arraySort(x -> x.1, groupArray((d, conn_s, silent_s, gap_cause, gap_batt, gap_fails, gap_seen, cliffs,
-                                         short_n, low_s, erratic, resets, gap_short))) AS days
+                                         short_n, low_s, erratic, resets, gap_short, gap_batt_age))) AS days
   FROM per_day
   GROUP BY person_id
 ),
@@ -127,7 +131,7 @@ SELECT multiIf(
            OR (conn_before > 0 AND silent_before > 0.5 * conn_before)
            OR cliffs_before > 0 OR short_before >= 10 OR low_before >= 3600 OR erratic_before > 0
            OR reset_days > 0, 'hardware',
-         stop.4 IN ('out_of_range', 'power_off', 'manual') AND stop.5 > 20, 'put_down',
+         stop.4 IN ('out_of_range', 'power_off', 'manual') AND stop.5 > 20 AND stop.14 <= 180, 'put_down',
          'unclassified') AS dropoff_kind,
        stop.4 AS gap_cause,
        count() AS people
@@ -141,7 +145,7 @@ mostly silent connected time, short-session churn (at least 3 in the 24 h before
 before the stop), an hour or more stuck at ≤ 5%, an erratic or cliff battery step, or any firmware reset in the
 14 days before (`device_resets_by_reason`, mostly `RESET_LOW_POWER_WAKE`, which may itself mean a flat battery;
 only 3.0.24+ reports it, about 0.1% of daily rows today). `put_down` is a clean loss (out of range,
-powered off or manual) with more than 20% battery left. `unclassified` keeps the unknown share visible.
+powered off or manual) with more than 20% battery in a sample at most 3 hours old. `unclassified` keeps the unknown share visible.
 Restrict `per_day` to a cohort (cancellers, a churn study's stoppers) with a `person_id IN (...)` subquery.
 
 ## Known blind spot

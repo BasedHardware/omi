@@ -72,6 +72,9 @@ void main() {
       expect(DeviceDropoffSignals.cause(rowAt(rssi: -60, age: 45000), null), 'unknown');
       expect(DeviceDropoffSignals.cause({...rowAt(rssi: -60)}..remove('lastRssiAgeMs'), null), 'unknown');
       expect(DeviceDropoffSignals.cause(rowAt(rssi: 0), null), 'unknown');
+      expect(DeviceDropoffSignals.cause(rowAt(rssi: -95, age: -1), null), 'unknown');
+      expect(DeviceDropoffSignals.cause(rowAt(rssi: -60, age: 30001), null), 'unknown');
+      expect(DeviceDropoffSignals.cause(rowAt(reason: 'app_closed'), null), 'phone_side');
     });
   });
 
@@ -143,6 +146,37 @@ void main() {
     expect(result.containsKey('gap_saved_reconnect_enabled'), isFalse);
   });
 
+  test('audio resuming after the outage closes the gap without a later disconnect row', () {
+    final at = start + 10 * _hour;
+    final result = DeviceDropoffSignals.rollup({
+      'observed_at': nextDay + _hour,
+      'disconnect_history_v2': [
+        {...disconnect(at, rssi: -95), 'lostAudioResolvedAt': at + 10 * _minute},
+      ],
+    }, day);
+    expect(result['long_gaps'], 0);
+    expect(result.containsKey('gap_cause'), isFalse);
+  });
+
+  test('malformed rows are skipped, not thrown', () {
+    final result = DeviceDropoffSignals.rollup({
+      'observed_at': nextDay + _hour,
+      'disconnect_history_v2': [
+        'junk',
+        {'timestamp': 1.5, 'eventType': 'disconnect'},
+        {'timestamp': start + _hour, 'eventType': 'disconnect', 'lastRssi': 'x', 'connectionDurationMs': '9'},
+      ],
+      'battery_history_v2': [
+        {'ts': 'x', 'level': 3},
+        {'ts': start, 'level': null},
+      ],
+      'ble_log': ['junk', 7],
+      'saved_reconnect_enabled': true,
+    }, day);
+    expect(result['gap_cause'], 'unknown');
+    expect(result['long_gaps'], 1);
+  });
+
   test('a gap still under 30 minutes at observation is not a gap yet', () {
     final result = DeviceDropoffSignals.rollup({
       'observed_at': start + 10 * _hour + 20 * _minute,
@@ -182,6 +216,15 @@ void main() {
     final result = DeviceDropoffSignals.rollup(diagnostics, day);
     expect(result['connected_no_audio_seconds'], 2 * 3600);
     expect(result['connected_no_audio_sessions'], 1);
+
+    // A restarted counter reads zero, but the day bucket saw a packet inside it.
+    final restarted = DeviceDropoffSignals.rollup({
+      ...diagnostics,
+      'audio_packet_days': [
+        {'ts': start, 'received': 40, 'last_at': start + 2 * _hour},
+      ],
+    }, day);
+    expect(restarted['connected_no_audio_seconds'], 0);
 
     final neverStreams = DeviceDropoffSignals.rollup({
       'disconnect_history_v2': [disconnect(start + 3 * _hour, packets: 0)],
@@ -266,6 +309,9 @@ void main() {
     expect(off.keys.toSet().intersection({'connected_seconds', 'gap_cause', 'long_gaps', 'charge_inferred_events'}),
         isEmpty);
     expect(on.keys.toSet().containsAll(off.keys.toSet()), isTrue);
+    for (final key in off.keys.where((key) => key != 'schema_version')) {
+      expect(on[key], off[key], reason: key);
+    }
   });
 
   group('emitter kill switch', () {

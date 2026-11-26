@@ -87,7 +87,10 @@ abstract final class DeviceDropoffSignals {
       final ts = row['timestamp'] as int;
       final measured = row['timeToReconnectMs'];
       if (measured is int && measured > 0) return ts + measured;
-      int? next;
+      // Audio resuming on this row's outage proves the link came back, even
+      // when no later disconnect row records the next session.
+      final resumed = row['lostAudioResolvedAt'];
+      int? next = resumed is int && resumed > ts ? resumed : null;
       for (final session in sessions) {
         if (session.start >= ts && (next == null || session.start < next)) next = session.start;
       }
@@ -208,10 +211,17 @@ abstract final class DeviceDropoffSignals {
             .whereType<Map>()
             .any((point) => point['received'] is int && (point['received'] as int) > 0);
     if (!streams) return const {};
+    // A session counter restarts with the process; the day bucket's last
+    // packet time does not. A packet inside the session means it had audio.
+    final packetTimes = [
+      for (final point in (diagnostics['audio_packet_days'] as List? ?? []).whereType<Map>())
+        if (point['last_at'] is int) point['last_at'] as int
+    ];
     var silentMs = 0;
     var silentSessions = 0;
     for (final session in sessions) {
       if (session.packets != 0 || session.end - session.start < noAudioSessionMinMs) continue;
+      if (packetTimes.any((at) => at >= session.start && at <= session.end)) continue;
       final overlap = session.end.clamp(start, end) - session.start.clamp(start, end);
       if (overlap <= 0) continue;
       silentMs += overlap;
