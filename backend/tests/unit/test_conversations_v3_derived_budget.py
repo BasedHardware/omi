@@ -1,6 +1,7 @@
 """The live closure loads a heavy owner's claimed rows without chaining through settled history."""
 
 from datetime import datetime, timedelta, timezone
+from unittest.mock import AsyncMock
 
 import pytest
 
@@ -768,6 +769,32 @@ async def test_reconcile_wakes_unvisited_unlocked_windows_once_per_pass(builder,
     assert len(wakes) == len(set(names)) == (2 if outlasts_wake else 1)
     if outlasts_wake:
         assert wakes[1] > wakes[0] + timedelta(minutes=1)
+
+
+@pytest.mark.asyncio
+async def test_parked_paged_pass_wakes_its_unvisited_windows_after_the_backoff(builder, monkeypatch):
+    _window, existing, recordings = _locked_pair(datetime.now(timezone.utc) - timedelta(hours=2))
+    monkeypatch.setenv('CONVERSATIONS_V3_LOCK_SECONDS', '3600')
+    recordings['r'].update(recording=True, status='completed', v3_pending=True)
+    until = datetime.now(timezone.utc) + timedelta(minutes=5)
+    parked, wakes = [], []
+
+    def load(*a, unlocked_page=None, **kw):
+        unlocked_page.remaining, unlocked_page.cursor = frozenset({'later'}), 'early'
+        return recordings, existing, []
+
+    def commit(*a, **kw):
+        raise Conflict('v3_derived_budget')
+
+    monkeypatch.setattr(store, 'load', load)
+    monkeypatch.setattr(service, '_commit', commit)
+    monkeypatch.setattr(store, 'record_blocked', lambda *a, **kw: parked.append(a))
+    monkeypatch.setattr(store, 'backoff_state', lambda *a: (until if parked else None, None))
+    monkeypatch.setattr(service, '_drain_blocked', AsyncMock())
+    monkeypatch.setattr(service, 'enqueue', lambda uid, **kw: kw.get('wake_key') and wakes.append(kw['at']))
+    assert await service.reconcile('synthetic') == 'blocked'
+    # The pre-commit continuation lands inside the backoff; a second wake follows its end.
+    assert len(wakes) == 2 and wakes[0] < until < wakes[1] <= until + timedelta(seconds=5)
 
 
 def test_unlocked_continuation_is_not_swallowed_by_an_earlier_same_minute_wake(monkeypatch):

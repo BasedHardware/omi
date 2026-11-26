@@ -319,6 +319,16 @@ async def _wake_unvisited_unlocked(uid, page, token, scheduled_at=None):
     return scheduled_at
 
 
+async def _wake_after_backoff(uid, page, token):
+    """A parked paged pass's unlocked windows carry no pending marker for the sweep to find, and its
+    next-minute continuation lands inside the backoff. Wake the owner when the backoff ends."""
+    if page is None:
+        return
+    until, _ = await run_blocking(db_executor, store.backoff_state, uid)
+    at = max(until or datetime.now(timezone.utc), datetime.now(timezone.utc)) + timedelta(seconds=5)
+    await run_blocking(db_executor, enqueue, uid, at=at, wake_key=token)
+
+
 def _measure_reconcile_writes(run):
     @wraps(run)
     async def measured(*args, **kwargs):
@@ -993,6 +1003,7 @@ async def reconcile(
             # Windows earlier passes (or earlier batches) committed still owe their notes.
             with suspend_committed_write_count():
                 await _drain_blocked(uid, blocked)
+            await _wake_after_backoff(uid, unlocked_page, token)
         return 'blocked'
     await _wake_unvisited_unlocked(uid, unlocked_page, token, unlocked_wake)
     if on_open:
