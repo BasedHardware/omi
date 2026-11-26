@@ -113,7 +113,8 @@ cloud_run:
       BATCH_PIPELINE_SERVING_SWEEP_PAGE_ROWS: '200'
       BATCH_PIPELINE_SERVING_TICK_SECONDS: '10'
       # SCA-3120/SCA-4454, David 2026-11-26: step in-process follow-up sweep slots
-      # 4 -> 3 (then 2 after two clean hours) to cut wasted attempts, reads and CPU.
+      # 4 -> 3 to cut wasted attempts, reads and CPU. 3 -> 2 stays held until
+      # random-offset follow-up discovery serves (Firestore owner, SCA-3120).
       # Rollback: set this key to '4' explicitly (the config train only updates
       # declared keys, so deleting it leaves the serving value) and verify.
       BATCH_PIPELINE_PROJECTION_FOLLOWUP_SLOTS: '3'
