@@ -141,7 +141,7 @@ def test_delete_conversation_removes_the_sibling_ledger_row(client, monkeypatch)
 
 
 @pytest.mark.parametrize('root_missing', [False, True], ids=['live-root', 'missing-root'])
-@pytest.mark.parametrize('late_wipe_status', ['wiping', 'wiped'])
+@pytest.mark.parametrize('late_wipe_status', ['running', 'completed'])
 def test_pl786_account_erasure_removes_pipeline_ledger_and_finalization_jobs(
     client, monkeypatch, root_missing, late_wipe_status
 ):
@@ -169,7 +169,7 @@ def test_pl786_account_erasure_removes_pipeline_ledger_and_finalization_jobs(
     unrelated = {'uid': 'another-account', 'status': 'pending'}
     jobs.document('unrelated').set(unrelated)
     marker = client.collection('account_deletions').document(uid)
-    marker.set({'wipe_status': 'wiping'})
+    marker.set({'wipe_status': 'running'})
     if root_missing:
         client.collection('users').document(uid).delete()
         assert _ledger(client, uid, capture_id) is not None
@@ -183,7 +183,7 @@ def test_pl786_account_erasure_removes_pipeline_ledger_and_finalization_jobs(
 
     assert {job.id: job.to_dict() for job in jobs.stream()} == {'unrelated': unrelated}
 
-    # A stale producer can write the conversation after the job sweep.
+    # Seed a stale conversation as input to the finalization writer fences.
     marker.set({'wipe_status': late_wipe_status})
     late_conversation = {
         'status': 'in_progress',
@@ -192,7 +192,9 @@ def test_pl786_account_erasure_removes_pipeline_ledger_and_finalization_jobs(
         'transcript_segments': [{'text': 'fixture'}],
         'finished_at': datetime(2026, 1, 1, tzinfo=timezone.utc),
     }
-    _conversation_ref(client, uid, capture_id).set(late_conversation)
+    late_ref = _conversation_ref(client, uid, capture_id)
+    late_ref.set(late_conversation)
+    before = late_ref.get().to_dict()
     intent = conversation_finalization_jobs.create_or_get_finalization_intent(
         uid,
         capture_id,
@@ -213,8 +215,7 @@ def test_pl786_account_erasure_removes_pipeline_ledger_and_finalization_jobs(
         firestore_client=client,
     )
     assert receipt == {'status': 'fenced'}
-    late_row = _conversation_ref(client, uid, capture_id).get().to_dict()
-    assert {'finalization_job_id', 'listen_quiet_timeout_seconds', 'meeting_treatment_eligible'}.isdisjoint(late_row)
+    assert late_ref.get().to_dict() == before
     assert {job.id: job.to_dict() for job in jobs.stream()} == {'unrelated': unrelated}
 
 

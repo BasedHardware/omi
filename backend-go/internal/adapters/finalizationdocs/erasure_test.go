@@ -3,6 +3,7 @@ package finalizationdocs
 import (
 	"errors"
 	"testing"
+	"time"
 
 	"github.com/BasedHardware/omi/backend-go/internal/finalization"
 	"github.com/BasedHardware/omi/backend-go/internal/platform/docstore"
@@ -11,7 +12,7 @@ import (
 
 func TestPL786FinalizationWritersRespectSharedErasureMarker(t *testing.T) {
 	t.Parallel()
-	for _, wipeStatus := range []string{"wiping", "wiped"} {
+	for _, wipeStatus := range []string{"running", "completed"} {
 		t.Run(wipeStatus, func(t *testing.T) {
 			t.Parallel()
 			store, bench, req := setup(t)
@@ -29,6 +30,14 @@ func TestPL786FinalizationWritersRespectSharedErasureMarker(t *testing.T) {
 				put(t, bench, base+id, document{"status": "completed"})
 			}
 			put(t, bench, jobs+"/unrelated", document{"uid": "another-account", "status": queued})
+			before := make(map[string]time.Time)
+			for _, path := range []string{conversationPath, base + quietRef.ID, base + merge.Sources[0], base + merge.Sources[1]} {
+				doc, err := bench.Raw.Doc(path).Get(ctx)
+				if err != nil {
+					t.Fatal(err)
+				}
+				before[path] = doc.UpdateTime
+			}
 
 			// The deletion executor sweeps this shared Firestore collection. Old cached
 			// work may still see valid conversation rows and call the Go adapters.
@@ -48,6 +57,16 @@ func TestPL786FinalizationWritersRespectSharedErasureMarker(t *testing.T) {
 			if len(jobRows) != 1 || jobRows[0].Ref.ID != "unrelated" ||
 				jobRows[0].Data()["uid"] != "another-account" || jobRows[0].Data()["status"] != queued {
 				t.Fatal("blocked writers changed the finalization job collection")
+			}
+
+			for path, version := range before {
+				doc, err := bench.Raw.Doc(path).Get(ctx)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if !doc.UpdateTime.Equal(version) {
+					t.Errorf("blocked writer changed conversation %s", path)
+				}
 			}
 
 			// Remove only the synthetic fixture marker to prove that the same
