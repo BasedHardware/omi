@@ -177,6 +177,15 @@ while later speech still belongs to the same outline stretch. Later speech
 gets its own continuation. Reconciliation can merge settled cards when the
 outline and the loaded source claims cover the complete merge.
 
+`CONVERSATIONS_V3_TRANSCRIPT_SIZE_CAP` defaults to on. A new derived window also splits
+before its estimated encoded `transcript_segments` (enhanced encryption included) passes
+900 KiB, below Firestore's 1,048,487-byte per-field limit. Splits use the duration cap's
+continuation path; only unpublished windows split, and locked rows keep their boundaries.
+Count `event=v3_transcript_size_cap_split` log lines to see splits. A commit Firestore still
+rejects for size (whole document or one property) parks the owner as `document_too_large`
+instead of retrying. To roll back, set `CONVERSATIONS_V3_TRANSCRIPT_SIZE_CAP=off` on builder
+and backfill runners.
+
 `CONVERSATIONS_V3_MAX_WINDOW_SECONDS` defaults to 10800 (three hours).
 The first transcript line whose recorded start reaches the limit starts a new
 stretch. The earlier live stretch locks and enters normal processing, and the

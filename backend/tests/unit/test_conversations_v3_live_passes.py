@@ -7,15 +7,20 @@ cap and preservation paths, not the loader's query plan.
 """
 
 from copy import deepcopy
+import base64
 from datetime import datetime, timedelta, timezone
 import json
+import random
+import zlib
 from types import SimpleNamespace
 
+from google.api_core.exceptions import InvalidArgument
 import pytest
 
 from database import conversations_v3 as store
-from utils.conversations.v3 import policy, service
+from utils.conversations.v3 import metrics, policy, service
 from utils.home_feed.projection import reveal_display
+from tests.unit.fixtures.strict_firestore_transaction import StrictFirestoreTransaction
 from tests.unit.test_conversations_v3_claim_growth import strict, owners_import, path, UID  # noqa: F401
 
 T0 = datetime(2026, 11, 18, 10, 0, tzinfo=timezone.utc)
@@ -136,6 +141,58 @@ def timing(monkeypatch, gap, lock):
 
 
 @pytest.mark.asyncio
+async def test_post_commit_latency_metric_failure_keeps_reconcile_successful(strict, monkeypatch):
+    put_recording(strict, speech(8), status='completed', landed=T0)
+    committed_at_observe = []
+
+    def fail_after_commit(*_args):
+        committed_at_observe.append(bool(derived(strict)))
+        raise OSError('metrics unavailable')
+
+    monkeypatch.setattr(metrics.VISIBLE_LATENCY, 'observe', fail_after_commit)
+    outcome = await reconcile_at(strict, monkeypatch, T0 + timedelta(minutes=30))
+
+    assert committed_at_observe == [True]
+    assert derived(strict)
+    assert outcome == 'committed'
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ('reason', 'outcome'),
+    [('source_changed', 'raced'), ('multiple_open_conversations', 'blocked')],
+)
+async def test_conflict_outcome_survives_telemetry_failure_after_projection_commit(
+    strict, monkeypatch, reason, outcome
+):
+    put_recording(strict, speech(8), status='completed', landed=T0)
+    original_commit = service._commit
+
+    def commit_then_conflict(*args, **kwargs):
+        original_commit(*args, **kwargs)
+        assert derived(strict)
+        raise service.Conflict(reason)
+
+    monkeypatch.setattr(service, '_commit', commit_then_conflict)
+
+    def fail_metric(*_args, **_kwargs):
+        raise OSError('metrics unavailable')
+
+    if outcome == 'raced':
+        monkeypatch.setattr(metrics.RECONCILES.labels('raced'), 'inc', fail_metric)
+        monkeypatch.setattr(metrics.RACES.labels(reason), 'inc', fail_metric)
+        monkeypatch.setattr(service.logger, 'info', fail_metric)
+    else:
+        monkeypatch.setattr(metrics.RECONCILES.labels('blocked'), 'inc', fail_metric)
+        monkeypatch.setattr(metrics.BLOCKED.labels(reason), 'inc', fail_metric)
+        monkeypatch.setattr(service.logger, 'warning', fail_metric)
+        monkeypatch.setattr(service.store, 'record_blocked', lambda *_args, **_kwargs: None)
+
+    assert await reconcile_at(strict, monkeypatch, T0 + timedelta(minutes=30)) == outcome
+    assert derived(strict)
+
+
+@pytest.mark.asyncio
 async def test_live_recording_inside_the_lock_delay_keeps_one_open_card(strict, monkeypatch):
     # (a) A ten-minute recording arrives a minute at a time; its latest speech stays inside the lock delay.
     timing(monkeypatch, 900, 900)
@@ -190,6 +247,29 @@ async def test_live_title_is_attempted_once_and_final_outline_wins(strict, monke
     assert not planner_open(row)
     assert row['structured']['title'] == 'Talk'
     assert calls == [UID]
+
+
+@pytest.mark.asyncio
+async def test_live_title_telemetry_failure_after_projection_commit_keeps_successful_result(strict, monkeypatch):
+    timing(monkeypatch, 300, 300)
+    monkeypatch.delenv('CONVERSATIONS_V3_LIVE_TITLE', raising=False)
+    segments = speech(8)
+    now = T0 + timedelta(seconds=segments[-1]['end'] + 1)
+    put_recording(strict, segments, status='in_progress', landed=now)
+
+    def fail_provider(_uid, _segments):
+        assert derived(strict)
+        raise TimeoutError('synthetic title timeout')
+
+    def fail_telemetry(*_args, **_kwargs):
+        raise OSError('telemetry unavailable')
+
+    monkeypatch.setattr(service.models, 'live_title', fail_provider)
+    monkeypatch.setattr(service.logger, 'warning', fail_telemetry)
+    monkeypatch.setattr(service, 'record_fallback', fail_telemetry)
+
+    assert await reconcile_at(strict, monkeypatch, now) == 'committed'
+    assert derived(strict)
 
 
 @pytest.mark.parametrize(
@@ -511,7 +591,7 @@ async def test_overlapping_turns_at_the_cap_keep_one_owner_across_passes(strict,
     assert seen[0]['a'] != seen[0]['b'] == seen[0]['c']
 
 
-def main_capped(lines, sections, committed=()):
+def main_capped(lines, sections, committed=(), *, size_cap=False):
     # planner._capped before this change (main b301dc3): cut at the section nearest the middle.
     from utils.conversations.v3.planner import CAP
 
@@ -840,6 +920,51 @@ async def test_one_ownership_index_per_plan(strict, monkeypatch):
     put_recording(strict, segments, status='in_progress', landed=end)
     assert await reconcile_at(strict, monkeypatch, end + timedelta(seconds=30)) == 'committed'
     assert built == [1]
+
+
+@pytest.mark.asyncio
+async def test_reconcile_parks_then_recovers_oversize_transcript_as_continuations(strict, monkeypatch):
+
+    rng = random.Random(2918)
+    segments = speech(100, step=10)
+    for segment in segments:
+        segment['text'] = ' '.join(base64.b64encode(rng.randbytes(21)).decode() for _ in range(500))
+    now = T0 + timedelta(hours=1)
+    put_recording(strict, segments, status='completed', landed=T0 + timedelta(minutes=17))
+    # Each source recording fits individually. Only the derived union is oversized.
+    start = 500
+    strict.rows[path('r')]['transcript_segments'] = segments[:50]
+    strict.rows[path('r')]['finished_at'] = T0 + timedelta(seconds=segments[49]['end'])
+    strict.rows[path('r2')] = {
+        **strict.rows[path('r')],
+        'id': 'r2',
+        'started_at': T0 + timedelta(seconds=start),
+        'finished_at': T0 + timedelta(seconds=segments[-1]['end']),
+        'transcript_segments': [{**s, 'start': s['start'] - start, 'end': s['end'] - start} for s in segments[50:]],
+    }
+    original_set = StrictFirestoreTransaction.set
+
+    def checked_set(tx, ref, row, **kwargs):
+        if row.get('v3_derived'):
+            field = zlib.compress(json.dumps(row['transcript_segments']).encode())
+            if len(field) > 1048487:
+                raise InvalidArgument('The value of property "transcript_segments" is longer than 1048487 bytes')
+        return original_set(tx, ref, row, **kwargs)
+
+    monkeypatch.setattr(StrictFirestoreTransaction, 'set', checked_set)
+    monkeypatch.setenv('CONVERSATIONS_V3_TRANSCRIPT_SIZE_CAP', 'off')
+    # The per-property rejection parks the owner (backoff) instead of failing every retry with a 500.
+    assert await reconcile_at(strict, monkeypatch, now) == 'blocked'
+    assert not derived(strict)
+    assert not strict.rows[path('r')]['claims']
+
+    monkeypatch.delenv('CONVERSATIONS_V3_TRANSCRIPT_SIZE_CAP')
+    assert await reconcile_at(strict, monkeypatch, now + timedelta(minutes=6)) == 'committed'
+    rows = derived(strict)
+    assert len(rows) > 1
+    assert [s['id'] for row in rows for s in row['transcript_segments']] == [s['id'] for s in segments]
+    assert not strict.rows[path('r')]['v3_pending']
+    assert not strict.rows[path('r2')]['v3_pending']
 
 
 @pytest.mark.asyncio

@@ -4,7 +4,7 @@ from datetime import timedelta
 
 import pytest
 
-from database import conversations_v3 as store, conversations_v3_leases as leases
+from database import conversations_v3 as store, conversations_v3_leases as leases, memories
 from utils.conversations.v3 import Conflict
 from tests.unit.test_conversations_v3_claim_growth import T0, UID, path, strict  # noqa: F401
 from tests.unit.test_conversations_v3_review import AT, MemoryQuery, source
@@ -132,8 +132,9 @@ def test_commit_batches_stay_under_the_write_cap(strict, monkeypatch, remove, ex
         return run
 
     monkeypatch.setattr(store.firestore, 'transactional', transactional)
-    # One source update and the lease leave three rows per transaction; a re-derive's two deletes leave one.
-    monkeypatch.setattr(store, 'BATCH_MAX_WRITES', 5)
+    # A removal consumes two writes: its marker and delete. Keep just one row slot in that case.
+    monkeypatch.setattr(store, 'BATCH_MAX_WRITES', 7 if remove else 5)
+    monkeypatch.setattr(memories, 'linked_conversation_ids', lambda *a, **kw: set())
     for cid in remove:
         strict.rows[path(cid)] = {'id': cid, 'v3_derived': True, 'backfilled': True}
     rows = [
