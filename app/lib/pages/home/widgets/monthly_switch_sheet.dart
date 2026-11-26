@@ -29,6 +29,8 @@ typedef MonthlySwitchApplier = Future<Map<String, dynamic>?> Function({
 /// Opens the confirm sheet; resolves true once the reader is on monthly.
 Future<bool> showMonthlySwitchSheet(BuildContext context,
     {required PaymentIssue issue, MonthlySwitchApplier? apply}) async {
+  // The switch charges Stripe; a build that sells through Google Play never offers it.
+  if (_buysThroughPlay(context)) return false;
   const TypedEvents().emit(const SubscriptionPaymentIssueMonthlyTapped());
   var switched = false;
   await showOmiSheet<void>(
@@ -38,6 +40,8 @@ Future<bool> showMonthlySwitchSheet(BuildContext context,
   );
   return switched;
 }
+
+bool _buysThroughPlay(BuildContext context) => context.read<UsageProvider?>()?.buysThroughPlay == true;
 
 class MonthlySwitchSheet extends StatefulWidget {
   const MonthlySwitchSheet({super.key, required this.issue, this.apply, this.onSwitched});
@@ -60,6 +64,11 @@ class _MonthlySwitchSheetState extends State<MonthlySwitchSheet> {
   Future<void> _switch() async {
     final offer = widget.issue.monthlySwitch;
     if (offer == null || _switching) return;
+    // Play setup arrived while this sheet was open: charge nothing and close it; Home then shows the plain line.
+    if (_buysThroughPlay(context)) {
+      Navigator.of(context).maybePop();
+      return;
+    }
     OmiHaptics.medium();
     setState(() {
       _switching = true;
@@ -79,7 +88,7 @@ class _MonthlySwitchSheetState extends State<MonthlySwitchSheet> {
     var switched = result != null && result['error'] != true;
     if (result == null && usage != null) {
       // No answer (timeout, server error): read the plan again before saying anything about it.
-      await usage.fetchSubscription();
+      await usage.fetchSubscription(fresh: true);
       if (!mounted) return;
       final sub = usage.subscription;
       switched = sub != null && sub.paymentIssue == null && sub.subscription.plan.isPaid;
@@ -88,7 +97,7 @@ class _MonthlySwitchSheetState extends State<MonthlySwitchSheet> {
     if (switched) {
       const TypedEvents().emit(const SubscriptionPaymentIssueMonthlySwitched());
       widget.onSwitched?.call();
-      if (usage != null && result != null) unawaited(usage.fetchSubscription());
+      if (usage != null && result != null) unawaited(usage.fetchSubscription(fresh: true));
       setState(() {
         _switching = false;
         _done = true;
@@ -97,7 +106,9 @@ class _MonthlySwitchSheetState extends State<MonthlySwitchSheet> {
     }
     final status = result?['status_code'];
     final declined = status == 402;
-    final refused = status == 409 || status == 400;
+    // A Play check that could not run is transient: keep Confirm so the reader can try again.
+    final transient = result?['code'] == 'play_check_unavailable';
+    final refused = !transient && (status == 409 || status == 400 || status == 403);
     const TypedEvents().emit(SubscriptionPaymentIssueMonthlyFailed(
       reason: declined
           ? SubscriptionPaymentIssueMonthlyFailedReason.declined
@@ -110,9 +121,8 @@ class _MonthlySwitchSheetState extends State<MonthlySwitchSheet> {
       _refused = refused;
       _error = declined
           ? l10n.monthlySwitchDeclined
-          : refused
-              ? l10n.monthlySwitchUnavailable
-              : l10n.somethingWentWrong;
+          : payment_api.paymentRefusalMessage(result) ??
+              (refused ? l10n.monthlySwitchUnavailable : l10n.somethingWentWrong);
     });
   }
 

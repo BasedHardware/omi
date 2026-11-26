@@ -131,6 +131,50 @@ void main() {
     TranscriptionPendingConversations.reset();
   });
 
+  testWidgets('a confirmed hold becomes processing and then shows its transcript and summary', (tester) async {
+    var fetched = ServerConversation.fromJson({
+      ...heldListRowJson(),
+      'transcription_admission': 'allowance_held',
+    });
+    final detail = ConversationDetailProvider(fetchConversation: (_) async => fetched)
+      ..selectedDate = conversationLocalDayKey(fetched.createdAt)
+      ..setCachedConversation(fetched);
+    addTearDown(detail.dispose);
+    await tester.pumpWidget(_app(detail, _summary));
+    final l10n = AppLocalizations.of(tester.element(find.byType(Scaffold)));
+
+    expect(find.byKey(const Key('conversation_detail_held_recording')), findsOneWidget);
+    expect(find.text(l10n.waitingForTranscriptionAllowance), findsOneWidget);
+    expect(find.text(l10n.retry), findsNothing);
+    expect(find.text(l10n.upgrade), findsNothing);
+
+    fetched = ServerConversation.fromJson({
+      ...heldDetailJson(),
+      'status': 'processing',
+      'transcription_admission': 'processing',
+    });
+    expect(await detail.refreshConversation(), isTrue);
+    await tester.pump();
+    expect(detail.conversation.id, heldConversationId);
+    expect(detail.conversation.homeStep, 'transcribing');
+    expect(find.byKey(const Key('conversation_detail_held_recording')), findsNothing);
+    expect(find.text(l10n.processingConversationProgress), findsOneWidget);
+    expect(find.text(l10n.retry), findsNothing);
+
+    fetched = ServerConversation.fromJson({
+      ...heldDetailJson(),
+      'transcription_wait': null,
+      'structured': Structured('Venue planning', 'We picked Friday.', emoji: '🧠').toJson(),
+      'transcript_segments': [_segment('We picked Friday.').toJson()],
+    });
+    expect(await detail.refreshConversation(), isTrue);
+    await tester.pumpAndSettle();
+    expect(detail.conversation.id, heldConversationId);
+    expect(detail.conversation.transcriptSegments.single.text, 'We picked Friday.');
+    expect(find.text(l10n.processingConversationProgress), findsNothing);
+    expect(find.textContaining('We picked Friday.', findRichText: true), findsOneWidget);
+  });
+
   testWidgets('redesign: a refresh that lands a transcript retires the not-transcribed card', (tester) async {
     TranscriptionPendingConversations.reset();
     addTearDown(TranscriptionPendingConversations.reset);

@@ -47,6 +47,8 @@ from database._client import get_firestore_client
 from database.transcript_pointer import run_preloaded_transactional as run_transactional
 from database.conversations import decode_transcript_segments_verified
 from database.conversation_revisions import firestore_revision_datetime
+from database.episode_finalization_fence import require_not_deleted
+from database.firestore_read_metrics import FirestoreReadSite
 from utils.encryption import decrypt, encrypt
 from utils.home_feed.projection import DISPLAY_FIELDS, stamp as stamp_home_display
 
@@ -567,7 +569,12 @@ def _commit(
     updates: Mapping[str, Any],
     link_conversation_ids: Sequence[str],
     segment_receipts: Optional[Mapping[str, Sequence[str]]] = None,
+    finalizing_conversation_id: Optional[str] = None,
 ) -> dict[str, Any]:
+    if finalizing_conversation_id is not None:
+        require_not_deleted(
+            transaction, client, uid, finalizing_conversation_id, FirestoreReadSite.EPISODE_FINALIZATION_MOMENT_FENCE
+        )
     pointer = _links(client, uid).document(CURRENT)
     timeline_ref = _links(client, uid).document('recorded_timeline')
     timeline_enabled = recorded_episodes_enabled()
@@ -636,6 +643,7 @@ def commit_moment(
     link_conversation_ids: Sequence[str] = (),
     segment_receipts: Optional[Mapping[str, Sequence[str]]] = None,
     firestore_client: Any = None,
+    finalizing_conversation_id: Optional[str] = None,
 ) -> dict[str, Any]:
     """Either update the open episode (CAS) or close it and open ``new_episode``. Returns the stored state.
 
@@ -656,6 +664,7 @@ def commit_moment(
         dict(updates or {}),
         list(link_conversation_ids),
         dict(segment_receipts or {}) or None,
+        finalizing_conversation_id,
         transient=True,
     )
 
@@ -669,7 +678,12 @@ def _reopen(
     expected_version: int,
     updates: Mapping[str, Any],
     link_conversation_ids: Sequence[str],
+    finalizing_conversation_id: Optional[str] = None,
 ) -> Optional[dict[str, Any]]:
+    if finalizing_conversation_id is not None:
+        require_not_deleted(
+            transaction, client, uid, finalizing_conversation_id, FirestoreReadSite.EPISODE_FINALIZATION_UPDATE_FENCE
+        )
     timeline_enabled = recorded_episodes_enabled()
     timeline_row = None
     if timeline_enabled:
@@ -722,6 +736,7 @@ def reopen_episode(
     updates: Optional[Mapping[str, Any]] = None,
     link_conversation_ids: Sequence[str] = (),
     firestore_client: Any = None,
+    finalizing_conversation_id: Optional[str] = None,
 ) -> Optional[dict[str, Any]]:
     """Reopen a closed episode as the current one. Returns the live state, or None.
 
@@ -740,6 +755,7 @@ def reopen_episode(
         expected_version,
         dict(updates or {}),
         list(link_conversation_ids),
+        finalizing_conversation_id,
     )
 
 
@@ -778,7 +794,12 @@ def _close(
     split_after: Optional[datetime] = None,
     retained_member_window: bool = False,
     synced_f: bool = False,
+    finalizing_conversation_id: Optional[str] = None,
 ) -> Optional[dict[str, Any]]:
+    if finalizing_conversation_id is not None:
+        require_not_deleted(
+            transaction, client, uid, finalizing_conversation_id, FirestoreReadSite.EPISODE_FINALIZATION_CLOSE_FENCE
+        )
     timeline_enabled = recorded_episodes_enabled()
     timeline_row = None
     if timeline_enabled:
@@ -886,6 +907,7 @@ def close_episode(
     firestore_client: Any = None,
     retained_member_window: bool = False,
     synced_f: bool = False,
+    finalizing_conversation_id: Optional[str] = None,
 ) -> Optional[dict[str, Any]]:
     """Close a live episode once. Returns the closed state, or None when it was not live.
 
@@ -911,6 +933,7 @@ def close_episode(
         split_after,
         retained_member_window,
         synced_f,
+        finalizing_conversation_id,
         **transaction_options,
     )
 
@@ -937,7 +960,12 @@ def _update(
     segment_receipts: Optional[Mapping[str, Sequence[str]]] = None,
     recovery_conversation_id: Optional[str] = None,
     expected_member_revisions: Optional[Mapping[str, live_members.MemberRevision]] = None,
+    finalizing_conversation_id: Optional[str] = None,
 ) -> dict[str, Any]:
+    if finalizing_conversation_id is not None:
+        require_not_deleted(
+            transaction, client, uid, finalizing_conversation_id, FirestoreReadSite.EPISODE_FINALIZATION_UPDATE_FENCE
+        )
     timeline_enabled = recorded_episodes_enabled()
     timeline_row = None
     if timeline_enabled:
@@ -1046,6 +1074,7 @@ def update_episode(
     firestore_client: Any = None,
     recovery_conversation_id: Optional[str] = None,
     expected_member_revisions: Optional[Mapping[str, live_members.MemberRevision]] = None,
+    finalizing_conversation_id: Optional[str] = None,
 ) -> dict[str, Any]:
     """CAS update of any episode (open or closed). Raises ``EpisodeConflict`` on a lost race.
 
@@ -1053,6 +1082,7 @@ def update_episode(
     same transaction, so a receipt exists exactly when the state that consumed it does.
     ``expected_member_revisions`` fences snapshot-derived notes against concurrent
     member writes using canonical Firestore update times (None asserts absence).
+    ``finalizing_conversation_id`` fences post-effects reconciliation against deletion.
     """
     client = _client(firestore_client)
     return run_transactional(
@@ -1067,5 +1097,6 @@ def update_episode(
         dict(segment_receipts or {}) or None,
         recovery_conversation_id,
         expected_member_revisions,
+        finalizing_conversation_id,
         transient=True,
     )

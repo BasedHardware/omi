@@ -13,7 +13,8 @@ import yaml
 from database import conversations_v3 as store, conversations_v3_leases as leases
 from database import conversations_v3_processing as writers
 from utils.app_integrations import ExternalIntegrationFanoutError
-from utils.conversations.v3 import created, processing, service
+from utils.conversations.v3 import created, outline, planner, processing, service
+from utils.conversations.v3.live import FINISH_RECORDING_FIELD, FINISH_WINDOW_FIELD
 from tests.unit.test_conversations_v3_review import AT, builder, source  # noqa: F401
 from tests.unit.test_conversations_v3_transactions import strict  # noqa: F401
 
@@ -114,22 +115,68 @@ def test_completed_word_floor_is_observed_once_on_settlement(strict, monkeypatch
     observe.assert_called_once_with(True, False)
 
 
-def test_cloud_run_sync_scrapes_both_word_floor_outcomes():
+@pytest.mark.parametrize(
+    'updates,outcome',
+    [
+        ({}, ('visible', 'conversation')),
+        ({'home_hidden': True}, ('hidden', 'conversation')),
+        ({'kind': 'media'}, ('visible', 'media')),
+        ({'sync_merged_into': 'other'}, ('hidden', 'conversation')),
+        ({'kind': 'unexpected'}, ('visible', 'other')),
+        ({'discarded': True}, None),
+        ({'deleted': True}, None),
+        ({'backfilled': True}, None),
+        ({'status': 'failed'}, None),
+        ({'manual_end': False}, None),
+    ],
+)
+def test_manual_end_visibility_counts_successful_settlements(strict, monkeypatch, updates, outcome):
+    row = derived(manual_end=True, v3_process_pending=True, kind='conversation')
+    strict.rows[C] = {**row, **updates}
+    counter = Mock()
+    monkeypatch.setattr(writers.metrics, 'MANUAL_END_HOME', counter)
+    settle(strict, notes=False)
+    settle(strict, notes=False)  # No additional settlement is owed here.
+    if outcome is None:
+        counter.labels.assert_not_called()
+    else:
+        counter.labels.assert_called_once_with(*outcome)
+        counter.labels.return_value.inc.assert_called_once_with()
+
+
+def test_manual_end_visibility_ignores_late_rewrite_resettlement(strict, monkeypatch):
+    strict.rows[C] = derived(manual_end=True, v3_process_pending=True, kind='conversation')
+    counter = Mock()
+    monkeypatch.setattr(writers.metrics, 'MANUAL_END_HOME', counter)
+    settle(strict, notes=False)
+    # Late transcript re-arms the settled row; its rewrite settlement is not a second manual finish.
+    strict.rows[C].update(v3_process_pending=True, summary_covers_through=None)
+    settle(strict, notes=False)
+    counter.labels.assert_called_once_with('visible', 'conversation')
+    assert strict.rows[C]['v3_manual_end_home_counted'] is True
+
+
+@pytest.mark.parametrize(
+    'counter,label_keys,outcomes',
+    [
+        (
+            writers.metrics.WORD_FLOOR_COMPLETIONS,
+            ('method', 'floor'),
+            {('legacy', 'below'), ('legacy', 'met'), ('script_aware', 'below'), ('script_aware', 'met')},
+        ),
+        (
+            writers.metrics.MANUAL_END_HOME,
+            ('visibility', 'kind'),
+            {(v, k) for v in ('visible', 'hidden') for k in writers.metrics.MANUAL_END_KINDS},
+        ),
+    ],
+)
+def test_cloud_run_sync_scrapes_v3_processing_outcomes(counter, label_keys, outcomes):
     profile = Path(__file__).resolve().parents[2] / 'deploy' / 'cloud_run_gmp_sync.yaml'
     rules = yaml.safe_load(profile.read_text())['spec']['endpoints'][0]['metricRelabeling']
     (rule,) = [r for r in rules if r['action'] == 'keep' and r['sourceLabels'] == ['__name__']]
-    samples = [
-        sample
-        for family in writers.metrics.WORD_FLOOR_COMPLETIONS.collect()
-        for sample in family.samples
-        if sample.name.endswith('_total')
-    ]
-    assert {(s.labels['method'], s.labels['floor']) for s in samples} == {
-        ('legacy', 'below'),
-        ('legacy', 'met'),
-        ('script_aware', 'below'),
-        ('script_aware', 'met'),
-    }
+    samples = [sample for family in counter.collect() for sample in family.samples if sample.name.endswith('_total')]
+    assert {tuple(s.labels[key] for key in label_keys) for s in samples} == outcomes
     assert all(re.fullmatch(rule['regex'], sample.name) for sample in samples)
 
 
@@ -251,7 +298,7 @@ def test_claims_are_bounded_when_delivery_never_completes(strict):
 
 
 def _visible_rebuild(monkeypatch, prior):
-    def build(uid, window, recordings, existing=None, *, allocated=None):
+    def build(uid, window, recordings, existing=None, *, allocated=None, manual_end_home_visible=True):
         return {
             **(existing or prior),
             'home_hidden': False,
@@ -431,3 +478,38 @@ async def test_the_builder_drain_delivers_settled_notes(strict, delivery, monkey
     monkeypatch.setattr(service, 'pending_processing', lambda uid: [])
     await service.drain_processing('synthetic')
     assert [cid for _, cid, _ in delivery.sent] == ['c']
+
+
+def test_no_pointer_finish_counts_only_the_accepted_windows_first_settlement(strict, monkeypatch):
+    counter = Mock()
+    monkeypatch.setattr(writers.metrics, 'FINISH_NO_POINTER', counter)
+    strict.rows[C] = derived(
+        manual_end=True, v3_process_pending=True, kind='conversation', **{FINISH_WINDOW_FIELD: 'c'}
+    )
+    settle(strict, notes=False)
+    strict.rows[C]['v3_process_pending'] = True
+    settle(strict, notes=False)
+    counter.labels.assert_called_once_with('settled')
+    counter.labels.return_value.inc.assert_called_once_with()
+
+
+def test_recording_finish_counts_first_settlement_of_its_derived_window(strict, monkeypatch):
+    counter = Mock()
+    monkeypatch.setattr(writers.metrics, 'FINISH_NO_POINTER', counter)
+    recording = source(v3_manual_end=True, **{FINISH_RECORDING_FIELD: True})
+    groups = outline.stretches([recording], AT + timedelta(seconds=20))
+    [window] = planner.windows(groups, [[{'first_line': 1, 'kind': 'conversation', 'title': 'Plan', 'line': ''}]])
+    row = planner.build('synthetic', window, {'r': recording})
+    cid = row['id']
+    assert row[FINISH_WINDOW_FIELD] == cid and row['manual_end'] and row['status'] == 'processing'
+    counter.labels.assert_not_called()
+
+    path = (*C[:-1], cid)
+    # The service arms processing and the notes writer then completes the row.
+    strict.rows[path] = {**row, 'status': 'completed', 'v3_process_pending': True}
+    token = leases.acquire('synthetic', f'summary-{cid}', firestore_client=strict)
+    for _ in range(2):
+        writers.settle_processing('synthetic', cid, token, 1, AT, notes=False, firestore_client=strict)
+        strict.rows[path]['v3_process_pending'] = True
+    counter.labels.assert_called_once_with('settled')
+    counter.labels.return_value.inc.assert_called_once_with()

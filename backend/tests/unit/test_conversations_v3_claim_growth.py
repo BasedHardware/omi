@@ -118,6 +118,8 @@ async def run_pass(strict, monkeypatch, sources):
     committed = []
 
     async def blocking(pool, fn, *args, **kwargs):
+        if fn is store.clear_terminal_pending:
+            return None
         if fn is original_load:
             return deepcopy(recordings), deepcopy(existing), []
         if fn is store.adoptable:
@@ -136,6 +138,8 @@ async def run_pass(strict, monkeypatch, sources):
     monkeypatch.setattr(service, 'run_blocking', blocking)
     monkeypatch.setattr(service, 'drain_processing', no_processing)
     monkeypatch.setattr(service, 'has_pending', lambda uid: False)
+    # A window still settling on its landing clock schedules a follow-up pass; no task target here.
+    monkeypatch.setattr(service, 'enqueue', lambda *args, **kwargs: None)
     monkeypatch.setattr(service.models, 'outline', outline)
     monkeypatch.setattr(service.visibility, 'hydrate_recognition', lambda uid, recordings, windows: None)
     monkeypatch.setattr(service.context, 'outline_sources', lambda *a: ({}, [], []))

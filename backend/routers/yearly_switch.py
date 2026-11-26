@@ -3,10 +3,11 @@ POST /v1/payments/upgrade-subscription with ``switch_now``."""
 
 from typing import Optional
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, Request
 from pydantic import BaseModel
 
 import database.users as users_db
+from config import play_billing as play_billing_config
 from utils import yearly_switch
 from utils.other import endpoints as auth
 
@@ -34,8 +35,14 @@ def get_yearly_switch_endpoint(
         False, description="Include Stripe's invoice preview: the charge today and the renewal date."
     ),
     uid: str = Depends(auth.get_current_user_uid),
+    http_request: Request = None,  # pyright: ignore[reportArgumentType]  # FastAPI injects Request; direct callers omit it
 ):
     """Whether this monthly payer can switch to yearly now, and (with preview) exactly what it costs."""
+    if http_request and play_billing_config.client_uses_play(
+        http_request.headers.get('X-App-Platform'), http_request.headers.get('X-App-Build'), uid
+    ):
+        # The switch charges through Stripe, which a Google Play build never starts.
+        return YearlySwitchResponse(eligible=False, reason=play_billing_config.USE_GOOGLE_PLAY)
     subscription = users_db.get_user_subscription(uid)
     offer = yearly_switch.get_offer(subscription.stripe_subscription_id if subscription else None, preview=preview)
     return YearlySwitchResponse(**offer.__dict__)

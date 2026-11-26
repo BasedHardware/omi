@@ -7,18 +7,23 @@ from typing import Any
 
 from google.cloud import firestore
 
-from database._client import get_firestore_client, run_transactional
+from database._client import run_transactional
+from database.account_deletion_marker import account_deletion_document, account_deletion_firestore_client
 from database.conversation_revisions import firestore_revision_datetime
 from database.read_boundary import parse_payload_strict
 from models.speaker_evidence import SpeakerEvidence
 from utils.encryption import decrypt, encrypt
+from utils.observability import speaker_evidence_erasure as metrics
 
 MAX_ENCODED_BYTES = 750_000
 MAX_DECODED_BYTES = 16_000_000
 
 
-def _ref(uid: str, conversation_id: str, firestore_client: Any):
-    client = firestore_client if firestore_client is not None else get_firestore_client()
+class _DeletionMarkerPresent(ValueError):
+    """The write transaction observed an existing account deletion marker."""
+
+
+def _ref(uid: str, conversation_id: str, client: Any):
     return client.collection('users').document(uid).collection('conversations').document(conversation_id)
 
 
@@ -36,11 +41,15 @@ def store_evidence(
     payload = encrypt(base64.b64encode(zlib.compress(raw)).decode(), uid)
     if len(payload.encode()) > MAX_ENCODED_BYTES:
         raise ValueError('speaker evidence exceeds document size budget')
-    client = firestore_client if firestore_client is not None else get_firestore_client()
+    client = account_deletion_firestore_client(firestore_client=firestore_client)
     parent = _ref(uid, conversation_id, client)
+    marker = account_deletion_document(uid, firestore_client=client)
 
     @firestore.transactional
     def persist(transaction):
+        marker_present = marker.get(transaction=transaction).exists
+        if marker_present:
+            raise _DeletionMarkerPresent('speaker evidence account unavailable')
         snapshot = parent.get(transaction=transaction)
         current = snapshot.to_dict()
         if (
@@ -51,14 +60,28 @@ def store_evidence(
         if current is None or current.get('deleted') or current.get('discarded'):
             raise ValueError('speaker evidence parent unavailable')
         transaction.set(parent.collection('speaker_evidence').document('current'), {'version': 1, 'payload': payload})
+        return marker_present
 
     # A child write preserves the parent update_time used by late identity CAS.
     # Parent deletion and the existing recursive deletion sweeps fence or purge it.
-    run_transactional(client, persist)
+    try:
+        marker_present = run_transactional(client, persist)
+    except _DeletionMarkerPresent:
+        metrics.REFUSED_MARKER_PRESENT.inc()
+        raise
+    except Exception:
+        metrics.WRITER_FAILED.inc()
+        raise
+    # The SDK returns the callback result only after acknowledging the commit.
+    if marker_present:
+        metrics.COMMITTED_MARKER_PRESENT.inc()
+    else:
+        metrics.COMMITTED_MARKER_ABSENT.inc()
 
 
 def get_evidence(uid: str, conversation_id: str, *, firestore_client: Any = None) -> SpeakerEvidence | None:
-    parent = _ref(uid, conversation_id, firestore_client)
+    client = account_deletion_firestore_client(firestore_client=firestore_client)
+    parent = _ref(uid, conversation_id, client)
     raw = parent.get().to_dict()
     if raw is None or raw.get('deleted') or raw.get('discarded'):
         return None

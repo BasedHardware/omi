@@ -73,8 +73,8 @@ class SummaryFailure {
 bool conversationHasRequestedSummary(ServerConversation conversation, String? appId, {List<String>? appIds}) {
   final selectedIds = appIds ?? (appId == null ? null : [appId]);
   if (selectedIds != null) {
-    return selectedIds.every((id) =>
-        conversation.appResults.any((result) => result.appId == id && result.content.trim().isNotEmpty));
+    return selectedIds
+        .every((id) => conversation.appResults.any((result) => result.appId == id && result.content.trim().isNotEmpty));
   }
   return ConversationSummarySelection.firstParty(conversation).kind != ConversationSummaryKind.empty;
 }

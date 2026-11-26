@@ -1,0 +1,733 @@
+"""Regression tests for replay safety and measurement contracts."""
+
+from datetime import datetime, timezone
+import importlib.util
+import json
+import os
+from pathlib import Path
+import tempfile
+from threading import Lock
+from types import SimpleNamespace
+import unittest
+from unittest.mock import Mock, patch
+
+from google.auth.credentials import AnonymousCredentials
+from google.cloud.firestore_v1.services.firestore.client import FirestoreClient
+from google.cloud.firestore_v1.types import firestore
+
+from testing.finalization_replay.candidate import _Handler, replay_database
+from testing.finalization_replay.driver import _observe
+from testing.finalization_replay.firestore_proxy import FirestoreProxy
+from testing.finalization_replay.metrics import (
+    _delete_write,
+    _invoke_rpc,
+    _wrap_stream,
+    install_firestore_meter,
+    measure,
+    prompt_token_estimate,
+)
+from testing.finalization_replay.state import (
+    CaseState,
+    episode_attach_memo_failure_reason,
+    fenced_sync_attach_memo_check,
+    episode_attach_memo_valid,
+    ordinary_sync_attach_memo_failure_reason,
+)
+from testing.finalization_replay.ordinary_sync_diag_report import (
+    UNREADABLE_RETRY_BUG,
+    enrich as enrich_ordinary_sync_report,
+    is_go_coordination_stamp_difference,
+    is_unreadable_retry_consequence,
+)
+
+REPO_ROOT = Path(__file__).resolve().parents[3]
+VERIFY_PATH = REPO_ROOT / 'backend-go' / 'tools' / 'replay' / 'verify.py'
+VERIFY_SPEC = importlib.util.spec_from_file_location('replay_verify_contracts', VERIFY_PATH)
+verify = importlib.util.module_from_spec(VERIFY_SPEC)
+VERIFY_SPEC.loader.exec_module(verify)
+
+
+class ReplayContractTests(unittest.TestCase):
+    def test_sdk_batch_write_requires_explicit_success_for_committed_evidence(self):
+        root = 'projects/demo-replay/databases/(default)/documents'
+        home = f'{root}/users/u/episode_links/c'
+        update = {'update': {'name': home, 'fields': {'home_dirty': {'boolean_value': True}}}}
+        delete = {'delete': home}
+        profile = {'update': {'name': f'{root}/users/u', 'fields': {'ai_user_profile': {'map_value': {}}}}}
+        item = {'update': {'name': f'{root}/users/u/action_items/task'}}
+        statuses = (('failed', [{'code': 7}] * 3, 0), ('missing', [], 0), ('successful', [{}, {}, {}], 1))
+
+        install_firestore_meter()
+        with FirestoreClient(credentials=AnonymousCredentials()) as client:
+            transport = client.transport
+            for bucket, home_write in (('set_true', update), ('deleted', delete)):
+                request = firestore.BatchWriteRequest(
+                    database=root.removesuffix('/documents'), writes=[home_write, profile, item]
+                )
+                for label, entries, expected in statuses:
+                    with self.subTest(home_operation=bucket, status=label):
+                        state = CaseState(Mock(), {'name': 'c', 'uid': 'u'})
+                        response = firestore.BatchWriteResponse(status=entries)
+                        rpc = Mock(return_value=response)
+                        with patch.dict(transport._wrapped_methods, {transport.batch_write: rpc}), measure(state):
+                            self.assertEqual(client.batch_write(request=request), response)
+                        rpc.assert_called_once()
+                        self.assertEqual(state.home_dirty_receipt_trace[bucket], expected)
+                        self.assertEqual(sum(state.home_dirty_receipt_trace.values()), expected)
+                        self.assertEqual(len(state.profile_writes), expected)
+                        self.assertEqual(state.task_writes, ['users/u/action_items/task'] if expected else [])
+                        self.assertEqual(state.firestore_operations['writes'], 2 if bucket == 'deleted' else 3)
+                        self.assertEqual(state.firestore_operations['deletes'], int(bucket == 'deleted'))
+
+    def test_approved_coordination_stamp_rule_requires_exact_name_and_direction(self):
+        for field in (
+            'go_sync_inline_fanout_epoch',
+            'go_sync_inline_fanout_revision',
+            'go_empty_discard_fanout_epoch',
+            'go_sync_empty_discard_home_revision',
+        ):
+            self.assertTrue(
+                is_go_coordination_stamp_difference(
+                    {
+                        'path': f'/conversation/{field}',
+                        'kind': 'missing_in_python',
+                    }
+                )
+            )
+            self.assertFalse(
+                is_go_coordination_stamp_difference(
+                    {
+                        'path': f'/conversation/{field}s',
+                        'kind': 'missing_in_python',
+                    }
+                )
+            )
+            self.assertFalse(
+                is_go_coordination_stamp_difference(
+                    {
+                        'path': f'/conversation/{field}',
+                        'kind': 'different_value',
+                    }
+                )
+            )
+
+    def test_unreadable_retry_rule_labels_only_nine_verified_consequences(self):
+        consequence_rows = [
+            ('/conversation/finalization_status', 'missing_in_python'),
+            ('/derived_documents/sync_reprocess_outbox~1outbox-id', 'missing_in_go'),
+            ('/derived_documents/users~1owner~1processing_attention_items~1item-id', 'missing_in_python'),
+            ('/go/admitted', 'invalid_binding'),
+            ('/python/batch_pipeline_privacy/final', 'missing_document'),
+            ('/python/derived_documents/batch_pipeline_privacy~1hash/memo_token', 'invalid_binding'),
+            ('/python/derived_documents/batch_pipeline_privacy~1hash/memo_schema', 'missing_evidence'),
+            ('/python/batch_pipeline_privacy/final_snapshot', 'invalid_binding'),
+            ('/python/firestore_operations/batch_pipeline_privacy_document', 'invalid_operations'),
+        ]
+        self.assertTrue(
+            all(
+                is_unreadable_retry_consequence({'path': path, 'kind': kind, 'unreadable_terminal_consequence': True})
+                for path, kind in consequence_rows
+            )
+        )
+        self.assertFalse(
+            is_unreadable_retry_consequence(
+                {
+                    'path': '/python/derived_documents/batch_pipeline_privacy~1hash/memo_token',
+                    'kind': 'missing_evidence',
+                    'unreadable_terminal_consequence': True,
+                }
+            )
+        )
+        self.assertFalse(
+            is_unreadable_retry_consequence(
+                {
+                    'path': '/conversation/finalization_status/extra',
+                    'kind': 'missing_in_python',
+                    'unreadable_terminal_consequence': True,
+                }
+            )
+        )
+
+        differences = [
+            {'path': '/status', 'kind': 'different_value', 'unreadable_terminal_consequence': True},
+            *({'path': path, 'kind': kind, 'unreadable_terminal_consequence': True} for path, kind in consequence_rows),
+        ]
+        report = {
+            'commit_sha': 'fixture',
+            'unexplained_differences': len(differences),
+            'cases': [
+                {
+                    'name': 'unreadable-ciphertext-dead-letters',
+                    'errors': {},
+                    'python_status': 'parked',
+                    'go_status': 'failure',
+                    'python_retry': {
+                        'outcome': 'parked',
+                        'reason': 'age_gate_72h',
+                        'ciphertext_kept': True,
+                        'attempts': 869,
+                        'callback_pending_attempts': 868,
+                    },
+                    'go_ciphertext_kept': True,
+                    'differences': differences,
+                }
+            ],
+            'operation_table': [
+                {
+                    'case': 'unreadable-ciphertext-dead-letters',
+                    'difference': 0,
+                }
+            ],
+        }
+        enriched = enrich_ordinary_sync_report(report)
+        labels = [row.get('label') for row in enriched['cases'][0]['differences']]
+        self.assertEqual(labels, [UNREADABLE_RETRY_BUG] * 10)
+        self.assertEqual(
+            enriched['diagnostic']['unexplained_gate']['python_bug_exceptions'],
+            {
+                'unreadable_ciphertext_retry_until_age_gate': 10,
+            },
+        )
+        for row in differences:
+            row.pop('label')
+            row.pop('reason')
+            row.pop('issue')
+        for row in (differences[0], differences[-1]):
+            row.pop('unreadable_terminal_consequence')
+        report['unexplained_differences'] = len(differences)
+        enriched = enrich_ordinary_sync_report(report)
+        self.assertIsNone(differences[0]['label'])
+        self.assertIsNone(differences[-1]['label'])
+        self.assertEqual(enriched['diagnostic']['cohort_gate'], 'closed')
+
+    def test_failed_commits_survive_report_enrichment_and_stay_outside_r7(self):
+        report = {
+            'cases': [
+                {
+                    'name': 'retry',
+                    'cost': {
+                        'python': {'firestore_operations': {'document_reads': 2, 'failed_commit_rpcs': 1}},
+                        'go': {'firestore_operations': {'document_reads': 2, 'failed_commit_rpcs': 3}},
+                    },
+                }
+            ],
+        }
+        for _ in range(2):
+            report = enrich_ordinary_sync_report(report)
+            row = report['operation_table'][0]
+            self.assertEqual((row['python_failed_commit_rpcs'], row['go_failed_commit_rpcs']), (1, 3))
+            self.assertEqual((row['python_operations'], row['go_operations']), (2, 2))
+            self.assertEqual(report['diagnostic']['r7_operation_budget']['status'], 'pass')
+
+    def test_missing_profile_or_task_write_proof_is_counted_as_go_gap(self):
+        report = {
+            'commit_sha': 'fixture',
+            'unexplained_differences': 2,
+            'cases': [
+                {
+                    'name': 'kept-with-effects',
+                    'errors': {},
+                    'differences': [
+                        {
+                            'path': '/go/profile_refresh',
+                            'kind': 'invalid_binding',
+                            'failure_reason': 'profile_refresh_proof_failed',
+                        },
+                        {
+                            'path': '/go/task_vector',
+                            'kind': 'invalid_binding',
+                            'failure_reason': 'task_vector_proof_failed',
+                        },
+                    ],
+                }
+            ],
+            'operation_table': [{'case': 'kept-with-effects', 'difference': 0}],
+        }
+        enriched = enrich_ordinary_sync_report(report)
+        self.assertEqual(
+            [difference['label'] for difference in enriched['cases'][0]['differences']],
+            ['go_gap', 'go_gap'],
+        )
+
+    def test_episode_attach_memo_evidence_checks_key_owner_and_completion(self):
+        conversation = {'transcript_segments': 'fixture-envelope', 'transcript_segments_compressed': True}
+        link_path = 'users/owner/episode_links/conversation'
+        link = {
+            'episode_id': 'episode',
+            'attach_owner_id': 'episode',
+            'attach_revision': 'v2:fixture-key',
+            'attach_completed': 'v2:fixture-key',
+            'attach_finalized': None,
+        }
+        decoded_rows = []
+
+        def decode(uid, raw, compressed):
+            decoded_rows.append((uid, raw, compressed))
+            return [{'text': 'fixture'}]
+
+        def compute_key(row):
+            self.assertEqual(row['transcript_segments'], [{'text': 'fixture'}])
+            return 'v2:fixture-key'
+
+        self.assertTrue(
+            episode_attach_memo_valid(
+                'owner',
+                'conversation',
+                conversation,
+                {link_path: link},
+                transcript_decoder=decode,
+                content_key_fn=compute_key,
+            )
+        )
+        self.assertEqual(decoded_rows, [('owner', 'fixture-envelope', True)])
+
+        link['attach_owner_id'] = 'other-episode'
+        self.assertFalse(
+            episode_attach_memo_valid(
+                'owner',
+                'conversation',
+                conversation,
+                {link_path: link},
+                transcript_decoder=decode,
+                content_key_fn=compute_key,
+            )
+        )
+        self.assertEqual(
+            episode_attach_memo_failure_reason(
+                'owner',
+                'conversation',
+                conversation,
+                {link_path: link},
+                transcript_decoder=decode,
+                content_key_fn=compute_key,
+            ),
+            'owner_binding_mismatch',
+        )
+        link['attach_owner_id'] = 'episode'
+        link['attach_revision'] = 'v2:fixture-key'
+        link['attach_finalized'] = 'stale-finalization'
+        self.assertFalse(
+            episode_attach_memo_valid(
+                'owner',
+                'conversation',
+                conversation,
+                {link_path: link},
+                transcript_decoder=decode,
+                content_key_fn=compute_key,
+            )
+        )
+        link['attach_finalized'] = None
+        link['attach_revision'] = 'stale-key'
+        self.assertFalse(
+            episode_attach_memo_valid(
+                'owner',
+                'conversation',
+                conversation,
+                {link_path: link},
+                transcript_decoder=decode,
+                content_key_fn=compute_key,
+            )
+        )
+
+    def test_episode_attach_memo_accepts_go_decoded_transcript_segments(self):
+        segments = [{'text': 'fixture', 'start': 0, 'end': 1}]
+        link_path = 'users/owner/episode_links/conversation'
+        link = {
+            'episode_id': 'episode',
+            'attach_owner_id': 'episode',
+            'attach_revision': 'v2:fixture-key',
+            'attach_completed': 'v2:fixture-key',
+            'attach_finalized': 'v2:fixture-key',
+        }
+
+        def decode(*_args):
+            self.fail('already-decoded segments must not be decoded again')
+
+        def compute_key(row):
+            self.assertEqual(row['transcript_segments'], segments)
+            return 'v2:fixture-key'
+
+        self.assertTrue(
+            episode_attach_memo_valid(
+                'owner',
+                'conversation',
+                {'transcript_segments': segments},
+                {link_path: link},
+                transcript_decoder=decode,
+                content_key_fn=compute_key,
+            )
+        )
+        link['attach_finalized'] = 'stale-key'
+        self.assertFalse(
+            episode_attach_memo_valid(
+                'owner',
+                'conversation',
+                {'transcript_segments': segments},
+                {link_path: link},
+                transcript_decoder=decode,
+                content_key_fn=compute_key,
+            )
+        )
+
+    def test_worker_fence_requires_a_bound_intake_memo_and_an_unchanged_link(self):
+        conversation = {'episode_id': 'episode'}
+        link = {
+            'episode_id': 'episode',
+            'attach_owner_id': 'episode',
+            'attach_revision': 'v2:intake',
+            'attach_completed': 'v2:intake',
+        }
+
+        def check(before, after, row=conversation, intake_key='v2:intake'):
+            return fenced_sync_attach_memo_check('owner', 'conversation', row, before, after, intake_key=intake_key)
+
+        self.assertEqual(check(link, dict(link)), (True, ''))
+        self.assertEqual(check(None, None), (True, 'missing_link'))
+        empty_memo = {'episode_id': 'episode'}
+        self.assertEqual(check(empty_memo, empty_memo), (True, 'missing_memo_fields'))
+        self.assertEqual(check(empty_memo, empty_memo, intake_key=None), (False, ''))
+        self.assertEqual(check(None, None, row={}), (False, ''))
+        wrong_owner = dict(link, attach_owner_id='other')
+        self.assertEqual(check(wrong_owner, wrong_owner), (True, 'owner_binding_mismatch'))
+        self.assertEqual(check(link, link, {'episode_id': 'other'}), (True, 'owner_binding_mismatch'))
+        wrong_key = dict(link, attach_revision='v2:stale', attach_completed='v2:stale')
+        self.assertEqual(check(wrong_key, wrong_key), (True, 'completed_key_mismatch'))
+        self.assertEqual(
+            check(link, dict(link, attach_finalized='v2:intake')), (True, 'link_changed_after_worker_delete')
+        )
+        self.assertEqual(check(link, None), (True, 'link_changed_after_worker_delete'))
+        self.assertEqual(check(link, link, None), (False, 'missing_conversation_before_worker_delete'))
+
+    def test_fenced_observation_reports_required_memo_when_both_snapshots_lack_it(self):
+        link_path = 'users/owner/episode_links/conversation'
+        for side in ('python', 'go'):
+            for link, reason in ((None, 'missing_link'), ({'episode_id': 'episode'}, 'missing_memo_fields')):
+                with self.subTest(side=side, reason=reason):
+                    documents = {} if link is None else {link_path: link}
+                    state = SimpleNamespace(
+                        uid='owner',
+                        cid='conversation',
+                        replay_side=side,
+                        home_dirty_receipt_path=link_path,
+                        fence_intake_memo_key='v2:intake',
+                        memo_before_worker_delete=({'episode_id': 'episode'}, link),
+                        conversation=SimpleNamespace(get=lambda: SimpleNamespace(to_dict=lambda: None)),
+                        documents=lambda: documents,
+                        started_at=datetime.now(timezone.utc),
+                        initial_updated_at=None,
+                        queue_fanout_key=None,
+                        admitted=None,
+                        provider_calls=[],
+                        go_evidence={},
+                        effects={},
+                        webhooks=[],
+                        cost=lambda: {},
+                    )
+                    observation = CaseState.observe(state, 'fenced', documents, load_memo_bindings=lambda: None)
+                    self.assertTrue(observation['episode_attach_memo_expected'])
+                    self.assertFalse(observation['episode_attach_memo_valid'])
+                    self.assertEqual(observation['episode_attach_memo_failure_reason'], reason)
+
+    def test_ordinary_sync_memo_requires_exact_go_key_and_proven_python_cache(self):
+        path = 'users/owner/episode_links/conversation'
+        conversation = {'episode_id': 'episode'}
+        link = {
+            'episode_id': 'episode',
+            'attach_owner_id': 'episode',
+            'attach_revision': 'v2:final',
+            'attach_completed': 'v2:final',
+            'attach_finalized': 'v2:final',
+        }
+
+        def check(python_keys=None, *, has_link=True):
+            return ordinary_sync_attach_memo_failure_reason(
+                'owner',
+                'conversation',
+                conversation,
+                {path: link} if has_link else {},
+                python_keys=python_keys,
+                key_fn=lambda *_: 'v2:final',
+            )
+
+        self.assertEqual(check(), '')
+        self.assertEqual(check(has_link=False), 'missing_link')
+        self.assertEqual(check([], has_link=False), '')
+        self.assertEqual(check([]), 'completed_key_mismatch')
+        self.assertEqual(check(['v2:final']), '')
+        link['attach_finalized'] = 'v2:old'
+        self.assertEqual(check(), 'finalized_binding_mismatch')
+        link.update(attach_revision='v2:old', attach_completed='v2:old', attach_finalized=None)
+        self.assertEqual(check(), 'completed_key_mismatch')
+        self.assertEqual(check(['v2:old']), '')
+        self.assertEqual(check(['v2:other']), 'completed_key_mismatch')
+        link.update(attach_revision='v2:final', attach_completed='v2:final', attach_finalized='v2:final')
+        conversation['episode_id'] = 'other'
+        self.assertEqual(check(), 'owner_binding_mismatch')
+        link.clear()
+        self.assertEqual(check([]), '')
+
+    def test_database_creation_ignores_hostile_libpq_environment(self):
+        observed = {}
+
+        class Connection:
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *_args):
+                return False
+
+            def execute(self, *_args):
+                pass
+
+        def connect(dsn, **kwargs):
+            observed['dsn'] = dsn
+            observed['kwargs'] = kwargs
+            observed['pg_environment'] = {key: value for key, value in os.environ.items() if key.startswith('PG')}
+            return Connection()
+
+        hostile = {
+            'PGHOSTADDR': '198.51.100.77',
+            'PGHOST': 'attacker.invalid',
+            'PGSERVICE': 'hostile-service',
+        }
+        with patch.dict(os.environ, hostile), patch('psycopg.connect', side_effect=connect):
+            with replay_database('postgres://replay:secret@127.0.0.1:5432/replay?sslmode=disable'):
+                pass
+            self.assertEqual({key: os.environ.get(key) for key in hostile}, hostile)
+
+        self.assertEqual(observed['pg_environment'], {})
+        self.assertEqual(observed['kwargs']['host'], '127.0.0.1')
+        self.assertEqual(observed['kwargs']['hostaddr'], '127.0.0.1')
+        self.assertEqual(observed['kwargs']['port'], 5432)
+
+    def test_snapshot_keeps_boolean_to_integer_change(self):
+        state = CaseState.__new__(CaseState)
+        state.started_at = datetime.now(timezone.utc)
+        state.queue_fanout_key = None
+        state.initial_updated_at = 'before'
+        state.admitted = None
+        state.provider_calls = []
+        state.go_evidence = {}
+        state.effects = {}
+        state.webhooks = []
+        state.documents = lambda: {'derived/doc': {'enabled': 1}}
+        state.cost = lambda: {'measured': True}
+
+        class Snapshot:
+            def to_dict(self):
+                return {'updated_at': 'after'}
+
+        class Conversation:
+            def get(self):
+                return Snapshot()
+
+        state.conversation = Conversation()
+
+        def unavailable_memo_bindings():
+            raise ValueError('candidate has no serving environment')
+
+        observation = state.observe(
+            'completed', {'derived/doc': {'enabled': True}}, load_memo_bindings=unavailable_memo_bindings
+        )
+        self.assertEqual(observation['derived_documents'], {'derived/doc': {'enabled': 1}})
+        self.assertEqual(observation['episode_attach_memo_failure_reason'], 'check_failed')
+
+    def test_embedding_meter_counts_pretokenized_batches(self):
+        state = CaseState.__new__(CaseState)
+        state._metrics_lock = Lock()
+        state.provider_calls = []
+        state.embedding_tokens = 0
+        state.record_embedding_request([[101, 202, 303], [404]])
+        self.assertEqual(state.embedding_tokens, 4)
+        self.assertEqual(state.provider_calls, ['openai-embeddings'])
+
+    def test_cost_verifier_rejects_zero_rows_when_activity_is_observed(self):
+        zero_cost = {
+            'measured': True,
+            'token_basis': 'cl100k content-token estimate; excludes model/API framing',
+            'llm_tokens': {'prompt': 0, 'completion': 0, 'total': 0},
+            'embedding_tokens': 0,
+            'firestore_operations': {
+                'rpc_calls': 0,
+                'document_reads': 0,
+                'query_documents': 0,
+                'query_requests': 0,
+                'writes': 0,
+                'deletes': 0,
+            },
+        }
+        for observation in (
+            {'provider_calls': ['conv-structure']},
+            {'provider_calls': [], 'derived_documents': {'users/replay/doc': {'value': 1}}},
+        ):
+            with self.subTest(observation=observation):
+                case = {'name': 'active-case', 'cost': {'python': zero_cost, 'go': zero_cost}, 'python': observation}
+                report = {
+                    'cases': [case],
+                    'cost_table': [{'case': 'active-case', 'python': zero_cost, 'go': zero_cost}],
+                }
+                with self.assertRaises(SystemExit):
+                    verify.verify_cost(report)
+
+    def test_jobd_wire_input_uses_nonzero_shared_prompt_token_basis(self):
+        from threading import Lock
+
+        state = CaseState.__new__(CaseState)
+        state.uid = 'replay-cost'
+        state.cid = 'case-cost'
+        state.notes = {'title': 'n', 'overview': 'o'}
+        state.case = {}
+        state.memories = []
+        state._metrics_lock = Lock()
+        state.provider_calls = []
+        state.llm_tokens = {'prompt': 0, 'completion': 0}
+        handler = object.__new__(_Handler)
+        handler.path = '/llm/notes'
+        handler.command = 'POST'
+        handler.server = SimpleNamespace(state=state)
+        prompt = 'Summarize this synthetic conversation.'
+        transcript = ['The real jobd wire carries prompt input here.']
+        input_payload = {
+            'feature': 'conv-structure',
+            'prompt': prompt,
+            'transcript': transcript,
+            'app_platform': '',
+            'trigger': 'sync',
+        }
+        input_text = json.dumps(input_payload)
+        expected_messages = [
+            {'role': 'system', 'content': prompt},
+            {'role': 'user', 'content': '\n'.join(transcript)},
+        ]
+        handler._body = lambda: {
+            'uid': state.uid,
+            'subject_id': state.cid,
+            'job_id': 'job-cost',
+            'request_id': 'request-cost',
+            'input': input_text,
+            'input_hash': 'synthetic-hash',
+            'implementation_version': 'jobd-go-v1',
+        }
+
+        status, _result = handler._route()
+        self.assertEqual(status, 200)
+        self.assertGreater(state.llm_tokens['prompt'], 0)
+        self.assertEqual(state.llm_tokens['prompt'], prompt_token_estimate(expected_messages))
+
+    def test_task_exported_json_drops_go_evidence_after_departure_checks(self):
+        private_case = {
+            'name': 'synthetic',
+            'python': {'conversation': {'private': 'value'}},
+            'go': {'conversation': {'private': 'value'}},
+            'go_evidence': {'job': {'metadata': 'private queue metadata'}},
+            'errors': {},
+            'differences': [],
+        }
+        report = {'cases': [private_case], 'failed_cases': 0, 'unexplained_differences': 0}
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            parity_path = Path(temp_dir) / 'parity-input.json'
+            gaps_path = Path(temp_dir) / 'gaps-input.json'
+            parity_path.write_text(json.dumps(report))
+            gaps_path.write_text(json.dumps(report))
+            output_dir = Path(temp_dir) / 'exported'
+
+            def assert_departure_checks_see_evidence(gaps):
+                self.assertEqual(gaps['cases'][0]['go_evidence']['job']['metadata'], 'private queue metadata')
+
+            with (
+                patch.object(verify, 'verify_corpus_map'),
+                patch.object(verify, 'verify_unexplained_count'),
+                patch.object(verify, 'verify_departures', side_effect=assert_departure_checks_see_evidence),
+            ):
+                verify.verify_task_reports(str(output_dir), str(parity_path), str(gaps_path))
+
+            for name in ('parity.json', 'gaps.json'):
+                exported = json.loads((output_dir / name).read_text())
+                self.assertNotIn('go_evidence', exported['cases'][0])
+                self.assertNotIn('python', exported['cases'][0])
+                self.assertNotIn('go', exported['cases'][0])
+
+    def test_error_observation_packs_effects(self):
+        from threading import Lock
+
+        state = CaseState.__new__(CaseState)
+        state._metrics_lock = Lock()
+        state.cost_measured = False
+        state.documents = lambda: {}
+        state.start = lambda: setattr(state, 'started_at', datetime.now(timezone.utc))
+        state.started_at = None
+        state.queue_fanout_key = None
+        state.admitted = None
+        state.provider_calls = []
+        state.effects = {'raw_payload': b'abc'}
+        state.conversation = SimpleNamespace()
+        state.webhooks = []
+        state.go_evidence = {}
+        state.cost = lambda: {'measured': state.cost_measured}
+        output = {'errors': {}}
+
+        def fail(_state):
+            raise RuntimeError('synthetic adapter error')
+
+        _observe(state, fail, output, 'go')
+        self.assertEqual(output['go']['effects'], {'raw_payload': {'$bytes': 'YWJj'}})
+
+    def test_read_attempt_is_counted_when_rpc_fails(self):
+        operations = {}
+
+        class Meter:
+            def add_firestore_operations(self, **counts):
+                for name, count in counts.items():
+                    operations[name] = operations.get(name, 0) + count
+
+        def fail():
+            raise RuntimeError('synthetic Firestore failure')
+
+        with self.assertRaises(RuntimeError):
+            _invoke_rpc(Meter(), 'get_document', {'get_document'}, fail)
+        self.assertEqual(operations['document_reads'], 1)
+        self.assertEqual(operations['rpc_calls'], 1)
+
+    def test_both_meters_skip_default_empty_query_documents(self):
+        python_reads = []
+        meter = SimpleNamespace(add_firestore_operations=lambda **counts: python_reads.append(counts))
+        proxy = object.__new__(FirestoreProxy)
+        proxy.privacy_document_path = 'batch_pipeline_privacy/owner'
+        proxy.home_dirty_receipt_path = 'users/u/episode_links/c'
+        proxy._lock = Lock()
+        proxy.reset()
+        responses = [
+            firestore.RunQueryResponse(),
+            firestore.RunQueryResponse(document={}),
+            firestore.RunQueryResponse(document={'name': 'projects/p/databases/(default)/documents/users/u'}),
+        ]
+        list(_wrap_stream(responses, 'run_query', meter))
+        for response in responses:
+            proxy._record_response('run_query', firestore.RunQueryResponse.serialize(response))
+        self.assertEqual(python_reads, [{'query_documents': 1}])
+        self.assertEqual(proxy.counts()['query_documents'], 1)
+        self.assertEqual(proxy.operation_sources(), {'users/u': {'reads': 1, 'writes': 0, 'deletes': 0}})
+
+    def test_partial_stream_counts_consumed_results_and_delete_empty_map(self):
+        operations = {}
+
+        class Meter:
+            def add_firestore_operations(self, **counts):
+                for name, count in counts.items():
+                    operations[name] = operations.get(name, 0) + count
+
+        stream = _wrap_stream(
+            [SimpleNamespace(document={'name': 'first'}), SimpleNamespace(document={'name': 'second'})],
+            'run_query',
+            Meter(),
+        )
+        next(stream)
+        stream.close()
+        self.assertEqual(operations['query_documents'], 1)
+        self.assertTrue(_delete_write({'delete': {}}))
+        self.assertFalse(_delete_write({'update': {'name': 'retained'}}))
+
+
+if __name__ == '__main__':
+    unittest.main()

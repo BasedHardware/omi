@@ -180,6 +180,36 @@ def test_focused_unknown_or_empty_inputs_do_not_expand_to_full_suite(selector):
 
 
 @pytest.mark.parametrize(
+    'other_paths',
+    [
+        [],
+        [
+            'backend/database/conversations.py',
+            'backend/docs/feature-flag-registry.md',
+            'backend/routers/conversations.py',
+            'backend/tests/support/firestore_query_driver_registry.py',
+            'backend/tests/unit/test_fsr_wq4_cursor.py',
+            'backend/tests/unit/test_home_hidden_run_pagination.py',
+        ],
+    ],
+    ids=['budget-only', 'omi-26193-backend-diff'],
+)
+def test_list_budget_regressions_run_under_pre_push_cap(selector, other_paths):
+    paths = ['backend/utils/other/list_budget.py', *other_paths]
+    all_tests = selector['all_tests']
+    regressions = {
+        'tests/unit/test_pending_bridge_read_budget.py',
+        'tests/unit/test_retired_list_projection.py',
+    }
+    selected, _ = selector['tests_for_changed_paths'](paths, all_tests)
+    assert regressions <= set(selected)
+    focused = selector['focused_tests_for_changed_paths'](paths, all_tests)
+    assert regressions <= set(focused[:40])
+    if not other_paths:
+        assert len(focused) <= 40
+
+
+@pytest.mark.parametrize(
     'source',
     [
         'backend/deploy/compose_runtime_env.py',

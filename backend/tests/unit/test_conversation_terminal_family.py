@@ -198,6 +198,29 @@ def test_persist_flips_content_and_status_in_one_write(store):
     assert observed == [True]
 
 
+@pytest.mark.parametrize('mode', ['off', 'on'])
+@pytest.mark.parametrize(
+    'existing, patch, visible',
+    [
+        ({'recording': True, 'home_hidden': True}, {'recording': False}, False),
+        ({'recording': False, 'home_hidden': True}, {'home_hidden': False}, True),
+    ],
+)
+def test_persist_writes_home_visibility_with_its_source_flags(store, monkeypatch, mode, existing, patch, visible):
+    monkeypatch.setenv('CONVERSATION_TERMINAL_FAMILY_MODE', mode)
+    store.rows[PATH].update(existing)
+    tx = store.transaction()
+    monkeypatch.setattr(store, 'transaction', lambda: tx)
+    if mode == 'off':
+        monkeypatch.setattr(tx, 'set', lambda ref, data, *, merge: tx.sets.append((ref.path, data)))
+
+    assert persist(patch)
+    [(path, payload)] = tx.sets + tx.updates
+    assert path == PATH
+    assert {key: payload[key] for key in patch} == patch
+    assert payload['home_list_visible'] is visible
+
+
 @pytest.mark.parametrize(
     'existing',
     [
@@ -353,7 +376,7 @@ def test_mode_default_and_operator_kill_switch(monkeypatch, mode, expected):
         monkeypatch.delenv('CONVERSATION_TERMINAL_FAMILY_MODE', raising=False)
     else:
         monkeypatch.setenv('CONVERSATION_TERMINAL_FAMILY_MODE', mode)
-    assert db._terminal_family_serving('synthetic') is expected
+    assert db.terminal_settled.serving('synthetic') is expected
 
 
 @pytest.mark.parametrize('reason', ['terminal_failure', 'completed_status_regression'])

@@ -39,6 +39,9 @@ class _Transaction:
             else:
                 ref.data[key] = value
 
+    def update(self, ref, updates):
+        ref.data.update(updates)
+
 
 def _claim(ref, job_id, now):
     return sync_ledger._claim_transaction.to_wrap(_Transaction(), ref, job_id, 'backfill', now)
@@ -150,6 +153,7 @@ def test_bad_deploy_for_an_hour_does_not_pause_before_the_third_strike_and_recov
         after_fix,
     )
     assert completed and fixed_early.data['status'] == 'completed'
+    assert fixed_early.data['completed_at'] == after_fix
 
     # Three failures inside the hour: paused for 24 hours, then admitted again
     # with no operator repair, and the fixed code completes it.
@@ -169,6 +173,32 @@ def test_bad_deploy_for_an_hour_does_not_pause_before_the_third_strike_and_recov
         released,
     )
     assert paused.data['status'] == 'completed'
+
+
+def test_batch_projection_completion_stores_terminal_timestamp():
+    now = datetime(2026, 11, 22, 1, 0, tzinfo=timezone.utc)
+    ref = _Ref()
+    existing = {
+        'dispatch_protocol': 'batch_v1',
+        'status': 'partial',
+        'job_id': 'batch-job',
+        'ledger_run_token': '1:token',
+        'ledger_run_epoch': 1,
+    }
+    result = {'failed_segments': 0, 'total_segments': 1, 'errors': [], 'outcome': 'success'}
+
+    sync_ledger.complete_batch_projection_in_transaction(
+        _Transaction(),
+        ref,
+        existing,
+        'batch-job',
+        result,
+        now,
+        run_token='1:token',
+        run_epoch=1,
+    )
+
+    assert ref.data['completed_at'] == now
 
 
 def test_partial_batch_earns_strikes_pauses_after_three_and_keeps_sibling_checkpoints():

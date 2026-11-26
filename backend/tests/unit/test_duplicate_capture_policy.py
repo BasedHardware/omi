@@ -101,6 +101,18 @@ async def finalize(id):
     )
 
 
+def test_deferred_between_discovery_and_link_fences_duplicate_write(harness):
+    harness.rows.update({path('pendant'): row('pendant', 'omi'), path('desktop'): row('desktop', 'desktop', 100, 590)})
+    primary = policy.capture_record(harness.rows[path('pendant')], UID)
+    secondary = policy.capture_record(harness.rows[path('desktop')], UID)
+    assert primary is not None and secondary is not None
+
+    harness.rows[path('desktop')]['deferred'] = True
+    assert policy.capture_record(harness.rows[path('desktop')], UID) is None
+    assert not conversations_db.link_duplicate_capture(UID, primary, secondary, {}, firestore_client=harness)
+    assert harness.rows[path('desktop')]['external_data'] == {'preserved': 'fixture'}
+
+
 @pytest.mark.asyncio
 @pytest.mark.parametrize('last', ['pendant', 'desktop'])
 async def test_finalization_links_shorter_capture_in_either_order_and_replay(harness, last, caplog):

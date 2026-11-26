@@ -119,3 +119,8 @@ def get_diarizer_backend() -> DiarizerBackend:
     if backend in {'pyannote', 'nemotron'}:
         return HttpDiarizer(backend)
     raise ValueError('unknown_diarizer_backend')
+
+
+def diarize(pcm, backend: DiarizerBackend, **kwargs) -> dict:
+    """Whole-unit diarization on the original audio; turns/overlaps already use original clocks."""
+    return backend.diarize(pcm, **kwargs).model_dump()

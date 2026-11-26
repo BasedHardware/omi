@@ -59,7 +59,9 @@ async def test_recovery_scope_skips_all_global_work_and_kill_switch_restores_it(
         projector.start_followups.assert_awaited_once_with(['recovered'], discover=False)
         projector.start_drains.assert_not_called()
     else:
-        service._maintain.assert_called_once_with(recover_quarantine=False, recovery_caller=RecoveryCaller.RECONCILE)
+        service._maintain.assert_called_once_with(
+            recover_quarantine=False, recovery_caller=RecoveryCaller.RECONCILE, run_held_expiry=True
+        )
         projector.sweep.assert_called_once()
         service.metrics.refresh.assert_called_once()
         projector.start_followups.assert_awaited_once_with(['recovered'])
@@ -176,7 +178,9 @@ async def test_periodic_restart_finishes_durable_publication_after_request_failu
     periodic._maintain = Mock()
     try:
         await periodic.reconcile_async(periodic=True, recover_quarantine=True)
-        periodic._maintain.assert_called_once_with(recover_quarantine=True, recovery_caller=RecoveryCaller.SERVING)
+        periodic._maintain.assert_called_once_with(
+            recover_quarantine=True, recovery_caller=RecoveryCaller.SERVING, run_held_expiry=True
+        )
         # The first pass can hand the pending chain to the process drain;
         # its walk-owed follow-ups launch on the next independent tick.
         if restarted.drains and restarted.drains.tasks:

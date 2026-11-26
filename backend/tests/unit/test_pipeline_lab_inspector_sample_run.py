@@ -190,6 +190,7 @@ def test_content_key_matches_the_contract_recipe():
     assert content_key('task', '  Buy a 12 mm washer. ') == expected
 
 
+@pytest.mark.slow  # near the fast-unit CPU limit on CI runners
 def test_sample_is_deterministic(tmp_path):
     a = sample_run.write_sample(tmp_path / 'a', audio_rate=500)
     b = sample_run.write_sample(tmp_path / 'b', audio_rate=500)

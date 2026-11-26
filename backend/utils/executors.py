@@ -318,6 +318,13 @@ llm_executor = MonitoredThreadPoolExecutor(name="llm", max_workers=6, thread_nam
 admission_executor = MonitoredThreadPoolExecutor(name="admission", max_workers=4, thread_name_prefix="admission")
 stripe_executor = MonitoredThreadPoolExecutor(name="stripe", max_workers=4, thread_name_prefix="stripe")
 sync_executor = MonitoredThreadPoolExecutor(name="sync", max_workers=16, thread_name_prefix="sync")
+# The from-segments route bounds its auth dependency by the request deadline. A
+# stalled identity/Firestore call cannot be interrupted, so the wait is
+# abandoned at the deadline; this pool holds those abandoned calls apart from
+# the critical pool that gates every other request.
+auth_deadline_executor = MonitoredThreadPoolExecutor(
+    name="auth_deadline", max_workers=16, max_queue_size=64, thread_name_prefix="auth-deadline"
+)
 # Optional per-window LID must not hold the shared sync coordination pool.
 # Bound outstanding calls; run_blocking awaits capacity without blocking a loop.
 record_language_executor = MonitoredThreadPoolExecutor(
@@ -392,6 +399,7 @@ _ALL_EXECUTORS = [
     stripe_executor,
     admission_executor,
     sync_executor,
+    auth_deadline_executor,
     record_language_executor,
     postprocess_executor,
     cleanup_executor,
@@ -462,6 +470,53 @@ def get_context_executor() -> MonitoredThreadPoolExecutor:
             )
             _ALL_EXECUTORS.append(_context_executor)
         return _context_executor
+
+
+_fast_finish_chunk_executor: MonitoredThreadPoolExecutor | None = None
+_fast_finish_chunk_executor_lock = threading.Lock()
+
+
+def get_fast_finish_chunk_executor() -> MonitoredThreadPoolExecutor:
+    """Leaf provider requests for v3 fast-finish chunks: six at once per process.
+
+    The pass that submits them coordinates from ``storage_executor``, never from this pool. The queue
+    is bounded by its callers, not here: two short-pass slots of four chunks plus one long-pass slot
+    of three is eleven submissions at most, and a submission-slot bound would race the done callback
+    that frees it. A long pass's three leave three workers for short Finishes.
+    """
+    global _fast_finish_chunk_executor
+    with _fast_finish_chunk_executor_lock:
+        if _fast_finish_chunk_executor is None:
+            _fast_finish_chunk_executor = MonitoredThreadPoolExecutor(
+                name='fast_finish_chunk', max_workers=6, thread_name_prefix='ff-chunk'
+            )
+            _ALL_EXECUTORS.append(_fast_finish_chunk_executor)
+        return _fast_finish_chunk_executor
+
+
+_fast_finish_io_executor: MonitoredThreadPoolExecutor | None = None
+_fast_finish_io_executor_lock = threading.Lock()
+
+
+def get_fast_finish_io_executor() -> MonitoredThreadPoolExecutor:
+    """Bounded leaf work of a v3 fast-finish pass, so the pass can stop waiting at its deadline.
+
+    Runs the pass's Firestore calls (row refresh, funding, privacy, the transcript write and the cut),
+    its language resolution (the vendor probe and the self-hosted gate, with the privacy checks before
+    them) and, fire-and-forget, the long-budget Redis settle after the slot is released. The Firestore
+    client cannot bound a transaction commit and probe timeouts add up per phase, so the pass waits for
+    each call only until its bound and then abandons it: a queued call is cancelled, a running one ends
+    on its own timeouts. A pass has one call outstanding at a time and at most three passes run, so
+    eight workers leave room for abandoned calls and settles still running.
+    """
+    global _fast_finish_io_executor
+    with _fast_finish_io_executor_lock:
+        if _fast_finish_io_executor is None:
+            _fast_finish_io_executor = MonitoredThreadPoolExecutor(
+                name='fast_finish_io', max_workers=8, thread_name_prefix='ff-io'
+            )
+            _ALL_EXECUTORS.append(_fast_finish_io_executor)
+        return _fast_finish_io_executor
 
 
 _rollout_executor: MonitoredThreadPoolExecutor | None = None
@@ -594,6 +649,22 @@ def _byok_detail_code(error: BaseException) -> str | None:
                 return code
         current = current.__cause__ or current.__context__
     return None
+
+
+def _transient_provider_failure_class(error: BaseException) -> str | None:
+    """Return the bounded provider/transport class for a background-task failure.
+
+    Lazy import: executors sits below the provider SDKs in the import graph, and
+    the GPU worker runtime image must not pull them in at module load. A
+    transient provider fault is a retryable dependency failure, not an Omi-side
+    crash, so the done callback logs its class at WARNING instead of the
+    provider message at ERROR (which Cloud Error Reporting would group).
+    """
+    try:
+        from utils.conversations.processing_retry import retryable_provider_failure_class
+    except Exception:
+        return None
+    return retryable_provider_failure_class(error)
 
 
 def _log_background_failure(name: str, future: "Future[Any]") -> None:
@@ -732,12 +803,20 @@ async def log_executor_health(
 _background_tasks: set[asyncio.Task[Any]] = set()
 
 
-def start_background_task(coro: Coroutine[Any, Any, Any], *, name: str) -> asyncio.Task[Any]:
+def start_background_task(
+    coro: Coroutine[Any, Any, Any], *, name: str, bounded_provider_failure: bool = False
+) -> asyncio.Task[Any]:
     """Schedule *coro* as a tracked background task with exception logging.
 
     Use this instead of bare ``asyncio.create_task()`` for production
     fire-and-forget work.  Bare ``create_task`` silently drops exceptions
     and can be garbage-collected if the caller doesn't keep a reference.
+
+    ``bounded_provider_failure`` opts this task into the retryable-provider
+    contract: a transient provider/transport fault is logged as one bounded
+    WARNING with its class instead of the provider body at ERROR. Only tasks
+    whose caller owns a queue retry or replay may opt in; every other task
+    keeps the loud ERROR so Error Reporting still sees it.
     """
     from database.firestore_read_origin import background_task_read_origin
 
@@ -753,6 +832,20 @@ def start_background_task(coro: Coroutine[Any, Any, Any], *, name: str) -> async
             return
         exc = t.exception()
         if exc:
+            if bounded_provider_failure:
+                # A transient provider/transport fault on a task whose caller
+                # owns a queue retry is a retryable dependency failure, not an
+                # Omi-side crash: log its bounded class at WARNING so Error
+                # Reporting does not group it and the provider body never
+                # reaches logs. The caller still receives the exception.
+                failure_class = _transient_provider_failure_class(exc)
+                if failure_class is not None:
+                    logger.warning(
+                        'background_task transient provider failure: %s failure_class=%s',
+                        t.get_name(),
+                        failure_class,
+                    )
+                    return
             logger.error('background_task failed: %s — %s: %s', t.get_name(), type(exc).__name__, exc)
 
     task.add_done_callback(_done)

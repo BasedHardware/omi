@@ -1,0 +1,347 @@
+{
+ "model": "parakeet-tdt-0.6b-v3@541d1f99/cpu-fp32/vad",
+ "source": "local",
+ "windows": "vad",
+ "words": [
+  {
+   "end": 6.904,
+   "start": 6.584,
+   "text": "Mode."
+  },
+  {
+   "end": 7.544,
+   "start": 7.224,
+   "text": "Put"
+  },
+  {
+   "end": 7.704,
+   "start": 7.544,
+   "text": "the"
+  },
+  {
+   "end": 8.184,
+   "start": 7.704,
+   "text": "flower"
+  },
+  {
+   "end": 8.264,
+   "start": 8.184,
+   "text": "in"
+  },
+  {
+   "end": 8.984,
+   "start": 8.904,
+   "text": "I"
+  },
+  {
+   "end": 9.224,
+   "start": 9.064,
+   "text": "know,"
+  },
+  {
+   "end": 9.544,
+   "start": 9.304,
+   "text": "I'm"
+  },
+  {
+   "end": 9.624,
+   "start": 9.544,
+   "text": "just"
+  },
+  {
+   "end": 10.024,
+   "start": 9.704,
+   "text": "awful,"
+  },
+  {
+   "end": 10.344,
+   "start": 10.104,
+   "text": "Jim."
+  },
+  {
+   "end": 10.504,
+   "start": 10.424,
+   "text": "I"
+  },
+  {
+   "end": 10.664,
+   "start": 10.504,
+   "text": "was"
+  },
+  {
+   "end": 10.824,
+   "start": 10.664,
+   "text": "so"
+  },
+  {
+   "end": 11.144,
+   "start": 10.824,
+   "text": "scared"
+  },
+  {
+   "end": 12.152,
+   "start": 11.992,
+   "text": "In"
+  },
+  {
+   "end": 12.472,
+   "start": 12.152,
+   "text": "fact,"
+  },
+  {
+   "end": 12.712,
+   "start": 12.552,
+   "text": "he"
+  },
+  {
+   "end": 12.872,
+   "start": 12.712,
+   "text": "is"
+  },
+  {
+   "end": 13.112,
+   "start": 12.872,
+   "text": "quite"
+  },
+  {
+   "end": 13.432,
+   "start": 13.112,
+   "text": "severe"
+  },
+  {
+   "end": 13.592,
+   "start": 13.432,
+   "text": "on"
+  },
+  {
+   "end": 15.176,
+   "start": 14.856,
+   "text": "Next"
+  },
+  {
+   "end": 15.496,
+   "start": 15.256,
+   "text": "take"
+  },
+  {
+   "end": 15.736,
+   "start": 15.496,
+   "text": "either"
+  },
+  {
+   "end": 15.896,
+   "start": 15.736,
+   "text": "a"
+  },
+  {
+   "end": 16.136,
+   "start": 15.896,
+   "text": "large"
+  },
+  {
+   "end": 16.776,
+   "start": 16.136,
+   "text": "tablespoon"
+  },
+  {
+   "end": 16.856,
+   "start": 16.776,
+   "text": "of"
+  },
+  {
+   "end": 18.424,
+   "start": 18.024,
+   "text": "Only,"
+  },
+  {
+   "end": 19.224,
+   "start": 18.504,
+   "text": "unfortunately,"
+  },
+  {
+   "end": 19.624,
+   "start": 19.384,
+   "text": "he's"
+  },
+  {
+   "end": 20.936,
+   "start": 20.856,
+   "text": "I"
+  },
+  {
+   "end": 21.176,
+   "start": 21.016,
+   "text": "never"
+  },
+  {
+   "end": 21.336,
+   "start": 21.256,
+   "text": "know"
+  },
+  {
+   "end": 21.576,
+   "start": 21.416,
+   "text": "you"
+  },
+  {
+   "end": 21.736,
+   "start": 21.576,
+   "text": "were"
+  },
+  {
+   "end": 21.896,
+   "start": 21.736,
+   "text": "so"
+  },
+  {
+   "end": 22.216,
+   "start": 21.896,
+   "text": "brave,"
+  },
+  {
+   "end": 22.696,
+   "start": 22.376,
+   "text": "Jim."
+  },
+  {
+   "end": 23.8,
+   "start": 23.72,
+   "text": "look"
+  },
+  {
+   "end": 24.12,
+   "start": 23.96,
+   "text": "at"
+  },
+  {
+   "end": 24.36,
+   "start": 24.12,
+   "text": "it"
+  },
+  {
+   "end": 24.68,
+   "start": 24.36,
+   "text": "from"
+  },
+  {
+   "end": 25.0,
+   "start": 24.68,
+   "text": "time"
+  },
+  {
+   "end": 25.32,
+   "start": 25.0,
+   "text": "to"
+  },
+  {
+   "end": 25.64,
+   "start": 25.32,
+   "text": "time."
+  },
+  {
+   "end": 26.2,
+   "start": 26.04,
+   "text": "A"
+  },
+  {
+   "end": 26.52,
+   "start": 26.2,
+   "text": "faint"
+  },
+  {
+   "end": 27.16,
+   "start": 26.68,
+   "text": "fetid"
+  },
+  {
+   "end": 27.64,
+   "start": 27.24,
+   "text": "smell"
+  },
+  {
+   "end": 27.8,
+   "start": 27.64,
+   "text": "came"
+  },
+  {
+   "end": 28.04,
+   "start": 27.8,
+   "text": "from"
+  },
+  {
+   "end": 28.2,
+   "start": 28.04,
+   "text": "him"
+  },
+  {
+   "end": 28.6,
+   "start": 28.28,
+   "text": "and"
+  },
+  {
+   "end": 29.4,
+   "start": 29.08,
+   "text": "mister"
+  },
+  {
+   "end": 30.2,
+   "start": 29.48,
+   "text": "Quilter"
+  },
+  {
+   "end": 30.36,
+   "start": 30.2,
+   "text": "has"
+  },
+  {
+   "end": 30.76,
+   "start": 30.36,
+   "text": "missed"
+  },
+  {
+   "end": 31.0,
+   "start": 30.76,
+   "text": "his"
+  },
+  {
+   "end": 31.64,
+   "start": 31.0,
+   "text": "chance."
+  },
+  {
+   "end": 32.12,
+   "start": 31.88,
+   "text": "Then"
+  },
+  {
+   "end": 32.68,
+   "start": 32.2,
+   "text": "placed"
+  },
+  {
+   "end": 32.92,
+   "start": 32.68,
+   "text": "the"
+  },
+  {
+   "end": 33.16,
+   "start": 32.92,
+   "text": "pan"
+  },
+  {
+   "end": 33.32,
+   "start": 33.16,
+   "text": "on"
+  },
+  {
+   "end": 33.48,
+   "start": 33.32,
+   "text": "a"
+  },
+  {
+   "end": 33.8,
+   "start": 33.48,
+   "text": "strong"
+  }
+ ]
+}

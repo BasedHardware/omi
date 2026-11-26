@@ -16,6 +16,7 @@ from database.quiet_check_retirement import stop_quiet_check_for_conversation
 from database._client import get_firestore_client
 from database import conversation_finalization_jobs as jobs
 from utils.conversations.recovery import TERMINAL_NO_DERIVED_EFFECTS_FIELD
+from utils.conversations import terminal_settled
 
 MARKER = 'stuck_noise_close'
 POLICY = 'silent_backfill_v1'
@@ -103,12 +104,14 @@ def _close_txn(
         raise BackfillConflict('already_closed')
     _fences(transaction, client, user, uid, cid, row, cutoff, expected_session_revision, now)
     prior = {key: {'present': key in row, 'value': row.get(key)} for key in _FIELDS}
+    settled = terminal_settled.settle(row, now=now, enabled=terminal_settled.serving(uid))
     transaction.update(
         ref,
         {
             'status': 'completed',
             'discarded': True,
             TERMINAL_NO_DERIVED_EFFECTS_FIELD: True,
+            **settled,
             MARKER: {
                 'version': 1,
                 'policy': POLICY,
@@ -116,6 +119,8 @@ def _close_txn(
                 'closed_at': now,
                 'prior': prior,
                 'session_revision': expected_session_revision,
+                # Restore removes the settle time it added, so a later close stamps its own.
+                'settled_stamped': bool(settled),
             },
         },
     )
@@ -188,6 +193,7 @@ def _restore_txn(
         ref,
         {
             **{key: saved['value'] if saved['present'] else firestore.DELETE_FIELD for key, saved in prior.items()},
+            **({terminal_settled.FIELD: firestore.DELETE_FIELD} if marker.get('settled_stamped') else {}),
             MARKER: firestore.DELETE_FIELD,
         },
     )

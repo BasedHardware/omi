@@ -10,7 +10,15 @@ from pydantic.json_schema import SkipJsonSchema
 import config.speaker_match_scores as match_scores
 import config.owner_recognition_diagnostics as owner_diagnostics
 
-from pydantic import BaseModel, Field, PrivateAttr, field_validator, model_serializer, model_validator
+from pydantic import (
+    BaseModel,
+    Field,
+    ModelWrapValidatorHandler,
+    PrivateAttr,
+    field_validator,
+    model_serializer,
+    model_validator,
+)
 
 from models.recorded_span import RecordedClock
 from models.audio_file import AudioFile
@@ -525,6 +533,10 @@ class Conversation(BaseModel):
     title_locked: Optional[bool] = None
     recording_pieces: Optional[List[RecordingPiece]] = None
     manual_end: Optional[bool] = None
+    # Reliability experiment end_open_conversation: the End instant that closed this conversation (the
+    # time the app sent with that End). The app matches its "just ended" Home row to the conversation
+    # by it when the End was answered before the conversation existed. Stored only with the experiment on.
+    v3_manual_cut_at: SkipJsonSchema[Optional[datetime]] = None
     summary_covers_through: Optional[datetime] = None
     live_summary: Optional[LiveSummaryPreview] = None
     v3_pending: SkipJsonSchema[Optional[bool]] = Field(default=None, exclude=True)
@@ -578,6 +590,11 @@ class Conversation(BaseModel):
     # Server-authored Home row contract on list reads (utils/conversations/home_step.py):
     # ready | transcribing | writing_notes | failed | noise. Omitted when unset.
     home_step: SkipJsonSchema[Optional[Literal['ready', 'transcribing', 'writing_notes', 'failed', 'noise']]] = None
+    # Read-time projection (utils/conversations/transcribing_hold.py): the transcription wait ran out
+    # with no failure receipt, so the audio is still waiting. Omitted when unset.
+    transcription_wait: SkipJsonSchema[Optional[Literal['overdue']]] = None
+    # Read-time observation of a matching current batch job on the authenticated owner's recording.
+    transcription_admission: SkipJsonSchema[Optional[Literal['allowance_held', 'processing']]] = None
     transcript_segments: List[TranscriptSegment] = []
     transcript_segments_compressed: Optional[bool] = False
     geolocation: Optional[Geolocation] = None
@@ -677,8 +694,9 @@ class Conversation(BaseModel):
             data.pop('processing_deferred', None)
         if self.live_summary is None:
             data.pop('live_summary', None)
-        if self.home_step is None:
-            data.pop('home_step', None)
+        for name in ('home_step', 'transcription_wait', 'transcription_admission'):
+            if getattr(self, name) is None:
+                data.pop(name, None)
         for name in ('processing_tier', 'summary_on_open'):
             if getattr(self, name) is None:
                 data.pop(name, None)
@@ -972,7 +990,36 @@ class CreateConversation(BaseModel):
 
 
 class ProcessConversationRequest(BaseModel):
+    _has_body_fields: bool = PrivateAttr(default=False)
+    _names_only_live_conversation: bool = PrivateAttr(default=False)
+
+    @model_validator(mode='wrap')
+    @classmethod
+    def capture_body_field_presence(
+        cls, value: Any, handler: ModelWrapValidatorHandler['ProcessConversationRequest']
+    ) -> 'ProcessConversationRequest':
+        request = handler(value)
+        if isinstance(value, dict):
+            # Validation ignores unknown keys for wire compatibility. They still make the body nonempty.
+            request._has_body_fields = bool(value)
+            request._names_only_live_conversation = set(value) <= {'live_conversation_id'}
+        return request
+
+    @property
+    def empty_body(self) -> bool:
+        return not (self._has_body_fields or self.model_fields_set)
+
+    @property
+    def finish_only_body(self) -> bool:
+        """The app's Finish body: empty, or only the live window it was showing."""
+        return self.empty_body or (
+            self._names_only_live_conversation and self.model_fields_set <= {'live_conversation_id'}
+        )
+
     calendar_meeting_context: Optional[CalendarMeetingContext] = None
+    live_conversation_id: Optional[str] = Field(
+        default=None, description='Optional live v3 window to Finish when no active recording is found.'
+    )
 
     @field_validator('calendar_meeting_context', mode='before')
     @classmethod
@@ -1174,6 +1221,8 @@ class LiveConversation(BaseModel):
 
     is_locked: SkipJsonSchema[Optional[bool]] = None
     v3_recording_ids: SkipJsonSchema[Optional[List[str]]] = None
+    # Reliability experiment end_button_by_device; absent when it is off.
+    v3_capture_device_id: SkipJsonSchema[Optional[str]] = None
 
 
 class ConversationsLiveResponse(BaseModel):

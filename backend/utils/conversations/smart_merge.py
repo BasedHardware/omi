@@ -52,7 +52,7 @@ from config.conversation_smart_merge import (
     smart_merge_mode,
 )
 from config.jev_decisions import JEV_MODEL
-from config.merge_before_processing import enabled as merge_before_processing_enabled
+from config.merge_before_processing import enabled as merge_before_processing_enabled, v3_excluded, v3_owned
 from models.finalization_owner import FinalizationOwnedElsewhere, python_owns_finalization
 from database import conversations as conversations_db
 from database import notifications as notification_db
@@ -61,7 +61,6 @@ from database.firestore_read_metrics import FirestoreReadSite
 from database.legal_holds import DestructiveOperationInProgress, LegalHoldActive, LegalHoldAuthorityUnavailable
 from database.sync_bridges import mark_sync_bridge_cleaned
 from utils.cloud_tasks import is_audio_merge_dispatch_enabled
-from utils.episodes.boundaries import merge_allowed
 from utils.conversations.action_item_refresh import transfer_donor
 from utils.sync import processing_hold
 from utils.enrichment import outbox as enrichment_outbox
@@ -439,6 +438,10 @@ def _decide(
     if reason is not None:
         _skip(mode, reason, uid, conversation_id)
         return None
+    if v3_excluded() and v3_owned(survivor_meta):
+        # Before any owed legacy refresh: a v3 survivor's notes are v3's to write.
+        _skip(mode, SkipReason.V3_OWNED, uid, conversation_id)
+        return None
     survivor_id = str(survivor_meta['id'])
     if refresh_owed(survivor_meta) and mode is SmartMergeMode.MERGE:
         # A refresh a crashed or dead-lettered job still owes: pay it before deciding.
@@ -458,9 +461,6 @@ def _decide(
         return None
     survivor = dict(survivor, id=survivor_id)
     survivor_segments = _segments(survivor)
-    if not merge_allowed(uid, survivor, new_row):
-        _skip(mode, 'boundary', uid, conversation_id)
-        return None
     if smart_merge_db.has_intervening_discarded(uid, survivor, new_row):
         _skip(mode, SkipReason.INTERVENING_DISCARDED, uid, conversation_id)
         return None

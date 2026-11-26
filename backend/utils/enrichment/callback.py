@@ -16,6 +16,7 @@ from utils.observability.delivery import observe_sync_failures, sync_result, syn
 
 from utils.enrichment.admission import SyncConversationPersistenceFenced
 from utils.enrichment.admission import require_current_persistence as _require_current_conversation_persistence
+from utils.enrichment.admission import require_transcript_decoded
 from utils.enrichment.admission import run_created_webhook as _run_conversation_created_webhook
 
 import logging
@@ -64,7 +65,7 @@ def enrich_conversation(uid: str, conversation_id: str, language: str, *, user_s
     from models.finalization_owner import REFUSAL as FINALIZATION_OWNER_REFUSAL
     from models.finalization_owner import FinalizationOwnedElsewhere, python_owns_finalization
 
-    conversation_data = conversations_db.get_conversation(uid, conversation_id)
+    conversation_data = conversations_db.get_conversation(uid, conversation_id, include_transcript_decode_status=True)
     context = PROCESS_CONTEXT.get()
     if conversation_data is not None and not python_owns_finalization(conversation_data):
         raise processing_hold.finalization_owner_deferral()
@@ -86,7 +87,9 @@ def enrich_conversation(uid: str, conversation_id: str, language: str, *, user_s
             # The outbox transfers custody atomically before acknowledging this donor.
             context['redirect_to' if canonical else 'defer_reason'] = canonical or 'redirect_unresolved'
             return sync_result('deferred')
-        conversation_data = conversations_db.get_sync_redirected_conversation(uid, conversation_id)
+        conversation_data = conversations_db.get_sync_redirected_conversation(
+            uid, conversation_id, include_transcript_decode_status=True
+        )
         if conversation_data:
             if not python_owns_finalization(conversation_data):
                 raise processing_hold.finalization_owner_deferral()
@@ -100,12 +103,15 @@ def enrich_conversation(uid: str, conversation_id: str, language: str, *, user_s
         logger.info('event=sync_reprocess_callback outcome=unavailable')
         return sync_result('no_op' if conversation_data and conversation_data.get('deleted') else 'deferred')
 
+    require_transcript_decoded(conversation_data)
     if conversation_data.get(bridge_pending.FIELD):
         conversation_id, conversation_data = bridge.resume_pending(uid, conversation_id, conversation_data, context)
         if conversation_data is None:
             return sync_result('deferred')
         if not python_owns_finalization(conversation_data):
             raise processing_hold.finalization_owner_deferral()
+
+        require_transcript_decoded(conversation_data)
 
     if repair_fenced(conversation_data):
         raise SummaryRepairSuperseded(

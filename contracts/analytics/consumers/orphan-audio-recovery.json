@@ -9,5 +9,5 @@
   "question": "How much orphan audio can the foreground ledger safely recover, and which fences prevent adoption?",
   "zero_policy": "No events is unknown until build identity, consent and ingestion are verified.",
   "query": "contracts/analytics/consumers/orphan-audio-recovery.sql",
-  "posthog_query": "SELECT properties['result'], count() FROM events WHERE event = 'Orphan Audio Recovery' AND properties['$app_namespace'] = '{app_namespace}' AND properties['build_number'] = '{build_number}' GROUP BY properties['result']"
+  "posthog_query": "SELECT properties['result'], count() FROM events WHERE event = 'Orphan Audio Recovery' AND properties['$app_namespace'] = '{app_namespace}' AND coalesce(properties['app_build'], properties['build_number']) = '{build_number}' GROUP BY properties['result']"
 }

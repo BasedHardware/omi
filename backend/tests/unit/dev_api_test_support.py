@@ -17,7 +17,6 @@ import database.firestore_cache_metrics  # noqa: F401
 import database.firestore_read_metrics  # noqa: F401
 import utils.capture.shadow  # noqa: F401
 import utils.conversations.summary_delivery  # noqa: F401
-import utils.list_version_check  # noqa: F401
 import utils.metrics  # noqa: F401
 import utils.observability.delivery  # noqa: F401
 import utils.observability.external_lists  # noqa: F401

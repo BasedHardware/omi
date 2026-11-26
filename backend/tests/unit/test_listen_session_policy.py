@@ -459,6 +459,35 @@ def test_new_main_ops_kill_remains_live_and_keeps_semantics(monkeypatch, raw, en
     assert kill_switch(name, policy_id=policy.policy_id) is enabled
 
 
+@pytest.mark.parametrize('name', ['BATCH_ACCOUNT_PRIVACY_WRITER_ENABLED', 'CAPTURE_RETRY_CAP_ENFORCED'])
+def test_kill_switch_log_on_change_keeps_first_transition_and_rollback(monkeypatch, caplog, name):
+    from collections import OrderedDict
+    from concurrent.futures import ThreadPoolExecutor
+    from config.policy import kill_switch, kill_switches
+
+    setting = 'BATCH_POLICY_KILL_SWITCH_LOG_ON_CHANGE_ENABLED'
+    monkeypatch.setattr(kill_switches, '_last_logged', OrderedDict())
+    monkeypatch.setattr(kill_switches, '_MAX_LOGGED_SWITCHES', 2)
+    flags = {setting: 'true', name: 'true'}
+    with caplog.at_level('INFO', logger=kill_switches.__name__):
+        assert kill_switch(name, policy_id='first', flags=flags, log=False)
+        with ThreadPoolExecutor(max_workers=4) as executor:
+            assert all(executor.map(lambda _: kill_switch(name, policy_id='first', flags=flags), range(16)))
+        assert not kill_switch(name, policy_id='first', flags={**flags, name: 'false'})
+        assert not kill_switch(name, policy_id='first', flags={**flags, name: 'false'})
+        assert kill_switch(name, policy_id='second', flags=flags)
+        assert kill_switch(name, policy_id='third', flags=flags)
+        assert list(kill_switches._last_logged) == [('second', name), ('third', name)]
+        for _ in range(2):
+            assert kill_switch(name, policy_id='third', flags={**flags, setting: 'false'})
+
+    lines = [record.message for record in caplog.records if 'event=batch_policy_kill_switch' in record.message]
+    assert len(lines) == 6
+    assert lines[0].endswith('enabled=True count=1 changed=false')
+    assert lines[1].endswith('enabled=False count=1 changed=true')
+    assert lines[-2:] == [f'event=batch_policy_kill_switch policy_id=third switch={name} enabled=True count=1'] * 2
+
+
 def test_paid_spillover_settings_stay_recorded_after_flip(monkeypatch):
     from utils.stt import paid_admission
 

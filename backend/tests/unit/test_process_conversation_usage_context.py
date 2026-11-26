@@ -32,6 +32,8 @@ from models.conversation import Conversation, CreateConversation
 from models.conversation_enums import ConversationSource, ConversationStatus
 from models.structured import Structured
 from models.transcript_segment import TranscriptSegment
+from database import _client as firestore_client
+from tests.support.isolated_prometheus import isolated_prometheus
 from testing.import_isolation import AutoMockModule, load_module_fresh, stub_modules
 
 BACKEND_DIR = Path(__file__).resolve().parent.parent.parent
@@ -51,9 +53,6 @@ def _build_fakes() -> dict[str, ModuleType]:
     because they are not exercised by the tracking-context logic under test. ``models.*`` and
     ``fastapi`` stay real (they are import-pure Pydantic schemas / the framework).
     """
-    import hashlib
-    import uuid
-
     fakes: dict[str, ModuleType] = {}
 
     def add(name: str, mod: ModuleType) -> ModuleType:
@@ -64,23 +63,6 @@ def _build_fakes() -> dict[str, ModuleType]:
     refresh = ModuleType('utils.conversations.action_item_refresh')
     refresh.preserve = lambda *a, **k: False
     add('utils.conversations.action_item_refresh', refresh)
-
-    database_pkg = ModuleType("database")
-    database_pkg.__path__ = [str(BACKEND_DIR / "database")]  # type: ignore[attr-defined]
-    add("database", database_pkg)
-
-    client_mod = ModuleType("database._client")
-    client_mod.db = MagicMock(name="db")
-    client_mod.get_firestore_client = lambda: client_mod.db
-    client_mod.get_data_plane_firestore_client = lambda: client_mod.db
-
-    def _document_id_from_seed(seed: str) -> str:
-        seed_hash = hashlib.sha256(seed.encode("utf-8")).digest()
-        return str(uuid.UUID(bytes=seed_hash[:16], version=4))
-
-    client_mod.document_id_from_seed = _document_id_from_seed
-    client_mod.run_transactional = MagicMock()
-    add("database._client", client_mod)
 
     vector_db = add("database.vector_db", AutoMockModule("database.vector_db"))
     for attr in [
@@ -389,7 +371,12 @@ def _load_modules(request):
     teardown, keeping the suite hermetic.
     """
     fakes = _build_fakes()
-    with stub_modules(fakes):
+    with pytest.MonkeyPatch.context() as patch, isolated_prometheus(), stub_modules(fakes):
+        client = MagicMock()
+        patch.setattr(firestore_client, '_firestore_client', client)
+        patch.setattr(firestore_client, '_customer_firestore_client', client)
+        patch.setattr(firestore_client, '_data_plane_firestore_client', client)
+        patch.setattr(firestore_client, 'run_transactional', MagicMock())
         ut = load_module_fresh(
             "utils.llm.usage_tracker",
             str(BACKEND_DIR / "utils" / "llm" / "usage_tracker.py"),
@@ -938,7 +925,10 @@ def test_fresh_creation_uses_the_explicit_completed_lifecycle_owner(monkeypatch)
     persisted.assert_not_called()
 
 
-def test_deferred_fresh_creation_uses_the_explicit_processing_lifecycle_owner(monkeypatch):
+@pytest.mark.parametrize('enabled', [True, False])
+def test_deferred_fresh_creation_uses_the_matching_lifecycle_owner(monkeypatch, enabled):
+    monkeypatch.setenv('CONVERSATION_PARKED_TERMINAL_STATUS_ENABLED', str(enabled))
+    expected_status = ConversationStatus.completed if enabled else ConversationStatus.processing
     new_request = CreateConversation(
         started_at=datetime(2026, 7, 14, tzinfo=timezone.utc),
         finished_at=datetime(2026, 7, 14, 0, 1, tzinfo=timezone.utc),
@@ -947,19 +937,26 @@ def test_deferred_fresh_creation_uses_the_explicit_processing_lifecycle_owner(mo
     )
     deferred_conversation = MagicMock()
     deferred_conversation.id = 'deferred-conversation'
-    deferred_conversation.dict.return_value = {'id': 'deferred-conversation', 'status': 'processing'}
-    created = MagicMock(return_value=True)
+    deferred_conversation.record_lane_owner = None
+    deferred_conversation.recording = False
+    deferred_conversation.dict.return_value = {'id': 'deferred-conversation', 'status': expected_status}
+    completed = MagicMock(return_value=True)
+    processing = MagicMock(return_value=True)
     persisted = MagicMock()
     monkeypatch.setattr(process_conversation, 'build_deferred_structured', lambda *args: MagicMock())
     monkeypatch.setattr(process_conversation, '_get_conversation_obj', lambda *args, **kwargs: deferred_conversation)
-    monkeypatch.setattr(process_conversation.lifecycle_service, 'create_processing_conversation', created)
+    monkeypatch.setattr(process_conversation.lifecycle_service, 'create_completed_conversation', completed)
+    monkeypatch.setattr(process_conversation.lifecycle_service, 'create_processing_conversation', processing)
     monkeypatch.setattr(process_conversation.lifecycle_service, 'persist_processed_conversation', persisted)
 
     result = process_conversation._store_deferred_conversation('uid', new_request)
 
     assert result is deferred_conversation
     assert deferred_conversation.deferred is True
-    created.assert_called_once_with('uid', deferred_conversation.dict(), idempotent=True)
+    assert deferred_conversation.status is expected_status
+    used, unused = (completed, processing) if enabled else (processing, completed)
+    used.assert_called_once_with('uid', deferred_conversation.dict(), idempotent=True)
+    unused.assert_not_called()
     persisted.assert_not_called()
 
 
@@ -967,6 +964,7 @@ def test_deferred_desktop_filler_is_discarded_by_the_free_rules(monkeypatch):
     """Free-tier desktop never reaches the model, but the rules still run."""
     from models.transcript_segment import TranscriptSegment
 
+    monkeypatch.setenv('CONVERSATION_PARKED_TERMINAL_STATUS_ENABLED', 'on')
     new_request = CreateConversation(
         started_at=datetime(2026, 7, 14, tzinfo=timezone.utc),
         finished_at=datetime(2026, 7, 14, 0, 1, tzinfo=timezone.utc),
@@ -975,12 +973,14 @@ def test_deferred_desktop_filler_is_discarded_by_the_free_rules(monkeypatch):
     )
     deferred_conversation = MagicMock()
     deferred_conversation.id = 'deferred-filler'
-    deferred_conversation.dict.return_value = {'id': 'deferred-filler', 'status': 'processing'}
+    deferred_conversation.record_lane_owner = None
+    deferred_conversation.recording = False
+    deferred_conversation.dict.return_value = {'id': 'deferred-filler', 'status': 'completed'}
     created = MagicMock(return_value=True)
     monkeypatch.setattr(process_conversation, 'build_deferred_structured', lambda *args: MagicMock())
     monkeypatch.setattr(process_conversation, '_get_conversation_obj', lambda *args, **kwargs: deferred_conversation)
     monkeypatch.setattr(process_conversation, '_calendar_overlap_retains_conversation', lambda *args: False)
-    monkeypatch.setattr(process_conversation.lifecycle_service, 'create_processing_conversation', created)
+    monkeypatch.setattr(process_conversation.lifecycle_service, 'create_completed_conversation', created)
 
     process_conversation._store_deferred_conversation('uid', new_request)
 

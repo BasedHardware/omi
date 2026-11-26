@@ -1,0 +1,578 @@
+{
+ "adapter": "local",
+ "audio": {
+  "format": "pcm16le_mono",
+  "sample_rate": 16000,
+  "seconds": 34.3208125
+ },
+ "detected_language": "en",
+ "key": {
+  "audio_sha256": "b67c58ad0804759b75dd85853669fa19f154ad38d28f50623145fe736ef98a69",
+  "language": "en",
+  "model": "parakeet-tdt-0.6b-v3@541d1f99/cpu-fp32/vad",
+  "provider": "parakeet_local",
+  "vocabulary_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+ },
+ "key_digest": "ba4863619daa27a47abd9a4c1d11302ffacb4445f9deb869a9bad96715150178",
+ "recorded_at": "2026-11-26T16:57:20.667260Z",
+ "schema": "pipeline_lab.stt_cassette/v1",
+ "segments": [
+  {
+   "end": 2.4240000000000004,
+   "speaker": null,
+   "start": 0.344,
+   "text": "Well, and have we a fair wind?"
+  },
+  {
+   "end": 11.928,
+   "speaker": null,
+   "start": 3.448,
+   "text": "When we took our seats at the breakfast table, it was with the My uncle was delighted, for myself moody and dissatisfied,"
+  },
+  {
+   "end": 33.592,
+   "speaker": null,
+   "start": 13.336,
+   "text": "instantly they absorbed all my attention, though I dared not give them But no ghost or anything else appeared upon the ancient walls. Yes, and a very respectable one. The fact is, the castle is much later than the time of the heroic Prince of Denmark. The lady is not the mother of the boys, but their aunt."
+  }
+ ],
+ "served": {
+  "model": "parakeet-tdt-0.6b-v3@541d1f99/cpu-fp32/vad",
+  "provider": "parakeet_local"
+ },
+ "source": "local",
+ "source_detail": {
+  "vad": {
+   "join_gap": 0.3,
+   "max_seconds": 30.0,
+   "model": "silero_vad.onnx (utils/stt/local_vad.py, threshold 0.5)",
+   "pad": 0.2
+  },
+  "windows": "vad"
+ },
+ "usd": 0.0,
+ "words": [
+  {
+   "end": 0.744,
+   "speaker": null,
+   "start": 0.344,
+   "text": "Well,"
+  },
+  {
+   "end": 1.224,
+   "speaker": null,
+   "start": 0.9039999999999999,
+   "text": "and"
+  },
+  {
+   "end": 1.384,
+   "speaker": null,
+   "start": 1.224,
+   "text": "have"
+  },
+  {
+   "end": 1.544,
+   "speaker": null,
+   "start": 1.384,
+   "text": "we"
+  },
+  {
+   "end": 1.6239999999999999,
+   "speaker": null,
+   "start": 1.544,
+   "text": "a"
+  },
+  {
+   "end": 2.024,
+   "speaker": null,
+   "start": 1.6239999999999999,
+   "text": "fair"
+  },
+  {
+   "end": 2.4240000000000004,
+   "speaker": null,
+   "start": 2.024,
+   "text": "wind?"
+  },
+  {
+   "end": 3.6879999999999997,
+   "speaker": null,
+   "start": 3.448,
+   "text": "When"
+  },
+  {
+   "end": 3.848,
+   "speaker": null,
+   "start": 3.6879999999999997,
+   "text": "we"
+  },
+  {
+   "end": 4.088,
+   "speaker": null,
+   "start": 3.848,
+   "text": "took"
+  },
+  {
+   "end": 4.327999999999999,
+   "speaker": null,
+   "start": 4.088,
+   "text": "our"
+  },
+  {
+   "end": 4.808,
+   "speaker": null,
+   "start": 4.327999999999999,
+   "text": "seats"
+  },
+  {
+   "end": 4.968,
+   "speaker": null,
+   "start": 4.808,
+   "text": "at"
+  },
+  {
+   "end": 5.208,
+   "speaker": null,
+   "start": 4.968,
+   "text": "the"
+  },
+  {
+   "end": 5.848,
+   "speaker": null,
+   "start": 5.208,
+   "text": "breakfast"
+  },
+  {
+   "end": 6.247999999999999,
+   "speaker": null,
+   "start": 5.848,
+   "text": "table,"
+  },
+  {
+   "end": 6.568,
+   "speaker": null,
+   "start": 6.4079999999999995,
+   "text": "it"
+  },
+  {
+   "end": 6.808,
+   "speaker": null,
+   "start": 6.568,
+   "text": "was"
+  },
+  {
+   "end": 7.128,
+   "speaker": null,
+   "start": 6.808,
+   "text": "with"
+  },
+  {
+   "end": 7.448,
+   "speaker": null,
+   "start": 7.128,
+   "text": "the"
+  },
+  {
+   "end": 8.088,
+   "speaker": null,
+   "start": 7.927999999999999,
+   "text": "My"
+  },
+  {
+   "end": 8.488,
+   "speaker": null,
+   "start": 8.088,
+   "text": "uncle"
+  },
+  {
+   "end": 8.728,
+   "speaker": null,
+   "start": 8.488,
+   "text": "was"
+  },
+  {
+   "end": 9.288,
+   "speaker": null,
+   "start": 8.728,
+   "text": "delighted,"
+  },
+  {
+   "end": 9.768,
+   "speaker": null,
+   "start": 9.528,
+   "text": "for"
+  },
+  {
+   "end": 10.168,
+   "speaker": null,
+   "start": 9.768,
+   "text": "myself"
+  },
+  {
+   "end": 10.808,
+   "speaker": null,
+   "start": 10.408,
+   "text": "moody"
+  },
+  {
+   "end": 11.048,
+   "speaker": null,
+   "start": 10.968,
+   "text": "and"
+  },
+  {
+   "end": 11.928,
+   "speaker": null,
+   "start": 11.048,
+   "text": "dissatisfied,"
+  },
+  {
+   "end": 14.056000000000001,
+   "speaker": null,
+   "start": 13.336,
+   "text": "instantly"
+  },
+  {
+   "end": 14.296,
+   "speaker": null,
+   "start": 14.056000000000001,
+   "text": "they"
+  },
+  {
+   "end": 14.856,
+   "speaker": null,
+   "start": 14.296,
+   "text": "absorbed"
+  },
+  {
+   "end": 15.096,
+   "speaker": null,
+   "start": 14.856,
+   "text": "all"
+  },
+  {
+   "end": 15.256,
+   "speaker": null,
+   "start": 15.096,
+   "text": "my"
+  },
+  {
+   "end": 15.816,
+   "speaker": null,
+   "start": 15.256,
+   "text": "attention,"
+  },
+  {
+   "end": 16.216,
+   "speaker": null,
+   "start": 15.976,
+   "text": "though"
+  },
+  {
+   "end": 16.296,
+   "speaker": null,
+   "start": 16.216,
+   "text": "I"
+  },
+  {
+   "end": 16.616,
+   "speaker": null,
+   "start": 16.296,
+   "text": "dared"
+  },
+  {
+   "end": 16.776,
+   "speaker": null,
+   "start": 16.616,
+   "text": "not"
+  },
+  {
+   "end": 17.096,
+   "speaker": null,
+   "start": 16.776,
+   "text": "give"
+  },
+  {
+   "end": 17.416,
+   "speaker": null,
+   "start": 17.096,
+   "text": "them"
+  },
+  {
+   "end": 18.392,
+   "speaker": null,
+   "start": 18.232,
+   "text": "But"
+  },
+  {
+   "end": 18.552,
+   "speaker": null,
+   "start": 18.392,
+   "text": "no"
+  },
+  {
+   "end": 18.951999999999998,
+   "speaker": null,
+   "start": 18.552,
+   "text": "ghost"
+  },
+  {
+   "end": 19.112,
+   "speaker": null,
+   "start": 18.951999999999998,
+   "text": "or"
+  },
+  {
+   "end": 19.352,
+   "speaker": null,
+   "start": 19.112,
+   "text": "anything"
+  },
+  {
+   "end": 19.512,
+   "speaker": null,
+   "start": 19.352,
+   "text": "else"
+  },
+  {
+   "end": 19.912,
+   "speaker": null,
+   "start": 19.592,
+   "text": "appeared"
+  },
+  {
+   "end": 20.152,
+   "speaker": null,
+   "start": 19.912,
+   "text": "upon"
+  },
+  {
+   "end": 20.311999999999998,
+   "speaker": null,
+   "start": 20.152,
+   "text": "the"
+  },
+  {
+   "end": 20.712,
+   "speaker": null,
+   "start": 20.311999999999998,
+   "text": "ancient"
+  },
+  {
+   "end": 21.352,
+   "speaker": null,
+   "start": 20.712,
+   "text": "walls."
+  },
+  {
+   "end": 22.152,
+   "speaker": null,
+   "start": 21.752,
+   "text": "Yes,"
+  },
+  {
+   "end": 22.552,
+   "speaker": null,
+   "start": 22.311999999999998,
+   "text": "and"
+  },
+  {
+   "end": 22.791999999999998,
+   "speaker": null,
+   "start": 22.552,
+   "text": "a"
+  },
+  {
+   "end": 23.032,
+   "speaker": null,
+   "start": 22.791999999999998,
+   "text": "very"
+  },
+  {
+   "end": 23.832,
+   "speaker": null,
+   "start": 23.032,
+   "text": "respectable"
+  },
+  {
+   "end": 24.152,
+   "speaker": null,
+   "start": 23.832,
+   "text": "one."
+  },
+  {
+   "end": 25.112000000000002,
+   "speaker": null,
+   "start": 24.952,
+   "text": "The"
+  },
+  {
+   "end": 25.512,
+   "speaker": null,
+   "start": 25.112000000000002,
+   "text": "fact"
+  },
+  {
+   "end": 25.672,
+   "speaker": null,
+   "start": 25.512,
+   "text": "is,"
+  },
+  {
+   "end": 26.072000000000003,
+   "speaker": null,
+   "start": 25.832,
+   "text": "the"
+  },
+  {
+   "end": 26.552000000000003,
+   "speaker": null,
+   "start": 26.072000000000003,
+   "text": "castle"
+  },
+  {
+   "end": 26.712000000000003,
+   "speaker": null,
+   "start": 26.552000000000003,
+   "text": "is"
+  },
+  {
+   "end": 26.872,
+   "speaker": null,
+   "start": 26.712000000000003,
+   "text": "much"
+  },
+  {
+   "end": 27.272000000000002,
+   "speaker": null,
+   "start": 26.872,
+   "text": "later"
+  },
+  {
+   "end": 27.432000000000002,
+   "speaker": null,
+   "start": 27.272000000000002,
+   "text": "than"
+  },
+  {
+   "end": 27.512,
+   "speaker": null,
+   "start": 27.432000000000002,
+   "text": "the"
+  },
+  {
+   "end": 27.672,
+   "speaker": null,
+   "start": 27.512,
+   "text": "time"
+  },
+  {
+   "end": 27.832,
+   "speaker": null,
+   "start": 27.672,
+   "text": "of"
+  },
+  {
+   "end": 27.912000000000003,
+   "speaker": null,
+   "start": 27.832,
+   "text": "the"
+  },
+  {
+   "end": 28.472,
+   "speaker": null,
+   "start": 27.912000000000003,
+   "text": "heroic"
+  },
+  {
+   "end": 28.712000000000003,
+   "speaker": null,
+   "start": 28.472,
+   "text": "Prince"
+  },
+  {
+   "end": 28.872,
+   "speaker": null,
+   "start": 28.712000000000003,
+   "text": "of"
+  },
+  {
+   "end": 29.672,
+   "speaker": null,
+   "start": 28.872,
+   "text": "Denmark."
+  },
+  {
+   "end": 30.232000000000003,
+   "speaker": null,
+   "start": 29.992,
+   "text": "The"
+  },
+  {
+   "end": 30.632,
+   "speaker": null,
+   "start": 30.232000000000003,
+   "text": "lady"
+  },
+  {
+   "end": 30.872,
+   "speaker": null,
+   "start": 30.632,
+   "text": "is"
+  },
+  {
+   "end": 31.032000000000004,
+   "speaker": null,
+   "start": 30.872,
+   "text": "not"
+  },
+  {
+   "end": 31.192,
+   "speaker": null,
+   "start": 31.032000000000004,
+   "text": "the"
+  },
+  {
+   "end": 31.512,
+   "speaker": null,
+   "start": 31.192,
+   "text": "mother"
+  },
+  {
+   "end": 31.672,
+   "speaker": null,
+   "start": 31.512,
+   "text": "of"
+  },
+  {
+   "end": 31.912000000000003,
+   "speaker": null,
+   "start": 31.672,
+   "text": "the"
+  },
+  {
+   "end": 32.312000000000005,
+   "speaker": null,
+   "start": 31.912000000000003,
+   "text": "boys,"
+  },
+  {
+   "end": 32.792,
+   "speaker": null,
+   "start": 32.552,
+   "text": "but"
+  },
+  {
+   "end": 33.112,
+   "speaker": null,
+   "start": 32.792,
+   "text": "their"
+  },
+  {
+   "end": 33.592,
+   "speaker": null,
+   "start": 33.112,
+   "text": "aunt."
+  }
+ ]
+}

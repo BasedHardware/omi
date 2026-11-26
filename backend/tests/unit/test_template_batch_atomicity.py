@@ -361,7 +361,7 @@ def test_batch_user_reprocess_recovers_dead_letter_with_results_and_restore(monk
     document = _strict_firestore(monkeypatch, row)
     snapshot = conversations_db.get_user_reprocess_app_snapshot('user', 'conversation')
     assert snapshot is not None
-    monkeypatch.setattr(conversations_db, '_terminal_family_serving', lambda *_: True)
+    monkeypatch.setattr(conversations_db.terminal_settled, 'serving', lambda *_: True)
     monkeypatch.setattr(conversations_db, 'stop_quiet_check_for_conversation', lambda *args, **kwargs: None)
     monkeypatch.setattr(conversations_db, 'invalidate_people_stats_cache', lambda *_: None)
     monkeypatch.setattr(conversations_db, '_sync_conversation_search_index', lambda *args: None)

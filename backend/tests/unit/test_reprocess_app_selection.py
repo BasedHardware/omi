@@ -239,20 +239,109 @@ def test_valid_explicit_selection_reaches_processing_with_explicit_attribution()
 
 
 def test_lazy_enrichment_uses_non_user_usage_attribution(monkeypatch):
-    conversation = {'id': 'c1', 'deferred': True}
+    from concurrent.futures import Future
+
+    conversation = {'id': 'c1', 'deferred': True, 'status': 'completed'}
     model = SimpleNamespace(language='en', deferred=True)
     monkeypatch.setattr(conv_router.lifecycle_service, 'reacquire_deferred_processing', lambda *_args: True)
     monkeypatch.setattr(
         conv_router.lifecycle_service, 'processing_admission_guard', lambda *_args, **_kwargs: nullcontext()
     )
     monkeypatch.setattr(conv_router, 'deserialize_conversation', lambda _conversation: model)
-    monkeypatch.setattr(conv_router, 'submit_with_context', lambda _executor, function: function())
+    callbacks = []
+
+    def submit(_executor, function):
+        callbacks.append(function)
+        return Future()
+
+    monkeypatch.setattr(conv_router, 'submit_with_context', submit)
     with patch.object(conv_router, 'process_conversation', return_value=model) as process:
         result = conv_router._enrich_deferred_conversation('u1', conversation)
+        callbacks[0]()
 
     assert result['deferred'] is False
+    assert result['status'] == model.status == 'processing'
     assert process.call_args.kwargs['trigger'] is conv_router.ProcessingTrigger.FIRST_OPEN
     assert process.call_args.kwargs['app_usage_attribution'] is AppUsageAttribution.NON_USER_REPROCESS
+
+
+@pytest.mark.parametrize(('status', 'deferred'), [('processing', False), ('completed', True)])
+def test_losing_first_open_returns_authoritative_status_without_enqueuing(monkeypatch, status, deferred):
+    stale = {'id': 'c1', 'status': 'completed', 'deferred': True}
+    current = {'id': 'c1', 'status': status, 'deferred': deferred}
+    monkeypatch.setattr(conv_router.lifecycle_service, 'reacquire_deferred_processing', lambda *_args: False)
+    with (
+        patch.object(conv_router, '_get_valid_conversation_by_id', return_value=current) as reread,
+        patch.object(conv_router, 'submit_with_context') as submit,
+    ):
+        result = conv_router._enrich_deferred_conversation('u1', stale)
+
+    assert result is current
+    reread.assert_called_once_with('u1', 'c1', follow_sync_bridge=True)
+    submit.assert_not_called()
+
+
+def test_losing_first_open_reapplies_discard_visibility(monkeypatch):
+    stale = {'id': 'c1', 'status': 'completed', 'deferred': True}
+    current = {**stale, 'discarded': True}
+    monkeypatch.setattr(conv_router.lifecycle_service, 'reacquire_deferred_processing', lambda *_args: False)
+    monkeypatch.setattr(conv_router, '_get_valid_conversation_by_id', lambda *_args, **_kwargs: current)
+
+    with pytest.raises(HTTPException) as error:
+        conv_router._enrich_deferred_conversation('u1', stale, include_discarded=False)
+
+    assert error.value.status_code == 404
+
+
+def test_redirect_during_deferred_admission_reapplies_source_constraint(monkeypatch):
+    donor = {'id': 'c1', 'source': 'omi', 'status': 'completed', 'deferred': True}
+    target = {'id': 'c2', 'source': 'desktop', 'status': 'completed'}
+    monkeypatch.setattr(conv_router.lifecycle_service, 'reacquire_deferred_processing', lambda *_args: False)
+    with patch.object(conv_router, '_get_valid_conversation_by_id', side_effect=[donor, target]) as read:
+        with pytest.raises(HTTPException) as error:
+            conv_router.get_conversation_by_id(
+                'c1',
+                source='omi',
+                include_discarded=None,
+                uid='u1',
+                include_translations=False,
+                request=SimpleNamespace(headers={'X-Omi-Recording-Detail': '1'}, query_params={}),
+            )
+
+    assert error.value.status_code == 404
+    assert [call.kwargs for call in read.call_args_list] == [{'follow_sync_bridge': True}] * 2
+
+
+@pytest.mark.parametrize('polling', [False, True])
+@pytest.mark.parametrize('detail_open', [False, True])
+def test_detail_poll_does_not_claim_rearmed_enrichment(monkeypatch, polling, detail_open):
+    parked = {
+        'id': 'c1',
+        'source': 'desktop',
+        'status': 'completed',
+        'deferred': True,
+        'structured': {'title': 'Saved'},
+    }
+    admitted = {**parked, 'status': 'processing', 'deferred': False}
+    monkeypatch.setattr(conv_router, '_get_valid_conversation_by_id', lambda *a, **k: dict(parked))
+    monkeypatch.setattr(conv_router, 'live_recap_enabled', lambda *_args: False)
+    query_params = {'status_poll': '1'} if polling else {}
+    headers = {'X-Omi-Recording-Detail': '1'} if detail_open else {}
+
+    with patch.object(conv_router, '_enrich_deferred_conversation', return_value=admitted) as enrich:
+        result = conv_router.get_conversation_by_id(
+            'c1',
+            source=None,
+            include_discarded=None,
+            uid='u1',
+            include_translations=False,
+            request=SimpleNamespace(headers=headers, query_params=query_params),
+        )
+
+    should_enrich = not polling
+    assert result['status'] == ('processing' if should_enrich else 'completed')
+    assert result['deferred'] is not should_enrich
+    assert enrich.call_count == int(should_enrich)
 
 
 def test_successful_reprocess_schedules_durable_learning():
