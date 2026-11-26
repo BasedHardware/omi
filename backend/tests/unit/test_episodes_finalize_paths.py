@@ -1909,3 +1909,103 @@ def test_live_window_finish_newer_capture_kill_switch_restores_the_tail_cut(newe
     assert db.rows[paths['latest']]['v3_manual_end'] is True and 'v3_manual_end' not in db.rows[_B]
     assert enqueued == [(_UID, {'manual_end_id': 'latest'})]
     counter.labels.assert_called_once_with('cut')
+
+
+@pytest.mark.parametrize('b_lands', ['speech', 'silence'])
+def test_one_finish_cuts_a_at_once_and_consumes_b_once_across_resolution_and_retry(
+    newer_capture_route, monkeypatch, b_lands
+):
+    """End to end under StrictFirestore: Finish -> both stored -> B's whole record completes -> the same Finish again.
+
+    One Finish may end two cards: A's window is cut at once; if B lands with speech, B's request becomes its own
+    manual end. The response names A's window, and a retry answers the same target without writing.
+    """
+    from utils.conversations.v3 import triggers
+
+    client, db, paths, enqueued, counter = newer_capture_route
+    a_path, body = paths['latest'], {'live_conversation_id': 'window'}
+    # B as production creates it: Listen's in-progress create runs mark_new, which stamps v3_speech_landed_at
+    # before any speech, then audio custody marks content and the capture seals. No projection yet.
+    sealed = db.rows[_B]['finished_at']
+    b = {
+        'created_at': sealed - timedelta(seconds=80),
+        'started_at': sealed - timedelta(seconds=80),
+        'finished_at': sealed,
+        'status': 'in_progress',
+        'source': 'omi',
+        'data_protection_level': 'enhanced',
+        'external_data': {'recording_session_id': 'pendant-session-b', 'server_batch_only': True},
+        'record_lane_owner': 'batch_live_v1',
+    }
+    monkeypatch.setattr(triggers, 'conversations_v3_enabled', lambda uid: True)
+    triggers.mark_new(_UID, b)
+    assert b['v3_speech_landed_at'] and b['recording'] is True
+    b.update(status='completed', has_content=True, server_batch_audio_start=1, server_batch_audio_end=2)
+    db.rows[_B] = b
+
+    projection_txs = []  # the landing stand-in rewrites the whole row; it is not a Finish or completion write
+
+    def writes_to(target, field):
+        return [
+            p
+            for tx in db.transactions
+            if tx not in projection_txs
+            for path, p in tx.updates
+            if path == target and p.get(field)
+        ]
+
+    def a_cuts():
+        return writes_to(a_path, 'v3_manual_end')
+
+    def b_requests():
+        return writes_to(_B, 'v3_manual_end_requested')
+
+    # 1-2. Finish: one transaction cuts A's tail and stores B's request; the answer names A's window.
+    first = client.post('/v1/conversations', json=body)
+    assert first.status_code == 200 and first.json()['conversation']['id'] == 'window'
+    assert db.rows[a_path]['v3_manual_end'] is True and len(a_cuts()) == 1
+    assert b['v3_manual_end_requested'] is True and b[FINISH_RECORDING_FIELD] is True and 'v3_manual_end' not in b
+    assert enqueued == [(_UID, {'manual_end_id': 'latest'})]
+    counter.labels.assert_called_once_with('newer_dual_cut')
+    counter.reset_mock()
+
+    # 3. B's batch projection lands, then the real whole-record completion consumes B's request (twice: once).
+    complete, _, _ = native_finish_completion(
+        monkeypatch, db, _UID, 'capture-b', 1, empty_outcome=None if b_lands == 'speech' else 'silence'
+    )
+    segments = [{'id': 'speech', 'start': 0, 'end': 1, 'text': 'Synthetic speech'}] if b_lands == 'speech' else []
+    span = {'start': b['started_at'].timestamp(), 'end': b['finished_at'].timestamp()}
+    span.update(whole_native_record=True) if segments else span.update(terminal_empty_outcome='silence')
+    projected, _ = replace_record(b, {'started_at': b['started_at'], 'transcript_segments': segments}, span)
+    projection_txs.append(db.transaction())
+    projection_txs[0].update(
+        db.collection('users').document(_UID).collection('conversations').document(_B[-1]), projected
+    )
+    assert 'v3_manual_end' not in b  # a recording-scoped request waits for the whole record
+    for _ in range(2):
+        complete(datetime.now(timezone.utc).timestamp())
+    if b_lands == 'speech':
+        assert b['v3_manual_end'] is True and b['v3_pending'] is True
+        counter.labels.assert_called_once_with('whole_record_consumed')
+    else:
+        assert b['v3_manual_end_requested'] is False and 'v3_manual_end' not in b
+        counter.labels.assert_called_once_with('whole_record_resolved_empty')
+    assert len(b_requests()) == 1
+    # Consuming B's request wakes B's own reconcile once; A's stays the single one from the Finish.
+    assert enqueued == [(_UID, {'manual_end_id': 'latest'})] + (
+        [(_UID, {'manual_end_id': 'capture-b'})] if b_lands == 'speech' else []
+    )
+    woken = list(enqueued)
+    counter.reset_mock()
+    writes = _writes(db)
+
+    # 4. The same Finish again: the same target, nothing written, an "already" answer.
+    retry = client.post('/v1/conversations', json=body)
+
+    assert retry.status_code == 200 and retry.json()['conversation']['id'] == first.json()['conversation']['id']
+    assert _writes(db) == writes
+    counter.labels.assert_called_once_with('already_cut')
+    assert len(a_cuts()) == 1 and len(b_requests()) == 1
+    assert enqueued == woken
+    assert db.rows[a_path]['v3_manual_end'] is True
+    assert b.get('v3_manual_end') is (True if b_lands == 'speech' else None)

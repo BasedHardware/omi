@@ -30,11 +30,19 @@ account-deletion check as the recording fallback runs before any write.
 
 ## What Finish stores
 
-- **The capture's speech has landed** (`has_finish_content`: a live-lane
-  capture, or a batch capture with a provisional transcript): it takes the
-  recording-scoped cut through `_finish_capture` instead of the window tail.
-  That is the same write, batch request and empty resolution the fallback uses,
-  and the response names the capture.
+- **The capture's speech has landed**: it takes the recording-scoped cut
+  through `_finish_capture` instead of the window tail. That is the same write,
+  batch request and empty resolution the fallback uses, and the response names
+  the capture. "Landed" depends on the lane:
+  - A live-lane capture: `has_finish_content`.
+  - A server-batch capture: `_batch_speech_landed`, which is
+    `record_projection_revision` plus `has_content`. A fast-finish provisional
+    transcript never sets `record_projection_revision`, so such a B takes the
+    stored-both path below. `has_finish_content` cannot be used for batch
+    captures: `create_in_progress_conversation` → `mark_new` stamps
+    `v3_speech_landed_at` when the recording is created, and audio custody sets
+    `has_content` on any committed audio, so it is true for nearly every batch
+    capture before any speech.
 - **A server-batch capture whose speech has not landed.** The session's last
   capture is often only silence: after the quiet timeout the listen loop seals
   A and opens B, then the device stops and seals B. Audio custody sets
@@ -59,6 +67,14 @@ account-deletion check as the recording fallback runs before any write.
 
 A qualifying capture is strictly newer than the window, so the tail cut's rule
 that an older overlapping source never cuts through visible speech still holds.
+
+**Resulting behaviour.** One Finish may end two cards: A's window is cut at once; if the pending newer capture B later lands with speech, B's request becomes its own manual end and B surfaces as its own card. The response names A's window. Latency is measured once per Finish, to the response target's first visible card.
+
+`test_one_finish_cuts_a_at_once_and_consumes_b_once_across_resolution_and_retry`
+pins this end to end under StrictFirestore. It runs Finish, B's projection and the
+real whole-record completion (with speech, and silent), then the same Finish
+again: A is cut once, B's request is consumed once, and the retry answers A's
+window with `already_cut` and no writes.
 
 ## Retries
 
@@ -91,6 +107,21 @@ read is the one the tail cut always made. Writes: at most one recording per
 transaction, except the stored-both case, which writes two (A's cut and B's
 request). With the switch off, nothing extra is read and the transaction is
 exactly the tail cut.
+
+Provider cost: storing B's request makes B a fast-finish candidate. That adds at
+most one fast-finish pass per stored-both Finish, even when B turns out silent.
+The pass transcribes up to 20 minutes of audio (`MAX_SECONDS`) and sends one
+prerecorded request per batch unit, at most `MAX_UNITS` (8); a single-unit B is
+one call. The lab budget for `finish_after_second_close` shows it as STT 0 → 1.
+Two things bound it:
+- `CONVERSATIONS_V3_FAST_FINISH` (`cohort` by default; production runs `on` for
+  the services that serve Finish and admission, so the cohort does not limit it
+  there).
+- The shared funding gate every fast-finish pass passes before provider spend
+  (`fast_finish.funded` → `sync_admission(lane='batch')`): consent and the
+  owner's funded STT plan allowance.
+
+There is no fast-finish-specific daily cap.
 
 ## Metrics and switch
 
