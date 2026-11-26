@@ -721,10 +721,10 @@ def process_in_progress_conversation(
     ):
         # Held-out owner only (SCA-2918): a legacy row in progress beside an older v3 window. A Finish naming
         # the window closes exactly that window; the legacy row keeps recording. A miss runs the legacy Finish.
+        # No experiment wake here: record_end stores no cut for a held-out owner, and the window cut
+        # wakes its builder itself (finish._acknowledge enqueues the pending recording).
         finished = finish_live_window(uid, named, named_only=True)
         if finished is not None:
-            if getattr(finished.conversation, 'tile_state', None) != 'writing':
-                v3_manual_cuts.wake(uid, cut_id)
             return finished
     if not conversation:
         response = finish_live_window(

@@ -1380,7 +1380,7 @@ def test_strict_named_finish_never_moves_to_a_later_capture(sealed_named_route, 
 
     assert all(not tx.updates for tx in db.transactions) and not enqueued
     assert 'v3_manual_end' not in a and 'v3_manual_end' not in b
-    counter.labels.assert_not_called()
+    counter.labels.assert_called_once_with('named_superseded')
 
 
 @pytest.mark.parametrize('case', ['private', 'two_owners', 'not_window_tail', 'tie'])

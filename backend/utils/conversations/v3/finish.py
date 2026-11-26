@@ -46,6 +46,7 @@ def finish_live_window(
                 uid, window_id, now=now, strict=True
             )
             if not named:
+                metrics.FINISH_NO_POINTER.labels(named_outcome or 'no_live_window').inc()
                 return None
             _recovered('named_window')
             return _acknowledge(uid, named, named_outcome, recording_id)

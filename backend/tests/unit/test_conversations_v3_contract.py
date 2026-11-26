@@ -134,6 +134,10 @@ def test_intake_with_known_membership(monkeypatch):
     row = holdout.new_row()
     assert 'recording' not in row and 'v3_pending' not in row
     assert holdout.fallbacks == [] and set(holdout.reads) == {'conversations-v3-holdout'}
+    # A rotation successor continues the capture in flight: still v3 for a held-out owner.
+    successor = {'source': 'omi', 'data_protection_level': 'standard'}
+    triggers.mark_new('synthetic', successor, continuation=True)
+    assert successor['recording'] is True
 
 
 def test_intake_with_unavailable_membership_admits_and_records_fallback(monkeypatch):
@@ -195,6 +199,9 @@ def test_holdout_live_keeps_v3_when_the_window_lookup_is_capped(monkeypatch):
     # A capped lookup has not proven there is no window: fail toward the existing one and count it.
     assert routes.get_live_conversation('synthetic', 'store') == {'v3': True, 'conversation': None}
     assert [(f['from_mode'], f['to_mode'], f['reason']) for f in fallbacks] == [('v3_holdout', 'v3_live', 'lookup_cap')]
+    from utils.observability.fallback import bucket_reason
+
+    assert bucket_reason(fallbacks[0]['reason']) == 'lookup_cap'  # Emitted as itself, not relabelled 'other'.
     window['complete'] = True
     assert routes.get_live_conversation('synthetic', 'store') == {'v3': False, 'conversation': None}
     assert len(fallbacks) == 1

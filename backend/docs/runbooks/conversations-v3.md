@@ -44,6 +44,7 @@ admission (`conversations_v3_enabled`) ignores the holdout. New-intake sites ask
 `v3_intake_held_out` after admission:
 
 - `triggers.mark_new` (in-progress create, sync ingest, batch projection): no `recording` marker on new rows.
+  A listen v3 rotation successor is the same capture continuing, so it stays v3.
 - Manual cuts (`record_end`, `ends_around`): experiment-off End handling.
 - Home list: legacy read mode (offset paging, `show_held`). It still shows the owner's existing
   `v3_derived` cards, and their new legacy pieces held for notes.
