@@ -9,7 +9,9 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/gen/pigeon_communicator.g.dart';
+import 'package:omi/services/experiments/device_dropoff_telemetry.dart';
 import 'package:omi/utils/analytics/analytics_manager.dart';
+import 'package:omi/utils/analytics/device_dropoff_signals.dart';
 import 'package:omi/utils/analytics/registry/events.g.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
 
@@ -221,7 +223,9 @@ class DeviceHealthTelemetry {
     return '≥${limits.last}';
   }
 
-  static Map<String, dynamic> rollup(Map<String, dynamic> diagnostics, DateTime day) {
+  /// [dropoff] adds the [DeviceDropoffSignals] fields (schema 3); the kill
+  /// switch turns them off and restores the schema 2 shape.
+  static Map<String, dynamic> rollup(Map<String, dynamic> diagnostics, DateTime day, {bool dropoff = true}) {
     final start = DateTime(day.year, day.month, day.day).millisecondsSinceEpoch;
     final end = DateTime(day.year, day.month, day.day + 1).millisecondsSinceEpoch;
     // Writers emit integer millis; a fractional observed_at would shift both
@@ -430,7 +434,7 @@ class DeviceHealthTelemetry {
         rssiAtLeastMinus60: ringReadRssi[3],
         rssiUnknown: ringReadRssi[4],
       ).properties,
-      'schema_version': 2,
+      'schema_version': dropoff ? 3 : 2,
       'day_app_build': builds.isEmpty ? null : (builds.toList()..sort()),
       'day_firmware': firmwares.isEmpty ? null : (firmwares.toList()..sort()),
       'lost_audio_seconds': lostAudioSeconds?.clamp(0, 86400),
@@ -448,6 +452,13 @@ class DeviceHealthTelemetry {
       if (lastOffChargerMvMax != null) 'last_off_charger_mv_max': lastOffChargerMvMax,
       if (socFrozenSamples != null) 'soc_frozen_samples': socFrozenSamples,
       'device_resets_by_reason': resets,
+      if (dropoff) ...{
+        // Explicit split: lost_audio_seconds stays "time without a link".
+        'connected_seconds': connectedMs.clamp(0, end - start) ~/ 1000,
+        'disconnected_seconds': disconnectedMs ~/ 1000,
+        'audio_packets_per_connected_minute': connectedMs < 60000 ? null : received * 60000 ~/ connectedMs,
+        ...DeviceDropoffSignals.rollup(diagnostics, day),
+      },
     };
   }
 
@@ -527,6 +538,7 @@ class DeviceHealthTelemetry {
     Future<String> Function(String)? loadDiagnostics,
     void Function(String, Map<String, dynamic>)? emit,
     Map<String, dynamic>? emissionContext,
+    Future<bool> Function()? dropoffDisabled,
   }) async {
     if (!AnalyticsManager.deviceHealthRecordingEnabled || !_inFlightDevices.add(device.id)) return;
     try {
@@ -624,6 +636,12 @@ class DeviceHealthTelemetry {
           : Platform.isIOS
               ? (await DeviceInfoPlugin().iosInfo).utsname.machine
               : (await DeviceInfoPlugin().androidInfo).model;
+      var dropoff = true;
+      try {
+        dropoff = !await (dropoffDisabled ?? DeviceDropoffTelemetryPolicy.disabled)();
+      } catch (_) {
+        // An unreadable kill switch keeps the fields on.
+      }
       var day = last == null ? yesterday : DateTime(last.year, last.month, last.day + 1);
       final oldest = DateTime(yesterday.year, yesterday.month, yesterday.day - 6);
       if (day.isBefore(oldest)) day = oldest;
@@ -634,7 +652,7 @@ class DeviceHealthTelemetry {
           day = DateTime(day.year, day.month, day.day + 1);
           continue;
         }
-        final daily = rollup(diagnostics, day);
+        final daily = rollup(diagnostics, day, dropoff: dropoff);
         final dayFirmware = daily['day_firmware'] as List?;
         final dayBuild = daily['day_app_build'] as List?;
         final properties = {
