@@ -553,6 +553,18 @@ def format_report(result: dict[str, Any]) -> str:
 
         lines.append('  stand-ins:')
         lines.extend('    ' + line for line in stand_in_lines(result))
+    if result.get('ops'):
+        from testing.pipeline_lab.scenario.budget import table_rows
+
+        ops = result['ops']
+        cells = []
+        for row in table_rows(ops, result.get('budget')):
+            mark = '' if row['ok'] is None else (' ok' if row['ok'] else ' OVER')
+            cap = f'/{row["budget"]}' if row['budget'] is not None else ''
+            cells.append(f'{row["key"]}={row["count"]}{cap}{mark}')
+        lines.append('  ops: ' + ', '.join(cells))
+        for site, count in (ops.get('noop_sites') or {}).items():
+            lines.append(f'    no-op writes x{count}: {site}')
     if result.get('finish_target') is not None or result.get('checks'):
         lines.append(f'  finish target: {result.get("finish_target")}')
     for check in result.get('checks') or []:

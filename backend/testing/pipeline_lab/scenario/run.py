@@ -9,7 +9,9 @@ loopback Cloud Tasks queue, capture-only sinks, the in-process vector index with
 lab's scripted fake LLM gateway, and the production flag profile of this checkout
 (``deploy/runtime_env.yaml``, service ``backend-sync``) with the scenario's ``env`` on top.
 
-Writes ``DIR/result.json`` (outside git) and prints the same JSON as its last stdout line.
+Writes ``DIR/result.json`` (outside git) and prints the same JSON as its last stdout line. Its ``ops`` block
+holds the run's operation counts (``scenario/budget.py``): Firestore reads, writes, deletes and no-op writes
+by collection, and vendor calls (fake gateway requests, fast-finish STT calls, cassette plays).
 
 Isolation (set by the parent, ``scenario/stack.py``): ``OMI_PIPELINE_LAB_PROJECT_ID`` names this run's own
 ``demo-lab-<run id>`` Firestore project, ``OMI_PIPELINE_LAB_REDIS_DB`` the Redis database it leased, and
@@ -32,9 +34,10 @@ import time
 import traceback
 from typing import Any, Optional, Sequence
 
+from testing.pipeline_lab.scenario import budget as budgets
 from testing.pipeline_lab.scenario.checks import OUTCOMES, evaluate, outcome
-from testing.pipeline_lab.scenario.home import HOME_MODULES, HomeRecorder
-from testing.pipeline_lab.scenario.spec import Scenario, load_scenario, plan_events
+from testing.pipeline_lab.scenario.home import HOME_MODULES, HomeRecorder, handle_of
+from testing.pipeline_lab.scenario.spec import Scenario, load_scenario, plan_events, seed_plan
 
 FAST_FINISH_ENV = 'CONVERSATIONS_V3_FAST_FINISH'
 RUNTIME_ENV = Path(__file__).resolve().parents[3] / 'deploy' / 'runtime_env.yaml'
@@ -66,13 +69,78 @@ def scenario_overlay(scenario: Scenario, runtime_env: Path = RUNTIME_ENV) -> Any
     return lab_overlay(Overlay.from_mapping(payload))
 
 
-def seed_account(uid: str) -> str:
-    """The account document production always has (the reset removes it): sync on, through the product's
-    own settings writer. The batch privacy fence refuses a missing account (``account_missing``)."""
+def seed_account(uid: str, enabled: bool = True) -> str:
+    """The account document production always has (the reset removes it): sync on (or the scenario's
+    ``account`` setting), through the product's own settings writer. The batch privacy fence refuses a
+    missing account (``account_missing``)."""
     from database import users as users_db
 
-    users_db.set_user_private_cloud_sync_enabled(uid, True)
-    return 'private_cloud_sync_enabled'
+    users_db.set_user_private_cloud_sync_enabled(uid, enabled)
+    return 'private_cloud_sync_enabled' if enabled else 'private_cloud_sync_disabled'
+
+
+SEED_WORDS = ('lantern', 'harbor', 'maple', 'pebble', 'orchard', 'canvas', 'meadow', 'copper', 'willow', 'saffron')
+
+
+def seed_row(doc_id: str, kind: str, created: datetime) -> dict[str, Any]:
+    """One synthetic Home-history row of a ``seed`` kind, in the shapes the v3 Home query meets."""
+    words = 40 if kind == 'visible' else 4
+    text = ' '.join(SEED_WORDS[i % len(SEED_WORDS)] for i in range(words)).capitalize() + '.'
+    row: dict[str, Any] = {
+        'id': doc_id,
+        'created_at': created,
+        'started_at': created,
+        'finished_at': created + timedelta(seconds=30),
+        'status': 'completed',
+        'discarded': kind == 'discarded',
+        'source': 'omi',
+        'language': 'en',
+        'structured': {'title': f'Seeded {kind}', 'overview': 'Synthetic seeded history.', 'category': 'other'},
+        'transcript_segments': [
+            {'id': f'{doc_id}-0', 'text': text, 'speaker': 'SPEAKER_00', 'speaker_id': 0, 'is_user': True,
+             'start': 0.0, 'end': 30.0}
+        ],
+        'audio_files': [],
+        'private_cloud_sync_enabled': True,
+    }  # fmt: skip
+    if kind == 'recording':
+        row.update(recording=True, structured={})
+        return row
+    row.update(v3_derived=True, v3_recording_ids=[], tile_state='done', kind='conversation', home_hidden=False)
+    row['home_hidden_reason'] = 'conversation'
+    if kind == 'below_word_minimum':
+        row.update(home_hidden=True, home_hidden_reason='below_word_minimum')
+    elif kind == 'media':
+        row.update(home_hidden=True, home_hidden_reason='media', kind='media')
+    return row
+
+
+def seed_history(firestore: Any, uid: str, scenario: Scenario) -> dict[str, Any]:
+    """Write the scenario's ``seed`` rows before t0 through the product's stored-shape seam
+    (``encode_conversation_for_write``, the same seam a day replay seeds history with), stamped with the
+    Home candidate bit the product's writers set; 400 per batch. Returns counts and the seeded handles."""
+    from database import conversations as conversations_db, home_visibility_index
+
+    plan = seed_plan(scenario)
+    collection = firestore.collection('users').document(uid).collection('conversations')
+    batch, pending, kinds = firestore.batch(), 0, {}
+    for doc_id, kind, minutes in plan:
+        row = seed_row(doc_id, kind, scenario.t0 - timedelta(minutes=minutes))
+        data = conversations_db.encode_conversation_for_write(uid, row, 'standard')
+        batch.set(collection.document(doc_id), home_visibility_index.stamp(data))
+        kinds[kind] = kinds.get(kind, 0) + 1
+        pending += 1
+        if pending >= 400:
+            batch.commit()
+            batch, pending = firestore.batch(), 0
+    if pending:
+        batch.commit()
+    return {
+        'rows': len(plan),
+        'kinds': kinds,
+        'visible': [handle_of(doc_id) for doc_id, kind, _ in plan if kind == 'visible'],
+        'hidden': [handle_of(doc_id) for doc_id, kind, _ in plan if kind != 'visible'],
+    }
 
 
 async def run_scenario(
@@ -83,6 +151,7 @@ async def run_scenario(
     tick: bool = True,
     audio: Optional[dict] = None,
     trace_calls: bool = False,
+    llm_requests: Optional[Any] = None,
 ) -> dict[str, Any]:
     from testing.pipeline_lab.chain.barrier import ExecutorBarrier
     from testing.pipeline_lab.chain.driver import ProductFinalizer
@@ -128,6 +197,7 @@ async def run_scenario(
         tasks = LoopbackTasks(clock.now, log=lambda row: append_jsonl(out_dir / 'v3_tasks.jsonl', row))
         tasks.install(stack)
         install_emulator_size_errors(stack)
+        counter = budgets.install(stack, env.firestore, budgets.OpCounter())
         stack.enter_context(installed_clock(clock))
         # --trace-calls (scenario/reach.py): files with a function called from here to the final snapshot.
         trace = None
@@ -153,7 +223,11 @@ async def run_scenario(
         ops.stt_sources = {row['label']: row['source'] for row in (result.get('audio') or {}).get('recordings', [])}
         clock.set(start)
         reset_lab_state(env.firestore, env.redis, config.uid, redis_lease=redis_lease)
-        result['account'] = seed_account(config.uid)
+        result['account'] = seed_account(config.uid, scenario.account.private_cloud_sync_enabled)
+        seeded = seed_history(env.firestore, config.uid, scenario) if scenario.seed else None
+        if seeded is not None:
+            ops.seeded = {handle for handle in seeded['visible'] + seeded['hidden']}
+            result['seed'] = {'rows': seeded['rows'], 'kinds': seeded['kinds']}
         timings['environment'] = round(time.perf_counter() - mark, 3)
         mark = time.perf_counter()
         try:
@@ -163,24 +237,51 @@ async def run_scenario(
             horizon = max(e.instant for e in events) + (scenario.at(scenario.tail_seconds) - scenario.t0)
             clock.set(start)  # setup took real time on a ticking clock
             driver = V3Driver(uid=config.uid, ops=ops, tasks=tasks, clock=clock, horizon=horizon, sweeps=True)
+            llm_before = len(llm_requests()) if llm_requests is not None else 0
+            counter.start()
             report = await driver.run(events)  # type: ignore[arg-type] - scenario events quack like arrivals
             timings['driver'] = round(time.perf_counter() - mark, 3)
-            await asyncio.to_thread(home.write_home_snapshot, None)  # before the final snapshot reads on_home
+            await asyncio.to_thread(ops.home_snapshot, None)  # before the final snapshot reads on_home
             final = ops.snapshot(config.uid)
             recordings = ops.recordings(config.uid)
+            paging = None
+            if any(check.home_paging for check in scenario.checks):
+                mark = time.perf_counter()
+                visible = (seeded or {}).get('visible', []) + [row['handle'] for row in final if row['visible']]
+                hidden = (seeded or {}).get('hidden', []) + [
+                    row['handle'] for row in final if not row['visible'] and not row.get('deleted')
+                ]
+
+                def page() -> dict[str, Any]:
+                    with budgets.scope('home'):
+                        return home.page_to_end(visible, hidden)
+
+                paging = await asyncio.to_thread(page)
+                timings['paging'] = round(time.perf_counter() - mark, 3)
+            counter.stop()
+            llm_paths = [row.get('path', '') for row in (llm_requests() if llm_requests is not None else [])][
+                llm_before:
+            ]
         finally:
             clear_admission(config.uid)
             if trace is not None:
                 from testing.pipeline_lab.scenario.reach import CALLED_FILE
 
                 (out_dir / CALLED_FILE).write_text(json.dumps(trace.stop(), indent=0) + '\n')
+    counts = counter.summary()
+    counts['vendor_calls'] = budgets.vendor_counts(
+        transcribe_calls=ops.transcribe_calls,
+        cassette_plays=len((result.get('audio') or {}).get('recordings') or []),
+        llm_paths=llm_paths,
+    )
+    facts = {**ops.facts(), 'ops': counts, 'paging': paging}
     results = []
     for index_, check in enumerate(scenario.checks):
         if check.at is not None:
             seen = ops.checkpoints.get(index_)
-            results.append(seen['result'] if seen else evaluate(check, [], ops.finish_label))
+            results.append(seen['result'] if seen else evaluate(check, [], ops.finish_label, facts))
         else:
-            results.append(evaluate(check, final, ops.finish_label))
+            results.append(evaluate(check, final, ops.finish_label, facts))
     errors = [e for e in report.events if e.outcome == 'error']
     result.update(
         outcome=outcome(
@@ -209,6 +310,10 @@ async def run_scenario(
         },
         recordings=recordings,
         fast_finish=ops.fast_finish_outcomes,
+        finish_taps=ops.finish_taps,
+        ops=counts,
+        budget=scenario.budget or None,
+        paging={k: v for k, v in paging.items() if k != 'requests'} if paging else None,
         stand_ins=ops.stand_ins,
         stand_in_sources=ops.stand_in_sources,
         home=home.summary(),
@@ -266,6 +371,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
                     tick=args.clock == 'tick',
                     audio=audio,
                     trace_calls=args.trace_calls,
+                    llm_requests=lambda: list(upstream.requests),
                 )
             )
         finally:

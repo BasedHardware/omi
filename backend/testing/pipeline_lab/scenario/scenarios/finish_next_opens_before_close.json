@@ -1,0 +1,102 @@
+{
+  "name": "finish_next_opens_before_close",
+  "description": "A pendant pause: recording A's capture stays open until 75 s while recording B opens at 70 s (a new session on the same origin). Finish is tapped at 128 s while B captures. The tap must end B, A's speech must stay visible, and nothing may be hidden.",
+  "origins": [
+    {
+      "id": "O",
+      "source": "omi"
+    }
+  ],
+  "recordings": [
+    {
+      "id": "A",
+      "origin": "O",
+      "session": "S1",
+      "audio": [
+        0,
+        60
+      ],
+      "sealed_at": 75,
+      "transcript_at": 140,
+      "speech": [
+        {
+          "fill": [
+            0.5,
+            60
+          ],
+          "every": 4,
+          "words": 10,
+          "speakers": [
+            "SPEAKER_00",
+            "SPEAKER_01"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "B",
+      "origin": "O",
+      "session": "S2",
+      "audio": [
+        70,
+        130
+      ],
+      "transcript_at": 190,
+      "speech": [
+        {
+          "fill": [
+            70.5,
+            130
+          ],
+          "every": 4,
+          "words": 10,
+          "speakers": [
+            "SPEAKER_00",
+            "SPEAKER_01"
+          ]
+        }
+      ]
+    }
+  ],
+  "finish": {
+    "at": 128,
+    "fast_finish": true,
+    "provisional_latency": 15
+  },
+  "expect": [
+    {
+      "label": "finish_targets_b",
+      "conversation_of": "@finish",
+      "recordings_include": [
+        "B"
+      ],
+      "visible": true,
+      "manual_end": true
+    },
+    {
+      "label": "a_visible",
+      "conversation_of": "A",
+      "visible": true,
+      "on_home": true
+    },
+    {
+      "label": "a_not_hidden",
+      "no_hidden_with": "A"
+    },
+    {
+      "label": "b_not_hidden",
+      "no_hidden_with": "B"
+    }
+  ],
+  "budget": {
+    "reads": 260,
+    "writes": 80,
+    "deletes": 1,
+    "noop_writes": 7,
+    "vendor_calls": {
+      "stt": 1,
+      "llm": 8
+    },
+    "note": "Measured 2026-11-26 (235 reads, 69 writes, 1 delete(s), 7 no-op, 1 STT, 8 LLM; caps about +10%). noop_writes=7 is the current count, not a target: every one is database/conversations_v3_leases.py:72 renew (service.reconcile run_blocking renew) rewriting the lease until at the instant it was claimed. The lab clock does not move inside one event; production's does, so this is a lab-clock repeat, reported in the PR."
+  }
+}

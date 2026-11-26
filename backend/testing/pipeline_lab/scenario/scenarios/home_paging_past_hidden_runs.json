@@ -1,0 +1,93 @@
+{
+  "name": "home_paging_past_hidden_runs",
+  "description": "Home history with long runs of hidden rows (below the word floor, raw recordings, discarded, media) between visible conversations, then one new recording. Paging the real Home route to its end the way the app does (limit 50, offset by the server's storage count, its cursor and has-more) must show every visible conversation exactly once and no hidden one (the #25721, #25725, #26193 class).",
+  "origins": [
+    {
+      "id": "O",
+      "source": "omi"
+    }
+  ],
+  "seed": [
+    {
+      "kind": "visible",
+      "count": 30
+    },
+    {
+      "kind": "below_word_minimum",
+      "count": 100
+    },
+    {
+      "kind": "visible",
+      "count": 25
+    },
+    {
+      "kind": "recording",
+      "count": 70
+    },
+    {
+      "kind": "discarded",
+      "count": 30
+    },
+    {
+      "kind": "visible",
+      "count": 20
+    },
+    {
+      "kind": "media",
+      "count": 70
+    },
+    {
+      "kind": "visible",
+      "count": 15
+    }
+  ],
+  "recordings": [
+    {
+      "id": "B",
+      "origin": "O",
+      "session": "S1",
+      "audio": [
+        0,
+        60
+      ],
+      "transcript_at": 70,
+      "speech": [
+        {
+          "fill": [
+            0.5,
+            60
+          ],
+          "every": 4,
+          "words": 10,
+          "speakers": [
+            "SPEAKER_00",
+            "SPEAKER_01"
+          ]
+        }
+      ]
+    }
+  ],
+  "expect": [
+    {
+      "label": "b_on_home",
+      "conversation_of": "B",
+      "visible": true,
+      "on_home": true
+    },
+    {
+      "label": "every_visible_once",
+      "home_paging": "visible_once"
+    }
+  ],
+  "budget": {
+    "reads": 1140,
+    "writes": 55,
+    "deletes": 1,
+    "noop_writes": 4,
+    "vendor_calls": {
+      "stt": 0,
+      "llm": 7
+    },
+    "note": "Measured 2026-11-26 (1034 reads, 48 writes, 1 delete(s), 4 no-op, 0 STT, 7 LLM; caps about +10%). noop_writes=4 is the current count, not a target: every one is database/conversations_v3_leases.py:72 renew (service.reconcile run_blocking renew) rewriting the lease until at the instant it was claimed. The lab clock does not move inside one event; production's does, so this is a lab-clock repeat, reported in the PR."
+  }
+}

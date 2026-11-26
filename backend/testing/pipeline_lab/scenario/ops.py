@@ -32,6 +32,15 @@ Stand-ins (each is listed in the README's gap table with its follow-up):
 - ``STAND_IN_SYNC``: a device-sync fragment is written as a completed recording with its transcript and woken
   as the projection would; ``/v2/sync-local-files`` intake and its batch job are not run.
 
+The fast-finish privacy check (``store.run(check_privacy)``) is part of ``STAND_IN_ADMISSION``: it reads the
+account's sync setting through the product reader ``users.get_user_private_cloud_sync_enabled`` and refuses
+(``BatchPrivacyBlocked``) when it is off, instead of the batch privacy fence's generation read. The
+in-transaction fence of the transcript write (``assert_batch_write_allowed``) is the product's own.
+
+Operation counts (``scenario/budget.py``): the lab's own reads (snapshots, flags, the driver's pending check,
+the account change of ``sync_off_at``) run under ``budget.lab_io()`` and are not budgeted; Home captures
+run under the ``home`` scope; everything else, stand-in writes included, is ``pipeline``.
+
 Every stand-in is counted in ``stand_ins``; the ones that write words also count where the words came from in
 ``stand_in_sources`` (``scripted``, or the cassette source). ``scenario/standins.py`` words each from those.
 """
@@ -44,7 +53,8 @@ from typing import Any, Callable, Optional
 from unittest.mock import patch
 
 from testing.pipeline_lab.chain.barrier import ExecutorBarrier
-from testing.pipeline_lab.scenario.checks import conversation_row, evaluate
+from testing.pipeline_lab.scenario import budget
+from testing.pipeline_lab.scenario.checks import conversation_row, evaluate, finish_tap_row
 from testing.pipeline_lab.scenario.spec import Recording, Scenario, ScenarioEvent
 from testing.pipeline_lab.sinks.capture import capture_scope
 from testing.pipeline_lab.v3.product import ProductV3Ops
@@ -62,10 +72,16 @@ STAND_IN_SYNC = 'sync_intake'
 PROJECTION_REVISION = 1
 
 
-class _PrivacyAllowed:
-    """``store.run``'s transaction for the fast-finish privacy check: the account allows batch work."""
+class _LabPrivacy:
+    """``store.run``'s transaction for the fast-finish privacy check: allowed while the account's sync
+    setting (the product reader) is on; ``BatchPrivacyBlocked`` once it is off."""
 
-    def check_privacy(self, *args: Any, **kwargs: Any) -> int:
+    def check_privacy(self, uid: str, *args: Any, **kwargs: Any) -> int:
+        from database import users as users_db
+        from database.batch_pipeline_privacy import BatchPrivacyBlocked
+
+        if not users_db.get_user_private_cloud_sync_enabled(uid):
+            raise BatchPrivacyBlocked('private cloud sync is off')
         return 0
 
 
@@ -76,7 +92,7 @@ class LabBatchStore:
         self.client = client
 
     def run(self, fn: Callable[[Any], Any]) -> Any:
-        return fn(_PrivacyAllowed())
+        return fn(_LabPrivacy())
 
 
 def segment_dicts(rec: Recording, origin: float) -> list[dict[str, Any]]:
@@ -115,6 +131,9 @@ class ScenarioOps(ProductV3Ops):
         self.stand_ins: dict[str, int] = {}
         self.stand_in_sources: dict[str, dict[str, int]] = {}  # stand-in -> words source -> count
         self.stt_sources: dict[str, str] = {}  # label -> cassette source, for audio_file recordings
+        self.finish_taps: list[dict[str, Any]] = []  # one row per Finish tap (checks.finish_tap_row)
+        self.transcribe_calls = 0  # fast-finish STT provider calls (budget vendor_calls.stt)
+        self.seeded: set[str] = set()  # handles of ``seed`` history rows: not the run's conversations
 
     # ---- seams installed for the run ----------------------------------------------------------
 
@@ -126,6 +145,7 @@ class ScenarioOps(ProductV3Ops):
         def transcribe(pcm: bytes, language: Optional[str]) -> list[dict[str, Any]]:
             # STT replaced by the script: the unit is the whole recording, so seconds are from its audio start.
             rec = self._transcribing
+            self.transcribe_calls += 1
             return [] if rec is None else segment_dicts(rec, rec.audio[0])
 
         def observed_run(uid: str, conversation_id: str, *args: Any, **kwargs: Any) -> str:
@@ -150,10 +170,15 @@ class ScenarioOps(ProductV3Ops):
         return self.firestore.collection('users').document(uid).collection('conversations').document(rec.doc_id)
 
     def _raw(self, uid: str, rec: Recording) -> dict[str, Any]:
-        return self._ref(uid, rec).get().to_dict() or {}
+        with budget.lab_io():
+            return self._ref(uid, rec).get().to_dict() or {}
+
+    def pending(self, uid: str) -> bool:
+        with budget.lab_io():  # the driver's own question, not a product read
+            return super().pending(uid)
 
     def _flags(self, uid: str, rec: Recording) -> dict[str, Any]:
-        raw = self._raw(uid, rec)
+        raw = self._raw(uid, rec)  # a lab read (budget.lab_io)
         keys = ('status', 'v3_manual_end', 'v3_manual_end_requested', 'v3_pending', 'record_projection_revision')
         return {k: raw.get(k) for k in keys if raw.get(k) is not None}
 
@@ -172,14 +197,17 @@ class ScenarioOps(ProductV3Ops):
             'language': 'en',
             'transcript_segments': [] if status == 'in_progress' else segment_dicts(rec, rec.audio[0]),
             'audio_files': [],
-            'private_cloud_sync_enabled': True,
+            'private_cloud_sync_enabled': self.scenario.account.private_cloud_sync_enabled,
             'client_device_id': f'scenario-origin-{origin.label.lower()}',
         }
         if rec.lane == 'batch':
+            if self.scenario.batch_lane:
+                row.update(
+                    record_lane_owner='batch_live_v1',
+                    server_batch_only=True,
+                    server_batch_audio_start=start.timestamp(),
+                )
             row.update(
-                record_lane_owner='batch_live_v1',
-                server_batch_only=True,
-                server_batch_audio_start=start.timestamp(),
                 # Listen stamps every generation of one client recording with its origin
                 # (routers/listen/conversations.py); a reconnect opens a new session under it.
                 external_data={
@@ -201,7 +229,7 @@ class ScenarioOps(ProductV3Ops):
 
     async def arrive(self, uid: str, event: ScenarioEvent) -> dict[str, Any]:  # type: ignore[override]
         handler = getattr(self, '_on_' + event.kind)
-        if event.kind in ('finish', 'checkpoint'):
+        if event.kind in ('finish', 'checkpoint', 'account'):
             return await handler(uid, event)
         rec = self.scenario.recording(event.ref)
         with capture_scope(rec.doc_id, 'scenario_' + event.kind):
@@ -217,9 +245,10 @@ class ScenarioOps(ProductV3Ops):
         update: dict[str, Any] = {
             'status': 'completed',
             'finished_at': self.scenario.at(rec.audio[1]),
-            'server_batch_audio_end': self.scenario.at(rec.audio[1]).timestamp(),
             'record_sealed_at': self.scenario.at(rec.sealed_at or rec.audio[1]).timestamp(),
         }
+        if self.scenario.batch_lane:
+            update['server_batch_audio_end'] = self.scenario.at(rec.audio[1]).timestamp()
         detail: dict[str, Any] = {}
         if rec.label in self.requested:
             self._stand_in(STAND_IN_CAPTURE_CLOSE)
@@ -235,24 +264,49 @@ class ScenarioOps(ProductV3Ops):
         from utils.conversations.process_conversation import retrieve_in_progress_conversation
         from utils.conversations.v3.finish import finish_live_window
 
+        tap = len(self.finish_taps) + 1
         current = await asyncio.to_thread(retrieve_in_progress_conversation, uid)
         if current:
             # Production: finalize_conversation -> client_finalize job -> capture close stores the request.
             label = self.scenario.label_of(str(current.get('id')))
             self.requested.add(label)
-            self.finish_label = label
-            return {'outcome': 'in_progress', 'target': label, 'stand_in': STAND_IN_CAPTURE_CLOSE}
-        before = {rec.label: self._flags(uid, rec) for rec in self.scenario.recordings}
+            if self.finish_label is None:  # a later tap does not move the Finish target
+                self.finish_label = label
+            self.finish_taps.append(finish_tap_row('in_progress', None, self.scenario.label_of))
+            return {'outcome': 'in_progress', 'target': label, 'stand_in': STAND_IN_CAPTURE_CLOSE, 'tap': tap}
+        before = {rec.label: await asyncio.to_thread(self._flags, uid, rec) for rec in self.scenario.recordings}
         response = await asyncio.to_thread(finish_live_window, uid, None, allow_recording_fallback=True)
+        after = {rec.label: await asyncio.to_thread(self._flags, uid, rec) for rec in self.scenario.recordings}
         changed = [
             rec.label
             for rec in self.scenario.recordings
-            if self._flags(uid, rec) != before[rec.label]
-            and (self._flags(uid, rec).get('v3_manual_end') or self._flags(uid, rec).get('v3_manual_end_requested'))
+            if after[rec.label] != before[rec.label]
+            and (after[rec.label].get('v3_manual_end') or after[rec.label].get('v3_manual_end_requested'))
         ]
-        self.finish_label = changed[0] if changed else None
-        tile = getattr(getattr(response, 'conversation', None), 'tile_state', None) if response else None
-        return {'outcome': 'no_pointer' if response else 'not_found', 'target': self.finish_label, 'tile': tile}
+        if self.finish_label is None:
+            self.finish_label = changed[0] if changed else None
+        conversation = getattr(response, 'conversation', None) if response else None
+        tile = getattr(conversation, 'tile_state', None)
+        returned = conversation.model_dump() if conversation is not None else None
+        self.finish_taps.append(
+            finish_tap_row('no_pointer' if response else 'not_found', returned, self.scenario.label_of)
+        )
+        return {
+            'outcome': 'no_pointer' if response else 'not_found',
+            'target': changed[0] if changed else None,
+            'tile': tile,
+            'tap': tap,
+        }
+
+    async def _on_account(self, uid: str, event: ScenarioEvent) -> dict[str, Any]:
+        from database import users as users_db
+
+        def turn_off() -> None:
+            with budget.lab_io():  # the owner's settings change, not pipeline work
+                users_db.set_user_private_cloud_sync_enabled(uid, False)
+
+        await asyncio.to_thread(turn_off)
+        return {'outcome': 'sync_off'}
 
     async def _on_admission(self, uid: str, rec: Recording) -> dict[str, Any]:
         from utils.batch_pipeline import live
@@ -306,28 +360,47 @@ class ScenarioOps(ProductV3Ops):
     async def _on_checkpoint(self, uid: str, event: ScenarioEvent) -> dict[str, Any]:
         check = self.scenario.checks[event.check_index or 0]
         if self.home is not None:  # Home at this instant first, so the snapshot's rows carry on_home
-            await asyncio.to_thread(self.home.write_home_snapshot, check.at)
+            await asyncio.to_thread(self.home_snapshot, check.at)
         snapshot = await asyncio.to_thread(self.snapshot, uid)
-        result = evaluate(check, snapshot, self.finish_label)
+        result = evaluate(check, snapshot, self.finish_label, self.facts())
         self.checkpoints[event.check_index or 0] = {'result': result, 'snapshot': snapshot}
         return {'outcome': 'ok' if result.ok else 'mismatch', 'conversations': len(snapshot)}
 
     # ---- reading --------------------------------------------------------------------------------
 
+    def home_snapshot(self, at: Optional[float]) -> Any:
+        """Home at this instant (``home.write_home_snapshot``), its reads counted under the ``home`` scope."""
+        with budget.scope('home'):
+            return self.home.write_home_snapshot(at)
+
+    def facts(self) -> dict[str, Any]:
+        """What the non-snapshot checks read (``checks.evaluate``): fast-finish outcomes and Finish taps."""
+        return {'fast_finish': dict(self.fast_finish_outcomes), 'finish_taps': list(self.finish_taps)}
+
     def snapshot(self, uid: str) -> list[dict[str, Any]]:
         """Every v3 conversation now, summarized (labels, words, visibility; no text)."""
+        with budget.lab_io():
+            return self._snapshot(uid)
+
+    def _snapshot(self, uid: str) -> list[dict[str, Any]]:
         from testing.pipeline_lab.v3.product import read_v3_rows
         from utils.conversations.v3.word_floor import text_word_count
 
         derived, _ = read_v3_rows(uid)
         rows = []
         for row in derived:
+            if str(row.get('id') or '')[:8] in self.seeded:
+                continue
             words = sum(text_word_count(str(s.get('text') or '')) for s in row.get('transcript_segments') or [])
             rows.append(conversation_row(row, self.scenario.label_of, words))
         rows.sort(key=lambda r: str(r.get('started_at') or ''))
         return self.home.annotate_rows(rows) if self.home is not None else rows
 
     def recordings(self, uid: str) -> list[dict[str, Any]]:
+        with budget.lab_io():
+            return self._recordings(uid)
+
+    def _recordings(self, uid: str) -> list[dict[str, Any]]:
         out = []
         for rec in self.scenario.recordings:
             flags = self._flags(uid, rec)

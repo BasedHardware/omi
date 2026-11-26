@@ -1,0 +1,67 @@
+{
+  "name": "finish_privacy_refused_fast_finish",
+  "description": "Finish tapped at 38 s while recording B captures; the owner turns cloud sync off at 45 s, before the fast-finish pass at 53 s. The pass must refuse before any audio leaves: outcome privacy_blocked and zero STT calls. The canonical batch transcript never lands (the batch lane refuses too).",
+  "origins": [
+    {
+      "id": "O",
+      "source": "omi"
+    }
+  ],
+  "account": {
+    "private_cloud_sync_enabled": true,
+    "sync_off_at": 45
+  },
+  "recordings": [
+    {
+      "id": "B",
+      "origin": "O",
+      "session": "S1",
+      "audio": [
+        0,
+        40
+      ],
+      "transcript_at": null,
+      "speech": [
+        {
+          "fill": [
+            0.5,
+            40
+          ],
+          "every": 4,
+          "words": 10,
+          "speakers": [
+            "SPEAKER_00",
+            "SPEAKER_01"
+          ]
+        }
+      ]
+    }
+  ],
+  "finish": {
+    "at": 38,
+    "fast_finish": true,
+    "provisional_latency": 15
+  },
+  "expect": [
+    {
+      "label": "fast_finish_refused",
+      "recording": "B",
+      "fast_finish": "privacy_blocked"
+    },
+    {
+      "label": "b_not_hidden",
+      "no_hidden_with": "B"
+    }
+  ],
+  "budget": {
+    "reads": 40,
+    "writes": 10,
+    "deletes": 0,
+    "noop_writes": 1,
+    "vendor_calls": {
+      "stt": 0,
+      "llm": 0
+    },
+    "note": "Measured 2026-11-26 (36 reads, 8 writes, 0 delete(s), 1 no-op, 0 STT, 0 LLM; caps about +10%). noop_writes=1 is the current count, not a target: every one is database/conversations_v3_leases.py:72 renew (service.reconcile run_blocking renew) rewriting the lease until at the instant it was claimed. The lab clock does not move inside one event; production's does, so this is a lab-clock repeat, reported in the PR."
+  }
+}

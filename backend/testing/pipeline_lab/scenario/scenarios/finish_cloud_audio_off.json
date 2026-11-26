@@ -1,0 +1,79 @@
+{
+  "name": "finish_cloud_audio_off",
+  "description": "Cloud audio off (private_cloud_sync_enabled false): Listen takes the live lane, so no batch admission and no fast finish run. Recording A closes at 60 s with its live transcript, and Finish is tapped at 70 s. Finish must still finish A and answer with it (the #26296 shape: the derived row has no audio pieces), with no STT call.",
+  "account": {
+    "private_cloud_sync_enabled": false
+  },
+  "origins": [
+    {
+      "id": "O",
+      "source": "phone"
+    }
+  ],
+  "recordings": [
+    {
+      "id": "A",
+      "origin": "O",
+      "session": "S1",
+      "audio": [
+        0,
+        60
+      ],
+      "transcript_at": 60,
+      "speech": [
+        {
+          "fill": [
+            0.5,
+            60
+          ],
+          "every": 4,
+          "words": 10,
+          "speakers": [
+            "SPEAKER_00",
+            "SPEAKER_01"
+          ]
+        }
+      ]
+    }
+  ],
+  "finish": {
+    "at": 70,
+    "fast_finish": true
+  },
+  "expect": [
+    {
+      "label": "finish_response_names_a",
+      "finish_response": 1,
+      "outcome": "no_pointer",
+      "recordings_include": [
+        "A"
+      ]
+    },
+    {
+      "label": "a_finished",
+      "conversation_of": "@finish",
+      "recordings_include": [
+        "A"
+      ],
+      "manual_end": true,
+      "visible": true,
+      "on_home": true
+    },
+    {
+      "label": "no_fast_finish",
+      "recording": "A",
+      "fast_finish": "none"
+    }
+  ],
+  "budget": {
+    "reads": 200,
+    "writes": 60,
+    "deletes": 1,
+    "noop_writes": 5,
+    "vendor_calls": {
+      "stt": 0,
+      "llm": 7
+    },
+    "note": "Measured 2026-11-26 (178 reads, 54 writes, 1 delete(s), 5 no-op, 0 STT, 7 LLM; caps about +10%). noop_writes=5 is the current count, not a target: every one is database/conversations_v3_leases.py:72 renew (service.reconcile run_blocking renew) rewriting the lease until at the instant it was claimed. The lab clock does not move inside one event; production's does, so this is a lab-clock repeat, reported in the PR."
+  }
+}
