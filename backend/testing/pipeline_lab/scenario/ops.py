@@ -248,7 +248,9 @@ class ScenarioOps(ProductV3Ops):
             'record_sealed_at': self.scenario.at(rec.sealed_at or rec.audio[1]).timestamp(),
         }
         if self.scenario.batch_lane:
+            # Production's note_server_batch_audio writes both in one transaction once audio samples commit.
             update['server_batch_audio_end'] = self.scenario.at(rec.audio[1]).timestamp()
+            update['has_content'] = True
         detail: dict[str, Any] = {}
         if rec.label in self.requested:
             self._stand_in(STAND_IN_CAPTURE_CLOSE)

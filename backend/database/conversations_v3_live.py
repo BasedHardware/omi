@@ -254,16 +254,21 @@ def request_finish(
         if newer_capture:
             newer = _newer_capture(_recent_finish_sources(collection, tx, now), window, now)
             if isinstance(newer, str):
-                return newer, '', None
+                return 'newer_' + newer, '', None
             if newer is not None:
-                newer_id, newer_row = newer
-                # Writes only when it returns a row, so a decline leaves the tail cut below its reads.
+                retry, newer_id, newer_row = newer
+                if _account_deleting(client, tx, uid):
+                    return 'newer_recording_ineligible', '', None
+                # Writes only when it answers with a row (and never on ``already_empty``), so a decline
+                # leaves the tail cut below with every read still before any write.
                 outcome, response_row = _finish_capture(client, tx, collection, uid, newer_id, newer_row, now)
-                if response_row is not None:
+                if retry:
+                    # An earlier tap finished this capture: answer from it and never cut the tail as well.
+                    return 'newer_' + outcome, newer_id if response_row else '', response_row
+                if response_row is not None and outcome != 'already_empty':
                     logger.info('v3 Finish moved from the live window tail to a capture that sealed after it')
-                    return _NEWER_OUTCOMES.get(outcome, outcome), newer_id, response_row
-                if newer_row.get(FINISH_RECORDING_FIELD):
-                    return outcome, '', None  # An earlier tap finished it; never cut the tail as well.
+                    return 'newer_' + outcome, newer_id, response_row
+                # No speech to finish on the newer capture: the person's last speech is the window's.
         outcome, recording_id = _finish_window_tail(client, tx, uid, collection, window, window_id, cid, row, now)
         return outcome, recording_id, None
 
@@ -376,7 +381,15 @@ def _recent_finish_sources(collection, tx, now):
     )
 
 
-_NEWER_OUTCOMES = {'recording_cut': 'newer_recording_cut', 'recording_requested': 'newer_recording_requested'}
+# A recording-scoped Finish may not land on a capture in any of these states.
+_FINISH_BLOCKERS = (
+    'deleted',
+    'discarded',
+    'is_locked',
+    'sync_merged_into',
+    'record_audio_partial',
+    'record_upload_failed',
+)
 
 
 def _newer_capture(docs, window: Mapping[str, Any], now: datetime):
@@ -385,10 +398,14 @@ def _newer_capture(docs, window: Mapping[str, Any], now: datetime):
     A pendant or server-batch capture can seal after the live window's last speech while its
     transcript, and so its place in a window, is still pending. Such a capture is the person's last
     speech. It must be a sealed Listen capture newer than the window's ``finished_at``, not one of
-    the window's sources, unclaimed and eligible for the recording-scoped Finish. A capture that a
-    recording-scoped Finish already marked answers a retry, so a second tap never cuts the tail as
-    well. ``docs`` is the newest-first recent-source scan. Returns ``(cid, row)``, None, or
-    ``'recording_ambiguous'`` when more than one capture qualifies.
+    the window's sources, carry content (``has_content``; a projection that landed empty clears it),
+    and pass the recording-Finish checks. The newest one wins, as in ``_latest_capture``; an exact tie
+    keeps the tail cut. A capture an earlier recording-scoped Finish marked answers a retry, so a
+    second tap never cuts the tail as well, unless that Finish resolved empty: then the window's
+    speech is the last speech again. ``docs`` is the newest-first recent-source scan.
+
+    Returns ``(retry, cid, row)``, None, or ``'recording_ineligible'`` when the marked capture can no
+    longer take a Finish.
     """
     members = set(window.get('v3_recording_ids') or ())
     newer = []
@@ -399,30 +416,49 @@ def _newer_capture(docs, window: Mapping[str, Any], now: datetime):
             and _is_sealed_capture(row)
             and isinstance(row.get('finished_at'), datetime)
             and row['finished_at'] > window['finished_at']
-            and not any(row.get(key) for key in ('deleted', 'discarded', 'sync_merged_into'))
         ):
             newer.append((doc.id, row))
     oldest = (docs[-1].to_dict() or {}).get('finished_at') if docs else None
     # A full scan whose oldest row is still newer than the window may hide another newer capture.
     capped = len(docs) >= RECENT_FINISH_LIMIT and not (isinstance(oldest, datetime) and oldest <= window['finished_at'])
-    marked = [(cid, row) for cid, row in newer if row.get(FINISH_RECORDING_FIELD)]
+    marked = [
+        (cid, row)
+        for cid, row in newer
+        if row.get(FINISH_RECORDING_FIELD)
+        and not (row.get('v3_manual_end_requested') is False and not row.get('v3_manual_end'))
+    ]
     last_mark = max((row['finished_at'] for _, row in marked), default=None)
     unmarked = [
         (cid, row)
         for cid, row in newer
         # Past a full scan, keep the tail cut rather than guess which capture is the newest.
-        if not capped and not row.get(FINISH_RECORDING_FIELD) and not _capture_ineligible(row, now)
+        if not capped
+        and not row.get(FINISH_RECORDING_FIELD)
+        and row.get('has_content') is True
+        and not _capture_ineligible(row, now)
         # Speech the person already finished after is behind that Finish.
         and (last_mark is None or row['finished_at'] > last_mark)
     ]
-    if len(unmarked) > 1:
-        return 'recording_ambiguous'
     if unmarked:
-        return unmarked[0]
-    top = [(cid, row) for cid, row in marked if row['finished_at'] == last_mark]
-    if len(top) > 1:
-        return 'recording_ambiguous'
-    return top[0] if top else None
+        newest = max(row['finished_at'] for _, row in unmarked)
+        top = [(cid, row) for cid, row in unmarked if row['finished_at'] == newest]
+        if len(top) > 1:
+            logger.info('v3 Finish found newer captures that sealed together; cutting the window tail')
+            return None
+        return False, *top[0]
+    if not marked:
+        return None
+    cid, row = min(((cid, row) for cid, row in marked if row['finished_at'] == last_mark), key=lambda item: item[0])
+    if row.get('data_protection_level') == 'private' or any(row.get(key) for key in _FINISH_BLOCKERS):
+        return 'recording_ineligible'
+    return True, cid, row
+
+
+def _account_deleting(client, tx, uid) -> bool:
+    marker = account_deletion_document(uid, firestore_client=client).get(transaction=tx)
+    return account_deletion_marker_blocks_access(
+        marker_exists=marker.exists, raw_status=(marker.to_dict() or {}).get('wipe_status')
+    )
 
 
 def _capture_ineligible(row: Mapping[str, Any], now: datetime, *, window_id: Optional[str] = None) -> bool:
@@ -444,17 +480,7 @@ def _capture_ineligible(row: Mapping[str, Any], now: datetime, *, window_id: Opt
         or not now - RECENT_FINISH_AGE <= row['finished_at'] <= now
         or not row['started_at'] <= row['finished_at']
         or row.get('data_protection_level') == 'private'
-        or any(
-            row.get(key)
-            for key in (
-                'deleted',
-                'discarded',
-                'is_locked',
-                'sync_merged_into',
-                'record_audio_partial',
-                'record_upload_failed',
-            )
-        )
+        or any(row.get(key) for key in _FINISH_BLOCKERS)
         or (
             bool(claims or row.get(FINISH_WINDOW_FIELD))
             if window_id is None
@@ -485,10 +511,7 @@ def _live_window_or_deleting(client, tx, collection, uid, now) -> Optional[str]:
         return 'window_lookup_capped'
     if any(_is_finishable_window(window.to_dict() or {}, now) for window in windows):
         return 'no_live_window'  # A live window appeared before the recording cut.
-    marker = account_deletion_document(uid, firestore_client=client).get(transaction=tx)
-    if account_deletion_marker_blocks_access(
-        marker_exists=marker.exists, raw_status=(marker.to_dict() or {}).get('wipe_status')
-    ):
+    if _account_deleting(client, tx, uid):
         return 'recording_ineligible'
     return None
 

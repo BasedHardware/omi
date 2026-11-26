@@ -80,7 +80,9 @@ def _acknowledge(uid, window, outcome, recording_id):
     metrics.FINISH_NO_POINTER.labels(outcome).inc()
     if not recording_id:
         return None
-    if outcome in {'cut', 'consumed', 'recording_cut', 'named_recording_cut', 'newer_recording_cut'}:
+    # A Finish moved to a newer capture is counted apart (``newer_*``) and answered like the capture path.
+    outcome = outcome.removeprefix('newer_')
+    if outcome in {'cut', 'consumed', 'recording_cut', 'named_recording_cut'}:
         triggers.enqueue_pending(uid, manual_end_id=recording_id)
     conversation = deserialize_conversation(window)
     if outcome in {'resolved_empty', 'already_empty', 'already_visible'}:
@@ -93,14 +95,7 @@ def _acknowledge(uid, window, outcome, recording_id):
         conversation.status = ConversationStatus.processing
         conversation.tile_state = (
             'transcribing'
-            if outcome
-            in {
-                'requested',
-                'already_requested',
-                'recording_requested',
-                'named_recording_requested',
-                'newer_recording_requested',
-            }
+            if outcome in {'requested', 'already_requested', 'recording_requested', 'named_recording_requested'}
             else 'writing'
         )
     return CreateConversationResponse(conversation=conversation, messages=[])
