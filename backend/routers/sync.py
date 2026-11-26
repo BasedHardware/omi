@@ -275,12 +275,19 @@ from utils.sync.backfill import (
     reserve_backfill_speech,
     retry_after_next_utc_day,
 )
-from utils.batch_pipeline.live_upload import RecordUploadRoute, memoized_record_wait, registered_record_response
+from utils.batch_pipeline.live_upload import (
+    RecordUploadRoute,
+    has_conversation_wait_hint,
+    memoized_record_wait,
+    registered_record_response,
+)
 from utils.sync.content_id import compute_sync_content_id
 from utils.sync.failure_reason import stamped_failure_kwargs
 from utils.sync.capture_manifest import (
     claim_conversation_manifest,
     issue_capture_manifest,
+    issue_retry_handle,
+    valid_retry_handle,
     manifest_claims_match_paths,
     verify_capture_manifest,
 )
@@ -364,6 +371,7 @@ async def create_sync_capture_manifest(
     x_app_platform: Optional[str] = Header(None, alias='X-App-Platform'),
     x_device_id_hash: Optional[str] = Header(None, alias='X-Device-Id-Hash'),
     x_app_version: Optional[str] = Header(None, alias='X-App-Version'),
+    retry_handle: Optional[str] = Header(None, alias='X-Omi-Wal-Retry', include_in_schema=False),
 ):
     device = resolve_client_device(
         x_app_platform=x_app_platform,
@@ -408,7 +416,43 @@ async def create_sync_capture_manifest(
         app_build=sanitize_app_build(x_app_version),
         uid=uid,
     )
+    # This service may differ from backend-sync. Invite a probe only while a
+    # memo exists. All manifest effects above still happen on their normal route.
+    if valid_retry_handle(retry_handle, uid, device.client_device_id, payload.conversation_id, claims):
+        try:
+            if await has_conversation_wait_hint(uid, payload.conversation_id):
+                return JSONResponse(content={'manifest': manifest}, headers={'X-Omi-Wal-Retry': 'check'})
+        except Exception:
+            pass
     return SyncCaptureManifestResponse(manifest=manifest)
+
+
+@router.put(
+    '/v2/sync-local-files',
+    status_code=204,
+    response_class=Response,
+    responses={503: {'description': 'Only a typed record_capture_pending response defers the multipart upload'}},
+)
+async def check_sync_retry(
+    payload: SyncCaptureManifestRequest,
+    uid: str = Depends(auth.get_current_user_uid),
+    x_app_platform: Optional[str] = Header(None, alias='X-App-Platform'),
+    x_device_id_hash: Optional[str] = Header(None, alias='X-Device-Id-Hash'),
+    retry_handle: Optional[str] = Header(None, alias='X-Omi-Wal-Retry'),
+):
+    """Check a live wait after manifest admission. A 204 directs the client to upload."""
+    device = resolve_client_device(x_app_platform=x_app_platform, x_device_id_hash=x_device_id_hash)
+    claims = [item.model_dump() for item in payload.files]
+    if valid_retry_handle(retry_handle, uid, device.client_device_id, payload.conversation_id, claims):
+        try:
+            wait = await memoized_record_wait(uid, payload.conversation_id)
+        except Exception:
+            wait = None
+        if wait is not None and valid_retry_handle(
+            retry_handle, uid, device.client_device_id, payload.conversation_id, claims
+        ):
+            return wait
+    return Response(status_code=204)
 
 
 def _store_capture_end(uid: str, recording_session_id: str, marker: dict) -> str:
@@ -744,6 +788,7 @@ async def sync_local_files_v2(
     x_omi_firmware_version: Optional[str] = Header(None, alias='X-Omi-Firmware-Version'),
     x_omi_device_model: Optional[str] = Header(None, alias='X-Omi-Device-Model'),
     x_omi_conversation_geolocation: Optional[str] = Header(None, alias='X-Omi-Conversation-Geolocation'),
+    x_omi_wal_retry: Optional[str] = Header(None, alias='X-Omi-Wal-Retry', include_in_schema=False),
     x_omi_upload_trace: Optional[str] = Header(None, alias='X-Omi-Upload-Trace', include_in_schema=False),
     x_omi_upload_hold: Optional[str] = Header(None, alias='X-Omi-Upload-Hold', include_in_schema=False),
     x_omi_upload_recovered: Optional[str] = Header(None, alias='X-Omi-Upload-Recovered', include_in_schema=False),
@@ -1251,6 +1296,25 @@ async def sync_local_files_v2(
                 evidence=intake_evidence,
             )
         if isinstance(record_response, JSONResponse):
+            # Only this branch has both checked the signed manifest against
+            # staged bytes and identified the exact conversation memo writer.
+            # An early memo hit has not verified the bytes. A coverage wait can
+            # still require archive, lease, settlement and partial-wake work.
+            if (
+                x_omi_wal_retry == '1'
+                and conversation_id
+                and getattr(record_response, 'retry_conversation', None) == conversation_id
+                and has_server_capture_proof
+                and client_device_context.client_device_id
+                and manifest_claims
+                and filenames == upload_filenames
+                and len(set(filenames)) == len(filenames)
+                and not any(capture_clock_run_from_path(path) for path in paths)
+                and all(get_timestamp_from_path(path) <= capture_received_at for path in paths)
+            ):
+                record_response.headers['X-Omi-Wal-Retry'] = issue_retry_handle(
+                    uid, client_device_context.client_device_id, conversation_id, manifest_claims
+                )
             future_capture_request.mark(FutureCaptureOutcome.PRIOR_CUSTODY)
             return record_response
 
@@ -2177,7 +2241,7 @@ async def wait_for_sync_receipts(
     body: SyncReceiptsWaitRequest, request: Request, uid: str = Depends(auth.get_current_user_uid)
 ):
     from database.redis_db import get_async_redis_client
-    from database.sync_jobs import receipt_channel, TERMINAL_STATUSES
+    from database.sync_jobs import receipt_channel, receipt_note_key, TERMINAL_STATUSES
 
     # Experiment receipt_long_poll. For an account it is off for, the path answers as an unknown route does.
     await warm_experiments(uid)
@@ -2190,10 +2254,13 @@ async def wait_for_sync_receipts(
             headers={'Retry-After': str(SYNC_POLL_WINDOW_SECONDS)},
         )
     jobs = set(body.job_ids)
+    # Experiment receipt_finished_note: job state is read only for a job that a note or a wake
+    # says finished. Off, every start, wake and expiry reads every listed job.
+    noted = experiment('receipt_finished_note', uid)
 
-    def snapshot():
+    def snapshot(named=None):
         receipts, fallback = [], []
-        for job_id in jobs:
+        for job_id in jobs if named is None else named:
             try:
                 status = _read_sync_job_status(job_id, uid, False, None)
             except HTTPException as error:
@@ -2209,6 +2276,9 @@ async def wait_for_sync_receipts(
                 fallback.append(job_id)
             elif status.get('status') in TERMINAL_STATUSES:
                 receipts.append(status)
+            elif named is not None:
+                # Named as finished but not final: the paced status polls own this handle.
+                fallback.append(job_id)
         return {'receipts': receipts, 'fallback': fallback}
 
     channel = await run_blocking(db_executor, receipt_channel, uid)
@@ -2219,17 +2289,27 @@ async def wait_for_sync_receipts(
         message = await sub.get_message(timeout=3)
         if not message or message['type'] != 'subscribe':
             raise HTTPException(status_code=503, detail='Receipt waiter unavailable')
-        result = await run_blocking(db_executor, snapshot)
+        if noted:
+            # A job that finished before the subscription left a note; a later one publishes a wake.
+            listed = sorted(jobs)
+            keys = await run_blocking(db_executor, lambda: [receipt_note_key(uid, job_id) for job_id in listed])
+            notes = await redis.mget(keys)
+            finished = [job_id for job_id, note in zip(listed, notes) if note]
+            result = (
+                await run_blocking(db_executor, snapshot, finished) if finished else {'receipts': [], 'fallback': []}
+            )
+        else:
+            result = await run_blocking(db_executor, snapshot)
         deadline = time.monotonic() + 20
         while not result['receipts'] and not result['fallback']:
             remaining = deadline - time.monotonic()
             if remaining <= 0:
-                return await run_blocking(db_executor, snapshot)
+                return result if noted else await run_blocking(db_executor, snapshot)
             if await request.is_disconnected():
                 return result
             message = await sub.get_message(ignore_subscribe_messages=True, timeout=min(1, remaining))
             if message and message['data'] in jobs:
-                result = await run_blocking(db_executor, snapshot)
+                result = await run_blocking(db_executor, snapshot, [message['data']] if noted else None)
         return result
 
 

@@ -94,11 +94,7 @@ func batchPrivacyEvidenceValid(python, goRun *observation) bool {
 			run.Cost.Firestore.BatchPrivacyDocumentDeletes != 0 {
 			return false
 		}
-		token, ok := run.BatchPrivacy.Final.Fields["memo_token"].(string)
-		if !ok || !uuid4Hex.MatchString(token) || seededHomeToken(run, token) {
-			return false
-		}
-		if seedToken, exists := run.BatchPrivacy.Seed.Fields["memo_token"]; exists && seedToken == token {
+		if !freshBatchPrivacyMemo(run) {
 			return false
 		}
 		if _, exists := run.BatchPrivacy.Final.Fields["memo_schema"]; !exists {
@@ -110,6 +106,13 @@ func batchPrivacyEvidenceValid(python, goRun *observation) bool {
 		privacyStateEqual(py.Seed.Fields, candidate.Seed.Fields) &&
 		privacyStateEqual(py.Final.Fields, candidate.Final.Fields) &&
 		samePrivacyField(py.Final.Fields, candidate.Final.Fields, "memo_schema")
+}
+
+func freshBatchPrivacyMemo(run *observation) bool {
+	token, ok := run.BatchPrivacy.Final.Fields["memo_token"].(string)
+	seedToken := run.BatchPrivacy.Seed.Fields["memo_token"]
+	return run.SeededTokenHashes != nil && ok && uuid4Hex.MatchString(token) &&
+		!seededHomeToken(run, token) && seedToken != token
 }
 
 func approvedBatchPrivacyDifference(path string, python, goRun *observation) string {

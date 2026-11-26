@@ -17,6 +17,7 @@ abstract final class ReliabilityFlags {
     'instant_live_text': _InstantLiveText.enabledFlag,
     'early_title_icon': _EarlyTitleIcon.enabledFlag,
     'receipt_long_poll': _ReceiptLongPoll.enabledFlag,
+    'receipt_finished_note': _ReceiptFinishedNote.enabledFlag,
     'vendor_recognizer_on_opened_app': _VendorRecognizerOnOpenedApp.enabledFlag,
   };
 
@@ -56,6 +57,10 @@ abstract final class _EarlyTitleIcon {
 
 abstract final class _ReceiptLongPoll {
   static const enabledFlag = 'receipt_long_poll';
+}
+
+abstract final class _ReceiptFinishedNote {
+  static const enabledFlag = 'receipt_finished_note';
 }
 
 abstract final class _VendorRecognizerOnOpenedApp {
