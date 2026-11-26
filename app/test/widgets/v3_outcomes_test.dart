@@ -324,6 +324,49 @@ void main() {
       expect(find.text("Taking longer than usual. We'll have it on Home."), findsOneWidget);
       await tester.pumpWidget(const SizedBox());
     });
+
+    testWidgets('fast_end_feedback: the waiting request\'s answer opens the conversation before the next poll',
+        (tester) async {
+      final made = _decoded('writing', id: 'made', status: 'processing', extra: {
+        'recording_pieces': [
+          {'recording_id': 'rec-1', 'audio_file_id': 'f', 'start': 0.0, 'end': 4.0}
+        ],
+      });
+      final other = _decoded('writing', id: 'other', status: 'processing');
+      final v3 = ConversationsV3Provider(
+        fetchLive: () async => const ApiFailure(ApiProblem(ApiProblemKind.transport)),
+        uid: () => 'u1',
+        cached: 'u1:1',
+        summaryWaitEnabled: () => true,
+        summaryWait: (id, {untilOutline = false}) async =>
+            (result: (item: id == 'made' ? made : other, ok: true, inaccessible: false), settled: true),
+      );
+      addTearDown(v3.dispose);
+      ServerConversation? opened;
+      await tester.pumpWidget(_app(
+        FinishedCapturePage(
+          recordingId: 'rec-1',
+          pollInterval: const Duration(minutes: 5),
+          maxWait: const Duration(minutes: 20),
+          fetch: () async => <ServerConversation>[],
+          open: (_, conversation) => opened = conversation,
+        ),
+        providers: [ChangeNotifierProvider<ConversationsV3Provider>.value(value: v3)],
+      ));
+      await tester.pump();
+      expect(opened, isNull);
+
+      v3.awaitSummaryAfterEnd('other');
+      await tester.pump();
+      await tester.pump();
+      expect(opened, isNull, reason: 'an answer for a conversation not made from this recording');
+
+      v3.awaitSummaryAfterEnd('made');
+      await tester.pump();
+      await tester.pump();
+      expect(opened?.id, 'made');
+      await tester.pumpWidget(const SizedBox());
+    });
   });
 
   testWidgets('X11: one predicate; a live conversation refuses changes and says why', (tester) async {

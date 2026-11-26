@@ -420,9 +420,11 @@ def enqueue_named_task(
     audience: Optional[str] = None,
     invoker_sa: Optional[str] = None,
     schedule_at: Optional[int] = None,
-) -> None:
+) -> bool:
     """Enqueue one named HTTP task. Duplicate names are treated as success —
-    Cloud Tasks deduplicates named tasks. Any other failure raises."""
+    Cloud Tasks deduplicates named tasks. Any other failure raises.
+
+    Returns False when the name was refused as a duplicate, True when this call created the task."""
     project = os.getenv('SYNC_TASKS_PROJECT', '')
     location = os.getenv('SYNC_TASKS_LOCATION', '')
     selected_invoker_sa = invoker_sa or _invoker_sa()
@@ -450,6 +452,8 @@ def enqueue_named_task(
         client.create_task(parent=parent, task=task)  # type: ignore[reportUnknownMemberType]  # google.cloud.tasks_v2 partially untyped
     except AlreadyExists:
         logger.info('task %s already enqueued, skipping duplicate', task_id)
+        return False
+    return True
 
 
 def named_task_exists(queue: str, task_id: str) -> bool:

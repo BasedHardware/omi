@@ -369,7 +369,7 @@ class LiveEpisodePageState extends State<LiveEpisodePage> with SingleTickerProvi
                   // The admitted preview session, when this capture has one: its on-device notes
                   // (So far) hang off it.
                   preview: context.select<CaptureProvider, LivePreviewController?>(
-                    (c) => c.localPreviewAdmitted && c.livePreview?.admitted == true ? c.livePreview : null,
+                    (c) => c.liveWordsShown && c.livePreview?.admitted == true ? c.livePreview : null,
                   ),
                   onDismiss: (item) => _dismiss(context, episodes, item),
                 ),

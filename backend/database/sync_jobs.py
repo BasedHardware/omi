@@ -27,6 +27,7 @@ import logging
 import os
 import time
 import uuid
+from config.reliability_experiments import enabled as experiment
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from enum import Enum
@@ -465,6 +466,7 @@ _TERMINAL_RESULT_FIELDS = frozenset(
         'errors',
         'repeat_failure_key',
         'repeat_failure_fingerprint',
+        'frame_outcomes_v1',
     )
 )
 
@@ -488,10 +490,20 @@ def _compact_terminal_job(job: Dict[str, Any]) -> None:
         job['result'] = compact if compact or not result else {'new_memories': []}
 
 
+def receipt_channel(uid: str) -> str:
+    return _key(f'sync_receipt_ready:{uid}')
+
+
 def _cleanup_terminal_segments(job_id: str, job: Optional[Dict[str, Any]]) -> None:
     """Only a winning terminal CAS authorizes removal of retry checkpoints."""
     if job is None or job.get('status') not in TERMINAL_STATUSES:
         return
+    if experiment('receipt_long_poll', job.get('uid')):
+        try:
+            r.publish(receipt_channel(job['uid']), job_id)
+        except Exception as error:
+            # The terminal CAS is authoritative. A waiter also rechecks on expiry.
+            logger.warning('sync receipt wake unavailable exception_type=%s', type(error).__name__)
     try:
         r.delete(_key(f'{PROCESSED_SEGMENTS_KEY_PREFIX}{job_id}'))
     except Exception as error:

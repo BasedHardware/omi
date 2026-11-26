@@ -25,6 +25,8 @@ from database.transcript_pointer import (
     run_preloaded_transaction_with_contention_retry,
 )
 from database import conversations, conversations_v3_leases as leases
+from database import conversations_v3_commit_cost as commit_cost
+from database import conversations_v3_collisions as collisions
 from database.conversations_v3_finish_predecessors import attach as attach_finish_predecessors
 from database.conversations_v3_undo_removals import removal_ref
 from database import conversations_v3_write_equality as write_equality
@@ -110,6 +112,8 @@ def decode_row(uid, snapshot, *, data=None) -> dict[str, Any] | None:
     if not snapshot.exists:
         return None
     data.setdefault('id', snapshot.id)
+    # One token per stored field, taken before decoding: a lost commit names the fields that changed.
+    loaded_fields = collisions.fingerprint(data)
     segments = conversations.decode_transcript_segments_verified(
         uid, data.get('transcript_segments') or [], bool(data.get('transcript_segments_compressed'))
     )
@@ -121,6 +125,7 @@ def decode_row(uid, snapshot, *, data=None) -> dict[str, Any] | None:
     if not isinstance(data.get('transcript_segments'), list):
         data['transcript_segments'] = segments
     data['_v3_revision'] = snapshot.update_time
+    data[collisions.FIELDS_KEY] = loaded_fields
     return data
 
 
@@ -162,6 +167,7 @@ def recording_input(uid, snapshot):
         '_v3_revision': snapshot.update_time,
         '_v3_unreadable': True,
         '_v3_fence': source_fence(raw),
+        collisions.FIELDS_KEY: collisions.fingerprint(raw),
     }
 
 
@@ -581,13 +587,17 @@ def log_largest_write(staged, *, batch, batches):
 def mark_pending(uid, cid, *, manual_end=False, firestore_client=None):
     client = firestore_client or get_firestore_client()
     ref = user_conversations(client, uid).document(cid)
+    # Bookkeeping only (conversations_v3_collisions.marked): what this mark changed and whether it met a lock.
+    tries, changed, started = [0], ['skipped'], time.monotonic()
 
     skip_unchanged = skip_unchanged_writes_enabled()
 
     @firestore.transactional
     def mark(tx):
+        tries[0] += 1
         row = ref.get(transaction=tx).to_dict() or {}
         if not row.get('recording') or row.get('deleted'):
+            changed[0] = 'skipped'
             return False, None
         # True still owes a wake even when the durable marker is already set.
         # A legacy marker without a timestamp is invisible to the ordered loader and sweeper.
@@ -597,16 +607,24 @@ def mark_pending(uid, cid, *, manual_end=False, firestore_client=None):
             and isinstance(row.get('v3_pending_since'), datetime)
             and (not manual_end or row.get('v3_manual_end') is True)
         ):
+            # Already marked: no write now, but the read still took the row's lock inside a transaction.
+            changed[0] = 'already_pending'
             return True, 'skipped'
         # The landing time (SPEECH_LANDED_FIELD) is stamped by the transaction that commits the speech,
         # not here: a reconcile can run between that commit and this re-arm.
         update = {'v3_pending': True, 'v3_pending_since': row.get('v3_pending_since') or datetime.now(timezone.utc)}
         if manual_end:
             update['v3_manual_end'] = True
+        changed[0] = 'already_pending' if all(row.get(k) == v for k, v in update.items()) else 'armed'
         tx.update(ref, update)
         return True, 'written'
 
-    should_enqueue, outcome = mark(client.transaction())
+    try:
+        should_enqueue, outcome = mark(client.transaction())
+    except Exception as error:
+        collisions.marked('failed', tries[0], time.monotonic() - started, error)
+        raise
+    collisions.marked(changed[0], tries[0], time.monotonic() - started)
     if outcome:
         metrics.projection_writes('mark_pending', int(outcome == 'written'), int(outcome == 'skipped'))
     return should_enqueue
@@ -709,6 +727,7 @@ def commit_projection(
             or not set(all_absorbed) <= existing.keys() - planned_ids
             or len(all_absorbed) != len(set(all_absorbed))
         ):
+            collisions.report(collisions.RACED, collisions.CONVERSATION, None, writer='plan', lane=key, phase='plan')
             raise Conflict('source_changed')
     retired = {cid for cid, patch in retire.items() if patch.get('sync_merged_into')}
     failure_transitions = {
@@ -745,9 +764,12 @@ def commit_projection(
     written_rows, skipped_rows = set(), set()
     # What the current transaction attempt writes, kept by reference and sized only after a failure.
     staged = {}
+    # Bookkeeping only: which document, and whose write, costs this commit a try or the whole pass.
+    watch = collisions.CommitWatch(key, {**recordings, **existing}, lead=SOURCE_FENCE_FIELDS)
 
     @firestore.transactional
     def commit(tx, batch_rows, batch_prepared, final):
+        watch.begin()  # Counts the try: the retry runs this body again after a lock abort.
         observed = {}
         batch_moved = set()
         staged.clear()
@@ -755,7 +777,10 @@ def commit_projection(
             rows=[row for raw, row in zip(batch_rows, batch_prepared) if not raw.get('deleted')], recordings={}
         )
         now = datetime.now(timezone.utc)
-        lease = held.get(transaction=tx).to_dict() or {}
+        lease_snapshot = held.get(transaction=tx)
+        lease = lease_snapshot.to_dict() or {}
+        watch.saw(collisions.LEASE_KEY, lease_snapshot, lease)
+        watch.phase('deletion_marker')
         deletion = account_deletion_document(uid, firestore_client=client).get(transaction=tx)
         if account_deletion_marker_blocks_access(
             marker_exists=deletion.exists, raw_status=(deletion.to_dict() or {}).get('status')
@@ -765,21 +790,32 @@ def commit_projection(
             raise Conflict('lease_lost')
         # Firestore requires every read before every write, including tombstones.
         inputs = {**recordings, **existing}
+        watch.phase('documents')
         for rid, snapshot in _projection_snapshots(client, coll, tx, list(inputs), batch_reads=batch_reads):
             row = inputs[rid]
             current = snapshot.to_dict() or {} if snapshot.exists else None
+            watch.saw(rid, snapshot, current)
             if not snapshot.exists or snapshot.update_time != row['_v3_revision']:
                 if rid in existing or rid not in recordings or not speech_moved(row, current):
+                    watch.raced(rid, row, snapshot, current)
                     raise Conflict('source_changed')
                 batch_moved.add(rid)
             observed[rid] = current or {}
+        watch.reads_done()
+        watch.phase('guards')
         absorbed = {cid: row['id'] for row in batch_rows for cid in row.get('_v3_absorbed', ())}
         touched = {*(row['id'] for row in batch_rows), *absorbed}
         if final:
             touched.update((*retire, *remove))
         if any(has_retained_custody(observed.get(cid)) for cid in touched):
+            collisions.report(
+                collisions.RACED, collisions.CONVERSATION, None, writer='retained_custody', lane=key, phase='guards'
+            )
             raise Conflict('source_changed')
         if absorbed and merge_donors_have_tasks(uid, absorbed, firestore_client=client, transaction=tx):
+            collisions.report(
+                collisions.RACED, collisions.CONVERSATION, None, writer='task_links', lane=key, phase='guards'
+            )
             raise Conflict('source_changed')
         if retired and merge_donors_have_tasks(uid, retired, firestore_client=client, transaction=tx):
             raise Conflict('rederive_live_donor_tasks')
@@ -801,10 +837,12 @@ def commit_projection(
                 if not (existing.get(cid) or {}).get('backfilled'):
                     raise Conflict('remove_not_backfilled')
         user = client.collection('users').document(uid)
+        watch.phase('privacy')
         # Filtering can mutate the encoded payload; every attempt needs its original input.
         batch_prepared = [dict(row) for row in batch_prepared]
         for row in batch_prepared:
             filter_processing_write(tx, user, row)
+        watch.phase('commit')
         skipped_ids = set()
         skipped_patches, written = set(), set()
 
@@ -982,15 +1020,31 @@ def commit_projection(
     if current or not batches:
         batches.append(current)
     for index, batch in enumerate(batches):
+        batch_rows, batch_prepared, final = [r for r, _ in batch], [r for _, r in batch], index == len(batches) - 1
         try:
-            observed, batch_moved, committed_prepared, skipped_ids, written, skipped = (
-                run_preloaded_transaction_with_contention_retry(
-                    client, commit, [r for r, _ in batch], [r for _, r in batch], index == len(batches) - 1
+            watch.reset()
+
+            def execute():
+                # Main's retry: up to three fresh transactions with a jittered wait (SCA-2918).
+                return run_preloaded_transaction_with_contention_retry(
+                    client, commit, batch_rows, batch_prepared, final
                 )
-            )
+
+            if key == 'builder':
+                # The live builder's commit is timed and the cost of its lock retries counted
+                # (database/conversations_v3_commit_cost.py). The transaction and its retries are unchanged.
+                result = commit_cost.run(
+                    execute,
+                    reads_per_attempt=2 + len(recordings) + len(existing) + len(batch_rows),
+                    attempts=lambda: watch.attempt,
+                )
+            else:
+                result = execute()
+            observed, batch_moved, committed_prepared, skipped_ids, written, skipped = result
         except Conflict:
             raise
         except Exception as error:
+            watch.failed(error, client, coll, held)
             if isinstance(error, InvalidArgument) and size_error(error):
                 log_largest_write(staged, batch=index, batches=len(batches))
             logger.warning(
@@ -1043,12 +1097,21 @@ def commit_projection(
                         logger.warning(
                             'v3 projection readback changed kind=recording batch=%d fields=%s', index, changed[:8]
                         )
+                        collisions.report(
+                            collisions.RACED,
+                            collisions.RECORDING_ROW,
+                            changed,
+                            lane=key,
+                            phase='readback',
+                            update_time=snapshot.update_time,
+                        )
                         raise Conflict('source_changed')
                     moved.add(rid)
                 recordings[rid] = {
                     **recordings[rid],
                     'claims': current.get('claims') or [],
                     '_v3_revision': snapshot.update_time,
+                    collisions.FIELDS_KEY: collisions.fingerprint(current),
                     **({'_v3_fence': source_fence(current)} if recordings[rid].get('_v3_fence') is not None else {}),
                 }
             for (raw, _), encoded in zip(batch, committed_prepared):
@@ -1064,8 +1127,20 @@ def commit_projection(
                         logger.warning(
                             'v3 projection readback changed kind=derived_row batch=%d fields=%s', index, changed[:8]
                         )
+                        collisions.report(
+                            collisions.RACED,
+                            collisions.doc_kind(current),
+                            changed,
+                            lane=key,
+                            phase='readback',
+                            update_time=snapshot.update_time,
+                        )
                         raise Conflict('source_changed')
-                    existing[raw['id']] = {**raw, '_v3_revision': snapshot.update_time}
+                    existing[raw['id']] = {
+                        **raw,
+                        '_v3_revision': snapshot.update_time,
+                        collisions.FIELDS_KEY: collisions.fingerprint(current),
+                    }
     metrics.projection_writes('commit_projection', len(written_rows), len(skipped_rows - written_rows))
     return moved
 

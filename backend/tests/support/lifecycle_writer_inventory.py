@@ -1,6 +1,16 @@
 """Reviewed payload sites, including values/keys and duplicate sites. Never refresh in a test."""
 
 FIELD_SITES = {
+    # An End answered while its conversation is still open projects processing into the HTTP response
+    # only (flag end_open_conversation). Nothing is stored.
+    'utils/conversations/v3/end_answer.py': [
+        ('ended_conversation', 'status', 'ConversationStatus.processing', ('status',)),
+    ],
+    # A per-frame verdict (text or empty) in an upload's status result (flag batch_frame_outcomes). Not a
+    # lifecycle state: the key is a range's own label.
+    'utils/batch_pipeline/frame_outcomes.py': [
+        ('completed_ranges', 'status', 'status', ('capture_root', 'clock_epoch', 'end', 'start', 'status')),
+    ],
     # Finish projects processing into the HTTP response. Only the v3 builder stores window status.
     'utils/conversations/v3/finish.py': [
         ('_acknowledge', 'status', 'ConversationStatus.completed', ('status',)),
@@ -4247,13 +4257,7 @@ FIELD_SITES = {
     ],
     'utils/memory/memory_service.py': [
         (
-            'MemoryService._write_historical_override',
-            'status',
-            'status.value',
-            ('memory_id', 'origin', 'public_id', 'status', 'uid', 'updated_at'),
-        ),
-        (
-            'MemoryService._write_historical_overrides',
+            'MemoryService._historical_override_payload',
             'status',
             'status.value',
             ('memory_id', 'origin', 'public_id', 'status', 'uid', 'updated_at'),

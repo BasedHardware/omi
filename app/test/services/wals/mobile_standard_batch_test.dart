@@ -212,6 +212,32 @@ void main() {
         encodeWalFrames(List.generate(6000, (_) => [0])));
   });
 
+  test('end_open_conversation: an End seals the speech file being written; later frames open the next file', () async {
+    await enable();
+    vad.value = 0.4;
+    for (var i = 0; i < 5; i++) {
+      expect(route(1), true);
+    }
+    await lane.pendingInference;
+    await buffer.pending;
+    expect(published, isEmpty, reason: 'still speaking: the file stays open');
+
+    lane.sealForEnd();
+    await buffer.pending;
+    expect(published, hasLength(1));
+    expect(published.single.totalFrames, 5);
+
+    lane.sealForEnd();
+    await buffer.pending;
+    expect(published, hasLength(1), reason: 'nothing open: a second End seals nothing');
+
+    expect(route(2), true);
+    lane.sealForEnd();
+    await buffer.pending;
+    expect(published, hasLength(2));
+    expect(published.last.totalFrames, 1);
+  });
+
   test('a 15-second cap seals four files where the default seals one, losing no frame', () async {
     buffer.maxFileSeconds = MobileBatchFileCapGate.shortFileSeconds;
     await enable();

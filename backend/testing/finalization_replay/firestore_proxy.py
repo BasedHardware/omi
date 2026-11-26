@@ -110,6 +110,7 @@ class FirestoreProxy:
         with self._lock:
             self._counts = {
                 'rpc_calls': 0,
+                'failed_commit_rpcs': 0,
                 'document_reads': 0,
                 'query_documents': 0,
                 'query_requests': 0,
@@ -143,6 +144,8 @@ class FirestoreProxy:
         with self._lock:
             counts = self._rpc_failures.setdefault(method, {})
             counts[code.name] = counts.get(code.name, 0) + 1
+            if method == 'commit':
+                self._counts['failed_commit_rpcs'] += 1
 
     def _add(self, **values):
         with self._lock:

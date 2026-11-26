@@ -39,6 +39,7 @@ from pydantic import BaseModel
 from config.summary_guarantee import repair_enabled as summary_repair_enabled
 from services import summary_debt_repair
 from config.policy import resolve_batch_policy
+from config.reliability_experiments import enabled as experiment, warm as warm_experiments
 from config.policy.ramp import audio_span
 from database.batch_ramp import ramp_admission_policy
 from database.batch_pipeline_privacy import BatchPrivacyBlocked
@@ -59,6 +60,8 @@ from utils.batch_pipeline.intake_outcome import (
 )
 from models.sync_job_status import (
     SyncJobStartResponse,
+    SyncReceiptsWaitRequest,
+    SyncReceiptsWaitResponse,
     SyncJobStatusResponse,
     SyncCaptureManifestRequest,
     SyncCaptureManifestResponse,
@@ -743,6 +746,7 @@ async def sync_local_files_v2(
     x_omi_conversation_geolocation: Optional[str] = Header(None, alias='X-Omi-Conversation-Geolocation'),
     x_omi_upload_trace: Optional[str] = Header(None, alias='X-Omi-Upload-Trace', include_in_schema=False),
     x_omi_upload_hold: Optional[str] = Header(None, alias='X-Omi-Upload-Hold', include_in_schema=False),
+    x_omi_upload_recovered: Optional[str] = Header(None, alias='X-Omi-Upload-Recovered', include_in_schema=False),
     x_omi_upload_hold_age_ms: Optional[str] = Header(None, alias='X-Omi-Upload-Hold-Age-Ms', include_in_schema=False),
 ):
     """
@@ -1265,6 +1269,7 @@ async def sync_local_files_v2(
             # nor rollback may start a legacy twin or release this batch claim.
             sequencer_registration_started = True
             batch_attempted = True
+            upload_recovered = x_omi_upload_recovered == '1'
             batch_response = await accept_batch_upload(
                 uid=uid,
                 job_id=job_id,
@@ -1287,6 +1292,7 @@ async def sync_local_files_v2(
                         if isinstance(x_omi_upload_hold, str)
                         else {}
                     ),
+                    **({'upload_recovered': True} if upload_recovered else {}),
                     **({'capture_source_conversation_id': recovery_source_id} if recovery_source_id else {}),
                     **({'capture_clock_policy': capture_clock_policy} if capture_clock_policy is not None else {}),
                     **(
@@ -1332,7 +1338,7 @@ async def sync_local_files_v2(
                 # owner is a follow-on, not a batch landing).
                 if intake_evidence.batch_accepted and not intake_evidence.final_pass_owner_followed:
                     record_upload_outcome('batch')
-                    observe_hold_age(x_omi_upload_hold_age_ms, x_omi_upload_hold)
+                    observe_hold_age(x_omi_upload_hold_age_ms, x_omi_upload_hold, upload_recovered)
                 return batch_response
             sequencer_registration_started = False
 
@@ -1972,6 +1978,10 @@ def get_sync_job_status(
             detail='Sync job polling too frequent; retry later',
             headers={'Retry-After': str(SYNC_POLL_WINDOW_SECONDS)},
         )
+    return _read_sync_job_status(job_id, uid, surface_open, x_omi_custody_repair_protocol)
+
+
+def _read_sync_job_status(job_id: str, uid: str, surface_open: bool, x_omi_custody_repair_protocol: Optional[str]):
     try:
         durable = (
             get_durable_job_status(job_id, uid, artifact_retry=True)
@@ -2155,6 +2165,72 @@ def get_sync_job_status(
             resp['error'] = job['error']
 
     return sync_job_poll_response(resp, uid, surface_open)
+
+
+@router.post(
+    '/v2/sync-local-files/receipts/wait',
+    response_model=SyncReceiptsWaitResponse,
+    response_model_exclude_none=True,
+    include_in_schema=False,
+)
+async def wait_for_sync_receipts(
+    body: SyncReceiptsWaitRequest, request: Request, uid: str = Depends(auth.get_current_user_uid)
+):
+    from database.redis_db import get_async_redis_client
+    from database.sync_jobs import receipt_channel, TERMINAL_STATUSES
+
+    # Experiment receipt_long_poll. For an account it is off for, the path answers as an unknown route does.
+    await warm_experiments(uid)
+    if not experiment('receipt_long_poll', uid):
+        raise HTTPException(status_code=404, detail='Not Found')
+    if not await run_blocking(db_executor, admit_sync_job_poll, uid):
+        raise HTTPException(
+            status_code=429,
+            detail='Receipt requests too frequent',
+            headers={'Retry-After': str(SYNC_POLL_WINDOW_SECONDS)},
+        )
+    jobs = set(body.job_ids)
+
+    def snapshot():
+        receipts, fallback = [], []
+        for job_id in jobs:
+            try:
+                status = _read_sync_job_status(job_id, uid, False, None)
+            except HTTPException as error:
+                if error.status_code not in (403, 404, 503):
+                    raise
+                fallback.append(job_id)
+                continue
+            if not isinstance(status, dict) or status.get('reason_code') in (
+                'batch_unit_held',
+                'batch_artifact_missing',
+                'source_alignment_pending',
+            ):
+                fallback.append(job_id)
+            elif status.get('status') in TERMINAL_STATUSES:
+                receipts.append(status)
+        return {'receipts': receipts, 'fallback': fallback}
+
+    channel = await run_blocking(db_executor, receipt_channel, uid)
+    redis = await get_async_redis_client()
+    async with redis.pubsub() as sub:
+        await sub.subscribe(channel)
+        # Wait for Redis to acknowledge subscription before reading job state.
+        message = await sub.get_message(timeout=3)
+        if not message or message['type'] != 'subscribe':
+            raise HTTPException(status_code=503, detail='Receipt waiter unavailable')
+        result = await run_blocking(db_executor, snapshot)
+        deadline = time.monotonic() + 20
+        while not result['receipts'] and not result['fallback']:
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                return await run_blocking(db_executor, snapshot)
+            if await request.is_disconnected():
+                return result
+            message = await sub.get_message(ignore_subscribe_messages=True, timeout=min(1, remaining))
+            if message and message['data'] in jobs:
+                result = await run_blocking(db_executor, snapshot)
+        return result
 
 
 async def _maintain_uid_sequencer_lease(

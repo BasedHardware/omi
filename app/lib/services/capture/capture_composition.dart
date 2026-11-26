@@ -6,6 +6,10 @@ import 'package:omi/services/wals/mobile_batch_buffer.dart';
 import 'package:omi/services/wals/mobile_batch_vad.dart';
 import 'package:omi/services/wals/mobile_standard_batch.dart';
 import 'package:omi/services/live_preview/live_preview_composition.dart';
+import 'package:omi/services/live_preview/live_preview_controller.dart';
+import 'package:omi/services/live_preview/live_words_coordinator.dart';
+import 'package:omi/services/live_preview/live_words_log.dart';
+import 'package:omi/services/live_preview/vendor_live_words.dart';
 import 'package:omi/services/sockets/listen_client_state.dart';
 import 'package:flutter/widgets.dart';
 
@@ -182,7 +186,11 @@ CaptureProvider composeProductionCaptureProvider({
   unawaited(_installMobileStandardBatch(provider));
   final livePreview = composeLivePreview();
   if (livePreview != null) provider.installLivePreview(livePreview);
-  final lifecycle = AppLifecycleListener(onStateChange: provider.onAppLifecycleChanged);
+  final liveWords = livePreview == null ? null : _composeLiveWords(provider, livePreview);
+  final lifecycle = AppLifecycleListener(onStateChange: (state) {
+    provider.onAppLifecycleChanged(state);
+    liveWords?.onLifecycle(state);
+  });
   provider.lifetime.own(lifecycle.dispose);
   final initialLifecycle = WidgetsBinding.instance.lifecycleState;
   if (initialLifecycle != null && initialLifecycle != AppLifecycleState.resumed) {
@@ -193,6 +201,26 @@ CaptureProvider composeProductionCaptureProvider({
     unawaited(CaptureSystemSurface(provider, LiveActivityBridge()).start());
   }
   return provider;
+}
+
+/// Reliability experiment `vendor_recognizer_on_opened_app`: the vendor stream on the capture audio
+/// taps and the coordinator that decides when it and the phone's recogniser run. Off, the taps only
+/// reach an early return and nothing connects.
+LiveWordsCoordinator _composeLiveWords(CaptureProvider provider, LivePreviewController livePreview) {
+  final vendor = VendorLiveWords(
+    onLines: livePreview.onVendorLines,
+    log: (event, fields) => LiveWordsLog.event('vendor_$event', fields),
+  );
+  void onPendant(List<int> packet) => vendor.onPendantPacket(packet, provider.pendantTapCodec);
+  provider.addDeviceAudioListener(onPendant);
+  provider.addPhoneMicAudioListener(vendor.onPhonePcm);
+  final coordinator = LiveWordsCoordinator(capture: provider, preview: livePreview, vendor: vendor)..start();
+  provider.lifetime.own(() {
+    provider.removeDeviceAudioListener(onPendant);
+    provider.removePhoneMicAudioListener(vendor.onPhonePcm);
+    coordinator.dispose();
+  });
+  return coordinator;
 }
 
 CaptureWedgeMonitor composeCaptureWedgeMonitor() {

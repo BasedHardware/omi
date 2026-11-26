@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 from hashlib import sha256
+import importlib
 import re
 from threading import Lock
 
@@ -14,6 +15,10 @@ from testing.finalization_replay.metrics import embedding_token_estimate, prompt
 # the queue in Postgres. The disposition is compared separately from these rows.
 QUEUE_COLLECTIONS = {'conversation_finalization_jobs', 'conversation_finalization_projection_shards'}
 TOKEN_HEX = re.compile(r'[0-9a-f]{32}')
+
+
+def load_memo_bindings():
+    return importlib.import_module('testing.finalization_replay.memo_bindings')
 
 
 def _seeded_tokens(value):
@@ -199,6 +204,7 @@ class CaseState:
         self.embedding_tokens = 0
         self.firestore_operations = {
             'rpc_calls': 0,
+            'failed_commit_rpcs': 0,
             'document_reads': 0,
             'query_documents': 0,
             'query_requests': 0,
@@ -340,6 +346,26 @@ class CaseState:
         snapshot = self.client.collection(collection).document(document).get()
         return {'exists': snapshot.exists, 'fields': pack(snapshot.to_dict() or {})}
 
+    def capture_before_erasure(self):
+        snapshot = self.observe('completed', self.initial_documents, load_memo_bindings=load_memo_bindings)
+        if snapshot['conversation'] is None:
+            raise RuntimeError('replay conversation missing before erasure')
+        self.before_erasure = {
+            field: snapshot[field]
+            for field in (
+                'conversation',
+                'derived_documents',
+                'cost',
+                'finished_at',
+                'updated_at_changed',
+                'preserved_fields',
+                'episode_attach_memo_valid',
+                'episode_attach_memo_expected',
+                'episode_attach_memo_failure_reason',
+            )
+        }
+        self.before_erasure['batch_pipeline_privacy'] = snapshot['batch_pipeline_privacy']['final']
+
     def observe(self, status, before, *, load_memo_bindings=None):
         after = self.documents()
         changed_documents = {
@@ -438,6 +464,8 @@ class CaseState:
             observation['firestore_operation_sources'] = operation_sources
         if hasattr(self, 'speaker_trace'):
             observation['speaker_trace'] = self.speaker_trace
+        if hasattr(self, 'before_erasure'):
+            observation['before_erasure'] = self.before_erasure
         return observation
 
     def vector(self, conversation_id):

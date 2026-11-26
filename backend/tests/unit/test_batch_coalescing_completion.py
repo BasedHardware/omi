@@ -104,6 +104,7 @@ def test_sixteen_originals_complete_with_windows_unset_and_keep_each_original_cl
             'upload_arrived_at': 10 + i,
             'upload_entitlement': 'free',
             'upload_hold_state': state,
+            'upload_recovered': i == 0,
         }
         intake_ref = client.collection('synthetic_intakes').document(original['job_id'])
         content_ref = sync_content_ledger_ref(client, 'owner', original['content_id'])
@@ -125,7 +126,9 @@ def test_sixteen_originals_complete_with_windows_unset_and_keep_each_original_cl
     delivered = Mock()
     monkeypatch.setattr(metrics, 'DELIVERED', delivered)
     metrics.observe_completion({}, members, merged=True, changed=True, result=result, now=400)
-    assert delivered.labels.call_args_list == [call('free', state) for state in states]
+    assert delivered.labels.call_args_list == [
+        call('free', state, 'true' if index == 0 else 'false') for index, state in enumerate(states)
+    ]
     for original in originals:
         ref = sync_content_ledger_ref(client, 'owner', original['content_id'])
         assert client.rows[ref.path]['status'] == 'completed'

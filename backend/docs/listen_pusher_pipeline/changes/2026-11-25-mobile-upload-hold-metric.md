@@ -16,3 +16,8 @@ the hold window plus 300 seconds. The age adds no Firestore field or operation.
 
 [Request header contract](../../listen_pusher_pipeline.mdx) ·
 [Canary measurement rules](../../runbooks/batch-upload-coalescing.md#measurements-and-first-canary)
+
+Follow-up: `X-Omi-Upload-Recovered: 1` adds a bounded `recovered="true"`
+label to the hold-age and publication-latency histograms. Other inputs are
+`recovered="false"`. True rides on existing intake and completion metadata,
+including coalesced originals. No additional Firestore operations are required.
