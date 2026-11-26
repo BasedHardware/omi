@@ -406,7 +406,9 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
   final Future<int?> Function()? _freeDiskBytesOverride;
   final Future<void> Function(Duration duration)? _sleepOverride;
   final WalBacklogTelemetry _backlogTelemetry;
-  final MobileHeldWalSignal _heldWalSignal = MobileHeldWalSignal();
+  late final MobileHeldWalSignal _heldWalSignal = MobileHeldWalSignal(
+    holdLabel: (wal) => mobileBatchUploadHold?.label(wal),
+  );
   final PendantRingCustody _custody;
   final Future<DeviceConnection?> Function(String deviceId)? _connectionResolver;
 

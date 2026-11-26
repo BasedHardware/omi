@@ -16,14 +16,17 @@ class MobileHeldWalSignal {
   MobileHeldWalSignal({
     Future<bool?> Function(bool refresh)? cohort,
     void Function(MobileHeldWalBacklog)? emit,
+    String? Function(Wal)? holdLabel,
   })  : _cohort = cohort ?? _readCohort,
-        _emit = emit ?? const TypedEvents().emit;
+        _emit = emit ?? const TypedEvents().emit,
+        _holdLabel = holdLabel;
 
   static const _hour = Duration(hours: 1);
   static const _refreshInterval = Duration(minutes: 1);
 
   final Future<bool?> Function(bool refresh) _cohort;
   final void Function(MobileHeldWalBacklog) _emit;
+  final String? Function(Wal)? _holdLabel;
   final _pending = <MobileHeldWalBacklogTrigger, _Snapshot>{};
   DateTime? _nextHourly;
   DateTime? _lastFlagRefresh;
@@ -81,7 +84,9 @@ class MobileHeldWalSignal {
       count++;
       if (oldestSealMs == null || sealMs < oldestSealMs) {
         oldestSealMs = sealMs;
-        oldestState = wal.mobileBatchHold?.state;
+        // A cold restart has no active hold. The prior seal state is
+        // still available for the separately labelled recovery upload.
+        oldestState = wal.recoveredMobileBatchHold ? null : _holdLabel?.call(wal) ?? wal.mobileBatchHold?.state;
       }
     }
     _pending[trigger] = (

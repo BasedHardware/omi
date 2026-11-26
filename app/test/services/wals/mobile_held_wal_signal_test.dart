@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:fake_async/fake_async.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
+import 'package:omi/services/wals/mobile_batch_upload_hold.dart';
 import 'package:omi/services/wals/mobile_held_wal_signal.dart';
 import 'package:omi/services/wals/wal.dart';
 
@@ -17,6 +18,7 @@ Wal _file({bool mobile = true, bool held = true, WalStatus status = WalStatus.mi
       device: 'source',
       status: status,
       storage: WalStorage.disk,
+      recordingSessionId: 'recording',
       filePath: mobile ? 'audio_omimobilebatch_file.bin' : 'audio_other_file.bin',
       mobileBatchHold: held
           ? (sealedAtMs: _now.subtract(const Duration(seconds: 1400)).millisecondsSinceEpoch, state: 'bg300')
@@ -67,6 +69,30 @@ void main() {
       expect(events.map((event) => event['trigger']), ['startup', 'foreground', 'hourly', 'hourly']);
       expect(events.first['held_wal_count'], 0);
       expect(events.last['oldest_held_age_s'], 86400);
+    });
+  });
+
+  test('backlog reports the live deadline state and leaves recovered deadlines unknown', () {
+    fakeAsync((time) {
+      final hold = MobileBatchUploadHold(enabled: () => true, wake: () {}, now: () => _now);
+      final events = <Map<String, Object>>[];
+      final signal = MobileHeldWalSignal(
+        cohort: (_) async => true,
+        emit: (event) => events.add(event.properties),
+        holdLabel: hold.label,
+      );
+      final wal = _file();
+      hold.sealed(wal);
+      signal.startup([wal], _now);
+      time.flushMicrotasks();
+      hold.setPreview(true);
+      signal.foreground([wal], _now);
+      time.flushMicrotasks();
+      final recovered = _file()..recoveredMobileBatchHold = true;
+      signal.foreground([recovered], _now);
+      time.flushMicrotasks();
+      expect(events.map((event) => event['hold_state']), ['fg60', 'fg_preview300', 'unknown']);
+      hold.clear();
     });
   });
 

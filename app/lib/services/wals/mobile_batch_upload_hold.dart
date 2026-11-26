@@ -77,7 +77,11 @@ class MobileBatchUploadHold {
 
   bool isHeld(Wal wal) => _pending.containsKey(wal.id);
 
-  String label(Wal wal) => enabled() ? _released[wal]?.header ?? indexedLabel(wal) : 'none';
+  String label(Wal wal) {
+    if (!enabled()) return 'none';
+    if (_pending.containsKey(wal.id)) return _state.header;
+    return _released[wal]?.header ?? indexedLabel(wal);
+  }
 
   static String indexedLabel(Wal wal) {
     final state = wal.mobileBatchHold?.state;
