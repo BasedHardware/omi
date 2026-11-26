@@ -60,12 +60,6 @@ def check_cached_write(
     if lookup is None:
         return None
     metrics.called('batch')
-    if enforce and lookup.decision is not None and lookup.decision.fresh():
-        if on_hit is not None:
-            on_hit(uid, ids, site, lookup.decision)
-        cache.TOKENLESS.labels(f'{site}_hit').inc()
-        metrics.decision('batch')
-        return lookup.decision.generation
     return _read_and_cache_tokenless(
         client,
         transaction,
@@ -73,15 +67,17 @@ def check_cached_write(
         lookup,
         ids,
         started,
+        enforce=enforce,
         shadow=shadow,
         site=site,
         expected_generation=expected_generation,
         read_budget=read_budget,
+        on_hit=on_hit,
     )
 
 
 def _read_and_cache_tokenless(
-    client, transaction, uid, lookup, ids, started, *, shadow, site, expected_generation, read_budget
+    client, transaction, uid, lookup, ids, started, *, enforce, shadow, site, expected_generation, read_budget, on_hit
 ):
     walk: dict[str, Any] = {}
     snapshot, version = None, None
@@ -97,6 +93,22 @@ def _read_and_cache_tokenless(
         reference = client.collection(PRIVACY_COLLECTION).document(privacy_owner_key(uid))
         snapshot = metrics.read_snapshot('batch', reference, transaction=transaction, read_budget=read_budget)
         version = token_version(snapshot)
+        candidate = lookup.decision
+        if enforce and candidate is not None and candidate.fresh():
+            # Authority Commits rotate this token atomically with the policy.
+            # Reading it here also enrolls it in the lease transaction's read set.
+            authority_generation = (snapshot.to_dict() or {}).get('generation', 0)
+            if (
+                candidate.version == version
+                and type(authority_generation) is int
+                and candidate.generation == authority_generation
+            ):
+                if on_hit is not None:
+                    on_hit(uid, ids, site, candidate)
+                cache.TOKENLESS.labels(f'{site}_hit').inc()
+                metrics.decision('batch')
+                return candidate.generation
+            cache.TOKENLESS.labels('authority_mismatch').inc()
         generation = read_live_batch_write_authority(
             client,
             transaction,

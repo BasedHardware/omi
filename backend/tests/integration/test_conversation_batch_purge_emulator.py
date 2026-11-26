@@ -13,6 +13,7 @@ import os
 from pathlib import Path
 import threading
 import time
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 from unittest.mock import MagicMock
@@ -1614,6 +1615,80 @@ def _dead_letter_count(error):
     return REGISTRY.get_sample_value('omi_batch_pipeline_privacy_post_window_dead_letters_total', {'error': error}) or 0
 
 
+@pytest.mark.parametrize('site', ('probe', 'lease'))
+def test_warm_write_cache_denies_after_opt_out_before_redis_invalidation(plane, monkeypatch, site):
+    import fakeredis
+
+    from database import batch_privacy_write_authority as authority, batch_privacy_write_cache as cache
+    from database import batch_privacy_write_fence as fence
+    from database.batch_pipeline_privacy import BatchPrivacyBlocked
+
+    redis = fakeredis.FakeRedis()
+    monkeypatch.setenv('REDIS_DB_HOST', 'synthetic-test-only')
+    monkeypatch.setenv('ENCRYPTION_SECRET', 'synthetic-write-proof-key-for-test-only')
+    monkeypatch.setenv('OMI_ENV_STAGE', 'dev')
+    monkeypatch.setenv('FIRESTORE_READ_LEVERS', '{"bpp_tokenless_write_cache":100}')
+    monkeypatch.setattr(cache, '_redis', lambda: redis)
+    monkeypatch.setattr(cache, 'available', lambda client: client is plane.client)
+    monkeypatch.setattr(authority, 'ttl_disabled', lambda: False)
+
+    user = plane.client.collection('users').document(plane.uid)
+    user.update({'private_cloud_sync_enabled': True})
+    user.collection('conversations').document('native').set(
+        {'record_lane_owner': 'batch_live_v1', 'private_cloud_sync_enabled': True}
+    )
+    store = FirestoreStore('batch_pipeline_dev', firestore_client=plane.client)
+    ref = plane.client.collection('batch_pipeline_dev_jobs').document('unleased')
+    row = {
+        'owner_id': plane.uid,
+        'owner_key': plane.key,
+        'conversation_id': 'native',
+        'privacy_generation': 0,
+        'state': 'ready',
+        'requires_compute_admission': True,
+        'segment_id': ref.id,
+    }
+    ref.set(row)
+
+    def probe(tx):
+        return tx._probe_write_privacy(plane.uid, ('native',), 0)
+
+    def lease(tx):
+        job = tx.get('jobs', ref.id)
+        tx.put('jobs', ref.id, {**job, 'state': 'leased', 'attempt': 1, 'token': 'lease', 'lease_until': 123.0})
+
+    action = probe if site == 'probe' else lease
+    assert store.run(probe) == 0
+    hits = cache.TOKENLESS.labels(f'{site}_hit')._value
+    before_hit = hits.get()
+    store.run(action)
+    assert hits.get() == before_hit + 1
+    ref.set(row)
+
+    committed = threading.Event()
+    release_notification = threading.Event()
+
+    def pause_and_drop_notification(paths, commit_time):
+        committed.set()
+        assert release_notification.wait(timeout=10)
+
+    monkeypatch.setattr(fence, 'invalidate_tokenless', pause_and_drop_notification)
+    with ThreadPoolExecutor(max_workers=1) as writer:
+        revoke = writer.submit(user.update, {'private_cloud_sync_enabled': False})
+        try:
+            assert committed.wait(timeout=5)
+            assert user.get().get('private_cloud_sync_enabled') is False
+            with pytest.raises(BatchPrivacyBlocked, match='recording_privacy_changed'):
+                store.run(action)
+        finally:
+            release_notification.set()
+            revoke.result(timeout=5)
+    with pytest.raises(BatchPrivacyBlocked, match='recording_privacy_changed'):
+        store.run(action)
+    assert hits.get() == before_hit + 1
+    assert ref.get().get('state') == 'ready'
+
+
 def test_tokenless_write_cache_is_limited_to_existing_compute_admitted_leases(plane, monkeypatch):
     from dataclasses import replace
 
@@ -1654,12 +1729,12 @@ def test_tokenless_write_cache_is_limited_to_existing_compute_admitted_leases(pl
             'jobs', ref.id, {**job, 'state': 'leased', 'attempt': 1, 'token': 'synthetic-lease', 'lease_until': 123.0}
         )
 
-    def read_count():
+    def read_count(action):
         before = snapshot_reads()
-        store.run(lease)
+        store.run(action)
         return reads_for_caller(delta_reads(before), 'database.batch_pipeline_privacy:read')
 
-    assert read_count() == 0
+    assert read_count(lease) == 1
     ref.set(row)
 
     pending_audits = []
@@ -1672,8 +1747,8 @@ def test_tokenless_write_cache_is_limited_to_existing_compute_admitted_leases(pl
     monkeypatch.setattr(audit, '_ROLE', 'integration')
     agree_by_role = audit.AUDIT_BY_ROLE.labels('integration', 'agree')._value
     before_role = agree_by_role.get()
-    assert store.run(lambda tx: tx._probe_write_privacy(plane.uid, ('source',), 0)) == 0
-    assert read_count() == 0
+    assert read_count(lambda tx: tx._probe_write_privacy(plane.uid, ('source',), 0)) == 1
+    assert read_count(lease) == 1
     assert [args[1].site for _, args in pending_audits] == ['probe', 'lease']
     assert ref.get().to_dict()['state'] == 'leased'
     assert agree_by_role.get() == before_role
@@ -1694,15 +1769,15 @@ def test_tokenless_write_cache_is_limited_to_existing_compute_admitted_leases(pl
     before_probe = probe_shadow.get()
     assert store.run(lambda tx: tx._probe_write_privacy(plane.uid, ('source',), 0)) == 0
     assert probe_shadow.get() == before_probe + 1
-    assert read_count() > 0
+    assert read_count(lease) > 1
     assert shadow._value.get() == before + 1
     assert not pending_audits
     ref.set(row)
     monkeypatch.setenv('FIRESTORE_READ_LEVERS', '{"bpp_tokenless_write_cache":0}')
-    assert read_count() > 0
+    assert read_count(lease) > 1
 
-    # A missed invalidation can influence the bounded lease. A content write
-    # still calls durable authority, even while that lease proof is cached.
+    # Keep the pre-change proof in Redis to model retrospective audit outcomes.
+    # Content writes still call durable authority.
     monkeypatch.setattr(batch_privacy_write_fence, 'invalidate_tokenless', lambda *args: None)
     plane.client.collection('users').document(plane.uid).update({'migration_status': 'pending'})
     token = plane.client.collection(audit.PRIVACY_COLLECTION).document(plane.key).get()

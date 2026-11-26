@@ -5,8 +5,13 @@ SCA-3508 keeps the projection precheck in its own change. On the write side,
 changing the authorizing decision. The candidate's original Firestore snapshot
 and walk start bound reuse to five minutes, including a clock margin. A
 purpose-derived HMAC binds the proof to its database, owner and covered sources.
-A postcommit owner marker invalidates outstanding evidence and prevents late
-fills. The write cache, shadow, and audit levers all default to zero.
+Each authorizing transaction point-reads the Firestore owner token and checks
+its revision and generation before reusing a proof. This is one Firestore read
+on a warm hit, which skips the remaining authority reads. A mismatch uses the
+same token snapshot for the full authority walk. The authority Commit rotates
+the token atomically. Postcommit Redis invalidation evicts obsolete proofs and
+helps prevent late fills. Delayed or failed Redis invalidation cannot authorize
+a stale allow. The write cache, shadow, and audit levers all default to zero.
 
 `bpp_tokenless_write_cache` can reuse a decision during scheduler probing and
 when committing scheduling fields on a previously read, existing ready job
