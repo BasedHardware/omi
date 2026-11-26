@@ -255,6 +255,19 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         print(json.dumps({'outcome': 'error', 'error': str(refused)}))
         return OUTCOMES['error']
     started = time.perf_counter()
+    from testing.pipeline_lab.scenario.paths import private_lab_root
+    from testing.pipeline_lab.store import private_tempdir
+
+    try:
+        # The product's own temp files (sync and batch lanes on owner audio) go inside the private lab root.
+        with private_tempdir(private_lab_root()):
+            return _run_main(args, out, started)
+    except StoreRefused as refused:
+        print(json.dumps({'outcome': 'error', 'error': str(refused)}))
+        return OUTCOMES['error']
+
+
+def _run_main(args: argparse.Namespace, out: Path, started: float) -> int:
     from testing.pipeline_lab.scenario.audio import AudioError, prepare
 
     try:

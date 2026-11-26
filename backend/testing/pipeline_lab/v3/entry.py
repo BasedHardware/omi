@@ -157,8 +157,11 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     parser.add_argument('--run', required=True)
     parser.add_argument('--engine', choices=('product', 'fake'), default='product')
     args = parser.parse_args(argv)
+    from testing.pipeline_lab.store import private_tempdir
+
     try:
-        summary = run(Path(args.root), args.run, args.engine)
+        with private_tempdir(Path(args.root)):  # the product's own temp files stay inside the lab root
+            summary = run(Path(args.root), args.run, args.engine)
     except Exception:  # noqa: BLE001 - the traceback goes to chain_errors.log
         trace = traceback.format_exc()
         try:

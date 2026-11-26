@@ -305,12 +305,15 @@ def materialize(
     *,
     vad: Optional[Callable] = None,
     file_vad: Optional[Callable] = None,
+    scratch_root: Optional[Path] = None,
 ) -> tuple[Any, dict[str, Any]]:
-    """The scenario with every audio recording's ``lines`` filled from its lane replay, and the report."""
+    """The scenario with every audio recording's ``lines`` filled from its lane replay, and the report.
+
+    ``scratch_root``: where the sync lane's work files go (``<root>/tmp/sync``); default the scenario lab root."""
     from testing.pipeline_lab.cassette.player import SpanSource
     from testing.pipeline_lab.contracts import utc_iso
     from testing.pipeline_lab.lanes.batch import BatchConversation, replay_record_lane
-    from testing.pipeline_lab.lanes.sync import SyncConversation, replay_sync_lane
+    from testing.pipeline_lab.lanes.sync import SyncConversation, private_scratch, replay_sync_lane
 
     report: dict[str, Any] = {'mode': next(iter(prepared.values())).mode if prepared else None, 'recordings': []}
     recordings = []
@@ -336,6 +339,7 @@ def materialize(
                 span=SpanSource(item.cassette),
                 file_vad=file_vad,
                 stt=stt,
+                scratch=private_scratch(scratch_root),  # the recording's WAV files: inside the private lab root
             )
         if result.outcome == 'failed':
             raise AudioError(f'recording {rec.label}: the {rec.lane} lane failed ({result.error})')

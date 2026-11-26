@@ -317,3 +317,32 @@ def test_sync_lane_work_files_default_to_the_private_lab_root(tmp_path, monkeypa
     sync.replay_sync_lane(conversation, player=player, file_vad=lambda path: [])
     assert made and Path(made[0]) == tmp_path / 'lab' / 'tmp' / 'sync'
     assert mode(tmp_path / 'lab' / 'tmp' / 'sync') == 0o700
+
+
+def test_reused_keep_directory_starts_each_scenario_with_fresh_output(tmp_path):
+    root = stack.output_root(str(tmp_path / 'kept'))
+    old = lab_store.private_subdir(root / 'one' / 'repeat-2')
+    for name in ('scenario.json', 'home.json', 'result.json', 'v3_tasks.jsonl'):
+        lab_store.private_write_text(root / 'one' / name, 'earlier run')
+    lab_store.private_write_text(old / 'result.json', 'earlier run')
+    lab_store.private_write_text(root / 'verdict.json', '{}')
+    lab_store.private_write_text(root / '.stack' / 'firestore.log', 'stack in use')
+    lab_store.private_write_text(root / 'notes.txt', 'not lab output')
+    (root / 'linked').symlink_to(tmp_path)
+    stack._fresh_output(root)
+    assert not (root / 'one').exists() and not (root / 'verdict.json').exists()
+    assert (root / '.stack' / 'firestore.log').read_text() == 'stack in use'
+    assert (root / 'notes.txt').exists() and (root / 'linked').is_symlink()
+
+
+def test_product_temp_files_go_under_the_private_lab_root_for_the_block(tmp_path, monkeypatch):
+    import tempfile
+
+    monkeypatch.setenv('TMPDIR', '/tmp')
+    before = tempfile.gettempdir()
+    with lab_store.private_tempdir(tmp_path / 'lab') as directory:
+        assert directory == tmp_path / 'lab' / 'tmp' / 'product' and mode(directory) == 0o700
+        assert tempfile.gettempdir() == str(directory) and os.environ['TMPDIR'] == str(directory)
+        made = Path(tempfile.mkdtemp(prefix='product-'))
+        assert made.parent == directory
+    assert tempfile.gettempdir() == before and os.environ['TMPDIR'] == '/tmp'
