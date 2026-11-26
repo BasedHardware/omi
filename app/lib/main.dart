@@ -140,6 +140,8 @@ FirebaseOptions _firebaseOptionsForFlavor() => Env.profile == AppEnvironmentProf
 /// See [ensureFirebaseApp] for why `Firebase.apps.isEmpty` was never a valid
 /// guard and why `[core/duplicate-app]` must not kill startup.
 Future<FirebaseApp> _ensureFirebaseApp() {
+  // Background engines can enter here without running the foreground startup.
+  F.configureForStartup();
   final options = _firebaseOptionsForFlavor();
   return ensureFirebaseApp<FirebaseApp>(
     existingApp: () => Firebase.apps.isEmpty ? null : Firebase.app(),
@@ -436,8 +438,16 @@ Future _init() async {
 Future<void> _start({bool forceFull = false}) async {
   BootRecovery? recovery;
   try {
+    if (!PhysicalQualification.enabled) _startupErrorRouter.beginStartup();
+    try {
+      F.configureForStartup();
+    } on StateError catch (error) {
+      throw StartupConfigurationError(error);
+    }
+    // The seeded journey VM service extensions are only installed for eligible
+    // local-dev builds, after the build flavor has been validated.
+    if (kDebugMode) SemanticControls.instance.installIfEligible();
     if (!PhysicalQualification.enabled) {
-      _startupErrorRouter.beginStartup();
       recovery = BootRecovery(await SharedPreferences.getInstance());
       await recovery.countInterruptedBoot(BootJournal.instance);
       await BootJournal.instance.record('boot', 'begin');
@@ -524,11 +534,6 @@ void main() {
       // Ensure
       if (kDebugMode) {
         MarionetteBinding.ensureInitialized();
-        // Typed semantic controls for the seeded-journey lane: same debug VM
-        // service transport as Marionette, installed only in eligible
-        // local-dev test builds (inert everywhere else, including
-        // production-flavor debug builds).
-        SemanticControls.instance.installIfEligible();
       } else {
         WidgetsFlutterBinding.ensureInitialized();
       }

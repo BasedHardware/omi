@@ -26,6 +26,11 @@ enum Environment {
 class F {
   static Environment env = Environment.fromFlavor();
 
+  static void configureForStartup([String? flavor = appFlavor]) {
+    env = Environment.tryFromFlavor(flavor) ??
+        (throw StateError('Unsupported build flavor "${flavor ?? '<missing>'}". Use dev, prod, or raybanDat.'));
+  }
+
   static String get title {
     switch (env) {
       case Environment.prod:
