@@ -190,9 +190,18 @@ async def test_rederive_retires_prior_copies_no_new_window_claims(builder, monke
     )
     monkeypatch.setattr(service.models, 'outline', lambda *a: SCENARIOS['long_visible'][1])
     seen = {}
-    monkeypatch.setattr(service, '_commit', lambda *a, **kw: seen.update(kw))
-    await service.reconcile('u', derive=True, since=AT, until=AT + timedelta(days=1), run_id=RUN, rederive=True)
+
+    def commit(*args, **kwargs):
+        seen.update(kwargs)
+        return set()
+
+    monkeypatch.setattr(service, '_commit', commit)
+    report = {}
+    await service.reconcile(
+        'u', derive=True, since=AT, until=AT + timedelta(days=1), run_id=RUN, rederive=True, report=report
+    )
     assert seen['remove'] == ['stale'] and seen['key'] == store.BACKFILL_LEASE
+    assert report['rows_removed'] == 0
 
 
 @pytest.mark.asyncio
@@ -340,7 +349,7 @@ def test_estimate_prices_each_stretch_on_the_live_notes_floors(monkeypatch):
 @pytest.mark.parametrize('letter', ['界', 'あ'])
 def test_backfill_estimate_uses_script_aware_notes_floors(monkeypatch, letter):
     sources = {}
-    for index, words in enumerate((19, 20, 299, 300)):
+    for index, words in enumerate((19, 20, 149, 150)):
         cid = f'capture-{index}'
         row = legacy(cid, AT + timedelta(minutes=10 * index), words)
         row['transcript_segments'][0]['text'] = letter * words
@@ -349,7 +358,7 @@ def test_backfill_estimate_uses_script_aware_notes_floors(monkeypatch, letter):
     estimate = backfill.estimate_partition(
         'u', {'since': AT, 'until': AT + timedelta(days=1)}, RUN, now=AT + timedelta(days=2)
     )
-    assert estimate['words'] == 19 + 20 + 299 + 300
+    assert estimate['words'] == 19 + 20 + 149 + 150
     assert estimate['no_model_windows'] == 1
     assert estimate['short_task_calls'] == 2
     assert estimate['notes_calls'] == 1

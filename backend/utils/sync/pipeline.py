@@ -2164,6 +2164,11 @@ def _reprocess_merged_conversations(
             if on_fenced:
                 on_fenced()
             logger.info('event=sync_conversation_reprocess outcome=fenced conversation_id=%s', conversation_id)
+        except SyncAssignmentSuperseded:
+            # User authority refused this conversation's pending bridge. Its
+            # speech already landed; skip only its reprocess and keep the rest
+            # of the batch (and the job) terminal instead of erroring.
+            logger.debug('event=sync_conversation_reprocess outcome=superseded')
         except Exception as e:
             if coalescing or user_selected or is_destructive_operation_in_progress(e):
                 raise

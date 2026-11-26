@@ -109,15 +109,79 @@ def ensure_private_dir(path: Path) -> Path:
 
 
 def _subdir(path: Path) -> Path:
-    """A directory below an already-validated root: create 0700 without re-walking parents."""
-    path.mkdir(mode=0o700, parents=True, exist_ok=True)
+    """A directory below an already-validated root: create it and every missing parent 0700 (``mkdir -p``
+    would give the parents the umask's default mode), without re-validating existing ones."""
+    path = Path(path)
+    missing = []
+    probe = path
+    while not probe.exists():
+        missing.append(probe)
+        probe = probe.parent
+    for directory in reversed(missing):
+        try:
+            directory.mkdir(mode=0o700)
+        except FileExistsError:
+            continue
+        os.chmod(directory, 0o700)  # mkdir's mode is masked by the umask
     return path
 
 
 private_subdir = _subdir
 
 
+def private_dir(path: Path, what: str = 'lab output') -> Path:
+    """``ensure_private_dir`` for a directory a command was told to write into (``--keep``, ``--out``).
+
+    An existing directory that is group/other accessible, foreign or a symlink is refused, not
+    chmod-ed: it may be someone else's tree. The message names the policy and the path only."""
+    try:
+        return ensure_private_dir(Path(path))
+    except StoreRefused as refused:
+        raise StoreRefused(f'{what} {path}: {refused} (use a new path or chmod 700 it yourself)') from None
+
+
+@contextlib.contextmanager
+def private_tempdir(root: Path) -> Iterator[Path]:
+    """``tempfile`` and ``$TMPDIR`` point at ``<root>/tmp/product`` (owner-only) for the block, then back.
+
+    Product code the lab runs on owner data makes its own temp files (``utils/batch_pipeline``, ``utils/sync``)
+    in the system temp directory; under this they land inside the private lab root instead. ``TMPDIR`` is
+    inherited by the lab environment (``stack/env.py``) and by child processes."""
+    import tempfile
+
+    directory = ensure_private_dir(Path(root) / 'tmp' / 'product')
+    previous_env, previous_dir = os.environ.get('TMPDIR'), tempfile.tempdir
+    os.environ['TMPDIR'] = str(directory)
+    tempfile.tempdir = str(directory)
+    try:
+        yield directory
+    finally:
+        tempfile.tempdir = previous_dir
+        if previous_env is None:
+            os.environ.pop('TMPDIR', None)
+        else:
+            os.environ['TMPDIR'] = previous_env
+
+
+def private_write_text(path: Path, text: str) -> Path:
+    """Replace ``path`` atomically with ``text``, created 0600 (parents 0700)."""
+    atomic_write_bytes(Path(path), text.encode('utf-8'))
+    return Path(path)
+
+
+def private_open(path: Path, mode: str = 'wb') -> Any:
+    """A file object on ``path`` created 0600 and never through a symlink: ``wb`` truncates, ``ab`` appends.
+
+    For streams another process writes (an emulator's log), where an atomic replace cannot work."""
+    flags = os.O_WRONLY | os.O_CREAT | os.O_NOFOLLOW | (os.O_APPEND if mode.startswith('a') else os.O_TRUNC)
+    _subdir(Path(path).parent)
+    fd = os.open(path, flags, 0o600)
+    os.fchmod(fd, 0o600)  # an existing file keeps its mode through O_CREAT
+    return os.fdopen(fd, mode)
+
+
 def atomic_write_bytes(path: Path, body: bytes) -> None:
+    path = Path(path)
     _subdir(path.parent)
     temp = path.with_name(f'.{path.name}.{secrets.token_hex(6)}.tmp')
     fd = os.open(temp, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
@@ -319,6 +383,46 @@ class Store:
         path = self.cache_path(stage, key)
         atomic_write_json(path, {**value, 'key': key, 'stage': stage, 'stored_at': utc_iso()})
         return path
+
+    def cache_files_dir(self, stage: str, key: str) -> Path:
+        """Where a cache entry's stored artifacts live (run files, by path relative to the run dir)."""
+        return self.cache_path(stage, key).with_suffix('.files')
+
+    @staticmethod
+    def _artifact_parts(relative: str) -> tuple[str, ...]:
+        parts = Path(relative).parts
+        if not parts or Path(relative).is_absolute():
+            raise StoreRefused('artifact path must be relative to the run directory')
+        for part in parts:
+            safe_segment(part, 'artifact path segment')
+        return parts
+
+    def cache_put_files(self, stage: str, key: str, source_dir: Path, relatives: Sequence[str]) -> dict[str, str]:
+        """Copy run files into the entry's artifact directory; returns ``{relative: sha256}``."""
+        import hashlib
+
+        base = self.cache_files_dir(stage, key)
+        digests: dict[str, str] = {}
+        for relative in relatives:
+            parts = self._artifact_parts(relative)
+            body = Path(source_dir).joinpath(*parts).read_bytes()
+            atomic_write_bytes(base.joinpath(*parts), body)
+            digests[relative] = hashlib.sha256(body).hexdigest()
+        return digests
+
+    def cache_files_present(self, stage: str, key: str, relatives: Sequence[str]) -> bool:
+        base = self.cache_files_dir(stage, key)
+        try:
+            return all(base.joinpath(*self._artifact_parts(r)).is_file() for r in relatives)
+        except StoreRefused:
+            return False
+
+    def cache_restore_files(self, stage: str, key: str, target_dir: Path, relatives: Sequence[str]) -> None:
+        """Write an entry's artifacts back into a run directory (same relative paths)."""
+        base = self.cache_files_dir(stage, key)
+        for relative in relatives:
+            parts = self._artifact_parts(relative)
+            atomic_write_bytes(Path(target_dir).joinpath(*parts), base.joinpath(*parts).read_bytes())
 
     # ---- runs ------------------------------------------------------------------
 

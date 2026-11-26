@@ -45,6 +45,7 @@ class STTAdapter(Protocol):
     provider: str
     model: str
     destination: str
+    source: str  # vendor | local | synthetic (``format.SOURCES``): stored on the cassette
 
     def estimate_usd(self, request: STTRequest) -> float: ...
 
@@ -81,6 +82,7 @@ class StubAdapter:
 
     name = 'stub'
     destination = 'local stub (no vendor)'
+    source = 'synthetic'
 
     def __init__(
         self,
@@ -122,6 +124,7 @@ class PrerecordedAdapter:
     """
 
     name = 'prerecorded'
+    source = 'vendor'
 
     def __init__(self, *, provider: str, model: str, estimate: Callable[[STTRequest], float] | None = None):
         self.provider, self.model = provider, model
@@ -171,6 +174,7 @@ class ParakeetBatchAdapter:
     """
 
     name = 'parakeet_batch'
+    source = 'vendor'  # the production batch model on its hosted endpoint, not this machine
 
     def __init__(
         self,
@@ -215,21 +219,38 @@ class ParakeetBatchAdapter:
         return list(raw or []), detected
 
     def transcribe(self, request: STTRequest) -> STTResponse:
-        window_bytes = int(self.window_seconds * BYTES_PER_SECOND) // 2 * 2
-        words: list[Word] = []
-        detected = None
-        for offset in range(0, len(request.pcm16), window_bytes):
-            chunk = request.pcm16[offset : offset + window_bytes]
-            if not chunk:
-                continue
-            start = offset / BYTES_PER_SECOND
-            raw, language = self._transcribe_window(pcm16_to_wav(chunk), request.language)
-            detected = detected or language
-            index = int(start // self.window_seconds)
-            for word in words_from_prerecorded(raw):
-                speaker = _window_speaker_id(index, word.speaker) if word.speaker is not None else None
-                words.append(Word(word.start + start, word.end + start, word.text, speaker))
+        def window(chunk: bytes, language: str | None) -> tuple[list[Word], str | None]:
+            raw, detected = self._transcribe_window(pcm16_to_wav(chunk), language)
+            return words_from_prerecorded(raw), detected
+
+        words, detected = windowed_words(request.pcm16, request.language, self.window_seconds, window)
         return STTResponse(words, detected, self.provider, self.model)
+
+
+def windowed_words(
+    pcm16: bytes,
+    language: str | None,
+    window_seconds: float,
+    transcribe_window: Callable[[bytes, str | None], tuple[list[Word], str | None]],
+) -> tuple[list[Word], str | None]:
+    """Fixed windows of ``window_seconds`` (the record lane's longest VAD-packed window), each transcribed on
+    its own and shifted onto the stretch clock. Speaker labels are made unique per window, since a model
+    that diarizes restarts its labels at 0 on every call."""
+    window_bytes = int(window_seconds * BYTES_PER_SECOND) // 2 * 2
+    words: list[Word] = []
+    detected = None
+    for offset in range(0, len(pcm16), window_bytes):
+        chunk = pcm16[offset : offset + window_bytes]
+        if not chunk:
+            continue
+        start = offset / BYTES_PER_SECOND
+        found, language_found = transcribe_window(chunk, language)
+        detected = detected or language_found
+        index = int(start // window_seconds)
+        for word in found:
+            speaker = _window_speaker_id(index, word.speaker) if word.speaker is not None else None
+            words.append(Word(word.start + start, word.end + start, word.text, speaker, word.confidence))
+    return words, detected
 
 
 def _window_speaker_id(window: int, speaker: object) -> str:

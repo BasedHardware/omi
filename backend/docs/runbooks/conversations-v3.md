@@ -105,7 +105,7 @@ even below 20 words. Naturally ended media is hidden. Background hides only
 with positive wearer recognition somewhere in the contributing recordings:
 `is_user: true` or a segment-bound wearer label from authoritative speaker
 evidence. Without it, background becomes conversation and uses the normal
-300-word rule or the manual-end override. `kind`, `outline_kind` and the
+150-word rule or the manual-end override. `kind`, `outline_kind` and the
 classification reason remain available for analytics.
 Set `CONVERSATIONS_V3_MANUAL_END_HOME_VISIBLE=off` on every service that runs the
 v3 reconcile (`backend` for on-open rebuilds, `backend-sync`, `backend-sync-backfill`)
@@ -133,6 +133,11 @@ without waiting for the batch merge and delivery. The batch record projection la
 provisional segments; once `record_projection_revision` is set the fast write is refused. Recordings
 over 20 minutes, partial records, custom STT, locked rows and private rows are skipped. Read
 `omi_conversations_v3_fast_finish_total{outcome}` and `omi_conversations_v3_fast_finish_seconds{stage}`.
+A manual finish that never starts the pass is counted in
+`omi_conversations_v3_fast_finish_skipped_total{reason}`: `mode_off`, `already_started`, or the first
+failing `fast_finish.candidate_rejection` predicate (`not_recording`, `no_manual_end`,
+`status_in_progress`, `status_processing`, `status_other`, `no_private_cloud_sync`, `protection_level`,
+`projection_revision`, `audio_partial`, `deleted`, `discarded`, `locked`, `custom_stt`).
 Five minutes of placed-speech silence is a hard window boundary. An outline's
 `resumes_previous` may undo a topic split within that interval, never rejoin
 windows across the silence boundary, even with the same people. Short socket
@@ -153,7 +158,7 @@ proof of acoustic silence; qualify transcript completeness separately.
 `CONVERSATIONS_V3_STRETCH_COHESION` defaults to `on`. The outline renders
 stretch-local speaker labels, and short conversational topics fold within the
 same silence, manual-end and two-hour cap boundaries. Home evaluates the
-300-word threshold against that fresh stretch. Media, recognized background
+150-word threshold against that fresh stretch. Media, recognized background
 and late fragments around published claims retain their own visibility rules.
 Set the switch to `off` on v3 builder and backfill runners to restore the prior
 prompt and per-topic Home minimum for subsequent passes. Existing published
@@ -164,12 +169,22 @@ controls recorded-speech grouping (120–1800 seconds), and `CONVERSATIONS_V3_LO
 controls when a card locks and owes notes (120–3600 seconds). Both default to
 300. Invalid values use the defaults. When either value differs from its
 default, the existing summary-open path and explicit End bypass the lock timer.
-Setting both values back to 300 or disabling cohesion restores the prior
-timing; provisional rows remain reachable for the builder to finish.
+Setting both values back to 300 restores the default lock delay, still counted
+from landing unless `CONVERSATIONS_V3_SETTLE_ON_LANDING=off`; disabling cohesion
+restores the prior timing. Provisional rows remain reachable for the builder to finish.
 A lock delay shorter than the silence threshold can finalize an initial card
 while later speech still belongs to the same outline stretch. Later speech
 gets its own continuation. Reconciliation can merge settled cards when the
 outline and the loaded source claims cover the complete merge.
+
+`CONVERSATIONS_V3_TRANSCRIPT_SIZE_CAP` defaults to on. A new derived window also splits
+before its estimated encoded `transcript_segments` (enhanced encryption included) passes
+900 KiB, below Firestore's 1,048,487-byte per-field limit. Splits use the duration cap's
+continuation path; only unpublished windows split, and locked rows keep their boundaries.
+Count `event=v3_transcript_size_cap_split` log lines to see splits. A commit Firestore still
+rejects for size (whole document or one property) parks the owner as `document_too_large`
+instead of retrying. To roll back, set `CONVERSATIONS_V3_TRANSCRIPT_SIZE_CAP=off` on builder
+and backfill runners.
 
 `CONVERSATIONS_V3_MAX_WINDOW_SECONDS` defaults to 10800 (three hours).
 The first transcript line whose recorded start reaches the limit starts a new
@@ -207,13 +222,16 @@ rows cut by earlier code or an earlier pass keep their cut (even when a turn
 straddles it or a held turn is revised) and the cap counts from there. A locked
 row that owns none of the stretch's lines never cuts it.
 
-Under custom timing (either setting differs from 300), the lock delay counts
+With stretch cohesion on, live passes count the lock delay
 from the later of the stretch's last speech and when that speech landed
 (`v3_speech_landed_at`, written in the same transaction as the speech by the
 live transcript write and sync assignment, and only when the speech changed). A
 batch of old speech from
 offline sync then waits the lock delay after landing instead of locking on
-arrival. Default timing still counts from the last speech.
+arrival. Custom timing (either setting differs from 300) always uses this clock.
+At the default timing, `CONVERSATIONS_V3_SETTLE_ON_LANDING` (default on) selects it;
+set it to `off` to count from the last speech again. Backfill and re-derive keep the
+recorded clock.
 
 The recording-speaker picker for a derived conversation reads and edits only
 that copied window. Shared source scopes cannot expand it into other product

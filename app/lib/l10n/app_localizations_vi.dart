@@ -15833,4 +15833,14 @@ class AppLocalizationsVi extends AppLocalizations {
   String playStripePlanPaused(String plan) {
     return 'Gói $plan của bạn đang tạm dừng.';
   }
+
+  @override
+  String get firmwareNewestSupportedForDevice => 'Thiết bị của bạn đã dùng phiên bản firmware mới nhất được hỗ trợ';
+
+  @override
+  String get firmwareSyncRecordingsFirstTitle => 'Hãy đồng bộ bản ghi âm của bạn trước';
+
+  @override
+  String get firmwareSyncRecordingsFirstMessage =>
+      'Một số bản ghi âm vẫn còn trên thiết bị của bạn. Hãy đợi chúng đồng bộ xong lên điện thoại, sau đó bắt đầu cập nhật.';
 }

@@ -1,10 +1,14 @@
 """Manual-finish first transcript: gating, audio layout, provisional write and failure containment."""
 
 import asyncio
+import itertools
+import re
 import threading
 from datetime import datetime, timezone
+from pathlib import Path
 
 import pytest
+import yaml
 
 from config import rollout_cohorts
 from database import _client as db_client
@@ -17,7 +21,7 @@ from utils import stt_cap_dispatch
 # Imported at module load: record admission is a heavy import, and one made inside a test is
 # charged to that test's CPU budget.
 from utils.batch_pipeline import live
-from utils.conversations.v3 import fast_finish, triggers
+from utils.conversations.v3 import fast_finish, metrics as v3_metrics, triggers
 from utils.observability.stt_cap_dispatch import DispatchPath
 from utils.stt import pre_recorded
 
@@ -795,4 +799,135 @@ def test_at_most_two_passes_run_at_once(monkeypatch):
 def test_admission_survives_a_broken_hook(monkeypatch):
     live._FAST_FINISH_STARTED.clear()
     monkeypatch.setattr(fast_finish, 'candidate', boom)
+    monkeypatch.setattr(fast_finish, 'candidate_rejection', boom)
     asyncio.run(live._manual_finish_admitted(_Store(row()), UID, 'cid', row(), [UNIT, UNIT], object(), b'k'))
+
+
+# --- Why a manual finish never started a fast pass -------------------------------------------------
+
+
+def _reference_candidate(row_):
+    """``candidate`` as it read before ``candidate_rejection``: the oracle for the equivalence test."""
+    return bool(
+        row_.get('recording') is True
+        and (row_.get('v3_manual_end_requested') is True or row_.get('v3_manual_end') is True)
+        and row_.get('status') == 'completed'
+        and row_.get('private_cloud_sync_enabled')
+        and row_.get('data_protection_level', 'enhanced') in {'standard', 'enhanced'}
+        and not row_.get('record_projection_revision')
+        and not row_.get('record_audio_partial')
+        and not any(row_.get(key) for key in ('deleted', 'discarded', 'is_locked', 'uses_custom_stt'))
+    )
+
+
+@pytest.mark.parametrize(
+    'change,reason',
+    [
+        ({}, None),
+        ({'recording': False}, 'not_recording'),
+        ({'recording': 'true'}, 'not_recording'),
+        ({'v3_manual_end_requested': None}, 'no_manual_end'),
+        ({'v3_manual_end_requested': None, 'v3_manual_end': True}, None),
+        ({'status': 'in_progress'}, 'status_in_progress'),
+        ({'status': 'processing'}, 'status_processing'),
+        ({'status': 'merging'}, 'status_other'),
+        ({'status': 'failed'}, 'status_other'),
+        ({'status': None}, 'status_other'),
+        ({'status': 'an-unbounded-value'}, 'status_other'),
+        ({'private_cloud_sync_enabled': False}, 'no_private_cloud_sync'),
+        ({'data_protection_level': 'private'}, 'protection_level'),
+        ({'data_protection_level': 'standard'}, None),
+        ({'record_projection_revision': 3}, 'projection_revision'),
+        ({'record_audio_partial': True}, 'audio_partial'),
+        ({'deleted': True}, 'deleted'),
+        ({'discarded': True}, 'discarded'),
+        ({'is_locked': True}, 'locked'),
+        ({'uses_custom_stt': True}, 'custom_stt'),
+        # The first failing predicate wins.
+        ({'recording': False, 'deleted': True}, 'not_recording'),
+        ({'status': 'processing', 'is_locked': True}, 'status_processing'),
+        ({'deleted': True, 'uses_custom_stt': True}, 'deleted'),
+    ],
+)
+def test_candidate_rejection_names_the_first_failing_predicate(change, reason):
+    current = row(**change)
+    assert fast_finish.candidate_rejection(current) == reason
+    assert reason is None or reason in fast_finish.SKIP_REASONS
+    assert fast_finish.candidate(current) is (reason is None)
+
+
+def test_candidate_matches_its_previous_definition_on_every_field_combination():
+    values = {
+        'recording': (True, False, None),
+        'v3_manual_end_requested': (True, None),
+        'v3_manual_end': (True, None),
+        'status': ('completed', 'in_progress', 'processing', 'failed', None),
+        'private_cloud_sync_enabled': (True, False),
+        'data_protection_level': ('enhanced', 'standard', 'private', None),
+        'record_projection_revision': (None, 1),
+        'record_audio_partial': (None, True),
+        'deleted': (None, True),
+        'discarded': (None, True),
+        'is_locked': (None, True),
+        'uses_custom_stt': (None, True),
+    }
+    keys = list(values)
+    checked = 0
+    for combination in itertools.product(*(values[key] for key in keys)):
+        current = {key: value for key, value in zip(keys, combination) if value is not None}
+        reason = fast_finish.candidate_rejection(current)
+        assert fast_finish.candidate(current) is _reference_candidate(current) is (reason is None)
+        assert reason is None or reason in fast_finish.SKIP_REASONS
+        checked += 1
+    assert checked == 3 * 2 * 2 * 5 * 2 * 4 * 2**6
+
+
+def _skipped(reason):
+    return fast_finish.SKIPPED.labels(reason)._value.get()
+
+
+def _manual_end(reason):
+    return v3_metrics.BATCH_MANUAL_END.labels(reason)._value.get()
+
+
+@pytest.mark.parametrize(
+    'mode,change,units,reason',
+    [
+        ('off', {}, [UNIT], 'mode_off'),
+        ('off', {'deleted': True}, [UNIT, UNIT], 'mode_off'),
+        ('cohort', {'status': 'processing'}, [UNIT, UNIT], 'status_processing'),
+        ('on', {'uses_custom_stt': True}, [UNIT], 'custom_stt'),
+        ('cohort', {'private_cloud_sync_enabled': False}, [UNIT, UNIT], 'no_private_cloud_sync'),
+    ],
+)
+def test_an_early_return_counts_its_reason(monkeypatch, mode, change, units, reason):
+    monkeypatch.setenv('CONVERSATIONS_V3_FAST_FINISH', mode)
+    before, deferred = _skipped(reason), _manual_end('multi_unit_deferred')
+    # A skip never starts the pass; a single unit is still promoted, several are deferred as before.
+    assert _admit(monkeypatch, row(**change), units) == {'fast': 0, 'promote': int(len(units) == 1), 'cut': 0}
+    assert _skipped(reason) == before + 1
+    assert _manual_end('multi_unit_deferred') == deferred + int(len(units) > 1)
+
+
+def test_a_second_admission_counts_already_started(monkeypatch):
+    before = _skipped('already_started')
+    assert _admit_many(monkeypatch, ['cid', 'cid'], threading.Event()) == ['cid']
+    assert _skipped('already_started') == before + 1
+
+
+def test_a_started_pass_counts_no_skip(monkeypatch):
+    before = {reason: _skipped(reason) for reason in fast_finish.SKIP_REASONS}
+    assert _admit(monkeypatch, row(), [UNIT, UNIT]) == {'fast': 1, 'promote': 0, 'cut': 1}
+    assert {reason: _skipped(reason) for reason in fast_finish.SKIP_REASONS} == before
+
+
+def test_cloud_run_sync_scrapes_fast_finish_skips():
+    # FC-metric-dropped-by-scrape-allowlist: a dropped counter reads as a healthy zero.
+    profile = Path(__file__).resolve().parents[2] / 'deploy' / 'cloud_run_gmp_sync.yaml'
+    rules = yaml.safe_load(profile.read_text())['spec']['endpoints'][0]['metricRelabeling']
+    (rule,) = [r for r in rules if r['action'] == 'keep' and r['sourceLabels'] == ['__name__']]
+    for counter in (fast_finish.SKIPPED, fast_finish.OUTCOMES):
+        samples = [s for family in counter.collect() for s in family.samples if s.name.endswith('_total')]
+        assert samples and all(re.fullmatch(rule['regex'], s.name) for s in samples)
+    reasons = {s.labels['reason'] for f in fast_finish.SKIPPED.collect() for s in f.samples}
+    assert reasons == set(fast_finish.SKIP_REASONS)

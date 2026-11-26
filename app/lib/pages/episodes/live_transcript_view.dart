@@ -26,6 +26,8 @@ import 'package:omi/providers/people_provider.dart';
 import 'package:omi/providers/usage_provider.dart';
 import 'package:omi/services/live_preview/live_preview_controller.dart';
 import 'package:omi/services/live_preview/live_preview_coverage.dart';
+import 'package:omi/services/live_preview/live_words_hole.dart';
+import 'package:omi/services/live_preview/live_words_log.dart';
 import 'package:omi/services/wals/wal.dart';
 import 'package:omi/ui/components/local_stt_recovery_notice.dart';
 import 'package:omi/ui/ui.dart';
@@ -33,6 +35,7 @@ import 'package:omi/utils/constants.dart';
 import 'package:omi/utils/enums.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/other/temp.dart';
+import 'package:omi/utils/reliability_experiments.dart';
 import 'package:omi/widgets/conversation_photo_image.dart';
 import 'package:omi/widgets/media_viewer_page.dart';
 import 'package:omi/widgets/photos_grid.dart';
@@ -77,6 +80,40 @@ class LiveTranscriptView extends StatefulWidget {
 class _LiveTranscriptViewState extends State<LiveTranscriptView> {
   final TranscriptScrollStateStore _transcriptScrollStateStore = TranscriptScrollStateStore();
   bool _rejectingSuggestion = false;
+
+  // Reliability experiment vendor_recognizer_on_opened_app, step 4: a local record, numbers only, of
+  // what this page holds (stored lines, live lines, the hole between them) when it opens and every
+  // 10 s while it stays open. Off, nothing is scheduled.
+  Timer? _holeReport;
+
+  @override
+  void initState() {
+    super.initState();
+    if (ReliabilityExperiments.enabled('vendor_recognizer_on_opened_app')) {
+      _holeReport = Timer.periodic(const Duration(seconds: 10), (_) => _reportHole());
+      WidgetsBinding.instance.addPostFrameCallback((_) => _reportHole(opened: true));
+    }
+  }
+
+  @override
+  void dispose() {
+    _holeReport?.cancel();
+    super.dispose();
+  }
+
+  void _reportHole({bool opened = false}) {
+    if (!mounted) return;
+    final provider = context.read<CaptureProvider>();
+    LiveWordsLog.event('listening_page', {
+      'opened': opened,
+      ...LiveWordsHole.measure(
+        stored: provider.segments,
+        origin: provider.liveTranscriptStartedAt,
+        live: provider.livePreview?.lines ?? const [],
+        now: DateTime.now(),
+      ),
+    });
+  }
 
   TranscriptScrollState _scrollStateFor(String sessionId) => _transcriptScrollStateStore.forSession(sessionId);
 
@@ -724,7 +761,7 @@ class _LiveTranscriptViewState extends State<LiveTranscriptView> {
   /// no preview engine, and a photo timeline always keeps today's view.
   bool _showsLivePreview(CaptureProvider provider) {
     final preview = provider.livePreview;
-    if (preview == null || !provider.localPreviewAdmitted || !preview.admitted) return false;
+    if (preview == null || !provider.liveWordsShown || !preview.admitted) return false;
     if (!provider.pendantCaptureVerified || provider.photos.isNotEmpty) return false;
     return provider.segments.isEmpty || preview.phase != LivePreviewPhase.unavailable;
   }

@@ -628,6 +628,36 @@ def test_contention_control_retains_existing_expired_transaction_restart(monkeyp
     assert operation.call_args_list[0] != operation.call_args_list[1]
 
 
+def test_projection_bridge_superseded_keeps_the_receipt_canonical(binding, monkeypatch, caplog):
+    from utils.sync.assignment_errors import SyncAssignmentSuperseded
+
+    projector = projection.Projector(Mock(), Mock(), playback=Mock())
+    monkeypatch.setattr(projector.store, 'settle_deleted_output', Mock())
+    mark = Mock()
+    monkeypatch.setattr(projector.store, 'mark_enrichment', mark)
+    monkeypatch.setattr(
+        bridge,
+        'finish_sync_bridges',
+        Mock(side_effect=SyncAssignmentSuperseded('sync anchor is user managed')),
+    )
+    receipt = {
+        'state': 'persisted',
+        'conversation_id': 'managed',
+        'audio_required': False,
+        'enrichment_required': True,
+        'language': 'en',
+    }
+    policy = resolve_stage_policy(binding.owner_id, 'projection')
+
+    with caplog.at_level(logging.DEBUG, logger=projection.__name__):
+        projector.finish_part(Mock(), binding, receipt, None, policy=policy)
+
+    assert 'event=batch_projection action=bridge outcome=superseded' in caplog.text
+    # The assignment already committed: follow-up stays on its own canonical.
+    mark.assert_called_once()
+    assert mark.call_args.args[3] == 'managed'
+
+
 @pytest.mark.parametrize('engine', ['go', 'pending'])
 def test_projection_bridge_refuses_foreign_target_before_followup(binding, monkeypatch, engine):
     from utils.sync import processing_hold
@@ -1225,7 +1255,9 @@ def test_committed_transcript_signals_episode_before_playback_or_enrichment(bind
     assert events == ['commit', 'signal', 'finish']
 
 
-def native_finish_completion(monkeypatch, db, uid, cid, unit_count, *, empty_outcome=None):
+def native_finish_completion(
+    monkeypatch, db, uid, cid, unit_count, *, empty_outcome=None, native_record=True, settle_allowance=None
+):
     """Supply ready sibling fixtures; use the real completion transaction and ledger writer."""
     from contextlib import nullcontext
 
@@ -1243,8 +1275,8 @@ def native_finish_completion(monkeypatch, db, uid, cid, unit_count, *, empty_out
         content,
         (first, *(f'second-{i}' for i in range(unit_count - 1))),
         target_conversation_id=cid,
-        record_origin=True,
-        native_record=True,
+        record_origin=native_record,
+        native_record=native_record,
     )
     ledger = sync_content_ledger_ref(db, uid, content)
     db.rows[ledger.path] = {
@@ -1270,7 +1302,7 @@ def native_finish_completion(monkeypatch, db, uid, cid, unit_count, *, empty_out
     session.prepare.side_effect = lambda tx, **_: setattr(session, 'ledger', ledger.get(transaction=tx).to_dict())
     monkeypatch.setattr(store, 'session', lambda *a, **k: session)
     monkeypatch.setattr(store, '_observe_transcription', Mock())
-    monkeypatch.setattr(store, '_settle_allowance', Mock())
+    monkeypatch.setattr(store, '_settle_allowance', settle_allowance if settle_allowance is not None else Mock())
     monkeypatch.setattr(store, 'run', lambda operation, **_: operation(db.transaction()))
     accounting = {'seconds': 0.0 if empty_outcome else float(unit_count), 'updates': {}}
 
@@ -1278,6 +1310,30 @@ def native_finish_completion(monkeypatch, db, uid, cid, unit_count, *, empty_out
         return store.complete(first, binding, now, accounting)
 
     return complete, ledger.path, [db.rows[f'{namespace}_results', sid]['projection'] for sid in binding.segment_ids]
+
+
+def test_ordinary_upload_observes_first_durable_transcript_only(monkeypatch):
+    from database import batch_pipeline_upload_metrics as metrics
+
+    monkeypatch.setenv('OMI_ENV_STAGE', 'dev')
+    uid, cid = 'synthetic-owner', 'synthetic-conversation'
+    db = StrictFirestore({('users', uid, 'conversations', cid): {'status': 'completed'}})
+    settle_allowance = Mock(side_effect=[RuntimeError('synthetic post-commit failure'), None])
+    complete, ledger_path, _ = native_finish_completion(
+        monkeypatch, db, uid, cid, 2, native_record=False, settle_allowance=settle_allowance
+    )
+    db.rows[ledger_path].update(
+        upload_arrived_at=100.0, upload_entitlement='free', upload_hold_state='bg300', upload_recovered=True
+    )
+    delivered = Mock()
+    monkeypatch.setattr(metrics, 'DELIVERED', delivered)
+
+    with pytest.raises(RuntimeError, match='synthetic post-commit failure'):
+        complete(172.0)
+    assert db.rows[ledger_path]['status'] == 'completed'
+    assert complete(200.0) is not None
+    delivered.labels.assert_called_once_with('free', 'bg300', 'true')
+    delivered.labels.return_value.observe.assert_called_once_with(72.0)
 
 
 @pytest.mark.parametrize('marker_mode', ['on', 'off'])

@@ -10,7 +10,7 @@ from functools import lru_cache
 from math import floor, isfinite
 
 from prometheus_client import Counter
-import redis
+from redis import RedisError
 
 from database.redis_connection import create_bounded_redis_client
 from utils.observability.fallback import record_fallback
@@ -66,7 +66,7 @@ def _coverage(ids) -> frozenset[str]:
 
 def _fallback(error: Exception, *, outcome: str) -> None:
     global _redis_retry_at
-    if isinstance(error, redis.RedisError):
+    if isinstance(error, RedisError):
         _redis_retry_at = time.monotonic() + REDIS_RETRY_SECONDS
     OUTCOMES.labels(outcome).inc()
     record_fallback(
@@ -115,7 +115,7 @@ def read(client, owner: str, ids, expected_generation: int | None, *, shadow: bo
             return None
         OUTCOMES.labels('covered').inc()
         return Decision(started, (token, revision, nanos), generation)
-    except (redis.RedisError, ValueError, TypeError, OverflowError) as error:
+    except (RedisError, ValueError, TypeError, OverflowError) as error:
         _fallback(error, outcome='get_error')
         return None
 
@@ -131,7 +131,7 @@ def store(client, owner: str, ids, version, generation: int, *, started: float) 
     try:
         _redis().set(key, payload, px=remaining)
         OUTCOMES.labels('stored').inc()
-    except (redis.RedisError, ValueError) as error:
+    except (RedisError, ValueError) as error:
         _fallback(error, outcome='set_error')
 
 

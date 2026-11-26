@@ -6,10 +6,19 @@ import math
 started_at: ContextVar[float | None] = ContextVar('omi_request_started_at', default=None)
 
 CLASSES = frozenset({'paid', 'trial', 'free', 'unknown'})
+HOLD_STATES = frozenset({'none', 'bg300', 'fg_preview300', 'fg60', 'unknown'})
 
 
 def bounded_class(value):
     return value if isinstance(value, str) and value in CLASSES else 'unknown'
+
+
+def bounded_hold_state(value):
+    return value if isinstance(value, str) and value in HOLD_STATES else 'unknown'
+
+
+def recovered_label(value):
+    return 'true' if value is True else 'false'
 
 
 def clock_fields(arrived_at, entitlement):
@@ -20,4 +29,9 @@ def clock_fields(arrived_at, entitlement):
 
 def context_fields(context):
     context = context or {}
-    return clock_fields(context.get('upload_arrived_at'), context.get('upload_entitlement'))
+    fields = clock_fields(context.get('upload_arrived_at'), context.get('upload_entitlement'))
+    if 'upload_hold_state' in context:
+        fields['upload_hold_state'] = bounded_hold_state(context['upload_hold_state'])
+    if context.get('upload_recovered') is True:
+        fields['upload_recovered'] = True
+    return fields

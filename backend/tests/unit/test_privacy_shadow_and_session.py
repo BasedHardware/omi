@@ -50,10 +50,20 @@ def world(monkeypatch):
     monkeypatch.setattr(StrictFirestoreDocument, 'get', get)
     monkeypatch.setattr(tombstones, 'db', db)
     monkeypatch.setattr(cache, '_redis', lambda: redis)
-    monkeypatch.setenv('FIRESTORE_READ_LEVERS', '{}')
+    # The shared owner cache merges dark (code default 0); this world exercises it enabled.
+    monkeypatch.setenv('FIRESTORE_READ_LEVERS', '{"bpp_shared_owner_cache":100}')
     redis = fakeredis.FakeRedis()
     yield db, reads, revision, redis
     redis.close()
+
+
+def test_shared_owner_cache_merges_dark_and_status_skip_ships_on(monkeypatch):
+    from config.firestore_read_levers import lever_percent
+
+    monkeypatch.setenv('FIRESTORE_READ_LEVERS', '{}')
+    assert lever_percent('bpp_shared_owner_cache') == 0
+    assert lever_percent('bpp_shared_owner_shadow') == 0
+    assert lever_percent('bpp_status_skip') == 100
 
 
 def enable(monkeypatch, *names):

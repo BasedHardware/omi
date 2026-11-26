@@ -425,6 +425,16 @@
   ],
   "exempt": [
     {
+      "site": "backend/database/memories.py",
+      "expression": "canonical.memory_items",
+      "reason": "Existing canonical memory items. Backfill re-derive reads source links within a removal transaction. These documents store memory records and carry no work state."
+    },
+    {
+      "site": "backend/database/memories.py",
+      "expression": "canonical.memory_evidence",
+      "reason": "Existing canonical memory evidence. Backfill re-derive reads source links within a removal transaction. These documents store provenance and carry no work state."
+    },
+    {
       "collection": "operational_hold_release_plan_shards",
       "reason": "Immutable fragments of a reviewed account-erasure approval. The erasure worker reads one exact hash-prefix document for each matching object lookup. This collection carries no queue, lease, retry, or progress state and is never polled."
     },

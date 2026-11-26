@@ -24,7 +24,7 @@ from database import batch_pipeline_coalescing as rows
 from database.batch_pipeline_coalescing_identity import compatibility_key, digest
 from database.batch_pipeline_leader import LeaseLost
 from utils.batch_pipeline.contracts import WorkItem
-from config.request_clock import clock_fields
+from config.request_clock import context_fields
 from utils.batch_pipeline.capture_decode import decode_units
 from utils.batch_pipeline.scheduler import owner_key
 from utils.executors import run_blocking, db_executor, storage_executor, sync_executor
@@ -219,7 +219,7 @@ async def offer(store, artifacts, seed, *, arguments, context, language, policy,
         'lane': arguments['lane'],
         'hold_seconds': hold,
         'accepted_at': now,
-        **clock_fields(upload_context.get('upload_arrived_at'), upload_context.get('upload_entitlement')),
+        **context_fields(upload_context),
         'policy': policy.to_dict(),
         'language': language,
     }

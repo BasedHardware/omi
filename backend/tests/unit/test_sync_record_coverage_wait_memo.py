@@ -1,6 +1,7 @@
 """WAL-scoped negative coverage memo: real response and byte comparison path."""
 
 import io
+import json
 from types import SimpleNamespace
 import wave
 
@@ -34,7 +35,7 @@ class ExpiringRedis:
         return value if self.now < deadline else None
 
     def set(self, key, value, *, ex, nx):
-        assert nx and ex in (30, 300)
+        assert nx and ex > 0
         if key in self.rows and self.now < self.rows[key][1]:
             return False
         self.rows[key] = (value, self.now + ex)
@@ -57,6 +58,8 @@ def wav(pcm):
 def world(monkeypatch, tmp_path):
     monkeypatch.setenv('OMI_ENV_STAGE', 'dev')
     monkeypatch.delenv('SYNC_RECORD_COVERAGE_WAIT_MEMO', raising=False)
+    monkeypatch.delenv('SYNC_RECORD_COVERAGE_WAIT_TTL_SECONDS', raising=False)
+    monkeypatch.delenv('SYNC_RECORD_COVERAGE_WAIT_RETRY_AFTER_SECONDS', raising=False)
     monkeypatch.setenv('ENCRYPTION_SECRET', 'synthetic-test-content-secret')
     redis = ExpiringRedis()
     monkeypatch.setattr(cache, '_marker_redis', redis)
@@ -67,7 +70,7 @@ def world(monkeypatch, tmp_path):
         segment_id='segment-1',
         owner_id=uid,
         capture_at=100.0,
-        audio_uri='gs://synthetic/record-1',
+        audio_uri='gs://synthetic/record-1#1',
         duration_seconds=1.0,
         priority=0,
     )
@@ -118,13 +121,15 @@ def world(monkeypatch, tmp_path):
     return SimpleNamespace(redis=redis, store=store, job=job, counts=counts, bad=bad, good=good, upload=upload)
 
 
-async def test_same_wal_repeats_identical_503_before_decode_or_artifact_lookup(world):
+async def test_same_wal_repeats_503_with_longer_body_hint_before_decode_or_artifact_lookup(world):
     first = await world.upload()
     repeat = await world.upload()
     assert first.status_code == repeat.status_code == 503
-    assert first.body == repeat.body
-    assert dict(first.headers) == dict(repeat.headers)
-    assert 'retry-after' not in repeat.headers
+    first_body = json.loads(first.body)
+    assert first_body['code'] == 'record_capture_pending'
+    assert first_body['retry_after_seconds'] == 30
+    assert json.loads(repeat.body) == {**first_body, 'retry_after_seconds': 1800}
+    assert 'retry-after' not in first.headers and 'retry-after' not in repeat.headers
     assert world.counts == {'decode': 1, 'fetch': 1, 'artifacts': 1}
     assert world.redis.reads == 2 and world.redis.writes == 1
 
@@ -136,15 +141,15 @@ async def test_different_wal_same_filename_and_conversation_can_prove_coverage(w
     assert world.redis.writes == 1  # Positive coverage is never memoized.
 
 
-@pytest.mark.parametrize('change', ['unit_added', 'artifact_changed', 'duration_changed'])
+@pytest.mark.parametrize('change', ['unit_added', 'artifact_generation_changed', 'duration_changed'])
 async def test_record_job_change_invalidates(world, change):
     assert (await world.upload()).status_code == 503
     if change == 'unit_added':
         intake = next(row for (kind, _), row in world.store.rows.items() if kind == 'intakes')
         intake['segment_ids'].append('segment-2')
         world.store.rows['jobs', 'segment-2'] = dict(world.job, segment_id='segment-2', capture_at=101.0)
-    elif change == 'artifact_changed':
-        world.store.rows['jobs', 'segment-1']['audio_uri'] = 'gs://synthetic/record-2'
+    elif change == 'artifact_generation_changed':
+        world.store.rows['jobs', 'segment-1']['audio_uri'] = 'gs://synthetic/record-1#2'
     else:
         world.store.rows['jobs', 'segment-1']['duration_seconds'] = 2.0
     assert (await world.upload()).status_code == 503
@@ -152,12 +157,27 @@ async def test_record_job_change_invalidates(world, change):
     assert world.redis.writes == 2
 
 
+async def test_repaired_generation_can_prove_coverage_before_old_memo_expires(world, monkeypatch):
+    def fetch(item):
+        pcm = world.bad if item.audio_uri.endswith('#2') else world.good
+        return wav(pcm.read_bytes())
+
+    monkeypatch.setattr(live_upload, 'artifacts_for', lambda *_: SimpleNamespace(fetch_audio=fetch))
+    assert (await world.upload()).status_code == 503
+    assert json.loads((await world.upload()).body)['retry_after_seconds'] == 1800
+    world.store.rows['jobs', 'segment-1']['audio_uri'] = 'gs://synthetic/record-1#2'
+    assert (await world.upload()).status_code == 200
+    assert world.redis.writes == 1
+
+
 @pytest.mark.parametrize('value', ['false', '0', 'off', ' OFF '])
 async def test_kill_switch_off_runs_original_path_without_memo_io(world, monkeypatch, value):
     assert (await world.upload()).status_code == 503  # Existing entries are bypassed too.
     monkeypatch.setenv('SYNC_RECORD_COVERAGE_WAIT_MEMO', value)
     for _ in range(2):
-        assert (await world.upload()).status_code == 503
+        response = await world.upload()
+        assert response.status_code == 503
+        assert json.loads(response.body)['retry_after_seconds'] == 30
     assert world.counts['decode'] == 3
     assert world.redis.reads == world.redis.writes == 1
 
@@ -182,16 +202,15 @@ async def test_errors_are_never_memoized(world, monkeypatch, where):
 
 async def test_ttl_boundary_and_hits_never_extend_expiry(world):
     assert (await world.upload()).status_code == 503
-    world.redis.now = 299.999
+    world.redis.now = 21599.999
     assert (await world.upload()).status_code == 503
     assert world.counts['decode'] == 1
     assert world.redis.writes == 1
-    world.redis.now = 300
+    world.redis.now = 21600
     assert (await world.upload()).status_code == 503
     assert world.counts['decode'] == 2
     assert world.redis.writes == 2
-    # The coverage memo owns its 300 s window; the conversation memo keeps 30 s.
-    assert world.redis.expiries == [300, 300]
+    assert world.redis.expiries == [21600, 21600]
 
 
 def test_concurrent_negative_writes_keep_first_expiry(world):
@@ -199,8 +218,23 @@ def test_concurrent_negative_writes_keep_first_expiry(world):
     world.redis.now = 5
     cache.remember_coverage_wait('synthetic-key')
     assert world.redis.writes == 1
-    world.redis.now = 300
+    world.redis.now = 21600
     assert not cache.cached_coverage_wait('synthetic-key')
+
+
+@pytest.mark.parametrize(
+    ('value', 'ttl', 'hint'),
+    [('120', 120, 120), ('0', 30, 30), ('99999', 21600, 1800), ('invalid', 21600, 1800)],
+)
+async def test_coverage_overrides_are_bounded_and_hint_only_applies_on_a_hit(world, monkeypatch, value, ttl, hint):
+    monkeypatch.setenv('SYNC_RECORD_COVERAGE_WAIT_TTL_SECONDS', value)
+    monkeypatch.setenv('SYNC_RECORD_COVERAGE_WAIT_RETRY_AFTER_SECONDS', value)
+    first = await world.upload()
+    repeat = await world.upload()
+    assert first.status_code == repeat.status_code == 503
+    assert json.loads(first.body)['retry_after_seconds'] == 30
+    assert json.loads(repeat.body)['retry_after_seconds'] == hint
+    assert world.redis.expiries == [ttl]
 
 
 async def test_cache_outage_falls_through_to_original_response(world, monkeypatch):
@@ -283,7 +317,9 @@ async def test_memo_first_kill_switch_keeps_the_memo_after_the_copy(world, monke
     calls = spy_lease(monkeypatch)
     assert (await world.upload()).status_code == 503
     monkeypatch.setenv('SYNC_RECORD_WAIT_MEMO_FIRST', 'off')
-    assert (await world.upload()).status_code == 503
+    repeat = await world.upload()
+    assert repeat.status_code == 503
+    assert json.loads(repeat.body)['retry_after_seconds'] == 1800
     # Off restores the pre-change order: the copy runs, then the memo answers.
     assert calls['retain'] == 2
     assert calls['rearm'] == 0

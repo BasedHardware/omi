@@ -24,7 +24,14 @@ from utils.conversations import phase_shadow
 from config.policy import resolve_batch_policy
 from config.audio_archive import derived_audio_bucket
 from config.record_wal_duplicate import SOURCE_FIELD
-from config.record_audio import BARRIER_NOT_CLOSED, require_record_audio_barrier, record_identity
+from config.record_audio import (
+    BARRIER_BLOCKERS,
+    BARRIER_NOT_CLOSED,
+    TOKEN_KINDS,
+    barrier_cause_metrics_enabled,
+    record_identity,
+    require_record_audio_barrier,
+)
 from config.record_partial import UNIT_SECONDS, UNIT_REFERENCES, INVENTORY_POLL_SECONDS
 from config.record_latency import record_seal_wake_preserved_enabled
 from config.record_drain import (
@@ -105,6 +112,18 @@ _RETRY_REASONS = frozenset(
         'work identity must match projection binding',
     }
 )
+
+
+def _observe_barrier_refusal(counter, error) -> None:
+    try:
+        blocker = getattr(error, 'barrier_blocker', None)
+        kind = getattr(error, 'barrier_token_kind', None)
+        counter.labels(
+            blocker if blocker in BARRIER_BLOCKERS else 'unknown',
+            kind if kind in TOKEN_KINDS else 'unknown',
+        ).inc()
+    except Exception:
+        pass  # Observability never changes a drain outcome.
 
 
 def _retry_reason(error: BaseException) -> str:
@@ -432,7 +451,14 @@ async def _manual_finish_admitted(
             v3_metrics.BATCH_MANUAL_END.labels('promoted' if promoted else 'not_promoted').inc()
         # ``current`` is a raw row: its stored transcript is opaque here, so this only screens on
         # clear fields. The pass decides on a decoded row.
-        if fast_finish.mode() == 'off' or not fast_finish.candidate(current) or conversation_id in _FAST_FINISH_STARTED:
+        if fast_finish.mode() == 'off':
+            skipped = 'mode_off'
+        else:
+            skipped = fast_finish.candidate_rejection(current)
+            if skipped is None and conversation_id in _FAST_FINISH_STARTED:
+                skipped = 'already_started'
+        if skipped is not None:
+            fast_finish.SKIPPED.labels(skipped).inc()
             if not single:
                 v3_metrics.BATCH_MANUAL_END.labels('multi_unit_deferred').inc()
             return
@@ -803,6 +829,7 @@ async def drain_recordings(store, *, provider_outbox_factory=None, metrics=None)
         nonlocal partial_count, privacy_blocked, admitted
         partial_count += bool(pending.get('partial_coordinator'))
         failed = barrier_open = False
+        barrier_error = None
         try:
             if provider_outbox_factory is None:
                 await admit_recording(store, pending)
@@ -818,6 +845,7 @@ async def drain_recordings(store, *, provider_outbox_factory=None, metrics=None)
         except Exception as error:
             failed = True
             barrier_open = isinstance(error, ValueError) and str(error) == BARRIER_NOT_CLOSED
+            barrier_error = error
             if pending.get('partial_coordinator'):
                 record_partial_failure(error, run=pending.get('partial_run'))
             logger.warning(
@@ -894,6 +922,10 @@ async def drain_recordings(store, *, provider_outbox_factory=None, metrics=None)
             admitted += 1
         if expired and metrics is not None:
             metrics.record_dead_letter.inc()
+        if barrier_open and metrics is not None and barrier_cause_metrics_enabled():
+            _observe_barrier_refusal(metrics.record_barrier_refusals, barrier_error)
+            if expired:
+                _observe_barrier_refusal(metrics.record_barrier_aged, barrier_error)
 
     async def worker():
         # next() has no await: each selected row belongs to one local worker.

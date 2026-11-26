@@ -38,6 +38,7 @@ from routers import (
     desktop_screen_crisp,
     desktop_tts_updates,
 )
+from services.monthly_usage_shadow import install_month_shadow
 from utils.http_client import close_all_clients
 from utils.llm.vertex_reservation_state import reservation_state
 from utils.metrics import start_metrics_sidecar_server, stop_metrics_sidecar_server
@@ -83,6 +84,7 @@ def _initialize_firebase_admin() -> None:
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     prepare_google_credentials()
     _initialize_firebase_admin()
+    install_month_shadow()
     start_metrics_sidecar_server()
     watchdog: DesktopLoopWatchdog = app.state.loop_watchdog
     watchdog.start()
