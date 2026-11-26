@@ -36,8 +36,9 @@ class _Usage extends UsageProvider {
   int restores = 0;
 
   @override
-  Future<void> fetchSubscription({bool fresh = false}) async {
+  Future<RestoreOutcome> restorePurchases() async {
     restores++;
+    return RestoreOutcome.failed;
   }
 }
 
@@ -86,6 +87,40 @@ Future<(_Usage, _Pops)> _pump(WidgetTester tester,
 }
 
 void main() {
+  testWidgets('Close and Restore stay usable in the safe area after scrolling to the plans', (tester) async {
+    tester.view.physicalSize = const Size(402, 874) * 3;
+    tester.view.devicePixelRatio = 3;
+    tester.view.padding = const FakeViewPadding(top: 62 * 3, bottom: 34 * 3);
+    addTearDown(tester.view.reset);
+    final (usage, pops) = await _pump(tester, checkout: () async => PaywallCheckoutOutcome.cancelled);
+    final close = find.byKey(const Key('trial_paywall_close'));
+    final restore = find.byKey(const Key('trial_paywall_restore'));
+    final closeBefore = tester.getRect(close);
+    final restoreBefore = tester.getRect(restore);
+    final vertical = find.byWidgetPredicate((w) => w is Scrollable && w.axisDirection == AxisDirection.down);
+    await tester.scrollUntilVisible(find.byKey(const Key('trial_paywall_monthly')), 200, scrollable: vertical.first);
+    await tester.pumpAndSettle();
+    expect(tester.getRect(close), closeBefore);
+    expect(tester.getRect(restore), restoreBefore);
+    for (final control in [close, restore]) {
+      final rect = tester.getRect(control);
+      expect(rect.top, greaterThanOrEqualTo(62));
+      expect(rect.width, greaterThanOrEqualTo(44));
+      expect(rect.height, greaterThanOrEqualTo(44));
+    }
+    await tester.tap(restore);
+    await tester.pumpAndSettle();
+    expect(usage.restores, 1);
+    expect(find.text("Couldn't check your plan."), findsOneWidget);
+    expect(find.byType(TrialPaywallPage), findsOneWidget);
+    expect(pops.results, isEmpty, reason: 'a failed restore must keep the paywall open');
+    await tester.tap(close);
+    await tester.pumpAndSettle();
+    expect(find.byType(TrialPaywallPage), findsNothing);
+    expect(find.text('open'), findsOneWidget);
+    expect(pops.results.where((r) => r == 'paywall'), hasLength(1));
+  });
+
   testWidgets('Restore and dismiss are ignored while a checkout is in flight', (tester) async {
     final pending = Completer<PaywallCheckoutOutcome>();
     final (usage, pops) = await _pump(tester, checkout: () => pending.future);

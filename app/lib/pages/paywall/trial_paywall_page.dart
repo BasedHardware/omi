@@ -349,11 +349,15 @@ class _TrialPaywallPageState extends State<TrialPaywallPage> {
                   : null;
               return Column(
                 children: [
+                  Padding(
+                    padding: EdgeInsets.only(top: top + OmiSpacing.sm),
+                    child: _Header(onClose: _dismiss, onRestore: _restore, brand: l10n.paywallTrialBrand),
+                  ),
                   Expanded(
                     child: ListView(
-                      padding: EdgeInsets.fromLTRB(0, top + 8, 0, 16),
+                      padding: const EdgeInsets.only(bottom: OmiSpacing.md),
+                      clipBehavior: Clip.hardEdge,
                       children: [
-                        _Header(onClose: _dismiss, onRestore: _restore, brand: l10n.paywallTrialBrand),
                         const SizedBox(height: 18),
                         Padding(
                           padding: const EdgeInsets.symmetric(horizontal: 24),
