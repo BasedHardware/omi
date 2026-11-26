@@ -32,6 +32,7 @@ from config.batch_pipeline_coverage_wait import decode_failure_memo_enabled
 from config.batch_pipeline_providers import provider_config
 from config.firestore_read_levers import lever_enabled
 from config.prerecorded_language import language_guard_enabled, language_class
+from config.reliability_experiments import enabled as experiment
 from config.request_clock import context_fields
 from config.stt_cap_dispatch import offline_enforcement_enabled
 from config.stt_provider_policy import normalized_stt_language, PARAKEET_SUPPORTED_LANGUAGES_BY_MODEL
@@ -52,6 +53,7 @@ from database.sync_ledger import (
 )
 from utils.batch_pipeline.artifact_policy import artifacts_for
 from utils.batch_pipeline.audio import with_context
+from utils.batch_pipeline import frame_outcomes
 from utils.batch_pipeline.capture_decode import decode_units, is_deterministic_decode_failure
 from utils.batch_pipeline.future_capture_decode import decode_future_units
 from utils.sync import future_capture_request
@@ -435,6 +437,12 @@ def durable_status(store, uid: str, job_id: str, *, poll: bool = False) -> dict 
                 )
             )
         )
+        if status == 'completed' and experiment('batch_frame_outcomes', uid):
+            # Experiment batch_frame_outcomes: the completed result also names which source
+            # frames became text and which were evaluated and are empty. Computed from the
+            # intake and unit rows this read already holds; a held, failed or unattributable
+            # unit gets no verdict, and a copy keeps the ledger's own result untouched.
+            result = frame_outcomes.attach(result, intake, jobs)
         return {
             'job_id': job_id,
             'status': status,
@@ -452,12 +460,28 @@ def durable_status(store, uid: str, job_id: str, *, poll: bool = False) -> dict 
 
     status = store.run(read)
     if status is not None and '_coalescing_intake' in status:
+        if experiment('batch_frame_outcomes', uid):
+            # Experiment batch_frame_outcomes: a coalesced member stores its target's result as
+            # its own receipt. The target's verdicts span every member, so they stay out of it.
+            return member_status(
+                store, uid, status['_coalescing_intake'], partial(_status_without_frame_outcomes, poll=poll)
+            )
         return member_status(store, uid, status['_coalescing_intake'], partial(durable_status, poll=poll))
     if spent_redrives:
         # Class 6 counter: same signal as the nightly scan, once per committed poll re-drive.
         from utils.backlog_metrics import record_transition
 
         record_transition('held_redrive_budget_spent', len(spent_redrives))
+    return status
+
+
+def _status_without_frame_outcomes(store, uid: str, job_id: str, *, poll: bool = False) -> dict | None:
+    status = durable_status(store, uid, job_id, poll=poll)
+    if not status:
+        return status
+    result = status.get('result')
+    if isinstance(result, dict) and frame_outcomes.FIELD in result:
+        return {**status, 'result': {key: value for key, value in result.items() if key != frame_outcomes.FIELD}}
     return status
 
 
@@ -989,7 +1013,15 @@ async def accept_upload(
         items = []
         source_aliases = {}
 
+        # Experiment batch_frame_outcomes: the source frames each unit holds, kept for the status read.
+        frame_runs: dict[str, tuple] = {}
+
         def unit_item(unit, index):
+            item = unit_work_item(unit, index)
+            frame_runs[item.segment_id] = getattr(unit, 'coverage_runs', ())
+            return item
+
+        def unit_work_item(unit, index):
             return replace(
                 seed,
                 segment_id=hashlib.sha256(f'{content_id}:{index}'.encode()).hexdigest(),
@@ -1179,6 +1211,9 @@ async def accept_upload(
                 # An automatic release (trial or conversion) is backfill the owner did not tap for;
                 # its rows carry the source so hard-3 and the 2h alarm can count it apart.
                 **({'release': release} if release else {}),
+                # Experiment batch_frame_outcomes: that mapping otherwise exists only inside the
+                # encrypted staged audio, which the status route cannot read. Off, nothing is added.
+                **frame_outcomes.intake_fields(uid, frame_runs),
             },
             enqueue=provider_enqueue(route, outbox, wakes) if provider else None,
             adopt=adopt,

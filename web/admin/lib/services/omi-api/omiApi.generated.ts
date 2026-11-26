@@ -2947,6 +2947,14 @@ export interface FolderMutationResponse {
   status: string;
 }
 
+export interface FrameProcessingRange {
+  capture_root: string;
+  clock_epoch: number;
+  end: number;
+  start: number;
+  status: "text" | "empty";
+}
+
 export interface FrameRange {
   end: number;
   start: number;
@@ -5941,6 +5949,7 @@ export interface SyncJobStatusResponse {
 export interface SyncLocalFilesResultResponse {
   errors?: Array<string>;
   failed_segments?: number;
+  frame_outcomes_v1?: Array<FrameProcessingRange> | null;
   held_audio?: boolean | null;
   new_memories?: Array<string>;
   total_segments?: number;
@@ -7220,6 +7229,7 @@ export interface OmiApiSchemas {
   "FocusAssistantSettings": FocusAssistantSettings;
   "Folder": Folder;
   "FolderMutationResponse": FolderMutationResponse;
+  "FrameProcessingRange": FrameProcessingRange;
   "FrameRange": FrameRange;
   "FrameRequest": FrameRequest;
   "FrameRequestBatch": FrameRequestBatch;

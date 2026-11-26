@@ -18,6 +18,7 @@ from utils.batch_pipeline.contracts import LeasedWork
 # with transport headroom. A server that predates the header keeps its own 4s.
 ADMISSION_DEADLINE_SECONDS = 8.0
 AUTHORIZE_TIMEOUT_SECONDS = 9
+COMMIT_WAKE_TIMEOUT_SECONDS = 3
 
 
 class InvalidReceipt(ValueError):
@@ -149,6 +150,36 @@ class ComputeClient:
         }:
             raise ValueError('invalid shadow projection receipt')
         return receipt
+
+    def commit_wake(self, owner_ids: list[str]) -> int:
+        """Reliability experiment commit_wake: tell the serving backend which owners just got a commit.
+
+        One attempt with a short timeout. The wake is a hint; the serving sweep stays the backstop.
+        """
+        with self._lock:
+            if time.monotonic() >= self._refresh_at:
+                self._token = self._token_source()
+                self._refresh_at = time.monotonic() + 300
+            token = self._token
+        request = Request(
+            self.base_url + '/v2/batch-pipeline/commit-wake',
+            data=json.dumps({'stage': self.stage, 'owner_ids': owner_ids}).encode(),
+            method='POST',
+            headers={'Content-Type': 'application/json', 'Authorization': f'Bearer {token}'},
+        )
+        try:
+            with self._send(request, timeout=COMMIT_WAKE_TIMEOUT_SECONDS) as response:
+                raw = response.read(4097)
+        except Exception:
+            self._refresh_at = 0.0
+            raise
+        if len(raw) > 4096:
+            raise ValueError('bounded commit wake receipt required')
+        receipt = json.loads(raw)
+        accepted = receipt.get('accepted') if isinstance(receipt, dict) else None
+        if type(accepted) is not int or not 0 <= accepted <= len(owner_ids):
+            raise ValueError('invalid commit wake receipt')
+        return accepted
 
 
 def from_env() -> ComputeClient:
