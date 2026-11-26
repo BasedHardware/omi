@@ -239,9 +239,13 @@ def request_finish(
     client = firestore_client if firestore_client is not None else get_firestore_client()
     collection = client.collection('users').document(uid).collection(conversations_collection)
     window_ref = collection.document(window_id)
+    # The transaction body re-runs on contention and each attempt resets this, so what remains is the committed
+    # attempt's. Fallback telemetry is recorded once, after the commit, never from inside the body.
+    degraded: List[bool] = []
 
     @firestore.transactional
     def commit(tx):
+        degraded.clear()
         window = window_ref.get(transaction=tx, field_paths=FINISH_FIELDS).to_dict() or {}
         if not _is_finishable_window(window, now):
             return 'no_live_window', '', None
@@ -253,7 +257,11 @@ def request_finish(
             return 'no_recording', '', None
         row = collection.document(cid).get(transaction=tx).to_dict() or {}
         tail_state = None
-        newer = _newer_capture(_recent_finish_sources(collection, tx, now), window, now) if newer_capture else None
+        newer = (
+            _newer_capture(_recent_finish_sources(collection, tx, now), window, now, degraded=degraded)
+            if newer_capture
+            else None
+        )
         if (
             newer is not None
             and newer[0]
@@ -295,7 +303,10 @@ def request_finish(
         )
         return outcome, recording_id, None
 
-    return commit(client.transaction())
+    result = commit(client.transaction())
+    if degraded:
+        _record_newer_capture_fallback()
+    return result
 
 
 def _finish_window_tail(
@@ -420,7 +431,7 @@ _FINISH_BLOCKERS = (
 )
 
 
-def _newer_capture(docs, window: Mapping[str, Any], now: datetime):
+def _newer_capture(docs, window: Mapping[str, Any], now: datetime, *, degraded: List[bool]):
     """The capture a live-window Finish cuts instead of the window tail, or None to cut the tail.
 
     A pendant or server-batch capture can seal after the live window's last speech while its
@@ -433,7 +444,8 @@ def _newer_capture(docs, window: Mapping[str, Any], now: datetime):
     speech is the last speech again. ``docs`` is the newest-first recent-source scan.
 
     Returns ``(retry, cid, row)`` or None. A marked capture that can no longer take a Finish (private,
-    locked, deleted, ...) is None too, so the tail is cut rather than answering a 404.
+    locked, deleted, ...) is None too, so the tail is cut rather than answering a 404. A tie or a full
+    scan appends to ``degraded``; the caller records that once the transaction commits.
     """
     members = set(window.get('v3_recording_ids') or ())
     newer = []
@@ -471,14 +483,14 @@ def _newer_capture(docs, window: Mapping[str, Any], now: datetime):
         newest = max(row['finished_at'] for _, row in unmarked)
         top = [(cid, row) for cid, row in unmarked if row['finished_at'] == newest]
         if len(top) > 1:
-            _record_newer_capture_fallback()
+            degraded.append(True)
             return None
         return False, *top[0]
     if not marked:
         if capped:
             # The bounded scan may have omitted a newer capture, so keep the safe tail cut and expose the
-            # degraded targeting through shared fallback telemetry.
-            _record_newer_capture_fallback()
+            # degraded targeting through shared fallback telemetry once the transaction commits.
+            degraded.append(True)
         return None
     cid, row = min(((cid, row) for cid, row in marked if row['finished_at'] == last_mark), key=lambda item: item[0])
     if row.get('data_protection_level') == 'private' or any(row.get(key) for key in _FINISH_BLOCKERS):

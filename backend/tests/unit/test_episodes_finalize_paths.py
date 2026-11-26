@@ -18,6 +18,7 @@ from unittest.mock import AsyncMock, Mock
 import pytest
 from fastapi import FastAPI, HTTPException
 from fastapi.testclient import TestClient
+from google.api_core.exceptions import Aborted
 
 os.environ.setdefault(
     'ENCRYPTION_SECRET',
@@ -34,7 +35,7 @@ from models.conversation_enums import ConversationSource, ConversationStatus
 from models.structured import Structured
 from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore, StrictFirestoreDocument
 from utils.batch_pipeline.live_projection import replace_record
-from utils.conversations.v3 import finish as v3_finish, live as v3_live
+from utils.conversations.v3 import finish as v3_finish, live as v3_live, triggers
 from utils.conversations.v3.live import FINISH_FIELDS, FINISH_RECORDING_FIELD, FINISH_WINDOW_FIELD
 from tests.unit.test_batch_pipeline_projection import native_finish_completion
 from utils.conversations import finalizer
@@ -1747,6 +1748,64 @@ def test_live_window_finish_cuts_the_newest_of_two_newer_captures(newer_capture_
         fallback.assert_not_called()
 
 
+@pytest.mark.parametrize('case', ['tie', 'full_scan'])
+def test_live_window_finish_records_degraded_targeting_once_across_transaction_retries(
+    newer_capture_route, case, monkeypatch
+):
+    """The transaction body re-runs on contention; only the attempt that commits publishes the fallback."""
+    client, db, paths, enqueued, counter = newer_capture_route
+    store = v3_finish.conversations_v3_live
+    fallback = Mock()
+    monkeypatch.setattr(store, 'record_fallback', fallback)
+    b = db.rows[_B]
+    if case == 'tie':
+        db.rows['users', _UID, 'conversations', 'capture-c'] = {
+            **b,
+            'external_data': {'recording_session_id': 'phone-session-c'},
+        }
+    else:
+        for n in range(8):
+            db.rows['users', _UID, 'conversations', f'rotated-{n}'] = {
+                **b,
+                'status': 'in_progress',
+                'external_data': {'recording_session_id': f'rotated-{n}'},
+            }
+    # The first attempt loses on contention after the scan and before any write, as Firestore's commit would.
+    cut_tail, attempts = store._finish_window_tail, []
+
+    def contended_tail(*args, **kwargs):
+        attempts.append(len(attempts) + 1)
+        if len(attempts) == 1:
+            raise Aborted('contention')
+        return cut_tail(*args, **kwargs)
+
+    def retrying(body):
+        def run(tx):
+            try:
+                return body(tx)
+            except Aborted:
+                return body(tx)
+
+        return run
+
+    monkeypatch.setattr(store, '_finish_window_tail', contended_tail)
+    monkeypatch.setattr(store.firestore, 'transactional', retrying)
+
+    response = client.post('/v1/conversations', json={})
+
+    assert response.status_code == 200 and response.json()['conversation']['id'] == 'window'
+    assert attempts == [1, 2] and _writes(db) == 1
+    assert db.rows[paths['latest']]['v3_manual_end'] is True and 'v3_manual_end' not in b
+    counter.labels.assert_called_once_with('cut')
+    fallback.assert_called_once_with(
+        component='conversation_finalization',
+        from_mode='newer_capture',
+        to_mode='window_tail',
+        reason='other',
+        outcome='degraded',
+    )
+
+
 def _ledger(db, cid, **fields):
     content, _ = record_identity(_UID, cid)
     db.rows[sync_content_ledger_ref(db, _UID, content).path] = {
@@ -1936,8 +1995,6 @@ def test_one_finish_cuts_a_at_once_and_consumes_b_once_across_resolution_and_ret
     One Finish may end two cards: A's window is cut at once; if B lands with speech, B's request becomes its own
     manual end. The response names A's window, and a retry answers the same target without writing.
     """
-    from utils.conversations.v3 import triggers
-
     client, db, paths, enqueued, counter = newer_capture_route
     a_path, body = paths['latest'], {'live_conversation_id': 'window'}
     # B as production creates it: Listen's in-progress create runs mark_new, which stamps v3_speech_landed_at
