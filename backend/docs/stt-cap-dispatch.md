@@ -626,8 +626,10 @@ cross-process admission race.
   off unless the user opts in. The on-device runner does not transcribe those
   synced copies. Transcribing the waiting backlog on the phone is a follow-up.
   At cap the UI says processing is paused. After reset the server returns a
-  waiting choice with estimated allowance hours/percent. Process waiting recordings
-  requires explicit confirmation; Not now leaves them waiting. When the estimate
+  waiting choice with estimated allowance hours/percent. Home offers Process waiting
+  recordings only for this state. The action requires explicit confirmation, and
+  Not now leaves the recordings waiting. A changed estimate requires a fresh
+  confirmation. When the estimate
   exceeds remaining allowance, the worker processes newest-first up to what fits
   and leaves the rest waiting. Reset remains 00:00 UTC on the 1st, including legacy Plus. Live capture
   keeps recording while cloud transcription pauses. The first suppressed live

@@ -1,12 +1,8 @@
 import 'package:clock/clock.dart';
 import 'package:omi/utils/local_day_rollover.dart';
-// The conversations list page: paged list with filter-keyed load-more state,
-// plus the capture-status surfaces stacked above it (processing card, held
-// audio, on-device queue banners).
-//
-// The page stays alive across tab switches (AutomaticKeepAliveClientMixin), so
-// scroll position and pagination survive background sync mutations; load-more
-// state is keyed by the active filter and resets deliberately on filter change.
+// The conversations list preserves pagination and scroll position across tab switches.
+// Changing the active filter resets the list's load-more state.
+
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -20,6 +16,7 @@ import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/pages/capture/widgets/widgets.dart';
 import 'package:omi/pages/held_audio/held_audio_views.dart';
+import 'package:omi/pages/held_audio/processing_backlog_view.dart';
 import 'package:omi/pages/conversations/widgets/processing_capture.dart';
 import 'package:omi/pages/conversations/widgets/v3_live_placeholder_row.dart';
 import 'package:omi/backend/schema/phone_call.dart';
@@ -1379,6 +1376,8 @@ class _ConversationsPageState extends State<ConversationsPage>
               ),
               // A declined renewal the user can still pay: one row, Update opens Stripe's billing portal.
               const SliverToBoxAdapter(child: PaymentIssueRow()),
+              if (defaultHome && !convoProvider.isSelectionModeActive)
+                const SliverToBoxAdapter(child: ProcessingBacklogChoiceCard()),
               // A paying monthly reader whose Omi recorded nothing for 5 days: one quiet row, Check opens the device.
               const SliverToBoxAdapter(child: QuietPayerRow()),
               const SliverToBoxAdapter(child: SpeechProfileCardWidget()),

@@ -33,6 +33,7 @@ import 'package:omi/backend/schema/transcript_segment.dart';
 import 'package:omi/l10n/app_localizations.dart';
 import 'package:omi/env/env.dart';
 import 'package:omi/models/local_recording.dart';
+import 'package:omi/models/subscription.dart';
 import 'package:omi/models/sync_state.dart';
 import 'package:omi/pages/conversation_detail/conversation_detail_provider.dart';
 import 'package:omi/pages/conversation_detail/page.dart';
@@ -558,7 +559,7 @@ class _Home {
     ..groupConversationsByDate();
 }
 
-Widget _app(_Home home, {Key? boundary, ThemeData? theme}) {
+Widget _app(_Home home, {Key? boundary, ThemeData? theme, UsageProvider? usage}) {
   return RepaintBoundary(
       key: boundary,
       child: MultiProvider(
@@ -583,7 +584,7 @@ Widget _app(_Home home, {Key? boundary, ThemeData? theme}) {
           ChangeNotifierProvider<PeopleProvider>.value(
             value: PeopleProvider(loadPeople: () async => const PeopleListResponse(people: [])),
           ),
-          ChangeNotifierProvider<UsageProvider>.value(value: UsageProvider()),
+          ChangeNotifierProvider<UsageProvider>.value(value: usage ?? UsageProvider()),
           ChangeNotifierProvider<IntegrationProvider>.value(
             value: IntegrationProvider(
               fetchStatus: (_) async => null,
@@ -620,13 +621,18 @@ Widget _app(_Home home, {Key? boundary, ThemeData? theme}) {
 }
 
 Future<_Home> _pumpHome(WidgetTester tester,
-    {required bool v3, bool remembered = true, Key? boundary, ThemeData? theme, Size? size}) async {
+    {required bool v3,
+    bool remembered = true,
+    Key? boundary,
+    ThemeData? theme,
+    Size? size,
+    UsageProvider? usage}) async {
   tester.view.physicalSize = size ?? const Size(800, 1600);
   tester.view.devicePixelRatio = 1.0;
   addTearDown(tester.view.resetPhysicalSize);
   addTearDown(tester.view.resetDevicePixelRatio);
   final home = _Home(v3: v3, remembered: remembered);
-  await tester.pumpWidget(_app(home, boundary: boundary, theme: theme));
+  await tester.pumpWidget(_app(home, boundary: boundary, theme: theme, usage: usage));
   await tester.pump();
   await tester.pump(const Duration(milliseconds: 300));
   await tester.pump(const Duration(milliseconds: 300));
@@ -1639,6 +1645,97 @@ void main() {
         ),
       );
     }
+
+    testWidgets('Home lets a trial owner confirm processing the existing server backlog', (tester) async {
+      await withClock(Clock.fixed(_now), () async {
+        var calls = 0;
+        final usage = UsageProvider(processBacklogRequest: ({required idempotencyKey}) async {
+          calls++;
+          if (calls == 1) return null; // The client must keep the choice available on failure.
+          return const ProcessingBacklog(state: 'processing', heldAudioCount: 2, heldAudioSeconds: 900);
+        });
+        addTearDown(usage.dispose);
+        final palette = OmiColors.active;
+        addTearDown(() => OmiColors.active = palette);
+        OmiColors.active = OmiColors.forBrightness(Brightness.dark);
+
+        void setBacklog(String state, {double hours = 0.25}) {
+          usage.debugSetSubscription(UserSubscriptionResponse(
+            subscription: Subscription(plan: PlanType.unlimitedV2, status: SubscriptionStatus.active),
+            transcriptionSecondsUsed: 0,
+            transcriptionSecondsLimit: 0,
+            wordsTranscribedUsed: 0,
+            wordsTranscribedLimit: 0,
+            insightsGainedUsed: 0,
+            insightsGainedLimit: 0,
+            processingBacklog: ProcessingBacklog(
+              state: state,
+              heldAudioCount: 2,
+              heldAudioSeconds: 900,
+              estimatedHours: hours,
+              estimatedPercent: 5,
+              exceedsRemaining: true,
+            ),
+          ));
+        }
+
+        setBacklog('capped');
+        final home = await _pumpHome(
+          tester,
+          v3: true,
+          boundary: boundary,
+          theme: theme().copyWith(platform: TargetPlatform.android),
+          size: const Size(390, 844),
+          usage: usage,
+        );
+        final process = find.byKey(const Key('processing_backlog_process'));
+        final confirm = find.descendant(
+          of: find.byType(AlertDialog),
+          matching: find.widgetWithText(TextButton, 'Process waiting recordings'),
+        );
+        expect(process, findsNothing);
+        setBacklog('waiting_choice');
+        await tester.pump();
+        expect(process, findsOneWidget);
+        expect(calls, 0);
+        await shoot(tester, '001-mobile-android-processing-backlog');
+
+        await tester.tap(process);
+        await settleDetailTab(tester);
+        expect(find.textContaining("We'll process the newest recordings first"), findsOneWidget);
+        await shoot(tester, '002-mobile-android-processing-confirmation');
+        await tester.tap(find.text('Not now'));
+        await settleDetailTab(tester);
+        expect(calls, 0);
+
+        // If Home refreshes the plan while the dialog is open, use the newly rendered estimate.
+        await tester.tap(process);
+        await settleDetailTab(tester);
+        setBacklog('waiting_choice', hours: 0.5);
+        await tester.pump();
+        await tester.tap(confirm);
+        await settleDetailTab(tester);
+        expect(calls, 0);
+
+        await tester.tap(process);
+        await settleDetailTab(tester);
+        await tester.tap(confirm);
+        await settleDetailTab(tester);
+        expect(calls, 1);
+        expect(process, findsOneWidget);
+
+        await tester.tap(find.text('Try Again'));
+        await settleDetailTab(tester);
+        await tester.tap(confirm);
+        await settleDetailTab(tester);
+        expect(calls, 2);
+        expect(process, findsNothing);
+        expect(find.text('Processing your waiting recordings…'), findsOneWidget);
+        // Clear the simulated account before unmounting to cancel its refresh timer.
+        usage.clearUserData();
+        await _dispose(tester, home);
+      });
+    });
 
     testWidgets('a list read failure keeps Try Again beside a manual finish', (tester) async {
       await withClock(Clock.fixed(_now), () async {
