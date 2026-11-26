@@ -156,6 +156,7 @@ from database import (
     conversation_batch_purge_jobs,
     speaker_evidence_verification as evidence_verification,
 )
+from database.speaker_evidence_verification import observe_sweep
 from utils.executors import db_executor, erasure_executor, llm_executor, run_blocking
 from utils.http_client import UnsafeWebhookURLError, safe_request_target
 from utils.log_sanitizer import sanitize
@@ -412,7 +413,7 @@ async def run_account_deletion_wipe(
         max_attempts = get_account_deletion_tasks_max_attempts()
         terminal = task_authentication.retry_count >= max_attempts - 1
         erase_args = (wipe_job_id,) if needs_erase else ()
-        with evidence_verification.observe_sweep(receipt):
+        with observe_sweep(receipt):
             ok = await run_deletion_wipe_with_lease(
                 uid, task_authentication.retry_count, terminal, lock_token, *erase_args
             )
