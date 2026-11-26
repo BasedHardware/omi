@@ -614,13 +614,14 @@ async def test_slow_consumer_full_ring_paced_budget_and_realtime_live_order(
         await ingestion
         expected = original[-PREFIX_BYTES:] + b''.join(tail)
         # Ingestion has ended, so pump completion is the deterministic barrier
-        # for every expected byte to reach the fake transport. Polling virtual
-        # time behind a real-wall watchdog made valid catch-up delivery fail
-        # whenever host scheduling consumed the watchdog first.
+        # for every expected byte to reach the fake transport. Watch it on the
+        # real monotonic clock: this fixture pins the loop's `time()` to virtual
+        # time, so an `asyncio.timeout` here would never fire if the pump
+        # stalled on an event nobody advances.
         pump = actual.stt_socket._task
         if pump is not None:
-            async with asyncio.timeout(30):
-                await pump
+            await virtual_clock.until(pump.done, timeout=30)
+            await pump
         assert raws[-1]._ws.byte_count == len(expected), (raws[-1]._ws.byte_count, len(expected))
         assert not raws[-1].is_connection_dead, (
             raws[-1].death_reason,
