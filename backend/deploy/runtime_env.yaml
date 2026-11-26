@@ -4579,7 +4579,7 @@ environments:
               value: '168'
               category: config
             FIRST_WEEK_SUMMARY_GUARANTEE_ENABLED:
-              value: 'true'
+              value: 'false'
               category: ops_kill
             ENRICHMENT_TASKS_HANDLER_URL:
               value: https://backend-integration-hhibjajaja-uc.a.run.app/v2/enrichment/run
@@ -5171,7 +5171,7 @@ environments:
               value: '168'
               category: config
             FIRST_WEEK_SUMMARY_GUARANTEE_ENABLED:
-              value: 'true'
+              value: 'false'
               category: ops_kill
             ENRICHMENT_TASKS_HANDLER_URL:
               value: https://backend-integration-hhibjajaja-uc.a.run.app/v2/enrichment/run
@@ -5750,7 +5750,7 @@ environments:
               value: '168'
               category: config
             FIRST_WEEK_SUMMARY_GUARANTEE_ENABLED:
-              value: 'true'
+              value: 'false'
               category: ops_kill
             ENRICHMENT_TASKS_HANDLER_URL:
               value: https://backend-integration-hhibjajaja-uc.a.run.app/v2/enrichment/run
@@ -6283,7 +6283,7 @@ environments:
               value: '168'
               category: config
             FIRST_WEEK_SUMMARY_GUARANTEE_ENABLED:
-              value: 'true'
+              value: 'false'
               category: ops_kill
             ENRICHMENT_TASKS_HANDLER_URL:
               value: https://backend-integration-hhibjajaja-uc.a.run.app/v2/enrichment/run
@@ -6801,7 +6801,7 @@ environments:
               value: '168'
               category: config
             FIRST_WEEK_SUMMARY_GUARANTEE_ENABLED:
-              value: 'true'
+              value: 'false'
               category: ops_kill
             ENRICHMENT_TASKS_HANDLER_URL:
               value: https://backend-integration-hhibjajaja-uc.a.run.app/v2/enrichment/run

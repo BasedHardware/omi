@@ -166,6 +166,7 @@ BODY_DIGEST = {
     'database.conversations_v3_live._recent_window_query': '6f2c323bfa8df890362c6bdc4796182a70e4c704376bcb4944358560b12edc75',
     'database.conversations_v3._oldest_pending': 'e2da208a3dcbae7d7c7c59335883b422e27dc71c9cfae51568883aa452bcfc57',
     'database.conversations_v3.commit_projection': '4f070f852f6b023db0d1299b647cc91afc723aa976922d916e8ffa3adf77f1e0',
+    'services.first_week_summary_closeout.durable_outcome_counts': '36aa6a57a8338d5dfdf1db70d3df993baca8707c3d3e9758eddd0007c7cebad8',
     'database.batch_pipeline_conversation_purge_scans._claim': 'faa5dabcf01dc5bd377b2e14a149282aa2db93b2872cdc97a3b756157701532c',
     'database.batch_pipeline_conversation_purge_scans.run_job': 'fe5d30b77da198a7e0dc188115c8906fb6446925079a4e96339d36675a55faeb',
     'database.batch_pipeline_store.FirestoreStore.protected_retries': 'b55d2960c94057cb8df9b9cdd2e7728b6af63728bc0a2cb6f5bd333efed443a2',
@@ -3943,6 +3944,16 @@ _add(
         reason='Operator CLI history read in the separate flag project: one equality filter on key over the '
         'small omi_flags_audit collection (single-field index, sorted in Python); never a serving path.',
         body_digest='12ee243338e5fc080b8e2f81223586837bb454f8d8e14d711f3805c74e258cfa',
+    )
+)
+
+_add(
+    SkipEntry(
+        'services.first_week_summary_closeout.durable_outcome_counts',
+        reason='One operator readback after the first-week cohort closes; streams at most nine fixed '
+        'aggregate documents and is not a serving query path. Its reads are included in the SCA-4790 '
+        'maintenance collection budget.',
+        body_digest=BODY_DIGEST['services.first_week_summary_closeout.durable_outcome_counts'],
     )
 )
 
