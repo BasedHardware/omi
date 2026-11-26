@@ -9,11 +9,13 @@ import 'package:omi/backend/http/api/speaker_labels.dart';
 import 'package:omi/backend/http/api_result.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/conversation.dart';
+import 'package:omi/backend/schema/conversation_v3.dart';
 import 'package:omi/backend/schema/person.dart';
 import 'package:omi/backend/schema/transcript_segment.dart';
 import 'package:omi/pages/capture/widgets/widgets.dart';
 import 'package:omi/pages/conversation_detail/conversation_detail_provider.dart';
 import 'package:omi/pages/conversation_detail/conversation_detail_meta.dart';
+import 'package:omi/pages/conversation_detail/page.dart' show detailFloatingBarBottom, detailFloatingBarHeight;
 import 'package:omi/pages/conversation_detail/widgets/earlier_voice_matches_sheet.dart';
 import 'package:omi/pages/conversation_detail/widgets/conversation_detail_chip.dart';
 import 'package:omi/pages/conversation_detail/widgets/edit_segment_sheet.dart';
@@ -23,13 +25,16 @@ import 'package:omi/pages/conversation_detail/widgets/speaker_quick_picker.dart'
 import 'package:omi/pages/conversation_detail/widgets/speaker_summary_action.dart';
 import 'package:omi/pages/conversation_detail/widgets/speaker_tag_outcome.dart';
 import 'package:omi/providers/connectivity_provider.dart';
+import 'package:omi/providers/conversations_v3_provider.dart';
 import 'package:omi/providers/people_provider.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/audio/conversation_playback_controller.dart';
 import 'package:omi/utils/constants.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
+import 'package:omi/utils/reliability_experiments.dart';
 import 'package:omi/widgets/expandable_text.dart';
+import 'package:omi/widgets/transcript.dart';
 import 'package:omi/widgets/speaker_label.dart';
 import 'package:omi/widgets/extensions/string.dart';
 import 'package:omi/pages/review/widgets/review_question_card.dart';
@@ -71,6 +76,9 @@ class _TranscriptWidgetsState extends State<TranscriptWidgets> with AutomaticKee
 
   /// Lines chosen to name together; null outside selection mode.
   Set<String>? _selection;
+
+  /// Height of the fade the conversation page paints above its floating bar.
+  static const double _barFade = 28;
 
   /// The last person tagged during a labeling pass. Its outcome card waits for Done instead of
   /// interrupting every label.
@@ -496,6 +504,20 @@ class _TranscriptWidgetsState extends State<TranscriptWidgets> with AutomaticKee
         final segments = provider.recordingDisplaySegments;
         final photos = conversation.photos;
         final playback = provider.hasRecordingSiblings ? null : controller;
+        // Follow while the reader hasn't taken the scroll back AND playback
+        // is either running or a fresh explicit request (line tap, scrub,
+        // Play, back-to-current) asks for it — an idle first open does not.
+        final followPlayback =
+            playback != null && playback.isFollowing && (playback.isPlaying || playback.followRequest > 0);
+        // A conversation still in progress keeps its newest line in view, the stored lines and the
+        // live ones under them alike, until the reader scrolls away. Playing a line and choosing lines
+        // hold the reader's place instead.
+        final live = context.select<ConversationsV3Provider?, bool>((v3) => v3?.v3 ?? false) &&
+            conversation.v3?.tileState == ConversationTileState.live;
+        final followLatest = live && !followPlayback && _selection == null;
+        // What the page's floating bar and the fade above it cover at the foot of the list.
+        final barReach =
+            detailFloatingBarBottom(MediaQuery.viewPaddingOf(context).bottom) + detailFloatingBarHeight + _barFade;
         // Review's "Who said this?" for this conversation sits above the lines it asks about.
         final reviewQuestion = context.watch<ReviewProvider?>()?.speakerQuestionIn(conversation.id);
         playback?.updateSegments(segments);
@@ -535,11 +557,15 @@ class _TranscriptWidgetsState extends State<TranscriptWidgets> with AutomaticKee
           canDisplaySeconds: provider.canDisplaySeconds,
           isConversationDetail: true,
           unresolvedSpeakers: conversation.speakerResolution?.status == 'unavailable',
-          bottomMargin: 150,
+          // A saved conversation ends with room to spare. One still in progress is read at its end,
+          // so its newest line sits just above the bar instead of a third of the way up the screen.
+          bottomMargin:
+              live ? (barReach + OmiSpacing.lg - TranscriptWidget.footerHeight).clamp(0.0, 150.0).toDouble() : 150,
           searchQuery: widget.searchQuery,
           currentResultIndex: widget.currentResultIndex,
           onTapWhenSearchEmpty: widget.onTapWhenSearchEmpty,
-          onSegmentTap: widget.onSegmentTap == null
+          // Reliability experiment no_live_player: with no player on the page a line tap seeks nothing.
+          onSegmentTap: widget.onSegmentTap == null || (live && ReliabilityExperiments.enabled('no_live_player'))
               ? null
               : (TranscriptSegment segment) {
                   final local = conversation.transcriptSegments.where((line) => line.id == segment.id).firstOrNull;
@@ -562,11 +588,10 @@ class _TranscriptWidgetsState extends State<TranscriptWidgets> with AutomaticKee
           currentSegmentId: playback?.currentSegmentId,
           highlightedSegment: playback?.highlightedSegment,
           followTargetSegmentId: playback?.followTargetSegmentId,
-          // Follow while the reader hasn't taken the scroll back AND playback
-          // is either running or a fresh explicit request (line tap, scrub,
-          // Play, back-to-current) asks for it — an idle first open does not.
-          followCurrentSegment:
-              playback != null && playback.isFollowing && (playback.isPlaying || playback.followRequest > 0),
+          followCurrentSegment: followPlayback,
+          followLatest: followLatest,
+          // Above the page's floating bar and the fade the page paints over the lines behind it.
+          jumpToLatestButtonBottom: barReach + OmiSpacing.xs,
           playbackFollowRequest: playback?.followRequest ?? 0,
           onUserScroll: playback?.suspendFollowing,
           onTopVisibleSegmentChanged: playback?.readerMovedTo,

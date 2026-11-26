@@ -1130,6 +1130,9 @@ async def reconcile(
 
 
 async def _maybe_publish_live_title(uid, key, token, row):
+    # Reliability experiment title_at_end: an open conversation is not named; the outline names it at its end.
+    if reliability_experiments.enabled(reliability_experiments.TITLE_AT_END_FLAG_KEY, uid):
+        return
     try:
         revision = row.get('sync_content_revision')
         segments = row.get('transcript_segments') or []

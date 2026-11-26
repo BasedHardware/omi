@@ -38,6 +38,7 @@ END_BUTTON_BY_DEVICE_FLAG_KEY = 'end_button_by_device'
 INSTANT_LIVE_TEXT_FLAG_KEY = 'instant_live_text'
 COMMIT_WAKE_FLAG_KEY = 'commit_wake'
 VENDOR_RECOGNIZER_ON_OPENED_APP_FLAG_KEY = 'vendor_recognizer_on_opened_app'
+TITLE_AT_END_FLAG_KEY = 'title_at_end'
 
 # name -> what turning it on changes. Register here before using a name.
 EXPERIMENTS = {
@@ -119,6 +120,12 @@ EXPERIMENTS = {
         'The open conversation also carries v3_capture_device_id, as under end_button_by_device, so the app can '
         'show the merged live words under a conversation this phone feeds. Off, the endpoint refuses every '
         'connection.'
+    ),
+    TITLE_AT_END_FLAG_KEY: (
+        'An open conversation is not named before it ends: the live-title step (one model call once an open '
+        'conversation holds three minutes of speech) is skipped, nothing is claimed or written for it, and the '
+        'conversation gets its title from the outline when it ends. A title already published on an open row is '
+        'left as it is. Off, CONVERSATIONS_V3_LIVE_TITLE alone decides, as on main.'
     ),
 }
 
