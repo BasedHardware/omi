@@ -322,11 +322,13 @@ with `1011` (`event=pusher_receive_failed`) rather than ending in a repeated
 unhandled `custody commit unresolved` traceback per tail. Later flushes and the
 shutdown tail return without rerunning storage or emitting a second record. The
 disposition is `event=durable_custody_commit_disposition disposition=unresolved
-stage=commit|window_tail exception_type=<class> raised_by=<frame>`, counted once
-in `omi_audio_custody_failures_total` and `omi_audio_custody_would_drop_total`
-under the same stage. A refusal (a known non-commit) is not a disposition and
-keeps its existing no-error-close behavior. The disposition is socket-local; it
-is not persisted and no other service reads it.
+stage=commit|window_tail exception_type=<class> raised_by=<frame>`. The
+settlement records one `omi_audio_custody_would_drop_total{stage}` and leaves
+`omi_audio_custody_failures_total` to the storage helper, which already records
+the dispatch fault as `stage="commit"` before re-raising; a live failure is
+therefore one failure series, never two. A refusal (a known non-commit) is not a
+disposition and keeps its existing no-error-close behavior. The disposition is
+socket-local; it is not persisted and no other service reads it.
 
 `omi_pusher_storage_pcm_inflight_bytes` measures submitted custody PCM. When
 admission is enabled, accounting and capacity remain held until storage actually

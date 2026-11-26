@@ -22,11 +22,16 @@ shutdown tail observe it and return instead of raising:
   client's WAL must replay. No receipt or opcode-203 ACK is produced.
 - The record is a structured warning naming no message or args:
   `event=durable_custody_commit_disposition disposition=unresolved
-  stage=commit|window_tail exception_type=<class> raised_by=<frame>`, counted
-  once in `omi_audio_custody_failures_total{stage,reason="other"}` and
-  `omi_audio_custody_would_drop_total{stage}`. `stage=commit` is a live flush
-  failure; `stage=window_tail` is the shutdown-tail first failure or a fault
-  outside the dispatch.
+  stage=commit|window_tail exception_type=<class> raised_by=<frame>`.
+  `stage=commit` is a live flush failure; `stage=window_tail` is the
+  shutdown-tail first failure or a fault outside the dispatch. The settlement
+  adds exactly one `omi_audio_custody_would_drop_total{stage}` (pre-durability
+  loss) and never touches `omi_audio_custody_failures_total`: the storage
+  helper (`utils/other/audio_outbox.commit_capture`) already records the
+  dispatch failure as `stage="commit"` before re-raising, so counting it again
+  here would double one disposition. Cancellations and faults that never
+  reached the storage helper are counted only as would-drop, plus the
+  disposition line.
 - No `logger.exception` is emitted from the tail path, so a fenced socket is one
   recorded outcome rather than one Error Reporting event per tail. The socket
   still fails closed: `1011` on the first unknown outcome, or the existing tail
@@ -60,6 +65,8 @@ groups return unchanged, with no data migration.
 Coverage in `backend/tests/unit/test_audio_durable_outbox.py`:
 `test_one_failed_durable_commit_settles_once_and_the_tail_never_raises`,
 `test_cancelled_durable_commit_settles_once_and_the_tail_never_reruns`,
-`test_refused_durable_tail_retains_the_fence_without_raising`, and
-`test_normal_durable_tail_commits_once_without_a_disposition`. Runbook:
+`test_refused_durable_tail_retains_the_fence_without_raising`,
+`test_normal_durable_tail_commits_once_without_a_disposition`, and
+`test_real_storage_failure_counts_one_commit_failure_and_settles_once` (live
+and tail variants through the real storage helper). Runbook:
 `backend/docs/runbooks/audio-durable-outbox.md`.

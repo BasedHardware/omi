@@ -1427,6 +1427,11 @@ async def _run_websocket_util_trigger(
             flush or tail on this socket observes them instead of raising, so a
             single failed or unknown commit produces one record, not one per
             tail. Telemetry faults never change the socket outcome.
+
+            Failure-counter ownership stays with the storage helper, which
+            records the dispatch failure before re-raising; this settlement
+            adds only the pre-durability loss signal, so one disposition can
+            never increment the same failure series twice.
             """
             nonlocal durable_commit_unresolved, durable_commit_disposition
             durable_commit_unresolved = True
@@ -1434,7 +1439,6 @@ async def _run_websocket_util_trigger(
                 return
             durable_commit_disposition = 'unresolved'
             try:
-                record_failure(stage)
                 record_would_drop(stage)
             except Exception:
                 pass  # Telemetry never changes the socket outcome.
