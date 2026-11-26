@@ -3327,6 +3327,44 @@ final class PendantFramesDropped extends RegisteredEvent {
   Map<String, Object> get properties => {"count": count, "reason": reason.wireName};
 }
 
+enum MobileHeldWalBacklogTrigger {
+  startup("startup"),
+  foreground("foreground"),
+  hourly("hourly");
+  const MobileHeldWalBacklogTrigger(this.wireName);
+  final String wireName;
+}
+
+enum MobileHeldWalBacklogHoldState {
+  bg300("bg300"),
+  fgPreview300("fg_preview300"),
+  fg60("fg60"),
+  unknown("unknown");
+  const MobileHeldWalBacklogHoldState(this.wireName);
+  final String wireName;
+}
+
+enum MobileHeldWalBacklogCohort {
+  on("on"),
+  off("off");
+  const MobileHeldWalBacklogCohort(this.wireName);
+  final String wireName;
+}
+
+final class MobileHeldWalBacklog extends RegisteredEvent {
+  const MobileHeldWalBacklog({required this.trigger, required this.heldWalCount, required this.oldestHeldAgeS, required this.holdFlagOn, required this.holdState, required this.cohort});
+  final MobileHeldWalBacklogTrigger trigger;
+  final int heldWalCount;
+  final int oldestHeldAgeS;
+  final bool holdFlagOn;
+  final MobileHeldWalBacklogHoldState holdState;
+  final MobileHeldWalBacklogCohort cohort;
+  @override
+  String get wireName => "Mobile Held WAL Backlog";
+  @override
+  Map<String, Object> get properties => {"trigger": trigger.wireName, "held_wal_count": heldWalCount, "oldest_held_age_s": oldestHeldAgeS, "hold_flag_on": holdFlagOn, "hold_state": holdState.wireName, "cohort": cohort.wireName};
+}
+
 final class WalReconcilePollSummary extends RegisteredEvent {
   const WalReconcilePollSummary({required this.backlogJobs, required this.polledJobs, required this.transientJobs, required this.throttledJobs, required this.missingConfirmationJobs, required this.locallyDeferredJobs});
   final int backlogJobs;

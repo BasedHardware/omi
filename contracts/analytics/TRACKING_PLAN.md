@@ -210,6 +210,7 @@ Source: events.json. Presence is not task success. Existing SDK provenance/ident
 | onboardingWebviewFallback | Onboarding Webview Fallback | reason | active | mobile-instrumentation-presence |
 | captureRecoveryObserved | Capture Recovery Observed | kind, trigger | active | capture-recovery |
 | pendantFramesDropped | Pendant Frames Dropped | count, reason | active | wal-backlog-health |
+| mobileHeldWalBacklog | Mobile Held WAL Backlog | trigger, held_wal_count, oldest_held_age_s, hold_flag_on, hold_state, cohort | active | mobile-held-wal-backlog |
 | walReconcilePollSummary | WAL Reconcile Poll Summary | backlog_jobs, polled_jobs, transient_jobs, throttled_jobs, missing_confirmation_jobs, locally_deferred_jobs | active | wal-backlog-health |
 | nativeCustodyObserved | Native Custody Observed | outcome | active | native-custody-health |
 | livePreviewEngineSelected | Live Preview Engine | engine, reason, platform, os_major, bundled_installed | active | live-preview |

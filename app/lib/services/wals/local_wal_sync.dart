@@ -56,6 +56,7 @@ import 'package:omi/services/experiments/wal_delta_index_gate.dart';
 import 'package:omi/services/wals/pendant_ring_custody.dart';
 import 'package:omi/services/wals/batch_ring_proof.dart';
 import 'package:omi/services/wals/mobile_batch_upload_hold.dart';
+import 'package:omi/services/wals/mobile_held_wal_signal.dart';
 import 'package:omi/services/experiments/mobile_batch_upload_hold_gate.dart';
 import 'package:omi/services/wals/wal.dart';
 import 'package:omi/services/wals/deleted_account_uids.dart';
@@ -309,6 +310,7 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
     final admitted = <Wal>[];
     final foreign = <Wal>[];
     for (final wal in loaded) {
+      wal.recoveredMobileBatchHold = MobileBatchUploadHold.indexedLabel(wal) != 'none';
       if (_walAdmittedAtLoad(wal)) {
         admitted.add(wal);
       } else {
@@ -341,6 +343,7 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
   void clearUserData() {
     mobileBatchUploadHold?.clear();
     _backlogTelemetry.clearUserData();
+    _heldWalSignal.clearUserData();
     _orphanFrameCache = const OrphanAudioFrameCache.empty();
     _sessionGeneration++;
     _cancelStopRetry();
@@ -403,6 +406,7 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
   final Future<int?> Function()? _freeDiskBytesOverride;
   final Future<void> Function(Duration duration)? _sleepOverride;
   final WalBacklogTelemetry _backlogTelemetry;
+  final MobileHeldWalSignal _heldWalSignal = MobileHeldWalSignal();
   final PendantRingCustody _custody;
   final Future<DeviceConnection?> Function(String deviceId)? _connectionResolver;
 
@@ -621,6 +625,9 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
     });
     _pendantTimer = _periodic(const Duration(seconds: 10), (t) async {
       final generation = _sessionGeneration;
+      if (_walReady.isCompleted && !_initialIndexAdmissionPending) {
+        _heldWalSignal.hourly(_wals, _now());
+      }
       await _logTickFailure('pendant drain', _drainPendantTail(generation));
       await _logTickFailure('phone-mic drain', _drainPhoneTail(generation));
       _maybeRecoverOrphanAudio();
@@ -664,7 +671,9 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
 
   Future<void> _reportStaleWalsWhenReady(int generation) async {
     await _walReady.future;
-    if (_isCurrent(generation)) reportStaleMissingWals(trigger: 'foreground');
+    if (!_isCurrent(generation) || _initialIndexAdmissionPending) return;
+    _heldWalSignal.foreground(_wals, _now());
+    reportStaleMissingWals(trigger: 'foreground');
   }
 
   /// Reports durable local backlog separately from retry attempts. Age starts
@@ -813,8 +822,11 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
       Logger.debug('synced-copy auto-remove sweep failed: $e');
     }
 
+    if (_isCurrent(generation)) {
+      _heldWalSignal.startup(_wals, _now());
+      reportStaleMissingWals(trigger: 'startup');
+    }
     if (!_walReady.isCompleted) _walReady.complete();
-    if (_isCurrent(generation)) reportStaleMissingWals(trigger: 'startup');
     _notifyUpdated(generation);
   }
 
@@ -2702,6 +2714,7 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
           sealedAtSeconds: oldest.timerStart + oldest.seconds,
           holdState: isMobileStandardBatchWal(oldest) ? holdLabel?.call(oldest) ?? 'none' : null,
           holdSealedAtMs: MobileBatchUploadHold.oldestSealedAtMs(batchWals),
+          recovered: oldest.recoveredMobileBatchHold,
         );
         final result = await _uploadGate.upload(
           files,
@@ -3044,6 +3057,7 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
             ? mobileBatchUploadHold?.label(walToSync) ?? MobileBatchUploadHold.indexedLabel(walToSync)
             : null,
         holdSealedAtMs: walToSync.mobileBatchHold?.sealedAtMs,
+        recovered: walToSync.recoveredMobileBatchHold,
       );
       final result = await _uploadGate.upload(
         [walFile],

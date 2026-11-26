@@ -239,6 +239,7 @@ List<Wal> nextSyncUploadBatch(List<Wal> pending, int nowSeconds, {String Functio
   final recordingSessionId = ordered.first.recordingSessionId;
   final locationKey = _walLocationBatchKey(ordered.first);
   final hold = holdLabel?.call(ordered.first);
+  final recovered = ordered.first.recoveredMobileBatchHold;
   final group = ordered
       .where(
         (wal) =>
@@ -248,6 +249,7 @@ List<Wal> nextSyncUploadBatch(List<Wal> pending, int nowSeconds, {String Functio
                 walCaptureTimeClass(wal, nowSeconds) == walCaptureTimeClass(ordered.first, nowSeconds)) &&
             isMobileStandardBatchWal(wal) == isMobileStandardBatchWal(ordered.first) &&
             holdLabel?.call(wal) == hold &&
+            wal.recoveredMobileBatchHold == recovered &&
             _walLocationBatchKey(wal) == locationKey,
       )
       .toList();

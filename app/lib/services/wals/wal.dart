@@ -656,6 +656,9 @@ class Wal {
   /// A replayed journal is recoverable audio, not yet a persisted index row.
   bool recoveredBatchJournal = false;
 
+  /// A prior process durably held this file. Upload telemetry only.
+  bool recoveredMobileBatchHold = false;
+
   // Ring download coordinates commit atomically with the WAL index. They are
   // independent of transient BLE epochs and survive a crash before custody save.
   int? _downloadRingId;

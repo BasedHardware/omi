@@ -4922,6 +4922,59 @@
       "correlation": null
     },
     {
+      "id": "mobileHeldWalBacklog",
+      "wire_name": "Mobile Held WAL Backlog",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {
+        "trigger": {
+          "type": "enum",
+          "wire_name": "trigger",
+          "values": [
+            "startup",
+            "foreground",
+            "hourly"
+          ]
+        },
+        "heldWalCount": {
+          "type": "int",
+          "wire_name": "held_wal_count"
+        },
+        "oldestHeldAgeS": {
+          "type": "int",
+          "wire_name": "oldest_held_age_s"
+        },
+        "holdFlagOn": {
+          "type": "bool",
+          "wire_name": "hold_flag_on"
+        },
+        "holdState": {
+          "type": "enum",
+          "wire_name": "hold_state",
+          "values": [
+            "bg300",
+            "fg_preview300",
+            "fg60",
+            "unknown"
+          ]
+        },
+        "cohort": {
+          "type": "enum",
+          "wire_name": "cohort",
+          "values": [
+            "on",
+            "off"
+          ]
+        }
+      },
+      "consumers": [
+        "mobile-held-wal-backlog"
+      ],
+      "correlation": null
+    },
+    {
       "id": "walReconcilePollSummary",
       "wire_name": "WAL Reconcile Poll Summary",
       "status": "active",

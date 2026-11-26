@@ -276,6 +276,16 @@ class MobileBatchBuffer {
     var published = false;
     _pending = _pending.then((_) async {
       wal.fileSha256 = (await sha256.bind(File('${directory.path}/${wal.filePath}').openRead()).first).toString();
+      if (wal.mobileBatchHold != null) {
+        try {
+          final tmp = File('${journal.path}.tmp');
+          await tmp.writeAsString(jsonEncode(wal.toJson()), flush: true);
+          await tmp.rename(journal.path);
+        } on FileSystemException {
+          // The existing journal still protects the audio. The index can
+          // carry the hold stamp even if this optional checkpoint failed.
+        }
+      }
       await publish(wal);
       published = true;
       // publish persists the shared WAL index before removing the journal.

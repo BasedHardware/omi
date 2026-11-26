@@ -39,12 +39,33 @@ void main() {
     expect(trace.holdHeadersAtSend(upload, holdEnabled: false), {'X-Omi-Upload-Hold': 'none'});
   });
 
+  test('recovered uploads keep their marker across retries and flag-off', () {
+    trace.prepare(
+      firstFilePath: '/recovered.bin',
+      oldestId: 'recovered',
+      sealedAtSeconds: 1990,
+      holdState: 'fg60',
+      holdSealedAtMs: 1990000,
+      recovered: true,
+    );
+    final upload = trace.take('/recovered.bin');
+    expect(trace.holdHeadersAtSend(upload, holdEnabled: true), {
+      'X-Omi-Upload-Hold': 'fg60',
+      'X-Omi-Upload-Hold-Age-Ms': '10000',
+      'X-Omi-Upload-Recovered': '1',
+    });
+    expect(trace.holdHeadersAtSend(upload, holdEnabled: false), {
+      'X-Omi-Upload-Hold': 'none',
+      'X-Omi-Upload-Recovered': '1',
+    });
+  });
+
   test('hold age clamps clock changes and requires a held file', () {
-    const held = (trace: 'trace', holdState: 'fg60', holdSealedAtMs: 2010000);
+    const held = (trace: 'trace', holdState: 'fg60', holdSealedAtMs: 2010000, recovered: false);
     expect(trace.holdHeadersAtSend(held, holdEnabled: true)['X-Omi-Upload-Hold-Age-Ms'], '0');
     clock = at(200000);
     expect(trace.holdHeadersAtSend(held, holdEnabled: true)['X-Omi-Upload-Hold-Age-Ms'], '86400000');
-    const unheld = (trace: 'trace', holdState: 'none', holdSealedAtMs: 2010000);
+    const unheld = (trace: 'trace', holdState: 'none', holdSealedAtMs: 2010000, recovered: false);
     expect(trace.holdHeadersAtSend(unheld, holdEnabled: true), {'X-Omi-Upload-Hold': 'none'});
   });
 

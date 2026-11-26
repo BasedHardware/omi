@@ -307,8 +307,44 @@ void main() {
     ]);
     expect((await restarted.getAllWals()).every((wal) => wal.status == WalStatus.uploaded), isTrue);
     expect(traces.last?.holdState, 'fg60');
+    expect(traces.first?.recovered, isFalse);
+    expect(traces.last?.recovered, isTrue);
     expect(traces.last?.holdSealedAtMs, _start.millisecondsSinceEpoch);
     expect(await File('${directory.path}/${file.filePath}').readAsBytes(), [1, 0, 0, 0, 1]);
+  });
+
+  test('sealed journal retains the hold stamp if publication is interrupted', () async {
+    final directory = await custodyDirectory();
+    addTearDown(() => directory.delete(recursive: true));
+    final hold = MobileBatchUploadHold(enabled: () => true, wake: () {}, now: () => _start);
+    addTearDown(hold.clear);
+    final buffer = MobileBatchBuffer(
+      directory: directory,
+      onSealed: hold.sealed,
+      publish: (_) async => throw StateError('test interruption before index write'),
+    );
+    expect(buffer.append([1], uid: 'owner', codec: BleAudioCodec.opus, now: _start, recordingSessionId: 'r'), isTrue);
+    await buffer.close();
+
+    final restarted = await custodyLedger(now: () => _start);
+    final recovered = (await restarted.getAllWals()).single;
+    expect(recovered.recoveredBatchJournal, isTrue);
+    expect(recovered.recoveredMobileBatchHold, isTrue);
+    expect(recovered.mobileBatchHold, (sealedAtMs: _start.millisecondsSinceEpoch, state: 'fg60'));
+    expect(await File('${directory.path}/${recovered.filePath}').readAsBytes(), [1, 0, 0, 0, 1]);
+  });
+
+  test('a recovered WAL never batches with a fresh WAL carrying the same hold state', () {
+    final recovered = _wal(0, 1)
+      ..mobileBatchHold = (sealedAtMs: 100, state: 'bg300')
+      ..recoveredMobileBatchHold = true;
+    final fresh = _wal(1, 1)..mobileBatchHold = (sealedAtMs: 101, state: 'bg300');
+    final now = _start.add(const Duration(hours: 1)).millisecondsSinceEpoch ~/ 1000;
+    final first = nextSyncUploadBatch([fresh, recovered], now, holdLabel: MobileBatchUploadHold.indexedLabel);
+    expect(first, hasLength(1));
+    final rest = [fresh, recovered]..removeWhere(first.contains);
+    final second = nextSyncUploadBatch(rest, now, holdLabel: MobileBatchUploadHold.indexedLabel);
+    expect([...first, ...second], unorderedEquals([fresh, recovered]));
   });
 
   test('oldest seal is picked from the actual request even when a later capture sealed first', () {
