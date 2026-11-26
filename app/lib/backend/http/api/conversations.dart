@@ -2,6 +2,8 @@ import 'dart:async';
 import 'package:omi/utils/reliability_experiments.dart';
 import 'package:omi/utils/analytics/lag_work_registry.dart';
 import 'sync_upload_refusal.dart';
+import 'wal_retry_manifest.dart';
+import 'package:omi/backend/preferences.dart';
 import 'conversation_page_headers.dart';
 export 'conversation_page_headers.dart';
 import 'dart:convert';
@@ -1077,29 +1079,61 @@ enum SyncRateLimitKind { fairUse, backendCapacity, edgeThrottle }
 bool shouldRequestSyncCaptureManifest(String? conversationId, bool claimLiveCapture) =>
     conversationId != null && claimLiveCapture;
 
-Future<String?> _createSyncCaptureManifest(List<File> files, String conversationId) async {
+final _walRetryManifests = WalRetryManifests(DateTime.now);
+
+Future<({String? manifest, String key})> _createSyncCaptureManifest(
+  List<File> files,
+  String conversationId,
+  String uploadUrl,
+) async {
+  final owner = SharedPreferencesUtil().uid;
   final claims = <Map<String, String>>[];
   for (final file in files) {
     final digest = await sha256.bind(file.openRead()).first;
     claims.add({'name': file.uri.pathSegments.last, 'sha256': digest.toString()});
   }
+  final key = WalRetryManifests.key(owner, PlatformManager.instance.deviceIdHash, uploadUrl, claims);
+  final body = jsonEncode(wire.GeneratedSyncCaptureManifestRequest(
+    conversationId: conversationId,
+    files: [
+      for (final claim in claims) wire.GeneratedSyncCaptureManifestFile(name: claim['name']!, sha256: claim['sha256']!),
+    ],
+  ).toJson());
+  final handle = owner.isEmpty ? null : _walRetryManifests.take(key);
   final response = await makeApiCall(
     url: '${Env.apiBaseUrl}v2/sync-capture-manifest',
-    headers: const {},
-    body: jsonEncode(
-      wire.GeneratedSyncCaptureManifestRequest(
-        conversationId: conversationId,
-        files: [
-          for (final claim in claims)
-            wire.GeneratedSyncCaptureManifestFile(name: claim['name']!, sha256: claim['sha256']!),
-        ],
-      ).toJson(),
-    ),
+    headers: {if (handle != null) 'X-Omi-Wal-Retry': handle},
+    body: body,
     method: 'POST',
+    canSend: handle == null ? null : () => SharedPreferencesUtil().uid == owner,
   );
-  if (response?.statusCode != 200) return null;
-  final body = wire.GeneratedSyncCaptureManifestResponse.fromJson(jsonDecode(response!.body) as Map<String, dynamic>);
-  return body.manifest;
+  if (SharedPreferencesUtil().uid != owner) {
+    throw const SyncUploadHttpException(401, 'Upload account changed');
+  }
+  if (response?.statusCode != 200) return (manifest: null, key: key);
+  final result = wire.GeneratedSyncCaptureManifestResponse.fromJson(jsonDecode(response!.body) as Map<String, dynamic>);
+  if (handle != null && response.headers['x-omi-wal-retry'] == 'check') {
+    const deadline = Duration(seconds: 3);
+    final elapsed = Stopwatch()..start();
+    final probe = await makeApiCall(
+      url: '${Env.apiBaseUrl}v2/sync-local-files',
+      method: 'PUT',
+      headers: {'X-Omi-Wal-Retry': handle},
+      body: body,
+      timeout: const Duration(seconds: 2),
+      retries: 0,
+      retryServerErrors: false,
+      canSend: () => SharedPreferencesUtil().uid == owner && elapsed.elapsed < deadline,
+    ).timeout(deadline, onTimeout: () => null);
+    if (SharedPreferencesUtil().uid != owner || probe?.statusCode == 401 || probe?.statusCode == 403) {
+      throw SyncUploadHttpException(probe?.statusCode == 403 ? 403 : 401, 'Upload authentication failed');
+    }
+    if (_walRetryManifests.confirmsWait(handle, probe)) {
+      throw SyncUploadHttpException(503, 'Recording custody is pending',
+          reasonCode: recordCapturePending, recordingWaitSeconds: syncUploadServerWaitSeconds(probe!));
+    }
+  }
+  return (manifest: result.manifest, key: key);
 }
 
 /// Thrown when a sync upload is rate-limited (HTTP 429).
@@ -1281,12 +1315,6 @@ Future<UploadFilesResult> uploadLocalFilesV2(
   final work = lagWork.begin(LagWork.upload);
   try {
     assertWalSyncFilesAreFramedBins(files.map((file) => file.path));
-    // Measurement only; absent when nothing was parked for this upload.
-    final uploadTrace = files.isEmpty ? null : UploadTrace.instance.take(files.first.path);
-    String? captureManifest;
-    if (shouldRequestSyncCaptureManifest(conversationId, claimLiveCapture)) {
-      captureManifest = await _createSyncCaptureManifest(files, conversationId!);
-    }
     var url = '${Env.apiBaseUrl}v2/sync-local-files';
     final query = <String, String>{
       if (conversationId != null && conversationId.isNotEmpty) 'conversation_id': conversationId,
@@ -1297,17 +1325,26 @@ Future<UploadFilesResult> uploadLocalFilesV2(
     if (query.isNotEmpty) {
       url += '?${query.entries.map((entry) => '${entry.key}=${Uri.encodeQueryComponent(entry.value)}').join('&')}';
     }
+    final capture = shouldRequestSyncCaptureManifest(conversationId, claimLiveCapture)
+        ? await _createSyncCaptureManifest(files, conversationId!, url)
+        : null;
+    final captureManifest = capture?.manifest;
+    // Measurement only; absent when nothing was parked for this upload.
+    final uploadTrace = files.isEmpty ? null : UploadTrace.instance.take(files.first.path);
     var response = await makeMultipartApiCall(
       url: url,
       files: files,
       headers: {
         if (captureManifest != null) 'X-Omi-Sync-Capture-Manifest': captureManifest,
+        if (captureManifest != null) 'X-Omi-Wal-Retry': '1',
         if (captureEvidence != null) 'X-Omi-Capture-Evidence': captureEvidence,
         if (geolocation != null) 'X-Omi-Conversation-Geolocation': jsonEncode(geolocation.toJson()),
         if (uploadTrace != null) 'X-Omi-Upload-Trace': uploadTrace,
       },
       onUploadProgress: onUploadProgress,
     );
+
+    if (captureManifest != null) _walRetryManifests.remember(capture!.key, response);
 
     if (response.statusCode == 200) {
       // Fast-path: server processed synchronously and returned the result. A
