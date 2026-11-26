@@ -289,11 +289,20 @@ def windows(groups, outlines, *, cohesion=False, silence_gap=SILENCE, defer_topi
                     candidate['_stretch_partition'] = first_result
                 # A model can undo a topic split within a stretch. Keep a cap boundary even without cohesion.
                 prior = result[-1] if result else None
+                oversize = bool(
+                    prior
+                    and size_cap
+                    and entry.get('resumes_previous')
+                    and sum(map(_transcript_bytes, (*prior['lines'], *part))) > TRANSCRIPT_BUDGET
+                )
+                if oversize:
+                    # The size budget, not the outline, keeps this resumed topic a separate card.
+                    logger.info('event=v3_transcript_size_cap_split')
                 if (
                     prior
                     and (not (cohesion or group.get('after_window_cap')) or len(result) > first_result)
                     and entry.get('resumes_previous')
-                    and (not size_cap or sum(map(_transcript_bytes, (*prior['lines'], *part))) <= TRANSCRIPT_BUDGET)
+                    and not oversize
                     and not prior.get('manual_end')
                     and prior['kind'] == candidate['kind']
                     and prior.get('people') == candidate.get('people')

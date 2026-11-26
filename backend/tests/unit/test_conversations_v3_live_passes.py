@@ -852,7 +852,7 @@ async def test_one_ownership_index_per_plan(strict, monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_reconcile_retries_oversize_transcript_as_continuations(strict, monkeypatch):
+async def test_reconcile_parks_then_recovers_oversize_transcript_as_continuations(strict, monkeypatch):
 
     rng = random.Random(2918)
     segments = speech(100, step=10)
@@ -882,13 +882,13 @@ async def test_reconcile_retries_oversize_transcript_as_continuations(strict, mo
 
     monkeypatch.setattr(StrictFirestoreTransaction, 'set', checked_set)
     monkeypatch.setenv('CONVERSATIONS_V3_TRANSCRIPT_SIZE_CAP', 'off')
-    with pytest.raises(InvalidArgument, match='longer than 1048487 bytes'):
-        await reconcile_at(strict, monkeypatch, now)
+    # The per-property rejection parks the owner (backoff) instead of failing every retry with a 500.
+    assert await reconcile_at(strict, monkeypatch, now) == 'blocked'
     assert not derived(strict)
     assert not strict.rows[path('r')]['claims']
 
     monkeypatch.delenv('CONVERSATIONS_V3_TRANSCRIPT_SIZE_CAP')
-    assert await reconcile_at(strict, monkeypatch, now + timedelta(seconds=15)) == 'committed'
+    assert await reconcile_at(strict, monkeypatch, now + timedelta(minutes=6)) == 'committed'
     rows = derived(strict)
     assert len(rows) > 1
     assert [s['id'] for row in rows for s in row['transcript_segments']] == [s['id'] for s in segments]
