@@ -373,6 +373,66 @@ def test_stripe_conflict_settlement(conflict, caplog, monkeypatch, caller, listi
     )
 
 
+def test_a_billable_subscription_seen_by_the_first_listing_survives_a_failed_second_listing(
+    conflict, caplog, monkeypatch
+):
+    """Luna P2 on #26410: the live check saw the card subscription; the conflict listing then saw only a
+    prepaid code and failed. The first listing's evidence must still record the conflict."""
+    monkeypatch.setattr(play_billing.time, 'time', lambda: NOW)
+    env = conflict.env
+    env.users.rows.pop(UID)  # no qualifying local row, so only Stripe evidence counts
+    billable = {'id': 'sub_card', 'status': 'active', 'metadata': {'uid': UID}}
+    prepaid = {
+        'id': 'sub_prepaid',
+        'status': 'active',
+        'metadata': {'uid': UID, 'prepaid_code_redemption': '1', 'redeemed_promotion_code_id': 'promo_prepaid'},
+    }
+    calls = []
+
+    def subscriptions(**kwargs):
+        calls.append(kwargs)
+
+        def first():
+            yield SimpleNamespace(to_dict=lambda: billable)
+
+        def second():
+            yield SimpleNamespace(to_dict=lambda: prepaid)
+            raise RuntimeError('Stripe pagination unavailable')
+
+        return SimpleNamespace(auto_paging_iter=first if len(calls) == 1 else second)
+
+    monkeypatch.setattr(play_billing.stripe.Subscription, 'list', subscriptions)
+    fallbacks = []
+    monkeypatch.setattr(play_billing, 'record_fallback', lambda **kwargs: fallbacks.append(kwargs))
+
+    assert _notify(1) == 'stripe_conflict'
+    purchase = env.store.docs[play_db.token_key(TOKEN)]
+    assert len(calls) == 2
+    assert purchase[play_billing.CONFLICT_FIELD] == NOW
+    assert play_billing.CONFLICT_UNVERIFIED_FIELD not in purchase  # confirmed by the first listing
+    assert [n.source for n in conflict.notices] == ['play_billing_double_billing']
+    assert len(_double_charge_lines(caplog)) == 1
+    assert fallbacks == []
+
+
+def test_an_unverified_conflict_records_fallback_telemetry(conflict, monkeypatch):
+    """Luna P2 on #26410: the local-row conflict path is a degraded fallback and must be counted."""
+    monkeypatch.setattr(play_billing.time, 'time', lambda: NOW)
+
+    def unavailable(**kwargs):
+        raise RuntimeError('Stripe unavailable')
+
+    monkeypatch.setattr(play_billing.stripe.Subscription, 'list', unavailable)
+    fallbacks = []
+    monkeypatch.setattr(play_billing, 'record_fallback', lambda **kwargs: fallbacks.append(kwargs))
+
+    assert _notify(1) == 'stripe_conflict'
+    assert conflict.env.store.docs[play_db.token_key(TOKEN)][play_billing.CONFLICT_UNVERIFIED_FIELD] == NOW
+    assert [(f['component'], f['from_mode'], f['to_mode'], f['outcome']) for f in fallbacks] == [
+        ('play_billing', 'stripe_listing', 'local_row', 'degraded')
+    ]
+
+
 @pytest.mark.parametrize('failure', [RuntimeError('fcm down'), 'failed'])
 def test_a_failed_notice_is_sent_on_the_next_observation(conflict, failure):
     if failure == 'failed':
