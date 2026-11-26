@@ -4,6 +4,7 @@ Only lifecycle calls commit_projection. Speech uses the existing conversation
 codec; cached outlines are encrypted. Nothing is cleared after a lost race.
 """
 
+import hashlib
 import json
 import logging
 import os
@@ -79,6 +80,27 @@ def _env_int(name, default):
 DERIVED_LIMIT = _env_int('CONVERSATIONS_V3_DERIVED_LIMIT', 1024)
 DERIVED_BYTES = _env_int('CONVERSATIONS_V3_DERIVED_BYTES', 16 * 1024 * 1024)
 SOURCE_LIMIT = _env_int('CONVERSATIONS_V3_SOURCE_LIMIT', 400)
+
+
+def _env_allowance(name, default):
+    try:
+        value = int(os.getenv(name, ''))
+    except ValueError:
+        return default
+    return value if value >= 0 else default
+
+
+# Locked claimants: rows the planner keeps fixed (preserve_finished_windows), so they are read-only in a pass.
+# Old moving cap cuts left a long recording owning up to ~1,000 locked one-line windows (2026-11-26: 21
+# owners, a single seed's closure 1,026-1,994 rows, median row 8 s). The locked rows may use this
+# extra room. Rewritable rows keep DERIVED_LIMIT and DERIVED_BYTES.
+# Off by default. Only owners listed in CONVERSATIONS_V3_LOCKED_CLOSURE_OWNERS get the allowance: the
+# list holds comma-separated owner tags (sha256(uid)[:12], the `owner=` tag of the blocked log), or `*`
+# for every owner. A pass that commits such a closure costs about 6.5k to 15k reads (most of them commit
+# revision fences: every batch rereads the whole loaded closure), so the ramp is per owner.
+# An empty list, or either size set to 0, is the kill switch: the origin bound applies to every row.
+LOCKED_DERIVED_ALLOWANCE = _env_allowance('CONVERSATIONS_V3_LOCKED_DERIVED_ALLOWANCE', 2048)
+LOCKED_DERIVED_BYTES = _env_allowance('CONVERSATIONS_V3_LOCKED_DERIVED_BYTES', 32 * 1024 * 1024)
 CLAIM_READ_CHUNK = 100
 
 
@@ -394,6 +416,31 @@ def _is_discarded_or_deleted(row):
     return row.get('recording') and (row.get('discarded') or row.get('deleted'))
 
 
+def locked_closure_owner(uid):
+    """The owner is on the locked-claimant allowlist (read per pass, so an env edit applies on the next one)."""
+    listed = {tag.strip().lower() for tag in os.getenv('CONVERSATIONS_V3_LOCKED_CLOSURE_OWNERS', '').split(',')}
+    listed.discard('')
+    return '*' in listed or hashlib.sha256(str(uid).encode()).hexdigest()[:12] in listed
+
+
+def _locked_allowance(uid):
+    """(rows, bytes) the closure may add for locked claimants; (0, 0) off the allowlist or when switched off."""
+    if not LOCKED_DERIVED_ALLOWANCE or not LOCKED_DERIVED_BYTES or not locked_closure_owner(uid):
+        return 0, 0
+    return LOCKED_DERIVED_ALLOWANCE, LOCKED_DERIVED_BYTES
+
+
+def locked_claimant(row):
+    """A row whose boundaries this pass cannot move: the planner's preserve_finished_windows predicate."""
+    return bool(
+        row.get('status') != 'in_progress'
+        and not row.get('v3_unlocked')
+        and row.get('started_at')
+        and row.get('finished_at')
+        and not (row.get('v3_refined') and row.get('v3_claims_transferred_to'))
+    )
+
+
 def _select_unlocked(state, existing, limit, page):
     ids = sorted(set(state.get('unlocked_ids') or ()) - existing.keys())
     if page is None:
@@ -472,17 +519,35 @@ def load(
             existing[opened['id']] = opened
     queried = set()
     by_claims = closure_by_claims()
-    loaded_bytes = sum(_encoded_bytes(row.get('transcript_segments') or []) for row in existing.values())
+    extra_rows, extra_bytes = _locked_allowance(uid)
+    row_limit = DERIVED_LIMIT + extra_rows
+    sizes = {cid: _encoded_bytes(row.get('transcript_segments') or []) for cid, row in existing.items()}
+    locked = {cid for cid, row in existing.items() if locked_claimant(row)}
+    loaded_bytes = sum(sizes.values())
+    locked_bytes = sum(sizes[cid] for cid in locked)
 
     def add(row):
         # Checked per document, so an overflowing closure stops reading and decoding at the bound.
-        nonlocal loaded_bytes
-        previous = existing.get(row['id'])
-        loaded_bytes += _encoded_bytes(row.get('transcript_segments') or [])
-        if previous is not None:
-            loaded_bytes -= _encoded_bytes(previous.get('transcript_segments') or [])
-        existing[row['id']] = row
-        if len(existing) > DERIVED_LIMIT or loaded_bytes > DERIVED_BYTES:
+        nonlocal loaded_bytes, locked_bytes
+        cid = row['id']
+        if cid in sizes:
+            loaded_bytes -= sizes[cid]
+            if cid in locked:
+                locked_bytes -= sizes[cid]
+                locked.discard(cid)
+        sizes[cid] = _encoded_bytes(row.get('transcript_segments') or [])
+        loaded_bytes += sizes[cid]
+        if locked_claimant(row):
+            locked.add(cid)
+            locked_bytes += sizes[cid]
+        existing[cid] = row
+        # Rewritable rows keep the original bound. Locked claimants may also use the allowance.
+        if (
+            len(existing) - len(locked) > DERIVED_LIMIT
+            or loaded_bytes - locked_bytes > DERIVED_BYTES
+            or len(existing) > row_limit
+            or loaded_bytes > DERIVED_BYTES + extra_bytes
+        ):
             raise Conflict('v3_derived_budget')
 
     if not conversation_id:
@@ -538,7 +603,7 @@ def load(
                 if isinstance(cid, str) and cid not in existing:
                     claimed.add(cid)
         # Refuse before reading when the ids alone overflow, and read in chunks so a byte overflow stops early.
-        if len(existing) + len(claimed) > DERIVED_LIMIT:
+        if len(existing) + len(claimed) > row_limit:
             raise Conflict('v3_derived_budget')
         ordered = sorted(claimed)
         for start in range(0, len(ordered), CLAIM_READ_CHUNK):
@@ -577,11 +642,11 @@ def load(
                 coll.where(filter=FieldFilter('v3_derived', '==', True))
                 .where(filter=FieldFilter('finished_at', '>=', left))
                 .where(filter=FieldFilter('started_at', '<=', right))
-                .limit(DERIVED_LIMIT + 1)
+                .limit(row_limit + 1)
                 .stream()
             )
             for count, doc in enumerate(snapshots, 1):
-                if count > DERIVED_LIMIT:
+                if count > row_limit:
                     raise Conflict('v3_derived_budget')
                 row = decode_row(uid, doc)
                 if row:

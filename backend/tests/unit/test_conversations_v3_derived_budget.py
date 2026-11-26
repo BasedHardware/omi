@@ -15,6 +15,12 @@ C = '/users/u/conversations/'
 
 
 @pytest.fixture(autouse=True)
+def origin_bound(monkeypatch):
+    # The bound tests below pin the kill-switched (origin) bound; the locked allowance has its own tests.
+    monkeypatch.setattr(store, 'LOCKED_DERIVED_ALLOWANCE', 0)
+
+
+@pytest.fixture(autouse=True)
 def plain_rows(monkeypatch):
     monkeypatch.setattr(store, 'account_deletion_blocks_user_work', lambda *a: False)
     monkeypatch.setattr(
@@ -826,3 +832,146 @@ def test_park_with_indexed_unlocked_windows_spends_the_paging_attempt(strict):
     assert store.record_blocked(UID, token, 'v3_derived_budget', firestore_client=strict)
     backoff, reason = store.backoff_state(UID, firestore_client=strict)
     assert backoff is not None and reason == 'v3_derived_budget'
+
+
+# Locked-claimant allowance (2026-11-26): 21 owners were parked because a single seed's closure was 1,026-1,994
+# rows. One long recording owned up to ~1,000 locked 8-second windows left by the old moving cap cut.
+
+
+def allowance(monkeypatch, rows, nbytes=1 << 30, owners='*'):
+    monkeypatch.setenv('CONVERSATIONS_V3_LOCKED_CLOSURE_OWNERS', owners)
+    monkeypatch.setattr(store, 'DERIVED_LIMIT', 10)
+    monkeypatch.setattr(store, 'LOCKED_DERIVED_ALLOWANCE', rows)
+    monkeypatch.setattr(store, 'LOCKED_DERIVED_BYTES', nbytes)
+
+
+def test_locked_fragments_past_the_derived_limit_load_within_the_allowance(monkeypatch):
+    allowance(monkeypatch, 20)
+    recordings, existing, _ = store.load('u', firestore_client=MemoryQuery(fragmented(30)))
+    assert set(recordings) == {'r'} and len(existing) == 30
+
+
+def test_locked_fragments_found_by_time_load_within_the_allowance(monkeypatch):
+    allowance(monkeypatch, 20)
+    rows = fragmented(30)
+    rows[C + 'r']['claims'] = []  # only the time query finds them
+    _, existing, _ = store.load('u', firestore_client=MemoryQuery(rows))
+    assert len(existing) == 30
+
+
+def test_the_allowance_has_a_total_bound_checked_before_reading(monkeypatch):
+    allowance(monkeypatch, 20)
+    reads = []
+    real = MemoryQuery.get_all
+    monkeypatch.setattr(MemoryQuery, 'get_all', lambda self, refs, **kw: reads.append(len(refs)) or real(self, refs))
+    with pytest.raises(Conflict, match='v3_derived_budget'):
+        store.load('u', firestore_client=MemoryQuery(fragmented(31)))
+    assert reads == []
+
+
+@pytest.mark.parametrize('field', ['v3_unlocked', 'in_progress', 'transferred'])
+def test_rewritable_rows_keep_the_derived_limit(monkeypatch, field):
+    allowance(monkeypatch, 20)
+    rows = fragmented(11)
+    for i in range(11):
+        row = rows[C + f'd{i}']
+        if field == 'v3_unlocked':
+            row['v3_unlocked'] = True
+        elif field == 'in_progress':
+            row['status'] = 'in_progress'
+        else:
+            row.update(v3_refined=True, v3_claims_transferred_to='elsewhere')
+    with pytest.raises(Conflict, match='v3_derived_budget'):
+        store.load('u', firestore_client=MemoryQuery(rows))
+
+
+def test_rewritable_rows_keep_the_byte_bound_and_locked_rows_use_the_byte_allowance(monkeypatch):
+    rows = fragmented(10)
+    per_row = store._encoded_bytes(rows[C + 'd0']['transcript_segments'])
+    allowance(monkeypatch, 20, nbytes=per_row * 6)
+    monkeypatch.setattr(store, 'DERIVED_BYTES', per_row * 4)
+    _, existing, _ = store.load('u', firestore_client=MemoryQuery(rows))  # 10 locked rows: 4 + 6
+    assert len(existing) == 10
+    rows = fragmented(11)
+    with pytest.raises(Conflict, match='v3_derived_budget'):  # total bytes over 4 + 6
+        store.load('u', firestore_client=MemoryQuery(rows))
+    rows = fragmented(5)
+    for i in range(5):
+        rows[C + f'd{i}']['v3_unlocked'] = True
+    with pytest.raises(Conflict, match='v3_derived_budget'):  # 5 rewritable rows over 4
+        store.load('u', firestore_client=MemoryQuery(rows))
+
+
+def test_locked_claimant_matches_the_planners_protected_rows():
+    row = derived('d', AT, 10, ['r'])
+    assert store.locked_claimant(row)
+    assert not store.locked_claimant({**row, 'v3_unlocked': True})
+    assert not store.locked_claimant({**row, 'status': 'in_progress'})
+    assert not store.locked_claimant({**row, 'finished_at': None})
+    assert not store.locked_claimant({**row, 'v3_refined': True, 'v3_claims_transferred_to': 'x'})
+
+
+TAG = __import__('hashlib').sha256(b'u').hexdigest()[:12]
+
+
+@pytest.mark.parametrize(
+    'owners, allowed',
+    [
+        ('', False),
+        ('   ', False),
+        ('0123456789ab', False),
+        (TAG, True),
+        (f'0123456789ab, {TAG.upper()}', True),
+        ('*', True),
+    ],
+)
+def test_the_allowance_applies_only_to_listed_owners(monkeypatch, owners, allowed):
+    allowance(monkeypatch, 20, owners=owners)
+    if allowed:
+        assert len(store.load('u', firestore_client=MemoryQuery(fragmented(30)))[1]) == 30
+    else:
+        with pytest.raises(Conflict, match='v3_derived_budget'):
+            store.load('u', firestore_client=MemoryQuery(fragmented(11)))
+        assert len(store.load('u', firestore_client=MemoryQuery(fragmented(10)))[1]) == 10
+
+
+def test_the_allowlist_is_off_by_default(monkeypatch):
+    monkeypatch.delenv('CONVERSATIONS_V3_LOCKED_CLOSURE_OWNERS', raising=False)
+    assert store._locked_allowance('u') == (0, 0)
+
+
+@pytest.mark.parametrize('raw, expected', [('0', 0), ('', 2048), ('junk', 2048), ('-3', 2048), ('4096', 4096)])
+def test_allowance_env_parsing(monkeypatch, raw, expected):
+    monkeypatch.setenv('X_ALLOWANCE', raw)
+    assert store._env_allowance('X_ALLOWANCE', 2048) == expected
+
+
+@pytest.mark.parametrize('switch', ['LOCKED_DERIVED_ALLOWANCE', 'LOCKED_DERIVED_BYTES'])
+def test_kill_switch_restores_the_origin_bound(monkeypatch, switch):
+    allowance(monkeypatch, 20)
+    monkeypatch.setattr(store, switch, 0)
+    with pytest.raises(Conflict, match='v3_derived_budget'):
+        store.load('u', firestore_client=MemoryQuery(fragmented(11)))
+    store.load('u', firestore_client=MemoryQuery(fragmented(10)))
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('allowed, sizes', [(20, [8]), (0, [8, 1])])
+async def test_a_parked_owner_with_a_fragmented_recording_commits_instead_of_parking(monkeypatch, allowed, sizes):
+    allowance(monkeypatch, allowed)
+    client, attempted = MemoryQuery(fragmented(30)), []
+
+    async def run_fixture(_, fn, *args, **kwargs):
+        if fn in (leases.renew, store.mark_bounded_attempt, store.clear_terminal_pending):
+            return None
+        attempted.append(kwargs.get('pending_limit', 32))
+        return fn(*args, **kwargs, firestore_client=client)
+
+    monkeypatch.setattr(service, 'run_blocking', run_fixture)
+    if allowed:
+        recordings, existing, _, size = await service._load_live_batch('u', 'token', 'v3_derived_budget')
+        assert set(recordings) == {'r'} and len(existing) == 30 and size == 8
+    else:
+        with pytest.raises(Conflict, match='v3_derived_budget'):
+            await service._load_live_batch('u', 'token', 'v3_derived_budget')
+    assert attempted == sizes
