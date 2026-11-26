@@ -30,6 +30,49 @@ def test_operation_endpoints_reject_invalid_key():
         assert 'X-Omi-Idempotency-Key' not in get_error.value.headers
 
 
+def test_ordinary_completions_reject_idempotency_key():
+    calls = []
+    with provider_server() as server:
+        endpoint = f'http://127.0.0.1:{server.server_port}/v1/chat/completions'
+        server.dispatch = lambda *args: calls.append(args)
+        request = Request(endpoint, b'{}', {'Idempotency-Key': 'ordinary-key'})
+        with pytest.raises(HTTPError) as error:
+            urlopen(request, timeout=2)
+        assert error.value.code == 400
+        assert json.load(error.value)['error']['code'] == 'idempotency_operations_route_required'
+        assert not server.operations
+    assert not calls
+
+
+def test_operation_key_rejects_changed_request_and_preserves_original_replay():
+    calls = []
+    with provider_server() as server:
+        endpoint = f'http://127.0.0.1:{server.server_port}/v1/chat/completions/operations'
+        server.state = SimpleNamespace(case={})
+
+        def dispatch(_path, body, _headers):
+            calls.append(body)
+            return {'content': body['prompt']}
+
+        server.dispatch = dispatch
+        headers = {'Idempotency-Key': 'operation-key'}
+        original = {'prompt': 'synthetic', 'temperature': 0}
+        with urlopen(Request(endpoint, json.dumps(original).encode(), headers), timeout=2) as response:
+            assert json.load(response) == {'content': 'synthetic'}
+
+        changed = {**original, 'prompt': 'changed'}
+        with pytest.raises(HTTPError) as error:
+            urlopen(Request(endpoint, json.dumps(changed).encode(), headers), timeout=2)
+        assert error.value.code == 409
+        assert json.load(error.value)['error']['code'] == 'idempotency_conflict'
+        assert 'X-Omi-Idempotency-Key' not in error.value.headers
+
+        equivalent = {'temperature': 0, 'prompt': 'synthetic'}
+        with urlopen(Request(endpoint, json.dumps(equivalent).encode(), headers), timeout=2) as response:
+            assert json.load(response) == {'content': 'synthetic'}
+    assert calls == [original]
+
+
 def test_wire_usage_uses_content_and_counts_idempotent_completion_once():
     state = SimpleNamespace(
         case={},

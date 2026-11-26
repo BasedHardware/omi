@@ -91,7 +91,8 @@ def provider_server():
             prefix = '/v1/chat/completions/operations/'
             key = self.path.removeprefix(prefix)
             if self.path.startswith(prefix) and _IDEMPOTENCY_KEY.fullmatch(key) and key in self.server.operations:
-                self._reply(200, self.server.operations[key], key)
+                _, result = self.server.operations[key]
+                self._reply(200, result, key)
                 return
             self._reply(404, {'error': {'code': 'idempotency_not_found'}})
 
@@ -100,6 +101,9 @@ def provider_server():
             try:
                 path = urlsplit(self.path).path
                 request_key = self.headers.get('Idempotency-Key')
+                if path == '/v1/chat/completions' and request_key is not None:
+                    self._reply(400, {'error': {'code': 'idempotency_operations_route_required'}})
+                    return
                 if request_key is not None and not _IDEMPOTENCY_KEY.fullmatch(request_key):
                     raise ValueError('invalid replay operation identity')
                 body = json.loads(self.rfile.read(int(self.headers['Content-Length'])))
@@ -111,12 +115,15 @@ def provider_server():
                     key = request_key
                     if not key:
                         raise ValueError('missing replay operation identity')
+                    canonical = json.dumps(body, sort_keys=True, separators=(',', ':'), allow_nan=False)
                     with self.server.operation_lock:
                         if key not in self.server.operations:
-                            self.server.operations[key] = self.server.dispatch(
-                                '/v1/chat/completions', body, self.headers
-                            )
-                        result = self.server.operations[key]
+                            result = self.server.dispatch('/v1/chat/completions', body, self.headers)
+                            self.server.operations[key] = canonical, result
+                        committed_request, result = self.server.operations[key]
+                    if canonical != committed_request:
+                        self._reply(409, {'error': {'code': 'idempotency_conflict'}})
+                        return
                 else:
                     result = self.server.dispatch(path, body, self.headers)
                 status = 503 if path == f"/receive/{self.server.state.case.get('unavailable_app')}" else 200
