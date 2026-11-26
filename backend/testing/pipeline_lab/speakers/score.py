@@ -74,8 +74,9 @@ def _voice(turn: Optional[dict]) -> Optional[str]:
     return turn.get('speaker')
 
 
-def score_conversation(words: list[dict], truth: dict, turns: list[dict]) -> dict:
-    """One conversation's counts and rates. ``turns`` are predicted segments on the audio clock."""
+def score_conversation(words: list[dict], truth: dict, turns: list[dict], scope: Optional[set] = None) -> dict:
+    """One conversation's counts and rates. ``turns`` are predicted segments on the audio clock. ``scope``
+    (word indexes) limits scoring to the words the conversation owns, the same set for every arm."""
     from utils.stt.diarization_eval import persisted_word_turns, score_words
 
     reference = truth_words(words, truth)
@@ -86,9 +87,9 @@ def score_conversation(words: list[dict], truth: dict, turns: list[dict]) -> dic
     chosen = persisted_word_turns(reference, valid) if valid else [None] * len(reference)
     counts = dict.fromkeys(COUNTS, 0)
     pairs = []
-    for word, index in zip(reference, chosen):
+    for position, (word, index) in enumerate(zip(reference, chosen)):
         label = word['speaker']
-        if label in IGNORED:
+        if label in IGNORED or (scope is not None and position not in scope):
             continue
         turn = valid[index] if index is not None else None
         claim, expected = _claim(turn), identities.get(label)
@@ -106,7 +107,9 @@ def score_conversation(words: list[dict], truth: dict, turns: list[dict]) -> dic
         counts['wrong_name_words'] += claim is not None and claim != expected
     oracle = score_words([p[0] for p in pairs], [p[1] for p in pairs]) if pairs else None
     counts['attributed_correct'] = oracle['correct_1to1'] if oracle else 0
-    truth_voices = len({w['speaker'] for w in reference if w['speaker'] not in IGNORED})
+    truth_voices = len(
+        {w['speaker'] for i, w in enumerate(reference) if w['speaker'] not in IGNORED and (scope is None or i in scope)}
+    )
     predicted_voices = len({_voice(t) for t in valid if _voice(t) is not None})
     card = {**counts, **rates(counts)}
     card['truth_voices'] = truth_voices

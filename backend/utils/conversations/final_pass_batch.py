@@ -198,32 +198,52 @@ class UnitStream:
     read_budget: ArtifactReadBudget
 
 
+APPEND_GAP_BYTES = 32000  # one second of silence before a unit placed after the timeline
+
+
 def _assemble(stream):
+    """One PCM buffer for the diarizer: each unit at its capture clock, words shifted with it.
+
+    A unit whose capture clock overlaps audio already placed with different samples (measured 2026-11-26 on
+    owner v3 conversations: a 131 s unit inside a 298 s unit of the same recording, correlation 0 at every lag
+    within 0.5 s) cannot sit at that clock. Labels do not need the conversation's timeline: words are
+    assigned to turns on the unit's own audio and the result maps back by segment id. So that unit is
+    appended after the timeline (one second of silence first) instead of refusing the whole conversation.
+    Identical overlaps still share their samples.
+    """
     stream.read_budget.timeout(60)
     # Metadata is small and sorted before decoding. Only one decoded unit lives
-    # alongside this buffer; the returned read-only view never copies it.
-    pcm = memoryview(bytearray(stream.capacity))
-    used, words, checks = 0, [], []
+    # alongside this buffer; it grows only for appended units.
+    pcm = bytearray(stream.capacity)
+    used, words, checks, appended = 0, [], [], 0
     for item, audio, local_words, validate in stream.units:
         stream.read_budget.timeout(60)
         position = round((item.capture_at - stream.origin) * 16000) * 2
-        end = position + len(audio)
-        if end > len(pcm):
-            raise OverflowError('audio timeline too long')
         overlap = max(0, min(used - position, len(audio)))
-        source = memoryview(audio)
-        if overlap and pcm[position : position + overlap] != source[:overlap]:
-            raise IncompleteCoverage('conflicting capture clocks')
-        pcm[position + overlap : end] = source[overlap:]
+        if overlap:
+            with memoryview(pcm) as placed, memoryview(audio) as source:
+                same = placed[position : position + overlap] == source[:overlap]
+            if not same:
+                position, overlap = used + APPEND_GAP_BYTES, 0
+                appended += 1
+        end = position + len(audio)
+        if end > MAX_AUDIO_SECONDS * 32000:
+            raise OverflowError('audio timeline too long')
+        if end > len(pcm):
+            pcm.extend(bytes(end - len(pcm)))
+        with memoryview(audio) as source:
+            pcm[position + overlap : end] = source[overlap:]
         used = max(used, end)
         for word in local_words:
             word['timestamp'][0] += position / 32000
             word['timestamp'][1] += position / 32000
         words.extend(local_words)
         checks.append(validate)
-        del source, audio, local_words
+        del audio, local_words
+    if appended:
+        logger.info('event=batch_final_pass unit_placement=appended_after_timeline units=%d', appended)
     stream.read_budget.timeout(60)
-    return pcm[:used].toreadonly(), words, checks
+    return memoryview(pcm)[:used].toreadonly(), words, checks
 
 
 def receipt_sources(conversation) -> tuple[str, ...]:

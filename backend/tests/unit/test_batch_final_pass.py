@@ -635,13 +635,16 @@ def test_capture_clock_places_staged_pcm_and_words_across_gap(lane, monkeypatch)
     assert [w['timestamp'] for w in received] == [[0.2, 2.8], [3, 5.8], [10.2, 12.8], [13, 15.8]]
 
 
-def test_overlapping_incompatible_unit_clocks_keep_all_labels(lane):
+def test_overlapping_incompatible_unit_clocks_append_after_timeline(lane):
+    # unit-b's clock overlaps unit-a with different samples. Labels need each unit's words on its own audio,
+    # so unit-b is appended after the timeline and the pass runs, instead of refusing the conversation
+    # (9 of 24 owner v3 conversations refused this way on 2026-11-26).
     lane.items['unit-b'] = replace(lane.items['unit-b'], capture_at=CAPTURE + 4)
     metric = batch.OUTCOMES.labels(lane='batch', outcome='failed_incomplete_coverage')
     before = metric._value.get()
-    assert all(s.person_id == 'resolver-person' for s in resolve(lane))
-    assert not lane.gpu and lane.fallbacks
-    assert metric._value.get() == before + 1
+    assert all(s.is_user for s in resolve(lane))
+    assert len(lane.gpu) == 1
+    assert metric._value.get() == before
 
 
 def test_staged_read_budget_can_exceed_playback_64_mib_limit(lane, monkeypatch):

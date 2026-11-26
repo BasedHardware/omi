@@ -228,6 +228,16 @@ def stored_turns(words: list[dict], segments: Optional[list[dict]]) -> Optional[
     return [{k: v for k, v in t.items() if k != '_segment'} for t in turns if t['end'] > t['start']]
 
 
+def owned_words(words: list[dict], segments: Optional[list[dict]]) -> Optional[set]:
+    """Indexes of the words the conversation's own stored segments cover (text-aligned). A conversations-v3 row
+    lists its recordings' whole audio files but owns only pieces of them; every arm is scored on these words."""
+    turns = stored_turns(words, segments)
+    if not turns:
+        return None
+    spans = [(t['start'], t['end']) for t in turns]
+    return {i for i, w in enumerate(words) if any(a <= (w['start'] + w['end']) / 2 <= b for a, b in spans)}
+
+
 def production_turns(conversation: corpus_mod.Conversation, words: Optional[list[dict]] = None) -> Optional[list[dict]]:
     """Production's stored labels on the audio clock (placed by text, see :func:`stored_turns`)."""
     if words is None:
@@ -344,6 +354,7 @@ def bench(
     for results in outputs.values():
         common &= {k for k, row in results.items() if 'error' not in row}
     report['common_conversations'] = len(common)
+    scopes = {c.key: owned_words(words[c.key], (c.production or {}).get('segments')) for c in conversations}
     for name, results in outputs.items():
         cards, agreements, errors, outcomes = {}, {}, 0, {}
         for c in conversations:
@@ -357,7 +368,7 @@ def bench(
             if outcome:
                 outcomes[outcome] = outcomes.get(outcome, 0) + 1
             if c.truth:
-                cards[c.key] = score.score_conversation(words[c.key], c.truth, row['segments'])
+                cards[c.key] = score.score_conversation(words[c.key], c.truth, row['segments'], scopes.get(c.key))
             if name != 'production' and production.get(c.key) is not None:
                 agreements[c.key] = score.agreement(words[c.key], production[c.key], row['segments'])
         report['arms'][name].update(
