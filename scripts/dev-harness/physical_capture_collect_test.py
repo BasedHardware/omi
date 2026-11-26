@@ -57,6 +57,7 @@ class CollectorTests(unittest.TestCase):
             "defines": {
                 "OMI_APP_PROFILE": "local_dev",
                 "OMI_PHYSICAL_QUALIFICATION": "true",
+                "OMI_PHYSICAL_CAPTURE_SOURCE": "wearable",
                 "OMI_PHYSICAL_FIXTURE_UID": self.uid,
                 "OMI_API_BASE_URL": self.api,
                 "OMI_FIREBASE_AUTH_EMULATOR_HOST": "127.0.0.1",
@@ -86,7 +87,7 @@ class CollectorTests(unittest.TestCase):
         self.launched = False
         self.sent_upload = False
         self.appurl = "file:///private/var/containers/Bundle/Application/AAAAAAAA-BBBB/OmiCaptureQA.app/"
-        self.emit("boot", {"source": "phone_mic"})
+        self.emit("boot", {"source": "wearable"})
         self.emit("awaiting_termination", {"files": [self.file("miss", None)]})
         self.real_sleep = time.sleep
 
@@ -95,7 +96,7 @@ class CollectorTests(unittest.TestCase):
 
     def file(self, status, job):
         return {
-            "wal_id": "phone-mic_100",
+            "wal_id": "wearable_100",
             "filename": "audio.bin",
             "bytes": len(self.raw),
             "sha256": hashlib.sha256(self.raw).hexdigest(),
@@ -151,8 +152,8 @@ class CollectorTests(unittest.TestCase):
                     destination,
                     {
                         "process": self.boot,
-                        "wal_ids": ["phone-mic_100"],
-                        "source": "phone_mic",
+                        "wal_ids": ["wearable_100"],
+                        "source": "wearable",
                         "fixture_uid": self.uid,
                     },
                 )
@@ -169,7 +170,7 @@ class CollectorTests(unittest.TestCase):
                     {
                         "wals": [
                             {
-                                "device": "phone-mic",
+                                "device": "wearable",
                                 "timer_start": 100,
                                 "storage": "disk",
                                 "owner_uid": self.uid,
@@ -337,6 +338,14 @@ class CollectorTests(unittest.TestCase):
         self.args.bundle_id = "com.friend.ios"
         with self.assertRaises(EvidenceError):
             self.collect()
+        self.assertEqual(self.calls, [])
+
+    def test_non_wearable_capture_build_refused(self):
+        data = json.loads(self.args.build_receipt.read_text())
+        data["defines"]["OMI_PHYSICAL_CAPTURE_SOURCE"] = "phone_mic"
+        self.write(self.args.build_receipt, data)
+        with self.assertRaises(EvidenceError):
+            Collector(self.args, device=self)
         self.assertEqual(self.calls, [])
 
 

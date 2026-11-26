@@ -191,12 +191,11 @@ class Collector:
         )
         self.run_bytes = self.run_path.read_bytes()
         self.cutoff = self.run_path.stat().st_mtime_ns
-        self.source = (
-            "wearable"
-            if self.defines.get("OMI_PHYSICAL_CAPTURE_SOURCE") == "wearable"
-            or self.defines.get("OMI_PHYSICAL_WEARABLE_ID")
-            else "phone_mic"
+        require(
+            self.defines.get("OMI_PHYSICAL_CAPTURE_SOURCE") == "wearable",
+            "wearable capture build required",
         )
+        self.source = "wearable"
         self.device = device
         self.deadline = time.monotonic() + args.timeout
 
