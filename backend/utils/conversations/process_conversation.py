@@ -311,6 +311,7 @@ from utils.other.storage import (
     precache_conversation_audio,
 )
 
+from utils.conversations.v3 import Conflict as V3Conflict
 from utils.conversations.v3 import policy as v3_policy, service as v3_service
 from utils.conversations.v3.word_floor import MIN_HOME_WORDS, MIN_TASK_WORDS, text_word_count
 
@@ -785,6 +786,7 @@ def _get_structured(
         SyncConversationPersistenceFenced,
         member_notes.LiveMemberNotesDeferred,
         RequestDeadlineExceeded,
+        V3Conflict,
         v3_service.models.BackfillNotesDeletionBlocked,
         v3_service.models.BackfillNotesAdmissionTimeout,
     ):
