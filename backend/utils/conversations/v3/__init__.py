@@ -29,6 +29,9 @@ def request_log_trace_id() -> str:
 class Conflict(RuntimeError):
     """Retryable v3 ownership and source-revision conflicts."""
 
+    # (recordings, existing, planned rows) of a projection commit Firestore rejected for size (SCA-2918).
+    size_commit: tuple[Mapping, Mapping, list] | None = None
+
 
 @dataclass
 class UnlockedPage:

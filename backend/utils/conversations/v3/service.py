@@ -445,6 +445,13 @@ def _size_quarantine(reason, pending_limit, page, commit, oversized):
     return (seed, *sorted(rid for rid in members - {seed} if recordings[rid].get('v3_pending')))
 
 
+def _quarantine_park(error, pending_limit, page):
+    """record_blocked's quarantine argument for a blocked pass: empty unless its rejection is attributable."""
+    commit = error.size_commit if isinstance(error, Conflict) else None
+    found = _size_quarantine(str(error), pending_limit, page, commit, size_error_document(error.__cause__))
+    return {'quarantine': found} if found else {}
+
+
 def _reached(starts, recordings, existing, planned):
     """Every loaded document ``starts`` reach through claims (recording -> row) and sources (row -> recording)."""
     rows = {**existing, **{row['id']: row for row in planned}}
@@ -1060,10 +1067,7 @@ async def reconcile(
                 bounded_pending_limit=bounded_pending_limit,
                 unlocked_page=unlocked_page,
             )
-        except Exception as failure:
-            if isinstance(failure, Conflict) and str(failure) == 'document_too_large':
-                # What the rejected commit wrote, for the size quarantine's attribution.
-                failure.size_commit = (commit_recordings, commit_existing, rows)
+        except Exception:
             if live:
                 # Copies of rows this attempt did not write go, whatever failed; a resume records them
                 # again. If this cleanup fails too, the partition stays unfinished until resume or undo.
@@ -1158,13 +1162,6 @@ async def reconcile(
         report['blocked_reason'] = reason
         if not derive:
             # A backfill conflict must not park the owner's live builder.
-            quarantine = _size_quarantine(
-                reason,
-                bounded_pending_limit,
-                unlocked_page,
-                getattr(error, 'size_commit', None),
-                size_error_document(error.__cause__),
-            )
             await run_blocking(
                 db_executor,
                 store.record_blocked,
@@ -1172,7 +1169,7 @@ async def reconcile(
                 token,
                 reason,
                 on_open=on_open,
-                **({'quarantine': quarantine} if quarantine else {}),
+                **_quarantine_park(error, bounded_pending_limit, unlocked_page),
             )
         blocked = reason
         primary_failed = False
@@ -1472,7 +1469,10 @@ def _commit(
         # same way on every retry; park the owner instead of cycling the shared queue with 500s.
         kind = store.size_error(error)
         if kind == 'document':
-            raise Conflict('document_too_large') from error
+            conflict = Conflict('document_too_large')
+            # What the rejected commit wrote, for the size quarantine's attribution.
+            conflict.size_commit = (recordings, existing, rows)
+            raise conflict from error
         if kind == 'request':
             raise Conflict('request_too_large') from error
         raise

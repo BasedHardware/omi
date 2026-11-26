@@ -252,7 +252,9 @@ def owner(monkeypatch):
             # Firestore rejects the oversize document: the transaction writes nothing.
             path = f'projects/p/databases/(default)/documents/users/u/conversations/{state.oversized}'
             text = f"Document '{path}' cannot be written because its size (1,048,611 bytes) exceeds the maximum allowed size"
-            raise Conflict('document_too_large') from InvalidArgument(
+            conflict = Conflict('document_too_large')
+            conflict.size_commit = (recordings, existing, planned)  # As the real _commit attaches it.
+            raise conflict from InvalidArgument(
                 text if state.named else 'The value of property "transcript_segments" is longer than 1048487 bytes'
             )
         for rid in recordings:
@@ -497,3 +499,21 @@ async def test_a_finished_row_the_open_windows_source_also_claims_is_never_charg
     assert 'dz' in owner.passes[0][1] and 'o' in owner.passes[0][0]
     assert store.SIZE_QUARANTINE_FIELD not in rows[LEASE]
     assert store.backoff_state('u')[0] is not None
+
+
+def test_the_commit_attaches_what_it_wrote_to_a_size_rejection(monkeypatch):
+    from utils.conversations import lifecycle
+
+    path = 'projects/p/databases/(default)/documents/users/u/conversations/da'
+
+    def rejected(*a, **kw):
+        raise InvalidArgument(
+            f"Document '{path}' cannot be written because its size (1 bytes) exceeds the maximum allowed size"
+        )
+
+    monkeypatch.setattr(lifecycle, 'commit_v3_projection', rejected)
+    recordings, existing, planned = {'a': {}}, {'da': {}}, [{'id': 'da'}]
+    with pytest.raises(Conflict, match='document_too_large') as caught:
+        service._commit('u', 'token', recordings, existing, planned, [])
+    assert caught.value.size_commit == (recordings, existing, planned)
+    assert service.size_error_document(caught.value.__cause__) == 'da'
