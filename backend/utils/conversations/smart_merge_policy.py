@@ -15,7 +15,7 @@ device partition and a user-managed row are.
 from __future__ import annotations
 
 from utils.sync import processing_hold
-from config.merge_before_processing import enabled as merge_before_processing_enabled, already_processed
+from config.merge_before_processing import enabled as merge_before_processing_enabled, already_processed, v3_excluded
 from utils.conversations.summary_delivery import present as summary_present
 
 import re
@@ -91,6 +91,7 @@ class SkipReason:
     WALLCLOCK_GAP_NEGATIVE = 'wallclock_gap_negative'
     WALLCLOCK_TIME_INVALID = 'wallclock_time_invalid'
     INTERVENING_DISCARDED = 'intervening_discarded'
+    V3_OWNED = 'v3_owned'
 
 
 def smart_merge_state(row: Mapping[str, Any]) -> Mapping[str, Any]:
@@ -317,6 +318,11 @@ def predecessor_status_skip(row: Mapping[str, Any]) -> Optional[str]:
     return None
 
 
+def v3_owned(row: Mapping[str, Any]) -> bool:
+    """v3 derived rows and v3 recordings: v3 owns their boundaries and claims."""
+    return row.get('v3_derived') is True or row.get('recording') is True
+
+
 @dataclass(frozen=True)
 class PairCheck:
     reason: Optional[str]  # None when Jev may be asked
@@ -347,6 +353,10 @@ def check_pair(
     reason = predecessor_status_skip(survivor)
     if reason is not None:
         return PairCheck(reason)
+    if v3_excluded() and (v3_owned(survivor) or v3_owned(new)):
+        # Rechecked on current rows inside the absorb transaction: a legacy redirect or survivor rewrite
+        # would move v3 boundaries without moving v3 claims.
+        return PairCheck(SkipReason.V3_OWNED)
     if partition(survivor) != partition(new):
         return PairCheck(SkipReason.NO_PREDECESSOR)
     if refresh_owed(survivor) and not (

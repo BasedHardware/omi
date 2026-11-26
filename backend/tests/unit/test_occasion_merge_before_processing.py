@@ -60,6 +60,25 @@ def test_v3_owned_row_never_enters_pre_notes_absorb(world, monkeypatch, owner_fl
     assert 'sync_merged_into' not in world.raw('n')
 
 
+@pytest.mark.parametrize('owner_flag', ['v3_derived', 'recording'])
+def test_v3_owned_survivor_is_never_rewritten_by_a_legacy_absorb(world, owner_flag):
+    # A legacy donor must not pick a v3 row as its survivor: the absorb would rewrite the v3 row's
+    # transcript and finish time without moving v3 claims.
+    world.raw('p')[owner_flag] = True
+    survivor = dict(world.raw('p'))
+    invoke(world)
+    assert 'sync_merged_into' not in world.raw('n')
+    assert world.raw('p') == survivor
+
+
+def test_v3_owned_survivor_kill_switch_restores_absorb(world, monkeypatch):
+    world.raw('p')['v3_derived'] = True
+    monkeypatch.setenv('CONVERSATION_MERGE_BEFORE_PROCESSING_V3_EXCLUSION', 'false')
+    with pytest.raises(ConversationAbsorbed):
+        invoke(world)
+    assert world.raw('n')['sync_merged_into'] == 'p'
+
+
 def test_v3_exclusion_kill_switch_restores_absorb(world, monkeypatch):
     world.raw('n')['v3_derived'] = True
     monkeypatch.setenv('CONVERSATION_MERGE_BEFORE_PROCESSING_V3_EXCLUSION', 'false')
