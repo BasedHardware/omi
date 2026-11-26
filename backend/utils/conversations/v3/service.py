@@ -292,7 +292,8 @@ async def _load_live_batch(uid, token, parked, unlocked_page=None):
             if size < 32:
                 lane = f" unlocked_limit={options['unlocked_limit']}" if 'unlocked_limit' in options else ''
                 logger.info('event=v3_bounded_pending pending_limit=%d%s', size, lane)
-            return (*result, max(size, 1))
+            # Only a pass that seeded pending rows may remember a smaller pending page.
+            return (*result, size or 32)
     raise AssertionError('bounded pending batch sizes are empty')
 
 

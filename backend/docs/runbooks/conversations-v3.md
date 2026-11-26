@@ -267,8 +267,9 @@ The final commit remembers a successful smaller page on the builder lease. Befor
 the projection, the builder can clear discarded or deleted markers within the oldest 50
 pending rows under that lease. A pass loads owner-wide unlocked windows one page at a time and,
 while windows remain unvisited, wakes itself a minute later with a task named by its lease token.
-A derived-budget park with indexed unlocked windows gets one more early attempt, recorded as
-`v3_unlocked_paging_attempted`. See the [bounded pending](../listen_pusher_pipeline/changes/2026-11-26-v3-bounded-pending.md)
+A derived-budget park recorded before paging shipped, with indexed unlocked windows and no
+`v3_unlocked_paging_attempted` yet, gets one more early attempt that sets it; a new park sets it
+when it is recorded and waits out the usual backoff. See the [bounded pending](../listen_pusher_pipeline/changes/2026-11-26-v3-bounded-pending.md)
 and [bounded unlocked](../listen_pusher_pipeline/changes/2026-11-26-v3-bounded-unlocked.md) change notes.
 A new failed bounded pass records `v3_bounded_pending_attempted` (and, with unlocked windows,
 `v3_unlocked_paging_attempted`) on the builder lease and observes the usual backoff. An operator

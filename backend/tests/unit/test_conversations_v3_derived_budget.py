@@ -676,7 +676,7 @@ async def test_seed_lanes_that_overflow_together_each_advance_on_successive_pass
         recordings, existing, _, limit = await service._load_live_batch('u', 'token', None, page)
         loaded.append((set(recordings), set(existing), page.remaining, limit))
     assert loaded[0] == ({'rp'}, {'p1', 'p2'}, {'u'}, 1)  # The unvisited window stays owed to a later pass.
-    assert loaded[1] == ({'ru'}, {'u'}, frozenset(), 1)
+    assert loaded[1] == ({'ru'}, {'u'}, frozenset(), 32)  # An unlocked-only pass remembers no pending page.
 
 
 @pytest.mark.asyncio
@@ -751,12 +751,21 @@ async def test_reconcile_wakes_unvisited_unlocked_windows_once_per_pass(builder,
 
     monkeypatch.setattr(store, 'load', load)
     monkeypatch.setattr(service, '_commit', commit)
-    monkeypatch.setattr(service, 'enqueue', lambda uid, **kw: kw.get('wake_key') and wakes.append(kw['at']))
+    names = []
+    monkeypatch.setenv('CONVERSATIONS_V3_TASKS_URL', 'https://test.invalid')
+    monkeypatch.setattr(triggers, 'enqueue_named_task', lambda queue, url, task_id, *a, **kw: names.append(task_id))
+
+    def wake(uid, **kw):
+        if kw.get('wake_key'):
+            wakes.append(kw['at'])
+            triggers.enqueue(uid, **kw)
+
+    monkeypatch.setattr(service, 'enqueue', wake)
     started = datetime.now(timezone.utc)
     assert await service.reconcile('synthetic') == 'committed'
     assert len(pages) == 1 and wakes[0] - started >= timedelta(seconds=59)
-    # One wake per pass, re-armed after the lease only when this pass outlasted it.
-    assert len(wakes) == (2 if outlasts_wake else 1)
+    # One wake per pass, re-armed after the lease only when this pass outlasted it, under a fresh task name.
+    assert len(wakes) == len(set(names)) == (2 if outlasts_wake else 1)
     if outlasts_wake:
         assert wakes[1] > wakes[0] + timedelta(minutes=1)
 
