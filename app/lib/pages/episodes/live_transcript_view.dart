@@ -1092,9 +1092,18 @@ class LivePreviewTail extends StatefulWidget {
       this.catchUp,
       this.lines,
       this.whenEmpty,
-      this.includeBottomInset = true,
-      this.showHeading = true,
-      this.horizontalInset = OmiSpacing.md});
+      this.includeBottomInset = true})
+      : showHeading = true,
+        horizontalInset = OmiSpacing.md;
+
+  /// The conversation page's form: the lines continue the transcript, so there is no heading, no
+  /// side inset (the page already insets the transcript) and no bottom inset.
+  const LivePreviewTail.continuingTranscript(
+      {super.key, required this.preview, required this.coverage, this.lines, this.whenEmpty})
+      : catchUp = null,
+        includeBottomInset = false,
+        showHeading = false,
+        horizontalInset = 0;
 
   final LivePreviewController preview;
   final LivePreviewCoverage coverage;
@@ -1102,12 +1111,10 @@ class LivePreviewTail extends StatefulWidget {
   final Widget? whenEmpty;
   final bool includeBottomInset;
 
-  /// The "Just now, on this phone" heading over the lines. The conversation page shows the lines
-  /// without it.
+  /// The "Just now, on this phone" heading over the lines.
   final bool showHeading;
 
-  /// The lines' own side inset. Zero where the parent already insets the transcript, so the lines
-  /// start at the transcript's left edge.
+  /// The lines' own side inset; zero where the parent already insets the transcript.
   final double horizontalInset;
 
   /// What sits between the final transcript and the preview, rebuilt with the preview's ticks.
