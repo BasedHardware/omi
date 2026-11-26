@@ -19,7 +19,7 @@ import logging
 from datetime import datetime, timedelta, timezone
 
 from config import reliability_experiments
-from config.conversations_v3 import conversations_v3_enabled
+from config.conversations_v3 import conversations_v3_enabled, v3_intake_held_out
 from database import conversations_v3_manual_cuts as cuts_db
 from utils.conversations.v3 import triggers
 from utils.conversations.v3.end_sides import ATTACH_KEY
@@ -76,7 +76,8 @@ def record_end(uid, *, ended_at=None, now=None):
     if not enabled(uid):
         return None
     try:
-        if not conversations_v3_enabled(uid):
+        # A held-out owner keeps experiment-off End handling, paired with mark_new (SCA-2918).
+        if not conversations_v3_enabled(uid) or v3_intake_held_out(uid):
             return None
         cut_id = cuts_db.record(uid, cut_instant(ended_at, now or datetime.now(timezone.utc)))
         logger.info('event=v3_manual_cut outcome=recorded')
@@ -123,7 +124,8 @@ def ends_around(uid, incoming, *, firestore_client=None):
     if not enabled(uid):
         return None
     try:
-        if not conversations_v3_enabled(uid):
+        # A held-out owner keeps experiment-off End handling, paired with mark_new (SCA-2918).
+        if not conversations_v3_enabled(uid) or v3_intake_held_out(uid):
             return None
         started = incoming.get('started_at')
         starts = [s.get('start') for s in incoming.get('transcript_segments') or [] if isinstance(s, dict)]
