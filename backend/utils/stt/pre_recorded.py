@@ -42,8 +42,8 @@ from models.transcript_segment import TranscriptSegment
 from utils.log_sanitizer import sanitize_provider_error
 from utils.observability.fallback import record_fallback
 from utils.other.endpoints import timeit
-from utils.stt.prerecorded_route import budget_timeout, prerecorded_bytes_route
-from utils.stt.prerecorded_route import verification_deadline as _verification_deadline
+from utils.stt.prerecorded_deadline import budget_timeout, verification_stt_deadline as verification_stt_deadline
+from utils.stt.prerecorded_deadline import verification_deadline as _verification_deadline
 from utils.stt.outcomes import TranscriptionFailure
 from utils.stt.modulate_batch import MODULATE_TIMEOUT as _MODULATE_TIMEOUT
 from utils.stt.modulate_batch import modulate_budget_refusal as _modulate_budget_refusal
@@ -93,16 +93,6 @@ def held_single_attempt():
         yield
     finally:
         _held_single_attempt.reset(token)
-
-
-@contextmanager
-def verification_stt_deadline(deadline: float):
-    """Limit the prompt verifier's one provider attempt to its caller's budget."""
-    token = _verification_deadline.set(deadline)
-    try:
-        yield
-    finally:
-        _verification_deadline.reset(token)
 
 
 def _verification_timeout(default: httpx.Timeout | float) -> httpx.Timeout | float:
@@ -1461,6 +1451,18 @@ def prerecorded(
         if return_provider:
             return result, served_provider, served_model
     return result
+
+
+def prerecorded_bytes_route(audio_bytes, language, *, before_probe=None, before_self_probe=None, **audio: Any):
+    """The selected service and provider language for these bytes; ``before_*probe`` gate each language probe."""
+    from utils.stt.batch_language import resolve_language, select_decision
+
+    hooks = {'before_probe': before_probe, 'before_self_probe': before_self_probe}
+    decision = resolve_language(language, audio_bytes, **audio, **{k: v for k, v in hooks.items() if v is not None})
+    resolved = decision.language if decision.parakeet_safe else language
+    if not language_guard_enabled() or language_class(language) != 'unknown':
+        resolved = language
+    return select_decision(language, decision, get_prerecorded_service), resolved
 
 
 def prerecorded_from_bytes(

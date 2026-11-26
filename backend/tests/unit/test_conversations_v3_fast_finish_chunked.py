@@ -20,7 +20,7 @@ from database.batch_pipeline_privacy import BatchPrivacyBlocked
 from utils.batch_pipeline import live
 from utils.conversations.v3 import fast_finish
 from utils.executors import get_fast_finish_chunk_executor
-from utils.stt import pre_recorded, prerecorded_route
+from utils.stt import language_gate, pre_recorded, prerecorded_deadline
 
 UID = 'owner-uid-0000000000000000000'
 START = datetime(2026, 11, 24, 3, 0, tzinfo=timezone.utc)
@@ -420,7 +420,7 @@ def test_the_language_is_resolved_once_and_every_chunk_reuses_it_under_the_deadl
         sent.append((kwargs['route'], kwargs['attempts'], pre_recorded._verification_deadline.get()))
         return []
 
-    monkeypatch.setattr(prerecorded_route, 'prerecorded_bytes_route', resolve)
+    monkeypatch.setattr(pre_recorded, 'prerecorded_bytes_route', resolve)
     monkeypatch.setattr(pre_recorded, 'prerecorded_from_bytes', provider)
     deadline = time.monotonic() + 40
     outcome = fast_finish.run(
@@ -525,6 +525,9 @@ class _Doc:
 
 class _Store:
     client = _Doc()
+
+    def run(self, transaction):
+        return None  # the batch privacy fence allows
 
 
 def _admit(monkeypatch, units, *, hold=None):
@@ -743,24 +746,184 @@ def test_a_stopped_pass_returns_promptly_even_if_a_request_ignores_its_timeouts(
 
 
 def test_request_timeouts_share_one_budget_instead_of_each_taking_it_whole():
-    timeout = prerecorded_route.budget_timeout(10.0)
+    timeout = prerecorded_deadline.budget_timeout(10.0)
     assert timeout.connect + timeout.pool + timeout.write + timeout.read == pytest.approx(10.0)
     with pre_recorded.verification_stt_deadline(time.monotonic() + 4.0):
         verifier = pre_recorded._verification_timeout(None)
-        probe = prerecorded_route.probe_timeout(None)
+        probe = prerecorded_deadline.probe_timeout(None)
     assert sum((verifier.connect, verifier.pool, verifier.write, verifier.read)) <= 4.0
     assert sum((probe.connect, probe.pool, probe.write, probe.read)) <= 4.0
     with pre_recorded.verification_stt_deadline(time.monotonic() + 40.0):
-        probe = prerecorded_route.probe_timeout(None)
+        probe = prerecorded_deadline.probe_timeout(None)
     # The probe never takes longer than its own 10 s bound.
-    assert sum((probe.connect, probe.pool, probe.write, probe.read)) <= prerecorded_route.PROBE_SECONDS + 0.01
-    assert prerecorded_route.probe_timeout('default') == 'default'  # no caller deadline: unchanged
+    assert sum((probe.connect, probe.pool, probe.write, probe.read)) <= prerecorded_deadline.PROBE_SECONDS + 0.01
+    assert prerecorded_deadline.probe_timeout('default') == 'default'  # no caller deadline: unchanged
 
 
 def test_an_expired_admission_budget_reads_no_audio():
     unit, _ = recording(200)
     never = lambda *args: pytest.fail('must not read audio')
     assert run([unit], never, never, deadline=time.monotonic() - 1, write=never)[0] == 'deadline'
+
+
+def test_a_stalled_audio_read_releases_the_slot_within_the_deadline_plus_grace(monkeypatch):
+    unit, _ = recording(1100)
+    live._FAST_FINISH_STARTED.clear()
+    monkeypatch.setattr(fast_finish, 'PASS_DEADLINE_SECONDS', 0.3)
+    monkeypatch.setattr(
+        conversations_db, 'get_conversation', lambda uid, cid, **kwargs: row(_recovery_transcript_decoded=True)
+    )
+    monkeypatch.setattr(conversations_v3, 'promote_manual_end', lambda uid, cid, firestore_client=None: True)
+    timeouts = []
+
+    def stalled(client, ref, uid, cid, allowed, key, *, source_metadata, read_budget):
+        # A storage read that never answers ends on its own timeout: today's 30 s, capped to what is left.
+        timeouts.append(read_budget.timeout(30))
+        time.sleep(min(timeouts[-1], 5))
+        raise TimeoutError('read timed out')
+
+    monkeypatch.setattr(live, 'read_reference', stalled)
+    before = fast_finish.OUTCOMES.labels('deadline')._value.get()
+    started = time.monotonic()
+    _admit_all([('stalled-read', [unit])])
+    elapsed = time.monotonic() - started
+    assert elapsed < 0.3 + fast_finish.STOP_GRACE_SECONDS
+    assert len(timeouts) == 1 and timeouts[0] <= 0.3
+    assert fast_finish.OUTCOMES.labels('deadline')._value.get() == before + 1
+    # Both short slots are free again.
+    assert live._FAST_FINISH_SLOTS.acquire(blocking=False) and live._FAST_FINISH_SLOTS.acquire(blocking=False)
+    live._FAST_FINISH_SLOTS.release()
+    live._FAST_FINISH_SLOTS.release()
+
+
+def test_the_serial_kill_switch_path_keeps_its_own_read_timeouts(monkeypatch):
+    monkeypatch.setenv('CONVERSATIONS_V3_FAST_FINISH_CHUNKED', 'off')
+    unit, _ = recording(200)
+    started = _admit(monkeypatch, [unit])
+    budgets = []
+
+    def fake_run(uid, cid, row_, units, read, **kwargs):
+        started.append(cid)
+        monkeypatch.setattr(live, 'read_reference', lambda *a, read_budget, **k: budgets.append(read_budget))
+        read(units[0][2][0])
+        return 'written'
+
+    monkeypatch.setattr(fast_finish, 'run', fake_run)
+    _admit_all([('serial', [unit])])
+    assert started == ['serial'] and budgets == [None]
+
+
+def test_the_deadline_is_checked_before_every_reference_inside_a_chunk():
+    unit, read = recording(300, pack_seconds=30)  # one chunk over ten packs
+    reads = []
+
+    def slow(ref):
+        reads.append(ref['path'])
+        time.sleep(0.15)
+        return read(ref)
+
+    never = lambda *args: pytest.fail('must not transcribe or write')
+    outcome, _ = run([unit], slow, never, deadline=time.monotonic() + 0.2, write=never)
+    assert outcome == 'deadline' and len(set(reads)) <= 2
+
+
+@pytest.mark.parametrize('stage', ['refresh', 'authorize', 'privacy'])
+def test_a_slow_firestore_call_before_chunking_ends_at_the_deadline(stage):
+    unit, _ = recording(200)
+
+    def slow(answer):
+        def call(*args):
+            time.sleep(0.15)
+            return answer
+
+        return call
+
+    hooks = {'refresh': lambda: row(), 'authorize': lambda *a: True, 'privacy': lambda: True}
+    hooks[stage] = slow(hooks[stage]())
+    never = lambda *args: pytest.fail('must not read audio')
+    outcome, _ = run([unit], never, never, deadline=time.monotonic() + 0.1, write=never, **hooks)
+    assert outcome == 'deadline'
+
+
+def test_a_row_without_a_start_leaks_no_long_reservation():
+    unit, read = recording(1800)
+    missing = {key: value for key, value in row().items() if key != 'started_at'}
+    never = lambda *args: pytest.fail('must not transcribe or write')
+    outcome = fast_finish.run(
+        UID, 'cid', missing, [unit], read, transcribe_words=never, privacy=lambda: True, write=never
+    )
+    assert outcome == 'error' and fast_finish.LONG_BUDGET._used == 0
+
+
+def test_an_early_stop_takes_no_retry_and_returns_when_running_requests_end():
+    unit, read = recording(1100)  # four chunks, one round
+    lock, calls = threading.Lock(), []
+
+    def provider(pcm, language):
+        first = next(value for value in values(pcm) if value)
+        with lock:
+            calls.append(first)
+        # The first chunk fails fast, twice; the others are still running when it has.
+        time.sleep(0.05 if first == 1 else 0.3)
+        raise RuntimeError('provider down')
+
+    started = time.monotonic()
+    outcome, _ = run([unit], read, provider)
+    elapsed = time.monotonic() - started
+    others = [first for first in calls if first != 1]
+    assert outcome == 'provider_error'
+    # The failing chunk took its one retry; the others, failing after the stop, took none (and a
+    # chunk the pool had not started by then sent nothing).
+    assert calls.count(1) == 2 and others and len(others) == len(set(others))
+    # Released as the running requests ended, not at the 45 s deadline plus grace.
+    assert elapsed < 1.0
+
+
+def test_a_privacy_stop_takes_no_retry_either():
+    unit, read = recording(1100)
+    lock, calls = threading.Lock(), []
+    # Before the audio, then the four dispatches: one of them is refused. Every later answer allows.
+    answers = iter([True, True, True, True, False])
+
+    def provider(pcm, language):
+        with lock:
+            calls.append(next(value for value in values(pcm) if value))
+        time.sleep(0.3)
+        raise RuntimeError('provider down')
+
+    started = time.monotonic()
+    outcome, _ = run([unit], read, provider, privacy=lambda: next(answers, True))
+    # The three chunks already sent fail after the refusal stopped the pass, and none is retried.
+    assert outcome == 'privacy_blocked' and len(calls) == 3 and time.monotonic() - started < 1.0
+
+
+def test_the_self_hosted_language_gate_is_capped_to_what_is_left(monkeypatch):
+    monkeypatch.setenv('HOSTED_LID_API_URL', 'http://gate.invalid')
+    seen = []
+
+    class Client:
+        def __init__(self, *, timeout):
+            seen.append(timeout)
+
+        def __enter__(self):
+            raise language_gate.httpx.ConnectTimeout('down')
+
+        def __exit__(self, *args):
+            return False
+
+    monkeypatch.setattr(language_gate.httpx, 'Client', Client)
+    with prerecorded_deadline.verification_stt_deadline(time.monotonic() + 3.0):
+        assert language_gate.self_detect(b'wav', surface='prerecorded') is None
+    with prerecorded_deadline.verification_stt_deadline(time.monotonic() + 40.0):
+        assert language_gate.self_detect(b'wav', surface='prerecorded') is None
+    with prerecorded_deadline.verification_stt_deadline(time.monotonic() - 1):
+        assert language_gate.self_detect(b'wav', surface='prerecorded') is None
+    assert language_gate.self_detect(b'wav', surface='prerecorded') is None
+    totals = [sum((t.connect, t.pool, t.write, t.read)) for t in seen[:2]]
+    # Within the 3 s left, then within the gate's own bound; an expired deadline sends nothing;
+    # without a caller deadline the gate keeps its default.
+    assert totals[0] <= 3.0 and totals[1] <= language_gate.GATE_SECONDS + 0.01
+    assert len(seen) == 3 and seen[2] is language_gate.GATE_TIMEOUT
 
 
 # --- privacy at provider dispatch ----------------------------------------------------------------
@@ -984,7 +1147,7 @@ def test_the_language_probe_is_privacy_checked_right_before_it_sends(monkeypatch
         probed.append(before_probe())  # the vendor probe asks right before posting audio
         return (('modulate', 'en', 'velma-2'), 'en')
 
-    monkeypatch.setattr(prerecorded_route, 'prerecorded_bytes_route', route)
+    monkeypatch.setattr(pre_recorded, 'prerecorded_bytes_route', route)
     monkeypatch.setattr(pre_recorded, 'prerecorded_from_bytes', lambda *a, **k: pytest.fail('must not transcribe'))
     outcome = fast_finish.run(
         UID, 'cid', row(), [unit], read, write=lambda *a: True, privacy=lambda: next(answers, False)
@@ -1000,11 +1163,14 @@ def test_an_allowed_language_probe_is_charged_to_the_daily_cap(monkeypatch):
         assert before_self_probe() is True and before_probe() is True
         return (('modulate', 'en', 'velma-2'), 'en')
 
-    monkeypatch.setattr(prerecorded_route, 'prerecorded_bytes_route', route)
+    monkeypatch.setattr(pre_recorded, 'prerecorded_bytes_route', route)
     monkeypatch.setattr(pre_recorded, 'prerecorded_from_bytes', lambda pcm, **kwargs: [])
+    audio = fast_finish.AUDIO_SECONDS.labels('long')._value.get()
     assert fast_finish.run(UID, 'cid', row(), [unit], read, write=lambda *a: True, privacy=lambda: True) == 'empty'
     # Seven chunks (1818 s) and one 30 s vendor probe clip; the self-hosted probe is not provider spend.
     assert fast_finish.LONG_BUDGET._used == pytest.approx(1818 + 30, abs=1)
+    # The audio-seconds readback counts the same vendor probe clip as the cap.
+    assert fast_finish.AUDIO_SECONDS.labels('long')._value.get() - audio == pytest.approx(1818 + 30, abs=1)
 
 
 def test_the_daily_budget_resets_each_utc_day(monkeypatch):

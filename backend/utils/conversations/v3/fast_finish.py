@@ -41,6 +41,9 @@ from config.policy.batch import cohort_bucket
 from config.refactor_modes import default_on
 from config.rollout_cohorts import in_rollout_cohort
 from utils.executors import get_fast_finish_chunk_executor
+from utils.stt import pre_recorded
+from utils.stt.batch_language import MAX_PROBE_SECONDS
+from utils.stt.prerecorded_deadline import verification_stt_deadline
 
 logger = logging.getLogger(__name__)
 
@@ -111,7 +114,7 @@ CHUNK_QUEUE_SECONDS = Histogram(
 )
 AUDIO_SECONDS = Counter(
     'omi_conversations_v3_fast_finish_audio_seconds',
-    'Provider audio seconds sent by chunked fast first transcripts, retries included, by path',
+    'Provider audio seconds sent by chunked fast first transcripts, retries and the vendor language probe included',
     ['path'],
 )
 for _path in ('short', 'long'):
@@ -314,10 +317,9 @@ def eligible(row: dict) -> bool:
 def funded(uid: str, seconds: float, language: str | None) -> bool:
     """The shared consent and funding gate that batch and sync transcription pass before provider spend."""
     from utils.observability.stt_cap_dispatch import DispatchPath
-    from utils.stt.pre_recorded import get_prerecorded_service
     from utils.stt_cap_dispatch import sync_admission
 
-    provider = get_prerecorded_service(language)[0]
+    provider = pre_recorded.get_prerecorded_service(language)[0]
     allowed, _ = sync_admission(uid, seconds, provider, lane='batch', path=DispatchPath.BATCH_PROVIDER)
     return allowed
 
@@ -556,11 +558,9 @@ def _transcribe_words(pcm: bytes, language: str | None, *, route=None, deadline:
     raises before sending, and the provider's own retry and Soniox credit failover stay off: the
     pass owns its one retry and yields to batch, which keeps both.
     """
-    from utils.stt.pre_recorded import prerecorded_from_bytes, verification_stt_deadline
-
     with verification_stt_deadline(deadline) if deadline is not None else nullcontext():
         return (
-            prerecorded_from_bytes(
+            pre_recorded.prerecorded_from_bytes(
                 pcm,
                 sample_rate=SAMPLE_RATE,
                 diarize=True,
@@ -575,17 +575,14 @@ def _transcribe_words(pcm: bytes, language: str | None, *, route=None, deadline:
         )
 
 
-def _routed_transcriber(pcm: bytes, language: str | None, deadline: float, privacy, sent: '_Sent'):
+def _routed_transcriber(pcm: bytes, language: str | None, deadline: float, privacy, sent: '_Sent', path: str):
     """The pass's provider call, with the language resolved once, on its first chunk's audio.
 
     Resolving may post up to 30 s of that audio to the vendor (or self-hosted) language probe. The
-    privacy authority is asked right before either probe sends, the vendor probe's timeouts share
-    what is left of the deadline, and its audio is charged to the pass.
+    privacy authority is asked right before either probe sends, both probes' timeouts are capped to
+    what is left of the deadline, and the vendor probe's audio is charged to the pass and counted in
+    ``AUDIO_SECONDS``.
     """
-    from utils.stt.batch_language import MAX_PROBE_SECONDS
-    from utils.stt.pre_recorded import verification_stt_deadline
-    from utils.stt.prerecorded_route import prerecorded_bytes_route
-
     stopped: list[str] = []
 
     def allowed(*, vendor: bool) -> bool:
@@ -596,11 +593,13 @@ def _routed_transcriber(pcm: bytes, language: str | None, deadline: float, priva
             stopped.append('privacy_blocked')
             return False
         if vendor:
-            sent.add(min(len(pcm) / 2 / SAMPLE_RATE, MAX_PROBE_SECONDS))
+            probe = min(len(pcm) / 2 / SAMPLE_RATE, MAX_PROBE_SECONDS)
+            sent.add(probe)
+            AUDIO_SECONDS.labels(path).inc(probe)
         return True
 
     with verification_stt_deadline(deadline):
-        route = prerecorded_bytes_route(
+        route = pre_recorded.prerecorded_bytes_route(
             pcm,
             language,
             sample_rate=SAMPLE_RATE,
@@ -619,7 +618,6 @@ def _transcribe(pcm: bytes, language: str | None) -> list[dict]:
 
 
 def _segments(words: list[dict]) -> list[dict]:
-    from utils.stt.pre_recorded import postprocess_words
     from utils.sync.word_timing import first_word_offset
 
     if not words:
@@ -627,7 +625,7 @@ def _segments(words: list[dict]) -> list[dict]:
     # postprocess_words starts its clock at the first word; restore the offset into the unit.
     offset = first_word_offset(words)
     segments = []
-    for segment in postprocess_words(words, 0):
+    for segment in pre_recorded.postprocess_words(words, 0):
         row = segment.model_dump()
         row.update(id=str(uuid.uuid4()), start=row['start'] + offset, end=row['end'] + offset)
         segments.append(row)
@@ -841,16 +839,31 @@ class _Expired(Exception):
     """The pass deadline passed before a chunk could be sent."""
 
 
+class _Abandoned(Exception):
+    """The pass had already stopped when this chunk would have sent a request."""
+
+
 def _chunk_job(
-    call, pcm: bytes, language, privacy, deadline: float, submitted: float, path: str, sent: _Sent
+    call,
+    pcm: bytes,
+    language,
+    privacy,
+    deadline: float,
+    submitted: float,
+    path: str,
+    sent: _Sent,
+    stop: threading.Event,
 ) -> list[dict]:
     """One chunk on the chunk pool: privacy at dispatch, the provider request, at most one retry.
 
-    A leaf: it never waits on another pool. Holds its own buffer until it returns.
+    A leaf: it never waits on another pool. Holds its own buffer until it returns. Once its pass has
+    stopped (``stop``), it sends nothing more: no first request and no retry.
     """
     CHUNK_QUEUE_SECONDS.observe(time.monotonic() - submitted)
     seconds = len(pcm) / 2 / SAMPLE_RATE
     for attempt in (1, 2):
+        if stop.is_set():
+            raise _Abandoned()
         if time.monotonic() >= deadline:
             raise _Expired()
         # At actual dispatch: a chunk can wait in the shared pool's queue, and consent may change
@@ -863,7 +876,7 @@ def _chunk_job(
         try:
             return call(pcm, language) or []
         except Exception as error:
-            if attempt == 2 or deadline - time.monotonic() < RETRY_MIN_SECONDS:
+            if attempt == 2 or stop.is_set() or deadline - time.monotonic() < RETRY_MIN_SECONDS:
                 raise
             logger.info('event=v3_fast_finish_chunk_retry exception_type=%s', type(error).__name__)
         finally:
@@ -877,11 +890,14 @@ def _chunked_segments(
     """Every chunk sent concurrently within the deadline, then stitched in order.
 
     At most the pass's window of chunk buffers is alive at once, read or in flight (PASS_CHUNK_WINDOW
-    for a short pass, whatever its chunk count, LONG_PASS_WINDOW for a long one). A refusal at
-    dispatch, an audio error, a chunk that fails twice or the deadline stops the pass: queued chunks
-    are cancelled, and running ones are waited for only until the deadline plus STOP_GRACE_SECONDS,
-    so a stopped pass releases its slot promptly. A request still running then ends on its own
-    timeouts, which share what was left of the deadline when it was sent; its result is never written.
+    for a short pass, whatever its chunk count, LONG_PASS_WINDOW for a long one). The deadline is
+    checked before every retained-audio reference is read (``read`` itself is bounded by it at
+    admission), before every request and before every retry. A refusal at dispatch, an audio error,
+    a chunk that fails twice or the deadline stops the pass: no running chunk sends another request
+    or retry, queued chunks are cancelled, and the pass returns as soon as the requests already in
+    flight end, or at the deadline plus STOP_GRACE_SECONDS, whichever is first. A request still
+    running then ends on its own timeouts, which share what was left of the deadline when it was
+    sent; its result is never written.
     """
     CHUNKS.observe(len(jobs))
     window = LONG_PASS_WINDOW if path == 'long' else PASS_CHUNK_WINDOW
@@ -891,7 +907,15 @@ def _chunked_segments(
     cache: dict = {}
     call = transcribe_words
     position, reading = 0, 0.0
+    stop = threading.Event()
     started = time.monotonic()
+
+    def bounded(ref):
+        # One chunk may span several retained packs: each read starts only inside the deadline.
+        if time.monotonic() >= deadline:
+            raise _Stopped('deadline')
+        return read(ref)
+
     try:
         while position < len(jobs) or in_flight:
             if time.monotonic() >= deadline:
@@ -903,16 +927,18 @@ def _chunked_segments(
                     if time.monotonic() >= deadline:
                         raise _Stopped('deadline')
                     _, references, chunk = jobs[position + len(batch)]
-                    batch.append(window_pcm(references, read, chunk.lo, chunk.hi, cache))
+                    batch.append(window_pcm(references, bounded, chunk.lo, chunk.hi, cache))
             except _Stopped:
                 raise
             except Exception as error:
-                logger.warning('event=v3_fast_finish outcome=audio_error exception_type=%s', type(error).__name__)
-                raise _Stopped('audio_error') from error
+                # A read that ran into the deadline (its timeouts are capped to it) is the deadline.
+                outcome = 'deadline' if time.monotonic() >= deadline else 'audio_error'
+                logger.warning('event=v3_fast_finish outcome=%s exception_type=%s', outcome, type(error).__name__)
+                raise _Stopped(outcome) from error
             reading += time.monotonic() - read_started
             if batch and call is None:
                 try:
-                    call = _routed_transcriber(batch[0], language, deadline, privacy, sent)
+                    call = _routed_transcriber(batch[0], language, deadline, privacy, sent, path)
                 except _Stopped:
                     raise
                 except Exception as error:
@@ -924,7 +950,7 @@ def _chunked_segments(
             # Popped, not iterated: no local name keeps a submitted buffer alive while the pass waits.
             while batch:
                 future = pool.submit(
-                    _chunk_job, call, batch.pop(0), language, privacy, deadline, time.monotonic(), path, sent
+                    _chunk_job, call, batch.pop(0), language, privacy, deadline, time.monotonic(), path, sent, stop
                 )
                 in_flight[future] = position
                 position += 1
@@ -949,6 +975,8 @@ def _chunked_segments(
                     )
                     raise _Stopped('deadline' if expired else 'provider_error') from error
     finally:
+        # Set first: a running chunk that fails now takes no retry, and one not yet sent sends nothing.
+        stop.set()
         cache.clear()
         for future in in_flight:
             future.cancel()
@@ -1002,6 +1030,13 @@ def _run(
             # Fail closed: the default writer never publishes without the in-transaction privacy fence.
             return 'privacy_blocked'
         write = functools.partial(_write_fenced, fence=fence)
+    chunked = chunked_enabled()
+
+    def expired() -> bool:
+        # The chunked path's deadline covers the Firestore reads before it too (refresh, funding,
+        # privacy): a slow one leaves no time to start chunking. The serial path keeps none.
+        return chunked and time.monotonic() >= deadline
+
     if refresh is not None:
         # Admission read this row before staging. Nothing is sent to the provider on a stale grant.
         row = refresh()
@@ -1012,21 +1047,27 @@ def _run(
     refused = screen(uid, units)
     if refused is not None:
         return refused
-    chunked = chunked_enabled()
+    if expired():
+        return 'deadline'
     seconds = sum(duration for _, duration, _ in units)
     jobs = plan(units) if chunked else []
     # Audio the serial path never sent: the canary and its daily cap bound this added spend.
     long_audio = chunked and long_recording(units)
     if not authorize(uid, seconds, row.get('language')):
         return 'not_funded'
+    if expired():
+        return 'deadline'
     # The owner may have turned sync off or changed privacy since this recording was captured and
     # admitted. Nothing is read from storage on a stale grant.
     if not _privacy_allows(privacy):
         return 'privacy_blocked'
+    if expired():
+        return 'deadline'
+    # Before the reservation: nothing between it and the try below may raise and leak it.
+    origin = row['started_at'].timestamp()
     reserved = planned_seconds(jobs) if long_audio else 0.0
     if long_audio and not LONG_BUDGET.reserve(reserved):
         return 'long_cap'
-    origin = row['started_at'].timestamp()
     sent = _Sent()
     try:
         if chunked:

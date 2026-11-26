@@ -140,20 +140,23 @@ minutes makes a pass long, never its chunk count; a long pass takes its own pass
 a short Finish's slot, and a short Finish waits up to 10 s for a slot instead of answering `busy`. Length,
 canary and cap refusals are counted before any slot is taken. Each chunk asks the batch privacy fence
 again when it actually starts, and so does the language probe right before it sends; a chunk is retried
-once if time allows. One 45 s deadline from record admission covers slot wait, reads, the probe,
-queueing and provider requests (their connect, pool, write and read timeouts share what is left); past
-it the pass cancels queued chunks, waits at most 2 s more for running ones and yields to batch as
-`deadline`. At a fixed cut the earlier chunk owns lines that start before the overlap's middle; every
+once if time allows. One 45 s deadline from record admission (not the Finish tap) covers slot wait, the
+Firestore reads before chunking, every retained-audio reference read (its storage timeouts capped to what
+is left), both language probes, queueing and provider requests (their connect, pool, write and read
+timeouts share what is left); past it the pass cancels queued chunks, waits at most 2 s more for running
+ones and yields to batch as `deadline`. A pass that stops early sends no further request or retry and
+releases its slot when the requests in flight end. At a fixed cut the earlier chunk owns lines that start before the overlap's middle; every
 later line that starts before the earlier chunk's last line ended is compared against it (words by time,
 utterances by text, allowing a clipped word on either side) and keeps only what is new. Recordings over 20 minutes are a canary: `CONVERSATIONS_V3_FAST_FINISH_LONG_PERCENT`
 (default 25, `long_canary` outside it) and `CONVERSATIONS_V3_FAST_FINISH_LONG_DAILY_SECONDS` (default
-7200 per process per UTC day of audio actually sent, retries, overlaps and the probe included; `long_cap`
-past it). Set `CONVERSATIONS_V3_FAST_FINISH_CHUNKED=off` on
+7200 per process per UTC day of audio actually sent, retries, overlaps and the vendor probe included,
+counted in memory so a new or restarted instance starts the day at 0; `long_cap` past it). Set `CONVERSATIONS_V3_FAST_FINISH_CHUNKED=off` on
 `backend-integration` to restore one serial request per unit and the 20-minute bound. Read
 `omi_conversations_v3_fast_finish_total{outcome}`, `omi_conversations_v3_fast_finish_seconds{stage}`,
 `omi_conversations_v3_fast_finish_chunks`, `omi_conversations_v3_fast_finish_chunk_seconds`,
 `omi_conversations_v3_fast_finish_chunk_queue_seconds`, `omi_conversations_v3_fast_finish_audio_seconds_total{path}`
-and `omi_conversations_v3_fast_finish_wall_seconds` (written passes, from admission).
+(vendor probe clip included) and `omi_conversations_v3_fast_finish_wall_seconds` (written passes, from
+record admission, not the Finish tap).
 A manual finish that never starts the pass is counted in
 `omi_conversations_v3_fast_finish_skipped_total{reason}`: `mode_off`, `already_started`, or the first
 failing `fast_finish.candidate_rejection` predicate (`not_recording`, `no_manual_end`,

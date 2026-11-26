@@ -60,7 +60,14 @@ from database.batch_pipeline_shadow_hook import shadow_from_env
 from utils.batch_pipeline.artifact_policy import create_artifact_store
 from utils.batch_pipeline.contracts import ProjectionBinding, WorkItem
 from utils.batch_pipeline.scheduler import owner_key
-from utils.batch_pipeline.source_audio import MAGIC, MAX_REFERENCES, read_reference, batch_timing_store
+from utils.batch_pipeline.artifact_reads import ArtifactReadBudget
+from utils.batch_pipeline.source_audio import (
+    MAGIC,
+    MAX_REFERENCES,
+    MAX_SOURCE_BYTES,
+    read_reference,
+    batch_timing_store,
+)
 from utils.batch_pipeline.record_barrier import validate_record_tail
 from utils.batch_pipeline.record_wal_source import attest
 from utils.batch_pipeline.record_language import prove_manifest
@@ -482,7 +489,13 @@ async def _manual_finish_admitted(
         copied = [(start, duration, [dict(ref) for ref in refs]) for start, duration, refs in units]
 
         def read(ref):
-            return read_reference(client, ref, uid, conversation_id, allowed, key, source_metadata=True)
+            # A chunked pass's reads end with its deadline: each reference's metadata and download
+            # timeouts are capped to what is left, and one that starts past it refuses at once. The
+            # serial kill-switch path keeps today's 30 s and 60 s timeouts.
+            budget = ArtifactReadBudget(deadline, MAX_SOURCE_BYTES, 1) if fast_finish.chunked_enabled() else None
+            return read_reference(
+                client, ref, uid, conversation_id, allowed, key, source_metadata=True, read_budget=budget
+            )
 
         def refresh():
             # Decoded: an empty stored transcript is not empty bytes. A transcript that cannot be

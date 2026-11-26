@@ -16,14 +16,23 @@ transcript (`utils/conversations/v3/fast_finish.py`) calls the provider.
   silence of at least 1 s near the even chunk length. With none, it goes at the even length and the next
   chunk starts 3 s earlier. The rest of the unit is shared evenly, so no chunk is a sliver.
 - **One end-to-end deadline.** 45 s from record admission (`PASS_DEADLINE_SECONDS`), so the write, the
-  builder and Home still fit the 60 s target. Slot wait, audio reads, the language probe, chunk queue wait
-  and provider requests all count, and so does one retry. Under `verification_stt_deadline` a request's
-  connect, pool, write and read timeouts share what is left (`budget_timeout`) instead of each taking all
-  of it. That context also keeps the provider's own retry and Soniox credit failover off for these
-  requests; batch keeps both. The language probe's 8 s timeout is capped the same way. Past the deadline
-  the pass cancels queued chunks, waits at most `STOP_GRACE_SECONDS` (2 s) more for running ones, writes
-  nothing, releases its slot and yields to batch as `deadline`. A request still running then ends on its
-  own timeouts, and its result is dropped.
+  builder and Home still fit the 60 s target. The clock starts when admission's hook runs
+  (`_manual_finish_admitted`), not at the Finish tap: the time from the tap to admission (upload, seal,
+  admission) is outside it, and outside `omi_conversations_v3_fast_finish_wall_seconds`.
+  - Slot wait, the Firestore reads before chunking (row refresh, funding, privacy), audio reads, the
+    language probe, chunk queue wait and provider requests all count, and so does one retry. The pass
+    checks the deadline after each Firestore call and before every retained-audio reference it reads.
+  - Each reference's storage metadata and download timeouts are capped to what is left
+    (`ArtifactReadBudget`); the serial kill-switch path keeps its 30 s and 60 s.
+  - Under `verification_stt_deadline` a request's connect, pool, write and read timeouts share what is
+    left (`budget_timeout`) instead of each taking all of it. That context also keeps the provider's own
+    retry and Soniox credit failover off for these requests; batch keeps both. The vendor language
+    probe's 8 s timeout and the self-hosted gate's 6 s are capped the same way.
+  - Past the deadline the pass cancels queued chunks, waits at most `STOP_GRACE_SECONDS` (2 s) more for
+    running ones, writes nothing, releases its slot and yields to batch as `deadline`. A request still
+    running then ends on its own timeouts, and its result is dropped.
+  - A pass that stops early (`provider_error`, `privacy_blocked`, `audio_error`) sends no further request
+    or retry, cancels queued chunks and releases its slot as soon as the requests already in flight end.
 - **Short and long.** Long means over 20 minutes of audio, never merely many chunks. A six-minute Finish
   split into six units, or one 19.9-minute unit of five chunks, is short.
   - A short pass keeps four chunks in flight (one round up to about 19.8 minutes, two above).
@@ -45,8 +54,9 @@ transcript (`utils/conversations/v3/fast_finish.py`) calls the provider.
   Cancellation stops queued chunks; a request already dispatched may finish, but its result is never
   written. The write is still fenced inside its transaction.
 - **Retry and language.** A chunk that fails is sent once more if at least 10 s of the deadline is left.
-  The language is resolved once per pass, on the first chunk's audio (`prerecorded_bytes_route`, now in
-  `utils/stt/prerecorded_route.py`), and every chunk reuses that provider selection.
+  The language is resolved once per pass, on the first chunk's audio (`pre_recorded.prerecorded_bytes_route`),
+  and every chunk reuses that provider selection. The deadline context and its timeouts live in the leaf
+  module `utils/stt/prerecorded_deadline.py`, which the provider, the vendor probe and the gate import.
 - **Stitching.** At a fixed cut the earlier chunk owns lines that start before the overlap's middle.
   Every later line that starts before the earlier chunk's last line ended is compared against it.
   - Words, which have their own timing, go by time.
@@ -65,8 +75,10 @@ Recordings over 20 minutes are the spend this change adds. They take the chunked
 `CONVERSATIONS_V3_FAST_FINISH_LONG_PERCENT` of owners (default 25, salted uid bucket
 `v3-fast-finish-long`; outside it, `long_canary`). They are also limited to
 `CONVERSATIONS_V3_FAST_FINISH_LONG_DAILY_SECONDS` of their audio per process per UTC day (default 7200;
-past it, `long_cap`). The cap counts the audio actually sent: chunk overlaps, retries and the language
-probe included, and chunks never sent refunded. Finishes up to 20 minutes are not gated.
+past it, `long_cap`). The cap counts the audio actually sent: chunk overlaps, retries and the vendor
+language probe included, and chunks never sent refunded. It is an in-memory counter for the life of the
+process: each new or restarted instance starts the day at 0, so the fleet's daily total is not this value
+times a fixed instance count when instances scale or restart. Finishes up to 20 minutes are not gated.
 
 ## Metrics
 
@@ -75,7 +87,8 @@ New metrics, all with no labels unless noted:
 - `omi_conversations_v3_fast_finish_chunk_seconds`
 - `omi_conversations_v3_fast_finish_chunk_queue_seconds`
 - `omi_conversations_v3_fast_finish_wall_seconds` (every written pass, from admission)
-- `omi_conversations_v3_fast_finish_audio_seconds_total{path=short|long}` (provider audio, retries included)
+- `omi_conversations_v3_fast_finish_audio_seconds_total{path=short|long}` (provider audio, retries and the
+  vendor language probe clip included: the same audio the daily cap charges)
 
 New outcomes: `deadline`, `long_canary`, `long_cap`. In the chunked path,
 `omi_conversations_v3_fast_finish_seconds{stage="provider"}` is the whole concurrent span. All of these
