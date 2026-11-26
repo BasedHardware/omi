@@ -15788,4 +15788,12 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get stillWorkingOnIt => 'Még dolgozunk rajta.';
+
+  @override
+  String get deletedRecordingWillBeProcessed =>
+      'A felvétel feldolgozása folytatódik. A beszélgetést törölheted, miután megjelent.';
+
+  @override
+  String get deleteRecordingKeepsConversation =>
+      'Az itteni törlés eltávolítja a másolatot a telefonról. A már átírt felvételekhez tartozó beszélgetések megmaradnak.';
 }

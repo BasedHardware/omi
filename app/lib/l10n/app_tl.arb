@@ -12295,5 +12295,7 @@
     "conversationLiveNoEdits": "Hintaying matapos muna bago ito baguhin.",
     "finishedSummaryReady": "Handa na ang buod",
     "writingSummaryStatus": "Isinusulat ang buod…",
-    "stillWorkingOnIt": "Pinagtatrabahuhan pa rin ito."
+    "stillWorkingOnIt": "Pinagtatrabahuhan pa rin ito.",
+    "deletedRecordingWillBeProcessed": "Patuloy na ipoproseso ang recording na ito. Maaari mong burahin ang pag-uusap kapag lumabas na ito.",
+    "deleteRecordingKeepsConversation": "Aalisin ng pagbura rito ang kopya sa telepono. Mananatili ang mga pag-uusap para sa mga recording na na-transcribe na."
 }

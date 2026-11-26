@@ -15763,4 +15763,12 @@ class AppLocalizationsUk extends AppLocalizations {
 
   @override
   String get stillWorkingOnIt => 'Ще працюємо над цим.';
+
+  @override
+  String get deletedRecordingWillBeProcessed =>
+      'Обробка цього запису триватиме. Коли розмова з’явиться, її можна буде видалити.';
+
+  @override
+  String get deleteRecordingKeepsConversation =>
+      'Видалення тут прибирає копію з телефона. Розмови з уже транскрибованих записів залишаються.';
 }

@@ -15808,4 +15808,12 @@ class AppLocalizationsIt extends AppLocalizations {
 
   @override
   String get stillWorkingOnIt => 'Ancora al lavoro.';
+
+  @override
+  String get deletedRecordingWillBeProcessed =>
+      'Questa registrazione verrà comunque elaborata. Puoi eliminare la conversazione quando compare.';
+
+  @override
+  String get deleteRecordingKeepsConversation =>
+      'Eliminando qui rimuovi la copia dal telefono. Le conversazioni delle registrazioni già trascritte vengono conservate.';
 }

@@ -12295,5 +12295,7 @@
     "conversationLiveNoEdits": "পরিবর্তন করতে এটি শেষ হওয়া পর্যন্ত অপেক্ষা করুন।",
     "finishedSummaryReady": "সারসংক্ষেপ প্রস্তুত",
     "writingSummaryStatus": "সারসংক্ষেপ লেখা হচ্ছে…",
-    "stillWorkingOnIt": "এখনও কাজ চলছে।"
+    "stillWorkingOnIt": "এখনও কাজ চলছে।",
+    "deletedRecordingWillBeProcessed": "এই রেকর্ডিং প্রক্রিয়াকরণ চলবে। কথোপকথনটি দেখা গেলে আপনি সেটি মুছে ফেলতে পারবেন।",
+    "deleteRecordingKeepsConversation": "এখানে মুছলে ফোনের কপি সরবে। ইতিমধ্যে প্রতিলিখিত রেকর্ডিংয়ের কথোপকথন থেকে যাবে।"
 }

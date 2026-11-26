@@ -15731,4 +15731,12 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get stillWorkingOnIt => 'Vẫn đang xử lý.';
+
+  @override
+  String get deletedRecordingWillBeProcessed =>
+      'Bản ghi này vẫn sẽ được xử lý. Bạn có thể xóa cuộc trò chuyện khi nó xuất hiện.';
+
+  @override
+  String get deleteRecordingKeepsConversation =>
+      'Xóa tại đây sẽ xóa bản sao trên điện thoại. Cuộc trò chuyện của những bản ghi đã được chép lời vẫn được giữ lại.';
 }

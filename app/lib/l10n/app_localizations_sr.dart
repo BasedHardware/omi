@@ -15738,4 +15738,12 @@ class AppLocalizationsSr extends AppLocalizations {
 
   @override
   String get stillWorkingOnIt => 'Још увек радимо на томе.';
+
+  @override
+  String get deletedRecordingWillBeProcessed =>
+      'Обрада овог снимка ће се наставити. Разговор можеш да избришеш кад се појави.';
+
+  @override
+  String get deleteRecordingKeepsConversation =>
+      'Брисањем овде уклањаш копију са телефона. Разговори из већ транскрибованих снимака остају.';
 }

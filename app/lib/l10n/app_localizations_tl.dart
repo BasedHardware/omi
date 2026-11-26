@@ -15854,4 +15854,12 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String get stillWorkingOnIt => 'Pinagtatrabahuhan pa rin ito.';
+
+  @override
+  String get deletedRecordingWillBeProcessed =>
+      'Patuloy na ipoproseso ang recording na ito. Maaari mong burahin ang pag-uusap kapag lumabas na ito.';
+
+  @override
+  String get deleteRecordingKeepsConversation =>
+      'Aalisin ng pagbura rito ang kopya sa telepono. Mananatili ang mga pag-uusap para sa mga recording na na-transcribe na.';
 }

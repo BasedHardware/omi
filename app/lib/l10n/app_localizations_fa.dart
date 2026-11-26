@@ -15722,4 +15722,12 @@ class AppLocalizationsFa extends AppLocalizations {
 
   @override
   String get stillWorkingOnIt => 'هنوز روی آن کار می‌کنیم.';
+
+  @override
+  String get deletedRecordingWillBeProcessed =>
+      'پردازش این ضبط ادامه خواهد یافت. وقتی گفتگو ظاهر شد، می‌توانید آن را حذف کنید.';
+
+  @override
+  String get deleteRecordingKeepsConversation =>
+      'حذف از اینجا نسخهٔ روی تلفن را پاک می‌کند. گفتگوهای ضبط‌هایی که قبلاً به متن تبدیل شده‌اند باقی می‌مانند.';
 }

@@ -15729,4 +15729,12 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String get stillWorkingOnIt => 'Stále na tom pracujeme.';
+
+  @override
+  String get deletedRecordingWillBeProcessed =>
+      'Zpracování tohoto záznamu bude pokračovat. Konverzaci můžete smazat, až se objeví.';
+
+  @override
+  String get deleteRecordingKeepsConversation =>
+      'Smazáním zde odstraníte kopii z telefonu. Konverzace již přepsaných záznamů zůstanou zachovány.';
 }

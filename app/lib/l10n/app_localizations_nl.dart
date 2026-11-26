@@ -15771,4 +15771,12 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get stillWorkingOnIt => 'Er wordt nog aan gewerkt.';
+
+  @override
+  String get deletedRecordingWillBeProcessed =>
+      'Deze opname wordt nog verwerkt. Je kunt het gesprek verwijderen zodra het verschijnt.';
+
+  @override
+  String get deleteRecordingKeepsConversation =>
+      'Als je hier verwijdert, verdwijnt de kopie van je telefoon. Gesprekken van opnamen die al zijn getranscribeerd, blijven bewaard.';
 }

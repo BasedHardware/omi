@@ -15765,4 +15765,12 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get stillWorkingOnIt => 'Vēl tiek pie tā strādāts.';
+
+  @override
+  String get deletedRecordingWillBeProcessed =>
+      'Šī ieraksta apstrāde turpināsies. Kad saruna parādīsies, to varēsi dzēst.';
+
+  @override
+  String get deleteRecordingKeepsConversation =>
+      'Dzēšot šeit, tiek noņemta kopija no tālruņa. Jau transkribēto ierakstu sarunas saglabājas.';
 }

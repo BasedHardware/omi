@@ -12295,5 +12295,7 @@
     "conversationLiveNoEdits": "המתן עד שההקלטה תסתיים כדי לשנות.",
     "finishedSummaryReady": "הסיכום מוכן",
     "writingSummaryStatus": "כותב סיכום…",
-    "stillWorkingOnIt": "עדיין עובדים על זה."
+    "stillWorkingOnIt": "עדיין עובדים על זה.",
+    "deletedRecordingWillBeProcessed": "עיבוד ההקלטה יימשך. אפשר למחוק את השיחה כשתופיע.",
+    "deleteRecordingKeepsConversation": "המחיקה כאן מסירה את העותק מהטלפון. שיחות מהקלטות שכבר תומללו נשארות."
 }

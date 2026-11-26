@@ -15833,4 +15833,12 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String get stillWorkingOnIt => 'Εξακολουθούμε να δουλεύουμε πάνω σε αυτό.';
+
+  @override
+  String get deletedRecordingWillBeProcessed =>
+      'Η επεξεργασία αυτής της εγγραφής θα συνεχιστεί. Μπορείς να διαγράψεις τη συνομιλία μόλις εμφανιστεί.';
+
+  @override
+  String get deleteRecordingKeepsConversation =>
+      'Η διαγραφή εδώ αφαιρεί το αντίγραφο από το τηλέφωνο. Οι συνομιλίες από ήδη απομαγνητοφωνημένες εγγραφές διατηρούνται.';
 }

@@ -4773,5 +4773,7 @@
     "conversationLiveNoEdits": "Poczekaj, aż się zakończy, aby ją zmienić.",
     "finishedSummaryReady": "Podsumowanie gotowe",
     "writingSummaryStatus": "Pisanie podsumowania…",
-    "stillWorkingOnIt": "Nadal pracujemy nad tym."
+    "stillWorkingOnIt": "Nadal pracujemy nad tym.",
+    "deletedRecordingWillBeProcessed": "Przetwarzanie tego nagrania będzie kontynuowane. Możesz usunąć rozmowę, gdy się pojawi.",
+    "deleteRecordingKeepsConversation": "Usunięcie w tym miejscu usuwa kopię z telefonu. Rozmowy z nagrań, które już przepisano, pozostaną dostępne."
 }

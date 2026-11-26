@@ -15758,4 +15758,12 @@ class AppLocalizationsSl extends AppLocalizations {
 
   @override
   String get stillWorkingOnIt => 'Še vedno poteka obdelava.';
+
+  @override
+  String get deletedRecordingWillBeProcessed =>
+      'Obdelava tega posnetka se bo nadaljevala. Pogovor lahko izbrišeš, ko se prikaže.';
+
+  @override
+  String get deleteRecordingKeepsConversation =>
+      'Brisanje tukaj odstrani kopijo s telefona. Pogovori že prepisanih posnetkov se ohranijo.';
 }

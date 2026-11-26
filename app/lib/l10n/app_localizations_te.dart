@@ -15793,4 +15793,12 @@ class AppLocalizationsTe extends AppLocalizations {
 
   @override
   String get stillWorkingOnIt => 'ఇంకా పని జరుగుతోంది.';
+
+  @override
+  String get deletedRecordingWillBeProcessed =>
+      'ఈ రికార్డింగ్ ప్రాసెసింగ్ కొనసాగుతుంది. సంభాషణ కనిపించిన తర్వాత దాన్ని తొలగించవచ్చు.';
+
+  @override
+  String get deleteRecordingKeepsConversation =>
+      'ఇక్కడ తొలగిస్తే ఫోన్‌లోని కాపీ తొలగిపోతుంది. ఇప్పటికే లిప్యంతరీకరించిన రికార్డింగ్‌ల సంభాషణలు అలాగే ఉంటాయి.';
 }

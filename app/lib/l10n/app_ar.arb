@@ -4738,5 +4738,7 @@
     "conversationLiveNoEdits": "انتظر حتى ينتهي قبل تغييره.",
     "finishedSummaryReady": "الملخص جاهز",
     "writingSummaryStatus": "جارٍ كتابة الملخص…",
-    "stillWorkingOnIt": "ما زلنا نعمل عليه."
+    "stillWorkingOnIt": "ما زلنا نعمل عليه.",
+    "deletedRecordingWillBeProcessed": "ستستمر معالجة هذا التسجيل. يمكنك حذف المحادثة عند ظهورها.",
+    "deleteRecordingKeepsConversation": "يؤدي الحذف هنا إلى إزالة النسخة من الهاتف. وتبقى محادثات التسجيلات التي تم تفريغها بالفعل."
 }

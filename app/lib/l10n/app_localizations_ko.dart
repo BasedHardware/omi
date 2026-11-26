@@ -15508,4 +15508,10 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get stillWorkingOnIt => '아직 처리 중입니다.';
+
+  @override
+  String get deletedRecordingWillBeProcessed => '이 녹음은 계속 처리됩니다. 대화가 표시되면 삭제할 수 있습니다.';
+
+  @override
+  String get deleteRecordingKeepsConversation => '여기서 삭제하면 휴대전화의 사본이 제거됩니다. 이미 텍스트로 변환된 녹음의 대화는 유지됩니다.';
 }

@@ -15641,4 +15641,11 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get stillWorkingOnIt => 'ما زلنا نعمل عليه.';
+
+  @override
+  String get deletedRecordingWillBeProcessed => 'ستستمر معالجة هذا التسجيل. يمكنك حذف المحادثة عند ظهورها.';
+
+  @override
+  String get deleteRecordingKeepsConversation =>
+      'يؤدي الحذف هنا إلى إزالة النسخة من الهاتف. وتبقى محادثات التسجيلات التي تم تفريغها بالفعل.';
 }

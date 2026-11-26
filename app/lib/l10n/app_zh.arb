@@ -4738,5 +4738,7 @@
     "conversationLiveNoEdits": "请等它结束后再修改。",
     "finishedSummaryReady": "摘要已生成",
     "writingSummaryStatus": "正在生成摘要…",
-    "stillWorkingOnIt": "仍在处理中。"
+    "stillWorkingOnIt": "仍在处理中。",
+    "deletedRecordingWillBeProcessed": "系统仍会处理这段录音。对话出现后，你可以将其删除。",
+    "deleteRecordingKeepsConversation": "在此删除会移除手机上的副本。已转录录音对应的对话将保留。"
 }

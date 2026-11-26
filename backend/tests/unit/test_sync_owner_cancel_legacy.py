@@ -256,6 +256,31 @@ def test_completed_legacy_content_is_already_processed_and_untouched():
     assert store.rows == before
 
 
+@pytest.mark.parametrize('purged', [False, True])
+@pytest.mark.parametrize('projected', [False, True])
+def test_gone_legacy_holds_do_not_fence_the_ledger(purged, projected):
+    from utils.batch_pipeline.cap_hold_admission import held_content_id
+
+    store = MemoryLegacyStore()
+    held_upload(store, {'h1': hold(30, state='purged')} if purged else {}, cap_hold_ids=['h1'])
+    if projected:
+        store.rows['ledger', OWNER, held_content_id(OWNER, 'h1')] = {
+            'status': 'completed',
+            'result': {
+                'new_memories': ['conv-1'],
+                'updated_memories': [],
+                'failed_segments': 0,
+                'total_segments': 1,
+                'errors': [],
+            },
+        }
+    before = deepcopy(store.rows)
+    result = cancel(store)
+    assert result.outcome is (Outcome.ALREADY_PROCESSED if projected else Outcome.NOT_CANCELLABLE)
+    assert result.conversation_ids == (('conv-1',) if projected else ())
+    assert store.rows == before
+
+
 def test_foreign_unknown_and_non_hold_legacy_handles_write_nothing():
     store = MemoryLegacyStore()
     held_upload(store)
@@ -275,8 +300,9 @@ def test_summary_mid_rebuild_is_left_to_the_rebuild():
     store = MemoryLegacyStore()
     held_upload(store)
     store.rows[('summary', OWNER, 'current')] = {'version': 1, 'build_owner': 'rebuild'}
-    cancel(store)
+    assert cancel(store, FakeLegacyEraser(store, fail_holds=1)).erasure == 'pending'
     assert store.rows[('summary', OWNER, 'current')] == {'version': 1, 'build_owner': 'rebuild'}
+    assert cap_hold.remaining_seconds(store.rows['hold', OWNER, 'h2']) == 0
 
 
 def test_without_a_legacy_store_a_legacy_handle_is_not_found():

@@ -4738,5 +4738,7 @@
     "conversationLiveNoEdits": "Espera que acabi per modificar-la.",
     "finishedSummaryReady": "Resum preparat",
     "writingSummaryStatus": "Escrivint el resum…",
-    "stillWorkingOnIt": "Encara hi estem treballant."
+    "stillWorkingOnIt": "Encara hi estem treballant.",
+    "deletedRecordingWillBeProcessed": "Aquesta gravació es continuarà processant. Pots suprimir la conversa quan aparegui.",
+    "deleteRecordingKeepsConversation": "Si suprimeixes aquí, s’elimina la còpia del telèfon. Es conserven les converses de les gravacions ja transcrites."
 }

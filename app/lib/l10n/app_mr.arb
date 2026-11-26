@@ -12295,5 +12295,7 @@
     "conversationLiveNoEdits": "बदलण्यासाठी ते संपेपर्यंत थांबा.",
     "finishedSummaryReady": "सारांश तयार आहे",
     "writingSummaryStatus": "सारांश लिहिले जात आहे…",
-    "stillWorkingOnIt": "अजून त्यावर काम सुरू आहे."
+    "stillWorkingOnIt": "अजून त्यावर काम सुरू आहे.",
+    "deletedRecordingWillBeProcessed": "या रेकॉर्डिंगवर प्रक्रिया सुरू राहील. संभाषण दिसल्यानंतर तुम्ही ते हटवू शकता.",
+    "deleteRecordingKeepsConversation": "इथून हटवल्यावर फोनवरील प्रत हटते. ज्या रेकॉर्डिंगचे लिप्यंतरण झाले आहे, त्यांची संभाषणे कायम राहतात."
 }

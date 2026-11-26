@@ -4738,5 +4738,7 @@
     "conversationLiveNoEdits": "Tunggu sehingga tamat untuk mengubahnya.",
     "finishedSummaryReady": "Ringkasan sedia",
     "writingSummaryStatus": "Menulis ringkasan…",
-    "stillWorkingOnIt": "Masih memprosesnya."
+    "stillWorkingOnIt": "Masih memprosesnya.",
+    "deletedRecordingWillBeProcessed": "Rakaman ini akan terus diproses. Anda boleh memadamkan perbualan selepas ia muncul.",
+    "deleteRecordingKeepsConversation": "Pemadaman di sini membuang salinan pada telefon. Perbualan daripada rakaman yang sudah ditranskripsikan akan kekal."
 }

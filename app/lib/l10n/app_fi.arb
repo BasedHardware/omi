@@ -4738,5 +4738,7 @@
     "conversationLiveNoEdits": "Odota, että se päättyy, ennen kuin muutat sitä.",
     "finishedSummaryReady": "Tiivistelmä valmis",
     "writingSummaryStatus": "Kirjoitetaan tiivistelmää…",
-    "stillWorkingOnIt": "Yhä työn alla."
+    "stillWorkingOnIt": "Yhä työn alla.",
+    "deletedRecordingWillBeProcessed": "Tallenteen käsittely jatkuu. Voit poistaa keskustelun, kun se tulee näkyviin.",
+    "deleteRecordingKeepsConversation": "Poistaminen tässä poistaa kopion puhelimesta. Jo litteroitujen tallenteiden keskustelut säilyvät."
 }

@@ -15795,4 +15795,12 @@ class AppLocalizationsMk extends AppLocalizations {
 
   @override
   String get stillWorkingOnIt => 'Сè уште се работи на тоа.';
+
+  @override
+  String get deletedRecordingWillBeProcessed =>
+      'Обработката на оваа снимка ќе продолжи. Можеш да го избришеш разговорот кога ќе се појави.';
+
+  @override
+  String get deleteRecordingKeepsConversation =>
+      'Бришењето овде ја отстранува копијата од телефонот. Разговорите за веќе транскрибираните снимки остануваат.';
 }

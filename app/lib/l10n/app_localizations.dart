@@ -27620,6 +27620,18 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Still working on it.'**
   String get stillWorkingOnIt;
+
+  /// Notice after deletion when the server cannot cancel an uploaded recording.
+  ///
+  /// In en, this message translates to:
+  /// **'This recording will still be processed. You can delete the conversation once it appears.'**
+  String get deletedRecordingWillBeProcessed;
+
+  /// Delete confirmation when the selection contains a transcribed recording.
+  ///
+  /// In en, this message translates to:
+  /// **'Deleting here removes the phone copy. Conversations for recordings that have already been transcribed will stay.'**
+  String get deleteRecordingKeepsConversation;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

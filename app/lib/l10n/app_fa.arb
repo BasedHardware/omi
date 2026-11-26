@@ -12295,5 +12295,7 @@
     "conversationLiveNoEdits": "برای تغییر، صبر کنید تا تمام شود.",
     "finishedSummaryReady": "خلاصه آماده است",
     "writingSummaryStatus": "در حال نوشتن خلاصه…",
-    "stillWorkingOnIt": "هنوز روی آن کار می‌کنیم."
+    "stillWorkingOnIt": "هنوز روی آن کار می‌کنیم.",
+    "deletedRecordingWillBeProcessed": "پردازش این ضبط ادامه خواهد یافت. وقتی گفتگو ظاهر شد، می‌توانید آن را حذف کنید.",
+    "deleteRecordingKeepsConversation": "حذف از اینجا نسخهٔ روی تلفن را پاک می‌کند. گفتگوهای ضبط‌هایی که قبلاً به متن تبدیل شده‌اند باقی می‌مانند."
 }

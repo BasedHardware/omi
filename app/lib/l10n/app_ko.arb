@@ -4738,5 +4738,7 @@
     "conversationLiveNoEdits": "변경하려면 종료될 때까지 기다려 주세요.",
     "finishedSummaryReady": "요약이 준비되었습니다",
     "writingSummaryStatus": "요약 작성 중…",
-    "stillWorkingOnIt": "아직 처리 중입니다."
+    "stillWorkingOnIt": "아직 처리 중입니다.",
+    "deletedRecordingWillBeProcessed": "이 녹음은 계속 처리됩니다. 대화가 표시되면 삭제할 수 있습니다.",
+    "deleteRecordingKeepsConversation": "여기서 삭제하면 휴대전화의 사본이 제거됩니다. 이미 텍스트로 변환된 녹음의 대화는 유지됩니다."
 }

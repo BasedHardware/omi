@@ -15726,4 +15726,12 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get stillWorkingOnIt => 'Ešte sa na tom pracuje.';
+
+  @override
+  String get deletedRecordingWillBeProcessed =>
+      'Spracovanie tejto nahrávky bude pokračovať. Konverzáciu môžeš odstrániť, keď sa zobrazí.';
+
+  @override
+  String get deleteRecordingKeepsConversation =>
+      'Odstránením sa vymaže kópia z telefónu. Konverzácie z už prepísaných nahrávok zostanú zachované.';
 }

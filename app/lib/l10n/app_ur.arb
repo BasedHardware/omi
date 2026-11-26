@@ -12295,5 +12295,7 @@
     "conversationLiveNoEdits": "تبدیلی کے لیے اس کے ختم ہونے تک انتظار کریں۔",
     "finishedSummaryReady": "خلاصہ تیار ہے",
     "writingSummaryStatus": "خلاصہ لکھا جا رہا ہے…",
-    "stillWorkingOnIt": "ابھی کام جاری ہے۔"
+    "stillWorkingOnIt": "ابھی کام جاری ہے۔",
+    "deletedRecordingWillBeProcessed": "اس ریکارڈنگ پر کارروائی جاری رہے گی۔ گفتگو ظاہر ہونے پر آپ اسے حذف کر سکتے ہیں۔",
+    "deleteRecordingKeepsConversation": "یہاں حذف کرنے سے فون پر موجود کاپی ہٹ جاتی ہے۔ جن ریکارڈنگز کو پہلے ہی متن میں تبدیل کیا جا چکا ہے ان کی گفتگو برقرار رہے گی۔"
 }

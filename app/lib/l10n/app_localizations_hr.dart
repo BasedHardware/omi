@@ -15767,4 +15767,12 @@ class AppLocalizationsHr extends AppLocalizations {
 
   @override
   String get stillWorkingOnIt => 'I dalje radimo na tome.';
+
+  @override
+  String get deletedRecordingWillBeProcessed =>
+      'Obrada ove snimke će se nastaviti. Razgovor možeš izbrisati kad se pojavi.';
+
+  @override
+  String get deleteRecordingKeepsConversation =>
+      'Brisanjem ovdje uklanjaš kopiju s telefona. Razgovori za već transkribirane snimke ostaju.';
 }

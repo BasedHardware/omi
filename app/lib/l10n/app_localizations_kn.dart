@@ -15781,4 +15781,12 @@ class AppLocalizationsKn extends AppLocalizations {
 
   @override
   String get stillWorkingOnIt => 'ಇನ್ನೂ ಕೆಲಸ ನಡೆಯುತ್ತಿದೆ.';
+
+  @override
+  String get deletedRecordingWillBeProcessed =>
+      'ಈ ರೆಕಾರ್ಡಿಂಗ್‌ನ ಸಂಸ್ಕರಣೆ ಮುಂದುವರಿಯುತ್ತದೆ. ಸಂಭಾಷಣೆ ಕಾಣಿಸಿಕೊಂಡ ನಂತರ ಅದನ್ನು ಅಳಿಸಬಹುದು.';
+
+  @override
+  String get deleteRecordingKeepsConversation =>
+      'ಇಲ್ಲಿ ಅಳಿಸಿದರೆ ಫೋನ್‌ನಲ್ಲಿರುವ ಪ್ರತಿ ಅಳಿಯುತ್ತದೆ. ಈಗಾಗಲೇ ಲಿಪ್ಯಂತರಿಸಿದ ರೆಕಾರ್ಡಿಂಗ್‌ಗಳ ಸಂಭಾಷಣೆಗಳು ಉಳಿಯುತ್ತವೆ.';
 }

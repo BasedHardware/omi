@@ -15502,4 +15502,10 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get stillWorkingOnIt => 'まだ処理中です。';
+
+  @override
+  String get deletedRecordingWillBeProcessed => 'この録音の処理は続行されます。会話が表示されたら削除できます。';
+
+  @override
+  String get deleteRecordingKeepsConversation => 'ここで削除すると、スマートフォン上のコピーが消去されます。文字起こし済みの録音の会話は残ります。';
 }

@@ -139,6 +139,21 @@ def test_adjacent_siblings_inside_a_queue_relink_predecessor_and_tail():
     assert chain(store) == ['first', 'last']
 
 
+def test_intake_order_can_differ_from_fifo_after_retry():
+    store = MemoryStore()
+    queue = admit(store, ['a', 'b'])
+    lease = queue.pull(1, 1)[0]
+    assert lease.item.segment_id == 'a'
+    assert queue.defer('a', lease.token, 2, retry_after=4, held_reason='retry')
+    assert queue.recover(store.rows['jobs', 'a']['available_at']) == 1
+    assert chain(store) == ['b', 'a']
+
+    # Keep the fenced rows present so the pull would find any stale link.
+    assert cancel(store, FakeEraser(store, fail_units=1)).erasure == 'pending'
+    assert chain(store) == []
+    assert queue.pull(101, 1) == []
+
+
 def test_upload_at_the_tail_moves_the_tail_back():
     store = MemoryStore()
     queue = Scheduler(store)
@@ -541,7 +556,7 @@ def test_archive_erasure_keeps_originals_linked_to_conversations_and_other_uploa
         def list_blobs(self, *, prefix, versions):
             assert versions is True
             prefixes.append(prefix)
-            return blobs[prefix.split('/', 1)[0]]
+            return [b for b in blobs[prefix.split('/', 1)[0]] if b.deleted is None and not b.missing]
 
     class Client:
         def bucket(self, name):
@@ -550,7 +565,7 @@ def test_archive_erasure_keeps_originals_linked_to_conversations_and_other_uploa
     monkeypatch.setattr(storage, '_get_storage_client', lambda: Client())
     earlier = 'raw-sync/owner-synthetic/a/earlier.bin'
     assert storage.delete_unlinked_upload_archives(OWNER, 'upload-1', (earlier,)) == 3
-    assert prefixes == [f'raw-sync/{OWNER}/', f'raw-mobile-batch/{OWNER}/']
+    assert prefixes == [f'raw-sync/{OWNER}/', f'raw-mobile-batch/{OWNER}/'] * 2
     assert [b.name for group in blobs.values() for b in group if b.deleted is not None] == [
         'raw-sync/owner-synthetic/a/x.bin',
         earlier,
@@ -559,6 +574,57 @@ def test_archive_erasure_keeps_originals_linked_to_conversations_and_other_uploa
     assert blobs['raw-mobile-batch'][0].deleted == 9
     with pytest.raises(ValueError):
         storage.delete_unlinked_upload_archives(OWNER, '')
+
+
+@pytest.mark.parametrize('second_pass', ['late_write', 'listing_failed', 'still_present'])
+def test_archive_eraser_verifies_after_first_delete_pass(monkeypatch, second_pass):
+    from utils.other import storage
+
+    prefix = f'raw-sync/{OWNER}/'
+    first = _Blob(prefix + 'first', {'sync_job_id': 'upload-1'})
+    late = _Blob(prefix + 'late', {'sync_job_id': 'upload-1'})
+    reads = 0
+
+    def list_blobs(*, prefix, versions):
+        nonlocal reads
+        if not prefix.startswith('raw-sync/'):
+            return []
+        reads += 1
+        if reads == 1:
+            return [first]
+        if second_pass == 'listing_failed':
+            raise RuntimeError('listing unavailable')
+        return [late] if late.deleted is None or second_pass == 'still_present' else []
+
+    from types import SimpleNamespace
+
+    bucket = SimpleNamespace(list_blobs=list_blobs)
+    monkeypatch.setattr(storage, '_get_storage_client', lambda: SimpleNamespace(bucket=lambda name: bucket))
+    if second_pass == 'late_write':
+        assert storage.delete_unlinked_upload_archives(OWNER, 'upload-1', (first.name,)) == 2
+        assert late.deleted == late.generation
+    else:
+        with pytest.raises(storage.ArchiveReceiptIncomplete):
+            storage.delete_unlinked_upload_archives(OWNER, 'upload-1', (first.name,))
+    assert first.deleted == first.generation
+
+
+def test_rejected_upload_erases_only_generations_tagged_by_that_request(monkeypatch):
+    from types import SimpleNamespace
+    from utils.other import storage
+
+    path = f'raw-sync/{OWNER}/original'
+    own = _Blob(path, {'sync_job_id': 'new'}, generation=8)
+    reused = _Blob(path, {'sync_job_id': 'earlier'})
+    linked = _Blob(path, {'sync_job_id': 'new', 'conversation_id': 'conv'}, generation=9)
+    other = _Blob(path + '-other', {'sync_job_id': 'new'})
+    bucket = SimpleNamespace(list_blobs=lambda **kwargs: [own, reused, linked, other])
+    monkeypatch.setattr(storage, '_get_storage_client', lambda: SimpleNamespace(bucket=lambda name: bucket))
+
+    storage.delete_rejected_upload_archives(OWNER, 'new', [path])
+
+    assert own.deleted == 8
+    assert all(blob.deleted is None for blob in (reused, linked, other))
 
 
 @pytest.mark.parametrize('lane', ['batch', 'legacy'])

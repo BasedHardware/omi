@@ -12295,5 +12295,7 @@
     "conversationLiveNoEdits": "Дачакайцеся сканчэння, каб змяніць яго.",
     "finishedSummaryReady": "Рэзюмэ гатовае",
     "writingSummaryStatus": "Пішам рэзюмэ…",
-    "stillWorkingOnIt": "Усё яшчэ працуем над гэтым."
+    "stillWorkingOnIt": "Усё яшчэ працуем над гэтым.",
+    "deletedRecordingWillBeProcessed": "Апрацоўка гэтага запісу працягнецца. Вы зможаце выдаліць размову, калі яна з’явіцца.",
+    "deleteRecordingKeepsConversation": "Выдаленне тут прыбірае копію з тэлефона. Размовы для ўжо транскрыбаваных запісаў застаюцца."
 }

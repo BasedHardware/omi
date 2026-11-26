@@ -121,6 +121,7 @@ from utils.analytics import record_sync_v1_usage as record_usage
 from utils.other import endpoints as auth
 from utils.account_cutover.access import should_skip_background_account_mutation
 from utils.other.storage import (
+    delete_rejected_upload_archives,
     archive_mobile_batch_raw_files,
     link_archive_captures,
     get_playback_artifact_signed_url,
@@ -1159,6 +1160,10 @@ async def sync_local_files_v2(
 
         archive_paths = None
 
+        async def erase_rejected_archives():
+            if archive_paths:
+                await run_blocking(storage_executor, delete_rejected_upload_archives, uid, job_id, archive_paths)
+
         async def archive_originals():
             nonlocal archive_paths
             if archive_paths is not None:
@@ -1291,6 +1296,12 @@ async def sync_local_files_v2(
                 evidence=intake_evidence,
             )
             if batch_response is not None:
+                if (
+                    isinstance(batch_response, JSONResponse)
+                    and batch_response.status_code == 202
+                    and json.loads(batch_response.body).get('reason_code') == 'owner_cancelled'
+                ):
+                    await erase_rejected_archives()
                 # Count only a fresh admission this request (a re-ACK of prior
                 # custody, a fence/unavailable response, or a rehomed final-pass
                 # owner is a follow-on, not a batch landing).
@@ -1340,6 +1351,8 @@ async def sync_local_files_v2(
                 )
             await run_blocking(sync_executor, _cleanup_files, paths)
             await run_blocking(sync_executor, shutil.rmtree, job_dir, True)
+            if decision.ownership is legacy_dark.LegacyOwnership.OWNER_CANCELLED:
+                await erase_rejected_archives()
             return (
                 legacy_dark.fence_response(decision, total_files=len(files), lane=lane_decision.lane.value)
                 or legacy_dark.admission_refused_response()
@@ -1396,6 +1409,7 @@ async def sync_local_files_v2(
             lane_decision.lane.value,
         )
         if claim.get('outcome') == 'owner_cancelled':
+            await erase_rejected_archives()
             await run_blocking(db_executor, mark_job_failed, job_id, 'Owner cancelled', reason_code='owner_cancelled')
             return owner_cancelled_response(claim.get('job_id'), total_files=len(files), lane=lane_decision.lane.value)
         if claim.get('outcome') in {'completed', 'held'}:

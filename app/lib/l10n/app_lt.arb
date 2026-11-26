@@ -4738,5 +4738,7 @@
     "conversationLiveNoEdits": "Norėdami pakeisti, palaukite, kol jis baigsis.",
     "finishedSummaryReady": "Santrauka paruošta",
     "writingSummaryStatus": "Rašoma santrauka…",
-    "stillWorkingOnIt": "Vis dar dirbama."
+    "stillWorkingOnIt": "Vis dar dirbama.",
+    "deletedRecordingWillBeProcessed": "Šis įrašas ir toliau bus apdorojamas. Galėsi ištrinti pokalbį, kai jis pasirodys.",
+    "deleteRecordingKeepsConversation": "Ištrynus čia, kopija pašalinama iš telefono. Jau transkribuotų įrašų pokalbiai išlieka."
 }

@@ -1753,20 +1753,14 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
       return null;
     }
     final serverJob = target.status == WalStatus.uploaded ? target.jobId : null;
-    if (serverJob != null && serverJob.isNotEmpty) {
-      // The tombstone is durable before the local copy goes; without it the server job
-      // would outlive the delete with nothing left to cancel it.
-      if (!await _recordServerCancel(serverJob, target.ownerUid)) {
-        Logger.debug('deleteWal kept ${target.id}: server cancel could not be recorded');
-        _notifyUpdated(generation);
-        return const SyncJobCancelResult(SyncJobCancelOutcome.retryLater);
-      }
+    if (serverJob == null || serverJob.isEmpty) {
+      if (await _deleteWal(target, generation: generation)) await _saveWalsToFile(generation);
+      _notifyUpdated(generation);
+      return null;
     }
-    if (await _deleteWal(target, generation: generation)) {
-      await _saveWalsToFile(generation);
-    }
+    final deleted = await _deleteWalWithServerCancel(target, serverJob, generation);
     _notifyUpdated(generation);
-    if (serverJob == null || serverJob.isEmpty) return null;
+    if (!deleted) return const SyncJobCancelResult(SyncJobCancelOutcome.retryLater);
     final pass = await _drainServerCancels(generation, only: serverJob);
     return pass.answered[serverJob] ?? const SyncJobCancelResult(SyncJobCancelOutcome.retryLater);
   }

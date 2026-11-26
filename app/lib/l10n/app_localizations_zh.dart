@@ -15477,4 +15477,10 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get stillWorkingOnIt => '仍在处理中。';
+
+  @override
+  String get deletedRecordingWillBeProcessed => '系统仍会处理这段录音。对话出现后，你可以将其删除。';
+
+  @override
+  String get deleteRecordingKeepsConversation => '在此删除会移除手机上的副本。已转录录音对应的对话将保留。';
 }

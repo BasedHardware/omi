@@ -12295,5 +12295,7 @@
     "conversationLiveNoEdits": "మార్చడానికి అది ముగిసే వరకు వేచి ఉండండి.",
     "finishedSummaryReady": "సారాంశం సిద్ధంగా ఉంది",
     "writingSummaryStatus": "సారాంశం తయారవుతోంది…",
-    "stillWorkingOnIt": "ఇంకా పని జరుగుతోంది."
+    "stillWorkingOnIt": "ఇంకా పని జరుగుతోంది.",
+    "deletedRecordingWillBeProcessed": "ఈ రికార్డింగ్ ప్రాసెసింగ్ కొనసాగుతుంది. సంభాషణ కనిపించిన తర్వాత దాన్ని తొలగించవచ్చు.",
+    "deleteRecordingKeepsConversation": "ఇక్కడ తొలగిస్తే ఫోన్‌లోని కాపీ తొలగిపోతుంది. ఇప్పటికే లిప్యంతరీకరించిన రికార్డింగ్‌ల సంభాషణలు అలాగే ఉంటాయి."
 }

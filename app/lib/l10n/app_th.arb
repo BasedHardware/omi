@@ -4738,5 +4738,7 @@
     "conversationLiveNoEdits": "รอให้จบก่อนจึงจะเปลี่ยนได้",
     "finishedSummaryReady": "สรุปพร้อมแล้ว",
     "writingSummaryStatus": "กำลังเขียนสรุป…",
-    "stillWorkingOnIt": "ยังดำเนินการอยู่"
+    "stillWorkingOnIt": "ยังดำเนินการอยู่",
+    "deletedRecordingWillBeProcessed": "ระบบจะประมวลผลการบันทึกนี้ต่อไป คุณสามารถลบการสนทนาได้เมื่อปรากฏขึ้น",
+    "deleteRecordingKeepsConversation": "การลบจากที่นี่จะนำสำเนาออกจากโทรศัพท์ การสนทนาจากการบันทึกที่ถอดเสียงแล้วจะยังคงอยู่"
 }

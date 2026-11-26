@@ -4738,5 +4738,7 @@
     "conversationLiveNoEdits": "बदलने से पहले इसके समाप्त होने का इंतज़ार करें।",
     "finishedSummaryReady": "सारांश तैयार है",
     "writingSummaryStatus": "सारांश लिखा जा रहा है…",
-    "stillWorkingOnIt": "अभी भी इस पर काम चल रहा है।"
+    "stillWorkingOnIt": "अभी भी इस पर काम चल रहा है।",
+    "deletedRecordingWillBeProcessed": "इस रिकॉर्डिंग की प्रोसेसिंग जारी रहेगी। बातचीत दिखने पर आप उसे हटा सकते हैं।",
+    "deleteRecordingKeepsConversation": "यहाँ हटाने से फ़ोन की कॉपी हट जाती है। जिन रिकॉर्डिंग का लिप्यंतरण हो चुका है, उनकी बातचीत बनी रहेगी।"
 }

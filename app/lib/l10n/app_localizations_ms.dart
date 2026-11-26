@@ -15766,4 +15766,12 @@ class AppLocalizationsMs extends AppLocalizations {
 
   @override
   String get stillWorkingOnIt => 'Masih memprosesnya.';
+
+  @override
+  String get deletedRecordingWillBeProcessed =>
+      'Rakaman ini akan terus diproses. Anda boleh memadamkan perbualan selepas ia muncul.';
+
+  @override
+  String get deleteRecordingKeepsConversation =>
+      'Pemadaman di sini membuang salinan pada telefon. Perbualan daripada rakaman yang sudah ditranskripsikan akan kekal.';
 }

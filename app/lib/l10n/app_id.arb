@@ -4773,5 +4773,7 @@
     "conversationLiveNoEdits": "Tunggu sampai selesai untuk mengubahnya.",
     "finishedSummaryReady": "Ringkasan siap",
     "writingSummaryStatus": "Menulis ringkasan…",
-    "stillWorkingOnIt": "Masih dikerjakan."
+    "stillWorkingOnIt": "Masih dikerjakan.",
+    "deletedRecordingWillBeProcessed": "Rekaman ini akan tetap diproses. Kamu bisa menghapus percakapan setelah muncul.",
+    "deleteRecordingKeepsConversation": "Menghapus di sini menghapus salinan di ponsel. Percakapan dari rekaman yang sudah ditranskripsikan tetap tersimpan."
 }

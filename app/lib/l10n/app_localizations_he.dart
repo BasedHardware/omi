@@ -15617,4 +15617,10 @@ class AppLocalizationsHe extends AppLocalizations {
 
   @override
   String get stillWorkingOnIt => 'עדיין עובדים על זה.';
+
+  @override
+  String get deletedRecordingWillBeProcessed => 'עיבוד ההקלטה יימשך. אפשר למחוק את השיחה כשתופיע.';
+
+  @override
+  String get deleteRecordingKeepsConversation => 'המחיקה כאן מסירה את העותק מהטלפון. שיחות מהקלטות שכבר תומללו נשארות.';
 }

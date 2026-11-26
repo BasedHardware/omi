@@ -15740,4 +15740,12 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get stillWorkingOnIt => 'Hâlâ üzerinde çalışılıyor.';
+
+  @override
+  String get deletedRecordingWillBeProcessed =>
+      'Bu kayıt işlenmeye devam edecek. Konuşma göründüğünde onu silebilirsin.';
+
+  @override
+  String get deleteRecordingKeepsConversation =>
+      'Buradan silmek telefondaki kopyayı kaldırır. Metne dönüştürülmüş kayıtların konuşmaları kalır.';
 }

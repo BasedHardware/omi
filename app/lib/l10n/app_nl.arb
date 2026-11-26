@@ -4738,5 +4738,7 @@
     "conversationLiveNoEdits": "Wacht tot het afgelopen is om het te wijzigen.",
     "finishedSummaryReady": "Samenvatting klaar",
     "writingSummaryStatus": "Samenvatting wordt geschreven…",
-    "stillWorkingOnIt": "Er wordt nog aan gewerkt."
+    "stillWorkingOnIt": "Er wordt nog aan gewerkt.",
+    "deletedRecordingWillBeProcessed": "Deze opname wordt nog verwerkt. Je kunt het gesprek verwijderen zodra het verschijnt.",
+    "deleteRecordingKeepsConversation": "Als je hier verwijdert, verdwijnt de kopie van je telefoon. Gesprekken van opnamen die al zijn getranscribeerd, blijven bewaard."
 }

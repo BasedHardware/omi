@@ -15795,4 +15795,12 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get stillWorkingOnIt => 'Încă lucrăm la asta.';
+
+  @override
+  String get deletedRecordingWillBeProcessed =>
+      'Această înregistrare va fi procesată în continuare. Poți șterge conversația când apare.';
+
+  @override
+  String get deleteRecordingKeepsConversation =>
+      'Ștergerea de aici elimină copia de pe telefon. Conversațiile înregistrărilor deja transcrise rămân.';
 }

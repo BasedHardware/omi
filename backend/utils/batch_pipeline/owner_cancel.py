@@ -145,7 +145,7 @@ def _unlink(tx, job: dict, removed: dict[str, str | None]) -> None:
             if predecessor.get('next') != segment_id:
                 predecessor_id = None
     removed[segment_id] = predecessor_id
-    following = job.get('next', '')
+    following = tx.get('jobs', segment_id).get('next', '')
     if queue.get('head') == segment_id:
         queue['head'] = following
     elif predecessor_id is not None:

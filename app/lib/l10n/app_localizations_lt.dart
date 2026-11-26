@@ -15754,4 +15754,12 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String get stillWorkingOnIt => 'Vis dar dirbama.';
+
+  @override
+  String get deletedRecordingWillBeProcessed =>
+      'Šis įrašas ir toliau bus apdorojamas. Galėsi ištrinti pokalbį, kai jis pasirodys.';
+
+  @override
+  String get deleteRecordingKeepsConversation =>
+      'Ištrynus čia, kopija pašalinama iš telefono. Jau transkribuotų įrašų pokalbiai išlieka.';
 }

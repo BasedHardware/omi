@@ -4738,5 +4738,7 @@
     "conversationLiveNoEdits": "Așteaptă să se încheie pentru a o modifica.",
     "finishedSummaryReady": "Rezumat gata",
     "writingSummaryStatus": "Se scrie rezumatul…",
-    "stillWorkingOnIt": "Încă lucrăm la asta."
+    "stillWorkingOnIt": "Încă lucrăm la asta.",
+    "deletedRecordingWillBeProcessed": "Această înregistrare va fi procesată în continuare. Poți șterge conversația când apare.",
+    "deleteRecordingKeepsConversation": "Ștergerea de aici elimină copia de pe telefon. Conversațiile înregistrărilor deja transcrise rămân."
 }

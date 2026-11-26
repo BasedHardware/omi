@@ -132,7 +132,8 @@ void main() {
     });
   });
 
-  test('deleting an uploaded recording records the tombstone first, then cancels its server job', () async {
+  test('deleting a legacy-owned uploaded recording writes the tombstone before sending it', () async {
+    await SharedPreferencesUtil().saveString('uid', 'current-owner');
     final store = _MemoryStore();
     final calls = <String>[];
     late File file;
@@ -144,10 +145,12 @@ void main() {
           calls.add(jobId);
           // The tombstone is durable and the local copy is already gone when the server is asked.
           expect(store.rows.map((t) => t.jobId), ['bp_job']);
+          expect(store.rows.single.ownerUid, 'current-owner');
           expect(file.existsSync(), isFalse);
           return const SyncJobCancelResult(SyncJobCancelOutcome.cancelled);
         });
-    final wal = await uploaded('a');
+    final wal = await uploaded('a')
+      ..ownerUid = 'legacy';
     file = File('${dir.path}/a.bin');
     sync.testWals = [wal];
 
@@ -276,6 +279,55 @@ void main() {
     await sync.stop();
   });
 
+  test('a failed local delete rolls back a new tombstone without cancelling the job', () async {
+    final store = _MemoryStore();
+    final sync = LocalWalSyncImpl(_Listener(),
+        now: () => now,
+        persistWals: (_) async {},
+        serverCancelStore: store,
+        serverCancel: (_) async => fail('must not ask the server after a failed local delete'));
+    final wal = await uploaded('a');
+    await File('${dir.path}/a.bin').delete();
+    await Directory('${dir.path}/a.bin').create();
+    sync.testWals = [wal];
+
+    expect((await sync.deleteWal(wal))?.outcome, SyncJobCancelOutcome.retryLater);
+    expect(store.events, ['save:bp_job', 'save:']);
+    expect(store.rows, isEmpty);
+    expect(sync.testWals, [wal]);
+    expect(wal.status, WalStatus.uploaded);
+    expect(wal.jobId, 'bp_job');
+    await sync.stop();
+  });
+
+  test('a fenced cancel only returns siblings, even if a delete target is still tracked', () async {
+    final target = await uploaded('a');
+    final sibling = await uploaded('b', offset: 30);
+    await File('${dir.path}/a.bin').delete();
+    await Directory('${dir.path}/a.bin').create();
+    final store = _MemoryStore()
+      ..rows = [
+        WalServerCancelTombstone(jobId: 'bp_job', ownerUid: 'legacy', createdAt: 1, targetWalIds: {target.id})
+      ];
+    await SharedPreferencesUtil().saveString('uid', 'current-owner');
+    final sync = LocalWalSyncImpl(_Listener(),
+        now: () => now,
+        persistWals: (_) async {},
+        serverCancelStore: store,
+        jobStatusFetcher: (_) async => fail('the delete target must stay out of status reconciliation'),
+        serverCancel: (_) async => const SyncJobCancelResult(SyncJobCancelOutcome.cancelled));
+    sync.testWals = [target, sibling];
+
+    await sync.reconcileUploadedWals();
+
+    expect(target.status, WalStatus.uploaded);
+    expect(target.jobId, 'bp_job');
+    expect(sibling.status, WalStatus.miss);
+    expect(sibling.jobId, isNull);
+    expect(store.rows.single.fenced, isTrue);
+    await sync.stop();
+  });
+
   test('a tombstone that cannot be saved keeps the recording instead of orphaning its server job', () async {
     final store = _MemoryStore()..failSaves = true;
     final sync = LocalWalSyncImpl(_Listener(),
@@ -357,7 +409,8 @@ void main() {
   test('tombstones persist across restarts in preferences', () async {
     final store = PreferencesWalServerCancelStore();
     expect(await store.load(), isEmpty);
-    const tombstone = WalServerCancelTombstone(jobId: 'bp_job', ownerUid: 'u', createdAt: 5, attempts: 2, fenced: true);
+    const tombstone = WalServerCancelTombstone(
+        jobId: 'bp_job', ownerUid: 'u', createdAt: 5, attempts: 2, fenced: true, targetWalIds: {'deleted-recording'});
     expect(await store.save([tombstone]), isTrue);
     final loaded = (await PreferencesWalServerCancelStore().load()).single;
     expect(loaded.toJson(), tombstone.toJson());

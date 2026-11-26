@@ -15744,4 +15744,12 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get stillWorkingOnIt => 'Masih dikerjakan.';
+
+  @override
+  String get deletedRecordingWillBeProcessed =>
+      'Rekaman ini akan tetap diproses. Kamu bisa menghapus percakapan setelah muncul.';
+
+  @override
+  String get deleteRecordingKeepsConversation =>
+      'Menghapus di sini menghapus salinan di ponsel. Percakapan dari rekaman yang sudah ditranskripsikan tetap tersimpan.';
 }

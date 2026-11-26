@@ -15735,4 +15735,12 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get stillWorkingOnIt => 'Yhä työn alla.';
+
+  @override
+  String get deletedRecordingWillBeProcessed =>
+      'Tallenteen käsittely jatkuu. Voit poistaa keskustelun, kun se tulee näkyviin.';
+
+  @override
+  String get deleteRecordingKeepsConversation =>
+      'Poistaminen tässä poistaa kopion puhelimesta. Jo litteroitujen tallenteiden keskustelut säilyvät.';
 }

@@ -15722,4 +15722,12 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get stillWorkingOnIt => 'Töötame veel selle kallal.';
+
+  @override
+  String get deletedRecordingWillBeProcessed =>
+      'Selle salvestise töötlemine jätkub. Saad vestluse kustutada, kui see ilmub.';
+
+  @override
+  String get deleteRecordingKeepsConversation =>
+      'Siin kustutades eemaldad koopia telefonist. Juba transkribeeritud salvestiste vestlused jäävad alles.';
 }

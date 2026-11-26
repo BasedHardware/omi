@@ -4738,5 +4738,7 @@
     "conversationLiveNoEdits": "Oota, kuni see lõpeb, et seda muuta.",
     "finishedSummaryReady": "Kokkuvõte on valmis",
     "writingSummaryStatus": "Kirjutan kokkuvõtet…",
-    "stillWorkingOnIt": "Töötame veel selle kallal."
+    "stillWorkingOnIt": "Töötame veel selle kallal.",
+    "deletedRecordingWillBeProcessed": "Selle salvestise töötlemine jätkub. Saad vestluse kustutada, kui see ilmub.",
+    "deleteRecordingKeepsConversation": "Siin kustutades eemaldad koopia telefonist. Juba transkribeeritud salvestiste vestlused jäävad alles."
 }

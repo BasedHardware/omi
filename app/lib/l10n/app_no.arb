@@ -4738,5 +4738,7 @@
     "conversationLiveNoEdits": "Vent til den er avsluttet før du endrer den.",
     "finishedSummaryReady": "Oppsummeringen er klar",
     "writingSummaryStatus": "Skriver oppsummering…",
-    "stillWorkingOnIt": "Jobber fortsatt med det."
+    "stillWorkingOnIt": "Jobber fortsatt med det.",
+    "deletedRecordingWillBeProcessed": "Opptaket blir fortsatt behandlet. Du kan slette samtalen når den vises.",
+    "deleteRecordingKeepsConversation": "Hvis du sletter her, fjernes kopien fra telefonen. Samtaler fra opptak som allerede er transkribert, beholdes."
 }

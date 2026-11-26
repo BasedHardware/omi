@@ -32,6 +32,7 @@ from database.sync_ledger import (
     sync_content_reference,
 )
 from database.sync_cap_holds import PROTOCOL as HOLD_PROTOCOL
+from utils.batch_pipeline.cap_hold_admission import held_content_id
 from utils.batch_pipeline.owner_cancel import CancelResult, Outcome, conversation_ids
 from utils.sync import cap_hold
 from utils.sync.stage import collection_name
@@ -100,6 +101,17 @@ def _fence(tx: Any, uid: str, job_id: str, content_id: str, now: float) -> tuple
         if not _detached(row, now):
             return CancelResult(Outcome.IN_PROGRESS), ()
         fenced[hold_id] = row
+    if not fenced:
+        processed_ids = set()
+        processed = False
+        for hold_id in hold_ids:
+            handoff = tx.get('ledger', uid, held_content_id(uid, hold_id))
+            if handoff.get('status') == 'completed' and is_valid_completed_sync_content_result(handoff.get('result')):
+                processed = True
+                processed_ids.update(conversation_ids(handoff.get('result')))
+        if processed:
+            return CancelResult(Outcome.ALREADY_PROCESSED, tuple(sorted(processed_ids))), ()
+        return CancelResult(Outcome.NOT_CANCELLABLE), ()
     delta_seconds, delta_count = 0.0, 0
     for hold_id, row in fenced.items():
         remaining = cap_hold.remaining_seconds(row)
@@ -112,6 +124,7 @@ def _fence(tx: Any, uid: str, job_id: str, content_id: str, now: float) -> tuple
             {
                 **row,
                 'state': FENCED_HOLD_STATE,
+                'failed_reconciliation': False,
                 'lease_until': 0,
                 'lease_token': '',
                 'next_attempt_at': cap_hold.RETAINED_NEXT_ATTEMPT_AT,

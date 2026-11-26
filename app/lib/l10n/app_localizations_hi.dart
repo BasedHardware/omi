@@ -15713,4 +15713,12 @@ class AppLocalizationsHi extends AppLocalizations {
 
   @override
   String get stillWorkingOnIt => 'अभी भी इस पर काम चल रहा है।';
+
+  @override
+  String get deletedRecordingWillBeProcessed =>
+      'इस रिकॉर्डिंग की प्रोसेसिंग जारी रहेगी। बातचीत दिखने पर आप उसे हटा सकते हैं।';
+
+  @override
+  String get deleteRecordingKeepsConversation =>
+      'यहाँ हटाने से फ़ोन की कॉपी हट जाती है। जिन रिकॉर्डिंग का लिप्यंतरण हो चुका है, उनकी बातचीत बनी रहेगी।';
 }

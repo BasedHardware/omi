@@ -4738,5 +4738,7 @@
     "conversationLiveNoEdits": "Attendi la fine per modificarla.",
     "finishedSummaryReady": "Riepilogo pronto",
     "writingSummaryStatus": "Scrittura del riepilogo…",
-    "stillWorkingOnIt": "Ancora al lavoro."
+    "stillWorkingOnIt": "Ancora al lavoro.",
+    "deletedRecordingWillBeProcessed": "Questa registrazione verrà comunque elaborata. Puoi eliminare la conversazione quando compare.",
+    "deleteRecordingKeepsConversation": "Eliminando qui rimuovi la copia dal telefono. Le conversazioni delle registrazioni già trascritte vengono conservate."
 }

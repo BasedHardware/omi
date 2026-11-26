@@ -4738,5 +4738,7 @@
     "conversationLiveNoEdits": "Espera a que termine para cambiarlo.",
     "finishedSummaryReady": "Resumen listo",
     "writingSummaryStatus": "Escribiendo el resumen…",
-    "stillWorkingOnIt": "Sigue trabajando en ello."
+    "stillWorkingOnIt": "Sigue trabajando en ello.",
+    "deletedRecordingWillBeProcessed": "Esta grabación se seguirá procesando. Puedes eliminar la conversación cuando aparezca.",
+    "deleteRecordingKeepsConversation": "Al eliminar aquí, se borra la copia del teléfono. Se conservan las conversaciones de las grabaciones ya transcritas."
 }

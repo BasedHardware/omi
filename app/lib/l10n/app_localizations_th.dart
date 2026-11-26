@@ -15655,4 +15655,11 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get stillWorkingOnIt => 'ยังดำเนินการอยู่';
+
+  @override
+  String get deletedRecordingWillBeProcessed => 'ระบบจะประมวลผลการบันทึกนี้ต่อไป คุณสามารถลบการสนทนาได้เมื่อปรากฏขึ้น';
+
+  @override
+  String get deleteRecordingKeepsConversation =>
+      'การลบจากที่นี่จะนำสำเนาออกจากโทรศัพท์ การสนทนาจากการบันทึกที่ถอดเสียงแล้วจะยังคงอยู่';
 }

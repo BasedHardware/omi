@@ -4773,5 +4773,7 @@
     "conversationLiveNoEdits": "Aguarde o término para alterá-la.",
     "finishedSummaryReady": "Resumo pronto",
     "writingSummaryStatus": "Escrevendo o resumo…",
-    "stillWorkingOnIt": "Ainda estamos trabalhando nisso."
+    "stillWorkingOnIt": "Ainda estamos trabalhando nisso.",
+    "deletedRecordingWillBeProcessed": "Esta gravação continuará a ser processada. Pode eliminar a conversa quando aparecer.",
+    "deleteRecordingKeepsConversation": "Ao eliminar aqui, remove a cópia do telefone. As conversas das gravações já transcritas são mantidas."
 }

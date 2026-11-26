@@ -4738,5 +4738,7 @@
     "conversationLiveNoEdits": "Изчакайте да приключи, за да го промените.",
     "finishedSummaryReady": "Обобщението е готово",
     "writingSummaryStatus": "Пише се обобщение…",
-    "stillWorkingOnIt": "Все още работим по него."
+    "stillWorkingOnIt": "Все още работим по него.",
+    "deletedRecordingWillBeProcessed": "Обработката на този запис ще продължи. Можете да изтриете разговора, когато се появи.",
+    "deleteRecordingKeepsConversation": "Изтриването тук премахва копието от телефона. Разговорите за вече транскрибираните записи остават."
 }

@@ -15738,4 +15738,12 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String get stillWorkingOnIt => 'Jobbar fortfarande på det.';
+
+  @override
+  String get deletedRecordingWillBeProcessed =>
+      'Inspelningen kommer fortfarande att bearbetas. Du kan radera konversationen när den visas.';
+
+  @override
+  String get deleteRecordingKeepsConversation =>
+      'Om du raderar här tas kopian bort från telefonen. Konversationer från inspelningar som redan har transkriberats finns kvar.';
 }

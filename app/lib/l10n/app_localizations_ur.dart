@@ -15742,4 +15742,12 @@ class AppLocalizationsUr extends AppLocalizations {
 
   @override
   String get stillWorkingOnIt => 'ابھی کام جاری ہے۔';
+
+  @override
+  String get deletedRecordingWillBeProcessed =>
+      'اس ریکارڈنگ پر کارروائی جاری رہے گی۔ گفتگو ظاہر ہونے پر آپ اسے حذف کر سکتے ہیں۔';
+
+  @override
+  String get deleteRecordingKeepsConversation =>
+      'یہاں حذف کرنے سے فون پر موجود کاپی ہٹ جاتی ہے۔ جن ریکارڈنگز کو پہلے ہی متن میں تبدیل کیا جا چکا ہے ان کی گفتگو برقرار رہے گی۔';
 }

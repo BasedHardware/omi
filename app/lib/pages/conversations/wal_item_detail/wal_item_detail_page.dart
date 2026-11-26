@@ -13,6 +13,7 @@ import 'package:omi/utils/device.dart';
 import 'package:omi/widgets/waveform_section.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/pages/conversations/wal_delete_confirmation.dart';
+import 'package:omi/pages/conversations/wal_server_delete_copy.dart';
 
 class WalItemDetailPage extends StatefulWidget {
   final Wal wal;
@@ -583,8 +584,10 @@ class _WalItemDetailPageState extends State<WalItemDetailPage> {
     );
 
     if (confirmed && context.mounted) {
-      Navigator.of(context).pop(); // Go back to previous screen
-      context.read<SyncProvider>().deleteWal(widget.wal);
+      final result = await context.read<SyncProvider>().deleteWal(widget.wal);
+      if (!context.mounted) return;
+      showWalServerDeleteNotice(context, result, context.l10n);
+      Navigator.of(context).pop();
     }
   }
 

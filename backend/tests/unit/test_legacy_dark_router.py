@@ -63,6 +63,41 @@ async def test_router_rejects_duplicate_cancelled_content_before_archiving(monke
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize('admission', ['batch', 'legacy', 'dark'])
+async def test_router_erases_request_archives_when_cancel_wins_after_the_precheck(monkeypatch, admission):
+    from unittest.mock import AsyncMock, MagicMock
+
+    from utils.batch_pipeline.live_upload import RecordUploadRoute
+
+    module, saved, _, BytesIO = _router()
+    try:
+        mode = DARK if admission == 'dark' else ON
+        row = {'status': 'owner_cancelled', 'dispatch_protocol': 'stt_cap_hold_v1', 'job_id': 'held-job'}
+        monkeypatch.setattr(legacy_dark, 'current_mode', lambda uid=None: mode)
+        monkeypatch.setattr(legacy_dark, 'read_ledger_row', MagicMock(side_effect=[None, row]))
+        if admission == 'batch':
+            module.registered_record_response = AsyncMock(return_value=RecordUploadRoute.BATCH)
+            module.accept_batch_upload = AsyncMock(
+                return_value=module.owner_cancelled_response('held-job', total_files=1, lane='fresh')
+            )
+        if admission == 'legacy':
+            module.claim_sync_content = MagicMock(return_value={'outcome': 'owner_cancelled', 'job_id': 'held-job'})
+        archive_paths = ['raw-sync/test-uid/new-attempt']
+        module.archive_mobile_batch_raw_files = MagicMock(return_value=archive_paths)
+        module.delete_rejected_upload_archives = MagicMock()
+
+        response = await _upload(module, BytesIO)
+
+        assert response.status_code == 202
+        assert json.loads(response.body)['reason_code'] == 'owner_cancelled'
+        request_job = module.archive_mobile_batch_raw_files.call_args.args[2]['sync_job_id']
+        assert request_job != 'held-job'
+        module.delete_rejected_upload_archives.assert_called_once_with('test-uid', request_job, archive_paths)
+    finally:
+        _restore(saved)
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize('mode', [DRAINING, DARK])
 async def test_router_never_creates_a_legacy_job_outside_on(monkeypatch, mode):
     from unittest.mock import MagicMock

@@ -4773,5 +4773,7 @@
     "conversationLiveNoEdits": "Дождитесь завершения, чтобы изменить.",
     "finishedSummaryReady": "Сводка готова",
     "writingSummaryStatus": "Пишем сводку…",
-    "stillWorkingOnIt": "Всё ещё работаем над этим."
+    "stillWorkingOnIt": "Всё ещё работаем над этим.",
+    "deletedRecordingWillBeProcessed": "Обработка этой записи продолжится. Когда разговор появится, вы сможете удалить его.",
+    "deleteRecordingKeepsConversation": "При удалении здесь копия удаляется с телефона. Разговоры по уже расшифрованным записям сохраняются."
 }

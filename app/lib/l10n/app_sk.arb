@@ -4738,5 +4738,7 @@
     "conversationLiveNoEdits": "Počkajte, kým skončí, potom ju môžete zmeniť.",
     "finishedSummaryReady": "Zhrnutie je pripravené",
     "writingSummaryStatus": "Zhrnutie sa píše…",
-    "stillWorkingOnIt": "Ešte sa na tom pracuje."
+    "stillWorkingOnIt": "Ešte sa na tom pracuje.",
+    "deletedRecordingWillBeProcessed": "Spracovanie tejto nahrávky bude pokračovať. Konverzáciu môžeš odstrániť, keď sa zobrazí.",
+    "deleteRecordingKeepsConversation": "Odstránením sa vymaže kópia z telefónu. Konverzácie z už prepísaných nahrávok zostanú zachované."
 }

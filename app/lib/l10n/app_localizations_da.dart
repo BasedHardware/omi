@@ -15721,4 +15721,12 @@ class AppLocalizationsDa extends AppLocalizations {
 
   @override
   String get stillWorkingOnIt => 'Vi arbejder stadig på det.';
+
+  @override
+  String get deletedRecordingWillBeProcessed =>
+      'Optagelsen bliver stadig behandlet. Du kan slette samtalen, når den vises.';
+
+  @override
+  String get deleteRecordingKeepsConversation =>
+      'Hvis du sletter her, fjernes kopien fra telefonen. Samtaler for optagelser, der allerede er transskriberet, bevares.';
 }

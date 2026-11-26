@@ -15836,4 +15836,12 @@ class AppLocalizationsTa extends AppLocalizations {
 
   @override
   String get stillWorkingOnIt => 'இன்னும் அதில் வேலை செய்யப்படுகிறது.';
+
+  @override
+  String get deletedRecordingWillBeProcessed =>
+      'இந்தப் பதிவு தொடர்ந்து செயலாக்கப்படும். உரையாடல் தோன்றியதும் அதை நீக்கலாம்.';
+
+  @override
+  String get deleteRecordingKeepsConversation =>
+      'இங்கு நீக்கினால் மொபைலில் உள்ள நகல் அகற்றப்படும். ஏற்கெனவே எழுத்தாக்கப்பட்ட பதிவுகளின் உரையாடல்கள் தொடர்ந்து இருக்கும்.';
 }

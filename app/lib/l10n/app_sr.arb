@@ -12295,5 +12295,7 @@
     "conversationLiveNoEdits": "Сачекајте да се заврши, па га измените.",
     "finishedSummaryReady": "Резиме је спреман",
     "writingSummaryStatus": "Пише се резиме…",
-    "stillWorkingOnIt": "Још увек радимо на томе."
+    "stillWorkingOnIt": "Још увек радимо на томе.",
+    "deletedRecordingWillBeProcessed": "Обрада овог снимка ће се наставити. Разговор можеш да избришеш кад се појави.",
+    "deleteRecordingKeepsConversation": "Брисањем овде уклањаш копију са телефона. Разговори из већ транскрибованих снимака остају."
 }

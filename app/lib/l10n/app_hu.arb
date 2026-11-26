@@ -4834,5 +4834,7 @@
     "conversationLiveNoEdits": "Módosítás előtt várd meg, míg véget ér.",
     "finishedSummaryReady": "Az összefoglaló kész",
     "writingSummaryStatus": "Összefoglaló írása…",
-    "stillWorkingOnIt": "Még dolgozunk rajta."
+    "stillWorkingOnIt": "Még dolgozunk rajta.",
+    "deletedRecordingWillBeProcessed": "A felvétel feldolgozása folytatódik. A beszélgetést törölheted, miután megjelent.",
+    "deleteRecordingKeepsConversation": "Az itteni törlés eltávolítja a másolatot a telefonról. A már átírt felvételekhez tartozó beszélgetések megmaradnak."
 }

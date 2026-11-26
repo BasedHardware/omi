@@ -17,6 +17,7 @@ const _serverCancelRetryDelays = [Duration(minutes: 5), Duration(minutes: 30), D
 class WalServerCancelTombstone {
   final String jobId;
   final String? ownerUid;
+  final Set<String> targetWalIds;
   final int createdAt;
   final int attempts;
   final int nextAttemptAt;
@@ -28,6 +29,7 @@ class WalServerCancelTombstone {
     required this.jobId,
     required this.ownerUid,
     required this.createdAt,
+    this.targetWalIds = const {},
     this.attempts = 0,
     this.nextAttemptAt = 0,
     this.fenced = false,
@@ -39,6 +41,7 @@ class WalServerCancelTombstone {
       jobId: jobId,
       ownerUid: ownerUid,
       createdAt: createdAt,
+      targetWalIds: targetWalIds,
       attempts: attempts + 1,
       nextAttemptAt: nowSecs + delay.inSeconds,
       fenced: fenced || this.fenced,
@@ -49,6 +52,7 @@ class WalServerCancelTombstone {
         'job_id': jobId,
         'owner_uid': ownerUid,
         'created_at': createdAt,
+        'target_wal_ids': targetWalIds.toList(),
         'attempts': attempts,
         'next_attempt_at': nextAttemptAt,
         'fenced': fenced,
@@ -59,11 +63,13 @@ class WalServerCancelTombstone {
     final jobId = value['job_id'];
     if (jobId is! String || jobId.isEmpty) return null;
     final owner = value['owner_uid'];
+    final targets = value['target_wal_ids'];
     int number(Object? v) => v is int ? v : 0;
     return WalServerCancelTombstone(
       jobId: jobId,
       ownerUid: owner is String ? owner : null,
       createdAt: number(value['created_at']),
+      targetWalIds: targets is List ? targets.whereType<String>().toSet() : const {},
       attempts: number(value['attempts']),
       nextAttemptAt: number(value['next_attempt_at']),
       fenced: value['fenced'] == true,
@@ -134,18 +140,33 @@ extension _WalServerCancel on LocalWalSyncImpl {
     }
   }
 
-  /// Persists the tombstone before the caller deletes local audio. False keeps the recording.
-  Future<bool> _recordServerCancel(String jobId, String? ownerUid) => _serverCancelLocked(() async {
+  /// Keep the drain from sending a new tombstone while its local delete can still fail.
+  Future<bool> _deleteWalWithServerCancel(Wal target, String jobId, int generation) => _serverCancelLocked(() async {
+        if (!_isCurrent(generation) || !_isTrackedWal(target) || target.isSyncing) return false;
         final tombstones = await _serverCancelStore.load();
-        if (tombstones.any((t) => t.jobId == jobId)) return true;
-        return _serverCancelStore.save([
-          ...tombstones,
+        final prior = tombstones.where((t) => t.jobId == jobId).firstOrNull;
+        final targetWalIds = {...?prior?.targetWalIds, target.id};
+        final ownerUid = target.ownerUid == 'legacy' ? _currentWalOwnerUid() : target.ownerUid;
+        if (!await _serverCancelStore.save([
+          ...tombstones.where((t) => t.jobId != jobId),
           WalServerCancelTombstone(
             jobId: jobId,
-            ownerUid: ownerUid,
-            createdAt: _now().millisecondsSinceEpoch ~/ 1000,
+            ownerUid: prior?.ownerUid ?? ownerUid,
+            createdAt: prior?.createdAt ?? _now().millisecondsSinceEpoch ~/ 1000,
+            attempts: prior?.attempts ?? 0,
+            nextAttemptAt: prior?.nextAttemptAt ?? 0,
+            fenced: prior?.fenced ?? false,
+            targetWalIds: targetWalIds,
           ),
-        ]);
+        ])) {
+          return false;
+        }
+        if (!await _deleteWal(target, generation: generation)) {
+          if (prior == null) await _serverCancelStore.save(tombstones);
+          return false;
+        }
+        await _saveWalsToFile(generation);
+        return true;
       });
 
   /// Asks the server about due tombstones. [only] forces one job now (the delete that wrote it).
@@ -160,7 +181,7 @@ extension _WalServerCancel on LocalWalSyncImpl {
         final kept = <WalServerCancelTombstone>[];
         var changed = false, asked = 0;
         for (final tombstone in tombstones) {
-          final mine = tombstone.ownerUid == null || tombstone.ownerUid == owner;
+          final mine = tombstone.ownerUid == null || tombstone.ownerUid == owner || tombstone.ownerUid == 'legacy';
           final due = only == null ? tombstone.nextAttemptAt <= nowSecs : only == tombstone.jobId;
           if (!mine ||
               !due ||
@@ -179,27 +200,45 @@ extension _WalServerCancel on LocalWalSyncImpl {
           } else if (result.serverAnswered) {
             await ServerCancelPause.instance.clear();
           }
-          if (result.fenced && !tombstone.fenced) await _returnCancelledSiblings(tombstone.jobId, generation);
-          if (result.settled) {
+          if (result.fenced && !tombstone.fenced) await _returnCancelledSiblings(tombstone, generation);
+          final fenced = result.fenced || tombstone.fenced;
+          var localDeletePending = false;
+          if (fenced && _isCurrent(generation)) {
+            final targets =
+                _wals.where((wal) => wal.jobId == tombstone.jobId && tombstone.targetWalIds.contains(wal.id)).toList();
+            var removed = false;
+            for (final target in targets) {
+              if (await _deleteWal(target, generation: generation)) {
+                removed = true;
+              } else {
+                localDeletePending = true;
+              }
+            }
+            if (removed) {
+              await _saveWalsToFile(generation);
+              _notifyUpdated(generation);
+            }
+          }
+          if (result.settled && !localDeletePending && _isCurrent(generation)) {
             changed = true;
             continue;
           }
-          kept.add(tombstone.retried(nowSecs, fenced: result.fenced));
+          kept.add(tombstone.retried(nowSecs, fenced: fenced));
           changed = true;
-          // A fenced job will never finish: its remaining rows already returned to custody.
-          if (!tombstone.fenced && !result.fenced) pending.add(tombstone.jobId);
+          if (!fenced || localDeletePending) pending.add(tombstone.jobId);
         }
         if (changed) await _serverCancelStore.save(kept);
         return _ServerCancelPass(pending, answered);
       });
 
   /// Recordings that shared the cancelled upload re-upload on their own; the server discarded them.
-  Future<void> _returnCancelledSiblings(String jobId, int generation) async {
+  Future<void> _returnCancelledSiblings(WalServerCancelTombstone tombstone, int generation) async {
     if (!_isCurrent(generation)) return;
+    final jobId = tombstone.jobId;
     final nowSecs = _now().millisecondsSinceEpoch ~/ 1000;
     var changed = false;
     for (final wal in _wals) {
-      if (wal.status != WalStatus.uploaded || wal.jobId != jobId) continue;
+      if (wal.status != WalStatus.uploaded || wal.jobId != jobId || tombstone.targetWalIds.contains(wal.id)) continue;
       wal.status = WalStatus.miss;
       wal.jobId = null;
       wal.lastRetryAt = nowSecs;

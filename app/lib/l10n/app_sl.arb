@@ -12295,5 +12295,7 @@
     "conversationLiveNoEdits": "Počakajte, da se konča, nato ga spremenite.",
     "finishedSummaryReady": "Povzetek je pripravljen",
     "writingSummaryStatus": "Povzetek se zapisuje…",
-    "stillWorkingOnIt": "Še vedno poteka obdelava."
+    "stillWorkingOnIt": "Še vedno poteka obdelava.",
+    "deletedRecordingWillBeProcessed": "Obdelava tega posnetka se bo nadaljevala. Pogovor lahko izbrišeš, ko se prikaže.",
+    "deleteRecordingKeepsConversation": "Brisanje tukaj odstrani kopijo s telefona. Pogovori že prepisanih posnetkov se ohranijo."
 }

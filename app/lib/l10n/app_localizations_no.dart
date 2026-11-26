@@ -15734,4 +15734,12 @@ class AppLocalizationsNo extends AppLocalizations {
 
   @override
   String get stillWorkingOnIt => 'Jobber fortsatt med det.';
+
+  @override
+  String get deletedRecordingWillBeProcessed =>
+      'Opptaket blir fortsatt behandlet. Du kan slette samtalen når den vises.';
+
+  @override
+  String get deleteRecordingKeepsConversation =>
+      'Hvis du sletter her, fjernes kopien fra telefonen. Samtaler fra opptak som allerede er transkribert, beholdes.';
 }

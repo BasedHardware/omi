@@ -4738,5 +4738,7 @@
     "conversationLiveNoEdits": "Hãy đợi đến khi kết thúc rồi hãy thay đổi.",
     "finishedSummaryReady": "Đã có tóm tắt",
     "writingSummaryStatus": "Đang viết tóm tắt…",
-    "stillWorkingOnIt": "Vẫn đang xử lý."
+    "stillWorkingOnIt": "Vẫn đang xử lý.",
+    "deletedRecordingWillBeProcessed": "Bản ghi này vẫn sẽ được xử lý. Bạn có thể xóa cuộc trò chuyện khi nó xuất hiện.",
+    "deleteRecordingKeepsConversation": "Xóa tại đây sẽ xóa bản sao trên điện thoại. Cuộc trò chuyện của những bản ghi đã được chép lời vẫn được giữ lại."
 }

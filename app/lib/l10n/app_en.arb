@@ -19230,5 +19230,13 @@
     "stillWorkingOnIt": "Still working on it.",
     "@stillWorkingOnIt": {
         "description": "Quiet notice on a conversation page when the app stopped checking a conversation that is still being transcribed or summarized. Shown with a Try Again button."
+    },
+    "deletedRecordingWillBeProcessed": "This recording will still be processed. You can delete the conversation once it appears.",
+    "@deletedRecordingWillBeProcessed": {
+        "description": "Notice after deletion when the server cannot cancel an uploaded recording."
+    },
+    "deleteRecordingKeepsConversation": "Deleting here removes the phone copy. Conversations for recordings that have already been transcribed will stay.",
+    "@deleteRecordingKeepsConversation": {
+        "description": "Delete confirmation when the selection contains a transcribed recording."
     }
 }
