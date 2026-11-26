@@ -7,15 +7,20 @@ cap and preservation paths, not the loader's query plan.
 """
 
 from copy import deepcopy
+import base64
 from datetime import datetime, timedelta, timezone
 import json
+import random
+import zlib
 from types import SimpleNamespace
 
+from google.api_core.exceptions import InvalidArgument
 import pytest
 
 from database import conversations_v3 as store
 from utils.conversations.v3 import metrics, policy, service
 from utils.home_feed.projection import reveal_display
+from tests.unit.fixtures.strict_firestore_transaction import StrictFirestoreTransaction
 from tests.unit.test_conversations_v3_claim_growth import strict, owners_import, path, UID  # noqa: F401
 
 T0 = datetime(2026, 11, 18, 10, 0, tzinfo=timezone.utc)
@@ -586,7 +591,7 @@ async def test_overlapping_turns_at_the_cap_keep_one_owner_across_passes(strict,
     assert seen[0]['a'] != seen[0]['b'] == seen[0]['c']
 
 
-def main_capped(lines, sections, committed=()):
+def main_capped(lines, sections, committed=(), *, size_cap=False):
     # planner._capped before this change (main b301dc3): cut at the section nearest the middle.
     from utils.conversations.v3.planner import CAP
 
@@ -915,6 +920,51 @@ async def test_one_ownership_index_per_plan(strict, monkeypatch):
     put_recording(strict, segments, status='in_progress', landed=end)
     assert await reconcile_at(strict, monkeypatch, end + timedelta(seconds=30)) == 'committed'
     assert built == [1]
+
+
+@pytest.mark.asyncio
+async def test_reconcile_parks_then_recovers_oversize_transcript_as_continuations(strict, monkeypatch):
+
+    rng = random.Random(2918)
+    segments = speech(100, step=10)
+    for segment in segments:
+        segment['text'] = ' '.join(base64.b64encode(rng.randbytes(21)).decode() for _ in range(500))
+    now = T0 + timedelta(hours=1)
+    put_recording(strict, segments, status='completed', landed=T0 + timedelta(minutes=17))
+    # Each source recording fits individually. Only the derived union is oversized.
+    start = 500
+    strict.rows[path('r')]['transcript_segments'] = segments[:50]
+    strict.rows[path('r')]['finished_at'] = T0 + timedelta(seconds=segments[49]['end'])
+    strict.rows[path('r2')] = {
+        **strict.rows[path('r')],
+        'id': 'r2',
+        'started_at': T0 + timedelta(seconds=start),
+        'finished_at': T0 + timedelta(seconds=segments[-1]['end']),
+        'transcript_segments': [{**s, 'start': s['start'] - start, 'end': s['end'] - start} for s in segments[50:]],
+    }
+    original_set = StrictFirestoreTransaction.set
+
+    def checked_set(tx, ref, row, **kwargs):
+        if row.get('v3_derived'):
+            field = zlib.compress(json.dumps(row['transcript_segments']).encode())
+            if len(field) > 1048487:
+                raise InvalidArgument('The value of property "transcript_segments" is longer than 1048487 bytes')
+        return original_set(tx, ref, row, **kwargs)
+
+    monkeypatch.setattr(StrictFirestoreTransaction, 'set', checked_set)
+    monkeypatch.setenv('CONVERSATIONS_V3_TRANSCRIPT_SIZE_CAP', 'off')
+    # The per-property rejection parks the owner (backoff) instead of failing every retry with a 500.
+    assert await reconcile_at(strict, monkeypatch, now) == 'blocked'
+    assert not derived(strict)
+    assert not strict.rows[path('r')]['claims']
+
+    monkeypatch.delenv('CONVERSATIONS_V3_TRANSCRIPT_SIZE_CAP')
+    assert await reconcile_at(strict, monkeypatch, now + timedelta(minutes=6)) == 'committed'
+    rows = derived(strict)
+    assert len(rows) > 1
+    assert [s['id'] for row in rows for s in row['transcript_segments']] == [s['id'] for s in segments]
+    assert not strict.rows[path('r')]['v3_pending']
+    assert not strict.rows[path('r2')]['v3_pending']
 
 
 @pytest.mark.asyncio

@@ -522,6 +522,7 @@ def unique_claims(claims):
 # Firestore's per-document limit is 1 MiB ("... exceeds the maximum allowed size"); a commit request is
 # separately capped ("Request payload size exceeds the limit: N bytes").
 DOCUMENT_TOO_LARGE = 'exceeds the maximum allowed size'
+PROPERTY_TOO_LARGE = ('The value of property', 'is longer than')  # one field over 1 MiB: parks like a document
 REQUEST_TOO_LARGE = 'Request payload size exceeds the limit'
 # Derived-row bytes per transaction, and every write in it (rows, source claim updates, lease): batches
 # split on whichever fills first, so the source rewrites each batch repeats count against the request.
@@ -535,7 +536,7 @@ BATCH_MAX_WRITES = 450
 def size_error(error):
     """'document' or 'request' when a Firestore InvalidArgument is a size limit, else None."""
     text = str(error)
-    if DOCUMENT_TOO_LARGE in text:
+    if DOCUMENT_TOO_LARGE in text or all(marker in text for marker in PROPERTY_TOO_LARGE):
         return 'document'
     if REQUEST_TOO_LARGE in text:
         return 'request'
