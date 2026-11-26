@@ -48,6 +48,10 @@ KNOWN_MISSING_ROUTES: Set[str] = {
     # fdcdc5f6bd3 (pocket onboarding arm) calls this from app/lib/backend/http/api/conversations.dart,
     # but no backend route exists yet. Owner: the pocket onboarding author; add the route or drop the call.
     '/v1/onboarding/seed-conversation',
+    # Owner: SCA-4565. The fast_end_feedback and receipt_long_poll rollout tests require
+    # these experimental routes to stay hidden from the schema.
+    '/v1/conversations/{param}/summary/wait',
+    '/v2/sync-local-files/receipts/wait',
 }
 
 # Dart route literals: capture from `${Env.apiBaseUrl}` to the closing quote,
