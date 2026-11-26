@@ -439,6 +439,45 @@ def test_reference_refuses_expired_erasing_or_changed_artifacts(reference_store,
             references.load_reference(store, UID, 'unit-a', 'conversation')
 
 
+def _v3_conversation_row(client, cid='v3-conversation'):
+    client.rows[('users', UID, 'conversations', cid)] = {'id': cid, 'v3_recording_ids': ['conversation']}
+    return cid
+
+
+def test_v3_conversation_reads_units_projected_onto_its_source_recording(reference_store):
+    # A conversations-v3 row copies its recording's projected segments; the unit's receipts keep naming the
+    # recording. Before the fix every v3 row refused with skipped_merged (owner corpus 2026-11-26: 24 of 24).
+    store, client = reference_store
+    cid = _v3_conversation_row(client)
+    before = deepcopy(client.rows)
+    with pytest.raises(references.ReferenceUnavailable, match='skipped_merged'):
+        references.load_reference(store, UID, 'unit-a', cid)
+    assert references.load_reference(store, UID, 'unit-a', cid, source_ids=('conversation',)) is not None
+    # A recording the row was not built from is still another conversation's audio.
+    with pytest.raises(references.ReferenceUnavailable, match='skipped_merged'):
+        references.load_reference(store, UID, 'unit-a', cid, source_ids=('other-recording',))
+    assert client.rows == before
+
+
+def test_v3_source_recording_keeps_shared_unit_and_privacy_fences(reference_store):
+    store, client = reference_store
+    cid = _v3_conversation_row(client)
+    receipts = client.rows[('batch_pipeline_dev_results', 'unit-a')]['projection_parts']
+    receipts['1'] = {'conversation_id': 'foreign', 'speaker_scope': 'final:batch:unit-a'}
+    with pytest.raises(references.ReferenceUnavailable, match='skipped_shared_unit'):
+        references.load_reference(store, UID, 'unit-a', cid, source_ids=('conversation',))
+    del receipts['1']
+    client.rows[('users', UID, 'conversations', 'conversation')]['deleted'] = True
+    with pytest.raises(BatchPrivacyBlocked):
+        references.load_reference(store, UID, 'unit-a', cid, source_ids=('conversation',))
+
+
+def test_receipt_sources_are_the_rows_own_v3_recordings():
+    assert batch.receipt_sources(SimpleNamespace(v3_recording_ids=['r2', 'r1', 'r1', None])) == ('r1', 'r2')
+    assert batch.receipt_sources(SimpleNamespace(v3_recording_ids=None)) == ()
+    assert batch.receipt_sources(SimpleNamespace()) == ()
+
+
 def test_reference_privacy_deletion_fence(reference_store):
     store, client = reference_store
     assert references.load_reference(store, UID, 'unit-a', 'conversation') is not None

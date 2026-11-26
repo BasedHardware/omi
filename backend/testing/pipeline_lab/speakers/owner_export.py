@@ -143,13 +143,26 @@ def _recorded_seconds(meta: dict) -> float:
 
 
 def _conversations(
-    uid: str, start: datetime, end: datetime, *, min_seconds: float, max_seconds: float
+    uid: str, start: datetime, end: datetime, *, min_seconds: float, max_seconds: float, v3_recent: bool = False
 ) -> Iterable[dict]:
     """Longest recordings first. Metadata pages (no decode) pick candidates; each is then read in full.
     The Home reader is not used: it pages visible rows only and stops early on hidden runs."""
     from database import conversations as conversations_db
 
     candidates, offset = [], 0
+    if v3_recent:
+        # The newest conversations-v3 rows with batch units (the shape the final pass serves), newest first.
+        page = conversations_db.get_conversations(uid, limit=200, start_date=start, end_date=end, metadata_only=True)
+        for meta in page:
+            row = conversations_db.get_conversation(uid, meta['id']) or {}
+            if row.get('discarded') or row.get('deleted') or not row.get('v3_recording_ids'):
+                continue
+            if any(
+                (s.get('speaker_id_scope') or '').startswith('final:batch:')
+                for s in row.get('transcript_segments') or []
+            ):
+                yield row
+        return
     while True:
         page = conversations_db.get_conversations(
             uid, limit=PAGE, offset=offset, start_date=start, end_date=end, metadata_only=True
@@ -207,6 +220,11 @@ def conversation_record(row: dict, key: str) -> dict:
         'segments': segments,
         'manual_speaker_assignments': _plain(row.get('manual_speaker_assignments')),
         'excluded_speakers': _plain(row.get('excluded_speakers')),
+        # Production's own account of its speaker work on this conversation (statuses and counts, no vectors).
+        'speaker_resolution': _plain(row.get('speaker_resolution')),
+        'owner_recognition_diagnostics': _plain(row.get('owner_recognition_diagnostics')),
+        'private_cloud_sync_enabled': row.get('private_cloud_sync_enabled'),
+        'uses_custom_stt': row.get('uses_custom_stt'),
     }
 
 
@@ -220,6 +238,8 @@ def export(
     salt: str,
     min_segments: int = 1,
     max_seconds: float = 1800.0,
+    refresh: bool = False,
+    v3_recent: bool = False,
 ) -> dict:
     from testing.pipeline_lab.store import atomic_write_bytes, atomic_write_json, ensure_private_dir
 
@@ -230,7 +250,7 @@ def export(
     atomic_write_json(out / 'people.json', people)
     counts = {'listed': 0, 'no_audio': 0, 'short': 0, 'no_segments': 0, 'exported': 0, 'existing': 0}
     conversations = ensure_private_dir(out / 'conversations')
-    for row in _conversations(uid, start, end, min_seconds=min_seconds, max_seconds=max_seconds):
+    for row in _conversations(uid, start, end, min_seconds=min_seconds, max_seconds=max_seconds, v3_recent=v3_recent):
         if counts['exported'] + counts['existing'] >= limit:
             break
         counts['listed'] += 1
@@ -241,6 +261,8 @@ def export(
         target = conversations / key
         if (target / 'audio.wav').is_file():
             counts['existing'] += 1
+            if refresh:
+                atomic_write_json(target / 'conversation.json', conversation_record(row, key))
             continue
         pcm = conversation_pcm(uid, row)
         if not pcm:
@@ -274,6 +296,8 @@ def main(argv: Optional[list[str]] = None) -> int:
     parser.add_argument('--limit', type=int, default=60)
     parser.add_argument('--min-seconds', type=float, default=60.0)
     parser.add_argument('--max-seconds', type=float, default=1800.0, help='skip recordings longer than this')
+    parser.add_argument('--v3-recent', action='store_true', help='newest conversations-v3 rows with batch units')
+    parser.add_argument('--refresh', action='store_true', help='rewrite conversation.json of exported conversations')
     parser.add_argument('--min-segments', type=int, default=1, help='skip conversations with fewer stored segments')
     args = parser.parse_args(argv)
 
@@ -300,6 +324,8 @@ def main(argv: Optional[list[str]] = None) -> int:
             salt=salt_file.read_text(),
             min_segments=args.min_segments,
             max_seconds=args.max_seconds,
+            refresh=args.refresh,
+            v3_recent=args.v3_recent,
         )
     print(json.dumps(manifest['counts']))
     return 0

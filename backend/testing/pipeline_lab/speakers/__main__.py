@@ -8,15 +8,18 @@ import sys
 def main(argv: list[str]) -> int:
     commands = {
         'bench': 'testing.pipeline_lab.speakers.bench',
+        'words': 'testing.pipeline_lab.speakers.bench:words_main',
         'export-owner': 'testing.pipeline_lab.speakers.owner_export',
         'silver': 'testing.pipeline_lab.speakers.silver',
+        'diagnose': 'testing.pipeline_lab.speakers.prod_diagnose',
     }
     if not argv or argv[0] not in commands:
         print('usage: python -m testing.pipeline_lab.speakers {' + '|'.join(commands) + '} ...', file=sys.stderr)
         return 2
     import importlib
 
-    return importlib.import_module(commands[argv[0]]).main(argv[1:])
+    module, _, function = commands[argv[0]].partition(':')
+    return getattr(importlib.import_module(module), function or 'main')(argv[1:])
 
 
 if __name__ == '__main__':

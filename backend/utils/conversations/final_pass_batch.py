@@ -226,6 +226,11 @@ def _assemble(stream):
     return pcm[:used].toreadonly(), words, checks
 
 
+def receipt_sources(conversation) -> tuple[str, ...]:
+    """Recordings a conversations-v3 row was built from: their projection receipts are this row's."""
+    return tuple(sorted({str(rid) for rid in (getattr(conversation, 'v3_recording_ids', None) or []) if rid}))
+
+
 def read_unit_references(
     store, uid, conversation, units, read_budget, diagnostics, failure_context: UnitFailureContext
 ):
@@ -233,7 +238,9 @@ def read_unit_references(
     for unit in units:
         read_budget.timeout(3)
         try:
-            reference = load_reference(store, uid, unit, conversation.id, read_budget=read_budget)
+            reference = load_reference(
+                store, uid, unit, conversation.id, read_budget=read_budget, source_ids=receipt_sources(conversation)
+            )
             if reference is None:
                 raise IncompleteCoverage('no_job')
             references[unit] = reference
@@ -406,7 +413,12 @@ def decode_unit_evidence(
                 try:
                     return (
                         load_reference(
-                            store, uid, unit, conversation.id, read_budget=ArtifactReadBudget(deadline, 0, 0)
+                            store,
+                            uid,
+                            unit,
+                            conversation.id,
+                            read_budget=ArtifactReadBudget(deadline, 0, 0),
+                            source_ids=receipt_sources(conversation),
                         )
                         == reference
                     )

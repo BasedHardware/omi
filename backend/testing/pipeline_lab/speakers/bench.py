@@ -105,6 +105,27 @@ def ensure_words(conversation: corpus_mod.Conversation, *, record: bool, private
     return value['words']
 
 
+def words_main(argv: Optional[list[str]] = None) -> int:
+    """``python -m testing.pipeline_lab.speakers words --corpus NAME [--jobs N]``: record missing words locally."""
+    from concurrent.futures import ThreadPoolExecutor
+
+    parser = argparse.ArgumentParser(prog='python -m testing.pipeline_lab.speakers words')
+    parser.add_argument('--corpus', required=True)
+    parser.add_argument('--jobs', type=int, default=2, help='parallel Parakeet workers (about 3 GB each)')
+    parser.add_argument('--key', action='append', default=[])
+    args = parser.parse_args(argv)
+    corpus = corpus_mod.load(args.corpus)
+    todo = [c for c in corpus.conversations(args.key or None) if c.words is None]
+
+    def one(conversation: corpus_mod.Conversation) -> int:
+        return len(ensure_words(conversation, record=True, private=not corpus.public))
+
+    with ThreadPoolExecutor(max_workers=max(1, args.jobs)) as pool:
+        for conversation, count in zip(todo, pool.map(one, todo)):
+            print(json.dumps({'key': conversation.key[:6], 'words': count}), flush=True)
+    return 0
+
+
 def gallery_for(corpus: corpus_mod.Corpus) -> dict[str, list[float]]:
     """Stored voiceprints (owner corpora), else the enrollment audio embedded through the peer with product code."""
     if corpus.gallery:
@@ -119,21 +140,81 @@ def gallery_for(corpus: corpus_mod.Corpus) -> dict[str, list[float]]:
     return prints
 
 
-def production_turns(conversation: corpus_mod.Conversation) -> Optional[list[dict]]:
-    """Production's stored segments on the audio clock (stored clocks are from ``started_at``)."""
-    stored = conversation.production
-    if not stored or stored.get('segment_clock_offset') is None:
+STORED_ARMS = {'production': ('conversation.json', None)}  # name -> (file, key inside it)
+
+
+def stored_arms(corpus: corpus_mod.Corpus) -> dict[str, tuple[str, Optional[str]]]:
+    """Every stored-label arm a private corpus carries: production's labels, and each ``diagnose --label L``
+    result (``resolver_L.json``) as ``resolver_L`` (the resolver's labels) and ``final_L`` (the final pass's)."""
+    arms = dict(STORED_ARMS)
+    root = corpus.path / 'conversations'
+    labels = sorted({p.stem.removeprefix('resolver_') for p in root.glob('*/resolver_*.json')}) if root.is_dir() else []
+    for label in labels:
+        arms[f'resolver_{label}'] = (f'resolver_{label}.json', 'segments')
+        arms[f'final_{label}'] = (f'resolver_{label}.json', 'final_pass')
+    return arms
+
+
+def _stored_segments(conversation: corpus_mod.Conversation, source: tuple[str, Optional[str]]) -> Optional[list]:
+    import json as _json
+
+    path = conversation.path / source[0]
+    if not path.is_file():
         return None
-    offset = float(stored['segment_clock_offset'])
-    turns = []
-    for s in stored.get('segments') or []:
-        if s.get('start') is None or s.get('end') is None:
+    value = _json.loads(path.read_text())
+    if source[1] == 'final_pass':
+        return ((value.get('final_pass') or {}).get('segments')) or None
+    return value.get('segments') if isinstance(value, dict) else None
+
+
+def stored_turns(words: list[dict], segments: Optional[list[dict]]) -> Optional[list[dict]]:
+    """Stored segments on the audio clock, placed by their text: stored clocks are not on the audio clock
+    (measured 2026-11-26 on an owner corpus: 17 % of segments within 1.5 s), so each stored token is aligned to
+    the corpus words (``difflib``, no junk heuristic) and every aligned word takes its segment's labels. Words
+    between two aligned words of one segment take it too; other words stay unlabeled (an abstention)."""
+    import difflib
+    import re
+
+    if not segments:
+        return None
+    pattern = re.compile(r"[a-z0-9]+(?:'[a-z0-9]+)?")
+    stored_tokens, stored_owner = [], []
+    for index, segment in enumerate(segments):
+        for token in pattern.findall((segment.get('text') or '').lower()):
+            stored_tokens.append(token)
+            stored_owner.append(index)
+    word_tokens, word_owner = [], []
+    for index, word in enumerate(words):
+        for token in pattern.findall((word.get('text') or '').lower()):
+            word_tokens.append(token)
+            word_owner.append(index)
+    labels: list[Optional[int]] = [None] * len(words)
+    matcher = difflib.SequenceMatcher(None, stored_tokens, word_tokens, autojunk=False)
+    for block in matcher.get_matching_blocks():
+        for k in range(block.size):
+            labels[word_owner[block.b + k]] = stored_owner[block.a + k]
+    last: dict[int, int] = {}
+    for index, label in enumerate(labels):
+        if label is None:
+            continue
+        previous = last.get(label)
+        if previous is not None and all(labels[i] is None for i in range(previous + 1, index)):
+            for i in range(previous + 1, index):
+                labels[i] = label
+        last[label] = index
+    turns: list[dict] = []
+    for word, label in zip(words, labels):
+        if label is None:
+            continue
+        s = segments[label]
+        if turns and turns[-1]['_segment'] == label and word['start'] - turns[-1]['end'] < 2.0:
+            turns[-1]['end'] = max(turns[-1]['end'], word['end'])
             continue
         turns.append(
             {
-                'start': float(s['start']) - offset,
-                'end': float(s['end']) - offset,
-                'text': s.get('text') or '',
+                '_segment': label,
+                'start': word['start'],
+                'end': max(word['end'], word['start'] + 0.01),
                 'speaker': s.get('speaker'),
                 'speaker_id': s.get('speaker_id'),
                 'speaker_id_scope': s.get('speaker_id_scope'),
@@ -141,14 +222,41 @@ def production_turns(conversation: corpus_mod.Conversation) -> Optional[list[dic
                 'person_id': s.get('person_id'),
             }
         )
-    return turns
+    for a, b in zip(turns, turns[1:]):
+        if b['start'] < a['end']:
+            a['end'] = b['start'] = (a['end'] + b['start']) / 2
+    return [{k: v for k, v in t.items() if k != '_segment'} for t in turns if t['end'] > t['start']]
 
 
-def run_arm(arm: Arm, jobs: list[dict], gallery: dict, peer_env: dict, work: Path) -> dict[str, dict]:
+def production_turns(conversation: corpus_mod.Conversation, words: Optional[list[dict]] = None) -> Optional[list[dict]]:
+    """Production's stored labels on the audio clock (placed by text, see :func:`stored_turns`)."""
+    if words is None:
+        words = (conversation.words or {}).get('words') or []
+    return stored_turns(words, (conversation.production or {}).get('segments'))
+
+
+def run_arm(
+    arm: Arm, jobs: list[dict], gallery: dict, peer_env: dict, work: Path, *, parallel: int = 1
+) -> dict[str, dict]:
+    """The arm's conversations split over ``parallel`` processes (each a fresh product import)."""
+    from concurrent.futures import ThreadPoolExecutor
+
+    shards = [jobs[i :: max(1, parallel)] for i in range(max(1, parallel))]
+    shards = [s for s in shards if s]
+    results: dict[str, dict] = {}
+    with ThreadPoolExecutor(max_workers=len(shards) or 1) as pool:
+        for part in pool.map(
+            lambda pair: _run_shard(arm, pair[1], gallery, peer_env, work, pair[0]), list(enumerate(shards))
+        ):
+            results.update(part)
+    return results
+
+
+def _run_shard(arm: Arm, jobs: list[dict], gallery: dict, peer_env: dict, work: Path, index: int) -> dict[str, dict]:
     from testing.pipeline_lab.store import atomic_write_json
 
     backend = arm.backend or BACKEND
-    job_path, out_path = work / f'job-{arm.name}.json', work / f'out-{arm.name}.jsonl'
+    job_path, out_path = work / f'job-{arm.name}-{index}.json', work / f'out-{arm.name}-{index}.jsonl'
     atomic_write_json(job_path, {'engine': arm.engine, 'conversations': jobs, 'gallery': gallery, 'out': str(out_path)})
     env = {k: os.environ[k] for k in PASS_ENV if k in os.environ}
     env.update(ISOLATION_ENV)
@@ -190,6 +298,7 @@ def bench(
     keys: Optional[list[str]] = None,
     out: Path,
     write_public_cassettes: bool = False,
+    parallel: int = 1,
 ) -> dict:
     from testing.pipeline_lab.scenario.paths import private_lab_root
     from testing.pipeline_lab.store import atomic_write_bytes, ensure_private_dir
@@ -213,21 +322,28 @@ def bench(
         'peer_mode': mode,
         'arms': {},
     }
-    with SpeakerPeer(mode, store=store) as peer:
+    with SpeakerPeer(mode, store=store, workers=parallel) as peer:
         os.environ.update(peer.env())
         gallery = gallery_for(corpus)
         report['gallery'] = {'identities': len(gallery), 'owner': 'user' in gallery}
         outputs: dict[str, dict[str, dict]] = {}
-        production = {c.key: production_turns(c) for c in conversations}
-        if any(v is not None for v in production.values()):
-            outputs['production'] = {k: {'key': k, 'segments': v} for k, v in production.items() if v is not None}
-            report['arms']['production'] = {'engine': 'stored', 'env': {}, 'backend': None}
+        production = {c.key: production_turns(c, words[c.key]) for c in conversations}
+        for name, source in ({} if corpus.public else stored_arms(corpus)).items():
+            placed = {c.key: stored_turns(words[c.key], _stored_segments(c, source)) for c in conversations}
+            if any(v is not None for v in placed.values()):
+                outputs[name] = {k: {'key': k, 'segments': v} for k, v in placed.items() if v is not None}
+                report['arms'][name] = {'engine': 'stored', 'source': source[0], 'env': {}, 'backend': None}
         for arm in arms:
-            outputs[arm.name] = run_arm(arm, jobs, gallery, peer.env(), work)
+            outputs[arm.name] = run_arm(arm, jobs, gallery, peer.env(), work, parallel=parallel)
             report['arms'][arm.name] = arm.describe()
         report['peer'] = peer.stats.summary()
     for job in jobs:
         Path(job['pcm_path']).unlink(missing_ok=True)
+    # Pool every arm over the same conversations: those every arm labeled (stored arms can be partial).
+    common = {c.key for c in conversations if c.truth}
+    for results in outputs.values():
+        common &= {k for k, row in results.items() if 'error' not in row}
+    report['common_conversations'] = len(common)
     for name, results in outputs.items():
         cards, agreements, errors, outcomes = {}, {}, 0, {}
         for c in conversations:
@@ -245,7 +361,8 @@ def bench(
             if name != 'production' and production.get(c.key) is not None:
                 agreements[c.key] = score.agreement(words[c.key], production[c.key], row['segments'])
         report['arms'][name].update(
-            pooled=score.pool(cards.values()) if cards else None,
+            pooled=score.pool(v for k, v in cards.items() if k in common) if common else None,
+            pooled_all=score.pool(cards.values()) if cards else None,
             conversations=cards,
             agreement_with_production=agreements or None,
             errors=errors,
@@ -271,7 +388,8 @@ def summary_markdown(report: dict) -> str:
     lines = [
         f"Speaker bench: corpus `{report['corpus']['name']}` ({report['corpus']['kind']}, "
         f"{report['corpus']['conversations']} conversations, truth {', '.join(report['truth'])}), "
-        f"peer {report['peer_mode']}, {report['seconds']} s",
+        f"peer {report['peer_mode']}, {report['seconds']} s; pooled over the "
+        f"{report.get('common_conversations')} conversations every arm labeled",
         '',
         '| arm | words | ' + ' | '.join(METRICS) + ' | errors |',
         '|---|---|' + '---|' * len(METRICS) + '---|',
@@ -313,6 +431,7 @@ def main(argv: Optional[list[str]] = None) -> int:
     parser.add_argument('--out', default=None)
     parser.add_argument('--gate', action='append', default=[], help='ARM.METRIC>=VALUE or ARM.METRIC<=VALUE')
     parser.add_argument('--write-public-cassettes', action='store_true', help='file new cassettes of a public corpus')
+    parser.add_argument('--jobs', type=int, default=1, help='parallel arm processes (and local model workers)')
     parser.add_argument('--json', action='store_true')
     args = parser.parse_args(argv)
     try:
@@ -327,6 +446,7 @@ def main(argv: Optional[list[str]] = None) -> int:
             keys=args.key or None,
             out=out,
             write_public_cassettes=args.write_public_cassettes,
+            parallel=args.jobs,
         )
     except (FileNotFoundError, ValueError, RuntimeError) as error:
         print(f'error: {error}', file=sys.stderr)

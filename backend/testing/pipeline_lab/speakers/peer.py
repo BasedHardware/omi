@@ -116,10 +116,13 @@ class CassetteStore:
 class LocalModels:
     """The local worker process: started on the first miss, kept for the peer's lifetime."""
 
-    def __init__(self, workdir: Path, python: Optional[str] = None):
+    def __init__(self, workdir: Path, python: Optional[str] = None, workers: int = 1):
         self.python = python or os.environ.get(PYTHON_ENV) or os.environ.get(FALLBACK_PYTHON_ENV)
         self.workdir = workdir
-        self.process: Optional[subprocess.Popen] = None
+        self.workers = max(1, workers)
+        self.idle: list[subprocess.Popen] = []
+        self.started: list[subprocess.Popen] = []
+        self.available = threading.Semaphore(self.workers)
         self.lock = threading.Lock()
 
     def _start(self) -> subprocess.Popen:
@@ -139,26 +142,36 @@ class LocalModels:
         ready = json.loads(process.stdout.readline() or '{}')
         if not ready.get('ready'):
             raise RuntimeError(f'local speaker worker failed to start (see {self.workdir}/local_worker.log)')
+        self.started.append(process)
         return process
 
     def run(self, request: dict) -> dict:
-        with self.lock:
-            if self.process is None or self.process.poll() is not None:
-                self.process = self._start()
-            self.process.stdin.write(json.dumps(request) + '\n')
-            self.process.stdin.flush()
-            line = self.process.stdout.readline()
+        """One request on a free worker; up to ``workers`` model processes run at once."""
+        with self.available:
+            with self.lock:
+                process = self.idle.pop() if self.idle else None
+            if process is None or process.poll() is not None:
+                process = self._start()
+            try:
+                process.stdin.write(json.dumps(request) + '\n')
+                process.stdin.flush()
+                line = process.stdout.readline()
+            finally:
+                with self.lock:
+                    if process.poll() is None:
+                        self.idle.append(process)
         if not line:
             raise RuntimeError('local speaker worker exited')
         return json.loads(line)
 
     def close(self) -> None:
-        if self.process is not None and self.process.poll() is None:
-            self.process.stdin.close()
-            try:
-                self.process.wait(timeout=10)
-            except subprocess.TimeoutExpired:
-                self.process.kill()
+        for process in self.started:
+            if process.poll() is None:
+                process.stdin.close()
+                try:
+                    process.wait(timeout=10)
+                except subprocess.TimeoutExpired:
+                    process.kill()
 
 
 @dataclass
@@ -196,6 +209,7 @@ class SpeakerPeer:
         store: Optional[CassetteStore] = None,
         workdir: Optional[Path] = None,
         local: Optional[Any] = None,
+        workers: int = 1,
     ):
         if mode not in MODES:
             raise ValueError(f'speaker peer mode must be one of {MODES}')
@@ -210,7 +224,9 @@ class SpeakerPeer:
             workdir = workdir or ensure_private_dir(ensure_private_dir(private_lab_root() / 'tmp') / 'speakers')
         self.store = store
         self.workdir = workdir
-        self.local = local if local is not None else (LocalModels(workdir) if mode == 'record-local' else None)
+        self.local = (
+            local if local is not None else (LocalModels(workdir, workers=workers) if mode == 'record-local' else None)
+        )
         self.stats = PeerStats()
         self.server: Optional[ThreadingHTTPServer] = None
         self.thread: Optional[threading.Thread] = None

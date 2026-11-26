@@ -20,7 +20,16 @@ class ReferenceUnavailable(ValueError):
         super().__init__(self.reason)
 
 
-def load_reference(store, uid, unit, conversation_id, *, read_budget=None):
+def load_reference(store, uid, unit, conversation_id, *, read_budget=None, source_ids=()):
+    """The staged unit behind ``final:batch:{unit}`` segments of ``conversation_id``.
+
+    ``source_ids`` are the conversation's own v3 source recordings: a conversations-v3 row copies its
+    recordings' projected segments (same segment ids), while the unit's projection receipts keep naming the
+    recording they were projected onto. Receipts naming the conversation or one of its source recordings are
+    this conversation's; any other owner is still a merge or a shared unit and refuses.
+    """
+    owners = frozenset((conversation_id, *source_ids))
+
     def read(tx):
         def unavailable(reason: str) -> NoReturn:
             raise ReferenceUnavailable('failed_incomplete_coverage', reason)
@@ -42,8 +51,7 @@ def load_reference(store, uid, unit, conversation_id, *, read_budget=None):
                 unavailable(reason)
         item = WorkItem(**{k: job[k] for k in WorkItem.__dataclass_fields__ if k in job})
         if not any(
-            r.get('conversation_id') == conversation_id and r.get('speaker_scope') == f'final:batch:{unit}'
-            for r in receipts
+            r.get('conversation_id') in owners and r.get('speaker_scope') == f'final:batch:{unit}' for r in receipts
         ):
             if any(r.get('conversation_id') and r.get('speaker_scope') == f'final:batch:{unit}' for r in receipts):
                 raise ReferenceUnavailable('skipped_merged')
@@ -55,10 +63,12 @@ def load_reference(store, uid, unit, conversation_id, *, read_budget=None):
             output for receipt in receipts for output in [receipt, *(receipt.get('size_rollover_outputs') or [])]
         ]
         if len(receipts) != result.get('projection_part_count', len(receipts)) or any(
-            output.get('conversation_id') != conversation_id for output in outputs
+            output.get('conversation_id') not in owners for output in outputs
         ):
             raise ReferenceUnavailable('skipped_shared_unit')
-        tx.check_privacy(uid, (conversation_id,), expected_generation=item.privacy_generation)
+        tx.check_privacy(
+            uid, (conversation_id, *sorted(owners - {conversation_id})), expected_generation=item.privacy_generation
+        )
         uri = (result.get('result') or {}).get('result_uri')
         for kind, reference in (('audio', item.audio_uri), ('results', uri)):
             if not reference or '#' not in reference:
