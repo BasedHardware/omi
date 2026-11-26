@@ -63,7 +63,9 @@ def write(uid, row, emit):
     from utils.conversations.process_conversation import _get_structured  # pyright: ignore[reportPrivateUsage]
     from utils.generated_compute import generated_compute_scope
 
-    with generated_compute_scope(uid), models.notes_mode(uid, foreground=True, emit=emit):
+    with generated_compute_scope(uid), models.notes_mode(
+        uid, foreground=True, emit=emit, backfilled=bool(row.get('v3_derived') and row.get('backfilled'))
+    ):
         structured, _discarded = _get_structured(
             uid, row.get('language') or 'en', Conversation(**row), live_recap=recap_telemetry.active()
         )
@@ -313,6 +315,8 @@ async def stream(
             # until it exits, without publishing its result after disconnect.
             await asyncio.shield(worker)
         raise
+    except (models.BackfillNotesDeletionBlocked, models.BackfillNotesAdmissionTimeout):
+        yield 'error: {"detail":"Summary unavailable; poll conversation detail"}\n\n'
     except Exception:
         _record(observation, 'stream_failed')
         if not live and row.get('v3_derived') and not needs_open_reconcile(row):

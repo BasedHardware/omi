@@ -19,7 +19,7 @@ import urllib.request
 from pathlib import Path
 from typing import Iterable
 
-from . import config, providers, safety, memory_scenarios
+from . import config, parity_stack, prod_parity, providers, safety, memory_scenarios
 
 OWNERSHIP_PREFIX = "omi-dev-harness"
 
@@ -196,6 +196,13 @@ def _service_health(cfg: config.HarnessConfig, service: str) -> tuple[bool, str]
         return _http_ok(f"{cfg.llm_gateway_url}/health")
     if service == "desktop-backend":
         return _http_ok(f"{cfg.desktop_backend_url}/health")
+    if service == "pusher" or service in parity_stack.SERVICE_PROCESSES.values():
+        url, _headers = parity_stack.health_checks(cfg)[service]
+        return _http_ok(str(url))
+    if parity_stack.is_process(service):
+        record = _service_record(cfg, service)
+        alive = record is not None and safety.process_exists(int(record.get("pid", -1)))
+        return (True, "running") if alive else (False, "not running")
     return False, f"unknown service {service!r}"
 
 
@@ -355,6 +362,11 @@ def _minimum_node_major_for_firebase_tools(repo_root: Path) -> int | None:
     return min(majors) if majors else None
 
 
+def _required_credentials() -> tuple[str, ...] | None:
+    """The active profile's own credential list; None keeps each provider's default."""
+    return prod_parity.REQUIRED_CREDENTIALS if parity_stack.enabled() else None
+
+
 def prerequisite_report(cfg: config.HarnessConfig) -> tuple[list[str], list[str]]:
     missing: list[str] = []
     warnings: list[str] = []
@@ -413,13 +425,23 @@ def prerequisite_report(cfg: config.HarnessConfig) -> tuple[list[str], list[str]
         missing.append("backend/main.py")
     if not _python_importable("uvicorn"):
         missing.append("Python package uvicorn (run: make lane-backend)")
-    provider_report = providers.provider_preflight(cfg.repo_root, env=config.preflight_env(cfg))
+    provider_report = providers.provider_preflight(
+        cfg.repo_root, env=config.preflight_env(cfg), required_credentials=_required_credentials()
+    )
     missing.extend(provider_report.missing)
     warnings.extend(provider_report.warnings)
     if cfg.provider_mode == "offline":
         warnings.append(
             "PROVIDER_MODE=offline: external-provider credentials are stripped from child processes; local stack shape is preserved."
         )
+    if parity_stack.enabled():
+        if cfg.provider_mode == "offline":
+            missing.append(
+                f"PROVIDER_MODE=real ({prod_parity.PROFILE_ENV}={prod_parity.PROD_PARITY} runs real providers)"
+            )
+        for package in ("yaml", "croniter", "cryptography", "websockets"):
+            if not _python_importable(package):
+                missing.append(f"Python package {package} (run: make setup-backend)")
     return missing, warnings
 
 
@@ -436,13 +458,17 @@ def print_config(cfg: config.HarnessConfig) -> None:
     print(f"llm_gateway: {cfg.llm_gateway_url}")
     print(f"backend: {cfg.backend_url}")
     print(f"desktop_backend: {cfg.desktop_backend_url}")
+    if parity_stack.enabled():
+        print(f"profile: {prod_parity.PROD_PARITY} (backend is the edge router; one process per production service)")
     if cfg.dev_bind_host != "127.0.0.1":
         print(f"dev_bind_host: {cfg.dev_bind_host} (set via {config.DEV_BIND_HOST_ENV} or {config.APP_DEV_HOST_ENV})")
 
 
 def print_provider_status(cfg: config.HarnessConfig) -> providers.ProviderPreflight:
     parsed = config.parse_secrets_file(cfg)
-    report = providers.provider_preflight(cfg.repo_root, env=config.preflight_env(cfg))
+    report = providers.provider_preflight(
+        cfg.repo_root, env=config.preflight_env(cfg), required_credentials=_required_credentials()
+    )
     print("provider_status:")
     for line in providers.status_lines(report):
         print(f"  {line}")
@@ -611,6 +637,7 @@ def _start_process(
     log_name: str,
     port: int,
     env: dict[str, str] | None = None,
+    backend_import: bool = False,
 ) -> None:
     existing = _service_record(cfg, service)
     if existing is not None:
@@ -627,7 +654,7 @@ def _start_process(
     log_file = log_path.open("ab")
     child_env = config.child_env_for(cfg) if env is None else env
     python_paths = [cfg.repo_root / "scripts" / "dev-harness"]
-    if service == "backend":
+    if service == "backend" or backend_import:
         python_paths.append(cfg.repo_root / "backend")
     _prepend_pythonpath(child_env, *python_paths)
     supervised = [
@@ -817,8 +844,60 @@ def _start_infrastructure(cfg: config.HarnessConfig) -> None:
     )
 
 
+def _start_prod_parity_services(cfg: config.HarnessConfig) -> None:
+    """Start one process per production service plus the stack's stand-ins (see parity_stack)."""
+    for note in parity_stack.start_notes(cfg):
+        print(note)
+    # Services read the rollout document while they boot.
+    print(parity_stack.seed_rollout_ramp(cfg))
+    for process in parity_stack.processes(cfg):
+        _start_process(
+            cfg,
+            process.name,
+            process.command,
+            cwd=process.cwd,
+            log_name=f"{process.name}.log",
+            port=process.port,
+            env=process.env,
+            backend_import=process.backend_import,
+        )
+
+
+def _process_gone(pid: int) -> bool:
+    """True once a process has exited, including one this invocation started and nobody has reaped yet.
+
+    A finished child stays in the process table until its parent collects it, and a
+    signal-0 probe still finds it there.
+    """
+    if os.name != "nt":
+        try:
+            return os.waitpid(pid, os.WNOHANG)[0] == pid
+        except ChildProcessError:
+            pass  # started by an earlier invocation
+    return not safety.process_exists(pid)
+
+
+def _exited_prod_parity_processes(cfg: config.HarnessConfig) -> list[str]:
+    """Workers with no health route that have already exited (a model that cannot load, a port in use).
+
+    The process manifest keeps live processes only, so the plan is what says which ones are missing.
+    """
+    running = {
+        str(record.get("service")) for record in _process_records(cfg) if not _process_gone(int(record.get("pid", -1)))
+    }
+    return [
+        f"{process.name}: exited after start; the stack runs without it. "
+        f"Check {cfg.layout.logs_dir / (process.name + '.log')}"
+        for process in parity_stack.processes(cfg)
+        if parity_stack.is_process(process.name) and process.name not in running
+    ]
+
+
 def _start_app_services(cfg: config.HarnessConfig) -> None:
     """Start the isolated gateway, backend, and desktop-backend."""
+    if parity_stack.enabled():
+        _start_prod_parity_services(cfg)
+        return
     _start_process(
         cfg,
         "llm-gateway",
@@ -887,6 +966,7 @@ _HEALTH_TIMEOUTS: dict[str, float] = {
     "backend": 180.0,
     "llm-gateway": 60.0,
     "desktop-backend": 60.0,
+    "pusher": 120.0,
     "redis": 30.0,
 }
 
@@ -913,12 +993,17 @@ def _wait_health(
         "desktop-backend": (f"{cfg.desktop_backend_url}/health", None),
         "redis": (None, None),  # port-based check
     }
+    if parity_stack.enabled():
+        checks.pop("desktop-backend")  # not part of the production recording path
+        checks.update(parity_stack.health_checks(cfg))
     pending = dict(checks)
     start = time.time()
     # Per-service deadlines; ``timeout`` overrides the backend deadline only.
     deadlines: dict[str, float] = {}
     for service in pending:
         base = _HEALTH_TIMEOUTS.get(service, 45.0)
+        if service in parity_stack.SERVICE_PROCESSES.values():
+            base = _HEALTH_TIMEOUTS["backend"]  # the same application, started once per production service
         if timeout is not None and service == "backend":
             base = timeout
         deadlines[service] = start + base
@@ -1019,6 +1104,9 @@ def cmd_up(args: argparse.Namespace) -> int:
             print(f"  - {failure}")
         print(f"Inspect logs with: make dev-logs OMI_LOCAL_STATE_ROOT={cfg.layout.state_root.parent}")
         return 1
+    if parity_stack.enabled():
+        for item in _exited_prod_parity_processes(cfg):
+            print(f"warning: {item}")
     if _current_scenario_manifest(cfg) is None:
         try:
             memory_scenarios.seed_scenario("happy_path", cfg)
@@ -1080,7 +1168,9 @@ def cmd_status(args: argparse.Namespace) -> int:
 
 def cmd_summary(args: argparse.Namespace) -> int:
     cfg = config.load_config(_repo_root(), create_layout=False)
-    provider_report = providers.provider_preflight(cfg.repo_root, env=config.preflight_env(cfg))
+    provider_report = providers.provider_preflight(
+        cfg.repo_root, env=config.preflight_env(cfg), required_credentials=_required_credentials()
+    )
     if not cfg.layout.sentinel_path.is_file():
         print("Cannot write session summary: harness sentinel is missing (run make dev-up or make dev-reset first)")
         return 1
@@ -1140,8 +1230,14 @@ def _reap_detached_port_holders(record: dict[str, object], descendants: tuple[in
             print(f"{service}: detached child {pid} still holds port {port}: {exc}")
 
 
-def _stop_owned(cfg: config.HarnessConfig) -> None:
-    records = _process_records(cfg)
+# What holds the stack's data. `restart` does not stop these (`up` still replaces the
+# Typesense container, which keeps its data folder).
+INFRASTRUCTURE_SERVICES = frozenset({"firestore", "redis", "typesense"})
+
+
+def _stop_owned(cfg: config.HarnessConfig, *, keep: frozenset[str] = frozenset()) -> None:
+    kept = [record for record in _process_records(cfg) if str(record.get("service")) in keep]
+    records = [record for record in _process_records(cfg) if str(record.get("service")) not in keep]
     # Capture the tree while the supervisors are alive; detached children (the
     # Firestore emulator JVM) are unreachable through the process group.
     descendants = {int(record.get("pid", -1)): safety.descendant_pids(int(record.get("pid", -1))) for record in records}
@@ -1176,7 +1272,16 @@ def _stop_owned(cfg: config.HarnessConfig) -> None:
         if safety.process_exists(pid):
             print(f"{record.get('service')}: still running pid={pid}; leaving it for safety inspection")
         _reap_detached_port_holders(record, descendants.get(pid, ()))
-    _save_manifests(cfg, records)
+    _save_manifests(cfg, [*kept, *records])
+
+
+def cmd_restart(args: argparse.Namespace) -> int:
+    """Stop the application services and start them again; the emulators and Redis keep running, so data stays."""
+    cfg = config.load_config(_repo_root(), create_layout=False)
+    if cfg.layout.sentinel_path.is_file():
+        safety.read_and_validate_sentinel(cfg.layout.state_root, repo_root=cfg.repo_root, instance=cfg.instance)
+        _stop_owned(cfg, keep=INFRASTRUCTURE_SERVICES)
+    return cmd_up(args)
 
 
 def cmd_down(args: argparse.Namespace) -> int:
@@ -1220,6 +1325,24 @@ def cmd_logs(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_parity(args: argparse.Namespace) -> int:
+    from . import parity_report, prod_snapshot
+
+    if args.action == "snapshot":
+        if not args.out:
+            print("parity snapshot needs --out DIR (keep snapshots outside the repository)")
+            return 2
+        return prod_snapshot.capture_command(Path(args.out).expanduser(), args.configuration)
+    if args.action == "drift":
+        if len(args.paths) != 2:
+            print("parity drift needs OLD_DIR NEW_DIR")
+            return 2
+        return prod_snapshot.drift_command(*(Path(item).expanduser() for item in args.paths))
+    report, findings = parity_report.build(config.load_config(_repo_root(), create_layout=False))
+    print(report)
+    return 0 if findings == 0 else 1
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="dev-harness")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -1229,6 +1352,7 @@ def build_parser() -> argparse.ArgumentParser:
         "status": cmd_status,
         "summary": cmd_summary,
         "down": cmd_down,
+        "restart": cmd_restart,
         "reset": cmd_reset,
         "logs": cmd_logs,
     }.items():
@@ -1236,6 +1360,12 @@ def build_parser() -> argparse.ArgumentParser:
         if name == "status":
             command.add_argument("--write-summary", action="store_true", default=False)
         command.set_defaults(func=func)
+    parity = sub.add_parser("parity", help="prod-parity profile: report, production snapshot, drift")
+    parity.add_argument("action", nargs="?", choices=("report", "snapshot", "drift"), default="report")
+    parity.add_argument("paths", nargs="*", help="drift: OLD_DIR NEW_DIR")
+    parity.add_argument("--out", help="snapshot: directory to write, outside the repository")
+    parity.add_argument("--configuration", help="snapshot: gcloud configuration to read with (default: the active one)")
+    parity.set_defaults(func=cmd_parity)
     return parser
 
 

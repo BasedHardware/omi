@@ -29,6 +29,14 @@ def skip_unchanged_writes_enabled() -> bool:
     return default_on('CONVERSATIONS_V3_SKIP_UNCHANGED_WRITES')
 
 
+def bounded_pending_enabled() -> bool:
+    return default_on('CONVERSATIONS_V3_BOUNDED_PENDING')
+
+
+def transcript_size_cap_enabled() -> bool:
+    return default_on('CONVERSATIONS_V3_TRANSCRIPT_SIZE_CAP')
+
+
 def finish_no_pointer_enabled() -> bool:
     return os.getenv('CONVERSATIONS_V3_FINISH_NO_POINTER', 'on').strip().lower() not in {'off', 'false', '0', 'no'}
 

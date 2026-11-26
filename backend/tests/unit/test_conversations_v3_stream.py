@@ -717,6 +717,7 @@ async def test_cancelled_builder_keeps_lease_until_paid_outline_exits(monkeypatc
     monkeypatch.setattr(service.store, 'save_outline', lambda *a: None)
     monkeypatch.setattr(service.store, 'adoptable', lambda *a: {})
     monkeypatch.setattr(service.store, 'backoff_state', lambda *a: (None, None))
+    monkeypatch.setattr(service.store, 'clear_terminal_pending', lambda *a: None)
     monkeypatch.setattr(service.models, 'outline', model)
     task = asyncio.create_task(service.reconcile('u'))
     try:

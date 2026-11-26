@@ -1,0 +1,203 @@
+{
+ "schema": "pipeline_lab.stt_cassette/v1",
+ "key": {
+  "provider": "synthetic",
+  "model": "macos-say-script-v1",
+  "language": "en",
+  "vocabulary_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+  "audio_sha256": "c891b3fadace58ea08e02aa2ac7bac60fe9debb4ebb211c30e31e21683da5949"
+ },
+ "key_digest": "f9c9d5406e9bf3df42ab78c18e95a9af2c61be56d08e558d912d421fdb2c4091",
+ "audio": {
+  "seconds": 8.9308125,
+  "sample_rate": 16000,
+  "format": "pcm16le_mono"
+ },
+ "adapter": "synthetic_script",
+ "source": "synthetic",
+ "recorded_at": "2026-11-25T20:34:44Z",
+ "served": {
+  "provider": "synthetic",
+  "model": "macos-say-script-v1"
+ },
+ "detected_language": "en",
+ "usd": 0.0,
+ "words": [
+  {
+   "start": 0.25,
+   "end": 0.454,
+   "text": "This",
+   "speaker": "SPEAKER_00"
+  },
+  {
+   "start": 0.477,
+   "end": 0.599,
+   "text": "is",
+   "speaker": "SPEAKER_00"
+  },
+  {
+   "start": 0.613,
+   "end": 0.694,
+   "text": "a",
+   "speaker": "SPEAKER_00"
+  },
+  {
+   "start": 0.704,
+   "end": 1.112,
+   "text": "synthetic",
+   "speaker": "SPEAKER_00"
+  },
+  {
+   "start": 1.157,
+   "end": 1.361,
+   "text": "test",
+   "speaker": "SPEAKER_00"
+  },
+  {
+   "start": 1.384,
+   "end": 1.792,
+   "text": "recording",
+   "speaker": "SPEAKER_00"
+  },
+  {
+   "start": 1.837,
+   "end": 2.001,
+   "text": "for",
+   "speaker": "SPEAKER_00"
+  },
+  {
+   "start": 2.019,
+   "end": 2.182,
+   "text": "the",
+   "speaker": "SPEAKER_00"
+  },
+  {
+   "start": 2.2,
+   "end": 2.567,
+   "text": "pipeline",
+   "speaker": "SPEAKER_00"
+  },
+  {
+   "start": 2.608,
+   "end": 2.812,
+   "text": "lab.",
+   "speaker": "SPEAKER_00"
+  },
+  {
+   "start": 3.185,
+   "end": 3.51,
+   "text": "Lantern",
+   "speaker": "SPEAKER_01"
+  },
+  {
+   "start": 3.547,
+   "end": 3.831,
+   "text": "harbor",
+   "speaker": "SPEAKER_01"
+  },
+  {
+   "start": 3.863,
+   "end": 4.107,
+   "text": "maple",
+   "speaker": "SPEAKER_01"
+  },
+  {
+   "start": 4.134,
+   "end": 4.419,
+   "text": "pebble",
+   "speaker": "SPEAKER_01"
+  },
+  {
+   "start": 4.451,
+   "end": 4.776,
+   "text": "orchard",
+   "speaker": "SPEAKER_01"
+  },
+  {
+   "start": 4.812,
+   "end": 5.097,
+   "text": "canvas",
+   "speaker": "SPEAKER_01"
+  },
+  {
+   "start": 5.129,
+   "end": 5.413,
+   "text": "meadow",
+   "speaker": "SPEAKER_01"
+  },
+  {
+   "start": 5.445,
+   "end": 5.771,
+   "text": "copper.",
+   "speaker": "SPEAKER_01"
+  },
+  {
+   "start": 6.157,
+   "end": 6.434,
+   "text": "Willow",
+   "speaker": "SPEAKER_00"
+  },
+  {
+   "start": 6.465,
+   "end": 6.783,
+   "text": "saffron",
+   "speaker": "SPEAKER_00"
+  },
+  {
+   "start": 6.818,
+   "end": 7.135,
+   "text": "beacon,",
+   "speaker": "SPEAKER_00"
+  },
+  {
+   "start": 7.17,
+   "end": 7.329,
+   "text": "the",
+   "speaker": "SPEAKER_00"
+  },
+  {
+   "start": 7.347,
+   "end": 7.743,
+   "text": "synthetic",
+   "speaker": "SPEAKER_00"
+  },
+  {
+   "start": 7.787,
+   "end": 8.065,
+   "text": "sample",
+   "speaker": "SPEAKER_00"
+  },
+  {
+   "start": 8.096,
+   "end": 8.294,
+   "text": "ends",
+   "speaker": "SPEAKER_00"
+  },
+  {
+   "start": 8.316,
+   "end": 8.554,
+   "text": "here.",
+   "speaker": "SPEAKER_00"
+  }
+ ],
+ "segments": [
+  {
+   "start": 0.25,
+   "end": 2.812,
+   "speaker": "SPEAKER_00",
+   "text": "This is a synthetic test recording for the pipeline lab."
+  },
+  {
+   "start": 3.185,
+   "end": 5.771,
+   "speaker": "SPEAKER_01",
+   "text": "Lantern harbor maple pebble orchard canvas meadow copper."
+  },
+  {
+   "start": 6.157,
+   "end": 8.554,
+   "speaker": "SPEAKER_00",
+   "text": "Willow saffron beacon, the synthetic sample ends here."
+  }
+ ]
+}

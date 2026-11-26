@@ -177,6 +177,15 @@ while later speech still belongs to the same outline stretch. Later speech
 gets its own continuation. Reconciliation can merge settled cards when the
 outline and the loaded source claims cover the complete merge.
 
+`CONVERSATIONS_V3_TRANSCRIPT_SIZE_CAP` defaults to on. A new derived window also splits
+before its estimated encoded `transcript_segments` (enhanced encryption included) passes
+900 KiB, below Firestore's 1,048,487-byte per-field limit. Splits use the duration cap's
+continuation path; only unpublished windows split, and locked rows keep their boundaries.
+Count `event=v3_transcript_size_cap_split` log lines to see splits. A commit Firestore still
+rejects for size (whole document or one property) parks the owner as `document_too_large`
+instead of retrying. To roll back, set `CONVERSATIONS_V3_TRANSCRIPT_SIZE_CAP=off` on builder
+and backfill runners.
+
 `CONVERSATIONS_V3_MAX_WINDOW_SECONDS` defaults to 10800 (three hours).
 The first transcript line whose recorded start reaches the limit starts a new
 stretch. The earlier live stretch locks and enters normal processing, and the
@@ -251,8 +260,18 @@ commit: the 2026-11-18 incident was a fresh late-speech window time-matching a r
 two planned rows re-added the same held claims and the array doubled each pass. A planned id that
 already exists outside the loaded closure is adopted once as the prior (live derived rows only).
 Watch `omi_conversations_v3_blocked_total{reason}` and `omi_conversations_v3_adopted_total`; an owner
-blocked for hours needs investigation, and an operator clears the park by deleting the three
-`v3_blocked_*`/`v3_backoff_until` fields on `users/{uid}/conversation_v3_leases/builder`.
+blocked for hours needs investigation. With `CONVERSATIONS_V3_BOUNDED_PENDING` on, a legacy
+closure-budget or document-size park gets an early background attempt. A closure-budget park
+starts with eight seeds and can fall back to one. A document-size park starts with one seed.
+The final commit remembers a successful smaller page on the builder lease. Before loading
+the projection, the builder can clear discarded or deleted markers within the oldest 50
+pending rows under that lease. Owner-wide unlocked-window overflows survive even at one
+seed. See the [bounded pending change note](../listen_pusher_pipeline/changes/2026-11-26-v3-bounded-pending.md)
+for the unlocked-window reconciliation follow-up.
+A new failed bounded pass records `v3_bounded_pending_attempted` on the builder lease and
+observes the usual backoff. An operator clears the park by deleting `v3_blocked_count`,
+`v3_blocked_reason`, `v3_backoff_until` and `v3_bounded_pending_attempted` on
+`users/{uid}/conversation_v3_leases/builder`.
 
 Each source has a durable `v3_pending` obligation. Tasks use the dedicated `conversations-v3`
 Cloud Tasks queue and the configured sync origin/OIDC identity unless
@@ -436,16 +455,36 @@ PYTHONPATH=backend backend/.venv/bin/python $S run --owners-file $O --since 2026
   builder leases before it lists the run's documents, so no pass commits while it works. It refuses
   while either is held or a notes write for the owner is in flight, and records the refusal in the
   ledger (`undo.reason`); rerun it. `undo` and `resume` exit 1 when no listed owner has the run.
-  Otherwise it restores every donor field exactly, then deletes the run's derived rows. It writes no
-  tombstones and touches no audio. A donor whose backfilled copy the owner deleted is not restored
-  (that would resurrect the deletion): it stays a hidden source, together with every copy it shares
-  and those copies' donors. The ledger and `undo --dry-run` count them (`donors_kept_deleted`,
-  `rows_kept_deleted`, `donors_deleted_by_owner`). Undo a re-derive by undoing the original run;
+  Otherwise it works one connected group at a time (donors and the copies that claim them): in one
+  transaction it restores every donor field exactly and deletes the group's copies, so nothing is
+  hidden or doubled partway. It writes no tombstones and touches no audio. A group in which the owner
+  deleted a copy (a deletion tombstone for a copy id, or a donor deleted span added after the run;
+  both read inside the transaction, so a delete racing undo is seen) stays as backfilled v3, so undo
+  never resurrects a deletion; its surviving copies' owed notes move to the live notes marker (the
+  deleted copy's notes are never written). Totals and removed copy ids are written in each group's own
+  transaction. If the owner deletes a copy in the instant undo removes it (before the delete path
+  writes its tombstone), the legacy row is visible again: undo lists those copy ids as
+  `deleted_during_undo_ids` (every attempt's removals are checked), so delete the matching legacy
+  rows by hand. A run with kept groups or a raced delete ends `undone_partial`, never `undone`, and
+  the operator exits 1. A group whose copy a live builder pass extended with recordings captured
+  after the run (the copy then holds live capture as well as donor lines) also stays as v3, counted
+  as `groups_kept_live`/`donors_kept_live`. A group containing a copy stamped with another run
+  uses the same counters. Undo leaves the other run’s rows and notes obligations untouched. The ledger
+  records `groups_kept_deleted` and `donors_kept_deleted`; `undo --dry-run` prints the group count
+  and `donors_deleted_by_owner_min`, a lower bound (it counts deleted spans and deleted copies
+  recorded on donors, and misses only a delete whose claim release has not run yet). Undoing a run
+  already `undone` or `undone_partial` reports its recorded result and changes nothing. A group
+  that is both live-extended and owner-deleted counts as kept-deleted. A group whose reads (two, plus one per donor and three per copy) would exceed 500 is
+  refused (`undo_group_too_large`); partitions keep groups far below that. Undo a re-derive by undoing the original run;
   `undo` on a re-derive run id says so and exits 1. Not undone: outline cache entries, speaker-resolution and media-boundary
   evidence that the notes path wrote, and gateway spend.
 - **Blocked.** A partition over the loader's 128-document limit, a planned id that is already a live
   row (`target_exists`), a tombstoned window, or a converted donor that no longer reads
-  (`backfill_source_unreadable`; its copies are kept) blocks the run. The partition and its reason are
+  (`backfill_source_unreadable`; its copies are kept), a re-derive in which a converted donor no rebuilt window claims
+  (`backfill_donor_unclaimed`; when the owner deleted that donor's copy, undo keeps it, so undo the
+  run and plan a new one around that range instead of resuming), or account deletion starting mid-drain (`account_deletion`;
+  no further transcript goes to the notes model) blocks the run. One owner's blocked plan prints
+  its reason and the operator continues with the next owner (exit 1). The partition and its reason are
   recorded in the ledger. Fix the cause, then `resume`. Never describe a blocked or partial run as
   complete. `status` shows partitions committed, windows, Home-visible rows, outline calls and
   notes processed or failed.

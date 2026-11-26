@@ -31,7 +31,8 @@ class StreamedLinesTail extends StatelessWidget {
             for (var i = 0; i < current.length; i++)
               Padding(
                 key: ValueKey('streamed_line_${current[i].id}'),
-                padding: EdgeInsets.fromLTRB(OmiSpacing.md, i == 0 ? OmiSpacing.md : 0, OmiSpacing.md, OmiSpacing.sm),
+                // The page already insets the transcript; the lines start at its left edge.
+                padding: EdgeInsets.only(top: i == 0 ? OmiSpacing.md : 0, bottom: OmiSpacing.sm),
                 child: Text(current[i].text, style: OmiType.body.copyWith(height: 1.4, color: OmiColors.textSecondary)),
               ),
           ],

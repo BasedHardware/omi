@@ -118,6 +118,8 @@ async def run_pass(strict, monkeypatch, sources):
     committed = []
 
     async def blocking(pool, fn, *args, **kwargs):
+        if fn is store.clear_terminal_pending:
+            return None
         if fn is original_load:
             return deepcopy(recordings), deepcopy(existing), []
         if fn is store.adoptable:
