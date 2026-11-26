@@ -846,6 +846,15 @@ def commit_projection(
         ):
             collisions.report(collisions.RACED, collisions.CONVERSATION, None, writer='plan', lane=key, phase='plan')
             raise Conflict('source_changed')
+    # Replacing claims on the same recording must be atomic with removing their old windows.
+    replacing_claimants = set()
+    if remove:
+        planned_sources = {rid for row in rows if not row.get('deleted') for rid in row.get('v3_recording_ids', ())}
+        replacing_claimants = set(remove) & {
+            claim['conversation_id']
+            for rid in planned_sources & recordings.keys()
+            for claim in recordings[rid].get('claims') or []
+        }
     retired = {cid for cid, patch in retire.items() if patch.get('sync_merged_into')}
     failure_transitions = {
         r['id']: r.get('v3_process_failed') and not (existing.get(r['id']) or {}).get('v3_process_failed') for r in rows
@@ -966,6 +975,8 @@ def commit_projection(
                 deleting = without_tasks - memories.linked_conversation_ids(
                     uid, without_tasks, firestore_client=client, transaction=tx
                 )
+            if replacing_claimants - deleting:
+                raise Conflict('backfill_rederive_linked_claims')
         watch.phase('privacy')
         # Filtering can mutate the encoded payload; every attempt needs its original input.
         batch_prepared = [dict(row) for row in batch_prepared]
@@ -1159,6 +1170,8 @@ def commit_projection(
         pointers += pointer
     if current or not batches:
         batches.append(current)
+    if replacing_claimants and len(batches) > 1:
+        raise Conflict('backfill_partition_budget')
     for index, batch in enumerate(batches):
         batch_rows, batch_prepared, final = [r for r, _ in batch], [r for _, r in batch], index == len(batches) - 1
         try:

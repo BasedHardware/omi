@@ -94,6 +94,7 @@ BLOCKED = frozenset(
         'rederive_mixed_runs',
         'backfill_source_unreadable',
         'backfill_donor_unclaimed',
+        'backfill_rederive_linked_claims',
         'rederive_live_open',
         'rederive_live_boundary',
         'rederive_live_outline_failed',

@@ -497,3 +497,36 @@ def test_successor_check_ignores_undecoded_terminal_pointer(terminal):
     pointer = {'uri': 'gs://bucket/transcript', 'revision': 3}
     row = {'id': 'r', 'started_at': AT, 'transcript_segments': pointer, terminal: True}
     store._mark_successor_pending(None, {'r': row})
+
+
+def test_backfill_rederive_keeps_both_prior_windows_when_merge_would_strand_a_memory_link(strict, monkeypatch):
+    first = derived('first', T0, 10, ['r'], backfilled=True)
+    second_start = T0 + timedelta(seconds=10)
+    linked = derived('linked', second_start, 10, ['r'], backfilled=True)
+    claims = [claim('first', T0, 10), claim('linked', second_start, 10)]
+    recording = {'id': 'r', 'recording': True, 'status': 'completed', 'claims': claims}
+    strict.rows.update({path('first'): first, path('linked'): linked, path('r'): recording})
+    token = leases.acquire(UID, store.BACKFILL_LEASE, firestore_client=strict)
+    monkeypatch.setattr(memories, 'linked_conversation_ids', lambda uid, ids, **kw: {'linked'} & ids)
+    merged = derived('merged', T0, 20, ['r'], backfilled=True)
+    removed = set()
+
+    with pytest.raises(Conflict, match='backfill_rederive_linked_claims'):
+        store.commit_projection(
+            UID,
+            token,
+            {'r': {**recording, '_v3_revision': 1}},
+            {row['id']: {**row, '_v3_revision': 1} for row in (first, linked)},
+            [merged],
+            [],
+            remove=('first', 'linked'),
+            removed_ids=removed,
+            key=store.BACKFILL_LEASE,
+            firestore_client=strict,
+        )
+
+    assert strict.rows[path('first')] == first
+    assert strict.rows[path('linked')] == linked
+    assert strict.rows[path('r')]['claims'] == claims
+    assert path('merged') not in strict.rows
+    assert not removed
