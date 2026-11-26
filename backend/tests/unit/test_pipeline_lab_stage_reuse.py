@@ -344,3 +344,14 @@ def test_harness_identity_changes_with_lab_code_and_ignores_bytecode(tmp_path, m
     assert orchestrator.harness_identity() == first  # bytecode is not the harness
     (pkg / 'scenario' / 'ops.py').write_text('A = 2\n')
     assert orchestrator.harness_identity() != first  # a changed stand-in or driver must miss the cache
+
+
+def test_transcribe_with_failed_replays_is_not_stored():
+    from testing.pipeline_lab.lanes.plugin import TranscribeStage
+
+    stage = TranscribeStage()
+    assert stage.cache_ok({'transcribe': {'outcomes': {'replayed': 3}}}) is None
+    assert stage.cache_ok({'transcribe': {'source': 'stored'}}) is None  # nothing replayed, nothing failed
+    assert (
+        stage.cache_ok({'transcribe': {'outcomes': {'replayed': 2, 'failed': 1}}}) == '1 conversations failed to replay'
+    )

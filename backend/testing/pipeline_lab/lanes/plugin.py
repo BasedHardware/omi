@@ -21,7 +21,7 @@ overlay's ``model_config.stt``. The code part of each key covers only the files 
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Mapping, Optional
 
 from testing.pipeline_lab import keys
 from testing.pipeline_lab.registry import StageResult, ToolContext
@@ -116,6 +116,13 @@ class TranscribeStage(_Stage):
 
     def restore(self, ctx: Any, output: dict[str, Any]) -> None:
         ctx.run_extra['stt'] = output.get('stt_label') or 'stored production transcripts'
+
+    def cache_ok(self, outputs: Mapping[str, Mapping[str, Any]]) -> Optional[str]:
+        """Why this result must not be stored, or None. A conversation whose replay failed (a transient worker
+        or VAD error, a missing cassette) kept its stored transcript; storing that would keep serving it after
+        the cause is gone, so the next identical run replays again. The run's warnings keep the diagnostics."""
+        failed = int(((outputs.get('transcribe') or {}).get('outcomes') or {}).get('failed') or 0)
+        return f'{failed} conversations failed to replay' if failed else None
 
     def run(self, ctx: Any) -> StageResult:
         stt = stt_config(ctx.overlay)
