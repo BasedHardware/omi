@@ -1385,7 +1385,10 @@ def get_conversations(
         budget.mark_exhausted(error.reason)
         scanned = prepared.copy()
         rows = [row for row, _ in scanned if row is not None]
-        page_result = scanned[-1][1] if scanned else {'storage_rows': 0, 'has_more': False}
+        # A wall deadline can expire before the reader publishes its first
+        # checkpoint. Keep the caller at the same offset and report that the
+        # incomplete scan may have more rows, so pagination can retry it.
+        page_result = scanned[-1][1] if scanned else {'storage_rows': 0, 'has_more': True}
         show_held = default_home and read_mode == 'legacy'
 
     read_done = time.monotonic()

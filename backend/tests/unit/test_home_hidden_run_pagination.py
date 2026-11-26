@@ -449,6 +449,44 @@ def test_route_hard_deadline_returns_prepared_prefix(monkeypatch, routes):
             assert exited.wait(2)
 
 
+def test_route_deadline_before_first_prepared_row_keeps_page_retryable(monkeypatch, routes):
+    from threading import Event
+
+    data, visible = owner(before=3, hidden=0, after=0)
+    monkeypatch.setattr(db, 'db', CountingQuery(data))
+    monkeypatch.setenv('OMI_LIST_READ_BUDGET_SECONDS', '0.25')
+    monkeypatch.setenv('OMI_LIST_PAGE_WALL_BUDGET_ENABLED', 'true')
+    entered, release, exited = Event(), Event(), Event()
+    original = db.prepare_conversation_for_read
+
+    def prepare(row, uid, **kwargs):
+        if row['id'] == visible[0]:
+            entered.set()
+            try:
+                release.wait(5)
+            finally:
+                exited.set()
+        return original(row, uid, **kwargs)
+
+    monkeypatch.setattr(db, 'prepare_conversation_for_read', prepare)
+    try:
+        result, response = call_route(routes, limit=3)
+        assert entered.is_set()
+        assert not exited.is_set()
+        assert result == []
+        assert response.headers['X-Omi-List-Truncated'] == 'true'
+        assert response.headers['X-Omi-Has-More'] == 'true'
+        assert response.headers['X-Omi-Conversation-Page-Size'] == '0'
+    finally:
+        release.set()
+        if entered.is_set():
+            assert exited.wait(2)
+
+    retried, response = call_route(routes, limit=3)
+    assert [row['id'] for row in retried] == visible
+    assert 'X-Omi-List-Truncated' not in response.headers
+
+
 @pytest.mark.parametrize('use_cursor', [False, True])
 def test_overlay_budget_exhaustion_resumes_at_the_failed_row(monkeypatch, routes, use_cursor):
     from utils.other.list_budget import ListReadBudgetExhausted
