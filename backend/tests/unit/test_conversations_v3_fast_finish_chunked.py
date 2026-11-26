@@ -1873,7 +1873,8 @@ def test_a_denial_or_stop_before_the_retry_reserves_nothing(monkeypatch, how):
         assert len(asked) == (1 if how == 'denied_by_another_check' else 2)
 
 
-def test_a_retry_whose_reservation_ends_past_the_deadline_is_not_sent(monkeypatch):
+@pytest.mark.parametrize('left', [-0.05, 0.1])
+def test_a_retry_whose_reservation_leaves_too_little_time_is_not_sent(monkeypatch, left):
     monkeypatch.setattr(fast_finish, 'RETRY_MIN_SECONDS', 0.0)
     monkeypatch.setattr(fast_finish, 'RESERVE_MIN_SECONDS', 0.1)
     monkeypatch.setattr(fast_finish, 'CHUNK_SEND_MIN_SECONDS', 0.0)
@@ -1886,7 +1887,9 @@ def test_a_retry_whose_reservation_ends_past_the_deadline_is_not_sent(monkeypatc
 
     def slow_take(key, seconds):
         kept = take(key, seconds)
-        time.sleep(max(deadline - time.monotonic(), 0) + 0.05)  # Redis answers after the deadline
+        # Redis answers with ``left`` seconds of the deadline remaining (negative: past it), under
+        # RETRY_SEND_MIN_SECONDS either way.
+        time.sleep(max(deadline - left - time.monotonic(), 0))
         return kept
 
     monkeypatch.setattr(budget, 'take', slow_take)
@@ -1927,10 +1930,13 @@ def test_an_abandoned_chunk_that_reaches_its_send_after_the_settle_sends_and_cha
     unit, read = recording(1800)
     provider = Provider()
     audio = fast_finish.AUDIO_SECONDS.labels('long')._value.get()
-    outcome, written = run([unit], read, provider, deadline=time.monotonic() + 1.0)
-    assert outcome == 'deadline' and written is None and len(held) == fast_finish.LONG_PASS_WINDOW
-    charged = used()  # the settle has landed: admission refunded down to what was sent (nothing)
-    gate.set()
+    try:
+        outcome, written = run([unit], read, provider, deadline=time.monotonic() + 1.0)
+        assert outcome == 'deadline' and written is None and len(held) == fast_finish.LONG_PASS_WINDOW
+        charged = used()  # the settle has landed: admission refunded down to what was sent (nothing)
+    finally:
+        # Released even when an assertion above fails, so no chunk worker stays parked on the gate.
+        gate.set()
     wait(futures, timeout=5)
     assert all(isinstance(f.exception(), fast_finish._Abandoned) for f in futures)
     # No provider call after the settle, and no audio seconds that the counter does not carry.

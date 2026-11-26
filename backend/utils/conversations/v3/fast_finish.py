@@ -90,12 +90,18 @@ STOP_GRACE_SECONDS = 2.0
 PROBE_MIN_SECONDS = 3.0
 # A long pass reserves from the fleet budget (at admission, and again before each chunk retry) only
 # with at least this much left. Each Redis call is bounded (1 s connect, 1 s per read), but one
-# reservation can take about 3-4 s in the worst case: AUTH on a new connection, the health-check
-# PING, the INCRBYFLOAT pipeline and, over the cap, the give-back round trip. It can therefore end
-# past the deadline. The slot bound holds anyway, because every wait on that call is bounded: the
-# pass waits for running chunks at most until the deadline plus STOP_GRACE_SECONDS, and a retry that
-# returns from its reservation past the deadline is not sent (its seconds are refunded at settle).
+# reservation is several of them: AUTH on a new connection, the health-check PING, the INCRBYFLOAT
+# pipeline and, over the cap, the give-back round trip. It can therefore end past the deadline:
+# - At admission (``LONG_BUDGET.reserve`` on the pass's own thread) the worst case is about 5 s, so it
+#   ends at most about 2 s past the deadline, within STOP_GRACE_SECONDS. A pass whose reservation
+#   returns that late stops at the chunk loop's first deadline check, sends nothing, and refunds it all.
+# - A chunk retry's reservation (on the chunk pool) takes about 3-4 s at worst. The pass waits for
+#   running chunks at most until the deadline plus STOP_GRACE_SECONDS, and a retry left with under
+#   RETRY_SEND_MIN_SECONDS once its reservation returns is not sent (refunded at settle).
 RESERVE_MIN_SECONDS = 3.0
+# A retry is sent only with at least this much of the deadline left once its reservation returns.
+# With less it would almost certainly time out, so it is not paid for.
+RETRY_SEND_MIN_SECONDS = 1.0
 # A chunked pass's row refresh, transcript write and cut after its chunks may run this far past the
 # deadline; past it each is abandoned, so a stalled call releases the slot within STOP_GRACE_SECONDS.
 WRITE_GRACE_SECONDS = 1.5
@@ -1083,8 +1089,8 @@ def _chunk_job(
             # Stopped while Redis answered: reserved but not sent, so the settle refunds it.
             if stop.is_set():
                 raise _Abandoned()
-            # The reservation itself ran past the deadline: not sent, refunded at settle.
-            if time.monotonic() >= deadline:
+            # The reservation took most of what was left: not sent, refunded at settle.
+            if deadline - time.monotonic() < RETRY_SEND_MIN_SECONDS:
                 raise _Expired()
         # Immediately before the charge and the send: a denial another chunk recorded after this
         # chunk's check passed still stops it, before the coordinator has set ``stop``.
