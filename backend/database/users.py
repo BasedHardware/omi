@@ -1738,17 +1738,20 @@ def _is_paid_plan(subscription: Any) -> bool:
     return bool(plan) and plan not in {'basic', 'free'}
 
 
-def paid_since_patch(stored: Any, incoming: dict, *, now: float | None = None) -> dict[str, int]:
+def paid_since_patch(
+    stored: Any, incoming: dict, *, stored_user_paid_since: Any = None, now: float | None = None
+) -> dict[str, int]:
     """The commercial first-paid epoch, set once on the free->paid transition.
 
-    ``current_period_start`` moves on every renewal, so it cannot identify a first
-    week. A row that predates this field has no epoch and is never covered. A
-    trial that was never charged, and a renewal of an already-paid plan, do not
-    start a window (SCA-4790).
+    Stored as a user-document field beside ``subscription`` so replacing the
+    subscription payload can never wipe it. ``current_period_start`` moves on
+    every renewal, so it cannot identify a first week. A row that predates this
+    field has no epoch and is never covered. A trial that was never charged, and
+    a renewal of an already-paid plan, do not start a window (SCA-4790).
     """
-    existing = stored.get('paid_since') if isinstance(stored, dict) else None
-    if isinstance(existing, int) and not isinstance(existing, bool) and existing > 0:
-        return {'paid_since': existing}
+    if isinstance(stored_user_paid_since, int) and not isinstance(stored_user_paid_since, bool):
+        if stored_user_paid_since > 0:
+            return {'paid_since': stored_user_paid_since}
     carried = incoming.get('paid_since')
     if isinstance(carried, int) and not isinstance(carried, bool) and carried > 0:
         return {'paid_since': carried}
@@ -1760,12 +1763,16 @@ def paid_since_patch(stored: Any, incoming: dict, *, now: float | None = None) -
     return {'paid_since': int(now if now is not None else datetime.now(timezone.utc).timestamp())}
 
 
-def _stored_subscription_payload(user_ref: Any) -> Any:
+def _stored_subscription_fields(user_ref: Any) -> tuple[Any, Any]:
+    """The stored commercial subscription and the durable first-paid epoch, in one read."""
     try:
-        snapshot = user_ref.get(['subscription'])
+        snapshot = user_ref.get(['subscription', 'paid_since'])
     except Exception:
-        return None
-    return (snapshot.to_dict() or {}).get('subscription') if snapshot.exists else None
+        return None, None
+    if not snapshot.exists:
+        return None, None
+    data = snapshot.to_dict() or {}
+    return data.get('subscription'), data.get('paid_since')
 
 
 @cache_writer('subscription_cache')
@@ -2324,15 +2331,13 @@ def first_week_stamp_for(uid: str, created_at: Any, *, interval_from: tuple[Any,
     if not first_week_enabled():
         return None
     try:
-        subscription = get_user_subscription(uid, read_only=True)
+        subscription, fields = get_existing_user_subscription_and_fields(uid, ('paid_since',))
     except Exception:
         return None
     if subscription is None:
         return None
     period = interval_from or (subscription.current_period_start, subscription.current_period_end)
-    return first_week_stamp(
-        getattr(subscription, 'paid_since', None), created_at, interval=first_week_interval(*period)
-    )
+    return first_week_stamp(fields.get('paid_since'), created_at, interval=first_week_interval(*period))
 
 
 # **************************************

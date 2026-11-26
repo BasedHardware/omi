@@ -377,9 +377,13 @@ def write_commercial_subscription(uid: str, subscription: dict, *, client=None, 
         # the same write that installs the paid subscription (SCA-4790).
         from database.users import paid_since_patch
 
-        stored = user.get('subscription')
-        paid_patch = paid_since_patch(stored, subscription, now=now.timestamp())
-        patch = {'subscription': {**subscription, **paid_patch} if paid_patch else subscription}
+        paid_patch = paid_since_patch(
+            user.get('subscription'),
+            subscription,
+            stored_user_paid_since=user.get('paid_since'),
+            now=now.timestamp(),
+        )
+        patch = {'subscription': subscription, **paid_patch}
         if requeued is not None and requeued != grant:
             patch[GRANT_FIELD] = requeued
         transaction.update(user_ref, patch)

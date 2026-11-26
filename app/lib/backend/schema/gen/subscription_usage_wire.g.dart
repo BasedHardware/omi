@@ -47,7 +47,6 @@ class GeneratedSubscription {
   final String? deprecationMessage;
   final List<String> features;
   final GeneratedPlanLimits limits;
-  final int? paidSince;
   final String plan;
   final bool? prepaid;
   final String? provider;
@@ -63,7 +62,6 @@ class GeneratedSubscription {
     this.deprecationMessage,
     this.features = const [],
     GeneratedPlanLimits? limits,
-    this.paidSince,
     this.plan = "basic",
     this.prepaid,
     this.provider,
@@ -82,7 +80,6 @@ class GeneratedSubscription {
       deprecationMessage: _readFieldValue<String>(_readField(json, const ["deprecation_message"]), "deprecation_message", _readString, requiredField: false, nullable: true),
       features: _required(_readFieldValue<List<String>>(_readField(json, const ["features"]), "features", _readStringList, requiredField: false, nullable: false, defaultValue: const []), "features"),
       limits: _required(_readFieldValue<GeneratedPlanLimits>(_readField(json, const ["limits"]), "limits", (value) => _readObject(value, GeneratedPlanLimits.fromJson), requiredField: false, nullable: false, defaultValue: GeneratedPlanLimits.fromJson(const {})), "limits"),
-      paidSince: _readFieldValue<int>(_readField(json, const ["paid_since"]), "paid_since", _readInt, requiredField: false, nullable: true),
       plan: _required(_readFieldValue<String>(_readField(json, const ["plan"]), "plan", _readString, requiredField: false, nullable: false, defaultValue: "basic"), "plan"),
       prepaid: _readFieldValue<bool>(_readField(json, const ["prepaid"]), "prepaid", _readBool, requiredField: false, nullable: true),
       provider: _readFieldValue<String>(_readField(json, const ["provider"]), "provider", _readString, requiredField: false, nullable: true),
@@ -101,7 +98,6 @@ class GeneratedSubscription {
       'deprecation_message': deprecationMessage,
       'features': features,
       'limits': limits.toJson(),
-      'paid_since': paidSince,
       'plan': plan,
       'prepaid': prepaid,
       'provider': provider,

@@ -97,15 +97,18 @@ def test_paid_since_is_set_once_on_a_free_to_paid_transition():
     incoming = {'plan': 'unlimited', 'status': 'active'}
     patch = users_db.paid_since_patch(stored, incoming, now=PAID)
     assert patch == {'paid_since': PAID}
-    # A renewal never moves it, and a legacy paid row without the epoch is never covered.
-    assert users_db.paid_since_patch({**stored, 'paid_since': PAID}, incoming, now=PAID + 99) == {'paid_since': PAID}
+    # The user-level epoch is authoritative and a renewal never moves it.
+    assert users_db.paid_since_patch(stored, incoming, stored_user_paid_since=PAID, now=PAID + 99) == {
+        'paid_since': PAID
+    }
+    # A legacy paid row without the epoch is never covered.
     assert users_db.paid_since_patch({'plan': 'unlimited', 'status': 'active'}, incoming, now=PAID) == {}
 
 
 def test_paid_since_ignores_a_trial_that_was_never_charged():
     stored = {'plan': 'basic', 'status': 'active'}
     assert users_db.paid_since_patch(stored, {'plan': 'unlimited', 'status': 'trialing'}, now=PAID) == {}
-    # A carried epoch from the caller is authoritative and never overwritten.
+    # A carried epoch from the caller is authoritative and never moved.
     assert users_db.paid_since_patch(stored, {'plan': 'unlimited', 'status': 'active', 'paid_since': 5}, now=PAID) == {
         'paid_since': 5
     }
