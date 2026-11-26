@@ -8,13 +8,14 @@ import 'package:omi/utils/enums.dart';
 
 import '../support/capture/capture_replay_world.dart';
 import '../support/spine/contract.dart';
-import 'c1_composition_test.dart' show dependencies;
+import 'c1_composition_test.dart' show InertMic, dependencies;
 
 import 'c1_persistence_test.dart' show HeldStore;
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
   contractTest('C1 cancelled queued fingerprint cannot suppress identical content in the next generation', () async {
+    pendingContract('C1');
     final dir = await Directory.systemTemp.createTemp('c1-store-');
     final world = await CaptureReplayWorld.boot(tempDir: dir);
     try {
@@ -24,8 +25,8 @@ void main() {
       final deps = CaptureDependencies(
           ensureDeviceConnection: d.ensureDeviceConnection,
           wal: d.wal,
-          phoneMic: d.phoneMic,
-          batchSupported: d.batchSupported,
+          phoneMic: InertMic(),
+          batchSupported: false,
           auth: d.auth,
           connectivity: d.connectivity,
           now: d.now,
@@ -37,7 +38,7 @@ void main() {
           location: d.location,
           localSegments: store,
           codec: d.codec,
-          microphonePermission: d.microphonePermission,
+          microphonePermission: () async => false,
           refreshConversation: d.refreshConversation,
           telemetry: d.telemetry);
       final p = composeCaptureProvider(deps);

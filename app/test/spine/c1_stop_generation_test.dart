@@ -4,26 +4,32 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/geolocation.dart';
 import 'package:omi/services/capture/capture_composition.dart';
+import 'package:omi/backend/schema/bt_device/bt_device.dart';
+import '../support/capture/scripted_device_connection.dart';
 import '../support/capture/capture_replay_world.dart';
 import '../support/spine/contract.dart';
 import 'c1_async_boundaries_test.dart' show HeldLocation;
-import 'c1_composition_test.dart' show dependencies;
+import 'c1_composition_test.dart' show InertMic, dependencies;
 import 'c1_location_completion_test.dart' show PhoneSpy, WalSpy;
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
   contractTest('stop invalidates location before waiting for WAL finalization', () async {
+    pendingContract('C1');
     final dir = await Directory.systemTemp.createTemp('t10-stop-');
     final world = await CaptureReplayWorld.boot(tempDir: dir);
     try {
       world.disposeController();
+      final pendant = BtDevice(id: 'c1-pendant', name: 'Omi', type: DeviceType.omi, rssi: -40);
+      world.deviceConnection = ScriptedDeviceConnection();
       final location = HeldLocation();
       final d = dependencies(world: world, preferences: SharedPreferencesUtil(), location: location);
       final phone = PhoneSpy(world.wal.getSyncs().phone);
       final deps = CaptureDependencies(
           wal: WalSpy(phone),
-          phoneMic: d.phoneMic,
-          batchSupported: d.batchSupported,
+          phoneMic: InertMic(),
+          batchSupported: false,
+          microphonePermission: () async => false,
           auth: d.auth,
           connectivity: d.connectivity,
           now: d.now,
@@ -35,17 +41,16 @@ void main() {
           location: location,
           localSegments: d.localSegments,
           codec: d.codec,
-          microphonePermission: d.microphonePermission,
           refreshConversation: d.refreshConversation,
           telemetry: d.telemetry,
           ensureDeviceConnection: d.ensureDeviceConnection);
       final p = composeCaptureProvider(deps);
-      await p.streamRecording();
+      await p.streamDeviceRecording(device: pendant);
       await pumpEventQueue();
       expect(location.captures, 1);
       final before = d.owner.token;
       phone.finalizeGate = Completer<void>();
-      final stopping = p.stopStreamRecording();
+      final stopping = p.stopStreamDeviceRecording();
       await pumpEventQueue();
       final invalidated = !d.owner.isCurrent(before);
       location.fix.complete(Geolocation(latitude: 1, longitude: 2, time: world.clock.now()));

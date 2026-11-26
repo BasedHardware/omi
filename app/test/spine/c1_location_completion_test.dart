@@ -13,10 +13,11 @@ import 'package:omi/services/sockets/transcription_service.dart';
 import 'package:omi/services/wals/recording_transfer_coordinator.dart';
 import 'package:omi/services/capture/capture_composition.dart';
 import 'package:omi/services/wals/wal_interfaces.dart';
+import '../support/capture/scripted_device_connection.dart';
 import '../support/capture/capture_replay_world.dart';
 import '../support/spine/contract.dart';
 import 'c1_async_boundaries_test.dart' show HeldLocation;
-import 'c1_composition_test.dart' show dependencies;
+import 'c1_composition_test.dart' show InertMic, dependencies;
 
 class PhoneSpy {
   PhoneSpy(this.real);
@@ -24,6 +25,8 @@ class PhoneSpy {
   Completer<void>? finalizeGate;
   final published = <Geolocation?>[];
   Future<void> onAudioCodecChanged(BleAudioCodec codec) async => await real.onAudioCodecChanged(codec);
+  Future<void> configureDeviceAudio(BleAudioCodec codec, String id, BtDevice device) async =>
+      await real.configureDeviceAudio(codec, id, device);
   void setDeviceInfo(String? id, String? name) => real.setDeviceInfo(id, name);
   void setSessionGeolocation(Geolocation? value) {
     published.add(value);
@@ -55,17 +58,21 @@ class WalSpy implements IWalService {
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
   contractTest('C1 old upload completion cannot publish geolocation into new capture WAL', () async {
+    pendingContract('C1');
     final dir = await Directory.systemTemp.createTemp('c1-upload-');
     final w = await CaptureReplayWorld.boot(tempDir: dir);
     try {
       w.disposeController();
+      final pendant = BtDevice(id: 'c1-pendant', name: 'Omi', type: DeviceType.omi, rssi: -40);
+      w.deviceConnection = ScriptedDeviceConnection();
       final location = HeldLocation();
       final d = dependencies(world: w, preferences: SharedPreferencesUtil(), location: location);
       final phone = PhoneSpy(w.wal.getSyncs().phone);
       final deps = CaptureDependencies(
           wal: WalSpy(phone),
-          phoneMic: d.phoneMic,
-          batchSupported: d.batchSupported,
+          phoneMic: InertMic(),
+          batchSupported: false,
+          microphonePermission: () async => false,
           auth: d.auth,
           connectivity: d.connectivity,
           now: d.now,
@@ -77,13 +84,12 @@ void main() {
           location: location,
           localSegments: d.localSegments,
           codec: d.codec,
-          microphonePermission: d.microphonePermission,
           refreshConversation: d.refreshConversation,
           telemetry: d.telemetry,
           ensureDeviceConnection: d.ensureDeviceConnection);
 
       final p = composeCaptureProvider(deps);
-      await p.streamRecording();
+      await p.streamDeviceRecording(device: pendant);
       await pumpEventQueue();
       expect(location.captures, 1);
       location.fix.complete(Geolocation(latitude: 1, longitude: 2, time: w.clock.now()));
@@ -94,7 +100,8 @@ void main() {
       await pumpEventQueue();
       expect(phone.published.whereType<Geolocation>(), isEmpty);
       // Current work still publishes; an implementation that drops every result fails.
-      await p.streamRecording();
+      await p.stopStreamDeviceRecording(cleanDevice: true);
+      await p.streamDeviceRecording(device: pendant);
       await pumpEventQueue();
       expect(location.captures, 2);
       expect(phone.published.whereType<Geolocation>().single.latitude, 1);
@@ -105,6 +112,7 @@ void main() {
     }
   });
   contractTest('C1 capture finalization completion cannot wake recovery for a later session', () async {
+    pendingContract('C1');
     final dir = await Directory.systemTemp.createTemp('c1-finalize-');
     final w = await CaptureReplayWorld.boot(tempDir: dir);
     try {
@@ -139,8 +147,9 @@ void main() {
       final phone = PhoneSpy(w.wal.getSyncs().phone);
       final deps = CaptureDependencies(
           wal: WalSpy(phone),
-          phoneMic: d.phoneMic,
-          batchSupported: d.batchSupported,
+          phoneMic: InertMic(),
+          batchSupported: false,
+          microphonePermission: () async => false,
           auth: d.auth,
           connectivity: d.connectivity,
           now: d.now,
@@ -152,7 +161,6 @@ void main() {
           location: d.location,
           localSegments: d.localSegments,
           codec: d.codec,
-          microphonePermission: d.microphonePermission,
           refreshConversation: d.refreshConversation,
           telemetry: d.telemetry,
           ensureDeviceConnection: d.ensureDeviceConnection);

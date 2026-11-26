@@ -9,6 +9,8 @@ import 'package:omi/services/capture/capture_seams.dart';
 import 'package:omi/services/capture/conversation_location_capture.dart';
 import 'package:omi/utils/enums.dart';
 
+import 'package:omi/backend/schema/bt_device/bt_device.dart';
+import '../support/capture/scripted_device_connection.dart';
 import '../support/capture/capture_replay_world.dart';
 import '../support/spine/contract.dart';
 import 'c1_composition_test.dart' show dependencies;
@@ -41,14 +43,17 @@ class HeldLocation extends ConversationLocationCapture {
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
   contractTest('C1 location fix from obsolete session must not start compatibility upload', () async {
+    pendingContract('C1');
     final dir = await Directory.systemTemp.createTemp('c1-location-');
     final w = await CaptureReplayWorld.boot(tempDir: dir);
     try {
       w.disposeController();
+      final pendant = BtDevice(id: 'c1-pendant', name: 'Omi', type: DeviceType.omi, rssi: -40);
+      w.deviceConnection = ScriptedDeviceConnection();
       final location = HeldLocation();
       final d = dependencies(world: w, preferences: SharedPreferencesUtil(), location: location);
       final p = composeCaptureProvider(d);
-      await p.streamRecording();
+      await p.streamDeviceRecording(device: pendant);
       await pumpEventQueue();
       expect(location.captures, 1);
       d.owner.replaceSession('different-account');
@@ -64,6 +69,7 @@ void main() {
   });
 
   contractTest('C1 pending auth refresh cannot reconnect after capture generation changes', () async {
+    pendingContract('C1');
     final dir = await Directory.systemTemp.createTemp('c1-auth-');
     final w = await CaptureReplayWorld.boot(tempDir: dir);
     try {

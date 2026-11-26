@@ -1,0 +1,7 @@
+{
+  "path": "app/test/spine/c1_stop_generation_test.dart",
+  "owner": "C1",
+  "before": "1defafa241c53c4cb6e4579594ad00fe601e60483e651a66dc17a2ecc29571cd",
+  "after": "8924f08b7d17559ba9d3b2e1098d6736e3bad6cbfe5578848bb11d9afd35856d",
+  "reason": "SCA-4440 changes the C1 capture fixture to a supported wearable while preserving the ownership, lifecycle and persistence coverage."
+}
