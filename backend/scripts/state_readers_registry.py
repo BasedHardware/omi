@@ -5,6 +5,12 @@ payload names, dict spreads, updates and subscript assignments into buffered
 put/patch writes as well as direct Firestore set/update/create payloads.
 Computed keys, helper-returned payloads and external storage/queue contracts
 still require the PR's explicit reader/version review.
+
+Coverage compares the full ``collection.field`` identity, so a new collection
+cannot inherit another collection's reader contract merely by reusing a field
+name such as ``state``. Writes reached through a reference or helper this pass
+cannot resolve to a table keep the weaker field-name check; the PR still has to
+name their readers.
 """
 
 from __future__ import annotations
@@ -19,8 +25,26 @@ BACKEND = Path(__file__).resolve().parents[1]
 REGISTRY = BACKEND / 'deploy/state_readers.yaml'
 
 
+# Logical job-store tables that live outside `{namespace}_<table>`. The store's
+# `_ref` maps these to nested user documents, so the field name alone cannot
+# identify the collection they belong to.
+NESTED_TABLES = {
+    'conversations': 'users/{owner}/conversations',
+    'content': 'users/{owner}/{sync_content_ledger}',
+}
+
+
 def literal(node):
     return node.value if isinstance(node, ast.Constant) and isinstance(node.value, str) else None
+
+
+def top_level(field):
+    """A dotted update path addresses a nested field; registry keys are top-level."""
+    return field.split('.', 1)[0] if field else field
+
+
+def collection_name(table: str) -> str:
+    return NESTED_TABLES.get(table, f'{{namespace}}_{table}')
 
 
 def written_fields(source: str) -> dict[str, set[str]]:
@@ -58,19 +82,19 @@ def written_fields(source: str) -> dict[str, set[str]]:
                     elif isinstance(target, ast.Subscript) and isinstance(target.value, ast.Name):
                         key = literal(target.slice)
                         if key:
-                            mutations[target.value.id].append({key})
+                            mutations[target.value.id].append({top_level(key)})
         for call in calls:
             if isinstance(call.func.value, ast.Name):
                 if call.func.attr == 'update':
                     mutations[call.func.value.id].append(call)
                 elif call.func.attr == 'setdefault' and call.args and literal(call.args[0]):
-                    mutations[call.func.value.id].append({literal(call.args[0])})
+                    mutations[call.func.value.id].append({top_level(literal(call.args[0]))})
 
         def keys(node, seen=frozenset()):
             if isinstance(node, set):
                 return node
             if isinstance(node, ast.Dict):
-                found = {literal(k) for k in node.keys if literal(k)}
+                found = {top_level(literal(k)) for k in node.keys if literal(k)}
                 for key, value in zip(node.keys, node.values):
                     if key is None:
                         found |= keys(value, seen)
@@ -86,7 +110,9 @@ def written_fields(source: str) -> dict[str, set[str]]:
                 if (isinstance(node.func, ast.Name) and node.func.id == 'dict') or (
                     isinstance(node.func, ast.Attribute) and node.func.attr == 'update'
                 ):
-                    return {k.arg for k in node.keywords if k.arg} | set().union(*(keys(a, seen) for a in node.args))
+                    return {top_level(k.arg) for k in node.keywords if k.arg} | set().union(
+                        *(keys(a, seen) for a in node.args)
+                    )
             return set()
 
         persisted = set()
@@ -101,6 +127,16 @@ def written_fields(source: str) -> dict[str, set[str]]:
             if call.func.attr not in {'set', 'update', 'create'}:
                 continue
             receiver = call.func.value
+            if (
+                call.func.attr == 'update'
+                and len(call.args) == 1
+                and isinstance(receiver, ast.Name)
+                and isinstance(call.args[0], ast.Name)
+            ):
+                # `cache.update(other)` merges an in-memory dict. A Firestore
+                # reference update spells its payload out (a dict literal), is
+                # called on a reference attribute, or passes its target too.
+                continue
             # Local in-memory dictionaries are covered at their put() sink.
             # Parameter updates (e.g. retry_policy's job) remain checked.
             if isinstance(receiver, ast.Name) and receiver.id in assignments:
@@ -170,11 +206,26 @@ def validate(registry, roster):
 
 
 def coverage_errors(registry, paths):
-    registered = {name.rsplit('.', 1)[-1] for name in registry['states']}
+    """Require every literal write to name a registered collection.field contract.
+
+    Resolved tables must match the collection identity, so a new collection
+    cannot reuse another collection's entry by writing a common field name.
+    ``?`` marks a reference or helper this pass cannot resolve to a table; those
+    keep the weaker field-name check and still need their reader named in the PR.
+    """
+    states = set(registry['states'])
+    fields = {name.rsplit('.', 1)[-1] for name in states}
     errors = []
     for path in paths:
-        fields = set().union(*written_fields(path.read_text()).values())
-        errors.extend(f'{path.name}: unregistered written field {field}' for field in sorted(fields - registered))
+        for table, written in written_fields(path.read_text()).items():
+            for field in sorted(written):
+                if table == '?':
+                    name, missing = field, field not in fields
+                else:
+                    name = f'{collection_name(table)}.{field}'
+                    missing = name not in states
+                if missing:
+                    errors.append(f'{path.name}: unregistered written field {name}')
     return errors
 
 

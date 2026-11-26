@@ -75,6 +75,45 @@ def test_transient_dict_and_rpc_options_are_not_durable_state():
     assert set().union(*fields.values()) == {'ready_at'}
 
 
+def test_in_memory_dict_merge_is_not_a_durable_state_write():
+    """`cache.update(other)` merges a local dict; only ref/transaction updates persist."""
+    fields = written_fields('''
+def protection(snapshots, loaded):
+    snapshots.update(loaded)
+''')
+    assert fields == {}
+
+
+def test_nested_update_path_registers_its_top_level_field(tmp_path):
+    probe = tmp_path / 'probe.py'
+    probe.write_text("transaction.update(ref, {'owner_scan.position': position})")
+    assert coverage_errors({'states': {'{namespace}_jobs.owner_scan': {}}}, [probe]) == []
+
+
+def test_new_collection_cannot_reuse_another_collections_field(tmp_path):
+    """SCA-1945 round 1: a new collection.state needs its own reader contract."""
+    probe = tmp_path / 'probe.py'
+    probe.write_text("tx.put('new_collection', key, {'state': now})")
+    errors = coverage_errors({'states': {'{namespace}_jobs.state': {}}}, [probe])
+    assert any('{namespace}_new_collection.state' in error for error in errors)
+
+
+def test_nested_table_names_its_user_scoped_collection(tmp_path):
+    probe = tmp_path / 'probe.py'
+    probe.write_text("tx.put('content', key, {'status': value})")
+    errors = coverage_errors({'states': {'{namespace}_content.status': {}}}, [probe])
+    assert any('users/{owner}/{sync_content_ledger}.status' in error for error in errors)
+
+
+def test_projection_clock_and_late_upload_writes_name_their_readers(registry_data):
+    """SCA-1945 round 1: the fields the merge-tree gate named must be registered."""
+    for state in ('{namespace}_control.after', '{namespace}_control.complete', '{namespace}_jobs.late_upload'):
+        entry = registry_data['states'][state]
+        assert entry['readers'], state
+        assert entry['writers'], state
+        assert entry['kill_switch']['service'] in set(entry['readers']) | set(entry['writers']), state
+
+
 def test_payload_names_are_scoped_to_their_function():
     fields = written_fields('''
 def diagnostics():
