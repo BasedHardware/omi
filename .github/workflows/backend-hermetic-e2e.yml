@@ -386,6 +386,190 @@ jobs:
       - name: Run Sync Cloud Tasks stack gauntlet
         run: npm run test:sync-cloud-tasks-stack:emulator
 
+  # Advisory (not in the merge gate, branch protection or any ruleset): the pipeline lab's committed
+  # capture -> Finish -> Home scenarios on a local Firestore emulator and Redis, STT from committed
+  # cassettes (--stt replay), LLM answers from the lab's fake gateway; no secrets, no network peers
+  # beyond loopback.
+  # Runs on every pull request and merge-queue run and always reports, failing closed:
+  # - it skips the scenarios only when the scope job succeeded and said exactly applies=false (no change
+  #   under backend/, package.json, package-lock.json or this workflow); the summary and a notice say so
+  #   ("not run", never "passed"). A failed, cancelled or skipped scope job, or an empty or unexpected
+  #   output, runs the full suite and warns.
+  # - a run passes only when every committed scenario (every scenario/scenarios/*.json, found at run
+  #   time, so a new file is covered without editing this job) ran twice and evaluated its checks
+  #   (`scenario summary --require-committed`); a run that executed nothing is a failure.
+  # The run directory is uploaded so anyone can download it and open
+  # `python -m testing.pipeline_lab scenario view DIR` locally.
+  pipeline-lab-scenarios:
+    name: Pipeline Lab Scenarios
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    needs: scope
+    if: ${{ !cancelled() }}
+    # The lab starts its own Firestore emulator (multi-project, one project per run) and uses this Redis
+    # (one leased database per run; scenario/stack.py), so no apt install is needed.
+    services:
+      redis:
+        image: redis:7
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 2s
+          --health-timeout 2s
+          --health-retries 15
+
+    steps:
+      - name: Decide whether scenarios apply
+        id: applies
+        env:
+          SCOPE_RESULT: ${{ needs.scope.result }}
+          SCOPE_APPLIES: ${{ needs.scope.outputs.applies }}
+        run: |
+          # Fail closed: only a successful scope that answered exactly "false" skips the scenarios.
+          if [[ "$SCOPE_RESULT" == 'success' && "$SCOPE_APPLIES" == 'false' ]]; then
+            reason='no change under backend/, package.json, package-lock.json or this workflow'
+            echo "run=false" >> "$GITHUB_OUTPUT"
+            echo "::notice title=Pipeline lab scenarios not run::${reason}; no scenario executed."
+            echo "**Pipeline lab scenarios: not run** (${reason}). No scenario executed; this is not a pass." \
+              >> "$GITHUB_STEP_SUMMARY"
+          elif [[ "$SCOPE_RESULT" == 'success' && "$SCOPE_APPLIES" == 'true' ]]; then
+            echo "run=true" >> "$GITHUB_OUTPUT"
+          else
+            note="Hermetic scope result '${SCOPE_RESULT}', applies '${SCOPE_APPLIES}': running the full suite."
+            echo "run=true" >> "$GITHUB_OUTPUT"
+            echo "::warning title=Pipeline lab scope unknown::${note}"
+            echo "**Pipeline lab scope unknown.** ${note}" >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Checkout code
+        if: steps.applies.outputs.run == 'true'
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.nightly_main_sha || github.sha }}
+        timeout-minutes: 10
+
+      - name: Set up Python
+        if: steps.applies.outputs.run == 'true'
+        uses: actions/setup-python@v6
+        with:
+          python-version-file: backend/.python-version
+
+      - name: Set up uv
+        if: steps.applies.outputs.run == 'true'
+        uses: astral-sh/setup-uv@ecd24dd710f2fb0dca1693a67af11fc4a5c5ec84
+        with:
+          version: "0.11.13"
+          enable-cache: true
+          cache-dependency-glob: backend/pylock*.toml
+
+      - name: Install backend dependencies
+        if: steps.applies.outputs.run == 'true'
+        working-directory: backend
+        run: |
+          uv venv .venv
+          uv pip sync pylock.toml --python .venv/bin/python
+
+      - name: Set up Node.js for the Firestore emulator
+        if: steps.applies.outputs.run == 'true'
+        uses: actions/setup-node@v7
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      - name: Install pinned Firebase CLI dependencies
+        if: steps.applies.outputs.run == 'true'
+        run: |
+          for attempt in 1 2 3; do
+            if npm ci --ignore-scripts --prefer-offline --no-audit --fund=false; then
+              echo "$PWD/node_modules/.bin" >> "$GITHUB_PATH"
+              exit 0
+            fi
+            if [[ "$attempt" == 3 ]]; then
+              echo "Pinned Firebase CLI dependency install failed after 3 attempts." >&2
+              npm cache verify || true
+              exit 1
+            fi
+            echo "npm ci failed on attempt $attempt/3; verifying cache before bounded retry." >&2
+            npm cache verify
+            sleep "$attempt"
+          done
+
+      - name: Set up Java for the Firestore emulator
+        if: steps.applies.outputs.run == 'true'
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Run pipeline lab scenarios
+        if: steps.applies.outputs.run == 'true'
+        id: scenarios
+        working-directory: backend
+        env:
+          RUN_DIR: ${{ runner.temp }}/pipeline-lab-scenarios
+          OMI_PIPELINE_LAB_REDIS: 127.0.0.1:6379
+        run: |
+          set +e
+          .venv/bin/python -m testing.pipeline_lab scenario run --jobs 4 --repeat 2 --json --stt replay \
+            --keep "$RUN_DIR" > "$RUNNER_TEMP/pipeline-lab-verdict.json"
+          code=$?
+          set -e
+          echo "code=$code" >> "$GITHUB_OUTPUT"
+          coverage=1
+          if [[ -f "$RUN_DIR/verdict.json" ]]; then
+            # Exit 1 unless every committed scenario ran x2 and evaluated its checks (no silent green).
+            set +e
+            .venv/bin/python -m testing.pipeline_lab scenario summary "$RUN_DIR" --require-committed --repeat 2 \
+              >> "$GITHUB_STEP_SUMMARY"
+            coverage=$?
+            set -e
+            echo "Download the pipeline-lab-scenarios artifact and run \`scenario view\` on it." >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "**Pipeline lab scenarios: no verdict** (exit $code)" >> "$GITHUB_STEP_SUMMARY"
+            cat "$RUNNER_TEMP/pipeline-lab-verdict.json" >> "$GITHUB_STEP_SUMMARY" || true
+          fi
+          echo "coverage=$coverage" >> "$GITHUB_OUTPUT"
+
+      - name: Upload the scenario run directory
+        if: ${{ !cancelled() && steps.applies.outputs.run == 'true' }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: pipeline-lab-scenarios
+          path: ${{ runner.temp }}/pipeline-lab-scenarios
+          retention-days: 14
+          if-no-files-found: warn
+
+      # Always runs (unless cancelled) and is the job's verdict: a skip passes only when decided above;
+      # a run passes only with exit 0 and full coverage; anything else (setup failed before a verdict, a
+      # missing output) fails.
+      - name: Report the scenario verdict
+        if: ${{ !cancelled() }}
+        env:
+          RUN: ${{ steps.applies.outputs.run }}
+          CODE: ${{ steps.scenarios.outputs.code }}
+          COVERAGE: ${{ steps.scenarios.outputs.coverage }}
+        run: |
+          if [[ "$RUN" == 'false' ]]; then
+            echo "Pipeline lab scenarios not run: no change in scope (see the notice)."
+            exit 0
+          fi
+          if [[ "$RUN" != 'true' || -z "$CODE" ]]; then
+            echo "Pipeline lab scenarios gave no verdict (run '$RUN', exit '$CODE'): a step before them failed." >&2
+            echo "**Pipeline lab scenarios: no verdict** (a setup step failed before the scenarios ran)." \
+              >> "$GITHUB_STEP_SUMMARY"
+            exit 1
+          fi
+          if [[ "$CODE" != '0' ]]; then
+            echo "Pipeline lab scenarios did not pass (exit $CODE); see the job summary and the artifact." >&2
+            exit 1
+          fi
+          if [[ "$COVERAGE" != '0' ]]; then
+            echo "Pipeline lab scenarios did not cover every committed scenario; see the job summary." >&2
+            exit 1
+          fi
+
   replay-harness-phase0a-gauntlet:
     name: Replay Harness Phase 0A Feasibility (advisory)
     runs-on: ubuntu-latest

@@ -6,10 +6,18 @@ Order inside the environment matters: product modules are imported *before* the
 lab clock is installed (so no model class is defined against the lab datetime
 type), then the vector index, embeddings, capture sinks and executor barrier are
 installed, the start state is seeded, and the ordered driver runs.
+
+The chain runs on the simulated clock by default (``stack/clock.py``, mode ``sim``): product code
+sees the instant the driver set for each conversation, and its monotonic and loop clocks follow
+the replay (``product_monotonic=True``), so the same inputs stamp the same instants however fast the
+host is. The overlay switch the v3 replay uses, ``model_config.v3.clock: "tick"``, restores the
+ticking clock here too (:func:`chain_clock_mode`). ``late_monotonic_reads`` in the result counts
+product monotonic reads past the per-event grace (a place real time reached a product decision).
 """
 
 from __future__ import annotations
 
+import time
 from contextlib import ExitStack
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -41,6 +49,17 @@ PRODUCT_MODULES = (
 )
 
 
+def chain_clock_mode(overlay: Any) -> str:
+    """``sim`` unless the overlay's ``model_config.v3.clock`` asks for ``tick`` (one switch for both replays)."""
+    from testing.pipeline_lab.stack.clock import CLOCK_MODES
+
+    raw = dict((getattr(overlay, 'model_config', None) or {}).get('v3') or {})
+    mode = str(raw.get('clock') or 'sim')
+    if mode not in CLOCK_MODES:
+        raise ValueError(f'model_config.v3.clock must be one of {CLOCK_MODES}, got {mode!r}')
+    return mode
+
+
 @dataclass
 class ChainRunSpec:
     run_dir: Path
@@ -55,6 +74,7 @@ class ChainRunSpec:
     export_workers: int = 4
     day: str | None = None  # YYYY-MM-DD local; when set, the day stages run after the chain
     tz_name: str | None = None
+    clock: str | None = None  # sim | tick; None = chain_clock_mode(overlay)
     production_recap_at: Any = None
 
 
@@ -91,8 +111,19 @@ async def replay_chain(spec: ChainRunSpec) -> dict[str, Any]:
     if spec.vector_index is None:
         raise ValueError('a vector index is required (DESIGN L7); refusing to run with an empty Pinecone stub')
     config = spec.config or LabStackConfig.from_env()
-    clock = LabClock(spec.day_start)
-    result: dict[str, Any] = {}
+    clock = LabClock.for_mode(spec.day_start, spec.clock or chain_clock_mode(spec.overlay))
+    result: dict[str, Any] = {'clock': clock.mode}
+    # Wall seconds per phase (``environment`` includes importing the product modules).
+    timings: dict[str, float] = {}
+    result['timings'] = timings
+    mark = time.monotonic()
+
+    def lap(name: str) -> None:
+        nonlocal mark
+        now = time.monotonic()
+        timings[name] = round(timings.get(name, 0.0) + now - mark, 3)
+        mark = now
+
     with lab_environment(
         config, spec.overlay, run_dir=spec.run_dir, preimport=PRODUCT_MODULES
     ) as env, ExitStack() as stack:
@@ -108,7 +139,8 @@ async def replay_chain(spec: ChainRunSpec) -> dict[str, Any]:
         barrier = ExecutorBarrier()
         result['executors'] = barrier.instrument_product(stack)
         _record_processing_failures(stack, Path(spec.run_dir) / 'processing_errors.log')
-        stack.enter_context(installed_clock(clock))
+        stack.enter_context(installed_clock(clock, product_monotonic=clock.mode == 'sim'))
+        lap('environment')
         if spec.start_state is not None:
             writer = ProductSeedWriter(env.firestore)
             reset = (lambda: reset_lab_state(env.firestore, env.redis, config.uid)) if spec.reset_user else None
@@ -120,6 +152,7 @@ async def replay_chain(spec: ChainRunSpec) -> dict[str, Any]:
                 action_items=spec.start_state.action_items,
             )
             result['vectors'] = apply_with_product(records, config.uid, vector_report).as_dict()
+        lap('seed')
         driver = ChainDriver(
             uid=config.uid,
             store=ProductChainStore(),
@@ -132,6 +165,8 @@ async def replay_chain(spec: ChainRunSpec) -> dict[str, Any]:
         )
         report = await driver.run(plan_chain(spec.conversations))
         result['chain'] = report.as_dict()
+        lap('conversations')
+        timings['conversations_export'] = round(report.export_seconds, 3)
         if spec.day is not None:
             from testing.pipeline_lab.day.run import run_day
             from testing.pipeline_lab.stack.io import read_json
@@ -158,9 +193,12 @@ async def replay_chain(spec: ChainRunSpec) -> dict[str, Any]:
                 'recap': day_payload.get('recap'),
                 'chat_index_ready': day_payload['chat_index'].get('ready'),
             }
+            lap('day')
+        result['late_monotonic_reads'] = clock.late_monotonic_reads
         result['notifications'] = len(sinks.notifications)
         result['egress'] = len(sinks.egress)
         result['network_refusals'] = list(env.network.refusals)
         if getattr(spec.vector_index, 'path', None):
             spec.vector_index.save()
+    lap('teardown')
     return result

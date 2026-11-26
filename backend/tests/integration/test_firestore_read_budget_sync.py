@@ -93,10 +93,11 @@ def _upload(http):
     return job_id
 
 
-def _report_and_check(scenario, delta, *, state=''):
+def _report_and_check(scenario, delta, *, state='', expect_privacy=True):
     privacy = reads_for_caller(delta, PRIVACY_CALLER)
     print(f'{scenario} {state}: total={delta.reads:g}, privacy={privacy:g}')
-    assert delta.reads > 0 and privacy > 0, delta
+    assert delta.reads > 0, delta
+    assert privacy > 0 if expect_privacy else privacy == 0, delta
     assert_read_budget(scenario, delta.reads, delta)
 
 
@@ -112,22 +113,28 @@ def test_sync_upload_accept_and_request_privacy(sync_http):
         _report_and_check(scenario, delta)
 
 
-def test_sync_job_status_poll(sync_http):
+def test_sync_job_status_poll(sync_http, monkeypatch):
     http, store, uid = sync_http
     job_id = _upload(http)
     path = f'/v2/sync-local-files/{job_id}'
     assert http.get(path, headers={'Authorization': ''}).status_code == 401
 
-    def poll(expected):
+    def poll(expected, *, expect_privacy=True):
         before = snapshot_reads()
         response = http.get(path)
         delta = delta_reads(before)
         assert response.status_code == 200, response.text
         assert response.json()['status'] == expected, response.text
-        _report_and_check('sync_job_status_poll', delta, state=expected)
+        _report_and_check('sync_job_status_poll', delta, state=expected, expect_privacy=expect_privacy)
         return response.json()
 
-    poll('queued')
+    poll('queued', expect_privacy=False)
+    with monkeypatch.context() as rollback:
+        rollback.setenv(
+            'FIRESTORE_READ_LEVERS',
+            '{"bpp_generation_memo":100,"bpp_owner_memo_enforce":100,"bpp_status_skip":0}',
+        )
+        poll('queued')
 
     # Seed the durable state that the projection writer leaves when one unit
     # completes. The poll must read its result and re-check the published ID.

@@ -104,15 +104,20 @@ func reviewSpeakerDifferences(diffs *[]difference, py, goRun *observation) {
 	pyDiag, goDiag := measuredResolver(py), measuredResolver(goRun)
 	doc := "users/" + py.OwnerID + "/conversations/" + py.ConversationID + "/speaker_evidence/current"
 	docPath := "/derived_documents/" + escapePointer(doc)
-	if expectsResolverWitness(py) || expectsResolverWitness(goRun) {
-		validateResolverWitness(diffs, "/python", pyDiag)
-		if !provedJobdResolverDeparture(goRun) {
-			validateResolverWitness(diffs, "/go", goDiag)
-		}
-	}
-	var pyPayload, goPayload []byte
 	_, pyStored := py.Derived[doc]
 	_, goStored := goRun.Derived[doc]
+	resolverExpected := expectsResolverWitness(py) || expectsResolverWitness(goRun)
+	if resolverExpected {
+		validateResolverWitness(diffs, "/python", pyDiag)
+	}
+	goDeparted := provedJobdDeparture(goRun)
+	goHasResolver := documentField(goRun, "owner_recognition_diagnostics") != nil ||
+		documentField(goRun, "speaker_resolution") != nil ||
+		(goRun.SpeakerTrace != nil && (len(goRun.SpeakerTrace.Exits) != 0 || len(goRun.SpeakerTrace.ClockSeconds) != 0))
+	if (resolverExpected && !goDeparted) || (goDeparted && goHasResolver) {
+		validateResolverWitness(diffs, "/go", goDiag)
+	}
+	var pyPayload, goPayload []byte
 	// Unsampled shadow processing can build evidence without persisting it.
 	if pyStored || goStored {
 		pyPayload, goPayload = observedSpeakerPayload(py, doc), observedSpeakerPayload(goRun, doc)
@@ -140,10 +145,9 @@ func reviewSpeakerDifferences(diffs *[]difference, py, goRun *observation) {
 
 const resolverPath = "/conversation/owner_recognition_diagnostics"
 
-// The jobd fence and erase fixtures can end with a proved absent row. There is
-// then no Go resolver result to authenticate. The whole-row difference remains.
-func provedJobdResolverDeparture(run *observation) bool {
-	if run.Document != nil || (run.SpeakerTrace != nil && len(run.SpeakerTrace.Exits) != 0) {
+// Use the post-event observation to prove an absent conversation.
+func provedJobdDeparture(run *observation) bool {
+	if run.Document != nil || run.OwnerID != "replay-"+run.ConversationID {
 		return false
 	}
 	job := run.GoEvidence["job"]
@@ -155,8 +159,8 @@ func provedJobdResolverDeparture(run *observation) bool {
 		erasure := run.GoEvidence["erasure"]
 		jobs, jobsOK := integerValue(objectField(erasure, "jobs_for_uid"))
 		tenants, tenantsOK := integerValue(objectField(erasure, "tenants_for_uid"))
-		return run.Status == "completed" && objectField(job, "state") == "completed" &&
-			objectField(erasure, "user_document_absent") == true && jobsOK && tenantsOK && jobs == 0 && tenants == 0
+		return completedErasure(run) && equalReplayValue(erasure, run.Effects["erasure"]) &&
+			objectField(job, "state") == "completed" && jobsOK && tenantsOK && jobs == 0 && tenants == 0
 	default:
 		return false
 	}

@@ -37,16 +37,28 @@ func generatedHomeTokenCounts(cases []replayCase, goSide bool) map[string]int {
 		if goSide {
 			run = c.Go
 		}
-		if run == nil {
-			continue
-		}
-		for _, slot := range homeTokenSlots(run) {
-			if value, ok := slot.value.(string); ok {
-				counts[value]++
-			}
-		}
+		addHomeTokenCounts(counts, run, 1)
 	}
 	return counts
+}
+
+func homeTokenCountsForView(counts map[string]int, post, pre *observation) map[string]int {
+	viewCounts := make(map[string]int, len(counts))
+	maps.Copy(viewCounts, counts)
+	addHomeTokenCounts(viewCounts, post, -1)
+	addHomeTokenCounts(viewCounts, pre, 1)
+	return viewCounts
+}
+
+func addHomeTokenCounts(counts map[string]int, run *observation, delta int) {
+	for _, slot := range homeTokenSlots(run) {
+		if homeTokenPreserved(run, slot) {
+			continue
+		}
+		if value, ok := slot.value.(string); ok {
+			counts[value] += delta
+		}
+	}
 }
 
 func homeTokenSlots(run *observation) []tokenSlot {
@@ -95,6 +107,9 @@ func escapePointer(value string) string {
 func validateHomeTokenEvidence(diffs *[]difference, side string, run *observation, counts map[string]int) {
 	for _, slot := range homeTokenSlots(run) {
 		value, ok := slot.value.(string)
+		if ok && value != "" && homeTokenPreserved(run, slot) {
+			continue
+		}
 		valid := ok && uuid4Hex.MatchString(value)
 		if valid {
 			valid = !seededHomeToken(run, value) && counts[value] == 1 && homeTokenLinkValid(run, slot, value)
@@ -187,10 +202,16 @@ func tokenSlotAt(run *observation, path string) (tokenSlot, bool) {
 }
 
 func homeTokenValid(run *observation, slot tokenSlot, value string, counts map[string]int) bool {
-	if !uuid4Hex.MatchString(value) || seededHomeToken(run, value) || counts[value] != 1 || !homeTokenLinkValid(run, slot, value) {
+	if homeTokenPreserved(run, slot) || !uuid4Hex.MatchString(value) || seededHomeToken(run, value) ||
+		counts[value] != 1 || !homeTokenLinkValid(run, slot, value) {
 		return false
 	}
 	return true
+}
+
+func homeTokenPreserved(run *observation, slot tokenSlot) bool {
+	// The released-memory token has a separate contract that requires a fresh write.
+	return slot.field != "token" && slices.Contains(run.PreservedFields[slot.docPath], slot.field)
 }
 
 func seededHomeToken(run *observation, value string) bool {

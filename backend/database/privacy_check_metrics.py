@@ -42,6 +42,21 @@ REASONS = frozenset(
 )
 CHECKS = Counter('privacy_checks_total', 'Privacy check decisions', ['family', 'mode', 'reason', 'plan_group'])
 CALLS = Counter('privacy_check_calls_total', 'Privacy check calls including invalid inputs', ['family', 'mode'])
+STATUS_SKIP = Counter(
+    'omi_batch_pipeline_privacy_status_skips_total',
+    'Content-free job-status polls that skip the batch privacy check',
+    ['path'],
+)
+PURGE_COMPLETED = Counter(
+    'omi_batch_pipeline_privacy_purge_completed_total',
+    'Existing batch privacy sweeps that reached durable completion',
+    ['scope'],
+)
+PURGE_ROWS = Counter(
+    'omi_batch_pipeline_privacy_purge_rows_total',
+    'Rows handled by completed batch owner privacy sweeps',
+    ['scope'],
+)
 ACCOUNT_AUTHORITY_WRITES = Counter(
     'omi_batch_pipeline_account_privacy_writes_total',
     'Committed account authority writes observed by the Firestore interceptor',

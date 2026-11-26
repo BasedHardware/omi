@@ -345,8 +345,8 @@ def test_account_wipe_drops_a_late_index_document(monkeypatch):
     retirements = []
     monkeypatch.setattr(
         user_data_deletion,
-        'stop_quiet_checks_for_account',
-        lambda uid, **kwargs: retirements.append((uid, kwargs['firestore_client'])),
+        'purge_finalization_jobs',
+        lambda uid, client: retirements.append((uid, client)),
     )
     user_data_deletion.purge_user_subtree(UID, client, lambda *a, **k: None)
     assert retirements == [(UID, client)]
@@ -401,8 +401,8 @@ def test_account_wipe_erases_head_recreated_after_state_collection(monkeypatch, 
     retirements = []
     monkeypatch.setattr(
         user_data_deletion,
-        'stop_quiet_checks_for_account',
-        lambda uid, **kwargs: retirements.append((uid, kwargs['firestore_client'])),
+        'purge_finalization_jobs',
+        lambda uid, client: retirements.append((uid, client)),
     )
     assert user_data_deletion.purge_user_subtree(UID, client, erase)['status'] == 'ok'
     assert retirements == [(UID, client)]

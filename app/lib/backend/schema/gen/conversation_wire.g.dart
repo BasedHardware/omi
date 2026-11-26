@@ -2210,9 +2210,46 @@ class GeneratedSearchConversationsResponse {
   }
 }
 
+class GeneratedFrameProcessingRange {
+  final String captureRoot;
+  final int clockEpoch;
+  final int end;
+  final int start;
+  final String status;
+
+  const GeneratedFrameProcessingRange({
+    required this.captureRoot,
+    required this.clockEpoch,
+    required this.end,
+    required this.start,
+    required this.status,
+  });
+
+  factory GeneratedFrameProcessingRange.fromJson(Map<String, dynamic> json) {
+    return GeneratedFrameProcessingRange(
+      captureRoot: _required(_readFieldValue<String>(_readField(json, const ["capture_root"]), "capture_root", _readString, requiredField: true, nullable: false), "capture_root"),
+      clockEpoch: _required(_readFieldValue<int>(_readField(json, const ["clock_epoch"]), "clock_epoch", _readInt, requiredField: true, nullable: false), "clock_epoch"),
+      end: _required(_readFieldValue<int>(_readField(json, const ["end"]), "end", _readInt, requiredField: true, nullable: false), "end"),
+      start: _required(_readFieldValue<int>(_readField(json, const ["start"]), "start", _readInt, requiredField: true, nullable: false), "start"),
+      status: _required(_readFieldValue<String>(_readField(json, const ["status"]), "status", _readString, requiredField: true, nullable: false), "status"),
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'capture_root': captureRoot,
+      'clock_epoch': clockEpoch,
+      'end': end,
+      'start': start,
+      'status': status,
+    };
+  }
+}
+
 class GeneratedSyncLocalFilesResultResponse {
   final List<String>? errors;
   final int failedSegments;
+  final List<GeneratedFrameProcessingRange>? frameOutcomesV1;
   final bool? heldAudio;
   final List<String>? newMemories;
   final int totalSegments;
@@ -2221,6 +2258,7 @@ class GeneratedSyncLocalFilesResultResponse {
   const GeneratedSyncLocalFilesResultResponse({
     this.errors,
     this.failedSegments = 0,
+    this.frameOutcomesV1,
     this.heldAudio,
     this.newMemories,
     this.totalSegments = 0,
@@ -2231,6 +2269,7 @@ class GeneratedSyncLocalFilesResultResponse {
     return GeneratedSyncLocalFilesResultResponse(
       errors: _readFieldValue<List<String>>(_readField(json, const ["errors"]), "errors", _readStringList, requiredField: false, nullable: true),
       failedSegments: _required(_readFieldValue<int>(_readField(json, const ["failed_segments"]), "failed_segments", _readInt, requiredField: false, nullable: false, defaultValue: 0), "failed_segments"),
+      frameOutcomesV1: _readFieldValue<List<GeneratedFrameProcessingRange>>(_readField(json, const ["frame_outcomes_v1"]), "frame_outcomes_v1", (value) => _readObjectList(value, GeneratedFrameProcessingRange.fromJson), requiredField: false, nullable: true),
       heldAudio: _readFieldValue<bool>(_readField(json, const ["held_audio"]), "held_audio", _readBool, requiredField: false, nullable: true),
       newMemories: _readFieldValue<List<String>>(_readField(json, const ["new_memories"]), "new_memories", _readStringList, requiredField: false, nullable: true),
       totalSegments: _required(_readFieldValue<int>(_readField(json, const ["total_segments"]), "total_segments", _readInt, requiredField: false, nullable: false, defaultValue: 0), "total_segments"),
@@ -2242,6 +2281,7 @@ class GeneratedSyncLocalFilesResultResponse {
     return {
       'errors': errors,
       'failed_segments': failedSegments,
+      'frame_outcomes_v1': frameOutcomesV1?.map((value) => value.toJson()).toList(),
       'held_audio': heldAudio,
       'new_memories': newMemories,
       'total_segments': totalSegments,

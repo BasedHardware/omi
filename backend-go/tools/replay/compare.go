@@ -38,6 +38,7 @@ type speakerTrace struct {
 type observation struct {
 	ObservedNotesOutput            string                     `json:"observed_notes_output,omitempty"`
 	SpeakerTrace                   *speakerTrace              `json:"speaker_trace,omitempty"`
+	BeforeErasure                  *beforeErasure             `json:"before_erasure,omitempty"`
 	OwnerID                        string                     `json:"owner_id"`
 	ConversationID                 string                     `json:"conversation_id"`
 	SeededTokenHashes              []string                   `json:"seeded_token_hashes"`
@@ -96,18 +97,20 @@ type operationSourceRow struct {
 }
 
 type operationRow struct {
-	Case                  string               `json:"case"`
-	PythonReads           int64                `json:"python_reads"`
-	PythonWrites          int64                `json:"python_writes"`
-	PythonDeletes         int64                `json:"python_deletes"`
-	GoReads               int64                `json:"go_reads"`
-	GoWrites              int64                `json:"go_writes"`
-	GoDeletes             int64                `json:"go_deletes"`
-	PythonOperations      int64                `json:"python_operations"`
-	GoOperations          int64                `json:"go_operations"`
-	Difference            int64                `json:"difference"`
-	Label                 string               `json:"label,omitempty"`
-	GoTopOperationSources []operationSourceRow `json:"go_top_operation_sources"`
+	Case                   string               `json:"case"`
+	PythonReads            int64                `json:"python_reads"`
+	PythonWrites           int64                `json:"python_writes"`
+	PythonDeletes          int64                `json:"python_deletes"`
+	PythonFailedCommitRPCs int64                `json:"python_failed_commit_rpcs"`
+	GoReads                int64                `json:"go_reads"`
+	GoWrites               int64                `json:"go_writes"`
+	GoDeletes              int64                `json:"go_deletes"`
+	GoFailedCommitRPCs     int64                `json:"go_failed_commit_rpcs"`
+	PythonOperations       int64                `json:"python_operations"`
+	GoOperations           int64                `json:"go_operations"`
+	Difference             int64                `json:"difference"`
+	Label                  string               `json:"label,omitempty"`
+	GoTopOperationSources  []operationSourceRow `json:"go_top_operation_sources"`
 }
 
 type batchPrivacySnapshot struct {
@@ -128,6 +131,7 @@ type tokenUsage struct {
 
 type firestoreOperations struct {
 	RPCCalls                    int64 `json:"rpc_calls"`
+	FailedCommitRPCs            int64 `json:"failed_commit_rpcs"`
 	DocumentReads               int64 `json:"document_reads"`
 	QueryDocuments              int64 `json:"query_documents"`
 	QueryRequests               int64 `json:"query_requests"`
@@ -311,6 +315,7 @@ func operationTableRow(c replayCase) operationRow {
 		row.PythonReads = operations.DocumentReads + operations.QueryDocuments
 		row.PythonWrites = operations.Writes
 		row.PythonDeletes = operations.Deletes
+		row.PythonFailedCommitRPCs = operations.FailedCommitRPCs
 		row.PythonOperations = operations.Total()
 	}
 	if c.Go != nil {
@@ -318,6 +323,7 @@ func operationTableRow(c replayCase) operationRow {
 		row.GoReads = operations.DocumentReads + operations.QueryDocuments
 		row.GoWrites = operations.Writes
 		row.GoDeletes = operations.Deletes
+		row.GoFailedCommitRPCs = operations.FailedCommitRPCs
 		row.GoOperations = operations.Total()
 		for path, counts := range c.Go.FirestoreOperationSources {
 			total := counts.Reads + counts.Writes + counts.Deletes

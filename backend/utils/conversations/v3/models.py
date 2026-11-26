@@ -4,10 +4,14 @@ import asyncio
 import json
 from contextlib import contextmanager
 from contextvars import ContextVar
-from typing import Callable
+from time import monotonic
+from typing import Awaitable, Callable, TypeVar
 
+from google.cloud import firestore
+from database.account_deletion_marker import account_deletion_document, account_deletion_firestore_client
+from database.account_deletion_policy import account_deletion_marker_blocks_access
 from langchain_core.callbacks import BaseCallbackHandler
-from openai import DefaultAsyncHttpxClient
+from openai import APITimeoutError, DefaultAsyncHttpxClient
 
 from utils.llm.gateway_client import feature_auto_lane_id
 from utils.llm.usage_tracker import track_usage
@@ -16,6 +20,10 @@ from utils.conversations.v3 import metrics
 from utils.summary_quality import valid_title
 
 OUTLINE_DEADLINE_SECONDS = 60
+# Leave room to commit even under Firestore's 20-second transaction lock deadline.
+BACKFILL_NOTES_BUDGET_SECONDS = 12
+BACKFILL_NOTES_REQUEST_TIMEOUT_SECONDS = 8
+_backfill_notes_deadline: ContextVar[float | None] = ContextVar('backfill_notes_deadline', default=None)
 
 
 def get_or_create_omi_gateway_llm(*args, **kwargs):
@@ -29,7 +37,16 @@ def get_or_create_omi_gateway_llm(*args, **kwargs):
     return gateway_llm(*args, **kwargs)
 
 
-_notes_mode: ContextVar[tuple[str, bool, Callable[[str], None] | None] | None] = ContextVar(
+class BackfillNotesDeletionBlocked(RuntimeError):
+    """Account deletion won admission to the notes model."""
+
+
+class BackfillNotesAdmissionTimeout(TimeoutError):
+    """Backfill notes exhausted their model admission budget."""
+
+
+_T = TypeVar('_T')
+_notes_mode: ContextVar[tuple[str, bool, Callable[[str], None] | None, bool] | None] = ContextVar(
     'v3_notes_mode', default=None
 )
 
@@ -64,8 +81,8 @@ class SectionEvents(BaseCallbackHandler):
 
 
 @contextmanager
-def notes_mode(uid, *, foreground=False, emit=None):
-    token = _notes_mode.set((uid, foreground, emit))
+def notes_mode(uid, *, foreground=False, emit=None, backfilled=False):
+    token = _notes_mode.set((uid, foreground, emit, backfilled))
     try:
         yield
     finally:
@@ -76,14 +93,64 @@ def active():
     return _notes_mode.get() is not None
 
 
+def dispatch_notes_model(invoke: Callable[[], _T]) -> _T:
+    mode = _notes_mode.get()
+    if mode is None or not mode[3]:
+        return invoke()
+
+    uid = mode[0]
+    client = account_deletion_firestore_client()
+    marker = account_deletion_document(uid, firestore_client=client)
+    # The server transaction locks the same document the deletion intent writes.
+    # Start the model call while that admission lock is held. Never replay a
+    # paid invocation if the transaction later times out or loses contention.
+    admission_deadline = monotonic() + 5
+
+    @firestore.transactional
+    def dispatch(tx):
+        snapshot = marker.get(transaction=tx, timeout=3, retry=None)
+        if account_deletion_marker_blocks_access(
+            marker_exists=snapshot.exists, raw_status=(snapshot.to_dict() or {}).get('wipe_status')
+        ):
+            raise BackfillNotesDeletionBlocked
+        if monotonic() >= admission_deadline:
+            raise BackfillNotesAdmissionTimeout('backfill_notes_admission_expired')
+        deadline = monotonic() + BACKFILL_NOTES_BUDGET_SECONDS
+        token = _backfill_notes_deadline.set(deadline)
+        try:
+            result = invoke()
+            if monotonic() >= deadline:
+                raise BackfillNotesAdmissionTimeout('backfill_notes_budget_exhausted')
+            return result
+        finally:
+            _backfill_notes_deadline.reset(token)
+
+    return dispatch(client.transaction(max_attempts=1))
+
+
+async def within_notes_admission(invoke: Callable[[], Awaitable[_T]]) -> _T:
+    """Cancel provider I/O when the shared admission budget expires."""
+    deadline = _backfill_notes_deadline.get()
+    if deadline is None:
+        return await invoke()
+    remaining = deadline - monotonic()
+    if remaining <= 0:
+        raise BackfillNotesAdmissionTimeout('backfill_notes_budget_exhausted')
+    try:
+        async with asyncio.timeout(remaining):
+            return await invoke()
+    except (TimeoutError, APITimeoutError) as error:
+        raise BackfillNotesAdmissionTimeout('backfill_notes_budget_exhausted') from error
+
+
 def notes_client():
     mode = _notes_mode.get()
     if mode is None:
         return None
-    uid, foreground, emit = mode
+    uid, foreground, emit, backfilled = mode
     feature = 'conversation_v3_summary_open' if foreground else 'conversation_v3_summary'
     require_current_generated_compute(feature, uid=uid, provider='openai', allow_byok=False)
-    options = {'request_timeout': 90, 'max_retries': 0}
+    options = {'request_timeout': BACKFILL_NOTES_REQUEST_TIMEOUT_SECONDS if backfilled else 90, 'max_retries': 0}
     model = get_or_create_omi_gateway_llm(
         feature_auto_lane_id(feature), streaming=bool(emit), options=options, feature=feature
     )
@@ -189,17 +256,28 @@ def short_tasks(uid, conversation):
         ),
         ('human', transcript),
     ]
+    mode = _notes_mode.get()
+    backfilled = bool(mode and mode[3])
     with track_usage(uid, 'conv_action_items'):
         model = get_or_create_omi_gateway_llm(
             feature_auto_lane_id('conv_action_items'),
-            options={'request_timeout': 30, 'max_retries': 0},
+            options={'request_timeout': BACKFILL_NOTES_REQUEST_TIMEOUT_SECONDS if backfilled else 30, 'max_retries': 0},
             feature='conv_action_items',
         )
         metrics.MODEL_CALLS.labels('short_tasks').inc()
         # No response_format: the conv_action_items gateway lane declares no structured output and
         # rejects json_object with 400 capability_not_supported, which failed every short v3 tile
         # (2026-11-18). The prompt asks for JSON; _action_items parses it defensively.
-        response = model.bind(reasoning_effort='low').invoke(messages)
+        if backfilled:
+            from utils.llm.shaped_notes_transport import isolated_notes_model
+
+            async def invoke():
+                async with isolated_notes_model(model) as isolated_model:
+                    return await isolated_model.bind(reasoning_effort='low').ainvoke(messages)
+
+            response = dispatch_notes_model(lambda: asyncio.run(within_notes_admission(invoke)))
+        else:
+            response = model.bind(reasoning_effort='low').invoke(messages)
     if not isinstance(response.content, str):
         raise ValueError('short_tasks_non_text_response')
     structured = conversation.structured.model_copy(deep=True)

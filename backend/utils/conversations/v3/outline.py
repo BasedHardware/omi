@@ -50,6 +50,9 @@ Return one JSON object: {"conversations": [ ... ]} where each conversation has
 Write in English unless the speech is mostly in another language."""
 
 SILENCE = timedelta(minutes=5)
+# How far a recording's end mark may trail the owner-level End it belongs to (reliability experiment
+# end_open_conversation): the phone's clock stamps the End, the server's the recording.
+END_CLOCK_SKEW = timedelta(seconds=10)
 # A silence gap longer than this default (CONVERSATIONS_V3_SILENCE_GAP_SECONDS) cuts at sit-downs: the
 # outline sees pauses as marker lines and finds sit-downs instead of treating silence as a hard boundary.
 GAP_MARK = timedelta(minutes=2)
@@ -195,10 +198,20 @@ def stretches(
     lock_delay=SILENCE,
     settle_on_landing=False,
     max_window=timedelta(0),
+    manual_cuts=(),
     continuity=False,
 ):
-    """``continuity`` (``CONVERSATIONS_V3_CAPTURE_CONTINUITY``): a stream gap inside one capture origin
-    is not silence, and a manual-end cut waits for a pending transcript (``_held_cuts``)."""
+    """``manual_cuts`` are owner-level end instants (experiment ``end_open_conversation``); empty is the baseline.
+
+    A recording's own manual end always cuts. An owner-level cut ends a stretch only while that stretch
+    is still open at the cut (its last speech is less than ``silence_gap`` before it): a cut that arrives
+    after the silence boundary already ended the stretch changes nothing.
+
+    ``continuity`` (``CONVERSATIONS_V3_CAPTURE_CONTINUITY``): a stream gap inside one capture origin
+    is not silence, and a manual-end cut waits for a pending transcript (``_held_cuts``). An End that
+    stored an owner-level cut does not wait: the cut applies at the End time at once, and speech from
+    before it that lands later joins the ended conversation (``planner.Ownership``).
+    """
     lines = []
     seen = []
     for row in sorted(
@@ -251,10 +264,49 @@ def stretches(
             )
     lines.sort(key=lambda line: (line['start'], line['conversation_id']))
     groups = []
+    owner_cuts = {utc(at) for at in manual_cuts}
+    recording_cuts = {utc(r['finished_at']) for r in members if r.get('v3_manual_end') and r.get('finished_at')}
+    # An End also marks the recording it finalized, and that mark sits at the recording's last speech,
+    # which can be minutes before the End when later speech travelled in other recordings. With an
+    # owner-level cut for the same End, the End time is the cut: the recording's own mark must not cut the
+    # stretch a second time. The mark an owner cut answers is the latest recording-level one since the
+    # previous owner cut (clocks may differ by a few seconds).
+    answered = {}
+    earlier = None
+    for owner_cut in sorted(owner_cuts):
+        answering = [
+            r
+            for r in recording_cuts - owner_cuts
+            if r <= owner_cut + END_CLOCK_SKEW and (earlier is None or r > earlier + END_CLOCK_SKEW)
+        ]
+        if answering:
+            answered[max(answering)] = owner_cut
+        earlier = owner_cut
+
+    def ends(cut, group, following=None):
+        if cut in owner_cuts:
+            return cut - group['end'] < silence_gap
+        owner_cut = answered.get(cut)
+        if owner_cut is not None and cut > owner_cut:
+            # Stamped just after its End on another clock: that End has already cut.
+            return False
+        if (
+            owner_cut is not None
+            and following is not None
+            and following['start'] < owner_cut
+            and following['start'] - group['end'] < silence_gap
+        ):
+            # The stretch goes on to the End that finalized this recording: that End cuts it, not this mark.
+            return False
+        return True
+
     rows = {row['id']: row for row in members} if continuity else {}
     for row in members:
         row.pop(HOLD_UNTIL, None)
     held = _held_cuts(members, lines, now, silence_gap, continuity)
+    # Experiment end_open_conversation: the End behind an owner-level cut is applied now, not held for a
+    # pending transcript. Its late speech joins the ended conversation instead of delaying its notes.
+    held = {cut: wait for cut, wait in held.items() if cut not in answered}
     hold = None
     marks = lines
     if held:
@@ -279,7 +331,7 @@ def stretches(
     cuts = iter(
         sorted(
             cut
-            for cut in (utc(r['finished_at']) for r in members if r.get('v3_manual_end') and r.get('finished_at'))
+            for cut in (recording_cuts | owner_cuts if owner_cuts else recording_cuts)
             if hold is None or cut < hold[0]
         )
     )
@@ -288,7 +340,7 @@ def stretches(
         previous = groups[-1] if groups else None
         # A segment belongs to the side on which it starts, even if it crosses the cut.
         while cut is not None and cut <= mark['start']:
-            if previous and previous['first'] < cut:
+            if previous and previous['first'] < cut and ends(cut, previous, mark):
                 previous['manual_end'] = True
             cut = next(cuts, None)
         silence = previous is None
@@ -338,8 +390,11 @@ def stretches(
     groups = [group for group in groups if group['lines']]
     for group in groups:
         group['end'] = max(line['end'] for line in group['lines'])
-    if groups and cut is not None and cut <= now:
-        groups[-1]['manual_end'] = True
+    while groups and cut is not None and cut <= now:
+        if ends(cut, groups[-1]):
+            groups[-1]['manual_end'] = True
+            break
+        cut = next(cuts, None)
     # The window the held cut will close: the last one, when the awaited speech joins it.
     closing = groups[-1] if hold is not None and groups and groups[-1].pop('awaits', False) else None
     if hold is not None and closing is not None and not closing['manual_end']:
@@ -357,7 +412,7 @@ def stretches(
         continues = not later and any(
             r.get('_v3_page_continues') and r['id'] == group['lines'][-1]['conversation_id'] for r in members
         )
-        # Under custom timing, lock age counts from the later of the last speech and when it landed:
+        # When settlement uses the landing clock, age counts from the later of speech and landing:
         # an offline batch whose speech is already old must not lock the moment it arrives, or each
         # later batch appends a fresh card behind it.
         rids = group_rids(group)

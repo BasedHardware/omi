@@ -164,9 +164,10 @@ BODY_DIGEST = {
     'utils.support.holds._held_deferred_deletes': '612a521045553ef1b02d1eb81aac37a3c63a75c598ce5e99484c007c7c87e878',
     'utils.support.retention._select_conversations': 'f36920350f4e3a557e0e474e8801ae414c21ce67203e0627f7a39ba820243d16',
     'database.conversations_v3_live._recent_window_query': '6f2c323bfa8df890362c6bdc4796182a70e4c704376bcb4944358560b12edc75',
-    'database.conversations_v3.commit_projection': '69bf5cafb3178ba2544c2f40dba701fa3cbc91465372985d5948062608ccd8c4',
+    'database.conversations_v3._oldest_pending': 'e2da208a3dcbae7d7c7c59335883b422e27dc71c9cfae51568883aa452bcfc57',
+    'database.conversations_v3.commit_projection': '4f070f852f6b023db0d1299b647cc91afc723aa976922d916e8ffa3adf77f1e0',
     'database.batch_pipeline_conversation_purge_scans._claim': 'faa5dabcf01dc5bd377b2e14a149282aa2db93b2872cdc97a3b756157701532c',
-    'database.batch_pipeline_conversation_purge_scans.run_job': '1916be25d4e9d5b8a350a665ae0fce626ccc56f68fc66107e8f4b0bb1243b00e',
+    'database.batch_pipeline_conversation_purge_scans.run_job': 'fe5d30b77da198a7e0dc188115c8906fb6446925079a4e96339d36675a55faeb',
     'database.batch_pipeline_store.FirestoreStore.protected_retries': 'b55d2960c94057cb8df9b9cdd2e7728b6af63728bc0a2cb6f5bd333efed443a2',
     'database.batch_pipeline_store.FirestoreTransaction.protected_ready': 'c722019b927498cd74c6d5c4d3e52506c4e1318ef5ae74da4ddd17af978ae564',
     'database.batch_census_export._filtered': '6bac588e6afae4b032a876bd6944c4e0a6ec9e5f6ef9a37a0a744ddc940cf4e7',
@@ -177,7 +178,7 @@ BODY_DIGEST = {
     'database.conversation_batch_purge_jobs.RunProgress.segments': '8abb8d7ed330ab91cc91af8b792809121c06605ff0180e0c90da4b66d6e3ef45',
     'database.conversation_batch_purge_jobs._drop_segment_records': '2db3123e6e11d177d434326668969249a7fd4e0aade9788d045056fbdefe8c9d',
     'database.conversation_batch_purge_jobs._owes_segments': '5945da3db3e539efafe6dbc95560280683ea863b77a8e7e720ee3c2902b59c68',
-    'database.conversation_batch_purge_jobs.run_job': '2c963aa7f8692928c6d1892b87992ea3b369bbb9547b71b48a4ddb21c35cd09b',
+    'database.conversation_batch_purge_jobs.run_job': '6ce31f57dbe5d612325f14c71473b364d3c31515c65907835a572b5132536965',
     'database.batch_pipeline_store.promote_record_recoveries': 'ce853ebe262f00a49241f670f28e23dfa0951d37cda42e1da34a966899c1ecd1',
     'database.record_custody_receipts.prune': 'a01ec56fc4132450ccd96a0eb11f59bfbdfdb8e7760e8c8d565f11ccd3af8e23',
     'database.action_items.FirestoreActionItems.iter_all': '1bc86d38c0b932c87e130090fde9d1105a6ca0df82c636b7dca0e2fd24c9d6d3',
@@ -248,7 +249,8 @@ BODY_DIGEST = {
     # Re-reviewed 2026-11-04: atomic blocked_byok_at metadata only; query ownership is unchanged.
     # Re-reviewed: the early user-finish admission judges the snapshot already held; no collection query
     # (cohort mode adds one cached point read of the owner's rollout_cohorts document).
-    'database.conversation_finalization_jobs._create_or_get_finalization_intent_txn': 'dc815b20539ecf62552bd9de5e3f2c3842ecc53cb7a7df04a2edb87dd9ff2292',
+    'database.user_data_deletion.purge_user_subtree': '9bb7456a9bfd5d6f77f15cd53f67b717d7c0b797ee5338394d0d8ec51b19d10d',
+    'database.conversation_finalization_jobs._create_or_get_finalization_intent_txn': '9fad8023fbdcc5a82898573d30afabcf7829ed2b7a992e3c28d3753fa2154136',
     'database.durable_queue_age._publish_queue_ages': '58e66cfc32f39bdc2e9b1e6c805d18599c1ff14be8dbcff68eadc23506656d9b',
     'database.firestore_query_types.FirestoreQuerySpec.build': '2c26a157a8e87be2bcfef668e3bd5cdc0a9c0d96e0b56bada98c30741c8be01a',
     # Re-reviewed: positional .where converted to filter=FieldFilter — same field/op/value shape.
@@ -519,6 +521,23 @@ _add(
         'database.quiet_check_retirement.stop_quiet_checks_for_account',
         base={'uid': UID},
         neutrals={'page_size': _PAGE},
+    )
+)
+
+_add(
+    DriverEntry(
+        'database.user_data_deletion.purge_finalization_jobs',
+        base={'uid': UID},
+    )
+)
+
+_add(
+    CoveredByEntry(
+        'database.user_data_deletion.purge_user_subtree',
+        covered_by=('database.user_data_deletion.purge_finalization_jobs',),
+        reason='delegates the finalization jobs query to purge_finalization_jobs',
+        expect_observed=False,
+        body_digest=BODY_DIGEST['database.user_data_deletion.purge_user_subtree'],
     )
 )
 
@@ -2458,6 +2477,12 @@ _add(DriverEntry('database.memories.get_memory_ids', base={'uid': UID}))
 _add(DriverEntry('database.memories.get_memory_ids_for_conversation', base={'uid': UID, 'conversation_id': 'conv-1'}))
 _add(
     DriverEntry(
+        'database.memories.linked_conversation_ids',
+        base={'uid': UID, 'conversation_ids': {'conv-1'}, 'transaction': ref_transaction()},
+    )
+)
+_add(
+    DriverEntry(
         'database.memories.get_non_filtered_memories', base={'uid': UID}, neutrals={'limit': _LIMIT, 'offset': _OFFSET}
     )
 )
@@ -3687,18 +3712,32 @@ for entry in (
         covered_by=(
             'database.conversations_v3_live.recent_windows',
             'database.conversations_v3_live.request_recording_finish',
+            'database.conversations_v3_live.request_named_finish',
         ),
         reason='Builds the indexed filters; live lookup and Finish execute the query with their own field masks.',
         expect_observed=False,
         body_digest=BODY_DIGEST['database.conversations_v3_live._recent_window_query'],
     ),
     CoveredByEntry(
+        'database.conversations_v3._oldest_pending',
+        covered_by=('database.conversations_v3.load', 'database.conversations_v3.clear_terminal_pending'),
+        reason='Builds the indexed oldest pending page; both callers execute it.',
+        expect_observed=False,
+        body_digest=BODY_DIGEST['database.conversations_v3._oldest_pending'],
+    ),
+    CoveredByEntry(
         'database.conversations_v3.commit_projection',
-        covered_by=('database.conversations_v3.merge_donors_have_tasks',),
+        covered_by=('database.conversations_v3.merge_donors_have_tasks', 'database.memories.linked_conversation_ids'),
         reason='Refinement and live repair use the same bounded donor-task query and write point markers with donor redirects. '
+        'Backfill uses that task query and scans projected memory links before writing a removal marker and deleting. '
         'The WAL custody guard uses the existing observation rows before donor-task queries or projection writes. '
         'The Home index bit is derived from the flags already present in those writes. '
-        'Write elision uses only the projection snapshots already read under revision fences.',
+        'Write elision uses only the projection snapshots already read under revision fences. '
+        'The collision record and commit meter add no query: on a lock failure the record re-reads by reference '
+        'the documents the commit had already loaded. Re-reviewed 2026-11-26: discarded sources clear '
+        'their pending marker using the same fenced point update as deleted sources. '
+        'Linked backfill replacements use the existing task and memory query results and loaded claims. '
+        'Unlocked paging carries unvisited IDs and the cursor into the existing builder lease write; no new query.',
         expect_observed=False,
         body_digest=BODY_DIGEST['database.conversations_v3.commit_projection'],
     ),

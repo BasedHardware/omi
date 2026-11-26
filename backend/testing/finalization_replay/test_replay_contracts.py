@@ -29,6 +29,7 @@ from testing.finalization_replay.metrics import (
 from testing.finalization_replay.state import (
     CaseState,
     episode_attach_memo_failure_reason,
+    fenced_sync_attach_memo_check,
     episode_attach_memo_valid,
     ordinary_sync_attach_memo_failure_reason,
 )
@@ -199,6 +200,25 @@ class ReplayContractTests(unittest.TestCase):
         self.assertIsNone(differences[-1]['label'])
         self.assertEqual(enriched['diagnostic']['cohort_gate'], 'closed')
 
+    def test_failed_commits_survive_report_enrichment_and_stay_outside_r7(self):
+        report = {
+            'cases': [
+                {
+                    'name': 'retry',
+                    'cost': {
+                        'python': {'firestore_operations': {'document_reads': 2, 'failed_commit_rpcs': 1}},
+                        'go': {'firestore_operations': {'document_reads': 2, 'failed_commit_rpcs': 3}},
+                    },
+                }
+            ],
+        }
+        for _ in range(2):
+            report = enrich_ordinary_sync_report(report)
+            row = report['operation_table'][0]
+            self.assertEqual((row['python_failed_commit_rpcs'], row['go_failed_commit_rpcs']), (1, 3))
+            self.assertEqual((row['python_operations'], row['go_operations']), (2, 2))
+            self.assertEqual(report['diagnostic']['r7_operation_budget']['status'], 'pass')
+
     def test_missing_profile_or_task_write_proof_is_counted_as_go_gap(self):
         report = {
             'commit_sha': 'fixture',
@@ -348,6 +368,65 @@ class ReplayContractTests(unittest.TestCase):
                 content_key_fn=compute_key,
             )
         )
+
+    def test_worker_fence_requires_a_bound_intake_memo_and_an_unchanged_link(self):
+        conversation = {'episode_id': 'episode'}
+        link = {
+            'episode_id': 'episode',
+            'attach_owner_id': 'episode',
+            'attach_revision': 'v2:intake',
+            'attach_completed': 'v2:intake',
+        }
+
+        def check(before, after, row=conversation, intake_key='v2:intake'):
+            return fenced_sync_attach_memo_check('owner', 'conversation', row, before, after, intake_key=intake_key)
+
+        self.assertEqual(check(link, dict(link)), (True, ''))
+        self.assertEqual(check(None, None), (True, 'missing_link'))
+        empty_memo = {'episode_id': 'episode'}
+        self.assertEqual(check(empty_memo, empty_memo), (True, 'missing_memo_fields'))
+        self.assertEqual(check(empty_memo, empty_memo, intake_key=None), (False, ''))
+        self.assertEqual(check(None, None, row={}), (False, ''))
+        wrong_owner = dict(link, attach_owner_id='other')
+        self.assertEqual(check(wrong_owner, wrong_owner), (True, 'owner_binding_mismatch'))
+        self.assertEqual(check(link, link, {'episode_id': 'other'}), (True, 'owner_binding_mismatch'))
+        wrong_key = dict(link, attach_revision='v2:stale', attach_completed='v2:stale')
+        self.assertEqual(check(wrong_key, wrong_key), (True, 'completed_key_mismatch'))
+        self.assertEqual(
+            check(link, dict(link, attach_finalized='v2:intake')), (True, 'link_changed_after_worker_delete')
+        )
+        self.assertEqual(check(link, None), (True, 'link_changed_after_worker_delete'))
+        self.assertEqual(check(link, link, None), (False, 'missing_conversation_before_worker_delete'))
+
+    def test_fenced_observation_reports_required_memo_when_both_snapshots_lack_it(self):
+        link_path = 'users/owner/episode_links/conversation'
+        for side in ('python', 'go'):
+            for link, reason in ((None, 'missing_link'), ({'episode_id': 'episode'}, 'missing_memo_fields')):
+                with self.subTest(side=side, reason=reason):
+                    documents = {} if link is None else {link_path: link}
+                    state = SimpleNamespace(
+                        uid='owner',
+                        cid='conversation',
+                        replay_side=side,
+                        home_dirty_receipt_path=link_path,
+                        fence_intake_memo_key='v2:intake',
+                        memo_before_worker_delete=({'episode_id': 'episode'}, link),
+                        conversation=SimpleNamespace(get=lambda: SimpleNamespace(to_dict=lambda: None)),
+                        documents=lambda: documents,
+                        started_at=datetime.now(timezone.utc),
+                        initial_updated_at=None,
+                        queue_fanout_key=None,
+                        admitted=None,
+                        provider_calls=[],
+                        go_evidence={},
+                        effects={},
+                        webhooks=[],
+                        cost=lambda: {},
+                    )
+                    observation = CaseState.observe(state, 'fenced', documents, load_memo_bindings=lambda: None)
+                    self.assertTrue(observation['episode_attach_memo_expected'])
+                    self.assertFalse(observation['episode_attach_memo_valid'])
+                    self.assertEqual(observation['episode_attach_memo_failure_reason'], reason)
 
     def test_ordinary_sync_memo_requires_exact_go_key_and_proven_python_cache(self):
         path = 'users/owner/episode_links/conversation'

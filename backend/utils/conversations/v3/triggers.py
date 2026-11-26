@@ -7,6 +7,7 @@ import time
 from datetime import datetime, timezone
 from urllib.parse import urlsplit
 
+from config import reliability_experiments
 from config.conversations_v3 import SPEECH_LANDED_FIELD, conversations_v3_enabled
 from database import conversations_v3 as store
 from database.helpers import set_data_protection_level
@@ -15,6 +16,9 @@ from utils.conversations.v3 import metrics
 from utils.observability.fallback import record_fallback
 
 logger = logging.getLogger(__name__)
+
+# Reliability experiment instant_live_text: a refused wake is followed up at the end of a slot this long.
+FOLLOW_UP_SLOT_SECONDS = 15
 
 
 def mark_new(uid, row):
@@ -76,7 +80,7 @@ def task_base():
     return base
 
 
-def enqueue(uid, *, at=None, manual_end_id=None):
+def enqueue(uid, *, at=None, manual_end_id=None, wake_key=None):
     instant = at or datetime.now(timezone.utc)
     minute = int(instant.timestamp()) // 60
     task_id = 'conversations-v3-' + hashlib.sha256(uid.encode()).hexdigest()[:32] + '-' + str(minute)
@@ -84,14 +88,27 @@ def enqueue(uid, *, at=None, manual_end_id=None):
         # A live task may already have completed in this minute. Its retained
         # Cloud Tasks name must not swallow the user's later explicit close.
         task_id += '-end-' + hashlib.sha256(manual_end_id.encode()).hexdigest()[:32]
+    if wake_key:
+        # A builder continuation: an earlier same-minute wake may run (busy) under this pass's lease.
+        task_id += '-wake-' + hashlib.sha256(wake_key.encode()).hexdigest()[:32]
     base = task_base()
-    enqueue_named_task(
-        os.getenv('CONVERSATIONS_V3_TASKS_QUEUE', 'conversations-v3'),
-        base + '/v1/conversations-v3/reconcile',
-        task_id,
-        {'uid': uid},
-        schedule_at=int(instant.timestamp()),
-    )
+    queue = os.getenv('CONVERSATIONS_V3_TASKS_QUEUE', 'conversations-v3')
+    url = base + '/v1/conversations-v3/reconcile'
+    created = enqueue_named_task(queue, url, task_id, {'uid': uid}, schedule_at=int(instant.timestamp()))
+    if (
+        created is False
+        and at is None
+        and not manual_end_id
+        and reliability_experiments.enabled('instant_live_text', uid)
+    ):
+        # Experiment instant_live_text: this minute's name is taken. Its task may have read the owner's
+        # speech before this write (it ran or is running) or may be scheduled for later in the minute,
+        # so the write would wait for the owner's next scheduled wake. One task at the end of the
+        # current slot starts after every write of that slot; further writes of the slot share its name.
+        # Only write-driven wakes do this: the builder's own scheduled wakes (at=) never chain.
+        slot_end = (int(instant.timestamp()) // FOLLOW_UP_SLOT_SECONDS + 1) * FOLLOW_UP_SLOT_SECONDS
+        if enqueue_named_task(queue, url, f'{task_id}-late-{slot_end}', {'uid': uid}, schedule_at=slot_end):
+            logger.info('event=v3_wake action=late_follow_up outcome=enqueued')
 
 
 def changed(uid, cid, *, manual_end=False):
