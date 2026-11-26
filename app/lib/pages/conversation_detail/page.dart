@@ -1421,10 +1421,9 @@ class ConversationDetailPageState extends State<ConversationDetailPage>
     }
 
     if (!isVerified()) return null;
-    return LivePreviewTail(
+    return LivePreviewTail.continuingTranscript(
       preview: preview,
       coverage: LivePreviewCoverage.forFinals(conversation.transcriptSegments, startedAt),
-      includeBottomInset: false,
       whenEmpty: whenEmpty,
       lines: () {
         if (!isVerified()) return const [];

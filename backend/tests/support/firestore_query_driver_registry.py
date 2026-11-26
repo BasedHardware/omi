@@ -164,7 +164,7 @@ BODY_DIGEST = {
     'utils.support.holds._held_deferred_deletes': '612a521045553ef1b02d1eb81aac37a3c63a75c598ce5e99484c007c7c87e878',
     'utils.support.retention._select_conversations': 'f36920350f4e3a557e0e474e8801ae414c21ce67203e0627f7a39ba820243d16',
     'database.conversations_v3_live._recent_window_query': '6f2c323bfa8df890362c6bdc4796182a70e4c704376bcb4944358560b12edc75',
-    'database.conversations_v3.commit_projection': '4dbc63b754697f856e67c886915320c4033fbbf4ce8d9d1154a8a82cd7d6d32b',
+    'database.conversations_v3.commit_projection': '5fd86935e8188136f4017753e89fa1e146f5006d0deacbe45f498074f2d6d88f',
     'database.batch_pipeline_conversation_purge_scans._claim': 'faa5dabcf01dc5bd377b2e14a149282aa2db93b2872cdc97a3b756157701532c',
     'database.batch_pipeline_conversation_purge_scans.run_job': 'fe5d30b77da198a7e0dc188115c8906fb6446925079a4e96339d36675a55faeb',
     'database.batch_pipeline_store.FirestoreStore.protected_retries': 'b55d2960c94057cb8df9b9cdd2e7728b6af63728bc0a2cb6f5bd333efed443a2',
@@ -2485,6 +2485,12 @@ _add(DriverEntry('database.memories.get_memory_ids', base={'uid': UID}))
 _add(DriverEntry('database.memories.get_memory_ids_for_conversation', base={'uid': UID, 'conversation_id': 'conv-1'}))
 _add(
     DriverEntry(
+        'database.memories.linked_conversation_ids',
+        base={'uid': UID, 'conversation_ids': {'conv-1'}, 'transaction': ref_transaction()},
+    )
+)
+_add(
+    DriverEntry(
         'database.memories.get_non_filtered_memories', base={'uid': UID}, neutrals={'limit': _LIMIT, 'offset': _OFFSET}
     )
 )
@@ -3725,8 +3731,10 @@ for entry in (
         covered_by=(
             'database.conversations_v3.merge_donors_have_tasks',
             'database.conversation_payload.read_payload_children_for_delete',
+            'database.memories.linked_conversation_ids',
         ),
         reason='Refinement and live repair use the same bounded donor-task query and write point markers with donor redirects. '
+        'Backfill uses that task query and scans projected memory links before writing a removal marker and deleting. '
         'The WAL custody guard uses the existing observation rows before donor-task queries or projection writes. '
         'The Home index bit is derived from the flags already present in those writes. '
         'Backfill removal enumerates the bounded payload children before deletion. '

@@ -190,9 +190,18 @@ async def test_rederive_retires_prior_copies_no_new_window_claims(builder, monke
     )
     monkeypatch.setattr(service.models, 'outline', lambda *a: SCENARIOS['long_visible'][1])
     seen = {}
-    monkeypatch.setattr(service, '_commit', lambda *a, **kw: seen.update(kw))
-    await service.reconcile('u', derive=True, since=AT, until=AT + timedelta(days=1), run_id=RUN, rederive=True)
+
+    def commit(*args, **kwargs):
+        seen.update(kwargs)
+        return set()
+
+    monkeypatch.setattr(service, '_commit', commit)
+    report = {}
+    await service.reconcile(
+        'u', derive=True, since=AT, until=AT + timedelta(days=1), run_id=RUN, rederive=True, report=report
+    )
     assert seen['remove'] == ['stale'] and seen['key'] == store.BACKFILL_LEASE
+    assert report['rows_removed'] == 0
 
 
 @pytest.mark.asyncio

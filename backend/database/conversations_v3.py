@@ -723,6 +723,7 @@ def commit_projection(
     *,
     clear_pending=True,
     remove=(),
+    removed_ids: set[str] | None = None,
     retire=None,
     key='builder',
     firestore_client=None,
@@ -731,6 +732,7 @@ def commit_projection(
 
     ``retire`` (live re-derive only) maps a row id to the soft-retirement patch the final batch applies:
     its claims leave every loaded recording with the same commit that writes the rows absorbing them.
+    ``removed_ids``, if supplied, receives only the backfill removals committed by the final batch.
 
     A recording that only received more speech during the pass does not fail the commit (a live
     wearer would otherwise starve every pass): the windows planned from the loaded snapshot commit,
@@ -890,11 +892,26 @@ def commit_projection(
             if snapshot.exists:
                 raise Conflict('target_exists')
             snapshots[cid] = snapshot
+        deleting = set()
+        user = client.collection('users').document(uid)
+        if final and remove:
+            for cid in remove:
+                # Only a backfill re-derive retires a copy, and only its own backfilled rows.
+                if not (existing.get(cid) or {}).get('backfilled'):
+                    raise Conflict('remove_not_backfilled')
+            from database import memories
+
+            without_tasks = {
+                cid
+                for cid in remove
+                if not merge_donors_have_tasks(uid, [cid], firestore_client=client, transaction=tx)
+            }
+            if without_tasks:
+                deleting = without_tasks - memories.linked_conversation_ids(
+                    uid, without_tasks, firestore_client=client, transaction=tx
+                )
         removed_payloads = {}
-        for cid in sorted(hard_removals):
-            # Only a backfill re-derive retires a copy, and only its own backfilled rows.
-            if not (existing.get(cid) or {}).get('backfilled'):
-                raise Conflict('remove_not_backfilled')
+        for cid in sorted(deleting):
             if PAYLOAD_FIELD in observed[cid]:
                 try:
                     ref = snapshots[cid].reference
@@ -903,7 +920,6 @@ def commit_projection(
                     removed_payloads[cid] = (children, payload_bytes + parent_bytes)
                 except ConversationProjectionTooLarge as error:
                     raise Conflict('document_too_large') from error
-        user = client.collection('users').document(uid)
         watch.phase('privacy')
         # Filtering can mutate the encoded payload; every attempt needs its original input.
         batch_prepared = [dict(row) for row in batch_prepared]
@@ -1017,7 +1033,8 @@ def commit_projection(
             tx.set(removal_ref(user, cid), {'absorbed_by_refinement': True})
             written.add(cid)
         if final:
-            for cid in remove:
+            for cid in sorted(deleting):
+                tx.set(removal_ref(user, cid), {'removed_by_backfill_rederive': True})
                 children, payload_bytes = removed_payloads.get(cid, ((), 0))
                 charge_payload(len(children), payload_bytes)
                 for ref in children:
@@ -1030,7 +1047,7 @@ def commit_projection(
                     update_if_changed(coll.document(cid), observed.get(cid, {}), patch)
                 if cid in retired:
                     tx.set(removal_ref(user, cid), {'retired_by_repair': True})
-        replaced = {r['id'] for r in batch_rows} | set(absorbed) | (set(remove) | retired if final else set())
+        replaced = {r['id'] for r in batch_rows} | set(absorbed) | deleting | (retired if final else set())
         for rid, recording in recordings.items():
             if recording.get('deleted') or recording.get('sync_merged_into'):
                 update_if_changed(coll.document(rid), observed[rid], {'v3_pending': False, 'v3_pending_since': None})
@@ -1123,12 +1140,12 @@ def commit_projection(
             lease_update['outline_cache'] = lease['outline_cache']
         staged['lease'] = (lease, lease_update)
         update_if_changed(held, lease, lease_update, count_row=False)
-        return observed, batch_moved, batch_prepared, skipped_ids, written, skipped_ids | skipped_patches
+        return observed, batch_moved, batch_prepared, skipped_ids, written, skipped_ids | skipped_patches, deleting
 
     fixed = fixed_write_bytes(recordings, rows, encrypted_cache)
     # Reserve space for all donor writes, including the task-link fences in the survivor's batch.
-    fixed_writes = len(recordings) + len(remove) + absorption_writes + len(retire) + len(retired) + 1
-    if retired and fixed_writes + bool(rows) > BATCH_MAX_WRITES:
+    fixed_writes = len(recordings) + 2 * len(remove) + absorption_writes + len(retire) + len(retired) + 1
+    if (retired or remove) and fixed_writes + bool(rows) > BATCH_MAX_WRITES:
         raise Conflict('backfill_partition_budget')
     max_rows = max(1, BATCH_MAX_WRITES - fixed_writes)
     batches, current, size, pointers = [], [], 0, 0
@@ -1170,7 +1187,7 @@ def commit_projection(
                 )
             else:
                 result = execute()
-            observed, batch_moved, committed_prepared, skipped_ids, written, skipped = result
+            observed, batch_moved, committed_prepared, skipped_ids, written, skipped, deleting = result
         except Conflict:
             raise
         except Exception as error:
@@ -1190,6 +1207,8 @@ def commit_projection(
         moved.update(batch_moved)
         written_rows.update(written)
         skipped_rows.update(skipped)
+        if removed_ids is not None:
+            removed_ids.update(deleting)
 
         for row, _encoded in batch:
             if failure_transitions[row['id']]:

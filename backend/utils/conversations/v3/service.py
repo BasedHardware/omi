@@ -759,8 +759,9 @@ async def reconcile(
             unclaimed = [rid for rid, r in recordings.items() if '_v3_backfill_prior' in r and rid not in claimed]
             for rid in unclaimed:
                 recordings.pop(rid)
-        # A re-derive reuses prior ids; a prior copy no rebuilt window claims is retired with the commit.
+        # The commit removes unplanned prior copies only if they have no task or memory links.
         remove = [cid for cid in existing if cid not in planned] if derive and rederive else []
+        removed_ids: set[str] = set()
         retire, commit_recordings, commit_existing, priors = {}, recordings, existing, []
         if live:
             rows, retire, touched, sources, priors, outcome = _live_outcome(
@@ -791,6 +792,7 @@ async def reconcile(
                 cache[-128:],
                 clear_pending=not on_open,
                 remove=remove,
+                removed_ids=removed_ids,
                 retire=retire,
                 key=key,
             )
@@ -811,7 +813,7 @@ async def reconcile(
             sources=len(eligible),
             windows=len(rows),
             rows_new=sum(1 for row in rows if row['id'] not in existing),
-            rows_removed=len(remove),
+            rows_removed=len(removed_ids),
             # A live run's loader already counted unclaimed live speech; its legacy meaning is donors.
             **({} if live else {'sources_unclaimed': len(unclaimed)}),
             notes_queued=sum(1 for row in rows if row.get('v3_backfill_process_pending')),
@@ -1146,7 +1148,18 @@ def _live_outcome(rows, existing, recordings, *, since, until, run_id):
 
 
 def _commit(
-    uid, token, recordings, existing, rows, cache, *, clear_pending=True, remove=(), retire=None, key='builder'
+    uid,
+    token,
+    recordings,
+    existing,
+    rows,
+    cache,
+    *,
+    clear_pending=True,
+    remove=(),
+    removed_ids=None,
+    retire=None,
+    key='builder',
 ):
     from google.api_core.exceptions import InvalidArgument
 
@@ -1162,6 +1175,7 @@ def _commit(
             cache,
             clear_pending=clear_pending,
             remove=remove,
+            removed_ids=removed_ids,
             retire=retire,
             key=key,
         )
