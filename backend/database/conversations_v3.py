@@ -574,7 +574,15 @@ def _mark_successor_pending(coll, recordings):
     Batch recordings get no transcript until they seal. Only a recording that listen rotation
     sealed carries the cap stamp; every other stretch keeps the plain five-minute rule.
     """
-    spoken = [r for r in recordings.values() if r.get('transcript_segments') and r.get('started_at')]
+    # Only decoded speech counts: a terminal row loaded undecoded may still hold an offloaded transcript pointer.
+    spoken = [
+        r
+        for r in recordings.values()
+        if isinstance(r.get('transcript_segments'), list)
+        and r['transcript_segments']
+        and r.get('started_at')
+        and not terminal_recording(r)
+    ]
     if not spoken:
         return
     latest = max(spoken, key=speech_end)

@@ -489,3 +489,11 @@ async def test_bounded_loader_only_shrinks_budget_failures(monkeypatch, parked, 
     assert attempted == sizes
     assert renewals == [('u', 'builder', 'token')] * (len(sizes) - 1)
     assert marked == ([('u', 'token')] if parked else [])
+
+
+@pytest.mark.parametrize('terminal', ['discarded', 'deleted'])
+def test_successor_check_ignores_undecoded_terminal_pointer(terminal):
+    # A terminal row loaded undecoded can still carry an offloaded transcript pointer (a dict), not segments.
+    pointer = {'uri': 'gs://bucket/transcript', 'revision': 3}
+    row = {'id': 'r', 'started_at': AT, 'transcript_segments': pointer, terminal: True}
+    store._mark_successor_pending(None, {'r': row})
