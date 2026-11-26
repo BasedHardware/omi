@@ -12,6 +12,12 @@ phone uploads. A failure here closes this connection only; capture is on other c
 Clock: the phone owns it. A line's ``start`` and ``end`` are seconds of audio counted from the first
 frame this connection received, and the phone places them on its own capture time of that frame.
 
+Silence: the phone's connection stays open through it. After ``PROVIDER_IDLE_SECONDS`` without audio
+only the Soniox stream is closed, and the next audio dials a new one on the same connection. A pendant
+that sends nothing while it is quiet would otherwise make the phone reconnect after every pause, and
+production counts new connections per signed-in user on the listen service (20 in 5 minutes, shared
+with the capture connection).
+
 Limits: one connection per account and app install (a new one replaces the old), the connection
 closes when no audio arrives for ``IDLE_SECONDS``, and audio held while Soniox is dialled is bounded.
 
@@ -62,10 +68,18 @@ SAMPLE_RATE = 16000
 CODECS = frozenset({'opus', 'pcm16'})
 # Largest Opus frame is 120 ms; the decoder never writes more than the packet holds.
 OPUS_DECODE_CAPACITY = SAMPLE_RATE // 1000 * 120
-# The phone stops sending when it leaves the front, pauses or stops. A connection that stays open
-# without audio is closed, so a phone that vanished cannot hold a provider stream.
-IDLE_SECONDS = 20.0
+# No audio for this long closes the provider stream only; the phone's connection stays, and the next
+# audio dials again. So a quiet room costs no provider time and no new connection.
+PROVIDER_IDLE_SECONDS = 20.0
+# The phone closes the connection itself when it leaves the front, pauses or stops. One that stays open
+# this long without audio is closed here, so a phone that vanished cannot hold a place on the server.
+IDLE_SECONDS = 600.0
 RECEIVE_POLL_SECONDS = 1.0
+# A stream that was asked to finish is given this long to deliver its last words before it is cut.
+RETIRE_GRACE_SECONDS = 3.0
+# Dials are spaced at least this far apart, and this many in a row without a word end the connection.
+REDIAL_SECONDS = 1.0
+MAX_PROVIDER_FAILURES = 3
 DIAL_TIMEOUT_SECONDS = 10.0
 # Audio that arrives while the provider is dialled (the phone's 3 s lead-in comes first) is kept and
 # sent first. Bounded; when it overflows the oldest audio falls out and the line clock is moved on.
@@ -170,15 +184,18 @@ class LiveWordsSession:
         self.joiner = LineJoiner()
         self.pending: deque[bytes] = deque()
         self.pending_bytes = 0
-        # Audio that fell out of the dial buffer before the provider saw anything: the provider's zero
-        # is this many samples after the connection's first frame.
-        self.skipped_samples = 0
+        # Streams that were asked to finish, with the time they were: cut after RETIRE_GRACE_SECONDS.
+        self.retired: list[tuple[Any, float]] = []
+        self.failures = 0
+        self.next_dial_at = 0.0
+        self.provider_opened_at: float | None = None
+        self.provider_seconds = 0.0
+        self.provider_streams = 0
         self.frames = 0
         self.samples = 0
         self.undecodable = 0
         self.last_audio_at = time.monotonic()
         self.last_ack_at = 0.0
-        self.opened_at: float | None = None
         self._send_lock = asyncio.Lock()
 
     # --- lifecycle -----------------------------------------------------------------------------
@@ -195,7 +212,7 @@ class LiveWordsSession:
             previous.stop('replaced')
         if self.codec == 'opus':
             self.decoder = _opus_decoder()
-        self.opening = create_named_task(self._open(), name='live_words_open')
+        self._dial()  # At once: the lead-in the phone sends first should not wait for a dial.
         logger.info('event=live_words action=connect uid=%s codec=%s', self.uid, self.codec)
         try:
             await self._receive()
@@ -211,7 +228,12 @@ class LiveWordsSession:
                 self.stop('idle')
                 break
             if self.socket is not None and live_stt_socket_is_dead(self.socket):
-                self.stop('provider_lost')
+                self._provider_lost()
+            elif self.socket is not None and now - self.last_audio_at >= PROVIDER_IDLE_SECONDS:
+                # Quiet: give the provider stream back and keep the phone's connection.
+                self._retire_provider('provider_idle')
+            await self._cut_retired(now)
+            if self.stop_reason is not None:
                 break
             try:
                 message = await asyncio.wait_for(self.websocket.receive(), timeout=RECEIVE_POLL_SECONDS)
@@ -241,37 +263,27 @@ class LiveWordsSession:
                     task.cancel()
                 await asyncio.gather(task, return_exceptions=True)
         self.opening = self.sender = None
-        socket, self.socket = self.socket, None
+        self._retire_provider(None)
         self.pending.clear()
         self.pending_bytes = 0
-        seconds = 0.0
-        if self.opened_at is not None:
-            seconds = max(0.0, time.monotonic() - self.opened_at)
-            OMI_LISTEN_LIVE_WORDS_SECONDS_TOTAL.inc(seconds)
+        seconds = self.provider_seconds
         OMI_LISTEN_LIVE_WORDS_AUDIO_SECONDS_TOTAL.inc(self.samples / SAMPLE_RATE)
         OMI_LISTEN_LIVE_WORDS_TOTAL.labels(outcome=reason).inc()
         # Counts only: the words themselves are never logged.
         logger.info(
-            'event=live_words action=close uid=%s reason=%s seconds=%.1f audio_seconds=%.1f frames=%d '
+            'event=live_words action=close uid=%s reason=%s seconds=%.1f streams=%d audio_seconds=%.1f frames=%d '
             'undecodable=%d lines=%d words=%d',
             self.uid,
             reason,
             seconds,
+            self.provider_streams,
             self.samples / SAMPLE_RATE,
             self.frames,
             self.undecodable,
             self.joiner.lines,
             self.joiner.words,
         )
-        if socket is not None:
-            try:
-                begin_stream_close(socket)
-                socket.finish()
-            except Exception:
-                pass  # The connection is ending either way.
-            finally:
-                release_live_stt_socket(socket)
-            await abort_replay_socket(socket, timeout=2)
+        await self._cut_retired(None)
         code = {'replaced': CLOSE_REPLACED, 'idle': CLOSE_IDLE, 'client': 1000, 'bad_frame': 1008}.get(reason, 1011)
         try:
             await self.websocket.close(code=code, reason=reason)
@@ -280,36 +292,100 @@ class LiveWordsSession:
 
     # --- provider stream -----------------------------------------------------------------------
 
+    def _dial(self) -> None:
+        """Start a dial unless one is running, a stream is open, or the last dial was a moment ago."""
+        if self.stop_reason is not None or self.socket is not None:
+            return
+        if self.opening is not None and not self.opening.done():
+            return
+        now = time.monotonic()
+        if now < self.next_dial_at:
+            return
+        self.next_dial_at = now + REDIAL_SECONDS
+        self.opening = create_named_task(self._open(), name='live_words_open')
+
     async def _open(self) -> None:
         raw = None
         adopted = False
+        stream: dict[str, Any] = {'base': None}
+
+        def words(segments: list[dict[str, Any]]) -> None:
+            self._words(stream, segments)
+
         try:
             # Same-task timeout keeps ownership of the candidate explicit on cancellation.
             async with asyncio.timeout(DIAL_TIMEOUT_SECONDS):
-                raw = await process_audio_soniox(self._words, SAMPLE_RATE, self.language, uid=self.uid)
+                raw = await process_audio_soniox(words, SAMPLE_RATE, self.language, uid=self.uid)
             if self.stop_reason is not None:
                 return
             self.socket = track_live_stt_socket(raw, PROVIDER)
             adopted = True
-            self.opened_at = time.monotonic()
+            # The provider's zero is the first sample it is sent: everything received on this connection
+            # before the audio still waiting here. Lines are timed from the connection's first frame.
+            stream['base'] = (self.samples - self.pending_bytes // 2) / SAMPLE_RATE
+            self.joiner.line = None  # A new stream starts a new line.
+            self.provider_opened_at = time.monotonic()
+            self.provider_streams += 1
             OMI_LISTEN_LIVE_WORDS_TOTAL.labels(outcome='opened').inc()
-            logger.info('event=live_words action=open uid=%s', self.uid)
+            logger.info('event=live_words action=open uid=%s stream=%d', self.uid, self.provider_streams)
             self._drain_pending()
         except asyncio.CancelledError:
             raise
         except Exception as error:
             logger.warning('Live words provider dial failed type=%s', type(error).__name__)
-            self.stop('provider_unavailable')
+            self._provider_failed('provider_unavailable')
         finally:
             if raw is not None and not adopted:
                 await abort_replay_socket(raw, timeout=2)
+
+    def _retire_provider(self, outcome: str | None) -> None:
+        """Ask the open stream to finish and let go of it. The phone's connection is not touched."""
+        socket, self.socket = self.socket, None
+        if self.provider_opened_at is not None:
+            seconds = max(0.0, time.monotonic() - self.provider_opened_at)
+            self.provider_seconds += seconds
+            self.provider_opened_at = None
+            OMI_LISTEN_LIVE_WORDS_SECONDS_TOTAL.inc(seconds)
+        if socket is None:
+            return
+        if outcome is not None:
+            OMI_LISTEN_LIVE_WORDS_TOTAL.labels(outcome=outcome).inc()
+            logger.info('event=live_words action=%s uid=%s', outcome, self.uid)
+        try:
+            begin_stream_close(socket)
+            socket.finish()
+        except Exception:
+            pass  # An optional stream; it is cut below either way.
+        finally:
+            release_live_stt_socket(socket)
+        self.retired.append((socket, time.monotonic()))
+
+    async def _cut_retired(self, now: float | None) -> None:
+        """Close retired streams for good once they had their grace; all of them when [now] is None."""
+        keep: list[tuple[Any, float]] = []
+        for socket, retired_at in self.retired:
+            if now is not None and now - retired_at < RETIRE_GRACE_SECONDS:
+                keep.append((socket, retired_at))
+            else:
+                await abort_replay_socket(socket, timeout=2)
+        self.retired = keep
+
+    def _provider_lost(self) -> None:
+        self._retire_provider('provider_lost')
+        self._provider_failed('provider_lost')
+
+    def _provider_failed(self, reason: str) -> None:
+        """A dial or a stream failed. The next audio dials again; several in a row end the connection."""
+        self.failures += 1
+        if self.failures >= MAX_PROVIDER_FAILURES:
+            self.stop(reason)
 
     def _drain_pending(self) -> bool:
         while self.pending:
             held = self.pending.popleft()
             self.pending_bytes -= len(held)
             if self.socket.send(held) is False:
-                self.stop('provider_lost')
+                self._provider_lost()
                 return False
         return True
 
@@ -334,19 +410,19 @@ class LiveWordsSession:
             self.pending_bytes += len(pcm)
             limit = int(DIAL_BUFFER_SECONDS * SAMPLE_RATE) * 2
             while self.pending_bytes > limit and len(self.pending) > 1:
-                dropped = self.pending.popleft()
-                self.pending_bytes -= len(dropped)
-                self.skipped_samples += len(dropped) // 2
+                self.pending_bytes -= len(self.pending.popleft())  # Display audio only; the line clock moves on.
+            self._dial()  # After silence, or after a lost stream: the audio itself asks for a new one.
             return
-        if self._drain_pending() and self.socket.send(pcm) is False:
-            self.stop('provider_lost')
+        if self._drain_pending() and self.socket is not None and self.socket.send(pcm) is False:
+            self._provider_lost()
 
     # --- lines to the phone --------------------------------------------------------------------
 
-    def _words(self, segments: list[dict[str, Any]]) -> None:
-        if self.stop_reason is not None:
-            return  # A late callback from a closing stream never reaches the phone.
-        self.joiner.add(segments, self.skipped_samples / SAMPLE_RATE)
+    def _words(self, stream: dict[str, Any], segments: list[dict[str, Any]]) -> None:
+        if self.stop_reason is not None or stream['base'] is None:
+            return  # A late callback from a closing connection never reaches the phone.
+        self.failures = 0
+        self.joiner.add(segments, stream['base'])
         if self.joiner.dirty and (self.sender is None or self.sender.done()):
             self.sender = create_named_task(self._send_lines(), name='live_words_lines')
 

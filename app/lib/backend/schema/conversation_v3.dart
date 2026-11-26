@@ -77,6 +77,7 @@ class ConversationV3Fields {
     this.liveSummary,
     this.recording = false,
     this.captureDeviceId,
+    this.manualCutAt,
   });
 
   /// `conversation`, `voice_work`, `media` or `background`.
@@ -105,6 +106,10 @@ class ConversationV3Fields {
   /// open conversation's latest speech, on the live read only. Null when the server does not send it.
   final String? captureDeviceId;
 
+  /// Reliability experiment `end_open_conversation`: the End instant that closed this conversation,
+  /// equal to the time the app sent with that End. Null when the server does not send it.
+  final DateTime? manualCutAt;
+
   static const _keys = [
     'kind',
     'home_hidden',
@@ -124,6 +129,7 @@ class ConversationV3Fields {
     final recordingIds = json['v3_recording_ids'];
     final covers = json['summary_covers_through'];
     final captureDevice = json['v3_capture_device_id'];
+    final manualCut = json['v3_manual_cut_at'];
     return ConversationV3Fields(
       kind: json['kind'] is String ? json['kind'] as String : null,
       homeHidden: json['home_hidden'] == true,
@@ -138,6 +144,7 @@ class ConversationV3Fields {
       liveSummary: _readLiveSummary(json['live_summary']),
       recording: json['recording'] == true,
       captureDeviceId: captureDevice is String && captureDevice.isNotEmpty ? captureDevice : null,
+      manualCutAt: manualCut is String ? DateTime.tryParse(manualCut) : null,
     );
   }
 
@@ -165,5 +172,6 @@ class ConversationV3Fields {
         if (summaryCoversThrough != null) 'summary_covers_through': summaryCoversThrough!.toUtc().toIso8601String(),
         if (recording) 'recording': true,
         if (captureDeviceId != null) 'v3_capture_device_id': captureDeviceId,
+        if (manualCutAt != null) 'v3_manual_cut_at': manualCutAt!.toUtc().toIso8601String(),
       };
 }

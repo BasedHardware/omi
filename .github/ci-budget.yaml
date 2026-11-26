@@ -3553,16 +3553,18 @@
       "runs_on": "ubuntu-latest"
     },
     "ui-author-approval.yml/guard": {
-      "budget_p50_minutes": 5,
+      "budget_p50_minutes": 0.85,
       "display_name": "guard",
-      "expected_runs_class": "unsampled-pr-sentinel",
-      "expected_runs_per_day": 1,
-      "if": "github.event_name == 'pull_request_target' || github.event.issue.pull_request",
-      "matrix": {},
+      "expected_runs_class": "measured-pr-day-plus-lifecycle",
+      "expected_runs_per_day": 730,
+      "if": null,
+      "matrix": {
+        "sha": "${{ fromJSON(needs.resolve.outputs.heads) }}"
+      },
       "matrix_size": 1,
       "needs": "resolve",
       "owner": "CI maintainers",
-      "rationale": "Account-scoped UI approval requested by Nik: one API-only Linux job, no builds or PR execution, five-minute hard timeout; unsampled sentinel until first daily audit.",
+      "rationale": "Eight successful Nov 25 samples had a 48-second median. Forecast 530 resolved events plus up to 200 extra prior-head evaluations for synchronize; each SHA retains its own serialized API-only guard and five-minute hard timeout.",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -3571,16 +3573,16 @@
       "runs_on": "ubuntu-latest"
     },
     "ui-author-approval.yml/resolve": {
-      "budget_p50_minutes": 5,
+      "budget_p50_minutes": 0.2,
       "display_name": "resolve",
-      "expected_runs_class": "unsampled-pr-sentinel",
-      "expected_runs_per_day": 1,
-      "if": "github.event_name == 'pull_request_target' || github.event.issue.pull_request",
+      "expected_runs_class": "measured-pr-day-plus-lifecycle",
+      "expected_runs_per_day": 530,
+      "if": "(github.event_name == 'pull_request_target' && (github.event.action != 'edited' || github.event.changes.base.ref)) || github.event.issue.pull_request",
       "matrix": {},
       "matrix_size": 1,
       "needs": [],
       "owner": "CI maintainers",
-      "rationale": "Resolve immutable SHA read-only before the per-SHA guard concurrency group; one API call and no checkout.",
+      "rationale": "Eight successful Nov 25 samples had a five-second median. Forecast 530 daily runs from 442 in the 24 hours ending Nov 25 23:00 UTC plus allowance for stack lifecycle events, closes, and base edits. The resolver performs at most one API read and no checkout.",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -7092,7 +7094,7 @@
     "ui-author-approval.yml": {
       "name": "UI author approval",
       "owner": "CI maintainers",
-      "rationale": "Account-scoped UI approval requested by Nik: one API-only Linux job, no builds or PR execution, five-minute hard timeout; unsampled sentinel until first daily audit.",
+      "rationale": "Refresh the shared approval result when main or stacked PR membership changes. The trusted default-branch workflow runs API-only checks for the affected SHA groups; it does not execute pull request code.",
       "triggers": {
         "issue_comment": {
           "types": [
@@ -7102,14 +7104,13 @@
           ]
         },
         "pull_request_target": {
-          "branches": [
-            "main"
-          ],
           "types": [
             "opened",
             "synchronize",
             "reopened",
-            "ready_for_review"
+            "ready_for_review",
+            "edited",
+            "closed"
           ]
         }
       }

@@ -1,0 +1,17 @@
+{
+  "id": "app-foreground-time",
+  "kind": "question",
+  "owner": "Mobile capture",
+  "question": "How much time does a person spend with the mobile app in front per day, by platform, and how much of that while capture is active (a pendant streaming or the phone recording, not paused)? The second number is the time a stream that runs only while the app is open would run, so it prices such features. The server's Listen Session Realtime Demand cannot answer this on iOS: the app reports a launch in the background as foreground there.",
+  "query": "contracts/analytics/consumers/app-foreground-time-presence.sql",
+  "events": [
+    "appForegroundEnded"
+  ],
+  "namespace_property": "$app_namespace",
+  "dimensions": [
+    "build_number",
+    "$os"
+  ],
+  "zero_policy": "One row each time the app leaves the front (lifecycle paused, hidden or detached) after at least one second in front. foreground_seconds counts only time in the resumed state: time under the notification shade, a system dialog or the app switcher (inactive) is not counted and does not end the stretch. capturing_seconds is the part of it with capture active and is never larger. A stretch is lost when the app is killed while in front without a lifecycle change (a crash), so totals are a slight undercount. A person with no rows on a day did not open the app that day; a launch in the background alone sends nothing. One stretch is capped at 12 hours. Sum per person and day for daily time; do not average rows.",
+  "outcomes_query": "contracts/analytics/consumers/app-foreground-time.sql"
+}

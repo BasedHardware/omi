@@ -157,6 +157,7 @@ class ProjectionStore:
         """
         for job_id in (binding.job_id, *(member for _, member in members)):
             try:
+                sync_jobs.leave_receipt_note(binding.owner_id, job_id)
                 sync_jobs.r.publish(sync_jobs.receipt_channel(binding.owner_id), job_id)
             except Exception as error:
                 logger.warning('sync receipt wake unavailable exception_type=%s', type(error).__name__)
