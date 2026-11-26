@@ -3225,12 +3225,13 @@ async def wait_for_conversation_summary(
     if not v3_summary_wake.enabled(uid):
         raise HTTPException(status_code=404, detail='Not Found')
 
-    async def read():
-        row = await run_blocking(
-            db_executor, lambda: _get_valid_conversation_by_id(uid, conversation_id, follow_sync_bridge=True)
-        )
+    def read_visible():
+        row = _get_valid_conversation_by_id(uid, conversation_id, follow_sync_bridge=True)
         _assert_detail_visible(row, None)
         return row
+
+    async def read():
+        return await run_blocking(db_executor, read_visible)
 
     async def disconnected():
         return await request.is_disconnected()

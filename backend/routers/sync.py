@@ -2208,9 +2208,10 @@ async def wait_for_sync_receipts(
                 receipts.append(status)
         return {'receipts': receipts, 'fallback': fallback}
 
+    channel = await run_blocking(db_executor, receipt_channel, uid)
     redis = await get_async_redis_client()
     async with redis.pubsub() as sub:
-        await sub.subscribe(receipt_channel(uid))
+        await sub.subscribe(channel)
         # Wait for Redis to acknowledge subscription before reading job state.
         message = await sub.get_message(timeout=3)
         if not message or message['type'] != 'subscribe':

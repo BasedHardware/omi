@@ -59,6 +59,9 @@ class SummaryWaitAfterEnd {
 
   bool isWaiting(String conversationId) => _waiting.contains(conversationId);
 
+  /// Waits that ended in an error since start-up. The conversation's own polls covered each of them.
+  int failedWaits = 0;
+
   /// Returns whether a request was started.
   bool start(String? conversationId) {
     if (conversationId == null || !_enabled() || !_waiting.add(conversationId)) return false;
@@ -93,7 +96,9 @@ class SummaryWaitAfterEnd {
         if (answer.settled) return apply(conversationId, answer.result, settled: true);
       }
     } catch (_) {
-      // The app's own polls are the fallback.
+      // The wait only brings the answer sooner: the app's own polls are the fallback and show the
+      // result or the failure. A failed wait is counted, not shown.
+      failedWaits++;
     } finally {
       _waiting.remove(conversationId);
     }

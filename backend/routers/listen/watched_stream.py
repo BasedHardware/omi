@@ -312,7 +312,7 @@ class WatchedStream:
                 line = {'id': uuid.uuid4().hex, 'speaker': speaker, 'start': start, 'end': end, 'text': text}
                 self.lines.append(line)
             else:
-                line['text'] = f"{line['text']} {text}"
+                line['text'] = ' '.join((line['text'], text))
                 line['end'] = max(line['end'], end)
             self.dirty[line['id']] = line
         if self.dirty and (self.sender is None or self.sender.done()):

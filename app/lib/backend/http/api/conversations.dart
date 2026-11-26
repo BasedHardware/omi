@@ -610,6 +610,7 @@ Future<({ConversationByIdResult result, bool settled})> waitForConversationSumma
   if (response != null && response.statusCode == 200) {
     return (
       result: (
+        // omi-perf-allow: history-json-on-ui -- one conversation, the same body the detail read decodes
         item: ServerConversation.fromJson(jsonDecode(response.body) as Map<String, dynamic>),
         ok: true,
         inaccessible: false,
@@ -1468,6 +1469,7 @@ Future<SyncReceiptBatch> waitForSyncReceipts(List<String> jobs, Future<void> abo
   final request = http.AbortableRequest('POST', Uri.parse(url), abortTrigger: abort)
     ..headers.addAll(headers)
     ..headers['Content-Type'] = 'application/json'
+    // omi-perf-allow: history-json-on-ui -- the job ids being waited on, a handful per request
     ..body = jsonEncode({'job_ids': jobs});
   final stream = await HttpPoolManager.instance.sendStreaming(request, timeout: const Duration(seconds: 28));
   final response = await http.Response.fromStream(stream).timeout(const Duration(seconds: 5));
@@ -1476,6 +1478,7 @@ Future<SyncReceiptBatch> waitForSyncReceipts(List<String> jobs, Future<void> abo
         kind: syncRateLimitKindForResponse(response), retryAfterSeconds: _parseRetryAfterSeconds(response));
   }
   if (response.statusCode != 200) throw HttpException('Receipt wait HTTP ${response.statusCode}');
+  // omi-perf-allow: history-json-on-ui -- receipts of at most the job ids asked for, independent of history size
   final body = jsonDecode(response.body) as Map<String, dynamic>;
   final receipts = <String, SyncJobFetch>{};
   for (final item in body['receipts'] as List) {
