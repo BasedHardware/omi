@@ -23,7 +23,6 @@ from collections import defaultdict
 import json
 import logging
 
-from google.cloud.firestore_v1.field_path import FieldPath
 
 from config import reliability_experiments
 from utils.batch_pipeline.contracts import MAX_PROJECTION_PARTS
@@ -113,6 +112,10 @@ def record_part(store, binding, item, entry: dict, index: int, part_count: int, 
     """
     if spans is None:
         return
+    # Imported here, not at module scope: several suites stub google.cloud.firestore_v1 with a plain
+    # module, which makes a top-level submodule import fail at collection.
+    from google.cloud.firestore_v1.field_path import FieldPath
+
     try:
         store.ref('intakes', binding.job_id).update(
             {
