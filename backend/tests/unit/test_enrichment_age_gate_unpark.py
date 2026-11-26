@@ -543,23 +543,27 @@ def test_cli_passes_private_checkpoint_back_to_discovery(monkeypatch, capsys, op
     assert json.loads(second.read_text()) == {'after': None}
 
 
-@pytest.mark.parametrize('public_root', [False, True])
+@pytest.mark.parametrize('unsafe_path', ['public_root', 'different_owner', 'symlink_escape'])
 def test_cli_rejects_unsafe_custom_scratch_before_client_access(
-    monkeypatch, capsys, operator_cli, tmp_path, public_root
+    monkeypatch, capsys, operator_cli, tmp_path, unsafe_path
 ):
     monkeypatch.setenv('GCP_AGENT_TIER', 'ro-prod')
     monkeypatch.delenv('FIRESTORE_EMULATOR_HOST', raising=False)
     monkeypatch.delenv('SERVICE_ACCOUNT_JSON', raising=False)
     root = tmp_path / 'alternate'
     root.mkdir(mode=0o700)
-    outside = tmp_path / 'outside'
-    outside.mkdir(mode=0o700)
     child = root / 'checkpoint'
-    if public_root:
-        root.chmod(0o755)
-        child.mkdir(mode=0o700)
-    else:
+    if unsafe_path == 'symlink_escape':
+        outside = tmp_path / 'outside'
+        outside.mkdir(mode=0o700)
         child.symlink_to(outside, target_is_directory=True)
+    else:
+        child.mkdir(mode=0o700)
+        if unsafe_path == 'public_root':
+            root.chmod(0o755)
+        else:
+            other_owner = root.stat().st_uid + 1
+            monkeypatch.setattr(operator_cli.os, 'geteuid', lambda: other_owner)
     client = Mock()
     monkeypatch.setattr(operator_cli.firestore, 'Client', client)
     with pytest.raises(SystemExit) as error:
