@@ -1,5 +1,6 @@
 """Content-free, kill-switch-gated observations for deliberate v3 Finishes."""
 
+from collections.abc import Iterable, Mapping, MutableMapping, Sequence
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 import hashlib
@@ -126,6 +127,34 @@ def observe_route(uid: str, recording_id: str, route: str) -> None:
 def observe_window(uid: str, recording_id: str, card_id: str) -> None:
     if enabled():
         _emit('window', recording=_key('recording', uid, recording_id), card=_key('card', uid, card_id))
+
+
+def remember_window(
+    windows: MutableMapping[str, tuple[str, ...]],
+    *,
+    enabled: bool,
+    ended: bool,
+    window: Mapping[str, object],
+    row: Mapping[str, object],
+) -> None:
+    if not enabled or not ended or not window.get('manual_end'):
+        return
+    sources = window.get('_finish_sli_sources')
+    row_id = row.get('id')
+    if not isinstance(sources, (tuple, list)) or not isinstance(row_id, str):
+        return
+    typed_sources = tuple(source for source in sources if isinstance(source, str))
+    if typed_sources:
+        windows[row_id] = typed_sources
+
+
+def observe_windows(uid: str, rows: Iterable[Mapping[str, object]], windows: Mapping[str, Sequence[str]]) -> None:
+    for row in rows:
+        card_id = row.get('id')
+        if not isinstance(card_id, str):
+            continue
+        for recording_id in windows.get(card_id, ()):
+            observe_window(uid, recording_id, card_id)
 
 
 def observe_summary(uid: str, card_id: str) -> None:

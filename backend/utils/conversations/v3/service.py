@@ -241,6 +241,42 @@ async def _release_reconcile_lease(uid, key, token, *, primary_failed):
         logger.warning('v3 reconcile lease release failed exception_type=%s', type(error).__name__)
 
 
+def _reconcile_groups(
+    uid,
+    eligible,
+    now,
+    *,
+    since,
+    until,
+    internal_end,
+    historical_timing,
+    silence_gap,
+    lock_delay,
+    custom_timing,
+    derive,
+    on_open,
+):
+    measure_finish = not (derive or on_open) and finish_home_sli.enabled()
+    held_finishes = set() if measure_finish else None
+    if historical_timing is not None:
+        groups = historical_stretches(eligible, now, since=since, until=until, internal_end=internal_end)
+    else:
+        groups = outline.stretches(
+            eligible,
+            now,
+            silence_gap=silence_gap,
+            lock_delay=lock_delay,
+            settle_on_landing=custom_timing,
+            max_window=timedelta(seconds=max_window_seconds()),
+            # Live passes only: backfill and re-derive keep their windowing (cuts there are long settled).
+            continuity=capture_continuity_enabled() and not derive,
+            **({'finish_routes': held_finishes} if measure_finish else {}),
+        )
+    for recording_id in held_finishes or ():
+        finish_home_sli.observe_route(uid, recording_id, 'held')
+    return groups, measure_finish
+
+
 def _measure_reconcile_writes(run):
     @wraps(run)
     async def measured(*args, **kwargs):
@@ -337,24 +373,20 @@ async def reconcile(
         eligible = [r for r in recordings.values() if policy.builder_eligible(r)]
         custom_timing = (silence_seconds, lock_seconds) != (DEFAULT_BOUNDARY_SECONDS, DEFAULT_BOUNDARY_SECONDS)
         silence_gap, lock_delay = timedelta(seconds=silence_seconds), timedelta(seconds=lock_seconds)
-        measure_finish = not (derive or on_open) and finish_home_sli.enabled()
-        held_finishes = set() if measure_finish else None
-        if historical_timing is not None:
-            groups = historical_stretches(eligible, now, since=since, until=until, internal_end=internal_end)
-        else:
-            groups = outline.stretches(
-                eligible,
-                now,
-                silence_gap=silence_gap,
-                lock_delay=lock_delay,
-                settle_on_landing=custom_timing,
-                max_window=timedelta(seconds=max_window_seconds()),
-                # Live passes only: backfill and re-derive keep their windowing (cuts there are long settled).
-                continuity=capture_continuity_enabled() and not derive,
-                **({'finish_routes': held_finishes} if measure_finish else {}),
-            )
-        for recording_id in held_finishes or ():
-            finish_home_sli.observe_route(uid, recording_id, 'held')
+        groups, measure_finish = _reconcile_groups(
+            uid,
+            eligible,
+            now,
+            since=since,
+            until=until,
+            internal_end=internal_end,
+            historical_timing=historical_timing,
+            silence_gap=silence_gap,
+            lock_delay=lock_delay,
+            custom_timing=custom_timing,
+            derive=derive,
+            on_open=on_open,
+        )
         if live and any(not g['finished'] or (g.get('window_cap_end') and not g['locked']) for g in groups):
             # Speech within five minutes of now is still the live builder's; refuse before any paid call.
             raise Conflict('rederive_live_open')
@@ -500,7 +532,7 @@ async def reconcile(
             and not eligible_ids.intersection(row.get('v3_recording_ids') or ())
         }
 
-        finish_windows = {}
+        finish_windows: dict[str, tuple[str, ...]] = {}
 
         async def plan():
             finish_windows.clear()
@@ -706,8 +738,13 @@ async def reconcile(
                     # queue never pick up historical notes.
                     row['v3_process_pending'] = False
                     row['v3_backfill_process_pending'] = True
-                if measure_finish and ended and window.get('manual_end') and window.get('_finish_sli_sources'):
-                    finish_windows[row['id']] = window['_finish_sli_sources']
+                finish_home_sli.remember_window(
+                    finish_windows,
+                    enabled=measure_finish,
+                    ended=ended,
+                    window=window,
+                    row=row,
+                )
                 rows.append(row)
                 for rid, claims in row['_v3_claims'].items():
                     allocated.setdefault(rid, []).extend((claim['start'], claim['end']) for claim in claims)
@@ -777,11 +814,7 @@ async def reconcile(
                 # again. If this cleanup fails too, the partition stays unfinished until resume or undo.
                 await run_blocking(db_executor, rederive_store.drop_unwritten_priors, uid, run_id, priors)
             raise
-        if finish_windows:
-            for row in rows:
-                finish_sources = finish_windows.get(row['id'], ())
-                for recording_id in finish_sources:
-                    finish_home_sli.observe_window(uid, recording_id, row['id'])
+        finish_home_sli.observe_windows(uid, rows, finish_windows)
         if not derive and not on_open:
             cap_starts = {group['lines'][0]['start'] for group in groups if group['after_window_cap']}
             new_cap_starts = {row['started_at'] for row in rows if row['id'] not in existing} & cap_starts
