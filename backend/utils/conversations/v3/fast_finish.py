@@ -19,7 +19,8 @@ Constraints it upholds:
   refused before any spend. ``off`` restores one serial provider request per unit and the 20-minute cap.
 - Long recordings (over 20 minutes, the spend that chunking adds) are a canary:
   ``CONVERSATIONS_V3_FAST_FINISH_LONG_PERCENT`` of owners by a salted uid bucket, and at most
-  ``CONVERSATIONS_V3_FAST_FINISH_LONG_DAILY_SECONDS`` of their audio per process per UTC day.
+  ``CONVERSATIONS_V3_FAST_FINISH_LONG_DAILY_SECONDS`` of their audio per UTC day across the fleet
+  (a Redis counter; when Redis cannot answer, long passes are refused).
 """
 
 import functools
@@ -40,7 +41,8 @@ from prometheus_client import Counter, Histogram
 from config.policy.batch import cohort_bucket
 from config.refactor_modes import default_on
 from config.rollout_cohorts import in_rollout_cohort
-from utils.executors import get_fast_finish_chunk_executor
+from database import redis_db
+from utils.executors import get_fast_finish_chunk_executor, get_fast_finish_io_executor
 from utils.stt import pre_recorded
 from utils.stt.batch_language import MAX_PROBE_SECONDS
 from utils.stt.prerecorded_deadline import verification_stt_deadline
@@ -80,6 +82,9 @@ SEAM_TOKENS = 24
 STOP_GRACE_SECONDS = 2.0
 # The language probe is skipped (and the pass stopped) with less than this left.
 PROBE_MIN_SECONDS = 2.0
+# A chunked pass's row refresh, transcript write and cut after its chunks may run this far past the
+# deadline; past it each is abandoned, so a stalled call releases the slot within STOP_GRACE_SECONDS.
+WRITE_GRACE_SECONDS = 1.5
 # How far a unit's first and last provisional line may reach toward that unit's audio bounds.
 EDGE_PAD_SECONDS = 2.0
 SAMPLE_RATE = 16000
@@ -223,38 +228,87 @@ def long_admitted(uid: str) -> bool:
     return bool(uid) and percent > 0 and cohort_bucket(uid, LONG_SALT) < percent
 
 
-class _DailyBudget:
-    """Long-recording audio seconds this process may send per UTC day."""
+# One shared counter per UTC day: every process reserves from it, so the cap is a fleet bound that
+# survives scaling and restarts. Kept a little past its day so a pass that settles after midnight
+# still finds its own day's key.
+LONG_BUDGET_KEY = 'v3_fast_finish:long_audio_seconds:{day}'
+LONG_BUDGET_TTL_SECONDS = 26 * 3600
+# A Redis call that stalls this long fails the long pass closed (long_cap); short passes never call it.
+LONG_BUDGET_REDIS_TIMEOUT_SECONDS = 1.0
 
-    def __init__(self):
-        self._lock = threading.Lock()
-        self._day: str | None = None
-        self._used = 0.0
 
-    def _roll(self, now: datetime | None) -> None:
-        day = (now or datetime.now(timezone.utc)).strftime('%Y-%m-%d')
-        if day != self._day:
-            self._day, self._used = day, 0.0
+@functools.cache
+def _budget_redis() -> Any:
+    """The fleet budget's Redis client, with bounded connect and read waits (built on first use)."""
+    return redis_db.create_bounded_redis_client(LONG_BUDGET_REDIS_TIMEOUT_SECONDS)
+
+
+class _FleetBudget:
+    """Long-recording provider audio seconds the whole fleet may send per UTC day, in Redis.
+
+    ``reserve`` adds a pass's planned audio to the day's counter and takes it back if that went over
+    the cap; ``settle`` replaces the reservation with the audio actually sent. Fails closed: when
+    Redis cannot answer, no long pass is admitted (``long_cap``). Two passes racing for the last room
+    may both be refused; neither can push the day over the cap.
+    """
+
+    def __init__(self, client: Any = None):
+        self._client = client
+
+    def _redis(self) -> Any:
+        return self._client if self._client is not None else _budget_redis()
+
+    @staticmethod
+    def key(now: datetime | None = None) -> str:
+        return LONG_BUDGET_KEY.format(day=(now or datetime.now(timezone.utc)).strftime('%Y-%m-%d'))
+
+    def used(self, *, now: datetime | None = None) -> float:
+        """Today's audio seconds across the fleet. Raises when Redis cannot answer."""
+        return float(self._redis().get(self.key(now)) or 0)
 
     def room(self, seconds: float, *, now: datetime | None = None) -> bool:
-        """Whether ``seconds`` more would fit today, without reserving them."""
-        with self._lock:
-            self._roll(now)
-            return self._used + seconds <= _number(LONG_DAILY_SECONDS_ENV, LONG_DAILY_SECONDS_DEFAULT)
+        """Whether ``seconds`` more would fit today, without reserving them; False when Redis cannot answer."""
+        try:
+            used = self.used(now=now)
+        except Exception as error:
+            logger.warning(
+                'event=v3_fast_finish_long_budget outcome=unavailable exception_type=%s', type(error).__name__
+            )
+            return False
+        return used + seconds <= _number(LONG_DAILY_SECONDS_ENV, LONG_DAILY_SECONDS_DEFAULT)
 
-    def reserve(self, seconds: float, *, now: datetime | None = None) -> bool:
-        with self._lock:
-            self._roll(now)
-            if self._used + seconds > _number(LONG_DAILY_SECONDS_ENV, LONG_DAILY_SECONDS_DEFAULT):
-                return False
-            self._used += seconds
-            return True
+    def reserve(self, seconds: float, *, now: datetime | None = None) -> str | None:
+        """The day's key when ``seconds`` fit and are now reserved; None (nothing reserved) otherwise."""
+        key = self.key(now)
+        try:
+            pipe = self._redis().pipeline()
+            pipe.incrbyfloat(key, seconds)
+            pipe.expire(key, LONG_BUDGET_TTL_SECONDS)
+            used = float(pipe.execute()[0])
+        except Exception as error:
+            logger.warning(
+                'event=v3_fast_finish_long_budget outcome=unavailable exception_type=%s', type(error).__name__
+            )
+            return None
+        if used > _number(LONG_DAILY_SECONDS_ENV, LONG_DAILY_SECONDS_DEFAULT):
+            self._adjust(key, -seconds)
+            return None
+        return key
 
-    def settle(self, reserved: float, sent: float, *, now: datetime | None = None) -> None:
+    def settle(self, key: str, reserved: float, sent: float) -> None:
         """Replace a pass's reservation with the audio it actually sent: retries, overlaps and probe included."""
-        with self._lock:
-            self._roll(now)
-            self._used = max(self._used + sent - reserved, 0.0)
+        if sent != reserved:
+            self._adjust(key, sent - reserved)
+
+    def _adjust(self, key: str, delta: float) -> None:
+        try:
+            self._redis().incrbyfloat(key, delta)
+        except Exception as error:
+            # A refund that cannot land leaves the day overcharged: less long-pass spend, never more.
+            # An undercharge that cannot land lets the day run over by at most this pass's retries and probe.
+            logger.warning(
+                'event=v3_fast_finish_long_budget outcome=settle_failed exception_type=%s', type(error).__name__
+            )
 
 
 class _Sent:
@@ -269,7 +323,7 @@ class _Sent:
             self.seconds += seconds
 
 
-LONG_BUDGET = _DailyBudget()
+LONG_BUDGET = _FleetBudget()
 
 
 def candidate_rejection(row: dict) -> str | None:
@@ -589,8 +643,13 @@ def _routed_transcriber(pcm: bytes, language: str | None, deadline: float, priva
         if deadline - time.monotonic() < PROBE_MIN_SECONDS:
             stopped.append('deadline')
             return False
-        if not _privacy_allows(privacy):
-            stopped.append('privacy_blocked')
+        try:
+            # On the pass's own thread: bounded by the deadline like its other Firestore calls.
+            if not _privacy_within(privacy, deadline):
+                stopped.append('privacy_blocked')
+                return False
+        except _Late:
+            stopped.append('deadline')
             return False
         if vendor:
             probe = min(len(pcm) / 2 / SAMPLE_RATE, MAX_PROBE_SECONDS)
@@ -699,7 +758,7 @@ def screen(uid: str, units: list) -> str | None:
 def run(
     uid: str,
     conversation_id: str,
-    row: dict,
+    row: dict | None,
     units: list,
     read,
     *,
@@ -715,7 +774,10 @@ def run(
 ) -> str:
     """Transcribe ``units`` and write them as provisional segments. Returns the counted outcome; never raises.
 
-    ``row`` and ``refresh()`` must be decoded rows. ``authorize`` is the consent and funding gate;
+    ``row`` and ``refresh()`` must be decoded rows; with ``refresh`` the pass reads its own row and
+    ``row`` may be None. A chunked pass waits for each Firestore call (refresh, ``authorize``,
+    ``privacy`` on its own thread, the write and ``cut``) only until its deadline, or
+    WRITE_GRACE_SECONDS past it for the calls after the chunks, then abandons it as ``deadline``. ``authorize`` is the consent and funding gate;
     without it nothing is sent to a provider that ordinary batch processing would have held.
     ``privacy`` answers whether the account's current sync authorization and privacy generation
     still allow server work on this recording. It is asked before any audio is read and again at
@@ -756,6 +818,8 @@ def run(
             fence=fence,
             deadline=deadline,
         )
+    except _Late:
+        outcome = 'deadline'
     except Exception as error:
         logger.warning('event=v3_fast_finish outcome=error exception_type=%s', type(error).__name__)
         outcome = 'error'
@@ -870,6 +934,10 @@ def _chunk_job(
         # meanwhile. The round that submitted it was authorized; this request may still not leave.
         if not _privacy_allows(privacy):
             raise _Refused()
+        # Asked again after the privacy check, which can be slow: a pass that stopped meanwhile
+        # sends nothing more and charges nothing.
+        if stop.is_set():
+            raise _Abandoned()
         started = time.monotonic()
         AUDIO_SECONDS.labels(path).inc(seconds)
         sent.add(seconds)
@@ -1004,6 +1072,63 @@ def _stitch(jobs, raw, units, origin) -> list[dict]:
     return segments
 
 
+class _Late(Exception):
+    """A Firestore call did not finish by its bound and was abandoned: the pass yields with ``deadline``."""
+
+
+def _bounded(call, until: float | None, *args):
+    """``call(*args)``, waited for only until ``until`` (``time.monotonic()``); None waits as before.
+
+    The Firestore client bounds reads but not a transaction commit, so every call a chunked pass makes
+    runs on the fast-finish I/O pool and is abandoned at its bound: cancelled if it has not started,
+    left to end on the client's own timeouts if it has. The pass then releases its slot.
+    """
+    if until is None:
+        return call(*args)
+    remaining = until - time.monotonic()
+    if remaining <= 0:
+        raise _Late()
+    future = get_fast_finish_io_executor().submit(call, *args)
+    done, _ = wait([future], timeout=remaining)
+    if not done:
+        future.cancel()
+        logger.warning('event=v3_fast_finish_abandoned stage=firestore')
+        raise _Late()
+    return future.result()
+
+
+def _privacy_within(privacy, until: float | None) -> bool:
+    """``_privacy_allows``, bounded: a refusal or error is False; a check past its bound raises ``_Late``."""
+    if privacy is None:
+        return False
+    try:
+        return _bounded(privacy, until) is True
+    except _Late:
+        raise
+    except Exception as error:
+        logger.warning('event=v3_fast_finish outcome=privacy_blocked exception_type=%s', type(error).__name__)
+        return False
+
+
+def _guard_until(fence, until: float | None):
+    """The write's in-transaction fence, refusing a transaction body that runs past ``until``.
+
+    The pass stops waiting for its write at ``until`` and then never stores a cut. A transaction that
+    the Firestore client starts, or retries after contention, later than that writes nothing: a
+    late provisional write can never be published behind a cut or a lock committed meanwhile.
+    """
+
+    if until is None:
+        return fence
+
+    def guard(transaction):
+        if time.monotonic() >= until:
+            raise _Late()
+        fence(transaction)
+
+    return guard
+
+
 def _run(
     uid,
     conversation_id,
@@ -1025,48 +1150,44 @@ def _run(
         deadline = time.monotonic() + PASS_DEADLINE_SECONDS
     if not enabled(uid):
         return 'not_enabled'
+    chunked = chunked_enabled()
+    # A chunked pass bounds every Firestore call by its deadline: the reads before the chunks (row
+    # refresh, funding, privacy) by the deadline itself, the refresh, write and cut after them by
+    # WRITE_GRACE_SECONDS more. The serial kill-switch path keeps today's unbounded calls.
+    before = deadline if chunked else None
+    after = deadline + WRITE_GRACE_SECONDS if chunked else None
     if write is None:
         if fence is None:
             # Fail closed: the default writer never publishes without the in-transaction privacy fence.
             return 'privacy_blocked'
-        write = functools.partial(_write_fenced, fence=fence)
-    chunked = chunked_enabled()
-
-    def expired() -> bool:
-        # The chunked path's deadline covers the Firestore reads before it too (refresh, funding,
-        # privacy): a slow one leaves no time to start chunking. The serial path keeps none.
-        return chunked and time.monotonic() >= deadline
-
+        write = functools.partial(_write_fenced, fence=_guard_until(fence, after))
     if refresh is not None:
-        # Admission read this row before staging. Nothing is sent to the provider on a stale grant.
-        row = refresh()
-    if not eligible(row):
+        # Admission did not read the decoded row; nothing is sent to the provider on a stale grant.
+        row = _bounded(refresh, before)
+    if not row or not eligible(row):
         return 'ineligible'
     # Length, the long canary and room under its daily cap: admission asked these before taking a
     # slot; they are asked again here for direct callers and a cap that filled meanwhile.
     refused = screen(uid, units)
     if refused is not None:
         return refused
-    if expired():
-        return 'deadline'
     seconds = sum(duration for _, duration, _ in units)
     jobs = plan(units) if chunked else []
     # Audio the serial path never sent: the canary and its daily cap bound this added spend.
     long_audio = chunked and long_recording(units)
-    if not authorize(uid, seconds, row.get('language')):
+    if not _bounded(authorize, before, uid, seconds, row.get('language')):
         return 'not_funded'
-    if expired():
-        return 'deadline'
     # The owner may have turned sync off or changed privacy since this recording was captured and
     # admitted. Nothing is read from storage on a stale grant.
-    if not _privacy_allows(privacy):
+    if not _privacy_within(privacy, before):
         return 'privacy_blocked'
-    if expired():
+    if chunked and time.monotonic() >= deadline:
         return 'deadline'
     # Before the reservation: nothing between it and the try below may raise and leak it.
     origin = row['started_at'].timestamp()
     reserved = planned_seconds(jobs) if long_audio else 0.0
-    if long_audio and not LONG_BUDGET.reserve(reserved):
+    budget_key = LONG_BUDGET.reserve(reserved) if long_audio else None
+    if long_audio and budget_key is None:
         return 'long_cap'
     sent = _Sent()
     try:
@@ -1080,24 +1201,27 @@ def _run(
     except _Stopped as stopped:
         return stopped.outcome
     finally:
-        if long_audio:
+        if budget_key is not None:
             # Charge what was actually sent (retries and the language probe included, chunks never
             # sent refunded), not the reservation.
-            LONG_BUDGET.settle(reserved, sent.seconds)
+            LONG_BUDGET.settle(budget_key, reserved, sent.seconds)
     if not segments:
         return 'empty'
     segments.sort(key=lambda segment: (segment['start'], segment['end']))
-    if refresh is not None and not eligible(refresh()):
+    if refresh is not None and not eligible(_bounded(refresh, after) or {}):
         return 'superseded'
     from database.batch_pipeline_privacy import BatchPrivacyBlocked
 
     started = time.monotonic()
     try:
         # False: the row no longer qualifies, or the canonical record already projected.
-        written = write(uid, conversation_id, segments)
+        written = _bounded(write, after, uid, conversation_id, segments)
     except BatchPrivacyBlocked:
         # The owner opted out, or the privacy generation moved, while the provider request ran.
         return 'privacy_blocked'
+    except _Late:
+        # Abandoned: no cut follows it, and its transaction refuses to run past ``after``.
+        raise
     except Exception as error:
         logger.warning('event=v3_fast_finish outcome=write_error exception_type=%s', type(error).__name__)
         return 'write_error'
@@ -1106,7 +1230,9 @@ def _run(
         return 'superseded'
     if cut is not None:
         try:
-            cut()
+            # After the write returned, so the cut always lands after the transcript. Past its bound
+            # the cut is abandoned and may still land; the pass reports it as not confirmed.
+            _bounded(cut, after)
         except Exception as error:
             # The transcript is stored; without the cut the window follows the silence and lock timers.
             logger.warning('event=v3_fast_finish outcome=cut_error exception_type=%s', type(error).__name__)

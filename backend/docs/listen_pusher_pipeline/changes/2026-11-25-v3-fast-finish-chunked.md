@@ -21,18 +21,28 @@ transcript (`utils/conversations/v3/fast_finish.py`) calls the provider.
   admission) is outside it, and outside `omi_conversations_v3_fast_finish_wall_seconds`.
   - Slot wait, the Firestore reads before chunking (row refresh, funding, privacy), audio reads, the
     language probe, chunk queue wait and provider requests all count, and so does one retry. The pass
-    checks the deadline after each Firestore call and before every retained-audio reference it reads.
+    checks the deadline before every retained-audio reference it reads.
+  - Every Firestore call of a chunked pass runs on the small `fast_finish_io` pool and is waited for
+    only until its bound: the deadline for the row refresh, funding and privacy (the language probe's
+    privacy check included), and `WRITE_GRACE_SECONDS` (1.5 s) past it for the refresh, transcript
+    write and cut after the chunks. Past its bound a call is abandoned (cancelled if not started) and the
+    pass yields as `deadline`. The Firestore client cannot bound a transaction commit, so the write is
+    fenced instead: its in-transaction guard refuses a body that runs past the bound, and the pass never
+    stores a cut after an abandoned write. Admission no longer reads the row before the pass; the pass
+    reads it once, bounded.
   - Each reference's storage metadata and download timeouts are capped to what is left
     (`ArtifactReadBudget`); the serial kill-switch path keeps its 30 s and 60 s.
   - Under `verification_stt_deadline` a request's connect, pool, write and read timeouts share what is
     left (`budget_timeout`) instead of each taking all of it. That context also keeps the provider's own
     retry and Soniox credit failover off for these requests; batch keeps both. The vendor language
-    probe's 8 s timeout and the self-hosted gate's 6 s are capped the same way.
+    probe and the self-hosted gate keep their own timeout parts (connect 2 s; read, write and pool 8 s
+    and 6 s), each capped to what is left.
   - Past the deadline the pass cancels queued chunks, waits at most `STOP_GRACE_SECONDS` (2 s) more for
     running ones, writes nothing, releases its slot and yields to batch as `deadline`. A request still
     running then ends on its own timeouts, and its result is dropped.
   - A pass that stops early (`provider_error`, `privacy_blocked`, `audio_error`) sends no further request
-    or retry, cancels queued chunks and releases its slot as soon as the requests already in flight end.
+    or retry (a chunk checks again after its privacy answer, just before it is charged and sent), cancels
+    queued chunks and releases its slot as soon as the requests already in flight end.
 - **Short and long.** Long means over 20 minutes of audio, never merely many chunks. A six-minute Finish
   split into six units, or one 19.9-minute unit of five chunks, is short.
   - A short pass keeps four chunks in flight (one round up to about 19.8 minutes, two above).
@@ -74,11 +84,14 @@ transcript (`utils/conversations/v3/fast_finish.py`) calls the provider.
 Recordings over 20 minutes are the spend this change adds. They take the chunked path only for
 `CONVERSATIONS_V3_FAST_FINISH_LONG_PERCENT` of owners (default 25, salted uid bucket
 `v3-fast-finish-long`; outside it, `long_canary`). They are also limited to
-`CONVERSATIONS_V3_FAST_FINISH_LONG_DAILY_SECONDS` of their audio per process per UTC day (default 7200;
-past it, `long_cap`). The cap counts the audio actually sent: chunk overlaps, retries and the vendor
-language probe included, and chunks never sent refunded. It is an in-memory counter for the life of the
-process: each new or restarted instance starts the day at 0, so the fleet's daily total is not this value
-times a fixed instance count when instances scale or restart. Finishes up to 20 minutes are not gated.
+`CONVERSATIONS_V3_FAST_FINISH_LONG_DAILY_SECONDS` of their audio per UTC day across the fleet (default
+7200; past it, `long_cap`). The counter is one Redis key per UTC day,
+`v3_fast_finish:long_audio_seconds:<day>` (26 h TTL), shared by every process, so it survives scaling
+and restarts. A long pass reserves its planned audio with `INCRBYFLOAT` (taken back at once if that
+went over the cap) and settles to the audio actually sent: chunk overlaps, retries and the vendor
+language probe included, and chunks never sent refunded. It fails closed: when Redis errors or takes over
+1 s, long passes are refused as `long_cap`; short passes never ask it. Finishes up to 20 minutes are not
+gated.
 
 ## Metrics
 

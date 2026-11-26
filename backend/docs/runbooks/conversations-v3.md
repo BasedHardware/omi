@@ -144,13 +144,17 @@ once if time allows. One 45 s deadline from record admission (not the Finish tap
 Firestore reads before chunking, every retained-audio reference read (its storage timeouts capped to what
 is left), both language probes, queueing and provider requests (their connect, pool, write and read
 timeouts share what is left); past it the pass cancels queued chunks, waits at most 2 s more for running
-ones and yields to batch as `deadline`. A pass that stops early sends no further request or retry and
+ones and yields to batch as `deadline`. Every Firestore call of a chunked pass (row refresh, funding,
+privacy, the transcript write and the cut) is waited for only until the deadline, or 1.5 s past it after
+the chunks, then abandoned as `deadline`; the write's own transaction refuses to run past that bound, and
+no cut follows an abandoned write. A pass that stops early sends no further request or retry and
 releases its slot when the requests in flight end. At a fixed cut the earlier chunk owns lines that start before the overlap's middle; every
 later line that starts before the earlier chunk's last line ended is compared against it (words by time,
 utterances by text, allowing a clipped word on either side) and keeps only what is new. Recordings over 20 minutes are a canary: `CONVERSATIONS_V3_FAST_FINISH_LONG_PERCENT`
 (default 25, `long_canary` outside it) and `CONVERSATIONS_V3_FAST_FINISH_LONG_DAILY_SECONDS` (default
-7200 per process per UTC day of audio actually sent, retries, overlaps and the vendor probe included,
-counted in memory so a new or restarted instance starts the day at 0; `long_cap` past it). Set `CONVERSATIONS_V3_FAST_FINISH_CHUNKED=off` on
+7200 per UTC day across the fleet, of audio actually sent, retries, overlaps and the vendor probe
+included, in the Redis key `v3_fast_finish:long_audio_seconds:<UTC day>`; `long_cap` past it, and also
+whenever Redis errors or takes over 1 s). Read today's total with `GET` on that key. Set `CONVERSATIONS_V3_FAST_FINISH_CHUNKED=off` on
 `backend-integration` to restore one serial request per unit and the 20-minute bound. Read
 `omi_conversations_v3_fast_finish_total{outcome}`, `omi_conversations_v3_fast_finish_seconds{stage}`,
 `omi_conversations_v3_fast_finish_chunks`, `omi_conversations_v3_fast_finish_chunk_seconds`,

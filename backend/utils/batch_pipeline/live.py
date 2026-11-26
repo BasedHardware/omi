@@ -557,7 +557,8 @@ async def _manual_finish_admitted(
                     outcome = fast_finish.run(
                         uid,
                         conversation_id,
-                        refresh(),
+                        # No row: the pass reads the decoded row itself, bounded by the deadline.
+                        None,
                         copied,
                         read,
                         refresh=refresh,
