@@ -61,6 +61,7 @@ KNOWN_LEVERS = frozenset(
         'bpp_tokenless_write_cache',  # opt in only after write-side shadow qualification
         'bpp_tokenless_write_audit',  # 0–100 basis points of enforced hits
         'bpp_tokenless_write_shadow',  # sampled comparison for write authority
+        'bpp_late_erasure_execute',  # 100 opens delayed erasure execution; proof capture stays on
         'bpp_status_skip',  # ship-on: content-free, read-only status polls
         'bpp_decision_cache',  # batch privacy: token-validated generation reuse across attempts, <= 60s
         'bpp_owner_memo',  # ship-on: batch privacy owner-level decision reuse, same per-use token certification; 0 restores id-set keying
@@ -91,6 +92,7 @@ DEFAULT_PERCENTAGES = {
     'bpp_shared_owner_shadow': 0,
     'bpp_status_skip': 100,
     'bpp_owner_memo_enforce': 0,
+    'bpp_late_erasure_execute': 0,
 }
 
 

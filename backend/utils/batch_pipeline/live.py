@@ -711,6 +711,7 @@ async def admit_recording(store, pending, *, now=None, provider_outbox_factory=N
             item,
             MAGIC + json.dumps(manifest, separators=(',', ':')).encode(),
             record_origin=True,
+            record_lane_owner=OWNER,
         )
         staged.append(replace(item, audio_uri=uri, timing_store=batch_timing_store(refs)))
     source_attestation = attest(private_cloud_sync_bucket, uid, conversation_id, current, record_barrier, units, staged)

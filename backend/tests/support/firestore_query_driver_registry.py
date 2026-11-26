@@ -167,7 +167,7 @@ BODY_DIGEST = {
     'database.conversations_v3._oldest_pending': 'e2da208a3dcbae7d7c7c59335883b422e27dc71c9cfae51568883aa452bcfc57',
     'database.conversations_v3.commit_projection': '8105dd5d27d6475098159c7b16ca41bf3ceeb09334e1941d697f1bfc75c52c26',
     'database.batch_pipeline_conversation_purge_scans._claim': '662c759fc79795f0851e0b18082b7dcb006e109253e45ba1fde2190d542bddf8',
-    'database.batch_privacy_late_sweeps.reconcile_batch_privacy_late_sweeps': '0d774cdc9791b539ea9442e3f3e22363f78e9c1702df0d1ea747f39585b5c52f',
+    'database.batch_privacy_late_sweeps.reconcile_batch_privacy_late_sweeps': 'bd0c62aeb7bab5e86e3fdbb73bc9b6cb395a1218923110590d0a8fcaacabd5f6',
     'database.batch_pipeline_conversation_purge_scans.run_job': 'fe5d30b77da198a7e0dc188115c8906fb6446925079a4e96339d36675a55faeb',
     'database.batch_pipeline_store.FirestoreStore.protected_retries': 'b55d2960c94057cb8df9b9cdd2e7728b6af63728bc0a2cb6f5bd333efed443a2',
     'database.batch_pipeline_store.FirestoreTransaction.protected_ready': 'c722019b927498cd74c6d5c4d3e52506c4e1318ef5ae74da4ddd17af978ae564',
@@ -179,7 +179,7 @@ BODY_DIGEST = {
     'database.conversation_batch_purge_jobs.RunProgress.segments': '8abb8d7ed330ab91cc91af8b792809121c06605ff0180e0c90da4b66d6e3ef45',
     'database.conversation_batch_purge_jobs._drop_segment_records': '2db3123e6e11d177d434326668969249a7fd4e0aade9788d045056fbdefe8c9d',
     'database.conversation_batch_purge_jobs._owes_segments': '5945da3db3e539efafe6dbc95560280683ea863b77a8e7e720ee3c2902b59c68',
-    'database.conversation_batch_purge_jobs.run_job': '08c2595e36263b8c4832fcac2e4118168f838b6d6665830b7d96ff39500a1cb7',
+    'database.conversation_batch_purge_jobs.run_job': '014d04b13eb68e59af11c061be1f0b926b3509dfe1964d717cb9fc14677dc94e',
     'database.batch_pipeline_store.promote_record_recoveries': 'ce853ebe262f00a49241f670f28e23dfa0951d37cda42e1da34a966899c1ecd1',
     'database.record_custody_receipts.prune': 'a01ec56fc4132450ccd96a0eb11f59bfbdfdb8e7760e8c8d565f11ccd3af8e23',
     'database.action_items.FirestoreActionItems.iter_all': '1bc86d38c0b932c87e130090fde9d1105a6ca0df82c636b7dca0e2fd24c9d6d3',
@@ -420,11 +420,34 @@ _add(
     DriverEntry(
         'database.conversation_batch_purge_jobs.due_jobs',
         neutrals={'now': _NOW, 'limit': _LIMIT},
-        domains={'collection': ['conversation_batch_purge_jobs', 'conversation_erasure_jobs']},
+        domains={
+            'collection': ['conversation_batch_purge_jobs', 'conversation_erasure_jobs'],
+            'post_window': [False, True],
+        },
     )
 )
 # Post-window artifact sweep intent has the same bounded due-at query.
-_add(DriverEntry('database.batch_privacy_late_sweeps.due_jobs', base={'now': T0}, neutrals={'limit': _LIMIT}))
+_add(
+    DriverEntry(
+        'database.batch_privacy_late_sweeps.due_jobs',
+        base={'now': T0},
+        neutrals={'limit': _LIMIT},
+        domains={'execution': [False, True]},
+    )
+)
+_add(
+    DriverEntry(
+        'database.privacy_check_metrics.observe_post_window_pending',
+        base={'phase': 'artifact_proof'},
+        domains={
+            'collection': [
+                ref_collection('batch_privacy_late_sweeps'),
+                ref_collection('conversation_batch_purge_jobs'),
+            ],
+            'schedule_field': ['due_at', 'execute_at', 'post_window_due_at'],
+        },
+    )
+)
 _add(
     CoveredByEntry(
         'database.batch_privacy_late_sweeps.reconcile_batch_privacy_late_sweeps',

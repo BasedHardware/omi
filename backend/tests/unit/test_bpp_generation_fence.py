@@ -391,6 +391,16 @@ def test_redis_invalidation_keeps_firestore_timestamp_precision(timestamp):
     assert write_cache._revision(timestamp) == 123_456_789_123
 
 
+def test_redis_invalidation_backoff_counts_skipped_commit(monkeypatch):
+    monkeypatch.setenv('REDIS_DB_HOST', 'synthetic-redis')
+    monkeypatch.delenv('BPP_WRITE_REDIS_HOST', raising=False)
+    monkeypatch.setattr(write_cache, '_redis_retry_at', float('inf'))
+    metric = write_cache.TOKENLESS.labels('invalidation_backoff')._value
+    before = metric.get()
+    write_cache.invalidate_tokenless({TOKEN}, datetime.now(timezone.utc))
+    assert metric.get() == before + 1
+
+
 @pytest.mark.parametrize(
     'family,fields',
     [

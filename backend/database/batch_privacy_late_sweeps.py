@@ -11,6 +11,7 @@ from google.api_core.exceptions import FailedPrecondition, GoogleAPICallError, I
 from google.cloud import firestore
 from google.cloud.firestore_v1.base_client import _parse_batch_get  # pyright: ignore[reportPrivateUsage]
 
+from config.firestore_read_levers import lever_enabled
 from database import legal_holds, rpc_deadline
 from database._client import get_data_plane_firestore_client
 from database.batch_account_authority_schema import (
@@ -25,7 +26,12 @@ from database.batch_pipeline_privacy_queries import owner_documents
 from database.batch_pipeline_purge import NAMESPACES
 from database.batch_pipeline_shadow_hook import purge_owner
 from database.batch_privacy_late_intents import COLLECTION, DELAY, PROTECTION_FIELDS
-from database.privacy_check_metrics import POST_WINDOW_DEAD_LETTERS, POST_WINDOW_OPERATIONS, POST_WINDOW_SWEEPS
+from database.privacy_check_metrics import (
+    POST_WINDOW_DEAD_LETTERS,
+    POST_WINDOW_OPERATIONS,
+    POST_WINDOW_SWEEPS,
+    observe_post_window_pending,
+)
 from utils.batch_pipeline.retention import BATCH_OBJECT_BUCKET_ENV, batch_object_address, delete_batch_object
 from utils.other.local_storage import create_storage_client
 
@@ -69,12 +75,13 @@ def _now() -> datetime:
     return datetime.now(timezone.utc)
 
 
-def due_jobs(*, now: datetime, limit: int, firestore_client: Any = None) -> list:
+def due_jobs(*, now: datetime, limit: int, execution: bool = False, firestore_client: Any = None) -> list:
     client = firestore_client if firestore_client is not None else get_data_plane_firestore_client()
+    field = 'execute_at' if execution else 'due_at'
     return list(
         client.collection(COLLECTION)
-        .where(filter=firestore.FieldFilter('due_at', '<=', now))
-        .order_by('due_at')
+        .where(filter=firestore.FieldFilter(field, '<=', now))
+        .order_by(field)
         .limit(limit)
         .stream()
     )
@@ -86,7 +93,7 @@ def _matches(snapshot, data, uid, reason, source, changed_at):
     if reason == 'account_deleted':
         # A completed, irreversible wipe owes all remnants of this account.
         return True
-    pending = data.get('write_pending_until')
+    pending = data.get('write_pending_until') or data.get('late_erasure_pending_until')
     # Registration happens before cloud IO. A still-open reservation at the
     # change may have landed an object after the first erasure passed its key.
     if not (
@@ -97,6 +104,8 @@ def _matches(snapshot, data, uid, reason, source, changed_at):
         return False
     if reason == 'data_protection':
         return True
+    if not source and data.get('record_lane_owner') in ('batch_sync_v1', 'legacy_final_pass_v1'):
+        return False
     # A legacy reservation can predate both provenance stamping and job admission.
     return data.get('record_origin') is not False and (not source or source in (data.get('conversation_ids') or ()))
 
@@ -260,7 +269,10 @@ def _certify_scope(client, event, uid, reason, source, changed_at, now):
     if not denies(snapshot.to_dict() or {}):
         event.reference.delete(option=option)
         return 'superseded'
-    event.reference.update({'scope_verified': True, 'due_at': max(now, changed_at + DELAY)}, option=option)
+    event.reference.update(
+        {'scope_verified': True, 'due_at': firestore.DELETE_FIELD, 'execute_at': max(now, changed_at + DELAY)},
+        option=option,
+    )
     return 'scope_verified'
 
 
@@ -282,15 +294,15 @@ def _receipt_failure(client, event, authority, uid, reason, now, artifact, error
     if dead:
         retry.update(dead_letter_error=str(error), dead_lettered_at=now)
     else:
-        retry['due_at'] = now + RETRY
+        retry['execute_at'] = now + RETRY
     if direct:
         changes = retry
         if dead:
-            changes['due_at'] = firestore.DELETE_FIELD
+            changes['execute_at'] = firestore.DELETE_FIELD
     else:
         # Register the retry atomically with advancing the scan. No later
         # receipt waits for retries on a different storage identity.
-        changes = {'after': artifact.id, 'due_at': now + PAGE_RETRY, 'has_receipt_retries': True}
+        changes = {'after': artifact.id, 'execute_at': now + PAGE_RETRY, 'has_receipt_retries': True}
     if not _advance(
         client,
         event.reference,
@@ -335,8 +347,13 @@ def _run(client, event, now):
             # A legacy receipt retry's create time identifies the retry, not the policy Commit.
             raise PermanentSweepError('scope_history_unavailable')
         return _certify_scope(client, event, uid, reason, source, changed_at, now)
+    if 'execute_at' not in data:
+        _reschedule(event, {'due_at': firestore.DELETE_FIELD, 'execute_at': max(now, changed_at + DELAY)})
+        return 'queued'
+    if not lever_enabled('bpp_late_erasure_execute'):
+        return 'paused'
     if changed_at + DELAY > now:
-        event.reference.update({'due_at': changed_at + DELAY}, option=firestore.LastUpdateOption(event.update_time))
+        _reschedule(event, {'execute_at': changed_at + DELAY})
         return 'early'
     key = privacy_owner_key(uid)
     _settle(client, uid)
@@ -367,8 +384,12 @@ def _run(client, event, now):
                 continue
             pending = receipt.get('write_pending_until')
             if isinstance(pending, datetime) and pending > now:
-                _advance(client, event.reference, authority, event, uid, reason, {'due_at': pending + PAGE_RETRY})
+                _advance(client, event.reference, authority, event, uid, reason, {'execute_at': pending + PAGE_RETRY})
                 return 'waiting_for_upload'
+            if reason == 'recording_policy' and not source and receipt.get('record_lane_owner') != 'batch_live_v1':
+                return _receipt_failure(
+                    client, event, authority, uid, reason, now, snapshot, PermanentSweepError('recording_lane_unproven')
+                )
             if _authorize(client, event.reference, authority, uid, reason, event, artifact=snapshot) != 'ready':
                 return 'changed'
             storage = rpc_deadline.bind_storage_client(create_storage_client())
@@ -382,7 +403,7 @@ def _run(client, event, now):
                     target=f'late-batch:{namespace}:{uri}',
                 )
                 POST_WINDOW_OPERATIONS.labels(reason, 'object_storage').inc()
-            changes = {'after': snapshot.id, 'needs_postgres': True, 'due_at': now + PAGE_RETRY}
+            changes = {'after': snapshot.id, 'needs_postgres': True, 'execute_at': now + PAGE_RETRY}
             if _advance(client, event.reference, authority, event, uid, reason, changes, artifact=snapshot):
                 POST_WINDOW_OPERATIONS.labels(reason, 'firestore').inc()
             return 'progress'
@@ -397,12 +418,17 @@ def _run(client, event, now):
                 else 'changed'
             )
         if page:
-            changes = {'after': page[-1].id, 'due_at': now + PAGE_RETRY}
+            changes = {'after': page[-1].id, 'execute_at': now + PAGE_RETRY}
         else:
             if data.get('needs_postgres') or reason == 'account_deleted':
                 rows = authority.remote(lambda: purge_owner(namespace, uid), target=f'late-batch:{namespace}')
                 POST_WINDOW_OPERATIONS.labels(reason, 'postgres').inc(rows)
-            changes = {'namespace_index': index + 1, 'after': None, 'needs_postgres': False, 'due_at': now + PAGE_RETRY}
+            changes = {
+                'namespace_index': index + 1,
+                'after': None,
+                'needs_postgres': False,
+                'execute_at': now + PAGE_RETRY,
+            }
         _advance(client, event.reference, authority, event, uid, reason, changes)
         return 'progress'
 
@@ -418,10 +444,10 @@ def _reschedule(event, changes) -> bool:
     return True
 
 
-def _intent_failure(event, now, error):
+def _intent_failure(event, now, error, field):
     attempts = _attempts((event.to_dict() or {}).get('permanent_attempts'))
     if attempts < _attempt_limit():
-        return 'retry' if _reschedule(event, {'permanent_attempts': attempts, 'due_at': now + RETRY}) else 'changed'
+        return 'retry' if _reschedule(event, {'permanent_attempts': attempts, field: now + RETRY}) else 'changed'
     if not _reschedule(
         event,
         {
@@ -429,6 +455,7 @@ def _intent_failure(event, now, error):
             'dead_lettered_at': now,
             'dead_letter_error': str(error),
             'due_at': firestore.DELETE_FIELD,
+            'execute_at': firestore.DELETE_FIELD,
         },
     ):
         return 'changed'
@@ -442,19 +469,28 @@ def reconcile_batch_privacy_late_sweeps(limit: int = 4, *, firestore_client: Any
     client = rpc_deadline.bind_firestore_client(client)
     now = _now()
     counts: dict[str, int] = {}
-    for event in due_jobs(now=now, limit=max(1, min(limit, 4)), firestore_client=client):
+    cap = max(1, min(limit, 4))
+    events = due_jobs(now=now, limit=cap, firestore_client=client)
+    if (len(events) < cap or cap > 1) and lever_enabled('bpp_late_erasure_execute'):
+        ready = due_jobs(now=now, limit=max(1, cap - len(events)), execution=True, firestore_client=client)
+        events = events[: cap - len(ready)] + ready
+    for event in events:
+        field = 'execute_at' if 'execute_at' in (event.to_dict() or {}) else 'due_at'
         try:
             outcome = _run(client, event, now)
         except legal_holds.LegalHoldActive:
-            outcome = 'held' if _reschedule(event, {'due_at': now + HOLD_RETRY}) else 'changed'
+            outcome = 'held' if _reschedule(event, {field: now + HOLD_RETRY}) else 'changed'
         except PermanentSweepError as error:
-            outcome = _intent_failure(event, now, error)
+            outcome = _intent_failure(event, now, error, field)
         except Exception as error:
             logger.warning('batch privacy late sweep retry error_type=%s', type(error).__name__)
             try:
-                _reschedule(event, {'due_at': now + RETRY})
+                _reschedule(event, {field: now + RETRY})
             except Exception:
                 pass  # Another runner may already have moved or completed the row.
             outcome = 'retry'
         counts[outcome] = counts.get(outcome, 0) + 1
+    queue = client.collection(COLLECTION)
+    observe_post_window_pending(queue, 'due_at', 'artifact_proof')
+    observe_post_window_pending(queue, 'execute_at', 'artifact_execution')
     return counts

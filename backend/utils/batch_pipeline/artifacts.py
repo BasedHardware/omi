@@ -135,6 +135,7 @@ class ArtifactStore:
         *,
         result_key: str | None = None,
         record_origin: bool | None = None,
+        record_lane_owner: str | None = None,
     ) -> str:
         if not body or len(body) > limit:
             raise ValueError('batch artifact exceeds bounded payload size')
@@ -157,6 +158,7 @@ class ArtifactStore:
             kind,
             context,
             **({'record_origin': record_origin} if record_origin is not None else {}),
+            **({'record_lane_owner': record_lane_owner} if record_lane_owner is not None else {}),
         )
         self._unchanged(item, context)
         if kind == 'voice_evidence':
@@ -339,18 +341,22 @@ class ArtifactStore:
             raise PermissionError('voice evidence expired or unbound')
         return payload
 
-    def stage_audio(self, item: WorkItem, wav: bytes, *, record_origin: bool | None = None) -> str:
+    def stage_audio(
+        self, item: WorkItem, wav: bytes, *, record_origin: bool | None = None, record_lane_owner: str | None = None
+    ) -> str:
         """Admission calls this before enqueue; audio AAD excludes its own URI."""
-        return self._write(item, 'audio', wav, AUDIO_LIMIT, record_origin=record_origin)
+        return self._write(
+            item, 'audio', wav, AUDIO_LIMIT, record_origin=record_origin, record_lane_owner=record_lane_owner
+        )
 
-    def stage_record_plan(self, item: WorkItem, plan: dict) -> str:
+    def stage_record_plan(self, item: WorkItem, plan: dict, *, record_lane_owner: str | None = None) -> str:
         """Small encrypted continuation, attached to the record coordinator.
 
         Uses the normal owner/privacy-fenced staging outbox. It contains only
         immutable source slices and is never sent to a compute worker.
         """
         body = json.dumps(plan, allow_nan=False, separators=(',', ':')).encode()
-        return self._write(item, 'audio', body, RESULT_LIMIT, record_origin=True)
+        return self._write(item, 'audio', body, RESULT_LIMIT, record_origin=True, record_lane_owner=record_lane_owner)
 
     def load_record_plan(self, item: WorkItem, uri: str) -> dict:
         return json.loads(self._read(item, uri, 'audio', RESULT_LIMIT))

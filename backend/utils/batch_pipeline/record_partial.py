@@ -149,7 +149,13 @@ async def prepare_run(store, pending, current, barrier, client, artifacts, units
 
     units, _ = await run_blocking(storage_executor, collect)
     plan = {'version': 1, 'fingerprint': fingerprint, 'units': units, 'prior_coverage': coverage}
-    uri = await run_blocking(storage_executor, artifacts.stage_record_plan, seed, plan)
+    uri = await run_blocking(
+        storage_executor,
+        artifacts.stage_record_plan,
+        seed,
+        plan,
+        record_lane_owner=pending['record_snapshot'].get('record_lane_owner'),
+    )
     generation = int((previous or {}).get('generation', 0)) + 1
     run = {
         'fingerprint': fingerprint,
@@ -351,6 +357,7 @@ async def admit_page(
             item,
             MAGIC + json.dumps(manifest, separators=(',', ':')).encode(),
             record_origin=True,
+            record_lane_owner=row.get('record_lane_owner'),
         )
         staged.append(replace(item, audio_uri=uri, timing_store=batch_timing_store(refs)))
     intake = {

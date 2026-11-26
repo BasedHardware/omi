@@ -21,7 +21,7 @@ from uuid import uuid4
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
-from google.api_core.exceptions import FailedPrecondition
+from google.api_core.exceptions import FailedPrecondition, ServiceUnavailable
 from google.auth.credentials import AnonymousCredentials
 from google.cloud import firestore
 from prometheus_client import REGISTRY
@@ -34,11 +34,13 @@ from utils import funded_processing, stt_cap_dispatch
 from utils.batch_pipeline import intake
 from utils.batch_pipeline.artifact_policy import create_artifact_store
 from utils.batch_pipeline.audio import audio_unit
-from utils.batch_pipeline.contracts import Priority, WorkItem
+from utils.batch_pipeline.contracts import Priority, ProjectionBinding, WorkItem
+from dataclasses import asdict
 from utils.stt import batch_language
 from utils.other.local_storage import LocalBlob, LocalStorageClient
 
 pytestmark = pytest.mark.integration
+ERASURE_ON = '{"bpp_late_erasure_execute":100}'
 
 
 @pytest.fixture
@@ -46,6 +48,7 @@ def plane(monkeypatch, tmp_path):
     host = os.getenv('FIRESTORE_EMULATOR_HOST', '')
     if not host.startswith(('127.0.0.1:', 'localhost:')):
         pytest.skip('loopback emulator required; no cloud fallback')
+    monkeypatch.setenv('FIRESTORE_READ_LEVERS', ERASURE_ON)
     monkeypatch.setenv('MEMORY_ENABLED', 'on')
     # WAL orphan sweeps use their own imported factory. Keep storage synthetic
     # even when a test separately replaces the artifact-delete transport.
@@ -852,7 +855,7 @@ def test_post_window_sweep_erases_a_late_commit_and_keeps_unrelated_rows(plane, 
     from database import privacy_check_metrics
 
     cid = 'synthetic-after-first-sweep'
-    monkeypatch.setenv('FIRESTORE_READ_LEVERS', '{}')
+    monkeypatch.delenv('FIRESTORE_READ_LEVERS')
     _delete(plane, route, cid)
     [(immediate, generation)] = _reconcile(monkeypatch)
     assert _quick(immediate, generation) == 'purged'
@@ -866,11 +869,16 @@ def test_post_window_sweep_erases_a_late_commit_and_keeps_unrelated_rows(plane, 
     row = delayed.get().to_dict()
     assert row['post_window'] is True
     assert _reconcile(monkeypatch) == []
-    rollback = '{"bpp_tokenless_write_cache":0}'
-    monkeypatch.setenv('FIRESTORE_READ_LEVERS', rollback)
-    assert parse_levers(rollback) == {'bpp_tokenless_write_cache': 0}
-    eligible_at = max(row['due_at'], row['post_window_started_at'] + jobs.POST_WINDOW_DELAY)
+    assert 'due_at' not in row
+    eligible_at = max(row['post_window_due_at'], row['post_window_started_at'] + jobs.POST_WINDOW_DELAY)
     monkeypatch.setattr(jobs, '_now', lambda: eligible_at + timedelta(seconds=1))
+    assert _reconcile(monkeypatch) == []
+    assert _quick(delayed.id, 0) == 'superseded'
+    assert delayed.get().exists and _results_left(plane, cid) == 1
+    assert _pending_count('conversation_execution') == 1
+    rollback = '{"bpp_tokenless_write_cache":0,"bpp_late_erasure_execute":100}'
+    monkeypatch.setenv('FIRESTORE_READ_LEVERS', rollback)
+    assert parse_levers(rollback) == {'bpp_tokenless_write_cache': 0, 'bpp_late_erasure_execute': 100}
     [(job, generation)] = _reconcile(monkeypatch)
     assert job == delayed.id
     completed = privacy_check_metrics.POST_WINDOW_SWEEPS.labels('conversation_deleted')
@@ -930,6 +938,7 @@ def test_late_privacy_sweep_recovers_an_inflight_object(plane, monkeypatch, tmp_
                 'conversation_ids': [source],
                 'kind': 'results',
                 'record_origin': record_origin,
+                'record_lane_owner': 'batch_live_v1',
                 'uri': f'gs://{name}/{object_name}',
                 'write_pending_until': pending,
             }
@@ -1058,7 +1067,9 @@ def test_recording_revocation_recovers_crashed_pre_admission_upload(plane, monke
 
     monkeypatch.setattr(LocalBlob, 'upload_from_file', revoke_during_upload)
     with pytest.raises(UploadProcessExited):
-        artifacts.stage_audio(item, b'synthetic audio', record_origin=origin)
+        artifacts.stage_audio(
+            item, b'synthetic audio', record_origin=origin, record_lane_owner='batch_live_v1' if origin else None
+        )
 
     [receipt] = receipt_collection.stream()
     assert ('record_origin' in receipt.to_dict()) is not legacy
@@ -1222,7 +1233,130 @@ def test_maskless_account_revocation_arms_recording_erasure(plane):
     assert intent.get('conversation_id') == ''
 
 
-@pytest.mark.parametrize('path', ['same-commit-restore', 'later-restore', 'history-unreadable', 'unverified-retry'])
+def _register_pending_result(plane, monkeypatch, tmp_path, variant):
+    bucket, namespace, uid = 'synthetic-late-batch', 'batch_pipeline_dev', plane.uid
+    storage = LocalStorageClient(tmp_path / 'result-upload')
+    monkeypatch.setenv('OMI_ENV_STAGE', 'dev')
+    monkeypatch.setenv('BUCKET_BATCH_PIPELINE', bucket)
+    monkeypatch.setattr(late_sweeps, 'create_storage_client', lambda: storage)
+    monkeypatch.setattr(late_sweeps, 'purge_owner', lambda *_: 0)
+    user = plane.client.collection('users').document(uid)
+    user.update({'private_cloud_sync_enabled': True})
+    cid, segment = 'synthetic-source', 'synthetic-unit'
+    origin = variant != 'legacy-nonrecording'
+    lane = {'desktop-sync': 'batch_sync_v1', 'native': 'batch_live_v1'}.get(variant)
+    user.collection('conversations').document(cid).set(
+        {'private_cloud_sync_enabled': True, **({'record_lane_owner': lane} if lane else {})}
+    )
+    binding = ProjectionBinding(
+        uid,
+        'synthetic-job',
+        'synthetic-content',
+        (segment,),
+        source='desktop' if variant == 'desktop-sync' else 'omi',
+        target_conversation_id=cid,
+        record_origin=origin,
+        native_record=variant == 'native',
+    )
+    job = {'owner_id': uid, 'state': 'leased', 'conversation_id': cid, 'projection_binding': asdict(binding)}
+    if variant == 'native':
+        job.update(record_lane_owner=lane, record_origin=True)
+    plane.client.collection(f'{namespace}_jobs').document(segment).set(job)
+    artifacts = create_artifact_store(
+        FirestoreStore(namespace, firestore_client=plane.client), storage, bucket, b'x' * 32
+    )
+    item = WorkItem(segment, uid, 100, 'record:pending', 1, Priority.FRESH, conversation_id=cid, privacy_generation=0)
+    uri = artifacts.persist_result(item, {'synthetic_result': True})
+    blob = storage.bucket(bucket).blob(uri.removeprefix(f'gs://{bucket}/').split('#', 1)[0])
+    [receipt] = plane.client.collection(f'{namespace}_artifacts').stream()
+    return user, receipt, blob
+
+
+@pytest.mark.parametrize('variant', ['desktop-sync', 'legacy-nonrecording', 'native', 'legacy-unstamped'])
+def test_account_opt_out_preserves_allowed_admitted_results(plane, monkeypatch, tmp_path, variant):
+    user, receipt, blob = _register_pending_result(
+        plane, monkeypatch, tmp_path, 'native' if variant == 'legacy-unstamped' else variant
+    )
+    start = receipt.create_time
+    assert receipt.get('record_origin') is (variant != 'legacy-nonrecording')
+    if variant == 'desktop-sync':
+        assert receipt.get('record_lane_owner') == 'batch_sync_v1'
+    if variant == 'legacy-unstamped':
+        receipt.reference.update({'record_lane_owner': firestore.DELETE_FIELD})
+        monkeypatch.setenv('BATCH_PRIVACY_LATE_SWEEP_PERMANENT_ATTEMPTS', '1')
+    user.update({'private_cloud_sync_enabled': False})
+    [intent] = plane.client.collection(late_intents.COLLECTION).stream()
+    # Preserve the emulator's real Commit revision for historical proof and
+    # simulate the five-minute offset on the independent reservation clock.
+    intent.reference.update({'changed_at': start + timedelta(minutes=5)})
+    clock = [start + timedelta(minutes=5)]
+    monkeypatch.setattr(late_sweeps, '_now', lambda: clock[0])
+    reconcile = late_sweeps.reconcile_batch_privacy_late_sweeps
+    assert reconcile(firestore_client=plane.client) == {'scope_verified': 1}
+    clock[0] = start + timedelta(minutes=30)
+    for _ in range(8):
+        if reconcile(firestore_client=plane.client) == {'completed': 1}:
+            break
+        clock[0] += late_sweeps.PAGE_RETRY
+    assert not intent.reference.get().exists
+    assert receipt.reference.get().exists is (variant != 'native')
+    assert blob.exists() is (variant != 'native')
+    if variant == 'legacy-unstamped':
+        [debt] = plane.client.collection(late_intents.COLLECTION).stream()
+        assert debt.get('artifact_id') == receipt.id
+        assert debt.get('dead_letter_error') == 'recording_lane_unproven'
+        assert 'execute_at' not in debt.to_dict()
+
+
+def test_default_closed_sweep_keeps_proof_and_resumes_after_history_window(plane, monkeypatch, tmp_path):
+    from database.batch_pipeline_staging import ORPHAN_GRACE, reap_one
+
+    monkeypatch.delenv('FIRESTORE_READ_LEVERS')
+    client = plane.client
+    user, receipt, blob = _register_pending_result(plane, monkeypatch, tmp_path, 'native')
+    user.update({'private_cloud_sync_enabled': False})
+    [intent] = client.collection(late_intents.COLLECTION).stream()
+    reconcile = late_sweeps.reconcile_batch_privacy_late_sweeps
+    assert reconcile(firestore_client=client) == {'scope_verified': 1}
+    proof = intent.reference.get().to_dict()
+    assert proof['scope_verified'] is True and 'due_at' not in proof
+    assert _pending_count('artifact_execution') == 1
+    user.update({'private_cloud_sync_enabled': True})
+    deadline = receipt.get('write_pending_until')
+    clock = [deadline + ORPHAN_GRACE + timedelta(seconds=1)]
+    monkeypatch.setattr(late_sweeps, '_now', lambda: clock[0])
+    storage = late_sweeps.create_storage_client
+    mocked_storage = MagicMock(side_effect=storage)
+    monkeypatch.setattr(late_sweeps, 'create_storage_client', mocked_storage)
+    assert reconcile(firestore_client=client) == {}
+    mocked_storage.assert_not_called()
+    assert intent.reference.get().exists and receipt.reference.get().exists and blob.exists()
+    client.collection('batch_pipeline_dev_jobs').document(receipt.get('segment_id')).update(
+        {'result.result_uri': receipt.get('uri')}
+    )
+    store = FirestoreStore('batch_pipeline_dev', firestore_client=client)
+    assert reap_one(store, receipt.id, clock[0])
+    retired = receipt.reference.get().to_dict()
+    assert 'write_pending_until' not in retired and retired['late_erasure_pending_until'] == deadline
+    monkeypatch.setattr(
+        late_sweeps, '_historical_scope', MagicMock(side_effect=AssertionError('proof must be durable'))
+    )
+    monkeypatch.setenv('FIRESTORE_READ_LEVERS', ERASURE_ON)
+    for _ in range(8):
+        if reconcile(firestore_client=client) == {'completed': 1}:
+            break
+        clock[0] += late_sweeps.PAGE_RETRY
+    assert not intent.reference.get().exists and not receipt.reference.get().exists and not blob.exists()
+    assert _pending_count('artifact_execution') == 0
+
+
+def _pending_count(phase):
+    return REGISTRY.get_sample_value('omi_batch_pipeline_privacy_post_window_pending', {'phase': phase})
+
+
+@pytest.mark.parametrize(
+    'path', ['same-commit-restore', 'later-restore', 'history-unreadable', 'history-transient', 'unverified-retry']
+)
 def test_account_recording_erasures_require_a_denial_at_the_policy_commit(plane, monkeypatch, tmp_path, path):
     client, uid = plane.client, plane.uid
     bucket = 'synthetic-late-batch'
@@ -1243,6 +1377,7 @@ def test_account_recording_erasures_require_a_denial_at_the_policy_commit(plane,
             'kind': 'audio',
             'segment_id': 'unit',
             'record_origin': True,
+            'record_lane_owner': 'batch_live_v1',
             'uri': f'gs://{bucket}/{object_name}',
             'write_pending_until': pending,
         }
@@ -1264,15 +1399,17 @@ def test_account_recording_erasures_require_a_denial_at_the_policy_commit(plane,
     clock = [max(intent.get('due_at'), pending) + timedelta(seconds=1)]
     monkeypatch.setattr(late_sweeps, '_now', lambda: clock[0])
     reconcile = late_sweeps.reconcile_batch_privacy_late_sweeps
-    if path in {'history-unreadable', 'unverified-retry'}:
+    if path in {'history-unreadable', 'history-transient', 'unverified-retry'}:
         monkeypatch.setenv('BATCH_PRIVACY_LATE_SWEEP_PERMANENT_ATTEMPTS', '2')
         before = _dead_letter_count('scope_history_unavailable')
 
         def unavailable(_client, reference, field_paths, read_time):
-            assert path == 'history-unreadable'
+            assert path in {'history-unreadable', 'history-transient'}
             assert reference.path == user.path
             assert tuple(field_paths) == ('private_cloud_sync_enabled',)
             assert read_time == intent.create_time
+            if path == 'history-transient':
+                raise ServiceUnavailable('historical read unavailable')
             raise FailedPrecondition('historical proof unavailable')
 
         monkeypatch.setattr(late_sweeps, '_historical_scope', unavailable)
@@ -1288,6 +1425,7 @@ def test_account_recording_erasures_require_a_denial_at_the_policy_commit(plane,
         debt = intent.reference.get().to_dict()
         assert debt['dead_letter_error'] == 'scope_history_unavailable'
         assert 'due_at' not in debt
+        assert 'execute_at' not in debt
         assert _dead_letter_count('scope_history_unavailable') == before + 1
     elif path == 'same-commit-restore':
         assert reconcile(firestore_client=client) == {'superseded': 1}
@@ -1368,6 +1506,7 @@ def test_permanent_receipt_failure_dead_letters_and_valid_rows_recover(plane, mo
         'kind': 'audio',
         'segment_id': 'unit',
         'record_origin': True,
+        'record_lane_owner': 'batch_live_v1',
         'write_pending_until': pending,
     }
     good, bad = artifacts.document('b-valid'), artifacts.document('a-malformed')

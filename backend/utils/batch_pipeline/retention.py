@@ -115,6 +115,7 @@ def _register_batch_artifact(
     *,
     item: Any = None,
     record_origin: bool | None = None,
+    record_lane_owner: str | None = None,
 ) -> str:
     """Register BEFORE object upload; rejected late upload must delete its object.
 
@@ -140,11 +141,18 @@ def _register_batch_artifact(
         if shadow and job.get('owner_key') != privacy_owner_key(uid):
             raise BatchPrivacyBlocked('shadow_artifact_owner')
         binding = job.get('projection_binding') or {}
-        # Admission persists provenance on the job. Preserve positive proof on
-        # older jobs, whose only recording marker was in the projection binding.
-        origin = job.get('record_origin', record_origin)
+        # Older admitted jobs carry the same origin in their immutable binding.
+        origin = job.get('record_origin')
+        if origin is None:
+            origin = binding.get('record_origin', False) if binding else record_origin
         if record_origin is True or binding.get('record_origin') or binding.get('native_record'):
             origin = True
+        lane = job.get('record_lane_owner') or record_lane_owner
+        if lane is None and origin is True:
+            if binding.get('native_record') is True and not binding.get('partial_record'):
+                lane = 'batch_live_v1'
+            elif (binding and not binding.get('native_record')) or (not job and record_origin is True):
+                lane = 'batch_sync_v1'
         voice_write = kind == 'voice_evidence'
         projected_ids = []
         voice_due = None
@@ -294,6 +302,7 @@ def _register_batch_artifact(
                     'duration_seconds': getattr(item, 'duration_seconds', None) or job.get('duration_seconds'),
                     'privacy_generation': expected_generation,
                     'record_origin': origin,
+                    **({'record_lane_owner': lane} if lane is not None else {}),
                     'write_pending_until': datetime.now(timezone.utc) + timedelta(seconds=UPLOAD_PENDING_SECONDS),
                     **({'cleanup_after': voice_due} if voice_write else {}),
                     **(
@@ -303,8 +312,17 @@ def _register_batch_artifact(
                     ),
                 },
             )
-        elif origin is True and (existing.to_dict() or {}).get('record_origin') is not True:
-            transaction.update(reference, {'record_origin': True})
+        else:
+            old = existing.to_dict() or {}
+            provenance = {}
+            if origin is not None and old.get('record_origin') is None:
+                provenance['record_origin'] = origin
+            if origin is True and old.get('record_origin') is False:
+                provenance['record_origin'] = True
+            if lane is not None and old.get('record_lane_owner') is None:
+                provenance['record_lane_owner'] = lane
+            if provenance:
+                transaction.update(reference, provenance)
 
     register(client.transaction())
     mirror_refresh(namespace, [('artifacts', artifact_id)])  # A2 shadow: no-op unless shadow mode
@@ -593,11 +611,26 @@ def batch_artifact_authorize(store: Any, item: Any, *, snapshots: dict | None = 
 
 
 def batch_artifact_register(
-    store: Any, item: Any, uri: str, kind: str, context: Any, *, record_origin: bool | None = None
+    store: Any,
+    item: Any,
+    uri: str,
+    kind: str,
+    context: Any,
+    *,
+    record_origin: bool | None = None,
+    record_lane_owner: str | None = None,
 ) -> None:
     """B's register_artifact(item, uri, kind, context) callback (before upload)."""
     register_batch_artifact(
-        store, item.owner_id, item.segment_id, uri, kind, context.generation, item=item, record_origin=record_origin
+        store,
+        item.owner_id,
+        item.segment_id,
+        uri,
+        kind,
+        context.generation,
+        item=item,
+        record_origin=record_origin,
+        record_lane_owner=record_lane_owner,
     )
 
 
@@ -632,13 +665,22 @@ def register_batch_artifact(
     *,
     item: Any = None,
     record_origin: bool | None = None,
+    record_lane_owner: str | None = None,
 ) -> str:
     """Scoped entry point (lever bpp_attempt_scope, key = uid); see _register_batch_artifact."""
     from database.batch_privacy_attempt import scoped_privacy_attempt
 
     with scoped_privacy_attempt(uid):
         return _register_batch_artifact(
-            store, uid, segment_id, uri, kind, expected_generation, item=item, record_origin=record_origin
+            store,
+            uid,
+            segment_id,
+            uri,
+            kind,
+            expected_generation,
+            item=item,
+            record_origin=record_origin,
+            record_lane_owner=record_lane_owner,
         )
 
 

@@ -61,11 +61,25 @@ retain their existing retry path. Post-commit Redis invalidation errors log
 and increment the `invalidation_error` outcome while the acknowledged write
 still returns its result.
 
-The same conversation reconciler polls at most four due intents per minute.
-Each slice reads at most one page of 100 batch artifact receipts. The planning
-allocation is 250 Firestore reads per slice and 1,440,000 per day at four
-slices a minute, including 576,000 possible artifact-page reads per day.
-Configured Postgres reconciliation also rereads primary mirror keys. Readback
+`bpp_late_erasure_execute` defaults to `0`. On deploy, writers still register
+artifact receipts with server-owned provenance, create delayed intents, and
+invalidate configured Redis after acknowledged authority Commits. The
+reconciler captures Commit-time scope and keeps it on the intent. Existing
+deletion obligations keep their regular schedule. The new artifact sweep and
+second conversation pass hold durable execution dates in separate queues.
+Eligible rows persist without a TTL while execution is closed. A result's
+original reservation window survives retirement of its active upload marker.
+Account opt-outs execute only against receipts with a trusted `batch_live_v1`
+lane. An unstamped candidate whose lane cannot be proven enters recovery debt.
+
+`omi_batch_pipeline_privacy_post_window_pending` counts proof, artifact
+execution, and conversation execution work. `10001` means at least that many
+rows. Proof and artifact execution share four slots a minute, reserving one
+for execution when both queues have due work and the switch is open. A slot
+allows up to 100 artifact rows plus 150 planned supporting
+reads. Two capped counts add up to 31,680/day, for 1,471,680/day. Sampling
+the delayed conversation queue adds up to 15,840/day. Configured Postgres
+reconciliation also rereads primary mirror keys. Readback
 includes cache and shadow outcomes, due queue age, durable completions, and
 Firestore, Postgres and object-storage work from
 `omi_batch_pipeline_privacy_post_window_operations_total`. Before widening
@@ -73,6 +87,22 @@ authorization, use six hours with evaluated samples at each site and zero
 `mismatch_outside_window` on
 `omi_batch_pipeline_privacy_tokenless_write_shadow_total`. The 137M reads/day
 scenario assumes much wider proven sink coverage and GPU connectivity.
+
+Release owns the execution ramp. Before enabling production execution, enable
+`100` in an isolated non-production slice and verify durable proof, backlog
+drain, unchanged immediate-delete latency, zero unexpected dead letters and
+preservation of desktop and legacy non-recording results. Budget the second
+owner-wide discovery scan before scheduling the production change. Only `100`
+opens execution. It drains up to four delayed conversation dispatches per
+tick in addition to the shared proof and artifact slots. Set `0` on the
+dispatcher and task consumer to pause work; new proofs keep queueing and an
+already-started destructive unit may finish. Resume from the saved schedules
+and cursors after Release confirms the rollout conditions again.
+Verify the switch on every reconciler-capable service and task consumer before
+the ramp. A Phase 2 build predating the switch is unsafe as a pause mechanism.
+An unresolved remote attempt keeps its account gate while paused. Release
+uses the existing generation-pinned recovery procedure for that attempt when
+execution is authorized again.
 
 For canary expansion, `bpp_tokenless_write_audit` samples enforced hits after
 the transaction succeeds. The lever defaults to zero and accepts 0–100 basis

@@ -31,7 +31,8 @@ from uuid import uuid4
 
 from google.cloud import firestore
 
-from database.privacy_check_metrics import POST_WINDOW_SWEEPS, PURGE_COMPLETED
+from config.firestore_read_levers import lever_enabled
+from database.privacy_check_metrics import POST_WINDOW_SWEEPS, PURGE_COMPLETED, observe_post_window_pending
 from database._client import get_firestore_client
 from database import rpc_deadline
 from database import legal_holds
@@ -125,7 +126,8 @@ def post_window_job(client: Any, uid: str, conversation_id: str) -> tuple[Any, d
     fields = arm_fields(uid, conversation_id, current)
     fields.update(
         post_window=True,
-        due_at=current + POST_WINDOW_DELAY,
+        due_at=firestore.DELETE_FIELD,
+        post_window_due_at=current + POST_WINDOW_DELAY,
         # Old coalescers only enroll jobs without progress, and do not check
         # due_at when adding siblings. Keep the delayed job out of those scans.
         progress={'ns': 0},
@@ -147,6 +149,18 @@ def _post_window_due(row: dict) -> datetime | None:
     return None
 
 
+def _schedule(row: dict, at: datetime) -> dict[str, Any]:
+    if row.get('post_window') is True:
+        return {'post_window_due_at': at, 'due_at': firestore.DELETE_FIELD}
+    return {'due_at': at}
+
+
+def _scheduled_at(row: dict) -> datetime | None:
+    if row.get('post_window') is True and 'post_window_due_at' in row:
+        return row.get('post_window_due_at')
+    return row.get('due_at')
+
+
 def _in_transaction(client: Any, body: Callable[[Any], Any]) -> Any:
     @firestore.transactional
     def run(transaction):
@@ -156,17 +170,22 @@ def _in_transaction(client: Any, body: Callable[[Any], Any]) -> Any:
 
 
 def due_jobs(
-    *, now: datetime | None = None, limit: int = 50, firestore_client: Any = None, collection: str = COLLECTION
+    *,
+    now: datetime | None = None,
+    limit: int = 50,
+    firestore_client: Any = None,
+    collection: str = COLLECTION,
+    post_window: bool = False,
 ) -> list[Any]:
     """Obligations whose next dispatch is due, oldest first (single-field ``due_at`` index)."""
     client = firestore_client if firestore_client is not None else get_firestore_client()
-    query = (
-        client.collection(collection)
-        .where(filter=firestore.FieldFilter('due_at', '<=', now or _now()))
-        .order_by('due_at')
-        .limit(limit)
-    )
-    return list(query.stream())
+    queue = client.collection(collection)
+    field = 'post_window_due_at' if post_window else 'due_at'
+    query = queue.where(filter=firestore.FieldFilter(field, '<=', now or _now())).order_by(field).limit(limit)
+    rows = list(query.stream())
+    if collection == COLLECTION and not post_window:
+        observe_post_window_pending(queue, 'post_window_due_at', 'conversation_execution')
+    return rows
 
 
 def segment_records(
@@ -209,10 +228,14 @@ def claim_dispatch(
         if not snapshot.exists:
             return None
         row = snapshot.to_dict() or {}
-        due = row.get('due_at')
+        due = _scheduled_at(row)
         post_window_due = _post_window_due(row)
+        if row.get('post_window') is True and not lever_enabled('bpp_late_erasure_execute'):
+            if 'due_at' in row:
+                transaction.update(ref, _schedule(row, max(due or current, post_window_due or current)))
+            return None
         if post_window_due is not None and post_window_due > current:
-            transaction.update(ref, {'due_at': post_window_due})
+            transaction.update(ref, _schedule(row, post_window_due))
             return None
         lease_until = row.get('lease_until')
         if due is None or due > current or (lease_until is not None and lease_until > current):
@@ -225,7 +248,7 @@ def claim_dispatch(
             {
                 'generation': generation,
                 'attempts': attempts,
-                'due_at': current + timedelta(seconds=delay),
+                **_schedule(row, current + timedelta(seconds=delay)),
                 'dispatched_at': current,
             },
         )
@@ -254,9 +277,10 @@ def defer(
         snapshot = ref.get(transaction=transaction)
         if not snapshot.exists:
             return
-        if generation is not None and int((snapshot.to_dict() or {}).get('generation') or 0) != generation:
+        row = snapshot.to_dict() or {}
+        if generation is not None and int(row.get('generation') or 0) != generation:
             return
-        transaction.update(ref, {'due_at': (now or _now()) + timedelta(seconds=seconds)})
+        transaction.update(ref, _schedule(row, (now or _now()) + timedelta(seconds=seconds)))
 
     _in_transaction(client, body)
 
@@ -282,6 +306,8 @@ def begin_run(
         row = snapshot.to_dict() or {}
         if int(row.get('generation') or 0) != generation:
             return 'superseded', row, None
+        if row.get('post_window') is True and not lever_enabled('bpp_late_erasure_execute'):
+            return 'superseded', row, None
         post_window_due = _post_window_due(row)
         if post_window_due is not None and post_window_due > current:
             return 'superseded', row, None
@@ -289,7 +315,7 @@ def begin_run(
         if lease_until is not None and lease_until > current:
             return 'in_progress', row, None
         lease_until = current + timedelta(seconds=LEASE_SECONDS)
-        due = row.get('due_at')
+        due = _scheduled_at(row)
         progress_fields = {}
         if collection == COLLECTION:
             arm = _arm(row)
@@ -305,7 +331,7 @@ def begin_run(
                 'run_token': token,
                 'lease_generation': generation,
                 'lease_until': lease_until,
-                'due_at': lease_until if due is None or due < lease_until else due,
+                **_schedule(row, max(lease_until, due or lease_until)),
                 **progress_fields,
             },
         )
@@ -349,7 +375,7 @@ def finish_run(
                     'run_token': None,
                     'lease_generation': None,
                     'lease_until': None,
-                    'due_at': max(current, _post_window_due(row) or current),
+                    **_schedule(row, max(current, _post_window_due(row) or current)),
                     'attempts': 0,
                     'last_outcome': 'rearmed',
                 },
@@ -361,14 +387,14 @@ def finish_run(
         release = {'run_token': None, 'lease_generation': None, 'lease_until': None, 'last_outcome': outcome}
         if outcome == 'checkpointed':
             # Progress was made: hand off at once and restart the lost-task backoff.
-            transaction.update(ref, {**release, 'due_at': current, 'attempts': 0})
+            transaction.update(ref, {**release, **_schedule(row, current), 'attempts': 0})
             return False
         if outcome in {'busy', 'artifact_pending'}:
             wait = BUSY_RETRY_SECONDS if outcome == 'busy' else ARTIFACT_RETRY_SECONDS
-            transaction.update(ref, {**release, 'due_at': current + timedelta(seconds=wait), 'attempts': 0})
+            transaction.update(ref, {**release, **_schedule(row, current + timedelta(seconds=wait)), 'attempts': 0})
             return False
         wait = HOLD_RECHECK_SECONDS if outcome == 'held' else REDRIVE_SECONDS
-        transaction.update(ref, {**release, 'due_at': current + timedelta(seconds=wait)})
+        transaction.update(ref, {**release, **_schedule(row, current + timedelta(seconds=wait))})
         return False
 
     return _in_transaction(client, body)
@@ -390,6 +416,7 @@ class RunProgress:
         sleep: Callable[[float], None] = time.sleep,
         budget_seconds: float = RUN_BUDGET_SECONDS,
         started: float | None = None,
+        post_window: bool = False,
     ):
         self.client, self.job, self.generation, self.token, self.uid = client, job, generation, token, uid
         self.position = dict(position or {})
@@ -397,16 +424,22 @@ class RunProgress:
         self._started = clock() if started is None else started  # the run's entry, admission included
         self._budget = budget_seconds
         self._checkpointed = False  # every run saves at least one step before honouring its budget
+        self._post_window = post_window
 
     def _ref(self) -> Any:
         return self.client.collection(COLLECTION).document(self.job)
 
     def _owned(self, transaction: Any) -> None:
+        self._require_execution()
         snapshot = self._ref().get(transaction=transaction)
         row = (snapshot.to_dict() or {}) if snapshot.exists else {}
         if int(row.get('generation') or 0) != self.generation or row.get('run_token') != self.token:
             raise RunSuperseded()
         if row.get('progress_arm') != _arm(row):
+            raise RunSuperseded()
+
+    def _require_execution(self) -> None:
+        if self._post_window and not lever_enabled('bpp_late_erasure_execute'):
             raise RunSuperseded()
 
     @staticmethod
@@ -452,6 +485,7 @@ class RunProgress:
     @contextmanager
     def unit(self) -> Iterator[legal_holds.UnitAuthority]:
         # Erasures under the unit are fenced by its authority; see bounded_destructive_unit.
+        self._require_execution()
         with legal_holds.bounded_destructive_unit(
             self.uid, kind=GATE_KIND, wait_seconds=UNIT_GATE_WAIT_SECONDS
         ) as authority:
@@ -466,6 +500,7 @@ class RunProgress:
 
     def settle_stuck(self, resolve: Callable[[str], bool]) -> None:
         """Settle a unit gate left held by an unknown remote outcome, under that gate's own token."""
+        self._require_execution()
         client = legal_holds.account_deletion_firestore_client()
         stuck = legal_holds.stuck_remote_erasure(self.uid, kind=GATE_KIND, firestore_client=client)
         if stuck is None:
@@ -533,6 +568,7 @@ def run_job(
             sleep=sleep,
             budget_seconds=budget_seconds,
             started=started,
+            post_window=post_window,
         )
 
         def finish(outcome: str) -> bool:

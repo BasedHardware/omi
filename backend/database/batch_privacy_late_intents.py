@@ -96,7 +96,9 @@ def late_sweep_writes(writes) -> list[Write]:
                     'uid': Value(string_value=uid),
                     'reason': Value(string_value=reason),
                     'conversation_id': Value(string_value=source),
-                    'due_at': Value(timestamp_value=now + DELAY if reason == 'account_deleted' else now),
+                    ('execute_at' if reason == 'account_deleted' else 'due_at'): Value(
+                        timestamp_value=now + DELAY if reason == 'account_deleted' else now
+                    ),
                 },
             ),
             update_transforms=[

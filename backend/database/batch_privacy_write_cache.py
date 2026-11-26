@@ -214,7 +214,10 @@ def store_tokenless(lookup: TokenlessLookup, ids: frozenset[str], snapshot, vers
 
 def invalidate_tokenless(paths, commit_time: datetime | Timestamp) -> None:
     """Invalidate after an acknowledged authority commit; errors leave the hard TTL."""
-    if not os.getenv(f'{_redis_prefix()}HOST') or time.monotonic() < _redis_retry_at:
+    if not os.getenv(f'{_redis_prefix()}HOST'):
+        return
+    if time.monotonic() < _redis_retry_at:
+        TOKENLESS.labels('invalidation_backoff').inc()
         return
     revision = _revision(commit_time)
     for path in paths:
