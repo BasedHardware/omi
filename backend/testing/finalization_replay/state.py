@@ -155,10 +155,12 @@ def episode_attach_memo_failure_reason(
     )
 
 
-def ordinary_sync_attach_memo_failure_reason(uid, cid, conversation, documents, *, key_fn=None, python_keys=None):
+def ordinary_sync_attach_memo_failure_reason(
+    uid, cid, conversation, documents, *, key_fn=None, python_keys=None, require_memo=False
+):
     """Verify final Go memo binding or the proven Python skip-cache fallthrough."""
     link = documents.get(f'users/{uid}/episode_links/{cid}')
-    if link is None and python_keys is not None:
+    if link is None and python_keys is not None and not require_memo:
         return ''
     if not isinstance(link, dict):
         return 'missing_link'
@@ -166,7 +168,7 @@ def ordinary_sync_attach_memo_failure_reason(uid, cid, conversation, documents, 
     revision, completed, finalized = (link.get(f'attach_{name}') for name in ('revision', 'completed', 'finalized'))
     owner = link.get('attach_owner_id')
     if python_keys is not None and all(value is None for value in (revision, completed, finalized, owner)):
-        return ''
+        return 'missing_memo_fields' if require_memo else ''
     if not owner or owner != link.get('episode_id') or owner != conversation.get('episode_id'):
         return 'owner_binding_mismatch'
     if python_keys is not None:
@@ -183,10 +185,11 @@ def ordinary_sync_attach_memo_failure_reason(uid, cid, conversation, documents, 
     return ''
 
 
-def fenced_sync_attach_memo_failure_reason(uid, cid, conversation, before_link, after_link, *, intake_key):
-    """Validate the intake memo against the live row and require an unchanged link after fencing."""
+def fenced_sync_attach_memo_check(uid, cid, conversation, before_link, after_link, *, intake_key):
+    """Report whether intake requires a memo and validate the pre-delete binding."""
     if conversation is None:
-        return 'missing_conversation_before_worker_delete'
+        return False, 'missing_conversation_before_worker_delete'
+    expected = bool(intake_key and conversation.get('episode_id'))
     reason = ordinary_sync_attach_memo_failure_reason(
         uid,
         cid,
@@ -194,10 +197,11 @@ def fenced_sync_attach_memo_failure_reason(uid, cid, conversation, before_link, 
         {f'users/{uid}/episode_links/{cid}': before_link},
         # Both sides use the same intake writer. A fenced worker cannot finalize its memo.
         python_keys=(intake_key,) if intake_key else (),
+        require_memo=expected,
     )
-    if reason:
-        return reason
-    return '' if _same_snapshot_value(before_link, after_link) else 'link_changed_after_worker_delete'
+    if not reason and not _same_snapshot_value(before_link, after_link):
+        reason = 'link_changed_after_worker_delete'
+    return expected, reason
 
 
 class CaseState:
@@ -426,7 +430,7 @@ class CaseState:
             stored = document or {}
             if status == 'fenced' and document is None and hasattr(self, 'memo_before_worker_delete'):
                 before_conversation, before_link = self.memo_before_worker_delete
-                memo_failure_reason = fenced_sync_attach_memo_failure_reason(
+                memo_expected, memo_failure_reason = fenced_sync_attach_memo_check(
                     self.uid,
                     self.cid,
                     before_conversation,
@@ -445,7 +449,7 @@ class CaseState:
                 )
             if side == 'go':
                 link = derived_documents.get(self.home_dirty_receipt_path) or {}
-                memo_expected = bool(
+                memo_expected = memo_expected or bool(
                     link.get('attach_finalized') is not None
                     or (
                         status == 'completed'
