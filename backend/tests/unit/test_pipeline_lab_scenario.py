@@ -72,10 +72,19 @@ def test_committed_scenarios_are_valid_and_named_after_their_file():
         assert plan_events(parsed)
 
 
+# Committed scenarios that reproduce an open product bug, and the checks it fails. Its fix PR deletes the
+# scenario's expected_failure and its row here.
+KNOWN_BUGS = {'finish_after_second_close': ['finish_response_names_b', 'b_fast_finished']}
+
+
 def test_incident_scenarios_are_plain_passes_since_the_finish_fix():
     # #26304 (SCA-4385) landed; a known-bug block left behind would turn a regression into exit 0.
     for path in COMMITTED:
-        assert load_scenario(path).expected_failure is None, path.name
+        failure = load_scenario(path).expected_failure
+        if path.stem in KNOWN_BUGS:
+            assert failure and failure['checks'] == KNOWN_BUGS[path.stem] and failure['strict'] is True, path.name
+        else:
+            assert failure is None, path.name
 
 
 def test_incident_scenario_keeps_the_sca_4385_shape():
@@ -99,10 +108,11 @@ def test_reconnect_checks_hold_for_one_finish_conversation(name, members):
     # Review of #26303: a visible non-manual conversation with every recording plus a visible manual one
     # holding only the Finish recording must not pass as "the Finish conversation holds them all".
     parsed = load_scenario(stack.SCENARIO_DIR / f'{name}.json')
+    snapshot_checks = [c for c in parsed.checks if c.budget is None]  # budgets read the run's counts
     split = [conv('whole', members), conv('only_b', ['B'], manual_end=True)]
-    assert not all(evaluate(c, split, 'B').ok for c in parsed.checks)
+    assert not all(evaluate(c, split, 'B').ok for c in snapshot_checks)
     merged = [conv('whole', members, manual_end=True)]
-    assert all(evaluate(c, merged, 'B').ok for c in parsed.checks)
+    assert all(evaluate(c, merged, 'B').ok for c in snapshot_checks)
 
 
 def test_long_gap_scenario_is_longer_than_the_silence_gap_and_reconnects_one_capture():

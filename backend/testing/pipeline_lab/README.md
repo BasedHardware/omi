@@ -62,7 +62,7 @@ synthetic uid `local-dev-user`.
 | `timeline/`, `cassette/`, `lanes/` | Day timeline and lanes; STT cassettes (vendor prerecorded and Parakeet batch adapters); record/batch and sync replay; `lanes/plugin.py`. |
 | `inspector/` | Stdlib server and static UI; `sample_run.py` (synthetic Lumen Bay day). |
 | `v3/` | Conversations v3 replay: `feed.py` (recordings, arrival instants), `tasks.py` (loopback Cloud Tasks), `driver.py` (event loop), `product.py` + `run.py` + `entry.py` (real v3 code), `export.py` (contract rows, pairing by recording), `corpus.py` (add-day ingest), `select.py` (pipeline choice), `fake.py`, `smoke.py`, `prod_export.py` (read-only v3 exporter). |
-| `scenario/` | Scripted capture -> Finish -> Home stories (see [Scenarios](#scenarios)): `spec.py` (file format, event plan), `checks.py` (expectations, outcomes), `ops.py` (events as product calls), `run.py` (one scenario in process), `stack.py` (command, emulator bring-up, report), `scenarios/` (committed synthetic scenarios), `IMPORTER.md` (slice 2 design). |
+| `scenario/` | Scripted capture -> Finish -> Home stories (see [Scenarios](#scenarios)): `spec.py` (file format, event plan), `checks.py` (expectations, outcomes), `ops.py` (events as product calls), `run.py` (one scenario in process), `budget.py` (operation counts, no-op writes, budgets), `home.py` (the Home routes, paging), `stack.py` (command, emulator bring-up, report), `scenarios/` (committed synthetic scenarios), `IMPORTER.md` (slice 2 design). |
 | `ideal/` | Ideal days: `packet.py` (numbered lines), `schema.py` (validator), `score.py` (structure scoring), `runs.py` (score table and per-card diff across runs, no text), drafting passes. |
 | `sample.py` | Minimal synthetic run, used only when the inspector plugin is absent. |
 
@@ -177,12 +177,42 @@ or failed as expected, 1 on a failure, an unexpected pass or a repeat that diffe
 
 **Format.** Documented at the top of `scenario/spec.py`: origins, batch-lane recordings (audio span,
 recording session, seal, batch transcript landing, scripted lines with speaker and `is_user`), stream gaps,
-device-sync fragments with arrival instants, a Finish tap (fast finish on or off, provisional latency), an
-`env` overlay on top of this checkout's production `backend-sync` profile, and `expect` rows
-(`conversation_of` a label or `@finish`: `recordings`, `recordings_include`, `visible`, `on_home`,
-`manual_end`, `hidden_reason`, `min_words`, `kind`; or `no_hidden_with`), each optionally checked at an
-instant (`at`) and named (`label`). Every field of one row must hold for the same conversation.
+device-sync fragments with arrival instants, a Finish tap (fast finish on or off, provisional latency, more
+taps of the same button with `again_at`), the account (`account`: cloud audio off takes the live lane;
+`sync_off_at` turns sync off mid-run), Home history before the run (`seed`: visible, hidden-below-the-word-
+floor, media, raw recording and discarded rows, in runs), an `env` overlay on top of this checkout's
+production `backend-sync` profile, an operation `budget`, and `expect` rows. A row targets
+`conversation_of` a label or `@finish` (`recordings`, `recordings_include`, `visible`, `on_home`,
+`manual_end`, `hidden_reason`, `min_words`, `kind`, `titled`, `has_notes`, `home_titled`, `home_has_notes`,
+`holders`), `no_hidden_with`, `recording` (its `fast_finish` outcome), `finish_response` (what tap N
+answered: `outcome`, `titled`, `has_notes`, `discarded`, `recordings`) or `home_paging` (`visible_once`:
+Home paged to its end shows every visible conversation once). Each row is optionally checked at an instant
+(`at`) and named (`label`). Every field of one row must hold for the same conversation.
 `expected_failure: {"reason", "checks": [labels], "strict": true}` marks a known bug; the fix PR deletes it.
+
+**Operation counts and budgets** (`scenario/budget.py`). Every run counts, from the first event to the end:
+Firestore document reads, writes, deletes and no-op writes (a write that left the document unchanged:
+Firestore answers it with the document's previous `update_time`), by top-level collection and by collection
+path, and vendor calls (requests to the fake LLM gateway; fast-finish STT calls and cassette plays). The
+counts are taken at the emulator client's GAPIC API, the client `database._client` hands the product, so
+every SDK path is seen once; reads are counted as Firestore bills them. Each no-op write names its call
+site. The lab's own reads (snapshots, flags, the driver's pending check) are shown under `by_scope.lab` and
+never budgeted; Home route calls count under `home`. Reads through a real-time TTL cache (`dream_control`, a ten-second `time.monotonic` cache) depend on
+host speed, so they are kept apart in `wall_clock_reads`: shown, never totalled, budgeted or compared. So are the account-document reads and writes of the detached AI
+profile refresh (`utils/ai_profile_refresh.py`, `racy_ops`): its write is fenced against concurrent effects on
+its source conversation, and whether it lands depends on thread timing inside one event. To find where a count comes from, run with `OMI_PIPELINE_LAB_WRITE_SITES=1`: `ops.write_sites` then names the
+call site of every write (it walks the stack on each commit, so it is off by default). The counts are in `result.json` and the verdict row
+(`ops`), a column of `scenario summary`, a line of the text report and a table under the verdict in the web
+view, and they are compared between `--repeat` runs like every other result field. A scenario's `budget`
+(`{"reads": N, "writes": N, "deletes": N, "noop_writes": N, "vendor_calls": {"stt": N, "llm": N}, "note"}`)
+turns each key into a check labelled `budget_<key>` (`budget_vendor_stt`) that fails above the cap. Set a
+committed scenario's budget from its measured counts plus a small margin; when it shows no-op writes, set
+`noop_writes` to the current count and say where they come from in `note`, never higher to hide them. A change
+that moves a scenario past its budget fails it: raise a budget only with the reason in the pull request; a new
+no-op write site is a finding to report, not a cap to raise.
+Read no-op sites against the lab clock: it does not move inside one event, so a write of a `now`-derived
+value (a v3 lease renewal's `until`, `database/conversations_v3_leases.py` `renew`) repeats exactly in the
+lab where production's would move.
 The two tie rules (a tap at a seal's instant runs first; two recordings starting together are refused) are
 explained there too. Events run at their scripted instants (`--clock tick` adds real elapsed time).
 
@@ -212,7 +242,8 @@ Without an `stt` pin the run takes the best cassette recorded for the file: vend
 | Capture admission, recording rows | `triggers.mark_new`, `upsert_conversation_with_lifecycle` | none |
 | Finish tap | `retrieve_in_progress_conversation` picks the branch; with nothing in progress, `finish.finish_live_window` | Capture in progress: the finalization job's capture close is written as its outcome at the seal; the job does not run. |
 | Record admission, fast finish | `batch_pipeline.live._manual_finish_admitted` -> `promote_manual_end` -> `fast_finish.run` | `admit_recording` does not run; one unit over the whole recording, a privacy check that allows, funding open. STT returns the recording's lines: scripted, or the cassette words of an audio recording. |
-| Batch transcript landing | `update_conversation_segments`, `triggers.committed_sync_assignment` | The projection transaction (`replace_record`, its manual-end promotion, receipts) does not run. |
+| Batch transcript landing | `update_conversation_segments`, `triggers.committed_sync_assignment` | The projection transaction (`replace_record`, its manual-end promotion, receipts) does not run, nor does the native completion that writes the sync-content ledger and consumes a recording-scoped Finish intent. So a Finish after a batch transcript landed is answered `requested` in the lab (`_native_projection_state` reads no ledger: `pending`) where production cuts, and a recording-scoped intent (#26288 fallback) is never consumed: scenarios do not judge `manual_end` in those two shapes. |
+| Account settings | `users.set_user_private_cloud_sync_enabled` (start, `sync_off_at`) | The fast-finish privacy check reads that setting through `users.get_user_private_cloud_sync_enabled` instead of the batch privacy fence's generation read; the in-transaction fence of the write is the product's. |
 | Device-sync fragment | `mark_new`, `upsert_conversation_with_lifecycle`, `committed_sync_assignment` | `/v2/sync-local-files` intake and its job do not run. |
 | Reconcile, planner, notes, Home | `service.reconcile`, `service.sweep`, loopback named Cloud Tasks, the Home routes | Every LLM answer is the lab's fake gateway: one conversation per stretch, a new one at a line containing `switching topics`. |
 
@@ -242,7 +273,23 @@ own client-side filtering is not modelled.
 **CI.** The advisory job "Pipeline Lab Scenarios" (`.github/workflows/backend-hermetic-e2e.yml`) runs every
 committed scenario with `--jobs 4 --repeat 2 --stt replay` on every backend pull request and merge-queue run,
 writes the summary to the job page and uploads the run directory (artifact `pipeline-lab-scenarios`):
-download it and run `view` on it.
+download it and run `view` on it. Measured 2026-11-26 on the lab host with the job's arguments: the 13 committed scenarios run in about
+130 s (the five before them: 35 s); `.github/ci-budget.yaml` budgets the job at a 5-minute p50.
+
+**Committed scenarios** (`scenario/scenarios/`), each with a budget from its measured counts:
+
+| Scenario | Covers | From |
+|---|---|---|
+| `finish_single_recording_fast`, `audio_single_recording_finish` | Finish while capturing, fast finish, scripted and audio words | SCA-4386 |
+| `finish_after_reconnect_late_transcript`, `finish_after_long_reconnect_gap`, `finish_transcript_never_lands` | Finish after a reconnect; a predecessor transcript late or never | SCA-4385, #26304 |
+| `finish_next_opens_before_close` | a pendant pause: the next recording opens before the current one closes, then Finish | SCA-4385 class |
+| `finish_after_second_close` | A closes, B closes two minutes later, then Finish must finish B (`expected_failure`) | #26288 |
+| `finish_on_visible_conversation` | Finish on a closed conversation already on Home: a 404, and Home keeps its title and notes | #26241, #26242 |
+| `finish_double_tap` | two Finish taps: one conversation, one fast-finish STT call | #26208 |
+| `finish_no_closed_recording` | Finish with nothing to finish does not cut the next recording | #26288 |
+| `finish_cloud_audio_off` | cloud audio off (live lane): Finish finishes the recording with no STT call | #26296 |
+| `finish_privacy_refused_fast_finish` | the owner turns sync off before fast finish: `privacy_blocked`, zero STT calls | #26344 |
+| `home_paging_past_hidden_runs` | Home paged past runs of hidden rows shows every visible conversation once | #25721, #25725, #26193 |
 
 Turning a production incident into a scenario: [scenario/IMPORTER.md](scenario/IMPORTER.md).
 

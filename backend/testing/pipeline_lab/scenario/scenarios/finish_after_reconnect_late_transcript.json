@@ -35,5 +35,9 @@
   "expect": [
     {"conversation_of": "@finish", "recordings": ["A", "B", "F"], "visible": true, "manual_end": true},
     {"no_hidden_with": "A"}
-  ]
+  ],
+  "budget": {
+    "reads": 295, "writes": 85, "deletes": 1, "noop_writes": 8, "vendor_calls": {"stt": 1, "llm": 8},
+    "note": "Measured 2026-11-26 at the merged head (265 reads, 75 writes, 1 delete(s), 8 no-op, 1 STT, 8 LLM; caps about +10%). noop_writes=8 is the current count, not a target: every one is database/conversations_v3_leases.py:72 renew (service.reconcile run_blocking renew) rewriting the lease until at the instant it was claimed. The lab clock does not move inside one event; production's does, so this is a lab-clock repeat, reported in the PR."
+  }
 }

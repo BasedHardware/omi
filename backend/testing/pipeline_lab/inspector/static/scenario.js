@@ -336,9 +336,13 @@
   function expectText(raw) {
     if (!raw) return null;
     if (raw.no_hidden_with) return `no hidden conversation holds ${raw.no_hidden_with}`;
-    const fields = Object.entries(raw).filter(([k]) => !['at', 'label', 'conversation_of', 'no_hidden_with'].includes(k));
+    if (raw.home_paging) return `Home paged to its end: every visible conversation exactly once, no hidden one`;
+    const targets = ['conversation_of', 'no_hidden_with', 'recording', 'finish_response', 'home_paging'];
+    const fields = Object.entries(raw).filter(([k]) => !['at', 'label', ...targets].includes(k));
     const show = (v) => (Array.isArray(v) ? v.join(' + ') : v === true ? 'yes' : v === false ? 'no' : String(v));
-    return `conversation of ${raw.conversation_of}: ` + fields.map(([k, v]) => `${k.replace(/_/g, ' ')} ${show(v)}`).join(' · ');
+    const head = raw.recording ? `recording ${raw.recording}` :
+      raw.finish_response ? `Finish tap ${raw.finish_response} answered` : `conversation of ${raw.conversation_of}`;
+    return `${head}: ` + fields.map(([k, v]) => `${k.replace(/_/g, ' ')} ${show(v)}`).join(' · ');
   }
 
   function verdictSection(b) {
@@ -406,6 +410,8 @@
     } else {
       sec.append(h('p', { class: 'notice', text: 'This run has no checks.' }));
     }
+    const ops = opsSection(r);
+    if (ops) sec.append(ops);
     const sources = sourcesOf(b);
     if (Object.keys(sources).length) {
       sec.append(h('p', { class: 'meta-line' }, 'Transcripts: ',
@@ -413,6 +419,42 @@
     }
     if (r.finish_target !== undefined) sec.append(h('p', { class: 'meta-line', text: `Finish ended recording: ${r.finish_target ?? 'none'} · ran in ${r.seconds ?? '?'} s` }));
     return sec;
+  }
+
+  // Operation counts (scenario/budget.py): Firestore reads, writes, deletes and no-op writes of the product and
+  // the Home route, and vendor calls, each against the scenario's budget when it sets one.
+  function opsSection(r) {
+    const ops = r.ops;
+    if (!ops) return null;
+    const caps = Object.assign({}, r.budget || {});
+    const vendorCaps = caps.vendor_calls || {};
+    const vendor = ops.vendor_calls || {};
+    const rows = [
+      ['Firestore reads', ops.reads, caps.reads], ['Firestore writes', ops.writes, caps.writes],
+      ['Firestore deletes', ops.deletes, caps.deletes], ['No-op writes', ops.noop_writes, caps.noop_writes],
+      ['STT calls', vendor.stt, vendorCaps.stt], ['LLM calls', vendor.llm, vendorCaps.llm],
+    ];
+    const box = h('div', { class: 'ops' }, h('h2', { class: 'ops-title', text: 'Operations' }));
+    const table = h('table', { class: 'checks ops-table' },
+      h('thead', {}, h('tr', {}, h('th', { text: 'Count' }), h('th', { text: 'This run' }), h('th', { text: 'Budget' }))));
+    const body = h('tbody');
+    for (const [name, count, cap] of rows) {
+      const over = cap !== undefined && cap !== null && count !== undefined && count > cap;
+      body.append(h('tr', { class: over ? 'bad' : '' },
+        h('td', { text: name }), h('td', { class: 'mono', text: count === undefined ? '-' : String(count) }),
+        h('td', { class: 'mono', text: cap === undefined || cap === null ? '-' : (over ? `${cap} (over)` : String(cap)) })));
+    }
+    table.append(body);
+    box.append(table);
+    const sites = Object.entries(ops.noop_sites || {});
+    if (sites.length) {
+      box.append(h('p', { class: 'meta-line', text: 'No-op writes by call site:' }),
+        h('ul', { class: 'mono' }, sites.map(([site, n]) => h('li', { text: `${n} × ${site}` }))));
+    }
+    const split = Object.entries(ops.by_collection || {}).map(([c, k]) => `${c} ${k.reads}r/${k.writes}w`).join(' · ');
+    if (split) box.append(h('p', { class: 'meta-line', text: `By collection: ${split}` }));
+    if ((r.budget || {}).note) box.append(h('p', { class: 'meta-line', text: `Budget note: ${r.budget.note}` }));
+    return box;
   }
 
   // ---- Home -----------------------------------------------------------------------------------
