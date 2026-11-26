@@ -412,7 +412,10 @@ _FAST_FINISH_TASKS: set = set()
 # retried or re-run; one provider transcription per recording is enough.
 _FAST_FINISH_STARTED: dict[str, None] = {}
 _FAST_FINISH_STARTED_MAX = 4096
-# Each pass holds a recording's PCM in memory and a storage thread for a provider call.
+# Bounds whole passes, not provider requests. Each pass holds a storage thread as its coordinator
+# and up to fast_finish.PASS_CHUNK_WINDOW five-minute chunk buffers (38 MB); its chunk requests run
+# on the shared fast-finish chunk pool, which caps provider requests for the process. With
+# CONVERSATIONS_V3_FAST_FINISH_CHUNKED=off a pass holds a whole recording of up to 20 minutes instead.
 _FAST_FINISH_SLOTS = threading.BoundedSemaphore(2)
 
 

@@ -4454,6 +4454,9 @@ environments:
             CONVERSATIONS_V3_FAST_FINISH:
               value: 'on'
               category: ops_kill
+            CONVERSATIONS_V3_FAST_FINISH_CHUNKED:
+              value: 'on'
+              category: ops_kill
             CONVERSATION_PARKED_TERMINAL_STATUS_ENABLED: {value: 'off', category: rollout}
             ANDROID_BILLING: {value: stripe, category: rollout}
             PLAY_RTDN_OIDC_AUDIENCE:
@@ -6127,6 +6130,9 @@ environments:
             CONVERSATIONS_V3_FAST_FINISH:
               value: 'on'
               category: ops_kill
+            CONVERSATIONS_V3_FAST_FINISH_CHUNKED:
+              value: 'on'
+              category: ops_kill
             CONVERSATION_PARKED_TERMINAL_STATUS_ENABLED: {value: 'off', category: rollout}
             BATCH_PIPELINE_SERVING_SWEEP_PAGE_ROWS: {value: '200', category: rollout}
             BATCH_PIPELINE_SERVING_TICK_SECONDS: {value: '10', category: rollout}
@@ -6634,6 +6640,9 @@ environments:
               category: ops_kill
             CONVERSATIONS_V3_FAST_FINISH:
               value: cohort
+              category: ops_kill
+            CONVERSATIONS_V3_FAST_FINISH_CHUNKED:
+              value: 'on'
               category: ops_kill
             CONVERSATION_PARKED_TERMINAL_STATUS_ENABLED: {value: 'off', category: rollout}
             BATCH_PIPELINE_SERVING_SWEEP_PAGE_ROWS: {value: '200', category: rollout}

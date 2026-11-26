@@ -472,6 +472,27 @@ def get_context_executor() -> MonitoredThreadPoolExecutor:
         return _context_executor
 
 
+_fast_finish_chunk_executor: MonitoredThreadPoolExecutor | None = None
+_fast_finish_chunk_executor_lock = threading.Lock()
+
+
+def get_fast_finish_chunk_executor() -> MonitoredThreadPoolExecutor:
+    """Leaf provider requests for v3 fast-finish chunks: six at once per process.
+
+    The pass that submits them coordinates from ``storage_executor``, never from this pool. The queue
+    is bounded by its callers, not here: two pass slots times four chunks in flight each is eight
+    submissions at most, and a submission-slot bound would race the done callback that frees it.
+    """
+    global _fast_finish_chunk_executor
+    with _fast_finish_chunk_executor_lock:
+        if _fast_finish_chunk_executor is None:
+            _fast_finish_chunk_executor = MonitoredThreadPoolExecutor(
+                name='fast_finish_chunk', max_workers=6, thread_name_prefix='ff-chunk'
+            )
+            _ALL_EXECUTORS.append(_fast_finish_chunk_executor)
+        return _fast_finish_chunk_executor
+
+
 _rollout_executor: MonitoredThreadPoolExecutor | None = None
 _rollout_executor_lock = threading.Lock()
 

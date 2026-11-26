@@ -103,7 +103,10 @@ native binding has projected. Set the switch to `off` on the API service to rest
 until a member is added). For a member, or for every v3 owner with `on`, a manually
 finished v3 recording of up to 20 minutes is transcribed once through the prerecorded provider
 when record admission stages its sealed audio, and written as a provisional transcript that the
-batch record projection later replaces.
+batch record projection later replaces. `CONVERSATIONS_V3_FAST_FINISH_CHUNKED` (default `on`, an
+ops kill switch) raises that bound to two hours: every unit is split into chunks of at most five
+minutes, sent concurrently and stitched in order. `off` restores one serial request per unit and the
+20-minute bound.
 
 `CONVERSATIONS_V3_MAX_WINDOW_SECONDS` defaults to 10800. A transcript line
 starting at or after that elapsed time starts a separate v3 stretch. Set the

@@ -131,8 +131,15 @@ recording's language and writes the result with `update_conversation_segments`. 
 recording pending and wakes reconcile, and the stored manual end cuts the window, so notes start
 without waiting for the batch merge and delivery. The batch record projection later replaces the
 provisional segments; once `record_projection_revision` is set the fast write is refused. Recordings
-over 20 minutes, partial records, custom STT, locked rows and private rows are skipped. Read
-`omi_conversations_v3_fast_finish_total{outcome}` and `omi_conversations_v3_fast_finish_seconds{stage}`.
+over two hours or eight units, partial records, custom STT, locked rows and private rows are skipped.
+`CONVERSATIONS_V3_FAST_FINISH_CHUNKED` (default `on`) splits each unit into chunks of at most five
+minutes, cut at retained-audio silences where possible and otherwise at even offsets with a 3 s
+overlap, sends them to the provider concurrently (four in flight per pass, six per process on the
+`fast_finish_chunk` pool) and keeps each word once, by the chunk that owns its midpoint. Set it `off`
+on `backend-integration` to restore one serial request per unit and the 20-minute bound. Read
+`omi_conversations_v3_fast_finish_total{outcome}`, `omi_conversations_v3_fast_finish_seconds{stage}`,
+`omi_conversations_v3_fast_finish_chunks`, `omi_conversations_v3_fast_finish_chunk_seconds` and
+`omi_conversations_v3_fast_finish_wall_seconds` (written passes only).
 A manual finish that never starts the pass is counted in
 `omi_conversations_v3_fast_finish_skipped_total{reason}`: `mode_off`, `already_started`, or the first
 failing `fast_finish.candidate_rejection` predicate (`not_recording`, `no_manual_end`,

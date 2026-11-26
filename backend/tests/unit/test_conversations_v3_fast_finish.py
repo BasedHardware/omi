@@ -137,6 +137,9 @@ def test_unit_pcm_refuses_a_short_source():
 @pytest.fixture(autouse=True)
 def admitted(monkeypatch):
     monkeypatch.setenv('CONVERSATIONS_V3_FAST_FINISH', 'on')
+    # This file pins the kill-switch path (one serial request per unit, 20-minute cap): what
+    # CONVERSATIONS_V3_FAST_FINISH_CHUNKED=off restores. The chunked default has its own file.
+    monkeypatch.setenv('CONVERSATIONS_V3_FAST_FINISH_CHUNKED', 'off')
     monkeypatch.setattr(fast_finish, 'funded', lambda uid, seconds, language: True)
 
 
