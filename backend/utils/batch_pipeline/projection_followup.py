@@ -411,7 +411,6 @@ class ProjectionFollowups:
                 self.prioritized.discard(segment)
                 self.wake_marks.pop(segment, None)  # the running attempt absorbs the wake
                 continue
-            self.observe_wake(segment)
             task = start_background_task(self.run(segment), name='batch_projection_followup')
             self.tasks[segment] = task
             if segment in self.prioritized:
@@ -427,7 +426,6 @@ class ProjectionFollowups:
             if segment in self.tasks:
                 self.wake_marks.pop(segment, None)  # the running attempt absorbs the wake
                 continue
-            self.observe_wake(segment)
             task = start_background_task(self.run(segment), name='batch_projection_followup')
             self.tasks[segment] = task
             task.add_done_callback(lambda done, sid=segment: self.finished(sid, done, targeted=True))
@@ -440,6 +438,7 @@ class ProjectionFollowups:
 
     def finished(self, segment, task, *, targeted=False):
         self.tasks.pop(segment, None)
+        self.wake_marks.pop(segment, None)  # a task cancelled before entry leaves no stale mark
         self.forget_page(segment)
         if segment in self.sibling_requeue and not task.cancelled():
             self.sibling_requeue.discard(segment)
@@ -552,6 +551,8 @@ class ProjectionFollowups:
         # During mixed discovery both queues share one process-wide effect
         # budget. Queueing for it does not spend the follow-up attempt clock.
         async with slots if isinstance(slots, asyncio.Semaphore) else nullcontext():
+            # Attempt entry, after the shared slot: the targeted wake-to-start sample.
+            self.observe_wake(segment)
             return await self.run_attempt(segment, track_backoff=track_backoff)
 
     async def run_attempt(self, segment, *, track_backoff):

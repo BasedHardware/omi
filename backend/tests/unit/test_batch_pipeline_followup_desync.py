@@ -572,27 +572,47 @@ async def test_discovery_interval_zero_keeps_every_pass(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_targeted_wake_to_start_latency_is_observed_once(monkeypatch):
+async def test_targeted_wake_to_start_latency_is_observed_at_attempt_entry(monkeypatch):
     clock_box = [500.0]
     followups, _ = _paced_runner(monkeypatch, clock_box)
     observed = []
     monkeypatch.setattr(projection_followup.TARGETED_START_SECONDS, 'observe', observed.append)
-    release = asyncio.Event()
+    shared = asyncio.Semaphore(1)
+    followups.projector.outbox_followup_slots = shared
+    entered = []
 
-    async def run(_):
-        await release.wait()
+    async def attempt(segment, *, track_backoff):
+        entered.append(segment)
 
-    followups.run = AsyncMock(side_effect=run)
-    monkeypatch.setenv('BATCH_PIPELINE_PROJECTION_FOLLOWUP_SLOTS', '1')
-    await followups.schedule(['busy'], discover=False)  # takes the only slot at t=500
-    await followups.schedule(['waits'], discover=False)  # queued behind the slot
-    assert observed == [0.0]
-    clock_box[0] = 503.0
-    release.set()
+    followups.run_attempt = attempt
+    await shared.acquire()  # the shared effect budget is busy
+    await followups.schedule(['waits'], discover=False)
+    for _ in range(3):
+        await asyncio.sleep(0)
+    assert observed == [] and entered == []  # launched, but still waiting for the shared slot
+    clock_box[0] = 507.0
+    shared.release()
     await asyncio.gather(*list(followups.tasks.values()))
-    followups.launch_targeted()
-    assert observed == [0.0, 3.0]
+    assert entered == ['waits']
+    assert observed == [7.0]
     assert followups.wake_marks == {}
-    release.clear()
-    release.set()
-    await asyncio.gather(*list(followups.tasks.values()))
+
+
+@pytest.mark.asyncio
+async def test_targeted_wake_cancelled_before_entry_is_not_counted(monkeypatch):
+    clock_box = [500.0]
+    followups, _ = _paced_runner(monkeypatch, clock_box)
+    observed = []
+    monkeypatch.setattr(projection_followup.TARGETED_START_SECONDS, 'observe', observed.append)
+    shared = asyncio.Semaphore(0)
+    followups.projector.outbox_followup_slots = shared
+    followups.run_attempt = AsyncMock()
+    await followups.schedule(['gone'], discover=False)
+    task = followups.tasks['gone']
+    await asyncio.sleep(0)
+    task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await task
+    await asyncio.sleep(0)
+    assert observed == []
+    assert followups.wake_marks == {}
