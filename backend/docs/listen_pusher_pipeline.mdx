@@ -9564,6 +9564,10 @@ admission, processing priority, or custody.
 Clients with holding enabled also send `X-Omi-Upload-Hold-Age-Ms` for a held
 upload. It is the oldest included file's age at send time, as an integer in
 `0..86400000` milliseconds. An absent or malformed age produces no sample.
+The optional `X-Omi-Upload-Recovered: 1` header labels a held file recovered
+from the phone journal. Both latency histograms expose `recovered="true"`
+for this exact value and `recovered="false"` for all other values, including
+an absent header. The label leaves `hold_state` unchanged.
 [Change note](listen_pusher_pipeline/changes/2026-11-25-mobile-upload-hold-metric.md).
 
 The older `sync_processing_hold.upload_watermark_at` slot is unchanged and still has no producer: if
