@@ -41,8 +41,11 @@ Server-authored `upload_arrived_at` and `upload_entitlement` survive original
 intakes and merged completion. Entitlement labels are only paid/trial/free/unknown.
 `omi_batch_pipeline_created_units_total` counts first non-shadow unit admission;
 `omi_batch_pipeline_upload_to_transcript_seconds` measures each accepted original
-request through first durable transcript publication, not pre-accept retries,
-client receipt or notes. `omi_batch_pipeline_inter_upload_gap_seconds` records
+request through first durable transcript publication, not time on the phone,
+pre-accept retries, client receipt or notes. Its bounded `hold_state` label is
+`none|bg300|fg_preview300|fg60|unknown`, with absent or unrecognized headers
+reported as `unknown`. It covers ordinary and server-coalesced uploads.
+`omi_batch_pipeline_inter_upload_gap_seconds` records
 request-arrival gaps between accepted originals sharing the exact owner/session/
 coalescing key, using already-read predecessor rows. Its closed labels are
 `entitlement=paid|trial|free|unknown`, `freshness=fresh|backlog` and
@@ -117,6 +120,13 @@ row is live. User titles and the final outline take precedence.
 `CONVERSATIONS_V3_BATCH_COMMIT_READS=on` is the default. The projection commit uses
 transactional BatchGet chunks for input revisions, tombstones, and new-target existence
 checks. Set it to `off` to restore serial point reads.
+
+`CONVERSATIONS_V3_SKIP_UNCHANGED_WRITES` defaults to on. The builder compares its final
+payloads against existing transaction snapshots before writing. Set it to `off` to
+restore unconditional projection and pending writes. `omi_conversations_v3_projection_rows`
+measures skipped and written rows by caller. `omi_conversations_v3_reconcile_billed_writes`
+measures confirmed builder writes, including leases and Home feed writes. Downstream notes
+processing has separate write attribution.
 
 `POST /v1/conversations-v3/reconcile` returns HTTP 409 with
 `{"status":"retry","reason":"dependency_warming"}` for exhausted Firestore contention,
@@ -9546,6 +9556,19 @@ clamped to 60..1800, `0` withdraws it) is sent to phones as `end_silence_seconds
 `X-Omi-Upload-Trace: sealed=<epoch>;first=<epoch>;gate=<label>;attempts=<n>` on `/v2/sync-local-files` is
 measurement only: `omi_sync_seal_to_accept_seconds{gate}` records how long the batch's oldest file waited on
 the phone and which gate held it. A malformed header is ignored.
+
+The optional `X-Omi-Upload-Hold` request header on `/v2/sync-local-files` labels batch
+publication latency. Clients send `none`, `bg300`, `fg_preview300`, or `fg60`.
+An absent or unrecognized value becomes `unknown`. The value does not control
+admission, processing priority, or custody.
+Clients with holding enabled also send `X-Omi-Upload-Hold-Age-Ms` for a held
+upload. It is the oldest included file's age at send time, as an integer in
+`0..86400000` milliseconds. An absent or malformed age produces no sample.
+The optional `X-Omi-Upload-Recovered: 1` header labels a held file recovered
+from the phone journal. Both latency histograms expose `recovered="true"`
+for this exact value and `recovered="false"` for all other values, including
+an absent header. The label leaves `hold_state` unchanged.
+[Change note](listen_pusher_pipeline/changes/2026-11-25-mobile-upload-hold-metric.md).
 
 The older `sync_processing_hold.upload_watermark_at` slot is unchanged and still has no producer: if
 supplied it must pass `finished_at` plus the quiet window, and a lagging value waits up to the maximum hold.

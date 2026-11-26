@@ -276,7 +276,7 @@
       "matrix_size": 1,
       "needs": "scope",
       "owner": "CI maintainers",
-      "rationale": "2026-10-29 ghguards: run_sync now follows the full hermetic scope — the per-suite path filter missed backend/utils/sync/** and backend/database/, so #23919 shipped a sync-processing change with this gauntlet skipped and main went red unseen; expected runs match hermetic-e2e's 62 sampled backend-PR runs/day at the retained p50 (2026-10-29 measured median 7.1 min on PRs).",
+      "rationale": "2026-10-29 ghguards: run_sync now follows the full hermetic scope \u2014 the per-suite path filter missed backend/utils/sync/** and backend/database/, so #23919 shipped a sync-processing change with this gauntlet skipped and main went red unseen; expected runs match hermetic-e2e's 62 sampled backend-PR runs/day at the retained p50 (2026-10-29 measured median 7.1 min on PRs).",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -633,7 +633,7 @@
     },
     "desktop-windows-ci.yml/build-linux": {
       "budget_p50_minutes": 9,
-      "display_name": "Linux package · helper smoke",
+      "display_name": "Linux package \u00b7 helper smoke",
       "expected_nightly_runs_per_day": 1,
       "expected_runs_class": "sampled-pr-day",
       "expected_runs_per_day": 6.2,
@@ -671,7 +671,7 @@
     },
     "desktop-windows-ci.yml/checks": {
       "budget_p50_minutes": 7,
-      "display_name": "Typecheck · Lint · Test",
+      "display_name": "Typecheck \u00b7 Lint \u00b7 Test",
       "expected_nightly_runs_per_day": 1,
       "expected_runs_class": "sampled-pr-day",
       "expected_runs_per_day": 6.2,
@@ -1461,7 +1461,7 @@
       "runs_on": "ubuntu-latest"
     },
     "gcp_backend_listen_helm.yml/deploy-neg-coverage-exporter": {
-      "budget_p50_minutes": 13,
+      "budget_p50_minutes": 14,
       "display_name": "Deploy NEG coverage exporter",
       "expected_runs_class": "non-pr-or-unsampled",
       "expected_runs_per_day": 1,
@@ -1470,7 +1470,7 @@
       "matrix_size": 1,
       "needs": "helm-upgrade",
       "owner": "Omi backend maintainers",
-      "rationale": "Production-only follow-up after a successful listen rollout; the resolver emits its image-tag output only for explicit deploys, while kept-tag and rollback paths leave it empty. Budget covers WIF setup and the exporter Helm rollout capped at five minutes, with no PR-run cost. B5 (2026-10-19) adds the break_glass_lock dispatch input, no new trigger. 2026-10-22 plan D D2 adds the listen_edge_image_digest dispatch input; this job is unchanged and stays manual-only with no PR runs, and the one-minute bump records the trigger change. 2026-10-29 ghguards adds the expected_sha dispatch input upstream of this job; this job is unchanged, and the one-minute bump records the trigger change SCA-2225 excludes evidence mode explicitly; deploy-only exporter eligibility is narrower. No exporter is started by evidence, and the numeric bookkeeping is explicitly dispositioned by ruling 01a1e09e. SCA-2225 ruling 01a1e09e explicitly sets 12 to 11 as conservative bookkeeping for the narrowed condition; exporter code/timeout/frequency are unchanged and no runtime improvement is claimed. 2026-11-18 listen-private-values adds the private-env-migrate dispatch option; this job is deploy-only and unchanged, and the one-minute bump records the trigger change. SCA-3516 adds one conservative bookkeeping minute for the manual dispatch input as required by the trigger inventory policy. The runner and expected run count are unchanged.",
+      "rationale": "Production-only follow-up after a successful listen rollout; the resolver emits its image-tag output only for explicit deploys, while kept-tag and rollback paths leave it empty. Budget covers WIF setup and the exporter Helm rollout capped at five minutes, with no PR-run cost. B5 (2026-10-19) adds the break_glass_lock dispatch input, no new trigger. 2026-10-22 plan D D2 adds the listen_edge_image_digest dispatch input; this job is unchanged and stays manual-only with no PR runs, and the one-minute bump records the trigger change. 2026-10-29 ghguards adds the expected_sha dispatch input upstream of this job; this job is unchanged, and the one-minute bump records the trigger change SCA-2225 excludes evidence mode explicitly; deploy-only exporter eligibility is narrower. No exporter is started by evidence, and the numeric bookkeeping is explicitly dispositioned by ruling 01a1e09e. SCA-2225 ruling 01a1e09e explicitly sets 12 to 11 as conservative bookkeeping for the narrowed condition; exporter code/timeout/frequency are unchanged and no runtime improvement is claimed. 2026-11-18 listen-private-values adds the private-env-migrate dispatch option; this job is deploy-only and unchanged, and the one-minute bump records the trigger change. SCA-3516 adds one conservative bookkeeping minute for the manual dispatch input as required by the trigger inventory policy. The runner and expected run count are unchanged. SCA-4091 records one bookkeeping minute. Image-only dispatch excludes this job. The increment records the trigger inventory change.",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -1479,7 +1479,7 @@
       "runs_on": "ubuntu-latest"
     },
     "gcp_backend_listen_helm.yml/helm-upgrade": {
-      "budget_p50_minutes": 19,
+      "budget_p50_minutes": 20,
       "display_name": "helm-upgrade",
       "expected_runs_class": "non-pr-or-unsampled",
       "expected_runs_per_day": 2,
@@ -1488,13 +1488,13 @@
       "matrix_size": 1,
       "needs": [],
       "owner": "CI maintainers",
-      "rationale": "Unobserved in one-day PR sample; conservative 5-minute placeholder. B5 (2026-10-19) adds the break_glass_lock dispatch input, no new trigger. 2026-10-22 plan D D2 adds the listen_edge_image_digest dispatch input: when set, the job also admits the digest (one image-config read) and helm-upgrades backend/charts/listen-edge with a 600-second rollout wait after the listen rollout; manual-only, no PR runs, 15-minute placeholder p50. 2026-10-29 ghguards adds the expected_sha dispatch input: the admission step gains a SHA format/object check plus one merge-base containment test before any mutation (seconds on the full clone); the one-minute bump records the trigger change SCA-2225 rollout-lead ruling 01a1e09e (2026-11-15): one existing deploy forecast plus at most one manually requested evidence run/day, evidence ceiling 10 minutes within retained p50 allowance 16; no automatic evidence retry. No runtime improvement is asserted. 2026-11-18 listen-private-values adds the private-env-migrate dispatch option (one-time, about 5 minutes, no rollout wait) and one pre-roll guard step that reads one Secret and the serving ReplicaSets (seconds); the one-minute bump records the trigger change. Manual-only, no PR runs. SCA-3516 adds one conservative bookkeeping minute for the manual dispatch input as required by the trigger inventory policy. The expected run count is unchanged. SCA-2225 disposition 01a1e274 permits the evidence-only Ubuntu 22.04 runtime and verified staging, within the current budget and evidence timeout. Reconstruction uses the existing private read-only manual workflow per 01a1e267. Shipping approved one additional budget minute for the evidence-only runner on 2026-11-25. Dispatch frequency and runtime caps are unchanged.",
+      "rationale": "Unobserved in one-day PR sample; conservative 5-minute placeholder. B5 (2026-10-19) adds the break_glass_lock dispatch input, no new trigger. 2026-10-22 plan D D2 adds the listen_edge_image_digest dispatch input: when set, the job also admits the digest (one image-config read) and helm-upgrades backend/charts/listen-edge with a 600-second rollout wait after the listen rollout; manual-only, no PR runs, 15-minute placeholder p50. 2026-10-29 ghguards adds the expected_sha dispatch input: the admission step gains a SHA format/object check plus one merge-base containment test before any mutation (seconds on the full clone); the one-minute bump records the trigger change SCA-2225 rollout-lead ruling 01a1e09e (2026-11-15): one existing deploy forecast plus at most one manually requested evidence run/day, evidence ceiling 10 minutes within retained p50 allowance 16; no automatic evidence retry. No runtime improvement is asserted. 2026-11-18 listen-private-values adds the private-env-migrate dispatch option (one-time, about 5 minutes, no rollout wait) and one pre-roll guard step that reads one Secret and the serving ReplicaSets (seconds); the one-minute bump records the trigger change. Manual-only, no PR runs. SCA-3516 adds one conservative bookkeeping minute for the manual dispatch input as required by the trigger inventory policy. The expected run count is unchanged. SCA-2225 disposition 01a1e274 permits the evidence-only Ubuntu 22.04 runtime and verified staging, within the current budget and evidence timeout. Reconstruction uses the existing private read-only manual workflow per 01a1e267. Shipping approved one additional budget minute for the evidence-only runner on 2026-11-25. Dispatch frequency and runtime caps are unchanged. SCA-4091 records one bookkeeping minute. The existing manual rollout forecast includes the protected runtime and image-only admission.",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
         "linux": 1
       },
-      "runs_on": "${{ inputs.mode == 'evidence' && 'ubuntu-22.04' || 'ubuntu-latest' }}"
+      "runs_on": "${{ (inputs.mode == 'evidence' || inputs.mode == 'image-only') && 'ubuntu-22.04' || 'ubuntu-latest' }}"
     },
     "gcp_backend_pusher.yml/deploy": {
       "budget_p50_minutes": 6,
@@ -4987,7 +4987,7 @@
     "gcp_backend_listen_helm.yml": {
       "name": "Upgrade Backend Listen Helm Chart",
       "owner": "CI maintainers",
-      "rationale": "B5 prod-train lock (2026-10-19): break_glass_lock dispatch input added; triggers otherwise unchanged. 2026-10-22 plan D D2 (lane p41-d2): listen_edge_image_digest dispatch input (blank by default) rolls backend/charts/listen-edge by admitted digest after the listen rollout; no new event trigger, no PR runs. 2026-10-29 ghguards: expected_sha dispatch input (blank default) admits only a checked-out tree that contains the pinned commit before any mutation; no new event trigger, no PR runs SCA-2225 approved overlay-evidence design adds evidence mode and two request bindings in this existing workflow only; evidence cannot reach deploy, rollback, index, build or downstream exporter work. Numeric disposition is explicitly authorized by SCA-2225 ruling 01a1e09e; global caps stay unchanged. 2026-11-18 listen-private-values: private-env-migrate mode (prod, manual, one-time) writes the retired private overlay into Secret Manager and syncs its ExternalSecret without any listen roll; the deploy path stops reading the overlay secret and gains one in-job guard step. No new event trigger, no PR runs. SCA-3516 adds the opt-in control_sha input to the existing manual dispatch. It selects the immutable dispatch checkout and an exact SHA check before production mutation. Event filters, job graph, runner classes and expected runs per day stay the same.",
+      "rationale": "B5 prod-train lock (2026-10-19): break_glass_lock dispatch input added; triggers otherwise unchanged. 2026-10-22 plan D D2 (lane p41-d2): listen_edge_image_digest dispatch input (blank by default) rolls backend/charts/listen-edge by admitted digest after the listen rollout; no new event trigger, no PR runs. 2026-10-29 ghguards: expected_sha dispatch input (blank default) admits only a checked-out tree that contains the pinned commit before any mutation; no new event trigger, no PR runs SCA-2225 approved overlay-evidence design adds evidence mode and two request bindings in this existing workflow only; evidence cannot reach deploy, rollback, index, build or downstream exporter work. Numeric disposition is explicitly authorized by SCA-2225 ruling 01a1e09e; global caps stay unchanged. 2026-11-18 listen-private-values: private-env-migrate mode (prod, manual, one-time) writes the retired private overlay into Secret Manager and syncs its ExternalSecret without any listen roll; the deploy path stops reading the overlay secret and gains one in-job guard step. No new event trigger, no PR runs. SCA-3516 adds the opt-in control_sha input to the existing manual dispatch. It selects the immutable dispatch checkout and an exact SHA check before production mutation. Event filters, job graph, runner classes and expected runs per day stay the same. SCA-4091 adds an opt-in image-only dispatch in the existing prod-train group. Event filters, frequency, and all caps stay unchanged.",
       "triggers": {
         "push": {
           "branches": [
@@ -5051,7 +5051,7 @@
             },
             "evidence_request": {
               "default": "",
-              "description": "Nonsecret Release request bindings; evidence mode only, no overlay payload",
+              "description": "Nonsecret Release evidence request or admitted image-only proof",
               "required": "false"
             },
             "evidence_request_id": {
@@ -5094,11 +5094,12 @@
             },
             "mode": {
               "default": "deploy",
-              "description": "deploy applies the chart; rollback restores an earlier Helm revision; private-env-migrate copies the retired private overlay into Secret Manager (prod, no roll)",
+              "description": "deploy applies the chart; image-only replaces the primary Listen image; rollback restores an earlier Helm revision; private-env-migrate syncs private references without rolling",
               "options": [
                 "deploy",
                 "rollback",
                 "evidence",
+                "image-only",
                 "private-env-migrate"
               ],
               "required": "true",
@@ -5196,7 +5197,7 @@
     "gcp_backend_pusher_auto_deploy.yml": {
       "name": "Auto Deploy Backend Pusher to GKE (Development)",
       "owner": "CI maintainers",
-      "rationale": "Initial workflow inventory. 2026-10-21 plan B B2: backend/omi_logging.py added to the pusher source-closure paths. 2026-10-22 plan B B3: backend/Dockerfile.roles added — a qualification may name the backend-pusher role image, so its image definition joins the bake trigger closure",
+      "rationale": "Initial workflow inventory. 2026-10-21 plan B B2: backend/omi_logging.py added to the pusher source-closure paths. 2026-10-22 plan B B3: backend/Dockerfile.roles added \u2014 a qualification may name the backend-pusher role image, so its image definition joins the bake trigger closure",
       "triggers": {
         "push": {
           "branches": [

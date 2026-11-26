@@ -70,6 +70,7 @@ spec:
         # needs its own consumer before it is scraped. ~250 series per instance.
         # SCA-2280: finish classified/failure counters prove bounded migration progress.
         # SCA-3120: pump tick/success gauges; follow-up outcomes already match batch_pipeline_.*.
+        # SCA-4372: batch_pipeline_.* also keeps the phone upload_hold_age_seconds histogram.
         - action: keep
           sourceLabels:
             - __name__

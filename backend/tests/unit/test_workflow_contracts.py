@@ -2354,6 +2354,18 @@ def test_listen_deploy_tag_resolution_executes_against_stubbed_tools(tmp_path):
     assert outputs['BACKEND_LISTEN_SOURCE_SHA'] == 'd' * 40
     assert outputs['neg_coverage_exporter_image_tag'] == 'ddddddd'
 
+    case = tmp_path / 'image-only-wrong-source'
+    env = (
+        base_env
+        | _listen_env(case, {'ddddddd': 'd' * 40}, image='gcr.io/test-project/backend:abc1234')
+        | {'REQUESTED_TAG': 'ddddddd', 'DEPLOY_MODE': 'image-only', 'EXPECTED_SHA': 'e' * 40}
+    )
+    proc, outputs = _run_step(run, env, _LISTEN_SUBSTITUTIONS, case)
+    assert proc.returncode == 1
+    assert 'exact admitted source' in proc.stdout
+    assert 'BACKEND_LISTEN_SOURCE_SHA' not in outputs
+    assert 'neg_coverage_exporter_image_tag' not in outputs
+
     case = tmp_path / 'missing-tag'
     env = base_env | _listen_env(case, {'abc1234': 'c' * 40}, image='') | {'REQUESTED_TAG': ''}
     proc, _ = _run_step(run, env, _LISTEN_SUBSTITUTIONS, case)

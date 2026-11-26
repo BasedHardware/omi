@@ -1205,6 +1205,16 @@ class ProjectionStore:
             else writing('usage_month_cache', binding.owner_id)
         ):
             result, changed, seconds = self.run(commit, policy=policy)
+        # Only a first durable publication owns the upload sample. Observe it
+        # before post-commit work that could fail and leave a replay to finish.
+        observe_completion(
+            completion_upload,
+            delivered_uploads,
+            merged=bool(coalescing_receipts),
+            changed=changed,
+            result=result,
+            now=now,
+        )
         if finish_resolution:
             recording_id, outcome = finish_resolution[0]
             v3_metrics.FINISH_NO_POINTER.labels(outcome).inc()
@@ -1225,14 +1235,6 @@ class ProjectionStore:
                 SOURCE_DELETED_JOBS.inc()
                 logger.info('event=batch_projection action=completion outcome=source_deleted')
             record_correctness('projection_completed', seconds=seconds)
-        observe_completion(
-            completion_upload,
-            delivered_uploads,
-            merged=bool(coalescing_receipts),
-            changed=changed,
-            result=result,
-            now=now,
-        )
         return result
 
     def _v3_finish_update(self, transaction, collection, cid, row, silent, session, now):
