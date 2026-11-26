@@ -7,6 +7,7 @@ import pytest
 from database import conversations_v3 as store, conversations_v3_leases as leases, memories
 from utils.conversations.v3 import Conflict, service, triggers
 from tests.unit.test_conversations_v3_claim_growth import T0, UID, path, strict  # noqa: F401
+from tests.unit.test_conversations_v3_lock_timing import _locked_pair
 from tests.unit.test_conversations_v3_review import AT, MemoryQuery, builder, source  # noqa: F401
 
 C = '/users/u/conversations/'
@@ -728,8 +729,6 @@ async def test_unvisited_unlocked_wake_is_independent_of_pending_seeds(monkeypat
 @pytest.mark.asyncio
 @pytest.mark.parametrize('outlasts_wake', [False, True])
 async def test_reconcile_wakes_unvisited_unlocked_windows_once_per_pass(builder, monkeypatch, outlasts_wake):
-    from tests.unit.test_conversations_v3_lock_timing import _locked_pair
-
     _window, existing, recordings = _locked_pair(datetime.now(timezone.utc) - timedelta(hours=2))
     monkeypatch.setenv('CONVERSATIONS_V3_LOCK_SECONDS', '3600')
     recordings['r'].update(recording=True, status='completed', v3_pending=True)
