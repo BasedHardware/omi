@@ -128,6 +128,12 @@ measures skipped and written rows by caller. `omi_conversations_v3_reconcile_bil
 measures confirmed builder writes, including leases and Home feed writes. Downstream notes
 processing has separate write attribution.
 
+`CONVERSATIONS_V3_SETTLE_ON_LANDING` defaults to on. Live stretch cohesion at the default
+timing settles from the later of recorded speech end and `v3_speech_landed_at`, so a late
+batch of short topics joins its sit-down instead of locking on arrival. Set it to `off` to
+restore the recorded clock at the default timing; custom timing always uses landing. See the
+[short-topic sit-down change note](./listen_pusher_pipeline/changes/2026-11-25-v3-short-topic-sitdown.md).
+
 `POST /v1/conversations-v3/reconcile` returns HTTP 409 with
 `{"status":"retry","reason":"dependency_warming"}` for exhausted Firestore contention,
 expiry, or retry deadlines. Confirmed processing fences use `persistence_fenced` in the

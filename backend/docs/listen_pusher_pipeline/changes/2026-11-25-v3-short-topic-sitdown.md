@@ -13,4 +13,6 @@ retain their independent projection. Historical derivation and previously
 committed custody follow the existing rules.
 
 Set `CONVERSATIONS_V3_SETTLE_ON_LANDING=off` to restore the recorded clock
-at the default timing. Custom timing already uses the landing clock.
+at the default timing. Custom timing already uses the landing clock. The switch is
+documented with the other v3 switches in the
+[v3 model contract](../../listen_pusher_pipeline.mdx).

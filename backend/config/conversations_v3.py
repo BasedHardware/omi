@@ -105,7 +105,8 @@ def settle_on_landing_enabled(*, custom_timing: bool, cohesion: bool, derive: bo
 DEFAULT_BOUNDARY_SECONDS = 300
 DEFAULT_MAX_WINDOW_SECONDS = 10800
 HISTORICAL_SITDOWN_TIMING = (900, 3600)
-# Stamped by the transaction that makes new recording speech visible; custom lock timing counts from it.
+# Stamped by the transaction that makes new recording speech visible. Live stretch cohesion settles from it
+# (default timing under CONVERSATIONS_V3_SETTLE_ON_LANDING, custom timing always).
 SPEECH_LANDED_FIELD = 'v3_speech_landed_at'
 
 
