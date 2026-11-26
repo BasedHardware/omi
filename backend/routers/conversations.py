@@ -1650,14 +1650,24 @@ def delete_conversation(
 ):
     # A tombstone plus an absent primary row proves this request is already satisfied.
     # Leave any existing erasure obligation to its runner; never re-arm it on a retry.
-    if (
-        conversation_tombstones.is_deleted(uid, conversation_id)
-        and conversations_db.get_conversation_raw_snapshot(uid, conversation_id, field_paths=['id']) is None
-    ):
+    deleted = conversation_tombstones.is_deleted(uid, conversation_id)
+    try:
+        observed_row = conversations_db.get_conversation_raw_snapshot(uid, conversation_id, field_paths=['id'])
+    except Exception as error:
+        raise HTTPException(status_code=503, detail='Conversation storage deletion is busy, please retry') from error
+    if deleted and observed_row is None:
         return Response(status_code=204, headers={'X-Omi-Delete-Outcome': 'already_deleted'})
+    expected_exists = observed_row is not None
     released_during_delete = False
     if _legal_hold_defers_delete(uid):
-        held_response = _accept_held_conversation_delete(uid, conversation_id, cascade, http_request)
+        try:
+            held_response = _accept_held_conversation_delete(
+                uid, conversation_id, cascade, http_request, expected_exists=expected_exists
+            )
+        except conversation_tombstones.ConversationDeleteTargetChanged as error:
+            raise HTTPException(
+                status_code=409, detail='Conversation changed during deletion; refresh and retry'
+            ) from error
         if held_response is not None:
             return held_response
         released_during_delete = True
@@ -1684,22 +1694,33 @@ def delete_conversation(
     try:
         if accepting and _same_account_delete_running(uid, db_client):
             # Lock-free: no transaction on the gate the holder must release.
-            return _accept_conversation_delete(uid, conversation_id, http_request)
+            return _accept_conversation_delete(uid, conversation_id, http_request, expected_exists=expected_exists)
         with ExitStack() as held:
             try:
                 held.enter_context(gate)
             except Exception as error:
                 if not accepting or not _gate_busy_with_same_account_delete(error, uid, db_client):
                     raise
-                return _accept_conversation_delete(uid, conversation_id, http_request)
+                return _accept_conversation_delete(uid, conversation_id, http_request, expected_exists=expected_exists)
             held.enter_context(deferred_batch_purges(uid))
             _delete_conversation_under_gate(
-                conversation_id, background_tasks, cascade, http_request, uid, memory_service, db_client
+                conversation_id,
+                background_tasks,
+                cascade,
+                http_request,
+                uid,
+                memory_service,
+                db_client,
+                expected_exists=expected_exists,
             )
             if released_during_delete:
                 # Only now is it physically gone: until here the marker keeps it on release follow-up.
                 conversation_tombstones.clear_legal_hold_deferral(uid, conversation_id)
             return Response(status_code=204, headers={'X-Omi-Delete-Outcome': 'tombstoned'})
+    except conversation_tombstones.ConversationDeleteTargetChanged as error:
+        raise HTTPException(
+            status_code=409, detail='Conversation changed during deletion; refresh and retry'
+        ) from error
     except RuntimeError as error:
         if type(error).__name__ not in {
             'DestructiveGateTakeover',
@@ -1758,7 +1779,7 @@ def _legal_hold_defers_delete(uid: str) -> bool:
 
 
 def _accept_held_conversation_delete(
-    uid: str, conversation_id: str, cascade: bool, http_request: Request
+    uid: str, conversation_id: str, cascade: bool, http_request: Request, *, expected_exists: bool = False
 ) -> Response | None:
     """Hide and retain a held account's conversation; physical erasure waits for release.
 
@@ -1770,7 +1791,13 @@ def _accept_held_conversation_delete(
     landed in between may have scanned before the tombstone existed, so the
     request returns ``None`` and the caller deletes normally.
     """
-    conversation_tombstones.accept_deletion(uid, conversation_id, legal_hold_deferred=True, arm_erasure=cascade)
+    conversation_tombstones.accept_deletion(
+        uid,
+        conversation_id,
+        legal_hold_deferred=True,
+        arm_erasure=cascade,
+        expected_exists=expected_exists,
+    )
     if not cascade and not _legal_hold_defers_delete(uid):
         logger.info('event=conversation_delete outcome=held_released_during_delete')
         return None
@@ -1780,9 +1807,11 @@ def _accept_held_conversation_delete(
     return Response(status_code=204, headers={'X-Omi-Delete-Outcome': 'held_deferred'})
 
 
-def _accept_conversation_delete(uid: str, conversation_id: str, http_request: Request) -> Response:
+def _accept_conversation_delete(
+    uid: str, conversation_id: str, http_request: Request, *, expected_exists: bool = False
+) -> Response:
     # Hide + tombstone + owe the cascade in one commit; the obligation runner erases it.
-    conversation_tombstones.accept_deletion(uid, conversation_id)
+    conversation_tombstones.accept_deletion(uid, conversation_id, expected_exists=expected_exists)
     # Mode change, not a failure: the user's delete is done; derived-data erasure is deferred.
     record_fallback(
         component='other',
@@ -1835,12 +1864,21 @@ def erase_accepted_conversation(uid: str, conversation_id: str, audio_source_ids
 
 
 def _delete_conversation_under_gate(
-    conversation_id, background_tasks, cascade, http_request, uid, memory_service, db_client, *, record_event=True
+    conversation_id,
+    background_tasks,
+    cascade,
+    http_request,
+    uid,
+    memory_service,
+    db_client,
+    *,
+    record_event=True,
+    expected_exists=False,
 ):
     logger.info('event=conversation_delete cascade=%s', cascade)
 
     # Commit intent before retraction or cleanup; failures must never undo this guard.
-    conversation_tombstones.record_deletion(uid, conversation_id)
+    conversation_tombstones.record_deletion(uid, conversation_id, expected_exists=expected_exists)
     # Prompt vectors are derived evidence even when primary audio is retained.
     delete_owner_prompt_embedding_cache(uid, conversation_id)
 

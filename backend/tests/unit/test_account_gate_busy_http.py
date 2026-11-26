@@ -182,9 +182,10 @@ def test_conversation_delete_route_maps_takeover_to_409(monkeypatch, conversatio
     monkeypatch.setattr(conversation_routes, 'destructive_operation_gate', lambda *args, **kwargs: nullcontext())
     monkeypatch.setattr(conversation_routes, '_legal_hold_defers_delete', lambda uid: False)
     monkeypatch.setattr(conversation_routes.conversation_tombstones, "is_deleted", lambda *args: False)
-    monkeypatch.setattr(conversation_routes.conversation_tombstones, "record_deletion", lambda *args: None)
+    monkeypatch.setattr(conversation_routes.conversation_tombstones, "record_deletion", lambda *args, **kwargs: None)
     # #25610 short-circuits an already-tombstoned delete; this conversation is live.
     monkeypatch.setattr(conversation_routes.conversation_tombstones, "is_deleted", lambda *args, **kwargs: False)
+    monkeypatch.setattr(conversation_routes.conversations_db, "get_conversation_raw_snapshot", lambda *a, **k: {})
     monkeypatch.setattr(conversation_routes, "delete_owner_prompt_embedding_cache", lambda *args: None)
     monkeypatch.setattr(conversation_routes, "retraction_can_be_skipped", lambda *args, **kwargs: False)
     app = FastAPI()

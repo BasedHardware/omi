@@ -505,13 +505,24 @@ def test_accept_transaction_reads_before_it_writes_and_keeps_the_first_tombstone
         {('users', UID, 'conversations', 'c1'): {'created_at': 'original', 'sync_merged_from': ['donor']}}
     )
     monkeypatch.setattr(legal_holds, 'assert_account_deletion_permitted', lambda *a, **k: None)
-    conversation_tombstones.accept_deletion(UID, 'c1', firestore_client=store)
+    conversation_tombstones.accept_deletion(UID, 'c1', firestore_client=store, expected_exists=True)
     first = dict(store.rows[('users', UID, conversation_tombstones.COLLECTION, 'c1')])
     conversation_tombstones.accept_deletion(UID, 'c1', firestore_client=store)
     assert store.rows[('users', UID, conversation_tombstones.COLLECTION, 'c1')] == first
     assert store.rows[('users', UID, 'conversations', 'c1')]['deleted'] is True
     owed = store.rows[(ERASURES, purge_jobs.erasure_job_id(UID, 'c1'))]
     assert owed['audio_source_ids'] == ['donor'] and owed['uid'] == UID
+
+
+def test_accept_rejects_a_stale_delete_after_undo_removed_the_observed_copy(monkeypatch):
+    from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
+
+    store = StrictFirestore({})
+    monkeypatch.setattr(legal_holds, 'assert_account_deletion_permitted', lambda *a, **k: None)
+    with pytest.raises(conversation_tombstones.ConversationDeleteTargetChanged):
+        conversation_tombstones.accept_deletion(UID, 'c1', firestore_client=store, expected_exists=True)
+    assert ('users', UID, conversation_tombstones.COLLECTION, 'c1') not in store.rows
+    assert (ERASURES, purge_jobs.erasure_job_id(UID, 'c1')) not in store.rows
 
 
 def test_task_handler_routes_erasures_to_the_eraser(monkeypatch):
