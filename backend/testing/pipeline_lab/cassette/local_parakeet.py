@@ -132,14 +132,33 @@ class InProcess:
         return transcribe_pcm(pcm16, language, engine=self.engine)
 
 
-class Worker:
-    """Runs the model in the extra's venv: PCM in a 0600 temp file, words back as JSON."""
+def _private_work_root() -> Path:
+    """Where the worker's PCM and words go: an owner-only directory under the scenario lab root, never the
+    system temp directory (private audio and words stay inside the lab root, even if the process is killed)."""
+    from testing.pipeline_lab.scenario.paths import scenario_lab_root
+    from testing.pipeline_lab.store import ensure_private_dir
 
-    def __init__(self, python: str, revision: str, *, run: Callable[..., Any] = subprocess.run):
-        self.python, self.revision, self._run = python, revision, run
+    return ensure_private_dir(scenario_lab_root() / 'tmp' / 'local-stt')
+
+
+class Worker:
+    """Runs the model in the extra's venv: PCM in a 0600 file under the private lab root, words back as JSON."""
+
+    def __init__(
+        self,
+        python: str,
+        revision: str,
+        *,
+        run: Callable[..., Any] = subprocess.run,
+        work_root: Optional[Path] = None,
+    ):
+        self.python, self.revision, self._run, self._work_root = python, revision, run, work_root
 
     def __call__(self, pcm16: bytes, language: Optional[str]) -> list[LocalWord]:
-        with tempfile.TemporaryDirectory(prefix='plab-local-stt-') as work:
+        from testing.pipeline_lab.store import ensure_private_dir
+
+        base = ensure_private_dir(self._work_root) if self._work_root is not None else _private_work_root()
+        with tempfile.TemporaryDirectory(prefix='plab-local-stt-', dir=base) as work:
             pcm_path, out_path = Path(work, 'audio.pcm'), Path(work, 'words.json')
             fd = os.open(pcm_path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
             with os.fdopen(fd, 'wb') as handle:

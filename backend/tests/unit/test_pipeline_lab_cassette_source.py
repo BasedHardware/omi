@@ -228,22 +228,25 @@ def test_worker_round_trip_through_files(tmp_path):
     def run(command, **kwargs):
         pcm_path = Path(command[command.index('--pcm') + 1])
         seen.update(bytes=pcm_path.stat().st_size, mode=pcm_path.stat().st_mode & 0o777, cwd=kwargs['cwd'])
+        seen['inside_lab'] = (tmp_path / 'lab') in pcm_path.parents  # private audio stays under the lab root
         out = Path(command[command.index('--out') + 1])
         out.write_text(json.dumps({'revision': 'r' * 40, 'words': [{'start': 0.1, 'end': 0.2, 'text': 'x'}]}))
         return Done()
 
-    words = local_parakeet.Worker('/py', 'r' * 40, run=run)(pcm(2), 'en')
+    words = local_parakeet.Worker('/py', 'r' * 40, run=run, work_root=tmp_path / 'lab')(pcm(2), 'en')
     assert words == [LocalWord(0.1, 0.2, 'x')]
-    assert seen == {'bytes': 64000, 'mode': 0o600, 'cwd': local_parakeet.BACKEND}
+    assert seen == {'bytes': 64000, 'mode': 0o600, 'cwd': local_parakeet.BACKEND, 'inside_lab': True}
+    assert (tmp_path / 'lab').stat().st_mode & 0o777 == 0o700
+    assert list((tmp_path / 'lab').iterdir()) == []  # the per-call directory is removed afterwards
 
 
-def test_worker_refuses_a_different_revision_and_reports_missing_deps():
+def test_worker_refuses_a_different_revision_and_reports_missing_deps(tmp_path):
     def other(command, **kwargs):
         Path(command[command.index('--out') + 1]).write_text(json.dumps({'revision': 'x' * 40, 'words': []}))
         return Done()
 
     with pytest.raises(RuntimeError, match='different revision'):
-        local_parakeet.Worker('/py', 'r' * 40, run=other)(pcm(1), None)
+        local_parakeet.Worker('/py', 'r' * 40, run=other, work_root=tmp_path / 'lab')(pcm(1), None)
     missing = lambda command, **kwargs: Done(1, "ModuleNotFoundError: No module named 'nemo'")  # noqa: E731
     with pytest.raises(LocalRecorderNotInstalled, match='uv pip install'):
-        local_parakeet.Worker('/py', 'r' * 40, run=missing)(pcm(1), None)
+        local_parakeet.Worker('/py', 'r' * 40, run=missing, work_root=tmp_path / 'lab')(pcm(1), None)
