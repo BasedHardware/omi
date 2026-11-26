@@ -903,6 +903,7 @@ and an explicit empty literal renders as `''`.
 | `RECORD_SEAL_SWEEPER_MODE` | plan or apply; default apply, plan performs proofs without writes | backend | env | closed | — | — | — | — | keep | keep | — | two-lane lead |
 | `RECORD_WAL_DUPLICATE_PERCENT` | Default-off native WAL duplicate settlement cohort | backend | env | closed | — | — | — | — | keep | keep | — | quality |
 | `RECORD_WAL_DUPLICATE_SHADOW_EPOCH` | Separately approved native WAL duplicate shadow window | backend | env | closed | — | — | — | — | keep | keep | — | quality |
+| `RECORD_WAL_DUPLICATE_SHADOW_PRE_FENCE` | Default off; lets the native WAL duplicate shadow window run before Release verifies the source fence | backend | env | closed | — | — | — | — | keep | keep | — | quality |
 | `RECORD_WAL_DUPLICATE_SOURCE_FENCE_VERIFIED` | Release qualification of native WAL backing sources and writers | backend | env | closed | — | — | — | — | keep | keep | — | quality |
 | `RECORD_WAL_HANDOFF_ENABLED` | Default off; readers-first opt-in to quota-bounded original WAL custody under the existing native record owner | backend | env | closed | — | — | — | — | keep | keep | — | quality |
 | `RECORD_WAL_PENDING_GLOBAL_BYTES` | Default 4294967296; hard cap on global pending/reserved encrypted bytes across stage namespaces | backend | env | closed | — | — | — | — | keep | keep | — | quality |
@@ -1538,6 +1539,7 @@ their code default (`fail` tells you which way a missing value resolves).
 - `RECORD_TOKEN_LEASE_MODE_SERVE_UID_SHA256S` — Default empty; digested uid serve cohort, inert in off and shadow modes (fail: closed)
 - `RECORD_WAL_DUPLICATE_PERCENT` — Default-off native WAL duplicate settlement cohort (fail: closed)
 - `RECORD_WAL_DUPLICATE_SHADOW_EPOCH` — Separately approved native WAL duplicate shadow window (fail: closed)
+- `RECORD_WAL_DUPLICATE_SHADOW_PRE_FENCE` — Default off; lets the native WAL duplicate shadow window run before Release verifies the source fence (fail: closed)
 - `RECORD_WAL_DUPLICATE_SOURCE_FENCE_VERIFIED` — Release qualification of native WAL backing sources and writers (fail: closed)
 - `RECORD_WAL_HANDOFF_ENABLED` — Default off; readers-first opt-in to quota-bounded original WAL custody under the existing native record owner (fail: closed)
 - `RECORD_WAL_PENDING_GLOBAL_BYTES` — Default 4294967296; hard cap on global pending/reserved encrypted bytes across stage namespaces (fail: closed)

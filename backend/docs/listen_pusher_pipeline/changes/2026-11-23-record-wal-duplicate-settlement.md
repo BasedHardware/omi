@@ -81,19 +81,25 @@ erasure and replay behavior serving, including with settlement disabled.
 
 ## Release gates
 
-- Keep all controls off for the initial carrier. Qualify both effective
+- Keep all controls off for the initial carrier. Before settlement, qualify both effective
   `raw-live/` and `audio-outbox/` lifecycles in `omi-private-cloud-sync`.
   Verify that every positive-traffic and ready source writer, privacy purge and
   merge/removal writer serializes with the Firestore conflict set. A writer
   capable of deleting these objects after a failed fence leaves the cohort
   unqualified. A conditional object HEAD alone does not exclude erasure.
-- Keep phase 1 broad admission off. With a separate exact written privacy
-  approval and Release go-ahead and inverse, set
-  `RECORD_WAL_DUPLICATE_SOURCE_FENCE_VERIFIED=true` and the one approved
-  `RECORD_WAL_DUPLICATE_SHADOW_EPOCH` on backend-sync. Shadow preserves the
-  existing reply and writes no settlement receipts. Its own 480 durable slots
-  are separate from the Nov 24 sampler. Only requests with a nonempty capture
-  claim set and one claim per staged file can claim a shadow slot.
+- Keep phase 1 broad admission off. The shadow may run before the
+  serving-writer fence proof (David, 2026-11-26): with a written privacy
+  approval and Release go-ahead and inverse, set the shadow-only
+  `RECORD_WAL_DUPLICATE_SHADOW_PRE_FENCE=true` and the one approved
+  `RECORD_WAL_DUPLICATE_SHADOW_EPOCH` on backend-sync. The gate admits only
+  the shadow; it never admits settlement. The epoch is aligned to 30 s and
+  the window is 4 h of 30 s slots, closing `ATTEMPT_SECONDS` early: 480
+  durable slots, separate from the Nov 24 sampler, whose 3-minute, 24-hour
+  constants are unchanged. Each claimed slot runs one proof bounded to
+  2 s, well inside its 30 s slot. Shadow preserves the existing reply,
+  writes no settlement receipts and never commits. Only requests with a
+  nonempty capture claim set and one claim per staged file can claim a
+  shadow slot. Inverse: unset the gate and the epoch on backend-sync.
 - Score whole-bundle would-settle and hold outcomes, whole-file coverage and
   agreement on positive proofs. The shadow directly bounds proof work to
   49,920 Firestore point reads, 9,600 GCS RPCs and 7.5 GiB of manifest downloads.
@@ -106,8 +112,11 @@ erasure and replay behavior serving, including with settlement disabled.
   It should never attempt a commit.
   Reconcile early alias reads, reached candidates, holds and replays before
   setting active budget and guard thresholds. No activation on absent metrics.
-- After full custody review and written Release approval, clear the shadow
-  epoch and ramp `RECORD_WAL_DUPLICATE_PERCENT` at 1, 10, 50 and 100 on
+- Settlement still requires the full serving-writer fence proof,
+  `RECORD_WAL_DUPLICATE_SOURCE_FENCE_VERIFIED=true`, a full custody review,
+  Release preflight and a written go-ahead before
+  `RECORD_WAL_DUPLICATE_PERCENT=1`. Then clear the shadow epoch and gate, and
+  ramp `RECORD_WAL_DUPLICATE_PERCENT` at 1, 10, 50 and 100 on
   backend-sync. The stable cohort key is the owner. Release owns expansion,
   one closed matched guard window per step, and rollback. Shadow and active
   settings are mutually exclusive. Zero or unset stops new settlements,
