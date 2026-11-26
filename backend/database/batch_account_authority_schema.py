@@ -33,6 +33,10 @@ def data_protection_denies(data: dict) -> bool:
     )
 
 
+def account_recording_policy_denies(data: dict) -> bool:
+    return not data.get('private_cloud_sync_enabled', True)
+
+
 def recording_policy_denies(conversation: dict, user_sync_enabled: bool = True) -> bool:
     return conversation.get('record_lane_owner') == 'batch_live_v1' and (
         bool(conversation.get('uses_custom_stt'))

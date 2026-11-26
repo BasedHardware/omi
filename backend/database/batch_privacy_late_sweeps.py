@@ -15,6 +15,7 @@ from database import legal_holds, rpc_deadline
 from database._client import get_data_plane_firestore_client
 from database.batch_account_authority_schema import (
     ACCOUNT_DELETION_COLLECTION,
+    account_recording_policy_denies,
     data_protection_denies,
     recording_policy_denies,
 )
@@ -230,22 +231,29 @@ def _historical_scope(client, reference, fields, read_time):
         raise RuntimeError('recording scope read returned no snapshot') from None
 
 
-def _certify_scope(client, event, uid, source, changed_at, now):
+def _certify_scope(client, event, uid, reason, source, changed_at, now):
+    account_recording = reason == 'recording_policy' and not source
     if source:
         reference = client.document(f'users/{uid}/conversations/{source}')
         fields, denies = SCOPE_FIELDS, recording_policy_denies
     else:
         reference = client.collection('users').document(uid)
-        fields, denies = PROTECTION_FIELDS, data_protection_denies
-    snapshot = reference.get(field_paths=fields, timeout=5, retry=None)
+        if account_recording:
+            fields, denies = ('private_cloud_sync_enabled',), account_recording_policy_denies
+        else:
+            fields, denies = PROTECTION_FIELDS, data_protection_denies
+    snapshot = None if account_recording else reference.get(field_paths=fields, timeout=5, retry=None)
     # A later lane claim (or a new document with the same ID) cannot turn an
     # ordinary edit into recording erasure. A later re-enable cannot undo a
     # genuine obligation. Recover the exact state committed with the intent.
-    if not snapshot.exists or snapshot.update_time > event.create_time:
+    if snapshot is None or not snapshot.exists or snapshot.update_time > event.create_time:
         try:
             snapshot = _historical_scope(client, reference, fields, event.create_time)
-        except (InvalidArgument, FailedPrecondition):
-            if datetime.now(timezone.utc) - event.create_time >= timedelta(hours=1):
+        except (GoogleAPICallError, TimeoutError, RuntimeError, ValueError) as error:
+            if account_recording or (
+                isinstance(error, (InvalidArgument, FailedPrecondition))
+                and datetime.now(timezone.utc) - event.create_time >= timedelta(hours=1)
+            ):
                 raise PermanentSweepError('scope_history_unavailable') from None
             raise
     option = firestore.LastUpdateOption(event.update_time)
@@ -322,8 +330,11 @@ def _run(client, event, now):
         or ('artifact_id' in data and (not _document_id(artifact_id) or index == len(NAMESPACES)))
     ):
         raise PermanentSweepError('malformed_intent')
-    if (source or reason == 'data_protection') and data.get('scope_verified') is not True:
-        return _certify_scope(client, event, uid, source, changed_at, now)
+    if reason != 'account_deleted' and data.get('scope_verified') is not True:
+        if artifact_id and reason == 'recording_policy' and not source:
+            # A legacy receipt retry's create time identifies the retry, not the policy Commit.
+            raise PermanentSweepError('scope_history_unavailable')
+        return _certify_scope(client, event, uid, reason, source, changed_at, now)
     if changed_at + DELAY > now:
         event.reference.update({'due_at': changed_at + DELAY}, option=firestore.LastUpdateOption(event.update_time))
         return 'early'

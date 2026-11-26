@@ -16,7 +16,11 @@ from typing import Any
 from config.firestore_read_levers import lever_enabled, lever_percent
 from database.account_deletion_policy import account_deletion_blocks_access, normalize_account_deletion_status
 from database.batch_account_authority_schema import PRIVACY_COLLECTION as PRIVACY_COLLECTION
-from database.batch_account_authority_schema import data_protection_denies, recording_policy_denies
+from database.batch_account_authority_schema import (
+    account_recording_policy_denies,
+    data_protection_denies,
+    recording_policy_denies,
+)
 from database.batch_privacy_attempt import SCHEMA_FIELD, TOKEN_FIELD, TOKEN_SCHEMA, current_attempt, token_version
 from database import privacy_check_metrics as metrics
 from database import batch_privacy_owner_cache as shared_cache
@@ -802,7 +806,7 @@ def _assert_batch_write_allowed_live(
     # distinct document. A walk that reaches a document an earlier walk already
     # passed stops there; cycle detection stays per source and every source is
     # still read and checked itself.
-    user_sync_enabled = bool(data.get('private_cloud_sync_enabled', True))
+    user_sync_enabled = not account_recording_policy_denies(data)
     _verify_conversation_ids(
         client,
         transaction,

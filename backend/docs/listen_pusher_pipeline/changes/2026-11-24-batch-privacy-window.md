@@ -42,10 +42,13 @@ provenance is unknown. A conversation policy edit becomes eligible for erasure
 only after the reconciler certifies the same native-recording denial as the
 write authority at the policy commit. Account data-protection changes use the
 same commit-time proof of a protection or migration denial. Ordinary protection
-settings edits and migration clears preserve pending artifacts. The reconciler
-persists proof before waiting for the upload window or a legal hold. When the
-current row has changed, it uses the commit snapshot. An unavailable expired
-snapshot leaves durable recovery debt.
+settings edits and migration clears preserve pending artifacts. For account-wide
+recording policy, the reconciler reads the account at the intent's Commit
+timestamp. A deny and restore in the same Commit preserves pending artifacts.
+A restore in a later Commit preserves the earlier erasure obligation. The
+reconciler persists proof before waiting for the upload window or a legal hold.
+Unreadable account recording history or a legacy retry without proof uses the
+bounded dead-letter path.
 
 Permanent receipt failures move to a dedicated retry row while the cursor
 continues to other artifacts. After five attempts by default
