@@ -919,22 +919,38 @@ def _privacy_allows(privacy) -> bool:
 class _StickyPrivacy:
     """A pass's privacy authority, sticky on denial.
 
-    Once any check refuses or errors, every later check of the pass answers False without asking: no
-    language probe of any kind, no chunk request and no retry can leave after a denial, whichever
-    check saw it first and whatever a later check would have answered.
+    When any check refuses or errors, the denial is recorded before that check returns. From then on:
+    - every later check answers False without asking;
+    - a check whose read was already in flight answers False when it returns, whatever it read;
+    - a chunk reads the denial again immediately before it is charged and sent (``_chunk_job``), so no
+      language probe, chunk request or retry starts after a denial is recorded.
+    The one send it cannot recall is a request already started before the denial was recorded (its
+    final check and the pre-send read both came first); its result is never written, because the
+    denial ends the pass ``privacy_blocked``.
     """
 
     def __init__(self, privacy):
         self._privacy = privacy
-        self.denied = False
+        # An Event, not a bare flag: chunk jobs on several pool threads set and read it concurrently.
+        self._denied = threading.Event()
+
+    @property
+    def denied(self) -> bool:
+        return self._denied.is_set()
 
     def __call__(self) -> bool:
-        if self.denied:
+        if self._denied.is_set():
             return False
         allowed = _privacy_allows(self._privacy)
         if not allowed:
-            self.denied = True
-        return allowed
+            self._denied.set()
+        # A read that began before another check's denial and answered after it is refused too.
+        return allowed and not self._denied.is_set()
+
+
+def _privacy_denied(privacy) -> bool:
+    """Whether the pass's sticky privacy authority has recorded a denial (never asks)."""
+    return isinstance(privacy, _StickyPrivacy) and privacy.denied
 
 
 class _Stopped(Exception):
@@ -1055,11 +1071,18 @@ def _chunk_job(
             # chunk fails with its first error, as a retry out of time always has.
             if sent.key is not None and deadline - time.monotonic() < RESERVE_MIN_SECONDS:
                 raise failure
+            # Nothing is reserved after a denial another chunk recorded since this chunk's check.
+            if _privacy_denied(privacy):
+                raise _Refused()
             if not sent.retry(seconds):
                 raise _RetryCapped() from failure
             # Stopped while Redis answered: reserved but not sent, so the settle refunds it.
             if stop.is_set():
                 raise _Abandoned()
+        # Immediately before the charge and the send: a denial another chunk recorded after this
+        # chunk's check passed still stops it, before the coordinator has set ``stop``.
+        if _privacy_denied(privacy):
+            raise _Refused()
         if not sent.add(seconds):
             raise _Abandoned()
         started = time.monotonic()
