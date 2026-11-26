@@ -331,5 +331,7 @@ def test_legacy_park_gets_one_early_attempt(strict, monkeypatch, reason):
     assert store.backoff_until(UID, firestore_client=strict)
     monkeypatch.delenv('CONVERSATIONS_V3_BOUNDED_PENDING')
     assert store.backoff_state(UID, firestore_client=strict) == (None, reason)
+    assert store.record_blocked(UID, token, reason, on_open=True, firestore_client=strict)
+    assert store.backoff_state(UID, firestore_client=strict) == (None, reason)
     assert store.record_blocked(UID, token, reason, firestore_client=strict)
     assert store.backoff_until(UID, firestore_client=strict)

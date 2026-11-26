@@ -911,7 +911,7 @@ async def reconcile(
         report['blocked_reason'] = reason
         if not derive:
             # A backfill conflict must not park the owner's live builder.
-            await run_blocking(db_executor, store.record_blocked, uid, token, reason)
+            await run_blocking(db_executor, store.record_blocked, uid, token, reason, on_open=on_open)
         blocked = reason
         primary_failed = False
     except BaseException as error:

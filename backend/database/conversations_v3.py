@@ -258,7 +258,7 @@ def save_outline(uid, token, fingerprint, entries, *, key='builder', preview=Non
 BLOCKED_BACKOFF_MAX = timedelta(hours=1)
 
 
-def record_blocked(uid, token, reason, *, firestore_client=None):
+def record_blocked(uid, token, reason, *, on_open=False, firestore_client=None):
     """Deterministic conflicts back off per owner instead of retrying through the shared queue.
 
     Fenced by the builder token: a stale pass must not park an owner after a successor committed.
@@ -280,7 +280,9 @@ def record_blocked(uid, token, reason, *, firestore_client=None):
                 'v3_blocked_count': count,
                 'v3_blocked_reason': reason,
                 'v3_backoff_until': now + delay,
-                'v3_bounded_pending_attempted': bounded_pending_enabled(),
+                'v3_bounded_pending_attempted': (
+                    bool(row.get('v3_bounded_pending_attempted')) if on_open else bounded_pending_enabled()
+                ),
             },
         )
         return True
