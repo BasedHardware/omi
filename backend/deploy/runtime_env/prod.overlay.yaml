@@ -655,6 +655,7 @@ overlay:
         env:
           CONVERSATIONS_V3_LIVE_TITLE: {value: 'on', category: ops_kill}
           CONVERSATIONS_V3_FAST_FINISH: {value: 'on', category: ops_kill}
+          CONVERSATIONS_V3_FAST_FINISH_CHUNKED: {value: 'on', category: ops_kill}
           CONVERSATION_PARKED_TERMINAL_STATUS_ENABLED:
             value: 'off'
             category: rollout
@@ -1916,6 +1917,12 @@ overlay:
         env:
           CONVERSATIONS_V3_LIVE_TITLE: {value: 'off', category: ops_kill}
           CONVERSATIONS_V3_FAST_FINISH: {value: 'on', category: ops_kill}
+          CONVERSATIONS_V3_FAST_FINISH_CHUNKED: {value: 'on', category: ops_kill}
+          # SCA-4434 canary: long (over 20 min) chunked fast finishes for 25% of owners, at most 2 h of
+          # their provider audio (retries, overlaps and language probe included) per UTC day across the
+          # fleet, in one shared Redis counter; long passes are refused when Redis cannot answer.
+          CONVERSATIONS_V3_FAST_FINISH_LONG_PERCENT: {value: '25', category: rollout}
+          CONVERSATIONS_V3_FAST_FINISH_LONG_DAILY_SECONDS: {value: '7200', category: config}
           CONVERSATION_PARKED_TERMINAL_STATUS_ENABLED:
             value: 'off'
             category: rollout
