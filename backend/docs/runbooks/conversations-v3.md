@@ -169,8 +169,9 @@ controls recorded-speech grouping (120–1800 seconds), and `CONVERSATIONS_V3_LO
 controls when a card locks and owes notes (120–3600 seconds). Both default to
 300. Invalid values use the defaults. When either value differs from its
 default, the existing summary-open path and explicit End bypass the lock timer.
-Setting both values back to 300 or disabling cohesion restores the prior
-timing; provisional rows remain reachable for the builder to finish.
+Setting both values back to 300 restores the default lock delay, still counted
+from landing unless `CONVERSATIONS_V3_SETTLE_ON_LANDING=off`; disabling cohesion
+restores the prior timing. Provisional rows remain reachable for the builder to finish.
 A lock delay shorter than the silence threshold can finalize an initial card
 while later speech still belongs to the same outline stretch. Later speech
 gets its own continuation. Reconciliation can merge settled cards when the
@@ -221,13 +222,16 @@ rows cut by earlier code or an earlier pass keep their cut (even when a turn
 straddles it or a held turn is revised) and the cap counts from there. A locked
 row that owns none of the stretch's lines never cuts it.
 
-Under custom timing (either setting differs from 300), the lock delay counts
+With stretch cohesion on, live passes count the lock delay
 from the later of the stretch's last speech and when that speech landed
 (`v3_speech_landed_at`, written in the same transaction as the speech by the
 live transcript write and sync assignment, and only when the speech changed). A
 batch of old speech from
 offline sync then waits the lock delay after landing instead of locking on
-arrival. Default timing still counts from the last speech.
+arrival. Custom timing (either setting differs from 300) always uses this clock.
+At the default timing, `CONVERSATIONS_V3_SETTLE_ON_LANDING` (default on) selects it;
+set it to `off` to count from the last speech again. Backfill and re-derive keep the
+recorded clock.
 
 The recording-speaker picker for a derived conversation reads and edits only
 that copied window. Shared source scopes cannot expand it into other product

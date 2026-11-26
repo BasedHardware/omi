@@ -699,7 +699,7 @@ def process_in_progress_conversation(
         response = finish_live_window(
             uid,
             request.live_conversation_id if request else None,
-            allow_recording_fallback=request is None or request.empty_body,
+            allow_recording_fallback=request is None or request.finish_only_body,
         )
         # The baseline path wakes the builder itself when it cut the window (answered as writing); a second
         # wake at the same instant only collides with it. Every other answer leaves the wake to the experiment.
