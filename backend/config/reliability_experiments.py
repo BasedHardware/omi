@@ -60,7 +60,9 @@ EXPERIMENTS = {
         'on the other side of an End, so audio recorded after the End starts a new recording row and audio '
         'recorded before it still joins the old one. Off, End cuts only through the recording it finalizes or '
         'the last recording that already landed, later audio becomes its own conversation, and an uploaded unit '
-        'joins the nearest recording row whatever Ends lie between.'
+        'joins the nearest recording row whatever Ends lie between. The conversation an End closed carries that '
+        'End\'s instant (v3_manual_cut_at) and the conversation reads serve it, so the app can find the result of '
+        'an End that was answered before its conversation existed; off, the field is never stamped.'
     ),
     FAST_END_FEEDBACK_FLAG_KEY: (
         'A v3 conversation is shown as done (tile_state) as soon as its summary is stored, before folder '

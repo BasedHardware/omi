@@ -140,7 +140,10 @@ class ProviderCaptureExternalActions implements CaptureExternalActions {
     final v3 = conversationsV3;
     final result = outcome?.response?.conversation;
     final alreadyClosed = outcome?.absence == ProcessAbsence.notFound;
-    if (v3 == null || !v3.settleManualFinish(placeholder, result, alreadyClosed: alreadyClosed)) return;
+    if (v3 == null ||
+        !v3.settleManualFinish(placeholder, result, alreadyClosed: alreadyClosed, endStoredAt: outcome?.endStoredAt)) {
+      return;
+    }
     if (showFailure && !alreadyClosed) {
       final l10n = globalNavigatorKey.currentContext?.l10n;
       if (l10n != null) {

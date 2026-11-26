@@ -75,6 +75,9 @@ class ConversationsV3Provider extends ChangeNotifier {
   ServerConversation? _finishRow;
   String? _finishRecordingId;
   String? _finishLiveId;
+  // Reliability experiment end_open_conversation: the End time of a finish the server stored before its
+  // conversation existed. No id names that conversation; it will carry this instant.
+  DateTime? _finishCutAt;
   // An accepted finish that reached its deadline: Home reads the list once.
   bool _reconcileOnHome = false;
 
@@ -139,7 +142,8 @@ class ConversationsV3Provider extends ChangeNotifier {
     notifyListeners();
   }
 
-  bool settleManualFinish(ServerConversation row, ServerConversation? result, {bool alreadyClosed = false}) {
+  bool settleManualFinish(ServerConversation row, ServerConversation? result,
+      {bool alreadyClosed = false, DateTime? endStoredAt}) {
     if (!finishFeedbackEnabled || !identical(_finishRow, row)) return false;
     final accepted =
         result == null ? alreadyClosed : !result.discarded && result.status != ConversationStatus.in_progress;
@@ -150,7 +154,13 @@ class ConversationsV3Provider extends ChangeNotifier {
       _finishAccepted = true;
       _finishExpired = false;
       _suppressListening = !_listeningResumed;
-      _finishExpiry?.cancel();
+      if (result == null && endStoredAt != null) {
+        // The End is stored but nothing names its conversation, and there may never be one (nothing was
+        // said before the End). The row keeps the limit it started with instead of waiting 20 minutes.
+        _finishCutAt = endStoredAt;
+      } else {
+        _finishExpiry?.cancel();
+      }
       if (result != null) {
         _finishRecordingId = result.id;
         if (result.v3?.recording != true) {
@@ -199,10 +209,21 @@ class ConversationsV3Provider extends ChangeNotifier {
 
   bool _matchesFinish(Iterable<ServerConversation> rows) => rows.any(_matchesFinishRow);
 
+  /// The conversation a stored End closed carries that End's instant, whatever recordings it was made from.
+  bool _closedByStoredEnd(ServerConversation row) {
+    final sent = _finishCutAt;
+    final closedAt = row.v3?.manualCutAt;
+    return _finishAccepted &&
+        sent != null &&
+        closedAt != null &&
+        closedAt.difference(sent).abs() <= const Duration(milliseconds: 2);
+  }
+
   bool _matchesFinishRow(ServerConversation row) =>
       row.v3?.tileState != ConversationTileState.live &&
       row.status != ConversationStatus.in_progress &&
       (row.id == _finishLiveId ||
+          _closedByStoredEnd(row) ||
           (_finishAccepted &&
               _finishLiveId == null &&
               _finishRecordingId != null &&
@@ -223,8 +244,15 @@ class ConversationsV3Provider extends ChangeNotifier {
   void _armFinishExpiry() {
     _finishExpiry?.cancel();
     _finishExpiry = Timer(OptimisticProcessingPlaceholder.timeout, () {
-      _finishExpired = true;
-      _suppressListening = false;
+      if (_finishAccepted) {
+        // Only a stored End with no conversation yet keeps this timer after acceptance. None came: the
+        // row goes, and Home reads its list once in case the conversation is there under another id.
+        _reconcileOnHome = true;
+        _clearManualFinish();
+      } else {
+        _finishExpired = true;
+        _suppressListening = false;
+      }
       notifyListeners();
     });
   }
@@ -235,6 +263,7 @@ class ConversationsV3Provider extends ChangeNotifier {
     _listeningResumed = false;
     _finishRow = null;
     _finishRecordingId = null;
+    _finishCutAt = null;
     if (!keepClosedLive) {
       _finishLiveId = null;
       _finishCaptureId = null;

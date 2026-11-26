@@ -533,6 +533,10 @@ class Conversation(BaseModel):
     title_locked: Optional[bool] = None
     recording_pieces: Optional[List[RecordingPiece]] = None
     manual_end: Optional[bool] = None
+    # Reliability experiment end_open_conversation: the End instant that closed this conversation (the
+    # time the app sent with that End). The app matches its "just ended" Home row to the conversation
+    # by it when the End was answered before the conversation existed. Stored only with the experiment on.
+    v3_manual_cut_at: SkipJsonSchema[Optional[datetime]] = None
     summary_covers_through: Optional[datetime] = None
     live_summary: Optional[LiveSummaryPreview] = None
     v3_pending: SkipJsonSchema[Optional[bool]] = Field(default=None, exclude=True)

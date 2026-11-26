@@ -47,7 +47,9 @@ class ReliabilityExperiments {
     'end_open_conversation': 'Every way of ending a conversation (End Conversation, Finish, Wrap Up, the record '
         'button\'s stop, a pendant double-tap) seals the speech file the phone is still writing, so it uploads in '
         'the normal order instead of running to its 60 s cap, and sends the moment of the End with the request '
-        '(X-Omi-Ended-At). Off: the open file is left to its own rules and no End time is sent.',
+        '(X-Omi-Ended-At). When the server stores the End before its conversation exists, Home\'s Processing row '
+        'is handed to the conversation that carries the same End time (v3_manual_cut_at) and is removed after two '
+        'minutes if none comes. Off: the open file is left to its own rules and no End time is sent.',
     'fast_end_feedback': 'After a conversation is ended (End Conversation, Finish, Wrap Up, the record button\'s '
         'stop or a pendant double-tap), two waiting requests (waitForConversationSummary) return it the moment it is '
         'committed with its outline and the moment its summary is stored; Home, the open conversation page and the '
