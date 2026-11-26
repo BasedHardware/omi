@@ -26,6 +26,10 @@ def jobs(text):
 PR_SCHEMA_WRITERS = {"gcp_firestore_indexes.yml"}
 
 INTENTIONAL_BUDGET_CHANGES = {
+    # #26303 adds the advisory Pipeline Lab Scenarios job to the hermetic workflow: the committed lab
+    # scenarios twice each on a local emulator and a Redis service. Budgeted in ci-budget.yaml (p50 7).
+    ("backend-hermetic-e2e.yml", "pipeline-lab-scenarios", "runs-on"): "ubuntu-latest",
+    ("backend-hermetic-e2e.yml", "pipeline-lab-scenarios", "timeout-minutes"): "25",
     # Lane 8 adds a port-map job to the reusable workflow. It is skipped on
     # the pinned nightly, and its PR and main-push budget is fixed here.
     ("backend-go-checks.yml", "port-tasks", "runs-on"): "ubuntu-latest",

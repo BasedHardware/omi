@@ -18,6 +18,7 @@ from urllib.request import Request, urlopen
 from uuid import uuid4
 
 from testing.finalization_replay.corpus import pack
+from testing.finalization_replay.metrics import suspend_meter
 from testing.finalization_replay.providers import response
 
 
@@ -292,6 +293,8 @@ def _admit(proc, url, state, database):
     state.go_evidence['job']['metadata'] = metadata[0]
     state.queue_fanout_key = job['fanout_key']
     if state.case.get('erase_after'):
+        with suspend_meter():
+            state.capture_before_erasure()
         status, _ = _request('POST', f'{url}/v1/users/{state.uid}/erase')
         if status != 200:
             raise RuntimeError('Go replay erase was refused')
@@ -303,11 +306,14 @@ def _admit(proc, url, state, database):
             jobs_for_uid = cursor.fetchone()[0]
             cursor.execute('SELECT count(*) FROM queue_tenants WHERE uid = %s', (state.uid,))
             tenants_for_uid = cursor.fetchone()[0]
-        state.go_evidence['erasure'] = {
+        erasure = {
             'user_document_absent': user_document_absent,
+            'conversation_absent': not state.conversation.get().exists,
             'jobs_for_uid': jobs_for_uid,
             'tenants_for_uid': tenants_for_uid,
         }
+        state.go_evidence['erasure'] = erasure
+        state.effects['erasure'] = erasure
     if job.get('outcome') == 'fenced':
         return 'fenced'
     if job['state'] == 'completed' and (state.conversation.get().to_dict() or {}).get('discarded'):

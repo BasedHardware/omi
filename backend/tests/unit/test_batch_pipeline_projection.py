@@ -628,6 +628,36 @@ def test_contention_control_retains_existing_expired_transaction_restart(monkeyp
     assert operation.call_args_list[0] != operation.call_args_list[1]
 
 
+def test_projection_bridge_superseded_keeps_the_receipt_canonical(binding, monkeypatch, caplog):
+    from utils.sync.assignment_errors import SyncAssignmentSuperseded
+
+    projector = projection.Projector(Mock(), Mock(), playback=Mock())
+    monkeypatch.setattr(projector.store, 'settle_deleted_output', Mock())
+    mark = Mock()
+    monkeypatch.setattr(projector.store, 'mark_enrichment', mark)
+    monkeypatch.setattr(
+        bridge,
+        'finish_sync_bridges',
+        Mock(side_effect=SyncAssignmentSuperseded('sync anchor is user managed')),
+    )
+    receipt = {
+        'state': 'persisted',
+        'conversation_id': 'managed',
+        'audio_required': False,
+        'enrichment_required': True,
+        'language': 'en',
+    }
+    policy = resolve_stage_policy(binding.owner_id, 'projection')
+
+    with caplog.at_level(logging.DEBUG, logger=projection.__name__):
+        projector.finish_part(Mock(), binding, receipt, None, policy=policy)
+
+    assert 'event=batch_projection action=bridge outcome=superseded' in caplog.text
+    # The assignment already committed: follow-up stays on its own canonical.
+    mark.assert_called_once()
+    assert mark.call_args.args[3] == 'managed'
+
+
 @pytest.mark.parametrize('engine', ['go', 'pending'])
 def test_projection_bridge_refuses_foreign_target_before_followup(binding, monkeypatch, engine):
     from utils.sync import processing_hold
@@ -1292,7 +1322,9 @@ def test_ordinary_upload_observes_first_durable_transcript_only(monkeypatch):
     complete, ledger_path, _ = native_finish_completion(
         monkeypatch, db, uid, cid, 2, native_record=False, settle_allowance=settle_allowance
     )
-    db.rows[ledger_path].update(upload_arrived_at=100.0, upload_entitlement='free', upload_hold_state='bg300')
+    db.rows[ledger_path].update(
+        upload_arrived_at=100.0, upload_entitlement='free', upload_hold_state='bg300', upload_recovered=True
+    )
     delivered = Mock()
     monkeypatch.setattr(metrics, 'DELIVERED', delivered)
 
@@ -1300,7 +1332,7 @@ def test_ordinary_upload_observes_first_durable_transcript_only(monkeypatch):
         complete(172.0)
     assert db.rows[ledger_path]['status'] == 'completed'
     assert complete(200.0) is not None
-    delivered.labels.assert_called_once_with('free', 'bg300')
+    delivered.labels.assert_called_once_with('free', 'bg300', 'true')
     delivered.labels.return_value.observe.assert_called_once_with(72.0)
 
 

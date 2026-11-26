@@ -36,6 +36,7 @@ from utils.conversations.size_limit import (
 )
 from utils.conversations.summary_delivery import rearm_on_revision_change
 from utils.conversations.v3 import sync_custody
+from utils.conversations.v3.end_sides import ATTACH_KEY as END_CUTS_KEY, separated_by_end
 from utils.observability.fallback import record_fallback
 from utils.sync.size_telemetry import (
     finish_size_attempt,
@@ -283,6 +284,8 @@ def assign_in_transaction(
     require_live_target = incoming.pop('_batch_require_live_target', False)
     redrive_target = incoming.pop('_batch_redrive_target', False)
     record_span = incoming.pop('_batch_replace_live', None)
+    # Reliability experiment end_open_conversation: the Ends around this unit's first speech (None when off).
+    end_cuts = incoming.pop(END_CUTS_KEY, None)
     collection = user_ref.collection('conversations')
     read: dict[str, dict | None] = {}
 
@@ -641,6 +644,14 @@ def assign_in_transaction(
                 ):
                     # Live and user-managed rows can only be explicit targets.
                     if not auto_mergeable(raw) and cid != plan_target_id:
+                        continue
+                    # Reliability experiment end_open_conversation: a recording row stays on one side of
+                    # every End. A row found by time or hint that began on the other side of an End from
+                    # this unit is left alone, so the unit starts (or joins) a row on its own side. The
+                    # unit's own row and an explicit target keep their place.
+                    if cid not in (own_id, plan_target_id, target_hint) and separated_by_end(
+                        raw.get('started_at'), end_cuts
+                    ):
                         continue
                     if plan_target and not batch_target_contains(plan_target, decode(raw)):
                         continue

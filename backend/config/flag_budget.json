@@ -1265,6 +1265,14 @@
       "owner": "cl2-fixnow",
       "review_by": "2026-12-11"
     },
+    "SYNC_RECORD_COVERAGE_WAIT_RETRY_AFTER_SECONDS": {
+      "owner": "Goal: Margin (SCA-3376)",
+      "review_by": "2026-12-11"
+    },
+    "SYNC_RECORD_COVERAGE_WAIT_TTL_SECONDS": {
+      "owner": "Goal: Margin (SCA-3376)",
+      "review_by": "2026-12-11"
+    },
     "SYNC_RECORD_DECODE_FAILURE_MEMO": {
       "owner": "omi-pipeline / SCA-2229",
       "review_by": "2026-12-11"

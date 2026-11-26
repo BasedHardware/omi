@@ -9,7 +9,9 @@ import 'package:omi/services/live_preview/live_preview_engine.dart';
 import 'package:omi/services/live_preview/live_preview_notes.dart';
 import 'package:omi/services/live_preview/live_preview_word_budget.dart';
 import 'package:omi/services/live_preview/live_preview_telemetry.dart';
+import 'package:omi/services/live_preview/live_words_merge.dart';
 import 'package:omi/services/live_preview/local_preview_admission.dart';
+import 'package:omi/utils/reliability_experiments.dart';
 
 /// What the live transcript surface shows for an admitted local-preview session.
 enum LivePreviewPhase {
@@ -70,6 +72,12 @@ class LivePreviewController extends ChangeNotifier {
     Duration Function()? conversationGap,
     List<int> Function(Uint8List opus)? decodeOpus,
     Future<bool> Function()? requestAllowed,
+    bool Function()? ownResultsMuted,
+    bool Function()? retimeOwnResults,
+    this.watchdogSilence = const Duration(seconds: 10),
+    this.watchdogMinInterval = const Duration(minutes: 3),
+    this.watchdogMinWords = 4,
+    this.liveWordsLog,
     this.maxLines = 200,
     this.maxQueuedPackets = 64,
     this.maxInFlightFeeds = 4,
@@ -79,7 +87,10 @@ class LivePreviewController extends ChangeNotifier {
         _now = now ?? DateTime.now,
         _conversationGap = conversationGap ?? (() => const Duration(minutes: 2)),
         _decodeOpus = decodeOpus,
-        _requestAllowed = requestAllowed ?? (() async => true) {
+        _requestAllowed = requestAllowed ?? (() async => true),
+        _ownResultsMuted = ownResultsMuted ?? (() => ReliabilityExperiments.enabled(muteExperiment)),
+        _retimeOwnResults = retimeOwnResults ??
+            (() => platform == LivePreviewPlatform.ios && ReliabilityExperiments.enabled(liveWordsExperiment)) {
     // Notes draft from the preview text on this phone; they clear with it.
     notes = LivePreviewNotes(
       engine: notesEngine ?? noLivePreviewNotesEngine,
@@ -101,6 +112,25 @@ class LivePreviewController extends ChangeNotifier {
   final Duration Function() _conversationGap;
   final List<int> Function(Uint8List opus)? _decodeOpus;
   final Future<bool> Function() _requestAllowed;
+  final bool Function() _ownResultsMuted;
+  final bool Function() _retimeOwnResults;
+
+  static const liveWordsExperiment = 'vendor_recognizer_on_opened_app';
+
+  /// Test-only reliability experiment: the phone's recogniser runs, and its results are dropped before
+  /// display, so the vendor fallback can be seen on a phone whose recogniser works.
+  static const muteExperiment = 'phone_recogniser_mute';
+
+  /// Vendor words spanning this long with no result from a recogniser that claims to be streaming
+  /// mean it has stalled.
+  final Duration watchdogSilence;
+
+  /// A stalled recogniser is restarted at most this often.
+  final Duration watchdogMinInterval;
+  final int watchdogMinWords;
+
+  /// Local record of what the live-words layer did (counts and times, never text).
+  final void Function(String event, Map<String, Object?> fields)? liveWordsLog;
   final int maxLines;
   final int maxQueuedPackets;
   final int maxInFlightFeeds;
@@ -115,11 +145,24 @@ class LivePreviewController extends ChangeNotifier {
 
   final List<LivePreviewLine> _lines = [];
   late final UnmodifiableListView<LivePreviewLine> _linesView = UnmodifiableListView(_lines);
-  List<LivePreviewLine> get lines => _linesView;
+
+  /// What every screen shows. The phone's own recogniser's lines; under reliability experiment
+  /// `vendor_recognizer_on_opened_app`, also the vendor stream's words for the stretches the phone's
+  /// recogniser returned nothing for ([LiveWordsMerge]). Without vendor lines this is the same list
+  /// object as before.
+  List<LivePreviewLine> get lines {
+    if (_vendorLines.isEmpty) return _linesView;
+    return _merged ??= UnmodifiableListView(LiveWordsMerge.merge(_lines, _vendorLines));
+  }
+
+  // Vendor stream lines (display only, never stored), kept apart from the phone's own.
+  final List<LivePreviewLine> _vendorLines = [];
+  List<LivePreviewLine>? _merged;
+  List<LivePreviewLine> get vendorLinesForTesting => List.unmodifiable(_vendorLines);
 
   /// The newest non-empty preview line, for the home capture card's last-line slot.
   String? get latestLine {
-    for (final line in _lines.reversed) {
+    for (final line in lines.reversed) {
       final text = line.text.trim();
       if (text.isNotEmpty) return text;
     }
@@ -176,9 +219,37 @@ class LivePreviewController extends ChangeNotifier {
   /// Whether this client may declare `local_preview=enabled` (kill switch).
   Future<bool> requestAllowed() => _requestAllowed();
 
+  // Why the recogniser runs: the server's grant ([admit]), or, under reliability experiment
+  // `vendor_recognizer_on_opened_app`, capture being active with the app in front ([setFrontCapture]).
+  // It stops when neither holds. Without the experiment only the grant is ever set.
+  bool _grantAdmitted = false;
+  bool _frontAdmitted = false;
+
+  /// The recogniser runs (also) because capture is active and the app is in front.
+  bool get frontAdmitted => _frontAdmitted;
+
+  /// Reliability experiment `vendor_recognizer_on_opened_app`: capture is active and the app is in
+  /// front (or no longer). Starts the recogniser without the server's grant, and stops it when the
+  /// app leaves the front unless the grant keeps it running. Audio routing is not touched.
+  void setFrontCapture(bool active, {required String language}) {
+    if (_frontAdmitted == active) return;
+    _frontAdmitted = active;
+    liveWordsLog?.call('own_recogniser_front', {'active': active, 'granted': _grantAdmitted, 'phase': _phase.name});
+    if (active) {
+      if (_phase == LivePreviewPhase.inactive) _begin(language);
+    } else if (!_grantAdmitted) {
+      _end();
+    }
+  }
+
   /// The server admitted this socket session. Starts (or keeps) the engine.
   void admit({required String language}) {
+    _grantAdmitted = true;
     if (_phase != LivePreviewPhase.inactive) return;
+    _begin(language);
+  }
+
+  void _begin(String language) {
     final generation = ++_generation;
     _language = language;
     _failedEngines.clear();
@@ -206,6 +277,7 @@ class LivePreviewController extends ChangeNotifier {
       }
       _start = start;
       _resetSessionTelemetry();
+      _resetFeedClock();
       telemetry.engineSelected(start, platform: platform, osMajor: osMajor);
       if (start.running) {
         _results = _engine.results.listen((result) {
@@ -239,6 +311,13 @@ class LivePreviewController extends ChangeNotifier {
   /// Admission ended (socket closed, server revoked, reconnecting). Lines are
   /// kept so a quick re-admission within the same capture continues them.
   void revoke() {
+    _grantAdmitted = false;
+    // Capture in front keeps the recogniser (reliability experiment vendor_recognizer_on_opened_app).
+    if (_frontAdmitted) return;
+    _end();
+  }
+
+  void _end() {
     if (_phase == LivePreviewPhase.inactive) return;
     _generation++;
     _phase = LivePreviewPhase.inactive;
@@ -249,13 +328,18 @@ class LivePreviewController extends ChangeNotifier {
   /// The capture ended (stop, account change, dispose): the record replaces the
   /// preview through the conversation list's normal refresh, so drop it all.
   void endCapture() {
-    final hadState = _phase != LivePreviewPhase.inactive || _lines.isNotEmpty;
+    final hadState = _phase != LivePreviewPhase.inactive || _lines.isNotEmpty || _vendorLines.isNotEmpty;
+    _grantAdmitted = false;
+    _frontAdmitted = false;
     _generation++;
     _phase = LivePreviewPhase.inactive;
     _stopEngine();
     _clearLines();
     _lastResultAt = null;
     _lastNotRequested = null;
+    _lastOwnWordsAt = null;
+    _unansweredSince = null;
+    _unansweredWords = 0;
     if (hadState) notifyListeners();
   }
 
@@ -383,6 +467,7 @@ class LivePreviewController extends ChangeNotifier {
     _firstAudioAt ??= _now();
     _inFlight++;
     final generation = _generation;
+    if (startedAt != null && _retimeOwnResults()) _noteFed(chunk.length, startedAt);
     _engine.feedPcm16(chunk, startedAt: startedAt).then((accepted) {
       if (generation != _generation) return;
       if (accepted) {
@@ -399,6 +484,16 @@ class LivePreviewController extends ChangeNotifier {
     if (_phase != LivePreviewPhase.streaming) return;
     final now = _now();
     final text = result.text.trim();
+    if (text.isNotEmpty) {
+      // The recogniser is alive, whatever is done with its words below.
+      ownResultsHeard++;
+      _lastOwnWordsAt = now;
+      _unansweredSince = null;
+      _unansweredWords = 0;
+    }
+    if (_ownResultsMuted()) return;
+    _merged = null;
+    if (_feedOrigin != null && _retimeOwnResults()) result = _retimed(result);
     final last = _lastResultAt;
     if (text.isNotEmpty) {
       // A silence as long as the conversation timeout is a conversation
@@ -448,6 +543,167 @@ class LivePreviewController extends ChangeNotifier {
     _totalWordsSeen = 0;
     _lineWordHighWater.clear();
     _lines.clear();
+    _vendorLines.clear();
+    _merged = null;
+  }
+
+  // ------------------------------------------ the engine's clock (retiming) --
+
+  // Reliability experiment vendor_recognizer_on_opened_app. The iOS engines time a result on one
+  // unbroken audio timeline that starts at the first chunk fed (ios/Runner/LivePreviewPlugin.swift keeps
+  // its buffers contiguous on purpose). A pendant that sends nothing while it is quiet makes that
+  // timeline fall behind the capture clock by every gap, so a line can be stamped a minute before the
+  // audio that produced it. These anchors remember where each stretch of fed audio really sat, and a
+  // result is moved back onto the capture clock before anything reads its times: the merge with the
+  // vendor's words, the coverage by stored text, and the words-after-an-End rule.
+  DateTime? _feedOrigin;
+  double _fedMs = 0;
+  final List<(double, DateTime)> _feedAnchors = [];
+  static const _maxFeedAnchors = 2000;
+
+  void _resetFeedClock() {
+    _feedOrigin = null;
+    _fedMs = 0;
+    _feedAnchors.clear();
+  }
+
+  void _noteFed(int bytes, DateTime startedAt) {
+    // The engine is told milliseconds; keep the same value it took as its origin.
+    final at = DateTime.fromMillisecondsSinceEpoch(startedAt.millisecondsSinceEpoch, isUtc: true);
+    _feedOrigin ??= at;
+    final last = _feedAnchors.isEmpty ? null : _feedAnchors.last;
+    final expected = last?.$2.add(Duration(microseconds: ((_fedMs - last.$1) * 1000).round()));
+    // A new anchor where the fed audio leaves its own timeline (a gap in capture), and now and then.
+    if (expected == null || at.difference(expected).inMilliseconds.abs() > 200 || _fedMs - last!.$1 >= 5000) {
+      _feedAnchors.add((_fedMs, at));
+      if (_feedAnchors.length > _maxFeedAnchors) _feedAnchors.removeRange(0, _feedAnchors.length - _maxFeedAnchors);
+    }
+    _fedMs += bytes / 32;
+  }
+
+  /// [at] as the engine reported it (its origin plus audio fed) on the capture clock.
+  DateTime _onCaptureClock(DateTime at) {
+    final origin = _feedOrigin;
+    if (origin == null || _feedAnchors.isEmpty) return at;
+    final ms = at.difference(origin).inMicroseconds / 1000;
+    if (ms < 0) return at;
+    var low = 0, high = _feedAnchors.length - 1;
+    while (low < high) {
+      final mid = (low + high + 1) >> 1;
+      if (_feedAnchors[mid].$1 <= ms) {
+        low = mid;
+      } else {
+        high = mid - 1;
+      }
+    }
+    final (anchorMs, anchorAt) = _feedAnchors[low];
+    return anchorAt.add(Duration(microseconds: ((ms - anchorMs) * 1000).round()));
+  }
+
+  LivePreviewResult _retimed(LivePreviewResult result) => LivePreviewResult(
+        segmentId: result.segmentId,
+        text: result.text,
+        isFinal: result.isFinal,
+        startedAt: result.startedAt == null ? null : _onCaptureClock(result.startedAt!),
+        endedAt: result.endedAt == null ? null : _onCaptureClock(result.endedAt!),
+        spans: [
+          for (final span in result.spans)
+            LivePreviewSpan(
+                text: span.text, startedAt: _onCaptureClock(span.startedAt), endedAt: _onCaptureClock(span.endedAt)),
+        ],
+      );
+
+  // ------------------------------------------------- vendor words (display) --
+
+  DateTime? _lastOwnWordsAt;
+  DateTime? _unansweredSince;
+  int _unansweredWords = 0;
+  DateTime? _lastWatchdogRestartAt;
+
+  /// Local reliability measure (reliability experiment `vendor_recognizer_on_opened_app`): words and
+  /// milliseconds of speech the vendor stream supplied where the phone's recogniser had returned
+  /// nothing when they arrived, and how often a stalled recogniser was restarted. Counts only.
+  int ownResultsHeard = 0;
+  int vendorWordsSeen = 0;
+  int vendorFilledWords = 0;
+  int vendorFilledSpeechMs = 0;
+  int watchdogRestarts = 0;
+
+  /// New or longer lines from the vendor stream, timed on the phone's capture clock. Display only:
+  /// they join [lines] where the phone's recogniser has nothing, and are never stored.
+  void onVendorLines(List<LivePreviewLine> updates) {
+    if (_phase == LivePreviewPhase.inactive || updates.isEmpty) return;
+    final now = _now();
+    final last = _lastResultAt;
+    // The same conversation boundary as the phone's own lines.
+    if (last != null && now.difference(last) >= _conversationGap()) _clearLines();
+    _lastResultAt = now;
+    final own = LiveWordsMerge.coverage(_lines);
+    for (final line in updates) {
+      final index = _vendorLines.indexWhere((existing) => existing.id == line.id);
+      final previousWords = _lineWordHighWater[line.id] ?? 0;
+      final words = line.spans.isEmpty ? _wordCount(line.text) : line.spans.length;
+      if (words > previousWords) {
+        _totalWordsSeen += words - previousWords;
+        vendorWordsSeen += words - previousWords;
+        _lineWordHighWater[line.id] = words;
+        for (final span in line.spans.skip(previousWords)) {
+          if (LiveWordsMerge.covered(own, span.startedAt, span.endedAt)) continue;
+          vendorFilledWords++;
+          vendorFilledSpeechMs += span.endedAt.difference(span.startedAt).inMilliseconds.clamp(0, 60000);
+          _noteUnanswered(span, now);
+        }
+      }
+      if (index >= 0) {
+        _vendorLines[index] = line;
+      } else {
+        _vendorLines.add(line);
+        if (_vendorLines.length > maxLines) {
+          final evicted = _vendorLines.length - maxLines;
+          for (final old in _vendorLines.take(evicted)) {
+            _lineWordHighWater.remove(old.id);
+          }
+          _vendorLines.removeRange(0, evicted);
+        }
+      }
+    }
+    _merged = null;
+    _checkStalledRecogniser(now);
+    notifyListeners();
+  }
+
+  /// A vendor word the phone's recogniser has not answered: no line of its own for that audio, and
+  /// no result at all since shortly before the word was spoken.
+  void _noteUnanswered(LivePreviewSpan span, DateTime now) {
+    final ownAt = _lastOwnWordsAt;
+    if (ownAt != null && !ownAt.isBefore(span.startedAt.subtract(LiveWordsMerge.tolerance))) return;
+    _unansweredSince ??= span.startedAt;
+    if (span.startedAt.isBefore(_unansweredSince!)) _unansweredSince = span.startedAt;
+    _unansweredWords++;
+  }
+
+  /// Vendor words for [watchdogSilence] of speech and none from a recogniser that claims to be
+  /// streaming: it has stalled. Restart it, at most once per [watchdogMinInterval].
+  void _checkStalledRecogniser(DateTime now) {
+    final since = _unansweredSince;
+    if (since == null || _unansweredWords < watchdogMinWords) return;
+    if (_phase != LivePreviewPhase.streaming || !(_start?.running ?? false)) return;
+    if (now.difference(since) < watchdogSilence) return;
+    final lastRestart = _lastWatchdogRestartAt;
+    if (lastRestart != null && now.difference(lastRestart) < watchdogMinInterval) return;
+    _lastWatchdogRestartAt = now;
+    watchdogRestarts++;
+    liveWordsLog?.call('own_recogniser_restart', {
+      'unanswered_words': _unansweredWords,
+      'silent_ms': now.difference(since).inMilliseconds,
+      'restarts': watchdogRestarts,
+    });
+    _unansweredSince = null;
+    _unansweredWords = 0;
+    final generation = ++_generation;
+    _stopEngine();
+    _phase = LivePreviewPhase.starting;
+    _startEngine(generation);
   }
 
   void _noteFirstWord(DateTime now) {

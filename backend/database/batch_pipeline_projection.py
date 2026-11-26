@@ -17,6 +17,7 @@ from google.cloud import firestore
 
 from config.batch_pipeline import projection_followup_page_enabled, projection_source_deleted_enabled
 from config.record_latency import recent_native_record_notes, record_notes_eager_enabled
+from config.reliability_experiments import enabled as experiment
 from utils.enrichment import outbox as reprocess
 from database.outbox_firestore import FirestoreEnrichmentOutbox
 from config.sync_reprocess import settle_seconds
@@ -41,6 +42,7 @@ from database.fsr_read_cache import writing
 from database.monthly_usage_totals import queue_increment
 from database.batch_pipeline_store import FirestoreStore
 from database import batch_pipeline_coalescing_completion as coalescing_completion
+from database import sync_jobs
 from database.batch_pipeline_projection_finish import (
     PROJECTION_FINISH_ASYNC_CLOCK,
     PROJECTION_FINISH_DUE_FIELD,
@@ -145,6 +147,20 @@ class ProjectionStore:
             )
         except Exception:
             logger.warning('event=free_allowance_lease decision=settlement_unavailable')
+
+    @staticmethod
+    def _wake_receipt_waiters(binding: ProjectionBinding, members: list[tuple[str, str]]) -> None:
+        """Publish the completed upload's job id, and each coalesced member's own handle.
+
+        Best-effort: the ledger is authoritative and a waiter rechecks on expiry, so a
+        Redis fault must neither fail nor undo a completion that already committed.
+        """
+        for job_id in (binding.job_id, *(member for _, member in members)):
+            try:
+                sync_jobs.leave_receipt_note(binding.owner_id, job_id)
+                sync_jobs.r.publish(sync_jobs.receipt_channel(binding.owner_id), job_id)
+            except Exception as error:
+                logger.warning('sync receipt wake unavailable exception_type=%s', type(error).__name__)
 
     @staticmethod
     def _wake_notes(outbox: FirestoreEnrichmentOutbox, row_id: str, token: str) -> None:
@@ -1215,6 +1231,10 @@ class ProjectionStore:
             result=result,
             now=now,
         )
+        if changed and not binding.native_record and experiment('receipt_long_poll', binding.owner_id):
+            # Experiment receipt_long_poll: the upload's durable status just became completed.
+            # Wake its waiters now that the ledger is committed, as a finished legacy job does.
+            self._wake_receipt_waiters(binding, coalescing_receipts)
         if finish_resolution:
             recording_id, outcome = finish_resolution[0]
             v3_metrics.FINISH_NO_POINTER.labels(outcome).inc()

@@ -68,10 +68,14 @@ class StageResult:
 @runtime_checkable
 class StageDriver(Protocol):
     """A stage engine. Optional attributes: ``schema_version`` (int, default 1),
-    ``cacheable`` (bool, default True: False for drivers whose effect is emulator
-    state that a cached manifest cannot restore), ``inputs(ctx) -> {name: hash}``
-    (extra cache-key inputs) and ``restore(ctx, output)`` (rewrite run files
-    from a cached manifest)."""
+    ``cacheable`` (bool, default True: False for drivers whose effect cannot be
+    restored from stored run files), ``inputs(ctx) -> {name: hash}`` (extra
+    cache-key inputs), ``restore(ctx, output)`` (after the orchestrator writes the
+    stored artifacts back), ``unit`` (str: stages sharing one execute and cache
+    together), ``scoped_code`` (bool: key on the files the stage runs, per
+    ``affected``, not the whole backend tree), ``key_overlay(overlay) -> (overlay,
+    model_config)`` (the part of the overlay the stage reads) and
+    ``attribute_call(llm_call_row) -> stage | None`` (LLM call attribution inside a unit)."""
 
     stage: str
 

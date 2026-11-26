@@ -14,7 +14,7 @@ import os
 from dataclasses import dataclass, field
 from pathlib import Path
 from types import ModuleType
-from typing import Mapping
+from typing import Collection, Mapping
 from urllib.parse import urlparse
 
 from . import safety
@@ -31,6 +31,8 @@ _STATEFUL_CAPABILITY_MARKERS = ("vector", "index", "webhook", "callback", "queue
 _PROVIDER_SECRET_NAMES = (
     "OPENAI_API_KEY",
     "DEEPGRAM_API_KEY",
+    "MODULATE_API_KEY",
+    "SONIOX_API_KEY",
     "ANTHROPIC_API_KEY",
     "OPENROUTER_API_KEY",
     "GROQ_API_KEY",
@@ -94,6 +96,9 @@ class ProviderSpec:
     permits_external_files: bool = False
     fake_module: str | None = None
     fake_source_path: str | None = None
+    # False: a missing credential is a warning and the provider stays disabled,
+    # unless the active profile names the credential as required.
+    required: bool = True
 
 
 @dataclass(frozen=True)
@@ -192,6 +197,60 @@ def default_provider_specs(repo_root: Path) -> tuple[ProviderSpec, ...]:
             allowed_endpoints=("https://api.anthropic.com/v1/messages",),
             allowed_capabilities=("llm.chat",),
             budget=ProviderBudget(max_requests_per_session=60, max_requests_per_day=300, max_tokens=200_000),
+        ),
+        # Production's speech-to-text vendors and second LLM route. Optional for the
+        # default stack; the prod-parity profile requires the ones production's
+        # serving chain cannot start without (prod_parity.REQUIRED_CREDENTIALS).
+        ProviderSpec(
+            name="modulate",
+            credential_env="MODULATE_API_KEY",
+            billing_owner="developer-local-qa",
+            quota="local-harness $10/day developer budget",
+            data_use="synthetic-or-local-QA audio only",
+            retention="provider policy; not harness-authoritative state",
+            region="provider default",
+            allowed_endpoints=("https://modulate-developer-apis.com/api", "wss://modulate-developer-apis.com/api"),
+            allowed_capabilities=("stt.prerecorded", "stt.streaming"),
+            budget=ProviderBudget(
+                max_requests_per_session=120,
+                max_requests_per_day=600,
+                timeout_seconds=120.0,
+                max_upload_bytes=50_000_000,
+                max_audio_seconds=3_600,
+            ),
+            required=False,
+        ),
+        ProviderSpec(
+            name="soniox",
+            credential_env="SONIOX_API_KEY",
+            billing_owner="developer-local-qa",
+            quota="local-harness $10/day developer budget",
+            data_use="synthetic-or-local-QA audio only",
+            retention="provider policy; not harness-authoritative state",
+            region="provider default",
+            allowed_endpoints=("https://api.soniox.com/v1", "wss://stt-rt.soniox.com/transcribe-websocket"),
+            allowed_capabilities=("stt.prerecorded", "stt.streaming"),
+            budget=ProviderBudget(
+                max_requests_per_session=120,
+                max_requests_per_day=600,
+                timeout_seconds=120.0,
+                max_upload_bytes=50_000_000,
+                max_audio_seconds=3_600,
+            ),
+            required=False,
+        ),
+        ProviderSpec(
+            name="openrouter",
+            credential_env="OPENROUTER_API_KEY",
+            billing_owner="developer-local-qa",
+            quota="local-harness $10/day developer budget",
+            data_use="training disabled / synthetic-or-local-QA inputs only",
+            retention="provider policy; not harness-authoritative state",
+            region="provider default",
+            allowed_endpoints=("https://openrouter.ai/api/v1/chat/completions",),
+            allowed_capabilities=("llm.chat",),
+            budget=ProviderBudget(max_requests_per_session=60, max_requests_per_day=300, max_tokens=200_000),
+            required=False,
         ),
         ProviderSpec(
             name="hosted-ml-local-http",
@@ -328,7 +387,10 @@ def provider_preflight(
     *,
     env: Mapping[str, str] | None = None,
     specs: tuple[ProviderSpec, ...] | None = None,
+    required_credentials: Collection[str] | None = None,
 ) -> ProviderPreflight:
+    """``required_credentials`` is a profile's own list: with it, exactly those
+    credentials block startup and every other provider is optional."""
     source = os.environ if env is None else env
     mode = provider_mode_from_env(source)
     provider_specs = specs or default_provider_specs(repo_root)
@@ -360,6 +422,10 @@ def provider_preflight(
             missing.append(f"{spec.name}: matrix permits durable external side effects; local harness requires false")
         if spec.credential_env:
             secret = source.get(spec.credential_env, "").strip()
+            required = spec.required if required_credentials is None else spec.credential_env in required_credentials
+            if not secret and not required:
+                warnings.append(f"{spec.credential_env} not set; optional provider {spec.name} stays disabled")
+                continue
             if not secret:
                 missing.append(
                     f"{spec.credential_env} ({spec.name}; set in backend/.env.local-dev or use PROVIDER_MODE=offline)"

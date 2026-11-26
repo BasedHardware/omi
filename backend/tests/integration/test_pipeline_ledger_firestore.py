@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+from datetime import datetime, timezone
 from uuid import uuid4
 
 from google.auth.credentials import AnonymousCredentials
@@ -139,7 +140,11 @@ def test_delete_conversation_removes_the_sibling_ledger_row(client, monkeypatch)
     assert _ledger(client, uid, capture_id) is None
 
 
-def test_account_erasure_removes_the_pipeline_ledger(client, monkeypatch):
+@pytest.mark.parametrize('root_missing', [False, True], ids=['live-root', 'missing-root'])
+@pytest.mark.parametrize('late_wipe_status', ['running', 'completed'])
+def test_pl786_account_erasure_removes_pipeline_ledger_and_finalization_jobs(
+    client, monkeypatch, root_missing, late_wipe_status
+):
     from types import SimpleNamespace
 
     from database import conversation_finalization_jobs, conversation_quiet_checks, user_data_deletion
@@ -161,8 +166,13 @@ def test_account_erasure_removes_the_pipeline_ledger(client, monkeypatch):
     jobs.document('ordinary').set({'uid': uid, 'conversation_id': capture_id, 'status': 'pending'})
     jobs.document('quiet').set({'uid': uid, 'kind': 'listen_quiet_check'})
     jobs.document('merge').set({'uid': uid, 'kind': 'conversation_merge'})
-    jobs.document('unrelated').set({'uid': 'another-account'})
-    client.collection('account_deletions').document(uid).set({'wipe_status': 'wiping'})
+    unrelated = {'uid': 'another-account', 'status': 'pending'}
+    jobs.document('unrelated').set(unrelated)
+    marker = client.collection('account_deletions').document(uid)
+    marker.set({'wipe_status': 'running'})
+    if root_missing:
+        client.collection('users').document(uid).delete()
+        assert _ledger(client, uid, capture_id) is not None
 
     result = user_data_deletion.purge_user_subtree(
         uid, client, lambda sub, **kw: delete_collection_recursive(sub, client=client)
@@ -171,12 +181,20 @@ def test_account_erasure_removes_the_pipeline_ledger(client, monkeypatch):
     assert result['status'] == 'ok'
     assert _ledger(client, uid, capture_id) is None
 
-    assert [job.id for job in jobs.stream()] == ['unrelated']
+    assert {job.id: job.to_dict() for job in jobs.stream()} == {'unrelated': unrelated}
 
-    # Model a stale upstream write recreating the conversation after the sweep.
-    _conversation_ref(client, uid, capture_id).set(
-        {'status': 'in_progress', 'source': 'omi', 'has_content': True, 'transcript_segments': [{'text': 'fixture'}]}
-    )
+    # Seed a stale conversation as input to the finalization writer fences.
+    marker.set({'wipe_status': late_wipe_status})
+    late_conversation = {
+        'status': 'in_progress',
+        'source': 'omi',
+        'has_content': True,
+        'transcript_segments': [{'text': 'fixture'}],
+        'finished_at': datetime(2026, 1, 1, tzinfo=timezone.utc),
+    }
+    late_ref = _conversation_ref(client, uid, capture_id)
+    late_ref.set(late_conversation)
+    before = late_ref.get().to_dict()
     intent = conversation_finalization_jobs.create_or_get_finalization_intent(
         uid,
         capture_id,
@@ -186,7 +204,19 @@ def test_account_erasure_removes_the_pipeline_ledger(client, monkeypatch):
     )
     assert intent['status'] == 'refused_account_deleting'
     assert conversation_quiet_checks.arm_quiet_check(uid, capture_id, 120, firestore_client=client) is None
-    assert [job.id for job in jobs.stream()] == ['unrelated']
+    receipt = conversation_finalization_jobs.record_meeting_receipt(
+        uid,
+        capture_id,
+        finalization_job_id=None,
+        eligible=True,
+        reason='eligible',
+        duration_s=120,
+        dedup_speech_s=110,
+        firestore_client=client,
+    )
+    assert receipt == {'status': 'fenced'}
+    assert late_ref.get().to_dict() == before
+    assert {job.id: job.to_dict() for job in jobs.stream()} == {'unrelated': unrelated}
 
 
 def test_delayed_ledger_write_does_not_recreate_after_source_delete(client, monkeypatch):
