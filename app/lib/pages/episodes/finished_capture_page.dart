@@ -9,6 +9,7 @@ import 'package:omi/backend/http/api/conversations.dart' as api;
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/pages/conversation_detail/page.dart';
 import 'package:omi/providers/conversation_provider.dart';
+import 'package:omi/providers/conversations_v3_provider.dart';
 import 'package:omi/providers/home_provider.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/l10n_extensions.dart';
@@ -36,8 +37,8 @@ class FinishedCapturePage extends StatefulWidget {
   @visibleForTesting
   final void Function(BuildContext context, ServerConversation conversation)? open;
 
-  /// The newest conversation made from [recordingId]. A derived transcript can have
-  /// recording lineage before a playable audio piece is available.
+  /// The newest conversation made from [recordingId], which is the one on top of Home.
+  /// Source recording IDs also link derived rows that have no audio pieces.
   static ServerConversation? match(Iterable<ServerConversation> rows, String recordingId) {
     ServerConversation? best;
     for (final row in rows) {
@@ -85,6 +86,7 @@ class _FinishedCapturePageState extends State<FinishedCapturePage> with WidgetsB
   bool _expired = false;
   bool _discarded = false;
   Timer? _expiry;
+  StreamSubscription<SummaryWaitAnswer>? _summaryAnswers;
 
   /// Reads in a row that got no answer. After [_failedReadsShown] the page says it could not check,
   /// with Try Again, instead of claiming it is still working (X10).
@@ -98,7 +100,18 @@ class _FinishedCapturePageState extends State<FinishedCapturePage> with WidgetsB
     WidgetsBinding.instance.addObserver(this);
     _poll = Timer.periodic(widget.pollInterval, (_) => _check());
     _expiry = Timer(_debugMaxWait > 0 && kDebugMode ? const Duration(seconds: _debugMaxWait) : widget.maxWait, _expire);
+    // Reliability experiment fast_end_feedback: the app's waiting request may return the conversation
+    // made from this recording before the next poll does; open it then. Off, nothing is ever emitted.
+    _summaryAnswers =
+        Provider.of<ConversationsV3Provider?>(context, listen: false)?.summaryAnswers.listen(_onSummaryAnswer);
     unawaited(_check());
+  }
+
+  void _onSummaryAnswer(SummaryWaitAnswer answer) {
+    final row = answer.result.item;
+    if (row == null || _opened || _discarded || !mounted) return;
+    final found = FinishedCapturePage.match([row], widget.recordingId);
+    if (found != null && ModalRoute.of(context)?.isCurrent == true) _open(found);
   }
 
   @override
@@ -112,6 +125,7 @@ class _FinishedCapturePageState extends State<FinishedCapturePage> with WidgetsB
     WidgetsBinding.instance.removeObserver(this);
     _poll?.cancel();
     _expiry?.cancel();
+    unawaited(_summaryAnswers?.cancel());
     super.dispose();
   }
 

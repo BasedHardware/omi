@@ -26,6 +26,8 @@ import 'package:omi/providers/people_provider.dart';
 import 'package:omi/providers/usage_provider.dart';
 import 'package:omi/services/live_preview/live_preview_controller.dart';
 import 'package:omi/services/live_preview/live_preview_coverage.dart';
+import 'package:omi/services/live_preview/live_words_hole.dart';
+import 'package:omi/services/live_preview/live_words_log.dart';
 import 'package:omi/services/wals/wal.dart';
 import 'package:omi/ui/components/local_stt_recovery_notice.dart';
 import 'package:omi/ui/ui.dart';
@@ -33,6 +35,7 @@ import 'package:omi/utils/constants.dart';
 import 'package:omi/utils/enums.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/other/temp.dart';
+import 'package:omi/utils/reliability_experiments.dart';
 import 'package:omi/widgets/conversation_photo_image.dart';
 import 'package:omi/widgets/media_viewer_page.dart';
 import 'package:omi/widgets/photos_grid.dart';
@@ -77,6 +80,40 @@ class LiveTranscriptView extends StatefulWidget {
 class _LiveTranscriptViewState extends State<LiveTranscriptView> {
   final TranscriptScrollStateStore _transcriptScrollStateStore = TranscriptScrollStateStore();
   bool _rejectingSuggestion = false;
+
+  // Reliability experiment vendor_recognizer_on_opened_app, step 4: a local record, numbers only, of
+  // what this page holds (stored lines, live lines, the hole between them) when it opens and every
+  // 10 s while it stays open. Off, nothing is scheduled.
+  Timer? _holeReport;
+
+  @override
+  void initState() {
+    super.initState();
+    if (ReliabilityExperiments.enabled('vendor_recognizer_on_opened_app')) {
+      _holeReport = Timer.periodic(const Duration(seconds: 10), (_) => _reportHole());
+      WidgetsBinding.instance.addPostFrameCallback((_) => _reportHole(opened: true));
+    }
+  }
+
+  @override
+  void dispose() {
+    _holeReport?.cancel();
+    super.dispose();
+  }
+
+  void _reportHole({bool opened = false}) {
+    if (!mounted) return;
+    final provider = context.read<CaptureProvider>();
+    LiveWordsLog.event('listening_page', {
+      'opened': opened,
+      ...LiveWordsHole.measure(
+        stored: provider.segments,
+        origin: provider.liveTranscriptStartedAt,
+        live: provider.livePreview?.lines ?? const [],
+        now: DateTime.now(),
+      ),
+    });
+  }
 
   TranscriptScrollState _scrollStateFor(String sessionId) => _transcriptScrollStateStore.forSession(sessionId);
 
@@ -724,7 +761,7 @@ class _LiveTranscriptViewState extends State<LiveTranscriptView> {
   /// no preview engine, and a photo timeline always keeps today's view.
   bool _showsLivePreview(CaptureProvider provider) {
     final preview = provider.livePreview;
-    if (preview == null || !provider.localPreviewAdmitted || !preview.admitted) return false;
+    if (preview == null || !provider.liveWordsShown || !preview.admitted) return false;
     if (!provider.pendantCaptureVerified || provider.photos.isNotEmpty) return false;
     return provider.segments.isEmpty || preview.phase != LivePreviewPhase.unavailable;
   }
@@ -1055,13 +1092,30 @@ class LivePreviewTail extends StatefulWidget {
       this.catchUp,
       this.lines,
       this.whenEmpty,
-      this.includeBottomInset = true});
+      this.includeBottomInset = true})
+      : showHeading = true,
+        horizontalInset = OmiSpacing.md;
+
+  /// The conversation page's form: the lines continue the transcript, so there is no heading, no
+  /// side inset (the page already insets the transcript) and no bottom inset.
+  const LivePreviewTail.continuingTranscript(
+      {super.key, required this.preview, required this.coverage, this.lines, this.whenEmpty})
+      : catchUp = null,
+        includeBottomInset = false,
+        showHeading = false,
+        horizontalInset = 0;
 
   final LivePreviewController preview;
   final LivePreviewCoverage coverage;
   final List<LivePreviewLine> Function()? lines;
   final Widget? whenEmpty;
   final bool includeBottomInset;
+
+  /// The "Just now, on this phone" heading over the lines.
+  final bool showHeading;
+
+  /// The lines' own side inset; zero where the parent already insets the transcript.
+  final double horizontalInset;
 
   /// What sits between the final transcript and the preview, rebuilt with the preview's ticks.
   final WidgetBuilder? catchUp;
@@ -1081,6 +1135,17 @@ class _LivePreviewTailState extends State<LivePreviewTail> {
     _rows.clear();
   }
 
+  /// Without the heading the first line keeps the heading's gap from the transcript above it.
+  double get _firstLineTop => widget.showHeading ? OmiSpacing.xs : OmiSpacing.md;
+
+  @override
+  void didUpdateWidget(LivePreviewTail oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.showHeading != widget.showHeading || oldWidget.horizontalInset != widget.horizontalInset) {
+      _rows.clear();
+    }
+  }
+
   Widget _line(LivePreviewLine line, bool first) {
     final cached = _rows[line.id];
     if (cached != null && cached.text == line.text && cached.isFinal == line.isFinal && cached.first == first) {
@@ -1088,7 +1153,8 @@ class _LivePreviewTailState extends State<LivePreviewTail> {
     }
     final row = Padding(
       key: ValueKey('live_preview_tail_${line.id}'),
-      padding: EdgeInsets.fromLTRB(OmiSpacing.md, first ? OmiSpacing.xs : 0, OmiSpacing.md, OmiSpacing.sm),
+      padding:
+          EdgeInsets.fromLTRB(widget.horizontalInset, first ? _firstLineTop : 0, widget.horizontalInset, OmiSpacing.sm),
       child: Text(line.text,
           style: OmiType.body
               .copyWith(height: 1.4, color: line.isFinal ? OmiColors.textSecondary : OmiColors.textTertiary)),
@@ -1111,7 +1177,7 @@ class _LivePreviewTailState extends State<LivePreviewTail> {
           mainAxisSize: MainAxisSize.min,
           children: [
             if (widget.catchUp case final catchUp?) catchUp(context),
-            if (lines.isNotEmpty) const LivePreviewDivider(),
+            if (lines.isNotEmpty && widget.showHeading) const LivePreviewDivider(),
             for (var i = 0; i < lines.length; i++) _line(lines[i], i == 0),
             if (widget.includeBottomInset) SizedBox(height: MediaQuery.paddingOf(context).bottom + 84),
           ],

@@ -1,19 +1,32 @@
-"""Pure boundary and late-speech policy. No switch reads and no IO."""
+"""Boundary and late-speech policy for derived conversations."""
 
-from utils.conversations.v3.live import FINISH_WINDOW_FIELD
+from config.conversations_v3 import transcript_size_cap_enabled
+from utils.conversations.v3.live import FINISH_RECORDING_FIELD, FINISH_WINDOW_FIELD
 from utils.conversations.v3 import policy, visibility
 from utils.conversations.v3.outline import SILENCE, playback_origin, sitdown as is_sitdown
 from utils.conversations.v3.word_floor import text_word_count
 
+import json
+import logging
+
 from collections.abc import Iterator
 from copy import deepcopy
-from datetime import timedelta
+from datetime import datetime, timedelta
 from uuid import NAMESPACE_URL, uuid5
 from difflib import SequenceMatcher
 from itertools import groupby
 from typing import Any
 
 CAP = timedelta(hours=2)
+TRANSCRIPT_BUDGET = 900 * 1024
+logger = logging.getLogger(__name__)
+
+
+def _transcript_bytes(line):
+    # The write codec compresses JSON and may hex-encode and base64-encrypt
+    # it (8/3 expansion). Budget without assuming any compression savings.
+    segment = {**line['segment'], 'start': 0.0, 'end': 0.0}
+    return 3 * (len(json.dumps(segment)) + 64)
 
 
 def word_count(lines):
@@ -29,7 +42,7 @@ def late_rewrite(*, previous_words, new_words, ended_at, now, rewrites):
     )
 
 
-def _capped(lines, sections=(), ownership=None):
+def _capped(lines, sections=(), ownership=None, *, size_cap=False):
     """Cut a stretch over two hours after the longest prefix that ends within two hours of its start; repeat.
 
     Every part but the last locks. A cut that moved with later speech (the old middle cut) or with the
@@ -45,25 +58,39 @@ def _capped(lines, sections=(), ownership=None):
     stretch's lines never cuts it.
     """
     parts, offset = [], 0
-    while max(line['end'] for line in lines[offset:]) - lines[offset]['start'] > CAP:
+    sizes = list(map(_transcript_bytes, lines)) if size_cap else []
+    remaining = sum(sizes)
+    while remaining > TRANSCRIPT_BUDGET or max(line['end'] for line in lines[offset:]) - lines[offset]['start'] > CAP:
         cut = ownership.locked_run_end(lines, offset) if ownership is not None else None
         if cut is not None:
             if cut == len(lines):
                 break  # the locked row owns the rest
             parts.append(lines[offset:cut])
+            if size_cap:
+                remaining -= sum(sizes[offset:cut])
             offset = cut
             continue
         # The longest prefix whose latest end (overlapping turns included) stays within the cap.
         limit = lines[offset]['start'] + CAP
         cut, latest = None, lines[offset]['end']
+        size = sizes[offset] if size_cap else 0
         for i in range(offset + 1, len(lines)):
             if latest > limit:
                 break
             cut = i
+            next_size = sizes[i] if size_cap else 0
+            if size + next_size > TRANSCRIPT_BUDGET:
+                logger.info('event=v3_transcript_size_cap_split')
+                break
+            size += next_size
             latest = max(latest, lines[i]['end'])
+        if cut is None and len(lines) - offset == 1 and latest <= limit:
+            break  # a source segment is atomic
         if cut is None:
             raise ValueError('single_transcript_segment_exceeds_two_hours')
         parts.append(lines[offset:cut])
+        if size_cap:
+            remaining -= sum(sizes[offset:cut])
         offset = cut
     parts.append(lines[offset:])
     return parts
@@ -176,7 +203,7 @@ def _cohesive_manual_group(group):
 
 
 def _cohesive_groups(
-    groups, outlines, sitdown=False, ownership=None
+    groups, outlines, sitdown=False, ownership=None, *, size_cap=False
 ) -> Iterator[tuple[dict[str, Any], list[dict[str, Any]]]]:
     for group, entries in zip(groups, outlines):
         if not entries:
@@ -189,7 +216,7 @@ def _cohesive_groups(
             for section in entry.get('sections') or []
             if isinstance(section.get('first_line'), int)
         )
-        parts = _capped(group['lines'], cut_points, ownership)
+        parts = _capped(group['lines'], cut_points, ownership, size_cap=size_cap)
         start = 1
         for index, part in enumerate(parts):
             end = start + len(part)
@@ -229,7 +256,10 @@ def windows(groups, outlines, *, cohesion=False, silence_gap=SILENCE, defer_topi
     """``ownership``: an ``Ownership`` over the loaded rows; the two-hour cap reuses locked rows' cuts."""
     result = []
     sitdown = is_sitdown(silence_gap)
-    pairs = _cohesive_groups(groups, outlines, sitdown, ownership) if cohesion else zip(groups, outlines)
+    size_cap = transcript_size_cap_enabled()
+    pairs = (
+        _cohesive_groups(groups, outlines, sitdown, ownership, size_cap=size_cap) if cohesion else zip(groups, outlines)
+    )
     for group, entries in pairs:
         first_result = len(result)
         native_tail = (
@@ -244,7 +274,7 @@ def windows(groups, outlines, *, cohesion=False, silence_gap=SILENCE, defer_topi
             sections = [
                 s['first_line'] - 1 - begin for s in entry.get('sections', []) if isinstance(s.get('first_line'), int)
             ]
-            capped = _capped(lines, sections, ownership)
+            capped = _capped(lines, sections, ownership, size_cap=size_cap)
             for part_index, part in enumerate(capped):
                 candidate = {
                     **entry,
@@ -271,10 +301,20 @@ def windows(groups, outlines, *, cohesion=False, silence_gap=SILENCE, defer_topi
                     candidate['_stretch_partition'] = first_result
                 # A model can undo a topic split within a stretch. Keep a cap boundary even without cohesion.
                 prior = result[-1] if result else None
+                oversize = bool(
+                    prior
+                    and size_cap
+                    and entry.get('resumes_previous')
+                    and sum(map(_transcript_bytes, (*prior['lines'], *part))) > TRANSCRIPT_BUDGET
+                )
+                if oversize:
+                    # The size budget, not the outline, keeps this resumed topic a separate card.
+                    logger.info('event=v3_transcript_size_cap_split')
                 if (
                     prior
                     and (not (cohesion or group.get('after_window_cap')) or len(result) > first_result)
                     and entry.get('resumes_previous')
+                    and not oversize
                     and not prior.get('manual_end')
                     and prior['kind'] == candidate['kind']
                     and prior.get('people') == candidate.get('people')
@@ -334,11 +374,30 @@ def is_unlocked(row):
     return row.get('status') == 'in_progress' or bool(row.get('v3_unlocked'))
 
 
+# Reliability experiment end_open_conversation: the owner-level End instant that closed a conversation.
+CUT_FIELD = 'v3_manual_cut_at'
+
+
+def ending_cut(finished_at, cuts, silence_gap):
+    """The owner-level cut that ends a stretch whose last speech is ``finished_at``; None when none does.
+
+    The same test ``outline.stretches`` applies: the first cut at or after the last speech, and only
+    while the stretch is still open at that cut (less than ``silence_gap`` after its last speech).
+    """
+    cut = next((c for c in sorted(cuts or ()) if c >= finished_at), None)
+    return cut if cut is not None and cut - finished_at < silence_gap else None
+
+
 def build(uid, window, recordings, existing=None, *, allocated=None, manual_end_home_visible=True):
     lines = window['lines']
     start, end = lines[0]['start'], max(line['end'] for line in lines)
     if existing and (not is_unlocked(existing) or window.get('_held_provisional')):
+        held_end = end
         start, end = existing['started_at'], existing['finished_at']
+        if isinstance(existing.get(CUT_FIELD), datetime) and existing.get('manual_end'):
+            # Experiment end_open_conversation: speech from before the End that landed late is inside
+            # this conversation, so its end follows that speech (it started before the stored cut).
+            end = max(end, held_end)
     cid = existing['id'] if existing else str(uuid5(NAMESPACE_URL, f'v3:{uid}:{start.isoformat()}'))
     first = recordings[lines[0]['conversation_id']]
     segments = []
@@ -569,8 +628,14 @@ def build(uid, window, recordings, existing=None, *, allocated=None, manual_end_
     row['v3_recording_ids'] = list(
         dict.fromkeys([*(existing or {}).get('v3_recording_ids', []), *row['v3_recording_ids']])
     )
+    tail_recording = recordings[lines[-1]['conversation_id']]
     if manual_end and (
-        prior.get(FINISH_WINDOW_FIELD) == cid
+        (
+            window.get('manual_end')
+            and tail_recording.get(FINISH_RECORDING_FIELD)
+            and tail_recording.get('v3_manual_end')
+        )
+        or prior.get(FINISH_WINDOW_FIELD) == cid
         or any(
             recordings.get(rid, {}).get(FINISH_WINDOW_FIELD) == cid and recordings.get(rid, {}).get('v3_manual_end')
             for rid in row['v3_recording_ids']
@@ -670,6 +735,20 @@ class Ownership:
             for claim in recording['claims']:
                 by_row.setdefault(claim['conversation_id'], []).append((claim['start'], claim['end']))
         self._seen: dict[int, tuple[Any, Any]] = {}
+        # Reliability experiment end_open_conversation: a locked row the person ended carries the instant
+        # of that End (``CUT_FIELD``, written only with the experiment on). It keeps owning unclaimed speech
+        # that starts before that instant, even after its last published line: audio the phone was still
+        # holding at End. The reach stops at the next row's start. Without the field (the baseline) every
+        # row's reach is its own window.
+        self._reach: dict[str, Any] = {}
+        ended = [row for row in self.rows if isinstance(row.get(CUT_FIELD), datetime)]
+        starts = sorted(r['started_at'] for r in self.rows) if ended else []
+        for row in ended:
+            cut = row[CUT_FIELD]
+            if row['id'] not in self.locked_ids or not row.get('manual_end'):
+                continue
+            later = next((s for s in starts if s > row['started_at'] and s >= row['finished_at']), None)
+            self._reach[row['id']] = cut if later is None else min(cut, later)
 
     def owner_of(self, line):
         cached = self._seen.get(id(line))
@@ -687,10 +766,29 @@ class Ownership:
         if legacy is not None:
             return legacy
         claims = self._claims.get(rid)
-        return next(
+        owner = next(
             (r for r in self.rows if _contains_line(r, line, None if claims is None else claims.get(r['id'], ()))),
             None,
         )
+        if (
+            owner is None
+            and self._reach
+            # Unclaimed speech only: no stored claim of its recording overlaps the line.
+            and (
+                claims is None
+                or not any(a < line['end'] and line['start'] < b for spans in claims.values() for a, b in spans)
+            )
+        ):
+            # Held audio: after the ended row's last line, before the End that closed it.
+            owner = next(
+                (
+                    r
+                    for r in self.rows
+                    if r['id'] in self._reach and r['finished_at'] <= line['start'] < self._reach[r['id']]
+                ),
+                None,
+            )
+        return owner
 
     def locked_run_end(self, lines, offset):
         """The index after the run of lines one locked row owns from ``offset``; None when it is unowned."""

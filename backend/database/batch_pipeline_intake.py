@@ -1,6 +1,7 @@
 """Atomic batch protocol ownership, durable projection binding and queue admission."""
 
 from database import batch_pipeline_upload_metrics as upload_metrics
+from config.request_clock import context_fields
 
 from dataclasses import asdict, replace
 from datetime import datetime, timedelta, timezone
@@ -273,7 +274,7 @@ def admit(
             content_key,
             {
                 **coalescing_completion.manifest(coalescing_group),
-                **{k: v for k, v in (intake or {}).items() if k in {'upload_arrived_at', 'upload_entitlement'}},
+                **context_fields(intake),
                 'status': 'processing',
                 'job_id': binding.job_id,
                 'lane': 'batch',

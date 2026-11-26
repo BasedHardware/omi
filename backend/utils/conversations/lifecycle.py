@@ -55,6 +55,7 @@ from utils.conversations.finalization_decision import (
 from utils.conversations.processing_trigger import is_recovery_trigger
 from utils.conversations.processing_trigger import ProcessingTrigger
 from utils.conversations.terminal_relevance import stamp_terminal_decision
+from utils.conversations import terminal_settled
 from utils.llm.gateway_error_contract import (
     is_byok_account_state_http_exception,
     is_retryable_processing_http_exception,
@@ -417,6 +418,13 @@ def complete_orphan_batch_capture(
         'relevance_decision': terminal['relevance_decision'],
         'home_transcription_pending_at': now,
         'home_transcription_deadline_at': now + timedelta(seconds=home_transcription_deadline_seconds()),
+        **terminal_settled.settle(
+            current,
+            now=now,
+            enabled=terminal_settled.serving(
+                jobs_db.uid_from_conversation_path(str(getattr(conversation_ref, 'path', ''))) or ''
+            ),
+        ),
     }
     transaction.update(conversation_ref, updates)
 
@@ -1442,9 +1450,12 @@ def commit_v3_projection(
     *,
     clear_pending=True,
     remove=(),
+    removed_ids=None,
     retire=None,
     settle=None,
     key='builder',
+    bounded_pending_limit=None,
+    unlocked_page=None,
 ):
     """The lifecycle owner delegates the atomic derived-row/claim transaction."""
     from database import conversations_v3
@@ -1458,7 +1469,10 @@ def commit_v3_projection(
         cache,
         clear_pending=clear_pending,
         remove=remove,
+        removed_ids=removed_ids,
         retire=retire,
         key=key,
         **({'settle': settle} if settle else {}),
+        **({'bounded_pending_limit': bounded_pending_limit} if bounded_pending_limit is not None else {}),
+        **({'unlocked_page': unlocked_page} if unlocked_page is not None else {}),
     )

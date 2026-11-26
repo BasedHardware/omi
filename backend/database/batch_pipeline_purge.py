@@ -10,6 +10,7 @@ from google.cloud import firestore
 from database._client import get_data_plane_firestore_client
 from database import batch_pipeline_privacy_queries as queries
 from database import record_wal_capacity
+from database.privacy_check_metrics import PURGE_COMPLETED, PURGE_ROWS
 from utils.batch_pipeline.record_wal_erasure import purge_record_wal_owner
 from database.batch_pipeline_privacy import (
     PRIVACY_COLLECTION,
@@ -19,7 +20,6 @@ from database.batch_pipeline_privacy import (
 )
 from database.batch_pipeline_shadow_hook import mirror_refresh, purge_owner as purge_jobstore_owner
 from database.batch_pipeline_allowance_hold import STATE as ALLOWANCE_HELD, OWNERS as ALLOWANCE_OWNERS
-from database.sync_ledger_sources import owed_batch_segments
 
 NAMESPACES = ('batch_pipeline_prod', 'batch_pipeline_dev')
 PAGE_SIZE = 100
@@ -238,15 +238,9 @@ def purge_batch_owner(
     # Failure leaves metadata and quota reachable and the purge incomplete.
     if default_storage_cleanup:
         purge_record_wal_owner(uid, conversation_id)
-    # Sync uploads are keyed by a provisional capture identity; the ledger names
-    # the batch segments that a now fully deleted upload left behind.
-    owed: dict[str, set[str]] = {}
-    if conversation_id is not None:
-        owed = owed_batch_segments(uid, [conversation_id], firestore_client=client)
     deleted = 0
     for namespace in namespaces:
         segments = set()
-        owed_segments = owed.get(namespace, set())
         for table in (
             'jobs',
             'results',
@@ -271,7 +265,7 @@ def purge_batch_owner(
                     if table == 'jobs':
                         result_ref = result_document(client, namespace, snapshot.id)
                         result = result_ref.get().to_dict() or {}
-                    matched = (table in {'jobs', 'results'} and snapshot.id in owed_segments) or _belongs(
+                    matched = _belongs(
                         {**data, 'projection': result.get('projection') or data.get('projection')}, conversation_id
                     )
                     if not matched and not (
@@ -332,6 +326,9 @@ def purge_batch_owner(
         purge_jobstore_owner(namespace, uid)
     if conversation_id is None:
         finish_privacy_purge(client, uid, generation)
+    scope = 'conversation' if conversation_id is not None else reason
+    PURGE_COMPLETED.labels(scope).inc()
+    PURGE_ROWS.labels(scope).inc(deleted)
     return deleted
 
 

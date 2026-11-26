@@ -51,6 +51,10 @@
     "policy": "storage",
     "reason": "Persistence boundary: user-scoped storage and authoritative lifecycle/privacy/custody metadata. Public-facing methods apply the central visibility predicate."
   },
+  "backend/database/conversation_effect_fence.py:collection": {
+    "policy": "storage",
+    "reason": "Reads authority fields from an exact source inside its derived-write transaction."
+  },
   "backend/database/conversation_finalization_jobs.py:collection": {
     "policy": "both",
     "reason": "Explicit capture, recording, sync, finalization, custody, export or lifecycle-metadata storage exception."
@@ -342,6 +346,10 @@
   "backend/database/summary_debt_queries.py:collection_group": {
     "policy": "storage",
     "reason": "Persistence boundary: user-scoped storage and authoritative lifecycle/privacy/custody metadata. Public-facing methods apply the central visibility predicate."
+  },
+  "backend/database/user_data_deletion.py:collection": {
+    "policy": "storage",
+    "reason": "Account erasure enumerates owner-scoped conversation references to purge speaker evidence children, including orphaned parents."
   },
   "backend/database/summary_processing.py:collection": {
     "policy": "storage",
@@ -886,6 +894,10 @@
   "backend/utils/enrichment/redrive.py:collection": {
     "policy": "conversations",
     "reason": "Product and derived readers must apply is_visible_conversation or the validated by-id boundary; home_hidden is not a general visibility filter."
+  },
+  "backend/utils/enrichment/unpark.py:collection": {
+    "policy": "conversations",
+    "reason": "The unpark transaction reads the conversation by exact ID after validating the user and conversation IDs against the outbox row key."
   },
   "backend/utils/entity_pages.py:collection": {
     "policy": "conversations",

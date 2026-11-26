@@ -82,8 +82,14 @@ LUNA_UNSUPPORTED_PARAMS_DROPPED_TOTAL = Counter(
 
 FLEX_FIRST_TOTAL = Counter(
     'llm_gateway_flex_first_total',
-    'Flex-first attempts on background lanes by outcome (flex served, or fell back to standard)',
+    'Flex-first provider attempts and terminal outcomes by lane',
     ['lane_id', 'outcome'],
+)
+
+FLEX_FALLBACK_REASON_TOTAL = Counter(
+    'llm_gateway_flex_fallback_reason_total',
+    'Flex-to-Standard fallbacks by lane and bounded reason',
+    ['lane_id', 'reason'],
 )
 
 CONV_STRUCTURE_FLEX_FALLBACK_REASON_TOTAL = Counter(

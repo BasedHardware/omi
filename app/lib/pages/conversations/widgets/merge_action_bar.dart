@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 
 import 'package:provider/provider.dart';
 
@@ -23,11 +22,17 @@ class _MergeActionBarState extends State<MergeActionBar> with SingleTickerProvid
   @override
   void initState() {
     super.initState();
-    _animationController = AnimationController(vsync: this, duration: const Duration(milliseconds: 300));
+    _animationController = AnimationController(vsync: this, duration: OmiMotion.standardDuration);
     _slideAnimation = Tween<Offset>(
       begin: const Offset(0, 1),
       end: Offset.zero,
     ).animate(CurvedAnimation(parent: _animationController, curve: Curves.easeOutCubic));
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _animationController.duration = OmiMotion.of(context).standard;
   }
 
   @override
@@ -50,68 +55,80 @@ class _MergeActionBarState extends State<MergeActionBar> with SingleTickerProvid
           _animationController.reverse();
         }
 
-        return IgnorePointer(
-          ignoring: !isActive,
-          child: SlideTransition(
-            position: _slideAnimation,
-            child: Container(
-              decoration: BoxDecoration(
-                color: OmiColors.surface1,
-                borderRadius: const BorderRadius.vertical(top: Radius.circular(OmiRadius.lg)),
-                boxShadow: [
-                  BoxShadow(color: Colors.black.withValues(alpha: 0.5), blurRadius: 20, offset: const Offset(0, -4)),
-                ],
-              ),
-              child: SafeArea(
-                top: false,
-                child: Padding(
-                  padding: const EdgeInsets.fromLTRB(OmiSpacing.xs, OmiSpacing.md, OmiSpacing.md, OmiSpacing.md),
-                  child: Row(
-                    children: [
-                      OmiButton.tertiary(
-                        label: context.l10n.cancel,
-                        size: OmiButtonSize.compact,
-                        onPressed: () {
-                          HapticFeedback.lightImpact();
-                          provider.exitSelectionMode();
-                        },
-                      ),
-                      Expanded(
-                        child: AnimatedSwitcher(
-                          duration: const Duration(milliseconds: 150),
+        return AnimatedBuilder(
+          animation: _animationController,
+          builder: (context, child) => !isActive && _animationController.isDismissed ? const SizedBox.shrink() : child!,
+          child: IgnorePointer(
+            ignoring: !isActive,
+            child: SlideTransition(
+              position: _slideAnimation,
+              child: Container(
+                decoration: BoxDecoration(
+                  color: OmiColors.surface1,
+                  borderRadius: const BorderRadius.vertical(top: Radius.circular(OmiRadius.lg)),
+                  boxShadow: [
+                    BoxShadow(color: Colors.black.withValues(alpha: 0.5), blurRadius: 20, offset: const Offset(0, -4)),
+                  ],
+                ),
+                child: SafeArea(
+                  top: false,
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(OmiSpacing.xs, OmiSpacing.md, OmiSpacing.md, OmiSpacing.md),
+                    child: Wrap(
+                      alignment: WrapAlignment.spaceBetween,
+                      crossAxisAlignment: WrapCrossAlignment.center,
+                      runSpacing: OmiSpacing.xs,
+                      children: [
+                        OmiButton.tertiary(
+                          label: context.l10n.cancel,
+                          size: OmiButtonSize.compact,
+                          maxLines: null,
+                          onPressed: () {
+                            OmiHaptics.light();
+                            provider.exitSelectionMode();
+                          },
+                        ),
+                        AnimatedSwitcher(
+                          duration: OmiMotion.of(context).quick,
                           child: Text(
                             context.l10n.selectedCount(count),
                             key: ValueKey(count),
                             textAlign: TextAlign.center,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
                             style: OmiType.headline,
                           ),
                         ),
-                      ),
-                      // Bulk actions (hub audit #7): move and delete work on any selection; merge needs two.
-                      OmiIconButton(
-                        key: const Key('selection_bar_move'),
-                        icon: const Icon(Icons.folder_outlined),
-                        label: context.l10n.moveToFolder,
-                        onPressed: count > 0 ? () => moveSelectedConversationsToFolder(context) : null,
-                      ),
-                      OmiIconButton(
-                        key: const Key('selection_bar_delete'),
-                        icon: const Icon(Icons.delete_outline_rounded),
-                        label: context.l10n.delete,
-                        isDestructive: true,
-                        onPressed: count > 0 ? () => confirmAndDeleteSelectedConversations(context) : null,
-                      ),
-                      const SizedBox(width: OmiSpacing.xxs),
-                      OmiButton(
-                        key: const Key('selection_bar_merge'),
-                        label: context.l10n.merge,
-                        icon: Icons.merge_rounded,
-                        size: OmiButtonSize.compact,
-                        onPressed: canMerge ? () => _handleMerge(context, provider) : null,
-                      ),
-                    ],
+                        // Bulk actions (hub audit #7): move and delete work on any selection; merge needs two.
+                        Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            OmiIconButton(
+                              key: const Key('selection_bar_move'),
+                              icon: const Icon(Icons.folder_outlined),
+                              label: context.l10n.moveToFolder,
+                              onPressed: count > 0 ? () => moveSelectedConversationsToFolder(context) : null,
+                            ),
+                            OmiIconButton(
+                              key: const Key('selection_bar_delete'),
+                              icon: const Icon(Icons.delete_outline_rounded),
+                              label: context.l10n.delete,
+                              isDestructive: true,
+                              onPressed: count > 0 ? () => confirmAndDeleteSelectedConversations(context) : null,
+                            ),
+                            const SizedBox(width: OmiSpacing.xxs),
+                            Flexible(
+                              child: OmiButton(
+                                key: const Key('selection_bar_merge'),
+                                label: context.l10n.merge,
+                                icon: Icons.merge_rounded,
+                                size: OmiButtonSize.compact,
+                                maxLines: null,
+                                onPressed: canMerge ? () => _handleMerge(context, provider) : null,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
                   ),
                 ),
               ),
@@ -123,7 +140,7 @@ class _MergeActionBarState extends State<MergeActionBar> with SingleTickerProvid
   }
 
   Future<void> _handleMerge(BuildContext context, ConversationProvider provider) async {
-    HapticFeedback.mediumImpact();
+    OmiHaptics.medium();
     final confirmed = await MergeConfirmationDialog.show(context, provider.selectedConversations);
     if (confirmed && context.mounted) {
       final idsToMerge = provider.markSelectedAsMergingAndExit();

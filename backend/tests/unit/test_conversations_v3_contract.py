@@ -88,7 +88,10 @@ async def test_busy_native_ready_leaves_cloud_task_retryable(monkeypatch):
 
     from routers import conversations_v3_tasks
 
-    async def busy(uid):
+    lanes = []
+
+    async def busy(uid, *, background=False):
+        lanes.append(background)
         return 'busy'
 
     monkeypatch.setattr(service, 'reconcile', busy)
@@ -99,6 +102,7 @@ async def test_busy_native_ready_leaves_cloud_task_retryable(monkeypatch):
     with pytest.raises(HTTPException) as error:
         await conversations_v3_tasks.reconcile(request, http_request)
     assert error.value.status_code == 503
+    assert lanes == [True, False]
 
 
 def test_scheduled_wake_rounds_up_and_coalesces_in_delivery_minute(monkeypatch):

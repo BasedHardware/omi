@@ -14,6 +14,7 @@ import threading
 from typing import Any, Iterable, Iterator
 
 from testing.pipeline_lab.contracts import parse_time, utc_iso  # noqa: F401 - re-exported for lane modules
+from testing.pipeline_lab.store import private_subdir
 
 _APPEND_LOCK = threading.Lock()
 
@@ -50,7 +51,7 @@ def plain(value: Any) -> Any:
 
 def write_json(path: Path, value: Any) -> Path:
     path = Path(path)
-    path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+    private_subdir(path.parent)
     tmp = path.with_name(f'.{path.name}.{os.getpid()}.{threading.get_ident()}.tmp')
     fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
     with os.fdopen(fd, 'w', encoding='utf-8') as stream:
@@ -66,7 +67,7 @@ def read_json(path: Path) -> Any:
 
 def append_jsonl(path: Path, row: Any) -> None:
     path = Path(path)
-    path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+    private_subdir(path.parent)
     line = dumps(row) + '\n'
     with _APPEND_LOCK:
         fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_APPEND, 0o600)
@@ -87,7 +88,7 @@ def read_jsonl(path: Path) -> Iterator[dict]:
 
 def write_jsonl(path: Path, rows: Iterable[Any]) -> int:
     path = Path(path)
-    path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+    private_subdir(path.parent)
     count = 0
     tmp = path.with_name(f'.{path.name}.{os.getpid()}.tmp')
     fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)

@@ -17,6 +17,7 @@ from database.firestore_document_probe import (
 )
 
 from database import record_token_lease_metrics as lease_metrics
+from database.firestore_write_probe import FIRESTORE_BILLED_WRITES_BY_CALLER, FIRESTORE_BILLED_WRITES_BY_ORIGIN
 from config.record_seal_rules import token_lease_mode
 
 from utils.observability.reasons import (
@@ -28,9 +29,12 @@ from utils.observability.reasons import (
 )
 
 logger = logging.getLogger(__name__)
+_READ_COLLECTORS = (FIRESTORE_BILLED_READS, FIRESTORE_BILLED_READS_BY_CALLER)
+_WRITE_COLLECTORS = (FIRESTORE_BILLED_WRITES_BY_CALLER, FIRESTORE_BILLED_WRITES_BY_ORIGIN)
+
 COLLECTORS = (
-    FIRESTORE_BILLED_READS,
-    FIRESTORE_BILLED_READS_BY_CALLER,
+    *_READ_COLLECTORS,
+    *_WRITE_COLLECTORS,
     lease_metrics.EXPIRED_WOULD,
     lease_metrics.EXPIRED_SEALED,
     lease_metrics.LATE_APPEND,
@@ -55,6 +59,14 @@ COUNTER_SAMPLES = {
     'omi_firestore_billed_reads_by_caller_total': (
         FIRESTORE_BILLED_READS_BY_CALLER,
         ('collection', 'kind', 'caller'),
+    ),
+    'omi_firestore_billed_writes_by_caller_total': (
+        FIRESTORE_BILLED_WRITES_BY_CALLER,
+        ('collection', 'op', 'caller'),
+    ),
+    'omi_firestore_billed_writes_by_origin_total': (
+        FIRESTORE_BILLED_WRITES_BY_ORIGIN,
+        ('origin', 'collection', 'op'),
     ),
     'omi_firestore_caller_label_overflow_total': (FIRESTORE_CALLER_LABEL_OVERFLOW, ()),
 }
@@ -124,15 +136,14 @@ def repair_probe_server(*, port=9090, addr='0.0.0.0'):
 def terminal_totals():
     # Only totals and the producer's bounded labels; no created timestamps,
     # document IDs, query operands, or a second SDK patch.
-    # Unlabelled lease counters expose zero samples at import time. Keep the
-    # old terminal wire/log output exact when dark, even after a mode rollback.
-    collectors = COLLECTORS[:2] if token_lease_mode() == 'off' else COLLECTORS
+    # A disabled lease rollout must omit its counters, even after a rollback.
+    collectors = (*_READ_COLLECTORS, *_WRITE_COLLECTORS) if token_lease_mode() == 'off' else COLLECTORS
     return [
         [sample.name, sample.labels, sample.value]
         for collector in collectors
         for family in collector.collect()
         for sample in family.samples
-        if sample.name.endswith('_total') and (collector in COLLECTORS[:2] or sample.value > 0)
+        if sample.name.endswith('_total') and (collector in _READ_COLLECTORS or sample.value > 0)
     ]
 
 
@@ -191,7 +202,7 @@ def launch_with_probe(factory, *args, **kwargs):
 
 
 def collect_child_probe(process):
-    """Fold terminal child reads into the parent's served counters at reap."""
+    """Fold terminal child counters into the parent's served counters at reap."""
     output = getattr(process, '_firestore_probe_output', None)
     if output is None:
         return

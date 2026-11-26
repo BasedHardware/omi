@@ -7,6 +7,7 @@ collaborators rather than importing network clients or asserting source strings.
 import ast
 import asyncio
 from contextlib import ExitStack, nullcontext
+from itertools import islice
 from pathlib import Path
 from types import SimpleNamespace, MethodType
 from unittest.mock import MagicMock, AsyncMock
@@ -35,6 +36,20 @@ class Store:
         return Batch()
 
 
+class Transaction:
+    def __init__(self, store):
+        self.store = store
+
+    def create(self, ref, data):
+        ref.create(data)
+
+    def set(self, ref, data, merge=False):
+        if merge:
+            self.store.rows.setdefault(ref.path, {}).update(data)
+        else:
+            self.store.rows[ref.path] = data
+
+
 class Batch:
     def __init__(self):
         self.refs = []
@@ -57,7 +72,7 @@ class Ref:
 
     document = collection
 
-    def get(self):
+    def get(self, transaction=None, field_paths=None):
         data = self.store.rows.get(self.path)
         return SimpleNamespace(exists=data is not None, to_dict=lambda: data)
 
@@ -73,6 +88,40 @@ class Ref:
         prefix = self.path + '/'
         names = {p[len(prefix) :].split('/')[0] for p in self.store.rows if p.startswith(prefix)}
         return [self.collection(n) for n in names]
+
+    def where(self, *, filter):
+        assert filter.field_path == 'uid'
+        assert filter.op_string == '=='
+        return FinalizationJobsQuery(self, filter.value)
+
+    def list_documents(self):
+        # Firestore lists child references even when only their subcollections survive.
+        prefix = self.path + '/'
+        document_ids = {path[len(prefix) :].split('/', 1)[0] for path in self.store.rows if path.startswith(prefix)}
+        return [self.document(document_id) for document_id in sorted(document_ids)]
+
+
+class FinalizationJobsQuery:
+    def __init__(self, collection, uid):
+        self.collection = collection
+        self.uid = uid
+
+    def select(self, fields):
+        assert fields == []
+        return self
+
+    def limit(self, size):
+        self.size = size
+        return self
+
+    def stream(self):
+        matches = (
+            ref
+            for ref in self.collection.list_documents()
+            if self.collection.store.rows.get(ref.path, {}).get('uid') == self.uid
+        )
+        for ref in islice(matches, self.size):
+            yield SimpleNamespace(reference=ref)
 
 
 def function(path, name, namespace):
@@ -105,6 +154,7 @@ def function(path, name, namespace):
 def store(monkeypatch):
     store = Store()
     monkeypatch.setattr(tombstones, 'db', store)
+    monkeypatch.setattr(tombstones, '_in_transaction', lambda _client, body: body(Transaction(store)))
     monkeypatch.setattr('database.batch_pipeline_purge.purge_batch_owner', MagicMock())
     store.rows['users/u/conversations/c'] = {
         'created_at': 'original-time',
@@ -126,7 +176,7 @@ def test_tombstone_contains_only_identity_and_point_lookup_is_owner_scoped(store
     assert not tombstones.is_deleted('other-user', 'c')
 
 
-def test_non_cascade_delete_purges_prompt_evidence_and_primary_audio_after_intent(store):
+def test_non_cascade_delete_purges_prompt_evidence_after_intent_without_purging_primary_audio(store):
     calls = []
 
     def purge(uid, cid):
@@ -136,30 +186,54 @@ def test_non_cascade_delete_purges_prompt_evidence_and_primary_audio_after_inten
         calls.append(('parent', tombstones.is_deleted(uid, cid)))
         store.rows.pop(f'users/{uid}/conversations/{cid}')
 
-    snapshots = MagicMock()
-    snapshots.get_conversation_raw_snapshot.return_value = {'sync_merged_from': ['donor']}
+    audio = MagicMock()
     namespace = {
         'logger': MagicMock(),
         'conversation_tombstones': tombstones,
-        'conversations_db': snapshots,
         'delete_owner_prompt_embedding_cache': purge,
         'delete_conversation_screen_frames': MagicMock(),
         'delete_conversation_and_frame_evidence': hard_delete,
+        'delete_privacy_conversation_audio': audio,
+        'delete_vector': MagicMock(),
+        'delete_transcript_chunk_vectors': MagicMock(),
+        'record_product_event': MagicMock(),
+        'conversations_db': SimpleNamespace(
+            get_conversation_raw_snapshot=lambda uid, cid, **kw: store.rows.get(f'users/{uid}/conversations/{cid}')
+        ),
+        'HTTPException': HTTPException,
+        'logger': MagicMock(),
+    }
+    delete = function('routers/conversations.py', 'delete_conversation', namespace)
+    # The handler returns no body: the route is 204 No Content, the contract the
+    # released mobile client gates on (test_conversation_delete_wire_contract.py).
+    assert delete('c', MagicMock(), False, None, 'u').status_code == 204
+    assert calls == [('prompt', True), ('parent', True)]
+    audio.assert_not_called()
+
+
+def test_delete_that_loses_the_row_to_backfill_undo_returns_conflict(store):
+    def read_before_undo(uid, cid, **_kwargs):
+        row = store.rows.pop(f'users/{uid}/conversations/{cid}', None)
+        return {'id': cid} if row is not None else None
+
+    namespace = {
+        'logger': MagicMock(),
+        'conversation_tombstones': tombstones,
+        'conversations_db': SimpleNamespace(get_conversation_raw_snapshot=read_before_undo),
+        'HTTPException': HTTPException,
+        'delete_owner_prompt_embedding_cache': MagicMock(),
+        'delete_conversation_screen_frames': MagicMock(),
+        'delete_conversation_and_frame_evidence': MagicMock(),
         'delete_privacy_conversation_audio': MagicMock(),
         'delete_vector': MagicMock(),
         'delete_transcript_chunk_vectors': MagicMock(),
         'record_product_event': MagicMock(),
     }
     delete = function('routers/conversations.py', 'delete_conversation', namespace)
-    background = MagicMock()
-    # The handler returns no body: the route is 204 No Content, the contract the
-    # released mobile client gates on (test_conversation_delete_wire_contract.py).
-    assert delete('c', background, False, None, 'u').status_code == 204
-    assert calls == [('prompt', True), ('parent', True)]
-    # Audio is primary content: a non-cascade delete erases it after the response, donors included.
-    background.add_task.assert_called_once_with(
-        namespace['_delete_privacy_audio_after_response'], 'u', 'c', source_ids=['donor']
-    )
+    with pytest.raises(HTTPException) as error:
+        delete('c', MagicMock(), False, None, 'u')
+    assert error.value.status_code == 409
+    assert 'users/u/deleted_conversations/c' not in store.rows
 
 
 @pytest.mark.parametrize('failure', ['retraction', 'cleanup', None])
@@ -259,9 +333,12 @@ def test_account_wipe_enumerates_tombstones_even_without_root(store, monkeypatch
     data_plane.rows['rollout_cohorts/u'] = {'cohorts': {'dev': {'batch-pipeline': True}}}
     monkeypatch.setattr(user_data_deletion, 'search_apps_db', lambda _uid, my_apps: [])
     monkeypatch.setattr(user_data_deletion, 'get_data_plane_firestore_client', lambda: data_plane)
-    # Global quiet-job pagination is covered by the real Firestore emulator.
-    quiet_cleanup = MagicMock()
-    monkeypatch.setattr(user_data_deletion, 'stop_quiet_checks_for_account', quiet_cleanup)
+    job_path = 'conversation_finalization_jobs'
+    store.rows[f'{job_path}/ordinary'] = {'uid': 'u', 'conversation_id': 'c', 'status': 'pending'}
+    store.rows[f'{job_path}/quiet'] = {'uid': 'u', 'kind': 'listen_quiet_check'}
+    store.rows[f'{job_path}/merge'] = {'uid': 'u', 'kind': 'conversation_merge'}
+    other_job = f'{job_path}/other'
+    store.rows[other_job] = {'uid': 'other', 'conversation_id': 'c'}
 
     def purge(ref, **kwargs):
         for path in list(store.rows):
@@ -279,11 +356,52 @@ def test_account_wipe_enumerates_tombstones_even_without_root(store, monkeypatch
             'delete_collection_recursive': purge,
         },
     )
-    wipe('u')
-    quiet_cleanup.assert_called_once_with('u', firestore_client=store)
+    assert wipe('u')['status'] == 'ok'
     assert data_plane.rows == {}
-    assert store.rows == {}
+    assert store.rows == {other_job: {'uid': 'other', 'conversation_id': 'c'}}
     assert not tombstones.is_deleted('u', 'c')
+
+
+def test_account_job_purge_logs_only_counts_and_revision_after_multiple_batches(store, monkeypatch, caplog):
+    monkeypatch.setenv('K_REVISION', 'backend-test')
+    caplog.set_level('INFO', logger=user_data_deletion.__name__)
+    collection = store.collection('conversation_finalization_jobs')
+    for index in range(451):
+        collection.document(f'job-{index:03}').create({'uid': 'u'})
+
+    user_data_deletion.purge_finalization_jobs('u', store)
+
+    assert caplog.messages == ['account_erasure_finalization_jobs_purged deleted=451 remaining=0 revision=backend-test']
+
+
+def test_account_job_purge_retries_after_a_later_batch_failure(store, monkeypatch, caplog):
+    monkeypatch.setenv('K_REVISION', 'backend-test')
+    caplog.set_level('INFO', logger=user_data_deletion.__name__)
+    collection = store.collection('conversation_finalization_jobs')
+    for index in range(451):
+        collection.document(f'job-{index:03}').create({'uid': 'u'})
+
+    failing_batch = Batch()
+
+    def fail():
+        raise RuntimeError('synthetic batch failure')
+
+    monkeypatch.setattr(failing_batch, 'commit', fail)
+    batches = iter((Batch(), failing_batch))
+    with monkeypatch.context() as patch:
+        patch.setattr(store, 'batch', lambda: next(batches))
+        with pytest.raises(RuntimeError, match='synthetic batch failure'):
+            user_data_deletion.purge_finalization_jobs('u', store)
+
+    assert [ref.id for ref in collection.list_documents()] == ['job-450']
+    assert caplog.messages == []
+    user_data_deletion.purge_finalization_jobs('u', store)
+    assert collection.list_documents() == []
+    user_data_deletion.purge_finalization_jobs('u', store)
+    assert caplog.messages == [
+        'account_erasure_finalization_jobs_purged deleted=1 remaining=0 revision=backend-test',
+        'account_erasure_finalization_jobs_purged deleted=0 remaining=0 revision=backend-test',
+    ]
 
 
 def test_live_client_chosen_deleted_id_is_closed_before_bootstrap_and_registration(store):

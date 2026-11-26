@@ -67,7 +67,7 @@ def test_background_notes_stamp_visibility_before_worker_settle(strict, monkeypa
     strict.rows[path] = derived
     monkeypatch.setattr(db, 'db', strict)
     monkeypatch.setattr(db.pipeline_ledger, 'record_summary', lambda *args, **kwargs: None)
-    monkeypatch.setattr(db, '_terminal_family_serving', lambda uid: True)
+    monkeypatch.setattr(db.terminal_settled, 'serving', lambda uid: True)
     assert lifecycle.persist_processed_conversation(
         UID,
         {

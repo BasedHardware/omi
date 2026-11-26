@@ -29,18 +29,40 @@ jobs:
         id: range
         run: |
           set -euo pipefail
+          proof_ref="$GITHUB_REF"
           if [[ "${{ github.event_name }}" == "push" ]]; then
             echo "before=${{ github.event.before }}" >> "$GITHUB_OUTPUT"
             echo "after=${{ github.event.after }}" >> "$GITHUB_OUTPUT"
+          elif [[ "$GITHUB_EVENT_NAME" == workflow_dispatch && "$GITHUB_REF" == refs/heads/release/?* ]]; then
+            git fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main
+            head="$(git rev-parse --verify HEAD)"
+            [[ "$head" == "$GITHUB_SHA" ]]
+            fork="$(git merge-base origin/main "$head")"
+            base="$fork"
+            # Cover all carrier changes since its fork from main. A branch
+            # pointing at a merged commit still checks that commit's diff.
+            if [[ "$base" == "$head" ]]; then
+              base="$(git rev-parse --verify HEAD^)"
+            fi
+            # Use the canonical check controls from the carrier's merged base.
+            # The Release owner determines which serving SHA to branch from.
+            git diff --exit-code "$fork" "$head" -- .github/actions/release-eligibility \
+              .github/scripts/verify_release_eligibility.py .github/scripts/run_checks.py .github/checks-manifest.yaml
+            echo "before=$base" >> "$GITHUB_OUTPUT"
+            echo "after=$head" >> "$GITHUB_OUTPUT"
+            # Reuse the SHA-bound manual evidence mode of the canonical action.
+            # GitHub records the real release branch in its workflow-run metadata.
+            proof_ref="refs/heads/ci-evidence/$head"
           else
             echo "before=$(git rev-parse --verify HEAD^)" >> "$GITHUB_OUTPUT"
             echo "after=$(git rev-parse --verify HEAD)" >> "$GITHUB_OUTPUT"
           fi
+          echo "proof_ref=$proof_ref" >> "$GITHUB_OUTPUT"
 
       - name: Verify release eligibility
         uses: ./.github/actions/release-eligibility
         with:
-          ref: ${{ github.ref }}
+          ref: ${{ steps.range.outputs.proof_ref }}
           sha: ${{ github.sha }}
           before: ${{ steps.range.outputs.before }}
           after: ${{ steps.range.outputs.after }}

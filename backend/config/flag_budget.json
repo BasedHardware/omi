@@ -26,6 +26,11 @@
   "seed_review_by": "2026-11-15",
   "budget": 159,
   "names": {
+    "ENRICHMENT_AGE_GATE_UNPARK_ENABLED": {
+      "owner": "refactor-lead",
+      "review_by": "2026-12-10",
+      "registry": "config/feature-flags.yaml"
+    },
     "BATCH_ACCOUNT_PRIVACY_WRITER_ENABLED": {
       "owner": "batch-custody / lead2",
       "review_by": "2026-12-16",
@@ -155,6 +160,14 @@
     "BATCH_PIPELINE_EMPTY_ASR_SAFETY_NET_ENABLED": {
       "owner": "dazheng (batch record lane / rollout lead)",
       "review_by": "2026-12-14"
+    },
+    "BATCH_PIPELINE_TWO_RECOGNIZER_EMPTY_CLOSE_ENABLED": {
+      "owner": "batch record lane",
+      "review_by": "2026-12-22"
+    },
+    "BATCH_PIPELINE_LANGUAGE_GUARDED_EMPTY_CLOSE_ENABLED": {
+      "owner": "batch record lane",
+      "review_by": "2026-12-22"
     },
     "BATCH_PIPELINE_ENRICHMENT_FRESH_SWEEP_MAX_AGE_DAYS": {
       "owner": "omi-pipeline",
@@ -1255,6 +1268,14 @@
     },
     "SYNC_RECORD_COVERAGE_WAIT_MEMO": {
       "owner": "cl2-fixnow",
+      "review_by": "2026-12-11"
+    },
+    "SYNC_RECORD_COVERAGE_WAIT_RETRY_AFTER_SECONDS": {
+      "owner": "Goal: Margin (SCA-3376)",
+      "review_by": "2026-12-11"
+    },
+    "SYNC_RECORD_COVERAGE_WAIT_TTL_SECONDS": {
+      "owner": "Goal: Margin (SCA-3376)",
       "review_by": "2026-12-11"
     },
     "SYNC_RECORD_DECODE_FAILURE_MEMO": {

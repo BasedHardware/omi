@@ -23,6 +23,11 @@ LLM_PROXY_URL_ENV = 'OMI_PIPELINE_LAB_LLM_PROXY_URL'
 LAB_ROOT_ENV = 'OMI_PIPELINE_LAB_ROOT'
 DEFAULT_LAB_ROOT = '/Volumes/Ephemeral/pipeline-lab'
 STT_ALLOWLIST_ENV = 'OMI_PIPELINE_LAB_STT_ENDPOINTS'
+# Per-run isolation on a shared emulator + Redis (scenario runs): the Redis database number this run
+# owns, and ``off`` to keep the product's Typesense writes off whatever is listening on the port.
+REDIS_DB_ENV = 'OMI_PIPELINE_LAB_REDIS_DB'
+TYPESENSE_ENV = 'OMI_PIPELINE_LAB_TYPESENSE'
+PROJECT_ID_ENV = 'OMI_PIPELINE_LAB_PROJECT_ID'
 
 
 # Same local bucket names as dev-up (scripts/dev-harness/dev_harness/config.py).
@@ -82,8 +87,10 @@ class LabStackConfig:
     firestore: tuple[str, int] = ('127.0.0.1', 8085)
     auth: tuple[str, int] = ('127.0.0.1', 9099)
     redis: tuple[str, int] = ('127.0.0.1', 6380)
+    redis_db: int = 0
     typesense: tuple[str, int] = ('127.0.0.1', 8108)
     typesense_api_key: str = 'local-typesense-api-key-not-real'
+    typesense_writes: bool = True
     project_id: str = 'demo-omi-local'
     llm_proxy_url: str = 'http://127.0.0.1:9180'
     lab_root: Path = Path(DEFAULT_LAB_ROOT)
@@ -122,14 +129,22 @@ class LabStackConfig:
         proxy_url = env.get(LLM_PROXY_URL_ENV, '').strip() or defaults.llm_proxy_url
         _url_host_port(proxy_url, name=LLM_PROXY_URL_ENV)
         redis_host = env.get('OMI_PIPELINE_LAB_REDIS', '').strip()
-        typesense = env.get('OMI_PIPELINE_LAB_TYPESENSE', '').strip()
+        typesense = env.get(TYPESENSE_ENV, '').strip()
+        typesense_writes = typesense.lower() != 'off'
+        if not typesense_writes:
+            typesense = ''
+        redis_db = env.get(REDIS_DB_ENV, '').strip() or '0'
+        if not redis_db.isdigit():
+            raise StackConfigError(f'{REDIS_DB_ENV} must be a Redis database number')
         return cls(
             firestore=pick('FIRESTORE_EMULATOR_HOST', defaults.firestore),
             auth=pick('FIREBASE_AUTH_EMULATOR_HOST', defaults.auth),
             redis=_host_port(redis_host, name='OMI_PIPELINE_LAB_REDIS') if redis_host else defaults.redis,
-            typesense=_host_port(typesense, name='OMI_PIPELINE_LAB_TYPESENSE') if typesense else defaults.typesense,
+            redis_db=int(redis_db),
+            typesense=_host_port(typesense, name=TYPESENSE_ENV) if typesense else defaults.typesense,
             typesense_api_key=env.get('OMI_PIPELINE_LAB_TYPESENSE_API_KEY', '') or defaults.typesense_api_key,
-            project_id=env.get('OMI_PIPELINE_LAB_PROJECT_ID', '') or defaults.project_id,
+            typesense_writes=typesense_writes,
+            project_id=env.get(PROJECT_ID_ENV, '') or defaults.project_id,
             llm_proxy_url=proxy_url,
             lab_root=Path(env.get(LAB_ROOT_ENV, '') or DEFAULT_LAB_ROOT).expanduser(),
             stt_endpoints=_stt_endpoints(env.get(STT_ALLOWLIST_ENV, '')),

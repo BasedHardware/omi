@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
+from importlib.util import module_from_spec, spec_from_file_location
 
+import fakeredis
 import pytest
 
 from utils import ai_profile_refresh as refresh
@@ -11,6 +13,8 @@ from utils.llm.ai_user_profile import ProfileSynthesis
 
 UID = 'uid-ai-profile-refresh'
 NOW = datetime(2026, 11, 16, 12, 0, tzinfo=timezone.utc)
+REAL_PROFILE_WRITE = refresh.users_db.write_ai_user_profile_if_unchanged
+REAL_COLLECT_SOURCES = refresh.collect_sources
 
 
 class FakeStore:
@@ -21,7 +25,7 @@ class FakeStore:
     def get(self, uid):
         return self.profile
 
-    def write_if_unchanged(self, uid, expected_text, profile):
+    def write_if_unchanged(self, uid, expected_text, profile, **kwargs):
         if str((self.profile or {}).get('profile_text') or '').strip() != expected_text:
             return False
         self.writes.append(profile)
@@ -44,7 +48,7 @@ class FakeLock:
         self.ttls.append(ttl)
         return self.acquired
 
-    def cooldown(self, uid, ttl=3600):
+    def cooldown(self, uid, ttl=3600, *, token=None):
         if self.raises:
             raise ConnectionError('redis down')
         self.cooldown_ttls.append(ttl)
@@ -75,7 +79,10 @@ def wired(monkeypatch):
     monkeypatch.setattr(
         refresh,
         'collect_sources',
-        lambda uid, now=None: refresh.profile_llm.ProfileSources(memories=['[work] engineer'], goals=['ship', 'run']),
+        lambda uid, now=None: (
+            refresh.profile_llm.ProfileSources(memories=['[work] engineer'], goals=['ship', 'run']),
+            (),
+        ),
     )
     monkeypatch.setattr(refresh.profile_llm, 'synthesize_ai_user_profile', fake_synthesize)
     monkeypatch.delenv(refresh.KILL_SWITCH_ENV, raising=False)
@@ -164,7 +171,7 @@ def test_failures_never_write_or_raise(wired, monkeypatch):
     monkeypatch.setattr(refresh.profile_llm, 'synthesize_ai_user_profile', lambda *a, **k: None)
     assert refresh.refresh_if_stale(UID) == 'ai_profile_synthesis_failed'
 
-    monkeypatch.setattr(refresh, 'collect_sources', lambda uid, now=None: refresh.profile_llm.ProfileSources())
+    monkeypatch.setattr(refresh, 'collect_sources', lambda uid, now=None: (refresh.profile_llm.ProfileSources(), ()))
     assert refresh.refresh_if_stale(UID) == 'ai_profile_insufficient_data'
 
     monkeypatch.setattr(refresh, 'collect_sources', lambda uid, now=None: 1 / 0)
@@ -200,7 +207,7 @@ def test_failed_automatic_refresh_releases_in_progress_lock(wired, monkeypatch):
 def test_schedule_refresh_is_bounded_per_process(monkeypatch):
     monkeypatch.delenv(refresh.KILL_SWITCH_ENV, raising=False)
     queued: list = []
-    monkeypatch.setattr(refresh, 'submit_with_context', lambda executor, fn, uid: queued.append((fn, uid)))
+    monkeypatch.setattr(refresh, 'submit_with_context', lambda executor, fn, *args: queued.append((fn, args)))
     monkeypatch.setattr(refresh, '_automatic_slots', refresh.threading.BoundedSemaphore(2))
 
     stale = {'profile_text': 'x'}
@@ -209,11 +216,11 @@ def test_schedule_refresh_is_bounded_per_process(monkeypatch):
     assert not refresh.schedule_refresh('c', stale, known=True)  # both slots busy
     fresh = {'refreshed_at': datetime.now(timezone.utc).isoformat()}
     assert not refresh.schedule_refresh('d', fresh, known=True)
-    assert [uid for _, uid in queued] == ['a', 'b']
+    assert [args[0] for _, args in queued] == ['a', 'b']
 
     # A finished run frees its slot.
-    monkeypatch.setattr(refresh, 'refresh_if_stale', lambda uid: 'written')
-    queued[0][0]('a')
+    monkeypatch.setattr(refresh, 'refresh_if_stale', lambda uid, **kwargs: 'written')
+    queued[0][0](*queued[0][1])
     assert refresh.schedule_refresh('c', stale, known=True)
 
     monkeypatch.setenv(refresh.KILL_SWITCH_ENV, 'off')
@@ -279,12 +286,22 @@ def test_collect_sources_formats_lines_and_survives_a_failed_source(monkeypatch)
         assert kwargs['start_date'] == NOW - timedelta(days=7)
         assert kwargs['end_date'] == NOW
         assert kwargs['limit'] == 20
-        return [{'structured': {'title': 'Standup', 'overview': 'Planned the week'}}, {'structured': {}}]
+        return [
+            {
+                'id': 'standup',
+                'updated_at': NOW,
+                'sync_content_revision': 2,
+                'structured': {'title': 'Standup', 'overview': 'Planned the week'},
+            },
+            {'structured': {}},
+        ]
 
     monkeypatch.setattr(refresh.conversations_db, 'get_conversations_without_photos', conversations)
+    monkeypatch.setattr(refresh.conversation_tombstones_db, 'is_deleted', lambda uid, cid: False)
     monkeypatch.setattr(refresh.chat_db, 'get_messages', lambda uid, limit: 1 / 0)
 
-    sources = refresh.collect_sources(UID, NOW)
+    sources, inputs = refresh.collect_sources(UID, NOW)
+    assert inputs == (refresh.ProfileConversationInput('standup', 2, NOW),)
 
     assert sources.memories == ['[interesting] likes tea', '[system] works on Omi']
     assert sources.tasks == ['[todo/high] ship profile', '[done/medium] old']
@@ -301,18 +318,203 @@ def test_collect_sources_formats_lines_and_survives_a_failed_source(monkeypatch)
         (None, '', False),
     ],
 )
-def test_compare_and_write_is_transactional(monkeypatch, stored, expected, written):
+def test_compare_and_write_is_transactional(stored, expected, written):
     import database.users as users_db
     from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
 
     rows = {} if stored is None else {('users', UID): {'name': 'x', 'ai_user_profile': stored}}
     client = StrictFirestore(rows)
-    monkeypatch.setattr(users_db, 'get_firestore_client', lambda: client)
     profile = {'profile_text': '- new', 'source': 'backend'}
 
-    assert users_db.write_ai_user_profile_if_unchanged(UID, expected, profile) is written
+    assert users_db.write_ai_user_profile_if_unchanged(UID, expected, profile, firestore_client=client) is written
     after = client.rows.get(('users', UID))
     if written:
         assert after['ai_user_profile'] == profile and after['name'] == 'x'
     else:
         assert after == (None if stored is None else {'name': 'x', 'ai_user_profile': stored})
+
+
+@pytest.mark.parametrize(
+    ('race', 'expected'),
+    [
+        ('trigger_revision', 'source_fenced'),
+        ('trigger_tombstone', 'source_fenced'),
+        ('trigger_owner', 'source_fenced'),
+        ('input_revision', 'source_fenced'),
+        ('input_notes', 'source_fenced'),
+        ('input_tombstone', 'source_fenced'),
+        ('account', 'account_fenced'),
+        ('none', 'written'),
+    ],
+)
+def test_scheduled_profile_revalidates_trigger_and_actual_inputs(wired, monkeypatch, race, expected):
+    from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore, StrictFirestoreDocument
+
+    trigger = ('users', UID, 'conversations', 'trigger')
+    sampled = ('users', UID, 'conversations', 'sampled')
+    user = ('users', UID)
+    client = StrictFirestore(
+        {
+            user: {'ai_user_profile': {}},
+            trigger: {'sync_content_revision': 3},
+            sampled: {'sync_content_revision': 2, 'structured': {'title': 'Fixture'}, 'updated_at': NOW},
+        }
+    )
+    original_get = StrictFirestoreDocument.get
+
+    def get_with_update_time(ref, *args, **kwargs):
+        snapshot = original_get(ref, *args, **kwargs)
+        snapshot.update_time = client.rows.get(ref.path, {}).get('updated_at')
+        return snapshot
+
+    def synthesize(*args, **kwargs):
+        if race == 'trigger_revision':
+            client.rows[trigger]['sync_content_revision'] += 1
+        elif race == 'trigger_tombstone':
+            client.rows[('users', UID, 'deleted_conversations', 'trigger')] = {}
+        elif race == 'trigger_owner':
+            client.rows[trigger].update(finalization_engine='go', finalization_owner_epoch=1)
+        elif race == 'input_revision':
+            client.rows[sampled]['sync_content_revision'] += 1
+        elif race == 'input_notes':
+            client.rows[sampled]['updated_at'] = NOW + timedelta(seconds=1)
+        elif race == 'input_tombstone':
+            client.rows[('users', UID, 'deleted_conversations', 'sampled')] = {}
+        elif race == 'account':
+            client.rows[('account_deletions', UID)] = {'wipe_status': 'pending_deletion'}
+        return ProfileSynthesis(profile_text='Fixture profile', data_sources_used=['conversations'], item_count=1)
+
+    monkeypatch.setattr(StrictFirestoreDocument, 'get', get_with_update_time)
+    monkeypatch.setattr(refresh.users_db, 'get_data_plane_firestore_client', lambda: client)
+    # The cadence fixture stubs persistence. Use the real transactional writer here.
+    monkeypatch.setattr(refresh.users_db, 'write_ai_user_profile_if_unchanged', REAL_PROFILE_WRITE)
+    monkeypatch.setattr(refresh.redis_db, 'try_acquire_ai_profile_auto_cooldown', lambda *a, **k: True)
+    monkeypatch.setattr(refresh.redis_db, 'settle_ai_profile_auto_cooldown', lambda *a, **k: False)
+    monkeypatch.setattr(
+        refresh.conversations_db,
+        'get_conversations_without_photos',
+        lambda *a, **k: [{'id': 'sampled', **client.rows[sampled]}],
+    )
+    monkeypatch.setattr(
+        refresh.conversation_tombstones_db,
+        'is_deleted',
+        lambda uid, cid: ('users', uid, 'deleted_conversations', cid) in client.rows,
+    )
+    monkeypatch.setattr(refresh, 'collect_sources', REAL_COLLECT_SOURCES)
+    for getter in ('_memories', '_tasks', '_goals', '_messages'):
+        monkeypatch.setattr(refresh, getter, lambda uid: [])
+    monkeypatch.setattr(refresh.profile_llm, 'synthesize_ai_user_profile', synthesize)
+
+    effect_source = refresh.ConversationEffectSource('trigger', 3, None)
+    assert refresh.refresh_if_stale(UID, effect_source=effect_source) == expected
+    assert bool(client.transactions[-1].updates) is (expected == 'written')
+    assert bool(client.rows[user]['ai_user_profile']) is (expected == 'written')
+
+
+# Save the Redis adapters before the cadence fixture replaces them.
+REAL_ADMIT = refresh.redis_db.try_acquire_ai_profile_auto_cooldown
+REAL_SETTLE = refresh.redis_db.settle_ai_profile_auto_cooldown
+REAL_LOCK = refresh.redis_db.try_acquire_ai_profile_refresh_lock
+REAL_UNLOCK = refresh.redis_db.release_ai_profile_refresh_lock
+
+
+@pytest.mark.parametrize(
+    ('source_fenced', 'independent_fences', 'expected'),
+    [
+        (False, 0, 'written'),
+        (True, 0, 'written'),
+        (True, 1, 'written'),
+        (True, 3, 'source_fence_retry_exhausted'),
+    ],
+    ids=['conversation_writes', 'independent_writes', 'independent_refetches', 'independent_exhausts'],
+)
+def test_independent_refresh_survives_a_cross_instance_cooldown(
+    wired, monkeypatch, source_fenced, independent_fences, expected
+):
+    store, _, _ = wired
+    spec = spec_from_file_location('profile_refresh_other_instance', refresh.__file__)
+    assert spec is not None and spec.loader is not None
+    other = module_from_spec(spec)
+    spec.loader.exec_module(other)
+    assert other._automatic_slots is not refresh._automatic_slots
+
+    server = fakeredis.FakeServer()
+    first = fakeredis.FakeRedis(server=server)
+    second = fakeredis.FakeRedis(server=server)
+    monkeypatch.setattr(refresh.redis_db, 'r', first)
+    monkeypatch.setattr(refresh.redis_db, 'try_acquire_ai_profile_auto_cooldown', REAL_ADMIT)
+    monkeypatch.setattr(refresh.redis_db, 'settle_ai_profile_auto_cooldown', REAL_SETTLE)
+    monkeypatch.setattr(refresh.redis_db, 'try_acquire_ai_profile_refresh_lock', REAL_LOCK)
+    monkeypatch.setattr(refresh.redis_db, 'release_ai_profile_refresh_lock', REAL_UNLOCK)
+    queued = []
+    monkeypatch.setattr(other, 'submit_with_context', lambda executor, fn, *args: queued.append((fn, args)))
+
+    attempts = []
+    collected = []
+    collect_sources = refresh.collect_sources
+    cooldown_key = f'users:{UID}:ai_profile_auto_cooldown'
+    source = refresh.ConversationEffectSource('trigger', 3, None)
+    exhausted = refresh.SOURCE_FENCE_RETRY_EXHAUSTED
+    count_before = exhausted.collect()[0].samples[0].value
+
+    def collect(uid, now):
+        sources, _ = collect_sources(uid, now)
+        sampled = refresh.ProfileConversationInput('sampled', len(collected), NOW)
+        collected.append(sampled)
+        return sources, (sampled,)
+
+    def write(uid, expected_text, profile, *, effect_source, conversation_inputs):
+        attempts.append(effect_source)
+        assert conversation_inputs == (collected[len(attempts) - 1],)
+        if effect_source is not None:
+            # Finish the other instance's queued job before the first reaches
+            # its Firestore refusal. No process-local state crosses this seam.
+            assert other.schedule_refresh(uid, None, known=True)
+            fn, args = queued.pop()
+            with monkeypatch.context() as pod:
+                pod.setattr(refresh.redis_db, 'r', second)
+                fn(*args)
+            assert first.get(cooldown_key).endswith(b':pending')
+            assert store.writes == []
+            if source_fenced:
+                raise refresh.ConversationEffectSourceChanged('fixture trigger changed while generating')
+        else:
+            # The reservation survives a fenced retry and excludes new work
+            # while the next attempt reads fresh inputs.
+            assert first.get(cooldown_key).endswith(b':independent')
+            assert not REAL_ADMIT(uid, token='abcdef')
+            if len(attempts) - 1 <= independent_fences:
+                raise refresh.ConversationEffectSourceChanged('fixture sampled input changed while generating')
+        return store.write_if_unchanged(uid, expected_text, profile)
+
+    monkeypatch.setattr(refresh, 'collect_sources', collect)
+    monkeypatch.setattr(refresh.users_db, 'write_ai_user_profile_if_unchanged', write)
+    assert refresh.refresh_if_stale(UID, effect_source=source) == expected
+    assert queued == []
+    exhausted_retry = expected == 'source_fence_retry_exhausted'
+    independent_attempts = independent_fences + (source_fenced and not exhausted_retry)
+    assert attempts == [source] + [None] * independent_attempts
+    assert len(collected) == len(attempts)
+    assert first.get(cooldown_key) == (None if source_fenced else b'1')
+    assert len(store.writes) == (0 if exhausted_retry else 1)
+    count = exhausted.collect()[0].samples[0]
+    assert count.value - count_before == int(exhausted_retry)
+    assert count.labels == {}
+
+
+def test_stale_profile_cooldown_token_cannot_consume_new_owner_demand(monkeypatch):
+    client = fakeredis.FakeRedis()
+    monkeypatch.setattr(refresh.redis_db, 'r', client)
+    key = f'users:{UID}:ai_profile_auto_cooldown'
+    assert REAL_ADMIT(UID, token='aaaa')
+    assert REAL_SETTLE(UID, 'aaaa', source_fenced=True) is False
+    assert REAL_ADMIT(UID, token='bbbb')
+    assert not REAL_ADMIT(UID)
+    assert REAL_SETTLE(UID, 'aaaa', source_fenced=True) is False
+    assert client.get(key) == b'conversation:bbbb:pending'
+    assert REAL_SETTLE(UID, 'bbbb', source_fenced=True) is True
+    assert client.get(key) == b'conversation:bbbb:independent'
+    refresh.redis_db.finish_ai_profile_auto_retry(UID, 'aaaa', clear=True)
+    assert client.get(key) == b'conversation:bbbb:independent'
+    refresh.redis_db.finish_ai_profile_auto_retry(UID, 'bbbb', clear=True)
+    assert client.get(key) is None

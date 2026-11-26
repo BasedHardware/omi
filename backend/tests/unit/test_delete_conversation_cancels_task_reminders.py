@@ -18,7 +18,7 @@ def _delete_with_tasks(monkeypatch, tasks, vector_batch_fn=None, source_lookup=N
     monkeypatch.setattr(
         conversations_router.conversations_db, 'get_conversation_raw_snapshot', source_lookup or (lambda *a, **kw: {})
     )
-    monkeypatch.setattr(conversations_router.conversation_tombstones, 'record_deletion', lambda *a: None)
+    monkeypatch.setattr(conversations_router.conversation_tombstones, 'record_deletion', lambda *a, **kw: None)
     # #25610's already-deleted short-circuit reads the tombstone first; this row was never deleted.
     monkeypatch.setattr(conversations_router.conversation_tombstones, 'is_deleted', lambda *a, **kw: False)
     monkeypatch.setattr(conversations_router, 'delete_owner_prompt_embedding_cache', lambda *a: None)
@@ -106,8 +106,7 @@ def test_cascade_delete_cancels_reminders_even_if_vector_delete_raises(monkeypat
 
 
 @pytest.mark.parametrize('configured', [False, True])
-def test_donor_inventory_read_with_or_without_canonical_bucket(monkeypatch, configured):
-    # Donor prefixes and their sync uploads hold the target's audio in every deployment.
+def test_donor_inventory_read_only_when_canonical_bucket_configured(monkeypatch, configured):
     if configured:
         monkeypatch.setenv('BUCKET_CANONICAL_AUDIO', 'canonical')
     else:
@@ -115,8 +114,11 @@ def test_donor_inventory_read_with_or_without_canonical_bucket(monkeypatch, conf
     reads = []
 
     def lookup(uid, cid, **kwargs):
-        reads.append((uid, cid))
+        reads.append((uid, cid, kwargs.get('field_paths')))
         return {'sync_merged_from': ['donor']}
 
     _delete_with_tasks(monkeypatch, [], source_lookup=lookup)
-    assert reads == [(UID, 'conv-1')]
+    expected = [(UID, 'conv-1', ['id'])]
+    if configured:
+        expected.append((UID, 'conv-1', ['sync_merged_from']))
+    assert reads == expected

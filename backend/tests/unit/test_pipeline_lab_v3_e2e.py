@@ -79,6 +79,7 @@ def run_day(capsys, lab, overlay):
     )
 
 
+@pytest.mark.slow  # a whole v3 day replay; over the fast-unit CPU limit on CI runners
 def test_v3_day_runs_by_default_when_the_overlay_turns_v3_on(lab, capsys):
     code, added = run_cli(
         capsys, 'corpus', 'add-day', '--snapshot', str(lab['snap']), '--date', DAY, '--timezone', 'UTC'

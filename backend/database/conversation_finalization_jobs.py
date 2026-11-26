@@ -61,6 +61,7 @@ from utils.conversations.backfill_stats import same_timestamp_revision
 from utils.account_cutover.fence import background_job_should_skip_account
 from utils.conversations.terminal_relevance import stamp_terminal_decision
 from database.server_batch_capture_handoff import capture_allowed, manual_stop_patch
+from utils.conversations import terminal_settled
 from utils.conversations.processing_trigger import (
     PROCESSING_MODES,
     ProcessingTrigger,
@@ -599,6 +600,15 @@ def _create_or_get_finalization_intent_txn(
         if not python_owns_finalization(loaded):
             intent = _no_finalization_intent(FINALIZATION_OWNER_REFUSAL)
             return intent
+        if account_deletion_ref is not None:
+            marker = account_deletion_ref.get(transaction=transaction)
+            deletion_status = normalize_account_deletion_status(
+                marker_exists=bool(marker.exists),
+                raw_status=(marker.to_dict() or {}).get('wipe_status'),
+            )
+            if account_deletion_blocks_access(deletion_status):
+                intent = _no_finalization_intent('refused_account_deleting')
+                return intent
         conversation = loaded
         if trigger is ProcessingTrigger.SILENT_BACKFILL:
             if extra_updates:
@@ -631,15 +641,6 @@ def _create_or_get_finalization_intent_txn(
             if (privacy.get('byok') or {}).get('active'):
                 return _no_finalization_intent('refused_byok')
         if is_recovery_trigger(trigger):
-            if trigger is ProcessingTrigger.SERVER_RECOVERY and account_deletion_ref is not None:
-                marker = account_deletion_ref.get(transaction=transaction)
-                deletion_status = normalize_account_deletion_status(
-                    marker_exists=bool(marker.exists),
-                    raw_status=(marker.to_dict() or {}).get('wipe_status'),
-                )
-                if account_deletion_blocks_access(deletion_status):
-                    intent = _no_finalization_intent('refused_account_deleting')
-                    return intent
             refusal = recovery_admission_refusal(uid, loaded, recovery_cutoff)
             if refusal is not None:
                 intent = _no_finalization_intent(f'refused_{refusal}')
@@ -875,11 +876,7 @@ def create_or_get_finalization_intent(
             expected_update_time=expected_update_time,
             backfill_run_id=backfill_run_id,
             expected_session_revision=expected_session_revision,
-            account_deletion_ref=(
-                client.collection('account_deletions').document(uid)
-                if trigger is ProcessingTrigger.SERVER_RECOVERY
-                else None
-            ),
+            account_deletion_ref=client.collection('account_deletions').document(uid),
             require_expired_recording_lease=require_expired_recording_lease,
         )
 
@@ -1195,6 +1192,7 @@ def _complete_server_batch_capture_txn(
         if current.get('recording') is True and _is_client_finalize(job) and server_batch.manual_end_marker_enabled()
         else {}
     )
+    # Capture close settles the row before transcription or notes: the stamp means settled, not summarized.
     transaction.update(
         conversation_ref,
         {
@@ -1204,6 +1202,7 @@ def _complete_server_batch_capture_txn(
             'home_transcription_pending_at': now,
             'home_transcription_deadline_at': now + timedelta(seconds=home_transcription_deadline_seconds()),
             **manual_end_update,
+            **terminal_settled.settle(current, now=now, enabled=terminal_settled.serving(uid)),
         },
     )
     transaction.update(
@@ -1601,7 +1600,11 @@ def _complete_discarded_server_batch_fanout_txn(
             allow_discarded=True,
         )
         if claimed is not None:
-            transaction.update(conversation_ref, claimed)
+            uid = uid_from_conversation_path(str(getattr(conversation_ref, 'path', '') or '')) or ''
+            transaction.update(
+                conversation_ref,
+                terminal_settled.stamp(current, claimed, now=now, enabled=terminal_settled.serving(uid)),
+            )
     transaction.update(
         job_ref,
         {
@@ -2101,6 +2104,8 @@ def _record_meeting_receipt_txn(
     duration_s: float,
     dedup_speech_s: float,
     now: datetime,
+    *,
+    account_deletion_ref: Any | None = None,
 ) -> dict[str, Any]:
     """Create the finalization-job receipt once and project its verdict to the conversation."""
     conversation_snapshot = conversation_ref.get(transaction=transaction)
@@ -2109,6 +2114,14 @@ def _record_meeting_receipt_txn(
     conversation = conversation_snapshot.to_dict() or {}
     if not python_owns_finalization(conversation):
         return {'status': 'fenced'}
+    if account_deletion_ref is not None:
+        marker = account_deletion_ref.get(transaction=transaction)
+        deletion_status = normalize_account_deletion_status(
+            marker_exists=bool(marker.exists),
+            raw_status=(marker.to_dict() or {}).get('wipe_status'),
+        )
+        if account_deletion_blocks_access(deletion_status):
+            return {'status': 'fenced'}
     existing_job_id = conversation.get('finalization_job_id')
     job_id = (
         finalization_job_id
@@ -2228,6 +2241,7 @@ def record_meeting_receipt(
         duration_s,
         dedup_speech_s,
         _now(),
+        account_deletion_ref=client.collection('account_deletions').document(uid),
     )
     if result['status'] == 'recorded':
         stop_quiet_check_for_conversation(uid, conversation_id, firestore_client=client)

@@ -30,6 +30,8 @@ COUNTERS = frozenset(
         'privacy_memo_requests',
         'privacy_memo_ineligible',
         'privacy_negative_lookup',
+        'omi_batch_pipeline_privacy_owner_cache',
+        'omi_batch_pipeline_privacy_owner_shadow',
     }
 )
 RUNTIME_GAUGES = frozenset(

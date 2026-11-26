@@ -2,6 +2,7 @@
 
 from contextlib import contextmanager
 from contextvars import ContextVar
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any
 
@@ -12,6 +13,37 @@ _NATIVE_REARMED = 'v3_native_manual_rearmed_revision'
 _current: ContextVar[tuple[str, str, str, Any] | None] = ContextVar('conversation_v3_writer', default=None)
 
 
+class ProcessingPersistenceFenced(RuntimeError):
+    """The processing write declined a stale or no-longer-authorized result."""
+
+
+@dataclass(frozen=True)
+class PersistenceDecline:
+    reason: str
+    update_time: datetime | None
+    transient: bool = False
+
+
+@dataclass(frozen=True)
+class _PersistenceOutcome:
+    decline: PersistenceDecline | None
+
+
+_outcome: ContextVar[_PersistenceOutcome | None] = ContextVar('conversation_v3_persistence_outcome', default=None)
+
+
+def record_persistence_outcome(uid: str, cid: str, decline: PersistenceDecline | None) -> None:
+    """Keep the first result for the leased row, including a successful persist."""
+    held = current()
+    if held is not None and held[:2] == (uid, cid) and _outcome.get() is None:
+        _outcome.set(_PersistenceOutcome(decline))
+
+
+def persistence_declined() -> PersistenceDecline | None:
+    outcome = _outcome.get()
+    return outcome.decline if outcome is not None else None
+
+
 def current():
     return _current.get()
 
@@ -19,9 +51,11 @@ def current():
 @contextmanager
 def writer(uid, cid, token, *, native_binding=_UNSPECIFIED):
     held = _current.set((uid, cid, token, native_binding))
+    outcome = _outcome.set(None)
     try:
         yield
     finally:
+        _outcome.reset(outcome)
         _current.reset(held)
 
 

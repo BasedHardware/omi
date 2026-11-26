@@ -161,6 +161,8 @@ async def test_manual_end_during_a_pass_lands_a_processing_row_within_one_follow
         return {'r': loaded(current, current.get('_test_revision', 1))}, existing, []
 
     async def blocking(pool, fn, *args, **kwargs):
+        if fn is store.clear_terminal_pending:
+            return None
         if fn is original_load:
             if snapshots:
                 stale = snapshots.pop()
@@ -207,6 +209,8 @@ async def test_manual_end_during_a_pass_lands_a_processing_row_within_one_follow
     'case', ['steady', 'reopened_before_notes', 'reopened_before_settlement', 'reopened_after_notes_cleared']
 )
 async def test_promoted_native_stop_commits_one_tail_summary_across_a_ready_replay(strict, monkeypatch, case):
+    # The injected loader models the recording closure, not the pending-queue query.
+    monkeypatch.setenv('CONVERSATIONS_V3_BOUNDED_PENDING', 'off')
     revoked = case != 'steady'
     notes_committed = case == 'reopened_before_settlement'
     notes_cleared = case == 'reopened_after_notes_cleared'
@@ -274,6 +278,11 @@ async def test_promoted_native_stop_commits_one_tail_summary_across_a_ready_repl
     monkeypatch.setattr(service, 'run_blocking', blocking)
     monkeypatch.setattr(service, 'has_pending', lambda uid: False)
     monkeypatch.setattr(service, 'pending_processing', pending)
+    monkeypatch.setattr(
+        service,
+        '_load_processing_row',
+        lambda uid, cid: deepcopy(strict.rows.get(('users', uid, 'conversations', cid))),
+    )
     monkeypatch.setattr(service, '_process_leased', write_synthetic_summary)
     enqueued = []
     monkeypatch.setattr(service, 'enqueue', lambda uid, *, at=None: enqueued.append((uid, at)))
@@ -385,6 +394,8 @@ def test_promoted_native_source_custody_change_is_not_a_speech_only_race(strict,
 
 @pytest.mark.asyncio
 async def test_adjacent_revoked_native_windows_settle_unmatched_tile_with_links(strict, monkeypatch):
+    # The injected loader models the recording closure, not the pending-queue query.
+    monkeypatch.setenv('CONVERSATIONS_V3_BOUNDED_PENDING', 'off')
     start = datetime.now(timezone.utc) - timedelta(minutes=2)
     rid_paths = {'r': R, 'second': (*R[:-1], 'second')}
     for offset, (rid, path) in enumerate(rid_paths.items()):

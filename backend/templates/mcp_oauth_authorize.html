@@ -173,10 +173,7 @@
         const loader = document.getElementById('loader');
         const errorMessage = document.getElementById('error-message');
         const errorText = document.getElementById('error-text');
-        const signInOptions = [firebase.auth.GoogleAuthProvider.PROVIDER_ID];
-        if (/Mac|iPod|iPhone|iPad/.test(navigator.platform)) {
-            signInOptions.push('apple.com');
-        }
+        const signInOptions = [firebase.auth.GoogleAuthProvider.PROVIDER_ID, 'apple.com'];
 
         function setLoading(isLoading) {
             loader.classList.toggle('is-visible', isLoading);

@@ -79,6 +79,8 @@ class HeavyLiveCapture extends CaptureProvider {
 
   @override
   bool get localPreviewAdmitted => true;
+  @override
+  bool get liveWordsShown => true;
 }
 
 class _NoBle implements CaptureBleListeners {

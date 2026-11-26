@@ -68,7 +68,7 @@ def test_legacy_background_notes_commit_native_visibility(monkeypatch, overview)
     target.set(derived)
     monkeypatch.setattr(db, 'db', client)
     monkeypatch.setattr(db.pipeline_ledger, 'record_summary', lambda *args, **kwargs: None)
-    monkeypatch.setattr(db, '_terminal_family_serving', lambda uid: False)
+    monkeypatch.setattr(db.terminal_settled, 'serving', lambda uid: False)
     try:
         assert lifecycle.persist_processed_conversation(
             uid,

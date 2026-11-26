@@ -1,5 +1,6 @@
 """Transactional intake plus replayable bridge effects with all service leaves fake."""
 
+import logging
 from copy import deepcopy
 from unittest.mock import MagicMock
 
@@ -189,19 +190,78 @@ def test_bridge_redirect_cycle_is_bounded_as_assignment_conflict_subtype(monkeyp
     assert exc_info.value.subtype == 'redirect_cycle'
 
 
-def test_bridge_source_shape_conflict_has_its_own_subtype(monkeypatch):
+def test_bridge_source_that_cannot_redirect_is_terminal_and_skipped(monkeypatch, caplog):
     from utils.sync import bridge
 
+    rows = {
+        'survivor': {'id': 'survivor', 'sync_merged_from': ['gone', 'live', 'settled']},
+        'live': {'id': 'live', 'deleted': False},
+        # A tombstone whose cleanup receipt already covers its revision must
+        # still be traversed: dead entries may not block the valid sources.
+        'settled': {
+            'id': 'settled',
+            'deleted': True,
+            'sync_merged_into': 'survivor',
+            'sync_content_revision': 4,
+            'sync_bridge_cleaned_revision': 4,
+        },
+    }
+    monkeypatch.setattr(bridge.conversations_db, 'get_conversation', lambda uid, cid, **kw: rows.get(cid))
+
+    from utils.observability.reasons import SyncBridgeTerminalOutcome
+    from utils.sync.bridge import OMI_SYNC_BRIDGE_TERMINAL_TOTAL
+
+    kinds = (SyncBridgeTerminalOutcome.MISSING, SyncBridgeTerminalOutcome.NOT_TOMBSTONE)
+    before = {kind: OMI_SYNC_BRIDGE_TERMINAL_TOTAL.labels(outcome=kind)._value.get() for kind in kinds}
+    with caplog.at_level(logging.WARNING, logger=bridge.logger.name):
+        assert bridge.finish_sync_bridges('u', 'survivor') == 'survivor'
+
+    terminal = [record.getMessage() for record in caplog.records if 'outcome=source_terminal' in record.getMessage()]
+    assert len(terminal) == 2, terminal
+    assert {message.split('kind=')[1].split()[0] for message in terminal} == {'missing', 'not_tombstone'}
+    # The terminal state is counted so the class has a reader after the raise is gone.
+    for kind in kinds:
+        assert OMI_SYNC_BRIDGE_TERMINAL_TOTAL.labels(outcome=kind)._value.get() == before[kind] + 1
+    # The terminal disposition never rewrites the donor or the survivor.
+    assert rows['survivor']['sync_merged_from'] == ['gone', 'live', 'settled']
+    assert rows['live'] == {'id': 'live', 'deleted': False}
+
+
+def test_bridge_source_conflict_is_strict_when_target_recovery_is_off(monkeypatch):
+    from utils.sync import bridge
+
+    monkeypatch.setenv('SYNC_FINALIZE_TARGET_RECOVERY_ENABLED', 'off')
     rows = {
         'survivor': {'id': 'survivor', 'sync_merged_from': ['donor']},
         'donor': {'id': 'donor', 'deleted': False},
     }
-    monkeypatch.setattr(bridge.conversations_db, 'get_conversation', lambda uid, cid: rows.get(cid))
+    monkeypatch.setattr(bridge.conversations_db, 'get_conversation', lambda uid, cid, **kw: rows.get(cid))
 
     with pytest.raises(bridge.SyncAssignmentConflict, match='source missing or not a tombstone') as exc_info:
         bridge.finish_sync_bridges('u', 'survivor')
 
     assert exc_info.value.subtype == 'bridge_source_not_tombstone'
+
+
+def test_resume_pending_settles_a_dead_bridge_source_without_raising(monkeypatch):
+    from utils.sync import bridge, bridge_pending
+
+    monkeypatch.setattr(bridge, 'sync_finalize_target_recovery_enabled', lambda: True)
+    rows = {
+        'caller': {
+            'id': 'caller',
+            'status': 'completed',
+            'sync_merged_from': ['gone'],
+            bridge_pending.FIELD: {'target_id': 'target', 'expires_at': 0},
+        },
+        'target': {'id': 'target', 'status': 'completed'},
+    }
+    monkeypatch.setattr(bridge.conversations_db, 'get_conversation', lambda uid, cid, **kw: rows.get(cid))
+
+    conversation_id, row = bridge.resume_pending('u', 'caller', rows['caller'], None)
+
+    assert conversation_id == 'caller'
+    assert row is rows['caller']
 
 
 def test_receipt_does_not_mark_a_newer_tombstone_revision(system):

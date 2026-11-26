@@ -31,6 +31,7 @@ from testing.pipeline_lab.stack.overlay import (
     trace_serving_for,
 )
 from testing.pipeline_lab.stack.patching import replace_everywhere
+from testing.pipeline_lab.store import private_subdir
 
 INHERITED_ENV = ('PATH', 'TMPDIR', 'HOME', 'SYSTEMROOT', 'LANG', 'LC_ALL')
 
@@ -107,18 +108,35 @@ def _install_firestore(stack: ExitStack, client: Any) -> None:
             stack.enter_context(patch.object(_client, attribute, client))
 
 
-def _install_redis(stack: ExitStack, client: Any) -> None:
+def _install_redis(stack: ExitStack, client: Any, db: int = 0) -> None:
     from database import redis_db
 
     original = redis_db.r
     stack.enter_context(patch.object(redis_db, 'r', client))
     replace_everywhere(stack, original, client)
+    if db:
+        _install_redis_db(stack, db)
+
+
+def _install_redis_db(stack: ExitStack, db: int) -> None:
+    """Point every product Redis client at database ``db``. The product builds its bounded clients
+    (``create_bounded_redis_client``) from ``redis_connection_kwargs``, which names no database; the lab
+    adds one so a run's keys never meet another run's on a shared ``redis-server``."""
+    from database import redis_connection
+
+    original = redis_connection.redis_connection_kwargs
+
+    def with_db(*args: Any, **kwargs: Any) -> dict[str, Any]:
+        return {**original(*args, **kwargs), 'db': db}
+
+    stack.enter_context(patch.object(redis_connection, 'redis_connection_kwargs', with_db))
+    replace_everywhere(stack, original, with_db)
 
 
 def _install_storage(stack: ExitStack, root: Path) -> Any:
     from utils.other import local_storage, storage as product_storage
 
-    root.mkdir(parents=True, exist_ok=True, mode=0o700)
+    private_subdir(root)
     client = local_storage.LocalStorageClient(root)
     stack.enter_context(patch.object(product_storage, '_get_storage_client', lambda: client))
     stack.enter_context(patch.object(local_storage, 'create_storage_client', lambda: client))
@@ -151,7 +169,7 @@ def lab_environment(
     overlay = overlay or Overlay()
     settings = compose_settings(config, overlay)
     decisions = DecisionLog(run_dir / 'decisions.jsonl' if run_dir is not None else None)
-    typesense_up = peer_listening(config.typesense) if install_product else True
+    typesense_up = config.typesense_writes and (peer_listening(config.typesense) if install_product else True)
     if not typesense_up:
         settings.update(TYPESENSE_DOWN_ENV)
     policy = network_policy or NetworkPolicy.for_stack(
@@ -171,7 +189,10 @@ def lab_environment(
             settings=settings,
         )
         decisions.record('overlay', overlay.digest(), 'overlay', overlay_name=overlay.name)
-        if not typesense_up:
+        if not config.typesense_writes:
+            # A shared host's Typesense has one collection for every run: an isolated run writes none.
+            decisions.record('typesense_off', 'conversation_index_writes_off', 'lab_isolation')
+        elif not typesense_up:
             decisions.record(
                 'typesense_unavailable',
                 'conversation_index_writes_off',
@@ -197,10 +218,10 @@ def lab_environment(
                 from database.redis_connection import redis_connection_kwargs
 
                 # Same construction as database.redis_db.r, under the lab env (bytes, not str).
-                redis_client = redis.Redis(**redis_connection_kwargs())
+                redis_client = redis.Redis(**redis_connection_kwargs(), db=config.redis_db)
                 stack.callback(redis_client.close)
             environment.redis = redis_client
-            _install_redis(stack, redis_client)
+            _install_redis(stack, redis_client, config.redis_db)
             environment.storage = _install_storage(stack, config.storage_root)
         if clock is not None:
             stack.enter_context(installed_clock(clock))

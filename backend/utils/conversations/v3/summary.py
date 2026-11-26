@@ -17,6 +17,7 @@ from typing import Any
 from fastapi import HTTPException
 
 from config.conversations_v3 import live_recap_enabled
+from config.llm_spend import background_flex_retry_enabled, v3_summary_first_open_gating_enabled
 from database import conversations_v3 as store
 from models.conversation import Conversation
 from utils.conversations.v3 import models, planner, policy, recap_telemetry, visibility
@@ -32,7 +33,11 @@ def fresh(row):
 
 
 def needs_open_reconcile(row):
-    return row.get('v3_derived') and (row.get('status') == 'in_progress' or row.get('v3_unlocked'))
+    return row.get('v3_derived') and (
+        row.get('status') == 'in_progress'
+        or row.get('v3_unlocked')
+        or (v3_summary_first_open_gating_enabled() and row.get('v3_process_failure_reason') == 'outline')
+    )
 
 
 def summary_eligible(row):
@@ -58,7 +63,9 @@ def write(uid, row, emit):
     from utils.conversations.process_conversation import _get_structured  # pyright: ignore[reportPrivateUsage]
     from utils.generated_compute import generated_compute_scope
 
-    with generated_compute_scope(uid), models.notes_mode(uid, foreground=True, emit=emit):
+    with generated_compute_scope(uid), models.notes_mode(
+        uid, foreground=True, emit=emit, backfilled=bool(row.get('v3_derived') and row.get('backfilled'))
+    ):
         structured, _discarded = _get_structured(
             uid, row.get('language') or 'en', Conversation(**row), live_recap=recap_telemetry.active()
         )
@@ -95,7 +102,9 @@ def _record(observation: recap_telemetry.RecapObservation | None, outcome: str) 
         observation.record(outcome)
 
 
-async def prepare(uid, row, *, live=False, observation: recap_telemetry.RecapObservation | None = None):
+async def prepare(
+    uid, row, *, live=False, promote_llm=False, observation: recap_telemetry.RecapObservation | None = None
+):
     def check_cohort():
         if live and not live_recap_enabled(uid):
             _record(observation, 'cohort_revoked')
@@ -113,7 +122,10 @@ async def prepare(uid, row, *, live=False, observation: recap_telemetry.RecapObs
         # No foreground model work: the stream serves the stored row, as processing would.
         return None
     check_cohort()
-    token = await run_blocking(db_executor, leases.acquire, uid, 'summary-' + row['id'])
+    if promote_llm and background_flex_retry_enabled() and not live:
+        token = await run_blocking(db_executor, writers.acquire_open_summary, uid, row['id'])
+    else:
+        token = await run_blocking(db_executor, leases.acquire, uid, 'summary-' + row['id'])
     if token is None:
         _record(observation, 'lease_conflict')
         raise HTTPException(409, 'summary_in_progress')
@@ -130,6 +142,7 @@ async def stream(
     *,
     token=None,
     live=False,
+    allow_generation=True,
     observation: recap_telemetry.RecapObservation | None = None
 ):
     async def cohort_revoked():
@@ -159,6 +172,11 @@ async def stream(
             yield _LIVE_UNAVAILABLE
             return
         _record(observation, 'cache_hit' if cached else 'no_eligible_input')
+        yield done((cached or {}) if live else row)
+        return
+    if not allow_generation:
+        # Ordinary reads may stream the stored projection, but cannot acquire
+        # a writer or start paid work. An explicit detail open opts in above.
         yield done((cached or {}) if live else row)
         return
     token = token or await prepare(uid, row)
@@ -235,7 +253,9 @@ async def stream(
         if row.get('recording') or row.get('is_locked'):
             yield 'error: {"detail":"Conversation not available"}\n\n'
             return
-        if fallback_open and (fresh(row) or not summary_eligible(row)):
+        if not live and (fresh(row) or not summary_eligible(row)):
+            await run_blocking(db_executor, leases.release, uid, 'summary-' + cid, token)
+            token = None
             yield done(row)
             return
         if row.get(policy.NATIVE_MANUAL_BINDING) is not None and not await run_blocking(
@@ -300,6 +320,8 @@ async def stream(
             # until it exits, without publishing its result after disconnect.
             await asyncio.shield(worker)
         raise
+    except (models.BackfillNotesDeletionBlocked, models.BackfillNotesAdmissionTimeout):
+        yield 'error: {"detail":"Summary unavailable; poll conversation detail"}\n\n'
     except Exception:
         _record(observation, 'stream_failed')
         if not live and row.get('v3_derived') and not needs_open_reconcile(row):
@@ -317,7 +339,8 @@ async def stream(
                 pass  # A newer owner/content revision keeps its own presentation.
         yield 'error: {"detail":"Summary unavailable; poll conversation detail"}\n\n'
     finally:
-        await run_blocking(db_executor, leases.release, uid, 'summary-' + row['id'], token)
+        if token is not None:
+            await run_blocking(db_executor, leases.release, uid, 'summary-' + cid, token)
 
 
 async def _wake_created(uid):
