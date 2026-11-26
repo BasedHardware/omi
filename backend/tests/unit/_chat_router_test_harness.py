@@ -194,6 +194,8 @@ def wire_common_stubs(install) -> SimpleNamespace:
     sanitizer = install('utils.log_sanitizer', ModuleType('utils.log_sanitizer'))
     sanitizer.sanitize_pii = lambda value: value
     observability = install('utils.observability', ModuleType('utils.observability'))
+    # Preserve submodule imports through the stub package (utils.metrics eagerly loads them).
+    observability.__path__ = [str(BACKEND_DIR / 'utils' / 'observability')]
     observability.submit_langsmith_feedback = MagicMock()
     # routers.chat imports utils.observability.fallback as a submodule; keep it
     # stubbed here so suites that only load the router do not require the real package.
