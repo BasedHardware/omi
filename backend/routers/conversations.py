@@ -700,6 +700,15 @@ def process_in_progress_conversation(
     # session's recording below is doing. Off: the header is ignored and nothing is written.
     cut_id = v3_manual_cuts.record_end(uid, ended_at=v3_manual_cuts.parse_ended_at(ended_at))
     conversation = retrieve_in_progress_conversation(uid)
+    named = request.live_conversation_id if request else None
+    if conversation and named and named != conversation.get('id') and not conversation.get('recording'):
+        # A legacy row in progress beside an older v3 window (SCA-2918 holdout): a Finish naming the
+        # window closes that window; the legacy row keeps recording. A miss runs the legacy Finish below.
+        finished = finish_live_window(uid, named, named_only=True)
+        if finished is not None:
+            if getattr(finished.conversation, 'tile_state', None) != 'writing':
+                v3_manual_cuts.wake(uid, cut_id)
+            return finished
     if not conversation:
         response = finish_live_window(
             uid,

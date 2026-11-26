@@ -51,7 +51,9 @@ admission (`conversations_v3_enabled`) ignores the holdout. New-intake sites ask
   Without one, the answer is `v3:false`.
 
 Finish, episodes and the builders keep stage admission, so existing v3 recordings drain on the
-v3 path and an active v3 capture can still be finished. The cohort starts empty. Add or remove
+v3 path and an active v3 capture can still be finished. While a legacy row is in progress beside an
+older v3 window, a Finish that names a different id finishes only that named window (or its just-sealed
+capture) and leaves the legacy row recording. An unnamed Finish, or a miss, runs the legacy Finish. The cohort starts empty. Add or remove
 one owner per command from a private UID file (never pass a UID on the command line):
 
 ```bash

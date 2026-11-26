@@ -216,6 +216,86 @@ def test_existing_v3_work_drains_for_a_held_out_owner(monkeypatch):
     assert manual_cuts.record_end('synthetic') is None
 
 
+class _MixedFinish:
+    """Finish endpoint while a held-out owner's old v3 window coexists with a new legacy in-progress row."""
+
+    def __init__(self, monkeypatch, *, window_live=True):
+        from types import SimpleNamespace
+
+        from utils.conversations.v3 import finish
+
+        holdout = _Holdout(monkeypatch)
+        holdout.member = True
+        self.legacy = {'id': 'legacy-row', 'status': 'in_progress', 'source': 'omi'}
+        self.finished, self.finalized, self.woken, self.named = [], [], [], []
+        window = {'id': 'old-window', 'status': 'in_progress', 'v3_derived': True}
+        monkeypatch.setattr(routes, 'finish_live_window', finish.finish_live_window)
+        monkeypatch.setattr(routes, 'retrieve_in_progress_conversation', lambda uid: self.legacy)
+        monkeypatch.setattr(routes, 'is_listen_finalization_dispatch_enabled', lambda: True)
+        monkeypatch.setattr(routes.byok, 'has_byok_keys', lambda: False)
+        monkeypatch.setattr(routes, 'finalize_conversation', lambda cid, **kw: self.finalized.append(cid) or 'legacy')
+        monkeypatch.setattr(routes.v3_end_answer, 'answer', lambda uid, cut_id, baseline, *a, **kw: baseline)
+        monkeypatch.setattr(routes.v3_manual_cuts, 'wake', lambda uid, cut_id: self.woken.append(cut_id))
+        monkeypatch.setattr(finish, 'finish_no_pointer_enabled', lambda: True)
+        monkeypatch.setattr(finish, 'conversations_v3_enabled', switch.conversations_v3_enabled)
+        live_db = finish.conversations_v3_live
+        monkeypatch.setattr(live_db, 'live_window_by_id', lambda uid, wid, **kw: window if window_live else None)
+        monkeypatch.setattr(
+            live_db, 'request_finish', lambda uid, wid, **kw: self.finished.append(wid) or ('cut', 'rec')
+        )
+        monkeypatch.setattr(
+            live_db, 'request_named_finish', lambda uid, wid, **kw: self.named.append(wid) or (None, None, '')
+        )
+        monkeypatch.setattr(
+            finish,
+            '_acknowledge',
+            lambda uid, row, outcome, rid: SimpleNamespace(
+                conversation=SimpleNamespace(id=row['id'], tile_state='writing')
+            ),
+        )
+        monkeypatch.setattr(
+            live_db, 'live_window', lambda *a, **kw: pytest.fail('a named Finish fell back to another window')
+        )
+
+    def finish(self, named):
+        from fastapi import Response
+        from models.conversation import ProcessConversationRequest
+
+        request = ProcessConversationRequest(live_conversation_id=named) if named else None
+        return routes.process_in_progress_conversation(request, 'synthetic', None, response=Response())
+
+
+def test_named_v3_finish_closes_its_window_while_a_legacy_row_is_in_progress(monkeypatch):
+    mixed = _MixedFinish(monkeypatch)
+    answer = mixed.finish('old-window')
+    assert answer.conversation.id == 'old-window' and mixed.finished == ['old-window']
+    # The legacy row stays in progress: not finalized, not changed.
+    assert mixed.finalized == [] and mixed.legacy == {'id': 'legacy-row', 'status': 'in_progress', 'source': 'omi'}
+    assert mixed.woken == []  # The window cut answered as writing; the baseline path woke the builder.
+
+
+def test_unnamed_finish_beside_an_old_v3_window_still_finalizes_the_legacy_row(monkeypatch):
+    mixed = _MixedFinish(monkeypatch)
+    assert mixed.finish(None) == 'legacy'
+    assert mixed.finalized == ['legacy-row'] and mixed.finished == []
+    # Naming the legacy row itself is the legacy Finish too.
+    assert mixed.finish('legacy-row') == 'legacy'
+    assert mixed.finalized == ['legacy-row', 'legacy-row'] and mixed.finished == []
+
+
+def test_named_finish_miss_falls_back_to_the_legacy_finish(monkeypatch):
+    mixed = _MixedFinish(monkeypatch, window_live=False)
+    assert mixed.finish('old-window') == 'legacy'
+    assert mixed.named == ['old-window'] and mixed.finalized == ['legacy-row'] and mixed.finished == []
+
+
+def test_named_finish_beside_a_v3_recording_in_progress_keeps_today_path(monkeypatch):
+    mixed = _MixedFinish(monkeypatch)
+    mixed.legacy = {'id': 'session-recording', 'status': 'in_progress', 'recording': True}
+    assert mixed.finish('old-window') == 'legacy'
+    assert mixed.finalized == ['session-recording'] and mixed.finished == []
+
+
 def test_held_out_owner_reads_legacy_home_with_v3_cards_and_held_pieces(monkeypatch):
     from tests.unit.test_home_held_sync_piece import piece
 
