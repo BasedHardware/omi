@@ -348,7 +348,7 @@ async def test_reconcile_route_uses_real_processing_persistence_outcome(processi
         monkeypatch.setattr(db, '_batch_identity_membership_current', lambda *_: False)
     monkeypatch.setattr(service, 'has_pending', lambda *_: False)
     original_begin_processing = service.writers.begin_processing
-    monkeypatch.setattr(service.writers, 'begin_processing', lambda *_: True)
+    monkeypatch.setattr(service.writers, 'begin_processing', lambda *_, **__: True)
     monkeypatch.setattr(created, 'deliver', AsyncMock())
 
     def persist(_uid, _language, conversation, *, persistence_observer, **_kwargs):
