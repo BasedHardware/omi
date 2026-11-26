@@ -26,6 +26,21 @@ abstract final class DeviceDropoffSignals {
   /// Cumulative rise of a non-decreasing battery run that counts as charging.
   static const chargeRiseLevels = 5;
 
+  /// A link that drops this soon after connecting is a short session. Support
+  /// reports "keeps disconnecting seconds after connecting, even at 100%"; a
+  /// put-down pendant does not reconnect at all.
+  static const shortSessionMs = 30 * 1000;
+
+  /// Two samples this close that differ by this much are an erratic reading,
+  /// in either direction ("erratic battery reading", "stuck at 1% then off").
+  static const erraticStepLevels = 20;
+  static const erraticStepMaxMs = 10 * 60 * 1000;
+
+  /// Level at or below which time is counted as stuck low; samples further
+  /// apart than [lowSpanMaxMs] are not assumed to hold the level between them.
+  static const lowBatteryLevel = 5;
+  static const lowSpanMaxMs = 2 * 60 * 60 * 1000;
+
   static const _pairingReasons = {'pairing_lost', 'paired_to_another_phone', 'link_key_mismatch'};
   static const _phoneReasons = {'bluetooth_off', 'app_closed'};
   static const _trends = {'fading', 'sudden', 'gap', 'unknown'};
@@ -103,7 +118,13 @@ abstract final class DeviceDropoffSignals {
       longGapsByCause[gap.cause] = (longGapsByCause[gap.cause] ?? 0) + 1;
     }
 
+    final shortSessions = [
+      for (final session in sessions)
+        if (session.end - session.start < shortSessionMs && session.end < observedAt) session.end
+    ];
+
     final result = <String, dynamic>{
+      'short_sessions': shortSessions.where((at) => at >= start && at < end).length,
       'long_gaps': longGapsByCause.values.fold<int>(0, (sum, count) => sum + count),
       'long_gaps_by_cause': longGapsByCause,
       ..._audio(diagnostics, sessions, start, exposureEnd),
@@ -132,6 +153,7 @@ abstract final class DeviceDropoffSignals {
       'gap_rssi_age_s': rssiAge is int && rssiAge >= 0 ? rssiAge ~/ 1000 : null,
       'gap_rssi_trend': trend is String && _trends.contains(trend) ? trend : 'unknown',
       'gap_fail_to_connect': failures.where((at) => at >= ts && at < gapEnd).length,
+      'gap_short_sessions_24h': shortSessions.where((at) => at > ts - 24 * 3600 * 1000 && at <= ts).length,
       ..._scans(diagnostics, ts, gapEnd, observedAt),
     });
     // Reconnect intent is a snapshot of now, so it only describes a gap that
@@ -209,9 +231,23 @@ abstract final class DeviceDropoffSignals {
     int? runBase;
     var counted = false;
     num? previous;
+    int? previousTs;
+    var erratic = 0;
+    var lowMs = 0;
     for (final point in battery) {
       final ts = point['ts'] as int;
       final level = point['level'] as num;
+      if (previous != null && previousTs != null && ts > previousTs) {
+        if (ts >= start &&
+            ts < end &&
+            ts - previousTs <= erraticStepMaxMs &&
+            (level - previous).abs() >= erraticStepLevels) {
+          erratic++;
+        }
+        if (previous <= lowBatteryLevel && ts - previousTs <= lowSpanMaxMs) {
+          lowMs += ts.clamp(start, end) - previousTs.clamp(start, end);
+        }
+      }
       if (previous == null || level < previous) {
         runBase = level.toInt();
         counted = false;
@@ -220,12 +256,15 @@ abstract final class DeviceDropoffSignals {
         if (ts >= start && ts < end) rises++;
       }
       previous = level;
+      previousTs = ts;
       if (ts < start || ts >= end) continue;
       if (low == null || level < low) low = level.toInt();
       if (high == null || level > high) high = level.toInt();
     }
     return {
       'charge_inferred_events': rises,
+      'battery_erratic_steps': erratic,
+      'battery_low_seconds': lowMs ~/ 1000,
       if (low != null) 'battery_min_level': low,
       if (high != null) 'battery_max_level': high,
     };

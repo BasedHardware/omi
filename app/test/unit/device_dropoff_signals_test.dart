@@ -212,6 +212,41 @@ void main() {
     expect(jitter['charge_inferred_events'], 0);
   });
 
+  test('connect-then-drop sessions are counted per day and carried onto the gap that follows', () {
+    final gapAt = start + 20 * _hour;
+    final result = DeviceDropoffSignals.rollup({
+      'observed_at': nextDay + 8 * _hour,
+      'disconnect_history_v2': [
+        disconnect(start - 2 * _hour, durationMs: 8000, timeToReconnectMs: 1000),
+        for (var i = 0; i < 4; i++)
+          disconnect(gapAt - (i + 1) * 5 * _minute, durationMs: 12000, timeToReconnectMs: 1000, rssi: -55),
+        disconnect(gapAt - 3 * _hour, durationMs: 29999, timeToReconnectMs: 1000),
+        disconnect(gapAt - 2 * _hour, durationMs: 30000, timeToReconnectMs: 1000),
+        disconnect(gapAt, durationMs: 9000, rssi: -55),
+      ],
+      'connected_at': nextDay + 7 * _hour,
+    }, day);
+    expect(result['short_sessions'], 6);
+    expect(result['gap_short_sessions_24h'], 7);
+    expect(result['gap_cause'], 'power_off');
+  });
+
+  test('erratic steps and time stuck low come from the battery samples', () {
+    final result = DeviceDropoffSignals.rollup({
+      'battery_history_v2': [
+        battery(start - 30 * _minute, 3),
+        battery(start + 30 * _minute, 2),
+        battery(start + 90 * _minute, 1),
+        battery(start + 5 * _hour, 1),
+        battery(start + 5 * _hour + 5 * _minute, 100),
+        battery(start + 5 * _hour + 10 * _minute, 70),
+        battery(start + 6 * _hour, 90),
+      ],
+    }, day);
+    expect(result['battery_low_seconds'], 95 * 60);
+    expect(result['battery_erratic_steps'], 2);
+  });
+
   test('daily rollup reports schema 3 split fields, and the kill-switch shape is schema 2', () {
     final diagnostics = {
       'observed_at': nextDay + _hour,
