@@ -383,7 +383,7 @@ def write_commercial_subscription(uid: str, subscription: dict, *, client=None, 
             stored_user_paid_since=user.get('paid_since'),
             now=now.timestamp(),
         )
-        patch = {'subscription': subscription}
+        patch: dict[str, Any] = {'subscription': subscription}
         patch.update(paid_patch)
         if requeued is not None and requeued != grant:
             patch[GRANT_FIELD] = requeued
