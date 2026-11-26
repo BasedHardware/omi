@@ -156,6 +156,8 @@ async def test_manual_end_during_a_pass_lands_a_processing_row_within_one_follow
         return {'r': loaded(current, current.get('_test_revision', 1))}, existing, []
 
     async def blocking(pool, fn, *args, **kwargs):
+        if fn is store.clear_terminal_pending:
+            return None
         if fn is original_load:
             if snapshots:
                 stale = snapshots.pop()

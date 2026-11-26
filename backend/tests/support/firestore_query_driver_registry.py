@@ -164,7 +164,8 @@ BODY_DIGEST = {
     'utils.support.holds._held_deferred_deletes': '612a521045553ef1b02d1eb81aac37a3c63a75c598ce5e99484c007c7c87e878',
     'utils.support.retention._select_conversations': 'f36920350f4e3a557e0e474e8801ae414c21ce67203e0627f7a39ba820243d16',
     'database.conversations_v3_live._recent_window_query': '6f2c323bfa8df890362c6bdc4796182a70e4c704376bcb4944358560b12edc75',
-    'database.conversations_v3.commit_projection': 'a0435600aeff967644d1a5a9ff7a3c04541c0a03e67dab5ac63158bcae0bdf24',
+    'database.conversations_v3._oldest_pending': 'e2da208a3dcbae7d7c7c59335883b422e27dc71c9cfae51568883aa452bcfc57',
+    'database.conversations_v3.commit_projection': '479c6821d17582a4b186b0e6a242b932ec95f661fe39212857773319e04ccd22',
     'database.batch_pipeline_conversation_purge_scans._claim': 'faa5dabcf01dc5bd377b2e14a149282aa2db93b2872cdc97a3b756157701532c',
     'database.batch_pipeline_conversation_purge_scans.run_job': 'fe5d30b77da198a7e0dc188115c8906fb6446925079a4e96339d36675a55faeb',
     'database.batch_pipeline_store.FirestoreStore.protected_retries': 'b55d2960c94057cb8df9b9cdd2e7728b6af63728bc0a2cb6f5bd333efed443a2',
@@ -3716,6 +3717,13 @@ for entry in (
         reason='Builds the indexed filters; live lookup and Finish execute the query with their own field masks.',
         expect_observed=False,
         body_digest=BODY_DIGEST['database.conversations_v3_live._recent_window_query'],
+    ),
+    CoveredByEntry(
+        'database.conversations_v3._oldest_pending',
+        covered_by=('database.conversations_v3.load', 'database.conversations_v3.clear_terminal_pending'),
+        reason='Builds the indexed oldest pending page; both callers execute it.',
+        expect_observed=False,
+        body_digest=BODY_DIGEST['database.conversations_v3._oldest_pending'],
     ),
     CoveredByEntry(
         'database.conversations_v3.commit_projection',

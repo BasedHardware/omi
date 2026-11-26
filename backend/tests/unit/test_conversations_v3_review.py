@@ -50,6 +50,7 @@ def builder(monkeypatch):
     monkeypatch.setattr(store, 'adoptable', lambda *a: {})
     monkeypatch.setattr(store, 'merge_donors_have_tasks', lambda *a, **kw: False)
     monkeypatch.setattr(store, 'backoff_state', lambda *a: (None, None))
+    monkeypatch.setattr(store, 'clear_terminal_pending', lambda *a: None)
     monkeypatch.setattr(service, '_commit', lambda *a, **kw: committed.append(a))
     monkeypatch.setattr(service, 'has_pending', lambda *a: False)
     monkeypatch.setattr(service, 'enqueue', lambda *a, **kw: None)

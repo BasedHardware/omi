@@ -263,6 +263,11 @@ Watch `omi_conversations_v3_blocked_total{reason}` and `omi_conversations_v3_ado
 blocked for hours needs investigation. With `CONVERSATIONS_V3_BOUNDED_PENDING` on, a legacy
 closure-budget or document-size park gets an early background attempt. A closure-budget park
 starts with eight seeds and can fall back to one. A document-size park starts with one seed.
+The final commit remembers a successful smaller page on the builder lease. Before loading
+the projection, the builder can clear discarded or deleted markers within the oldest 50
+pending rows under that lease. Owner-wide unlocked-window overflows survive even at one
+seed. See the [bounded pending change note](../listen_pusher_pipeline/changes/2026-11-26-v3-bounded-pending.md)
+for the unlocked-window reconciliation follow-up.
 A new failed bounded pass records `v3_bounded_pending_attempted` on the builder lease and
 observes the usual backoff. An operator clears the park by deleting `v3_blocked_count`,
 `v3_blocked_reason`, `v3_backoff_until` and `v3_bounded_pending_attempted` on

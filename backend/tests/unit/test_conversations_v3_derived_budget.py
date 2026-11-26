@@ -278,7 +278,7 @@ async def test_large_pending_backlog_commits_oldest_complete_slice(strict, monke
     monkeypatch.setattr(store, 'DERIVED_LIMIT', 12)
 
     async def run_fixture(_, fn, *args, **kwargs):
-        if fn is store.mark_bounded_attempt:
+        if fn in (store.mark_bounded_attempt, store.clear_terminal_pending):
             return None  # the lease marker is covered by test_early_attempt_is_spent_under_the_lease_before_work
         return fn(*args, firestore_client=client, **kwargs)
 
@@ -287,7 +287,7 @@ async def test_large_pending_backlog_commits_oldest_complete_slice(strict, monke
         with pytest.raises(Conflict, match='v3_derived_budget'):
             store.load('u', firestore_client=client)
     with caplog.at_level('INFO'):
-        recordings, existing, _ = await service._load_live_batch('u', 'token', 'v3_derived_budget')
+        recordings, existing, _, limit = await service._load_live_batch('u', 'token', 'v3_derived_budget')
     assert list(recordings) == [f'r{i}' for i in range(8)]
     assert set(existing) == {f'd{i}' for i in range(8)}
     assert 'event=v3_bounded_pending pending_limit=8' in caplog.messages
@@ -296,7 +296,13 @@ async def test_large_pending_backlog_commits_oldest_complete_slice(strict, monke
         rid = row['id']
         strict.rows[path(rid)] = rows[C + rid].copy()
     token = leases.acquire(UID, 'builder', firestore_client=strict)
-    store.commit_projection(UID, token, recordings, existing, [], [], firestore_client=strict)
+    store.commit_projection(
+        UID, token, recordings, existing, [], [], bounded_pending_limit=limit, firestore_client=strict
+    )
+    held = leases.lease_ref(strict, UID, 'builder')
+    assert held.get().to_dict()['v3_bounded_pending_limit'] == 8
+    store.commit_projection(UID, token, {}, {}, [], [], bounded_pending_limit=32, firestore_client=strict)
+    assert held.get().to_dict()['v3_bounded_pending_limit'] is None
     for rid, row in recordings.items():
         stored = strict.rows[path(rid)]
         assert stored['v3_pending'] is False
@@ -304,25 +310,117 @@ async def test_large_pending_backlog_commits_oldest_complete_slice(strict, monke
     assert strict.rows[path('r8')]['v3_pending'] is True
 
 
+@pytest.mark.parametrize('enabled', [True, False])
 @pytest.mark.parametrize('terminal', ['discarded', 'deleted'])
-def test_terminal_pending_avoids_transcript_decode_and_claim_closure(monkeypatch, terminal):
+def test_terminal_pending_avoids_transcript_decode_and_claim_closure(monkeypatch, terminal, enabled):
+    monkeypatch.setenv('CONVERSATIONS_V3_BOUNDED_PENDING', 'on' if enabled else 'off')
     rows = fragmented(20)
     rows[C + 'r'][terminal] = True
+    decode = store.decode_row
+    decoded = []
+
+    def track(uid, doc):
+        decoded.append(doc.id)
+        return decode(uid, doc)
+
+    monkeypatch.setattr(store, 'decode_row', track)
     monkeypatch.setattr(store, 'DERIVED_LIMIT', 1)
-    monkeypatch.setattr(store, 'decode_row', lambda *a: pytest.fail('terminal transcript should stay unread'))
-    recordings, existing, _ = store.load('u', firestore_client=MemoryQuery(rows))
-    assert recordings['r']['_v3_unreadable']
-    assert not existing
+    if not enabled:
+        with pytest.raises(Conflict, match='v3_derived_budget'):
+            store.load('u', firestore_client=MemoryQuery(rows))
+        assert decoded == ['r']
+    else:
+        recordings, existing, _ = store.load('u', firestore_client=MemoryQuery(rows))
+        assert recordings['r']['_v3_unreadable']
+        assert not existing
+        assert not decoded
 
 
+@pytest.mark.parametrize('enabled', [True, False])
 @pytest.mark.parametrize('terminal', ['discarded', 'deleted'])
-def test_projection_clears_only_the_terminal_pending_fields(strict, terminal):
+def test_projection_clears_only_the_terminal_pending_fields(strict, monkeypatch, terminal, enabled):
+    monkeypatch.setenv('CONVERSATIONS_V3_BOUNDED_PENDING', 'on' if enabled else 'off')
     rid = 'r'
     raw = source(rid, v3_pending_since=AT, claims=[claim('held', AT, 10)], **{terminal: True})
     strict.rows[path(rid)] = raw.copy()
     token = leases.acquire(UID, 'builder', firestore_client=strict)
     store.commit_projection(UID, token, {rid: {**raw, '_v3_revision': 1}}, {}, [], [], firestore_client=strict)
-    assert strict.rows[path(rid)] == {**raw, 'v3_pending': False, 'v3_pending_since': None}
+    expected = {**raw, 'v3_pending': False, 'v3_pending_since': None} if enabled or terminal == 'deleted' else raw
+    assert strict.rows[path(rid)] == expected
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('overflow', ['count', 'bytes'])
+async def test_terminal_marker_clears_before_unlocked_index_overflow(strict, monkeypatch, overflow):
+    raw = source('r', discarded=True, claims=[claim('preview', AT, 10)], v3_pending_since=AT)
+    strict.rows[path('r')] = raw.copy()
+    token = leases.acquire(UID, 'builder', firestore_client=strict)
+    held = leases.lease_ref(strict, UID, 'builder')
+    strict.rows[('users', UID, 'conversation_v3_leases', 'builder')].update(unlocked_ids=['preview', 'second'])
+    before = held.get().to_dict()
+    preview = derived('preview', AT, 10, ['r'], v3_unlocked=True)
+    second = derived('second', AT, 10, ['r'], v3_unlocked=True)
+    if overflow == 'count':
+        monkeypatch.setattr(store, 'DERIVED_LIMIT', 1)
+    else:
+        monkeypatch.setattr(store, 'DERIVED_BYTES', 1)
+    prefix = f'/users/{UID}/'
+    query = store._oldest_pending
+    monkeypatch.setattr(
+        store,
+        '_oldest_pending',
+        lambda coll, limit: query(
+            (
+                coll
+                if isinstance(coll, MemoryQuery)
+                else MemoryQuery({prefix + 'conversations/r': raw}, prefix + 'conversations')
+            ),
+            limit,
+        ),
+    )
+
+    async def run_fixture(_, fn, *args, **kwargs):
+        if fn is leases.renew:
+            return None
+        if fn is store.load:
+            client = MemoryQuery(
+                {
+                    prefix + 'conversations/r': strict.rows[path('r')],
+                    prefix + 'conversations/preview': preview,
+                    prefix + 'conversations/second': second,
+                    prefix + 'conversation_v3_leases/builder': before,
+                }
+            )
+        else:
+            client = strict
+        return fn(*args, firestore_client=client, **kwargs)
+
+    monkeypatch.setattr(service, 'run_blocking', run_fixture)
+    with pytest.raises(Conflict, match='v3_derived_budget'):
+        await service._load_live_batch(UID, token, None)
+    assert strict.rows[path('r')] == {**raw, 'v3_pending': False, 'v3_pending_since': None}
+    assert held.get().to_dict() == before
+
+
+@pytest.mark.parametrize('moved', ['revision', 'status', 'lease'])
+def test_terminal_cleanup_rechecks_the_recording_and_lease(strict, monkeypatch, moved):
+    raw = source('r', discarded=True, v3_pending_since=AT)
+    token = leases.acquire(UID, 'builder', firestore_client=strict)
+    current = {
+        'revision': {**raw, '_test_revision': 2},
+        'status': {**raw, 'discarded': False},
+        'lease': raw,
+    }[moved]
+    strict.rows[path('r')] = current.copy()
+    query = store._oldest_pending
+    coll = '/users/synthetic/conversations'
+    monkeypatch.setattr(store, '_oldest_pending', lambda _, limit: query(MemoryQuery({coll + '/r': raw}, coll), limit))
+    if moved == 'lease':
+        with pytest.raises(Conflict, match='lease_lost'):
+            store.clear_terminal_pending(UID, 'stale-token', firestore_client=strict)
+    else:
+        store.clear_terminal_pending(UID, token, firestore_client=strict)
+    assert strict.rows[path('r')] == current
 
 
 @pytest.mark.parametrize('reason', ['v3_derived_budget', 'document_too_large'])
@@ -356,14 +454,16 @@ def test_early_attempt_is_spent_under_the_lease_before_work(strict, monkeypatch,
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
-    'parked,error,sizes',
+    'parked,error,remembered,sizes',
     [
-        ('document_too_large', None, [1]),
-        ('v3_derived_budget', 'v3_derived_budget', [8, 1]),
-        (None, 'account_deletion', [32]),
+        ('document_too_large', None, 8, [1]),
+        ('v3_derived_budget', 'v3_derived_budget', None, [8, 1]),
+        (None, 'account_deletion', None, [32]),
+        (None, None, 8, [8]),
+        (None, None, 1, [1]),
     ],
 )
-async def test_bounded_loader_only_shrinks_budget_failures(monkeypatch, parked, error, sizes):
+async def test_bounded_loader_only_shrinks_budget_failures(monkeypatch, parked, error, remembered, sizes):
     attempted, renewals, marked = [], [], []
 
     async def run_fixture(_, fn, *args, **kwargs):
@@ -373,6 +473,8 @@ async def test_bounded_loader_only_shrinks_budget_failures(monkeypatch, parked, 
         if fn is store.mark_bounded_attempt:
             marked.append(args)
             return
+        if fn is store.clear_terminal_pending:
+            return remembered
         attempted.append(kwargs.get('pending_limit', 32))
         if error and len(attempted) == 1:
             raise Conflict(error)
@@ -383,7 +485,7 @@ async def test_bounded_loader_only_shrinks_budget_failures(monkeypatch, parked, 
         with pytest.raises(Conflict, match=error):
             await service._load_live_batch('u', 'token', parked)
     else:
-        assert await service._load_live_batch('u', 'token', parked) == ({}, {}, [])
+        assert await service._load_live_batch('u', 'token', parked) == ({}, {}, [], sizes[-1])
     assert attempted == sizes
     assert renewals == [('u', 'builder', 'token')] * (len(sizes) - 1)
     assert marked == ([('u', 'token')] if parked else [])

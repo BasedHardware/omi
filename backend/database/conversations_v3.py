@@ -324,6 +324,62 @@ def backoff_state(uid, *, firestore_client=None):
     return row.get('v3_backoff_until'), reason
 
 
+TERMINAL_PENDING_SCAN_LIMIT = 50
+TERMINAL_PENDING_CLEAR = {'v3_pending': False, 'v3_pending_since': None}
+
+
+def _oldest_pending(coll, limit):
+    return coll.where(filter=FieldFilter('v3_pending', '==', True)).order_by('v3_pending_since').limit(limit)
+
+
+def clear_terminal_pending(uid, token, *, firestore_client=None):
+    """Clear terminal markers and return the page limit to use for the remaining backlog."""
+    client = firestore_client or get_firestore_client()
+    if account_deletion_blocks_user_work(uid):
+        raise Conflict('account_deletion')
+    coll = user_conversations(client, uid)
+    page = list(_oldest_pending(coll, TERMINAL_PENDING_SCAN_LIMIT).stream())
+    candidates = {doc.id: doc.update_time for doc in page if _is_discarded_or_deleted(doc.to_dict() or {})}
+    held = leases.lease_ref(client, uid, 'builder')
+    deletion_ref = account_deletion_document(uid, firestore_client=client)
+
+    @firestore.transactional
+    def clear(tx):
+        lease = held.get(transaction=tx).to_dict() or {}
+        if lease.get('token') != token or not lease.get('until') or lease['until'] <= datetime.now(timezone.utc):
+            raise Conflict('lease_lost')
+        deletion = deletion_ref.get(transaction=tx)
+        if account_deletion_marker_blocks_access(
+            marker_exists=deletion.exists, raw_status=(deletion.to_dict() or {}).get('status')
+        ):
+            raise Conflict('account_deletion')
+
+        matching = []
+        for rid, revision in candidates.items():
+            ref = coll.document(rid)
+            snapshot = ref.get(transaction=tx)
+            row = snapshot.to_dict() or {}
+            if (
+                snapshot.exists
+                and snapshot.update_time == revision
+                and row.get('v3_pending') is True
+                and _is_discarded_or_deleted(row)
+            ):
+                matching.append(ref)
+        for ref in matching:
+            tx.update(ref, TERMINAL_PENDING_CLEAR)
+        remembered = lease.get('v3_bounded_pending_limit')
+        # When the smaller page would already include the whole backlog, try the full page.
+        # Only the final projection commit can clear the saved limit.
+        return remembered if remembered in (1, 8) and len(page) - len(matching) >= remembered else None
+
+    return run_preloaded_transaction_with_contention_retry(client, clear)
+
+
+def _is_discarded_or_deleted(row):
+    return row.get('recording') and (row.get('discarded') or row.get('deleted'))
+
+
 def load(uid, *, conversation_id=None, pending_limit=32, firestore_client=None):
     client = firestore_client or get_firestore_client()
     if account_deletion_blocks_user_work(uid):
@@ -337,12 +393,7 @@ def load(uid, *, conversation_id=None, pending_limit=32, firestore_client=None):
         ids = (opened or {}).get('v3_recording_ids') or []
         pending = [coll.document(rid).get() for rid in ids]
     else:
-        pending = list(
-            coll.where(filter=FieldFilter('v3_pending', '==', True))
-            .order_by('v3_pending_since')
-            .limit(pending_limit)
-            .stream()
-        )
+        pending = list(_oldest_pending(coll, pending_limit).stream())
     recordings, unreadable = {}, {}
     for doc in pending:
         row = recording_input(uid, doc, skip_terminal=skip_terminal)
@@ -748,6 +799,7 @@ def commit_projection(
     removed_ids: set[str] | None = None,
     retire=None,
     key='builder',
+    bounded_pending_limit=None,
     firestore_client=None,
 ):
     """Commit derived rows and source claims; returns the ids of source recordings that kept moving.
@@ -977,8 +1029,10 @@ def commit_projection(
                 or recording.get('sync_merged_into')
                 or (key == 'builder' and clear_pending and bounded_pending_enabled() and recording.get('discarded'))
             ):
-                update_if_changed(coll.document(rid), observed[rid], {'v3_pending': False, 'v3_pending_since': None})
+                update_if_changed(coll.document(rid), observed[rid], TERMINAL_PENDING_CLEAR)
                 continue
+            if recording.get('discarded'):
+                continue  # Existing custody is retained even when terminal cleanup is disabled.
             if rid in batch_moved or rid in moved:
                 # Merge onto the re-read document; never write the stale snapshot's view of a live source.
                 claims = [c for c in observed[rid].get('claims') or [] if c['conversation_id'] not in replaced]
@@ -1052,6 +1106,10 @@ def commit_projection(
                 open_ids[0] if open_ids else (lease.get('open_id') if lease.get('open_id') not in existing else None)
             ),
         }
+        if final and bounded_pending_limit is not None:
+            remembered_limit = bounded_pending_limit if bounded_pending_limit < 32 else None
+            if lease.get('v3_bounded_pending_limit') != remembered_limit:
+                lease_update['v3_bounded_pending_limit'] = remembered_limit
         unlocked = {r['id'] for r in batch_rows if r.get('v3_unlocked') and not r.get('deleted')}
         if unlocked or lease.get('unlocked_ids'):
             previous_unlocked = set(lease.get('unlocked_ids') or ()) - {r['id'] for r in batch_rows}

@@ -255,11 +255,12 @@ async def _load_live_batch(uid, token, parked):
     if parked in store.BOUNDED_RETRY_REASONS:
         # Spend a legacy park's one early attempt under this lease before any paid work.
         await run_blocking(db_executor, store.mark_bounded_attempt, uid, token)
+    remembered = await run_blocking(db_executor, store.clear_terminal_pending, uid, token)
     budget_reasons = {'v3_derived_budget', 'v3_source_closure_budget'}
     sizes = (32, 8, 1)
-    if parked == 'document_too_large':
+    if parked == 'document_too_large' or remembered == 1:
         sizes = (1,)
-    elif parked in budget_reasons:
+    elif parked in budget_reasons or remembered == 8:
         sizes = (8, 1)
     for size in sizes:
         try:
@@ -271,7 +272,7 @@ async def _load_live_batch(uid, token, parked):
         else:
             if size < 32:
                 logger.info('event=v3_bounded_pending pending_limit=%d', size)
-            return result
+            return (*result, size)
     raise AssertionError('bounded pending batch sizes are empty')
 
 
@@ -334,6 +335,7 @@ async def reconcile(
         metrics.RECONCILES.labels('busy').inc()
         return 'busy'
     primary_failed = False
+    bounded_pending_limit = None
     try:
         # The reliability experiments below are read on this event loop, which answers from what was last
         # learned for the account. Learn it on a worker thread first, so a pass never misses a switch.
@@ -365,7 +367,7 @@ async def reconcile(
                 rederive=rederive,
             )
         elif not on_open and bounded_pending_enabled():
-            recordings, existing, cached = await _load_live_batch(uid, token, parked)
+            recordings, existing, cached, bounded_pending_limit = await _load_live_batch(uid, token, parked)
         else:
             recordings, existing, cached = await run_blocking(
                 db_executor,
@@ -824,6 +826,7 @@ async def reconcile(
                 removed_ids=removed_ids,
                 retire=retire,
                 key=key,
+                bounded_pending_limit=bounded_pending_limit,
             )
         except Exception:
             if live:
@@ -1187,6 +1190,7 @@ def _commit(
     removed_ids=None,
     retire=None,
     key='builder',
+    bounded_pending_limit=None,
 ):
     from google.api_core.exceptions import InvalidArgument
 
@@ -1205,6 +1209,7 @@ def _commit(
             removed_ids=removed_ids,
             retire=retire,
             key=key,
+            **({'bounded_pending_limit': bounded_pending_limit} if bounded_pending_limit is not None else {}),
         )
     except InvalidArgument as error:
         # A document over Firestore's 1 MiB limit, or a commit request over its payload limit, fails the
