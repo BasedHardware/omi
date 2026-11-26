@@ -12,6 +12,7 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parents[2]
 APP_PREFIX = "app/"
 CHANGELOG_PREFIX = "app/changelog/"
+SPINE_TEST_PREFIX = "app/test/spine/"
 UNRELEASED_CHANGELOG_PREFIX = "app/changelog/unreleased/"
 NONE_KIND = "none"
 EXEMPT_APP_PATHS = {
@@ -49,7 +50,8 @@ def added_files(base_ref: str, head_ref: str) -> list[str]:
 def is_app_change_requiring_changelog(path: str) -> bool:
     if not path.startswith(APP_PREFIX):
         return False
-    if path.startswith(CHANGELOG_PREFIX):
+    # Spine revisions must contain only oracle files and their revision records.
+    if path.startswith((CHANGELOG_PREFIX, SPINE_TEST_PREFIX)):
         return False
     if path in EXEMPT_APP_PATHS:
         return False

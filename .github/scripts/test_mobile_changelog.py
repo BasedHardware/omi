@@ -445,6 +445,16 @@ class GateFixtureTests(unittest.TestCase):
             with unittest.mock.patch.object(checker, "REPO_ROOT", repo):
                 return checker.check_changelog(base, head)
 
+    def test_spine_revision_needs_no_fragment_but_mixed_app_change_does(self) -> None:
+        spine = {"app/test/spine/c1_capture_test.dart": "void main() {}\n"}
+        code, _ = self.run_gate(spine)
+        self.assertEqual(code, 0)
+
+        code, message = self.run_gate({**spine, "app/lib/main.dart": "void main() {}\n"})
+        self.assertEqual(code, 1)
+        self.assertIn("app/lib/main.dart", message)
+        self.assertNotIn("app/test/spine/c1_capture_test.dart", message)
+
     def test_app_change_without_fragment_fails(self) -> None:
         code, message = self.run_gate({"app/lib/main.dart": "void main() {}\n"})
         self.assertEqual(code, 1)
