@@ -28,6 +28,7 @@ from google.cloud.firestore_v1 import FieldFilter
 
 from config import reliability_experiments
 from config.conversations_v3 import (
+    bounded_pending_enabled,
     DEFAULT_BOUNDARY_SECONDS,
     HISTORICAL_SITDOWN_TIMING,
     SPEECH_LANDED_FIELD,
@@ -250,6 +251,32 @@ async def _release_reconcile_lease(uid, key, token, *, primary_failed):
         )
 
 
+async def _load_live_batch(uid, token, parked):
+    """Reduce pending seeds without clipping any selected source's ownership closure."""
+    if parked in store.BOUNDED_RETRY_REASONS:
+        # Spend a legacy park's one early attempt under this lease before any paid work.
+        await run_blocking(db_executor, store.mark_bounded_attempt, uid, token)
+    remembered = await run_blocking(db_executor, store.clear_terminal_pending, uid, token)
+    budget_reasons = {'v3_derived_budget', 'v3_source_closure_budget'}
+    sizes = (32, 8, 1)
+    if parked == 'document_too_large' or remembered == 1:
+        sizes = (1,)
+    elif parked in budget_reasons or remembered == 8:
+        sizes = (8, 1)
+    for size in sizes:
+        try:
+            result = await run_blocking(db_executor, store.load, uid, **({'pending_limit': size} if size < 32 else {}))
+        except Conflict as error:
+            if size == sizes[-1] or str(error) not in budget_reasons:
+                raise
+            await run_blocking(db_executor, leases.renew, uid, 'builder', token)
+        else:
+            if size < 32:
+                logger.info('event=v3_bounded_pending pending_limit=%d', size)
+            return (*result, size)
+    raise AssertionError('bounded pending batch sizes are empty')
+
+
 def _measure_reconcile_writes(run):
     @wraps(run)
     async def measured(*args, **kwargs):
@@ -303,6 +330,7 @@ async def reconcile(
     report = {} if report is None else report
     key = store.BACKFILL_LEASE if derive else 'builder'
     blocked = None
+    parked = None
     moved = set()
     deferred: dict[str, datetime] = {}
     # Live passes call the outline-cache writers exactly as before; only a backfill names its lease.
@@ -320,6 +348,7 @@ async def reconcile(
         metrics.RECONCILES.labels('busy').inc()
         return 'busy'
     primary_failed = False
+    bounded_pending_limit = None
     try:
         # The reliability experiments below are read on this event loop, which answers from what was last
         # learned for the account. Learn it on a worker thread first, so a pass never misses a switch.
@@ -350,6 +379,8 @@ async def reconcile(
                 run_id=run_id,
                 rederive=rederive,
             )
+        elif not on_open and bounded_pending_enabled():
+            recordings, existing, cached, bounded_pending_limit = await _load_live_batch(uid, token, parked)
         else:
             recordings, existing, cached = await run_blocking(
                 db_executor,
@@ -801,6 +832,7 @@ async def reconcile(
                 removed_ids=removed_ids,
                 retire=retire,
                 key=key,
+                bounded_pending_limit=bounded_pending_limit,
             )
         except Exception:
             if live:
@@ -897,7 +929,7 @@ async def reconcile(
         report['blocked_reason'] = reason
         if not derive:
             # A backfill conflict must not park the owner's live builder.
-            await run_blocking(db_executor, store.record_blocked, uid, token, reason)
+            await run_blocking(db_executor, store.record_blocked, uid, token, reason, on_open=on_open)
         blocked = reason
         primary_failed = False
     except BaseException as error:
@@ -1164,6 +1196,7 @@ def _commit(
     removed_ids=None,
     retire=None,
     key='builder',
+    bounded_pending_limit=None,
 ):
     from google.api_core.exceptions import InvalidArgument
 
@@ -1182,6 +1215,7 @@ def _commit(
             removed_ids=removed_ids,
             retire=retire,
             key=key,
+            **({'bounded_pending_limit': bounded_pending_limit} if bounded_pending_limit is not None else {}),
         )
     except InvalidArgument as error:
         # A document over Firestore's 1 MiB limit, or a commit request over its payload limit, fails the

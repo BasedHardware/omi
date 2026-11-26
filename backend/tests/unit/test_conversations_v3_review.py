@@ -50,6 +50,7 @@ def builder(monkeypatch):
     monkeypatch.setattr(store, 'adoptable', lambda *a: {})
     monkeypatch.setattr(store, 'merge_donors_have_tasks', lambda *a, **kw: False)
     monkeypatch.setattr(store, 'backoff_state', lambda *a: (None, None))
+    monkeypatch.setattr(store, 'clear_terminal_pending', lambda *a: None)
     monkeypatch.setattr(service, '_commit', lambda *a, **kw: committed.append(a))
     monkeypatch.setattr(service, 'has_pending', lambda *a: False)
     monkeypatch.setattr(service, 'enqueue', lambda *a, **kw: None)
@@ -1055,7 +1056,7 @@ def test_builder_loads_indexed_provisional_card_without_pending_audio(monkeypatc
     }
     monkeypatch.setattr(store, 'account_deletion_blocks_user_work', lambda *a, **kw: False)
     monkeypatch.setattr(store, 'decode_row', lambda uid, snap: snap.to_dict() if snap.exists else None)
-    monkeypatch.setattr(store, 'recording_input', lambda uid, snap: snap.to_dict() if snap.exists else None)
+    monkeypatch.setattr(store, 'recording_input', lambda uid, snap, **kw: snap.to_dict() if snap.exists else None)
     recordings, existing, _ = store.load('synthetic', firestore_client=MemoryQuery(rows))
     assert set(existing) == {'older'} and set(recordings) == {'r'}
 
@@ -1207,7 +1208,7 @@ async def test_configured_builder_wakes_at_outline_then_lock(builder, monkeypatc
 def test_pending_page_continuation_uses_configured_silence(monkeypatch, gap, continues):
     monkeypatch.setenv('CONVERSATIONS_V3_SILENCE_GAP_SECONDS', '900')
     monkeypatch.setattr(store, 'account_deletion_blocks_user_work', lambda *a, **kw: False)
-    monkeypatch.setattr(store, 'recording_input', lambda uid, snap: snap.to_dict() if snap.exists else None)
+    monkeypatch.setattr(store, 'recording_input', lambda uid, snap, **kw: snap.to_dict() if snap.exists else None)
     prefix = '/users/synthetic/conversations/'
     rows = {}
     for index in range(32):
