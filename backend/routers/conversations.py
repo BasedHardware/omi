@@ -8,6 +8,7 @@ a second copy of those codecs here would bypass the at-rest protection.
 
 from utils.generated_compute import require_generated_compute, generated_compute_allowed, generated_compute_scope
 import asyncio
+import contextvars
 import hashlib
 import os
 import time
@@ -130,7 +131,14 @@ from utils.episodes.member_notes import open_recording
 from utils.conversations import share_email
 from utils.conversations.meeting_receipt import record_finalized_meeting_receipt
 from utils.integration_telemetry import emit_posthog_event
-from utils.executors import db_executor, llm_executor, postprocess_executor, run_blocking, submit_with_context
+from utils.executors import (
+    conversation_list_executor,
+    db_executor,
+    llm_executor,
+    postprocess_executor,
+    run_blocking,
+    submit_with_context,
+)
 from utils.memory.memory_service import MemoryService
 from utils.metrics import record_lazy_desktop_deferral
 from utils.memory.retraction_scope import retraction_can_be_skipped
@@ -1233,19 +1241,36 @@ _LIST_PAGE_READ_SECONDS = 24.0
 _LIST_PAGE_FINISH_SECONDS = 2.0
 
 
-def _within_list_page_deadline(fn, deadline):
+def _log_abandoned_list_page_failure(future: Future) -> None:
+    if future.cancelled():
+        return
+    error = future.exception()
+    if error is not None and not isinstance(error, ListReadBudgetExhausted):
+        logger.error(
+            'conversation_list_abandoned_work_failed',
+            exc_info=(type(error), error, error.__traceback__),
+        )
+
+
+def _within_list_page_deadline(fn, deadline, *, executor):
     if time.monotonic() >= deadline:
         raise ListReadBudgetExhausted('deadline')
-    future = submit_with_context(db_executor, fn)
+    context = contextvars.copy_context()
+    future = executor.submit(context.run, fn)
+    timed_out = False
     try:
         done, _ = wait((future,), timeout=max(0.0, deadline - time.monotonic()))
         if not done or time.monotonic() >= deadline:
+            timed_out = True
             raise ListReadBudgetExhausted('deadline')
         return future.result()
     finally:
         # Queued work can be cancelled. A running sync call observes the
-        # budget when it returns and can only mutate its worker-local state.
+        # budget when it returns; list reads live in their own pool so they
+        # cannot starve the DB worker that finalizes the returned prefix.
         future.cancel()
+        if timed_out and not future.cancelled():
+            future.add_done_callback(_log_abandoned_list_page_failure)
 
 
 @router.get(
@@ -1375,7 +1400,9 @@ def get_conversations(
 
     try:
         raw, page_result, show_held = (
-            _within_list_page_deadline(read_page, read_deadline) if wall_budget else read_page()
+            _within_list_page_deadline(read_page, read_deadline, executor=conversation_list_executor)
+            if wall_budget
+            else read_page()
         )
         scanned = prepared.copy()
         # The production reader publishes every accepted row. An empty scan
@@ -1383,6 +1410,14 @@ def get_conversations(
         rows = [row for row, _ in scanned if row is not None] if scanned else raw
     except ListReadBudgetExhausted as error:
         budget.mark_exhausted(error.reason)
+        record_fallback(
+            component='firestore_read',
+            from_mode='complete_page',
+            to_mode='truncated_prefix',
+            reason='other',
+            outcome='degraded',
+            log=logger,
+        )
         scanned = prepared.copy()
         rows = [row for row, _ in scanned if row is not None]
         # A wall deadline can expire before the reader publishes its first
@@ -1426,13 +1461,28 @@ def get_conversations(
         return dict(staged_response.headers) if staged_response is not None else {}
 
     try:
-        headers = _within_list_page_deadline(finish_page, finish_deadline) if wall_budget else finish_page()
+        headers = (
+            _within_list_page_deadline(finish_page, finish_deadline, executor=db_executor)
+            if wall_budget
+            else finish_page()
+        )
         conversations = [row for row, _ in finished]
     except ListReadBudgetExhausted as error:
         budget.mark_exhausted(error.reason)
+        record_fallback(
+            component='conversation_finalization',
+            from_mode='complete_page',
+            to_mode='truncated_prefix',
+            reason='other',
+            outcome='degraded',
+            log=logger,
+        )
         prefix = finished.copy()
         conversations = [row for row, _ in prefix]
-        page_result = (prefix[-1][1] if prefix else None) or {'storage_rows': 0, 'has_more': False}
+        page_result = (prefix[-1][1] if prefix else None) or {
+            'storage_rows': 0,
+            'has_more': bool(scanned) or bool(page_result.get('has_more')),
+        }
         headers = {}
 
     if response is not None:

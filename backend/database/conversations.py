@@ -1099,15 +1099,17 @@ class _PageFill:
         self.consumed = 0
         self.skipped = 0
         self.has_more = False
+        self._unconsumed_row_pending = False
         self.cap = _HIDDEN_ROW_PAGE_SKIP_CAP if budget is not None else _UNBUDGETED_HIDDEN_ROW_SKIP_CAP
 
     def run(self, query, batch_limit):
         try:
             self._run(query, batch_limit)
         except ListReadBudgetExhausted:
-            # With no row read there is no position to resume from, and an identical retry
-            # would stop at the same place, so only a page that advanced says more.
-            self.has_more = self.consumed > 0
+            # A fetched row whose preparation ran out of budget has not advanced
+            # the checkpoint. Keep that row retryable even when it is the first
+            # visible row; the next request gets a fresh budget.
+            self.has_more = self.consumed > 0 or self._unconsumed_row_pending
         return self
 
     def _run(self, query, batch_limit):
@@ -1119,9 +1121,13 @@ class _PageFill:
                 conversation = document_data_with_revision(doc)
                 visible = conversation is not None and self.visible(conversation)
                 if self.consume is not None:
-                    self.budget.check()
-                    if visible:
-                        self.consume(conversation, doc, self.consumed + 1, self.skipped)
+                    try:
+                        self.budget.check()
+                        if visible:
+                            self.consume(conversation, doc, self.consumed + 1, self.skipped)
+                    except ListReadBudgetExhausted:
+                        self._unconsumed_row_pending = True
+                        raise
                 self.consumed += 1
                 self.last_doc = doc
                 if not visible:

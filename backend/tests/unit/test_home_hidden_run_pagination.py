@@ -7,6 +7,7 @@ advance so released apps (which add ``X-Omi-Conversation-Page-Size`` to their
 offset and stop below the page size) page past a hidden run.
 """
 
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta, timezone
 
 import pytest
@@ -487,8 +488,89 @@ def test_route_deadline_before_first_prepared_row_keeps_page_retryable(monkeypat
     assert 'X-Omi-List-Truncated' not in response.headers
 
 
+def test_stalled_read_worker_does_not_block_prefix_finalization(monkeypatch, routes):
+    from threading import Event
+
+    data, visible = owner(before=3, hidden=0, after=0)
+    monkeypatch.setattr(db, 'db', CountingQuery(data))
+    monkeypatch.setenv('OMI_LIST_READ_BUDGET_SECONDS', '0.25')
+    monkeypatch.setenv('OMI_LIST_PAGE_WALL_BUDGET_ENABLED', 'true')
+    entered, release, exited = Event(), Event(), Event()
+    fallbacks = []
+    monkeypatch.setattr(routes, 'record_fallback', lambda **kwargs: fallbacks.append(kwargs))
+
+    with ThreadPoolExecutor(max_workers=1, thread_name_prefix='test-list-read') as list_pool, ThreadPoolExecutor(
+        max_workers=1, thread_name_prefix='test-list-finish'
+    ) as finish_pool:
+        monkeypatch.setattr(routes, 'conversation_list_executor', list_pool)
+        monkeypatch.setattr(routes, 'db_executor', finish_pool)
+        original = db.prepare_conversation_for_read
+
+        def prepare(row, uid, **kwargs):
+            if row['id'] == visible[1]:
+                entered.set()
+                try:
+                    release.wait(5)
+                finally:
+                    exited.set()
+            return original(row, uid, **kwargs)
+
+        monkeypatch.setattr(db, 'prepare_conversation_for_read', prepare)
+        try:
+            result, response = call_route(routes, limit=3)
+            assert entered.is_set()
+            assert not exited.is_set()
+            assert [row['id'] for row in result] == visible[:1]
+            assert response.headers['X-Omi-List-Truncated'] == 'true'
+            assert response.headers['X-Omi-Has-More'] == 'true'
+            assert len(fallbacks) == 1
+            assert fallbacks[0]['component'] == 'firestore_read'
+        finally:
+            release.set()
+        assert exited.wait(2)
+
+
+def test_finish_deadline_keeps_unprojected_rows_retryable(monkeypatch, routes):
+    from threading import Event
+    from utils.episodes import home_membership
+
+    data, _ = owner(before=3, hidden=0, after=0)
+    monkeypatch.setattr(db, 'db', CountingQuery(data))
+    monkeypatch.setenv('OMI_LIST_READ_BUDGET_SECONDS', '0.25')
+    monkeypatch.setenv('OMI_LIST_PAGE_WALL_BUDGET_ENABLED', 'true')
+    monkeypatch.setattr(routes, '_LIST_PAGE_FINISH_SECONDS', 0.05)
+    entered, release, exited = Event(), Event(), Event()
+    fallbacks = []
+    monkeypatch.setattr(routes, 'record_fallback', lambda **kwargs: fallbacks.append(kwargs))
+    original_project = home_membership.project_list
+
+    def blocked_projection(*args, **kwargs):
+        entered.set()
+        try:
+            release.wait(5)
+        finally:
+            exited.set()
+        return original_project(*args, **kwargs)
+
+    monkeypatch.setattr(home_membership, 'project_list', blocked_projection)
+    try:
+        result, response = call_route(routes, limit=3)
+        assert entered.is_set()
+        assert not exited.is_set()
+        assert result == []
+        assert response.headers['X-Omi-List-Truncated'] == 'true'
+        assert response.headers['X-Omi-Has-More'] == 'true'
+        assert response.headers['X-Omi-Conversation-Page-Size'] == '0'
+        assert len(fallbacks) == 1
+        assert fallbacks[0]['component'] == 'conversation_finalization'
+    finally:
+        release.set()
+    assert exited.wait(2)
+
+
 @pytest.mark.parametrize('use_cursor', [False, True])
-def test_overlay_budget_exhaustion_resumes_at_the_failed_row(monkeypatch, routes, use_cursor):
+@pytest.mark.parametrize('failed_index', [0, 1])
+def test_overlay_budget_exhaustion_resumes_at_the_failed_row(monkeypatch, routes, use_cursor, failed_index):
     from utils.other.list_budget import ListReadBudgetExhausted
 
     data, visible = owner(before=4, hidden=0, after=0)
@@ -500,23 +582,34 @@ def test_overlay_budget_exhaustion_resumes_at_the_failed_row(monkeypatch, routes
     attempted = set()
 
     def prepare(row, uid, *, read_budget):
-        if row['id'] == visible[1] and not attempted:
+        if row['id'] == visible[failed_index] and not attempted:
             attempted.add(row['id'])
             raise ListReadBudgetExhausted('deadline')
         return original(row, uid, read_budget=read_budget)
 
     monkeypatch.setattr(db, 'prepare_conversation_for_read', prepare)
     prefix, response = call_route(routes, limit=3)
-    assert [row['id'] for row in prefix] == visible[:1]
+    assert [row['id'] for row in prefix] == visible[:failed_index]
     assert response.headers['X-Omi-List-Truncated'] == 'true'
     assert response.headers['X-Omi-Has-More'] == 'true'
-    assert response.headers['X-Omi-Conversation-Page-Size'] == '1'
+    assert response.headers['X-Omi-Conversation-Page-Size'] == str(failed_index)
 
-    continuation = (
-        {'cursor': response.headers['X-Omi-Next-Cursor']}
-        if use_cursor
-        else {'offset': int(response.headers['X-Omi-Conversation-Page-Size'])}
-    )
+    if use_cursor:
+        # No checkpoint is advanced when the first row fails preparation, so retry
+        # the same cursor. Later failures resume at the last completed checkpoint.
+        continuation = {'cursor': response.headers.get('X-Omi-Next-Cursor')}
+    else:
+        continuation = {'offset': int(response.headers['X-Omi-Conversation-Page-Size'])}
     suffix, response = call_route(routes, limit=3, **continuation)
-    assert [row['id'] for row in suffix] == visible[1:]
+    suffix_rows = [row['id'] for row in suffix]
+    if response.headers['X-Omi-Has-More'] == 'true':
+        if use_cursor:
+            continuation = {'cursor': response.headers.get('X-Omi-Next-Cursor')}
+        else:
+            continuation = {
+                'offset': int(continuation['offset']) + int(response.headers['X-Omi-Conversation-Page-Size'])
+            }
+        last_page, response = call_route(routes, limit=3, **continuation)
+        suffix_rows.extend(row['id'] for row in last_page)
+    assert suffix_rows == visible[failed_index:]
     assert 'X-Omi-List-Truncated' not in response.headers
