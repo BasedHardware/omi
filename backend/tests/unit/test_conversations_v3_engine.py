@@ -1,8 +1,11 @@
 """Synthetic recorded-clock contracts; no model calls or customer fixtures."""
 
 from copy import deepcopy
+import base64
 from datetime import datetime, timedelta, timezone
 import json
+import random
+import zlib
 
 import pytest
 
@@ -662,3 +665,42 @@ def test_finish_sli_keeps_adjacent_cuts_on_their_own_cards():
     groups = outline.stretches([a, b, c], NOW + timedelta(minutes=2), finish_routes=set())
     windows = planner.windows(groups, [[entry()], [entry()]])
     assert [w['_finish_sli_sources'] for w in windows] == [('a',), ('b',)]
+
+
+@pytest.mark.parametrize('cohesion', [False, True])
+def test_transcript_size_cap_replans_failed_projection(monkeypatch, cohesion):
+
+    rng = random.Random(2918)
+    segments = [
+        {
+            'text': ' '.join(base64.b64encode(rng.randbytes(21)).decode() for _ in range(500)),
+            'start': i * 10,
+            'end': i * 10 + 8,
+            'id': str(i),
+        }
+        for i in range(100)
+    ]
+    source = recording(segments=segments)
+    recordings = {'r': source}
+    groups = outline.stretches([source], NOW + timedelta(hours=1))
+    outlines = [[entry()]]
+    monkeypatch.setenv('CONVERSATIONS_V3_TRANSCRIPT_SIZE_CAP', 'off')
+    (oversized,) = planner.windows(groups, outlines, cohesion=cohesion)
+    raw = planner.build('u', oversized, recordings)
+    assert len(zlib.compress(json.dumps(raw['transcript_segments']).encode())) > 1048487
+
+    monkeypatch.delenv('CONVERSATIONS_V3_TRANSCRIPT_SIZE_CAP')
+
+    def replan():
+        planned = planner.windows(groups, outlines, cohesion=cohesion)
+        return [planner.build('u', window, recordings) for window in planned]
+
+    recovered = replan()
+    assert len(recovered) > 1
+    assert [row['id'] for row in recovered] == [row['id'] for row in replan()]
+    assert [segment['id'] for row in recovered for segment in row['transcript_segments']] == [
+        segment['id'] for segment in segments
+    ]
+    for row in recovered:
+        compressed = zlib.compress(json.dumps(row['transcript_segments']).encode())
+        assert len(base64.b64encode(bytes(28) + compressed.hex().encode())) < planner.TRANSCRIPT_BUDGET

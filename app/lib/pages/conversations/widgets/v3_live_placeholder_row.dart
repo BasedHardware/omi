@@ -35,7 +35,7 @@ class V3LivePlaceholderRow extends StatelessWidget {
         EpisodePresentation.displayState(capture),
         capture.liveCaptureSource,
         capture.pendantCaptureVerified,
-        capture.localPreviewAdmitted,
+        capture.liveWordsShown,
         capture.livePreview,
         capture.recordingDevice,
         // Load-bearing though discarded below: canShowPreview reads segments and photos without

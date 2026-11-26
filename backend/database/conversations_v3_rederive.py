@@ -121,6 +121,8 @@ def live_source_block(raw):
     """Why a source recording must not be replanned now (None: it is sealed and settled)."""
     if raw.get('deleted') or raw.get('sync_merged_into'):
         return 'deleted'
+    if raw.get('discarded'):
+        return 'discarded'
     if raw.get('data_protection_level') == 'private':
         return 'private'
     if raw.get('v3_backfill_run'):

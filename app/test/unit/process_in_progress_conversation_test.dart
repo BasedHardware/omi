@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
+import 'package:omi/utils/reliability_experiments.dart';
 import 'package:omi/backend/http/api/conversations.dart';
 import 'package:omi/backend/http/api_result.dart';
 import 'package:omi/backend/schema/conversation.dart';
@@ -67,6 +68,52 @@ void main() {
 
       expect(outcome.absence, ProcessAbsence.notFound);
       expect(outcome.response, isNull);
+    });
+
+    test('end_open_conversation: a stored End with no conversation yet is "result to come", not "not received"',
+        () async {
+      final recording = ServerConversation(
+        id: 'listening-recording',
+        createdAt: DateTime.utc(2026, 11, 24),
+        structured: Structured('', ''),
+        status: ConversationStatus.in_progress,
+      );
+      http.Response answer(String? accepted) => http.Response(
+            jsonEncode({'conversation': recording.toJson(), 'messages': []}),
+            200,
+            headers: {'content-type': 'application/json', if (accepted != null) endAcceptedHeader: accepted},
+          );
+      addTearDown(() => ReliabilityExperiments.overrideForTesting(null));
+
+      // Off (the baseline): the header is not read; the recording still in progress is the answer.
+      ReliabilityExperiments.overrideForTesting(const {});
+      var outcome = await processInProgressConversationOutcome(sendRequest: (_) async => answer('pending'));
+      expect(outcome.absence, isNull);
+      expect(outcome.response?.conversation?.status, ConversationStatus.in_progress);
+
+      ReliabilityExperiments.overrideForTesting({'end_open_conversation'});
+      outcome = await processInProgressConversationOutcome(sendRequest: (_) async => answer('pending'));
+      expect(outcome.absence, ProcessAbsence.notFound);
+      expect(outcome.response, isNull);
+
+      // It names the End time it was stored for, so Home can find the conversation that End closes.
+      final endedAt = DateTime.utc(2026, 11, 26, 0, 36, 48, 954);
+      outcome =
+          await processInProgressConversationOutcome(endedAt: endedAt, sendRequest: (_) async => answer('pending'));
+      expect(outcome.endStoredAt, endedAt);
+      outcome = await processInProgressConversationOutcome(
+          endedAt: endedAt, sendRequest: (_) async => answer('conversation'));
+      expect(outcome.endStoredAt, isNull);
+
+      // The End was not stored (no header): the baseline answer, so the app can still say so.
+      outcome = await processInProgressConversationOutcome(sendRequest: (_) async => answer(null));
+      expect(outcome.absence, isNull);
+      expect(outcome.response?.conversation?.status, ConversationStatus.in_progress);
+
+      // The body is the conversation the End closed: used as it is.
+      outcome = await processInProgressConversationOutcome(sendRequest: (_) async => answer('conversation'));
+      expect(outcome.absence, isNull);
+      expect(outcome.response?.conversation?.id, 'listening-recording');
     });
 
     test('retries the identical in-progress request after the typed 503 and returns its summary', () async {

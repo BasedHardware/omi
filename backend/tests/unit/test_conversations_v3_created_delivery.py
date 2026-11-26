@@ -513,24 +513,3 @@ def test_recording_finish_counts_first_settlement_of_its_derived_window(strict, 
         strict.rows[path]['v3_process_pending'] = True
     counter.labels.assert_called_once_with('settled')
     counter.labels.return_value.inc.assert_called_once_with()
-
-
-@pytest.mark.parametrize(
-    'updates,visible',
-    [
-        ({}, True),
-        ({'home_hidden': True}, False),
-        ({'is_locked': True}, False),
-        ({'recording': True}, False),
-        ({'sync_merged_into': 'survivor'}, False),
-        ({'structured': {'title': 'Plan'}}, False),
-    ],
-)
-def test_finish_sli_requires_a_home_visible_summary(strict, monkeypatch, updates, visible):
-    monkeypatch.setenv('CONVERSATIONS_V3_FINISH_HOME_SLI', 'on')
-    observed = []
-    monkeypatch.setattr(writers.finish_home_sli, 'observe_summary', lambda uid, cid: observed.append(cid))
-    fields = {'structured': {'title': 'Plan', 'overview': 'We set a date.'}, 'manual_end': True}
-    strict.rows[C] = derived(**(fields | updates))
-    settle(strict)
-    assert observed == (['c'] if visible else [])

@@ -487,12 +487,23 @@ def v3_finish_route(conv, monkeypatch):
 
     def read_finish_fields(ref, *args, field_paths=None, **kwargs):
         if ref.path == paths['window'] and kwargs.get('transaction') is not None:
-            assert field_paths == FINISH_FIELDS
-        if field_paths in (store.LIVE_FIELDS, FINISH_FIELDS, v3_live.FINISH_SOURCE_FIELDS):
+            assert field_paths in (FINISH_FIELDS, store.NAMED_FINISH_FIELDS)
+        if field_paths in (
+            store.LIVE_FIELDS,
+            FINISH_FIELDS,
+            v3_live.FINISH_SOURCE_FIELDS,
+            store.NAMED_FINISH_FIELDS,
+            store.RECENT_FINISH_FIELDS,
+        ):
             snapshot = read_document(ref, *args, **kwargs)
-            return type(snapshot)(
-                {key: value for key, value in (snapshot.to_dict() or {}).items() if key in field_paths}
-            )
+            data, masked = snapshot.to_dict() or {}, {}
+            for path in field_paths:  # Firestore field masks, including one dotted map path.
+                head, _, rest = path.partition('.')
+                if head in data and not rest:
+                    masked[head] = data[head]
+                elif isinstance(data.get(head), dict) and rest in data[head]:
+                    masked.setdefault(head, {})[rest] = data[head][rest]
+            return type(snapshot)(masked)
         return read_document(ref, *args, field_paths=field_paths, **kwargs)
 
     monkeypatch.setattr(StrictFirestoreDocument, 'get', read_finish_fields)
@@ -595,7 +606,8 @@ def test_finish_without_pointer_ignores_other_owners_window_id(v3_finish_route):
     for name, path in paths.items():
         db.rows['users', 'other-owner', 'conversations', name] = db.rows.pop(path)
     assert client.post('/v1/conversations', json={'live_conversation_id': 'window'}).status_code == 404
-    assert db.transactions == []
+    assert all(not tx.updates for tx in db.transactions)
+    assert all(path[1] == 'other-owner' for path in db.rows if path[0] == 'users')
 
 
 def test_finish_without_pointer_rechecks_window_is_live_before_writing(v3_finish_route, monkeypatch):
@@ -1033,6 +1045,7 @@ def test_first_finish_after_empty_batch_returns_discarded_acknowledgement(
 
 @pytest.mark.parametrize('case', ['ambiguous', 'claimed', 'hinted', 'saturated', 'deleting'])
 def test_finish_before_first_window_refuses_unproven_recording(pre_window_finish_route, monkeypatch, case):
+    # 'hinted' names a missing window alongside another body field: not the app's Finish body.
     client, db, paths, enqueued = pre_window_finish_route
     latest = db.rows[paths['latest']]
     request = {}
@@ -1048,7 +1061,7 @@ def test_finish_before_first_window_refuses_unproven_recording(pre_window_finish
 
         db.rows[account_deletion_document(_UID, firestore_client=db).path] = {'wipe_status': 'pending'}
     else:
-        request['live_conversation_id'] = 'missing'
+        request.update(live_conversation_id='missing', unknown_future_client_field=True)
 
     assert client.post('/v1/conversations', json=request).status_code == 404
     assert not enqueued
@@ -1115,3 +1128,386 @@ def test_nonempty_finish_body_can_only_finish_a_window(pre_window_finish_route, 
     assert response.status_code == 200 and response.json()['conversation']['id'] == 'window'
     assert latest[FINISH_WINDOW_FIELD] == 'window'
     assert FINISH_RECORDING_FIELD not in latest
+
+
+@pytest.fixture
+def sealed_named_route(v3_finish_route, monkeypatch):
+    """A pendant capture sealed at a speech pause and the window it fed stopped being live."""
+    client, db, paths, enqueued = v3_finish_route
+    window = db.rows[paths['window']]
+    now = window['finished_at']
+    window.update(status='processing', tile_state='writing', home_hidden=True)
+    db.rows[paths['latest']].update(
+        created_at=now - timedelta(seconds=20),
+        started_at=now - timedelta(seconds=20),
+        source='omi',
+        external_data={'recording_session_id': 'pendant-session'},
+        claims=[{'conversation_id': 'window', 'start': now - timedelta(seconds=20), 'end': now}],
+        has_content=True,
+        v3_speech_landed_at=now,
+    )
+    counter = Mock()
+    monkeypatch.setattr(v3_finish.metrics, 'FINISH_NO_POINTER', counter)
+    return client, db, paths, enqueued, counter
+
+
+@pytest.mark.parametrize('ended', ['writing', 'done', 'hidden_live'])
+def test_named_finish_cuts_sealed_tail_of_window_that_left_live(sealed_named_route, ended):
+    client, db, paths, enqueued, counter = sealed_named_route
+    if ended == 'done':
+        db.rows[paths['window']].update(status='completed', tile_state='done')
+    elif ended == 'hidden_live':
+        db.rows[paths['window']].update(status='in_progress', tile_state='live')
+
+    response = client.post('/v1/conversations', json={'live_conversation_id': 'window'})
+
+    assert response.status_code == 200
+    conversation = response.json()['conversation']
+    assert (conversation['id'], conversation['status'], conversation['tile_state']) == (
+        'window',
+        'processing',
+        'writing',
+    )
+    latest = db.rows[paths['latest']]
+    assert latest['v3_manual_end'] is True and latest['v3_pending'] is True
+    assert latest[FINISH_WINDOW_FIELD] == 'window' and FINISH_RECORDING_FIELD not in latest
+    assert 'v3_manual_end' not in db.rows[paths['older']]
+    assert enqueued == [(_UID, {'manual_end_id': 'latest'})]
+    counter.labels.assert_called_once_with('named_recording_cut')
+
+    # A retry answers from the stored cut and writes nothing.
+    counter.reset_mock()
+    assert client.post('/v1/conversations', json={'live_conversation_id': 'window'}).status_code == 200
+    assert not db.transactions[-1].updates and len(enqueued) == 1
+    counter.labels.assert_called_once_with('already_cut')
+
+
+def test_named_finish_binds_the_deliberate_finish_sli(conv, sealed_named_route, monkeypatch):
+    client, db, paths, enqueued, counter = sealed_named_route
+    bound = []
+    finish = Mock(bind=lambda recording_id, **kwargs: bound.append((recording_id, kwargs)))
+    monkeypatch.setattr(conv.finish_home_sli, 'from_request', lambda uid, request: finish)
+
+    assert client.post('/v1/conversations', json={'live_conversation_id': 'window'}).status_code == 200
+    counter.labels.assert_called_once_with('named_recording_cut')
+    # A retry answers from the stored cut and binds the same recording: the readback dedupes the Finish.
+    assert client.post('/v1/conversations', json={'live_conversation_id': 'window'}).status_code == 200
+    assert bound == [('latest', {'prove_legacy_manual_end': True})] * 2
+
+
+def test_named_finish_cuts_named_raw_capture(pre_window_finish_route, monkeypatch):
+    client, db, paths, enqueued = pre_window_finish_route
+    counter = Mock()
+    monkeypatch.setattr(v3_finish.metrics, 'FINISH_NO_POINTER', counter)
+
+    response = client.post('/v1/conversations', json={'live_conversation_id': 'latest'})
+
+    assert response.status_code == 200
+    assert response.json()['conversation']['id'] == 'latest'
+    assert response.json()['conversation']['tile_state'] == 'writing'
+    latest = db.rows[paths['latest']]
+    assert latest[FINISH_RECORDING_FIELD] and latest['v3_manual_end'] and latest['v3_pending']
+    assert enqueued == [(_UID, {'manual_end_id': 'latest'})]
+    counter.labels.assert_called_once_with('named_recording_cut')
+
+
+def test_named_finish_picks_named_capture_among_recent_ones(pre_window_finish_route, monkeypatch):
+    client, db, paths, enqueued = pre_window_finish_route
+    latest = db.rows[paths['latest']]
+    db.rows[paths['older']] = {**latest, 'external_data': {'recording_session_id': 'other-session'}}
+    # Without a name two recent captures are ambiguous.
+    assert client.post('/v1/conversations', json={}).status_code == 404
+    assert all(not tx.updates for tx in db.transactions) and not enqueued
+
+    response = client.post('/v1/conversations', json={'live_conversation_id': 'older'})
+
+    assert response.status_code == 200 and response.json()['conversation']['id'] == 'older'
+    assert db.rows[paths['older']]['v3_manual_end'] is True
+    assert 'v3_manual_end' not in db.rows[paths['latest']]
+    assert enqueued == [(_UID, {'manual_end_id': 'older'})]
+
+
+@pytest.mark.parametrize(
+    'case',
+    [
+        'stale',
+        'private',
+        'deleted',
+        'window_deleted',
+        'window_private',
+        'window_merged',
+        'foreign_claim',
+        'unclaimed_tail',
+        'live_window',
+        'deleting',
+    ],
+)
+def test_named_finish_refuses_unproven_capture(sealed_named_route, monkeypatch, case):
+    client, db, paths, enqueued, counter = sealed_named_route
+    latest = db.rows[paths['latest']]
+    expected = 'named_not_finishable'
+    if case == 'stale':
+        old = latest['finished_at'] - timedelta(minutes=6)
+        latest.update(created_at=old, started_at=old, finished_at=old)
+        db.rows[paths['window']].update(started_at=old, finished_at=old)
+    elif case == 'private':
+        latest['data_protection_level'] = 'private'
+    elif case == 'deleted':
+        latest['deleted'] = True
+    elif case == 'window_deleted':
+        db.rows[paths['window']]['deleted'] = True
+    elif case == 'window_private':
+        db.rows[paths['window']]['data_protection_level'] = 'private'
+    elif case == 'window_merged':
+        db.rows[paths['window']]['sync_merged_into'] = 'survivor'
+    elif case == 'unclaimed_tail':
+        latest['claims'] = []
+    elif case == 'foreign_claim':
+        latest['claims'].append(
+            {'conversation_id': 'other-window', 'start': latest['started_at'], 'end': latest['finished_at']}
+        )
+    elif case == 'live_window':
+        # A live window the first lookup missed appears before the cut.
+        db.rows['users', _UID, 'conversations', 'second'] = {
+            **db.rows[paths['window']],
+            'status': 'in_progress',
+            'tile_state': 'live',
+            'home_hidden': False,
+            'v3_recording_ids': ['other'],
+        }
+        monkeypatch.setattr(v3_finish.conversations_v3_live, 'live_window', lambda *a, **kw: None)
+        expected = 'no_live_window'
+    else:
+        from database.account_deletion_marker import account_deletion_document
+
+        db.rows[account_deletion_document(_UID, firestore_client=db).path] = {'wipe_status': 'pending'}
+        expected = 'recording_ineligible'
+
+    assert client.post('/v1/conversations', json={'live_conversation_id': 'window'}).status_code == 404
+    assert all(not tx.updates for tx in db.transactions) and not enqueued
+    assert 'v3_manual_end' not in latest
+    counter.labels.assert_called_once_with(expected)
+
+
+def test_named_missing_window_falls_back_to_single_capture(pre_window_finish_route, monkeypatch):
+    client, db, paths, enqueued = pre_window_finish_route
+    counter = Mock()
+    monkeypatch.setattr(v3_finish.metrics, 'FINISH_NO_POINTER', counter)
+
+    # The app's Finish body names a window that is gone: the single just-sealed capture is finished.
+    response = client.post('/v1/conversations', json={'live_conversation_id': 'missing'})
+    assert response.status_code == 200 and response.json()['conversation']['id'] == 'latest'
+    counter.labels.assert_called_once_with('recording_cut')
+    assert enqueued == [(_UID, {'manual_end_id': 'latest'})]
+
+
+def test_named_missing_window_with_other_fields_keeps_404(pre_window_finish_route, monkeypatch):
+    client, db, paths, enqueued = pre_window_finish_route
+    counter = Mock()
+    monkeypatch.setattr(v3_finish.metrics, 'FINISH_NO_POINTER', counter)
+    body = {'live_conversation_id': 'missing', 'client_processing': None}
+    assert client.post('/v1/conversations', json=body).status_code == 404
+    assert all(not tx.updates for tx in db.transactions) and not enqueued
+    counter.labels.assert_called_once_with('named_not_finishable')
+
+
+def test_finish_only_body_is_empty_or_names_only_the_live_window():
+    from models.conversation import ProcessConversationRequest
+
+    assert ProcessConversationRequest.model_validate({}).finish_only_body
+    assert ProcessConversationRequest.model_validate({'live_conversation_id': 'w'}).finish_only_body
+    assert ProcessConversationRequest.model_validate({'live_conversation_id': None}).finish_only_body
+    for body in ({'live_conversation_id': 'w', 'client_processing': None}, {'live_conversation_id': 'w', 'x': 1}):
+        assert not ProcessConversationRequest.model_validate(body).finish_only_body
+
+
+def test_null_live_conversation_id_finishes_like_an_empty_body(pre_window_finish_route):
+    client, db, paths, enqueued = pre_window_finish_route
+    response = client.post('/v1/conversations', json={'live_conversation_id': None})
+    assert response.status_code == 200 and response.json()['conversation']['id'] == 'latest'
+    assert db.rows[paths['latest']][FINISH_RECORDING_FIELD]
+    assert enqueued == [(_UID, {'manual_end_id': 'latest'})]
+
+
+def _later_capture(db, paths, *, owner='window-b', seconds_after=120):
+    """Capture B sealed after the named window's tail A and fed window WB, hidden and never live."""
+    a = db.rows[paths['latest']]
+    end_a = a['finished_at'] - timedelta(seconds=seconds_after)
+    a.update(created_at=end_a - timedelta(seconds=20), started_at=end_a - timedelta(seconds=20), finished_at=end_a)
+    a['claims'][0].update(start=a['started_at'], end=end_a)
+    db.rows[paths['window']].update(started_at=a['started_at'], finished_at=end_a)
+    end_b = end_a + timedelta(seconds=seconds_after)
+    b_path = ('users', _UID, 'conversations', 'capture-b')
+    db.rows[b_path] = {
+        **a,
+        'created_at': end_b - timedelta(seconds=15),
+        'started_at': end_b - timedelta(seconds=15),
+        'finished_at': end_b,
+        'v3_speech_landed_at': end_b,
+        'external_data': {'recording_session_id': 'pendant-session-b'},
+        'claims': [{'conversation_id': owner, 'start': end_b - timedelta(seconds=15), 'end': end_b}] if owner else [],
+    }
+    if owner:
+        db.rows['users', _UID, 'conversations', owner] = {
+            'id': owner,
+            'created_at': end_b - timedelta(seconds=15),
+            'started_at': end_b - timedelta(seconds=15),
+            'finished_at': end_b,
+            'status': 'in_progress',
+            'tile_state': 'live',
+            'home_hidden': True,
+            'v3_derived': True,
+            'v3_recording_ids': ['capture-b'],
+        }
+    return a, db.rows[b_path]
+
+
+@pytest.mark.parametrize('owner', ['window-b', None])
+def test_named_finish_cuts_capture_that_sealed_after_the_named_window(sealed_named_route, owner):
+    client, db, paths, enqueued, counter = sealed_named_route
+    a, b = _later_capture(db, paths, owner=owner)
+    if owner is None:
+        b['v3_pending'] = True
+
+    response = client.post('/v1/conversations', json={'live_conversation_id': 'window'})
+
+    assert response.status_code == 200
+    assert response.json()['conversation']['id'] == (owner or 'capture-b')
+    assert b['v3_manual_end'] is True and b['v3_pending'] is True
+    if owner:
+        assert b[FINISH_WINDOW_FIELD] == owner
+    else:
+        assert b[FINISH_RECORDING_FIELD] is True
+    assert 'v3_manual_end' not in a and FINISH_WINDOW_FIELD not in a
+    assert enqueued == [(_UID, {'manual_end_id': 'capture-b'})]
+    counter.labels.assert_called_once_with('named_recording_cut')
+
+
+@pytest.mark.parametrize('case', ['private', 'two_owners', 'not_window_tail', 'tie'])
+def test_named_finish_declines_when_the_later_capture_is_unproven(sealed_named_route, case):
+    client, db, paths, enqueued, counter = sealed_named_route
+    a, b = _later_capture(db, paths)
+    expected = 'named_superseded'
+    if case == 'private':
+        b['data_protection_level'] = 'private'
+    elif case == 'two_owners':
+        b['claims'].append({'conversation_id': 'window-c', 'start': b['started_at'], 'end': b['finished_at']})
+    elif case == 'not_window_tail':
+        db.rows['users', _UID, 'conversations', 'window-b']['v3_recording_ids'] = ['capture-b', 'capture-c']
+    else:
+        db.rows['users', _UID, 'conversations', 'capture-c'] = {
+            **b,
+            'external_data': {'recording_session_id': 'pendant-session-c'},
+        }
+        expected = 'recording_ambiguous'
+
+    assert client.post('/v1/conversations', json={'live_conversation_id': 'window'}).status_code == 404
+    assert all(not tx.updates for tx in db.transactions) and not enqueued
+    assert 'v3_manual_end' not in a and 'v3_manual_end' not in b
+    counter.labels.assert_called_once_with(expected)
+
+
+def test_named_finish_leaves_a_completed_visible_window_as_it_is(sealed_named_route):
+    client, db, paths, enqueued, counter = sealed_named_route
+    db.rows[paths['window']].update(
+        status='completed',
+        tile_state='done',
+        home_hidden=False,
+        starred=True,
+        structured={'title': 'Morning standup', 'overview': 'Planned the release train.', 'emoji': '🗓️'},
+    )
+
+    response = client.post('/v1/conversations', json={'live_conversation_id': 'window'})
+
+    assert response.status_code == 200
+    conversation = response.json()['conversation']
+    assert (conversation['id'], conversation['status'], conversation['tile_state']) == ('window', 'completed', 'done')
+    assert not conversation.get('discarded')
+    # The app replaces the visible card with this row, so it carries the card's own fields.
+    assert conversation['structured']['title'] == 'Morning standup'
+    assert conversation['structured']['overview'] == 'Planned the release train.'
+    assert conversation['structured']['emoji'] == '🗓️'
+    assert conversation['starred'] is True
+    assert all(not tx.updates for tx in db.transactions) and not enqueued
+    assert 'v3_manual_end' not in db.rows[paths['latest']]
+    counter.labels.assert_called_once_with('already_visible')
+
+
+def _rotated_successor(db, a, *, speech):
+    """A speech-pause rotation writes the next capture in progress before it seals A."""
+    later = a['finished_at'] + timedelta(seconds=2)
+    row = {
+        'created_at': later,
+        'started_at': later,
+        'finished_at': later,
+        'status': 'in_progress',
+        'source': 'omi',
+        'external_data': {'recording_session_id': 'pendant-session-next'},
+        'structured': {},
+    }
+    if speech:
+        row.update(recording=True, has_content=True, v3_speech_landed_at=later, v3_pending=True)
+    db.rows['users', _UID, 'conversations', 'capture-next'] = row
+    return row
+
+
+@pytest.mark.parametrize('speech', [False, True])
+def test_named_finish_ignores_in_progress_successor(sealed_named_route, speech):
+    client, db, paths, enqueued, counter = sealed_named_route
+    a = db.rows[paths['latest']]
+    successor = _rotated_successor(db, a, speech=speech)
+
+    response = client.post('/v1/conversations', json={'live_conversation_id': 'window'})
+
+    assert response.status_code == 200 and response.json()['conversation']['id'] == 'window'
+    assert a['v3_manual_end'] is True and a[FINISH_WINDOW_FIELD] == 'window'
+    assert 'v3_manual_end' not in successor
+    assert enqueued == [(_UID, {'manual_end_id': 'latest'})]
+    counter.labels.assert_called_once_with('named_recording_cut')
+
+
+def test_empty_body_finish_ignores_in_progress_successor(pre_window_finish_route):
+    client, db, paths, enqueued = pre_window_finish_route
+    a = db.rows[paths['latest']]
+    successor = _rotated_successor(db, a, speech=True)
+
+    response = client.post('/v1/conversations', json={})
+
+    assert response.status_code == 200 and response.json()['conversation']['id'] == 'latest'
+    assert a[FINISH_RECORDING_FIELD] and a['v3_manual_end']
+    assert 'v3_manual_end' not in successor
+    assert enqueued == [(_UID, {'manual_end_id': 'latest'})]
+
+
+@pytest.mark.parametrize('case', ['claimed', 'unclaimed', 'claimed_between'])
+def test_named_finish_retry_on_later_capture_cuts_once(sealed_named_route, case):
+    client, db, paths, enqueued, counter = sealed_named_route
+    a, b = _later_capture(db, paths, owner='window-b' if case == 'claimed' else None)
+    if case != 'claimed':
+        b['v3_pending'] = True
+    first = client.post('/v1/conversations', json={'live_conversation_id': 'window'})
+    assert first.status_code == 200 and b['v3_manual_end'] is True
+    assert enqueued == [(_UID, {'manual_end_id': 'capture-b'})]
+    if case == 'claimed_between':
+        # The planner claims B for a hidden window between the two taps.
+        b['claims'] = [{'conversation_id': 'window-b', 'start': b['started_at'], 'end': b['finished_at']}]
+        db.rows['users', _UID, 'conversations', 'window-b'] = {
+            'id': 'window-b',
+            'created_at': b['started_at'],
+            'started_at': b['started_at'],
+            'finished_at': b['finished_at'],
+            'status': 'in_progress',
+            'tile_state': 'live',
+            'home_hidden': True,
+            'v3_derived': True,
+            'v3_recording_ids': ['capture-b'],
+        }
+    counter.reset_mock()
+    writes = sum(len(tx.updates) for tx in db.transactions)
+
+    second = client.post('/v1/conversations', json={'live_conversation_id': 'window'})
+
+    assert second.status_code == 200
+    assert sum(len(tx.updates) for tx in db.transactions) == writes
+    assert len(enqueued) == 1 and 'v3_manual_end' not in a
+    counter.labels.assert_called_once_with('already_cut')

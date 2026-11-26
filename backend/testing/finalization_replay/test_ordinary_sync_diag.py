@@ -86,6 +86,20 @@ class OrdinarySyncDiagnosticTests(unittest.TestCase):
         self.assertTrue(cases[0]['repeat'])
         self.assertTrue(cases[0]['final_attempt'])
 
+    def test_paired_lifecycle_preserves_fence_admission_input(self):
+        [case] = _stored_sync_cases(
+            [
+                {
+                    'name': 'worker-missing-row-fence',
+                    'recording': {'segments': [{'text': 'Synthetic replay'}]},
+                    'delete_before_worker_read': True,
+                }
+            ],
+            paired_lifecycle=True,
+        )
+        self.assertEqual(case['document']['status'], 'in_progress')
+        self.assertTrue(case['delete_before_worker_read'])
+
     def test_family_classifier_and_report_totals(self):
         self.assertEqual(family_for_path('/provider_calls/memory-l1'), 'Memory source and metering')
         self.assertEqual(family_for_path('/webhooks/sample/0/payload'), 'Apps')
@@ -143,6 +157,27 @@ class OrdinarySyncDiagnosticTests(unittest.TestCase):
         self.assertNotIn('cost', enriched['cases'][0])
         token_row = enriched['cases'][0]['differences'][3]
         self.assertEqual(token_row['failure_reason'], 'home_dirty_receipt_missing')
+
+    def test_pre_wipe_rows_keep_the_live_labels_and_the_phase_prefix(self):
+        fields = ('finalization_job_id', 'sync_relevance')
+        paths = [f'/before_erasure/conversation/{field}' for field in fields]
+        report = {
+            'commit_sha': 'a' * 40,
+            'unexplained_differences': 2,
+            'cases': [
+                {
+                    'name': 'erase-removes-owner-and-jobs',
+                    'differences': [
+                        {'path': paths[0], 'kind': 'missing_in_python'},
+                        {'path': paths[1], 'kind': 'missing_in_go'},
+                    ],
+                }
+            ],
+            'cost_table': [{'case': 'erase-removes-owner-and-jobs', 'python': {}, 'go': {}}],
+        }
+        differences = enrich(report, paired_lifecycle=True)['cases'][0]['differences']
+        self.assertEqual([row['path'] for row in differences], paths)
+        self.assertEqual([row['label'] for row in differences], ['go_gap', 'go_gap'])
 
     def test_unverified_speaker_envelope_is_a_value_free_go_gap(self):
         path = '/derived_documents/users~1replay-c~1conversations~1c~1speaker_evidence~1current/payload'

@@ -1,5 +1,6 @@
 """Finish the owner-visible v3 window after its source leaves the in-progress lookup."""
 
+import logging
 from datetime import datetime, timezone
 from typing import Callable
 
@@ -10,6 +11,8 @@ from models.conversation_enums import ConversationStatus
 from utils.conversations.factory import deserialize_conversation
 from utils.conversations.v3 import live, metrics, triggers
 from utils.observability.fallback import record_fallback
+
+logger = logging.getLogger(__name__)
 
 
 def finish_live_window(
@@ -35,28 +38,45 @@ def finish_live_window(
                 return _acknowledge(uid, window, outcome, recording_id, observe_recording)
     window = conversations_v3_live.live_window(uid, now=now, max_idle=live.MAX_IDLE, pick=live.active)
     if window is None:
-        if window_id or not allow_recording_fallback:
-            metrics.FINISH_NO_POINTER.labels('no_live_window').inc()
+        named_outcome = None
+        if window_id:
+            # The named window left the live set (a pendant capture seals at a speech pause): finish the
+            # capture it names, if that capture just sealed.
+            named_outcome, named, recording_id = conversations_v3_live.request_named_finish(uid, window_id, now=now)
+            if named:
+                _recovered('named_window')
+                return _acknowledge(uid, named, named_outcome, recording_id, observe_recording)
+        if not allow_recording_fallback:
+            metrics.FINISH_NO_POINTER.labels(named_outcome or 'no_live_window').inc()
             return None
         outcome, recording = conversations_v3_live.request_recording_finish(uid, now=now)
         if recording:
-            record_fallback(
-                component='conversation_finalization',
-                from_mode='none',
-                to_mode='recording',
-                reason='other',
-                outcome='recovered',
-            )
+            _recovered('none')
+        elif named_outcome:
+            # Nothing to finish: the name is why this Finish was attempted, so its outcome is the answer.
+            logger.info('v3 named Finish found nothing; single-capture fallback outcome=%s', outcome)
+            outcome = named_outcome
         return _acknowledge(uid, recording, outcome, recording['id'] if recording else '', observe_recording)
     outcome, recording_id = conversations_v3_live.request_finish(uid, window['id'], now=now)
     return _acknowledge(uid, window, outcome, recording_id, observe_recording)
 
 
-def _acknowledge(uid, window, outcome, recording_id, observe_recording):
-    metrics.FINISH_NO_POINTER.labels(outcome).inc()
-    if not recording_id:
-        return None
-    if observe_recording is not None and outcome in {
+def _recovered(from_mode):
+    record_fallback(
+        component='conversation_finalization',
+        from_mode=from_mode,
+        to_mode='recording',
+        reason='other',
+        outcome='recovered',
+    )
+
+
+# Finish outcomes that cut or request a recording on this deliberate Finish (or found it already cut or
+# requested). Prefixed variants (``named_*`` from a Finish that named a window which left the live set, and
+# ``newer_*``/``newer_dual_*`` from a Finish that moved to a newer capture) are the same act on another
+# path, so the deliberate-Finish SLI strips the prefix before matching.
+DELIBERATE_FINISH_OUTCOMES = frozenset(
+    {
         'already_cut',
         'already_requested',
         'consumed',
@@ -64,19 +84,35 @@ def _acknowledge(uid, window, outcome, recording_id, observe_recording):
         'recording_cut',
         'recording_requested',
         'requested',
-    }:
+    }
+)
+
+
+def deliberate_finish(outcome: str) -> bool:
+    base = outcome.removeprefix('named_').removeprefix('newer_').removeprefix('dual_')
+    return base in DELIBERATE_FINISH_OUTCOMES
+
+
+def _acknowledge(uid, window, outcome, recording_id, observe_recording=None):
+    metrics.FINISH_NO_POINTER.labels(outcome).inc()
+    if not recording_id:
+        return None
+    if observe_recording is not None and deliberate_finish(outcome):
         observe_recording(recording_id)
-    if outcome in {'cut', 'consumed', 'recording_cut'}:
+    if outcome in {'cut', 'consumed', 'recording_cut', 'named_recording_cut'}:
         triggers.enqueue_pending(uid, manual_end_id=recording_id)
     conversation = deserialize_conversation(window)
-    if outcome in {'resolved_empty', 'already_empty'}:
-        # A silent tail can resolve empty while an earlier member still has speech.
-        conversation.discarded = not live.has_finish_content({}, window, recording_id)
+    if outcome in {'resolved_empty', 'already_empty', 'already_visible'}:
+        # A silent tail can resolve empty while an earlier member still has speech. An already visible
+        # window is a completed Home card; Finish answers with it and changes nothing.
+        conversation.discarded = outcome != 'already_visible' and not live.has_finish_content({}, window, recording_id)
         conversation.status = ConversationStatus.completed
         conversation.tile_state = 'done'
     else:
         conversation.status = ConversationStatus.processing
         conversation.tile_state = (
-            'transcribing' if outcome in {'requested', 'already_requested', 'recording_requested'} else 'writing'
+            'transcribing'
+            if outcome in {'requested', 'already_requested', 'recording_requested', 'named_recording_requested'}
+            else 'writing'
         )
     return CreateConversationResponse(conversation=conversation, messages=[])

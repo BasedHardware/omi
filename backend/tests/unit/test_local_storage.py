@@ -98,6 +98,33 @@ def test_local_storage_supports_streaming_copy_and_listing(monkeypatch: pytest.M
     assert [blob.name for blob in destination_bucket.list_blobs(prefix='user/')] == ['user/archive/chunk.bin']
 
 
+def test_local_storage_conditional_copy_matches_the_sync_bridge_contract(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """The sync bridge copies donor audio with GCS's conditional-copy arguments."""
+    _configure(monkeypatch, tmp_path)
+    client = LocalStorageClient.from_env()
+    assert client is not None
+    bucket = client.bucket('omi-private-cloud-sync')
+    source = bucket.blob('user/donor/chunk.bin')
+    with source.open('wb') as handle:
+        handle.write(b'chunk')
+
+    assert bucket.get_blob('user/target/chunk.bin', retry=None) is None
+    # Generation 0 means create-only, exactly as the bridge sends it.
+    copied = bucket.copy_blob(source, bucket, 'user/target/chunk.bin', if_generation_match=0, retry=None)
+    assert copied.download_as_bytes() == b'chunk'
+    winner = bucket.get_blob('user/target/chunk.bin', retry=None)
+    assert winner is not None and winner.crc32c == source.crc32c
+
+    with pytest.raises(PreconditionFailed):
+        bucket.copy_blob(source, bucket, 'user/target/chunk.bin', if_generation_match=0, retry=None)
+    # Replacing exactly the listed version is allowed; a stale generation is not.
+    bucket.copy_blob(source, bucket, 'user/target/chunk.bin', if_generation_match=winner.generation, retry=None)
+    with pytest.raises(PreconditionFailed):
+        bucket.copy_blob(source, bucket, 'user/target/chunk.bin', if_generation_match=1, retry=None)
+
+
 def test_local_storage_rejects_non_harness_and_traversal_paths(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     storage_root = _configure(monkeypatch, tmp_path)
     monkeypatch.setenv('OMI_LOCAL_STORAGE_ROOT', str(tmp_path / 'outside'))

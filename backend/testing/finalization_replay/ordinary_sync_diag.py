@@ -58,7 +58,7 @@ def _enable_worker_backend(worker_backend):
             package.__path__.insert(0, target)
 
 
-def _run_side(cases, side, binary, database, key, worker_backend):
+def _run_side(cases, side, binary, database, key, worker_backend, *, paired_lifecycle):
     _enable_worker_backend(worker_backend)
 
     install_firestore_meter()
@@ -73,6 +73,8 @@ def _run_side(cases, side, binary, database, key, worker_backend):
         states = _seed(client, cases, url)
         for state in states:
             state.notes_prompt_hashes = []
+            state.replay_fence = paired_lifecycle and state.case.get('delete_before_worker_read', False)
+            state.replay_erase = paired_lifecycle and state.case.get('erase_after', False)
             state.compare_full_derived_documents = True
         with patch.object(store_fixtures, '_emulator_client', lambda: client), replay_environment(
             _ReplayKey(key, client.project, url)
@@ -88,6 +90,9 @@ def _run_side(cases, side, binary, database, key, worker_backend):
 
 
 def _paired(payload, worker_binary, worker_backend):
+    side_timeout = int(os.environ.get('ORACLE_DIAG_SIDE_TIMEOUT_SECONDS', '240'))
+    if side_timeout <= 0:
+        raise ValueError('ORACLE_DIAG_SIDE_TIMEOUT_SECONDS must be positive')
     sides = []
     for side in ('python', 'go'):
         result = subprocess.run(
@@ -105,7 +110,7 @@ def _paired(payload, worker_binary, worker_backend):
             ],
             input=payload,
             capture_output=True,
-            timeout=240,
+            timeout=side_timeout,
         )
         if result.returncode:
             detail = result.stderr.decode(errors='replace')[-2000:]
@@ -119,7 +124,7 @@ def _paired(payload, worker_binary, worker_backend):
     return paired
 
 
-def _stored_sync_cases(cases):
+def _stored_sync_cases(cases, *, paired_lifecycle=False):
     """Project each fixture to the one stored-row sync admission the seam supports."""
     normalized = []
     for original in cases:
@@ -130,7 +135,8 @@ def _stored_sync_cases(cases):
         row = seed_document(case, case.get('conversation_id', case['name']))
         if row is None:
             raise ValueError('ordinary-sync diagnostics require a seeded conversation row')
-        row['status'] = 'completed'
+        if not (paired_lifecycle and case.get('delete_before_worker_read')):
+            row['status'] = 'completed'
         row.setdefault('sync_content_revision', 1)
         case['document'] = pack(row)
         normalized.append(case)
@@ -147,7 +153,8 @@ def main():
     args = parser.parse_args()
     payload = sys.stdin.buffer.read(16 * 1024 * 1024 + 1)
     corpus_sha256 = sha256(payload).hexdigest()
-    cases = _stored_sync_cases(read_corpus(payload))
+    paired_lifecycle = os.environ.get('ORACLE_DIAG_PAIRED_LIFECYCLE') == '1'
+    cases = _stored_sync_cases(read_corpus(payload), paired_lifecycle=paired_lifecycle)
     payload = json.dumps({'version': 1, 'cases': cases}, ensure_ascii=True).encode()
     if args.side is None:
         observations = _paired(payload, args.worker_binary, args.worker_backend)
@@ -163,7 +170,13 @@ def main():
         sink
     ), redirect_stderr(sink):
         result = _run_side(
-            cases, args.side, Path(args.worker_binary).resolve(strict=True), database, key, args.worker_backend
+            cases,
+            args.side,
+            Path(args.worker_binary).resolve(strict=True),
+            database,
+            key,
+            args.worker_backend,
+            paired_lifecycle=paired_lifecycle,
         )
     json.dump(result, sys.stdout, ensure_ascii=True, allow_nan=False)
 

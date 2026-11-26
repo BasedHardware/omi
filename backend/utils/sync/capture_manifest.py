@@ -121,3 +121,38 @@ def manifest_claims_match_paths(claims: list[dict[str, str]], paths: Iterable[st
                 digest.update(chunk)
         actual.append({'name': Path(path).name, 'sha256': digest.hexdigest()})
     return sorted(actual, key=lambda item: (item['name'], item['sha256'])) == claims
+
+
+# This authenticates the *identity* of a previously refused bundle. Only a
+# fresh lookup of the ordinary 30-second memo can say whether it still waits.
+RETRY_HANDLE_SECONDS = 120
+
+
+def _retry_signature(uid: str, device: str, conversation: str, claims: Iterable[dict[str, str]], expires: int) -> str:
+    payload = json.dumps(
+        ['wal-conversation-wait-v1', uid, device, conversation, validate_file_claims(claims), expires],
+        sort_keys=True,
+        separators=(',', ':'),
+    )
+    return hmac.new(_secret(), payload.encode(), hashlib.sha256).hexdigest()
+
+
+def issue_retry_handle(uid: str, device: str, conversation: str, claims: Iterable[dict[str, str]]) -> str:
+    expires = int(time.time()) + RETRY_HANDLE_SECONDS
+    return f'{expires}.{_retry_signature(uid, device, conversation, claims, expires)}'
+
+
+def valid_retry_handle(
+    handle: str | None, uid: str, device: str | None, conversation: str, claims: Iterable[dict[str, str]]
+) -> bool:
+    if not isinstance(handle, str) or len(handle) > 80 or not device:
+        return False
+    try:
+        expiry, signature = handle.split('.')
+        expires = int(expiry)
+        now = time.time()
+        return now < expires <= now + RETRY_HANDLE_SECONDS and hmac.compare_digest(
+            signature, _retry_signature(uid, device, conversation, claims, expires)
+        )
+    except (ValueError, RuntimeError, TypeError):
+        return False

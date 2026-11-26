@@ -145,6 +145,36 @@ void main() {
     if (tempDir.existsSync()) tempDir.deleteSync(recursive: true);
   });
 
+  test('a timed-out file batch retains its WAL and the next recording uploads in the same drain', () async {
+    final started = Completer<void>();
+    final blocked = Completer<UploadFilesResult>();
+    uploadResponse = (files) async {
+      if (uploadAttempts.length == 1) {
+        started.complete();
+        return blocked.future;
+      }
+      return UploadFilesResult.queued('healthy-job');
+    };
+    final stamp = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+    sync.testWals = [
+      for (var i = 0; i < 2; i++)
+        _makeWal(timerStart: stamp - 120 + i, filePath: 'audio_$i.bin')..conversationId = 'rec-$i'
+    ];
+    for (final w in sync.testWals) {
+      await File('${tempDir.path}/${w.filePath}').writeAsBytes([1]);
+    }
+    final pass = sync.syncAll();
+    await started.future;
+    expect(uploadAttempts.length, 1);
+    blocked.completeError(TimeoutException('stalled POST'));
+    await pass;
+    expect(uploadAttempts.length, 2);
+    final failed = sync.testWals.singleWhere((w) => w.filePath == uploadAttempts.first.single);
+    expect(failed.status, WalStatus.miss);
+    expect(await File('${tempDir.path}/${failed.filePath}').exists(), isTrue);
+    expect(sync.testWals.singleWhere((w) => w != failed).jobId, 'healthy-job');
+  });
+
   for (final liveOnly in [false, true]) {
     test('cancel during queued flush prevents the real ${liveOnly ? 'live' : 'fallback'} phone drain reaching its gate',
         () async {

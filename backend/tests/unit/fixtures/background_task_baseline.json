@@ -447,6 +447,13 @@
       "kind": "start_background_task",
       "count": 1,
       "why": "Manual-finish first transcript (SCA-3024), at most one per recording and two at a time per process, only for owners admitted by CONVERSATIONS_V3_FAST_FINISH: a best-effort early provider transcript started after record admission has committed. Losing it at SIGKILL loses only the early transcript; the admitted batch job still owns and delivers the canonical one, a single-unit recording's manual-end cut is stored before the task starts, and a multi-unit cut is stored only after the transcript write."
+    },
+    {
+      "path": "utils/batch_pipeline/commit_wake_sender.py",
+      "function": "CommitWakeSender.__call__",
+      "kind": "threading.Thread",
+      "count": 1,
+      "why": "Flag commit_wake: one daemon thread per worker posts owner ids to the serving backend. The wake is a hint held in memory; a wake lost at SIGKILL leaves the committed row where the serving sweep finds it, as without the flag."
     }
   ]
 }

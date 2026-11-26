@@ -18718,6 +18718,43 @@
         "title": "FolderMutationResponse",
         "type": "object"
       },
+      "FrameProcessingRange": {
+        "properties": {
+          "capture_root": {
+            "title": "Capture Root",
+            "type": "string"
+          },
+          "clock_epoch": {
+            "title": "Clock Epoch",
+            "type": "integer"
+          },
+          "end": {
+            "title": "End",
+            "type": "integer"
+          },
+          "start": {
+            "title": "Start",
+            "type": "integer"
+          },
+          "status": {
+            "enum": [
+              "text",
+              "empty"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "capture_root",
+          "clock_epoch",
+          "start",
+          "end",
+          "status"
+        ],
+        "title": "FrameProcessingRange",
+        "type": "object"
+      },
       "FrameRange": {
         "properties": {
           "end": {
@@ -36549,6 +36586,20 @@
             "default": 0,
             "title": "Failed Segments",
             "type": "integer"
+          },
+          "frame_outcomes_v1": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/FrameProcessingRange"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Frame Outcomes V1"
           },
           "held_audio": {
             "anyOf": [
@@ -90328,6 +90379,101 @@
           }
         ],
         "summary": "Sync Local Files V2"
+      },
+      "put": {
+        "description": "Check a live wait after manifest admission. A 204 directs the client to upload.",
+        "operationId": "check_sync_retry_v2_sync_local_files_put",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Omi-Wal-Retry",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Omi-Wal-Retry"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SyncCaptureManifestRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          },
+          "503": {
+            "description": "Only a typed record_capture_pending response defers the multipart upload"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Check Sync Retry"
       }
     },
     "/v2/sync-local-files/{job_id}": {

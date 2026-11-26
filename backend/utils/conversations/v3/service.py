@@ -26,7 +26,9 @@ from uuid import NAMESPACE_URL, uuid5
 
 from google.cloud.firestore_v1 import FieldFilter
 
+from config import reliability_experiments
 from config.conversations_v3 import (
+    bounded_pending_enabled,
     DEFAULT_BOUNDARY_SECONDS,
     HISTORICAL_SITDOWN_TIMING,
     SPEECH_LANDED_FIELD,
@@ -35,6 +37,7 @@ from config.conversations_v3 import (
     live_title_enabled,
     manual_end_home_visible_enabled,
     max_window_seconds,
+    settle_on_landing_enabled,
     stretch_cohesion_enabled,
 )
 from utils.conversations.v3.triggers import enqueue, changed
@@ -57,7 +60,8 @@ from utils.conversations.v3 import (
     visibility,
     context,
 )
-from utils.conversations.v3 import finish_home_sli, refinement, preview_wakes
+from utils.conversations.v3 import finish_home_sli, manual_cuts, refinement, preview_wakes, summary_wake
+from utils.conversations.v3 import capture_device
 from utils.conversations.v3.word_floor import MIN_TASK_WORDS, has_unspaced_script, text_word_count
 from utils.conversations.processing_trigger import ProcessingTrigger
 from utils.conversations.meeting_treatment import deduplicated_transcribed_speech_seconds
@@ -89,6 +93,8 @@ BLOCKED = frozenset(
         'remove_not_backfilled',
         'rederive_mixed_runs',
         'backfill_source_unreadable',
+        'backfill_donor_unclaimed',
+        'backfill_rederive_linked_claims',
         'rederive_live_open',
         'rederive_live_boundary',
         'rederive_live_outline_failed',
@@ -119,8 +125,9 @@ def redacted_cause(error):
     if cause is None:
         return '-'
     text = str(cause)
-    # Pure string checks (store.size_error's markers): this runs on the event loop.
-    kind = 'document' if store.DOCUMENT_TOO_LARGE in text else 'request' if store.REQUEST_TOO_LARGE in text else None
+    # Pure string checks on store's size markers (no store call): this runs on the event loop.
+    big = store.DOCUMENT_TOO_LARGE in text or all(m in text for m in store.PROPERTY_TOO_LARGE)
+    kind = 'document' if big else 'request' if store.REQUEST_TOO_LARGE in text else None
     if not kind:
         return type(cause).__name__
     sizes = ','.join(re.findall(r'\(?(\d+) bytes', text)) or '-'
@@ -133,7 +140,9 @@ async def _drain_blocked(uid, reason):
     try:
         await drain_processing(uid)
     except Exception as error:
-        logger.warning('v3 reconcile blocked drain failed exception_type=%s', type(error).__name__)
+        metrics.safe_metric(
+            lambda: logger.warning('v3 reconcile blocked drain failed exception_type=%s', type(error).__name__)
+        )
 
 
 def recording_short_path(fn):
@@ -238,10 +247,38 @@ async def _release_reconcile_lease(uid, key, token, *, primary_failed):
     except Exception as error:
         if not primary_failed:
             raise
-        logger.warning('v3 reconcile lease release failed exception_type=%s', type(error).__name__)
+        metrics.safe_metric(
+            lambda: logger.warning('v3 reconcile lease release failed exception_type=%s', type(error).__name__)
+        )
 
 
-def _reconcile_groups(
+async def _load_live_batch(uid, token, parked):
+    """Reduce pending seeds without clipping any selected source's ownership closure."""
+    if parked in store.BOUNDED_RETRY_REASONS:
+        # Spend a legacy park's one early attempt under this lease before any paid work.
+        await run_blocking(db_executor, store.mark_bounded_attempt, uid, token)
+    remembered = await run_blocking(db_executor, store.clear_terminal_pending, uid, token)
+    budget_reasons = {'v3_derived_budget', 'v3_source_closure_budget'}
+    sizes = (32, 8, 1)
+    if parked == 'document_too_large' or remembered == 1:
+        sizes = (1,)
+    elif parked in budget_reasons or remembered == 8:
+        sizes = (8, 1)
+    for size in sizes:
+        try:
+            result = await run_blocking(db_executor, store.load, uid, **({'pending_limit': size} if size < 32 else {}))
+        except Conflict as error:
+            if size == sizes[-1] or str(error) not in budget_reasons:
+                raise
+            await run_blocking(db_executor, leases.renew, uid, 'builder', token)
+        else:
+            if size < 32:
+                logger.info('event=v3_bounded_pending pending_limit=%d', size)
+            return (*result, size)
+    raise AssertionError('bounded pending batch sizes are empty')
+
+
+async def _reconcile_groups(
     uid,
     eligible,
     now,
@@ -253,28 +290,36 @@ def _reconcile_groups(
     silence_gap,
     lock_delay,
     custom_timing,
+    cohesion,
     derive,
     on_open,
 ):
+    """Plan the pass's stretches; returns ``(groups, owner_cuts, measure_finish)``."""
     measure_finish = not (derive or on_open) and finish_home_sli.enabled()
     held_finishes = set() if measure_finish else None
+    owner_cuts = []
     if historical_timing is not None:
         groups = historical_stretches(eligible, now, since=since, until=until, internal_end=internal_end)
     else:
+        # Experiment end_open_conversation: owner-level End instants cut the live builder's stretches.
+        # Off (the baseline) this reads nothing and passes no cuts. Backfill and re-derive do not read them.
+        if not derive and manual_cuts.enabled(uid):
+            owner_cuts = await run_blocking(db_executor, manual_cuts.load, uid, eligible)
         groups = outline.stretches(
             eligible,
             now,
             silence_gap=silence_gap,
             lock_delay=lock_delay,
-            settle_on_landing=custom_timing,
+            settle_on_landing=settle_on_landing_enabled(custom_timing=custom_timing, cohesion=cohesion, derive=derive),
             max_window=timedelta(seconds=max_window_seconds()),
+            **({'manual_cuts': owner_cuts} if owner_cuts else {}),
             # Live passes only: backfill and re-derive keep their windowing (cuts there are long settled).
             continuity=capture_continuity_enabled() and not derive,
             **({'finish_routes': held_finishes} if measure_finish else {}),
         )
     for recording_id in held_finishes or ():
         finish_home_sli.observe_route(uid, recording_id, 'held')
-    return groups, measure_finish
+    return groups, owner_cuts, measure_finish
 
 
 def _measure_reconcile_writes(run):
@@ -287,6 +332,18 @@ def _measure_reconcile_writes(run):
             return await run(*args, **kwargs)
 
     return measured
+
+
+def _exclude_unclaimed_backfill_donors(recordings, rows, *, rederive):
+    claimed = {rid for row in rows for rid in row.get('v3_recording_ids') or []}
+    # Keep unclaimed legacy rows visible. Converting them would hide the speech without a replacement.
+    unclaimed = [rid for rid, row in recordings.items() if '_v3_backfill_prior' in row and rid not in claimed]
+    for rid in unclaimed:
+        recordings.pop(rid)
+    # Re-derive may retire the existing copy. A converted donor needs a replacement before that can happen.
+    if rederive and any(rid not in claimed for rid, row in recordings.items() if row.get('_v3_derive')):
+        raise Conflict('backfill_donor_unclaimed')
+    return unclaimed
 
 
 @_measure_reconcile_writes
@@ -318,6 +375,7 @@ async def reconcile(
     report = {} if report is None else report
     key = store.BACKFILL_LEASE if derive else 'builder'
     blocked = None
+    parked = None
     moved = set()
     deferred: dict[str, datetime] = {}
     # Live passes call the outline-cache writers exactly as before; only a backfill names its lease.
@@ -335,7 +393,11 @@ async def reconcile(
         metrics.RECONCILES.labels('busy').inc()
         return 'busy'
     primary_failed = False
+    bounded_pending_limit = None
     try:
+        # The reliability experiments below are read on this event loop, which answers from what was last
+        # learned for the account. Learn it on a worker thread first, so a pass never misses a switch.
+        await reliability_experiments.warm(uid)
         cohesion = stretch_cohesion_enabled()
         silence_seconds, lock_seconds = boundary_seconds(cohesion=cohesion and not derive)
         if historical_timing is not None:
@@ -362,6 +424,8 @@ async def reconcile(
                 run_id=run_id,
                 rederive=rederive,
             )
+        elif not on_open and bounded_pending_enabled():
+            recordings, existing, cached, bounded_pending_limit = await _load_live_batch(uid, token, parked)
         else:
             recordings, existing, cached = await run_blocking(
                 db_executor,
@@ -373,7 +437,7 @@ async def reconcile(
         eligible = [r for r in recordings.values() if policy.builder_eligible(r)]
         custom_timing = (silence_seconds, lock_seconds) != (DEFAULT_BOUNDARY_SECONDS, DEFAULT_BOUNDARY_SECONDS)
         silence_gap, lock_delay = timedelta(seconds=silence_seconds), timedelta(seconds=lock_seconds)
-        groups, measure_finish = _reconcile_groups(
+        groups, owner_cuts, measure_finish = await _reconcile_groups(
             uid,
             eligible,
             now,
@@ -384,6 +448,7 @@ async def reconcile(
             silence_gap=silence_gap,
             lock_delay=lock_delay,
             custom_timing=custom_timing,
+            cohesion=cohesion,
             derive=derive,
             on_open=on_open,
         )
@@ -622,6 +687,20 @@ async def reconcile(
                     allocated=allocated,
                     manual_end_home_visible=manual_end_home_visible_enabled(),
                 )
+                if owner_cuts and row.get('manual_end') and not row.get(planner.CUT_FIELD):
+                    # Experiment end_open_conversation: remember the End that closed this conversation, so
+                    # speech recorded before it that lands later still belongs here (planner.Ownership).
+                    # Off there are no owner cuts and the field is never written.
+                    closed_by = planner.ending_cut(row['finished_at'], owner_cuts, silence_gap)
+                    if closed_by is not None:
+                        row[planner.CUT_FIELD] = closed_by
+                if row.get('tile_state') == 'live' and reliability_experiments.any_enabled(
+                    uid, 'end_button_by_device', 'instant_live_text', 'vendor_recognizer_on_opened_app'
+                ):
+                    # Experiments end_button_by_device, instant_live_text and vendor_recognizer_on_opened_app:
+                    # an open conversation names the app install behind its latest speech. With all off the
+                    # field is never written.
+                    capture_device.stamp(row, window['lines'], recordings)
                 if opening and prior and planner.is_unlocked(prior):
                     row['v3_open_locked'] = True
                 row.pop('v3_unlocked', None)
@@ -765,16 +844,10 @@ async def reconcile(
             existing.update(adopted)
             rows = await plan()
         planned = {row['id'] for row in rows}
-        unclaimed = []
-        if derive:
-            # A legacy row no window claims (no usable lines after duplicate and deleted-span removal)
-            # stays a visible legacy conversation: converting it would hide it with no replacement.
-            claimed = {rid for row in rows for rid in row.get('v3_recording_ids') or []}
-            unclaimed = [rid for rid, r in recordings.items() if '_v3_backfill_prior' in r and rid not in claimed]
-            for rid in unclaimed:
-                recordings.pop(rid)
-        # A re-derive reuses prior ids; a prior copy no rebuilt window claims is retired with the commit.
+        unclaimed = _exclude_unclaimed_backfill_donors(recordings, rows, rederive=rederive) if derive else []
+        # The commit removes unplanned prior copies only if they have no task or memory links.
         remove = [cid for cid in existing if cid not in planned] if derive and rederive else []
+        removed_ids: set[str] = set()
         retire, commit_recordings, commit_existing, priors = {}, recordings, existing, []
         if live:
             rows, retire, touched, sources, priors, outcome = _live_outcome(
@@ -805,8 +878,10 @@ async def reconcile(
                 cache[-128:],
                 clear_pending=not on_open,
                 remove=remove,
+                removed_ids=removed_ids,
                 retire=retire,
                 key=key,
+                bounded_pending_limit=bounded_pending_limit,
             )
         except Exception:
             if live:
@@ -816,14 +891,17 @@ async def reconcile(
             raise
         finish_home_sli.observe_windows(uid, rows, finish_windows)
         if not derive and not on_open:
+            # Experiment fast_end_feedback: a client waiting on an ended conversation is woken as soon as
+            # it is committed with its outline, before its summary starts. Off, nothing is published.
+            summary_wake.publish_committed(uid, rows, existing)
             cap_starts = {group['lines'][0]['start'] for group in groups if group['after_window_cap']}
             new_cap_starts = {row['started_at'] for row in rows if row['id'] not in existing} & cap_starts
-            metrics.WINDOW_CAP_CUTS.inc(len(new_cap_starts))
+            metrics.safe_metric(lambda: metrics.WINDOW_CAP_CUTS.inc(len(new_cap_starts)))
         report.update(
             sources=len(eligible),
             windows=len(rows),
             rows_new=sum(1 for row in rows if row['id'] not in existing),
-            rows_removed=len(remove),
+            rows_removed=len(removed_ids),
             # A live run's loader already counted unclaimed live speech; its legacy meaning is donors.
             **({} if live else {'sources_unclaimed': len(unclaimed)}),
             notes_queued=sum(1 for row in rows if row.get('v3_backfill_process_pending')),
@@ -833,7 +911,7 @@ async def reconcile(
             # Live speech arrived during the pass: the snapshot's windows are committed and the moved
             # recordings stay owed. Wake the owner at the next minute instead of an immediate re-pass,
             # which would race the same live recording again.
-            metrics.RACES.labels('source_moved').inc()
+            metrics.safe_metric(lambda: metrics.RACES.labels('source_moved').inc())
             await run_blocking(db_executor, enqueue, uid, at=datetime.now(timezone.utc) + RACE_RETRY)
         for group in groups if not derive else ():
             if not (group['locked'] if custom_timing else group['finished']):
@@ -845,7 +923,7 @@ async def reconcile(
         holds = [r[outline.HOLD_UNTIL] for r in recordings.values() if r.get(outline.HOLD_UNTIL) is not None]
         if holds and not derive:
             # A held manual-end cut applies when its wait ends, even if no transcript lands.
-            metrics.FINISH_HELD.inc()
+            metrics.safe_metric(lambda: metrics.FINISH_HELD.inc())
             await run_blocking(db_executor, enqueue, uid, at=max(min(holds), now + timedelta(minutes=1)))
         for row in rows:
             prior = existing.get(row['id']) or {}
@@ -854,14 +932,16 @@ async def reconcile(
                 and row.get('home_hidden_reason') == 'wearer_recognition_uncertain'
                 and (prior.get('home_hidden') or prior.get('home_hidden_reason') != 'wearer_recognition_uncertain')
             ):
-                metrics.UNCERTAIN_SHOWN.inc()
+                metrics.safe_metric(lambda: metrics.UNCERTAIN_SHOWN.inc())
             if row['id'] not in existing:
-                metrics.VISIBLE_LATENCY.observe(max(0, (now - row['started_at']).total_seconds()))
+                metrics.safe_metric(
+                    lambda: metrics.VISIBLE_LATENCY.observe(max(0, (now - row['started_at']).total_seconds()))
+                )
         if not derive and not on_open and live_title_enabled():
             for row in rows:
                 if policy.live_title_candidate(row) and not row.get(policy.LIVE_TITLE_STATE):
                     await _maybe_publish_live_title(uid, key, token, row)
-        metrics.RECONCILES.labels('committed').inc()
+        metrics.safe_metric(lambda: metrics.RECONCILES.labels('committed').inc())
         deferred = preview_wakes(rows, recordings)
     except Conflict as error:
         primary_failed = True
@@ -873,35 +953,39 @@ async def reconcile(
             try:
                 await run_blocking(db_executor, enqueue, uid, at=datetime.now(timezone.utc) + RACE_RETRY)
             except Exception as dispatch:
-                metrics.RECONCILES.labels('dispatch_error').inc()
-                metrics.RECONCILES.labels('error').inc()
-                logger.warning('v3 reconcile race wake failed exception_type=%s', type(dispatch).__name__)
+                metrics.safe_metric(lambda: metrics.RECONCILES.labels('dispatch_error').inc())
+                metrics.safe_metric(lambda: metrics.RECONCILES.labels('error').inc())
+                metrics.safe_metric(
+                    lambda: logger.warning('v3 reconcile race wake failed exception_type=%s', type(dispatch).__name__)
+                )
                 raise error from dispatch
-            metrics.RECONCILES.labels('raced').inc()
-            metrics.RACES.labels(reason).inc()
-            logger.info('v3 reconcile raced reason=%s', reason)
+            metrics.safe_metric(lambda: metrics.RECONCILES.labels('raced').inc())
+            metrics.safe_metric(lambda: metrics.RACES.labels(reason).inc())
+            metrics.safe_metric(lambda: logger.info('v3 reconcile raced reason=%s', reason))
             primary_failed = False
             return 'raced'
         if reason not in BLOCKED:
-            metrics.RECONCILES.labels('error').inc()
+            metrics.safe_metric(lambda: metrics.RECONCILES.labels('error').inc())
             raise
         # A deterministic conflict fails identically on every retry: answer the task (no Cloud Tasks
         # retry storm through the shared queue) and back this owner off; v3_pending stays owed.
-        metrics.RECONCILES.labels('blocked').inc()
-        metrics.BLOCKED.labels(reason).inc()
-        logger.warning(
-            'v3 reconcile blocked reason=%s owner=%s cause=%s', reason, owner_tag(uid), redacted_cause(error)
+        metrics.safe_metric(lambda: metrics.RECONCILES.labels('blocked').inc())
+        metrics.safe_metric(lambda: metrics.BLOCKED.labels(reason).inc())
+        metrics.safe_metric(
+            lambda: logger.warning(
+                'v3 reconcile blocked reason=%s owner=%s cause=%s', reason, owner_tag(uid), redacted_cause(error)
+            )
         )
         report['blocked_reason'] = reason
         if not derive:
             # A backfill conflict must not park the owner's live builder.
-            await run_blocking(db_executor, store.record_blocked, uid, token, reason)
+            await run_blocking(db_executor, store.record_blocked, uid, token, reason, on_open=on_open)
         blocked = reason
         primary_failed = False
     except BaseException as error:
         primary_failed = True
         if isinstance(error, Exception):
-            metrics.RECONCILES.labels('error').inc()
+            metrics.safe_metric(lambda: metrics.RECONCILES.labels('error').inc())
         raise
     finally:
         await _release_reconcile_lease(uid, key, token, primary_failed=primary_failed)
@@ -946,8 +1030,12 @@ async def _maybe_publish_live_title(uid, key, token, row):
             if title and live_title_enabled():
                 await run_blocking(db_executor, store.write_live_title_preview, *args, title=title)
     except Exception as error:
-        logger.warning('event=v3_live_title exception_type=%s', type(error).__name__)
-        record_fallback(component='other', from_mode='none', to_mode='none', reason='other', outcome='degraded')
+        metrics.safe_metric(lambda: logger.warning('event=v3_live_title exception_type=%s', type(error).__name__))
+        metrics.safe_metric(
+            lambda: record_fallback(
+                component='other', from_mode='none', to_mode='none', reason='other', outcome='degraded'
+            )
+        )
 
 
 def _held_claims(recordings, cid):
@@ -1146,7 +1234,19 @@ def _live_outcome(rows, existing, recordings, *, since, until, run_id):
 
 
 def _commit(
-    uid, token, recordings, existing, rows, cache, *, clear_pending=True, remove=(), retire=None, key='builder'
+    uid,
+    token,
+    recordings,
+    existing,
+    rows,
+    cache,
+    *,
+    clear_pending=True,
+    remove=(),
+    removed_ids=None,
+    retire=None,
+    key='builder',
+    bounded_pending_limit=None,
 ):
     from google.api_core.exceptions import InvalidArgument
 
@@ -1162,8 +1262,10 @@ def _commit(
             cache,
             clear_pending=clear_pending,
             remove=remove,
+            removed_ids=removed_ids,
             retire=retire,
             key=key,
+            **({'bounded_pending_limit': bounded_pending_limit} if bounded_pending_limit is not None else {}),
         )
     except InvalidArgument as error:
         # A document over Firestore's 1 MiB limit, or a commit request over its payload limit, fails the
@@ -1183,9 +1285,9 @@ async def _process_leased(uid, row, token):
         await asyncio.shield(worker)
     except asyncio.CancelledError:
         await asyncio.shield(worker)
-        await keeper
         raise
-    await keeper
+    finally:
+        await keeper
 
 
 async def drain_processing(uid):
@@ -1263,7 +1365,8 @@ def _process(uid, row, token):
             retryable=bool(row.get('transcript_segments')),
         )
         return
-    if not writers.begin_processing(uid, row, token):
+    backfill_prior = {} if row.get('backfilled') else None
+    if writers.begin_processing(uid, row, token, backfill_prior=backfill_prior) is not True:
         return
     texts = [s.get('text') or '' for s in row.get('transcript_segments') or []]
     words = sum(map(text_word_count, texts))
@@ -1276,17 +1379,37 @@ def _process(uid, row, token):
     else:
         notes = True
         persisted = []
-        with fence.writer(uid, row['id'], token), models.notes_mode(uid):
-            result = process_conversation(
-                uid,
-                row.get('language') or 'en',
-                Conversation(**row),
-                persistence_observer=persisted.append,
-                # Backfilled rows take the live trigger so relevance, speaker and meeting context and the
-                # short-clip floor match live notes; process_conversation withholds their derived effects.
-                trigger=ProcessingTrigger.CAPTURE_END,
-            )
-            decline = fence.persistence_declined()
+
+        def summary_persisted(current):
+            # process_conversation reports its canonical write here, before folder assignment, memory
+            # extraction and the other derived effects. Experiment fast_end_feedback shows the row as done
+            # at that moment instead of after them; settle_processing below still owns the obligation.
+            # Off, this is the baseline observer and nothing else is written.
+            persisted.append(current)
+            if current and reliability_experiments.enabled('fast_end_feedback', uid):
+                try:
+                    if writers.show_summary_stored(uid, row['id'], token):
+                        logger.info('event=v3_summary_shown_early outcome=shown')
+                        summary_wake.publish(uid, row['id'])
+                except Exception as error:
+                    logger.warning('event=v3_summary_shown_early outcome=error exception_type=%s', type(error).__name__)
+
+        try:
+            with fence.writer(uid, row['id'], token), models.notes_mode(uid, backfilled=bool(row.get('backfilled'))):
+                result = process_conversation(
+                    uid,
+                    row.get('language') or 'en',
+                    Conversation(**row),
+                    persistence_observer=summary_persisted,
+                    # Backfilled rows take the live trigger so relevance, speaker and meeting context and the
+                    # short-clip floor match live notes; process_conversation withholds their derived effects.
+                    trigger=ProcessingTrigger.CAPTURE_END,
+                )
+                decline = fence.persistence_declined()
+        except (models.BackfillNotesDeletionBlocked, models.BackfillNotesAdmissionTimeout):
+            if backfill_prior is not None:
+                writers.park_backfill_processing(uid, row['id'], token, backfill_prior)
+            raise
         if decline is not None:
             writers.settle_processing(
                 uid, row['id'], token, row.get('sync_content_revision'), None, skipped=True, decline=decline
@@ -1299,8 +1422,14 @@ def _process(uid, row, token):
             return
         if not persisted or not persisted[-1] or getattr(result.status, 'value', result.status) != 'completed':
             raise RuntimeError('v3_processing_not_completed')
-        metrics.SUMMARY_WRITES.labels('rewrite' if row.get('v3_rewrites') else 'first').inc()
-    metrics.SUMMARY_LATENCY.observe(max(0, (datetime.now(timezone.utc) - row['finished_at']).total_seconds()))
+        metrics.safe_metric(
+            lambda: metrics.SUMMARY_WRITES.labels('rewrite' if row.get('v3_rewrites') else 'first').inc()
+        )
+    metrics.safe_metric(
+        lambda: metrics.SUMMARY_LATENCY.observe(
+            max(0, (datetime.now(timezone.utc) - row['finished_at']).total_seconds())
+        )
+    )
     word_floor_outcomes = None
     if not (passive or manual or row.get('backfilled') or row.get('v3_rewrites')) and any(
         map(has_unspaced_script, texts)
@@ -1317,6 +1446,9 @@ def _process(uid, row, token):
         content_hash=writers.processing_hash(row),
         word_floor_outcomes=word_floor_outcomes,
     )
+    # Experiment fast_end_feedback: a client waiting on this row (GET .../summary/wait) is woken again at
+    # the end of the pass, for the passes that had no early summary write. Off, nothing is published.
+    summary_wake.publish(uid, row['id'])
 
 
 async def sweep():
@@ -1428,9 +1560,10 @@ async def drain_backfill(uid, *, deadline, after=None, keep_going=None, concurre
     """Notes for backfilled rows, through the same _process as live, a few at a time until deadline.
 
     Returns counts; ``remaining`` > 0 asks the caller for a continuation task. ``keep_going`` is
-    checked before each chunk so an undo stops new notes work.
+    checked before each chunk so an undo stops new notes work, and so is the account-deletion marker:
+    once deletion starts no transcript goes to the notes model (``account_deletion`` is set).
     """
-    counts: dict[str, Any] = {'processed': 0, 'failed': 0, 'retry': 0, 'busy': 0, 'remaining': 0}
+    counts: dict[str, Any] = {'processed': 0, 'failed': 0, 'retry': 0, 'busy': 0, 'remaining': 0, 'account_deletion': 0}
     pages_left = BACKFILL_SCAN_MAX_PAGES
 
     async def scan(cursor):
@@ -1458,29 +1591,41 @@ async def drain_backfill(uid, *, deadline, after=None, keep_going=None, concurre
         if token is None:
             counts['busy'] += 1
             return
-        failed = False
         try:
-            await _process_leased(uid, row, token)
-        except Exception as error:
-            failed = True
-            logger.warning('event=v3_backfill_notes outcome=error exception_type=%s', type(error).__name__)
-        finally:
+            if await run_blocking(db_executor, store.account_deletion_blocks_user_work, uid, fresh=True):
+                counts['account_deletion'] = 1
+                return
+            failed = False
             try:
-                outcome = await run_blocking(
-                    db_executor,
-                    writers.settle_backfill_processing,
-                    uid,
-                    row['id'],
-                    failed=failed,
-                    max_attempts=BACKFILL_NOTES_ATTEMPTS,
-                )
-            finally:
-                await run_blocking(db_executor, leases.release, uid, 'summary-' + row['id'], token)
+                await _process_leased(uid, row, token)
+            except models.BackfillNotesDeletionBlocked:
+                counts['account_deletion'] = 1
+                return
+            except Exception as error:
+                failed = True
+                logger.warning('event=v3_backfill_notes outcome=error exception_type=%s', type(error).__name__)
+            outcome = await run_blocking(
+                db_executor,
+                writers.settle_backfill_processing,
+                uid,
+                row['id'],
+                failed=failed,
+                max_attempts=BACKFILL_NOTES_ATTEMPTS,
+            )
+        finally:
+            await run_blocking(db_executor, leases.release, uid, 'summary-' + row['id'], token)
         counts[{'settled': 'processed', 'absent': 'processed', 'failed': 'failed', 'retry': 'retry'}[outcome]] += 1
 
     for start in range(0, len(rows), concurrency):
-        if time.monotonic() >= deadline or (keep_going is not None and not await keep_going()):
+        if (
+            counts['account_deletion']
+            or time.monotonic() >= deadline
+            or (keep_going is not None and not await keep_going())
+        ):
             break
+        if await run_blocking(db_executor, store.account_deletion_blocks_user_work, uid, fresh=True):
+            counts['account_deletion'] = 1
+            break  # still count what remains owed below
         await asyncio.gather(*(one(row) for row in rows[start : start + concurrency]))
     if rows:
         pending, tail_cursor, tail_foreign, paused = await scan(cursor)

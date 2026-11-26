@@ -23,7 +23,7 @@ from testing.pipeline_lab.cassette.recorder import Recorder
 from testing.pipeline_lab.lanes.audio import RATE, load_pcm16
 from testing.pipeline_lab.lanes.batch import BatchConversation, replay_record_lane
 from testing.pipeline_lab.lanes.output import IngestResult, write_results
-from testing.pipeline_lab.lanes.sync import SyncConversation, replay_sync_lane
+from testing.pipeline_lab.lanes.sync import SyncConversation, private_scratch, replay_sync_lane
 from testing.pipeline_lab.timeline.build import load_audio_index, load_baseline
 from testing.pipeline_lab.contracts import parse_time
 from testing.pipeline_lab.contracts import utc_iso as iso
@@ -107,6 +107,7 @@ def record_day_cassettes(
                 recorder=recorder,
                 vocabulary=vocabulary,
                 file_vad=file_vad,
+                scratch=private_scratch(lab_root(root)),
             )
         else:
             recorder.ensure(clip.pcm16, language=language, vocabulary=vocabulary, purpose=f'stt_cassette:{row["lane"]}')
@@ -197,6 +198,7 @@ def replay_day(
                     ),
                     file_vad=file_vad,
                     stt=dict(stt_meta),
+                    scratch=private_scratch(lab_root(root)),
                     **sync_kwargs,
                 )
                 result.started_at = row.get('started_at')

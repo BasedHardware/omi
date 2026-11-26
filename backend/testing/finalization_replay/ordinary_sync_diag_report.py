@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import csv
 import json
+import os
 import re
 import sys
 from collections import Counter, defaultdict
@@ -22,6 +23,8 @@ KNOWN_GAPS = [
     'Per-case trigger is replaced by one sync_update admission; the corpus trigger is not executed.',
     'Repeat-admission controls are not replayed; the adapter submits one admission per case.',
     'final_attempt is not applied to the workerd job.',
+]
+UNEXERCISED_LIFECYCLE = [
     'delete_before_worker_read is not applied; the stored row remains present.',
     'erase_after is not applied; erasure and queue-row deletion are not exercised.',
 ]
@@ -309,7 +312,7 @@ def unlabelled_groups(cases: list[dict]) -> list[dict]:
     ]
 
 
-def enrich(report: dict) -> dict:
+def enrich(report: dict, *, paired_lifecycle: bool = False) -> dict:
     if report.get('input_error'):
         return report
     totals = {family: {'unexplained': 0, 'allowed': 0, 'go_gap': 0, 'python_bug': 0, 'total': 0} for family in FAMILIES}
@@ -369,6 +372,9 @@ def enrich(report: dict) -> dict:
                 'label': 'go_gap:ops' if difference > 0 else None,
                 'go_top_operation_sources': top_sources,
             }
+            for side, ops in (('python', python_ops), ('go', go_ops)):
+                if 'failed_commit_rpcs' in ops:
+                    operation_row[f'{side}_failed_commit_rpcs'] = ops['failed_commit_rpcs']
         else:
             operation_row = dict(operation_row)
         operation_table.append(operation_row)
@@ -385,14 +391,16 @@ def enrich(report: dict) -> dict:
         case.pop('python', None)
         case.pop('go', None)
         for difference in case.get('differences', []):
-            family = family_for_path(difference.get('path', ''))
+            path = difference.get('path', '').removeprefix('/before_erasure')
+            rule_row = {**difference, 'path': path}
+            family = family_for_path(path)
             difference['family'] = family
-            pass3_group = pass3_go_gap_group(difference.get('path', ''), case.get('name', ''), pass3_groups)
+            pass3_group = pass3_go_gap_group(path, case.get('name', ''), pass3_groups)
             assigned_from_pass3 = False
             if difference.get('failure_reason') == 'home_dirty_receipt_missing':
                 label = None
                 home_receipt_rows += 1
-                side = difference.get('path', '').split('/', 1)[0]
+                side = path.split('/', 1)[0]
                 if side in {'python', 'go'}:
                     home_receipt_side_traces[(case.get('name'), side)] = case['home_dirty_receipt_trace'][side]
             elif difference.get('label'):
@@ -400,7 +408,7 @@ def enrich(report: dict) -> dict:
                 if label.startswith('python_bug:'):
                     raise ValueError('python_bug labels require a matching approved case-specific exception')
             elif (
-                difference.get('path')
+                path
                 in {
                     '/conversation/go_finalization_notes_input_hash',
                     '/conversation/go_finalization_notes_output_hash',
@@ -409,9 +417,9 @@ def enrich(report: dict) -> dict:
                 }
                 or (
                     difference.get('kind') == 'invalid_binding'
-                    and difference.get('path', '').startswith('/go/derived_documents/')
-                    and '~1episode_links~1' in difference.get('path', '')
-                    and difference.get('path', '').endswith('/attach_memo_evidence')
+                    and path.startswith('/go/derived_documents/')
+                    and '~1episode_links~1' in path
+                    and path.endswith('/attach_memo_evidence')
                 )
                 or difference.get('failure_reason') == 'go_attach_memo_invalid'
                 or difference.get('failure_reason')
@@ -422,21 +430,18 @@ def enrich(report: dict) -> dict:
                 }
             ):
                 label = 'go_gap'
-            elif is_reviewed_go_gap_row(difference, case.get('name', '')):
+            elif is_reviewed_go_gap_row(rule_row, case.get('name', '')):
                 label = 'go_gap'
-            elif is_go_coordination_stamp_difference(difference):
+            elif is_go_coordination_stamp_difference(rule_row):
                 label = 'by_design:go_coordination_stamp'
                 difference['reason'] = 'go_coordination_stamp'
-            elif unreadable_park and is_unreadable_retry_consequence(difference):
+            elif unreadable_park and is_unreadable_retry_consequence(rule_row):
                 label = UNREADABLE_RETRY_BUG
                 difference['issue'] = UNREADABLE_RETRY_ISSUE
                 difference['reason'] = UNREADABLE_PARK_RULE
             elif difference.get('reason'):
                 label = f"by_design:{difference['reason']}"
-            elif (
-                difference.get('kind') == 'different_value'
-                and (case['name'], difference['path']) in RULED_SYNC_VALUE_GAPS
-            ):
+            elif difference.get('kind') == 'different_value' and (case['name'], path) in RULED_SYNC_VALUE_GAPS:
                 label = 'go_gap'
             else:
                 if pass3_group is None:
@@ -530,7 +535,7 @@ def enrich(report: dict) -> dict:
         'raw_unexplained_differences': raw_unexplained,
         'allowed_by_rule': dict(sorted(allowed_by_rule.items())),
         'approved_rule_reference': 'backend-go/tools/replay/comparison-rules.md',
-        'known_gaps': KNOWN_GAPS,
+        'known_gaps': KNOWN_GAPS if paired_lifecycle else KNOWN_GAPS + UNEXERCISED_LIFECYCLE,
         'home_dirty_receipt_missing': {
             'rows': home_receipt_rows,
             'observed_case_sides': len(home_receipt_side_traces),
@@ -573,7 +578,7 @@ def main():
     if report.get('input_error'):
         print('Ordinary-sync observation input rejected. R7 invalid, cohort gate closed.', file=sys.stderr)
         raise SystemExit(2)
-    enriched = enrich(report)
+    enriched = enrich(report, paired_lifecycle=os.environ.get('ORACLE_DIAG_PAIRED_LIFECYCLE') == '1')
     temporary = path.with_name(f'.{path.name}.tmp')
     temporary.write_text(json.dumps(enriched, ensure_ascii=True, indent=2) + '\n', encoding='utf-8')
     temporary.chmod(0o600)

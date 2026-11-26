@@ -39,6 +39,7 @@ from utils.memory.canonical_visibility_filter import filter_canonical_default_vi
 from utils.memory.decision_path_telemetry import classify_model_about
 from database.document_ids import document_id_from_seed
 from database.memory_collections import MemoryCollections
+from database.conversation_effect_fence import ConversationEffectSource
 from database.memory_apply_store import (
     CanonicalApplyWrite,
     CanonicalMemoryTombstoneConflict,
@@ -2417,6 +2418,7 @@ def replace_conversation_sourced_memories(
     conflict_backoff_seconds: Sequence[float] = _REPLACEMENT_CONFLICT_BACKOFF_SECONDS,
     empty_set_intent: str = "retraction",
     claim_destructive_gate: bool = True,
+    effect_source: ConversationEffectSource | None = None,
 ) -> Dict[str, Any]:
     """Atomically replace one conversation's complete canonical memory set.
 
@@ -2626,6 +2628,7 @@ def replace_conversation_sourced_memories(
                     else None
                 ),
                 require_deletion_gate=bool(not items and claim_destructive_gate),
+                effect_source=effect_source,
                 db_client=client,
             )
             break

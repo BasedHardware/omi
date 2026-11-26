@@ -85,7 +85,7 @@ def test_upload_latency_labels_are_closed(monkeypatch, state, expected):
     upload_metrics.observe_delivery(
         {'upload_arrived_at': 10, 'upload_entitlement': 'free', 'upload_hold_state': state}, 370
     )
-    delivered.labels.assert_called_once_with('free', expected)
+    delivered.labels.assert_called_once_with('free', expected, 'false')
     delivered.labels.return_value.observe.assert_called_once_with(360)
     assert upload_metrics.bounded_class('synthetic-private-user') == 'unknown'
 
@@ -94,11 +94,12 @@ def test_upload_latency_labels_are_closed(monkeypatch, state, expected):
     'age_ms,state,expected_label,seconds',
     [('0', 'fg60', 'fg60', 0), ('360123', 'bg300', 'bg300', 360.123), ('86400000', 'invalid', 'unknown', 86400)],
 )
-def test_hold_age_observes_bounded_milliseconds(monkeypatch, age_ms, state, expected_label, seconds):
+@pytest.mark.parametrize('recovered,label', [(True, 'true'), (False, 'false'), ('private', 'false')])
+def test_hold_age_observes_bounded_milliseconds(monkeypatch, age_ms, state, expected_label, seconds, recovered, label):
     histogram = Mock()
     monkeypatch.setattr(sync_upload, 'HOLD_AGE', histogram)
-    sync_upload.observe_hold_age(age_ms, state)
-    histogram.labels.assert_called_once_with(expected_label)
+    sync_upload.observe_hold_age(age_ms, state, recovered)
+    histogram.labels.assert_called_once_with(expected_label, label)
     histogram.labels.return_value.observe.assert_called_once_with(seconds)
 
 
@@ -111,11 +112,11 @@ def test_malformed_hold_age_is_not_observed(monkeypatch, age_ms):
 
 
 def test_hold_age_is_exported_from_sync_with_guard_buckets():
-    sync_upload.observe_hold_age('60000', 'fg60')
+    sync_upload.observe_hold_age('60000', 'fg60', True)
     samples = metrics_response().body
     for boundary in ('60.0', '300.0', '360.0', '600.0', '900.0', '1800.0'):
         assert (
-            f'omi_batch_pipeline_upload_hold_age_seconds_bucket{{hold_state="fg60",le="{boundary}"}}'.encode()
+            f'omi_batch_pipeline_upload_hold_age_seconds_bucket{{hold_state="fg60",le="{boundary}",recovered="true"}}'.encode()
             in samples
         )
 
@@ -127,7 +128,7 @@ def test_completion_latency_counts_originals_not_merged_units_or_replays(monkeyp
     members = [{'upload_arrived_at': stamp, 'upload_entitlement': 'free'} for stamp in (20, 50, 100)]
     upload_metrics.observe_completion(ordinary, members, merged=True, changed=True, result={}, now=400)
     assert [call.args for call in delivered.labels.return_value.observe.call_args_list] == [(380,), (350,), (300,)]
-    delivered.labels.assert_called_with('free', 'unknown')
+    delivered.labels.assert_called_with('free', 'unknown', 'false')
     delivered.reset_mock()
     upload_metrics.observe_completion(ordinary, [], merged=True, changed=False, result={}, now=500)
     upload_metrics.observe_completion(ordinary, [], merged=False, changed=False, result={}, now=500)
@@ -137,7 +138,7 @@ def test_completion_latency_counts_originals_not_merged_units_or_replays(monkeyp
     upload_metrics.observe_completion(ordinary, members, merged=True, changed=False, result=None, now=500)
     delivered.labels.assert_not_called()
     upload_metrics.observe_completion(ordinary, [], merged=False, changed=True, result={}, now=400)
-    delivered.labels.assert_called_once_with('paid', 'unknown')
+    delivered.labels.assert_called_once_with('paid', 'unknown', 'false')
     delivered.labels.return_value.observe.assert_called_once_with(390)
 
 
@@ -146,12 +147,16 @@ def test_upload_metrics_forward_through_worker_multiprocess_exposition():
     for collector in upload_metrics.COLLECTORS:
         registry.register(collector)
     upload_metrics.CREATED.labels('free').inc()
-    upload_metrics.DELIVERED.labels('free', 'fg60').observe(360)
+    upload_metrics.DELIVERED.labels('free', 'fg60', 'true').observe(360)
     upload_metrics.INTER_UPLOAD_GAP.labels('paid', 'fresh', 'within_group').observe(65)
     page = generate_latest(registry)
     merged = merge_metrics([(0, page), (1, page)])
     assert b'omi_batch_pipeline_created_units_total{entitlement="free",worker_process="0"}' in merged
-    assert b'omi_batch_pipeline_upload_to_transcript_seconds_bucket' in merged
+    assert any(
+        line.startswith(b'omi_batch_pipeline_upload_to_transcript_seconds_bucket{entitlement="free",hold_state="fg60"')
+        and b'recovered="true"' in line
+        for line in merged.splitlines()
+    )
     assert b'omi_batch_pipeline_inter_upload_gap_seconds_bucket' in merged
     assert b'worker_process="1"' in merged
 
