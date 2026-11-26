@@ -309,7 +309,7 @@ async def test_reconcile_counts_expected_task_retries(monkeypatch, reconcile_req
 @pytest.mark.asyncio
 @pytest.mark.parametrize('handled', [False, True])
 async def test_summary_lease_release_preserves_only_propagating_failure(monkeypatch, reconcile_request, handled):
-    row = {'id': 'c'}
+    row = {'id': 'c', 'v3_process_pending': True}
     failure = service.FinalizationOwnedElsewhere() if handled else ValueError('unexpected processing failure')
 
     async def run(_executor, func, *_args):
@@ -317,12 +317,18 @@ async def test_summary_lease_release_preserves_only_propagating_failure(monkeypa
             return [row]
         if func is service.leases.acquire:
             return 'token'
+        if func is service._load_processing_row:
+            return row
         assert func is service.leases.release
         raise FirestoreContentionExhausted('release contention')
 
+    async def reconcile(uid, *, background):
+        assert background is True
+        return await service.drain_processing(uid)
+
     monkeypatch.setattr(service, 'run_blocking', run)
     monkeypatch.setattr(service, '_process_leased', AsyncMock(side_effect=failure))
-    monkeypatch.setattr(service, 'reconcile', service.drain_processing)
+    monkeypatch.setattr(service, 'reconcile', reconcile)
 
     if handled:
         response = await route.reconcile(route.ReconcileRequest(uid='u'), reconcile_request, _retry=0)

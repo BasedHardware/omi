@@ -1287,7 +1287,6 @@ def byok_policy():
     [
         ('conv-structure', 57_000, 17_000),
         ('memory-l1', 57_000, 33_000),
-        ('conversation-v3-summary', 57_000, 15_000),
         ('conversation-v3-outline', 110_000, 65_000),
     ],
 )
@@ -1427,7 +1426,7 @@ async def test_background_flex_gateway_switch_restores_legacy_for_zero_budget(mo
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize('lane', ['conv-structure', 'memory-l1', 'conversation-v3-summary'])
+@pytest.mark.parametrize('lane', ['conv-structure', 'memory-l1'])
 async def test_background_flex_429_uses_standard_reserve_and_retries_standard(monkeypatch, lane):
     lane = f'omi:auto:{lane}'
     resolved = resolve_chat_completion_route(
@@ -1462,7 +1461,7 @@ async def test_background_flex_429_uses_standard_reserve_and_retries_standard(mo
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize('lane', ['conv-structure', 'memory-l1', 'conversation-v3-summary'])
+@pytest.mark.parametrize('lane', ['conv-structure', 'memory-l1'])
 @pytest.mark.parametrize('scoped', [True, False])
 async def test_flex_timeout_without_receipt_stops_dispatch(monkeypatch, lane, scoped):
     lane = f'omi:auto:{lane}'
@@ -1484,6 +1483,23 @@ async def test_flex_timeout_without_receipt_stops_dispatch(monkeypatch, lane, sc
         )
     assert [call.request.get('service_tier') for call in provider.calls] == ['flex']
     assert trace.attempts[0].usage_status == UsageStatus.INDETERMINATE
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('switch', ['on', 'off'])
+@pytest.mark.parametrize('budget', [None, 57_000])
+async def test_v3_summary_keeps_standard_default(monkeypatch, switch, budget):
+    monkeypatch.setenv(executor.BACKGROUND_FLEX_SWITCH, switch)
+    monkeypatch.delenv('LLM_GATEWAY_FLEX_FIRST_LANES', raising=False)
+    resolved = resolve_chat_completion_route(
+        gateway_config(),
+        {'model': 'omi:auto:conversation-v3-summary', 'messages': [{'role': 'user', 'content': 'Synthetic prompt'}]},
+    )
+    provider = FakeChatCompletionProvider([fake_success_response(resolved.active_route.primary)])
+    await execute_chat_completion(
+        resolved, omi_credentials(), ProviderRegistry({'openai': provider}), background_flex_budget_ms=budget
+    )
+    assert [call.request.get('service_tier') for call in provider.calls] == [None]
 
 
 @pytest.mark.asyncio
