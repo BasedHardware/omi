@@ -80,7 +80,7 @@ def task_base():
     return base
 
 
-def enqueue(uid, *, at=None, manual_end_id=None):
+def enqueue(uid, *, at=None, manual_end_id=None, wake_key=None):
     instant = at or datetime.now(timezone.utc)
     minute = int(instant.timestamp()) // 60
     task_id = 'conversations-v3-' + hashlib.sha256(uid.encode()).hexdigest()[:32] + '-' + str(minute)
@@ -88,6 +88,9 @@ def enqueue(uid, *, at=None, manual_end_id=None):
         # A live task may already have completed in this minute. Its retained
         # Cloud Tasks name must not swallow the user's later explicit close.
         task_id += '-end-' + hashlib.sha256(manual_end_id.encode()).hexdigest()[:32]
+    if wake_key:
+        # A builder continuation: an earlier same-minute wake may run (busy) under this pass's lease.
+        task_id += '-wake-' + hashlib.sha256(wake_key.encode()).hexdigest()[:32]
     base = task_base()
     queue = os.getenv('CONVERSATIONS_V3_TASKS_QUEUE', 'conversations-v3')
     url = base + '/v1/conversations-v3/reconcile'
