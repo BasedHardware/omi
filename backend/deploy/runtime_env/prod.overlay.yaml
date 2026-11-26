@@ -1919,7 +1919,7 @@ overlay:
           CONVERSATIONS_V3_FAST_FINISH: {value: 'on', category: ops_kill}
           CONVERSATIONS_V3_FAST_FINISH_CHUNKED: {value: 'on', category: ops_kill}
           # SCA-4434 canary: long (over 20 min) chunked fast finishes for 25% of owners, at most 2 h of
-          # their provider audio per instance per UTC day.
+          # their provider audio (retries, overlaps and language probe included) per process per UTC day.
           CONVERSATIONS_V3_FAST_FINISH_LONG_PERCENT: {value: '25', category: rollout}
           CONVERSATIONS_V3_FAST_FINISH_LONG_DAILY_SECONDS: {value: '7200', category: config}
           CONVERSATION_PARKED_TERMINAL_STATUS_ENABLED:

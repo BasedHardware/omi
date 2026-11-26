@@ -72,6 +72,11 @@ LONG_MAX_CHUNKS = 9
 RETRY_MIN_SECONDS = 10.0
 # Tokens compared at a fixed cut's seam.
 SEAM_TOKENS = 24
+# A stopped pass waits for its running requests at most this long past the deadline, then releases
+# its slot; a request still running ends on its own timeouts and its result is dropped.
+STOP_GRACE_SECONDS = 2.0
+# The language probe is skipped (and the pass stopped) with less than this left.
+PROBE_MIN_SECONDS = 2.0
 # How far a unit's first and last provisional line may reach toward that unit's audio bounds.
 EDGE_PAD_SECONDS = 2.0
 SAMPLE_RATE = 16000
@@ -223,16 +228,42 @@ class _DailyBudget:
         self._day: str | None = None
         self._used = 0.0
 
-    def reserve(self, seconds: float, *, now: datetime | None = None) -> bool:
-        limit = _number(LONG_DAILY_SECONDS_ENV, LONG_DAILY_SECONDS_DEFAULT)
+    def _roll(self, now: datetime | None) -> None:
         day = (now or datetime.now(timezone.utc)).strftime('%Y-%m-%d')
+        if day != self._day:
+            self._day, self._used = day, 0.0
+
+    def room(self, seconds: float, *, now: datetime | None = None) -> bool:
+        """Whether ``seconds`` more would fit today, without reserving them."""
         with self._lock:
-            if day != self._day:
-                self._day, self._used = day, 0.0
-            if self._used + seconds > limit:
+            self._roll(now)
+            return self._used + seconds <= _number(LONG_DAILY_SECONDS_ENV, LONG_DAILY_SECONDS_DEFAULT)
+
+    def reserve(self, seconds: float, *, now: datetime | None = None) -> bool:
+        with self._lock:
+            self._roll(now)
+            if self._used + seconds > _number(LONG_DAILY_SECONDS_ENV, LONG_DAILY_SECONDS_DEFAULT):
                 return False
             self._used += seconds
             return True
+
+    def settle(self, reserved: float, sent: float, *, now: datetime | None = None) -> None:
+        """Replace a pass's reservation with the audio it actually sent: retries, overlaps and probe included."""
+        with self._lock:
+            self._roll(now)
+            self._used = max(self._used + sent - reserved, 0.0)
+
+
+class _Sent:
+    """Provider audio seconds one pass has sent, from any thread."""
+
+    def __init__(self):
+        self._lock = threading.Lock()
+        self.seconds = 0.0
+
+    def add(self, seconds: float) -> None:
+        with self._lock:
+            self.seconds += seconds
 
 
 LONG_BUDGET = _DailyBudget()
@@ -389,21 +420,19 @@ def window_pcm(references: list[dict], read, lo: int, hi: int, cache: dict) -> b
     return bytes(pcm)
 
 
-def chunk_entries(words: list[dict], chunk: Chunk) -> tuple[list[dict], list[dict]]:
-    """One chunk's provider entries on its unit's clock: (kept, straddling).
+def chunk_entries(words: list[dict], chunk: Chunk) -> list[dict]:
+    """One chunk's provider entries on its unit's clock, without those the next chunk owns.
 
     Entries are words or whole utterances (Parakeet and Modulate return utterances lasting
-    seconds, with no word timings). A chunk owns what starts inside its owned span. An entry that
-    starts in the overlap before it and runs past the boundary is returned as straddling, for
-    ``seam`` to trim against the previous chunk; one that ends before the boundary was heard whole
-    by the previous chunk and is dropped. A lone entry without timing (Parakeet's text-only
-    fallback is stamped [0, 0]) spans the whole chunk.
+    seconds, with no word timings). The next chunk owns what starts at or after this chunk's right
+    boundary (the middle of a fixed cut's overlap). Nothing is dropped on the left here: ``join``
+    decides that against what the previous chunk actually transcribed. A lone entry without timing
+    (Parakeet's text-only fallback is stamped [0, 0]) spans the whole chunk.
     """
     shift = chunk.lo / SAMPLE_RATE
-    own_lo = None if chunk.own_lo is None else chunk.own_lo / SAMPLE_RATE
     own_hi = None if chunk.own_hi is None else chunk.own_hi / SAMPLE_RATE
     timed = [word for word in words if (word.get('timestamp') or (None,))[0] is not None]
-    kept, straddling = [], []
+    entries = []
     for word in timed:
         timing = word['timestamp']
         start = float(timing[0])
@@ -414,72 +443,74 @@ def chunk_entries(words: list[dict], chunk: Chunk) -> tuple[list[dict], list[dic
         end = None if end is None else end + shift
         if own_hi is not None and start >= own_hi:
             continue
-        entry = {**word, 'timestamp': [start, end]}
-        if own_lo is not None and start < own_lo:
-            if (start if end is None else end) <= own_lo:
-                continue
-            straddling.append(entry)
-        else:
-            kept.append(entry)
-    return kept, straddling
+        entries.append({**word, 'timestamp': [start, end]})
+    return entries
+
+
+def _end(entry: dict) -> float:
+    timing = entry['timestamp']
+    return timing[1] if timing[1] is not None else timing[0]
 
 
 def _norm(token: str) -> str:
     return re.sub(r'\W', '', token.lower())
 
 
-def _seam_overlap(tail: list[str], head: list[str]) -> tuple[int, int] | None:
-    """(head tokens to drop, tail tokens to drop) where the head repeats the end of the tail.
+def _seam_overlap(tail: list[str], head: list[str]) -> tuple[int, int, int] | None:
+    """(repeated tokens, head tokens skipped first, tail tokens skipped last), the longest repeat.
 
-    The tail's last token may be a word clipped by the earlier chunk's cut, so a match may skip it.
-    A single repeated token counts only when it is the whole head: one common word is not evidence.
+    The head repeats the end of the tail. Either side may carry one word clipped by its cut (the
+    earlier chunk's last, the later chunk's first), so a match may skip it. A single repeated token
+    counts only when it is the whole rest of the head: one common word is not evidence.
     """
     tail, head = [_norm(t) for t in tail], [_norm(t) for t in head]
-    for skip in (0, 1):
-        candidate = tail[: len(tail) - skip]
-        for k in range(min(len(candidate), len(head)), 0, -1):
-            if candidate[len(candidate) - k :] == head[:k] and (k >= 2 or k == len(head)) and all(head[:k]):
-                return k, skip
-    return None
+    best = None
+    for skip_tail in (0, 1):
+        for skip_head in (0, 1):
+            end, rest = tail[: len(tail) - skip_tail], head[skip_head:]
+            for k in range(min(len(end), len(rest)), 0, -1):
+                if end[len(end) - k :] == rest[:k] and all(rest[:k]) and (k >= 2 or k == len(rest)):
+                    if best is None or k > best[0]:
+                        best = (k, skip_head, skip_tail)
+                    break
+    return best
 
 
-def seam(previous: list[dict], straddling: list[dict]) -> list[dict]:
-    """The straddling entries of a chunk less what the previous chunk of its unit already holds.
+def seam(previous: list[dict], candidates: list[dict]) -> list[dict]:
+    """Later-chunk lines that start before the previous chunk's last line ended, less what it holds.
 
-    Both chunks heard the overlap. Where the head of the straddling text repeats the end of the
-    previous chunk's text, that head is dropped (and a clipped last token of the previous chunk with
-    it). Without such a match, each straddling entry loses the share of its tokens that falls before
-    the end of the previous chunk's last line. ``previous`` may be edited in place.
+    Both chunks heard that stretch. Where the head of the candidates' text repeats the end of the
+    previous chunk's text, that head is dropped, with a clipped first word of the head and a clipped
+    last word of the previous chunk. Without such a match, each candidate loses the share of its
+    tokens that falls before the previous chunk's last end. ``previous`` may be edited in place.
     """
-    if not straddling:
+    if not candidates:
         return []
-    straddling = sorted(straddling, key=lambda entry: entry['timestamp'][0])
-    covered = max(
-        ((entry['timestamp'][1] if entry['timestamp'][1] is not None else entry['timestamp'][0]) for entry in previous),
-        default=None,
-    )
-    if covered is None or covered <= straddling[0]['timestamp'][0]:
-        return straddling  # the previous chunk transcribed nothing of this overlap
+    candidates = sorted(candidates, key=lambda entry: entry['timestamp'][0])
+    covered = max((_end(entry) for entry in previous), default=None)
+    if covered is None or covered <= candidates[0]['timestamp'][0]:
+        return candidates  # the previous chunk transcribed nothing of this stretch
     tail_tokens = [token for entry in previous for token in str(entry['text']).split()][-SEAM_TOKENS:]
-    head = [(index, token) for index, entry in enumerate(straddling) for token in str(entry['text']).split()]
+    head = [(index, token) for index, entry in enumerate(candidates) for token in str(entry['text']).split()]
     match = _seam_overlap(tail_tokens, [token for _, token in head])
-    drop = {index: 0 for index in range(len(straddling))}
+    drop = {index: 0 for index in range(len(candidates))}
     if match is not None:
-        count, clipped = match
-        for index, _ in head[:count]:
+        count, skip_head, skip_tail = match
+        for index, _ in head[: skip_head + count]:
             drop[index] += 1
-        if clipped:
+        if skip_tail:
             last = previous[-1]
             last['text'] = ' '.join(str(last['text']).split()[:-1])
     else:
-        for index, entry in enumerate(straddling):
+        for index, entry in enumerate(candidates):
             start, end = entry['timestamp'][0], entry['timestamp'][1]
             if end is None or end <= start:
+                drop[index] = len(str(entry['text']).split()) if start < covered else 0
                 continue
             share = min(max((covered - start) / (end - start), 0.0), 1.0)
             drop[index] = round(share * len(str(entry['text']).split()))
     trimmed = []
-    for index, entry in enumerate(straddling):
+    for index, entry in enumerate(candidates):
         tokens = str(entry['text']).split()[drop[index] :]
         if not tokens:
             continue
@@ -488,6 +519,34 @@ def seam(previous: list[dict], straddling: list[dict]) -> list[dict]:
             start = min(max(start, covered), end) if end is not None else max(start, covered)
         trimmed.append({**entry, 'text': ' '.join(tokens), 'timestamp': [start, end]})
     return trimmed
+
+
+def _word_level(entries: list[dict]) -> bool:
+    """Single words with their own timing: time alone tells which chunk heard them."""
+    return all(
+        len(str(entry['text']).split()) == 1 and _end(entry) - entry['timestamp'][0] <= CHUNK_OVERLAP_SECONDS / 2
+        for entry in entries
+    )
+
+
+def join(previous: list[dict], entries: list[dict]) -> list[dict]:
+    """A chunk's entries after the previous chunk of its unit: what both heard is kept once.
+
+    Every entry that starts before the previous chunk's last line ended is compared. Words (one
+    token each, with word timing) go by time: one whose middle falls inside what the previous chunk
+    covered is its copy. Utterances go by text, in ``seam``.
+    """
+    covered = max((_end(entry) for entry in previous), default=None)
+    if covered is None:
+        return entries
+    candidates = [entry for entry in entries if entry['timestamp'][0] < covered]
+    rest = [entry for entry in entries if entry['timestamp'][0] >= covered]
+    if not candidates:
+        return entries
+    if _word_level(candidates):
+        kept = [entry for entry in candidates if (entry['timestamp'][0] + _end(entry)) / 2 >= covered]
+        return kept + rest
+    return seam(previous, candidates) + rest
 
 
 def _transcribe_words(pcm: bytes, language: str | None, *, route=None, deadline: float | None = None) -> list[dict]:
@@ -516,13 +575,42 @@ def _transcribe_words(pcm: bytes, language: str | None, *, route=None, deadline:
         )
 
 
-def _routed_transcriber(pcm: bytes, language: str | None, deadline: float):
-    """The pass's provider call, with the language resolved once, on its first chunk's audio."""
+def _routed_transcriber(pcm: bytes, language: str | None, deadline: float, privacy, sent: '_Sent'):
+    """The pass's provider call, with the language resolved once, on its first chunk's audio.
+
+    Resolving may post up to 30 s of that audio to the vendor (or self-hosted) language probe. The
+    privacy authority is asked right before either probe sends, the vendor probe's timeouts share
+    what is left of the deadline, and its audio is charged to the pass.
+    """
+    from utils.stt.batch_language import MAX_PROBE_SECONDS
     from utils.stt.pre_recorded import verification_stt_deadline
     from utils.stt.prerecorded_route import prerecorded_bytes_route
 
+    stopped: list[str] = []
+
+    def allowed(*, vendor: bool) -> bool:
+        if deadline - time.monotonic() < PROBE_MIN_SECONDS:
+            stopped.append('deadline')
+            return False
+        if not _privacy_allows(privacy):
+            stopped.append('privacy_blocked')
+            return False
+        if vendor:
+            sent.add(min(len(pcm) / 2 / SAMPLE_RATE, MAX_PROBE_SECONDS))
+        return True
+
     with verification_stt_deadline(deadline):
-        route = prerecorded_bytes_route(pcm, language, sample_rate=SAMPLE_RATE, channels=1, encoding='linear16')
+        route = prerecorded_bytes_route(
+            pcm,
+            language,
+            sample_rate=SAMPLE_RATE,
+            channels=1,
+            encoding='linear16',
+            before_probe=lambda: allowed(vendor=True),
+            before_self_probe=lambda: allowed(vendor=False),
+        )
+    if stopped:
+        raise _Stopped(stopped[0])
     return functools.partial(_transcribe_words, route=route, deadline=deadline)
 
 
@@ -566,11 +654,48 @@ def plan(units: list) -> list[tuple[int, list[dict], Chunk]]:
     return jobs
 
 
+def long_recording(units: list) -> bool:
+    """Over the serial path's 20 minutes: audio only the chunked path sends, and the long canary's."""
+    return sum(duration for _, duration, _ in units) > MAX_SECONDS
+
+
+def planned_seconds(jobs: list) -> float:
+    """Provider audio the chunks carry, overlaps included."""
+    return sum(chunk.hi - chunk.lo for _, _, chunk in jobs) / SAMPLE_RATE
+
+
 def pass_class(units: list) -> str:
-    """Which pass slot a recording takes: ``serial`` (kill switch), ``short`` (one round) or ``long``."""
+    """Which pass slot a recording takes: ``serial`` (kill switch), ``short`` or ``long``.
+
+    Long means over 20 minutes of audio, never merely many chunks: a six-minute Finish split into
+    six units, or one 19.9-minute unit of five chunks, is short and keeps the short slots.
+    """
     if not chunked_enabled():
         return 'serial'
-    return 'short' if len(plan(units)) <= PASS_CHUNK_WINDOW else 'long'
+    return 'long' if long_recording(units) else 'short'
+
+
+def screen(uid: str, units: list) -> str | None:
+    """The checks that need only the units, safe before a pass slot is taken; None passes.
+
+    Length (``too_long``), the long canary (``long_canary``) and room under its daily cap
+    (``long_cap``), so a Finish that would be refused never holds a slot or reads anything.
+    """
+    if not units or len(units) > MAX_UNITS:
+        return 'too_long'
+    if not chunked_enabled():
+        return 'too_long' if long_recording(units) else None
+    if not long_recording(units):
+        return None
+    jobs = plan(units)
+    # Refused before any spend: more chunks than three long rounds cannot meet the deadline.
+    if len(jobs) > LONG_MAX_CHUNKS:
+        return 'too_long'
+    if not long_admitted(uid):
+        return 'long_canary'
+    if not LONG_BUDGET.room(planned_seconds(jobs)):
+        return 'long_cap'
+    return None
 
 
 def run(
@@ -716,7 +841,9 @@ class _Expired(Exception):
     """The pass deadline passed before a chunk could be sent."""
 
 
-def _chunk_job(call, pcm: bytes, language, privacy, deadline: float, submitted: float, path: str) -> list[dict]:
+def _chunk_job(
+    call, pcm: bytes, language, privacy, deadline: float, submitted: float, path: str, sent: _Sent
+) -> list[dict]:
     """One chunk on the chunk pool: privacy at dispatch, the provider request, at most one retry.
 
     A leaf: it never waits on another pool. Holds its own buffer until it returns.
@@ -732,6 +859,7 @@ def _chunk_job(call, pcm: bytes, language, privacy, deadline: float, submitted: 
             raise _Refused()
         started = time.monotonic()
         AUDIO_SECONDS.labels(path).inc(seconds)
+        sent.add(seconds)
         try:
             return call(pcm, language) or []
         except Exception as error:
@@ -743,17 +871,20 @@ def _chunk_job(call, pcm: bytes, language, privacy, deadline: float, submitted: 
     raise AssertionError('unreachable')
 
 
-def _chunked_segments(jobs, units, read, language, origin, privacy, transcribe_words, deadline, path) -> list[dict]:
+def _chunked_segments(
+    jobs, units, read, language, origin, privacy, transcribe_words, deadline, path, sent: _Sent
+) -> list[dict]:
     """Every chunk sent concurrently within the deadline, then stitched in order.
 
     At most the pass's window of chunk buffers is alive at once, read or in flight (PASS_CHUNK_WINDOW
-    for a short pass, LONG_PASS_WINDOW for a long one). A refusal at dispatch, an audio error, a chunk
-    that fails twice or the deadline stops the pass: queued chunks are cancelled, and running ones,
-    whose provider timeouts are capped to the deadline, are waited for, so a stopped pass releases its
-    slot only after its buffers are gone. A dispatched request that finishes is never written.
+    for a short pass, whatever its chunk count, LONG_PASS_WINDOW for a long one). A refusal at
+    dispatch, an audio error, a chunk that fails twice or the deadline stops the pass: queued chunks
+    are cancelled, and running ones are waited for only until the deadline plus STOP_GRACE_SECONDS,
+    so a stopped pass releases its slot promptly. A request still running then ends on its own
+    timeouts, which share what was left of the deadline when it was sent; its result is never written.
     """
     CHUNKS.observe(len(jobs))
-    window = PASS_CHUNK_WINDOW if len(jobs) <= PASS_CHUNK_WINDOW else LONG_PASS_WINDOW
+    window = LONG_PASS_WINDOW if path == 'long' else PASS_CHUNK_WINDOW
     pool = get_fast_finish_chunk_executor()
     raw: list[list[dict]] = [[] for _ in jobs]
     in_flight: dict = {}
@@ -769,15 +900,21 @@ def _chunked_segments(jobs, units, read, language, origin, privacy, transcribe_w
             read_started = time.monotonic()
             try:
                 while position + len(batch) < len(jobs) and len(in_flight) + len(batch) < window:
+                    if time.monotonic() >= deadline:
+                        raise _Stopped('deadline')
                     _, references, chunk = jobs[position + len(batch)]
                     batch.append(window_pcm(references, read, chunk.lo, chunk.hi, cache))
+            except _Stopped:
+                raise
             except Exception as error:
                 logger.warning('event=v3_fast_finish outcome=audio_error exception_type=%s', type(error).__name__)
                 raise _Stopped('audio_error') from error
             reading += time.monotonic() - read_started
             if batch and call is None:
                 try:
-                    call = _routed_transcriber(batch[0], language, deadline)
+                    call = _routed_transcriber(batch[0], language, deadline, privacy, sent)
+                except _Stopped:
+                    raise
                 except Exception as error:
                     logger.warning(
                         'event=v3_fast_finish outcome=provider_error stage=route exception_type=%s',
@@ -787,7 +924,7 @@ def _chunked_segments(jobs, units, read, language, origin, privacy, transcribe_w
             # Popped, not iterated: no local name keeps a submitted buffer alive while the pass waits.
             while batch:
                 future = pool.submit(
-                    _chunk_job, call, batch.pop(0), language, privacy, deadline, time.monotonic(), path
+                    _chunk_job, call, batch.pop(0), language, privacy, deadline, time.monotonic(), path, sent
                 )
                 in_flight[future] = position
                 position += 1
@@ -815,7 +952,9 @@ def _chunked_segments(jobs, units, read, language, origin, privacy, transcribe_w
         cache.clear()
         for future in in_flight:
             future.cancel()
-        wait(in_flight)
+        _, running = wait(in_flight, timeout=max(deadline - time.monotonic(), 0) + STOP_GRACE_SECONDS)
+        if running:
+            logger.info('event=v3_fast_finish_abandoned requests=%s', len(running))
     SECONDS.labels('audio').observe(reading)
     # Chunked: the whole concurrent span, the interleaved audio reads included.
     SECONDS.labels('provider').observe(time.monotonic() - started)
@@ -826,9 +965,10 @@ def _stitch(jobs, raw, units, origin) -> list[dict]:
     """Each unit's chunks in order: owned entries, the seam trimmed, then lines on the recording clock."""
     entries: list[list[dict]] = []
     for index, (unit, _, chunk) in enumerate(jobs):
-        kept, straddling = chunk_entries(raw[index], chunk)
-        previous = entries[-1] if index and jobs[index - 1][0] == unit else []
-        entries.append(sorted(seam(previous, straddling) + kept, key=lambda entry: entry['timestamp'][0]))
+        own = chunk_entries(raw[index], chunk)
+        if index and jobs[index - 1][0] == unit:
+            own = join(entries[-1], own)
+        entries.append(sorted(own, key=lambda entry: entry['timestamp'][0]))
     segments: list[dict[str, Any]] = []
     for unit, (start, duration, _) in enumerate(units):
         lines = [line for index, job in enumerate(jobs) if job[0] == unit for line in _segments(entries[index])]
@@ -867,41 +1007,42 @@ def _run(
         row = refresh()
     if not eligible(row):
         return 'ineligible'
+    # Length, the long canary and room under its daily cap: admission asked these before taking a
+    # slot; they are asked again here for direct callers and a cap that filled meanwhile.
+    refused = screen(uid, units)
+    if refused is not None:
+        return refused
     chunked = chunked_enabled()
     seconds = sum(duration for _, duration, _ in units)
-    if not units or len(units) > MAX_UNITS:
-        return 'too_long'
-    jobs, long_audio = [], False
-    if chunked:
-        jobs = plan(units)
-        # Refused before any spend: more chunks than three long rounds cannot meet the deadline.
-        if len(jobs) > LONG_MAX_CHUNKS:
-            return 'too_long'
-        # Audio the serial path never sent: the canary bounds this added spend.
-        long_audio = seconds > MAX_SECONDS
-        if long_audio and not long_admitted(uid):
-            return 'long_canary'
-    elif seconds > MAX_SECONDS:
-        return 'too_long'
+    jobs = plan(units) if chunked else []
+    # Audio the serial path never sent: the canary and its daily cap bound this added spend.
+    long_audio = chunked and long_recording(units)
     if not authorize(uid, seconds, row.get('language')):
         return 'not_funded'
     # The owner may have turned sync off or changed privacy since this recording was captured and
     # admitted. Nothing is read from storage on a stale grant.
     if not _privacy_allows(privacy):
         return 'privacy_blocked'
-    if long_audio and not LONG_BUDGET.reserve(seconds):
+    reserved = planned_seconds(jobs) if long_audio else 0.0
+    if long_audio and not LONG_BUDGET.reserve(reserved):
         return 'long_cap'
     origin = row['started_at'].timestamp()
+    sent = _Sent()
     try:
         if chunked:
-            path = 'short' if len(jobs) <= PASS_CHUNK_WINDOW else 'long'
+            path = 'long' if long_audio else 'short'
             segments = _chunked_segments(
-                jobs, units, read, row.get('language'), origin, privacy, transcribe_words, deadline, path
+                jobs, units, read, row.get('language'), origin, privacy, transcribe_words, deadline, path, sent
             )
         else:
             segments = _serial_segments(units, read, row.get('language'), origin, privacy, transcribe)
     except _Stopped as stopped:
         return stopped.outcome
+    finally:
+        if long_audio:
+            # Charge what was actually sent (retries and the language probe included, chunks never
+            # sent refunded), not the reservation.
+            LONG_BUDGET.settle(reserved, sent.seconds)
     if not segments:
         return 'empty'
     segments.sort(key=lambda segment: (segment['start'], segment['end']))

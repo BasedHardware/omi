@@ -16,38 +16,44 @@ transcript (`utils/conversations/v3/fast_finish.py`) calls the provider.
   silence of at least 1 s near the even chunk length. With none, it goes at the even length and the next
   chunk starts 3 s earlier. The rest of the unit is shared evenly, so no chunk is a sliver.
 - **One end-to-end deadline.** 45 s from record admission (`PASS_DEADLINE_SECONDS`), so the write, the
-  builder and Home still fit the 60 s target. Slot wait, audio reads, chunk queue wait and provider
-  requests all count, and so does one retry. Provider HTTP timeouts are capped to the time left
-  (`verification_stt_deadline`, which also keeps the provider's own retry and Soniox credit failover off
-  for these requests; batch keeps both). Past the deadline the pass cancels queued chunks, waits for
-  running ones (their timeouts end at the deadline), writes nothing and yields to batch as `deadline`.
-- **Rounds and caps.** A short pass, at most four chunks (about 19.8 minutes), is one round with every
-  chunk in flight. A long pass keeps three in flight and is capped at nine chunks (three rounds, about
-  44.6 minutes). A longer recording returns `too_long` before any spend, because it cannot meet the
-  deadline. A 2-hour recording is 25 chunks, about nine rounds of three, so it is refused up front.
+  builder and Home still fit the 60 s target. Slot wait, audio reads, the language probe, chunk queue wait
+  and provider requests all count, and so does one retry. Under `verification_stt_deadline` a request's
+  connect, pool, write and read timeouts share what is left (`budget_timeout`) instead of each taking all
+  of it. That context also keeps the provider's own retry and Soniox credit failover off for these
+  requests; batch keeps both. The language probe's 8 s timeout is capped the same way. Past the deadline
+  the pass cancels queued chunks, waits at most `STOP_GRACE_SECONDS` (2 s) more for running ones, writes
+  nothing, releases its slot and yields to batch as `deadline`. A request still running then ends on its
+  own timeouts, and its result is dropped.
+- **Short and long.** Long means over 20 minutes of audio, never merely many chunks. A six-minute Finish
+  split into six units, or one 19.9-minute unit of five chunks, is short.
+  - A short pass keeps four chunks in flight (one round up to about 19.8 minutes, two above).
+  - A long pass keeps three in flight and is capped at nine chunks (three rounds, about 44.6 minutes).
+  - A longer recording returns `too_long` before any spend, because it cannot meet the deadline. A
+    2-hour recording is 25 chunks, about nine rounds of three, so it is refused up front.
 - **Fairness.**
-  - Short and serial passes share two pass slots. A long pass takes its own single slot, so long passes
-    never hold a short Finish's slot.
-  - A short Finish waits up to 10 s (inside its deadline) for a slot instead of answering `busy` at once.
+  - Short and serial passes share two pass slots. A long pass takes its own single slot.
+  - Length, canary and cap refusals are counted before any slot is taken, so they never hold a slot or
+    read as `busy`.
+  - A short Finish waits up to 10 s, inside its deadline, for a slot instead of answering `busy` at once.
   - On the six-worker `fast_finish_chunk` pool, a long pass's three in flight always leave three workers
     for short Finishes.
-  - Memory per process is at most 11 chunk buffers (about 106 MB) plus one decoded pack per pass.
+  - Memory per process is at most 11 chunk buffers (about 106 MB), plus one per pool worker for a request
+    a stopped pass left running, plus one decoded pack per pass.
 - **Privacy at dispatch.** Privacy is asked before any audio is read, as before, and again inside every
-  chunk job just before its provider request (and before its retry). A chunk that waited in the shared
-  pool's queue is therefore asked when it actually starts. A refusal stops the pass. Cancellation stops
-  queued chunks; a request already dispatched may finish, but its result is never written. The write is
-  still fenced inside its transaction.
+  chunk job just before its provider request (and before its retry). It is also asked right before the
+  language probe posts audio to the vendor or the self-hosted classifier. A refusal stops the pass.
+  Cancellation stops queued chunks; a request already dispatched may finish, but its result is never
+  written. The write is still fenced inside its transaction.
 - **Retry and language.** A chunk that fails is sent once more if at least 10 s of the deadline is left.
-  The language is resolved once per pass, on the first chunk's audio (`prerecorded_bytes_route`), and
-  every chunk reuses that provider selection.
-- **Stitching.** Parakeet and Modulate return utterances lasting seconds, not words, so ownership is by
-  start time.
-  - At a fixed cut the earlier chunk owns lines that start before the overlap's middle.
-  - A later line that starts in the overlap and ends before that middle was heard whole by the earlier
-    chunk, and is dropped.
-  - A later line that straddles the middle is trimmed at the seam. Where its head repeats the end of the
-    earlier chunk's text (allowing one clipped last token), the repeat is dropped. Otherwise it loses the
-    share of its tokens that falls before the earlier chunk's last line ended.
+  The language is resolved once per pass, on the first chunk's audio (`prerecorded_bytes_route`, now in
+  `utils/stt/prerecorded_route.py`), and every chunk reuses that provider selection.
+- **Stitching.** At a fixed cut the earlier chunk owns lines that start before the overlap's middle.
+  Every later line that starts before the earlier chunk's last line ended is compared against it.
+  - Words, which have their own timing, go by time.
+  - Utterances (Parakeet and Modulate return utterances lasting seconds) go by text. Where the head of
+    the later text repeats the end of the earlier text, allowing a clipped word on either side, the
+    repeat and the clipped fragments are dropped. Otherwise each such line loses the share of its tokens
+    that falls before the earlier chunk's last end.
   - Parakeet's text-only fallback, stamped `[0, 0]`, spans its whole chunk instead of being dropped.
 - **Multi-unit recordings.** These were already written in one pass, with the cut stored only after the
   whole transcript was written. They were deferred when that pass was skipped or did not write. Their
@@ -59,7 +65,8 @@ Recordings over 20 minutes are the spend this change adds. They take the chunked
 `CONVERSATIONS_V3_FAST_FINISH_LONG_PERCENT` of owners (default 25, salted uid bucket
 `v3-fast-finish-long`; outside it, `long_canary`). They are also limited to
 `CONVERSATIONS_V3_FAST_FINISH_LONG_DAILY_SECONDS` of their audio per process per UTC day (default 7200;
-past it, `long_cap`). Finishes up to 20 minutes are not gated.
+past it, `long_cap`). The cap counts the audio actually sent: chunk overlaps, retries and the language
+probe included, and chunks never sent refunded. Finishes up to 20 minutes are not gated.
 
 ## Metrics
 

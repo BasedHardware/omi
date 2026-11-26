@@ -204,10 +204,12 @@ def test_a_long_unit_is_cut_into_even_overlapping_chunks_of_at_most_five_minutes
     assert plan[0].own_lo is None and plan[-1].own_hi is None
 
 
-def test_twenty_minutes_is_five_chunks_and_the_short_class_ends_at_four():
-    # 1191 s and up need a fifth chunk: those passes are long-class (two rounds), not one round.
+def test_twenty_minutes_is_five_chunks_and_still_a_short_pass():
+    # 1191 s and up need a fifth chunk: two rounds of the short window, still a short pass.
     assert len(fast_finish.chunk_plan(1185 * RATE)) == 4
     assert len(fast_finish.chunk_plan(1200 * RATE)) == 5
+    unit, _ = recording(1194)
+    assert fast_finish.pass_class([unit]) == 'short' and fast_finish.screen(UID, [unit]) is None
     # The deadline cap: nine chunks reach about 44.6 minutes.
     assert len(fast_finish.chunk_plan(2676 * RATE)) == 9
     assert len(fast_finish.chunk_plan(2680 * RATE)) == 10
@@ -258,23 +260,42 @@ def entry(start, end, text):
     return {'timestamp': [start, end], 'speaker': 'SPEAKER_00', 'text': text}
 
 
-def test_a_chunk_owns_what_starts_in_its_span_and_returns_what_straddles_its_left_boundary():
-    kept, straddling = fast_finish.chunk_entries([entry(290.0, 297.0, 'a'), entry(298.6, 299.5, 'b')], LEFT)
-    assert [e['text'] for e in kept] == ['a'] and straddling == []  # 'b' starts after the boundary
-    # On the right chunk's clock (it starts at 297 s): one heard whole by the left chunk, one straddling,
-    # one after the boundary.
-    kept, straddling = fast_finish.chunk_entries(
-        [entry(0.0, 1.0, 'x'), entry(1.0, 4.0, 'y'), entry(1.6, 2.5, 'z')], RIGHT
-    )
-    assert [e['text'] for e in straddling] == ['y'] and straddling[0]['timestamp'] == pytest.approx([298.0, 301.0])
-    assert [e['text'] for e in kept] == ['z']
+def test_a_chunk_leaves_what_starts_after_its_right_boundary_to_the_next():
+    entries = fast_finish.chunk_entries([entry(290.0, 297.0, 'a'), entry(298.6, 299.5, 'b')], LEFT)
+    assert [e['text'] for e in entries] == ['a']  # 'b' starts after the boundary
+    # Nothing is dropped on the left: the right chunk's entries come back on its unit's clock.
+    entries = fast_finish.chunk_entries([entry(0.0, 1.0, 'x'), entry(1.0, 4.0, 'y')], RIGHT)
+    assert [e['timestamp'] for e in entries] == [pytest.approx([297.0, 298.0]), pytest.approx([298.0, 301.0])]
 
 
 def test_an_untimed_fallback_spans_its_whole_chunk_instead_of_being_dropped():
     # Parakeet's text-only fallback is stamped [0, 0]; after a fixed cut it would sit before the boundary.
-    kept, straddling = fast_finish.chunk_entries([entry(0.0, 0.0, 'all of it')], RIGHT)
-    assert kept == [] and straddling[0]['timestamp'] == pytest.approx([297.0, 600.0])
-    assert fast_finish.seam([entry(290.0, 300.0, 'other words')], straddling)[0]['text'] == 'all of it'
+    (spanning,) = fast_finish.chunk_entries([entry(0.0, 0.0, 'all of it')], RIGHT)
+    assert spanning['timestamp'] == pytest.approx([297.0, 600.0])
+    (joined,) = fast_finish.join([entry(290.0, 300.0, 'other words')], [spanning])
+    assert joined['text'] == 'all of it'
+
+
+def test_a_later_line_inside_the_earlier_coverage_is_compared_and_dropped():
+    # Review probe: "epsilon zeta" starts after the overlap's middle but before the earlier chunk's
+    # last line ended; it used to be kept whole beside the earlier copy.
+    previous = [entry(290.0, 300.0, 'alpha beta gamma delta epsilon zeta')]
+    later = [entry(297.2, 298.4, 'gamma delta'), entry(298.7, 299.8, 'epsilon zeta'), entry(300.0, 302.0, 'eta theta')]
+    assert [e['text'] for e in fast_finish.join(previous, later)] == ['eta theta']
+
+
+def test_a_clipped_first_word_of_the_later_chunk_is_matched_not_traded_for_a_real_one():
+    # Review probe: the later chunk starts inside "go" and hears "o"; the earlier chunk ended inside
+    # "store" and heard "sto". Both fragments go, "store" stays.
+    previous = [entry(292.0, 300.0, 'we should go to the sto')]
+    (trimmed,) = fast_finish.join(previous, [entry(297.0, 305.0, 'o to the store tomorrow')])
+    assert trimmed['text'] == 'store tomorrow' and previous[0]['text'] == 'we should go to the'
+
+
+def test_words_with_their_own_timing_are_joined_by_time():
+    previous = [entry(297.5, 297.9, 'ten'), entry(298.3, 298.7, 'eleven')]
+    later = [entry(297.5, 297.9, 'ten'), entry(298.3, 298.7, 'eleven'), entry(299.0, 299.4, 'twelve')]
+    assert [e['text'] for e in fast_finish.join(previous, later)] == ['twelve']
 
 
 def test_the_seam_drops_the_repeated_head_of_an_utterance():
@@ -541,6 +562,58 @@ def _admit_all(cids_units, release=None, before=None):
     asyncio.run(admit())
 
 
+@pytest.mark.parametrize(
+    'shape',
+    [
+        'six one-minute units split by 30 s gaps',
+        'one unit of 19.9 minutes (five chunks)',
+    ],
+)
+def test_many_chunks_under_twenty_minutes_stay_short_while_a_long_pass_holds_its_slot(monkeypatch, shape):
+    if shape.startswith('six'):
+        units, _ = zip(*(recording(60, offset=offset) for offset in range(0, 540, 90)))
+        units = list(units)
+    else:
+        units = [recording(1194)[0]]
+    assert len(fast_finish.plan(units)) >= 5 and fast_finish.pass_class(units) == 'short'
+    started = _admit(monkeypatch, units)
+    assert live._FAST_FINISH_LONG_SLOTS.acquire(blocking=False)  # a canary long pass is running
+    try:
+        before = fast_finish.OUTCOMES.labels('busy')._value.get()
+        _admit_all([('short-many', units)])
+    finally:
+        live._FAST_FINISH_LONG_SLOTS.release()
+    assert started == ['short-many'] and fast_finish.OUTCOMES.labels('busy')._value.get() == before
+
+
+def test_a_short_pass_with_more_chunks_keeps_the_short_window_and_path():
+    units, readers = zip(*(recording(60, offset=offset) for offset in range(0, 540, 90)))
+    release = threading.Event()
+    provider = Provider(hold=_gate(fast_finish.PASS_CHUNK_WINDOW, release), sleep=0.01)
+    audio = fast_finish.AUDIO_SECONDS.labels('short')._value.get()
+    outcome, _ = run(list(units), merged_reader(*readers), provider)
+    assert outcome == 'written' and provider.peak == fast_finish.PASS_CHUNK_WINDOW
+    assert fast_finish.AUDIO_SECONDS.labels('short')._value.get() - audio == pytest.approx(360)
+
+
+@pytest.mark.parametrize('percent,cap,outcome', [('0', None, 'long_canary'), ('100', '100', 'long_cap')])
+def test_a_refused_long_finish_is_counted_before_any_slot(monkeypatch, percent, cap, outcome):
+    monkeypatch.setenv('CONVERSATIONS_V3_FAST_FINISH_LONG_PERCENT', percent)
+    if cap:
+        monkeypatch.setenv('CONVERSATIONS_V3_FAST_FINISH_LONG_DAILY_SECONDS', cap)
+    long_unit, _ = recording(1800)
+    started = _admit(monkeypatch, [long_unit])
+    assert live._FAST_FINISH_LONG_SLOTS.acquire(blocking=False)  # the long slot is busy
+    try:
+        before = {label: fast_finish.OUTCOMES.labels(label)._value.get() for label in ('busy', outcome)}
+        _admit_all([('long-refused', [long_unit])])
+    finally:
+        live._FAST_FINISH_LONG_SLOTS.release()
+    assert started == []
+    assert fast_finish.OUTCOMES.labels(outcome)._value.get() == before[outcome] + 1
+    assert fast_finish.OUTCOMES.labels('busy')._value.get() == before['busy']
+
+
 def test_a_long_pass_never_takes_a_short_finish_slot(monkeypatch):
     long_unit, _ = recording(1800)
     short_unit, _ = recording(200)
@@ -653,6 +726,35 @@ def test_a_chunk_that_waited_past_the_deadline_in_the_queue_is_never_sent():
         for blocker in blockers:
             blocker.result(5)
     assert outcome == 'deadline' and provider.calls == 0
+
+
+def test_a_stopped_pass_returns_promptly_even_if_a_request_ignores_its_timeouts(monkeypatch):
+    monkeypatch.setattr(fast_finish, 'STOP_GRACE_SECONDS', 0.2)
+    unit, read = recording(200)
+    provider = Provider(sleep=1.5)  # a request that runs well past the deadline
+    started = time.monotonic()
+    try:
+        outcome, _ = run([unit], read, provider, deadline=started + 0.2)
+        elapsed = time.monotonic() - started
+    finally:
+        while provider.in_flight:
+            time.sleep(0.02)
+    assert outcome == 'deadline' and elapsed < 1.0
+
+
+def test_request_timeouts_share_one_budget_instead_of_each_taking_it_whole():
+    timeout = prerecorded_route.budget_timeout(10.0)
+    assert timeout.connect + timeout.pool + timeout.write + timeout.read == pytest.approx(10.0)
+    with pre_recorded.verification_stt_deadline(time.monotonic() + 4.0):
+        verifier = pre_recorded._verification_timeout(None)
+        probe = prerecorded_route.probe_timeout(None)
+    assert sum((verifier.connect, verifier.pool, verifier.write, verifier.read)) <= 4.0
+    assert sum((probe.connect, probe.pool, probe.write, probe.read)) <= 4.0
+    with pre_recorded.verification_stt_deadline(time.monotonic() + 40.0):
+        probe = prerecorded_route.probe_timeout(None)
+    # The probe never takes longer than its own 10 s bound.
+    assert sum((probe.connect, probe.pool, probe.write, probe.read)) <= prerecorded_route.PROBE_SECONDS + 0.01
+    assert prerecorded_route.probe_timeout('default') == 'default'  # no caller deadline: unchanged
 
 
 def test_an_expired_admission_budget_reads_no_audio():
@@ -861,6 +963,48 @@ def test_the_daily_cap_on_long_audio_stops_further_long_passes(monkeypatch):
     assert run([unit], read, Provider())[0] == 'written'
     never = lambda *args: pytest.fail('must not read audio or transcribe')
     assert run([unit], never, never, write=never)[0] == 'long_cap'
+
+
+def test_the_daily_cap_is_charged_with_retries_and_the_language_probe(monkeypatch):
+    unit, read = recording(1800)
+    planned = fast_finish.planned_seconds(fast_finish.plan([unit]))
+    assert planned == pytest.approx(1818, abs=1)  # the six 3 s overlaps are sent too
+    provider = Provider(fail=lambda heard, attempt: 700 in heard and attempt == 1)
+    assert run([unit], read, provider)[0] == 'written'
+    used = fast_finish.LONG_BUDGET._used
+    # Every request sent, the retry included, is what the cap counts.
+    assert provider.calls == 8 and used == pytest.approx(sum(provider.durations)) and used > planned
+
+
+def test_the_language_probe_is_privacy_checked_right_before_it_sends(monkeypatch):
+    unit, read = recording(1800)
+    answers, probed = iter([True, False]), []
+
+    def route(pcm, language, *, before_probe, before_self_probe, **kwargs):
+        probed.append(before_probe())  # the vendor probe asks right before posting audio
+        return (('modulate', 'en', 'velma-2'), 'en')
+
+    monkeypatch.setattr(prerecorded_route, 'prerecorded_bytes_route', route)
+    monkeypatch.setattr(pre_recorded, 'prerecorded_from_bytes', lambda *a, **k: pytest.fail('must not transcribe'))
+    outcome = fast_finish.run(
+        UID, 'cid', row(), [unit], read, write=lambda *a: True, privacy=lambda: next(answers, False)
+    )
+    assert outcome == 'privacy_blocked' and probed == [False]
+    assert fast_finish.LONG_BUDGET._used == 0  # nothing was sent
+
+
+def test_an_allowed_language_probe_is_charged_to_the_daily_cap(monkeypatch):
+    unit, read = recording(1800)
+
+    def route(pcm, language, *, before_probe, before_self_probe, **kwargs):
+        assert before_self_probe() is True and before_probe() is True
+        return (('modulate', 'en', 'velma-2'), 'en')
+
+    monkeypatch.setattr(prerecorded_route, 'prerecorded_bytes_route', route)
+    monkeypatch.setattr(pre_recorded, 'prerecorded_from_bytes', lambda pcm, **kwargs: [])
+    assert fast_finish.run(UID, 'cid', row(), [unit], read, write=lambda *a: True, privacy=lambda: True) == 'empty'
+    # Seven chunks (1818 s) and one 30 s vendor probe clip; the self-hosted probe is not provider spend.
+    assert fast_finish.LONG_BUDGET._used == pytest.approx(1818 + 30, abs=1)
 
 
 def test_the_daily_budget_resets_each_utc_day(monkeypatch):

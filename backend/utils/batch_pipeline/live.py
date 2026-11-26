@@ -415,8 +415,9 @@ _FAST_FINISH_STARTED_MAX = 4096
 # Bound whole passes, not provider requests. Each pass holds a storage thread as its coordinator and
 # up to its window of five-minute chunk buffers (9.6 MB each); its chunk requests run on the shared
 # fast-finish chunk pool, which caps provider requests for the process. Short and serial passes share
-# two slots (4 buffers each); a long pass takes its own single slot (3 buffers), so long recordings
-# never hold a short Finish's slot: 11 buffers, about 106 MB, per process at most. With
+# two slots (4 buffers each); a long pass (over 20 minutes of audio) takes its own single slot (3
+# buffers), so long recordings never hold a short Finish's slot: 11 buffers, about 106 MB, per process,
+# plus at most one buffer per pool worker for a request a stopped pass left running. With
 # CONVERSATIONS_V3_FAST_FINISH_CHUNKED=off every pass is serial and holds a whole recording of up to
 # 20 minutes instead, as before.
 _FAST_FINISH_SLOTS = threading.BoundedSemaphore(2)
@@ -523,12 +524,18 @@ async def _manual_finish_admitted(
             # The cohort read is synchronous on this thread. Owners outside the rollout stop here
             # and never take one of the pass slots.
             shape = fast_finish.pass_class(copied) if fast_finish.enabled(uid) else None
+            # Length, the long canary and its daily cap need only the units: a Finish they refuse is
+            # counted as such and never holds a slot, so it can neither wait for one nor read as busy.
+            refused = fast_finish.screen(uid, copied) if shape is not None else None
             slots = _FAST_FINISH_LONG_SLOTS if shape == 'long' else _FAST_FINISH_SLOTS
             # A short Finish may wait briefly, inside its deadline; a long one and the serial kill-switch
             # path never wait, as before.
             patience = min(_FAST_FINISH_SHORT_SLOT_WAIT_SECONDS, deadline - time.monotonic()) if shape == 'short' else 0
             if shape is None:
                 outcome = 'not_enabled'
+            elif refused is not None:
+                outcome = refused
+                fast_finish.OUTCOMES.labels(refused).inc()
             elif not (slots.acquire(timeout=patience) if patience > 0 else slots.acquire(blocking=False)):
                 outcome = 'busy'
                 fast_finish.OUTCOMES.labels('busy').inc()

@@ -42,6 +42,8 @@ from models.transcript_segment import TranscriptSegment
 from utils.log_sanitizer import sanitize_provider_error
 from utils.observability.fallback import record_fallback
 from utils.other.endpoints import timeit
+from utils.stt.prerecorded_route import budget_timeout, prerecorded_bytes_route
+from utils.stt.prerecorded_route import verification_deadline as _verification_deadline
 from utils.stt.outcomes import TranscriptionFailure
 from utils.stt.modulate_batch import MODULATE_TIMEOUT as _MODULATE_TIMEOUT
 from utils.stt.modulate_batch import modulate_budget_refusal as _modulate_budget_refusal
@@ -66,7 +68,6 @@ from utils.stt.vendor_guard import (
 )
 
 _DG_TIMEOUT = httpx.Timeout(connect=10.0, read=120.0, write=30.0, pool=10.0)
-_verification_deadline: ContextVar[Optional[float]] = ContextVar('verification_stt_deadline', default=None)
 
 _held_single_attempt: ContextVar[bool] = ContextVar('held_stt_single_attempt', default=False)
 _modulate_prior_failure: ContextVar[Optional[bool]] = ContextVar('modulate_prior_failure', default=None)
@@ -111,7 +112,7 @@ def _verification_timeout(default: httpx.Timeout | float) -> httpx.Timeout | flo
     remaining = deadline - time.monotonic()
     if remaining <= 0:
         raise TimeoutError('speaker tag verification deadline expired')
-    return httpx.Timeout(remaining)
+    return budget_timeout(remaining)
 
 
 _MAX_PRE_RECORDED_SEGMENT_DURATION_SECONDS = 30.0
@@ -1478,8 +1479,6 @@ def prerecorded_from_bytes(
     route: Optional[Tuple[Any, Optional[str]]] = None,
 ) -> Any:
     """Route pre-recorded bytes transcription through STT_PRERECORDED_MODEL; ``route`` reuses a resolved one."""
-    from utils.stt.prerecorded_route import prerecorded_bytes_route
-
     selected, resolved = route or prerecorded_bytes_route(
         audio_bytes, language, sample_rate=sample_rate, channels=channels, encoding=encoding
     )
