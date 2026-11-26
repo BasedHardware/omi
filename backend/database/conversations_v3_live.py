@@ -394,10 +394,11 @@ def _capture_ineligible(row: Mapping[str, Any], now: datetime, *, window_id: Opt
 
 
 def _claimed_only_by(claims: Any, window_id: str) -> bool:
-    if not claims:
-        return True
-    return isinstance(claims, list) and all(
-        isinstance(claim, dict) and claim.get('conversation_id') == window_id for claim in claims
+    """The window holds a claim on the capture, and no other window does."""
+    return (
+        isinstance(claims, list)
+        and bool(claims)
+        and all(isinstance(claim, dict) and claim.get('conversation_id') == window_id for claim in claims)
     )
 
 
@@ -506,6 +507,60 @@ _NAMED_OUTCOMES = {
 }
 
 
+def _is_listen_capture(row: Mapping[str, Any]) -> bool:
+    return bool(
+        not row.get('v3_derived')
+        and row.get('source') in {'omi', 'phone'}
+        and (row.get('external_data') or {}).get('recording_session_id')
+    )
+
+
+def _window_unfit(window: Mapping[str, Any]) -> bool:
+    return bool(
+        not window.get('v3_derived')
+        or any(window.get(key) for key in ('deleted', 'discarded', 'is_locked', 'sync_merged_into'))
+        or window.get('data_protection_level') == 'private'
+        or not isinstance(window.get('started_at'), datetime)
+        or not isinstance(window.get('finished_at'), datetime)
+    )
+
+
+def _window_tail(window: Mapping[str, Any]) -> Optional[str]:
+    members = window.get('v3_recording_ids') or []
+    cid = members[-1] if isinstance(members, list) and members else None
+    return cid if _valid_document_id(cid) else None
+
+
+def _latest_capture(docs, cid, row):
+    """The capture the person just finished: ``cid``, or a capture that sealed after it.
+
+    A newer capture can feed a window that never goes live (hidden under the word floor), so the
+    app still names the earlier window. ``docs`` is the newest-first recent-source scan. Returns
+    ``(cid, row)`` or a decline outcome string when the newest capture cannot be told apart.
+    """
+    rows = [(doc.id, doc.to_dict() or {}) for doc in docs]
+    captures = [
+        (rid, source)
+        for rid, source in rows
+        if _is_listen_capture(source)
+        # Dropped or absorbed captures carry no speech the person could be finishing.
+        and not any(source.get(key) for key in ('deleted', 'discarded', 'sync_merged_into'))
+    ]
+    later = [
+        (rid, source)
+        for rid, source in captures
+        if rid != cid and isinstance(source.get('finished_at'), datetime) and source['finished_at'] > row['finished_at']
+    ]
+    if not later:
+        # The scan is newest first. Full, and without the named capture, a newer one may lie past it.
+        if len(docs) >= RECENT_FINISH_LIMIT and all(rid != cid for rid, _ in rows):
+            return 'recording_lookup_capped'
+        return cid, row
+    newest = max(source['finished_at'] for _, source in later)
+    top = [(rid, source) for rid, source in later if source['finished_at'] == newest]
+    return top[0] if len(top) == 1 else 'recording_ambiguous'
+
+
 def request_named_finish(
     uid: str, named_id: str, *, now: datetime, firestore_client: Any = None
 ) -> Tuple[str, Optional[Dict[str, Any]], str]:
@@ -513,9 +568,11 @@ def request_named_finish(
 
     The app names the window it was showing. A pendant capture that seals at a speech pause can
     end that window before the tap lands, so the name no longer resolves to a live window. The
-    named id is either that window (its tail source is the capture) or the capture itself. Only
-    a capture sealed within ``RECENT_FINISH_AGE`` that passes the recording-Finish checks is cut,
-    and only while no other window is live. Returns ``(outcome, response row, recording id)``.
+    named id is either that window (its tail source is the capture) or the capture itself. A
+    capture that sealed after it is what the person just finished, so it wins. Only a capture
+    sealed within ``RECENT_FINISH_AGE`` that passes the recording-Finish checks is cut, only
+    while no other window is live, and a completed window already on Home is left as it is.
+    Returns ``(outcome, response row, recording id)``.
     """
     if not _valid_document_id(named_id):
         return 'named_not_finishable', None, ''
@@ -524,39 +581,60 @@ def request_named_finish(
 
     @firestore.transactional
     def commit(tx):
-        named = collection.document(named_id).get(transaction=tx, field_paths=NAMED_FINISH_FIELDS).to_dict() or {}
-        window, cid, row = None, named_id, named
+        def read(doc_id, fields):
+            return collection.document(doc_id).get(transaction=tx, field_paths=fields).to_dict() or {}
+
+        named = read(named_id, NAMED_FINISH_FIELDS)
+        window_id, window, cid, row = None, None, named_id, named
         if named.get('v3_derived'):
-            members = named.get('v3_recording_ids') or []
-            cid = members[-1] if isinstance(members, list) and members else None
-            if (
-                any(named.get(key) for key in ('deleted', 'discarded', 'is_locked'))
-                or not isinstance(named.get('started_at'), datetime)
-                or not isinstance(named.get('finished_at'), datetime)
-                or not _valid_document_id(cid)
-            ):
+            cid = _window_tail(named)
+            if _window_unfit(named) or cid is None:
                 return 'named_not_finishable', None, ''
-            window = named
-            row = collection.document(cid).get(transaction=tx, field_paths=RECENT_FINISH_FIELDS).to_dict() or {}
-        if _capture_ineligible(row, now, window_id=named_id if window is not None else None):
+            window_id, window, row = named_id, named, read(cid, RECENT_FINISH_FIELDS)
+        if not _is_listen_capture(row) or not isinstance(row.get('finished_at'), datetime):
             return 'named_not_finishable', None, ''
+        latest = _latest_capture(_recent_finish_sources(collection, tx, now), cid, row)
+        if isinstance(latest, str):
+            return latest, None, ''
+        refusal = 'named_not_finishable'
+        if latest[0] != cid:
+            cid, row = latest
+            refusal = 'named_superseded'
+            owners = {
+                claim.get('conversation_id') if isinstance(claim, dict) else None for claim in row.get('claims') or ()
+            }
+            window_id, window = None, None
+            if owners:
+                window_id = next(iter(owners)) if len(owners) == 1 else None
+                window = read(window_id, NAMED_FINISH_FIELDS) if _valid_document_id(window_id) else {}
+                if _window_unfit(window) or _window_tail(window) != cid:
+                    return refusal, None, ''
+            logger.info('v3 named Finish moved to a capture that sealed after the named one')
+        if _capture_ineligible(row, now, window_id=window_id):
+            return refusal, None, ''
+        if window is not None and window_id and window.get('status') == 'completed' and not window.get('home_hidden'):
+            # Already on Home with its notes: a cut would only regenerate them.
+            return 'already_visible', _window_response(window_id, window), cid
         blocked = _live_window_or_deleting(client, tx, collection, uid, now)
         if blocked:
             return blocked, None, ''
-        if window is None:
+        if window is None or not window_id:
             outcome, response_row = _finish_capture(client, tx, collection, uid, cid, row, now)
             return _NAMED_OUTCOMES.get(outcome, outcome), response_row, cid if response_row else ''
-        outcome, recording_id = _finish_window_tail(client, tx, uid, collection, window, named_id, cid, row, now)
+        outcome, recording_id = _finish_window_tail(client, tx, uid, collection, window, window_id, cid, row, now)
         if not recording_id:
             return outcome, None, ''
-        response_row = {
-            'id': named_id,
-            'created_at': window.get('created_at') or window['started_at'],
-            'started_at': window['started_at'],
-            'finished_at': window['finished_at'],
-            'v3_recording_ids': window.get('v3_recording_ids'),
-            'structured': {},
-        }
-        return _NAMED_OUTCOMES.get(outcome, outcome), response_row, recording_id
+        return _NAMED_OUTCOMES.get(outcome, outcome), _window_response(window_id, window), recording_id
 
     return commit(client.transaction())
+
+
+def _window_response(window_id: str, window: Mapping[str, Any]) -> Dict[str, Any]:
+    return {
+        'id': window_id,
+        'created_at': window.get('created_at') or window['started_at'],
+        'started_at': window['started_at'],
+        'finished_at': window['finished_at'],
+        'v3_recording_ids': window.get('v3_recording_ids'),
+        'structured': {},
+    }

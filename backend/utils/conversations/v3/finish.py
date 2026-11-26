@@ -73,9 +73,10 @@ def _acknowledge(uid, window, outcome, recording_id):
     if outcome in {'cut', 'consumed', 'recording_cut', 'named_recording_cut'}:
         triggers.enqueue_pending(uid, manual_end_id=recording_id)
     conversation = deserialize_conversation(window)
-    if outcome in {'resolved_empty', 'already_empty'}:
-        # A silent tail can resolve empty while an earlier member still has speech.
-        conversation.discarded = not live.has_finish_content({}, window, recording_id)
+    if outcome in {'resolved_empty', 'already_empty', 'already_visible'}:
+        # A silent tail can resolve empty while an earlier member still has speech. An already visible
+        # window is a completed Home card; Finish answers with it and changes nothing.
+        conversation.discarded = outcome != 'already_visible' and not live.has_finish_content({}, window, recording_id)
         conversation.status = ConversationStatus.completed
         conversation.tile_state = 'done'
     else:

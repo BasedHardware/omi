@@ -89,6 +89,8 @@ for outcome in (
     'named_recording_cut',
     'named_recording_requested',
     'named_not_finishable',
+    'named_superseded',
+    'already_visible',
     'no_recording',
     'batch_disabled',
     'batch_unavailable',

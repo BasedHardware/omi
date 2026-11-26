@@ -55,9 +55,9 @@ def _finish_source(client, combo, trial):
 
 
 def _named_finish_sources(client, combo, trial):
-    """A just-sealed capture and the ended window it fed; Finish may name either one."""
+    """A just-sealed capture, and another that fed an ended window; Finish may name either one."""
     base = f'users/{SHAPE_UID}/conversations'
-    client.documents[f'{base}/source'] = {
+    capture = {
         'source': 'omi',
         'recording': True,
         'created_at': FROZEN_NOW,
@@ -66,12 +66,17 @@ def _named_finish_sources(client, combo, trial):
         'status': 'completed',
         'external_data': {'recording_session_id': 'shape-session'},
     }
+    client.documents[f'{base}/source'] = capture
+    client.documents[f'{base}/tail'] = {
+        **capture,
+        'claims': [{'conversation_id': 'window', 'start': FROZEN_NOW, 'end': FROZEN_NOW}],
+    }
     client.documents[f'{base}/window'] = {
         'v3_derived': True,
         'started_at': FROZEN_NOW,
         'finished_at': FROZEN_NOW,
         'status': 'processing',
-        'v3_recording_ids': ['source'],
+        'v3_recording_ids': ['tail'],
     }
 
 
@@ -193,8 +198,11 @@ def entries():
         ),
         CoveredByEntry(
             'database.conversations_v3_live._recent_finish_sources',
-            covered_by=('database.conversations_v3_live.request_recording_finish',),
-            reason='The Finish transaction scans the same bounded source query on every call.',
+            covered_by=(
+                'database.conversations_v3_live.request_recording_finish',
+                'database.conversations_v3_live.request_named_finish',
+            ),
+            reason='Both recording-scoped Finish transactions scan the same bounded source query.',
         ),
         DriverEntry(
             'database.conversations_v3.merge_donors_have_tasks',
