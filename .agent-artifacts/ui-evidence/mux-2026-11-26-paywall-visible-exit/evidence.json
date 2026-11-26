@@ -1,0 +1,33 @@
+{
+  "version": 1,
+  "images": [
+    {
+      "file": "001-mobile-ios-light-deep.png",
+      "platform": "mobile-ios",
+      "description": "Light, deepest scroll. Native iOS simulator screenshots, same focused scenario and local seeded account.",
+      "captured_by": "agent",
+      "source": "screencapture"
+    },
+    {
+      "file": "002-mobile-ios-dark-deep.png",
+      "platform": "mobile-ios",
+      "description": "Dark, deepest scroll. Native iOS simulator screenshots, same focused scenario and local seeded account.",
+      "captured_by": "agent",
+      "source": "screencapture"
+    },
+    {
+      "file": "003-mobile-ios-max-deep.png",
+      "platform": "mobile-ios",
+      "description": "Largest text, deepest scroll. Native iOS simulator screenshots, same focused scenario and local seeded account.",
+      "captured_by": "agent",
+      "source": "screencapture"
+    },
+    {
+      "file": "004-mobile-ios-light-top.png",
+      "platform": "mobile-ios",
+      "description": "Initial viewport. Native iOS simulator screenshots, same focused scenario and local seeded account.",
+      "captured_by": "agent",
+      "source": "screencapture"
+    }
+  ]
+}
