@@ -2228,7 +2228,8 @@ async def wait_for_sync_receipts(
         if noted:
             # A job that finished before the subscription left a note; a later one publishes a wake.
             listed = sorted(jobs)
-            notes = await redis.mget([receipt_note_key(uid, job_id) for job_id in listed])
+            keys = await run_blocking(db_executor, lambda: [receipt_note_key(uid, job_id) for job_id in listed])
+            notes = await redis.mget(keys)
             finished = [job_id for job_id, note in zip(listed, notes) if note]
             result = (
                 await run_blocking(db_executor, snapshot, finished) if finished else {'receipts': [], 'fallback': []}

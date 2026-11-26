@@ -191,6 +191,7 @@ CaptureProvider composeProductionCaptureProvider({
   final liveWords = livePreview == null ? null : _composeLiveWords(provider, livePreview);
   // Time with the app in front, and how much of it with capture active (App Foreground Ended).
   final foregroundTime = AppForegroundTime(capturing: () => _captureActive(provider));
+  // omi-perf-allow: unselected-provider-listener -- the callback reads one bool and returns when capture is unchanged or the app is not in front
   provider.addListener(foregroundTime.onCaptureChanged);
   provider.lifetime.own(() => provider.removeListener(foregroundTime.onCaptureChanged));
   final lifecycle = AppLifecycleListener(onStateChange: (state) {
