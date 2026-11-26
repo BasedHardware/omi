@@ -248,7 +248,7 @@ BODY_DIGEST = {
     # Re-reviewed 2026-11-04: atomic blocked_byok_at metadata only; query ownership is unchanged.
     # Re-reviewed: the early user-finish admission judges the snapshot already held; no collection query
     # (cohort mode adds one cached point read of the owner's rollout_cohorts document).
-    'database.user_data_deletion.purge_user_subtree': 'cf0e4ef71588e28f2e011464b65eee12c081eb27ecd676ccb29cf7a914c126ab',
+    'database.user_data_deletion.purge_user_subtree': '9bb7456a9bfd5d6f77f15cd53f67b717d7c0b797ee5338394d0d8ec51b19d10d',
     'database.conversation_finalization_jobs._create_or_get_finalization_intent_txn': '9fad8023fbdcc5a82898573d30afabcf7829ed2b7a992e3c28d3753fa2154136',
     'database.durable_queue_age._publish_queue_ages': '58e66cfc32f39bdc2e9b1e6c805d18599c1ff14be8dbcff68eadc23506656d9b',
     'database.firestore_query_types.FirestoreQuerySpec.build': '2c26a157a8e87be2bcfef668e3bd5cdc0a9c0d96e0b56bada98c30741c8be01a',
