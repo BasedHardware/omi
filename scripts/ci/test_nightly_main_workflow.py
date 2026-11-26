@@ -26,6 +26,15 @@ def jobs(text):
 PR_SCHEMA_WRITERS = {"gcp_firestore_indexes.yml"}
 
 INTENTIONAL_BUDGET_CHANGES = {
+    # Desktop Swift Static & Test Contracts: SCA-1981 (nightly run
+    # 43357908980) measured the prelude ahead of the suite step at 41 minutes
+    # (checkout, pinned Xcode, cold from-source formatter/linter bootstrap,
+    # macOS manifest checks, debug prebuild), which the 90-min ceiling could
+    # not admit alongside the job's own declared 70-min suite budget (4200s)
+    # plus the ~158s post-step: the job was cancelled before its step-budget
+    # guard could publish a diagnosable failure. 120 restores that headroom;
+    # budget_p50 stays 29.
+    ("desktop-swift-ci.yml", "desktop-swift-verify", "timeout-minutes"): "120",
     # Lane 8 adds a port-map job to the reusable workflow. It is skipped on
     # the pinned nightly, and its PR and main-push budget is fixed here.
     ("backend-go-checks.yml", "port-tasks", "runs-on"): "ubuntu-latest",

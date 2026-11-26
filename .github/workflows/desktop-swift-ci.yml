@@ -181,8 +181,16 @@ jobs:
     # completing. First pinned-Xcode 26.6 full lane on macos-26 measured
     # past 60 minutes (run 34687313733: cancelled mid serial cluster with
     # every completed suite green; one wedged batch cost 1650s before its
-    # bisect recovered), so this ceiling is 90.
-    timeout-minutes: 90
+    # bisect recovered), so this ceiling was 90. SCA-1981 (nightly run
+    # 43357908980) then measured the prelude ahead of the suite step —
+    # checkout, pinned Xcode, cold from-source formatter/linter bootstrap,
+    # macOS manifest checks, debug prebuild — at 41 minutes: 90 no longer
+    # admitted this job's own declared 70-minute suite budget (4200s) plus
+    # the ~158s post-step, so the job was cancelled before its step-budget
+    # guard could publish a diagnosable failure. 120 admits 41m prelude +
+    # 70m suite budget + post-step with slack (the PR lane's 4400s fits
+    # too); raise only with measured evidence in the PR that raises it.
+    timeout-minutes: 120
     steps:
       - name: Checkout code
         uses: actions/checkout@v7
@@ -380,8 +388,9 @@ jobs:
           # bisected into a green half (40s), a wedged half that burned its
           # full 1500s batch ceiling, and ~1020s of isolated singles, 3923s
           # step wall. The PR lane must admit one legitimate bisect cascade,
-          # so it is 4400s (cold-tools 742s prelude + 4400s + 158s post-step
-          # still fits the 90m verify-job ceiling). The full lane
+          # so it is 4400s (a cold prelude now measures 41m — SCA-1981 —
+          # and 41m + 4400s + 158s post-step still fits the 120m verify-job
+          # ceiling). The full lane
           # (re-baselined runner diffs, main pushes, scheduled health)
           # legitimately spans ~28-40m on a slow runner day and carries 4200s
           # against the 70m+ drift class. Raise either only with measured
