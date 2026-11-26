@@ -36,13 +36,18 @@ transcript (`utils/conversations/v3/fast_finish.py`) calls the provider.
     left (`budget_timeout`) instead of each taking all of it. That context also keeps the provider's own
     retry and Soniox credit failover off for these requests; batch keeps both. The vendor language
     probe and the self-hosted gate keep their own timeout parts (connect 2 s; read, write and pool 8 s
-    and 6 s), each capped to what is left.
+    and 6 s), each capped to what is left. Because those parts add up, the whole language resolution
+    also runs on `fast_finish_io` and is abandoned at the deadline (`deadline`); after the privacy
+    check, a probe with under `PROBE_MIN_SECONDS` (3 s) left is skipped and the row's language kept.
   - Past the deadline the pass cancels queued chunks, waits at most `STOP_GRACE_SECONDS` (2 s) more for
     running ones, writes nothing, releases its slot and yields to batch as `deadline`. A request still
     running then ends on its own timeouts, and its result is dropped.
   - A pass that stops early (`provider_error`, `privacy_blocked`, `audio_error`) sends no further request
     or retry (a chunk checks again after its privacy answer, just before it is charged and sent), cancels
-    queued chunks and releases its slot as soon as the requests already in flight end.
+    queued chunks and releases its slot as soon as the requests already in flight end. A cancelled chunk
+    job left in the pool's queue drops its audio buffer at once.
+  - The per-chunk privacy check runs on the chunk pool itself, not on `fast_finish_io`: during a
+    Firestore brownout a chunk can wait there until the coordinator's own bound releases the slot.
 - **Short and long.** Long means over 20 minutes of audio, never merely many chunks. A six-minute Finish
   split into six units, or one 19.9-minute unit of five chunks, is short.
   - A short pass keeps four chunks in flight (one round up to about 19.8 minutes, two above).
@@ -87,9 +92,11 @@ Recordings over 20 minutes are the spend this change adds. They take the chunked
 `CONVERSATIONS_V3_FAST_FINISH_LONG_DAILY_SECONDS` of their audio per UTC day across the fleet (default
 7200; past it, `long_cap`). The counter is one Redis key per UTC day,
 `v3_fast_finish:long_audio_seconds:<day>` (26 h TTL), shared by every process, so it survives scaling
-and restarts. A long pass reserves its planned audio with `INCRBYFLOAT` (taken back at once if that
-went over the cap) and settles to the audio actually sent: chunk overlaps, retries and the vendor
-language probe included, and chunks never sent refunded. It fails closed: when Redis errors or takes over
+and restarts. A long pass reserves the most it can send, every chunk twice (its one retry) plus one 30 s
+probe clip, with `INCRBYFLOAT` (taken back at once if that went over the cap), so retries can never
+push the day past the cap. It reserves only with at least `RESERVE_MIN_SECONDS` (3 s) of its deadline
+left, and settles in the background, off the slot, to the audio actually sent: chunk overlaps, retries
+and the vendor language probe included, and chunks never sent refunded. It fails closed: when Redis errors or takes over
 1 s, long passes are refused as `long_cap`; short passes never ask it. Finishes up to 20 minutes are not
 gated.
 

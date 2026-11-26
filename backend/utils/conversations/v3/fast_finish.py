@@ -80,8 +80,12 @@ SEAM_TOKENS = 24
 # A stopped pass waits for its running requests at most this long past the deadline, then releases
 # its slot; a request still running ends on its own timeouts and its result is dropped.
 STOP_GRACE_SECONDS = 2.0
-# The language probe is skipped (and the pass stopped) with less than this left.
-PROBE_MIN_SECONDS = 2.0
+# A language probe is sent only with at least this much of the deadline left; with less it is skipped
+# and the pass keeps the row's language. The whole language resolution is abandoned at the deadline.
+PROBE_MIN_SECONDS = 3.0
+# A long pass reserves from the fleet budget only with at least this much left: the bounded Redis
+# client answers within about 2 s (1 s connect, 1 s read), so the reservation ends before the deadline.
+RESERVE_MIN_SECONDS = 3.0
 # A chunked pass's row refresh, transcript write and cut after its chunks may run this far past the
 # deadline; past it each is abandoned, so a stalled call releases the slot within STOP_GRACE_SECONDS.
 WRITE_GRACE_SECONDS = 1.5
@@ -633,40 +637,43 @@ def _routed_transcriber(pcm: bytes, language: str | None, deadline: float, priva
     """The pass's provider call, with the language resolved once, on its first chunk's audio.
 
     Resolving may post up to 30 s of that audio to the vendor (or self-hosted) language probe. The
-    privacy authority is asked right before either probe sends, both probes' timeouts are capped to
-    what is left of the deadline, and the vendor probe's audio is charged to the pass and counted in
-    ``AUDIO_SECONDS``.
+    privacy authority is asked right before either probe sends; with less than PROBE_MIN_SECONDS of
+    the deadline left after that, the probe is skipped and the row's language kept. Each probe's own
+    timeout parts are capped to what is left, but they add up, so the whole resolution also runs on
+    the fast-finish I/O pool and is abandoned at the deadline (``deadline``): a slow probe can never
+    hold the slot past it. The vendor probe's audio is charged to the pass and counted in ``AUDIO_SECONDS``.
     """
     stopped: list[str] = []
 
     def allowed(*, vendor: bool) -> bool:
+        # Already a bounded leaf (below): the privacy check runs here, not on another bounded call.
+        if not _privacy_allows(privacy):
+            stopped.append('privacy_blocked')
+            return False
         if deadline - time.monotonic() < PROBE_MIN_SECONDS:
-            stopped.append('deadline')
-            return False
-        try:
-            # On the pass's own thread: bounded by the deadline like its other Firestore calls.
-            if not _privacy_within(privacy, deadline):
-                stopped.append('privacy_blocked')
-                return False
-        except _Late:
-            stopped.append('deadline')
-            return False
+            return False  # too little time for a useful probe: keep the row's language
         if vendor:
             probe = min(len(pcm) / 2 / SAMPLE_RATE, MAX_PROBE_SECONDS)
             sent.add(probe)
             AUDIO_SECONDS.labels(path).inc(probe)
         return True
 
-    with verification_stt_deadline(deadline):
-        route = pre_recorded.prerecorded_bytes_route(
-            pcm,
-            language,
-            sample_rate=SAMPLE_RATE,
-            channels=1,
-            encoding='linear16',
-            before_probe=lambda: allowed(vendor=True),
-            before_self_probe=lambda: allowed(vendor=False),
-        )
+    def resolve():
+        with verification_stt_deadline(deadline):
+            return pre_recorded.prerecorded_bytes_route(
+                pcm,
+                language,
+                sample_rate=SAMPLE_RATE,
+                channels=1,
+                encoding='linear16',
+                before_probe=lambda: allowed(vendor=True),
+                before_self_probe=lambda: allowed(vendor=False),
+            )
+
+    try:
+        route = _bounded(resolve, deadline)
+    except _Late as error:
+        raise _Stopped('deadline') from error
     if stopped:
         raise _Stopped(stopped[0])
     return functools.partial(_transcribe_words, route=route, deadline=deadline)
@@ -721,6 +728,14 @@ def planned_seconds(jobs: list) -> float:
     return sum(chunk.hi - chunk.lo for _, _, chunk in jobs) / SAMPLE_RATE
 
 
+def reserved_seconds(jobs: list) -> float:
+    """What a long pass reserves from the daily cap: the most it can send, so retries cannot overshoot.
+
+    Every chunk twice (its one retry) plus one vendor language probe clip; settled down to what was sent.
+    """
+    return 2 * planned_seconds(jobs) + MAX_PROBE_SECONDS
+
+
 def pass_class(units: list) -> str:
     """Which pass slot a recording takes: ``serial`` (kill switch), ``short`` or ``long``.
 
@@ -750,7 +765,7 @@ def screen(uid: str, units: list) -> str | None:
         return 'too_long'
     if not long_admitted(uid):
         return 'long_canary'
-    if not LONG_BUDGET.room(planned_seconds(jobs)):
+    if not LONG_BUDGET.room(reserved_seconds(jobs)):
         return 'long_cap'
     return None
 
@@ -909,7 +924,7 @@ class _Abandoned(Exception):
 
 def _chunk_job(
     call,
-    pcm: bytes,
+    holder: list[bytes],
     language,
     privacy,
     deadline: float,
@@ -920,10 +935,15 @@ def _chunk_job(
 ) -> list[dict]:
     """One chunk on the chunk pool: privacy at dispatch, the provider request, at most one retry.
 
-    A leaf: it never waits on another pool. Holds its own buffer until it returns. Once its pass has
-    stopped (``stop``), it sends nothing more: no first request and no retry.
+    A leaf: it never waits on another pool. Its buffer arrives in ``holder``, which a stopped pass
+    empties, so a cancelled job left in the pool's queue keeps no audio; once started it holds the
+    buffer until it returns. Once its pass has stopped (``stop``), it sends nothing more: no first
+    request and no retry.
     """
     CHUNK_QUEUE_SECONDS.observe(time.monotonic() - submitted)
+    pcm = holder.pop() if holder else None
+    if pcm is None:
+        raise _Abandoned()
     seconds = len(pcm) / 2 / SAMPLE_RATE
     for attempt in (1, 2):
         if stop.is_set():
@@ -1017,16 +1037,18 @@ def _chunked_segments(
                     raise _Stopped('deadline' if time.monotonic() >= deadline else 'provider_error') from error
             # Popped, not iterated: no local name keeps a submitted buffer alive while the pass waits.
             while batch:
+                holder = [batch.pop(0)]
                 future = pool.submit(
-                    _chunk_job, call, batch.pop(0), language, privacy, deadline, time.monotonic(), path, sent, stop
+                    _chunk_job, call, holder, language, privacy, deadline, time.monotonic(), path, sent, stop
                 )
-                in_flight[future] = position
+                in_flight[future] = (position, holder)
+                del holder
                 position += 1
             done, _ = wait(in_flight, timeout=max(deadline - time.monotonic(), 0), return_when=FIRST_COMPLETED)
             if not done:
                 raise _Stopped('deadline')
             for future in done:
-                index = in_flight.pop(future)
+                index, _ = in_flight.pop(future)
                 try:
                     raw[index] = future.result()
                 except _Refused as error:
@@ -1046,8 +1068,10 @@ def _chunked_segments(
         # Set first: a running chunk that fails now takes no retry, and one not yet sent sends nothing.
         stop.set()
         cache.clear()
-        for future in in_flight:
+        for future, (_, holder) in in_flight.items():
             future.cancel()
+            # A cancelled job may sit in the pool's queue until a worker pops it: drop its buffer now.
+            holder.clear()
         _, running = wait(in_flight, timeout=max(deadline - time.monotonic(), 0) + STOP_GRACE_SECONDS)
         if running:
             logger.info('event=v3_fast_finish_abandoned requests=%s', len(running))
@@ -1070,6 +1094,11 @@ def _stitch(jobs, raw, units, origin) -> list[dict]:
         lines = [line for index, job in enumerate(jobs) if job[0] == unit for line in _segments(entries[index])]
         segments.extend(_place(lines, start - origin, duration))
     return segments
+
+
+def _settle_later(key: str, reserved: float, sent: float):
+    """Settle a long pass's reservation on the fast-finish I/O pool; returns the future."""
+    return get_fast_finish_io_executor().submit(LONG_BUDGET.settle, key, reserved, sent)
 
 
 class _Late(Exception):
@@ -1125,6 +1154,9 @@ def _guard_until(fence, until: float | None):
         if time.monotonic() >= until:
             raise _Late()
         fence(transaction)
+        # Again after the fence's own reads, which may have been slow: the write follows at once.
+        if time.monotonic() >= until:
+            raise _Late()
 
     return guard
 
@@ -1185,7 +1217,10 @@ def _run(
         return 'deadline'
     # Before the reservation: nothing between it and the try below may raise and leak it.
     origin = row['started_at'].timestamp()
-    reserved = planned_seconds(jobs) if long_audio else 0.0
+    if long_audio and deadline - time.monotonic() < RESERVE_MIN_SECONDS:
+        # Too little left for the Redis round trip and any chunk: nothing is reserved.
+        return 'deadline'
+    reserved = reserved_seconds(jobs) if long_audio else 0.0
     budget_key = LONG_BUDGET.reserve(reserved) if long_audio else None
     if long_audio and budget_key is None:
         return 'long_cap'
@@ -1203,8 +1238,9 @@ def _run(
     finally:
         if budget_key is not None:
             # Charge what was actually sent (retries and the language probe included, chunks never
-            # sent refunded), not the reservation.
-            LONG_BUDGET.settle(budget_key, reserved, sent.seconds)
+            # sent refunded), not the reservation. Best effort, off the pass's thread: the slot is
+            # never held for this Redis call.
+            _settle_later(budget_key, reserved, sent.seconds)
     if not segments:
         return 'empty'
     segments.sort(key=lambda segment: (segment['start'], segment['end']))
