@@ -108,7 +108,11 @@ def _serve_live(monkeypatch, window):
     monkeypatch.setattr(routes.client_gate, 'note_client_seen', lambda uid: None)
     monkeypatch.setattr(routes.v3_client_capability, 'note_capable', lambda uid: None)
     monkeypatch.setattr(routes.reliability_experiments, 'any_enabled', lambda *a: False)
-    monkeypatch.setattr(routes.conversations_v3_live, 'live_window', lambda uid, **kw: window.get('row'))
+    monkeypatch.setattr(
+        routes.conversations_v3_live,
+        'live_window_lookup',
+        lambda uid, **kw: (window.get('row'), window.get('complete', True)),
+    )
 
 
 def test_holdout_keeps_stage_admission_for_existing_v3_work(monkeypatch):
@@ -181,6 +185,21 @@ def test_holdout_added_mid_capture_serves_the_active_window_then_legacy(monkeypa
     assert routes.get_live_conversation('synthetic', 'store') == {'v3': False, 'conversation': None}
 
 
+def test_holdout_live_keeps_v3_when_the_window_lookup_is_capped(monkeypatch):
+    holdout = _Holdout(monkeypatch)
+    holdout.member = True
+    window = {'row': None, 'complete': False}
+    _serve_live(monkeypatch, window)
+    fallbacks = []
+    monkeypatch.setattr(routes, 'record_fallback', lambda **kw: fallbacks.append(kw))
+    # A capped lookup has not proven there is no window: fail toward the existing one and count it.
+    assert routes.get_live_conversation('synthetic', 'store') == {'v3': True, 'conversation': None}
+    assert [(f['from_mode'], f['to_mode'], f['reason']) for f in fallbacks] == [('v3_holdout', 'v3_live', 'lookup_cap')]
+    window['complete'] = True
+    assert routes.get_live_conversation('synthetic', 'store') == {'v3': False, 'conversation': None}
+    assert len(fallbacks) == 1
+
+
 def test_holdout_removed_mid_capture_readmits_the_next_row(monkeypatch):
     holdout = _Holdout(monkeypatch)
     window = {'row': None}
@@ -219,13 +238,13 @@ def test_existing_v3_work_drains_for_a_held_out_owner(monkeypatch):
 class _MixedFinish:
     """Finish endpoint while a held-out owner's old v3 window coexists with a new legacy in-progress row."""
 
-    def __init__(self, monkeypatch, *, window_live=True):
+    def __init__(self, monkeypatch, *, window_live=True, member=True, unavailable=False):
         from types import SimpleNamespace
 
         from utils.conversations.v3 import finish
 
         holdout = _Holdout(monkeypatch)
-        holdout.member = True
+        holdout.member, holdout.unavailable = member, unavailable
         self.legacy = {'id': 'legacy-row', 'status': 'in_progress', 'source': 'omi'}
         self.finished, self.finalized, self.woken, self.named = [], [], [], []
         window = {'id': 'old-window', 'status': 'in_progress', 'v3_derived': True}
@@ -244,7 +263,9 @@ class _MixedFinish:
             live_db, 'request_finish', lambda uid, wid, **kw: self.finished.append(wid) or ('cut', 'rec')
         )
         monkeypatch.setattr(
-            live_db, 'request_named_finish', lambda uid, wid, **kw: self.named.append(wid) or (None, None, '')
+            live_db,
+            'request_named_finish',
+            lambda uid, wid, **kw: self.named.append((wid, kw.get('strict'))) or (None, None, ''),
         )
         monkeypatch.setattr(
             finish,
@@ -286,7 +307,20 @@ def test_unnamed_finish_beside_an_old_v3_window_still_finalizes_the_legacy_row(m
 def test_named_finish_miss_falls_back_to_the_legacy_finish(monkeypatch):
     mixed = _MixedFinish(monkeypatch, window_live=False)
     assert mixed.finish('old-window') == 'legacy'
-    assert mixed.named == ['old-window'] and mixed.finalized == ['legacy-row'] and mixed.finished == []
+    assert mixed.named == [('old-window', True)] and mixed.finalized == ['legacy-row'] and mixed.finished == []
+
+
+@pytest.mark.parametrize('member,unavailable', [(False, False), (True, True)])
+def test_named_finish_override_is_a_no_op_unless_holdout_is_confirmed(monkeypatch, member, unavailable):
+    from utils.conversations.v3 import finish
+
+    mixed = _MixedFinish(monkeypatch, member=member, unavailable=unavailable)
+    monkeypatch.setattr(
+        finish.conversations_v3_live, 'live_window_by_id', lambda *a, **kw: pytest.fail('non-member read the window')
+    )
+    # A non-member, or a membership read that failed, keeps today's Finish: the legacy row is finalized.
+    assert mixed.finish('old-window') == 'legacy'
+    assert mixed.finalized == ['legacy-row'] and mixed.finished == [] and mixed.named == []
 
 
 def test_named_finish_beside_a_v3_recording_in_progress_keeps_today_path(monkeypatch):
@@ -867,6 +901,13 @@ def test_live_read_with_nothing_open_stops_at_its_cap_and_logs(monkeypatch, capl
     # The cap is shared across both bands: 4 rows in the recent band, then 3 more.
     assert [call['size'] for call in log] == [3, 3, 3]
     assert 'stopped at its bound of 3 windows' in caplog.text
+    # The lookup reports the capped miss as incomplete; a short scan that finds nothing is complete.
+    now = datetime.now(timezone.utc)
+    args = dict(now=now, max_idle=routes.v3_live.MAX_IDLE, pick=routes.v3_live.active)
+    capped = _finished(4, newest_minutes_ago=1) + _finished(20, newest_minutes_ago=30)
+    assert live_db.live_window_lookup('u', firestore_client=_WindowQuery(capped, []), **args) == (None, False)
+    short = _finished(2, newest_minutes_ago=1)
+    assert live_db.live_window_lookup('u', firestore_client=_WindowQuery(short, []), **args) == (None, True)
 
 
 def test_merge_rejects_recording_before_admission(monkeypatch):

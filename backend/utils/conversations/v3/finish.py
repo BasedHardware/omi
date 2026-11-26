@@ -17,7 +17,8 @@ logger = logging.getLogger(__name__)
 def finish_live_window(
     uid: str, window_id: str | None = None, *, allow_recording_fallback: bool = False, named_only: bool = False
 ) -> CreateConversationResponse | None:
-    """``named_only``: finish only the window (or just-sealed capture) ``window_id`` names; None otherwise.
+    """``named_only``: finish only the window (or just-sealed capture) ``window_id`` names, never a newer
+    capture that superseded it (``strict``); None otherwise.
 
     The route uses it while a legacy row is in progress, so a named v3 Finish never falls back to another
     window or recording, and a miss leaves the legacy Finish to run unchanged.
@@ -41,7 +42,9 @@ def finish_live_window(
             if outcome != 'no_live_window':
                 return _acknowledge(uid, window, outcome, recording_id)
         if named_only:
-            named_outcome, named, recording_id = conversations_v3_live.request_named_finish(uid, window_id, now=now)
+            named_outcome, named, recording_id = conversations_v3_live.request_named_finish(
+                uid, window_id, now=now, strict=True
+            )
             if not named:
                 return None
             _recovered('named_window')

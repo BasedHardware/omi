@@ -211,11 +211,21 @@ def get_live_conversation(
     if not enabled:
         return {'v3': False, 'conversation': None}
     now = datetime.now(timezone.utc)
-    row = conversations_v3_live.live_window(uid, now=now, max_idle=v3_live.MAX_IDLE, pick=v3_live.active)
+    row, complete = conversations_v3_live.live_window_lookup(
+        uid, now=now, max_idle=v3_live.MAX_IDLE, pick=v3_live.active
+    )
     if row is None and v3_intake_held_out(uid):
-        # Holdout (SCA-2918): an existing active window is still served; without one, the
-        # owner's new captures are legacy, so the app shows its legacy live card.
-        return {'v3': False, 'conversation': None}
+        # Holdout (SCA-2918): an existing active window is still served; only a complete lookup proves
+        # there is none, and then the owner's new captures are legacy. A capped one keeps v3.
+        if complete:
+            return {'v3': False, 'conversation': None}
+        record_fallback(
+            component='feature_flags',
+            from_mode='v3_holdout',
+            to_mode='v3_live',
+            reason='lookup_cap',
+            outcome='degraded',
+        )
     compact = (
         {
             key: row[key]
@@ -701,9 +711,16 @@ def process_in_progress_conversation(
     cut_id = v3_manual_cuts.record_end(uid, ended_at=v3_manual_cuts.parse_ended_at(ended_at))
     conversation = retrieve_in_progress_conversation(uid)
     named = request.live_conversation_id if request else None
-    if conversation and named and named != conversation.get('id') and not conversation.get('recording'):
-        # A legacy row in progress beside an older v3 window (SCA-2918 holdout): a Finish naming the
-        # window closes that window; the legacy row keeps recording. A miss runs the legacy Finish below.
+    if (
+        conversation
+        and named
+        and named != conversation.get('id')
+        and not conversation.get('recording')
+        and conversations_v3_enabled(uid)
+        and v3_intake_held_out(uid)
+    ):
+        # Held-out owner only (SCA-2918): a legacy row in progress beside an older v3 window. A Finish naming
+        # the window closes exactly that window; the legacy row keeps recording. A miss runs the legacy Finish.
         finished = finish_live_window(uid, named, named_only=True)
         if finished is not None:
             if getattr(finished.conversation, 'tile_state', None) != 'writing':
