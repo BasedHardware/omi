@@ -1,3 +1,5 @@
+import 'dart:async';
+import 'package:omi/utils/reliability_experiments.dart';
 import 'package:omi/utils/analytics/lag_work_registry.dart';
 import 'sync_upload_refusal.dart';
 import 'conversation_page_headers.dart';
@@ -11,6 +13,7 @@ import 'package:http/http.dart' as http;
 import 'package:omi/backend/http/api_fallback.dart';
 import 'package:omi/backend/http/api_result.dart';
 import 'package:omi/backend/http/shared.dart';
+import 'package:omi/backend/http/http_pool_manager.dart';
 import 'package:omi/backend/schema/gen/action_items_folders_wire.g.dart' as action_items_wire;
 import 'package:omi/backend/schema/gen/apps_wire.g.dart' as apps_wire;
 import 'package:omi/backend/schema/gen/conversation_wire.g.dart' as wire;
@@ -43,6 +46,16 @@ part 'conversation_search_decode.dart';
 /// already finalized. Reporting it floods crash reporting with noise.
 bool isBenignInProgressConversationCreateStatus(int statusCode) => statusCode == 404;
 
+/// Reliability experiment `end_open_conversation`: the server stored this End but no conversation has
+/// landed for it yet (`X-Omi-End-Accepted: pending`; the body is the listening session's own empty
+/// recording, still in progress). The conversation is ended and summarised as soon as its audio lands,
+/// so this is "result to come", the same outcome as the 404 for a recording the server already
+/// closed, and not "audio not received". Off, the header is not read and the answer is the baseline.
+const endAcceptedHeader = 'x-omi-end-accepted';
+
+bool endAcceptedWithNoConversationYet(http.Response response) =>
+    ReliabilityExperiments.enabled('end_open_conversation') && response.headers[endAcceptedHeader] == 'pending';
+
 /// True only for the backend's typed, recoverable processing failure.
 @visibleForTesting
 bool isRetryableInProgressConversationResponse(http.Response? response) {
@@ -64,15 +77,23 @@ Future<CreateConversationResponse?> processInProgressConversation() async {
   return (await processInProgressConversationOutcome()).response;
 }
 
+/// Reliability experiment `end_open_conversation`: the moment the person ended the conversation, as
+/// seconds since the epoch on this phone's clock (the clock that stamps its recordings).
+const endedAtHeader = 'X-Omi-Ended-At';
+
+Map<String, String> endedAtHeaders(DateTime? endedAt) =>
+    endedAt == null ? const {} : {endedAtHeader: (endedAt.toUtc().millisecondsSinceEpoch / 1000).toStringAsFixed(3)};
+
 Future<InProgressProcessOutcome> processInProgressConversationOutcome({
   String? liveConversationId,
+  DateTime? endedAt,
   InProgressConversationRequestSender? sendRequest,
   @visibleForTesting Future<void> Function(Duration)? waitBeforeRetry,
   @visibleForTesting void Function(http.Response)? reportUnexpectedResponse,
 }) async {
   final request = ApiRequest(
     url: '${Env.apiBaseUrl}v1/conversations',
-    headers: const {},
+    headers: endedAtHeaders(endedAt),
     method: 'POST',
     body: jsonEncode({if (liveConversationId != null) 'live_conversation_id': liveConversationId}),
   );
@@ -97,6 +118,10 @@ Future<InProgressProcessOutcome> processInProgressConversationOutcome({
   if (response == null) return const InProgressProcessOutcome(absence: ProcessAbsence.transport);
   Logger.debug('createConversationServer: ${response.body}');
   if (response.statusCode == 200) {
+    if (endAcceptedWithNoConversationYet(response)) {
+      Logger.debug('processInProgressConversation: End stored; its conversation has not landed yet');
+      return const InProgressProcessOutcome(absence: ProcessAbsence.notFound);
+    }
     final parsed = CreateConversationResponse.fromGeneratedWireJson(jsonDecode(response.body) as Map<String, dynamic>);
     if (parsed.conversation == null) {
       return InProgressProcessOutcome(response: parsed, absence: ProcessAbsence.emptyBody);
@@ -555,6 +580,44 @@ Future<ConversationByIdResult> getConversationDetailReadResult(String conversati
     return (item: null, ok: true, inaccessible: true);
   }
   return (item: null, ok: false, inaccessible: response.statusCode == 401 || response.statusCode == 403);
+}
+
+/// Reliability experiment `fast_end_feedback`: a request that the server holds until the ended
+/// conversation reaches a step (`GET /v1/conversations/{id}/summary/wait`, at most about 20 s),
+/// answering with the conversation as a detail read does. With [untilOutline] it returns as soon as
+/// the conversation is committed with its outline (title, emoji, one-liner; summary still to come);
+/// without, when the summary is stored. `settled` is true only when the summary is stored (or failed);
+/// otherwise the body is the conversation as it stands. A server without the experiment answers 404:
+/// that falls back to the ordinary detail read, never to "this conversation is gone".
+Future<({ConversationByIdResult result, bool settled})> waitForConversationSummary(
+  String conversationId, {
+  bool untilOutline = false,
+  Future<http.Response?> Function(String url)? send,
+  Future<ConversationByIdResult> Function(String conversationId)? detailRead,
+}) async {
+  final url =
+      '${Env.apiBaseUrl}v1/conversations/$conversationId/summary/wait?until=${untilOutline ? 'outline' : 'summary'}';
+  final response = await (send ??
+      (url) => makeApiCall(
+            url: url,
+            headers: const {},
+            method: 'GET',
+            body: '',
+            timeout: const Duration(seconds: 30),
+            retries: 0,
+            retryServerErrors: false,
+          ))(url);
+  if (response != null && response.statusCode == 200) {
+    return (
+      result: (
+        item: ServerConversation.fromJson(jsonDecode(response.body) as Map<String, dynamic>),
+        ok: true,
+        inaccessible: false,
+      ),
+      settled: response.headers['x-omi-summary-wait'] == 'ready',
+    );
+  }
+  return (result: await (detailRead ?? getConversationDetailReadResult)(conversationId), settled: false);
 }
 
 Future<({ServerConversation? item, bool ok})> getConversationByIdResult(String conversationId,
@@ -1389,6 +1452,38 @@ Future<SyncJobFetch> fetchSyncJobStatus(String jobId) async {
   } finally {
     lagWork.end(work);
   }
+}
+
+class SyncReceiptBatch {
+  final Map<String, SyncJobFetch> receipts;
+  final Set<String> fallback;
+  const SyncReceiptBatch(this.receipts, this.fallback);
+}
+
+Future<SyncReceiptBatch> waitForSyncReceipts(List<String> jobs, Future<void> abort) async {
+  // The endpoint exists only with the experiment; off, nothing may reach it.
+  if (!ReliabilityExperiments.enabled('receipt_long_poll')) throw StateError('receipt_long_poll is off');
+  final url = '${Env.apiBaseUrl}v2/sync-local-files/receipts/wait';
+  final headers = await buildHeaders(requireAuthCheck: true, url: url, method: 'POST');
+  final request = http.AbortableRequest('POST', Uri.parse(url), abortTrigger: abort)
+    ..headers.addAll(headers)
+    ..headers['Content-Type'] = 'application/json'
+    ..body = jsonEncode({'job_ids': jobs});
+  final stream = await HttpPoolManager.instance.sendStreaming(request, timeout: const Duration(seconds: 28));
+  final response = await http.Response.fromStream(stream).timeout(const Duration(seconds: 5));
+  if (response.statusCode == 429) {
+    throw SyncRateLimitedException(
+        kind: syncRateLimitKindForResponse(response), retryAfterSeconds: _parseRetryAfterSeconds(response));
+  }
+  if (response.statusCode != 200) throw HttpException('Receipt wait HTTP ${response.statusCode}');
+  final body = jsonDecode(response.body) as Map<String, dynamic>;
+  final receipts = <String, SyncJobFetch>{};
+  for (final item in body['receipts'] as List) {
+    final job = SyncJobStatusResponse.fromJson(item as Map<String, dynamic>);
+    if (!jobs.contains(job.jobId) || !job.isTerminal) throw const FormatException('Unexpected receipt');
+    receipts[job.jobId] = SyncJobFetch(SyncJobFetchOutcome.ok, job);
+  }
+  return SyncReceiptBatch(receipts, (body['fallback'] as List).cast<String>().where(jobs.contains).toSet());
 }
 
 /// Serialize a local calendar-day bound for conversation search.

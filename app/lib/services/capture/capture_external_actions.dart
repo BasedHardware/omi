@@ -59,6 +59,11 @@ abstract interface class CaptureExternalActions {
     required bool showFailure,
   });
 
+  /// The server accepted an End for [saved] (any way of ending: End Conversation, Finish, Wrap Up,
+  /// the record button's stop, a pendant double-tap). Reliability experiment `fast_end_feedback`
+  /// starts its waiting requests here; the baseline does nothing.
+  void onEndAccepted(ServerConversation saved, {String? liveConversationId});
+
   Future<Person?> createPerson(String name);
 
   int get lastSpeakerAppliedCount;
@@ -137,6 +142,9 @@ class NoopCaptureExternalActions implements CaptureExternalActions {
     InProgressProcessOutcome? outcome, {
     required bool showFailure,
   }) {}
+
+  @override
+  void onEndAccepted(ServerConversation saved, {String? liveConversationId}) {}
 
   @override
   Future<Person?> createPerson(String name) async => null;

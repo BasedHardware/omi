@@ -11,6 +11,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
 from starlette.responses import Response
 
+from config import reliability_experiments
 from config.batch_pipeline import projection_pump_enabled, read_only_metrics_enabled
 from database.batch_pipeline_privacy import BatchPrivacyBlocked
 from database.batch_pipeline_projection_protocol import ProjectionBlocked
@@ -36,7 +37,11 @@ def verify_worker(request: Request) -> int:
     if request.url.path == '/v2/batch-pipeline/recover-quarantine':
         audience = os.getenv('BATCH_PIPELINE_RECOVERY_TASK_AUDIENCE', '').strip()
         invoker = os.getenv('SYNC_TASKS_INVOKER_SA', '').strip()
-    elif request.url.path in {'/v2/batch-pipeline/shadow-recover', '/v2/batch-pipeline/shadow-project'}:
+    elif request.url.path in {
+        '/v2/batch-pipeline/shadow-recover',
+        '/v2/batch-pipeline/shadow-project',
+        '/v2/batch-pipeline/commit-wake',
+    }:
         # Same CPU role/policy as paid record recovery, with the GPU worker's
         # existing service principal rather than the Cloud Tasks invoker.
         audience = os.getenv('BATCH_PIPELINE_RECOVERY_TASK_AUDIENCE', '').strip()
@@ -239,6 +244,23 @@ class ShadowProjectionRequest(WorkerRequest):
 @router.post('/shadow-project', include_in_schema=False)
 async def shadow_project(body: ShadowProjectionRequest):
     return await run_blocking(sync_executor, run_shadow_projection, body.service().store, body.segment_id, body.payload)
+
+
+class CommitWakeRequest(WorkerRequest):
+    owner_ids: list[str] = Field(min_length=1, max_length=32)
+
+
+@router.post('/commit-wake', include_in_schema=False)
+async def commit_wake(body: CommitWakeRequest):
+    # Reliability experiment commit_wake: a hint only. An owner it is off for is not accepted and nothing runs.
+    from utils.batch_pipeline import commit_wake as wake
+
+    if body.stage != current_stage():
+        raise HTTPException(status_code=409, detail='Worker stage mismatch')
+    owners = [owner_id for owner_id in dict.fromkeys(body.owner_ids) if 0 < len(owner_id) <= 128]
+    for owner_id in owners:
+        await reliability_experiments.warm(owner_id)
+    return {'accepted': wake.request(owners) if owners else 0}
 
 
 @router.post('/gpu-idle', include_in_schema=False)

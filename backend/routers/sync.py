@@ -39,6 +39,7 @@ from pydantic import BaseModel
 from config.summary_guarantee import repair_enabled as summary_repair_enabled
 from services import summary_debt_repair
 from config.policy import resolve_batch_policy
+from config.reliability_experiments import enabled as experiment, warm as warm_experiments
 from config.policy.ramp import audio_span
 from database.batch_ramp import ramp_admission_policy
 from database.batch_pipeline_privacy import BatchPrivacyBlocked
@@ -59,6 +60,8 @@ from utils.batch_pipeline.intake_outcome import (
 )
 from models.sync_job_status import (
     SyncJobStartResponse,
+    SyncReceiptsWaitRequest,
+    SyncReceiptsWaitResponse,
     SyncJobStatusResponse,
     SyncCaptureManifestRequest,
     SyncCaptureManifestResponse,
@@ -1972,6 +1975,10 @@ def get_sync_job_status(
             detail='Sync job polling too frequent; retry later',
             headers={'Retry-After': str(SYNC_POLL_WINDOW_SECONDS)},
         )
+    return _read_sync_job_status(job_id, uid, surface_open, x_omi_custody_repair_protocol)
+
+
+def _read_sync_job_status(job_id: str, uid: str, surface_open: bool, x_omi_custody_repair_protocol: Optional[str]):
     try:
         durable = (
             get_durable_job_status(job_id, uid, artifact_retry=True)
@@ -2155,6 +2162,71 @@ def get_sync_job_status(
             resp['error'] = job['error']
 
     return sync_job_poll_response(resp, uid, surface_open)
+
+
+@router.post(
+    '/v2/sync-local-files/receipts/wait',
+    response_model=SyncReceiptsWaitResponse,
+    response_model_exclude_none=True,
+    include_in_schema=False,
+)
+async def wait_for_sync_receipts(
+    body: SyncReceiptsWaitRequest, request: Request, uid: str = Depends(auth.get_current_user_uid)
+):
+    from database.redis_db import get_async_redis_client
+    from database.sync_jobs import receipt_channel, TERMINAL_STATUSES
+
+    # Experiment receipt_long_poll. For an account it is off for, the path answers as an unknown route does.
+    await warm_experiments(uid)
+    if not experiment('receipt_long_poll', uid):
+        raise HTTPException(status_code=404, detail='Not Found')
+    if not await run_blocking(db_executor, admit_sync_job_poll, uid):
+        raise HTTPException(
+            status_code=429,
+            detail='Receipt requests too frequent',
+            headers={'Retry-After': str(SYNC_POLL_WINDOW_SECONDS)},
+        )
+    jobs = set(body.job_ids)
+
+    def snapshot():
+        receipts, fallback = [], []
+        for job_id in jobs:
+            try:
+                status = _read_sync_job_status(job_id, uid, False, None)
+            except HTTPException as error:
+                if error.status_code not in (403, 404, 503):
+                    raise
+                fallback.append(job_id)
+                continue
+            if not isinstance(status, dict) or status.get('reason_code') in (
+                'batch_unit_held',
+                'batch_artifact_missing',
+                'source_alignment_pending',
+            ):
+                fallback.append(job_id)
+            elif status.get('status') in TERMINAL_STATUSES:
+                receipts.append(status)
+        return {'receipts': receipts, 'fallback': fallback}
+
+    redis = await get_async_redis_client()
+    async with redis.pubsub() as sub:
+        await sub.subscribe(receipt_channel(uid))
+        # Wait for Redis to acknowledge subscription before reading job state.
+        message = await sub.get_message(timeout=3)
+        if not message or message['type'] != 'subscribe':
+            raise HTTPException(status_code=503, detail='Receipt waiter unavailable')
+        result = await run_blocking(db_executor, snapshot)
+        deadline = time.monotonic() + 20
+        while not result['receipts'] and not result['fallback']:
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                return await run_blocking(db_executor, snapshot)
+            if await request.is_disconnected():
+                return result
+            message = await sub.get_message(ignore_subscribe_messages=True, timeout=min(1, remaining))
+            if message and message['data'] in jobs:
+                result = await run_blocking(db_executor, snapshot)
+        return result
 
 
 async def _maintain_uid_sequencer_lease(
