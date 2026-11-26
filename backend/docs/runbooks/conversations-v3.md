@@ -239,11 +239,7 @@ seeded into the same rejection. The early attempt is re-armed, so the next seed 
 - Repair the oversize document, then remove the ids from the list. Set the switch off on live builders to
   restore head-of-line retries; stored ids are then ignored.
 
-`CONVERSATIONS_V3_ALIAS_SLIM` (default on) stops recording aliases on derived rows from carrying the
-source file's `legacy_ids`, including aliases a retained row carries forward. Alias ids are
-`uuid5(recording:file)`, so those superseded source ids never match an alias, and playback resolves the
-original through `recording_file_id`. Files a legacy merge copied in (no `recording_id`) keep theirs. Set it
-off on builder and backfill runners to copy them again. See the [size quarantine](../listen_pusher_pipeline/changes/2026-11-26-v3-size-quarantine.md)
+See the [size quarantine](../listen_pusher_pipeline/changes/2026-11-26-v3-size-quarantine.md)
 change note.
 
 `CONVERSATIONS_V3_MAX_WINDOW_SECONDS` defaults to 10800 (three hours).

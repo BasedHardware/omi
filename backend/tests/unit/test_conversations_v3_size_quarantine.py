@@ -9,7 +9,7 @@ import pytest
 from google.api_core.exceptions import InvalidArgument
 
 from database import conversations_v3 as store, conversations_v3_leases as leases
-from utils.conversations.v3 import Conflict, UnlockedPage, audio, outline, planner, service
+from utils.conversations.v3 import Conflict, UnlockedPage, service
 from tests.unit.test_conversations_v3_claim_growth import UID, strict  # noqa: F401
 from tests.unit.test_conversations_v3_derived_budget import claim, derived
 from tests.unit.test_conversations_v3_review import AT, MemoryQuery, source
@@ -272,69 +272,6 @@ async def test_a_one_seed_size_rejection_with_an_unlocked_seed_sets_nothing_asid
     rows[LEASE]['unlocked_ids'] = ['da']
     assert await service.reconcile('u') == 'blocked'
     assert store.SIZE_QUARANTINE_FIELD not in rows[LEASE]
-
-
-def _with_audio(legacy):
-    segments = [{'id': '0', 'start': 0, 'end': 1, 'text': 'speech ' * 30}]
-    audio_file = {'id': 'f', 'duration': 60, 'chunk_timestamps': [AT.timestamp()], 'legacy_ids': legacy}
-    return {'id': 'r', 'started_at': AT, 'transcript_segments': segments, 'audio_files': [audio_file]}
-
-
-def _window(raw):
-    groups = outline.stretches([raw], AT + timedelta(minutes=10))
-    (window,) = planner.windows(groups, [[{'first_line': 1, 'title': 'Topic', 'line': '', 'kind': 'conversation'}]])
-    return window
-
-
-@pytest.mark.parametrize('enabled', [True, False])
-def test_recording_aliases_leave_out_superseded_source_file_ids(monkeypatch, enabled):
-    monkeypatch.setenv('CONVERSATIONS_V3_ALIAS_SLIM', 'on' if enabled else 'off')
-    raw = _with_audio(['old-%d' % i for i in range(128)])
-    (alias,) = planner.build('synthetic', _window(raw), {'r': raw})['audio_files']
-    assert alias['recording_id'] == 'r' and alias['recording_file_id'] == 'f'
-    assert alias['chunk_timestamps'] == [AT.timestamp()]  # Playback and the model still read these.
-    assert ('legacy_ids' in alias) is not enabled
-    assert raw['audio_files'][0]['legacy_ids']  # The source recording keeps its own aliases.
-
-
-def test_a_retained_rows_carried_aliases_are_slimmed_and_still_resolve(monkeypatch):
-    raw = _with_audio(['old'])
-    first = planner.build('synthetic', _window(raw), {'r': raw})
-    # The prior row carries an alias from an earlier source this pass does not regenerate, plus a file a
-    # legacy merge copied in (no recording alias): only the alias loses its superseded ids.
-    carried = {
-        'id': 'carried',
-        'recording_id': 'earlier',
-        'recording_file_id': 'e',
-        'duration': 60,
-        'chunk_timestamps': [AT.timestamp()],
-        'legacy_ids': ['older'],
-    }
-    merged = {'id': 'merged', 'duration': 60, 'chunk_timestamps': [AT.timestamp()], 'legacy_ids': ['y']}
-    prior = {
-        **first,
-        'status': 'completed',
-        'tile_state': 'done',
-        'audio_files': [*first['audio_files'], carried, merged],
-    }
-    assert not planner.is_unlocked(prior)
-    row = planner.build('synthetic', _window(raw), {'r': raw}, prior)
-    files = {af['id']: af for af in row['audio_files']}
-    assert 'legacy_ids' not in files['carried'] and files['carried']['recording_file_id'] == 'e'
-    assert files['merged']['legacy_ids'] == ['y']
-    assert all('legacy_ids' not in af for af in row['audio_files'] if af.get('recording_id'))
-
-    # Playback and download resolve a slimmed alias to the source recording's original file.
-    (alias,) = [af for af in row['audio_files'] if af.get('recording_id') == 'r']
-    original = raw['audio_files'][0]
-    recording = {**raw, 'recording': True, 'claims': [{'conversation_id': row['id'], 'start': AT, 'end': AT}]}
-    stored = {row['id']: {**row, 'id': row['id']}, 'r': recording}
-    monkeypatch.setattr(audio.conversations_db, 'get_conversation', lambda uid, cid: deepcopy(stored.get(cid)))
-    rid, resolved, source_row = audio.resolve('synthetic', {'id': row['id']}, alias)
-    assert rid == 'r' and resolved == original and resolved['legacy_ids'] == ['old']
-    parts = audio.playback_snapshot('synthetic', {'id': row['id']})['_v3_playback_parts']
-    resolved_parts = [part for part in parts if part.get('recording_id') == 'r']
-    assert resolved_parts and all(part['source'] == original for part in resolved_parts)
 
 
 def open_window(rows):

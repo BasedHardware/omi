@@ -38,13 +38,8 @@ def transcript_size_cap_enabled() -> bool:
 
 
 def size_quarantine_enabled() -> bool:
-    """A one-seed pass Firestore rejects for size sets that seed aside so the owner's backlog behind it drains."""
+    """A one-seed pass Firestore rejects for size sets its pending closure aside so the rest of the backlog drains."""
     return default_on('CONVERSATIONS_V3_SIZE_QUARANTINE')
-
-
-def alias_slim_enabled() -> bool:
-    """Recording aliases on derived rows leave out the source file's superseded ids (``legacy_ids``)."""
-    return default_on('CONVERSATIONS_V3_ALIAS_SLIM')
 
 
 def finish_no_pointer_enabled() -> bool:
