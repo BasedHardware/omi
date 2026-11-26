@@ -412,7 +412,7 @@ def stretches(
         continues = not later and any(
             r.get('_v3_page_continues') and r['id'] == group['lines'][-1]['conversation_id'] for r in members
         )
-        # Under custom timing, lock age counts from the later of the last speech and when it landed:
+        # When settlement uses the landing clock, age counts from the later of speech and landing:
         # an offline batch whose speech is already old must not lock the moment it arrives, or each
         # later batch appends a fresh card behind it.
         rids = group_rids(group)
