@@ -9,7 +9,11 @@ Answers, deterministically from the request body:
   asks for structure (``response_format.json_schema``, ``tools``/``functions``, or a
   LangChain "conforms to the JSON schema below" block in the prompt) the reply is the
   smallest instance of that schema, with strings seeded from the last user message so
-  different conversations get different titles. Otherwise a short text reply.
+  different conversations get different titles. Otherwise a short text reply. Random
+  UUIDs (version 4) in that message are renamed ``uuid4#1``, ``uuid4#2``, ... in first-seen
+  order before seeding, the rule ``determinism.py`` applies to run artifacts: a prompt that
+  cites random ids the product minted (transcript segment ids, for one) gets the same answer
+  on every repeat.
 - ``POST /v1/messages`` (Anthropic shape), the same rules, ``tool_use`` when tools are given.
 - ``POST /v1/embeddings``: unit vectors from a hash of each input (``dimensions`` or 3072).
 - ``POST /v1/systemone`` with a Jev decision body (``state`` and ``questions``, ``utils/llm/jev_client.py``):
@@ -56,6 +60,14 @@ def _schema_block(text: str) -> str | None:
 
 
 _WORD = re.compile(r"[A-Za-z][A-Za-z'-]+")
+# The same pattern as ``determinism._UUID4``: the ids the repeat comparison renames.
+_UUID4 = re.compile(r'\b[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\b')
+
+
+def _stable_ids(text: str) -> str:
+    """``text`` with every random UUID renamed ``uuid4#n`` in first-seen order (the same id, the same name)."""
+    names: dict[str, str] = {}
+    return _UUID4.sub(lambda match: names.setdefault(match.group(0), f'uuid4#{len(names) + 1}'), text)
 
 
 def _words(text: str) -> list[str]:
@@ -70,7 +82,7 @@ def _seed_text(messages: list[Any]) -> str:
         if isinstance(content, list):
             content = ' '.join(str(part.get('text') or '') for part in content if isinstance(part, dict))
         if content:
-            return str(content)
+            return _stable_ids(str(content))
     return 'synthetic conversation'
 
 

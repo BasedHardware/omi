@@ -729,13 +729,13 @@
       "budget_p50_minutes": 5,
       "display_name": "deploy",
       "expected_runs_class": "non-pr-or-unsampled",
-      "expected_runs_per_day": 1,
+      "expected_runs_per_day": 0,
       "if": null,
       "matrix": {},
       "matrix_size": 1,
       "needs": [],
       "owner": "CI maintainers",
-      "rationale": "SCA-2918 forecasts one additional run per day for shared base, dev overlay, and generated manifest changes on main. The five-minute p50 assumption and PR budget are unchanged.",
+      "rationale": "Unobserved in one-day PR sample; conservative 5-minute placeholder",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -4483,7 +4483,7 @@
     "desktop_backend_auto_dev.yml": {
       "name": "Auto Deploy Desktop Backend to Development",
       "owner": "CI maintainers",
-      "rationale": "SCA-2918 redeploys development desktop-backend when the shared base, dev overlay, or generated runtime manifest changes on main.",
+      "rationale": "Initial workflow inventory",
       "triggers": {
         "push": {
           "branches": [
@@ -4493,9 +4493,6 @@
             "backend/Dockerfile.desktop_backend",
             "backend/**/*.py",
             "backend/deploy/cloud_run_gmp_sidecar.yaml",
-            "backend/deploy/runtime_env/_base.yaml",
-            "backend/deploy/runtime_env/dev.overlay.yaml",
-            "backend/deploy/runtime_env.yaml",
             "backend/pylock.runtime.toml",
             "backend/runtime_images.json",
             ".github/workflows/desktop_backend_auto_dev.yml",

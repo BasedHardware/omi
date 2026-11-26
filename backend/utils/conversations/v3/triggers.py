@@ -8,7 +8,7 @@ from datetime import datetime, timezone
 from urllib.parse import urlsplit
 
 from config import reliability_experiments
-from config.conversations_v3 import SPEECH_LANDED_FIELD, conversations_v3_enabled
+from config.conversations_v3 import SPEECH_LANDED_FIELD, conversations_v3_enabled, v3_intake_held_out
 from database import conversations_v3 as store
 from database.helpers import set_data_protection_level
 from utils.cloud_tasks import enqueue_named_task
@@ -21,13 +21,17 @@ logger = logging.getLogger(__name__)
 FOLLOW_UP_SLOT_SECONDS = 15
 
 
-def mark_new(uid, row):
+def mark_new(uid, row, *, continuation=False):
+    """``continuation``: a v3 rotation successor of a recording row, the same capture, not new intake."""
     if (
         getattr(row.get('source'), 'value', row.get('source')) in {'omi', 'phone'}
         and not row.get('imported')
         and not row.get('v3_derived')
         and row.get('data_protection_level') != 'private'
         and conversations_v3_enabled(uid)
+        # Holdout (SCA-2918): a held-out owner's new rows stay legacy; stored v3 rows keep draining,
+        # and so does a capture in flight, whose rotation successor stays v3.
+        and (continuation or not v3_intake_held_out(uid))
     ):
         _mark_resolved(uid, row)
 
@@ -80,7 +84,7 @@ def task_base():
     return base
 
 
-def enqueue(uid, *, at=None, manual_end_id=None):
+def enqueue(uid, *, at=None, manual_end_id=None, wake_key=None):
     instant = at or datetime.now(timezone.utc)
     minute = int(instant.timestamp()) // 60
     task_id = 'conversations-v3-' + hashlib.sha256(uid.encode()).hexdigest()[:32] + '-' + str(minute)
@@ -88,6 +92,9 @@ def enqueue(uid, *, at=None, manual_end_id=None):
         # A live task may already have completed in this minute. Its retained
         # Cloud Tasks name must not swallow the user's later explicit close.
         task_id += '-end-' + hashlib.sha256(manual_end_id.encode()).hexdigest()[:32]
+    if wake_key:
+        # A builder continuation: an earlier same-minute wake may run (busy) under this pass's lease.
+        task_id += '-wake-' + hashlib.sha256(wake_key.encode()).hexdigest()[:32]
     base = task_base()
     queue = os.getenv('CONVERSATIONS_V3_TASKS_QUEUE', 'conversations-v3')
     url = base + '/v1/conversations-v3/reconcile'

@@ -164,7 +164,8 @@ BODY_DIGEST = {
     'utils.support.holds._held_deferred_deletes': '612a521045553ef1b02d1eb81aac37a3c63a75c598ce5e99484c007c7c87e878',
     'utils.support.retention._select_conversations': 'f36920350f4e3a557e0e474e8801ae414c21ce67203e0627f7a39ba820243d16',
     'database.conversations_v3_live._recent_window_query': '6f2c323bfa8df890362c6bdc4796182a70e4c704376bcb4944358560b12edc75',
-    'database.conversations_v3.commit_projection': '089bd7e2e91ed7ac408dbbbdcb1940889f008525f52bbe06b09b740b2f7ba8b7',
+    'database.conversations_v3._oldest_pending': 'e2da208a3dcbae7d7c7c59335883b422e27dc71c9cfae51568883aa452bcfc57',
+    'database.conversations_v3.commit_projection': '4f070f852f6b023db0d1299b647cc91afc723aa976922d916e8ffa3adf77f1e0',
     'database.batch_pipeline_conversation_purge_scans._claim': 'faa5dabcf01dc5bd377b2e14a149282aa2db93b2872cdc97a3b756157701532c',
     'database.batch_pipeline_conversation_purge_scans.run_job': 'fe5d30b77da198a7e0dc188115c8906fb6446925079a4e96339d36675a55faeb',
     'database.batch_pipeline_store.FirestoreStore.protected_retries': 'b55d2960c94057cb8df9b9cdd2e7728b6af63728bc0a2cb6f5bd333efed443a2',
@@ -3718,6 +3719,13 @@ for entry in (
         body_digest=BODY_DIGEST['database.conversations_v3_live._recent_window_query'],
     ),
     CoveredByEntry(
+        'database.conversations_v3._oldest_pending',
+        covered_by=('database.conversations_v3.load', 'database.conversations_v3.clear_terminal_pending'),
+        reason='Builds the indexed oldest pending page; both callers execute it.',
+        expect_observed=False,
+        body_digest=BODY_DIGEST['database.conversations_v3._oldest_pending'],
+    ),
+    CoveredByEntry(
         'database.conversations_v3.commit_projection',
         covered_by=('database.conversations_v3.merge_donors_have_tasks', 'database.memories.linked_conversation_ids'),
         reason='Refinement and live repair use the same bounded donor-task query and write point markers with donor redirects. '
@@ -3726,8 +3734,10 @@ for entry in (
         'The Home index bit is derived from the flags already present in those writes. '
         'Write elision uses only the projection snapshots already read under revision fences. '
         'The collision record and commit meter add no query: on a lock failure the record re-reads by reference '
-        'the documents the commit had already loaded. Re-reviewed 2026-11-26: post-commit telemetry guards and '
-        'diagnostic logging only; query and write shapes remain unchanged.',
+        'the documents the commit had already loaded. Re-reviewed 2026-11-26: discarded sources clear '
+        'their pending marker using the same fenced point update as deleted sources. '
+        'Linked backfill replacements use the existing task and memory query results and loaded claims. '
+        'Unlocked paging carries unvisited IDs and the cursor into the existing builder lease write; no new query.',
         expect_observed=False,
         body_digest=BODY_DIGEST['database.conversations_v3.commit_projection'],
     ),

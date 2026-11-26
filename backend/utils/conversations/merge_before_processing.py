@@ -7,7 +7,7 @@ worker here avoids a process_conversation <-> smart_merge import cycle.
 import importlib
 from typing import Any
 
-from config.merge_before_processing import enabled
+from config.merge_before_processing import enabled, v3_excluded, v3_owned
 from config.conversation_smart_merge import MIN_WORDS
 from utils.enrichment.admission import ConversationAbsorbed
 from utils.conversations.processing_trigger import ProcessingTrigger
@@ -31,6 +31,9 @@ def before_notes(
     if getattr(conversation, 'source', None) != 'omi' or not getattr(conversation, 'id', None):
         return
     if getattr(conversation, 'record_lane_owner', None) in {'batch_live_v1', 'batch_sync_v1'}:
+        return
+    # v3 owns its rows' boundaries and claims; a legacy redirect would strand them (see v3_excluded).
+    if v3_excluded() and v3_owned(conversation):
         return
     if sum(len(str(s.text or '').split()) for s in conversation.transcript_segments or []) < MIN_WORDS:
         return

@@ -77,6 +77,7 @@ PINNED: dict[str, dict[str, str]] = {
         # notes-9 checkpoints stay reusable.
         'notes-9': 'd150f39c05377979d9f7f42055f44b7abc9f1b548c06f12229d2e9482d25d135',
         'notes-10': 'f30e589568d4f2050e800e032e2edff2d9c9117d48a2138db22bd48721d37450',
+        'notes-11': 'd58412484b747c1c2dd05e3e48f05e2c6d534dab523a25117061458e5de6296d',
     },
     'l1': {'l1-1': '0ad51076315481003b05af2a90ce18797539846e35f4970680dff906c00b7d70'},
 }

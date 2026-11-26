@@ -5,6 +5,7 @@ import pytest
 from prometheus_client import CollectorRegistry, Counter, Histogram
 
 from utils import metrics_smart_merge
+from utils.conversations.smart_merge_policy import SkipReason
 
 
 @pytest.mark.parametrize(
@@ -46,3 +47,9 @@ def test_reuse_or_create_rejects_factory_type_mismatch(monkeypatch):
     monkeypatch.setattr(metrics_smart_merge, 'REGISTRY', registry)
     with pytest.raises(ValueError, match='different shape'):
         metrics_smart_merge._reuse_or_create(Histogram, 'omi_test_smart_merge_existing_total', 'test', ['outcome'])
+
+
+def test_every_skip_reason_keeps_its_own_metric_label():
+    reasons = {value for key, value in vars(SkipReason).items() if key.isupper()}
+    assert 'v3_owned' in reasons
+    assert reasons <= set(metrics_smart_merge.CONVERSATION_SMART_MERGE_REASONS)

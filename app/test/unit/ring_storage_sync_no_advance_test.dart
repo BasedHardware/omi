@@ -128,7 +128,7 @@ class _FakeRingDevice implements DeviceConnection {
   }
 
   @override
-  Future<bool> readRingFromSeq(int startSeq, {int? packetCount}) async {
+  Future<bool> readRingFromSeq(int startSeq, {int? packetCount, bool Function()? canStart}) async {
     readCalls.add(startSeq);
     final failure = readFailure;
     if (failure != null) throw failure;
@@ -231,11 +231,10 @@ void main() {
 
   RingStorageSyncImpl syncWith(_FakeLocalSync local, _FakeRingDevice card, Wal wal,
       {Timer Function(Duration, void Function())? transferTimer, DateTime Function()? clock}) {
-    final sync = RingStorageSyncImpl(_Listener(), transferTimer: transferTimer, clock: clock)
-      ..testConnection = card
-      ..testWals = [wal];
+    final sync = RingStorageSyncImpl(_Listener(), transferTimer: transferTimer, clock: clock)..testConnection = card;
     sync.setLocalSync(local);
     sync.setDevice(BtDevice(id: 'devkit-1', name: 'Omi DevKit', type: DeviceType.omi, rssi: -40));
+    sync.testWals = [wal];
     return sync;
   }
 
@@ -255,9 +254,9 @@ void main() {
     final syncs = WalSyncs(_Listener());
     syncs.ring
       ..testConnection = card
-      ..testWals = [wal]
       ..setLocalSync(local)
-      ..setDevice(BtDevice(id: 'devkit-1', name: 'Omi DevKit', type: DeviceType.omi, rssi: -40));
+      ..setDevice(BtDevice(id: 'devkit-1', name: 'Omi DevKit', type: DeviceType.omi, rssi: -40))
+      ..testWals = [wal];
     return syncs;
   }
 

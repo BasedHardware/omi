@@ -240,8 +240,31 @@ jobs:
           PUMP_CONTROL_SHA: ${{ inputs.pump_control_sha }}
           PUMP_RELEASE_DISPOSITION: ${{ inputs.pump_release_disposition }}
           WORKFLOW_CONTROL_SHA: ${{ github.workflow_sha }}
+          DEPLOY_GATEWAY: ${{ github.event.inputs.deploy_gateway }}
         run: |
           set -euo pipefail
+          # Reserved digest caller format: train-digest-v1:<workflow-sha>:<requester>.
+          if [[ "$WORKFLOW_MODE" == deploy &&
+                ( "${REQUESTED_BY:-}" == train-digest-v1 || "${REQUESTED_BY:-}" == train-digest-v1:* ) ]]; then
+            if [[ ! "$REQUESTED_BY" =~ ^train-digest-v1:([0-9a-f]{40}):[a-zA-Z0-9_.@/-]+$ ]]; then
+              echo '::error::Digest promotion requires the verified workflow commit and requester.' >&2
+              exit 1
+            fi
+            promotion_control_sha=${BASH_REMATCH[1]}
+            if [[ "$promotion_control_sha" == 0000000000000000000000000000000000000000 ||
+                  "$promotion_control_sha" != "$WORKFLOW_CONTROL_SHA" ||
+                  "$promotion_control_sha" != "$GITHUB_SHA" ]]; then
+              echo '::error::Digest promotion requires the verified workflow commit.' >&2
+              exit 1
+            fi
+            if [[ "$DEPLOY_ENVIRONMENT" != prod || "$DEPLOY_TARGETS" != cloud-run-only ||
+                  "$CLOUD_RUN_SERVICE" != all || "$SERVICE" != backend || "$DEPLOY_GATEWAY" != false ||
+                  -n "$SERVICE_IMAGES" || -n "$SELECTED_ROLLBACK_REVISION" ||
+                  "$SKIP_ELIGIBILITY" != false || "$BREAK_GLASS_LOCK" != false ]]; then
+              echo '::error::Digest promotion requires the four-service Cloud Run scope and normal admission.' >&2
+              exit 1
+            fi
+          fi
           if [[ -n "${RELEASE_BRANCH:-}" && "$WORKFLOW_MODE" != "build-only" ]]; then
             echo "release_branch applies only to mode=build-only." >&2
             exit 1
@@ -499,8 +522,27 @@ jobs:
       - name: Validate Firestore readiness inputs
         env:
           DEPLOY_ENVIRONMENT: ${{ github.event.inputs.environment }}
+          WORKFLOW_MODE: ${{ github.event.inputs.mode }}
+          REQUESTED_BY: ${{ github.event.inputs.requested_by }}
+          DEPLOY_PROJECT: ${{ vars.GCP_PROJECT_ID }}
+          RUNTIME_PROJECT: ${{ vars.RUNTIME_GCP_PROJECT_ID }}
         run: |
           set -euo pipefail
+          # Resolve environment-scoped project variables before the index check can authenticate.
+          if [[ "${WORKFLOW_MODE:-}" == deploy &&
+                ( "${REQUESTED_BY:-}" == train-digest-v1 || "${REQUESTED_BY:-}" == train-digest-v1:* ) ]]; then
+            if [[ "$DEPLOY_PROJECT" != based-hardware || "$RUNTIME_PROJECT" != based-hardware ]]; then
+              echo '::error::Digest promotion requires the reviewed production project.' >&2
+              exit 1
+            fi
+            if [[ "$REGION" != us-central1 ]]; then
+              echo '::error::Digest promotion requires the reviewed Cloud Run region.' >&2
+              exit 1
+            fi
+            # Keep the guard active without handing digest promotion to the legacy rebuild.
+            echo '::error::Digest promotion is disabled until the no-rebuild path is wired.' >&2
+            exit 1
+          fi
           if [[ "$DEPLOY_ENVIRONMENT" != "development" && "$DEPLOY_ENVIRONMENT" != "prod" ]]; then
             echo "Invalid environment: $DEPLOY_ENVIRONMENT. Must be 'development' or 'prod'."
             exit 1

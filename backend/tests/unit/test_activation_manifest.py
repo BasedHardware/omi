@@ -7,12 +7,9 @@ import json
 from pathlib import Path
 import shutil
 import subprocess
-import sys
 
 import pytest
-import yaml
 
-from deploy.compose_runtime_env import compose_manifest
 from scripts import activation_check as check
 from scripts import activation_collect as collect
 
@@ -73,65 +70,6 @@ def test_correct_state_passes(manifest):
     assert not _by_status(verdict, check.MISSING) and not _by_status(verdict, check.UNKNOWN)
     # Firestore indexes are named as owned elsewhere: always unknown here, never blocking.
     assert _by_status(verdict, check.UNKNOWN, controlled=False) == {'external:firestore-indexes'}
-
-
-@pytest.mark.parametrize(
-    ('desktop_override', 'expected_verdict', 'expected_parity'),
-    [
-        pytest.param({}, check.READY, check.SATISFIED, id='ready'),
-        pytest.param({'CONVERSATIONS_V3_STAGE': 'beta'}, check.BLOCKED, check.MISSING, id='stage-skew'),
-        pytest.param({'CONVERSATIONS_V3': 'off'}, check.BLOCKED, check.MISSING, id='kill-switch-skew'),
-    ],
-)
-def test_composed_prod_stages_pass_activation_with_desktop(
-    manifest, tmp_path, monkeypatch, desktop_override, expected_verdict, expected_parity
-):
-    state = _state('state-ready.json')
-    runtime_manifest = compose_manifest()
-    prod = runtime_manifest['environments']['prod']
-    # Render the same output the deploy action consumes. Mutate only desktop to
-    # simulate a retained revision with a different stage or kill switch.
-    for key, value in desktop_override.items():
-        prod['desktop_backend']['env'][key]['value'] = value
-    runtime_path = tmp_path / 'runtime_env.yaml'
-    runtime_path.write_text(yaml.safe_dump(runtime_manifest))
-    output_path = tmp_path / 'github-output'
-    monkeypatch.setenv('GITHUB_OUTPUT', str(output_path))
-    subprocess.run(
-        [
-            sys.executable,
-            str(BACKEND / 'scripts/render_backend_runtime_env.py'),
-            '--env',
-            'prod',
-            '--manifest',
-            str(runtime_path),
-            '--desktop-state-output',
-            str(tmp_path / 'desktop-state.json'),
-        ],
-        check=True,
-    )
-    delimiter = '__BACKEND_RUNTIME_ENV_conversations_v3_env_vars__'
-    desktop_output = output_path.read_text().split(f'conversations_v3_env_vars<<{delimiter}\n')[1].split(delimiter)[0]
-    desktop_env = dict(line.split('=', 1) for line in desktop_output.splitlines())
-
-    for rule in (rule for rule in manifest['env'] if rule['id'] in {'v3-stage', 'v3-kill-switch'}):
-        (key,) = rule['keys']
-        assert 'desktop-backend' in rule['runtimes']
-        for runtime in rule['runtimes']:
-            if runtime == 'desktop-backend':
-                value = desktop_env[key]
-            elif runtime in prod['gke']:
-                value = prod['gke']['config_map']['entries'][key]['value']
-            else:
-                value = prod['cloud_run']['services'][runtime]['env'][key]['value']
-            for unit in state['services'][runtime]['serving']:
-                unit['env'][key] = {'value': value}
-
-    verdict = check.evaluate(manifest, state)
-    for rule_id, key in (('v3-stage', 'CONVERSATIONS_V3_STAGE'), ('v3-kill-switch', 'CONVERSATIONS_V3')):
-        status = expected_parity if key in desktop_override or not desktop_override else check.SATISFIED
-        assert f'env-equal:{rule_id}:{key}' in _by_status(verdict, status)
-    assert verdict.verdict == expected_verdict
 
 
 def test_cli_exit_codes_and_text(capsys):

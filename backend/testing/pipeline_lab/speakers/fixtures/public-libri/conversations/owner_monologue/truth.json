@@ -1,0 +1,38 @@
+{
+ "kind": "synthetic",
+ "turns": [
+  {
+   "start": 0.552,
+   "end": 2.202,
+   "speaker": "owner"
+  },
+  {
+   "start": 2.878,
+   "end": 7.878,
+   "speaker": "owner"
+  },
+  {
+   "start": 8.682,
+   "end": 13.682,
+   "speaker": "owner"
+  },
+  {
+   "start": 14.559,
+   "end": 19.559,
+   "speaker": "owner"
+  },
+  {
+   "start": 19.965,
+   "end": 24.495,
+   "speaker": "owner"
+  },
+  {
+   "start": 25.184,
+   "end": 29.369,
+   "speaker": "owner"
+  }
+ ],
+ "identities": {
+  "owner": "user"
+ }
+}

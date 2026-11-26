@@ -265,20 +265,11 @@ def _staging_substitute(value: str, *, run_url_template: str, inputs: dict[str, 
 
 def _apply_conversations_v3_stage(env_config: ConfigDict) -> None:
     """One stage source moves API, capture, finalizers and jobs together (staging mirrors prod)."""
-    for rendered_name in ('CONVERSATIONS_V3', 'CONVERSATIONS_V3_STAGE', 'CONVERSATIONS_V3_FIRST_APP_BUILD'):
-        if rendered_name in env_config:
-            raise ValueError(
-                f'use {rendered_name.lower()} at environment scope; {rendered_name} is the rendered env name'
-            )
     stage = env_config.pop('conversations_v3_stage', None)
     # Kill switch (CONVERSATIONS_V3=off): stops new v3 admission on every writer; marked rows keep draining.
     kill = env_config.pop('conversations_v3', None)
-    if stage is None and kill is None:
-        return
-    desktop_env = env_config.setdefault('desktop_backend', {}).setdefault('env', {})
     if kill is not None:
         kill_descriptor = {'value': str(kill), 'category': 'ops_kill'}
-        desktop_env['CONVERSATIONS_V3'] = deepcopy(kill_descriptor)
         cloud_run = env_config.get('cloud_run', {})
         for group in ('services', 'jobs'):
             for service in cloud_run.get(group, {}).values():
@@ -302,9 +293,11 @@ def _apply_conversations_v3_stage(env_config: ConfigDict) -> None:
                 'value': 'conversations-v3-backfill',
                 'category': 'reliability',
             }
-        # The desktop deploy workflows render these settings from the same manifest.
-        desktop_env['CONVERSATIONS_V3_STAGE'] = deepcopy(descriptor)
-        desktop_env['CONVERSATIONS_V3_FIRST_APP_BUILD'] = deepcopy(build_descriptor)
+        # desktop-backend sets its env inline in its deploy workflow and reads the code defaults
+        # (stage beta, no first build), so at stage all it still reads beta. That is inert today:
+        # desktop_backend.py mounts no conversations/episodes router (no capability response), and
+        # mark_new admits only omi/phone sources, so desktop creates stay one-to-one at any stage.
+        # A desktop route that reads the stage needs that workflow to carry CONVERSATIONS_V3_STAGE.
         gke = env_config.get('gke', {})
         config_map = gke.get('config_map')
         if isinstance(config_map, dict):

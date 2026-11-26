@@ -52,7 +52,7 @@ from config.conversation_smart_merge import (
     smart_merge_mode,
 )
 from config.jev_decisions import JEV_MODEL
-from config.merge_before_processing import enabled as merge_before_processing_enabled
+from config.merge_before_processing import enabled as merge_before_processing_enabled, v3_excluded, v3_owned
 from models.finalization_owner import FinalizationOwnedElsewhere, python_owns_finalization
 from database import conversations as conversations_db
 from database import notifications as notification_db
@@ -437,6 +437,10 @@ def _decide(
     reason = predecessor_status_skip(survivor_meta)
     if reason is not None:
         _skip(mode, reason, uid, conversation_id)
+        return None
+    if v3_excluded() and v3_owned(survivor_meta):
+        # Before any owed legacy refresh: a v3 survivor's notes are v3's to write.
+        _skip(mode, SkipReason.V3_OWNED, uid, conversation_id)
         return None
     survivor_id = str(survivor_meta['id'])
     if refresh_owed(survivor_meta) and mode is SmartMergeMode.MERGE:

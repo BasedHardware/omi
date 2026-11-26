@@ -1,0 +1,40 @@
+{
+ "conversations": {
+  "owner_absent": {
+   "seconds": 34.3,
+   "speakers": 2,
+   "turns": 8
+  },
+  "owner_and_person": {
+   "seconds": 39.2,
+   "speakers": 2,
+   "turns": 8
+  },
+  "owner_and_stranger_same_gender": {
+   "seconds": 30.3,
+   "speakers": 2,
+   "turns": 8
+  },
+  "owner_monologue": {
+   "seconds": 29.9,
+   "speakers": 1,
+   "turns": 6
+  },
+  "three_speakers_short_turns": {
+   "seconds": 34.7,
+   "speakers": 3,
+   "turns": 12
+  }
+ },
+ "kind": "public",
+ "noise_floor_dbfs": -50,
+ "owner_gain_db": 6,
+ "roles": {
+  "owner": "enrolled",
+  "person-a": "enrolled",
+  "person-b": "enrolled",
+  "stranger-f": "not enrolled",
+  "stranger-m": "not enrolled"
+ },
+ "source": "LibriSpeech dev-clean (CC BY 4.0), https://www.openslr.org/12"
+}

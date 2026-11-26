@@ -1,11 +1,10 @@
 # Recording-derived conversations v3
 
-The shared source (`backend/deploy/runtime_env/_base.yaml`) sets `CONVERSATIONS_V3_STAGE=all`.
-The code default remains `beta`. Change the stage in the shared source, regenerate the runtime
-manifest, and deploy every participating runtime, including a separate desktop-backend production
-run. For the hard stop on new mobile pendant markings, set `conversations_v3: 'off'`
-under `overlay` in `backend/deploy/runtime_env/prod.overlay.yaml`, regenerate the
-manifest, and redeploy the same set. Stages are `cohort`, `beta`, `all`;
+The code default is `CONVERSATIONS_V3_STAGE=beta`; the deployed source (`runtime_env/_base.yaml`)
+is `all` (step 2 below; it was `cohort` on 2026-11-17 and `beta` from 2026-11-18). Change the stage
+only there, never by a live-only env edit, which the next workflow deploy would revert. Rollback is
+the source back to `beta` (TestFlight-seen owners) plus a train. `CONVERSATIONS_V3=off`
+stops marking new mobile pendant documents. Stages are `cohort`, `beta`, `all`;
 `rollout_cohorts/conversations-v3` is for named qualification accounts. Admission
 needs a v3-capable app: only those builds call `GET /v1/conversations/live`, on any
 channel, which refreshes the 14-day `conversations_v3:client_capable:{uid}` marker
@@ -25,11 +24,11 @@ Provision the dedicated queue on dev/prod before enabling admission; the prod
 ops manifest declares its bounded concurrency/retry policy. The same stage must reach backend/API, backend-listen (including realtime role),
 backend-sync, backend-sync-backfill, sync-backfill-worker, backend-integration,
 and pusher wherever their deployed image can create or finalize pendant rows.
-Desktop-backend receives the stage and kill switch for manifest parity. Its
-entrypoint has no v3 admission routes, so the run can follow the Cloud Run
-writers in the activation order. Refresh the runtime image/service census
+The desktop backend reads the code default (`beta`): it mounts no conversations or
+episodes router, so no capability/episode response depends on it, and its desktop
+creates remain one-to-one. A desktop route that reads the stage must first carry it. Refresh the runtime image/service census
 before rollout. `backend/deploy/runtime_env/_base.yaml` is the shared stage
-source; composition binds Cloud Run services/jobs and desktop directly, and
+source; composition binds Cloud Run services/jobs directly (not desktop), and
 backend-listen/pusher through the generated shared ConfigMap. The uninstalled
 sync-backfill-worker pilot references that ConfigMap. STT-only parakeet workers
 do not create/finalize/read conversation documents. A stage edit must be composed
@@ -38,32 +37,39 @@ worktree. Leave `CONVERSATIONS_V3_FIRST_APP_BUILD` unset in source. At rollout,
 lead2 sets it through the shared runtime source from the first TestFlight build
 containing this PR; unset/invalid yields unknown and cannot qualify deletion evidence.
 
-### Desktop-backend recovery while stage is `all`
+## Per-owner holdout
 
-A desktop traffic rollback or recovery restores the selected revision's environment.
-A retained revision can serve `beta` while the other runtimes serve `all`.
+An owner in the `conversations-v3-holdout` rollout cohort keeps legacy intake for NEW captures at
+every stage. Use it to return specific heavy owners to legacy at `all` without a roll. Stage
+admission (`conversations_v3_enabled`) ignores the holdout. New-intake sites ask
+`v3_intake_held_out` after admission:
 
-1. After any desktop traffic rollback or recovery, choose one way to restore parity.
-   - Forward-redeploy desktop-backend through its production workflow. Select the
-     admitted image needed for recovery and apply the current manifest's v3 environment.
-   - Restore `conversations_v3_stage: beta` in the shared source, regenerate the
-     manifest, and deploy the full set from the
-     [stage-all rollout note](../listen_pusher_pipeline/changes/2026-11-25-conversations-v3-stage-all.md#rollout),
-     including a separate desktop-backend production run.
-2. Collect fresh serving state and run the checker at `--before pusher`. At
-   this step the stage and kill-switch comparisons include desktop-backend and
-   the Cloud Run writers. Pusher and backend-listen checks are deferred. Confirm
-   `env-equal:v3-stage:CONVERSATIONS_V3_STAGE` is satisfied and the scoped verdict
-   is `READY` before closing desktop recovery.
+- `triggers.mark_new` (in-progress create, sync ingest, batch projection): no `recording` marker on new rows.
+  A listen v3 rotation successor is the same capture continuing, so it stays v3.
+- Manual cuts (`record_end`, `ends_around`): experiment-off End handling.
+- Home list: legacy read mode (offset paging, `show_held`). It still shows the owner's existing
+  `v3_derived` cards, and their new legacy pieces held for notes.
+- `GET /v1/conversations/live`: an existing active v3 window is still served (`v3:true`).
+  Without one, the answer is `v3:false`.
 
-   ```bash
-   source ~/.local/bin/gcp-agent-env.sh ro-prod &&
-     state=$(mktemp /tmp/v3-desktop-recovery.XXXXXX) &&
-     python3 backend/scripts/activation_collect.py \
-       --manifest backend/deploy/activation/conversations-v3.yaml --out "$state" &&
-     python3 backend/scripts/activation_check.py \
-       --manifest backend/deploy/activation/conversations-v3.yaml --state "$state" --before pusher
-   ```
+Finish, episodes and the builders keep stage admission, so existing v3 recordings drain on the
+v3 path and an active v3 capture can still be finished. While a legacy row is in progress beside an
+older v3 window, a Finish that names a different id finishes only that named window (or its just-sealed
+capture) and leaves the legacy row recording. An unnamed Finish, or a miss, runs the legacy Finish. The cohort starts empty. Add or remove
+one owner per command from a private UID file (never pass a UID on the command line):
+
+```bash
+GCP_AGENT_TIER=prod-operator python backend/scripts/rollout_cohort.py --uid-file <private-file> \
+  --cohort conversations-v3-holdout --project based-hardware --environment prod --add --apply
+# --remove instead of --add writes an explicit false and returns the owner to normal admission.
+```
+
+Allow about 60 s for the per-process cohort cache, plus up to 120 s for the capability read cache.
+The capture in flight keeps its layer; only new rows move. An unknown membership read admits as
+before and counts `omi_fallback_total{component="feature_flags",from_mode="v3_holdout"}`, so a cold
+cache can still admit a held-out owner. Check: once the writers have resolved membership, the owner
+gets no new `recording`-marked rows. `CONVERSATIONS_V3_HOLDOUT=off` (default on) skips the check and
+its read; members stay stored.
 
 ## Internal live recap beta
 
@@ -160,8 +166,40 @@ recording's language and writes the result with `update_conversation_segments`. 
 recording pending and wakes reconcile, and the stored manual end cuts the window, so notes start
 without waiting for the batch merge and delivery. The batch record projection later replaces the
 provisional segments; once `record_projection_revision` is set the fast write is refused. Recordings
-over 20 minutes, partial records, custom STT, locked rows and private rows are skipped. Read
-`omi_conversations_v3_fast_finish_total{outcome}` and `omi_conversations_v3_fast_finish_seconds{stage}`.
+of more than nine chunks (about 44 minutes) or eight units, partial records, custom STT, locked rows and
+private rows are skipped. `CONVERSATIONS_V3_FAST_FINISH_CHUNKED` (default `on`) splits each unit into
+chunks of at most five minutes, cut at retained-audio silences where possible and otherwise at even
+offsets with a 3 s overlap, and sends them to the provider concurrently on the six-worker
+`fast_finish_chunk` pool: four in flight, three for a recording over 20 minutes. Only audio over 20
+minutes makes a pass long, never its chunk count; a long pass takes its own pass slot, so it never holds
+a short Finish's slot, and a short Finish waits up to 10 s for a slot instead of answering `busy`. Length,
+canary and cap refusals are counted before any slot is taken. Each chunk asks the batch privacy fence
+again when it actually starts, and so does the language probe right before it sends; one refusal or
+error ends the pass (`privacy_blocked`), and every later check refuses without asking; a chunk is retried
+once if time allows. One 45 s deadline from record admission (not the Finish tap) covers slot wait, the
+Firestore reads before chunking, every retained-audio reference read (its storage timeouts capped to what
+is left), both language probes, queueing and provider requests (their connect, pool, write and read
+timeouts share what is left); past it the pass cancels queued chunks, waits at most 2 s more for running
+ones and yields to batch as `deadline`. Language resolution (both probes) is abandoned at the deadline
+as a whole, and skipped, keeping the row's language, with under 3 s left. Every Firestore call of a chunked pass (row refresh, funding,
+privacy, the transcript write and the cut) is waited for only until the deadline, or 1.5 s past it after
+the chunks, then abandoned as `deadline`; the write's own transaction refuses to run past that bound, and
+no cut follows an abandoned write. A pass that stops early sends no further request or retry and
+releases its slot when the requests in flight end. At a fixed cut the earlier chunk owns lines that start before the overlap's middle; every
+later line that starts before the earlier chunk's last line ended is compared against it (words by time,
+utterances by text, allowing a clipped word on either side) and keeps only what is new. Recordings over 20 minutes are a canary: `CONVERSATIONS_V3_FAST_FINISH_LONG_PERCENT`
+(default 25, `long_canary` outside it) and `CONVERSATIONS_V3_FAST_FINISH_LONG_DAILY_SECONDS` (default
+7200 per UTC day across the fleet, of audio actually sent, retries, overlaps and the vendor probe
+included, in the Redis key `v3_fast_finish:long_audio_seconds:<UTC day>`; `long_cap` past it, and also
+whenever Redis errors or takes over 1 s). A long pass reserves the most it can send (every chunk twice
+plus a 30 s probe clip), so retries cannot push the day past the cap, and settles in the background to
+what it sent; while passes run the key reads high. Read today's total with `GET` on that key. Set `CONVERSATIONS_V3_FAST_FINISH_CHUNKED=off` on
+`backend-integration` to restore one serial request per unit and the 20-minute bound. Read
+`omi_conversations_v3_fast_finish_total{outcome}`, `omi_conversations_v3_fast_finish_seconds{stage}`,
+`omi_conversations_v3_fast_finish_chunks`, `omi_conversations_v3_fast_finish_chunk_seconds`,
+`omi_conversations_v3_fast_finish_chunk_queue_seconds`, `omi_conversations_v3_fast_finish_audio_seconds_total{path}`
+(vendor probe clip included) and `omi_conversations_v3_fast_finish_wall_seconds` (written passes, from
+record admission, not the Finish tap).
 A manual finish that never starts the pass is counted in
 `omi_conversations_v3_fast_finish_skipped_total{reason}`: `mode_off`, `already_started`, or the first
 failing `fast_finish.candidate_rejection` predicate (`not_recording`, `no_manual_end`,
@@ -289,8 +327,22 @@ commit: the 2026-11-18 incident was a fresh late-speech window time-matching a r
 two planned rows re-added the same held claims and the array doubled each pass. A planned id that
 already exists outside the loaded closure is adopted once as the prior (live derived rows only).
 Watch `omi_conversations_v3_blocked_total{reason}` and `omi_conversations_v3_adopted_total`; an owner
-blocked for hours needs investigation, and an operator clears the park by deleting the three
-`v3_blocked_*`/`v3_backoff_until` fields on `users/{uid}/conversation_v3_leases/builder`.
+blocked for hours needs investigation. With `CONVERSATIONS_V3_BOUNDED_PENDING` on, a legacy
+closure-budget or document-size park gets an early background attempt. A closure-budget park
+starts with eight seeds and can fall back to one. A document-size park starts with one seed.
+The final commit remembers a successful smaller page on the builder lease. Before loading
+the projection, the builder can clear discarded or deleted markers within the oldest 50
+pending rows under that lease. A pass loads owner-wide unlocked windows one page at a time and,
+while windows remain unvisited, wakes itself a minute later with a task named by its lease token.
+A derived-budget park recorded before paging shipped, with indexed unlocked windows and no
+`v3_unlocked_paging_attempted` yet, gets one more early attempt that sets it; a new park sets it
+when it is recorded and waits out the usual backoff. See the [bounded pending](../listen_pusher_pipeline/changes/2026-11-26-v3-bounded-pending.md)
+and [bounded unlocked](../listen_pusher_pipeline/changes/2026-11-26-v3-bounded-unlocked.md) change notes.
+A new failed bounded pass records `v3_bounded_pending_attempted` (and, with unlocked windows,
+`v3_unlocked_paging_attempted`) on the builder lease and observes the usual backoff. An operator
+clears the park by deleting `v3_blocked_count`, `v3_blocked_reason`, `v3_backoff_until`,
+`v3_bounded_pending_attempted` and `v3_unlocked_paging_attempted` on
+`users/{uid}/conversation_v3_leases/builder`.
 
 Each source has a durable `v3_pending` obligation. Tasks use the dedicated `conversations-v3`
 Cloud Tasks queue and the configured sync origin/OIDC identity unless
@@ -608,11 +660,20 @@ Rollout owner: lead2. Step 0: set CONVERSATIONS_V3_FIRST_APP_BUILD through the s
 from the first TestFlight build containing this PR. Then dev named accounts,
 live/sync/late qualification and
 current App Store/TestFlight fallback acceptance; prod named cohort only. Step 1:
-beta in prod after that acceptance. Step 2: all within 12 hours if first-speech
-visibility, end-to-summary latency, conversations/calls/cost per user-day,
-share/delete/processing error rates, pending age and stuck counts remain clean,
-and late rewrite cost share is at most 5%. Stage rollback or kill switch affects
-new intake only; previously marked recordings continue draining.
+beta in prod after that acceptance. Step 2 expands to all owners with a recent
+v3-capable app. Keep the stage at beta until lead2 records a full clean beta hour
+before merge. Reconcile 5xx must be below 1%, reconciles must commit every hour,
+pending recordings older than one hour must be near zero, outline calls must be
+at most one per conversation, and late rewrite cost share must be at most 5%.
+First-speech visibility, end-to-summary latency, conversations/calls/cost per
+user-day, and share/delete/processing error rates must stay clean.
+
+Use production request logs and approved aggregate builder and accounting
+readbacks for the pre-merge gate. Missing samples do not qualify the ramp.
+Verify that the backend-sync GMP profile exposes the builder series after
+the train, then repeat the gate readout at one and four hours. Stage rollback
+or kill switch affects new intake only; previously marked recordings continue
+draining.
 
 Delete the old episode implementation in a follow-up only after stage all for
 14 days, kill switch unused for seven days, episode calls below 1% of active

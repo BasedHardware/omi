@@ -113,9 +113,25 @@ def entries():
             neutrals={'budget': (ListReadBudget(deadline_monotonic=10**30, max_documents=53), 'RPC/read budget only')},
         ),
         DriverEntry(
+            'database.conversations_v3.clear_terminal_pending',
+            base={'uid': SHAPE_UID, 'token': 'shape-token'},
+            setup=_pending_source,
+            patchers=(
+                _transaction_without_rpc,
+                lambda client: patch(
+                    'database.conversations_v3.run_preloaded_transaction_with_contention_retry',
+                    return_value=None,
+                ),
+            ),
+        ),
+        DriverEntry(
             'database.conversations_v3.load',
             base={'uid': SHAPE_UID},
-            domains={'conversation_id': [None, 'source']},
+            domains={'conversation_id': [None, 'source'], 'pending_limit': [32, 8, 1]},
+            neutrals={
+                'unlocked_page': (None, 'bounds indexed point reads; source and neighbor query shapes are unchanged'),
+                'unlocked_limit': (None, 'caps indexed point reads; adds no query shape'),
+            },
             setup=_pending_source,
             patchers=(_decode,),
         ),
@@ -176,6 +192,11 @@ def entries():
             neutrals={'pick': (_pick_none, 'row selection only; no window is live, so both bands read')},
         ),
         DriverEntry(
+            'database.conversations_v3_live.live_window_lookup',
+            base={'uid': SHAPE_UID, 'now': FROZEN_NOW, 'max_idle': timedelta(hours=2)},
+            neutrals={'pick': (_pick_none, 'row selection only; no window is live, so both bands read')},
+        ),
+        DriverEntry(
             'database.conversations_v3_live.request_recording_finish',
             base={'uid': SHAPE_UID, 'now': FROZEN_NOW},
             setup=_finish_source,
@@ -185,6 +206,7 @@ def entries():
             'database.conversations_v3_live.request_named_finish',
             base={'uid': SHAPE_UID, 'now': FROZEN_NOW},
             domains={'named_id': ['source', 'window']},
+            neutrals={'strict': (True, 'refuses a superseded capture after the same reads; no query changes')},
             setup=_named_finish_sources,
             patchers=(_transaction_without_rpc,),
         ),
