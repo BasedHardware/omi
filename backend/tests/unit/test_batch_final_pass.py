@@ -1529,3 +1529,63 @@ def test_shared_units_count_one_conversation_and_each_omitted_unit(prod_shaped, 
     assert after['shared_unit'] - before_units.get('shared_unit', 0) == 2
     assert after['blocked_by_shared_unit'] - before_units.get('blocked_by_shared_unit', 0) == 1
     assert sum(batch_outcome_counts().values()) - sum(before_conversations.values()) == 1
+
+
+def _final_pass_with(evidence_seconds, vector, prints):
+    from models.diarization import DiarizationResult
+
+    class Backend:
+        def diarize(self, pcm, **_):
+            return DiarizationResult.model_validate(
+                {
+                    'turns': [{'start': 0.0, 'end': 4.0, 'speaker': 'SPEAKER_00'}],
+                    'overlaps': [],
+                    'centroids': {'SPEAKER_00': {'embedding': vector, 'evidence_seconds': evidence_seconds}},
+                    'embedding_space': OMI_EMBEDDING_SPACE,
+                    'version': 'test',
+                    'provenance': {'backend': 'pyannote'},
+                }
+            )
+
+    words = [{'timestamp': [0.5, 1.0], 'text': 'hi'}, {'timestamp': [1.5, 2.0], 'text': 'there'}]
+    segments, _ = final.run_final_pass(
+        b'\0\0' * 64000,
+        words,
+        None,
+        {k: {'embedding': v} for k, v in prints.items()},
+        deadline=time.monotonic() + 30,
+        conversation_id='c',
+        diarizer_backend=Backend(),
+        record_outcome=False,
+    )
+    return segments
+
+
+def test_final_pass_voice_without_enough_evidence_is_unknown_not_no_match():
+    # Owner corpus 2026-11-26: on short v3 conversations the final pass labeled voices under the 5 s evidence
+    # floor no_match, and apply_speaker_resolution cleared the resolver's correct owner labels with it.
+    owner = [1.0] + [0.0] * 255
+    stranger = [0.0, 1.0] + [0.0] * 254
+    short = _final_pass_with(2.0, owner, {'user': owner})
+    assert {s.speaker_identity_status for s in short} == {'unknown'}
+    rejected = _final_pass_with(8.0, stranger, {'user': owner})
+    assert {s.speaker_identity_status for s in rejected} == {'no_match'}
+    named = _final_pass_with(8.0, owner, {'user': owner})
+    assert all(s.is_user for s in named)
+
+
+def test_unknown_final_pass_voice_keeps_the_resolvers_owner_label():
+    conversation = Conversation(
+        id='c',
+        created_at=datetime(2026, 1, 1, tzinfo=timezone.utc),
+        started_at=datetime(2026, 1, 1, tzinfo=timezone.utc),
+        finished_at=datetime(2026, 1, 1, 0, 1, tzinfo=timezone.utc),
+        structured=Structured(),
+        transcript_segments=[
+            {'id': 's1', 'text': 'hi', 'speaker': 'SPEAKER_00', 'speaker_id': 0, 'is_user': True, 'start': 0, 'end': 2}
+        ],
+    )
+    stage.apply_speaker_resolution(conversation, {'s1': 3}, {}, {3: 'unknown'}, owner_voiceprint_available=True)
+    assert conversation.transcript_segments[0].is_user is True
+    stage.apply_speaker_resolution(conversation, {'s1': 3}, {}, {3: 'no_match'}, owner_voiceprint_available=True)
+    assert conversation.transcript_segments[0].is_user is False

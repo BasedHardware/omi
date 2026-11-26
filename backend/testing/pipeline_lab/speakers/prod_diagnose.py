@@ -148,7 +148,8 @@ def diagnose(uid: str, conversation_id: str, *, run_final_pass: bool = False) ->
     if run_final_pass:
         from database import conversations as conversations_db
 
-        final = final_pass(uid, Conversation(**raw), conversations_db.get_manual_speaker_receipt(uid, conversation_id))
+        # Production order: the whole pass runs on the conversation the resolver just labeled.
+        final = final_pass(uid, conversation, conversations_db.get_manual_speaker_receipt(uid, conversation_id))
     segments = []
     for segment in conversation.transcript_segments:
         data = _plain(segment)
