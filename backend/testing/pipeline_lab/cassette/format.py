@@ -19,6 +19,8 @@ live only under the private lab root, never in git. The one exception is a
 ``record-stt`` or a scenario's ``--stt record-vendor``), ``local`` (a model on
 this machine, ``cassette/local.py``) or ``synthetic`` (hand-written or generated
 for a fixture). A cassette written before the field existed reads as ``vendor``.
+``source_detail`` (optional) says how the producer cut the audio, e.g. a local model's windowing mode and its
+VAD model and parameters (``cassette/local_parakeet.windowing_detail``); it is not part of the key.
 
 ``$ROOT/cache/stt_cassette/by_audio/<aa>/<audio_sha256>.jsonl`` indexes every
 cassette saved for one stretch of audio (any provider), so a scenario that does
@@ -107,6 +109,7 @@ class Cassette:
     usd: float = 0.0
     segments: list[dict] = field(default_factory=list)
     source: str = DEFAULT_SOURCE
+    source_detail: dict | None = None
 
     def __post_init__(self) -> None:
         if self.source not in SOURCES:
@@ -120,6 +123,7 @@ class Cassette:
             'audio': {'seconds': self.audio_seconds, 'sample_rate': SAMPLE_RATE, 'format': 'pcm16le_mono'},
             'adapter': self.adapter,
             'source': self.source,
+            **({'source_detail': self.source_detail} if self.source_detail else {}),
             'recorded_at': self.recorded_at,
             'served': {'provider': self.served_provider, 'model': self.served_model},
             'detected_language': self.detected_language,
@@ -148,6 +152,7 @@ class Cassette:
             usd=float(value.get('usd') or 0.0),
             segments=list(value.get('segments') or []),
             source=value.get('source') or DEFAULT_SOURCE,
+            source_detail=dict(value['source_detail']) if value.get('source_detail') else None,
         )
 
     def save(self, root=None) -> Path:
@@ -161,6 +166,7 @@ class Cassette:
             **asdict(self.key),
             'key_digest': self.key.digest,
             'source': self.source,
+            **({'source_detail': self.source_detail} if self.source_detail else {}),
             'recorded_at': self.recorded_at,
         }
 

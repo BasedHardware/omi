@@ -31,6 +31,8 @@ A scenario is one JSON object. Times are seconds from ``t0`` (a synthetic UTC in
       "budget": {"writes": 40, "reads": 300, "noop_writes": 0, "vendor_calls": {"stt": 1, "llm": 0},
                  "note": "..."},                         # optional caps on the run's operation counts
       "expected_failure": {"reason": "SCA-xxxx: ...", "checks": ["finish_visible"], "strict": true},
+      "speakers": {"peer": true, "gallery": {"user": "owner.wav", "person-a": "a.wav"},   # optional, see below
+                   "truth": "truth.json", "recording": "B"},
       "tail_seconds": 1800
     }
 
@@ -65,6 +67,27 @@ must still pass: a scenario whose unnamed check fails is ``failed``, not ``xfail
 ``budget_vendor_llm``) that fails when the count exceeds the cap; ``note`` is free text for the reader (say
 why a cap is what it is, e.g. a known no-op write source). Counts are recorded in ``result.json`` (``ops``)
 whether or not a budget is given.
+
+``speakers`` runs the product's speaker code (``speakers/scenario.py``): ``peer`` (default true) starts the
+loopback stand-in for the hosted diarizer (``--speakers replay|record-local``) and points the product's
+``HOSTED_DIARIZATION_API_URL`` / ``HOSTED_SPEAKER_EMBEDDING_API_URL`` at it; the batch lane then diarizes each
+unit through it instead of reading speaker labels off the STT cassette. ``gallery`` maps identities to
+enrollment WAVs (relative to this file): ``user`` is the owner, any other label (lowercase letters, digits,
+``-``) an enrolled person whose id is that label. ``truth`` is a speaker truth file (``speakers/corpus.py``:
+``{"turns": [{start, end, speaker}], "identities": {speaker: "user"|person label|null}}``) on the clock of
+``recording``'s audio file (default: the one audio recording). It needs at least one batch ``audio_file``
+recording; the run's diarization, gallery, resolver and final pass are reported in ``result.json``
+``speakers``. ``receipts`` says whom the staged-unit stand-in's projection receipts name: ``recording``
+(default; what ``batch_pipeline/projection.py`` writes: the recording the unit was projected into, so a
+speaker pass on the v3 conversation is answered ``skipped_merged`` as production's ``load_reference`` answers)
+or ``processed`` (a counterfactual, reported as a stand-in: the receipt names whichever conversation the speaker
+pass runs on, so the rest of the chain can be measured).
+
+A ``conversation_of`` row may carry ``speakers``: the conversation's persisted segments scored against the
+truth with ``speakers/score.score_conversation`` (segment clocks moved onto the recording's audio clock):
+``{"attribution_min", "owner_precision_min", "owner_recall_min", "named_accuracy_min", "named_coverage_min",
+"wrong_name_max", "owner_words_max", "voices": N | [N, tolerance]}``. A rate with nothing to measure (no
+owner words claimed, for ``owner_precision``) is ``null`` and fails a ``_min``. Verdicts hold numbers only.
 
 ``account`` is the lab account's settings. ``private_cloud_sync_enabled`` (default true) is written through
 the product's settings writer before the first event and stamped on every recording row. Off, Listen takes
@@ -141,8 +164,15 @@ DEFAULT_LANGUAGE = 'en'
 AUDIO_SPAN_TOLERANCE = 0.05
 CHECK_FIELDS = (
     'recordings', 'recordings_include', 'visible', 'on_home', 'manual_end', 'hidden_reason', 'min_words', 'kind',
-    'titled', 'has_notes', 'home_titled', 'home_has_notes', 'holders',
+    'titled', 'has_notes', 'home_titled', 'home_has_notes', 'holders', 'speakers',
 )  # fmt: skip
+# ``speakers`` expect keys: a minimum on a rate, a maximum on a rate or count, and the voice count.
+SPEAKER_MIN = ('attribution', 'owner_precision', 'owner_recall', 'named_accuracy', 'named_coverage')
+SPEAKER_MAX = ('wrong_name', 'owner_words')
+SPEAKER_KEYS = (*(f'{k}_min' for k in SPEAKER_MIN), *(f'{k}_max' for k in SPEAKER_MAX), 'voices')
+SPEAKER_BLOCK_KEYS = ('peer', 'gallery', 'truth', 'recording', 'receipts')
+SPEAKER_RECEIPTS = ('recording', 'processed')
+_IDENTITY = re.compile(r'^[a-z][a-z0-9-]{0,31}$')
 BOOL_FIELDS = ('visible', 'on_home', 'manual_end', 'titled', 'has_notes', 'home_titled', 'home_has_notes')
 RECORDING_FIELDS = ('fast_finish',)
 RESPONSE_FIELDS = ('outcome', 'titled', 'has_notes', 'discarded', 'recordings', 'recordings_include')
@@ -167,6 +197,9 @@ class Line:
     text: str
     speaker: str = 'SPEAKER_00'
     is_user: bool = True
+    # An audio recording with ``speakers``: the batch projection's own segment (ids, scopes, provider markers),
+    # written as stored instead of a segment rebuilt from the line.
+    product: Optional[Mapping[str, Any]] = field(default=None, compare=False, hash=False)
 
 
 @dataclass(frozen=True)
@@ -253,6 +286,17 @@ class Check:
 
 
 @dataclass(frozen=True)
+class Speakers:
+    """The ``speakers`` block: absolute paths, validated."""
+
+    peer: bool = True
+    gallery: Mapping[str, str] = field(default_factory=dict)  # identity (``user`` = owner) -> WAV path
+    truth: Optional[str] = None  # truth.json path
+    recording: Optional[str] = None  # the recording whose audio clock the truth is on
+    receipts: str = 'recording'  # whom the staged-unit stand-in's projection receipts name (see below)
+
+
+@dataclass(frozen=True)
 class Origin:
     label: str
     source: str = 'omi'
@@ -277,6 +321,7 @@ class Scenario:
     account: Account = field(default_factory=Account)
     seed: tuple[SeedRows, ...] = ()
     budget: Mapping[str, Any] = field(default_factory=dict)
+    speakers: Optional[Speakers] = None
 
     @property
     def batch_lane(self) -> bool:
@@ -542,6 +587,8 @@ def _check(raw: Any, where: str, labels: set[str], has_finish: bool, taps: int =
             value = fields[key]
             if not isinstance(value, list) or not value or any(v not in labels for v in value):
                 raise ScenarioError(f'{where}.{key}: a list of declared recording labels')
+    if 'speakers' in fields:
+        fields['speakers'] = _speaker_expect(fields['speakers'], where + '.speakers')
     if 'holders' in fields and (isinstance(fields['holders'], bool) or not isinstance(fields['holders'], int)):
         raise ScenarioError(f'{where}.holders: a whole number of conversations')
     if 'outcome' in fields and fields['outcome'] not in RESPONSE_OUTCOMES:
@@ -568,6 +615,79 @@ def _check(raw: Any, where: str, labels: set[str], has_finish: bool, taps: int =
             raise ScenarioError(f'{where}: home_paging runs at the end of the run; it takes no at')
         kwargs['home_paging'] = value
     return Check(raw=dict(raw), at=at, label=label, fields=fields, **kwargs)
+
+
+def _speaker_expect(raw: Any, where: str) -> dict[str, Any]:
+    if not isinstance(raw, Mapping) or not raw:
+        raise ScenarioError(f'{where}: an object of {list(SPEAKER_KEYS)}')
+    _keys(raw, SPEAKER_KEYS, where)
+    out: dict[str, Any] = {}
+    for key, value in raw.items():
+        if key == 'voices':
+            pair = [value, 0] if isinstance(value, int) and not isinstance(value, bool) else value
+            if (
+                not isinstance(pair, list)
+                or len(pair) != 2
+                or any(isinstance(v, bool) or not isinstance(v, int) or v < 0 for v in pair)
+            ):
+                raise ScenarioError(f'{where}.voices: a voice count N, or [N, tolerance]')
+            out[key] = list(pair)
+        elif key == 'owner_words_max':
+            out[key] = _count(value, f'{where}.{key}')
+        else:
+            number = _number(value, f'{where}.{key}')
+            if not 0.0 <= number <= 1.0:
+                raise ScenarioError(f'{where}.{key}: a rate from 0 to 1')
+            out[key] = number
+    return out
+
+
+def _speakers(raw: Any, base: Path, recordings: Sequence[Recording]) -> Optional[Speakers]:
+    if raw is None:
+        return None
+    if not isinstance(raw, Mapping):
+        raise ScenarioError('speakers: {"peer": true, "gallery": {"user": "owner.wav"}, "truth": "truth.json"}')
+    _keys(raw, SPEAKER_BLOCK_KEYS, 'speakers')
+    peer = raw.get('peer', True)
+    if not isinstance(peer, bool):
+        raise ScenarioError('speakers.peer: true or false')
+    audio = [rec for rec in recordings if rec.audio_file is not None and rec.lane == 'batch']
+    if not audio:
+        raise ScenarioError('speakers: needs a batch recording with an audio_file (the voices come from audio)')
+    gallery_raw = raw.get('gallery') or {}
+    if not isinstance(gallery_raw, Mapping):
+        raise ScenarioError('speakers.gallery: {"user": "owner.wav", "person-a": "a.wav"}')
+    gallery: dict[str, str] = {}
+    for label, value in gallery_raw.items():
+        if not isinstance(label, str) or not _IDENTITY.match(label):
+            raise ScenarioError(f'speakers.gallery: {label!r} is not an identity (user, or lowercase-letters-digits-)')
+        path, _ = _audio_file(value, f'speakers.gallery.{label}', base)
+        gallery[label] = str(path)
+    if gallery and not peer:
+        raise ScenarioError('speakers.gallery: enrollment embeds through the peer; set peer true')
+    label = raw.get('recording')
+    if label is None:
+        if len(audio) != 1:
+            raise ScenarioError('speakers.recording: name the audio recording the truth is on')
+        label = audio[0].label
+    elif label not in {rec.label for rec in audio}:
+        raise ScenarioError('speakers.recording: a batch recording with an audio_file')
+    truth = None
+    if raw.get('truth') is not None:
+        if not isinstance(raw['truth'], str):
+            raise ScenarioError('speakers.truth: a path to a truth.json, relative to the scenario file')
+        path = (base / raw['truth']).resolve()
+        try:
+            value = json.loads(path.read_text(encoding='utf-8'))
+        except (OSError, json.JSONDecodeError):
+            raise ScenarioError(f'speakers.truth: {raw["truth"]!r} is not a readable JSON file') from None
+        if not isinstance(value, Mapping) or not isinstance(value.get('turns'), list):
+            raise ScenarioError('speakers.truth: {"turns": [{start, end, speaker}], "identities": {...}}')
+        truth = str(path)
+    receipts = raw.get('receipts', 'recording')
+    if receipts not in SPEAKER_RECEIPTS:
+        raise ScenarioError(f'speakers.receipts: one of {SPEAKER_RECEIPTS}')
+    return Speakers(peer=peer, gallery=gallery, truth=truth, recording=label, receipts=receipts)
 
 
 def _count(value: Any, where: str) -> int:
@@ -666,7 +786,7 @@ def parse_scenario(raw: Any, *, path: Optional[str] = None) -> Scenario:
         raw,
         (
             'name', 'description', 't0', 'env', 'origins', 'recordings', 'gaps', 'sync', 'finish', 'expect',
-            'expected_failure', 'tail_seconds', 'admission_lag', 'stt', 'budget', 'account', 'seed',
+            'expected_failure', 'tail_seconds', 'admission_lag', 'stt', 'budget', 'account', 'seed', 'speakers',
         ),
         'scenario',
     )  # fmt: skip
@@ -739,6 +859,9 @@ def parse_scenario(raw: Any, *, path: Optional[str] = None) -> Scenario:
     )
     budget, budget_checks = _budget(raw.get('budget'))
     checks += tuple(budget_checks)
+    speakers = _speakers(raw.get('speakers'), base, recordings)
+    if any('speakers' in c.fields for c in checks) and (speakers is None or speakers.truth is None):
+        raise ScenarioError('expect: a speakers check needs speakers.truth')
     account = _account(raw.get('account'))
     seed = _seed(raw.get('seed'))
     if any(c.home_paging for c in checks) and not any(row.kind == 'visible' for row in seed):
@@ -776,6 +899,7 @@ def parse_scenario(raw: Any, *, path: Optional[str] = None) -> Scenario:
         account=account,
         seed=seed,
         budget=budget,
+        speakers=speakers,
     )
     if finish is not None:
         capturing = scenario.open_at(finish.at)

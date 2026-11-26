@@ -1,0 +1,69 @@
+{
+  "name": "speaker_owner_absent",
+  "description": "One batch-lane recording of two real voices (public LibriSpeech, 34 s) in which the owner never speaks: an enrolled person and a stranger take turns while the owner's pendant records. The owner and the person are enrolled. The batch lane diarizes through the speaker peer (production's community-1 answer, from a committed cassette) and the product's resolver and batch final pass label the voices. No word may be labelled as the owner, the enrolled person must be named, and the stranger must not get a name. Counterfactual (speakers.receipts \"processed\", reported in the stand-in notes): the staged-unit stand-in's receipts name the v3 conversation the speaker passes run on. With receipts as production's projection writes them (naming the recording), load_reference answers skipped_merged for the v3 conversation and no voice is named (measured 2026-11-26).",
+  "origins": [
+    {
+      "id": "O",
+      "source": "omi"
+    }
+  ],
+  "recordings": [
+    {
+      "id": "B",
+      "origin": "O",
+      "session": "S1",
+      "audio_file": "../../speakers/fixtures/public-libri/conversations/owner_absent/audio.wav",
+      "transcript_at": 60
+    }
+  ],
+  "finish": {
+    "at": 34.0,
+    "fast_finish": false
+  },
+  "speakers": {
+    "peer": true,
+    "gallery": {
+      "user": "../../speakers/fixtures/public-libri/gallery_audio/user.wav",
+      "person-b": "../../speakers/fixtures/public-libri/gallery_audio/person-b.wav"
+    },
+    "truth": "../../speakers/fixtures/public-libri/conversations/owner_absent/truth.json",
+    "receipts": "processed"
+  },
+  "expect": [
+    {
+      "label": "finished_visible",
+      "conversation_of": "@finish",
+      "recordings": [
+        "B"
+      ],
+      "visible": true,
+      "manual_end": true,
+      "min_words": 50
+    },
+    {
+      "label": "no_false_owner",
+      "conversation_of": "@finish",
+      "speakers": {
+        "owner_words_max": 0,
+        "attribution_min": 0.9,
+        "named_accuracy_min": 0.8,
+        "wrong_name_max": 0.05,
+        "voices": [
+          2,
+          0
+        ]
+      }
+    }
+  ],
+  "budget": {
+    "reads": 200,
+    "writes": 66,
+    "deletes": 1,
+    "noop_writes": 4,
+    "vendor_calls": {
+      "stt": 1,
+      "llm": 7
+    },
+    "note": "Measured 2026-11-26 on the lab host, --stt replay --speakers replay (180 reads, 60 writes, 1 delete(s), 4 no-op, 1 STT cassette play, 6 LLM; caps about +10%). Gallery enrollment runs before the first event and is not counted; speaker peer calls are loopback cassette plays, not vendor calls. noop_writes=4 is the current count, not a target: 2 are database/conversations_v3_leases.py:72 renew (the lease until at the instant it was claimed, a lab-clock repeat), 2 are database/dream_store.py:126 mark_dirty rewriting dream_due.due_at with the same lab-clock instant from after_write('conversations') hooks (seen only in the speaker scenarios: a finding, reported in the PR)."
+  }
+}
