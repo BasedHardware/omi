@@ -677,7 +677,7 @@ async def test_seed_lanes_that_overflow_together_each_advance_on_successive_pass
         recordings, existing, _, limit = await service._load_live_batch('u', 'token', None, page)
         loaded.append((set(recordings), set(existing), page.remaining, limit))
     assert loaded[0] == ({'rp'}, {'p1', 'p2'}, {'u'}, 1)  # The unvisited window stays owed to a later pass.
-    assert loaded[1] == ({'ru'}, {'u'}, frozenset(), 32)  # An unlocked-only pass remembers no pending page.
+    assert loaded[1] == ({'ru'}, {'u'}, frozenset(), None)  # An unlocked-only pass leaves the remembered page alone.
 
 
 @pytest.mark.asyncio
