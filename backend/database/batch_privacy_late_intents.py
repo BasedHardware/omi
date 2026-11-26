@@ -5,11 +5,11 @@ from uuid import uuid4
 
 from google.cloud.firestore_v1.types import Document, DocumentTransform, Value, Write
 
-from database.batch_account_authority_schema import ACCOUNT_DELETION_COLLECTION
+from database.batch_account_authority_schema import ACCOUNT_DELETION_COLLECTION, data_protection_denies
 
 COLLECTION = 'batch_privacy_late_sweeps'
 DELAY = timedelta(minutes=10)
-PROTECTION_FIELDS = frozenset({'data_protection_level', 'migration_status'})
+PROTECTION_FIELDS = ('data_protection_level', 'migration_status')
 
 
 def _field(write: Write, field: str) -> Value | None:
@@ -37,16 +37,20 @@ def _scopes(write: Write, parts: list[str]) -> list[tuple[str, str]]:
         return []
     if len(parts) == 7:
         reasons = []
-        mask = write.update_mask.field_paths
         protection = _field(write, 'data_protection_level')
         migration = _field(write, 'migration_status')
-        # Root creation commonly supplies the default protection level. A
-        # full replacement arms only when it explicitly starts denying data.
-        restricted_replacement = not mask and (
-            (protection is not None and protection.string_value == 'e2ee')
-            or (migration is not None and Value.pb(migration).WhichOneof('value_type') != 'null_value')
-        )
-        if PROTECTION_FIELDS.intersection(mask) or restricted_replacement:
+        # Absent fields alone cannot introduce a denial. Final state is
+        # verified at this Commit in case other writes change the same root.
+        if data_protection_denies(
+            {
+                'data_protection_level': protection.string_value if protection is not None else 'enhanced',
+                'migration_status': (
+                    migration
+                    if migration is not None and Value.pb(migration).WhichOneof('value_type') != 'null_value'
+                    else None
+                ),
+            }
+        ):
             reasons.append(('data_protection', ''))
         # Only a batch capture denial can erase batch artifacts. The
         # separate playback-storage preference still invalidates decisions.
@@ -92,7 +96,7 @@ def late_sweep_writes(writes) -> list[Write]:
                     'uid': Value(string_value=uid),
                     'reason': Value(string_value=reason),
                     'conversation_id': Value(string_value=source),
-                    'due_at': Value(timestamp_value=now if source else now + DELAY),
+                    'due_at': Value(timestamp_value=now if source or reason == 'data_protection' else now + DELAY),
                 },
             ),
             update_transforms=[

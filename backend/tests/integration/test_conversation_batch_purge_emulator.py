@@ -968,7 +968,7 @@ def test_late_privacy_sweep_recovers_an_inflight_object(plane, monkeypatch, tmp_
     data = intent.to_dict()
     assert data['reason'] == reason
     assert sweeps.reconcile_batch_privacy_late_sweeps(firestore_client=client) == (
-        {'scope_verified': 1} if scoped else {}
+        {'scope_verified': 1} if scoped or reason == 'data_protection' else {}
     )
 
     # The delayed provider write lands after the privacy mutation, while the
@@ -1218,6 +1218,47 @@ def test_maskless_account_revocation_arms_recording_erasure(plane):
     [intent] = plane.client.collection(late_intents.COLLECTION).stream()
     assert intent.get('reason') == 'recording_policy'
     assert intent.get('conversation_id') == ''
+
+
+@pytest.mark.parametrize('change', ['allowed-protection', 'clear-migration', 'same-commit-reenable'])
+def test_allowed_protection_edit_preserves_pending_artifact(plane, monkeypatch, tmp_path, change):
+    client, uid = plane.client, plane.uid
+    bucket = 'synthetic-late-batch'
+    storage = LocalStorageClient(tmp_path / 'protection-settings')
+    monkeypatch.setenv('BUCKET_BATCH_PIPELINE', bucket)
+    monkeypatch.setattr(late_sweeps, 'create_storage_client', lambda: storage)
+    monkeypatch.setattr(late_sweeps, 'purge_owner', lambda *_: 0)
+    path = f'batch-pipeline/batch_pipeline_prod/owners/{plane.key}/audio/unit/{uuid4().hex}.enc'
+    blob = storage.bucket(bucket).blob(path)
+    blob.upload_from_string(b'pending audio')
+    receipt = client.collection('batch_pipeline_prod_artifacts').document('pending-audio')
+    pending = datetime.now(timezone.utc) + timedelta(minutes=30)
+    receipt.set(
+        {
+            'owner_key': plane.key,
+            'owner_id': uid,
+            'kind': 'audio',
+            'segment_id': 'unit',
+            'uri': f'gs://{bucket}/{path}',
+            'write_pending_until': pending,
+        }
+    )
+    user = client.collection('users').document(uid)
+    if change == 'same-commit-reenable':
+        batch = client.batch()
+        batch.update(user, {'data_protection_level': 'e2ee'})
+        batch.update(user, {'data_protection_level': 'enhanced'})
+        batch.commit()
+    else:
+        fields = {'data_protection_level': 'standard'} if change == 'allowed-protection' else {'migration_status': None}
+        user.update(fields)
+    clock = [pending + timedelta(seconds=10)]
+    monkeypatch.setattr(late_sweeps, '_now', lambda: clock[0])
+    for _ in range(8):
+        late_sweeps.reconcile_batch_privacy_late_sweeps(firestore_client=client)
+        clock[0] += timedelta(seconds=10)
+    assert receipt.get().exists and blob.exists()
+    assert not list(client.collection(late_intents.COLLECTION).stream())
 
 
 @pytest.mark.parametrize('invalid', ['identity', 'bucket', 'missing-uri'])

@@ -16,7 +16,7 @@ from typing import Any
 from config.firestore_read_levers import lever_enabled, lever_percent
 from database.account_deletion_policy import account_deletion_blocks_access, normalize_account_deletion_status
 from database.batch_account_authority_schema import PRIVACY_COLLECTION as PRIVACY_COLLECTION
-from database.batch_account_authority_schema import recording_policy_denies
+from database.batch_account_authority_schema import data_protection_denies, recording_policy_denies
 from database.batch_privacy_attempt import SCHEMA_FIELD, TOKEN_FIELD, TOKEN_SCHEMA, current_attempt, token_version
 from database import privacy_check_metrics as metrics
 from database import batch_privacy_owner_cache as shared_cache
@@ -786,10 +786,7 @@ def _assert_batch_write_allowed_live(
         snapshots['user'] = data
     if not snapshot.exists:
         raise BatchPrivacyBlocked('account_missing')
-    if (
-        data.get('data_protection_level', 'enhanced') not in {'standard', 'enhanced'}
-        or data.get('migration_status') is not None
-    ):
+    if data_protection_denies(data):
         raise BatchPrivacyBlocked('data_protection_changed')
     if privacy_snapshot is None:
         privacy_snapshot = read(client.collection(PRIVACY_COLLECTION).document(key))

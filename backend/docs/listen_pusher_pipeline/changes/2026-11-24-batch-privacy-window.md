@@ -40,10 +40,12 @@ non-recording upload. Admission also stores provenance on the job for later
 uploads. A recording opt-out sweeps an in-flight receipt in scope when its
 provenance is unknown. A conversation policy edit becomes eligible for erasure
 only after the reconciler certifies the same native-recording denial as the
-write authority at the policy commit. It persists that proof before waiting
-for the upload window or a legal hold. When the current row has changed, it
-uses the commit snapshot. An unavailable expired snapshot leaves durable
-recovery debt.
+write authority at the policy commit. Account data-protection changes use the
+same commit-time proof of a protection or migration denial. Ordinary protection
+settings edits and migration clears preserve pending artifacts. The reconciler
+persists proof before waiting for the upload window or a legal hold. When the
+current row has changed, it uses the commit snapshot. An unavailable expired
+snapshot leaves durable recovery debt.
 
 Permanent receipt failures move to a dedicated retry row while the cursor
 continues to other artifacts. After five attempts by default

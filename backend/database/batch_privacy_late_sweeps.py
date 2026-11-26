@@ -13,13 +13,17 @@ from google.cloud.firestore_v1.base_client import _parse_batch_get  # pyright: i
 
 from database import legal_holds, rpc_deadline
 from database._client import get_data_plane_firestore_client
-from database.batch_account_authority_schema import ACCOUNT_DELETION_COLLECTION, recording_policy_denies
+from database.batch_account_authority_schema import (
+    ACCOUNT_DELETION_COLLECTION,
+    data_protection_denies,
+    recording_policy_denies,
+)
 from database.batch_pipeline_conversation_purge import purge_cursor
 from database.batch_pipeline_privacy import privacy_owner_key
 from database.batch_pipeline_privacy_queries import owner_documents
 from database.batch_pipeline_purge import NAMESPACES
 from database.batch_pipeline_shadow_hook import purge_owner
-from database.batch_privacy_late_intents import COLLECTION, DELAY
+from database.batch_privacy_late_intents import COLLECTION, DELAY, PROTECTION_FIELDS
 from database.privacy_check_metrics import POST_WINDOW_DEAD_LETTERS, POST_WINDOW_OPERATIONS, POST_WINDOW_SWEEPS
 from utils.batch_pipeline.retention import BATCH_OBJECT_BUCKET_ENV, batch_object_address, delete_batch_object
 from utils.other.local_storage import create_storage_client
@@ -214,10 +218,10 @@ def _advance(
     return apply(client.transaction())
 
 
-def _historical_scope(client, reference, read_time):
+def _historical_scope(client, reference, fields, read_time):
     # The high-level SDK only exposes current snapshots for point reads.
-    request, references, kwargs = client._prep_get_all([reference], SCOPE_FIELDS, None, None, 5)
-    del request['transaction']
+    request, references, kwargs = client._prep_get_all([reference], fields, None, None, 5)
+    request.pop('transaction', None)
     request['read_time'] = read_time
     responses = client._firestore_api.batch_get_documents(request=request, metadata=client._rpc_metadata, **kwargs)
     try:
@@ -227,20 +231,25 @@ def _historical_scope(client, reference, read_time):
 
 
 def _certify_scope(client, event, uid, source, changed_at, now):
-    reference = client.document(f'users/{uid}/conversations/{source}')
-    snapshot = reference.get(field_paths=SCOPE_FIELDS, timeout=5, retry=None)
+    if source:
+        reference = client.document(f'users/{uid}/conversations/{source}')
+        fields, denies = SCOPE_FIELDS, recording_policy_denies
+    else:
+        reference = client.collection('users').document(uid)
+        fields, denies = PROTECTION_FIELDS, data_protection_denies
+    snapshot = reference.get(field_paths=fields, timeout=5, retry=None)
     # A later lane claim (or a new document with the same ID) cannot turn an
     # ordinary edit into recording erasure. A later re-enable cannot undo a
     # genuine obligation. Recover the exact state committed with the intent.
     if not snapshot.exists or snapshot.update_time > event.create_time:
         try:
-            snapshot = _historical_scope(client, reference, event.create_time)
+            snapshot = _historical_scope(client, reference, fields, event.create_time)
         except (InvalidArgument, FailedPrecondition):
             if datetime.now(timezone.utc) - event.create_time >= timedelta(hours=1):
                 raise PermanentSweepError('scope_history_unavailable') from None
             raise
     option = firestore.LastUpdateOption(event.update_time)
-    if not recording_policy_denies(snapshot.to_dict() or {}):
+    if not denies(snapshot.to_dict() or {}):
         event.reference.delete(option=option)
         return 'superseded'
     event.reference.update({'scope_verified': True, 'due_at': max(now, changed_at + DELAY)}, option=option)
@@ -313,7 +322,7 @@ def _run(client, event, now):
         or ('artifact_id' in data and (not _document_id(artifact_id) or index == len(NAMESPACES)))
     ):
         raise PermanentSweepError('malformed_intent')
-    if source and data.get('scope_verified') is not True:
+    if (source or reason == 'data_protection') and data.get('scope_verified') is not True:
         return _certify_scope(client, event, uid, source, changed_at, now)
     if changed_at + DELAY > now:
         event.reference.update({'due_at': changed_at + DELAY}, option=firestore.LastUpdateOption(event.update_time))
