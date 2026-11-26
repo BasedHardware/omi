@@ -2,7 +2,7 @@
 
 from contextlib import contextmanager
 from contextvars import ContextVar
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Iterator, Mapping
 
@@ -43,6 +43,9 @@ class UnlockedPage:
     # Documents this load pulled in on their own, not through a pending seed: the lease's open window and
     # its direct sources. A size rejection of one of them is not the seed's to answer for.
     independent: frozenset[str] = frozenset()
+    # The derived rows each recording's time-neighbour query loaded: an independent document's neighbours
+    # load on every pass too, so the attribution veto follows these edges as well as claims and sources.
+    neighbours: dict[str, frozenset[str]] = field(default_factory=dict)
 
 
 def preview_wakes(rows, recordings) -> dict[str, datetime]:

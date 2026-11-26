@@ -224,14 +224,15 @@ defaults to on. When a live pass that seeded exactly one pending recording parks
 it may set work aside in `v3_size_quarantine` on the builder lease (all or nothing, at most 64 ids):
 - **Attribution.** Firestore's error must name the oversize document. It must be the seed, a row the seed
   claims or feeds, or a source the commit writes for those rows. It must also lie outside everything the
-  lease's open window and any unlocked seed reach through claims and sources: those load on every pass. An
-  unnamed or unattributable rejection parks with the usual backoff.
+  lease's open window and any unlocked seed reach through claims, time neighbours and sources: those load
+  on every pass. An unnamed or unattributable rejection parks with the usual backoff.
 - **The set** is the seed plus the pending sources the rejected commit writes for the seed's rows. Time
   siblings of unrelated rows are not set aside. The early attempt is re-armed, so the next seed runs on the
   following wake.
 - **Skipping.** Seeding is the only thing that skips quarantined ids: closures still load them, so claims
   are never filtered. The pass chain and the 5-minute sweep don't wake an owner whose only stale pending rows
-  are quarantined. A failed lease read in the sweep counts as not quarantined.
+  are quarantined. A failed lease read in the sweep counts as not quarantined and wakes the owner,
+  recorded as `omi_fallback_total{component="conversations_v3",to_mode="unfiltered_wake",outcome="recovered"}`.
 - **Pruning.** Each size park first drops held ids that are no longer `v3_pending` (landed, deleted or
   repaired). A closure that still doesn't fit parks with the usual backoff and records
   `omi_fallback_total{component="conversations_v3",outcome="exhausted"}` and

@@ -404,9 +404,30 @@ async def test_one_unreadable_lease_does_not_stop_the_sweep(owner, monkeypatch, 
         raise RuntimeError('transient')
 
     monkeypatch.setattr(store, 'size_quarantined', unreadable)
+    labels = dict(
+        component='conversations_v3',
+        from_mode='size_quarantine_filter',
+        to_mode='unfiltered_wake',
+        reason='unavailable',
+        outcome='recovered',
+    )
+    before = _fallbacks(**labels)
     with caplog.at_level('WARNING'):
         assert await service.sweep() == 1  # Treated as not quarantined: the owner is still woken.
     assert 'event=v3_size_quarantine_read outcome=error exception_type=RuntimeError' in caplog.messages
+    # The fail-open wake is on the shared fallback counter under its own labels, none bucketed to "other".
+    assert _fallbacks(**labels) == before + 1
+
+
+def _fallbacks(**labels):
+    from utils.metrics import OMI_FALLBACK_TOTAL
+
+    return sum(
+        sample.value
+        for family in OMI_FALLBACK_TOTAL.collect()
+        for sample in family.samples
+        if sample.name == 'omi_fallback_total' and sample.labels == labels
+    )
 
 
 def open_window(rows):
@@ -499,6 +520,35 @@ async def test_a_finished_row_the_open_windows_source_also_claims_is_never_charg
     assert 'dz' in owner.passes[0][1] and 'o' in owner.passes[0][0]
     assert store.SIZE_QUARANTINE_FIELD not in rows[LEASE]
     assert store.backoff_state('u')[0] is not None
+
+
+@pytest.mark.asyncio
+async def test_a_time_neighbour_of_the_open_windows_source_is_never_charged_to_the_seed(owner):
+    rows = owner.rows
+    open_window(rows)
+    at = AT + timedelta(hours=9) - timedelta(minutes=10)
+    # "dn" is a finished row inside the open source's time-neighbour window, so every pass loads it through
+    # the open window; the seed also claims it, but no claim joins it to the open window (Codex r4713922743).
+    rows[C + 'a']['claims'].append(claim('dn', at, 5))
+    rows[C + 'dn'] = derived('dn', at, 5, ['a'])
+    owner.state.oversized = 'dn'
+    assert await service.reconcile('u') == 'blocked'
+    assert 'dn' in owner.passes[0][1] and 'o' in owner.passes[0][0]
+    assert store.SIZE_QUARANTINE_FIELD not in rows[LEASE]
+    assert store.backoff_state('u')[0] is not None
+
+
+def test_a_time_queried_row_is_charged_only_to_the_windows_it_overlaps():
+    neighbours = {}
+    asked = [('a', AT, AT + timedelta(minutes=30)), ('b', AT + timedelta(hours=1), AT + timedelta(hours=2))]
+    store._record_neighbour(
+        neighbours,
+        asked,
+        {'id': 'x', 'started_at': AT + timedelta(minutes=5), 'finished_at': AT + timedelta(minutes=6)},
+    )
+    store._record_neighbour(neighbours, asked, {'id': 'y'})  # Undated: charged to every window that asked.
+    assert neighbours == {'a': frozenset({'x', 'y'}), 'b': frozenset({'y'})}
+    assert service._reached({'b'}, {}, {}, [], neighbours) == {'b', 'y'}
 
 
 def test_the_commit_attaches_what_it_wrote_to_a_size_rejection(monkeypatch):

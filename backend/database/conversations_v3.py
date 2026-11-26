@@ -415,6 +415,15 @@ def _direct_documents(row):
     return frozenset({row['id'], *(row.get('v3_recording_ids') or ()), *pieces})
 
 
+def _record_neighbour(neighbours, asked, row):
+    """Charge a time-queried row to each recording whose own window it overlaps (all of them if undated)."""
+    start, end = row.get('started_at'), row.get('finished_at')
+    dated = isinstance(start, datetime) and isinstance(end, datetime)
+    for rid, left, right in asked:
+        if not dated or (end >= left and start <= right):
+            neighbours[rid] = neighbours.get(rid, frozenset()) | {row['id']}
+
+
 def _oldest_pending(coll, limit):
     return coll.where(filter=FieldFilter('v3_pending', '==', True)).order_by('v3_pending_since').limit(limit)
 
@@ -541,7 +550,7 @@ def load(
     cache = json.loads(decrypt(state['outline_cache'], uid)) if state.get('outline_cache') else []
     if unlocked_page is not None:
         unlocked_page.remaining, unlocked_page.cursor = frozenset(), None
-        unlocked_page.independent = frozenset()
+        unlocked_page.independent, unlocked_page.neighbours = frozenset(), {}
         seeded = tuple(doc.id for doc in pending if doc.id in recordings or doc.id in unreadable)
         unlocked_page.seeds, unlocked_page.pending_ids = (len(seeded), 0), seeded
         unlocked_page.quarantined = quarantined
@@ -659,10 +668,11 @@ def load(
             left = row['started_at'] - margin
             right = min(speech_end(row), datetime.now(timezone.utc) + timedelta(minutes=5)) + margin
             if intervals and left <= intervals[-1][1]:
-                intervals[-1] = (intervals[-1][0], max(intervals[-1][1], right))
+                intervals[-1][2].append((row['id'], left, right))
+                intervals[-1] = (intervals[-1][0], max(intervals[-1][1], right), intervals[-1][2])
             else:
-                intervals.append((left, right))
-        for left, right in intervals:
+                intervals.append((left, right, [(row['id'], left, right)]))
+        for left, right, asked in intervals:
             snapshots = (
                 coll.where(filter=FieldFilter('v3_derived', '==', True))
                 .where(filter=FieldFilter('finished_at', '>=', left))
@@ -676,6 +686,8 @@ def load(
                 row = decode_row(uid, doc)
                 if row:
                     add(row)
+                    if unlocked_page is not None:
+                        _record_neighbour(unlocked_page.neighbours, asked, row)
         queried.update(row['id'] for row in fresh)
     else:
         raise Conflict('v3_source_closure_budget')

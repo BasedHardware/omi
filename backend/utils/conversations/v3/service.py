@@ -416,7 +416,7 @@ def _size_quarantine(reason, pending_limit, page, commit, oversized):
     whole backlog behind it. Quarantine needs positive attribution: Firestore must name the oversize
     document (``oversized``), and it must be the seed, a row the seed claims or feeds, or a source the
     commit writes for those rows. Nothing the load pulls in on its own (the open window and unlocked seeds)
-    reaches, through claims and sources transitively, is charged to the seed: it loads on every pass, so
+    reaches, through claims, time neighbours and sources transitively, is charged to the seed: it loads on every pass, so
     quarantining seeds would only walk healthy ones into the same rejection. The set is the seed plus the
     pending sources the commit writes for the seed's rows: they would be seeded into the same rejection.
     Recordings only loaded alongside (time siblings of unrelated rows) are not set aside. ``commit`` is the
@@ -428,7 +428,8 @@ def _size_quarantine(reason, pending_limit, page, commit, oversized):
         return ()
     recordings, existing, planned = commit
     (seed,) = page.pending_ids
-    if seed not in recordings or oversized in _reached(page.independent, recordings, existing, planned):
+    reached = _reached(page.independent, recordings, existing, planned, page.neighbours)
+    if seed not in recordings or oversized in reached:
         return ()
     rows = {c.get('conversation_id') for c in recordings[seed].get('claims') or [] if isinstance(c, dict)}
     rows |= {row['id'] for row in planned if seed in (row.get('v3_recording_ids') or ())}
@@ -452,8 +453,8 @@ def _quarantine_park(error, pending_limit, page):
     return {'quarantine': found} if found else {}
 
 
-def _reached(starts, recordings, existing, planned):
-    """Every loaded document ``starts`` reach through claims (recording -> row) and sources (row -> recording)."""
+def _reached(starts, recordings, existing, planned, neighbours=None):
+    """Every loaded document ``starts`` reach through claims and time neighbours (recording -> row) and sources (row -> recording)."""
     rows = {**existing, **{row['id']: row for row in planned}}
     seen, frontier = set(), set(starts)
     while frontier:
@@ -463,6 +464,7 @@ def _reached(starts, recordings, existing, planned):
         seen.add(doc)
         claims = (recordings.get(doc) or {}).get('claims') or ()
         frontier.update(c.get('conversation_id') for c in claims if isinstance(c, dict) and c.get('conversation_id'))
+        frontier.update((neighbours or {}).get(doc, ()))
         row = rows.get(doc) or {}
         frontier.update(row.get('v3_recording_ids') or ())
         frontier.update(p['recording_id'] for p in row.get('recording_pieces') or () if p.get('recording_id'))
@@ -1710,8 +1712,16 @@ async def sweep():
             try:
                 held = await run_blocking(db_executor, store.size_quarantined, uid)
             except Exception as error:
-                # One unreadable lease must not stop the sweep: treat the owner as not quarantined.
+                # One unreadable lease must not stop the sweep: treat the owner as not quarantined and wake it.
                 logger.warning('event=v3_size_quarantine_read outcome=error exception_type=%s', type(error).__name__)
+                record_fallback(
+                    component='conversations_v3',
+                    from_mode='size_quarantine_filter',
+                    to_mode='unfiltered_wake',
+                    reason='unavailable',
+                    outcome='recovered',
+                    log=logger,
+                )
                 held = frozenset()
             if ids <= held:
                 continue
