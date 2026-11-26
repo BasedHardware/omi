@@ -616,3 +616,50 @@ async def test_targeted_wake_cancelled_before_entry_is_not_counted(monkeypatch):
     await asyncio.sleep(0)
     assert observed == []
     assert followups.wake_marks == {}
+
+
+@pytest.mark.asyncio
+async def test_duplicate_queue_entry_keeps_the_first_wake_until_attempt_entry(monkeypatch):
+    clock_box = [500.0]
+    followups, _ = _paced_runner(monkeypatch, clock_box)
+    observed = []
+    monkeypatch.setattr(projection_followup.TARGETED_START_SECONDS, 'observe', observed.append)
+    monkeypatch.setenv('BATCH_PIPELINE_PROJECTION_FOLLOWUP_SLOTS', '1')
+    shared = asyncio.Semaphore(1)
+    followups.projector.outbox_followup_slots = shared
+    entered = []
+    release_busy = asyncio.Event()
+
+    async def attempt(segment, *, track_backoff):
+        entered.append(segment)
+        if segment == 'busy':
+            await release_busy.wait()
+
+    followups.run_attempt = attempt
+    await followups.schedule(['busy'], discover=False)  # occupies the only local slot
+    await asyncio.sleep(0)
+    await followups.schedule(['dup'], discover=False)  # wake at t=500, queued in targeted_pending
+    await followups.schedule(['dup'])  # the same segment again, via priority with discovery on
+    assert entered == ['busy']  # 'busy' holds the local slot and the only shared permit
+    hog = asyncio.ensure_future(shared.acquire())  # another shared-budget user queues first
+    await asyncio.sleep(0)
+    clock_box[0] = 504.0
+    release_busy.set()
+    await asyncio.wait_for(followups.tasks['busy'], 5)
+    await asyncio.wait_for(hog, 5)  # the freed permit goes to the hog, so 'dup' must wait for it
+    assert 'dup' in followups.tasks and 'dup' in followups.pending  # launched from targeted, still queued
+    # A freed local slot lets the ordinary queue reach its duplicate copy of 'dup'
+    # while the running copy still waits for the shared slot.
+    monkeypatch.setenv('BATCH_PIPELINE_PROJECTION_FOLLOWUP_SLOTS', '2')
+    followups.launch()
+    for _ in range(3):
+        await asyncio.sleep(0)
+    assert 'dup' in followups.tasks and 'dup' not in entered
+    assert 'dup' in followups.wake_marks
+    clock_box[0] = 509.0
+    shared.release()
+    await asyncio.wait_for(asyncio.gather(*list(followups.tasks.values())), 5)
+    assert entered.count('dup') == 1
+    # 'busy' started at once (0 s); 'dup' has one sample, from its first wake through the shared-slot wait.
+    assert observed == [0.0, 9.0]
+    assert followups.wake_marks == {}

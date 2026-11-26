@@ -409,7 +409,6 @@ class ProjectionFollowups:
             if segment in self.tasks:
                 # One task owns a segment's custody accounting; never overwrite it.
                 self.prioritized.discard(segment)
-                self.wake_marks.pop(segment, None)  # the running attempt absorbs the wake
                 continue
             task = start_background_task(self.run(segment), name='batch_projection_followup')
             self.tasks[segment] = task
@@ -424,7 +423,6 @@ class ProjectionFollowups:
         while self.targeted_pending and len(self.tasks) < projection_followup_slots(MAX_FOLLOWUPS) and not self.closed:
             segment = self.targeted_pending.popleft()
             if segment in self.tasks:
-                self.wake_marks.pop(segment, None)  # the running attempt absorbs the wake
                 continue
             task = start_background_task(self.run(segment), name='batch_projection_followup')
             self.tasks[segment] = task
