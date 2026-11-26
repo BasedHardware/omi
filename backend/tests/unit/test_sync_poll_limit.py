@@ -1,10 +1,6 @@
 """HTTP cap and wire contract; isolate the unchanged Redis Lua transport."""
 
-import time
-from collections import OrderedDict
 from collections.abc import Iterator
-from datetime import datetime, timezone
-from types import SimpleNamespace
 from unittest.mock import MagicMock
 from uuid import uuid4
 
@@ -13,17 +9,11 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from config.repeat_work import poll_backoff_cohort
 from database import redis_db, sync_jobs
 from routers import sync as sync_router
 from tests.unit.test_batch_pipeline_scheduler import MemoryStore
 from utils.batch_pipeline import intake
-from utils.metrics import (
-    OMI_SYNC_JOB_COMPLETION_TO_FIRST_TERMINAL_READ_SECONDS,
-    OMI_SYNC_JOB_POLL_ACTIVE_UPLOADERS,
-    OMI_SYNC_JOB_POLL_COHORT_REQUESTS_TOTAL,
-)
-from utils.sync import poll_limit, poll_metrics
+from utils.sync import poll_limit
 
 
 @pytest.fixture
@@ -143,99 +133,8 @@ def test_redis_failure_preserves_poll_and_emits_fallback(
     )
 
 
-def test_server_backoff_http_wire_and_open_surface(poll_client, monkeypatch):
-    monkeypatch.setenv('SYNC_POLL_BACKOFF_ENABLED', 'true')
-    monkeypatch.setenv('SYNC_POLL_BACKOFF_PERCENT', '100')
-    monkeypatch.setattr(sync_router, 'get_sync_job', lambda *_: {'job_id': 'j', 'uid': 'owner', 'status': 'queued'})
-    response = poll_client.get('/v2/sync-local-files/j')
-    assert response.status_code == 200 and response.json()['poll_after_ms'] == 60000
-    response = poll_client.get('/v2/sync-local-files/j?surface_open=true')
-    assert response.json()['poll_after_ms'] == 20000
-    monkeypatch.setattr(sync_router, 'get_durable_job_status', lambda *_: {'job_id': 'j', 'status': 'completed'})
-    assert poll_client.get('/v2/sync-local-files/j').json()['poll_after_ms'] == 0
-
-
-def _active_uploaders() -> dict[str, float]:
-    (metric,) = OMI_SYNC_JOB_POLL_ACTIVE_UPLOADERS.collect()
-    return {sample.labels['cohort']: sample.value for sample in metric.samples}
-
-
-def test_partial_backoff_http_uses_uid_and_reports_rollout_metrics(poll_client, monkeypatch):
-    monkeypatch.setenv('SYNC_POLL_BACKOFF_ENABLED', 'true')
-    monkeypatch.setenv('SYNC_POLL_BACKOFF_PERCENT', '5')
-    seed = uuid4().hex
-    uid_in = next(f'{seed}-{index}' for index in range(1000) if poll_backoff_cohort(f'{seed}-{index}') == 'in')
-    uid_out = next(
-        f'{seed}-out-{index}' for index in range(1000) if poll_backoff_cohort(f'{seed}-out-{index}') == 'out'
-    )
-    active_uid = {'value': uid_out}
-    poll_client.app.dependency_overrides[sync_router.auth.get_current_user_uid] = lambda: active_uid['value']
-    monkeypatch.setattr(sync_router, 'get_durable_job_status', lambda *_args, **_kwargs: None)
-    monkeypatch.setattr(
-        sync_router,
-        'get_sync_job',
-        lambda job_id: {'job_id': job_id, 'uid': active_uid['value'], 'status': 'queued'},
-    )
-
-    requests_in = OMI_SYNC_JOB_POLL_COHORT_REQUESTS_TOTAL.labels(cohort='in')._value.get()
-    requests_out = OMI_SYNC_JOB_POLL_COHORT_REQUESTS_TOTAL.labels(cohort='out')._value.get()
-    before_active = _active_uploaders()
-
-    excluded = poll_client.get('/v2/sync-local-files/excluded')
-    assert excluded.status_code == 200 and 'poll_after_ms' not in excluded.json()
-    active_uid['value'] = uid_in
-    admitted = poll_client.get('/v2/sync-local-files/admitted')
-    assert admitted.status_code == 200 and admitted.json()['poll_after_ms'] == 60000
-    assert OMI_SYNC_JOB_POLL_COHORT_REQUESTS_TOTAL.labels(cohort='in')._value.get() == requests_in + 1
-    assert OMI_SYNC_JOB_POLL_COHORT_REQUESTS_TOTAL.labels(cohort='out')._value.get() == requests_out + 1
-    assert _active_uploaders() == {'in': before_active['in'] + 1, 'out': before_active['out'] + 1}
-
-    terminal_job_id = f'terminal-{uuid4().hex}'
-    completed_at = datetime.fromtimestamp(time.time() - 10, timezone.utc)
-
-    def durable_status(job_id, *_args, **_kwargs):
-        if job_id == terminal_job_id:
-            return {'job_id': job_id, 'status': 'completed', 'completed_at': completed_at}
-        return None
-
-    monkeypatch.setattr(sync_router, 'get_durable_job_status', durable_status)
-    histogram = OMI_SYNC_JOB_COMPLETION_TO_FIRST_TERMINAL_READ_SECONDS.labels(cohort='in')
-    before = histogram._sum.get()
-    first_response = poll_client.get(f'/v2/sync-local-files/{terminal_job_id}')
-    assert first_response.json()['poll_after_ms'] == 0
-    assert 'completed_at' not in first_response.json()
-    first_read_sum = histogram._sum.get()
-    assert first_read_sum >= before + 9
-    assert poll_client.get(f'/v2/sync-local-files/{terminal_job_id}').json()['poll_after_ms'] == 0
-    assert histogram._sum.get() == first_read_sum
-
-
-def test_active_uploader_scrape_expires_uids_without_another_poll(monkeypatch):
-    monotonic = MagicMock(return_value=1000.0)
-    monkeypatch.setattr(poll_metrics, 'time', SimpleNamespace(monotonic=monotonic))
-    monkeypatch.setattr(poll_metrics, '_ACTIVE_UIDS', OrderedDict())
-    monkeypatch.setattr(poll_metrics, '_ACTIVE_UID_COUNTS', {'in': 0, 'out': 0})
-    monkeypatch.setenv('SYNC_POLL_BACKOFF_ENABLED', 'true')
-    monkeypatch.setenv('SYNC_POLL_BACKOFF_PERCENT', '100')
-
-    poll_metrics.record_active_sync_uploader('owner', {'status': 'queued'})
-    assert _active_uploaders() == {'in': 1, 'out': 0}
-    monotonic.return_value += poll_metrics.ACTIVE_UID_WINDOW_SECONDS + 1
-    assert _active_uploaders() == {'in': 0, 'out': 0}
-
-
-@pytest.mark.parametrize(
-    'enabled,percent,cohort',
-    [('false', '0', 'out'), ('false', '5', 'out'), ('false', '5', 'in'), ('true', '5', 'out'), ('true', '5', 'in')],
-)
-def test_job_status_poll_observes_durable_completion_in_serving_cohort(
-    poll_client, monkeypatch, enabled, percent, cohort
-):
-    monkeypatch.setenv('SYNC_POLL_BACKOFF_ENABLED', enabled)
-    monkeypatch.setenv('SYNC_POLL_BACKOFF_PERCENT', percent)
-    uid = next(f'owner-{index}' for index in range(1000) if poll_backoff_cohort(f'owner-{index}') == cohort)
-    poll_client.app.dependency_overrides[sync_router.auth.get_current_user_uid] = lambda: uid
-
+def test_job_status_poll_returns_durable_completion(flag_off_poll_client, monkeypatch):
+    uid = 'owner'
     store = MemoryStore()
     monkeypatch.setattr(intake, 'FirestoreStore', lambda _: store)
     monkeypatch.setattr(intake, 'shadow_from_env', lambda store: store)
@@ -259,35 +158,78 @@ def test_job_status_poll_observes_durable_completion_in_serving_cohort(
         },
     }
 
-    histogram = OMI_SYNC_JOB_COMPLETION_TO_FIRST_TERMINAL_READ_SECONDS
-
-    def counts():
-        return {
-            sample.labels['cohort']: sample.value
-            for metric in histogram.collect()
-            for sample in metric.samples
-            if sample.name == f'{metric.name}_count'
-        }
-
-    before = counts()
-    assert before.keys() == {'in', 'out'}
-    url = f'/v2/sync-local-files/{job_id}'
-    assert poll_client.get(url).json()['status'] == 'completed'
-    assert counts() == before  # Old receipts have no authoritative completion clock.
-
-    store.rows[content_key]['completed_at'] = datetime.fromtimestamp(time.time() - 10, timezone.utc)
-    response = poll_client.get(url)
+    response = flag_off_poll_client.get(f'/v2/sync-local-files/{job_id}')
     assert response.status_code == 200
+    assert response.json()['status'] == 'completed'
     assert response.json()['poll_after_ms'] == 0
     assert 'completed_at' not in response.json()
-    assert counts() == {**before, cohort: before[cohort] + 1}
-    assert poll_client.get(url).status_code == 200
-    assert counts() == {**before, cohort: before[cohort] + 1}
 
 
-@pytest.mark.parametrize('surface_open', [False, True])
-@pytest.mark.parametrize('backoff', ['true', 'false'])
-def test_held_custody_poll_is_paced_even_with_open_surface_or_generic_backoff_off(monkeypatch, surface_open, backoff):
-    monkeypatch.setenv('SYNC_POLL_BACKOFF_ENABLED', backoff)
-    status = {'status': 'processing', 'reason_code': 'batch_unit_held', 'poll_after_ms': 300000}
-    assert poll_limit.with_poll_hint(status, surface_open=surface_open)['poll_after_ms'] == 300000
+@pytest.fixture
+def flag_off_poll_client(poll_client, monkeypatch):
+    monkeypatch.setenv('SYNC_POLL_BACKOFF_ENABLED', 'false')
+    monkeypatch.setenv('SYNC_POLL_BACKOFF_PERCENT', '100')
+    return poll_client
+
+
+@pytest.fixture
+def legacy_poll_status(monkeypatch):
+    job = {
+        'job_id': 'legacy-job',
+        'uid': 'owner',
+        'status': 'queued',
+        'total_segments': 2,
+        'retry_after': 12,
+        'recording_age_seconds': 40,
+    }
+    monkeypatch.setattr(sync_router, 'get_sync_job', lambda _: job)
+
+
+@pytest.mark.parametrize('surface_open', ['false', 'true'])
+def test_authenticated_legacy_status_matches_flag_off_control(flag_off_poll_client, legacy_poll_status, surface_open):
+    response = flag_off_poll_client.get(f'/v2/sync-local-files/legacy-job?surface_open={surface_open}')
+    assert response.status_code == 200
+    assert response.content == (
+        b'{"job_id":"legacy-job","status":"queued","total_files":0,"total_segments":2,'
+        b'"processed_segments":0,"successful_segments":0,"failed_segments":0,"lane":"fresh",'
+        b'"retry_after":12,"recording_age_seconds":40}'
+    )
+
+
+@pytest.fixture(params=['batch_unit_held', 'batch_artifact_missing', 'source_alignment_pending'])
+def custody_poll_status(request, monkeypatch):
+    reason = request.param
+
+    def durable_status(job_id, uid, *, artifact_retry=False):
+        assert uid == 'owner'
+        status = 'partial_failure' if artifact_retry and reason == 'batch_artifact_missing' else 'processing'
+        return {'job_id': job_id, 'status': status, 'reason_code': reason}
+
+    monkeypatch.setattr(sync_router, 'get_durable_job_status', durable_status)
+    return reason
+
+
+@pytest.mark.parametrize('repair_protocol', [None, '1'])
+@pytest.mark.parametrize('surface_open', ['false', 'true'])
+def test_authenticated_custody_poll_preserves_hold(
+    flag_off_poll_client, custody_poll_status, repair_protocol, surface_open
+):
+    headers = {'X-Omi-Custody-Repair-Protocol': repair_protocol} if repair_protocol else {}
+    response = flag_off_poll_client.get(f'/v2/sync-local-files/bp_held?surface_open={surface_open}', headers=headers)
+    assert response.status_code == 200
+    expected = {
+        'job_id': 'bp_held',
+        'status': 'processing',
+        'total_files': 0,
+        'total_segments': 0,
+        'processed_segments': 0,
+        'successful_segments': 0,
+        'failed_segments': 0,
+        'lane': 'fresh',
+        'reason_code': custody_poll_status,
+        'poll_after_ms': 300000,
+    }
+    if repair_protocol and custody_poll_status == 'batch_artifact_missing':
+        expected['status'] = 'partial_failure'
+        del expected['poll_after_ms']
+    assert response.json() == expected

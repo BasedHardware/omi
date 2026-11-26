@@ -298,10 +298,6 @@ env:
     value: "180"
   - name: CONVERSATIONS_V3_ROTATION_MAX_SECONDS
     value: "300"
-  - name: SYNC_POLL_BACKOFF_ENABLED
-    value: "true"
-  - name: SYNC_POLL_BACKOFF_PERCENT
-    value: "5"
   - name: BATCH_PIPELINE_AUTHORITATIVE_LABELS_ENABLED
     value: "false"
   - name: BATCH_PIPELINE_LIVE_ADMISSION_ENABLED
