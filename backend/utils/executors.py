@@ -493,7 +493,10 @@ _live_archive_executor_lock = threading.Lock()
 
 
 def get_live_archive_executor() -> MonitoredThreadPoolExecutor:
-    """Bounded bulkhead pool for best-effort LiveAudioArchive writes on backend-listen."""
+    """Bounded pool for durable and best-effort LiveAudioArchive encoding/storage.
+
+    Capacity is per Python process; see docs/runbooks/live-audio-archive-capacity.md.
+    """
     global _live_archive_executor
     with _live_archive_executor_lock:
         if _live_archive_executor is None:

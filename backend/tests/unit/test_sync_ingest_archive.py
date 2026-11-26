@@ -813,3 +813,66 @@ async def test_live_audio_archive_uses_dedicated_bulkhead_and_disables_on_satura
     await saturated_archive.close()
     assert saturated_archive.failed
     assert reasons == ['capacity_exhausted']
+
+
+@pytest.mark.asyncio
+async def test_durable_live_archive_saturation_retains_custody_and_propagates_at_barrier(monkeypatch, buckets):
+    monkeypatch.setenv('AUDIO_DURABLE_OUTBOX_ENABLED', 'true')
+    events, acknowledgements, would_drop = [], [], []
+
+    async def send_event(event):
+        events.append(event)
+
+    async def acknowledge():
+        acknowledgements.append(True)
+
+    host = SimpleNamespace(
+        private_cloud_sync_enabled=True,
+        request=SimpleNamespace(
+            uid='owner',
+            codec='opus',
+            sample_rate=16000,
+            source='omi',
+            client_device_context=None,
+            websocket=SimpleNamespace(headers={}, query_params={'audio_custody': '1'}),
+        ),
+        send_event=send_event,
+        spawn=lambda coroutine, **kwargs: asyncio.create_task(coroutine),
+    )
+    monkeypatch.setattr(live_audio_archive, 'record_would_drop', would_drop.append)
+    commit_capture = MagicMock()
+    monkeypatch.setattr(live_audio_archive, 'commit_capture', commit_capture)
+    executor = live_audio_archive.get_live_archive_executor()
+    release = threading.Event()
+    # Eight running plus 32 queued operations exhaust the real per-process pool.
+    blockers = [executor.submit(release.wait) for _ in range(40)]
+    archive = LiveAudioArchive(host)
+    try:
+        with pytest.raises(live_audio_archive.ExecutorSaturatedError):
+            executor.submit(lambda: None)
+        await archive.append(b'original-packet', 'conversation', 1000, 160)
+        pack = archive.packs[0]
+        original_bytes = bytes(pack.data)
+        original_frames = list(archive.frames[id(pack)])
+        await archive.defer_ack('conversation', acknowledge)
+        await archive.flush(0)
+        with pytest.raises(live_audio_archive.ExecutorSaturatedError):
+            await archive.ensure_durable()
+        assert archive.durable and archive.failed
+        assert 'raw_pack' in would_drop
+        assert archive.uncommitted[id(pack)] == (pack, 0)
+        assert bytes(pack.data) == original_bytes
+        assert archive.frames[id(pack)] == original_frames
+        assert not events and not acknowledgements
+        commit_capture.assert_not_called()
+        # A later barrier must still refuse custody while capacity is unavailable.
+        with pytest.raises(live_audio_archive.ExecutorSaturatedError):
+            await archive.ensure_durable()
+        assert not events and not acknowledgements
+    finally:
+        release.set()
+        for future in blockers:
+            future.result(timeout=5)
+        await asyncio.gather(*archive.inflight, return_exceptions=True)
+    # Slots recover when work completes; rejection does not leak permits.
+    assert await live_audio_archive.run_blocking(executor, lambda: 'recovered') == 'recovered'
