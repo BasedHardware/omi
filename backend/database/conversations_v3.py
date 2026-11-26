@@ -491,6 +491,8 @@ def load(uid, *, conversation_id=None, pending_limit=32, firestore_client=None):
     for rid in preview_sources & unreadable.keys():
         # Fail closed when an otherwise eligible source temporarily cannot be
         # decoded. Replanning without it could clear the preview's index and wake.
+        if skip_terminal and terminal_recording(unreadable[rid]):
+            continue
         if policy.builder_eligible({**unreadable[rid], '_v3_unreadable': False}):
             raise Conflict('recording_decode_unavailable')
     _mark_successor_pending(coll, recordings)
@@ -527,6 +529,7 @@ def _mark_successor_pending(coll, recordings):
             doc.id != latest['id']
             and raw.get('recording') is True
             and not raw.get('deleted')
+            and not (bounded_pending_enabled() and raw.get('discarded'))
             and not raw.get('sync_merged_into')
             and raw.get('data_protection_level') != 'private'
             and policy.awaiting_transcript(raw, now, cap)
@@ -542,6 +545,7 @@ SUCCESSOR_FIELDS = [
     'status',
     'recording',
     'deleted',
+    'discarded',
     'sync_merged_into',
     'data_protection_level',
 ]

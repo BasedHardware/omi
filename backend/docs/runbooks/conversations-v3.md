@@ -260,8 +260,13 @@ commit: the 2026-11-18 incident was a fresh late-speech window time-matching a r
 two planned rows re-added the same held claims and the array doubled each pass. A planned id that
 already exists outside the loaded closure is adopted once as the prior (live derived rows only).
 Watch `omi_conversations_v3_blocked_total{reason}` and `omi_conversations_v3_adopted_total`; an owner
-blocked for hours needs investigation, and an operator clears the park by deleting the three
-`v3_blocked_*`/`v3_backoff_until` fields on `users/{uid}/conversation_v3_leases/builder`.
+blocked for hours needs investigation. With `CONVERSATIONS_V3_BOUNDED_PENDING` on, a legacy
+closure-budget or document-size park gets an early background attempt. A closure-budget park
+starts with eight seeds and can fall back to one. A document-size park starts with one seed.
+A new failed bounded pass records `v3_bounded_pending_attempted` on the builder lease and
+observes the usual backoff. An operator clears the park by deleting `v3_blocked_count`,
+`v3_blocked_reason`, `v3_backoff_until` and `v3_bounded_pending_attempted` on
+`users/{uid}/conversation_v3_leases/builder`.
 
 Each source has a durable `v3_pending` obligation. Tasks use the dedicated `conversations-v3`
 Cloud Tasks queue and the configured sync origin/OIDC identity unless

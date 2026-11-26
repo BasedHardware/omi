@@ -285,7 +285,7 @@ async def test_large_pending_backlog_commits_oldest_complete_slice(strict, monke
         with pytest.raises(Conflict, match='v3_derived_budget'):
             store.load('u', firestore_client=client)
     with caplog.at_level('INFO'):
-        recordings, existing, _ = await service._load_live_batch('u', 'v3_derived_budget')
+        recordings, existing, _ = await service._load_live_batch('u', 'token', 'v3_derived_budget')
     assert list(recordings) == [f'r{i}' for i in range(8)]
     assert set(existing) == {f'd{i}' for i in range(8)}
     assert 'event=v3_bounded_pending pending_limit=8' in caplog.messages
@@ -335,3 +335,34 @@ def test_legacy_park_gets_one_early_attempt(strict, monkeypatch, reason):
     assert store.backoff_state(UID, firestore_client=strict) == (None, reason)
     assert store.record_blocked(UID, token, reason, firestore_client=strict)
     assert store.backoff_until(UID, firestore_client=strict)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    'parked,error,sizes',
+    [
+        ('document_too_large', None, [1]),
+        ('v3_derived_budget', 'v3_derived_budget', [8, 1]),
+        (None, 'account_deletion', [32]),
+    ],
+)
+async def test_bounded_loader_only_shrinks_budget_failures(monkeypatch, parked, error, sizes):
+    attempted, renewals = [], []
+
+    async def run_fixture(_, fn, *args, **kwargs):
+        if fn is leases.renew:
+            renewals.append(args)
+            return
+        attempted.append(kwargs.get('pending_limit', 32))
+        if error and len(attempted) == 1:
+            raise Conflict(error)
+        return {}, {}, []
+
+    monkeypatch.setattr(service, 'run_blocking', run_fixture)
+    if error == 'account_deletion':
+        with pytest.raises(Conflict, match=error):
+            await service._load_live_batch('u', 'token', parked)
+    else:
+        assert await service._load_live_batch('u', 'token', parked) == ({}, {}, [])
+    assert attempted == sizes
+    assert renewals == [('u', 'builder', 'token')] * (len(sizes) - 1)

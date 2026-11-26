@@ -250,15 +250,21 @@ async def _release_reconcile_lease(uid, key, token, *, primary_failed):
         )
 
 
-async def _load_live_batch(uid, parked):
+async def _load_live_batch(uid, token, parked):
     """Reduce pending seeds without clipping any selected source's ownership closure."""
-    sizes = (1,) if parked == 'document_too_large' else (32, 8, 1)
+    budget_reasons = {'v3_derived_budget', 'v3_source_closure_budget'}
+    sizes = (32, 8, 1)
+    if parked == 'document_too_large':
+        sizes = (1,)
+    elif parked in budget_reasons:
+        sizes = (8, 1)
     for size in sizes:
         try:
             result = await run_blocking(db_executor, store.load, uid, **({'pending_limit': size} if size < 32 else {}))
         except Conflict as error:
-            if size == sizes[-1] or str(error) not in {'v3_derived_budget', 'v3_source_closure_budget'}:
+            if size == sizes[-1] or str(error) not in budget_reasons:
                 raise
+            await run_blocking(db_executor, leases.renew, uid, 'builder', token)
         else:
             if size < 32:
                 logger.info('event=v3_bounded_pending pending_limit=%d', size)
@@ -356,7 +362,7 @@ async def reconcile(
                 rederive=rederive,
             )
         elif not on_open and bounded_pending_enabled():
-            recordings, existing, cached = await _load_live_batch(uid, parked)
+            recordings, existing, cached = await _load_live_batch(uid, token, parked)
         else:
             recordings, existing, cached = await run_blocking(
                 db_executor,
