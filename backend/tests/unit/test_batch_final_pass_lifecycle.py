@@ -143,7 +143,7 @@ def test_overlapping_capture_clocks_require_identical_pcm(multi_unit, monkeypatc
 
     def assemble(stream):
         pcm, words, checks = real_assemble(stream)
-        placed.append(len(pcm))
+        placed.append((len(pcm), stream.capacity, bytes(pcm), [list(w['timestamp']) for w in words]))
         return pcm, words, checks
 
     monkeypatch.setattr(batch, '_assemble', assemble)
@@ -152,10 +152,17 @@ def test_overlapping_capture_clocks_require_identical_pcm(multi_unit, monkeypatc
     # unit's words on its own audio, not the conversation clock. Identical overlaps still share samples.
     assert result['outcome'] == 'success', result
     total = sum(fetched.values())
+    ((length, capacity, pcm, stamps),) = placed
     if shape == 'identical':
-        assert placed == [total - 4 * 32000]
+        assert length == total - 4 * 32000
     else:
-        assert placed == [total + batch.APPEND_GAP_BYTES]
+        # After the whole native timeline (its reserved capacity) and one second of silence, byte for byte.
+        start = capacity + batch.APPEND_GAP_BYTES
+        assert length == start + fetched['unit-b']
+        assert pcm[start:] == b'\x02\0' * (fetched['unit-b'] // 2) if shape == 'conflicting' else True
+        assert pcm[capacity:start] == bytes(batch.APPEND_GAP_BYTES)
+        # unit-b's words moved with its audio: every one of them now sits in the appended region.
+        assert any(stamp[0] >= start / 32000 for stamp in stamps)
     assert multi_unit.lane.conversation.transcript_segments != before
 
 

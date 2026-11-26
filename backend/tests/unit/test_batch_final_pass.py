@@ -478,6 +478,107 @@ def test_receipt_sources_are_the_rows_own_v3_recordings():
     assert batch.receipt_sources(SimpleNamespace()) == ()
 
 
+def _recordings(monkeypatch, rows):
+    from database import conversations as conversations_db
+
+    monkeypatch.setattr(conversations_db, 'get_conversation', lambda uid, rid: deepcopy(rows.get(rid)))
+
+
+def _at(seconds):
+    return datetime.fromtimestamp(seconds, timezone.utc)
+
+
+def test_v3_source_live_hold_reads_claims_minus_deleted_spans(monkeypatch):
+    conversation = SimpleNamespace(id='mine', v3_recording_ids=['R'])
+    _recordings(
+        monkeypatch,
+        {
+            'R': {
+                'claims': [
+                    {'conversation_id': 'mine', 'start': _at(1010), 'end': _at(1020)},
+                    {'conversation_id': 'sibling', 'start': _at(1020), 'end': _at(1030)},
+                ],
+                'deleted_spans': [{'start': _at(1014), 'end': _at(1016), 'conversation_id': 'mine'}],
+            }
+        },
+    )
+    assert batch.source_scope(UID, conversation).intervals == ((1010.0, 1014.0), (1016.0, 1020.0))
+
+
+def test_only_own_speech_reaches_the_diarizer():
+    # A source recording's unit: this conversation spoke at 2-4 s and 5-6 s (unit clock); a sibling at 10-14 s
+    # and deleted speech sat at 20-22 s. Only the padded own-word stretches keep their samples.
+    words = [{'timestamp': [2.0, 2.5]}, {'timestamp': [3.0, 4.0]}, {'timestamp': [5.0, 6.0]}]
+    spans = batch.own_speech_spans(words)
+    assert spans == [(1.75, 6.25)]
+    pcm = b'\x01\x00' * (30 * 16000)
+    masked = batch.masked_pcm(pcm, spans)
+    assert len(masked) == len(pcm)
+    at = lambda t: masked[int(t * 16000) * 2 : int(t * 16000) * 2 + 2]  # noqa: E731
+    assert at(3) == at(5.5) == b'\x01\x00'
+    assert at(1) == at(12) == at(21) == b'\x00\x00'
+    turns = [{'start': 0, 'end': 30, 'speaker': 'A'}, {'start': 10, 'end': 14, 'speaker': 'B'}]
+    assert batch.clip_turns(turns, spans) == [{'start': 1.75, 'end': 6.25, 'speaker': 'A'}]
+
+
+@pytest.mark.parametrize('row', [None, {'deleted': True, 'claims': []}, {'is_locked': True}, {'claims': []}])
+def test_v3_source_recording_gone_locked_or_unclaimed_refuses(monkeypatch, row):
+    _recordings(monkeypatch, {'R': row} if row is not None else {})
+    with pytest.raises(references.ReferenceUnavailable, match='skipped_merged'):
+        batch.source_scope(UID, SimpleNamespace(id='mine', v3_recording_ids=['R']))
+
+
+def test_v3_source_scope_fingerprint_changes_when_a_claim_or_deletion_changes(monkeypatch):
+    rows = {'R': {'claims': [{'conversation_id': 'mine', 'start': _at(1010), 'end': _at(1020)}]}}
+    _recordings(monkeypatch, rows)
+    conversation = SimpleNamespace(id='mine', v3_recording_ids=['R'])
+    first = batch.source_scope(UID, conversation)
+    rows['R']['deleted_spans'] = [{'start': _at(1012), 'end': _at(1013)}]
+    assert batch.source_scope(UID, conversation).fingerprint != first.fingerprint
+    rows['R'] = {'claims': [{'conversation_id': 'mine', 'start': _at(1010), 'end': _at(1018)}]}
+    assert batch.source_scope(UID, conversation).fingerprint != first.fingerprint
+    assert batch.source_scope(UID, SimpleNamespace(id='legacy', v3_recording_ids=None)) is None
+
+
+def test_appended_units_never_collide_with_later_native_units():
+    # 0-5 s, a 2-6 s unit whose samples differ (appended), and a 6-7 s unit at its own clock.
+    def unit(start, seconds, sample):
+        item = SimpleNamespace(capture_at=1000.0 + start)
+        words = [{'timestamp': [0.0, 0.5], 'text': 'w', 'segment_id': f's{start}'}]
+        return item, sample * (seconds * 16000), words, lambda: True
+
+    capacity = 7 * 32000
+    stream = batch.UnitStream(
+        1000.0,
+        capacity,
+        iter([unit(0, 5, b'\x01\x00'), unit(2, 4, b'\x02\x00'), unit(6, 1, b'\x03\x00')]),
+        SimpleNamespace(timeout=lambda seconds: None),
+    )
+    pcm, words, checks = batch._assemble(stream)
+    pcm = bytes(pcm)
+    appended = capacity + batch.APPEND_GAP_BYTES
+    assert pcm[: 5 * 32000] == b'\x01\x00' * (5 * 16000)
+    assert pcm[6 * 32000 : 7 * 32000] == b'\x03\x00' * 16000  # the native unit stays at its own clock
+    assert pcm[appended:] == b'\x02\x00' * (4 * 16000)
+    assert [w['timestamp'][0] for w in words] == [0.0, appended / 32000, 6.0]
+    assert len(checks) == 3
+
+
+def test_v3_source_passes_learn_no_recurring_profile_and_get_a_fresh_obligation(monkeypatch):
+    from utils.conversations import final_pass_retry as retry
+
+    monkeypatch.setattr(retry, 'batch_unit_scope', lambda s: s.speaker_id_scope)
+    segment = SimpleNamespace(id='s1', speaker_id_scope='final:batch:u1')
+    legacy = SimpleNamespace(transcript_segments=[segment], v3_recording_ids=None)
+    v3 = SimpleNamespace(transcript_segments=[segment], v3_recording_ids=['R'])
+    assert retry.scope_key(legacy) != retry.scope_key(v3)
+    assert retry.scope_key(v3) == retry.scope_key(
+        SimpleNamespace(transcript_segments=[segment], v3_recording_ids=['R'])
+    )
+    source = __import__('inspect').getsource(batch._run)
+    assert 'and not receipt_sources(conversation)' in source
+
+
 def test_reference_privacy_deletion_fence(reference_store):
     store, client = reference_store
     assert references.load_reference(store, UID, 'unit-a', 'conversation') is not None

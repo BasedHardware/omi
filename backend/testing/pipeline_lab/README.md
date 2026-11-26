@@ -21,6 +21,9 @@ python -m testing.pipeline_lab view DIR                        # look at the res
   for a pull request.
 - Agents: read [AGENTS.md](AGENTS.md) before judging a change with the lab.
 
+For speaker labeling experiments (corpora, silver truth, arms over real days, production diagnosis), see
+[speakers/README.md](speakers/README.md).
+
 ## What the lab is
 
 Two tools share this package. **Scenarios** script one capture -> Finish -> Home story in a small JSON
@@ -297,14 +300,14 @@ A scenario with a `speakers` block runs the product's speaker code on real voice
 | Resolver and final pass | `process_conversation` -> `resolve_speakers_for_processing` (`_resolve_original_batch`, `batch_identity_evidence.load`, `voice_centroids.extract`, embeddings through the peer, `resolve_conversation_speakers`, `apply_speaker_resolution`) and `run_batch_final_pass` (`HttpDiarizer` on the assembled audio, `run_final_pass`) | The batch pipeline store and its encrypted artifacts are never written: `load_reference`, `artifacts.load_result` and `artifacts.fetch_audio` are answered from this run's batch lane (the worker's payload and the unit WAV), and the store handle and runtime stage are replaced |
 
 `receipts` says whom those stood-in receipts name. `recording` (default) is what `batch_pipeline/projection.py`
-writes: the conversation the unit was projected into, the recording. **Measured 2026-11-26:** with it, the
-resolver and the final pass on the v3 conversation (whose id is not the recording's) both reach
-`load_reference` and get `skipped_merged`, the answer production's `database/batch_final_pass.py` gives for
-receipts naming another conversation; the voices are grouped (attribution 1.0) and no voice is named. The lab
-does not run the recording's own enrichment (the projection transaction is a stand-in), so whether production
-names v3 voices through another path is not measured here. `processed` is a counterfactual, reported in the
-stand-in notes: the receipt names the conversation the pass runs on, so the rest of the chain is measured. The
-two committed speaker scenarios use it. Record a speaker scenario's cassettes with
+writes: the conversation the unit was projected into, the recording. The stand-in applies the product's own
+ownership rule (`database/batch_final_pass.receipt_owners`): a conversations-v3 row owns receipts naming its
+`v3_recording_ids`. **This is how the lab caught a production escape (2026-11-26):** on `origin/main` the resolver
+and the final pass on a v3 conversation got `skipped_merged` (voices grouped, attribution 1.0, nobody named); with
+the fix both speaker scenarios pass (`scenario compare origin/main --worktree --metric speakers`: final pass
+`skipped_merged` -> `success`, owner recall 0 -> 1, named accuracy 0 -> 1). `processed` remains a labelled
+what-if for experiments: the receipt names whichever conversation the pass runs on. For a real-data check of the
+same path, see [the speaker lab](speakers/README.md) (`diagnose`). Record a speaker scenario's cassettes with
 `scenario run NAME --stt record-local --speakers record-local` (a few minutes on CPU), then commit the new
 files under `speakers/fixtures/`.
 

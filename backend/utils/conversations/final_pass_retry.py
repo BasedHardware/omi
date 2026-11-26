@@ -22,6 +22,10 @@ def scope_key(conversation):
     # Immutable unit/segment membership identifies one obligation. Summary writes
     # or duplicate enrichment calls cannot reset its attempt cap.
     membership = sorted((s.id, batch_unit_scope(s)) for s in conversation.transcript_segments if batch_unit_scope(s))
+    if getattr(conversation, 'v3_recording_ids', None):
+        # conversations-v3 rows settled as skipped_merged before they could read their source recordings' units
+        # get one new obligation, not a permanently closed one.
+        return hashlib.sha256(repr((membership, 'v3-source-receipts')).encode()).hexdigest()
     return hashlib.sha256(repr(membership).encode()).hexdigest()
 
 

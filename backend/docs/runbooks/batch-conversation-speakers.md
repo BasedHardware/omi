@@ -128,7 +128,15 @@ refuse the whole invocation before application. A conversations-v3 row reads the
 units projected onto its own source recordings (`v3_recording_ids`): their receipts
 name the recording, and the row holds copies of the recording's projected segments.
 Any other receipt owner is still a merge (`skipped_merged`) or a shared unit, and the
-privacy fence covers the row and those recordings. A unit whose capture clock
+privacy fence covers the row and those recordings. Each source recording must exist,
+be unlocked and still claim the row; its claims and deleted spans are fingerprinted
+before inference and re-checked with every unit reference after it, so a revoked
+claim or a new deletion refuses. A source unit also holds sibling conversations'
+speech and speech the owner deleted, so only the row's own speech reaches the
+diarizer and voice evidence: samples outside its own segments' words (unit clock,
+padded 0.25 s, joined across pauses up to 1 s) are silenced, and batch identity
+turns are clipped to the same stretches. No recurring profile is learned from
+source-recording units. A unit whose capture clock
 overlaps audio already placed with different samples is appended after the
 timeline (one second of silence first) rather than refusing: labels only need each
 unit's words on its own audio, and they map back by segment id. Identical overlaps

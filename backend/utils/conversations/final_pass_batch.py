@@ -4,6 +4,7 @@ After successful revalidation, retained private recurring profiles may be publis
 Only batch-backed positive-duration segments are candidates for relabeling.
 """
 
+import hashlib
 import io
 import math
 import logging
@@ -215,17 +216,22 @@ def _assemble(stream):
     # Metadata is small and sorted before decoding. Only one decoded unit lives
     # alongside this buffer; it grows only for appended units.
     pcm = bytearray(stream.capacity)
-    used, words, checks, appended = 0, [], [], 0
+    used, native, words, checks, appended = 0, 0, [], [], 0
+    # Appended units go after the whole native timeline (its capacity), so a later unit at its own clock never
+    # collides with one placed there.
+    append_at = stream.capacity
     for item, audio, local_words, validate in stream.units:
         stream.read_budget.timeout(60)
         position = round((item.capture_at - stream.origin) * 16000) * 2
-        overlap = max(0, min(used - position, len(audio)))
+        overlap = max(0, min(native - position, len(audio)))
         if overlap:
             with memoryview(pcm) as placed, memoryview(audio) as source:
                 same = placed[position : position + overlap] == source[:overlap]
             if not same:
-                position, overlap = used + APPEND_GAP_BYTES, 0
+                position, overlap = max(append_at, used) + APPEND_GAP_BYTES, 0
                 appended += 1
+        if position < append_at:
+            native = max(native, position + len(audio))
         end = position + len(audio)
         if end > MAX_AUDIO_SECONDS * 32000:
             raise OverflowError('audio timeline too long')
@@ -249,6 +255,91 @@ def _assemble(stream):
 def receipt_sources(conversation) -> tuple[str, ...]:
     """Recordings a conversations-v3 row was built from: their projection receipts are this row's."""
     return tuple(sorted({str(rid) for rid in (getattr(conversation, 'v3_recording_ids', None) or []) if rid}))
+
+
+def _epoch(value) -> float:
+    if isinstance(value, datetime):
+        return (value if value.tzinfo else value.replace(tzinfo=timezone.utc)).timestamp()
+    if isinstance(value, (int, float)):
+        return float(value)
+    parsed = datetime.fromisoformat(str(value).replace('Z', '+00:00'))
+    return (parsed if parsed.tzinfo else parsed.replace(tzinfo=timezone.utc)).timestamp()
+
+
+def _subtract(start: float, end: float, holes) -> list[tuple[float, float]]:
+    pieces = [(start, end)]
+    for left, right in sorted(holes):
+        pieces = [(a, b) for x, y in pieces for a, b in ((x, min(y, left)), (max(x, right), y)) if b > a]
+    return pieces
+
+
+@dataclass(frozen=True)
+class SourceScope:
+    """A conversations-v3 row's live hold on its source recordings: its claims minus deleted spans (epoch seconds,
+    on the stored clock) and a fingerprint of that evidence. Reading it refuses a deleted, locked or unclaiming
+    recording; the fingerprint is re-checked after inference so a revoked claim or a new deletion refuses."""
+
+    intervals: tuple[tuple[float, float], ...]
+    fingerprint: str
+
+
+def source_scope(uid, conversation) -> SourceScope | None:
+    sources = receipt_sources(conversation)
+    if not sources:
+        return None
+    from database import conversations as conversations_db  # lazy: the batch worker image shares this module
+
+    intervals, evidence = [], []
+    for rid in sources:
+        recording = conversations_db.get_conversation(uid, rid)
+        if not recording or recording.get('deleted') or recording.get('is_locked'):
+            raise ReferenceUnavailable('skipped_merged')
+        claims = [c for c in recording.get('claims') or [] if c.get('conversation_id') == conversation.id]
+        if not claims:
+            raise ReferenceUnavailable('skipped_merged')
+        deleted = [(_epoch(d['start']), _epoch(d['end'])) for d in recording.get('deleted_spans') or []]
+        for claim in claims:
+            intervals.extend(_subtract(_epoch(claim['start']), _epoch(claim['end']), deleted))
+        evidence.append((rid, sorted((_epoch(c['start']), _epoch(c['end'])) for c in claims), sorted(deleted)))
+    fingerprint = hashlib.sha256(repr(sorted(evidence)).encode()).hexdigest()
+    return SourceScope(tuple(sorted(intervals)), fingerprint)
+
+
+OWN_SPEECH_PAD_SECONDS = 0.25
+OWN_SPEECH_JOIN_SECONDS = 1.0
+
+
+def own_speech_spans(words) -> list[tuple[float, float]]:
+    """Unit-clock stretches around this conversation's own words (``timestamp`` on the unit's audio), joined
+    across short pauses and padded. Claim times come from stored segment clocks, which need not match the
+    unit's capture clock, so the words, not the claims, say where this conversation's speech is."""
+    spans: list[list[float]] = []
+    for left, right in sorted((float(w['timestamp'][0]), float(w['timestamp'][1])) for w in words):
+        left, right = max(0.0, left - OWN_SPEECH_PAD_SECONDS), right + OWN_SPEECH_PAD_SECONDS
+        if spans and left - spans[-1][1] <= OWN_SPEECH_JOIN_SECONDS:
+            spans[-1][1] = max(spans[-1][1], right)
+        else:
+            spans.append([left, right])
+    return [(a, b) for a, b in spans]
+
+
+def masked_pcm(pcm: bytes, spans) -> bytes:
+    """``pcm`` with every sample outside ``spans`` (unit seconds) silenced; length and clock unchanged."""
+    keep = bytearray(len(pcm))
+    for start, end in spans:
+        left, right = max(0, round(start * 16000)) * 2, min(len(pcm), round(end * 16000) * 2)
+        if right > left:
+            keep[left:right] = pcm[left:right]
+    return bytes(keep)
+
+
+def clip_turns(turns, spans) -> list[dict]:
+    return [
+        {**turn, 'start': max(turn['start'], a), 'end': min(turn['end'], b)}
+        for turn in turns
+        for a, b in spans
+        if min(turn['end'], b) > max(turn['start'], a)
+    ]
 
 
 def read_unit_references(
@@ -355,6 +446,7 @@ def decode_unit_evidence(
     identity_turns=None,
 ):
     total_bytes = 0
+    owned = source_scope(uid, conversation)
     for unit, reference in references.items():
         read_budget.timeout(60)
         try:
@@ -426,21 +518,29 @@ def decode_unit_evidence(
                 if reason:
                     diagnostics[sid] = reason
             words = [word for word in words if word['segment_id'] not in diagnostics]
+            if owned is not None:
+                # A source recording's unit also holds sibling conversations' speech and speech the owner
+                # deleted: only this conversation's own speech (its own segments' words, on the unit clock)
+                # reaches the diarizer and voice evidence.
+                words = [word for word in words if word['segment_id'] in stored]
+                spans = own_speech_spans(words)
+                pcm = masked_pcm(pcm, spans)
             if identity_turns is not None:
-                identity_turns[unit] = payload['diarization']['turns']
+                turns = payload['diarization']['turns']
+                identity_turns[unit] = clip_turns(turns, spans) if owned is not None else turns
 
-            def validate(unit=unit, reference=reference):
+            def validate(unit=unit, reference=reference, owned=owned):
                 try:
-                    return (
-                        load_reference(
-                            store,
-                            uid,
-                            unit,
-                            conversation.id,
-                            read_budget=ArtifactReadBudget(deadline, 0, 0),
-                            source_ids=receipt_sources(conversation),
-                        )
-                        == reference
+                    current = source_scope(uid, conversation)
+                    return load_reference(
+                        store,
+                        uid,
+                        unit,
+                        conversation.id,
+                        read_budget=ArtifactReadBudget(deadline, 0, 0),
+                        source_ids=receipt_sources(conversation),
+                    ) == reference and (current.fingerprint if current else None) == (
+                        owned.fingerprint if owned else None
                     )
                 except Exception:
                     failure_context.unit = unit
@@ -585,7 +685,9 @@ def _run(uid, conversation, receipt, load_prints, apply, failure_context: UnitFa
         return _reserve_budget(seconds)
 
     expected = None
-    if recurring_enabled_for(uid, conversation.transcript_segments):
+    # Units of source recordings: the live-claim bound is checked before inference, not inside the profile
+    # publish transaction, so no recurring profile is learned from them.
+    if recurring_enabled_for(uid, conversation.transcript_segments) and not receipt_sources(conversation):
         try:
             expected = recurring_voices.checkpoint(uid, conversation.id, receipt=receipt)
         except Exception:
