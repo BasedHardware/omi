@@ -707,16 +707,16 @@
       "runs_on": "ubuntu-latest"
     },
     "desktop_backend_auto_dev.yml/deploy": {
-      "budget_p50_minutes": 6,
+      "budget_p50_minutes": 5,
       "display_name": "deploy",
       "expected_runs_class": "non-pr-or-unsampled",
-      "expected_runs_per_day": 0,
+      "expected_runs_per_day": 1,
       "if": null,
       "matrix": {},
       "matrix_size": 1,
       "needs": [],
       "owner": "CI maintainers",
-      "rationale": "SCA-2918 adds a one-minute planning allowance for shared base, dev overlay, and generated manifest deploy triggers on main. This workflow runs outside the PR budget.",
+      "rationale": "SCA-2918 forecasts one additional run per day for shared base, dev overlay, and generated manifest changes on main. The five-minute p50 assumption and PR budget are unchanged.",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {

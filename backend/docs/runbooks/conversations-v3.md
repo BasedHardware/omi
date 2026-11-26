@@ -50,10 +50,20 @@ A retained revision can serve `beta` while the other runtimes serve `all`.
      manifest, and deploy the full set from the
      [stage-all rollout note](../listen_pusher_pipeline/changes/2026-11-25-conversations-v3-stage-all.md#rollout),
      including a separate desktop-backend production run.
-2. Collect fresh serving state with `activation_collect.py` and run
-   `activation_check.py` against `backend/deploy/activation/conversations-v3.yaml`.
-   Confirm `env-equal:v3-stage:CONVERSATIONS_V3_STAGE` is satisfied and the verdict
-   is `READY` before closing recovery.
+2. Collect fresh serving state and run the checker at `--before pusher`. At
+   this step the stage and kill-switch comparisons include desktop-backend and
+   the Cloud Run writers. Pusher and backend-listen checks are deferred. Confirm
+   `env-equal:v3-stage:CONVERSATIONS_V3_STAGE` is satisfied and the scoped verdict
+   is `READY` before closing desktop recovery.
+
+   ```bash
+   source ~/.local/bin/gcp-agent-env.sh ro-prod &&
+     state=$(mktemp /tmp/v3-desktop-recovery.XXXXXX) &&
+     python3 backend/scripts/activation_collect.py \
+       --manifest backend/deploy/activation/conversations-v3.yaml --out "$state" &&
+     python3 backend/scripts/activation_check.py \
+       --manifest backend/deploy/activation/conversations-v3.yaml --state "$state" --before pusher
+   ```
 
 ## Internal live recap beta
 

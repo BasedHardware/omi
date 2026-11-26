@@ -28,7 +28,9 @@ read-only tier. The output estimates the percentage as
 `100 × logged 5xx / (10 × logged 2xx/3xx + logged 4xx + logged 5xx)`.
 This assumes prod retains 10% of 2xx/3xx request logs and all 5xx and
 non-429 4xx. The denominator counts retained 429s as observed. An empty
-window yields no reading. See the [Cloud Logging sampling policy](../../runbooks/cloud-logging-cost-controls.md#_default-sink-exclusions-prod-config-not-in-git).
+window yields no reading. If the query returns the 100,000-entry cap, it prints
+`truncated`. Use smaller non-overlapping slices and combine the counts for the
+hour before calculating the percentage. See the [Cloud Logging sampling policy](../../runbooks/cloud-logging-cost-controls.md#_default-sink-exclusions-prod-config-not-in-git).
 
 ```bash
 set -o pipefail
@@ -43,14 +45,17 @@ filter=$(cat <<EOF
   timestamp < "${END_UTC:?set the UTC window end}"
 EOF
 )
-gcloud logging read "$filter" --project=based-hardware --format='json(httpRequest.status)' |
-  jq '
-    map(.httpRequest.status) as $statuses |
-    ($statuses | map(select(. >= 200 and . < 400)) | length) as $ok |
-    ($statuses | map(select(. >= 400 and . < 500)) | length) as $client |
-    ($statuses | map(select(. >= 500 and . < 600)) | length) as $server |
-    (10 * $ok + $client + $server) as $total |
-    if $total > 0 then 100 * $server / $total else empty end
+limit=100000
+gcloud logging read "$filter" --project=based-hardware --limit="$limit" --format='json(httpRequest.status)' |
+  jq -r --argjson limit "$limit" '
+    if length >= $limit then "truncated" else
+      map(.httpRequest.status) as $statuses |
+      ($statuses | map(select(. >= 200 and . < 400)) | length) as $ok |
+      ($statuses | map(select(. >= 400 and . < 500)) | length) as $client |
+      ($statuses | map(select(. >= 500 and . < 600)) | length) as $server |
+      (10 * $ok + $client + $server) as $total |
+      if $total > 0 then 100 * $server / $total else empty end
+    end
   '
 ```
 
@@ -87,20 +92,22 @@ and check readiness before each step.
    `backend-integration`. Run the
    [desktop-backend production workflow](../../../../.github/workflows/desktop_backend_prod.yml)
    after those services, before pusher. Desktop-backend does not mount the v3
-   admission routes. Its deploy changes no behavior and does not gate the writer
-   stage flip. It completes the manifest parity check.
+   admission routes. Its deploy does not change runtime behavior; it does gate the
+   activation parity check (`READY`).
 3. Apply the shared listen/pusher ConfigMap and roll `pusher` to load it.
 4. Roll `backend-listen` to load the same ConfigMap.
 
-Also deploy `backend-projection-pump` and redeploy the manifest-managed jobs:
-`notifications-job` in full mode, `x-connector-sync-job`, and
-`frame-request-retention-job`. These are outside the activation manifest's
+Also deploy `backend-projection-pump` and redeploy the four manifest-managed jobs:
+`notifications-job` in full mode, `x-connector-sync-job`,
+`frame-request-retention-job`, and
+[`day3-reengagement-email-job`](../../../../.github/workflows/gcp_day3_reengagement_email_job.yml). These are outside the activation manifest's
 ordered checks and carry the same shared stage.
 
 ## Rollback
 
 Set `conversations_v3_stage: beta` in the shared source, regenerate the runtime
-manifest, and redeploy the same set, including a separate desktop-backend run.
+manifest, and redeploy the same set, including all four jobs and a separate
+desktop-backend run.
 For a hard stop on new v3 admission, set `conversations_v3: 'off'` under
 `overlay` in `backend/deploy/runtime_env/prod.overlay.yaml`, regenerate the
 manifest, and redeploy the same set. Previously marked recordings continue
@@ -119,4 +126,5 @@ recovery, take one of these actions.
 
 Collect fresh serving state and rerun the
 [activation parity check](../../runbooks/conversations-v3.md#desktop-backend-recovery-while-stage-is-all).
-Confirm stage equality and a `READY` verdict before closing recovery.
+Use the `--before pusher` step and confirm stage equality and a `READY` verdict
+before closing desktop recovery.

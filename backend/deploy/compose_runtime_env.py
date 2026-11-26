@@ -265,8 +265,11 @@ def _staging_substitute(value: str, *, run_url_template: str, inputs: dict[str, 
 
 def _apply_conversations_v3_stage(env_config: ConfigDict) -> None:
     """One stage source moves API, capture, finalizers and jobs together (staging mirrors prod)."""
-    if 'CONVERSATIONS_V3' in env_config:
-        raise ValueError('use conversations_v3 at environment scope; CONVERSATIONS_V3 is the rendered env name')
+    for rendered_name in ('CONVERSATIONS_V3', 'CONVERSATIONS_V3_STAGE', 'CONVERSATIONS_V3_FIRST_APP_BUILD'):
+        if rendered_name in env_config:
+            raise ValueError(
+                f'use {rendered_name.lower()} at environment scope; {rendered_name} is the rendered env name'
+            )
     stage = env_config.pop('conversations_v3_stage', None)
     # Kill switch (CONVERSATIONS_V3=off): stops new v3 admission on every writer; marked rows keep draining.
     kill = env_config.pop('conversations_v3', None)
