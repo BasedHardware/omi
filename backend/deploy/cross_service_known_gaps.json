@@ -140,6 +140,10 @@
       "why": "Margin-40 PR25539 panel F4 requires integration-only cadence, 2026-11-17: this cadence belongs only to the integration projection sweep/supervisor. The worker entrypoint runs Pump/Scheduler, not Projection.sweep or Serving.supervise; the import-closure inventory over-approximates execution. Retain the excluded worker defaults. The deploy-contract test pins this exact integration/worker distinction; no general reader-split exemption."
     },
     {
+      "key": "reader-split|prod|helm/batch-pipeline-worker/BATCH_PIPELINE_PROJECTION_FOLLOWUP_SLOTS",
+      "why": "SCA-3120/SCA-4454, David 2026-11-26: the halved follow-up slot count belongs only to the in-process projection follow-up sweep that Serving.supervise runs on Cloud Run. The worker entrypoint runs Pump/Scheduler, not the follow-up sweep; the import-closure inventory over-approximates this reader. Keep the worker on the code default."
+    },
+    {
       "key": "reader-split|prod|helm/batch-pipeline-worker/BATCH_PIPELINE_PROJECTION_PHASE_SAMPLE_ENABLED",
       "why": "SCA-3664/3888: successful projection phase timing sampling is enabled on backend-integration only. The GPU worker does not execute the Cloud Run projection phase emitter; the import-closure inventory over-approximates this reader. Keep the worker unset so the control remains Integration-scoped."
     }
