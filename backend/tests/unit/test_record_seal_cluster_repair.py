@@ -1661,7 +1661,9 @@ def test_jobs_newest_first_ties_resume_encrypted_and_wrap(monkeypatch, setting):
         after = frontier.read(budget)
     assert len(observed) == 3
     assert cluster.discover_jobs(client, budget=budget, after=after) == ([], False, None)
-    assert cluster.discover_jobs(client, budget=budget, max_rows=1)[0][0] == observed[0]
+    wrapped, _, _ = cluster.discover_jobs(client, budget=budget, max_rows=1)
+    # A new sweep can report a different age for the same job.
+    assert wrapped[0][0] == observed[0][0]
     assert b'synthetic' not in state.state['cursor']
     assert client.queries[0].filters[0] == ('state', '==', 'record_pending')
     assert client.queries[0].filters[1] == ('enqueued_at', '<=', after['horizon'].timestamp())
