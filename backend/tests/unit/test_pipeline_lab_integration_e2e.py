@@ -58,6 +58,7 @@ def post(port, path, payload):
     return res.status, json.loads(body) if body else None
 
 
+@pytest.mark.slow  # near the fast-unit CPU limit on CI runners
 def test_add_day_run_baseline_and_inspector(lab, capsys):
     root = lab['root']
     code, added = run_cli(
@@ -194,6 +195,7 @@ def test_add_day_run_baseline_and_inspector(lab, capsys):
     assert os.path.exists(lab['verdicts'] / 'verdicts.jsonl')
 
 
+@pytest.mark.slow  # near the fast-unit CPU limit on CI runners
 def test_stage_registry_covers_every_stage_and_tool(lab, capsys):
     code, described = run_cli(capsys, 'stages')
     assert code == 0

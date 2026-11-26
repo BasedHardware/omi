@@ -36,11 +36,16 @@ def rows(count=20, *, tied=False):
 class Snapshot:
     update_time = None
 
-    def __init__(self, row):
+    def __init__(self, row, fields=None):
         self.row = copy.deepcopy(row)
         self.id = row['id']
+        self.fields = fields
+        self.reference = row['id']
 
     def to_dict(self):
+        if self.fields is not None:
+            # A projected read carries only the selected fields.
+            return {field: copy.deepcopy(self.row[field]) for field in self.fields if field in self.row}
         return copy.deepcopy(self.row)
 
 
@@ -130,7 +135,18 @@ class CountingQuery:
             self.counts['reads'] += 1
             if self.on_read:
                 self.on_read(row)
-            yield Snapshot(row)
+            if self.fields is not None:
+                self.counts['lean'] = self.counts.get('lean', 0) + 1
+            yield Snapshot(row, self.fields)
+
+    def get_all(self, references, **kwargs):
+        """Point reads of whole documents (or ``field_paths``), as ``client.get_all``."""
+        by_id = {row['id']: row for row in self.data}
+        for reference in references:
+            self.counts['reads'] += 1
+            self.counts['hydrated'] = self.counts.get('hydrated', 0) + 1
+            if reference in by_id:
+                yield Snapshot(by_id[reference], kwargs.get('field_paths'))
 
 
 @pytest.fixture(autouse=True)

@@ -28,14 +28,18 @@ from tests.unit.test_record_producer_proof import inventory, pod
 
 
 @pytest.mark.parametrize('fail', [False, True])
-def test_repair_child_terminal_reads_reach_parent_registry_once(fail):
+def test_repair_child_terminal_counters_reach_parent_registry_once(fail):
     from database.firestore_document_probe import FIRESTORE_BILLED_READS, FIRESTORE_BILLED_READS_BY_CALLER
+    from database.firestore_write_probe import FIRESTORE_BILLED_WRITES_BY_CALLER, FIRESTORE_BILLED_WRITES_BY_ORIGIN
     from utils.batch_pipeline.record_seal_worker import Metrics
     from utils.observability import firestore_probe_export as export
 
     billed = FIRESTORE_BILLED_READS.labels('other', 'query', 'unattributed')
     caller = FIRESTORE_BILLED_READS_BY_CALLER.labels('other', 'query', 'tests:repair_child_export')
-    before = (billed._value.get(), caller._value.get())
+    write_caller = FIRESTORE_BILLED_WRITES_BY_CALLER.labels('other', 'set', 'tests:repair_child_export')
+    write_origin = FIRESTORE_BILLED_WRITES_BY_ORIGIN.labels('job:repair_child_export', 'other', 'set')
+    counters = (billed, caller, write_caller, write_origin)
+    expected = tuple(counter._value.get() + 11 for counter in counters)
     entrypoint = Path(__file__).resolve().parents[2] / 'scripts/record_seal_repair_job.py'
     # Run the real entrypoint/finally in a separate interpreter, replacing only
     # the row's cloud work with synthetic counter increments.
@@ -43,9 +47,12 @@ def test_repair_child_terminal_reads_reach_parent_registry_once(fail):
         'import runpy, sys\n'
         f'entry = runpy.run_path({str(entrypoint)!r})\n'
         'from database.firestore_document_probe import FIRESTORE_BILLED_READS, FIRESTORE_BILLED_READS_BY_CALLER\n'
+        'from database.firestore_write_probe import FIRESTORE_BILLED_WRITES_BY_CALLER, FIRESTORE_BILLED_WRITES_BY_ORIGIN\n'
         'def row(*args, **kwargs):\n'
         '    FIRESTORE_BILLED_READS.labels("other", "query", "unattributed").inc(11)\n'
         '    FIRESTORE_BILLED_READS_BY_CALLER.labels("other", "query", "tests:repair_child_export").inc(11)\n'
+        '    FIRESTORE_BILLED_WRITES_BY_CALLER.labels("other", "set", "tests:repair_child_export").inc(11)\n'
+        '    FIRESTORE_BILLED_WRITES_BY_ORIGIN.labels("job:repair_child_export", "other", "set").inc(11)\n'
         + ('    raise RuntimeError("private synthetic error")\n' if fail else '    return {"disposition":"sealed"}\n')
         + 'entry["repair"].row_main = row\n'
         'sys.argv = ["record_seal_repair_job.py", "--row"]\n'
@@ -66,15 +73,23 @@ def test_repair_child_terminal_reads_reach_parent_registry_once(fail):
         # communicate closes stdout; stop's normal contract owns an open pipe.
         process.stdout = io.BytesIO(stdout)
         cluster.stop(process)
-        assert (billed._value.get(), caller._value.get()) == (before[0] + 11, before[1] + 11)
+        assert tuple(counter._value.get() for counter in counters) == expected
         export.collect_child_probe(process)
-        assert (billed._value.get(), caller._value.get()) == (before[0] + 11, before[1] + 11)
+        assert tuple(counter._value.get() for counter in counters) == expected
+        registry = Metrics('r', 'n').registry
         assert (
-            Metrics('r', 'n').registry.get_sample_value(
-                'omi_firestore_billed_reads_by_caller_total',
-                {'collection': 'other', 'kind': 'query', 'caller': 'tests:repair_child_export'},
+            registry.get_sample_value(
+                'omi_firestore_billed_writes_by_caller_total',
+                {'collection': 'other', 'op': 'set', 'caller': 'tests:repair_child_export'},
             )
-            == before[1] + 11
+            == expected[2]
+        )
+        assert (
+            registry.get_sample_value(
+                'omi_firestore_billed_writes_by_origin_total',
+                {'origin': 'job:repair_child_export', 'collection': 'other', 'op': 'set'},
+            )
+            == expected[3]
         )
     finally:
         if process.poll() is None:
@@ -143,10 +158,13 @@ def test_spawn_failure_closes_terminal_transport(monkeypatch):
 
 def test_counter_sample_map_matches_served_counter_metadata():
     from database.firestore_document_probe import FIRESTORE_BILLED_READS, FIRESTORE_BILLED_READS_BY_CALLER
+    from database.firestore_write_probe import FIRESTORE_BILLED_WRITES_BY_CALLER, FIRESTORE_BILLED_WRITES_BY_ORIGIN
     from utils.observability.firestore_probe_export import COUNTER_SAMPLES
 
     FIRESTORE_BILLED_READS.labels(collection='x', kind='query', tier='unattributed').inc(1)
     FIRESTORE_BILLED_READS_BY_CALLER.labels(collection='x', kind='query', caller='tests:probe_export_pin').inc(1)
+    FIRESTORE_BILLED_WRITES_BY_CALLER.labels(collection='x', op='set', caller='tests:probe_export_pin').inc()
+    FIRESTORE_BILLED_WRITES_BY_ORIGIN.labels(collection='x', op='set', origin='job:probe_export_pin').inc()
     seen = {}
     for collector, _label_keys in COUNTER_SAMPLES.values():
         for family in collector.collect():
@@ -1643,7 +1661,9 @@ def test_jobs_newest_first_ties_resume_encrypted_and_wrap(monkeypatch, setting):
         after = frontier.read(budget)
     assert len(observed) == 3
     assert cluster.discover_jobs(client, budget=budget, after=after) == ([], False, None)
-    assert cluster.discover_jobs(client, budget=budget, max_rows=1)[0][0] == observed[0]
+    wrapped, _, _ = cluster.discover_jobs(client, budget=budget, max_rows=1)
+    # A new sweep can report a different age for the same job.
+    assert wrapped[0][0] == observed[0][0]
     assert b'synthetic' not in state.state['cursor']
     assert client.queries[0].filters[0] == ('state', '==', 'record_pending')
     assert client.queries[0].filters[1] == ('enqueued_at', '<=', after['horizon'].timestamp())
@@ -1658,7 +1678,8 @@ def test_jobs_frozen_horizon_wraps_despite_new_inflow(monkeypatch):
     second, _, cursor = cluster.discover_jobs(client, budget=SweepBudget(60), after=cursor, max_rows=1)
     assert len(second) == 1 and first != second and cursor['horizon'] == horizon
     assert cluster.discover_jobs(client, budget=SweepBudget(60), after=cursor) == ([], False, None)
-    assert cluster.discover_jobs(client, budget=SweepBudget(60), max_rows=1)[0] == first
+    wrapped, _, _ = cluster.discover_jobs(client, budget=SweepBudget(60), max_rows=1)
+    assert [path for path, _ in wrapped] == [path for path, _ in first]
 
 
 @pytest.mark.parametrize('enqueued', [None, 'old', True, float('nan'), float('inf'), -float('inf'), 'missing'])

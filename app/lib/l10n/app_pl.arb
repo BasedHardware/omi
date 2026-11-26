@@ -4657,7 +4657,6 @@
     "capturePendantDisconnectedShort": "Omi połączy się ponownie samo",
     "forYou": "Dla Ciebie",
     "stopThese": "Zatrzymaj te",
-    "meetingActionItemsTitle": "Zadania do wykonania",
     "addToTasks": "Dodaj do zadań",
     "showInTranscript": "Pokaż transkrypcję",
     "tentativeTaskDueDate": "Termin około {date}",
@@ -4798,5 +4797,11 @@
     "prepaidCodeFieldHint": "Wpisz swój kod",
     "prepaidCodeRedeem": "Wykorzystaj",
     "prepaidCodeRedeemed": "Kod wykorzystany",
-    "prepaidCodeResult": "{reason, select, invalid{Ten kod jest nieprawidłowy. Sprawdź go i spróbuj ponownie.} used{Ten kod został już wykorzystany.} expired{Ten kod wygasł.} hasPlan{Masz już plan. Twój kod nie został wykorzystany. Wykorzystaj go, gdy Twój plan się skończy.} notPrepaid{Tego kodu nie można tu wykorzystać. Użyj go przy wyborze planu.} notEligible{Tego kodu nie można użyć na tym koncie.} rateLimited{Zbyt wiele prób. Spróbuj później.} other{Coś poszło nie tak. Spróbuj ponownie.}}"
+    "prepaidCodeResult": "{reason, select, invalid{Ten kod jest nieprawidłowy. Sprawdź go i spróbuj ponownie.} used{Ten kod został już wykorzystany.} expired{Ten kod wygasł.} hasPlan{Masz już plan. Twój kod nie został wykorzystany. Wykorzystaj go, gdy Twój plan się skończy.} notPrepaid{Tego kodu nie można tu wykorzystać. Użyj go przy wyborze planu.} notEligible{Tego kodu nie można użyć na tym koncie.} rateLimited{Zbyt wiele prób. Spróbuj później.} other{Coś poszło nie tak. Spróbuj ponownie.}}",
+    "playStripeBilledOnWeb": "Rozliczane przez omi.me. Anuluj tutaj w dowolnym momencie.",
+    "playStripeBilledOnWebShort": "Rozliczane przez omi.me.",
+    "playStripePlanPaused": "Twój plan {plan} jest wstrzymany.",
+    "firmwareNewestSupportedForDevice": "Twoje urządzenie ma już najnowszą obsługiwaną wersję oprogramowania układowego",
+    "firmwareSyncRecordingsFirstTitle": "Najpierw zsynchronizuj nagrania",
+    "firmwareSyncRecordingsFirstMessage": "Niektóre nagrania wciąż znajdują się na urządzeniu. Poczekaj, aż zostaną zsynchronizowane z telefonem, a następnie rozpocznij aktualizację."
 }

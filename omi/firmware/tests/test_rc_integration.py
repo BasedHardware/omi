@@ -186,6 +186,12 @@ static inline void sys_put_le32(uint32_t v, uint8_t *p) {
 #include <errno.h>
 #include <sys/types.h>
 #include "recovery_diagnostics.h"
+#include "boot_identity.h"
+static unsigned boot_identity_prepares;
+void omi_boot_identity_prepare(void) { ++boot_identity_prepares; }
+void omi_boot_identity_snapshot(uint8_t out[OMI_BOOT_IDENTITY_SIZE]) {
+    for (unsigned i=0;i<OMI_BOOT_IDENTITY_SIZE;++i) out[i]=(uint8_t)i;
+}
 #include <zephyr/kernel.h>
 #define CONFIG_BT_MAX_CONN 2
 #define BT_GATT_ERR(e) (-(e))
@@ -274,12 +280,22 @@ static ssize_t diagnostics_read_handler(struct bt_conn *c, const struct bt_gatt_
 '''
         suffix = r'''
 int main(void) {
-    assert(diagnostics_service.count == 5 && safe_diagnostics_service.count == 3);
+    assert(diagnostics_service.count == 7 && safe_diagnostics_service.count == 5);
     assert(diagnostics_service.attrs[0].uuid->value == 0x19b10040);
     assert(diagnostics_service.attrs[2].uuid->value == 0x19b10041);
     assert(diagnostics_service.attrs[4].uuid->value == 0x19b10042);
     assert(diagnostics_service.attrs[2].read == diagnostics_read_handler);
     assert(safe_diagnostics_service.attrs[2].uuid->value == 0x19b10042);
+    assert(diagnostics_service.attrs[6].uuid->value == 0x19b10043);
+    assert(safe_diagnostics_service.attrs[4].uuid->value == 0x19b10043);
+    assert(diagnostics_service.attrs[6].read == boot_identity_read);
+    uint8_t id[44];
+    struct bt_conn id_conn = {0};
+    assert(boot_identity_read(&id_conn,NULL,id,22,0)==22);
+    assert(boot_identity_read(&id_conn,NULL,id+22,22,22)==22);
+    for(unsigned i=0;i<44;++i) assert(id[i]==i);
+    assert(boot_identity_read(&id_conn,NULL,id,1,44)==0);
+    assert(boot_identity_read(&id_conn,NULL,id,1,45)==-7);
     uint8_t packet[OMI_RECOVERY_DIAGNOSTICS_SIZE];
     struct bt_conn conn = {0}, other = {1}, invalid = {2};
     const uint8_t expected[] = {2, 1, 1, 1, 0x78, 0x56, 0x34, 0x12,
@@ -299,7 +315,7 @@ int main(void) {
     assert(recovery_diagnostics_read(&invalid, NULL, packet, 16, 0) == -14);
     assert(recovery_diagnostics_read(&conn, NULL, packet, 16, 96) == 0);
     assert(recovery_diagnostics_read(&conn, NULL, packet, 16, 97) == -7);
-    assert(transport_start_safe() == 0 && advertising_started);
+    assert(transport_start_safe() == 0 && advertising_started && boot_identity_prepares == 1);
     assert(connection_callbacks == &recovery_callbacks);
     connection_callbacks->disconnected(&conn, 0);
     connection_callbacks->connected(&conn, 0);

@@ -18,6 +18,7 @@ import logging
 from itertools import chain
 import sys
 import threading
+from time import monotonic
 from typing import Any, Callable, List, Mapping
 import zlib
 
@@ -25,6 +26,7 @@ from cachetools import TTLCache
 
 from config import object_lake as config
 from database import _client
+from database.firestore_transaction_retry import run_with_transaction_contention_retry
 from utils import encryption
 from utils.other import object_lake, space_keys
 
@@ -66,6 +68,7 @@ class TranscriptMemoBudgetExceeded(TranscriptPointerFetchError):
     """Retryable operation memory limit; never evict a required read silently."""
 
 
+MAX_PRELOAD_DOCUMENTS = 32
 MAX_MEMO_DECODED_BYTES = 64 * 1024 * 1024
 
 
@@ -101,7 +104,7 @@ class _DecodedMemo(TTLCache):
 
     def __setitem__(self, key, value):
         self.check_budget(key, value)
-        if key not in self and len(self) >= 32:
+        if key not in self and len(self) >= MAX_PRELOAD_DOCUMENTS:
             self.popitem()
         super().__setitem__(key, value)
 
@@ -194,7 +197,7 @@ def resolve_pointer(uid: str, pointer: Mapping) -> list:
             value = memo.decoded[key]
         except KeyError:
             raise TranscriptPointerFetchError('Transcript preload expired before use') from None
-    if _client.in_transaction_body() and len(memo.resolved) < 32:
+    if _client.in_transaction_body() and len(memo.resolved) < MAX_PRELOAD_DOCUMENTS:
         memo.resolved.add(key)
     if isinstance(value, Exception):
         # Cached failures must not accumulate caller tracebacks/plaintext frames.
@@ -324,7 +327,7 @@ def _upload_candidate(uid, conversation_id, plaintext, source_digest, *, cache_d
     # Only direct pre-transaction encodes may warm reads. A transaction
     # candidate must not mask a cold read of an existing identical reference.
     # Cache actual upload bytes, never a later encryption of the same source.
-    if cache_decoded and key not in memo.decoded and len(memo.decoded) < 32:
+    if cache_decoded and key not in memo.decoded and len(memo.decoded) < MAX_PRELOAD_DOCUMENTS:
         memo.decoded[key] = _require_segment_list(json.loads(plaintext))
     memo.uploaded[(uid, conversation_id, source_digest)] = ref
     return ref
@@ -377,7 +380,7 @@ def run_preloaded_operation(operation, *args, **kwargs):
                     for key in superseded:
                         memo.decoded.pop(key, None)
                         preloaded.pop(key)
-                elif len(preloaded) >= 32:
+                elif len(preloaded) >= MAX_PRELOAD_DOCUMENTS:
                     raise TranscriptPointerFetchError('Transcript exceeds bounded preload document limit') from None
                 if content_changes + upload_changes > 3 or attempt == 67:
                     raise TranscriptPointerFetchError('Transcript changed during bounded preload retries') from None
@@ -393,6 +396,24 @@ def run_preloaded_operation(operation, *args, **kwargs):
 
 def run_preloaded_transactional(client, fn, *args, **kwargs):
     return run_preloaded_operation(_client.run_transactional, client, fn, *args, **kwargs)
+
+
+def run_preloaded_transaction_with_contention_retry(client, operation, *args):
+    """Load transcript blobs between attempts and start each contention retry with a new ID."""
+    # Use the shared duration reserve to avoid starting another long chain after
+    # a slow failure. The budget does not abort an in-flight transaction.
+    retry_deadline = monotonic() + 45.0
+
+    def run():
+        return run_with_transaction_contention_retry(
+            lambda: client.transaction(max_attempts=1),
+            lambda tx: operation(tx, *args),
+            operation_name=getattr(operation, 'to_wrap', operation).__name__,
+            max_attempts=3,
+            deadline=retry_deadline,
+        )
+
+    return run_preloaded_operation(run)
 
 
 def offload_inline_transcript(uid, conversation_id, *, firestore_client=None, expected_sha256=None) -> bool:

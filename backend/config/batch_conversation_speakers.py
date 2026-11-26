@@ -11,11 +11,25 @@ BATCH_FINAL_PASS_ENV = 'BATCH_FINAL_PASS_ENABLED'
 BATCH_CONVERSATION_SCOPE = 'final:batch:conversation:'
 SYNC_OFF_CENTROIDS_ENV = 'BATCH_SYNC_OFF_CENTROIDS_ENABLED'
 VENDOR_SPEAKER_TURNS_ENV = 'BATCH_VENDOR_SPEAKER_TURNS_ENABLED'
+FINAL_PASS_V3_SOURCES_ENV = 'BATCH_FINAL_PASS_V3_SOURCES_ENABLED'
+FINAL_PASS_APPEND_CONFLICTS_ENV = 'BATCH_FINAL_PASS_APPEND_CONFLICTING_UNITS_ENABLED'
 
 
 def _default_on(name: str) -> bool:
     """Keep the shared parser and expose constant-named kill-switch reads to deployment checks."""
     return default_on(name)
+
+
+def v3_sources_enabled() -> bool:
+    """Kill switch: a conversations-v3 row reads the staged units projected onto its own source recordings
+    (own speech only, live-claim fence). False restores the receipt rule that refuses them (skipped_merged)."""
+    return _default_on(FINAL_PASS_V3_SOURCES_ENV)
+
+
+def append_conflicting_units_enabled() -> bool:
+    """Kill switch: a unit whose capture clock contradicts placed audio is appended after the timeline. False
+    restores the whole-pass refusal (conflicting capture clocks)."""
+    return _default_on(FINAL_PASS_APPEND_CONFLICTS_ENV)
 
 
 def sync_off_enabled() -> bool:

@@ -7,6 +7,10 @@
     "policy": "conversations",
     "reason": "After a V3 refinement, repair retirement or undo marker hit, the task transaction checks only deletion and recording fields to allow an active product card with the same ID."
   },
+  "backend/database/batch_final_pass.py:collection": {
+    "policy": "both",
+    "reason": "Reads only the fence fields (claims, deleted spans, deleted, locked) of a v3 row's source recordings, by id and owner-scoped, before speaker inference."
+  },
   "backend/database/batch_pipeline_privacy.py:collection": {
     "policy": "both",
     "reason": "Capture, audio, sync, custody, retention, export, deletion or v3 construction owns recording-layer access; all lookups remain scoped to their owner."
@@ -50,6 +54,10 @@
   "backend/database/chat.py:collection": {
     "policy": "storage",
     "reason": "Persistence boundary: user-scoped storage and authoritative lifecycle/privacy/custody metadata. Public-facing methods apply the central visibility predicate."
+  },
+  "backend/database/conversation_effect_fence.py:collection": {
+    "policy": "storage",
+    "reason": "Reads authority fields from an exact source inside its derived-write transaction."
   },
   "backend/database/conversation_finalization_jobs.py:collection": {
     "policy": "both",
@@ -339,6 +347,10 @@
     "policy": "storage",
     "reason": "Persistence boundary: user-scoped storage and authoritative lifecycle/privacy/custody metadata. Public-facing methods apply the central visibility predicate."
   },
+  "backend/database/user_data_deletion.py:collection": {
+    "policy": "storage",
+    "reason": "Account erasure enumerates owner-scoped conversation references to purge speaker evidence children, including orphaned parents."
+  },
   "backend/database/summary_processing.py:collection": {
     "policy": "storage",
     "reason": "Persistence boundary: user-scoped storage and authoritative lifecycle/privacy/custody metadata. Public-facing methods apply the central visibility predicate."
@@ -479,6 +491,10 @@
     "policy": "operator",
     "reason": "Offline operator utility; explicit raw ownership/recovery inspection, never a product read."
   },
+  "backend/scripts/backfill_home_visibility_index.py:collection": {
+    "policy": "operator",
+    "reason": "Owner-scoped Home index migration reads only the two visibility flags and their derived index bit."
+  },
   "backend/scripts/backfill_notes_v2_default_emoji.py:collection": {
     "policy": "operator",
     "reason": "Offline operator utility; explicit raw ownership/recovery inspection, never a product read."
@@ -570,6 +586,10 @@
   "backend/scripts/scan_wake_word_variants.py:collection": {
     "policy": "operator",
     "reason": "Offline operator utility; explicit raw ownership/recovery inspection, never a product read."
+  },
+  "backend/scripts/settle_parked_conversations.py:collection_group": {
+    "policy": "operator",
+    "reason": "SCA-3590 one-time parked-status migration. Bounded projected scan, with lifecycle and custody rechecked transactionally before status-only writes."
   },
   "backend/scripts/staging/replay.py:collection": {
     "policy": "operator",
@@ -875,6 +895,10 @@
     "policy": "conversations",
     "reason": "Product and derived readers must apply is_visible_conversation or the validated by-id boundary; home_hidden is not a general visibility filter."
   },
+  "backend/utils/enrichment/unpark.py:collection": {
+    "policy": "conversations",
+    "reason": "The unpark transaction reads the conversation by exact ID after validating the user and conversation IDs against the outbox row key."
+  },
   "backend/utils/entity_pages.py:collection": {
     "policy": "conversations",
     "reason": "Product and derived readers must apply is_visible_conversation or the validated by-id boundary; home_hidden is not a general visibility filter."
@@ -1066,5 +1090,9 @@
   "backend/utils/task_intelligence/task_source_validation.py:get_conversation": {
     "policy": "conversations",
     "reason": "Product and derived readers must apply is_visible_conversation or the validated by-id boundary; home_hidden is not a general visibility filter."
+  },
+  "backend/utils/batch_pipeline/live.py:get_conversation": {
+    "policy": "both",
+    "reason": "Record admission's manual-finish first transcript re-reads one owner-scoped recording, decoded, to decide whether it still has no transcript before any provider call and again before the provisional write; recording-layer access by its capture owner."
   }
 }

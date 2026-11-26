@@ -2,7 +2,7 @@
 
 from copy import deepcopy
 from datetime import datetime, timedelta, timezone
-from unittest.mock import Mock
+from unittest.mock import ANY, Mock
 
 import pytest
 
@@ -90,6 +90,7 @@ def test_stale_replay_terminalizes_only_exhausted_budget(store, status, attempts
         'finalization_status': 'dead_letter',
         'structured': {'title': 'Synthetic transcript.', 'overview': ''},
         'summary_retryable': True,
+        'terminal_family_at': ANY,
         # The discard-detection audit stamps an explicit policy keep on the
         # dead-letter terminal; the verdict itself stays keep.
         'relevance_decision': {

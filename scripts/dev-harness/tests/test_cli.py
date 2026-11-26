@@ -563,3 +563,31 @@ def test_down_reaps_a_detached_child_still_holding_the_service_port(
                 os.kill(pid, signal.SIGKILL)
             except (ProcessLookupError, PermissionError):
                 pass
+
+
+def test_restart_stops_application_services_and_keeps_the_data_services(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+):
+    monkeypatch.setenv("OMI_LOCAL_STATE_ROOT", str(tmp_path / "state"))
+    monkeypatch.setenv("PROVIDER_MODE", "offline")
+    cfg = config.load_config(REPO_ROOT, create_layout=True)
+    records = [
+        {"service": name, "pid": os.getpid()} for name in ("firestore", "redis", "typesense", "backend", "pusher")
+    ]
+    signalled: list[str] = []
+    saved: list[list[str]] = []
+    monkeypatch.setattr(cli, "_process_records", lambda _cfg: records)
+    monkeypatch.setattr(safety, "validate_owned_pid", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(safety, "descendant_pids", lambda _pid: ())
+    monkeypatch.setattr(cli, "_signal_owned_process_group", lambda _pid, service: signalled.append(service))
+    monkeypatch.setattr(cli.os, "killpg", lambda _pid, _sig: None)
+    monkeypatch.setattr(cli.time, "sleep", lambda _seconds: None)
+    clock = iter(range(0, 10_000, 5))
+    monkeypatch.setattr(cli.time, "time", lambda: next(clock))
+    monkeypatch.setattr(cli, "_save_manifests", lambda _cfg, items: saved.append([str(r["service"]) for r in items]))
+
+    cli._stop_owned(cfg, keep=cli.INFRASTRUCTURE_SERVICES)
+
+    assert signalled == ["backend", "pusher"]
+    # Kept services stay in the manifest, so the next `up` reuses them instead of starting new ones.
+    assert saved == [["firestore", "redis", "typesense", "backend", "pusher"]]

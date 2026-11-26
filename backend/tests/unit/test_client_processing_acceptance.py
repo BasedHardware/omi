@@ -617,6 +617,7 @@ def test_paid_plan_generic_persist_omits_projection_keeps_it_in_memory(monkeypat
 
 
 def test_flag_off_deferred_persist_omits_projection_keeps_it_in_memory(monkeypatch, stack) -> None:
+    monkeypatch.setenv('CONVERSATION_PARKED_TERMINAL_STATUS_ENABLED', 'off')
     pc, _dev = stack
     monkeypatch.setattr(pc.funded_processing, 'enabled', lambda uid, lane=None: False)
     spies = _spy_managed_effects(monkeypatch, pc)

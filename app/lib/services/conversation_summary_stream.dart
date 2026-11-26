@@ -44,7 +44,7 @@ Stream<SummaryStreamEvent> streamConversationSummary(
               'X-Omi-Recap-Foreground': 'true',
               'X-Omi-Recap-Speech-Eligible': 'true',
             }
-          : const {},
+          : const {'X-Omi-Recording-Detail': '1'},
       seams: seams,
       cancelSignal: cancelSignal,
       canDispatch: canDispatch,

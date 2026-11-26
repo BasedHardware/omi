@@ -15108,9 +15108,6 @@ class AppLocalizationsJa extends AppLocalizations {
   String get stopThese => 'この種類を停止';
 
   @override
-  String get meetingActionItemsTitle => 'アクション項目';
-
-  @override
   String get addToTasks => 'タスクに追加';
 
   @override
@@ -15591,4 +15588,24 @@ class AppLocalizationsJa extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get playStripeBilledOnWeb => 'omi.me で請求されています。ここでいつでも解約できます。';
+
+  @override
+  String get playStripeBilledOnWebShort => 'omi.me で請求されています。';
+
+  @override
+  String playStripePlanPaused(String plan) {
+    return '$plan プランは一時停止中です。';
+  }
+
+  @override
+  String get firmwareNewestSupportedForDevice => 'お使いのデバイスは、すでにサポートされている最新のファームウェアバージョンで動作しています';
+
+  @override
+  String get firmwareSyncRecordingsFirstTitle => 'まず録音を同期してください';
+
+  @override
+  String get firmwareSyncRecordingsFirstMessage => '一部の録音はまだデバイスに残っています。スマートフォンへの同期が完了してから、更新を開始してください。';
 }

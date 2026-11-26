@@ -144,6 +144,7 @@ async def restore_upload(
                 uid=uid,
                 device_id=binding.client_device_id,
                 retained_offsets_by_name=context.get('retained_capture_offsets_by_name'),
+                durable_repair=True,
             ),
         )
     elif any(job.get('source_reuse_key') for job in jobs):

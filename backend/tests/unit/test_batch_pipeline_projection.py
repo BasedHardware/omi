@@ -2,6 +2,7 @@
 
 from dataclasses import replace
 from dataclasses import asdict
+from datetime import datetime, timedelta, timezone
 from copy import deepcopy
 from types import SimpleNamespace
 from config.policy import BatchUnitPolicy, ProjectionPolicy, resolve_batch_policy, resolve_stage_policy
@@ -12,12 +13,14 @@ from google.api_core.exceptions import Aborted, InvalidArgument
 import pytest
 
 from utils.batch_pipeline.contracts import ProjectionBinding
+from database import batch_pipeline_projection as completion
 from database.batch_pipeline_projection import ProjectionStore
 from utils.batch_pipeline import projection
 from utils.sync import bridge
 from database.sync_ledger import sync_content_ledger_ref
 from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
 from utils.batch_pipeline.scheduler import owner_key
+from utils.conversations.v3.live import FINISH_RECORDING_FIELD
 from utils.sync.capture import chunk_identity
 
 
@@ -625,6 +628,36 @@ def test_contention_control_retains_existing_expired_transaction_restart(monkeyp
     assert operation.call_args_list[0] != operation.call_args_list[1]
 
 
+def test_projection_bridge_superseded_keeps_the_receipt_canonical(binding, monkeypatch, caplog):
+    from utils.sync.assignment_errors import SyncAssignmentSuperseded
+
+    projector = projection.Projector(Mock(), Mock(), playback=Mock())
+    monkeypatch.setattr(projector.store, 'settle_deleted_output', Mock())
+    mark = Mock()
+    monkeypatch.setattr(projector.store, 'mark_enrichment', mark)
+    monkeypatch.setattr(
+        bridge,
+        'finish_sync_bridges',
+        Mock(side_effect=SyncAssignmentSuperseded('sync anchor is user managed')),
+    )
+    receipt = {
+        'state': 'persisted',
+        'conversation_id': 'managed',
+        'audio_required': False,
+        'enrichment_required': True,
+        'language': 'en',
+    }
+    policy = resolve_stage_policy(binding.owner_id, 'projection')
+
+    with caplog.at_level(logging.DEBUG, logger=projection.__name__):
+        projector.finish_part(Mock(), binding, receipt, None, policy=policy)
+
+    assert 'event=batch_projection action=bridge outcome=superseded' in caplog.text
+    # The assignment already committed: follow-up stays on its own canonical.
+    mark.assert_called_once()
+    assert mark.call_args.args[3] == 'managed'
+
+
 @pytest.mark.parametrize('engine', ['go', 'pending'])
 def test_projection_bridge_refuses_foreign_target_before_followup(binding, monkeypatch, engine):
     from utils.sync import processing_hold
@@ -1220,3 +1253,178 @@ def test_committed_transcript_signals_episode_before_playback_or_enrichment(bind
     projector.finish_part = lambda *a, **kw: events.append('finish')
     projector.assign_parts(item, {'result': {'result_uri': 'fixture'}}, binding)
     assert events == ['commit', 'signal', 'finish']
+
+
+def native_finish_completion(
+    monkeypatch, db, uid, cid, unit_count, *, empty_outcome=None, native_record=True, settle_allowance=None
+):
+    """Supply ready sibling fixtures; use the real completion transaction and ledger writer."""
+    from contextlib import nullcontext
+
+    from config.record_audio import record_identity
+    from database import batch_pipeline_projection as completion
+
+    monkeypatch.setattr(completion, 'writing', lambda *_: nullcontext())
+    monkeypatch.setattr(completion, 'record_notes_eager_enabled', lambda: False)
+    monkeypatch.setattr(completion.capture_end, 'enabled', lambda: False)
+    namespace = 'synthetic'
+    content, first = record_identity(uid, cid)
+    binding = ProjectionBinding(
+        uid,
+        'bp_' + content,
+        content,
+        (first, *(f'second-{i}' for i in range(unit_count - 1))),
+        target_conversation_id=cid,
+        record_origin=native_record,
+        native_record=native_record,
+    )
+    ledger = sync_content_ledger_ref(db, uid, content)
+    db.rows[ledger.path] = {
+        'status': 'processing',
+        'dispatch_protocol': 'batch_v1',
+        'job_id': binding.job_id,
+        'batch_pipeline': {'segment_ids': list(binding.segment_ids)},
+    }
+    for sid in binding.segment_ids:
+        db.rows[f'{namespace}_jobs', sid] = {'projection_binding': asdict(binding), 'duration_seconds': 3.0}
+        db.rows[f'{namespace}_results', sid] = {
+            'result': {'outcome': empty_outcome or 'success'},
+            'projection': {
+                'state': 'ready',
+                'conversation_id': None if empty_outcome else cid,
+                'created': False,
+                'speech_seconds': 0.0 if empty_outcome else 1.0,
+            },
+        }
+
+    store = _ledger_completion_store(db)
+    session = Mock(job={}, ledger_ref=ledger)
+    session.prepare.side_effect = lambda tx, **_: setattr(session, 'ledger', ledger.get(transaction=tx).to_dict())
+    monkeypatch.setattr(store, 'session', lambda *a, **k: session)
+    monkeypatch.setattr(store, '_observe_transcription', Mock())
+    monkeypatch.setattr(store, '_settle_allowance', settle_allowance if settle_allowance is not None else Mock())
+    monkeypatch.setattr(store, 'run', lambda operation, **_: operation(db.transaction()))
+    accounting = {'seconds': 0.0 if empty_outcome else float(unit_count), 'updates': {}}
+
+    def complete(now):
+        return store.complete(first, binding, now, accounting)
+
+    return complete, ledger.path, [db.rows[f'{namespace}_results', sid]['projection'] for sid in binding.segment_ids]
+
+
+def test_ordinary_upload_observes_first_durable_transcript_only(monkeypatch):
+    from database import batch_pipeline_upload_metrics as metrics
+
+    monkeypatch.setenv('OMI_ENV_STAGE', 'dev')
+    uid, cid = 'synthetic-owner', 'synthetic-conversation'
+    db = StrictFirestore({('users', uid, 'conversations', cid): {'status': 'completed'}})
+    settle_allowance = Mock(side_effect=[RuntimeError('synthetic post-commit failure'), None])
+    complete, ledger_path, _ = native_finish_completion(
+        monkeypatch, db, uid, cid, 2, native_record=False, settle_allowance=settle_allowance
+    )
+    db.rows[ledger_path].update(
+        upload_arrived_at=100.0, upload_entitlement='free', upload_hold_state='bg300', upload_recovered=True
+    )
+    delivered = Mock()
+    monkeypatch.setattr(metrics, 'DELIVERED', delivered)
+
+    with pytest.raises(RuntimeError, match='synthetic post-commit failure'):
+        complete(172.0)
+    assert db.rows[ledger_path]['status'] == 'completed'
+    assert complete(200.0) is not None
+    delivered.labels.assert_called_once_with('free', 'bg300', 'true')
+    delivered.labels.return_value.observe.assert_called_once_with(72.0)
+
+
+@pytest.mark.parametrize('marker_mode', ['on', 'off'])
+def test_full_multi_unit_completion_consumes_late_v3_finish_once(monkeypatch, marker_mode):
+    from datetime import datetime, timezone
+
+    from database import batch_pipeline_projection as completion
+    from utils.conversations.v3.live import FINISH_WINDOW_FIELD
+
+    monkeypatch.setenv('OMI_ENV_STAGE', 'offline')
+    monkeypatch.setenv('CONVERSATIONS_V3_BATCH_MANUAL_END', marker_mode)
+    enqueue = Mock()
+    monkeypatch.setattr(completion.v3_triggers, 'enqueue_pending', enqueue)
+
+    uid, cid = 'synthetic-owner', 'capture'
+    path = ('users', uid, 'conversations', cid)
+    db = StrictFirestore(
+        {
+            path: {
+                'recording': True,
+                'status': 'completed',
+                'finished_at': datetime.fromtimestamp(1, timezone.utc),
+                'record_projection_revision': 1,
+                'v3_manual_end_requested': True,
+                FINISH_WINDOW_FIELD: 'visible-window',
+            }
+        }
+    )
+    complete, ledger_path, receipts = native_finish_completion(monkeypatch, db, uid, cid, 2)
+    receipts[1]['state'] = 'persisted'
+    assert complete(2) is None
+    assert 'v3_manual_end' not in db.rows[path]
+    assert not db.transactions[-1].updates
+    enqueue.assert_not_called()
+
+    receipts[1]['state'] = 'ready'
+    db.rows[path]['record_projection_revision'] = 2
+    assert complete(3)['outcome'] == 'success'
+    assert db.rows[ledger_path]['status'] == 'completed'
+    if marker_mode == 'on':
+        assert db.rows[path]['v3_manual_end'] and db.rows[path]['v3_pending']
+        enqueue.assert_called_once_with(uid, manual_end_id=cid)
+    else:
+        assert db.rows[path]['v3_manual_end_requested'] and 'v3_manual_end' not in db.rows[path]
+        enqueue.assert_not_called()
+    assert complete(4)['outcome'] == 'success'
+    assert not db.transactions[-1].updates
+    assert enqueue.call_count == int(marker_mode == 'on')
+
+
+@pytest.mark.parametrize('unit_count', [1, 2])
+def test_native_completion_resolves_recording_finish_on_the_redirect_donor(monkeypatch, unit_count):
+    monkeypatch.setenv('OMI_ENV_STAGE', 'offline')
+    monkeypatch.setenv('CONVERSATIONS_V3_BATCH_MANUAL_END', 'on')
+    counter, enqueue = Mock(), Mock()
+    monkeypatch.setattr(completion.v3_metrics, 'FINISH_NO_POINTER', counter)
+    monkeypatch.setattr(completion.v3_triggers, 'enqueue_pending', enqueue)
+    uid, cid = 'synthetic-owner', 'capture'
+    path = ('users', uid, 'conversations', cid)
+    destination_path = (*path[:-1], 'survivor')
+    end = datetime.fromtimestamp(1, timezone.utc)
+    survivor = {'recording': True, 'status': 'completed', 'finished_at': end + timedelta(seconds=10)}
+    db = StrictFirestore(
+        {
+            path: {
+                'recording': True,
+                'status': 'completed',
+                'finished_at': end,
+                'record_projection_revision': unit_count,
+                'deleted': True,
+                'discarded': True,
+                'sync_merged_into': 'survivor',
+                'v3_manual_end_requested': True,
+                FINISH_RECORDING_FIELD: True,
+            },
+            destination_path: dict(survivor),
+        }
+    )
+    complete, ledger_path, receipts = native_finish_completion(monkeypatch, db, uid, cid, unit_count)
+    receipts[-1]['state'] = 'persisted'
+    assert complete(2) is None
+    assert db.rows[path]['v3_manual_end_requested'] is True
+    counter.labels.assert_not_called()
+
+    receipts[-1]['state'] = 'ready'
+    for now in (3, 4):
+        assert complete(now)['updated_memories'] == ['survivor']
+    assert db.rows[ledger_path]['status'] == 'completed'
+    assert db.rows[path]['v3_manual_end_requested'] is False
+    assert 'v3_manual_end' not in db.rows[path]
+    assert db.rows[destination_path] == survivor
+    counter.labels.assert_called_once_with('whole_record_redirected')
+    counter.labels.return_value.inc.assert_called_once_with()
+    enqueue.assert_not_called()

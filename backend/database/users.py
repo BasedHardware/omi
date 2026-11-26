@@ -33,6 +33,11 @@ from database.batch_account_authority import (
     mutate_account_authority,
     write_account_authority,
 )
+from database.conversation_effect_fence import (
+    ConversationEffectSource,
+    ProfileConversationInput,
+    require_active_account,
+)
 from database.account_deletion_policy import (
     ACCOUNT_DELETION_GRACE_STATUS,
     deletion_billing_error_is_already_gone,
@@ -61,6 +66,7 @@ from database.redis_db import (
     try_acquire_client_device_write_lock,
     try_acquire_user_platform_write_lock,
 )
+from utils.other.request_deadline import request_deadline_remaining_seconds
 from models.users import (
     LOCATION_CONTEXT_DISCLOSED_PROVIDERS,
     LOCATION_CONTEXT_PURPOSE,
@@ -74,6 +80,18 @@ from models.other import Person
 import logging
 
 logger = logging.getLogger(__name__)
+
+
+def _request_deadline_firestore_kwargs() -> dict[str, float]:
+    """Pass the active route budget to Firestore, or skip work after expiry."""
+    remaining = request_deadline_remaining_seconds()
+    if remaining is None:
+        return {}
+    if remaining <= 0.0:
+        raise TimeoutError('request deadline expired before Firestore call')
+    return {'timeout': remaining}
+
+
 # Run-lock TTL (30 minutes) plus grace for a dead worker's last heartbeat.
 DELETION_WIPE_RUNNING_STALE_AFTER = timedelta(minutes=45)
 _DELETION_WIPE_TERMINAL_STATUSES = frozenset({'completed', 'cancelled'})
@@ -174,11 +192,11 @@ def record_client_device(
         if label:
             updates['label'] = label
 
-        snapshot = doc_ref.get()
+        snapshot = doc_ref.get(**_request_deadline_firestore_kwargs())
         if not snapshot.exists:
             updates['first_seen_at'] = now
 
-        doc_ref.set(updates, merge=True)
+        doc_ref.set(updates, merge=True, **_request_deadline_firestore_kwargs())
     except Exception as e:  # noqa: BLE001
         logger.warning("record_client_device failed for uid=%s: %s", uid, e)
 
@@ -219,7 +237,7 @@ def record_user_platform(uid: str, raw_platform: Optional[str]) -> None:
         # `signup_platform` is set_once. Read the doc (single read) and only
         # include the field in the write if it's not already present. Cheaper
         # than a transaction for a field that almost never changes.
-        snapshot = user_ref.get()
+        snapshot = user_ref.get(**_request_deadline_firestore_kwargs())
         if snapshot.exists:
             data = snapshot.to_dict() or {}
             if not data.get('signup_platform'):
@@ -232,7 +250,7 @@ def record_user_platform(uid: str, raw_platform: Optional[str]) -> None:
             updates['signup_os'] = os_value
             updates['signup_platform_at'] = now
 
-        user_ref.set(updates, merge=True)
+        user_ref.set(updates, merge=True, **_request_deadline_firestore_kwargs())
     except Exception as e:  # noqa: BLE001
         logger.warning("record_user_platform failed for uid=%s: %s", uid, e)
 
@@ -2066,16 +2084,24 @@ def _s4_get_user_subscription_uncached(
 
 def get_existing_user_subscription(uid: str, *, firestore_client: Any | None = None) -> Optional[Subscription]:
     """Gets the user's stored subscription without creating a default record."""
+    return get_existing_user_subscription_and_fields(uid, (), firestore_client=firestore_client)[0]
+
+
+def get_existing_user_subscription_and_fields(
+    uid: str, fields: tuple[str, ...], *, firestore_client: Any | None = None
+) -> tuple[Optional[Subscription], dict]:
+    """The stored subscription plus top-level ``fields`` of the user document, in the same single read."""
     user_ref = (firestore_client or db).collection('users').document(uid)
-    user_doc = user_ref.get(['subscription'])
+    user_doc = user_ref.get(['subscription', *fields])
     if not user_doc.exists:
         observe_subscription(uid, None)
-        return None
+        return None, {}
 
     user_data = user_doc.to_dict()
+    extra = {name: user_data.get(name) for name in fields}
     if 'subscription' not in user_data:
         observe_subscription(uid, None)
-        return None
+        return None, extra
 
     sub_data = user_data['subscription']
 
@@ -2089,7 +2115,7 @@ def get_existing_user_subscription(uid: str, *, firestore_client: Any | None = N
 
     subscription = parse_snapshot_strict(Subscription, user_doc, payload_from_snapshot=subscription_payload)
     observe_subscription(uid, subscription)
-    return subscription
+    return subscription, extra
 
 
 def get_user_training_data_opt_in(uid: str) -> Optional[dict]:
@@ -2678,7 +2704,21 @@ def update_ai_user_profile(
 
 
 @transactional
-def _write_ai_user_profile_if_unchanged_txn(transaction, user_ref, expected_text: str, profile: dict) -> bool:
+def _write_ai_user_profile_if_unchanged_txn(
+    transaction,
+    client,
+    uid: str,
+    expected_text: str,
+    profile: dict,
+    effect_source: ConversationEffectSource | None,
+    conversation_inputs: tuple[ProfileConversationInput, ...],
+) -> bool:
+    require_active_account(transaction, client, uid)
+    if effect_source is not None:
+        effect_source.validate(transaction, client, uid)
+    for source in conversation_inputs:
+        source.validate(transaction, client, uid)
+    user_ref = client.collection('users').document(uid)
     snapshot = user_ref.get(transaction=transaction)
     if not snapshot.exists:
         return False
@@ -2689,14 +2729,20 @@ def _write_ai_user_profile_if_unchanged_txn(transaction, user_ref, expected_text
     return True
 
 
-def write_ai_user_profile_if_unchanged(uid: str, expected_text: str, profile: dict) -> bool:
-    """Replace the generated profile only if the stored text is still the synthesis input.
-
-    A user edit or delete that lands while the model runs wins; returns False then.
-    """
-    client = get_firestore_client()
-    user_ref = client.collection('users').document(uid)
-    written = _write_ai_user_profile_if_unchanged_txn(client.transaction(), user_ref, expected_text, profile)
+def write_ai_user_profile_if_unchanged(
+    uid: str,
+    expected_text: str,
+    profile: dict,
+    *,
+    effect_source: ConversationEffectSource | None = None,
+    conversation_inputs: tuple[ProfileConversationInput, ...] = (),
+    firestore_client: Any = None,
+) -> bool:
+    """Replace the generated profile if the account, source inputs and stored text are current."""
+    client = firestore_client if firestore_client is not None else get_data_plane_firestore_client()
+    written = _write_ai_user_profile_if_unchanged_txn(
+        client.transaction(), client, uid, expected_text, profile, effect_source, conversation_inputs
+    )
     invalidate(_USER_AI_PROFILE_CACHE, uid)
     return written
 

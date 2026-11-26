@@ -650,6 +650,25 @@ def test_backstop_runs_at_most_twice_and_only_for_a_routable_rejection():
     assert len(calls) == 1
 
 
+def test_backstop_reraises_superseded_raised_on_the_retry_leg(caplog):
+    """A user-authority guard hit while replanning is terminal, never a third try."""
+
+    calls = []
+
+    def run(full_ids):
+        calls.append(full_ids)
+        if len(calls) == 1:
+            raise _size_error('users/u/conversations/full')
+        raise SyncAssignmentSuperseded('sync anchor is user managed')
+
+    with caplog.at_level('DEBUG', logger=assignment.__name__):
+        with pytest.raises(SyncAssignmentSuperseded, match='user managed'):
+            assignment.run_with_size_limit_backstop(run, lambda: 'full')
+    assert calls == [frozenset(), frozenset({'full'})]
+    # One rollover log for the size rejection; the guard raise is never retried.
+    assert sum('reason=size_limit_retry' in record.getMessage() for record in caplog.records) == 1
+
+
 def test_pipeline_doc_kind_prefers_the_bounded_stamp():
     error = _size_error('users/u/conversations/c')
     assert _firestore_doc_kind(error) == 'conversation'

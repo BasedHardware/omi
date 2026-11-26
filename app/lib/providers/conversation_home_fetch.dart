@@ -103,16 +103,20 @@ extension _ConversationHomeFetch on ConversationProvider {
     };
   }
 
-  Future<_HomePage> _getConversationsFromServer() async {
+  /// [since] bounds the read to rows created at or after it (the recent-rows refresh); the
+  /// default reads the newest page.
+  Future<_HomePage> _getConversationsFromServer({DateTime? since}) async {
     final typedApi = _conversationApi;
     var page = const ConversationPageHeaders();
     if (typedApi != null) {
-      final (startDate, endDate) = _getDateFilterRange();
+      var (startDate, endDate) = _getDateFilterRange();
+      startDate = since ?? startDate;
       var storageCount = 0;
       final typed = await typedApi.list(
         heldHomeEpisodes: _homeEpisodeAcknowledgements,
         onStorageCount: (count) => storageCount = count,
         onPageHeaders: (headers) => page = headers,
+        homeMode: 'auto',
         includeDiscarded: showDiscardedConversations,
         startDate: startDate,
         endDate: endDate,
@@ -134,13 +138,15 @@ extension _ConversationHomeFetch on ConversationProvider {
       );
     }
 
-    final (startDate, endDate) = _getDateFilterRange();
+    var (startDate, endDate) = _getDateFilterRange();
+    startDate = since ?? startDate;
 
     var storageCount = 0;
     final result = await getConversationsResult(
       heldHomeEpisodes: _homeEpisodeAcknowledgements,
       onStorageCount: (count) => storageCount = count,
       onPageHeaders: (headers) => page = headers,
+      homeMode: 'auto',
       includeDiscarded: showDiscardedConversations,
       startDate: startDate,
       endDate: endDate,
@@ -158,7 +164,13 @@ extension _ConversationHomeFetch on ConversationProvider {
   }
 
   Future<_HomePage> _getTypedHomePage(
-      ConversationApi api, int offset, String? cursor, DateTime? startDate, DateTime? endDate) async {
+    ConversationApi api,
+    int offset,
+    String? cursor,
+    String? homeMode,
+    DateTime? startDate,
+    DateTime? endDate,
+  ) async {
     var storageCount = 0;
     var page = const ConversationPageHeaders();
     final result = await api.list(
@@ -168,6 +180,7 @@ extension _ConversationHomeFetch on ConversationProvider {
       limit: ConversationProvider._conversationPageSize,
       offset: offset,
       cursor: cursor,
+      homeMode: homeMode,
       includeDiscarded: showDiscardedConversations,
       startDate: startDate,
       endDate: endDate,

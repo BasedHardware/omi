@@ -15084,9 +15084,6 @@ class AppLocalizationsZh extends AppLocalizations {
   String get stopThese => '停止此类推荐';
 
   @override
-  String get meetingActionItemsTitle => '行动事项';
-
-  @override
   String get addToTasks => '添加到任务';
 
   @override
@@ -15567,4 +15564,24 @@ class AppLocalizationsZh extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get playStripeBilledOnWeb => '通过 omi.me 计费。可随时在此取消。';
+
+  @override
+  String get playStripeBilledOnWebShort => '通过 omi.me 计费。';
+
+  @override
+  String playStripePlanPaused(String plan) {
+    return '你的 $plan 方案已暂停。';
+  }
+
+  @override
+  String get firmwareNewestSupportedForDevice => '您的设备已处于所支持的最新固件版本';
+
+  @override
+  String get firmwareSyncRecordingsFirstTitle => '请先同步录音';
+
+  @override
+  String get firmwareSyncRecordingsFirstMessage => '部分录音仍存储在您的设备上。请等待它们同步到手机完成后，再开始更新。';
 }

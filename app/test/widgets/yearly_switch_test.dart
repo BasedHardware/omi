@@ -3,6 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'package:omi/backend/http/api/payment.dart' show paymentErrorFromBody;
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/gen/payments_wire.g.dart' as wire;
 import 'package:omi/l10n/app_localizations.dart';
@@ -16,6 +17,12 @@ import 'package:omi/utils/platform/platform_manager.dart';
 import '../support/recording_analytics.dart';
 
 final _now = DateTime.utc(2026, 10, 26, 12);
+const _play = PlayBillingConfig(
+  productId: 'omi_pro',
+  basePlans: {'monthly': 'month', 'yearly': 'year'},
+  trialOfferId: 'trial-7d',
+  obfuscatedAccountId: 'acct-hash',
+);
 final int _prorationDate = _now.millisecondsSinceEpoch ~/ 1000;
 final int _renewsAt = DateTime.utc(2027, 10, 26, 12).millisecondsSinceEpoch ~/ 1000;
 
@@ -105,6 +112,7 @@ Future<_Usage> _pump(
   Widget child, {
   SubscriptionStatus status = SubscriptionStatus.active,
   int? periodEnd,
+  PlayBillingConfig? play,
 }) async {
   tester.view.physicalSize = const Size(430, 932);
   tester.view.devicePixelRatio = 1;
@@ -127,6 +135,7 @@ Future<_Usage> _pump(
       wordsTranscribedLimit: 0,
       insightsGainedUsed: 0,
       insightsGainedLimit: 0,
+      playBilling: play,
     ),
   );
   await tester.pumpWidget(
@@ -298,6 +307,46 @@ void main() {
       expect(find.text(l10n.yearlySwitchFailed), findsOneWidget);
       expect(analytics.propertiesOf('Subscription Yearly Switch Failed').last['reason'], 'error');
     });
+
+    for (final (code, body, message) in [
+      (
+        'use_google_play',
+        '{"detail": "Subscribe with Google Play in the app.", "code": "use_google_play"}',
+        'Subscribe with Google Play in the app.',
+      ),
+      (
+        'play_on_hold',
+        '{"detail": "You have a Google Play subscription on hold. Fix the payment in Google Play.", '
+            '"code": "play_subscription_on_hold"}',
+        'You have a Google Play subscription on hold. Fix the payment in Google Play.',
+      ),
+    ]) {
+      testWidgets('a $code refusal shows the server sentence, never JSON', (tester) async {
+        final backend = _Backend(offer: _offer(), switchResult: paymentErrorFromBody(403, body));
+        await _pump(tester, YearlySwitchPlansRow(load: backend.load, apply: backend.apply));
+        await tester.tap(find.byKey(const Key('yearly_switch_plans_row')));
+        await tester.pumpAndSettle();
+        await tester.tap(find.byKey(const Key('yearly_switch_confirm')));
+        await tester.pumpAndSettle();
+        expect(tester.takeException(), isNull);
+        expect(find.text(message), findsOneWidget);
+        expect(find.textContaining('{'), findsNothing);
+        analytics.expectSingle('Subscription Yearly Switch Failed', {'surface': 'plans', 'reason': 'refused'});
+      });
+    }
+
+    testWidgets('a build that sells through Google Play never offers or reads the switch', (tester) async {
+      final backend = _Backend(offer: _offer());
+      await _pump(tester, YearlySwitchPlansRow(load: backend.load, apply: backend.apply), play: _play);
+      expect(find.byKey(const Key('yearly_switch_plans_row')), findsNothing);
+      expect(backend.loads, isEmpty);
+    }, variant: TargetPlatformVariant.only(TargetPlatform.android));
+
+    testWidgets('iOS ignores Play setup and keeps the switch', (tester) async {
+      final backend = _Backend(offer: _offer());
+      await _pump(tester, YearlySwitchPlansRow(load: backend.load, apply: backend.apply), play: _play);
+      expect(find.byKey(const Key('yearly_switch_plans_row')), findsOneWidget);
+    }, variant: TargetPlatformVariant.only(TargetPlatform.iOS));
 
     testWidgets('a preview that fails to load offers Try Again instead of a guess', (tester) async {
       final backend = _Backend(offer: _offer(), previewFailures: 1);

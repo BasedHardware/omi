@@ -90,11 +90,11 @@ class _LiveEpisodeRowState extends State<LiveEpisodeRow> {
         c.pendantReconnectInFlight,
         c.segmentsPhotosVersion,
         c.livePreview,
-        c.localPreviewAdmitted,
+        c.liveWordsShown,
       ),
     );
     final capture = context.read<CaptureProvider>();
-    final preview = capture.localPreviewAdmitted ? capture.livePreview : null;
+    final preview = capture.liveWordsShown ? capture.livePreview : null;
     // Share one snippet between the visible subtitle and its spoken label.
     return ListenableBuilder(
       listenable: preview ?? const AlwaysStoppedAnimation<double>(0),
@@ -131,7 +131,7 @@ class _LiveEpisodeRowState extends State<LiveEpisodeRow> {
     // A local-preview session reads its newest on-device words on line two, trimmed at the
     // start so the latest words stay visible, for the whole session: words the final
     // transcript already covers drop out, the rest stay. The duration lives in the tile.
-    final preview = listening && capture.localPreviewAdmitted ? capture.livePreview : null;
+    final preview = listening && capture.liveWordsShown ? capture.livePreview : null;
     String previewText() {
       if (!listening) return '';
       final uncovered = preview == null

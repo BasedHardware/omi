@@ -40,7 +40,7 @@ AUTO_SOURCE_ADMISSION_CONDITION = "\n".join(
 MANUAL_DEPLOY_CONDITION = "\n".join(
     (
         "github.ref == 'refs/heads/main' &&",
-        "(github.event.inputs.mode == 'deploy' || github.event.inputs.mode == 'build-only' || github.event.inputs.mode == 'workerd-image-only')",
+        "(github.event.inputs.mode == 'deploy' || github.event.inputs.mode == 'build-only' || github.event.inputs.mode == 'workerd-image-only' || github.event.inputs.mode == 'workerd-install' || github.event.inputs.mode == 'workerd-rollback')",
     )
 )
 MANUAL_TRAFFIC_REPAIR_CONDITION = "\n".join(
@@ -614,7 +614,7 @@ def validate_manual_workflow(text: str, root: Path = ROOT) -> list[str]:
     require_fragment(
         errors,
         text,
-        "      release_sha:\n        description: 'Exact main SHA with a successful Release Eligibility proof (deploy and build-only modes)'\n        required: false",
+        "      release_sha:\n        description: 'Exact SHA with a successful Release Eligibility proof (main by default)'\n        required: false",
         "manual backend deploy must keep release_sha optional for traffic-only repair",
     )
     if "github.event.inputs.branch" in text or re.search(r"(?m)^      branch:\n", text):
@@ -771,6 +771,62 @@ def validate_manual_workflow(text: str, root: Path = ROOT) -> list[str]:
         )
     errors.extend(validate_manual_build_only_job(text))
     errors.extend(validate_workerd_publish_job(text))
+    errors.extend(validate_workerd_helm_job(text))
+    return errors
+
+
+WORKERD_HELM_CONDITION = "\n".join((
+    "github.ref == 'refs/heads/main' &&",
+    "(inputs.mode == 'workerd-install' || inputs.mode == 'workerd-rollback') &&",
+    "inputs.environment == 'prod' &&",
+    "needs.firestore_readiness.outputs.break_glass == 'false'",
+))
+# SCA-3883: the only route that installs the workerd chart. Each fragment is a refusal or an
+# ordering the release go-ahead relies on.
+WORKERD_HELM_FRAGMENTS = (
+    "needs: [validate-production-boundary, firestore_readiness]",
+    MANUAL_BUILD_ONLY_ADMITTED_CHECKOUT,
+    "environment: prod",
+    "RELEASE: prod-omi-workerd",
+    "REPOSITORY: gcr.io/based-hardware/workerd",
+    "version: v4.2.4",
+    '--ref "$ADMITTED_SHA" --verify-image "$REPOSITORY" --check-worktree)"',
+    'if [[ "$identity" != "$EXPECTED_IDENTITY" ]]; then',
+    "Release identity differs from workerd_identity; refusing to install.",
+    "--set migration.enabled=true",
+    'kubectl -n "$NAMESPACE" wait --for=condition=complete "job/$job" --timeout=150s',
+    "Workerd migration did not complete; the Deployment is unchanged.",
+    'kubectl -n "$NAMESPACE" rollout status "deployment/$RELEASE" --timeout=5m',
+    "curl -fsS -m 5 http://127.0.0.1:18080/ready",
+    "if: failure() && inputs.mode == 'workerd-install' && steps.install.outcome != 'skipped'",
+    'helm -n "$NAMESPACE" rollback "$RELEASE" "$REVISION" --wait --timeout 5m',
+    "refusing a rollback that would enable private intake.",
+    "refusing ${{ inputs.mode }} while private intake is live.",
+    "not restoring it automatically.",
+    'if [[ "$REVISION" == 0 ]]; then',
+    'if [[ "${{ inputs.mode }}" == workerd-install && "$image" != "$REPOSITORY@$WORKERD_DIGEST" ]]; then',
+    '[[ "${ready%/*}" == "${ready#*/}" ]]',
+    '--revision "$REVISION" --all -o json | jq -r \'.intake.enabled // false\')"',
+)
+
+
+def validate_workerd_helm_job(text: str) -> list[str]:
+    job = mapping_block(text, "workerd-helm", 2)
+    if job is None:
+        return ["manual backend workflow is missing its workerd install/rollback job"]
+    errors: list[str] = []
+    if folded_job_condition(job) != WORKERD_HELM_CONDITION:
+        errors.append("workerd helm must run only for normal admitted main-ref production install or rollback")
+    for fragment in WORKERD_HELM_FRAGMENTS:
+        require_fragment(errors, job, fragment, f"workerd helm must retain {fragment}")
+    migrate = job.find("name: Run migration Job")
+    install = job.find("name: Install chart")
+    identity = job.find("name: Verify release identity")
+    if not 0 <= identity < migrate < install:
+        errors.append("workerd helm must verify the identity, then migrate, then install")
+    for fragment in ("gcloud run", "--to-revisions", "update-traffic"):
+        if fragment in job:
+            errors.append(f"workerd helm must not touch Cloud Run: {fragment}")
     return errors
 
 

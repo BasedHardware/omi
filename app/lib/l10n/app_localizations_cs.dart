@@ -15336,9 +15336,6 @@ class AppLocalizationsCs extends AppLocalizations {
   String get stopThese => 'Zastavit tyto';
 
   @override
-  String get meetingActionItemsTitle => 'Akční položky';
-
-  @override
   String get addToTasks => 'Přidat do úkolů';
 
   @override
@@ -15823,4 +15820,25 @@ class AppLocalizationsCs extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get playStripeBilledOnWeb => 'Účtováno přes omi.me. Zrušit můžete kdykoli zde.';
+
+  @override
+  String get playStripeBilledOnWebShort => 'Účtováno přes omi.me.';
+
+  @override
+  String playStripePlanPaused(String plan) {
+    return 'Váš tarif $plan je pozastaven.';
+  }
+
+  @override
+  String get firmwareNewestSupportedForDevice => 'Vaše zařízení už používá nejnovější podporovanou verzi firmwaru';
+
+  @override
+  String get firmwareSyncRecordingsFirstTitle => 'Nejprve synchronizujte své nahrávky';
+
+  @override
+  String get firmwareSyncRecordingsFirstMessage =>
+      'Některé nahrávky jsou stále ve vašem zařízení. Počkejte, až se synchronizují do telefonu, a potom spusťte aktualizaci.';
 }

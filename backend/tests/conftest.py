@@ -1,10 +1,12 @@
 """Shared pytest hooks for the whole backend test tree."""
 
 from collections import defaultdict
+from importlib.machinery import PathFinder
 import os
 import subprocess
 import sys
 from pathlib import Path
+from threading import local
 import time
 import pytest
 from types import ModuleType
@@ -56,6 +58,13 @@ _redis_guard = None
 _test_file_durations = defaultdict(float)
 _test_item_durations = defaultdict(float)
 _test_item_cpu = defaultdict(float)
+_test_item_imports = {}
+_import_call = local()
+_cpu_time = time.process_time
+_timing_recheck_dir = None
+_timing_result = None
+_rechecked_node = None
+_failed_timing_nodes = set()
 _collected_unit_files = set()
 
 _UNIT_TEST_ROOTS = (
@@ -134,10 +143,66 @@ def _stub_unrelated_account_deletion_reads(item):
     return originals
 
 
+class _ImportTimingLoader:
+    def __init__(self, loader):
+        self.loader = loader
+
+    def __getattr__(self, name):
+        return getattr(self.loader, name)
+
+    def exec_module(self, module):
+        # Keep the original loader visible to the module and resource APIs.
+        if module.__loader__ is self:
+            module.__loader__ = self.loader
+        if module.__spec__.loader is self:
+            module.__spec__.loader = self.loader
+        imports = getattr(_import_call, 'entries', None)
+        if imports is None:
+            self.loader.exec_module(module)
+            return
+        _import_call.entries = None
+        started = _cpu_time()
+        try:
+            self.loader.exec_module(module)
+        finally:
+            imports.append((module.__name__, _cpu_time() - started))
+            _import_call.entries = imports
+
+
+class _ImportTimingFinder:
+    def __getattr__(self, name):
+        # PathFinder also resolves distribution metadata and invalidates caches.
+        return getattr(PathFinder, name)
+
+    @staticmethod
+    def find_spec(fullname, path=None, target=None):
+        spec = PathFinder.find_spec(fullname, path, target)
+        # Wrap only cold path-based imports on the test call thread. Disabling
+        # tracking during exec_module counts the entire nested graph exactly once.
+        if (
+            spec is not None
+            and target is None
+            and getattr(_import_call, 'entries', None) is not None
+            and hasattr(spec.loader, 'exec_module')
+        ):
+            spec.loader = _ImportTimingLoader(spec.loader)
+        return spec
+
+
+_import_timing_finder = _ImportTimingFinder()
+
+
 def pytest_sessionstart(session):
-    global _network_guard
+    global _network_guard, _timing_recheck_dir, _timing_result, _rechecked_node
+    # These files belong to this pytest session. Child test subprocesses must
+    # not register unrelated timings with the enclosing CI shard.
+    _timing_recheck_dir = os.environ.pop('BACKEND_UNIT_TIMING_RECHECK_DIR', None)
+    _timing_result = os.environ.pop('BACKEND_UNIT_TIMING_RESULT', None)
+    _rechecked_node = None
+    _failed_timing_nodes.clear()
     _network_guard = block_outbound_network()
     _network_guard.__enter__()
+    sys.meta_path[sys.meta_path.index(PathFinder)] = _import_timing_finder
     session.config._backend_test_start_time = time.perf_counter()
 
 
@@ -163,6 +228,11 @@ def pytest_collection_finish(session):
 def pytest_runtest_logreport(report):
     if report.when not in {'setup', 'call', 'teardown'}:
         return
+    global _rechecked_node
+    if report.failed and _timing_recheck_dir:
+        _failed_timing_nodes.add(report.nodeid)
+    if report.when == 'call' and report.passed and _timing_result:
+        _rechecked_node = report.nodeid
     test_file = _backend_relative(report.fspath)
     if test_file is not None and test_file in _collected_unit_files:
         _test_file_durations[test_file] += report.duration
@@ -171,27 +241,32 @@ def pytest_runtest_logreport(report):
 
 @pytest.hookimpl(hookwrapper=True)
 def pytest_runtest_call(item):
-    """Measure per-test CPU time (call phase only) for the duration guard.
-
-    CPU time (``time.process_time``) is far less load-sensitive than wall-clock
-    ``report.duration``, but it is not load-independent: contention stall cycles are charged
-    to the process, so identical work reads ~2x higher CPU when the file-isolated runner
-    saturates the machine. The blocking budget therefore has to keep headroom over the warn
-    target (see ``test.sh``) rather than sit just above it. Only the *call* phase is measured
-    so that shared class/file setup
-    (FastAPI app / TestClient construction, per-process module import) — which file-isolated
-    runs charge once to the first test — is not misattributed as a per-test regression. The
-    advisory timing summary still reports wall-clock for visibility.
-    """
+    """Measure per-test call CPU after subtracting cold module execution."""
     originals = _stub_unrelated_account_deletion_reads(item)
-    start = time.process_time()
+    measure = _is_unit_test_path(item.path)
+    imports = []
+    if measure:
+        _import_call.entries = imports
+        started = _cpu_time()
     try:
         yield
     finally:
+        if measure:
+            elapsed = _cpu_time() - started
+            _import_call.entries = None
+            import_cpu = sum(seconds for _, seconds in imports)
+            _test_item_cpu[item.nodeid] += max(0.0, elapsed - import_cpu)
+            if imports:
+                _test_item_imports[item.nodeid] = (elapsed, import_cpu, ', '.join(name for name, _ in imports))
         for function_globals, status_reader in originals:
             function_globals['get_user_deletion_wipe_status'] = status_reader
-    if _is_unit_test_path(item.path):
-        _test_item_cpu[item.nodeid] += time.process_time() - start
+
+
+def _import_timing_note(nodeid):
+    if nodeid not in _test_item_imports:
+        return ''
+    elapsed, import_cpu, names = _test_item_imports[nodeid]
+    return f' ({elapsed:.2f} s call, {import_cpu:.2f} s of it first-time imports of {names})'
 
 
 _xdist_duration_failures = []
@@ -213,6 +288,9 @@ def _report_failed_files(terminalreporter, offenders):
 
 def pytest_sessionfinish(session, exitstatus):
     global _network_guard, _redis_guard
+    if _import_timing_finder in sys.meta_path:
+        sys.meta_path[sys.meta_path.index(_import_timing_finder)] = PathFinder
+    original_status = session.exitstatus
     failures = _enforce_fast_unit_duration_guard(session)
     # Under xdist the guard runs inside a worker, and a worker's ``session.exitstatus``
     # is discarded by the controller -- the run's status comes from test outcomes alone.
@@ -232,12 +310,34 @@ def pytest_sessionfinish(session, exitstatus):
             terminalreporter.line(f'Allow intentional exceptions in {_FAST_UNIT_ALLOWLIST.relative_to(BACKEND_DIR)}.')
             _report_failed_files(terminalreporter, _xdist_duration_failures)
         session.exitstatus = 1
+        failures = [*failures, *_xdist_duration_failures]
+    if workeroutput is None:
+        _publish_timing_recheck(session, original_status, failures)
     if _redis_guard is not None:
         _redis_guard.__exit__(None, None, None)
         _redis_guard = None
     if _network_guard is not None:
         _network_guard.__exit__(None, None, None)
         _network_guard = None
+
+
+def _publish_timing_recheck(session, original_status, failures):
+    if (
+        _timing_recheck_dir
+        and original_status in (pytest.ExitCode.OK, pytest.ExitCode.TESTS_FAILED)
+        and failures
+        and _GUARD_CONFIG_ERROR[0] not in failures
+    ):
+        retry_nodes = [(nodeid, cpu) for nodeid, cpu in failures if nodeid not in _failed_timing_nodes]
+        if retry_nodes:
+            # Separate files keep writes from parallel pytest processes independent.
+            Path(_timing_recheck_dir, f'{os.getpid()}.tsv').write_text(
+                ''.join(f'{cpu:.6f}\t{nodeid}\n' for nodeid, cpu in retry_nodes), encoding='utf-8'
+            )
+            session.exitstatus = original_status
+
+    if _timing_result and _rechecked_node in _test_item_cpu and session.exitstatus == pytest.ExitCode.OK:
+        Path(_timing_result).write_text(f'{_test_item_cpu[_rechecked_node]:.6f}\t{_rechecked_node}\n', encoding='utf-8')
 
 
 try:  # pragma: no cover - depends on whether pytest-xdist is installed
@@ -355,11 +455,11 @@ def _enforce_fast_unit_duration_guard(session):
         if warning_offenders:
             terminalreporter.section('Backend fast unit duration guard warnings (CPU time)')
             for test_id, seconds in warning_offenders:
-                terminalreporter.line(f'{seconds:7.2f}s > {warn_limit:.2f}s  {test_id}')
+                terminalreporter.line(f'{seconds:7.2f}s > {warn_limit:.2f}s  {test_id}{_import_timing_note(test_id)}')
         if failure_offenders:
             terminalreporter.section('Backend fast unit duration guard failures (CPU time)')
             for test_id, seconds in failure_offenders:
-                terminalreporter.line(f'{seconds:7.2f}s > {fail_limit:.2f}s  {test_id}')
+                terminalreporter.line(f'{seconds:7.2f}s > {fail_limit:.2f}s  {test_id}{_import_timing_note(test_id)}')
         terminalreporter.line(
             f'(CPU time, call phase only; warn limit = {warn_limit:.2f}s'
             + (f', fail limit = {fail_limit:.2f}s.)' if fail_limit is not None else '.)')

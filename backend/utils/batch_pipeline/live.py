@@ -15,14 +15,23 @@ import logging
 import math
 import os
 import random
+import threading
 import time
 
+from utils.conversations.v3.live import FINISH_RECORDING_FIELD
 from utils.conversations import phase_shadow
 
 from config.policy import resolve_batch_policy
 from config.audio_archive import derived_audio_bucket
 from config.record_wal_duplicate import SOURCE_FIELD
-from config.record_audio import BARRIER_NOT_CLOSED, require_record_audio_barrier, record_identity
+from config.record_audio import (
+    BARRIER_BLOCKERS,
+    BARRIER_NOT_CLOSED,
+    TOKEN_KINDS,
+    barrier_cause_metrics_enabled,
+    record_identity,
+    require_record_audio_barrier,
+)
 from config.record_partial import UNIT_SECONDS, UNIT_REFERENCES, INVENTORY_POLL_SECONDS
 from config.record_latency import record_seal_wake_preserved_enabled
 from config.record_drain import (
@@ -51,7 +60,14 @@ from database.batch_pipeline_shadow_hook import shadow_from_env
 from utils.batch_pipeline.artifact_policy import create_artifact_store
 from utils.batch_pipeline.contracts import ProjectionBinding, WorkItem
 from utils.batch_pipeline.scheduler import owner_key
-from utils.batch_pipeline.source_audio import MAGIC, MAX_REFERENCES, read_reference, batch_timing_store
+from utils.batch_pipeline.artifact_reads import ArtifactReadBudget
+from utils.batch_pipeline.source_audio import (
+    MAGIC,
+    MAX_REFERENCES,
+    MAX_SOURCE_BYTES,
+    read_reference,
+    batch_timing_store,
+)
 from utils.batch_pipeline.record_barrier import validate_record_tail
 from utils.batch_pipeline.record_wal_source import attest
 from utils.batch_pipeline.record_language import prove_manifest
@@ -59,7 +75,7 @@ from utils.batch_pipeline.language_receipt import admission as language_admissio
 from utils.batch_pipeline.record_partial import drain_partial, record_failure as record_partial_failure
 from config.record_seal_rules import overlap_trim_enabled
 from config.record_seal_repair import fresh_enabled as fresh_seal_repair_enabled
-from utils.executors import db_executor, storage_executor, run_blocking
+from utils.executors import db_executor, storage_executor, run_blocking, start_background_task
 from utils.other.local_storage import create_storage_client
 from utils.other.storage import list_audio_chunks, private_cloud_sync_bucket
 from utils.sync.stage import current_stage
@@ -103,6 +119,18 @@ _RETRY_REASONS = frozenset(
         'work identity must match projection binding',
     }
 )
+
+
+def _observe_barrier_refusal(counter, error) -> None:
+    try:
+        blocker = getattr(error, 'barrier_blocker', None)
+        kind = getattr(error, 'barrier_token_kind', None)
+        counter.labels(
+            blocker if blocker in BARRIER_BLOCKERS else 'unknown',
+            kind if kind in TOKEN_KINDS else 'unknown',
+        ).inc()
+    except Exception:
+        pass  # Observability never changes a drain outcome.
 
 
 def _retry_reason(error: BaseException) -> str:
@@ -257,7 +285,16 @@ def register_recording(
 
 
 def retained_record_units(
-    uid, conversation_id, chunks, client, key, *, diagnostics=None, partial=False, decoded_tail=None
+    uid,
+    conversation_id,
+    chunks,
+    client,
+    key,
+    *,
+    diagnostics=None,
+    partial=False,
+    decoded_tail=None,
+    record_source_proof=False,
 ) -> Generator[tuple[float, float, list[dict[str, Any]]], None, None]:
     """Bounded one-hour units; earlier retained objects own overlapping frames."""
     trim_divergent = overlap_trim_enabled()
@@ -278,7 +315,15 @@ def retained_record_units(
             ref, pcm = dict(decoded_tail['ref']), decoded_tail['pcm']
         else:
             pcm = read_reference(
-                client, ref, uid, conversation_id, allowed, key, source_metadata=True, listed_source=chunk
+                client,
+                ref,
+                uid,
+                conversation_id,
+                allowed,
+                key,
+                source_metadata=True,
+                listed_source=chunk,
+                record_source_proof=record_source_proof,
             )
             if decoded_tail is not None and chunk is chunks[-1]:
                 decoded_tail.update(chunk=chunk, ref=dict(ref), pcm=pcm)
@@ -369,6 +414,187 @@ def retained_record_units(
         yield start, end - start, references
 
 
+_FAST_FINISH_TASKS: set = set()
+# Conversations whose first-transcript pass this process already started. Admission can be
+# retried or re-run; one provider transcription per recording is enough.
+_FAST_FINISH_STARTED: dict[str, None] = {}
+_FAST_FINISH_STARTED_MAX = 4096
+# Bound whole passes, not provider requests. Each pass holds a storage thread as its coordinator and
+# up to its window of five-minute chunk buffers (9.6 MB each); its chunk requests run on the shared
+# fast-finish chunk pool, which caps provider requests for the process. Short and serial passes share
+# two slots (4 buffers each); a long pass (over 20 minutes of audio) takes its own single slot (3
+# buffers), so long recordings never hold a short Finish's slot: 11 buffers, about 106 MB, per process,
+# plus at most one buffer per pool worker for a request a stopped pass left running. With
+# CONVERSATIONS_V3_FAST_FINISH_CHUNKED=off every pass is serial and holds a whole recording of up to
+# 20 minutes instead, as before.
+_FAST_FINISH_SLOTS = threading.BoundedSemaphore(2)
+_FAST_FINISH_LONG_SLOTS = threading.BoundedSemaphore(1)
+# A short Finish waits this long for a slot (inside its deadline) instead of answering busy at once.
+_FAST_FINISH_SHORT_SLOT_WAIT_SECONDS = 10.0
+
+
+def _admitted_these_units(admitted, job_id) -> bool:
+    """The intake answered ``batch`` for this binding's own job (a same-job replay included)."""
+    return isinstance(admitted, dict) and admitted.get('outcome') == 'batch' and admitted.get('job_id') == job_id
+
+
+async def _manual_finish_admitted(
+    store, uid, conversation_id, current, units, client, key, privacy_generation=None
+) -> None:
+    """After a manually finished v3 recording is admitted: apply its cut, or start the first transcript.
+
+    A single batch unit projects as one transcript, so its cut is safe to store now. Several units
+    project one at a time; cutting on the first would lock a partial window, so those keep the
+    silence and lock timers unless the first-transcript pass writes every unit at once, and only
+    then does that pass store the cut. Never raises and never delays admission's result.
+    """
+    from config.server_batch import manual_end_marker_enabled
+    from database import conversations as conversations_db, conversations_v3
+    from utils.conversations.v3 import fast_finish, metrics as v3_metrics, triggers as v3_triggers
+
+    # One end-to-end budget for the pass, from here: slot wait and every provider request count.
+    deadline = time.monotonic() + fast_finish.PASS_DEADLINE_SECONDS
+    try:
+        if not current.get('recording') or not current.get('v3_manual_end_requested'):
+            return
+        if not manual_end_marker_enabled():
+            return
+        single = len(units) == 1
+        recording_finish = bool(current.get(FINISH_RECORDING_FIELD))
+        promoted = False
+        if single and not recording_finish:
+            # Stored before any detached work, so losing the process cannot lose a single-unit cut.
+            promoted = await run_blocking(
+                db_executor, conversations_v3.promote_manual_end, uid, conversation_id, firestore_client=store.client
+            )
+            v3_metrics.BATCH_MANUAL_END.labels('promoted' if promoted else 'not_promoted').inc()
+        # ``current`` is a raw row: its stored transcript is opaque here, so this only screens on
+        # clear fields. The pass decides on a decoded row.
+        if fast_finish.mode() == 'off':
+            skipped = 'mode_off'
+        else:
+            skipped = fast_finish.candidate_rejection(current)
+            if skipped is None and conversation_id in _FAST_FINISH_STARTED:
+                skipped = 'already_started'
+        if skipped is not None:
+            fast_finish.SKIPPED.labels(skipped).inc()
+            if not single:
+                v3_metrics.BATCH_MANUAL_END.labels('multi_unit_deferred').inc()
+            return
+        _FAST_FINISH_STARTED[conversation_id] = None
+        while len(_FAST_FINISH_STARTED) > _FAST_FINISH_STARTED_MAX:
+            _FAST_FINISH_STARTED.pop(next(iter(_FAST_FINISH_STARTED)))
+        allowed = {private_cloud_sync_bucket, derived_audio_bucket()}
+        # The manifest and attestation hold the same reference dicts; reading adds metadata to them.
+        copied = [(start, duration, [dict(ref) for ref in refs]) for start, duration, refs in units]
+
+        def read(ref):
+            # A chunked pass's reads end with its deadline: each reference's metadata and download
+            # timeouts are capped to what is left, and one that starts past it refuses at once. The
+            # serial kill-switch path keeps today's 30 s and 60 s timeouts.
+            budget = ArtifactReadBudget(deadline, MAX_SOURCE_BYTES, 1) if fast_finish.chunked_enabled() else None
+            return read_reference(
+                client, ref, uid, conversation_id, allowed, key, source_metadata=True, read_budget=budget
+            )
+
+        def refresh():
+            # Decoded: an empty stored transcript is not empty bytes. A transcript that cannot be
+            # decoded reads as empty, so it is reported as no row: the pass must not treat it as blank.
+            row = conversations_db.get_conversation(
+                uid, conversation_id, firestore_client=store.client, include_transcript_decode_status=True
+            )
+            return row if row and row.get('_recovery_transcript_decoded') is True else {}
+
+        def privacy():
+            # The batch privacy fence at the generation admission was granted under: the account's
+            # current sync authorization and an unchanged privacy generation. It raises when either
+            # no longer holds, and the pass treats any failure as a refusal.
+            store.run(lambda tx: tx.check_privacy(uid, (conversation_id,), privacy_generation))
+            return True
+
+        def fence(transaction):
+            # The same fence, read inside the transcript write's own transaction: an opt-out or a
+            # generation change during the last provider request still refuses publication.
+            # Read-only: no privacy-cache token is minted from inside a customer-data write.
+            from database._client import get_firestore_client
+            from database.batch_pipeline_privacy import assert_batch_write_allowed
+
+            assert_batch_write_allowed(
+                get_firestore_client(),
+                transaction,
+                uid,
+                conversation_ids=(conversation_id,),
+                expected_generation=privacy_generation,
+                allow_token_mint=False,
+            )
+
+        def cut():
+            # Sets the cut and wakes the builder again; the transcript write's own wake may have
+            # run before the cut existed.
+            v3_triggers.changed(uid, conversation_id, manual_end=True)
+
+        def run():
+            # The cohort read is synchronous on this thread. Owners outside the rollout stop here
+            # and never take one of the pass slots.
+            shape = fast_finish.pass_class(copied) if fast_finish.enabled(uid) else None
+            # Length, the long canary and its daily cap need only the units: a Finish they refuse is
+            # counted as such and never holds a slot, so it can neither wait for one nor read as busy.
+            refused = fast_finish.screen(uid, copied) if shape is not None else None
+            slots = _FAST_FINISH_LONG_SLOTS if shape == 'long' else _FAST_FINISH_SLOTS
+            # A short Finish may wait briefly, inside its deadline; a long one and the serial kill-switch
+            # path never wait, as before.
+            patience = min(_FAST_FINISH_SHORT_SLOT_WAIT_SECONDS, deadline - time.monotonic()) if shape == 'short' else 0
+            if shape is None:
+                outcome = 'not_enabled'
+            elif refused is not None:
+                outcome = refused
+                fast_finish.OUTCOMES.labels(refused).inc()
+            elif not (slots.acquire(timeout=patience) if patience > 0 else slots.acquire(blocking=False)):
+                outcome = 'busy'
+                fast_finish.OUTCOMES.labels('busy').inc()
+            else:
+                try:
+                    outcome = fast_finish.run(
+                        uid,
+                        conversation_id,
+                        # No row: the pass reads the decoded row itself, bounded by the deadline.
+                        None,
+                        copied,
+                        read,
+                        refresh=refresh,
+                        # Several units are cut only by a pass that wrote the whole transcript. A
+                        # promoted single unit already holds its cut, but still gets its own
+                        # manual-end wake after the write: the writer's plain wake shares the owner's
+                        # per-minute task name and is skipped when a reconcile already ran that minute.
+                        # Recording-scoped intent is consumed by the native completion transaction.
+                        cut=cut if not recording_finish and (not single or promoted) else None,
+                        privacy=privacy,
+                        fence=fence,
+                        deadline=deadline,
+                    )
+                finally:
+                    slots.release()
+            if outcome == 'written':
+                v3_metrics.BATCH_MANUAL_END.labels('fast_finish').inc()
+            elif not single:
+                v3_metrics.BATCH_MANUAL_END.labels('multi_unit_deferred').inc()
+
+        async def detached():
+            await run_blocking(storage_executor, run)
+
+        # Detached on purpose: admission must not wait for a provider call. Losing it at
+        # SIGKILL loses only the early transcript; the admitted batch job still delivers.
+        task = start_background_task(detached(), name='v3_fast_finish')
+        _FAST_FINISH_TASKS.add(task)
+        task.add_done_callback(_FAST_FINISH_TASKS.discard)
+    except Exception as error:
+        logger.warning('event=v3_manual_finish_admission outcome=error exception_type=%s', type(error).__name__)
+        try:
+            v3_metrics.BATCH_MANUAL_END.labels('error').inc()
+        except Exception:
+            pass
+
+
 async def admit_recording(store, pending, *, now=None, provider_outbox_factory=None):
     from config.batch_pipeline import require_record_protocol_ready
 
@@ -428,7 +654,11 @@ async def admit_recording(store, pending, *, now=None, provider_outbox_factory=N
         privacy_generation=pending['privacy_generation'],
     )
     protection = await run_blocking(db_executor, artifacts.authorize, seed)
-    iterator = retained_record_units(uid, conversation_id, chunks, client, artifacts.key_for_owner(uid))
+    # These read hints belong to the encrypted worker manifest. Keep the
+    # walker output for operator plans and partial continuations stable.
+    iterator = retained_record_units(
+        uid, conversation_id, chunks, client, artifacts.key_for_owner(uid), record_source_proof=True
+    )
     units = []
     try:
         # Advancing the generator downloads retained objects. Keep that leaf
@@ -518,7 +748,7 @@ async def admit_recording(store, pending, *, now=None, provider_outbox_factory=N
         )
         staged.append(replace(item, audio_uri=uri, timing_store=batch_timing_store(refs)))
     source_attestation = attest(private_cloud_sync_bucket, uid, conversation_id, current, record_barrier, units, staged)
-    return await run_blocking(
+    admitted = await run_blocking(
         db_executor,
         admit_record_units,
         store,
@@ -545,6 +775,20 @@ async def admit_recording(store, pending, *, now=None, provider_outbox_factory=N
             **({'server_batch_only': True} if row.get('server_batch_only') is True else {}),
         },
     )
+    # Only when this call's intake owns these units: the transaction can also answer busy or
+    # completed without admitting them, and a failed admission is retried.
+    if _admitted_these_units(admitted, binding.job_id):
+        await _manual_finish_admitted(
+            store,
+            uid,
+            conversation_id,
+            current,
+            units,
+            client,
+            artifacts.key_for_owner(uid),
+            privacy_generation=pending['privacy_generation'],
+        )
+    return admitted
 
 
 async def drain_recordings(store, *, provider_outbox_factory=None, metrics=None) -> bool:
@@ -623,6 +867,7 @@ async def drain_recordings(store, *, provider_outbox_factory=None, metrics=None)
         nonlocal partial_count, privacy_blocked, admitted
         partial_count += bool(pending.get('partial_coordinator'))
         failed = barrier_open = False
+        barrier_error = None
         try:
             if provider_outbox_factory is None:
                 await admit_recording(store, pending)
@@ -638,6 +883,7 @@ async def drain_recordings(store, *, provider_outbox_factory=None, metrics=None)
         except Exception as error:
             failed = True
             barrier_open = isinstance(error, ValueError) and str(error) == BARRIER_NOT_CLOSED
+            barrier_error = error
             if pending.get('partial_coordinator'):
                 record_partial_failure(error, run=pending.get('partial_run'))
             logger.warning(
@@ -714,6 +960,10 @@ async def drain_recordings(store, *, provider_outbox_factory=None, metrics=None)
             admitted += 1
         if expired and metrics is not None:
             metrics.record_dead_letter.inc()
+        if barrier_open and metrics is not None and barrier_cause_metrics_enabled():
+            _observe_barrier_refusal(metrics.record_barrier_refusals, barrier_error)
+            if expired:
+                _observe_barrier_refusal(metrics.record_barrier_aged, barrier_error)
 
     async def worker():
         # next() has no await: each selected row belongs to one local worker.

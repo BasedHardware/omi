@@ -108,6 +108,25 @@ void main() {
     });
 
     for (final shareRawAudio in [false, true]) {
+      test('Custom Live direct send follows Omi raw-audio consent ($shareRawAudio)', () async {
+        final primary = _FakeSocket();
+        final secondary = _FakeSocket();
+        final socket = CompositeTranscriptionSocket(
+          primarySocket: primary,
+          secondarySocket: secondary,
+          sttProvider: SttProvider.customLive.name,
+          forwardRawAudioToSecondary: shareRawAudio,
+        );
+        addTearDown(socket.stop);
+
+        expect(await socket.connect(), isTrue);
+        final audio = <int>[1, 2, 3];
+        socket.send(audio);
+
+        expect(primary.sent, [same(audio)]);
+        expect(secondary.sent, shareRawAudio ? [same(audio)] : isEmpty);
+      });
+
       test('Custom Live evidence follows Omi raw-audio consent ($shareRawAudio)', () async {
         final primary = _FakeSocket();
         final secondary = _FakeSocket();

@@ -15399,9 +15399,6 @@ class AppLocalizationsTe extends AppLocalizations {
   String get stopThese => 'వీటిని ఆపండి';
 
   @override
-  String get meetingActionItemsTitle => 'చర్య అంశాలు';
-
-  @override
   String get addToTasks => 'పనులకు జోడించండి';
 
   @override
@@ -15887,4 +15884,26 @@ class AppLocalizationsTe extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get playStripeBilledOnWeb => 'omi.me ద్వారా బిల్ చేయబడుతుంది. ఎప్పుడైనా ఇక్కడ రద్దు చేయండి.';
+
+  @override
+  String get playStripeBilledOnWebShort => 'omi.me ద్వారా బిల్ చేయబడుతుంది.';
+
+  @override
+  String playStripePlanPaused(String plan) {
+    return 'మీ $plan ప్లాన్ పాజ్ చేయబడింది.';
+  }
+
+  @override
+  String get firmwareNewestSupportedForDevice =>
+      'మీ డివైస్ ఇప్పటికే మద్దతు ఉన్న అత్యంత కొత్త ఫర్మ్‌వేర్ వెర్షన్‌లో ఉంది';
+
+  @override
+  String get firmwareSyncRecordingsFirstTitle => 'ముందుగా మీ రికార్డింగ్‌లను సమకాలీకరించండి';
+
+  @override
+  String get firmwareSyncRecordingsFirstMessage =>
+      'కొన్ని రికార్డింగ్‌లు ఇంకా మీ డివైస్‌లో ఉన్నాయి. అవి మీ ఫోన్‌కు పూర్తిగా సమకాలీకరించనివ్వండి, తర్వాత నవీకరణను ప్రారంభించండి.';
 }

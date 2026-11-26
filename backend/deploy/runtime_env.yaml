@@ -3332,6 +3332,7 @@ environments:
           BATCH_PIPELINE_ASYNC_PROJECTION_ENABLED: {value: 'true', category: rollout}
           BATCH_PIPELINE_RECOVERY_MODE: {value: 'off', category: rollout}
           BATCH_PIPELINE_RECOVERY_UID_ALLOWLIST: {value: '', category: rollout}
+          CONVERSATION_PARKED_TERMINAL_STATUS_ENABLED: {value: 'off', category: rollout}
           STT_CAP_DISPATCH_ENFORCEMENT:
             secret:
               name: prod-omi-backend-listen-private-env
@@ -3701,6 +3702,7 @@ environments:
           CONVERSATION_RELEVANCE_JEV_PERCENT:
             category: ops_kill
             value: '100'
+          CONVERSATION_PARKED_TERMINAL_STATUS_ENABLED: {value: 'off', category: rollout}
           SYNC_TASKS_PROJECT:
             value: based-hardware
             category: reliability
@@ -4446,6 +4448,16 @@ environments:
             BATCH_PIPELINE_PROJECTION_PAGINATION_ENABLED: {value: 'true', category: rollout}
             BATCH_PIPELINE_ASYNC_PROJECTION_ENABLED: {value: 'true', category: rollout}
             BATCH_PIPELINE_RECOVERY_MODE: {value: 'off', category: rollout}
+            CONVERSATIONS_V3_LIVE_TITLE:
+              value: 'on'
+              category: ops_kill
+            CONVERSATIONS_V3_FAST_FINISH:
+              value: 'on'
+              category: ops_kill
+            CONVERSATIONS_V3_FAST_FINISH_CHUNKED:
+              value: 'on'
+              category: ops_kill
+            CONVERSATION_PARKED_TERMINAL_STATUS_ENABLED: {value: 'off', category: rollout}
             ANDROID_BILLING: {value: stripe, category: rollout}
             PLAY_RTDN_OIDC_AUDIENCE:
               value: https://api.omi.me/v2/internal/play-billing/rtdn
@@ -5034,6 +5046,7 @@ environments:
             BATCH_PIPELINE_PROJECTION_PAGINATION_ENABLED: {value: 'true', category: rollout}
             BATCH_PIPELINE_ASYNC_PROJECTION_ENABLED: {value: 'true', category: rollout}
             BATCH_PIPELINE_RECOVERY_MODE: {value: 'off', category: rollout}
+            CONVERSATION_PARKED_TERMINAL_STATUS_ENABLED: {value: 'off', category: rollout}
             CONVERSATIONS_V3_BACKFILL:
               value: 'on'
               category: ops_kill
@@ -5600,6 +5613,10 @@ environments:
             BATCH_PIPELINE_PROJECTION_PAGINATION_ENABLED: {value: 'true', category: rollout}
             BATCH_PIPELINE_ASYNC_PROJECTION_ENABLED: {value: 'true', category: rollout}
             BATCH_PIPELINE_RECOVERY_MODE: {value: 'off', category: rollout}
+            CONVERSATIONS_V3_LIVE_TITLE:
+              value: 'on'
+              category: ops_kill
+            CONVERSATION_PARKED_TERMINAL_STATUS_ENABLED: {value: 'off', category: rollout}
             BATCH_PIPELINE_FOLLOWUP_CLAIMED_SIBLING_SKIP_ENABLED:
               value: 'false'
               category: ops_kill
@@ -6107,8 +6124,23 @@ environments:
             BATCH_PIPELINE_PROJECTION_PAGINATION_ENABLED: {value: 'true', category: rollout}
             BATCH_PIPELINE_ASYNC_PROJECTION_ENABLED: {value: 'true', category: rollout}
             BATCH_PIPELINE_RECOVERY_MODE: {value: 'on', category: rollout}
+            CONVERSATIONS_V3_LIVE_TITLE:
+              value: 'off'
+              category: ops_kill
+            CONVERSATIONS_V3_FAST_FINISH:
+              value: 'on'
+              category: ops_kill
+            CONVERSATIONS_V3_FAST_FINISH_CHUNKED:
+              value: 'on'
+              category: ops_kill
+            CONVERSATIONS_V3_FAST_FINISH_LONG_PERCENT: {value: '25', category: rollout}
+            CONVERSATIONS_V3_FAST_FINISH_LONG_DAILY_SECONDS:
+              value: '7200'
+              category: config
+            CONVERSATION_PARKED_TERMINAL_STATUS_ENABLED: {value: 'off', category: rollout}
             BATCH_PIPELINE_SERVING_SWEEP_PAGE_ROWS: {value: '200', category: rollout}
             BATCH_PIPELINE_SERVING_TICK_SECONDS: {value: '10', category: rollout}
+            BATCH_PIPELINE_PROJECTION_FOLLOWUP_SLOTS: {value: '3', category: rollout}
             BATCH_PROJECTION_FINISH_CLASSIFY_PAGE_LIMIT: {value: '16', category: rollout}
             BATCH_PIPELINE_FOLLOWUP_CLAIMED_SIBLING_SKIP_ENABLED:
               value: 'false'
@@ -6264,6 +6296,15 @@ environments:
             BATCH_PIPELINE_SERVING_METRICS_MIN_REFRESH_SECONDS:
               value: '60'
               category: reliability
+            BATCH_PIPELINE_PROJECTION_PHASE_SAMPLE_ENABLED:
+              value: 'true'
+              category: ops_kill
+            BATCH_PIPELINE_PROJECTION_PHASE_SAMPLE_PERCENT:
+              value: '1'
+              category: ops_kill
+            BATCH_POLICY_KILL_SWITCH_LOG_ON_CHANGE_ENABLED:
+              value: 'true'
+              category: ops_kill
             OMI_SHAPED_AGENT_MODE: {value: 'on', category: rollout}
             DREAM_AGENT_ENABLED: {value: 'true', category: rollout}
             DREAM_AGENT_CONCURRENCY:
@@ -6599,8 +6640,23 @@ environments:
             BATCH_PIPELINE_PROJECTION_PAGINATION_ENABLED: {value: 'true', category: rollout}
             BATCH_PIPELINE_ASYNC_PROJECTION_ENABLED: {value: 'true', category: rollout}
             BATCH_PIPELINE_RECOVERY_MODE: {value: 'on', category: rollout}
+            CONVERSATIONS_V3_LIVE_TITLE:
+              value: 'on'
+              category: ops_kill
+            CONVERSATIONS_V3_FAST_FINISH:
+              value: cohort
+              category: ops_kill
+            CONVERSATIONS_V3_FAST_FINISH_CHUNKED:
+              value: 'on'
+              category: ops_kill
+            CONVERSATIONS_V3_FAST_FINISH_LONG_PERCENT: {value: '25', category: rollout}
+            CONVERSATIONS_V3_FAST_FINISH_LONG_DAILY_SECONDS:
+              value: '7200'
+              category: config
+            CONVERSATION_PARKED_TERMINAL_STATUS_ENABLED: {value: 'off', category: rollout}
             BATCH_PIPELINE_SERVING_SWEEP_PAGE_ROWS: {value: '200', category: rollout}
             BATCH_PIPELINE_SERVING_TICK_SECONDS: {value: '10', category: rollout}
+            BATCH_PIPELINE_PROJECTION_FOLLOWUP_SLOTS: {value: '3', category: rollout}
             BATCH_PROJECTION_FINISH_CLASSIFY_PAGE_LIMIT: {value: '16', category: rollout}
             BATCH_PIPELINE_FOLLOWUP_CLAIMED_SIBLING_SKIP_ENABLED:
               value: 'false'
@@ -6839,6 +6895,9 @@ environments:
           - CONVERSATION_LLM_INPUT_DEDUPE_ENABLED
           - REPEAT_WORK_REVISION_ENABLED
           - HOSTED_DIARIZATION_API_URL
+          - BATCH_PIPELINE_PROJECTION_PHASE_SAMPLE_ENABLED
+          - BATCH_PIPELINE_PROJECTION_PHASE_SAMPLE_PERCENT
+          - BATCH_POLICY_KILL_SWITCH_LOG_ON_CHANGE_ENABLED
           service_account: backend-runtime@based-hardware.iam.gserviceaccount.com
       jobs:
         notifications-job:

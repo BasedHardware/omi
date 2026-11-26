@@ -42,6 +42,7 @@ _PRIMARY_META_FIELDS = [
     'external_data',
     'deleted',
     'discarded',
+    'deferred',
     'status',
     ENGINE_FIELD,
     EPOCH_FIELD,
@@ -58,6 +59,7 @@ def _eligible_primary_row(row: Any) -> bool:
         and python_owns_finalization(row)
         and not row.get('deleted')
         and not row.get('discarded')
+        and not row.get('deferred')
         and row.get('status') == 'completed'
     )
 

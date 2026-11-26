@@ -937,12 +937,14 @@ extension APIClient {
   func getConversation(
     id: String,
     includeDiscarded: Bool? = nil,
-    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil,
+    polling: Bool = false
   ) async throws -> ServerConversation {
-    let queryItems =
+    var queryItems =
       includeDiscarded.map {
         [URLQueryItem(name: "include_discarded", value: String($0))]
       } ?? []
+    if polling { queryItems.append(URLQueryItem(name: "status_poll", value: "1")) }
     return try await get(
       "v1/conversations/\(id)",
       queryItems: queryItems,

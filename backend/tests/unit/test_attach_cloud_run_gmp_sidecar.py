@@ -1389,6 +1389,14 @@ def test_sync_scrape_retains_exporter_and_direct_sentinel_consumers():
 
     for name in ('privacy_negative_lookup_total', 'omi_batch_projection_native_audio_prefetch_total'):
         assert kept(name), name
+    for name in (
+        'omi_record_wal_handoff_sample_attempts_total',
+        'omi_record_wal_handoff_sample_io_total',
+        'omi_pipeline_record_wait_answers_total',
+        'omi_pipeline_record_wait_memo_hits_total',
+    ):
+        assert kept(name), name
+    assert not kept('omi_pipeline_record_wait_unreviewed_total')
     assert not kept('omi_batch_projection_native_audio_prefetch_unreviewed_total')
     # Pre-unit holds and strict election must survive every later drop rule.
     for name in (
@@ -1481,6 +1489,7 @@ def test_sync_scrape_retains_exporter_and_direct_sentinel_consumers():
         # Firestore writes: billed writes by collection, caller and origin (write probe).
         'omi_firestore_billed_writes_total',
         'omi_firestore_billed_writes_by_caller_total',
+        'omi_firestore_billed_writes_by_origin_total',
         'omi_firestore_write_caller_label_overflow_total',
         'omi_firestore_ambiguous_commit_writes_total',
         'omi_firestore_noop_writes_by_caller_total',

@@ -4622,7 +4622,6 @@
     "capturePendantDisconnectedShort": "Omi अपने आप फिर से कनेक्ट हो जाएगा",
     "forYou": "आपके लिए",
     "stopThese": "इन्हें रोकें",
-    "meetingActionItemsTitle": "कार्रवाई के आइटम",
     "addToTasks": "टास्क में जोड़ें",
     "showInTranscript": "ट्रांसक्रिप्ट में दिखाएँ",
     "tentativeTaskDueDate": "संभावित समय-सीमा {date}",
@@ -4763,5 +4762,11 @@
     "prepaidCodeFieldHint": "अपना कोड दर्ज करें",
     "prepaidCodeRedeem": "रिडीम करें",
     "prepaidCodeRedeemed": "कोड रिडीम हो गया",
-    "prepaidCodeResult": "{reason, select, invalid{यह कोड मान्य नहीं है। जांचें और फिर से कोशिश करें।} used{यह कोड पहले ही इस्तेमाल हो चुका है।} expired{इस कोड की अवधि समाप्त हो गई है।} hasPlan{आपके पास पहले से एक प्लान है। आपका कोड इस्तेमाल नहीं हुआ। प्लान खत्म होने के बाद इसे रिडीम करें।} notPrepaid{यह कोड यहां रिडीम नहीं हो सकता। प्लान चुनते समय इसका इस्तेमाल करें।} notEligible{यह कोड इस खाते पर इस्तेमाल नहीं हो सकता।} rateLimited{बहुत ज़्यादा कोशिशें। बाद में फिर कोशिश करें।} other{कुछ गलत हो गया। कृपया फिर से कोशिश करें।}}"
+    "prepaidCodeResult": "{reason, select, invalid{यह कोड मान्य नहीं है। जांचें और फिर से कोशिश करें।} used{यह कोड पहले ही इस्तेमाल हो चुका है।} expired{इस कोड की अवधि समाप्त हो गई है।} hasPlan{आपके पास पहले से एक प्लान है। आपका कोड इस्तेमाल नहीं हुआ। प्लान खत्म होने के बाद इसे रिडीम करें।} notPrepaid{यह कोड यहां रिडीम नहीं हो सकता। प्लान चुनते समय इसका इस्तेमाल करें।} notEligible{यह कोड इस खाते पर इस्तेमाल नहीं हो सकता।} rateLimited{बहुत ज़्यादा कोशिशें। बाद में फिर कोशिश करें।} other{कुछ गलत हो गया। कृपया फिर से कोशिश करें।}}",
+    "playStripeBilledOnWeb": "omi.me के ज़रिए बिल किया जाता है। यहाँ कभी भी रद्द करें।",
+    "playStripeBilledOnWebShort": "omi.me के ज़रिए बिल किया जाता है।",
+    "playStripePlanPaused": "आपका {plan} प्लान रुका हुआ है।",
+    "firmwareNewestSupportedForDevice": "आपका डिवाइस पहले से ही नवीनतम समर्थित फर्मवेयर संस्करण पर है",
+    "firmwareSyncRecordingsFirstTitle": "पहले अपनी रिकॉर्डिंग सिंक करें",
+    "firmwareSyncRecordingsFirstMessage": "कुछ रिकॉर्डिंग अभी भी आपके डिवाइस पर हैं। उन्हें आपके फ़ोन पर सिंक होने दें, फिर अपडेट शुरू करें।"
 }
