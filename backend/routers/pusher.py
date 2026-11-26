@@ -195,7 +195,7 @@ PROJECTION_RETRY_BUDGET = 2
 
 
 def _projection_raising_frame(exc: BaseException) -> str:
-    """Innermost raising frame name, for RCA attribution of projection failures.
+    """Innermost raising frame name, for RCA attribution of storage failures.
 
     Only the code object's name is ever returned — the exception message and
     args can carry user-identifying object paths and must not reach logs.
@@ -1408,16 +1408,48 @@ async def _run_websocket_util_trigger(
         private_cloud_window_opened_at: Optional[float] = None
         durable_tail_has_receipt = False
         durable_commit_unresolved = False
+        # The socket's one terminal disposition for a durable window whose
+        # commit outcome is unknown. Set together with the fence; later flushes
+        # and the teardown tail observe it instead of attempting storage again.
+        durable_commit_disposition: Optional[str] = None
         pcm_admission_cancelled = False
         # Audio-timeline v2 continuity for this socket: the projected end of
         # the last accepted run and its conversation. None until first audio
         # or after a conversation switch (which flushes the run).
         audio_timeline_last_end: Optional[float] = None
 
+        def settle_durable_commit_unresolved(exc: BaseException, *, stage: str) -> None:
+            """Close the producer fence with exactly one recorded disposition.
+
+            An unknown storage outcome is never rerun, so the retained window
+            stays unacknowledged for client WAL replay and its producer token
+            stays held. The fence and its disposition are set once: every later
+            flush or tail on this socket observes them instead of raising, so a
+            single failed or unknown commit produces one record, not one per
+            tail. Telemetry faults never change the socket outcome.
+            """
+            nonlocal durable_commit_unresolved, durable_commit_disposition
+            durable_commit_unresolved = True
+            if durable_commit_disposition is not None:
+                return
+            durable_commit_disposition = 'unresolved'
+            try:
+                record_failure(stage)
+                record_would_drop(stage)
+            except Exception:
+                pass  # Telemetry never changes the socket outcome.
+            logger.warning(
+                'event=durable_custody_commit_disposition disposition=%s stage=%s exception_type=%s raised_by=%s %s',
+                durable_commit_disposition,
+                stage,
+                type(exc).__name__,
+                _projection_raising_frame(exc),
+                uid,
+            )
+
         async def commit_durable_window(window: RetainedPcmWindow, *, tail: bool = False) -> Optional[AudioReceipt]:
             """Commit the buffered window as one custody pair (see _commit_durable_audio_window)."""
             nonlocal durable_tail_has_receipt
-            nonlocal durable_commit_unresolved
             durable_tail_has_receipt = False
             late_append = False
 
@@ -1453,11 +1485,13 @@ async def _run_websocket_util_trigger(
                     framed=framed_audio,
                     tail=tail,
                 )
-            except BaseException:
+            except BaseException as exc:
                 # A failed/cancelled dispatch can have committed remotely. The
-                # shutdown tail must never rerun that unknown storage operation.
+                # shutdown tail must never rerun that unknown storage operation:
+                # close the fence with one disposition and let the socket end
+                # once instead of raising again on every later tail.
                 if not durable_tail_has_receipt:
-                    durable_commit_unresolved = True
+                    settle_durable_commit_unresolved(exc, stage='window_tail' if tail else 'commit')
                 raise
 
         async def _queue_private_cloud_chunk(*, skip_if_silent: bool = False, tail: bool = False) -> None:
@@ -1472,7 +1506,11 @@ async def _run_websocket_util_trigger(
                     return
             if durable_audio:
                 if durable_commit_unresolved:
-                    raise RuntimeError('custody commit unresolved; producer fence retained')
+                    # The outcome is unknown and its one disposition is already
+                    # recorded. Later flushes and the teardown tail must never
+                    # rerun that storage operation or raise: the retained window
+                    # and its producer token stay fenced for client WAL replay.
+                    return
                 if private_cloud_sync_enabled and private_cloud_sync_buffer:
                     # Move the originals, without copying or releasing their
                     # per-socket byte charge. A refused conversation/size/gap
@@ -1594,7 +1632,10 @@ async def _run_websocket_util_trigger(
                 # Cancelling admission leaves the unacknowledged window for
                 # WAL replay. Never start storage (or ACK a departed peer) in
                 # this cancellation cleanup, which must not wait on GCS retries.
-                if not pcm_admission_cancelled:
+                # A settled unknown outcome is equally untouchable: its one
+                # disposition already holds the fence, so retrying here would
+                # rerun storage and turn one failure into a raise per tail.
+                if not pcm_admission_cancelled and not durable_commit_unresolved:
                     await _queue_private_cloud_chunk(tail=True)
                     tail_committed = durable_audio and not refused_windows
             except ProjectionQueueWaitTimeout:
@@ -1605,16 +1646,18 @@ async def _run_websocket_util_trigger(
             except WebSocketDisconnect as exc:
                 websocket_close_code = exc.code or 1006
                 tail_committed = durable_tail_has_receipt
-            except Exception:
+            except Exception as exc:
                 if durable_audio:
-                    record_failure('window_tail')
-                    record_would_drop('window_tail')
+                    # The failing dispatch records the socket's one terminal
+                    # disposition; any other fault records it here. Neither log
+                    # line carries a traceback, so a fenced socket ends as one
+                    # recorded outcome instead of an unhandled exception per tail.
+                    settle_durable_commit_unresolved(exc, stage='window_tail')
                     # Fail closed to the producer: the unacknowledged tail must
                     # be replayable, so signal the same error close the
                     # mid-session commit failure path uses.
                     websocket_close_code = 1011
                     observation.reason = 'application_error'
-                    logger.exception(f'Durable audio window tail commit failed at shutdown {uid}')
                     if current_conversation_id:
                         # The immutable commit may have landed before ACK or
                         # queue delivery failed. Keep the producer token, but

@@ -314,6 +314,20 @@ retry. Close, abandon and marker operations remain ungated on their metadata
 executor. No ACK means the source WAL must retain and replay. This does not
 measure listen's re-offer cadence or certify installed client WAL behavior.
 
+A durable dispatch that fails or is cancelled before its receipt has no known
+storage outcome. That socket settles exactly one terminal disposition instead of
+raising on every later flush: the fence closes, the retained window and its
+producer token stay unacknowledged for WAL replay, and the socket closes once
+with `1011` (`event=pusher_receive_failed`) rather than ending in a repeated
+unhandled `custody commit unresolved` traceback per tail. Later flushes and the
+shutdown tail return without rerunning storage or emitting a second record. The
+disposition is `event=durable_custody_commit_disposition disposition=unresolved
+stage=commit|window_tail exception_type=<class> raised_by=<frame>`, counted once
+in `omi_audio_custody_failures_total` and `omi_audio_custody_would_drop_total`
+under the same stage. A refusal (a known non-commit) is not a disposition and
+keeps its existing no-error-close behavior. The disposition is socket-local; it
+is not persisted and no other service reads it.
+
 `omi_pusher_storage_pcm_inflight_bytes` measures submitted custody PCM. When
 admission is enabled, accounting and capacity remain held until storage actually
 settles, including a caller cancelled while its queued/running thread continues.

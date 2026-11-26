@@ -1056,6 +1056,162 @@ async def test_pusher_upload_failure_never_audio_acknowledges(remote, monkeypatc
     assert not sock.sent and sock.close_code == 1011
 
 
+def _observe_custody_failures(monkeypatch):
+    """Record every custody failure stage/reason a real socket emits."""
+    failures = []
+    real = pusher.record_failure
+
+    def observe(stage, reason='other'):
+        failures.append((stage, reason))
+        real(stage, reason)
+
+    monkeypatch.setattr(pusher, 'record_failure', observe)
+    return failures
+
+
+def _dispositions(caplog):
+    """Terminal dispositions recorded for this socket, in emission order."""
+    return [
+        record.getMessage().split('disposition=')[1].split()[0]
+        for record in caplog.records
+        if 'event=durable_custody_commit_disposition' in record.getMessage()
+    ]
+
+
+def _error_tracebacks(caplog):
+    """Pusher ERROR records carrying a traceback (Error Reporting events)."""
+    return [
+        record
+        for record in caplog.records
+        if record.name == 'routers.pusher' and record.levelno >= logging.ERROR and record.exc_info
+    ]
+
+
+@pytest.mark.asyncio
+async def test_one_failed_durable_commit_settles_once_and_the_tail_never_raises(inline_session, monkeypatch, caplog):
+    """A live dispatch failure closes the fence once.
+
+    The shutdown tail must observe that disposition instead of rerunning the
+    unknown storage operation or raising a second, unhandled error (SCA-2668).
+    """
+    client, path, barrier, projected = inline_session
+    monkeypatch.setattr(pusher, 'PRIVATE_CLOUD_CHUNK_DURATION', 0)
+    attempts = []
+
+    def fail(*args, **kwargs):
+        attempts.append('commit')
+        raise OSError('synthetic dispatch failure')
+
+    monkeypatch.setattr(pusher, 'commit_pcm_window', MagicMock(side_effect=fail))
+    failures = _observe_custody_failures(monkeypatch)
+    with caplog.at_level(logging.WARNING, logger='routers.pusher'):
+        sock = Socket(_audio_frames('conversation', [b'\x01\x00' * 160, b'\x02\x00' * 160]))
+        await asyncio.wait_for(pusher._websocket_util_trigger(sock, 'owner', 16000, audio_custody=1), 5)
+    # The failing live dispatch is the only storage attempt: the teardown tail
+    # never reruns the unknown operation and never raises again.
+    assert attempts == ['commit']
+    assert len(sock.frames) == 1, 'the socket fails closed on the first unknown outcome'
+    assert not sock.sent and not projected
+    assert sock.close_code == 1011
+    assert failures == [('commit', 'other')], 'one failed commit is exactly one custody record'
+    assert _dispositions(caplog) == ['unresolved']
+    assert not _error_tracebacks(caplog), 'later tails must not log an unhandled exception record'
+    assert 'conversation' in barrier.failed_recordings
+    assert client.rows[path]['record_upload_sessions'], 'the producer token stays held for WAL replay'
+    assert not client.rows[path]['record_audio_closed']
+
+
+@pytest.mark.asyncio
+async def test_cancelled_durable_commit_settles_once_and_the_tail_never_reruns(inline_session, monkeypatch, caplog):
+    """A cancelled dispatch has an unknown outcome: fence it once, then stop."""
+    client, path, barrier, projected = inline_session
+    monkeypatch.setattr(pusher, 'PRIVATE_CLOUD_CHUNK_DURATION', 0)
+    started = asyncio.Event()
+    calls = []
+    receive_tasks = []
+    create = pusher.create_named_task
+
+    def creating(*args, **kwargs):
+        task = create(*args, **kwargs)
+        if kwargs.get('name', '').endswith(':receive'):
+            receive_tasks.append(task)
+        return task
+
+    async def cancelled_dispatch(**kwargs):
+        calls.append(kwargs['tail'])
+        started.set()
+        await asyncio.Event().wait()
+
+    monkeypatch.setattr(pusher, '_commit_durable_audio_window', cancelled_dispatch)
+    monkeypatch.setattr(pusher, 'create_named_task', creating)
+    failures = _observe_custody_failures(monkeypatch)
+    sock = Socket(_audio_frames('conversation', [b'\x01\x00' * 160, b'\x02\x00' * 160]))
+    with caplog.at_level(logging.WARNING, logger='routers.pusher'):
+        handler = asyncio.create_task(pusher._websocket_util_trigger(sock, 'owner', 16000, audio_custody=1))
+        await asyncio.wait_for(started.wait(), 5)
+        receive_tasks[0].cancel()  # Pod shutdown cancels the in-flight dispatch.
+        await asyncio.wait_for(handler, 5)
+    assert calls == [False], 'the teardown tail never starts a second dispatch'
+    assert not sock.sent and not projected
+    assert sock.close_code == 1000
+    assert failures == [('commit', 'other')]
+    assert _dispositions(caplog) == ['unresolved']
+    assert not _error_tracebacks(caplog)
+    assert 'conversation' in barrier.failed_recordings
+    assert client.rows[path]['record_upload_sessions']
+    assert not client.rows[path]['record_audio_closed']
+
+
+@pytest.mark.asyncio
+async def test_refused_durable_tail_retains_the_fence_without_raising(inline_session, monkeypatch, caplog):
+    """A refusal is a known non-commit: retain the window, never raise."""
+    client, path, barrier, projected = inline_session
+    tails = []
+
+    async def refuse(**kwargs):
+        tails.append(kwargs['tail'])
+        return None
+
+    monkeypatch.setattr(pusher, '_commit_durable_audio_window', refuse)
+    failures = _observe_custody_failures(monkeypatch)
+    with caplog.at_level(logging.WARNING, logger='routers.pusher'):
+        sock = Socket(_audio_frames('conversation', [b'\x01\x00' * 160]))
+        await asyncio.wait_for(pusher._websocket_util_trigger(sock, 'owner', 16000, audio_custody=1), 5)
+    assert tails == [True], 'only the shutdown boundary was reached'
+    assert not sock.sent and not projected
+    assert sock.close_code == 1000, 'a refusal selects no error close'
+    assert failures == [] and _dispositions(caplog) == []
+    assert not _error_tracebacks(caplog)
+    assert 'conversation' in barrier.failed_recordings
+    assert client.rows[path]['record_upload_sessions']
+    assert not client.rows[path]['record_audio_closed']
+
+
+@pytest.mark.asyncio
+async def test_normal_durable_tail_commits_once_without_a_disposition(inline_session, monkeypatch, caplog):
+    """The healthy path is unchanged: one tail commit, one receipt, no record."""
+    client, path, barrier, projected = inline_session
+    tails = []
+    real = pusher._commit_durable_audio_window
+
+    async def observe(**kwargs):
+        tails.append(kwargs['tail'])
+        return await real(**kwargs)
+
+    monkeypatch.setattr(pusher, '_commit_durable_audio_window', observe)
+    failures = _observe_custody_failures(monkeypatch)
+    pcm = b'\x01\x00' * 160
+    with caplog.at_level(logging.WARNING, logger='routers.pusher'):
+        sock = Socket(_audio_frames('conversation', [pcm]))
+        await asyncio.wait_for(pusher._websocket_util_trigger(sock, 'owner', 16000, audio_custody=1), 5)
+    assert tails == [True]
+    assert [read_pcm('owner', receipt) for receipt in _sent_receipts(sock)] == [pcm]
+    assert client.rows[path]['record_audio_closed'] is True
+    assert failures == [] and _dispositions(caplog) == []
+    assert 'conversation' not in barrier.failed_recordings
+    assert not _error_tracebacks(caplog)
+
+
 @pytest.mark.parametrize('stage', ['raw-live', 'audio-outbox'])
 def test_deletion_during_upload_removes_the_new_generation_before_receipt(remote, monkeypatch, stage):
     deleted = False
