@@ -1,3 +1,5 @@
+typedef UploadTraceSnapshot = ({String trace, String? holdState, int? holdSealedAtMs, bool recovered});
+
 /// Measures how long a sealed recording file waits on the phone before the
 /// server accepts it, and which upload gate last held it. Measurement only: it
 /// never decides whether or when anything uploads, and losing it changes
@@ -28,7 +30,7 @@ class UploadTrace {
   String? _lastGate;
   DateTime? _lastGateAt;
   final Map<String, ({int first, int attempts})> _attempts = {};
-  final Map<String, String> _pending = {};
+  final Map<String, UploadTraceSnapshot> _pending = {};
 
   /// An upload pass was held back for [gate]. Unknown labels become `other`.
   void noteGate(String gate) {
@@ -38,7 +40,14 @@ class UploadTrace {
 
   /// Builds the header for an upload whose oldest file is [oldestId], sealed
   /// at [sealedAtSeconds], and parks it under [firstFilePath] for the uploader.
-  void prepare({required String firstFilePath, required String oldestId, required int sealedAtSeconds}) {
+  void prepare({
+    required String firstFilePath,
+    required String oldestId,
+    required int sealedAtSeconds,
+    String? holdState,
+    int? holdSealedAtMs,
+    bool recovered = false,
+  }) {
     if (sealedAtSeconds <= 0) return;
     final nowSeconds = _now().millisecondsSinceEpoch ~/ 1000;
     final seen = _attempts[oldestId];
@@ -50,11 +59,29 @@ class UploadTrace {
     final held = gateAt != null && gateAt.millisecondsSinceEpoch ~/ 1000 >= sealedAtSeconds;
     final gate = held ? (_lastGate ?? 'none') : 'none';
     if (_pending.length >= _maxTracked) _pending.remove(_pending.keys.first);
-    _pending[firstFilePath] = 'sealed=$sealedAtSeconds;first=${entry.first};gate=$gate;attempts=${entry.attempts}';
+    _pending[firstFilePath] = (
+      trace: 'sealed=$sealedAtSeconds;first=${entry.first};gate=$gate;attempts=${entry.attempts}',
+      holdState: holdState,
+      holdSealedAtMs: holdSealedAtMs,
+      recovered: recovered,
+    );
   }
 
   /// The header parked for the upload that starts with [firstFilePath], once.
-  String? take(String firstFilePath) => _pending.remove(firstFilePath);
+  UploadTraceSnapshot? take(String firstFilePath) => _pending.remove(firstFilePath);
+
+  /// Evaluate at each HTTP send, including a replay after authentication.
+  Map<String, String> holdHeadersAtSend(UploadTraceSnapshot? upload, {required bool holdEnabled}) {
+    final state = upload?.holdState;
+    if (state == null) return const {};
+    final sealedAtMs = upload?.holdSealedAtMs;
+    return {
+      'X-Omi-Upload-Hold': holdEnabled ? state : 'none',
+      if (upload?.recovered == true) 'X-Omi-Upload-Recovered': '1',
+      if (holdEnabled && state != 'none' && sealedAtMs != null)
+        'X-Omi-Upload-Hold-Age-Ms': (_now().millisecondsSinceEpoch - sealedAtMs).clamp(0, 86400000).toString(),
+    };
+  }
 
   /// The server accepted the upload whose oldest file is [oldestId].
   void accepted(String oldestId) => _attempts.remove(oldestId);

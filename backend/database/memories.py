@@ -1779,6 +1779,45 @@ def get_memory_ids_for_conversation(uid: str, conversation_id: str, *, firestore
     return memory_ids
 
 
+def linked_conversation_ids(
+    uid: str, conversation_ids: set[str], *, firestore_client: Any, transaction: Any
+) -> set[str]:
+    """Read only source fields and fail closed if stored evidence cannot be inspected."""
+    user = firestore_client.collection(users_collection).document(uid)
+    canonical = MemoryCollections(uid=uid)
+    linked: set[str] = set()
+    # Legacy evidence may be encrypted and Firestore cannot query fields inside arrays of maps.
+    for collection, fields in (
+        (
+            user.collection(memories_collection),
+            ('memory_id', 'conversation_id', 'evidence', 'data_protection_level'),
+        ),
+        (user.collection(short_term_db.short_term_collection), ('evidence',)),
+        (firestore_client.collection(canonical.memory_items), ('source_refs', 'evidence')),
+        (firestore_client.collection(canonical.memory_evidence), ('conversation_id', 'source_id')),
+    ):
+        for snapshot in collection.select(fields).stream(transaction=transaction):
+            row = _prepare_memory_for_read(snapshot.to_dict(), uid) or {}
+            for source_id in (row.get('memory_id'), row.get('conversation_id'), row.get('source_id')):
+                if isinstance(source_id, str) and source_id in conversation_ids:
+                    linked.add(source_id)
+            for field in ('evidence', 'source_refs'):
+                references = row.get(field)
+                if references is None:
+                    continue
+                if not isinstance(references, list):
+                    raise ValueError('Stored memory source references are unreadable')
+                for ref in references:
+                    if not isinstance(ref, dict):
+                        raise ValueError('Stored memory source reference is unreadable')
+                    for source_id in (ref.get('conversation_id'), ref.get('source_id')):
+                        if isinstance(source_id, str) and source_id in conversation_ids:
+                            linked.add(source_id)
+            if linked == conversation_ids:
+                return linked
+    return linked
+
+
 def delete_memories_for_conversation(uid: str, memory_id: str, *, firestore_client: Any = None) -> Dict[str, Any]:
     result = ripple_source_deletion(uid, memory_id, firestore_client=firestore_client)
     logger.info(f"delete_memories_for_conversation {memory_id} {len(result['retracted_memory_ids'])}")

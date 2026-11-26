@@ -41,8 +41,11 @@ Server-authored `upload_arrived_at` and `upload_entitlement` survive original
 intakes and merged completion. Entitlement labels are only paid/trial/free/unknown.
 `omi_batch_pipeline_created_units_total` counts first non-shadow unit admission;
 `omi_batch_pipeline_upload_to_transcript_seconds` measures each accepted original
-request through first durable transcript publication, not pre-accept retries,
-client receipt or notes. `omi_batch_pipeline_inter_upload_gap_seconds` records
+request through first durable transcript publication, not time on the phone,
+pre-accept retries, client receipt or notes. Its bounded `hold_state` label is
+`none|bg300|fg_preview300|fg60|unknown`, with absent or unrecognized headers
+reported as `unknown`. It covers ordinary and server-coalesced uploads.
+`omi_batch_pipeline_inter_upload_gap_seconds` records
 request-arrival gaps between accepted originals sharing the exact owner/session/
 coalescing key, using already-read predecessor rows. Its closed labels are
 `entitlement=paid|trial|free|unknown`, `freshness=fresh|backlog` and
@@ -80,6 +83,14 @@ terminal transaction. Record admission promotes it to `v3_manual_end` for a sing
 recording, or when the fast first transcript covers the whole recording. Set it to `off` on
 `backend` and `backend-integration` to restore the silence and lock timers for later finishes.
 
+`CONVERSATIONS_V3_CAPTURE_CONTINUITY` defaults to `on`. When two recordings prove a reconnect (same
+capture origin `external_data.recording_origin_id`, a new `recording_session_id`, same device when both
+name one), the stream gap between them, up to 10 minutes, is missing audio, not silence, for v3 grouping.
+A manual-end cut waits, at most 5 minutes after the cut, while its own recording or a preceding batch
+recording sealed by the Finish that joins the finished speech has no transcript yet. A held cut stays a
+boundary: its window stays open and unlocked, and later speech waits. Set it to `off` on the v3 builder
+to restore the previous cut and silence rules; rows already written keep their boundaries.
+
 `CONVERSATIONS_V3_FINISH_NO_POINTER` defaults to `on`. When the existing in-progress
 recording lookup misses, an authenticated v3 owner's Finish can acknowledge the
 live derived window in the existing processing response. An optional
@@ -92,7 +103,12 @@ native binding has projected. Set the switch to `off` on the API service to rest
 until a member is added). For a member, or for every v3 owner with `on`, a manually
 finished v3 recording of up to 20 minutes is transcribed once through the prerecorded provider
 when record admission stages its sealed audio, and written as a provisional transcript that the
-batch record projection later replaces.
+batch record projection later replaces. `CONVERSATIONS_V3_FAST_FINISH_CHUNKED` (default `on`, an
+ops kill switch) splits every unit into chunks of at most five minutes, sends them concurrently inside
+a 45 s end-to-end deadline and stitches them in order, for recordings of up to nine chunks (about 44
+minutes). Recordings over 20 minutes take that path only for `CONVERSATIONS_V3_FAST_FINISH_LONG_PERCENT`
+(default 25) of owners and up to `CONVERSATIONS_V3_FAST_FINISH_LONG_DAILY_SECONDS` (default 7200) of
+their audio per process per UTC day. `off` restores one serial request per unit and the 20-minute bound.
 
 `CONVERSATIONS_V3_MAX_WINDOW_SECONDS` defaults to 10800. A transcript line
 starting at or after that elapsed time starts a separate v3 stretch. Set the
@@ -106,9 +122,31 @@ segments counted once. Its durable claim limits it to one title-only provider
 attempt. The builder publishes the preview through `structured.title` while the
 row is live. User titles and the final outline take precedence.
 
-`CONVERSATIONS_V3_BATCH_COMMIT_READS=on` is the default. The projection commit reads its
-recordings and existing derived rows with one transactional BatchGet per chunk. Set it to `off`
-to restore serial per-document reads.
+`CONVERSATIONS_V3_BATCH_COMMIT_READS=on` is the default. The projection commit uses
+transactional BatchGet chunks for input revisions, tombstones, and new-target existence
+checks. Set it to `off` to restore serial point reads.
+
+`CONVERSATIONS_V3_SKIP_UNCHANGED_WRITES` defaults to on. The builder compares its final
+payloads against existing transaction snapshots before writing. Set it to `off` to
+restore unconditional projection and pending writes. `omi_conversations_v3_projection_rows`
+measures skipped and written rows by caller. `omi_conversations_v3_reconcile_billed_writes`
+measures confirmed builder writes, including leases and Home feed writes. Downstream notes
+processing has separate write attribution.
+
+`CONVERSATIONS_V3_SETTLE_ON_LANDING` defaults to on. Live stretch cohesion at the default
+timing settles from the later of recorded speech end and `v3_speech_landed_at`, so a late
+batch of short topics joins its sit-down instead of locking on arrival. Set it to `off` to
+restore the recorded clock at the default timing; custom timing always uses landing. See the
+[short-topic sit-down change note](./listen_pusher_pipeline/changes/2026-11-25-v3-short-topic-sitdown.md).
+
+`POST /v1/conversations-v3/reconcile` returns HTTP 409 with
+`{"status":"retry","reason":"dependency_warming"}` for exhausted Firestore contention,
+expiry, or retry deadlines. Confirmed processing fences use `persistence_fenced` in the
+same response. `CONVERSATIONS_V3_RECONCILE_RETRY_RESPONSE` defaults to on. Set it to
+`off` on backend-sync to restore the prior HTTP error mapping. See the
+[reconcile retry change note](./listen_pusher_pipeline/changes/2026-11-25-v3-reconcile-retry-contract.md)
+for retry metrics and processing settlement.
+
 
 ## Pre-recorded Modulate credit-refusal failover
 
@@ -287,6 +325,19 @@ errors skip discovery; cursor, heartbeat and new claims check the acquisition
 token transactionally. Existing 120s group custody leases and privacy/erasure
 checks remain authoritative for already claimed audio. See
 [coalescing scan coordination](listen_pusher_pipeline/changes/2026-11-14-coalescing-scan-leader.md).
+
+## Pusher playback inventory manifest reuse
+
+`PUSHER_INVENTORY_MANIFEST_LONG_TTL_ENABLED` defaults to false, for a
+120-second lifetime. Set it to true on Pusher to use 900 seconds. The cache
+has one 8 MiB process-local byte budget. Reuse requires both
+`PRIVATE_SYNC_INVENTORY_MANIFEST_BODY_CACHE_ENABLED` and
+`PRIVATE_SYNC_LISTED_MANIFEST_READ_ENABLED`, which default to true.
+Ordinary gapped playback inventory requires a unique current manifest,
+rechecks its generation and metageneration on every hit, and verifies its
+body, media binding and gap count before using frames. Fresh, strict and
+deadline-bound inventory reads bypass this cache. See the
+[rollout and readback runbook](runbooks/private-sync-inventory-manifest-reuse.md).
 
 ## Retained seal proof rules
 
@@ -478,7 +529,12 @@ can suppress at most the batch-admitted 25%. This knob does not expand batch
 admission itself. The rollout lead owns mobile cohort expansion and deployment.
 
 `SYNC_RECORD_COVERAGE_WAIT_MEMO` defaults `true`; set `false` to bypass memo reads
-and writes and restore full WAL coverage checks on each admission.
+and writes, including entries already cached, and restore full WAL coverage
+checks on each admission. `SYNC_RECORD_COVERAGE_WAIT_TTL_SECONDS` defaults to
+21,600 and is bounded to 30–21,600 seconds. It applies at insertion. Hits never
+extend the expiry. `SYNC_RECORD_COVERAGE_WAIT_RETRY_AFTER_SECONDS` defaults to
+1,800 and is bounded to 30–1,800 seconds. It sets the JSON body hint for coverage
+memo hits only. Unset or malformed values use the defaults.
 
 Web uses `SERVER_BATCH_ONLY_WEB_PERCENT` (default 0), a separate salted owner
 cohort keyed on authenticated `client_platform=web`; persisted source may be
@@ -9387,6 +9443,15 @@ A short encoded recording is never discarded because of its byte size; decoded
 silence still goes through VAD. Empty admission creates no job, transcript or
 conversation. These no-audio clips need no raw-audio archive.
 
+An updated manifest-capable client opts in with `X-Omi-Wal-Retry: 1` on the
+multipart POST. An eligible 503 can return an opaque two-minute handle in
+that header. On an exact retry the ordinary capture-manifest POST accepts
+the handle and can return `X-Omi-Wal-Retry: check` alongside its manifest.
+Only then may the client PUT the same manifest claims and handle to
+`/v2/sync-local-files`. A typed 503 with recording-scoped pacing keeps the
+WAL pending. A 204 or inconclusive probe continues to full multipart
+admission. Only the multipart route issues audio acknowledgments.
+
 Other 400 refusals expose closed codes for malformed multipart, part count,
 part size, invalid filenames and invalid capture time. Filename/time refusals
 log UID-scoped metadata only; parser failures happen before authentication and
@@ -9549,6 +9614,19 @@ clamped to 60..1800, `0` withdraws it) is sent to phones as `end_silence_seconds
 `X-Omi-Upload-Trace: sealed=<epoch>;first=<epoch>;gate=<label>;attempts=<n>` on `/v2/sync-local-files` is
 measurement only: `omi_sync_seal_to_accept_seconds{gate}` records how long the batch's oldest file waited on
 the phone and which gate held it. A malformed header is ignored.
+
+The optional `X-Omi-Upload-Hold` request header on `/v2/sync-local-files` labels batch
+publication latency. Clients send `none`, `bg300`, `fg_preview300`, or `fg60`.
+An absent or unrecognized value becomes `unknown`. The value does not control
+admission, processing priority, or custody.
+Clients with holding enabled also send `X-Omi-Upload-Hold-Age-Ms` for a held
+upload. It is the oldest included file's age at send time, as an integer in
+`0..86400000` milliseconds. An absent or malformed age produces no sample.
+The optional `X-Omi-Upload-Recovered: 1` header labels a held file recovered
+from the phone journal. Both latency histograms expose `recovered="true"`
+for this exact value and `recovered="false"` for all other values, including
+an absent header. The label leaves `hold_state` unchanged.
+[Change note](listen_pusher_pipeline/changes/2026-11-25-mobile-upload-hold-metric.md).
 
 The older `sync_processing_hold.upload_watermark_at` slot is unchanged and still has no producer: if
 supplied it must pass `finished_at` plus the quiet window, and a lagging value waits up to the maximum hold.

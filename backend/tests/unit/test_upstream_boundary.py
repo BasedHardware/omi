@@ -195,7 +195,7 @@ class TestExtractionSeamFanOut:
         source = PROCESS_CONVERSATION_PATH.read_text(encoding="utf-8")
         # Memory source replacement is synchronous/fail-closed; task and goal
         # projections remain independent postprocess destinations.
-        assert "_extract_memories(uid, conversation)" in source
+        assert "_extract_memories(uid, conversation, **effect_kwargs)" in source
         assert "submit_with_context(postprocess_executor, _extract_memories" not in source
         assert "submit_with_context(postprocess_executor, _save_action_items" in source
         assert "_save_action_items(uid, conversation, people, trigger)" in source

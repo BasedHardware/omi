@@ -4,6 +4,7 @@ import asyncio
 import itertools
 import re
 import threading
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -137,6 +138,9 @@ def test_unit_pcm_refuses_a_short_source():
 @pytest.fixture(autouse=True)
 def admitted(monkeypatch):
     monkeypatch.setenv('CONVERSATIONS_V3_FAST_FINISH', 'on')
+    # This file pins the kill-switch path (one serial request per unit, 20-minute cap): what
+    # CONVERSATIONS_V3_FAST_FINISH_CHUNKED=off restores. The chunked default has its own file.
+    monkeypatch.setenv('CONVERSATIONS_V3_FAST_FINISH_CHUNKED', 'off')
     monkeypatch.setattr(fast_finish, 'funded', lambda uid, seconds, language: True)
 
 
@@ -558,11 +562,13 @@ def _admit(monkeypatch, current, units, *, fast='written', promoted=True, member
     calls = {'fast': 0, 'promote': 0, 'cut': 0}
     decoded = current if decoded is None else decoded
 
-    def run(uid, cid, row_, units_, read, *, refresh, cut, privacy, fence):
+    def run(uid, cid, row_, units_, read, *, refresh, cut, privacy, fence, deadline):
+        # One end-to-end budget, set at admission and handed to the pass.
+        assert deadline > time.monotonic()
         calls['fast'] += 1
-        # The pass is handed a decoded row, never admission's raw snapshot.
+        # The pass reads its own decoded row (bounded by its deadline), never admission's raw snapshot.
         expected = dict(decoded, _recovery_transcript_decoded=True)
-        assert row_ == expected and refresh() == expected
+        assert row_ is None and refresh() == expected
         assert units_ is not units and units_[0][2] is not units[0][2]
         # A single unit is cut by admission before the pass; several units only by the pass itself.
         # A promoted single unit still gets the manual-end wake after a written pass.
@@ -640,25 +646,27 @@ def test_the_pass_gets_the_decoded_row_for_a_raw_row_with_stored_bytes(monkeypat
 
 def test_an_undecodable_stored_transcript_is_not_treated_as_empty(monkeypatch):
     live._FAST_FINISH_STARTED.clear()
-    seen = []
+    seen, outcomes = [], []
     monkeypatch.setattr(fast_finish, 'enabled', lambda uid: True)
     monkeypatch.setattr(
         fast_finish,
         'run',
         lambda uid, cid, row_, *a, **k: seen.append(row_)
-        or fast_finish._run(
-            uid,
-            cid,
-            row_,
-            [],
-            None,
-            write=None,
-            transcribe=None,
-            refresh=k['refresh'],
-            cut=None,
-            authorize=None,
-            privacy=None,
-            fence=None,
+        or outcomes.append(
+            fast_finish._run(
+                uid,
+                cid,
+                row_,
+                [],
+                None,
+                write=None,
+                transcribe=None,
+                refresh=k['refresh'],
+                cut=None,
+                authorize=None,
+                privacy=None,
+                fence=lambda transaction: None,
+            )
         ),
     )
     monkeypatch.setattr(
@@ -671,8 +679,8 @@ def test_an_undecodable_stored_transcript_is_not_treated_as_empty(monkeypatch):
         await asyncio.sleep(0)
 
     asyncio.run(admit())
-    # The pass is handed no row at all, which is ineligible before any audio is read.
-    assert seen == [{}]
+    # The pass reads no row at all, which is ineligible before any audio is read.
+    assert seen == [None] and outcomes == ['ineligible']
 
 
 def test_the_default_writer_rechecks_the_stored_row_inside_its_transaction(monkeypatch):

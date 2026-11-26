@@ -298,8 +298,12 @@ def install_planner_trace(stack: ExitStack, target: str | None = None) -> None:
         return value.isoformat() if hasattr(value, 'isoformat') else value
 
     def write(row: dict[str, Any]) -> None:
-        with open(target, 'a', encoding='utf-8') as handle:
-            handle.write(json.dumps(row, default=str) + '\n')
+        from pathlib import Path
+
+        from testing.pipeline_lab.store import private_open
+
+        with private_open(Path(target), 'ab') as handle:
+            handle.write((json.dumps(row, default=str) + '\n').encode('utf-8'))
 
     def load(uid: str, *args: Any, **kwargs: Any) -> Any:
         result = original_load(uid, *args, **kwargs)

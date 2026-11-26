@@ -1,6 +1,16 @@
 """Reviewed payload sites, including values/keys and duplicate sites. Never refresh in a test."""
 
 FIELD_SITES = {
+    # An End answered while its conversation is still open projects processing into the HTTP response
+    # only (flag end_open_conversation). Nothing is stored.
+    'utils/conversations/v3/end_answer.py': [
+        ('ended_conversation', 'status', 'ConversationStatus.processing', ('status',)),
+    ],
+    # A per-frame verdict (text or empty) in an upload's status result (flag batch_frame_outcomes). Not a
+    # lifecycle state: the key is a range's own label.
+    'utils/batch_pipeline/frame_outcomes.py': [
+        ('completed_ranges', 'status', 'status', ('capture_root', 'clock_epoch', 'end', 'start', 'status')),
+    ],
     # Finish projects processing into the HTTP response. Only the v3 builder stores window status.
     'utils/conversations/v3/finish.py': [
         ('_acknowledge', 'status', 'ConversationStatus.completed', ('status',)),
@@ -149,11 +159,14 @@ FIELD_SITES = {
                 'structured',
                 'summary_covers_through',
                 'title_locked',
+                'v3_backfill_attempts',
+                'v3_backfill_process_pending',
                 'v3_notes_written',
                 'v3_process_attempts',
                 'v3_process_failed',
                 'v3_process_failure_reason',
                 'v3_process_fingerprint',
+                'v3_process_pending',
                 'v3_rewrites',
             ),
         ),
@@ -195,6 +208,7 @@ FIELD_SITES = {
         ('plan_partitions', 'status', "'pending'", ('documents', 'forced_cut', 'since', 'status', 'until')),
         ('resume_run', 'status', "'pending'", ('status',)),
         ('resume_run', 'status', "(run or {}).get('status')", ('outcome', 'status')),
+        ('run_step', 'status', "'blocked'", ('notes_failed', 'notes_processed', 'notes_remaining', 'reason', 'status')),
         ('run_step', 'status', "'blocked'", ('reason', 'status')),
         ('run_step', 'status', "'committed'", ('status',)),
         ('run_step', 'status', "'deriving'", ('code_sha', 'status')),
@@ -1478,6 +1492,7 @@ FIELD_SITES = {
                 'updated_at',
             ),
         ),
+        ('_record_meeting_receipt_txn', 'status', "'fenced'", ('status',)),
         ('_record_meeting_receipt_txn', 'status', "'fenced'", ('status',)),
         ('_record_meeting_receipt_txn', 'status', "'fenced'", ('status',)),
         ('_record_meeting_receipt_txn', 'status', "'identity_mismatch'", ('status',)),
@@ -3500,7 +3515,6 @@ FIELD_SITES = {
                 'usage_unknown',
             ),
         ),
-        ('run_pass', 'status', "'not_admitted'", ('levers', 'reason', 'status', 'trigger')),
         ('run_pass', 'status', "'not_admitted'", ('reason', 'status')),
         ('run_pass', 'status', "'not_admitted'", ('reason', 'status')),
         ('run_pass', 'status', "'not_admitted'", ('reason', 'status')),
@@ -4247,13 +4261,7 @@ FIELD_SITES = {
     ],
     'utils/memory/memory_service.py': [
         (
-            'MemoryService._write_historical_override',
-            'status',
-            'status.value',
-            ('memory_id', 'origin', 'public_id', 'status', 'uid', 'updated_at'),
-        ),
-        (
-            'MemoryService._write_historical_overrides',
+            'MemoryService._historical_override_payload',
             'status',
             'status.value',
             ('memory_id', 'origin', 'public_id', 'status', 'uid', 'updated_at'),
@@ -4845,6 +4853,10 @@ KNOWN_TERMINAL_WRITERS = {
             'database/conversations_v3.py',
             'commit_projection.commit',
         ): 'known_extra_writer: lifecycle v3 projection; lease/revision/claim fenced',
+        (
+            'database/conversations_v3.py',
+            'undo_backfill_group.undo',
+        ): 'known_extra_writer: backfill undo restores converted donors and removes backfill copies; backfill lease fenced',
         (
             'utils/conversations/v3/service.py',
             'recording_short_path.guarded',

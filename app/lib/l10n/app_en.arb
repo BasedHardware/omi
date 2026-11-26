@@ -19348,5 +19348,17 @@
                 "type": "String"
             }
         }
+    },
+    "firmwareNewestSupportedForDevice": "Your device is already on its newest supported firmware version",
+    "@firmwareNewestSupportedForDevice": {
+        "description": "Calm status line on the firmware update page when this pendant has taken the newest firmware release as far as it can. Shown instead of 'Your device is up to date'. Must not sound like an error."
+    },
+    "firmwareSyncRecordingsFirstTitle": "Sync your recordings first",
+    "@firmwareSyncRecordingsFirstTitle": {
+        "description": "Dialog title shown when the user starts a firmware update while recordings are still stored only on the pendant."
+    },
+    "firmwareSyncRecordingsFirstMessage": "Some recordings are still on your device. Let them finish syncing to your phone, then start the update.",
+    "@firmwareSyncRecordingsFirstMessage": {
+        "description": "Dialog body explaining that recordings must finish syncing from the pendant to the phone before the firmware update can start."
     }
 }

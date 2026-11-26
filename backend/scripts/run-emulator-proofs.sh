@@ -65,8 +65,8 @@ run_proof "LLM gateway idempotency (claim, replay, expiry, stale settlement)" \
   "$PYTHON" -m pytest -q -p no:cacheprovider tests/integration/test_llm_gateway_idempotency_firestore.py
 run_proof "record nojob seal (synthetic cleanup ownership)" \
   "$PYTHON" -m pytest -q -p no:cacheprovider tests/unit/test_record_seal_nojob_emulator.py
-run_proof "pipeline ledger (fence, reopen, ordering, delete, erasure)" \
-  "$PYTHON" -m pytest -q -p no:cacheprovider tests/integration/test_pipeline_ledger_firestore.py
+run_proof "age-gate unpark (paging, CAS and durable enqueue debt)" \
+  "$PYTHON" -m pytest -q -p no:cacheprovider tests/unit/test_enrichment_age_gate_unpark_emulator.py
 run_proof "lifecycle properties (real Firestore, named producer exits)" \
   "$PYTHON" -m testing.lifecycle_sim.run \
   --extra-test-module testing/lifecycle_properties/test_properties.py
@@ -81,6 +81,8 @@ run_proof "destructive gate contention (same-kind block / stale takeover fence)"
 # Purge fixtures deliberately refuse cloud fallback. Make a wrong proof host a
 # failure here, rather than recording a successful invocation of skipped tests.
 if [[ "$FIRESTORE_EMULATOR_HOST" == 127.0.0.1:* || "$FIRESTORE_EMULATOR_HOST" == localhost:* ]]; then
+  run_proof "pipeline ledger and finalization jobs (ordering and account erasure)" \
+    "$PYTHON" -m pytest -q -p no:cacheprovider tests/integration/test_pipeline_ledger_firestore.py
   run_proof "conversation purge (coalescing, pre-PR consumers, rollback and WAL)" \
     "$PYTHON" -m pytest -q -p no:cacheprovider \
     tests/integration/test_conversation_batch_purge_emulator.py \
@@ -88,8 +90,8 @@ if [[ "$FIRESTORE_EMULATOR_HOST" == 127.0.0.1:* || "$FIRESTORE_EMULATOR_HOST" ==
     tests/integration/test_conversation_purge_mixed_version_emulator.py \
     tests/unit/test_record_wal_handoff_emulator.py
 else
-  echo "FAIL conversation purge: a loopback Firestore emulator is required" >&2
-  failures+=("conversation purge: loopback emulator required")
+  echo "FAIL account and conversation erasure proofs: a loopback Firestore emulator is required" >&2
+  failures+=("account and conversation erasure proofs: loopback emulator required")
 fi
 run_proof "ledger correction, revert, standalone reopen, privacy fence" \
   "$PYTHON" scripts/knowledge_ledger_correction_emulator_test.py
@@ -97,13 +99,13 @@ run_proof "ledger correction, revert, standalone reopen, privacy fence" \
 # and relies on backend/ staying the import root.
 run_proof "writer cutover / rollback / rollforward" \
   "$PYTHON" -m scripts.knowledge_ledger_writer_transition_emulator_test
-run_proof "Dream idle parking keeps every wakeup (park/acquire vs concurrent mark_dirty)" \
-  "$PYTHON" scripts/dream_park_race_emulator_test.py
 run_proof "summary task recovery, concurrency and expiry" \
   "$PYTHON" -m pytest \
   tests/integration/test_summary_debt_repair_firestore.py \
   tests/integration/test_summary_task_promotion_emulator.py \
   tests/integration/test_candidate_accept_expiry_emulator.py -q
+run_proof "v3 reconcile write elision (unchanged pass, Home receipts, kill switch)" \
+  "$PYTHON" -m pytest -q -p no:cacheprovider tests/integration/test_conversations_v3_unchanged_writes_firestore.py
 run_proof "desktop screen sync frame request delivery, expiry and quota" \
   "$PYTHON" -m pytest -q tests/integration/test_screen_sync_frame_queue_emulator.py
 

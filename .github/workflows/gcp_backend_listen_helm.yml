@@ -34,7 +34,7 @@ on:
         default: ''
         type: string
       mode:
-        description: 'deploy applies the chart; rollback restores an earlier Helm revision; private-env-migrate copies the retired private overlay into Secret Manager (prod, no roll)'
+        description: 'deploy applies the chart; image-only replaces the primary Listen image; rollback restores an earlier Helm revision; private-env-migrate syncs private references without rolling'
         required: true
         default: 'deploy'
         type: choice
@@ -42,13 +42,14 @@ on:
           - deploy
           - rollback
           - evidence
+          - image-only
           - private-env-migrate
       evidence_request_id:
         description: 'Single-use Release evidence request ID; evidence mode only'
         required: false
         default: ''
       evidence_request:
-        description: 'Nonsecret Release request bindings; evidence mode only, no overlay payload'
+        description: 'Nonsecret Release evidence request or admitted image-only proof'
         required: false
         default: ''
       image_tag:
@@ -146,7 +147,7 @@ jobs:
       id-token: 'write'
 
     timeout-minutes: ${{ inputs.mode == 'evidence' && 10 || 360 }}
-    runs-on: ${{ inputs.mode == 'evidence' && 'ubuntu-22.04' || 'ubuntu-latest' }}
+    runs-on: ${{ (inputs.mode == 'evidence' || inputs.mode == 'image-only') && 'ubuntu-22.04' || 'ubuntu-latest' }}
     steps:
       - name: Validate Environment Input
         if: github.event_name == 'workflow_dispatch'
@@ -176,6 +177,22 @@ jobs:
             echo "::error title=Listen control mismatch::The production workflow and checkout must match the admitted control SHA."
             exit 1
           fi
+      - name: Validate image-only Listen admission
+        if: ${{ inputs.mode != 'evidence' && inputs.mode == 'image-only' }}
+        env:
+          DEPLOY_ENV: ${{ inputs.environment }}
+        run: |
+          set -euo pipefail
+          [[ "$GITHUB_EVENT_NAME" == workflow_dispatch && "$GITHUB_REF" == refs/heads/main &&
+             "$GITHUB_RUN_ATTEMPT" == 1 && "$DEPLOY_ENV" == prod &&
+             "$GITHUB_SHA" == "$(git rev-parse HEAD)" ]]
+          jq -e --arg control "$GITHUB_SHA" '.inputs | .branch == "main" and (.image_tag | test("^[0-9a-f]{7}$"))
+              and (.expected_sha | test("^[0-9a-f]{40}$")) and .break_glass_lock == "false"
+              and .helm_revision == "" and .listen_edge_image_digest == "" and .evidence_request_id == ""
+              and .gateway_feature_mode == "chart-default" and .chat_agent_route == "chart-default"
+              and .allow_direct_model_exception == "chart-default" and .stt_service_models == ""
+              and .translation_service_models == "" and (.control_sha // "") == ""
+              and (.evidence_request | fromjson | .control_sha == $control)' "$GITHUB_EVENT_PATH" >/dev/null
 
       - name: Bind shared record token lease rollout inputs
         if: ${{ inputs.mode != 'evidence' && ((github.event.inputs.mode || 'deploy') == 'deploy') }}
@@ -265,8 +282,14 @@ jobs:
           python3 .github/listen-evidence-control/.github/scripts/listen_runtime.py reconstruct --root "$RUNNER_TEMP/listen-runtime"
           echo "$RUNNER_TEMP/listen-runtime/helm/linux-amd64" >> "$GITHUB_PATH"
 
+      - name: Reconstruct image-only runtime before credentials
+        if: ${{ inputs.mode != 'evidence' && inputs.mode == 'image-only' }}
+        run: |
+          python3 .github/scripts/listen_runtime.py reconstruct --root "$RUNNER_TEMP/listen-runtime"
+          echo "$RUNNER_TEMP/listen-runtime/helm/linux-amd64" >> "$GITHUB_PATH"
+
       - name: Install Helm
-        if: ${{ inputs.mode != 'evidence' }}
+        if: ${{ inputs.mode != 'evidence' && inputs.mode != 'image-only' }}
         uses: azure/setup-helm@v5
 
       # Prod: GitHub WIF as omi-ci-deployer-prod@ (credential-hygiene WS-C, plan v2 Phase E).
@@ -333,9 +356,11 @@ jobs:
 
       - name: Resolve backend-listen image tag
         id: resolve-listen-image
-        if: ${{ (github.event.inputs.mode || 'deploy') == 'deploy' }}
+        if: ${{ (github.event.inputs.mode || 'deploy') == 'deploy' || inputs.mode == 'image-only' }}
         env:
           REQUESTED_TAG: ${{ github.event.inputs.image_tag }}
+          EXPECTED_SHA: ${{ inputs.expected_sha }}
+          DEPLOY_MODE: ${{ inputs.mode }}
         run: |
           set -euo pipefail
           IMAGE="$(kubectl -n ${{ vars.ENV }}-omi-backend get deploy/${{ vars.ENV }}-omi-backend-listen -o jsonpath='{.spec.template.spec.containers[0].image}' 2>/dev/null || true)"
@@ -375,6 +400,10 @@ jobs:
               echo "ERROR: image_tag ${REQUESTED_TAG} is not an ancestor of origin/main." >&2
               exit 1
             fi
+          fi
+          if [[ "${DEPLOY_MODE:-deploy}" == image-only && "$(git rev-parse "${REQUESTED_TAG}^{commit}")" != "$EXPECTED_SHA" ]]; then
+            echo "::error::The image tag must resolve to the exact admitted source."
+            exit 1
           fi
           echo "BACKEND_LISTEN_SOURCE_SHA=$(git rev-parse "${REQUESTED_TAG}^{commit}")" >> "$GITHUB_ENV"
           RESOLVED_TAG=$(git rev-parse --short=7 "${REQUESTED_TAG}^{commit}")
@@ -709,6 +738,16 @@ jobs:
           echo "Image after rollback: $AFTER"
           helm -n "$NS" history "$RELEASE" --max 10
 
+      - name: Replace only the admitted Listen image
+        if: ${{ inputs.mode != 'evidence' && inputs.mode == 'image-only' }}
+        env:
+          IMAGE_ONLY_PROOF: ${{ inputs.evidence_request }}
+        run: |
+          set -euo pipefail
+          export LD_LIBRARY_PATH="$RUNNER_TEMP/listen-runtime/python/lib"
+          unset LD_PRELOAD PYTHONHOME PYTHONPATH
+          "$RUNNER_TEMP/listen-runtime/python/bin/python3.12" -I -B .github/scripts/listen_overlay_evidence.py apply-image-only
+
       - name: Verify rollout
         if: ${{ inputs.mode != 'evidence' && inputs.mode != 'private-env-migrate' }}
         run: |
@@ -719,6 +758,16 @@ jobs:
             exit 1
           fi
           python3 backend/scripts/deploy_status_report.py --env ${{ vars.ENV }} --include-gke --gke-service backend-listen
+
+      - name: Verify admitted Listen digest on every serving pod
+        if: ${{ inputs.mode != 'evidence' && inputs.mode == 'image-only' }}
+        env:
+          IMAGE_ONLY_PROOF: ${{ inputs.evidence_request }}
+        run: |
+          set -euo pipefail
+          export LD_LIBRARY_PATH="$RUNNER_TEMP/listen-runtime/python/lib"
+          unset LD_PRELOAD PYTHONHOME PYTHONPATH
+          "$RUNNER_TEMP/listen-runtime/python/bin/python3.12" -I -B .github/scripts/listen_overlay_evidence.py verify-image-only
 
       # GKE creates standalone NEGs from the Service annotation but does not
       # attach every newly appearing zone to this manually managed LB backend.

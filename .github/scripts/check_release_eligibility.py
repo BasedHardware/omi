@@ -160,7 +160,7 @@ def validate_workflow(text: str) -> list[str]:
         "release eligibility dispatch must resolve after as HEAD",
     )
     for name, expression in {
-        "ref": "${{ github.ref }}",
+        "ref": "${{ steps.range.outputs.proof_ref }}",
         "sha": "${{ github.sha }}",
         "before": "${{ steps.range.outputs.before }}",
         "after": "${{ steps.range.outputs.after }}",

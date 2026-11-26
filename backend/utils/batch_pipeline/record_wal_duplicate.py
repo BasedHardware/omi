@@ -12,7 +12,7 @@ from cryptography.exceptions import InvalidTag
 from google.api_core.exceptions import GoogleAPICallError
 from prometheus_client import Counter as Metric
 
-from config.record_wal_duplicate import ARCHIVE_BUCKET, mode
+from config.record_wal_duplicate import ARCHIVE_BUCKET, SHADOW_CONTENT_MODULUS, mode
 from config.record_wal_sample import ATTEMPT_SECONDS
 from database import record_wal_duplicate as ledger
 from database.record_wal_handoff import identity
@@ -219,7 +219,7 @@ async def replay(store, uid, cid, source, device, content_id, session, claims):
 
 def select(uid, content_id):
     current, slot = mode(uid, time.time())
-    if current == 'shadow' and int(hashlib.sha256(content_id.encode()).hexdigest()[:12], 16) % 1000:
+    if current == 'shadow' and int(hashlib.sha256(content_id.encode()).hexdigest()[:12], 16) % SHADOW_CONTENT_MODULUS:
         return 'off', None
     return current, slot
 

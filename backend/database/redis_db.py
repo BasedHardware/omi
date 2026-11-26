@@ -1447,10 +1447,58 @@ def try_acquire_ai_profile_refresh_lock(uid: str, ttl: int = 10 * 60) -> bool:
     return result is not None
 
 
-def try_acquire_ai_profile_auto_cooldown(uid: str, ttl: int = 60 * 60) -> bool:
-    """At most one automatic AI-profile refresh attempt per owner per ``ttl``."""
-    result = r.set(f'users:{uid}:ai_profile_auto_cooldown', '1', ex=ttl, nx=True)
-    return result is not None
+# The cooldown value also records independent demand while a conversation
+# attempt is active. One key keeps admission and handoff atomic across pods.
+_AI_PROFILE_ADMIT = """
+if redis.call('SET', KEYS[1], ARGV[1], 'EX', ARGV[2], 'NX') then
+    return 1
+end
+local owner = redis.call('GET', KEYS[1])
+if ARGV[1] == '1' and owner and string.match(owner, '^conversation:[0-9a-f]+$') then
+    redis.call('SET', KEYS[1], owner .. ':pending', 'KEEPTTL')
+end
+return 0
+"""
+
+_AI_PROFILE_SETTLE = """
+local owner = redis.call('GET', KEYS[1])
+local pending = owner == ARGV[1] .. ':pending'
+if owner ~= ARGV[1] and not pending then
+    return 0
+end
+if ARGV[2] == 'source_fenced' then
+    if pending then
+        redis.call('SET', KEYS[1], ARGV[1] .. ':independent', 'KEEPTTL')
+        return 1
+    end
+    redis.call('DEL', KEYS[1])
+elseif ARGV[2] == 'clear' then
+    redis.call('DEL', KEYS[1])
+else
+    redis.call('SET', KEYS[1], '1', 'KEEPTTL')
+end
+return 0
+"""
+
+
+def try_acquire_ai_profile_auto_cooldown(uid: str, ttl: int = 60 * 60, *, token: str | None = None) -> bool:
+    """Admit an automatic attempt or record independent demand on an active conversation attempt."""
+    owner = '1' if token is None else f'conversation:{token}'
+    return bool(r.eval(_AI_PROFILE_ADMIT, 1, f'users:{uid}:ai_profile_auto_cooldown', owner, ttl))
+
+
+def settle_ai_profile_auto_cooldown(uid: str, token: str, *, source_fenced: bool) -> bool:
+    """Settle only our attempt and reserve the cooldown for any owed independent retry."""
+    outcome = 'source_fenced' if source_fenced else 'settled'
+    return bool(
+        r.eval(_AI_PROFILE_SETTLE, 1, f'users:{uid}:ai_profile_auto_cooldown', f'conversation:{token}', outcome)
+    )
+
+
+def finish_ai_profile_auto_retry(uid: str, token: str, *, clear: bool) -> None:
+    """Release or settle the handoff only while it still owns the cooldown."""
+    outcome = 'clear' if clear else 'settled'
+    r.eval(_AI_PROFILE_SETTLE, 1, f'users:{uid}:ai_profile_auto_cooldown', f'conversation:{token}:independent', outcome)
 
 
 def release_ai_profile_refresh_lock(uid: str) -> None:

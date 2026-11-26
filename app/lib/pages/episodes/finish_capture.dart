@@ -34,7 +34,9 @@ HeldCapture? holdCapture(CaptureProvider provider) => provider.segments.isEmpty 
 /// The account's live window is a valid Finish target only if this device captures it.
 String? ownedLiveFinishId(BuildContext context, CaptureProvider capture) {
   final live = context.read<ConversationsV3Provider?>()?.live;
-  return live != null && LiveConversationEndButton.phoneCaptures(live, capture, currentLiveId: live.id)
+  return live != null &&
+          LiveConversationEndButton.phoneCaptures(live, capture,
+              currentLiveId: live.id, liveCaptureDeviceId: live.v3?.captureDeviceId)
       ? live.id
       : null;
 }

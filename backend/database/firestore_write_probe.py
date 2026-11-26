@@ -53,8 +53,10 @@ import functools
 import inspect
 import logging
 import os
+from contextlib import contextmanager
 from contextvars import ContextVar
 from typing import Any, Callable, Iterable
+from threading import Lock
 
 from prometheus_client import Counter
 
@@ -72,6 +74,7 @@ __all__ = [
     'FIRESTORE_NOOP_WRITES_BY_CALLER',
     'FIRESTORE_WRITE_CALLER_LABEL_OVERFLOW',
     'install_document_write_probe',
+    'probe_installed',
     'write_op',
 ]
 
@@ -142,6 +145,9 @@ _WRITE_PLUMBING_MODULES = frozenset(
         # retry helper would otherwise be the first frame for every caller of it
         # (~50% of Cloud Run writes on 2026-11-01).
         'database.firestore_transaction_retry',
+        # bind_firestore_client swaps the shared client's API methods for `bounded`,
+        # so it was the first frame for ~42M writes/day (most of backend-sync) on 2026-11-25.
+        'database.rpc_deadline',
     }
 )
 # Generic write helpers inside product modules: name the function that called them.
@@ -153,6 +159,9 @@ _WRITE_PLUMBING_FUNCTIONS = frozenset(
         ('utils.enrichment.outbox', 'mutate_row'),
         # FirestoreEnrichmentOutbox's adapter in front of mutate_row.
         ('database.outbox_firestore', '_mutate'),
+        # ProjectionStore's transaction runner: name the store method (ready, complete,
+        # acknowledge, ...) instead of `run` (~32M writes/day on 2026-11-25).
+        ('database.batch_pipeline_projection', 'run'),
     }
 )
 _OTHER = 'other'
@@ -259,20 +268,32 @@ def _record(writes: Iterable[Any], caller: str) -> None:
         try:
             FIRESTORE_BILLED_WRITES.labels(collection=collection, op=op, database=database).inc(amount)
         except Exception:
-            logger.warning('firestore write probe failed to record', exc_info=True)
+            _warn_record_failure()
         attribution_op = _ATTRIBUTION_OPS.get(op, op)
         try:
             FIRESTORE_BILLED_WRITES_BY_CALLER.labels(collection=collection, op=attribution_op, caller=write_caller).inc(
                 amount
             )
         except Exception:
-            logger.warning('firestore write probe failed to record', exc_info=True)
+            _warn_record_failure()
         try:
             FIRESTORE_BILLED_WRITES_BY_ORIGIN.labels(origin=origin, collection=collection, op=attribution_op).inc(
                 amount
             )
         except Exception:
             pass  # Attribution must never affect a write or the counters above.
+
+
+def _warn_record_failure() -> None:
+    """Keep both counter and warning failures outside the Firestore result path."""
+    try:
+        # Import lazily: v3 metrics imports this probe for its write-count context manager.
+        from utils.conversations.v3.metrics import safe_metric
+
+        safe_metric(lambda: logger.warning('firestore write probe failed to record', exc_info=True))
+    except Exception:
+        # The probe runs after an RPC may have committed, so telemetry imports must fail closed too.
+        pass
 
 
 def _request_writes(request: Any, kwargs: dict[str, Any]) -> list:
@@ -322,11 +343,62 @@ def _record_noops(writes: list, response: Any, caller: str) -> None:
         pass  # Attribution must never affect a write.
 
 
+class CommittedWrites:
+    """Shared by the executor threads in one request context."""
+
+    def __init__(self):
+        self._total = 0
+        self.incomplete = False
+        self._lock = Lock()
+
+    def add(self, count):
+        with self._lock:
+            self._total += count
+
+    @property
+    def total(self):
+        with self._lock:
+            if self.incomplete:
+                raise RuntimeError('Firestore write tally incomplete')
+            return self._total
+
+
+_committed_writes: ContextVar[CommittedWrites | None] = ContextVar('firestore_committed_writes', default=None)
+
+
+@contextmanager
+def count_committed_writes():
+    counter = CommittedWrites()
+    token = _committed_writes.set(counter)
+    try:
+        yield counter
+    finally:
+        _committed_writes.reset(token)
+
+
+@contextmanager
+def suspend_committed_write_count():
+    """Exclude work owned by a different stage from the current count."""
+    token = _committed_writes.set(None)
+    try:
+        yield
+    finally:
+        _committed_writes.reset(token)
+
+
 def _after(writes: list, response: Any, partial: bool) -> None:
     if partial:
         writes = _applied(writes, response)
     if not writes:
         return
+    count = _committed_writes.get()
+    if count is not None:
+        try:
+            count.add(len(writes))
+        except Exception:
+            # The RPC succeeded. Leave its result and the global counters alone;
+            # the guarded per-reconcile observer must not publish a partial total.
+            count.incomplete = True
     caller = write_caller() if bulk_write_attribution.get() is None else _OTHER
     _record(writes, caller)
     if not partial:
@@ -390,6 +462,11 @@ def patch_write_probe(cls: Any, name: str, factory: Callable[[Any], Any]) -> Non
 
 
 _installed = False
+
+
+def probe_installed() -> bool:
+    """Whether the SDK write probe was installed successfully."""
+    return _installed
 
 
 def probe_enabled() -> bool:

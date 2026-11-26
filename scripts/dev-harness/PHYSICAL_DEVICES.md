@@ -12,6 +12,8 @@ are hermetically tested and run in CI; **actual device qualification requires
 provisioned hardware and stays pending real evidence**.
 
 For agents without a phone, start with [offline capture regression tools](IPHONE_HARNESS.md).
+To exercise the ordinary dev app on a phone against a local backend configured like production,
+see the [prod-parity stack](PROD_PARITY.md); it makes no qualification claim.
 
 ## Interactive native microphone probe
 

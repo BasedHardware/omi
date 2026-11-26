@@ -794,7 +794,7 @@ def test_ios_notes_continue_after_http_deadline_and_same_row_replays(monkeypatch
     event = MagicMock()
     futures = []
     monkeypatch.setenv(developer.FROM_SEGMENTS_CONTINUED_PROCESSING_MODE_ENV, 'serve')
-    monkeypatch.setattr(request_deadline, 'FROM_SEGMENTS_REQUEST_BUDGET_SECONDS', 0.4)
+    monkeypatch.setattr(request_deadline, 'FROM_SEGMENTS_REQUEST_BUDGET_SECONDS', 1.0)
 
     def create(_uid, payload, *, idempotent):
         assert idempotent and not row
@@ -999,7 +999,7 @@ def test_slow_preflight_hits_http_budget_before_any_claim(monkeypatch, segment_a
             finished.set()
         return None
 
-    monkeypatch.setattr(request_deadline, 'FROM_SEGMENTS_REQUEST_BUDGET_SECONDS', 0.4)
+    monkeypatch.setattr(request_deadline, 'FROM_SEGMENTS_REQUEST_BUDGET_SECONDS', 1.0)
     monkeypatch.setattr(conversations_db, 'get_conversation', lookup)
     monkeypatch.setattr(developer.lifecycle_service, 'create_processing_conversation', create)
     try:

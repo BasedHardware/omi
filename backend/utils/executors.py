@@ -482,6 +482,53 @@ def get_context_executor() -> MonitoredThreadPoolExecutor:
         return _context_executor
 
 
+_fast_finish_chunk_executor: MonitoredThreadPoolExecutor | None = None
+_fast_finish_chunk_executor_lock = threading.Lock()
+
+
+def get_fast_finish_chunk_executor() -> MonitoredThreadPoolExecutor:
+    """Leaf provider requests for v3 fast-finish chunks: six at once per process.
+
+    The pass that submits them coordinates from ``storage_executor``, never from this pool. The queue
+    is bounded by its callers, not here: two short-pass slots of four chunks plus one long-pass slot
+    of three is eleven submissions at most, and a submission-slot bound would race the done callback
+    that frees it. A long pass's three leave three workers for short Finishes.
+    """
+    global _fast_finish_chunk_executor
+    with _fast_finish_chunk_executor_lock:
+        if _fast_finish_chunk_executor is None:
+            _fast_finish_chunk_executor = MonitoredThreadPoolExecutor(
+                name='fast_finish_chunk', max_workers=6, thread_name_prefix='ff-chunk'
+            )
+            _ALL_EXECUTORS.append(_fast_finish_chunk_executor)
+        return _fast_finish_chunk_executor
+
+
+_fast_finish_io_executor: MonitoredThreadPoolExecutor | None = None
+_fast_finish_io_executor_lock = threading.Lock()
+
+
+def get_fast_finish_io_executor() -> MonitoredThreadPoolExecutor:
+    """Bounded leaf work of a v3 fast-finish pass, so the pass can stop waiting at its deadline.
+
+    Runs the pass's Firestore calls (row refresh, funding, privacy, the transcript write and the cut),
+    its language resolution (the vendor probe and the self-hosted gate, with the privacy checks before
+    them) and, fire-and-forget, the long-budget Redis settle after the slot is released. The Firestore
+    client cannot bound a transaction commit and probe timeouts add up per phase, so the pass waits for
+    each call only until its bound and then abandons it: a queued call is cancelled, a running one ends
+    on its own timeouts. A pass has one call outstanding at a time and at most three passes run, so
+    eight workers leave room for abandoned calls and settles still running.
+    """
+    global _fast_finish_io_executor
+    with _fast_finish_io_executor_lock:
+        if _fast_finish_io_executor is None:
+            _fast_finish_io_executor = MonitoredThreadPoolExecutor(
+                name='fast_finish_io', max_workers=8, thread_name_prefix='ff-io'
+            )
+            _ALL_EXECUTORS.append(_fast_finish_io_executor)
+        return _fast_finish_io_executor
+
+
 _rollout_executor: MonitoredThreadPoolExecutor | None = None
 _rollout_executor_lock = threading.Lock()
 

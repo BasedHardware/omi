@@ -19,12 +19,14 @@ import 'package:omi/services/capture/capture_seams.dart';
 import 'package:omi/services/capture/empty_recording_notice.dart';
 import 'package:omi/services/capture/local_segment_store.dart';
 import 'package:omi/services/wals/wal_interfaces.dart';
+import 'package:omi/utils/reliability_experiments.dart';
 
 import '../support/crashlytics_recorder.dart';
 
 class _RecordingActions extends NoopCaptureExternalActions {
   final processing = <ServerConversation>[];
   final upserted = <ServerConversation>[];
+  final ended = <(String, String?)>[];
   ServerConversation? manualFinishRow;
   bool? manualFinishFailed;
   ProcessAbsence? manualFinishAbsence;
@@ -41,6 +43,11 @@ class _RecordingActions extends NoopCaptureExternalActions {
     if (!identical(placeholder, manualFinishRow)) return;
     manualFinishFailed = outcome?.response?.conversation == null && showFailure;
     manualFinishAbsence = outcome?.absence;
+  }
+
+  @override
+  void onEndAccepted(ServerConversation saved, {String? liveConversationId}) {
+    ended.add((saved.id, liveConversationId));
   }
 
   @override
@@ -233,6 +240,44 @@ void main() {
     expect(result.absence, ProcessAbsence.notFound);
   });
 
+  test('end_open_conversation: every End carries the moment it was asked for; off, no header is sent', () async {
+    Env.overrideApiBaseUrl('https://finish.test/');
+    addTearDown(Env.clearApiBaseUrlOverride);
+    addTearDown(() => ReliabilityExperiments.overrideForTesting(null));
+    final requests = <ApiRequest>[];
+    final finalize = Completer<void>();
+    final provider = _provider(
+      actions: _RecordingActions(),
+      finalizeGate: finalize,
+      laterFinalizeGates: [Completer<void>()..complete()],
+      processRequestSender: (request) async {
+        requests.add(request);
+        return http.Response('', 404);
+      },
+    );
+    addTearDown(provider.dispose);
+
+    ReliabilityExperiments.overrideForTesting(const {});
+    final baseline = provider.forceProcessingCurrentConversation(manualFinish: true);
+    finalize.complete();
+    await baseline;
+    await _flushEventQueue();
+    expect(requests.single.headers.containsKey(endedAtHeader), isFalse);
+
+    ReliabilityExperiments.overrideForTesting({'end_open_conversation'});
+    final before = DateTime.now();
+    await provider.forceProcessingCurrentConversation(manualFinish: true);
+    await _flushEventQueue();
+    await provider.finishCaptureWithOutcome(liveConversationId: 'window-2');
+    final after = DateTime.now();
+    expect(requests, hasLength(3));
+    for (final request in requests.skip(1)) {
+      final sent = double.parse(request.headers[endedAtHeader]!);
+      expect(sent, greaterThanOrEqualTo(before.millisecondsSinceEpoch / 1000 - 0.001));
+      expect(sent, lessThanOrEqualTo(after.millisecondsSinceEpoch / 1000 + 0.001));
+    }
+  });
+
   test('adds the processing placeholder before finalizeCurrentSession completes', () async {
     final finalize = Completer<void>();
     final actions = _RecordingActions();
@@ -372,6 +417,36 @@ void main() {
     await second;
     expect(processCalls, 1);
     expect(actions.processing.map((conversation) => conversation.id), ['0']);
+  });
+
+  test('every accepted End reports its conversation once, with the window it named; an unanswered one does not',
+      () async {
+    final finalize = Completer<void>()..complete();
+    final actions = _RecordingActions();
+    final provider = _provider(
+      actions: actions,
+      finalizeGate: finalize,
+      process: () async => CreateConversationResponse(
+          messages: <ServerMessage>[], conversation: _conversation(id: 'real', status: ConversationStatus.processing)),
+    );
+    addTearDown(provider.dispose);
+
+    // The shared path behind Finish, Wrap Up and the record button's stop: no manual-finish flag.
+    await provider.forceProcessingCurrentConversation();
+    await _flushEventQueue();
+    expect(actions.ended, [('real', null)]);
+
+    // End Conversation and a pendant double-tap: the manual finish, here naming its window.
+    await provider.forceProcessingCurrentConversation(manualFinish: true, liveConversationId: 'window');
+    await _flushEventQueue();
+    expect(actions.ended, [('real', null), ('real', 'window')]);
+
+    final unanswered = _RecordingActions();
+    final silent = _provider(actions: unanswered, finalizeGate: finalize, process: () async => null);
+    addTearDown(silent.dispose);
+    await silent.forceProcessingCurrentConversation(manualFinish: true);
+    await _flushEventQueue();
+    expect(unanswered.ended, isEmpty);
   });
 
   test('a contentless completed response settles into the real row', () async {
