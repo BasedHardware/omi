@@ -1056,6 +1056,231 @@ async def test_pusher_upload_failure_never_audio_acknowledges(remote, monkeypatc
     assert not sock.sent and sock.close_code == 1011
 
 
+def _observe_custody_signals(monkeypatch):
+    """Record the custody signals the socket router emits.
+
+    ``backend/utils/other/audio_outbox.commit_pcm_window`` owns the failure
+    counter for a dispatch fault it raised and records it before re-raising, so
+    these spies must see no second failure for the same disposition.
+    """
+    failures, would_drops = [], []
+    real_failure, real_would_drop = pusher.record_failure, pusher.record_would_drop
+
+    def observe_failure(stage, reason='other'):
+        failures.append((stage, reason))
+        real_failure(stage, reason)
+
+    def observe_would_drop(stage):
+        would_drops.append(stage)
+        real_would_drop(stage)
+
+    monkeypatch.setattr(pusher, 'record_failure', observe_failure)
+    monkeypatch.setattr(pusher, 'record_would_drop', observe_would_drop)
+    return {'failures': failures, 'would_drops': would_drops}
+
+
+def _dispositions(caplog):
+    """Terminal dispositions recorded for this socket, in emission order."""
+    return [
+        record.getMessage().split('disposition=')[1].split()[0]
+        for record in caplog.records
+        if 'event=durable_custody_commit_disposition' in record.getMessage()
+    ]
+
+
+def _error_tracebacks(caplog):
+    """Pusher ERROR records carrying a traceback (Error Reporting events)."""
+    return [
+        record
+        for record in caplog.records
+        if record.name == 'routers.pusher' and record.levelno >= logging.ERROR and record.exc_info
+    ]
+
+
+@pytest.mark.asyncio
+async def test_one_failed_durable_commit_settles_once_and_the_tail_never_raises(inline_session, monkeypatch, caplog):
+    """A live dispatch failure closes the fence once.
+
+    The shutdown tail must observe that disposition instead of rerunning the
+    unknown storage operation or raising a second, unhandled error (SCA-2668).
+    """
+    client, path, barrier, projected = inline_session
+    monkeypatch.setattr(pusher, 'PRIVATE_CLOUD_CHUNK_DURATION', 0)
+    attempts = []
+
+    def fail(*args, **kwargs):
+        attempts.append('commit')
+        raise OSError('synthetic dispatch failure')
+
+    monkeypatch.setattr(pusher, 'commit_pcm_window', MagicMock(side_effect=fail))
+    signals = _observe_custody_signals(monkeypatch)
+    with caplog.at_level(logging.WARNING, logger='routers.pusher'):
+        sock = Socket(_audio_frames('conversation', [b'\x01\x00' * 160, b'\x02\x00' * 160]))
+        await asyncio.wait_for(pusher._websocket_util_trigger(sock, 'owner', 16000, audio_custody=1), 5)
+    # The failing live dispatch is the only storage attempt: the teardown tail
+    # never reruns the unknown operation and never raises again.
+    assert attempts == ['commit']
+    assert len(sock.frames) == 1, 'the socket fails closed on the first unknown outcome'
+    assert not sock.sent and not projected
+    assert sock.close_code == 1011
+    assert signals['failures'] == [], 'the settlement never owns the dispatch failure counter'
+    assert signals['would_drops'] == ['commit'], 'one disposition, one pre-durability loss signal'
+    assert _dispositions(caplog) == ['unresolved']
+    assert not _error_tracebacks(caplog), 'later tails must not log an unhandled exception record'
+    assert 'conversation' in barrier.failed_recordings
+    assert client.rows[path]['record_upload_sessions'], 'the producer token stays held for WAL replay'
+    assert not client.rows[path]['record_audio_closed']
+
+
+@pytest.mark.asyncio
+async def test_cancelled_durable_commit_settles_once_and_the_tail_never_reruns(inline_session, monkeypatch, caplog):
+    """A cancelled dispatch has an unknown outcome: fence it once, then stop."""
+    client, path, barrier, projected = inline_session
+    monkeypatch.setattr(pusher, 'PRIVATE_CLOUD_CHUNK_DURATION', 0)
+    started = asyncio.Event()
+    calls = []
+    receive_tasks = []
+    create = pusher.create_named_task
+
+    def creating(*args, **kwargs):
+        task = create(*args, **kwargs)
+        if kwargs.get('name', '').endswith(':receive'):
+            receive_tasks.append(task)
+        return task
+
+    async def cancelled_dispatch(**kwargs):
+        calls.append(kwargs['tail'])
+        started.set()
+        await asyncio.Event().wait()
+
+    monkeypatch.setattr(pusher, '_commit_durable_audio_window', cancelled_dispatch)
+    monkeypatch.setattr(pusher, 'create_named_task', creating)
+    signals = _observe_custody_signals(monkeypatch)
+    sock = Socket(_audio_frames('conversation', [b'\x01\x00' * 160, b'\x02\x00' * 160]))
+    with caplog.at_level(logging.WARNING, logger='routers.pusher'):
+        handler = asyncio.create_task(pusher._websocket_util_trigger(sock, 'owner', 16000, audio_custody=1))
+        await asyncio.wait_for(started.wait(), 5)
+        receive_tasks[0].cancel()  # Pod shutdown cancels the in-flight dispatch.
+        await asyncio.wait_for(handler, 5)
+    assert calls == [False], 'the teardown tail never starts a second dispatch'
+    assert not sock.sent and not projected
+    assert sock.close_code == 1000
+    assert signals['failures'] == [], 'a cancelled dispatch is a disposition, not a second failure'
+    assert signals['would_drops'] == ['commit']
+    assert _dispositions(caplog) == ['unresolved']
+    assert not _error_tracebacks(caplog)
+    assert 'conversation' in barrier.failed_recordings
+    assert client.rows[path]['record_upload_sessions']
+    assert not client.rows[path]['record_audio_closed']
+
+
+@pytest.mark.asyncio
+async def test_refused_durable_tail_retains_the_fence_without_raising(inline_session, monkeypatch, caplog):
+    """A refusal is a known non-commit: retain the window, never raise."""
+    client, path, barrier, projected = inline_session
+    tails = []
+
+    async def refuse(**kwargs):
+        tails.append(kwargs['tail'])
+        return None
+
+    monkeypatch.setattr(pusher, '_commit_durable_audio_window', refuse)
+    signals = _observe_custody_signals(monkeypatch)
+    with caplog.at_level(logging.WARNING, logger='routers.pusher'):
+        sock = Socket(_audio_frames('conversation', [b'\x01\x00' * 160]))
+        await asyncio.wait_for(pusher._websocket_util_trigger(sock, 'owner', 16000, audio_custody=1), 5)
+    assert tails == [True], 'only the shutdown boundary was reached'
+    assert not sock.sent and not projected
+    assert sock.close_code == 1000, 'a refusal selects no error close'
+    assert signals['failures'] == [] and signals['would_drops'] == []
+    assert _dispositions(caplog) == []
+    assert not _error_tracebacks(caplog)
+    assert 'conversation' in barrier.failed_recordings
+    assert client.rows[path]['record_upload_sessions']
+    assert not client.rows[path]['record_audio_closed']
+
+
+@pytest.mark.asyncio
+async def test_normal_durable_tail_commits_once_without_a_disposition(inline_session, monkeypatch, caplog):
+    """The healthy path is unchanged: one tail commit, one receipt, no record."""
+    client, path, barrier, projected = inline_session
+    tails = []
+    real = pusher._commit_durable_audio_window
+
+    async def observe(**kwargs):
+        tails.append(kwargs['tail'])
+        return await real(**kwargs)
+
+    monkeypatch.setattr(pusher, '_commit_durable_audio_window', observe)
+    signals = _observe_custody_signals(monkeypatch)
+    pcm = b'\x01\x00' * 160
+    with caplog.at_level(logging.WARNING, logger='routers.pusher'):
+        sock = Socket(_audio_frames('conversation', [pcm]))
+        await asyncio.wait_for(pusher._websocket_util_trigger(sock, 'owner', 16000, audio_custody=1), 5)
+    assert tails == [True]
+    assert [read_pcm('owner', receipt) for receipt in _sent_receipts(sock)] == [pcm]
+    assert client.rows[path]['record_audio_closed'] is True
+    assert signals['failures'] == [] and signals['would_drops'] == []
+    assert _dispositions(caplog) == []
+    assert 'conversation' not in barrier.failed_recordings
+    assert not _error_tracebacks(caplog)
+
+
+def _custody_counter_value(stage):
+    return audio_outbox_metrics.CUSTODY_FAILURES.labels(stage=stage, reason='other')._value.get()
+
+
+def _would_drop_value(stage):
+    return audio_outbox_metrics.WOULD_DROP.labels(stage=stage)._value.get()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('live_flush', [True, False], ids=['live', 'tail'])
+async def test_real_storage_failure_counts_one_commit_failure_and_settles_once(
+    inline_session, monkeypatch, caplog, live_flush
+):
+    """A real helper failure owns the counter once; the settlement never doubles it.
+
+    Review F1: ``commit_pcm_window`` already records stage="commit" before
+    re-raising, so the socket settlement must add only the pre-durability loss
+    signal. This drives the real helper instead of replacing it.
+    """
+    client, path, barrier, projected = inline_session
+    if live_flush:
+        monkeypatch.setattr(pusher, 'PRIVATE_CLOUD_CHUNK_DURATION', 0)
+    real_archive = storage.archive_capture_bytes
+    manifest_attempts = []
+
+    def fail_manifest(uid, payload, prefix, *args, **kwargs):
+        if prefix == 'audio-outbox':
+            manifest_attempts.append(prefix)
+            raise OSError('manifest unavailable')
+        return real_archive(uid, payload, prefix, *args, **kwargs)
+
+    monkeypatch.setattr(storage, 'archive_capture_bytes', fail_manifest)
+    stage = 'commit' if live_flush else 'window_tail'
+    before_commit = _custody_counter_value('commit')
+    before_tail = _custody_counter_value('window_tail')
+    before_loss = _would_drop_value(stage)
+    signals = _observe_custody_signals(monkeypatch)
+    with caplog.at_level(logging.WARNING, logger='routers.pusher'):
+        sock = Socket(_audio_frames('conversation', [b'\x01\x00' * 160, b'\x02\x00' * 160]))
+        await asyncio.wait_for(pusher._websocket_util_trigger(sock, 'owner', 16000, audio_custody=1), 5)
+    assert manifest_attempts == ['audio-outbox'], 'the unknown storage operation is never retried'
+    assert _custody_counter_value('commit') == before_commit + 1, 'one failed commit is one failure record'
+    assert _custody_counter_value('window_tail') == before_tail, 'the tail adds no second failure series'
+    assert _would_drop_value(stage) == before_loss + 1
+    assert signals['failures'] == [], 'failure-counter ownership stays with the storage helper'
+    assert signals['would_drops'] == [stage]
+    assert _dispositions(caplog) == ['unresolved']
+    assert not _error_tracebacks(caplog)
+    assert not sock.sent and not projected
+    assert sock.close_code == 1011
+    assert 'conversation' in barrier.failed_recordings
+    assert client.rows[path]['record_upload_sessions']
+    assert not client.rows[path]['record_audio_closed']
+
+
 @pytest.mark.parametrize('stage', ['raw-live', 'audio-outbox'])
 def test_deletion_during_upload_removes_the_new_generation_before_receipt(remote, monkeypatch, stage):
     deleted = False
