@@ -62,7 +62,7 @@ synthetic uid `local-dev-user`.
 | `timeline/`, `cassette/`, `lanes/` | Day timeline and lanes; STT cassettes (vendor prerecorded and Parakeet batch adapters); record/batch and sync replay; `lanes/plugin.py`. |
 | `inspector/` | Stdlib server and static UI; `sample_run.py` (synthetic Lumen Bay day). |
 | `v3/` | Conversations v3 replay: `feed.py` (recordings, arrival instants), `tasks.py` (loopback Cloud Tasks), `driver.py` (event loop), `product.py` + `run.py` + `entry.py` (real v3 code), `export.py` (contract rows, pairing by recording), `corpus.py` (add-day ingest), `select.py` (pipeline choice), `fake.py`, `smoke.py`, `prod_export.py` (read-only v3 exporter). |
-| `scenario/` | Scripted capture -> Finish -> Home stories (see [Scenarios](#scenarios)): `spec.py` (file format, event plan), `checks.py` (expectations, outcomes), `ops.py` (events as product calls), `run.py` (one scenario in process), `budget.py` (operation counts, no-op writes, budgets), `home.py` (the Home routes, paging), `stack.py` (command, emulator bring-up, report), `scenarios/` (committed synthetic scenarios), `IMPORTER.md` (slice 2 design). |
+| `scenario/` | Scripted capture -> Finish -> Home stories (see [Scenarios](#scenarios)): `spec.py` (file format, event plan), `checks.py` (expectations, outcomes), `ops.py` (events as product calls), `run.py` (one scenario in process), `budget.py` (operation counts, no-op writes, budgets), `home.py` (the Home routes, paging), `stack.py` (command, emulator bring-up, report), `compare.py` (arms against a baseline), `metrics.py` (per-arm metric extractors), `scenarios/` (committed synthetic scenarios), `IMPORTER.md` (slice 2 design). |
 | `ideal/` | Ideal days: `packet.py` (numbered lines), `schema.py` (validator), `score.py` (structure scoring), `runs.py` (score table and per-card diff across runs, no text), drafting passes. |
 | `sample.py` | Minimal synthetic run, used only when the inspector plugin is absent. |
 
@@ -187,11 +187,13 @@ production `backend-sync` profile, an operation `budget`, and `expect` rows. A r
 `holders`), `no_hidden_with`, `recording` (its `fast_finish` outcome), `finish_response` (what tap N
 answered: `outcome`, `titled`, `has_notes`, `discarded`, `recordings`) or `home_paging` (`visible_once`:
 Home paged to its end shows every visible conversation once). Each row is optionally checked at an instant
-(`at`) and named (`label`). Every field of one row must hold for the same conversation.
+(`at`; its verdict evidence is what that instant saw: `result.json` `checkpoints` keep each one's facts) and
+named (`label`). Every field of one row must hold for the same conversation.
 `expected_failure: {"reason", "checks": [labels], "strict": true}` marks a known bug; the fix PR deletes it.
 
 **Operation counts and budgets** (`scenario/budget.py`). Every run counts, from the first event to the end:
-Firestore document reads, writes, deletes and no-op writes (a write that left the document unchanged:
+Firestore document reads (a query's `offset`-skipped documents included: `RunQueryResponse.skipped_results`
+counts against the queried collection, as Firestore bills them), writes, deletes and no-op writes (a write that left the document unchanged:
 Firestore answers it with the document's previous `update_time`), by top-level collection and by collection
 path, and vendor calls (requests to the fake LLM gateway; fast-finish STT calls and cassette plays). The
 counts are taken at the emulator client's GAPIC API, the client `database._client` hands the product, so
@@ -241,7 +243,7 @@ Without an `stt` pin the run takes the best cassette recorded for the file: vend
 |---|---|---|
 | Capture admission, recording rows | `triggers.mark_new`, `upsert_conversation_with_lifecycle` | none |
 | Finish tap | `retrieve_in_progress_conversation` picks the branch; with nothing in progress, `finish.finish_live_window` | Capture in progress: the finalization job's capture close is written as its outcome at the seal; the job does not run. |
-| Record admission, fast finish | `batch_pipeline.live._manual_finish_admitted` -> `promote_manual_end` -> `fast_finish.run` | `admit_recording` does not run; one unit over the whole recording, a privacy check that allows, funding open. STT returns the recording's lines: scripted, or the cassette words of an audio recording. |
+| Record admission, fast finish | `batch_pipeline.live._manual_finish_admitted` -> `promote_manual_end` -> `fast_finish.run` | `admit_recording` does not run; one unit over the whole recording (one retained reference, read as silence), a privacy check that allows, funding open. STT returns the recording's lines: scripted, or the cassette words of an audio recording; per chunk (`_transcribe_words`, the lines inside the chunk's window, no language probe) on the chunked path that ships, per unit (`_transcribe`) on the kill-switch path. |
 | Batch transcript landing | `update_conversation_segments`, `triggers.committed_sync_assignment` | The projection transaction (`replace_record`, its manual-end promotion, receipts) does not run, nor does the native completion that writes the sync-content ledger and consumes a recording-scoped Finish intent. So a Finish after a batch transcript landed is answered `requested` in the lab (`_native_projection_state` reads no ledger: `pending`) where production cuts, and a recording-scoped intent (#26288 fallback) is never consumed: scenarios do not judge `manual_end` in those two shapes. |
 | Account settings | `users.set_user_private_cloud_sync_enabled` (start, `sync_off_at`) | The fast-finish privacy check reads that setting through `users.get_user_private_cloud_sync_enabled` instead of the batch privacy fence's generation read; the in-transaction fence of the write is the product's. |
 | Device-sync fragment | `mark_new`, `upsert_conversation_with_lifecycle`, `committed_sync_assignment` | `/v2/sync-local-files` intake and its job do not run. |
@@ -259,9 +261,76 @@ for the run (with only `OMI_PIPELINE_LAB_REDIS` given, that Redis and a started 
 expected and actual), and per scenario `scenario.json`, `result.json`, `home.json`, `v3_tasks.jsonl`,
 `decisions.jsonl`, `repeat-<k>/`.
 
-**`scenario compare BASE [HEAD|--worktree]`** runs the same scenarios against two backend trees (a ref runs
-in a pinned worktree with this checkout's lab vendored in) and writes `base/`, `head/` and `compare.json`.
-Exit 0 when nothing differs, 1 when an outcome or conversation differs.
+**`scenario compare`** runs the same scenarios on several *arms* and compares every arm with a baseline arm.
+An arm is `{"name", "ref", "overlay", "env"}`: product code from `ref` (omitted or `null`: this working tree;
+a ref runs in a pinned worktree with this checkout's lab vendored in), then on top of each scenario's own `env`
+an optional lab overlay file (`{name, env, serving, gates, model_config}`, the [overlay schema](#command-line))
+and then `env`, which wins. Arms may share a ref and differ only by overlay or env (a threshold sweep).
+
+```bash
+python -m testing.pipeline_lab scenario compare BASE [HEAD|--worktree]        # arms base (BASE) and head (HEAD or this tree)
+python -m testing.pipeline_lab scenario compare --arms arms.json [--baseline NAME]
+python -m testing.pipeline_lab scenario compare --arm off \
+    --arm '{"name": "t8", "env": {"SOME_THRESHOLD": "8"}}' --arm '{"name": "t30", "env": {"SOME_THRESHOLD": "30"}}'
+#   common: [--scenario NAME ...] [--metric NAME ...] [--keep DIR] [--jobs N] [--timeout S] [--clock frozen|tick] [--json]
+```
+
+`--arms FILE` holds `[arm, ...]` or `{"baseline": NAME, "arms": [...]}` (overlay paths relative to the file);
+`--arm` takes an arm as JSON or `NAME[@REF]`. The baseline is `--baseline`, else the file's, else the first arm.
+Output: `DIR/<arm>/` (a `scenario run` layout per arm: `base/` and `head/` in the two-ref form), `DIR/.arms/`
+(each arm's effective overlay, 0600) and `compare.json` (schema 2):
+
+```
+{"schema": 2, "baseline": NAME,
+ "arms": [{"name", "ref", "sha", "backend_tree", "dirty", "env" (secret-shaped values redacted),
+           "overlay": null | {"file", "digest", "env_keys", "serving", "gates", "model_config"}}],
+ "base", "head",                       # the baseline and the first other arm's identity (schema 1 fields)
+ "differs", "errored", "seconds",
+ "scenarios": [{"name", "outcomes": {arm: outcome}, "differs",
+                "arms": {arm: {"outcome", "differs", "conversations": [{"key", "base", "head", "fields"}]}},
+                "base", "head", "conversations"}],   # schema 1 fields: the baseline against the first other arm
+ "metrics": {"extractors", "modules", "keys", "values": {arm: {key: value}},
+             "deltas": {arm: {key: delta}}, "errors": {arm: {metric: error}}},
+ "harness": {"path", "ran": {"source", "sha", "tree", "dirty"}, "refs_differ", "drift", "note",
+             "arms": {arm: {"ref", "sha", "tree", "same_as_ran", "same_as_baseline",
+                            "changed": {"scenarios"|"fixtures"|"code": [path, ...]}}}}}
+```
+
+A conversation differs when its recordings, visibility, hidden reason, words or manual end differ (final
+state). Exit 0 when no arm differs from the baseline, 1 when an outcome or a conversation differs, 2 when an arm
+errored, a metric extractor failed, or the arms could not be set up. `view DIR` shows a compare whose arms are
+named `base` and `head`; for other names open one arm's directory (`view DIR/<arm>`).
+
+**Harness drift.** Every arm runs *this checkout's* harness: its checks, budget counting, verdicts and
+scenario files, vendored into each ref's worktree. `compare.json` `harness` (and a `WARNING` line) says, per
+arm, whether that arm's own ref carries a different `backend/testing/pipeline_lab` than the one that ran, and
+which files (`scenarios`: expect rows and budgets; `fixtures`; `code`). An assertion weakened on a branch then
+judges both sides in a branch-against-main compare: read the warning before trusting "both green".
+
+**Metrics** (`scenario/metrics.py`). A metric is an extractor `(run_dir: Path) -> {key: int | float | str}`
+over one arm's directory (`run.json`, `verdict.json`, `<scenario>/result.json`). Compare runs every registered
+extractor (or those named by `--metric`) on every arm and reports a per-arm table (`"<metric>.<key>"`) and each
+non-baseline arm's delta (numbers: arm minus baseline; labels: `same`/`changed`; missing: `null`). Metrics are
+reported, never judged (they do not change the exit code unless an extractor fails). Built in: `ops` (reads,
+writes, deletes, no-op writes, vendor STT and LLM calls summed over the scenarios) and `outcomes` (scenarios per
+outcome, checks passed). To add one, put a `compare_metrics.py` anywhere under `testing/pipeline_lab/` (compare
+imports every such module; `$OMI_PIPELINE_LAB_METRICS` adds modules by name, comma separated):
+
+```python
+from pathlib import Path
+
+from testing.pipeline_lab.scenario.metrics import register_metric, scenario_results
+
+
+@register_metric('speakers', description='speaker attribution per scenario')
+def speaker_metrics(run_dir: Path) -> dict[str, int | float | str]:
+    return {f'{name}.labelled': len(result.get('speakers') or []) for name, result in scenario_results(run_dir)}
+```
+
+`register_metric(name, extractor=None, *, description='', replace=False)` (a decorator or a call; names have no
+dots and are unique), `scenario_results(run_dir)` yields `(name, result.json)` per scenario, `verdict_rows(run_dir)`
+the verdict rows. Values are numbers or labels of at most 80 characters, never run text (no transcript, title,
+name, uid or id); a bool, a non-finite number or a longer string is an extractor error (exit 2).
 
 **The web view** (`view DIR`, or `scenario view DIR`) is a stateless read-only page on loopback: the verdict
 and checks, Home as the route returned it with a snapshot picker and a "Not on Home" group, a timeline of
@@ -273,7 +342,11 @@ own client-side filtering is not modelled.
 **CI.** The advisory job "Pipeline Lab Scenarios" (`.github/workflows/backend-hermetic-e2e.yml`) runs every
 committed scenario with `--jobs 4 --repeat 2 --stt replay` on every backend pull request and merge-queue run,
 writes the summary to the job page and uploads the run directory (artifact `pipeline-lab-scenarios`):
-download it and run `view` on it. Measured 2026-11-26 on the lab host with the job's arguments: the 13 committed scenarios run in about
+download it and run `view` on it. It fails closed: it skips the scenarios only when the hermetic scope job
+succeeded and answered exactly "no backend change" (the job then says "not run", with a notice); a failed or
+unknown scope runs the full suite with a warning; and a run passes only when `scenario summary DIR
+--require-committed --repeat 2` finds every `scenario/scenarios/*.json` in the verdict, run twice, with its
+checks evaluated (exit 1 otherwise), so a run that executed nothing cannot be green. Measured 2026-11-26 on the lab host with the job's arguments: the 13 committed scenarios run in about
 130 s (the five before them: 35 s); `.github/ci-budget.yaml` budgets the job at a 5-minute p50.
 
 **Committed scenarios** (`scenario/scenarios/`), each with a budget from its measured counts:

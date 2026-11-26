@@ -43,7 +43,11 @@ from database.batch_pipeline_privacy import assert_batch_write_allowed
 from database.batch_pipeline_transaction_attempt import note_direct_reads as _note_direct_reads, prepare_transaction
 from config.firestore_read_levers import lever_enabled
 from database.batch_pipeline_recovery import defer_privacy_blocked_record, quarantine_fenced
-from database.firestore_transaction_retry import FirestoreContentionExhausted, run_with_transaction_contention_retry
+from database.firestore_transaction_retry import (
+    FirestoreContentionExhausted,
+    run_with_transaction_contention_retry,
+    transaction_with_safe_rollback,
+)
 from database.batch_pipeline_transaction_labels import (
     current_operation,
     pull_operation as pull_operation,
@@ -389,7 +393,7 @@ class FirestoreStore:
 
     def _run_committed(self, client, commit, last_view, *, before_attempt=None):
         if not contention_retry_enabled():
-            return commit(prepare_transaction(client, before_attempt))
+            return commit(transaction_with_safe_rollback(prepare_transaction(client, before_attempt)))
         # The outer budget owns fresh transaction IDs and all retries. The
         # SDK's same-ID commit loop would multiply the contention window.
         operation = current_operation()

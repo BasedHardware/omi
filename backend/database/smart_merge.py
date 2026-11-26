@@ -89,6 +89,8 @@ _PRECEDING_FIELDS = (
     'external_data.duplicate_capture_of',
     'relevance_decision.trigger',
     'sync_merged_into',
+    'v3_derived',
+    'recording',
     SMART_MERGE_FIELD,
 )
 

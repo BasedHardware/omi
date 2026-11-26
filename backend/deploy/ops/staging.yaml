@@ -68,6 +68,12 @@ cloud_run:
       # The former 100/20 source is held. A new lead/Release ruling must supersede this.
       BATCH_PIPELINE_SERVING_SWEEP_PAGE_ROWS: '200'
       BATCH_PIPELINE_SERVING_TICK_SECONDS: '10'
+      # SCA-3120/SCA-4454, David 2026-11-26: step in-process follow-up sweep slots
+      # 4 -> 3 to cut wasted attempts, reads and CPU. 3 -> 2 stays held until
+      # random-offset follow-up discovery serves (Firestore owner, SCA-3120).
+      # Rollback: set this key to '4' explicitly (the config train only updates
+      # declared keys, so deleting it leaves the serving value) and verify.
+      BATCH_PIPELINE_PROJECTION_FOLLOWUP_SLOTS: '3'
       BATCH_PROJECTION_FINISH_CLASSIFY_PAGE_LIMIT: '16'
       SYNC_TASKS_QUEUE: staging-sync-jobs-fresh
       SUMMARY_DEBT_REPAIR_ENABLED: 'true'

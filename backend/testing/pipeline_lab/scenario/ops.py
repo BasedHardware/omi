@@ -22,10 +22,12 @@ Stand-ins (each is listed in the README's gap table with its follow-up):
   finalization job's capture close does (``_complete_server_batch_capture_txn``: ``status: completed`` and
   ``v3_manual_end_requested`` in one write) when the capture seals; the job, lease and outbox are not run;
 - ``STAND_IN_ADMISSION``: batch record admission (audio listing, units, staging, intake) is not run; the
-  manual-finish hook gets one unit spanning the recording's audio, a batch store whose privacy check
-  answers allowed, and STT (``fast_finish._transcribe``) returns the recording's lines, with the funding gate
-  open; the lines are the scenario's speech, or for an ``audio_file`` recording the cassette words the batch
-  lane turned into segments (``scenario/audio.py``);
+  manual-finish hook gets one unit spanning the recording's audio (one retained reference, read as silence),
+  a batch store whose privacy check answers allowed, and STT returns the recording's lines, with the funding
+  gate open: per chunk on the chunked path that ships (``fast_finish._transcribe_words``, the lines inside
+  that chunk's window, no language probe), or per unit on the kill-switch path (``fast_finish._transcribe``);
+  the lines are the scenario's speech, or for an ``audio_file`` recording the cassette words the batch lane
+  turned into segments (``scenario/audio.py``);
 - ``STAND_IN_PROJECTION``: the canonical batch transcript lands through the live transcript writer and then
   stamps ``record_projection_revision``; the projection transaction (replace_record, its own manual-end
   promotion ``_v3_finish_update``, receipts) is not run;
@@ -70,6 +72,7 @@ STAND_IN_ADMISSION = 'record_admission'
 STAND_IN_PROJECTION = 'batch_projection'
 STAND_IN_SYNC = 'sync_intake'
 PROJECTION_REVISION = 1
+LAB_AUDIO_BUCKET = 'scenario-lab-audio'  # the admission stand-in's reference: read as silence, never from storage
 
 
 class _LabPrivacy:
@@ -139,14 +142,58 @@ class ScenarioOps(ProductV3Ops):
 
     def install(self, stack: ExitStack) -> None:
         from utils.conversations.v3 import fast_finish
+        from utils.batch_pipeline import live
+        from utils.stt import pre_recorded
 
         original_run = fast_finish.run
+        original_window = fast_finish.window_pcm
+        original_read = live.read_reference
+        chunk_starts: dict[int, int] = {}  # id(chunk audio) -> its first frame in the unit
 
         def transcribe(pcm: bytes, language: Optional[str]) -> list[dict[str, Any]]:
-            # STT replaced by the script: the unit is the whole recording, so seconds are from its audio start.
+            # STT replaced by the script (serial kill-switch path): the unit is the whole recording,
+            # so seconds are from its audio start.
             rec = self._transcribing
             self.transcribe_calls += 1
             return [] if rec is None else segment_dicts(rec, rec.audio[0])
+
+        def window_pcm(references: Any, read: Any, lo: int, hi: int, cache: Any) -> bytes:
+            # Remember where each chunk starts, so the scripted provider can answer for that window.
+            pcm = original_window(references, read, lo, hi, cache)
+            chunk_starts[id(pcm)] = lo
+            return pcm
+
+        def transcribe_words(
+            pcm: bytes, language: Optional[str], *, route: Any = None, deadline: Optional[float] = None
+        ) -> list[dict[str, Any]]:
+            # STT replaced by the script on the chunked path that ships (CONVERSATIONS_V3_FAST_FINISH_CHUNKED
+            # on): one provider request per chunk, answered with the scripted lines inside that chunk's
+            # window, as provider utterances on the chunk's own clock.
+            rec = self._transcribing
+            self.transcribe_calls += 1
+            if rec is None:
+                return []
+            lo = chunk_starts.pop(id(pcm), 0) / fast_finish.SAMPLE_RATE
+            hi = lo + len(pcm) / 2 / fast_finish.SAMPLE_RATE
+            return [
+                {
+                    'timestamp': [max(line['start'], lo) - lo, min(line['end'], hi) - lo],
+                    'speaker': line['speaker'],
+                    'text': line['text'],
+                }
+                for line in segment_dicts(rec, rec.audio[0])
+                if line['end'] > lo and line['start'] < hi
+            ]
+
+        def read_reference(client: Any, ref: dict[str, Any], *args: Any, **kwargs: Any) -> bytes:
+            # The lab's reference holds no stored audio: silence of its length, never a storage read.
+            if ref.get('bucket') == LAB_AUDIO_BUCKET:
+                return bytes(ref['frames'] * 2)
+            return original_read(client, ref, *args, **kwargs)
+
+        def route(*args: Any, **kwargs: Any) -> tuple[Any, Optional[str]]:
+            # No language probe: the scripted recording keeps its declared language, and no vendor is called.
+            return ('scripted', None, None), args[1] if len(args) > 1 else kwargs.get('language')
 
         def observed_run(uid: str, conversation_id: str, *args: Any, **kwargs: Any) -> str:
             outcome = original_run(uid, conversation_id, *args, **kwargs)
@@ -154,6 +201,10 @@ class ScenarioOps(ProductV3Ops):
             return outcome
 
         stack.enter_context(patch.object(fast_finish, '_transcribe', transcribe))
+        stack.enter_context(patch.object(fast_finish, '_transcribe_words', transcribe_words))
+        stack.enter_context(patch.object(fast_finish, 'window_pcm', window_pcm))
+        stack.enter_context(patch.object(pre_recorded, 'prerecorded_bytes_route', route))
+        stack.enter_context(patch.object(live, 'read_reference', read_reference))
         stack.enter_context(patch.object(fast_finish, 'funded', lambda *args, **kwargs: True))
         stack.enter_context(patch.object(fast_finish, 'run', observed_run))
 
@@ -312,10 +363,22 @@ class ScenarioOps(ProductV3Ops):
 
     async def _on_admission(self, uid: str, rec: Recording) -> dict[str, Any]:
         from utils.batch_pipeline import live
+        from utils.conversations.v3 import fast_finish
 
         self._stand_in(STAND_IN_ADMISSION, rec)
         current = await asyncio.to_thread(self._raw, uid, rec)
-        units = [(self.scenario.at(rec.audio[0]).timestamp(), rec.audio[1] - rec.audio[0], [])]
+        duration = rec.audio[1] - rec.audio[0]
+        # One retained reference over the whole recording, read as silence (``install``): the chunked
+        # pass plans its chunks from the references, and the scripted STT answers for each chunk.
+        reference = {
+            'bucket': LAB_AUDIO_BUCKET,
+            'path': rec.label,
+            'generation': 0,
+            'start_frame': 0,
+            'offset_frame': 0,
+            'frames': int(round(duration * fast_finish.SAMPLE_RATE)),
+        }
+        units = [(self.scenario.at(rec.audio[0]).timestamp(), duration, [reference])]
         self._transcribing = rec
         try:
             await live._manual_finish_admitted(
@@ -364,8 +427,10 @@ class ScenarioOps(ProductV3Ops):
         if self.home is not None:  # Home at this instant first, so the snapshot's rows carry on_home
             await asyncio.to_thread(self.home_snapshot, check.at)
         snapshot = await asyncio.to_thread(self.snapshot, uid)
-        result = evaluate(check, snapshot, self.finish_label, self.facts())
-        self.checkpoints[event.check_index or 0] = {'result': result, 'snapshot': snapshot}
+        facts = self.facts()
+        result = evaluate(check, snapshot, self.finish_label, facts)
+        # The facts are kept with the result so the verdict row shows what this instant saw, not the run's end.
+        self.checkpoints[event.check_index or 0] = {'result': result, 'snapshot': snapshot, 'facts': facts}
         return {'outcome': 'ok' if result.ok else 'mismatch', 'conversations': len(snapshot)}
 
     # ---- reading --------------------------------------------------------------------------------
