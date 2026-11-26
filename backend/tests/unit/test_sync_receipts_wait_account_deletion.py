@@ -10,6 +10,7 @@ re-reads the marker once, uncached, after the wait; a pending or active deletion
 
 import asyncio
 import json
+import time
 from types import SimpleNamespace
 
 import pytest
@@ -179,19 +180,33 @@ async def test_unreadable_deletion_marker_fails_closed(monkeypatch, failure):
         jobs={'job-a': legacy_job('completed', result=COMPLETED_RESULT)},
         marker=marker,
     )
+    timeout = 0.6
+    hung = asyncio.Event()
     if failure == 'hangs':
         real_run = sync.run_blocking
+        never = asyncio.Event()
 
         async def run(executor, fn, *args, **kwargs):
             if fn is sync.account_deletion_blocks_user_work:
-                await asyncio.sleep(60)
+                hung.set()
+                # Far past the route's timeout; then it would answer "not deleted", which only an
+                # absent timeout guard could pass through (and the 2 s bound below fails first).
+                try:
+                    await asyncio.wait_for(never.wait(), 5)
+                except asyncio.TimeoutError:
+                    pass
             return await real_run(executor, fn, *args, **kwargs)
 
         monkeypatch.setattr(sync, 'run_blocking', run)
-        monkeypatch.setattr(sync, 'RECEIPT_DELETION_CHECK_TIMEOUT_SECONDS', 0.05)
+        monkeypatch.setattr(sync, 'RECEIPT_DELETION_CHECK_TIMEOUT_SECONDS', timeout)
+    started = time.monotonic()
     with pytest.raises(HTTPException) as refused:
         await asyncio.wait_for(harness.start('job-a'), 2)
+    elapsed = time.monotonic() - started
     assert refused.value.status_code == 503
+    if failure == 'hangs':
+        # The marker read was in flight and the route gave up at its timeout, plus a small grace.
+        assert hung.is_set() and timeout <= elapsed < timeout + 1
     assert SECRET not in str(refused.value.detail) and 'job-a' not in str(refused.value.detail)
 
 
