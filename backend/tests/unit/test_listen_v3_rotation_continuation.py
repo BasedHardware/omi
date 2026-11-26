@@ -141,7 +141,48 @@ def test_supersede_accepts_a_pointer_this_socket_left_on_its_own_recording():
 
 
 @pytest.mark.anyio
-async def test_a_failed_pointer_move_still_finishes_the_successor_and_counts_it(monkeypatch):
+async def test_a_failed_pointer_move_does_not_seal_the_previous_recording(monkeypatch):
+    from routers.listen import conversations as controller_module
+
+    harness = _harness(monkeypatch)
+    controller, sealed = _connect(harness)
+    await controller.prepare()
+    first = controller.host.state.current_conversation_id
+    harness.store.rows[ROOT]['live_continuation'] = {
+        'conversation_id': first,
+        'recording_session_id': 'original',
+    }
+    outcomes = []
+    monkeypatch.setattr(controller_module, 'record_rotation', outcomes.append)
+
+    def broken(*args, **kwargs):
+        raise RuntimeError('firestore')
+
+    def unavailable_readback(*args, **kwargs):
+        raise RuntimeError('firestore unavailable')
+
+    monkeypatch.setattr(controller_module, 'supersede_live_continuation', broken)
+    monkeypatch.setattr(listen_continuations, 'resolve_live_continuation', unavailable_readback)
+    call = harness.call
+
+    async def calls(fn, *args, **kwargs):
+        if fn is broken:
+            return fn(*args, **kwargs)
+        return await call(fn, *args, **kwargs)
+
+    controller.host.persistence.call = calls
+    harness.now += timedelta(minutes=3)
+    await controller._rotate_v3_recording(first)
+    assert controller.host.state.current_conversation_id == first
+    assert sealed == [] and controller._unsealed_rotations == {}
+    assert harness.store.rows[ROOT]['live_continuation']['conversation_id'] == first
+    assert harness.pointer == first
+    assert harness.deleted == []
+    assert 'pointer_failed' in outcomes and 'rotated' not in outcomes
+
+
+@pytest.mark.anyio
+async def test_an_ambiguous_pointer_write_is_read_back_before_sealing(monkeypatch):
     from routers.listen import conversations as controller_module
 
     harness = _harness(monkeypatch)
@@ -151,23 +192,22 @@ async def test_a_failed_pointer_move_still_finishes_the_successor_and_counts_it(
     outcomes = []
     monkeypatch.setattr(controller_module, 'record_rotation', outcomes.append)
 
-    def broken(*args, **kwargs):
-        raise RuntimeError('firestore')
+    def committed_then_timed_out(uid, origin_id, *, previous_id, proposed, **kwargs):
+        harness.store.rows[ROOT]['live_continuation'] = dict(proposed)
+        raise RuntimeError('response lost after commit')
 
-    monkeypatch.setattr(controller_module, 'supersede_live_continuation', broken)
+    monkeypatch.setattr(controller_module, 'supersede_live_continuation', committed_then_timed_out)
     call = harness.call
 
     async def calls(fn, *args, **kwargs):
-        if fn is broken:
+        if fn is committed_then_timed_out:
             return fn(*args, **kwargs)
         return await call(fn, *args, **kwargs)
 
     controller.host.persistence.call = calls
-    events = len(harness.events)
     harness.now += timedelta(minutes=3)
     await controller._rotate_v3_recording(first)
     successor = controller.host.state.current_conversation_id
     assert successor != first and sealed == [first]
+    assert harness.store.rows[ROOT]['live_continuation']['conversation_id'] == successor
     assert 'pointer_failed' in outcomes and 'rotated' in outcomes
-    assert harness.pointer == successor  # the Redis in-progress id and the tail ran
-    assert len(harness.events) > events  # send_conversation_session reached the phone

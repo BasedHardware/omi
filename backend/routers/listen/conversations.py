@@ -112,6 +112,9 @@ class LiveConversationController:
         self._producer_skips: dict[str, None] = {}  # insertion-ordered, last 64 rows
         # Retired recording -> (failed seal attempts, next attempt). Kept until a seal is admitted.
         self._unsealed_rotations: dict[str, tuple[int, datetime]] = {}
+        self._rotation_pointer_confirmed = False
+        self._rotation_pointer_uncertain = False
+        self._rotation_pointer_attempted = False
         self._batch_producer_tokens: dict[str, str] = {}
         self._batch_renewed_at: datetime | None = None
 
@@ -666,13 +669,15 @@ class LiveConversationController:
 
     async def create_new_in_progress_conversation(
         self, *, rollover: bool = False, supersede: str | None = None
-    ) -> None:
+    ) -> bool | None:
         """Open the next recording generation.
 
         ``supersede`` names a live recording a v3 rotation retires: the create never resumes a
         continuation (that would return the same row) and moves the origin's pointer to the successor.
         """
         request = self.host.request
+        previous_recording_session_id = self.host.recording_session_id
+        previous_batch_record_capture = getattr(self.host, 'batch_record_capture', None)
         carry_from: Optional[tuple[str, str]] = None
         if rollover:
             previous_id = self.host.state.current_conversation_id
@@ -928,36 +933,95 @@ class LiveConversationController:
                     proposed['recording_session_id'],
                 )
                 return
-        await self.host.persistence.call(redis_db.set_in_progress_conversation_id, request.uid, conversation_id)
+        pointer_required = bool(supersede and self.host.client_conversation_id and not self.host.is_multi_channel)
+        if not pointer_required:
+            await self.host.persistence.call(redis_db.set_in_progress_conversation_id, request.uid, conversation_id)
         if source == ConversationSource.desktop and meeting:
             await self.host.persistence.call(redis_db.set_conversation_meeting_id, conversation_id, meeting['id'])
         if not await self._claim_batch_producer(conversation_id, {**payload, **(self.host.batch_record_capture or {})}):
             raise WebSocketException(code=1013, reason='Recording ownership changed; retry')
         await self._persist_policy_and_arm_quiet_check(conversation_id)
-        self.host.state.current_conversation_id = conversation_id
-        if supersede and self.host.client_conversation_id and not self.host.is_multi_channel:
-            # Only a claimed, armed successor the socket now writes to takes the pointer.
+        if pointer_required:
+            proposed = {
+                'conversation_id': conversation_id,
+                'recording_session_id': self.host.recording_session_id,
+            }
+            own_ids = list(self.host.recording_session_ids_by_conversation)[-16:]
+            self._rotation_pointer_attempted = True
+            confirmed = False
+            known_not_moved = False
+            write_failed = False
             try:
                 moved = await self.host.persistence.call(
                     supersede_live_continuation,
                     request.uid,
                     self.host.client_conversation_id,
                     previous_id=supersede,
-                    proposed={
-                        'conversation_id': conversation_id,
-                        'recording_session_id': self.host.recording_session_id,
-                    },
-                    own_ids=list(self.host.recording_session_ids_by_conversation)[-16:],
+                    proposed=proposed,
+                    own_ids=own_ids,
                 )
+                confirmed = moved == 'moved'
+                known_not_moved = not confirmed
+                if moved == 'other_owner':
+                    record_rotation('other_owner')
+                    logger.warning('event=v3_recording_rotation continuation=other_owner')
             except Exception as error:
-                # The switch already happened; finish binding the successor. A reconnect may resume
-                # the sealed row, which stale recovery and the normal reconnect rules handle.
-                moved = 'pointer_failed'
+                write_failed = True
                 record_rotation('pointer_failed')
                 logger.warning('event=v3_recording_rotation continuation=pointer_failed type=%s', type(error).__name__)
-            if moved == 'other_owner':
-                record_rotation('other_owner')
-                logger.warning('event=v3_recording_rotation continuation=other_owner')
+                # The transaction is idempotent for this socket's successor, so retry once
+                # before treating a transport error as an unresolved pointer move.
+                try:
+                    moved = await self.host.persistence.call(
+                        supersede_live_continuation,
+                        request.uid,
+                        self.host.client_conversation_id,
+                        previous_id=supersede,
+                        proposed=proposed,
+                        own_ids=own_ids,
+                    )
+                    confirmed = moved == 'moved'
+                    known_not_moved = not confirmed
+                except Exception as retry_error:
+                    logger.warning(
+                        'event=v3_recording_rotation continuation=pointer_retry_failed type=%s',
+                        type(retry_error).__name__,
+                    )
+
+            if not confirmed:
+                # A readback also covers a write that committed but lost its response.
+                try:
+                    persisted = await self._continuation(proposed)
+                    confirmed = persisted == proposed
+                    known_not_moved = not confirmed
+                except Exception as read_error:
+                    known_not_moved = False
+                    self._rotation_pointer_uncertain = True
+                    logger.warning(
+                        'event=v3_recording_rotation continuation=pointer_readback_failed type=%s',
+                        type(read_error).__name__,
+                    )
+
+            if not confirmed:
+                self.host.recording_session_id = previous_recording_session_id
+                self.host.batch_record_capture = previous_batch_record_capture
+                self._rotation_pointer_uncertain = not known_not_moved
+                if not write_failed:
+                    record_rotation('pointer_failed')
+                    logger.warning(
+                        'event=v3_recording_rotation continuation=not_confirmed outcome=%s',
+                        'not_moved' if known_not_moved else 'unknown',
+                    )
+                return False if known_not_moved else None
+            self._rotation_pointer_confirmed = True
+        elif supersede:
+            # No origin continuation exists for multi-channel or anonymous sessions.
+            self._rotation_pointer_confirmed = True
+
+        # Switch only after the continuation transaction or its readback confirms the successor.
+        self.host.state.current_conversation_id = conversation_id
+        if pointer_required:
+            await self.host.persistence.call(redis_db.set_in_progress_conversation_id, request.uid, conversation_id)
         # Fresh v2 generation: the origin is pinned by the receiver at the
         # first accepted audio frame associated with this conversation.
         self._adopt_capture_timeline(conversation_id, None)
@@ -994,6 +1058,7 @@ class LiveConversationController:
             owner_carry_donor=automatic_donor,
         )
         self.send_conversation_session(binding, self.host.recording_session_id)
+        return True if pointer_required else None
 
     async def rollover_after_transcript_decode_failure(self) -> None:
         """Move live speech first, then finalize the displaced generation normally.
@@ -1290,6 +1355,9 @@ class LiveConversationController:
         previous_capture = getattr(self.host, 'batch_record_capture', None)
         bindings = dict(getattr(self.host, 'recording_session_ids_by_conversation', {}))
         failed: BaseException | None = None
+        self._rotation_pointer_confirmed = False
+        self._rotation_pointer_attempted = False
+        self._rotation_pointer_uncertain = False
         try:
             await self.create_new_in_progress_conversation(rollover=True, supersede=previous_id)
         except asyncio.CancelledError:
@@ -1298,26 +1366,44 @@ class LiveConversationController:
             failed = error
             logger.warning('event=v3_recording_rotation outcome=create_failed type=%s', type(error).__name__)
         successor = self.host.state.current_conversation_id
-        if not successor or successor == previous_id:
-            # Nothing switched: drop the unbound successor's residue and keep the current recording.
+
+        if not self._rotation_pointer_confirmed:
+            # Never infer a successful rotation from an in-memory id change. A failed or
+            # ambiguous pointer write leaves the old row unsealed until a later attempt confirms it.
             current = getattr(self.host, 'recording_session_ids_by_conversation', {})
             strays = {cid: sid for cid, sid in current.items() if cid not in bindings and cid != previous_id}
+            self.host.state.current_conversation_id = previous_id
             self.host.recording_session_id = previous_session
             self.host.batch_record_capture = previous_capture
-            if hasattr(self.host, 'recording_session_ids_by_conversation'):
-                current.clear()
-                current.update(bindings)
-            if failed is not None:
-                await self._clear_failed_successor(previous_id, strays, failed)
+            if not self._rotation_pointer_uncertain:
+                if hasattr(self.host, 'recording_session_ids_by_conversation'):
+                    current.clear()
+                    current.update(bindings)
+                if strays:
+                    await self._clear_failed_successor(
+                        previous_id,
+                        strays,
+                        failed or RuntimeError('continuation pointer was not moved'),
+                    )
             self._rotation_retry_at = self.clock() + timedelta(seconds=ROTATION_RETRY_SECONDS)
-            record_rotation('create_failed' if failed is not None else 'same_row')
+            if not self._rotation_pointer_attempted:
+                record_rotation('create_failed' if failed is not None else 'same_row')
             if isinstance(failed, WebSocketException):
                 raise failed  # ownership changed or the producer-token cap: close like any other create
             return
+
+        if not successor or successor == previous_id:
+            # A confirmed pointer with no local successor is an invariant failure; keep the old
+            # recording live and let stale recovery reconcile it instead of sealing it here.
+            self._rotation_retry_at = self.clock() + timedelta(seconds=ROTATION_RETRY_SECONDS)
+            record_rotation('same_row')
+            return
+
         archive = getattr(getattr(self.host, 'receiver', None), 'raw_archive', None)
         if archive is not None:
             await archive.retarget(previous_id, successor)
         self._unsealed_rotations[previous_id] = (0, self.clock())
+        self._rotation_retry_at = None
         await self._seal_rotated()
 
     async def _clear_failed_successor(self, previous_id: str, strays: dict[str, str], failed: BaseException) -> None:
