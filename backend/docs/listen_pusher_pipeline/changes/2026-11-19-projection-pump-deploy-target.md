@@ -136,13 +136,77 @@ pump no longer competes for any of them.
 
 | Step | Who expands | Clean metric to hold | Rollback |
 | --- | --- | --- | --- |
-| 1. Dark deploy: `gh workflow run gcp_backend.yml -f mode=deploy -f environment=prod -f deploy_targets=cloud-run-only -f cloud_run_service=backend-projection-pump -f requested_by=<owner>` | Release owner executes; SCA-3120 owner reads back | Read back from the live service: ingress `internal`, no `allUsers`/`allAuthenticatedUsers` binding, env flags false, ledger name `backend-projection-pump`, and four instances scraped with `revision_name`. Also hold integration's `omi_batch_pipeline_projection_followup_outcomes_total{outcome="completed"}` per hour and the Firestore read rate at the pre-deploy baseline. | `gcloud run services delete backend-projection-pump` (nothing routes to it) |
+| 1. Dark deploy through SCA-3318 using the dispatch and recovery procedure below | Release owner executes; SCA-3120 owner reads back | Read back the ready serving revision, source SHA and image digest, internal ingress, service IAM, dark batch flags, ledger identity, and four instances scraped with `revision_name`. Hold integration's follow-up completions per hour and Firestore read rate at the pre-deploy baseline. | Verified dark inverse for promotion failure. Release records the disposition for an incomplete first create. |
 | 2. Enable the pump alongside the serving sweeps: set `BATCH_PIPELINE_PROJECTION_PUMP_ENABLED=true` in the manifest and redeploy through this target | Release owner executes; lead2 reviews custody evidence first | Fresh `omi_batch_projection_pump_last_success_seconds` from four instances on the receiving revision. Follow-up `completed` per hour at or above baseline. Owner-drain at or above 70% of baseline. Firestore reads within +50% of baseline. Bundle (iv) alert installed and read back. | Pump flag back to false (manifest plus redeploy), or restore the prior revision's traffic |
 | 3. Size N on follow-up `completed` per hour against the pre-change baseline | SCA-3120 owner proposes; release owner applies | As step 2, plus executor saturation and `claim_busy` share no worse than baseline | Revert N |
 | 4. Switch the serving sweep off: `BATCH_PIPELINE_SERVING_PROJECTION_SWEEP=off` on `backend-integration` through the config train | Release owner (go-ahead on the release issue); lead2 reviews custody | Follow-up `completed` per hour sustained at or above baseline with the pump alone. No rise in `attempts_exhausted` or pending owners. | Serving sweep back on first |
 | 5. Right-size CPU, memory and N | SCA-3120 owner reads back | As step 3 | Revert the size change |
 
+**Outcome, 2026-11-22 (SCA-3318).** Step 4 was attempted on 2026-11-22: the integration sweep-off tripped the
+pump floor twice (completions 34k/h -> 20k/h; the pump gained only about +500/h at 85-100% CPU with 32 drain
+slots against integration's ~450) and live traffic was rolled back at 02:07Z. The steady state is now **pump dark
+(`BATCH_PIPELINE_PROJECTION_PUMP_ENABLED=false`), integration sweep `'true'`** (#26017). Do not repeat step 4 on this
+design: the sweep's compute is the projection work, so a small pump cannot carry it. Rollback of the dark state:
+set only the pump flag back to `'true'`; never set integration's sweep `'off'` while the pump is dark. The service
+keeps 4 always-allocated instances while dark so the pinned enabled revision stays a traffic inverse.
+
 Rollback order at any step: serving sweep back on first, then the pump flag off, then delete the service.
+Deleting the service also needs `backend-projection-pump` removed from the read reconcile's required
+set first (`firestore_read_reconcile.py`), or every later day scores incomplete. A first create stays
+dark by policy (the first-create gate refuses an activated manifest): recreate from a manifest with
+the pump flag `false`, read back the dark base, then activate as step 2.
+
+After step 2 the routed pump revision is the activated one. The pre-mutation inverse check
+(`verify_projection_pump_inverse.py --disposition`) accepts a pinned routed revision whose
+`BATCH_PIPELINE_PROJECTION_PUMP_ENABLED` is the literal `'true'`, and otherwise the dark values. A
+base before its first pin and a new create must still be dark. The fastest pump rollback is a
+traffic restore to the recorded dark revision; a flag-false redeploy is the second option.
+
+## Dark dispatch and interrupted first-create recovery
+
+Release records the full admitted runtime SHA and the full dispatch control SHA in SCA-3318.
+Verify the published fat-image digest for the runtime SHA. Obtain independent review of the
+exact control carrier on main, including the workflow, composite and the staged `.github`,
+`backend/scripts` and `backend/deploy` controls it will use. Record those Git object IDs
+with the review. Dispatch from main as below after the Release Eligibility, Firestore readiness,
+production approval and shared prod-train gates. A change to main between review and dispatch
+causes the pump job to stop. Check the run's control evidence against the receipt.
+
+```sh
+gh workflow run gcp_backend.yml --ref main \
+  -f mode=deploy -f environment=prod -f deploy_targets=cloud-run-only \
+  -f cloud_run_service=backend-projection-pump -f requested_by="$release_owner" \
+  -f release_sha="$admitted_source" -f pump_control_sha="$reviewed_control"
+```
+
+For first create, Release records that the service is absent. Cloud Run initially sends traffic
+to LATEST. The workflow checks the new Ready dark base before pinning it, verifies the pin,
+and then attaches the zero-traffic sidecar. It reads the inverse again before promotion and
+captures the rollback snapshot from that same verified traffic document.
+
+If a run stops during first create, stop before any pin, redeploy or rerun. Release uses
+`ro-prod` to inspect requested and serving traffic, the receiving revision and the service IAM
+policy. Match the revision's Ready condition, admitted source stamp and fat-image digest
+against the original release evidence. Verify the projection pump role, both false flags,
+ledger identity, internal ingress, enabled IAM invoker check, no service invokers, and fixed
+4/4 shape with always-allocated CPU, 2 vCPU, 4 GiB, concurrency 80 and a 3600-second timeout.
+
+Release records the disposition on SCA-3318. If the evidence is incomplete or any check fails,
+hold and obtain a separate Release-approved recovery action. If the evidence passes and
+traffic still follows LATEST, Release may pin the verified revision under the production
+mutation lock as authorized by the recorded disposition, then read back both traffic views.
+A base already pinned at the time of interruption requires the same verification and disposition.
+
+For an existing service, include
+`-f pump_release_disposition="$comment_uuid $revision $inverse_source $inverse_image"` in the
+new dispatch. The production approver verifies that the referenced Release comment authorizes
+resuming with that revision and identity, using the actual inputs in the workflow's
+pre-approval summary. Use `repository@sha256:digest` for the image.
+Use the serving revision's own admitted source and digest from Release evidence, which may
+predate the new candidate. The workflow binds the dispatch input to live data and stops before
+mutation unless requested and serving traffic agree on exactly the Ready revision the disposition
+names (dark, or the activated pump after step 2). Record the run ID and independent serving and
+baseline readback in the Release order.
 
 ## Hazards
 
@@ -158,9 +222,6 @@ Rollback order at any step: serving sweep back on first, then the pump flag off,
   the pump from the headroom gate, or read it per instance.
 - **Firestore reads.** Reads rise while the pump and the serving sweeps both run (steps 2 and 3). Keep the
   window short, hold the +50% read alarm, and read the pump's spend from its own ledger service name.
-- **First create.** gcloud cannot create a service with `--no-traffic`, so the first deploy creates the base
-  revision serving, then pins traffic to it by name before attaching the sidecar. The service is internal and
-  dark, so this causes no exposure, but this path has not been run live.
 
 ## Review follow-ups that are not in this change
 
@@ -168,9 +229,10 @@ Rollback order at any step: serving sweep back on first, then the pump flag off,
   requires snapshots only from the four shipped services, so a silent pump ledger would still
   read as complete. Adding the pump to `SHIPPED_SERVICES` before the service exists would make
   every reconcile incomplete, so it lands as its own change after the dark deploy is read back
-  and before the pump flag is enabled. Owner: SCA-3120.
+  and before the pump flag is enabled. Owner: SCA-3120. Done in the step-2 activation PR (#25966):
+  the pump is in `SHIPPED_SERVICES` and `HOT_SERVICES`; the dark successor already emits snapshots.
 - **Inherited invoker grants.** The pre-traffic check reads the service's own IAM policy and
-  refuses any `roles/run.invoker` member there. It does not read project or folder policy: a
+  permits direct bindings only for private Cloud Run viewers. It does not read project or folder policy: a
   principal granted `roles/run.invoker` at the project can invoke every Cloud Run service in
   it, this one included, and that cannot be narrowed per service. The boundary this service
   relies on is internal ingress plus no service-level invoker; the routes it mounts keep their

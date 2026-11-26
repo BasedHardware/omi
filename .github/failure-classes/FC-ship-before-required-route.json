@@ -1,6 +1,7 @@
 {
   "schema_version": 1,
   "id": "FC-ship-before-required-route",
+  "family": "deploy-prerequisite",
   "violated_contract": "A client that hard-depends on a backend route and fails closed when that route is absent must not ship to users until the route is live in the environment the client calls.",
   "canonical_prevention": "Gate the client release lane on a production probe of the required route (status, response shape, and trust boundary) before minting an immutable release tag; keep the deploy-before-ship note next to the client dependency.",
   "canonical_prevention_artifact": [

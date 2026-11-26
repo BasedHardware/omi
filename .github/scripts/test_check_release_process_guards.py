@@ -343,33 +343,41 @@ def _module_bool_constant(path: Path, name: str) -> bool:
     raise AssertionError(f"{name} not found in {path}")
 
 
+def _module_str_constant(path: Path, name: str) -> str:
+    for node in ast.parse(path.read_text(encoding="utf-8")).body:
+        if isinstance(node, ast.Assign) and any(isinstance(t, ast.Name) and t.id == name for t in node.targets):
+            assert isinstance(node.value, ast.Constant) and isinstance(node.value.value, str), name
+            return node.value.value
+    raise AssertionError(f"{name} not found in {path}")
+
+
 def test_play_held_changes_flags_agree():
-    # 2026-10-28 -> 11-01: the Play commit flag and both Codemagic blocks were
-    # held, but the dispatcher's ANDROID_HELD_CHANGES_MODE stayed False, so the
-    # held Android distribution stalled with no reminder. All four move together.
+    # The Play commit flag and the tag lane's block move together (its alpha
+    # promotion commits through the flag). android-internal-auto has no static
+    # flag: Play flipped five times by 2026-11-21, so its script step follows
+    # Play's answer and records the mode the dispatcher reports on.
     promote = _module_bool_constant(REPO_ROOT / "app/scripts/mobile_store_promote.py", "CHANGES_NOT_SENT_FOR_REVIEW")
-    dispatcher = _module_bool_constant(
-        REPO_ROOT / ".github/scripts/mobile_distribution.py", "ANDROID_HELD_CHANGES_MODE"
-    )
     workflows = yaml.safe_load((REPO_ROOT / "codemagic.yaml").read_text(encoding="utf-8"))["workflows"]
-    codemagic = {
-        name: bool(workflows[name]["publishing"]["google_play"].get("changes_not_sent_for_review", False))
-        for name in ("android-internal-auto", "android-prod-internal")
-    }
-    assert dispatcher == promote, (dispatcher, promote)
-    assert set(codemagic.values()) == {promote}, (codemagic, promote)
+    prod_internal = workflows["android-prod-internal"]["publishing"]["google_play"]
+    assert bool(prod_internal.get("changes_not_sent_for_review", False)) == promote, (prod_internal, promote)
+
+    auto = workflows["android-internal-auto"]
+    assert "google_play" not in auto["publishing"]
+    step_name = _module_str_constant(REPO_ROOT / ".github/scripts/mobile_distribution.py", "PLAY_INTERNAL_PUBLISH_STEP")
+    steps = [step for step in auto["scripts"] if isinstance(step, dict) and step.get("name") == step_name]
+    assert len(steps) == 1, step_name
+    assert auto["scripts"][-1] is steps[0], "Play publish must run after the AAB build"
+    assert "python3 scripts/play_internal_publish.py" in steps[0]["script"]
+    assert "--changes-not-sent-for-review" not in steps[0]["script"]
+    assert "--out-dir build/play-internal-publish" in steps[0]["script"]
+    assert "build/play-internal-publish/*.json" in auto["artifacts"]
 
 
-def test_android_internal_publishers_hold_changes_for_console_review():
+def test_android_prod_internal_publisher_holds_changes_for_console_review():
     document = yaml.safe_load((REPO_ROOT / "codemagic.yaml").read_text(encoding="utf-8"))
-    auto_publisher = document["workflows"]["android-internal-auto"]["publishing"]["google_play"]
     workflow = document["workflows"]["android-prod-internal"]
     publisher = workflow["publishing"]
 
-    # The 2026-10-28 android-internal-auto uploads failed at Publishing:
-    # "Changes cannot be sent for review automatically." Keep both Play
-    # publishing blocks held until the Console review submission.
-    assert auto_publisher["changes_not_sent_for_review"] is True
     assert publisher["google_play"]["track"] == "internal"
     assert publisher["google_play"]["changes_not_sent_for_review"] is True
     assert publisher["google_play"]["release_name"] == "$CM_TAG [$CM_BUILD_ID]"

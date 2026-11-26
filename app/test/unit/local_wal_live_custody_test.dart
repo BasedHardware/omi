@@ -293,6 +293,7 @@ void main() {
     await pump();
     expect(conn.advances, isEmpty, reason: 'ring-A buffered frames must not prove ring-B audio');
 
+    sync.start();
     for (var i = 0; i < 15; i++) {
       sync.onFrameCaptured(frame(i));
     }

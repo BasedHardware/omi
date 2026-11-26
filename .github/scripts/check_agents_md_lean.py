@@ -45,6 +45,8 @@ BUDGETS: dict[str, tuple[int, int]] = {
     "web/app/AGENTS.md": (55, 2_400),
     "docs/AGENTS.md": (42, 2_000),
     "scripts/dev-harness/AGENTS.md": (15, 861),
+    # Set to its size at creation: the pipeline lab's replay and privacy practice for agents.
+    "backend/testing/pipeline_lab/AGENTS.md": (79, 5_163),
 }
 
 SKIP_PARTS = {"node_modules", ".build", ".git"}

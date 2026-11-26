@@ -7,6 +7,7 @@ import logging
 import threading
 from time import monotonic
 from google.cloud import firestore
+from database.transcript_pointer import run_preloaded_transaction_with_contention_retry
 from database._client import get_firestore_client
 from utils.conversations.v3 import Conflict
 
@@ -33,7 +34,7 @@ def acquire(uid, key, *, now=None, firestore_client=None):
         tx.set(ref, {**row, 'token': token, 'until': now + timedelta(seconds=LEASE_SECONDS)})
         return token
 
-    return claim(client.transaction())
+    return run_preloaded_transaction_with_contention_retry(client, claim)
 
 
 def release(uid, key, token, *, firestore_client=None):
@@ -46,7 +47,7 @@ def release(uid, key, token, *, firestore_client=None):
         if row.get('token') == token:
             tx.update(ref, {'until': datetime.now(timezone.utc), 'token': None})
 
-    finish(client.transaction())
+    run_preloaded_transaction_with_contention_retry(client, finish)
 
 
 def held(uid, key, *, now=None, firestore_client=None):
@@ -68,22 +69,23 @@ def renew(uid, key, token, *, firestore_client=None):
             raise Conflict('lease_lost')
         tx.update(ref, {'until': now + timedelta(seconds=LEASE_SECONDS)})
 
-    extend(client.transaction())
+    run_preloaded_transaction_with_contention_retry(client, extend)
 
 
 @contextmanager
-def keepalive(uid, key, token):
-    """Own and join the heartbeat of synchronous reprocess/merge writers."""
+def keepalive(uid, key, token, *, firestore_client=None, max_seconds: int | None = 900):
+    """Own and join the heartbeat of a synchronous writer."""
     stop = threading.Event()
-    deadline = monotonic() + 900
+    deadline = monotonic() + max_seconds if max_seconds is not None else None
+    client_args = {'firestore_client': firestore_client} if firestore_client is not None else {}
 
     def heartbeat():
         failures, delay = 0, LEASE_SECONDS / 3
         while not stop.wait(delay):
-            if monotonic() >= deadline:
+            if deadline is not None and monotonic() >= deadline:
                 return
             try:
-                renew(uid, key, token)
+                renew(uid, key, token, **client_args)
                 failures, delay = 0, LEASE_SECONDS / 3
             except Exception as exc:
                 # Persistence still checks the token and expiry. A transient

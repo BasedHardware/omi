@@ -32,18 +32,6 @@ class Priority(IntEnum):
 # David's fresh bar (2026-10-20): capture lag at most 10 min at upload.
 FRESH_CAPTURE_LAG_SECONDS = 600.0
 
-# Terminal exclusion keeps future nonterminal strings visible; the census gates missing/null state.
-MERGE_POLL_TERMINAL_STATES = tuple(
-    'committed dead quarantined privacy_blocked partial_retired provider_superseded'.split()
-)
-
-
-def held_poll_skip_enabled() -> bool:
-    from config.refactor_modes import default_off
-
-    return default_off('BATCH_HELD_POLL_SKIP_ENABLED')
-
-
 # A full grace window is also given to pre-field rows on first observation.
 HELD_DEAD_LETTER_SECONDS = 7 * 86400
 RECORD_DEAD_LETTER_SECONDS = 14 * 86400
@@ -54,6 +42,10 @@ def batch_held_dead_letter_enabled() -> bool:
     from config.policy.kill_switches import kill_switch
 
     return kill_switch('BATCH_HELD_DEAD_LETTER_ENABLED')
+
+
+def parked_job_sweeper_enabled() -> bool:
+    return kill_switch('BATCH_PARKED_JOB_SWEEPER_ENABLED', log=False)
 
 
 def projection_source_deleted_enabled() -> bool:
@@ -575,29 +567,6 @@ def projection_striping_enabled() -> bool:
     return kill_switch('BATCH_PIPELINE_PROJECTION_STRIPING_ENABLED')
 
 
-PROJECTION_FINISH_BACKOFF_SECONDS = (60.0, 300.0, 900.0)
-
-
-def projection_finish_backoff_enabled() -> bool:
-    """Default off; only ``true`` defers an unchanged persisted/ready finish walk.
-
-    Off keeps the legacy query and disables no-change deferral transactions.
-    Clock writes on state transitions are unconditional on every writer host.
-    On uses the due-clock filter only after the shared backfill marker exists;
-    until then it keeps the legacy page without per-row stamping. Rollback and
-    re-enable are safe because flag-off writers keep maintaining the clock.
-    """
-    from config.policy import kill_switch
-
-    return kill_switch('BATCH_PROJECTION_FINISH_BACKOFF_ENABLED')
-
-
-def projection_finish_backoff_delay(step: int) -> float:
-    """60 s, then 300 s, then 900 s for a repeatedly unchanged row; capped."""
-    index = max(0, min(int(step), len(PROJECTION_FINISH_BACKOFF_SECONDS) - 1))
-    return PROJECTION_FINISH_BACKOFF_SECONDS[index]
-
-
 PROJECTION_DISCOVERY_STRIPES = 4096
 _projection_discovery_stripe_value: int | None = None
 _PROJECTION_DISCOVERY_LOCK = threading.Lock()
@@ -728,6 +697,11 @@ def projection_followup_page_enabled() -> bool:
 
 def projection_followup_early_coalesce_enabled() -> bool:
     return kill_switch('BATCH_PIPELINE_FOLLOWUP_EARLY_COALESCE_ENABLED', log=False)
+
+
+def projection_followup_claimed_sibling_skip_enabled() -> bool:
+    """Kill switch: a ready sibling skips its read-only check once a same-page sibling claims completion."""
+    return kill_switch('BATCH_PIPELINE_FOLLOWUP_CLAIMED_SIBLING_SKIP_ENABLED', log=False)
 
 
 def owner_drain_enabled() -> bool:

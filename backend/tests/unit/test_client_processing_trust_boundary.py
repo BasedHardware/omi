@@ -498,8 +498,6 @@ PINNED_CONVERSATION_DUMPS: FrozenSet[DumpSite] = frozenset(
         DumpSite('utils/llm/external_integrations.py', 'generate_comprehensive_daily_summary', 'model_dump'),
         DumpSite('models/conversation.py', 'project_shared_conversation', 'model_dump'),
         DumpSite('models/conversation.py', 'as_dict_cleaned_dates', 'model_dump'),
-        # Historical-tier seam (T1+): dumps the explicit template app's results, not a conversation.
-        DumpSite('utils/conversations/process_conversation.py', 'process_conversation', 'dict'),
         DumpSite('utils/conversations/render.py', 'conversation_to_dict', 'model_dump'),
         DumpSite('utils/app_integrations.py', '_single', 'conversation_to_dict'),
         DumpSite('utils/webhooks.py', '_build_conversation_webhook_payload_sync', 'conversation_to_dict'),
@@ -645,6 +643,9 @@ PINNED_CONVERSATION_FIELDS: FrozenSet[str] = frozenset(
         'uses_custom_stt',
         # Server-only route arbitration metadata; Conversation marks it excluded from dumps.
         'record_lane_owner',
+        # Server-only finalization ownership. Both fields are excluded from dumps and wire schemas.
+        'finalization_engine',
+        'finalization_owner_epoch',
         # Server-authored partial audio proof metadata, not client display text.
         'record_audio_partial',
         'structured',
@@ -770,6 +771,14 @@ PINNED_CONVERSATION_FIELDS: FrozenSet[str] = frozenset(
         # projection-family — it must survive the integration redactor so
         # clients receive it; the model serializer omits it when unset.
         'home_step',
+        # Server read projection (utils/conversations/transcribing_hold.py): the
+        # transcription wait ran out with no failure receipt. Never stored and
+        # never client-authored; NOT projection-family, clients need it to tell a
+        # held recording from a failed one. Omitted when unset.
+        'transcription_wait',
+        # Server-owned app projection from current batch-job evidence, never
+        # stored or accepted from clients. Not a client-processing field.
+        'transcription_admission',
         # Recordings and conversations (v3): written only by the server-side builder,
         # planner and processing settle (utils/conversations/v3/), never client-authored.
         # NOT projection-family: clients need them (Home visibility and tile state).
@@ -790,6 +799,10 @@ PINNED_CONVERSATION_FIELDS: FrozenSet[str] = frozenset(
         'tile_state',
         'title_locked',
         'v3_derived',
+        # Reliability experiment end_open_conversation: the End instant that closed the conversation,
+        # stamped by the live builder only. A timestamp, never client-authored text; the app matches
+        # its just-ended Home row by it. NOT projection-family.
+        'v3_manual_cut_at',
         'v3_pending',
         'v3_process_pending',
         'v3_recording_ids',
@@ -2364,6 +2377,16 @@ def test_capture_coverage_stays_on_app_views_and_out_of_integrations(render_mod,
     assert conv.capture_coverage == coverage
     public.pop('capture_coverage')
     assert 'capture_coverage' not in render_mod.redact_conversation_for_integration(public)
+
+
+@pytest.mark.parametrize('locked', [False, True])
+def test_transcription_admission_stays_on_app_views_and_out_of_integrations(render_mod, locked):
+    conv = _make_conversation(is_locked=locked)
+    conv.transcription_admission = 'allowance_held'
+    assert 'transcription_admission' not in render_mod.PROJECTION_FAMILY_FIELDS
+    payload = render_mod.conversation_to_dict(conv)
+    assert render_mod.redact_conversation_for_list(dict(payload))['transcription_admission'] == 'allowance_held'
+    assert 'transcription_admission' not in render_mod.redact_conversation_for_integration(payload)
 
 
 @pytest.mark.parametrize('locked', [False, True])

@@ -7,8 +7,7 @@ from google.cloud import firestore
 from database import firestore_transaction_retry
 from database._client import get_firestore_client
 from database.account_deletion_marker import account_deletion_blocks_user_work
-from config.dream_agent import allowlist_uids, backed_off_hunt_interval, eligibility, eligible, enabled, hunt_interval
-from config import dream_levers
+from config.dream_agent import allowlist_uids, eligibility, eligible, enabled, hunt_interval
 from utils.observability.fallback import record_fallback
 
 EPOCH = datetime(1970, 1, 1, tzinfo=timezone.utc)
@@ -32,14 +31,7 @@ def priority(row, now, *, weight=1):
     return max(0, (now - last).total_seconds()) + min(500, row.get('score', 0)) * 60, row.get('score', 0)
 
 
-def owner_hunt_interval(uid, state):
-    """Today's hunt interval, backed off by the owner's dry-hunt streak when the lever serves them."""
-    if uid is not None and dream_levers.arm(dream_levers.HUNT_BACKOFF_MODE_ENV, uid) == 'serve':
-        return backed_off_hunt_interval(state.get('size_bucket'), state.get('dry_hunts'))
-    return hunt_interval(state.get('size_bucket'))
-
-
-def due_time(state, now, uid=None):
+def due_time(state, now):
     last = state.get('last_attempt_at') or state.get('last_pass_at') or EPOCH
     if not isinstance(last, datetime) or last.tzinfo is None or last <= EPOCH:
         # A never-attempted owner is due immediately. Backdating the epoch by
@@ -48,7 +40,7 @@ def due_time(state, now, uid=None):
     if state.get('score', 0) > 0:
         due = last - timedelta(minutes=min(500, state['score']))
         return due if due >= EPOCH else now
-    return last + owner_hunt_interval(uid, state)
+    return last + hunt_interval(state.get('size_bucket'))
 
 
 def candidate_page(*, after=None, limit=499, transaction=None, firestore_client=None):
@@ -171,8 +163,8 @@ def discover(database, now, *, pages=20, budget_seconds=DISCOVERY_BUDGET_SECONDS
                 for row in chunk:
                     target = database.collection('dream_due').document(row.id)
                     if eligible_owners[row.id]:
-                        if row.id not in queued and not _parked(row.id, states.get(row.id, {})):
-                            tx.set(target, {'due_at': due_time(states.get(row.id, {}), now, row.id)})
+                        if row.id not in queued:
+                            tx.set(target, {'due_at': due_time(states.get(row.id, {}), now)})
                     elif row.id in queued:
                         tx.delete(target)
                 if listed is None and final_chunk:
@@ -182,27 +174,6 @@ def discover(database, now, *, pages=20, budget_seconds=DISCOVERY_BUDGET_SECONDS
                 database.transaction, initialize, operation_name='dream_discover'
             )
         after = rows[-1].id
-
-
-def _parked(uid, state):
-    """Idle-skip serve owners with no pending score wait for mark_dirty, not a timed hunt.
-
-    Fails open: any doubt (lever error, a score, an unreadable state) enqueues as before.
-    """
-    try:
-        return (
-            dream_levers.arm(dream_levers.IDLE_SKIP_MODE_ENV, uid) == 'serve'
-            and not state.get('score', 0)
-            and not _backlog_owed(uid)
-        )
-    except Exception:
-        return False
-
-
-def _backlog_owed(uid):
-    from config import required_memory_intake
-
-    return required_memory_intake.backlog_enabled(uid)
 
 
 # Payoff ordering (lever B2). Owners overdue this long run first in due order, so

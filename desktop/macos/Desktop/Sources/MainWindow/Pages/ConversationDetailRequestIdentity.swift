@@ -90,3 +90,15 @@ struct ConversationDetailRequestToken: Hashable {
     self.summaryRevision = summaryRevision
   }
 }
+
+/// A parent row update can restart the detail task while the same panel stays
+/// open. Only the first read in that presentation can claim deferred work.
+struct ConversationDetailOpenAdmission {
+  private var requestedID: String?
+
+  mutating func isReadOnly(for conversationID: String) -> Bool {
+    if requestedID == conversationID { return true }
+    requestedID = conversationID
+    return false
+  }
+}

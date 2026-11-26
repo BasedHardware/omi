@@ -39,9 +39,7 @@ func run(ctx context.Context, args []string, logger *slog.Logger) error {
 		return err
 	}
 
-	// The family lanes supply production declarations and handlers here. An empty registry
-	// starts a dev infrastructure smoke worker that leaves all queued jobs untouched.
-	kinds, handlers := []queue.Kind(nil), map[string]queue.Handler(nil)
+	kinds := workerdKinds()
 	registry := prometheus.NewRegistry()
 	metrics := newQueueMetrics(registry, kinds, cfg.policy.GateAbandoned)
 
@@ -61,13 +59,32 @@ func run(ctx context.Context, args []string, logger *slog.Logger) error {
 		}
 		return nil
 	}
-	err = store.Ready(startup)
-	endStartup()
-	if err != nil {
-		reportQueueError(logger, "ready", err)
+	if readyErr := store.Ready(startup); readyErr != nil {
+		reportQueueError(logger, "ready", readyErr)
+		endStartup()
 		store.Close()
 		return errors.New("could not verify PostgreSQL queue schema; check connectivity and migration state")
 	}
+	maintenance, err := openFinalizationRuntime(ctx, startup, cfg, store)
+	if err != nil {
+		endStartup()
+		store.Close()
+		return err
+	}
+	defer func() {
+		if closeErr := maintenance.close(); closeErr != nil {
+			logger.Warn("could not close finalization adapters")
+		}
+	}()
+	handlers := workerdHandlers(maintenance.family)
+
+	eraseServer, closeErase, err := openEraseServer(startup, cfg, store, logger)
+	endStartup()
+	if err != nil {
+		store.Close()
+		return err
+	}
+	defer closeErase()
 
 	workers, err := queue.Start(ctx, store, handlers, func(err error) {
 		reportQueueError(logger, "worker", err)
@@ -77,7 +94,9 @@ func run(ctx context.Context, args []string, logger *slog.Logger) error {
 		store.Close()
 		return errors.New("could not start queue workers")
 	}
-	registry.MustRegister(newStrandedCollector(workers))
+	registry.MustRegister(newStrandedCollector(workers), newCustomerWaitCollector(store))
 
-	return serve(ctx, cfg, store, workers, registry)
+	return serve(ctx, cfg, store, workers, registry, func(ctx context.Context) {
+		maintenance.run(ctx, logger)
+	}, maintenance.episodeIntakeHandler(cfg), eraseServer)
 }

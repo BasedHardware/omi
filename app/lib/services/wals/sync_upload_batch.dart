@@ -138,6 +138,10 @@ String? _walLocationBatchKey(Wal wal) {
 String recordingGroupKey(Wal wal) =>
     '${wal.conversationId}|${wal.recordingSessionId}|${isMobileStandardBatchWal(wal)}|${_walLocationBatchKey(wal) ?? ''}';
 
+/// Legacy WALs without a session ID can share a conversation with unrelated
+/// audio. The upload gate paces those by the individual submitted file names.
+String? recordingWaitGroupKey(Wal wal) => wal.recordingSessionId?.isNotEmpty == true ? recordingGroupKey(wal) : null;
+
 /// Gap at which two id-less recordings on one device count as separate runs.
 /// Chunks of one file are exactly contiguous; the chunker's floor division can
 /// shave a second off a computed run boundary.
@@ -220,7 +224,7 @@ const drainRecordingShareWindowSeconds = 24 * 3600;
 /// history newest-first starved exactly the recordings with the least recovery
 /// time left; oldest-first makes every interruption cost the newest audio,
 /// which has the most slack, instead.
-List<Wal> nextSyncUploadBatch(List<Wal> pending, int nowSeconds) {
+List<Wal> nextSyncUploadBatch(List<Wal> pending, int nowSeconds, {String Function(Wal)? holdLabel}) {
   final indexed = [for (var i = 0; i < pending.length; i++) (pending[i], i)]..sort((a, b) {
       final aClass = walCaptureTimeClass(a.$1, nowSeconds);
       final bClass = walCaptureTimeClass(b.$1, nowSeconds);
@@ -234,6 +238,8 @@ List<Wal> nextSyncUploadBatch(List<Wal> pending, int nowSeconds) {
   final conversationId = ordered.first.conversationId;
   final recordingSessionId = ordered.first.recordingSessionId;
   final locationKey = _walLocationBatchKey(ordered.first);
+  final hold = holdLabel?.call(ordered.first);
+  final recovered = ordered.first.recoveredMobileBatchHold;
   final group = ordered
       .where(
         (wal) =>
@@ -242,6 +248,8 @@ List<Wal> nextSyncUploadBatch(List<Wal> pending, int nowSeconds) {
             (walClockPriorityOff ||
                 walCaptureTimeClass(wal, nowSeconds) == walCaptureTimeClass(ordered.first, nowSeconds)) &&
             isMobileStandardBatchWal(wal) == isMobileStandardBatchWal(ordered.first) &&
+            holdLabel?.call(wal) == hold &&
+            wal.recoveredMobileBatchHold == recovered &&
             _walLocationBatchKey(wal) == locationKey,
       )
       .toList();

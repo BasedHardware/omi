@@ -46,7 +46,6 @@ This rollout uses `/v1/transcribe`, never the RNNT `/v3/stream` path for the
 | `PARAKEET_BATCH_PRESSURE_POOL_HOST` | empty (stand down) | `dev-omi-parakeet-headless.dev-omi-backend.svc.cluster.local` | `prod-omi-parakeet-headless.prod-omi-backend.svc.cluster.local` |
 | `PARAKEET_BATCH_PRESSURE_MIN_REPLICAS` | `2` | `1` | `3` |
 | `PARAKEET_WINDOW_POST_TIMEOUT_SECONDS` | `8` | `8` | `8` |
-| `PARAKEET_WINDOW_DIARIZATION` | `false` | `false` | `false` |
 | `PARAKEET_WINDOW_PACE_SECONDS` | `6` | `6` | `6` |
 | `PARAKEET_WINDOW_MAX_CONTEXT_SECONDS` | `24` | `24` | `24` |
 | `PARAKEET_WINDOW_FIRST_TEXT_DEADLINE_SECONDS` | `12` | code default | `12` |
@@ -62,8 +61,7 @@ mode once at listen-session start; the pin survives mid-session environment
 changes, delayed component construction, successor legs, and spawned writer
 tasks, so changing the value only affects new sessions or replacement pods.
 **Off** (the code default and dev listen setting) runs the pre-recovery
-paths: the 135-second capture cap and legacy reconnect budgets (3 total, 2 per
-minute, 30s cumulative replay), plain `asyncio.Queue` provider send queues
+paths: the 135-second capture cap, plain `asyncio.Queue` provider send queues
 without writer pacing, the legacy finalize/EOS order, legacy circuit
 rejection semantics (429 records failure/selection bench; account protections
 are unchanged), and the unmanaged `_finishing` latch. The new recovery metrics (`omi_stt_replay_wall_seconds`,
@@ -71,8 +69,8 @@ are unchanged), and the unmanaged `_finishing` latch. The new recovery metrics (
 `omi_stt_replay_skipped_seconds_total`, `omi_stt_replay_successor_closed_total`,
 `omi_stt_recovery_attempts_total`, `omi_stt_connect_backoff_total`,
 `omi_live_session_terminal_after_text_total`) still register but never emit
-values in this mode; baseline metrics such as `omi_stt_replay_seconds_total`
-and `omi_stt_reconnect_total` are unchanged. **On**, configured for prod listen
+values in this mode. The baseline `omi_stt_replay_seconds_total` metric
+remains available. **On**, configured for prod listen
 with `STT_FAILOVER_RECOVERY_ENABLED=true`, the recovery
 state machine applies: `LiveRecoveryController`, the shared 60s
 episode, 150s bounded replacement headroom, paced `AudioSendQueue` replay, and

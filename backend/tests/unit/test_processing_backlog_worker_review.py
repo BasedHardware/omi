@@ -975,3 +975,16 @@ async def test_unreadable_provenance_stays_paused_without_spend(monkeypatch, fai
     if failure == 'lookup':
         ref.document.return_value.get.side_effect = OSError('synthetic manifest read failure')
     assert not await worker._selected('owner', {'kind': 'audio', 'id': 'held'})
+
+
+def test_foreign_backlog_row_defers_without_claiming_item(monkeypatch):
+    monkeypatch.setattr(
+        worker.conversations_db,
+        'get_conversation',
+        lambda *_: {'processing_deferred': True, 'finalization_engine': 'go', 'finalization_owner_epoch': 1},
+    )
+    claim = Mock()
+    monkeypatch.setattr(worker.store, 'claim_item', claim)
+
+    assert worker._process_text('u', 'c') is worker.AttemptOutcome.DEFERRED
+    claim.assert_not_called()

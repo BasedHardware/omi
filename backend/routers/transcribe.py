@@ -19,6 +19,7 @@ from firebase_admin.auth import InvalidIdTokenError
 
 from models.geolocation import Geolocation, geolocation_from_private_header
 from routers.listen.contracts import CustomSttMode, ListenRequest
+from routers.listen.live_words import run_live_words
 from routers.listen.runtime import run_listen_session
 from utils.client_device import (
     ClientDeviceContext,
@@ -241,6 +242,18 @@ async def listen_handler(
         # tolerates a session with no cloud streaming STT (CLOUD_LIVE_STT_MODE).
         local_preview=local_preview == 'enabled',
     )
+
+
+@router.websocket('/v4/live-words')
+async def live_words_handler(
+    websocket: WebSocket,
+    uid: str = Depends(auth.get_current_user_uid_ws_listen),
+    language: str = 'multi',
+    sample_rate: int = 16000,
+    codec: str = 'opus',
+) -> None:
+    """Reliability experiment ``vendor_recognizer_on_opened_app``: display-only words, nothing stored."""
+    await run_live_words(websocket, uid, language=language, sample_rate=sample_rate, codec=codec)
 
 
 @router.websocket('/v4/web/listen')

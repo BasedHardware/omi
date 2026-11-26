@@ -15,6 +15,7 @@ the pointer to converge instead of failing the deploy; every other mismatch
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import re
 import subprocess
@@ -247,15 +248,16 @@ def collect_documents(commands: Mapping[str, Sequence[str]]) -> dict[str, Mappin
                 text=True,
                 timeout=QUERY_TIMEOUT_SECONDS,
             )
-        except subprocess.TimeoutExpired as exc:
-            raise RuntimeError(f'{name} query timed out after {QUERY_TIMEOUT_SECONDS}s') from exc
+        except subprocess.TimeoutExpired:
+            raise RuntimeError(f'{name} query timed out after {QUERY_TIMEOUT_SECONDS}s') from None
+        except OSError:
+            raise RuntimeError(f'{name} query could not start') from None
         if completed.returncode != 0:
-            detail = completed.stderr.strip() or completed.stdout.strip() or f'exit code {completed.returncode}'
-            raise RuntimeError(f'{name} query failed: {detail}')
+            raise RuntimeError(f'{name} query failed: exit status {completed.returncode}')
         try:
             parsed = json.loads(completed.stdout)
-        except json.JSONDecodeError as exc:
-            raise RuntimeError(f'{name} did not return JSON: {exc}') from exc
+        except json.JSONDecodeError:
+            raise RuntimeError(f'{name} did not return JSON') from None
         if not isinstance(parsed, Mapping):
             raise RuntimeError(f'{name} returned a non-object JSON document')
         documents[name] = parsed
@@ -268,6 +270,7 @@ def evaluate(
     *,
     require_serving_traffic: bool = True,
     include_listener: bool = True,
+    verify_backfill_zero_traffic: bool = False,
 ) -> list[str]:
     errors: list[str] = []
     for service, expected_revision in expectation.revisions.items():
@@ -284,6 +287,8 @@ def evaluate(
                     expected_environment=expectation.environment,
                     require_serving_traffic=require_serving_traffic,
                     expected_revision_document=documents.get(f'cloud_run_revision/{service}'),
+                    require_resolved_candidate_traffic=verify_backfill_zero_traffic
+                    and service == 'backend-sync-backfill',
                 )
             )
     if include_listener:
@@ -304,6 +309,100 @@ def _latest_ready_error(service: str, expected_revision: str) -> str:
     return f'cloud_run/{service}: latest ready revision is not {expected_revision}'
 
 
+def evaluate_backfill_candidate_env(
+    revision: Mapping[str, Any], expected_revision: str, binding_sha256: str
+) -> list[str]:
+    service = 'backend-sync-backfill'
+    metadata = _mapping(revision.get('metadata'))
+    labels = _mapping(metadata.get('labels'))
+    if metadata.get('name') != expected_revision or labels.get('serving.knative.dev/service') != service:
+        return [f'cloud_run/{service}: candidate revision identity mismatch']
+
+    containers = _list(_mapping(revision.get('spec')).get('containers'))
+    # The GMP attachment names the backfill ingress backend-1.
+    ingress = [_mapping(container) for container in containers if _mapping(container).get('name') == 'backend-1']
+    if len(ingress) != 1:
+        return [f'cloud_run/{service}: candidate ingress container missing or ambiguous']
+    env = _list(ingress[0].get('env'))
+    errors = []
+    for name, expected_value in (
+        ('SYNC_TASKS_HANDLER_URL', binding_sha256),
+        ('SYNC_TASKS_OIDC_AUDIENCE', binding_sha256),
+        ('SYNC_TASKS_QUEUE', 'sync-backfill-fresh'),
+        ('BATCH_ACCOUNT_PRIVACY_WRITER_ENABLED', 'false'),
+        ('BATCH_PROJECTION_OUTBOX', 'false'),
+    ):
+        entries = [_mapping(entry) for entry in env if _mapping(entry).get('name') == name]
+        if len(entries) != 1 or 'valueFrom' in entries[0] or not isinstance(entries[0].get('value'), str):
+            errors.append(f'cloud_run/{service}: {name} must be present as a single literal')
+            continue
+        value = entries[0]['value']
+        if name in ('SYNC_TASKS_HANDLER_URL', 'SYNC_TASKS_OIDC_AUDIENCE'):
+            value = hashlib.sha256(value.encode('utf-8')).hexdigest()
+        if value != expected_value:
+            errors.append(f'cloud_run/{service}: {name} differs from the approved backfill value')
+    return errors
+
+
+def _candidate_traffic_percent(traffic: Any, expected_revision: str, latest_ready: Any) -> int:
+    if not isinstance(traffic, list) or not traffic:
+        raise ValueError('traffic status is unavailable')
+
+    total = 0
+    candidate_percent = 0
+    for entry in traffic:
+        target = _mapping(entry)
+        latest = target.get('latestRevision', False)
+        if latest is True:
+            if 'revisionName' in target:
+                raise ValueError('traffic target is ambiguous')
+            revision = latest_ready
+        else:
+            revision = target.get('revisionName')
+        percent = target.get('percent')
+        # Cloud Run can omit or serialize zero as null for tag-only targets.
+        if percent is None and isinstance(target.get('tag'), str) and target['tag']:
+            percent = 0
+        if (
+            not isinstance(revision, str)
+            or not revision
+            or any(character.isspace() for character in revision)
+            or type(latest) is not bool
+            or type(percent) is not int
+            or not 0 <= percent <= 100
+        ):
+            raise ValueError('traffic target is ambiguous')
+        total += percent
+        if revision == expected_revision:
+            candidate_percent += percent
+    if total != 100:
+        raise ValueError('traffic allocation is incomplete')
+    return candidate_percent
+
+
+def evaluate_candidate_zero_traffic(
+    service: str, expected_revision: str, status: Mapping[str, Any], spec: Mapping[str, Any] | None = None
+) -> list[str]:
+    latest_ready = status.get('latestReadyRevisionName')
+    try:
+        observed_percent = _candidate_traffic_percent(status.get('traffic'), expected_revision, latest_ready)
+    except ValueError as exc:
+        return [f'cloud_run/{service}: serving {exc}']
+
+    errors = []
+    if observed_percent > 0:
+        errors.append(f'cloud_run/{service}: expected revision carries traffic before promotion')
+    if spec is not None and 'traffic' in spec:
+        try:
+            desired_percent = _candidate_traffic_percent(spec['traffic'], expected_revision, latest_ready)
+        except ValueError as exc:
+            errors.append(f'cloud_run/{service}: configured {exc}')
+        else:
+            if desired_percent != observed_percent:
+                errors.append(f'cloud_run/{service}: configured and serving candidate traffic disagree')
+    return errors
+
+
 def evaluate_cloud_run_service(
     service: str,
     expected_revision: str,
@@ -313,9 +412,11 @@ def evaluate_cloud_run_service(
     expected_environment: str,
     require_serving_traffic: bool = True,
     expected_revision_document: Mapping[str, Any] | None = None,
+    require_resolved_candidate_traffic: bool = False,
 ) -> list[str]:
     status = _mapping(document.get('status'))
-    template_spec = _mapping(_mapping(_mapping(document.get('spec')).get('template')).get('spec'))
+    spec = _mapping(document.get('spec'))
+    template_spec = _mapping(_mapping(spec.get('template')).get('spec'))
     containers = _list(template_spec.get('containers'))
     image = _mapping(containers[0]).get('image') if containers else None
     traffic = _list(status.get('traffic'))
@@ -341,7 +442,9 @@ def evaluate_cloud_run_service(
         errors.append(f'cloud_run/{service}: template image is not {expected_image}')
     if require_serving_traffic and (not expected_traffic or _mapping(expected_traffic[0]).get('percent') != 100):
         errors.append(f'cloud_run/{service}: expected revision does not receive 100% traffic')
-    if not require_serving_traffic:
+    if not require_serving_traffic and require_resolved_candidate_traffic:
+        errors.extend(evaluate_candidate_zero_traffic(service, expected_revision, status, spec))
+    elif not require_serving_traffic:
         for entry in expected_traffic:
             allocation = _effective_candidate_traffic_percent(_mapping(entry).get('percent'))
             if allocation is None:
@@ -702,6 +805,9 @@ def main() -> int:
     parser.add_argument('--evidence-path', type=Path)
     parser.add_argument('--integration-only', action='store_true')
     parser.add_argument('--cloud-run-service', choices=('all', *SELECTABLE), default='all')
+    parser.add_argument(
+        '--backfill-binding-sha256', help='approved handler URL and OIDC audience hash for prod backfill'
+    )
     args = parser.parse_args()
     try:
         if args.cloud_run_service != 'all' and not args.cloud_run_only:
@@ -727,6 +833,13 @@ def main() -> int:
             integration_only=args.integration_only,
             cloud_run_service=args.cloud_run_service,
         )
+        if args.backfill_binding_sha256 is not None and (
+            not args.candidate
+            or args.environment != 'prod'
+            or 'backend-sync-backfill' not in expectation.revisions
+            or not re.fullmatch(r'[0-9a-f]{64}', args.backfill_binding_sha256)
+        ):
+            raise ValueError('backfill binding hash requires a production backfill candidate and a SHA-256 hex digest')
         commands = build_read_only_commands(
             expectation,
             include_listener=not args.cloud_run_only,
@@ -741,7 +854,16 @@ def main() -> int:
             documents,
             require_serving_traffic=require_serving_traffic,
             include_listener=include_listener,
+            verify_backfill_zero_traffic=args.backfill_binding_sha256 is not None,
         )
+        if args.backfill_binding_sha256 is not None:
+            errors.extend(
+                evaluate_backfill_candidate_env(
+                    documents.get('cloud_run_revision/backend-sync-backfill', {}),
+                    expectation.revisions['backend-sync-backfill'],
+                    args.backfill_binding_sha256,
+                )
+            )
         latest_ready_poll: dict[str, Any] | None = None
         if require_serving_traffic and errors and args.latest_ready_wait_seconds > 0:
             lagging, others = partition_latest_ready_lag(expectation, errors)

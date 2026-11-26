@@ -361,3 +361,39 @@ def test_close_refuses_changed_privacy_generation_without_write(client):
     assert client.rows[PATH] == before
     assert all(not txn.has_written for txn in client.transactions)
     assert client.deletes == []
+
+
+def test_close_stamps_the_settle_time_once_and_restore_removes_it(client, monkeypatch):
+    monkeypatch.delenv('CONVERSATION_TERMINAL_FAMILY_MODE', raising=False)
+    revision = close(client)
+    row = client.rows[PATH]
+    assert isinstance(row['terminal_family_at'], datetime) and 'terminal_family' not in row
+    assert row['no_speech_terminal']['settled_stamped'] is True
+    terminal.restore_no_speech(UID, CID, expected_closed_revision=revision, run_id='run-1', firestore_client=client)
+    assert 'terminal_family_at' not in client.rows[PATH]
+
+
+def test_close_keeps_an_earlier_settle_time_and_restore_keeps_it(client, monkeypatch):
+    monkeypatch.delenv('CONVERSATION_TERMINAL_FAMILY_MODE', raising=False)
+    earlier = NOW - timedelta(hours=2)
+    client.rows[PATH]['terminal_family_at'] = earlier
+    revision = close(client)
+    assert client.rows[PATH]['terminal_family_at'] == earlier
+    assert client.rows[PATH]['no_speech_terminal']['settled_stamped'] is False
+    terminal.restore_no_speech(UID, CID, expected_closed_revision=revision, run_id='run-1', firestore_client=client)
+    assert client.rows[PATH]['terminal_family_at'] == earlier
+
+
+def test_stuck_backfill_close_shares_the_settle_stamp_and_its_undo(client, monkeypatch):
+    from database import stuck_backfill
+
+    monkeypatch.delenv('CONVERSATION_TERMINAL_FAMILY_MODE', raising=False)
+    monkeypatch.setattr(stuck_backfill, '_fences', lambda *a, **k: None)
+    closed = client.revisions[PATH].isoformat()
+    stuck_backfill._close_txn(client.transaction(), client, UID, CID, closed, NOW, None, 'run-1', NOW)
+    row = client.rows[PATH]
+    assert row['terminal_family_at'] == NOW and row[stuck_backfill.MARKER]['settled_stamped'] is True
+    stuck_backfill._restore_txn(
+        client.transaction(), client, UID, CID, client.revisions[PATH].isoformat(), 'run-1', NOW
+    )
+    assert 'terminal_family_at' not in client.rows[PATH]

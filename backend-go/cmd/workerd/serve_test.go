@@ -22,16 +22,32 @@ func TestServeReturnsCleanlyAfterContextCancellation(t *testing.T) {
 	defer cancel()
 	cfg := serveTestConfig(t)
 	done := make(chan error, 1)
+	started, stopped := make(chan struct{}), make(chan struct{})
+	maintenance := func(ctx context.Context) {
+		close(started)
+		<-ctx.Done()
+		close(stopped)
+	}
 	go func() {
-		done <- serve(ctx, cfg, h.Store, workers, prometheus.NewRegistry())
+		done <- serve(ctx, cfg, h.Store, workers, prometheus.NewRegistry(), maintenance, nil)
 	}()
 
 	waitForHealth(t, cfg.healthPort)
+	select {
+	case <-started:
+	case <-time.After(time.Second):
+		t.Fatal("maintenance did not start")
+	}
 	cancel()
 	select {
 	case err := <-done:
 		if err != nil {
 			t.Fatalf("serve after cancellation: %v", err)
+		}
+		select {
+		case <-stopped:
+		default:
+			t.Fatal("serve returned before maintenance stopped")
 		}
 	case <-time.After(3 * time.Second):
 		t.Fatal("serve did not stop before its shutdown deadline")
@@ -59,7 +75,7 @@ func TestServeReturnsListenerFailure(t *testing.T) {
 	port := address.Port
 	cfg := serveTestConfig(t)
 	cfg.healthPort = port
-	err = serve(t.Context(), cfg, h.Store, workers, prometheus.NewRegistry())
+	err = serve(t.Context(), cfg, h.Store, workers, prometheus.NewRegistry(), nil, nil)
 	if err == nil || !strings.Contains(err.Error(), "health listener failed") {
 		t.Fatalf("serve error = %v, want health listener failure", err)
 	}

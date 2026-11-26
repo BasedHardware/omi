@@ -902,3 +902,109 @@ def test_r14_legacy_marker_without_status_is_never_claimed_or_redriven():
         uids = [row['uid'] for row in users_db.get_pending_deletion_wipes(limit=100)]
     assert 'legacy1' not in uids and collection.queried
     assert None not in collection.queried
+
+
+def test_stale_task_cannot_claim_a_replacement_deletion_generation():
+    txn = _make_txn()
+    snapshot = _make_snapshot({'uid': 'uid1', 'wipe_status': 'pending', 'wipe_job_id': 'replacement'})
+    doc_ref = types.SimpleNamespace(get=lambda transaction=None: snapshot)
+    raw_fn = getattr(users_db._claim_deletion_wipe_task_txn, 'to_wrap', users_db._claim_deletion_wipe_task_txn)
+    assert (
+        raw_fn(txn, doc_ref, users_db.DELETION_WIPE_RUNNING_STALE_AFTER, operation_id='old', expected_job_id='original')
+        == 'not_actionable'
+    )
+    assert txn._updates == []
+    assert txn._sets == []
+
+
+def test_legacy_task_defers_if_wipe_arms_after_job_lookup():
+    result, updates = _run_task_claim(
+        {
+            'uid': 'uid1',
+            'wipe_status': 'failed',
+            'go_queue_erase_armed_at': datetime.now(timezone.utc),
+        }
+    )
+    assert result == 'erase_required'
+    assert updates == []
+
+
+def test_legacy_mark_running_uses_the_original_authority_merge():
+    from unittest.mock import Mock
+
+    client, document = Mock(), Mock()
+    with (
+        patch.object(users_db, 'account_deletion_firestore_client', return_value=client),
+        patch.object(users_db, 'account_deletion_document', return_value=document),
+        patch.object(users_db, 'merge_account_authority') as merge,
+    ):
+        assert users_db.mark_user_deletion_wipe_running('uid1') is None
+
+    merge.assert_called_once()
+    assert merge.call_args.args[:2] == (client, document)
+    assert set(merge.call_args.args[2]) == {'wipe_status', 'wipe_running_at'}
+    assert merge.call_args.args[2]['wipe_status'] == 'running'
+    client.transaction.assert_not_called()
+
+
+@pytest.mark.parametrize(('age', 'expected'), [(5, 'claimed'), (3, 'running')])
+def test_protected_task_reclaims_only_after_four_minutes(age, expected):
+    txn = _make_txn()
+    snapshot = _make_snapshot(
+        {
+            'uid': 'uid1',
+            'wipe_status': 'running',
+            'wipe_job_id': 'job',
+            'wipe_running_at': datetime.now(timezone.utc) - timedelta(minutes=age),
+            'go_queue_erase_armed_at': datetime.now(timezone.utc) - timedelta(minutes=age),
+        }
+    )
+    ref = types.SimpleNamespace(get=lambda transaction=None: snapshot)
+    raw_fn = users_db._claim_deletion_wipe_task_txn.to_wrap
+    assert (
+        raw_fn(txn, ref, users_db.DELETION_WIPE_RUNNING_STALE_AFTER, operation_id='redelivery', expected_job_id='job')
+        == expected
+    )
+    assert bool(txn._sets or txn._updates) == (expected == 'claimed')
+
+
+def test_unprotected_wipe_heartbeat_refuses_armed_generation_without_writing():
+    txn = _make_txn()
+    snapshot = _make_snapshot(
+        {
+            'wipe_status': 'running',
+            'go_queue_erase_armed_at': datetime.now(timezone.utc),
+        }
+    )
+    ref = types.SimpleNamespace(get=lambda transaction=None: snapshot)
+    assert users_db._heartbeat_user_deletion_wipe_txn.to_wrap(txn, ref) is False
+    assert not (txn._sets or txn._updates)
+
+
+def test_restore_and_a_new_intent_start_the_failed_admission_record_from_zero():
+    # A first deletion failed its admission cancel 5 times and went overdue, then finished and was restored.
+    marker = {
+        'uid': 'uid1',
+        'wipe_status': 'pending_deletion',
+        'wipe_due_at': datetime.now(timezone.utc) + timedelta(days=1),
+        'grace_actions_complete': True,
+        'grace_actions_failed_attempts': 5,
+        'grace_actions_last_failed_at': datetime.now(timezone.utc),
+        'grace_actions_overdue': True,
+    }
+    result, updates = _run_restore(marker)
+    assert result == 'restored'
+    marker = {**marker, **updates[0][1]}
+    assert marker['grace_actions_failed_attempts'] == 0 and marker['grace_actions_overdue'] is False
+    assert marker['grace_actions_last_failed_at'] is None
+
+    # The account is deleted again: the merged intent write resets the record even if a restore never ran.
+    stale = {**marker, 'grace_actions_failed_attempts': 5, 'grace_actions_overdue': True}
+    result, sets, _ = _run_mark_grace(stale, datetime.now(timezone.utc) + timedelta(days=14))
+    assert result['mode'] == 'created'
+    fields, kwargs = sets[0][1], sets[0][2]
+    assert kwargs.get('merge') is True
+    merged = {**stale, **fields}
+    assert merged['grace_actions_failed_attempts'] == 0
+    assert merged['grace_actions_overdue'] is False
+    assert merged['grace_actions_last_failed_at'] is None

@@ -39,7 +39,11 @@ def read_agent_vm_migration_journals(uid: str) -> list[dict[str, Any]]:
 def mark_wipe_completed(transaction, doc_ref, *, operation_id: str) -> bool:
     snapshot = doc_ref.get(transaction=transaction)
     data = (snapshot.to_dict() or {}) if snapshot.exists else {}
-    if data.get('late_agent_vm_cleanup'):
+    erase_armed = data.get('go_queue_erase_armed_at') is not None
+    erase_verified = isinstance(data.get('go_queue_erase_receipt_at'), datetime) and isinstance(
+        data.get('go_queue_erase_wipe_started_at'), datetime
+    )
+    if data.get('late_agent_vm_cleanup') or (erase_armed and not erase_verified):
         write_account_authority(
             transaction,
             doc_ref,

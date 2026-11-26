@@ -423,3 +423,62 @@ def test_regenerate_is_offline_preserves_order_and_rejects_duplicate_sources(pro
     with pytest.raises(ValueError, match='duplicate'):
         provisioner.regenerate_export(path)
     assert path.read_bytes() == first
+
+
+@pytest.mark.parametrize(
+    'uid,location,key,value,expected',
+    [
+        ('omi-redis-cache-conn-page', 'labels', 'paging_target', 'other', 'invalid paging_target'),
+        ('omi-redis-cache-conn-page', 'notification_settings', 'receiver', 'Telegram', 'unexpected notification'),
+        (
+            'omi-redis-cache-conn-warn',
+            'notification_settings',
+            'receiver',
+            'Omi - Redis phone wake',
+            'unexpected notification',
+        ),
+    ],
+)
+def test_split_and_combined_reject_wrong_redis_route(provisioner, tmp_path, uid, location, key, value, expected):
+    rules = [copy.deepcopy(provisioner.load_rules(provisioner.RULES)[uid])]
+    rules[0][location][key] = value
+    split = tmp_path / 'alerts'
+    split.mkdir()
+    (split / 'resilience.json').write_text(json.dumps(rules))
+    combined = tmp_path / 'alert-rules.json'
+    combined.write_text(json.dumps(rules))
+    with pytest.raises(ValueError, match=expected):
+        provisioner.load_rules(combined)
+
+
+def test_redis_promtool_exercises_the_committed_instant_query(provisioner):
+    import yaml
+
+    rule = provisioner.load_rules(provisioner.RULES)[provisioner.REDIS_PAGER_UID]
+    query, _, threshold = rule['data']
+    assert query['datasourceUid'] == 'prometheus' and query['model']['instant'] is True
+    assert rule['condition'] == threshold['refId'] and rule['for'] == '5m'
+    assert threshold['model']['conditions'][0]['evaluator'] == {'type': 'gt', 'params': [0]}
+    assert rule['noDataState'] == 'KeepLast'
+    paging = provisioner.ROOT / 'backend/paging'
+    fixture = yaml.safe_load((paging / 'redis-probe.test.yml').read_text())
+    manifest = yaml.safe_load((paging / 'release.yaml').read_text())
+    assert {' '.join(test['expr'].split()) for case in fixture['tests'] for test in case['promql_expr_test']} == {
+        ' '.join(query['model']['expr'].split()),
+        ' '.join(manifest['redisProbe']['scrape']['healthQuery'].split()),
+    }
+
+
+def test_bulk_apply_preserves_live_redis_pilot(provisioner, tmp_path):
+    uid = provisioner.REDIS_PAGER_UID
+    candidate = provisioner.load_rules(provisioner.RULES)[uid]
+    previous = rule(uid)
+    api = FakeGrafana({uid: previous, 'example': rule()})
+    desired = {uid: candidate, 'example': rule() | {'title': 'new'}}
+    backup = tmp_path / 'backup.json'
+
+    assert provisioner.reconcile(api, {uid: candidate, 'example': rule()}) == []
+    assert provisioner.reconcile(api, desired, backup=backup) == []
+    assert len(api.writes) == 1
+    assert api.writes[0][1] == provisioner.API + '/example'
+    assert api.live[uid] == previous

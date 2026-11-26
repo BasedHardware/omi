@@ -21,7 +21,7 @@ func TestHealthRoutesAndReadinessFollowQueueSchemaAndShutdown(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer store.Close()
-	health := healthHandler(ctx.Done(), store.Ready)
+	health := healthHandler(ctx.Done(), store.Ready, nil)
 	assertStatus(t, health, http.MethodGet, "/health", http.StatusOK)
 	assertStatus(t, health, http.MethodGet, "/ready", http.StatusServiceUnavailable)
 	assertStatus(t, health, http.MethodGet, "/metrics", http.StatusNotFound)
@@ -44,4 +44,17 @@ func assertStatus(t *testing.T, handler http.Handler, method, path string, want 
 	if response.Code != want {
 		t.Errorf("%s %s status = %d, want %d", method, path, response.Code, want)
 	}
+}
+
+func TestHealthMuxRoutesEpisodeIntakeOnlyWhenEnabled(t *testing.T) {
+	t.Parallel()
+	runtime := finalizationRuntime{}
+	disabled := healthHandler(nil, nil, runtime.episodeIntakeHandler(config{}))
+	assertStatus(t, disabled, http.MethodPost, episodeIntakePath, http.StatusNotFound)
+
+	enabled := healthHandler(nil, nil, http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	assertStatus(t, enabled, http.MethodGet, episodeIntakePath, http.StatusMethodNotAllowed)
+	assertStatus(t, enabled, http.MethodPost, episodeIntakePath, http.StatusNoContent)
 }

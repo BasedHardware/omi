@@ -32,7 +32,11 @@ async def renew_until_done(uid, key, token, worker):
 
 
 async def leased_work(uid, key, token, executor, fn, *args):
-    worker = start_background_task(run_blocking(executor, fn, *args), name='v3-paid-work')
+    # The paid call's caller owns the Cloud Tasks retry, so a transient provider
+    # fault is logged as a bounded WARNING instead of the provider body at ERROR.
+    worker = start_background_task(
+        run_blocking(executor, fn, *args), name='v3-paid-work', bounded_provider_failure=True
+    )
     keeper = start_background_task(renew_until_done(uid, key, token, worker), name='v3-paid-lease')
     try:
         return await asyncio.shield(worker)

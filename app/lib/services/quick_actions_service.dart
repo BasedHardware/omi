@@ -16,7 +16,9 @@ import 'package:omi/providers/device_provider.dart';
 import 'package:omi/providers/home_provider.dart';
 import 'package:omi/utils/enums.dart';
 import 'package:omi/utils/l10n_extensions.dart';
+import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/other/temp.dart';
+import 'package:omi/utils/platform/platform_manager.dart';
 
 const _kAddTask = 'add_task';
 const _kAskOmi = 'ask_omi';
@@ -30,15 +32,20 @@ class QuickActionsService {
   static final QuickActionsService _instance = QuickActionsService._();
   QuickActionsService._()
       : _quickActions = const QuickActions(),
-        _isSupported = Platform.isIOS;
+        _isSupported = Platform.isIOS,
+        _reportNonFatal = null;
 
   @visibleForTesting
-  QuickActionsService.forTesting({required QuickActions quickActions})
-      : _quickActions = quickActions,
-        _isSupported = true;
+  QuickActionsService.forTesting({
+    required QuickActions quickActions,
+    Future<void> Function(Object, StackTrace, {Map<String, String> userAttributes})? reportNonFatal,
+  })  : _quickActions = quickActions,
+        _isSupported = true,
+        _reportNonFatal = reportNonFatal;
   static QuickActionsService get instance => _instance;
 
   final QuickActions _quickActions;
+  final Future<void> Function(Object, StackTrace, {Map<String, String> userAttributes})? _reportNonFatal;
   final bool _isSupported;
   bool _initialized = false;
   List<(String, String)>? _publishedShortcuts;
@@ -202,10 +209,15 @@ class QuickActionsService {
 
   void _toggleMute(BuildContext context, {required bool mute}) {
     final captureProvider = Provider.of<CaptureProvider>(context, listen: false);
-    if (mute) {
-      captureProvider.pauseCapture();
-    } else {
-      captureProvider.resumeCapture();
-    }
+    final toggle = mute ? captureProvider.pauseCapture() : captureProvider.resumeCapture();
+    // The shortcut has no screen to report on; keep a failed pendant write out of the uncaught handler.
+    unawaited(toggle.catchError((Object error, StackTrace stack) {
+      Logger.debug('QuickActions: ${mute ? 'mute' : 'unmute'} failed: $error');
+      return (_reportNonFatal ?? PlatformManager.instance.crashReporter.reportNonFatal)(
+        error,
+        stack,
+        userAttributes: {'capture_mute_source': 'quick_action', 'capture_mute_action': mute ? 'mute' : 'unmute'},
+      );
+    }));
   }
 }

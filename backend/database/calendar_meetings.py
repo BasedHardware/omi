@@ -1,24 +1,21 @@
+import logging
+import time
 from datetime import datetime, timezone
-from typing import Any, Callable, Dict, List, Optional, TypeVar, cast
+from typing import Any, Dict, List, Optional, cast
 
+from google.api_core.exceptions import DeadlineExceeded
 from google.cloud import firestore
-from google.cloud.firestore_v1 import FieldFilter, transactional  # type: ignore[reportUnknownMemberType]  # firestore SDK stub gap
+from google.cloud.firestore_v1 import FieldFilter
 
 from ._client import db
 from database.document_ids import calendar_meeting_doc_id
 from database.firestore_transaction_retry import run_with_transaction_contention_retry
 
-T = TypeVar("T")
+logger = logging.getLogger(__name__)
 
-
-def _typed_transactional(func: Callable[..., T]) -> Callable[..., T]:
-    """Wrap @transactional preserving the wrapped function's typed signature.
-
-    google-cloud-firestore's @transactional decorator surfaces as partially
-    unknown under strict Pyright (no stubs); this thin wrapper keeps the typed
-    call site while delegating runtime behavior to the SDK decorator.
-    """
-    return transactional(func)
+_UPSERT_ATTEMPTS = 3
+_UPSERT_TIMEOUT_SECONDS = 5.0
+_ROLLBACK_TIMEOUT_SECONDS = 0.25
 
 
 def _get_meetings_collection(uid: str) -> Any:
@@ -26,15 +23,54 @@ def _get_meetings_collection(uid: str) -> Any:
     return db.collection('users').document(uid).collection('meetings')
 
 
-@_typed_transactional
-def _upsert_meeting_transaction(transaction: Any, doc_ref: Any, meeting_data: Dict[str, Any], now: datetime) -> None:
+def _upsert_meeting_transaction(
+    transaction: Any, doc_ref: Any, meeting_data: Dict[str, Any], now: datetime, deadline: float
+) -> None:
     """Upsert a natural-key meeting while preserving first-created metadata."""
-    snapshot = doc_ref.get(transaction=transaction)
-    payload: Dict[str, Any] = dict(meeting_data)
-    payload['synced_at'] = now
-    if not getattr(snapshot, "exists", False):
-        payload['created_at'] = now
-    transaction.set(doc_ref, payload, merge=True)
+    client = transaction._client
+    api = client._firestore_api
+    base_request = {'database': client._database_string}
+    metadata = client._rpc_metadata
+
+    def remaining() -> float:
+        seconds = deadline - time.monotonic()
+        if seconds <= 0:
+            raise DeadlineExceeded('Calendar meeting transaction deadline exhausted')
+        return seconds
+
+    # Firestore 2.20.0's lifecycle methods use default RPC timeouts and retries.
+    # Use the same client API with a shared deadline and retain SDK write encoding.
+    response = api.begin_transaction(
+        request={**base_request, 'options': transaction._options_protobuf(retry_id=None)},
+        metadata=metadata,
+        retry=None,
+        timeout=remaining(),
+    )
+    transaction._id = response.transaction
+    txn_request = {**base_request, 'transaction': transaction.id}
+    try:
+        snapshot = doc_ref.get(transaction=transaction, retry=None, timeout=remaining())
+        payload = dict(meeting_data)
+        payload['synced_at'] = now
+        if not snapshot.exists:
+            payload['created_at'] = now
+        transaction.set(doc_ref, payload, merge=True)
+        api.commit(
+            request={**txn_request, 'writes': transaction._write_pbs},
+            metadata=metadata,
+            retry=None,
+            timeout=remaining(),
+        )
+    except Exception:
+        rollback_timeout = min(deadline - time.monotonic(), _ROLLBACK_TIMEOUT_SECONDS)
+        if transaction.in_progress and rollback_timeout > 0:
+            try:
+                api.rollback(request=txn_request, metadata=metadata, retry=None, timeout=rollback_timeout)
+            except Exception as cleanup_error:
+                logger.warning('Calendar meeting transaction rollback failed: %s', type(cleanup_error).__name__)
+        raise
+    finally:
+        transaction._clean_up()
 
 
 def create_meeting(uid: str, meeting_data: Dict[str, Any]) -> str:
@@ -55,13 +91,19 @@ def create_meeting(uid: str, meeting_data: Dict[str, Any]) -> str:
     doc_ref = _get_meetings_collection(uid).document(meeting_id)
     now = datetime.now(timezone.utc)
 
-    @firestore.transactional
-    def upsert(write_transaction):
-        _upsert_meeting_transaction(write_transaction, doc_ref, meeting_data, now)
+    deadline = time.monotonic() + _UPSERT_TIMEOUT_SECONDS
 
-    # Concurrent calendar syncs for the same user contend on the transaction —
-    # a bare db.transaction() abandons on Aborted. Bounded equal-jitter retry.
-    run_with_transaction_contention_retry(db.transaction, upsert, operation_name='calendar_meeting_create')
+    def upsert(transaction: Any) -> None:
+        _upsert_meeting_transaction(transaction, doc_ref, meeting_data, now, deadline)
+
+    run_with_transaction_contention_retry(
+        db.transaction,
+        upsert,
+        operation_name='calendar_meeting_create',
+        max_attempts=_UPSERT_ATTEMPTS,
+        deadline=deadline,
+        reserve_retry_time=False,
+    )
     return meeting_id
 
 

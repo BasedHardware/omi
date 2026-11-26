@@ -36,7 +36,6 @@ async def idle_receiver(monkeypatch, *, language='en', enabled=True, benched=Fal
     models = ['soniox', 'parakeet-window'] + (['modulate-velma-2'] if modulate else [])
     actual, base, raws, legs, observations = await setup_receiver(monkeypatch, models, source='soniox')
     actual._window_replay_audio = None
-    actual._resilient_audio = None
     old = actual.stt_socket
     old.gate = None
     actual.host.language = language
@@ -291,7 +290,6 @@ def test_wire_and_connected_origin_is_pinned_and_bounded(monkeypatch, origin):
 @pytest.mark.parametrize('outcome', ['success', 'error', 'cancel'])
 async def test_legacy_failover_pins_replacement_meters_and_restores_context(outcome):
     from types import SimpleNamespace
-    from unittest.mock import AsyncMock
 
     raws, wires = [], []
 
@@ -310,7 +308,6 @@ async def test_legacy_failover_pins_replacement_meters_and_restores_context(outc
         _stt_failover_lock=asyncio.Lock(),
         _stt_recovery_exhausted=False,
         stt_socket=SimpleNamespace(is_connection_dead=True, _finishing=False),
-        _reconnect_stt_socket_locked=AsyncMock(return_value=False),
         _rebuild_stt_socket_locked=rebuild,
     )
     token = telemetry.current_transport_origin.set('initial')

@@ -512,6 +512,7 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
           if (_isCurrent(_admittedWorkGeneration)) await phone.resetExhaustedAutoRetries();
         },
         networkChanges: ConnectivityService().onNetworkChange,
+        hasAcceptedJobs: () => _isCurrent(generation) && phone.hasUploadedWals,
         hasPendingWork: () =>
             pendingWals.any((wal) => !wal.holdForUser) ||
             uploadedWals.isNotEmpty ||
@@ -1381,6 +1382,7 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
       throw Exception('This recording is already on phone');
     }
 
+    _admittedWorkGeneration = generation;
     _updateSyncState(_syncState.toSyncing(), generation);
 
     await _keepAlive.acquire();

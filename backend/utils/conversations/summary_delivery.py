@@ -18,6 +18,7 @@ from utils.conversations import phase_shadow
 from utils.observability.delivery import record_delivery
 
 from prometheus_client import Counter, Gauge, Histogram
+from models.finalization_owner import python_owns_finalization
 from config.refactor_modes import default_on
 from config.summary_guarantee import deadline_seconds
 from config.policy import FirstSummaryPolicy
@@ -45,6 +46,17 @@ CLOSED_LATENCY = Histogram(
     'First durable summary after both server acceptance and last speech',
     ['lane'],
     buckets=(30, 60, 120, 180, 300, 600, 1800, 3600, 14400),
+)
+PROCESSED_LATENCY = Histogram(
+    'omi_conversation_processed_seconds',
+    'First usable summary durable, once per conversation, from last speech or from the later of last speech and sync',
+    ['lane', 'basis'],
+    buckets=(30, 60, 120, 300, 600, 1800, 3600, 14400, 43200, 86400),
+)
+SETTLED_UNSUMMARIZED = Counter(
+    'omi_conversation_settled_unsummarized_total',
+    'Conversations that settled without a summary; with the processed histogram count, the denominator',
+    ['lane', 'reason'],
 )
 DEBT = Gauge('omi_summary_debt_overdue', 'Overdue summary debt in the bounded repair window')
 OLDEST = Gauge('omi_summary_debt_oldest_age_seconds', 'Oldest overdue summary debt observed by repair')
@@ -328,7 +340,21 @@ def projection_owns_finalization(row: Row) -> bool:
     )
 
 
+def retryable_finalization_owns(row: Row) -> bool:
+    """A finalization job owns this row's summary debt and the repair pass refuses it.
+
+    Repair discovery and redrive skip foreign ownership markers and job rows
+    without a verified batch-projection handoff. An empty attempt must leave
+    delivery with that owner.
+    """
+    return not python_owns_finalization(row) or (
+        bool(row.get('finalization_job_id')) and not projection_owns_finalization(row)
+    )
+
+
 def _refusal(row: Row) -> str | None:
+    if not python_owns_finalization(row):
+        return 'generation_owned'
     if row.get('status') != 'completed' or row.get('deleted') or row.get('discarded'):
         return 'lifecycle'
     if row.get('deferred') or row.get('is_locked') or row.get('processing_state') == 'local_pending':
@@ -432,10 +458,19 @@ def retires_title_marker(existing: Row, write: Row) -> bool:
     )
 
 
+def _retire_title_marker(existing: Row, write: Row) -> None:
+    if retires_title_marker(existing, write):
+        # Sync tests load this module with google.cloud stubbed.
+        from google.cloud.firestore import DELETE_FIELD
+
+        write['structured']['title_provenance'] = DELETE_FIELD
+
+
 def _merge_historical(existing: Row, write: Row, current: float) -> None:
     """A historical row owes no automatic summary; its open-time summary is a delivered one."""
     write['summary_due_at'] = None
     if write.get('summary_output_present'):
+        _retire_title_marker(existing, write)
         write['summary_completed_at'] = existing.get('summary_completed_at') or current
         write['summary_title_provenance'] = 'generated'
         write['summary_blocked_reason'] = None
@@ -478,7 +513,9 @@ def merge_result(existing: Row, write: Row, uid: str, *, now: float | None = Non
         write['summary_due_at'] = None
         write['summary_blocked_reason'] = 'local_only'
         if existing.get('summary_blocked_reason') != 'local_only':
-            return dict(lane=lane(existing), reason='local_only', present=False, latency=None)
+            return dict(
+                lane=lane(existing), reason='local_only', present=False, latency=None, unsummarized='local_only'
+            )
         return None
     accepted = existing.get('summary_first_pending_at', ACCEPT_CONTEXT.get())
     if existing.get('summary_discard_receipted') and ACCEPT_CONTEXT.get() is not None:
@@ -489,11 +526,7 @@ def merge_result(existing: Row, write: Row, uid: str, *, now: float | None = Non
         write['summary_first_pending_at'] = accepted
     rich = bool(write.get('summary_output_present'))
     discarded = bool(write.get('discarded'))
-    if retires_title_marker(existing, write):
-        # Imported here like effective_user_title below: sync tests load this module with google.cloud stubbed.
-        from google.cloud.firestore import DELETE_FIELD
-
-        write['structured']['title_provenance'] = DELETE_FIELD
+    _retire_title_marker(existing, write)
     # The fence guards an open first-summary obligation only. Rows outside the
     # server-minimum protocol, already-enriched rows, and rows whose empty
     # budget is exhausted have no caller that catches this exception — the
@@ -506,7 +539,25 @@ def merge_result(existing: Row, write: Row, uid: str, *, now: float | None = Non
         and existing.get('summary_blocked_reason') not in EMPTY_BLOCKED_REASONS
     )
     if not rich and not discarded and obligation_open:
-        raise SummaryOutputUnavailable('kept first-summary output is empty')
+        if PROCESS_CONTEXT.get() is not None:
+            # A consumer owns this write and records the bounded empty-output
+            # strike (``record_empty_failure``) before releasing the lease.
+            raise SummaryOutputUnavailable('kept first-summary output is empty')
+        if retryable_finalization_owns(existing):
+            # The finalization job is the only repair owner: the repair pass
+            # refuses this row as ``generation_owned``. Committing the empty
+            # attempt would let the finalizer complete its job and leave the
+            # armed debt with no owner, so keep the raise and the job retryable.
+            raise SummaryOutputUnavailable('kept first-summary output is empty')
+        # No consumer and no retryable job owns this write: a request path
+        # (from-segments) or a direct sync persist. Raising here aborts the
+        # completed write and surfaces as a 500, so commit the empty attempt
+        # with the debt still armed. The repair pass re-wakes the row and the
+        # consumer's empty budget bounds the retries; an empty structured is
+        # never a delivery.
+        if write.get('summary_due_at') is None:
+            write['summary_due_at'] = current + deadline_seconds()
+        return dict(lane=lane(existing), reason='empty_output', present=False, latency=None)
     if existing.get('summary_completed_at') or existing.get('summary_output_present'):
         write['summary_due_at'] = None
         # An enriched row already holds a usable summary. The old fence refused
@@ -548,17 +599,45 @@ def merge_result(existing: Row, write: Row, uid: str, *, now: float | None = Non
         if rich:
             write['summary_title_provenance'] = 'generated'
         finished = write.get('finished_at', existing.get('finished_at'))
+        arrival = write.get('arrival_at', existing.get('arrival_at'))
+        # Rows admitted without summary metadata still carry the server receive time.
+        server_accepted = accepted if accepted is not None else _timestamp(arrival)
         closed_latency = None
-        if accepted is not None and isinstance(finished, datetime) and finished.timestamp() <= current:
-            closed_latency = max(0, current - max(accepted, finished.timestamp()))
+        if server_accepted is not None and isinstance(finished, datetime) and finished.timestamp() <= current:
+            closed_latency = max(0, current - max(server_accepted, finished.timestamp()))
         return dict(
             lane=lane(existing),
             reason=('discarded' if discarded else 'summary') if accepted is not None else 'accept_unknown',
             present=rich,
             latency=max(0, current - accepted) if accepted is not None else None,
             closed_latency=closed_latency,
+            # v3 rows publish a preview first; their notes commit owns the observation.
+            processed=(
+                processed_latencies(finished, arrival, current) if rich and not existing.get('v3_derived') else None
+            ),
+            unsummarized=None if rich else 'discarded',
         )
     return None
+
+
+def _timestamp(value: Any) -> float | None:
+    return value.timestamp() if isinstance(value, datetime) else None
+
+
+def processed_latencies(finished: Any, arrival: Any, now: float) -> dict[str, float] | None:
+    """Seconds from last speech, and from the later of last speech and server receipt (sync)."""
+    end = _timestamp(finished)
+    if end is None or end > now:
+        return None
+    received = _timestamp(arrival)
+    synced = end if received is None else max(end, received)
+    return {'finished': max(0.0, now - end), 'end_or_sync': max(0.0, now - synced)}
+
+
+def observe_processed(lane_value: str, latencies: Mapping[str, float] | None) -> None:
+    """Call once per conversation, after the commit that made its first usable summary durable."""
+    for basis, seconds in (latencies or {}).items():
+        PROCESSED_LATENCY.labels(lane_value, basis).observe(seconds)
 
 
 def lane(row: Row) -> str:
@@ -585,6 +664,10 @@ def emit(receipt: Row | None) -> None:
         LATENCY.labels(receipt['lane']).observe(receipt['latency'])
     if receipt['present'] and receipt.get('closed_latency') is not None:
         CLOSED_LATENCY.labels(receipt['lane']).observe(receipt['closed_latency'])
+    if receipt['present']:
+        observe_processed(receipt['lane'], receipt.get('processed'))
+    elif receipt.get('unsummarized'):
+        SETTLED_UNSUMMARIZED.labels(receipt['lane'], receipt['unsummarized']).inc()
 
 
 def emit_result(

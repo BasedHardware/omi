@@ -10,7 +10,7 @@ from __future__ import annotations
 import asyncio
 from collections import deque
 from contextlib import nullcontext
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 import hashlib
 import logging
 import os
@@ -24,6 +24,7 @@ from database.batch_pipeline_privacy import BatchPrivacyBlocked, matches_live_pr
 from database.batch_privacy_attempt import with_batch_privacy_attempt
 from config.batch_pipeline import (
     projection_followup_backoff_seconds,
+    projection_followup_claimed_sibling_skip_enabled,
     projection_followup_early_coalesce_enabled,
     projection_followup_page_enabled,
     projection_followup_slots,
@@ -86,6 +87,27 @@ FOLLOWUP_TIMEOUT_SECONDS = 120.0
 CLAIM_RELEASE_TIMEOUT_SECONDS = 2.0
 
 
+# How long a ready sibling waits for its same-page claimant's live privacy proof.
+CLAIM_PROOF_WAIT_SECONDS = 5.0
+
+
+@dataclass
+class SiblingClaim:
+    """The first ready sibling for a (page, binding) and the siblings skipped behind it.
+
+    ``proof`` is the claimant's live privacy proof from its own session check,
+    published before its completion attempt. A sibling may coalesce on it only
+    through the existing C1 verification (covered ids, expiry, live token).
+    """
+
+    ready: asyncio.Event = field(default_factory=asyncio.Event)
+    proof: FollowupPrivacyProof | None = None
+    waiting: list = field(default_factory=list)
+    # True once this claimant itself registered the completion attempt; only then
+    # may its release leave skipped siblings coalesced.
+    attempted: bool = False
+
+
 @dataclass(frozen=True)
 class PersistedFollowup:
     job: dict
@@ -119,6 +141,10 @@ class ProjectionFollowups:
         self.page = 0
         self.pages: dict[str, int] = {}
         self.completion_attempts: set[tuple[int, ProjectionBinding]] = set()
+        # (page, binding) -> ready siblings that skipped behind the first claimant (SCA-3508).
+        self.sibling_claims: dict[tuple[int, ProjectionBinding], SiblingClaim] = {}
+        # Skipped siblings still finishing when their claimant gave up: re-queue on finish.
+        self.sibling_requeue: set[str] = set()
         self.completed_probes: dict[int, dict[ProjectionBinding, FollowupPrivacyProof]] = {}
         self.backoff_ceiling = projection_followup_backoff_seconds()
         # Desync needs the keyset cursor: with pagination off every page is the
@@ -347,6 +373,10 @@ class ProjectionFollowups:
         self.launch_targeted()
         while self.pending and len(self.tasks) < projection_followup_slots(MAX_FOLLOWUPS) and not self.closed:
             segment = self.pending.popleft()
+            if segment in self.tasks:
+                # One task owns a segment's custody accounting; never overwrite it.
+                self.prioritized.discard(segment)
+                continue
             task = start_background_task(self.run(segment), name='batch_projection_followup')
             self.tasks[segment] = task
             if segment in self.prioritized:
@@ -374,6 +404,9 @@ class ProjectionFollowups:
     def finished(self, segment, task, *, targeted=False):
         self.tasks.pop(segment, None)
         self.forget_page(segment)
+        if segment in self.sibling_requeue and not task.cancelled():
+            self.sibling_requeue.discard(segment)
+            self.requeue_sibling(segment)
         if task.cancelled():
             # Global background-task shutdown must not replenish a cancelled
             # worker with another task after the shutdown snapshot was taken.
@@ -384,6 +417,8 @@ class ProjectionFollowups:
             self.pages.clear()
             self.completion_attempts.clear()
             self.completed_probes.clear()
+            self.sibling_claims.clear()
+            self.sibling_requeue.clear()
         if targeted:
             self.launch_targeted()
         else:
@@ -396,6 +431,52 @@ class ProjectionFollowups:
         except (TypeError, ValueError, KeyError, AttributeError):
             # Malformed or partially migrated hints still take the authoritative path.
             return None
+
+    @staticmethod
+    def ready_sibling_key(page, hints):
+        """The coalesce key for a hint that the existing path would coalesce, else None.
+
+        Mirrors the legacy test exactly: async projection, the projection and every
+        part ``ready``. Malformed hints return None and take the authoritative path.
+        """
+        try:
+            job, entry, binding = hints
+            if entry['projection']['state'] != 'ready' or not all(
+                part.get('state') == 'ready' for part in (entry.get('projection_parts') or {}).values()
+            ):
+                return None
+            if not ProjectionPolicy.from_dict(job['policy_parts']['projection']).async_projection:
+                return None
+            hash(binding)
+            return (page, binding)
+        except (TypeError, ValueError, KeyError, AttributeError):
+            return None
+
+    def release_sibling_claim(self, key):
+        """End a claim. Siblings that skipped behind a claimant that never reached the
+        completion attempt run again on the ordinary path, so none loses its probe."""
+        claim = self.sibling_claims.pop(key, None)
+        if claim is None:
+            return
+        claim.ready.set()
+        waiting = claim.waiting
+        if not waiting or (claim.attempted and key in self.completion_attempts) or self.closed:
+            return
+        for sibling in waiting:
+            if sibling in self.tasks:
+                # Its skip is still unwinding; finished() re-queues it.
+                self.sibling_requeue.add(sibling)
+            else:
+                self.requeue_sibling(sibling)
+
+    def requeue_sibling(self, sibling):
+        # Already queued (ordinary or targeted recovery) or running: that copy owns
+        # the segment's probe. A second queue entry would launch a duplicate task.
+        if self.closed or sibling in self.pending or sibling in self.targeted_pending or sibling in self.tasks:
+            return
+        self.pending.appendleft(sibling)
+        self.prioritized.add(sibling)
+        OUTCOMES.labels('claimed_sibling_requeued').inc()
 
     def read_persisted(self, segment, *, prior=None, hints=None):
         store = self.projector.store
@@ -476,6 +557,7 @@ class ProjectionFollowups:
         )
         entered = False
         completed_probe: tuple[int, ProjectionBinding, FollowupPrivacyProof] | None = None
+        sibling_key: tuple[int, ProjectionBinding] | None = None
         try:
             acquired = await run_blocking(db_executor, claim.__enter__)
             entered = True
@@ -485,11 +567,59 @@ class ProjectionFollowups:
             early = (
                 page is not None and projection_followup_page_enabled() and projection_followup_early_coalesce_enabled()
             )
-            if early and page is not None:
+            hints = None
+            persisted = None
+            if early and page and projection_followup_claimed_sibling_skip_enabled():
+                # The same hint read read_persisted would issue; reused below.
+                hints = await run_blocking(db_executor, store.read, segment)
+                key = self.ready_sibling_key(page, hints)
+                if key is not None and self.pages.get(segment) == page:
+                    sibling_claim = self.sibling_claims.get(key)
+                    if sibling_claim is None:
+                        self.sibling_claims[key] = SiblingClaim()
+                        sibling_key = key
+                    else:
+                        # Wait (bounded) for the claimant's live privacy proof, then
+                        # verify it exactly as C1 does: this sibling's own privacy ids
+                        # must be covered, unexpired, with the live token unchanged.
+                        # Any miss returns this run's own full-path result instead.
+                        try:
+                            await asyncio.wait_for(sibling_claim.ready.wait(), CLAIM_PROOF_WAIT_SECONDS)
+                        except TimeoutError:
+                            pass
+                        proof = sibling_claim.proof
+                        if proof is not None and self.pages.get(segment) == page:
+                            persisted = await run_blocking(
+                                db_executor, self.read_persisted, segment, prior={key[1]: proof}, hints=hints
+                            )
+                            if persisted.coalesced:
+                                live = self.sibling_claims.get(key) is sibling_claim
+                                if (
+                                    persisted.proof is proof
+                                    and (live or key in self.completion_attempts)
+                                    and self.pages.get(segment) == page
+                                    and time.monotonic() < proof.expires_at
+                                    and not self.closed
+                                ):
+                                    if live:
+                                        sibling_claim.waiting.append(segment)
+                                    OUTCOMES.labels('claimed_sibling_skipped').inc()
+                                    return 'coalesced'
+                                persisted = None  # Claim ended without an attempt: take the full path.
+            if persisted is not None:
+                pass  # This run's own full-path result from the proof check above.
+            elif early and page is not None:
                 prior = self.completed_probes.get(page, {}).copy()
-                persisted = await run_blocking(db_executor, self.read_persisted, segment, prior=prior)
+                persisted = await run_blocking(db_executor, self.read_persisted, segment, prior=prior, hints=hints)
             else:
-                persisted = await run_blocking(db_executor, self.read_persisted, segment)
+                persisted = await run_blocking(db_executor, self.read_persisted, segment, hints=hints)
+            if sibling_key is not None:
+                # Publish this claimant's live proof before its completion attempt.
+                own = self.sibling_claims.get(sibling_key)
+                if own is not None:
+                    if not persisted.coalesced and persisted.proof is not None:
+                        own.proof = persisted.proof
+                    own.ready.set()
             job, entry, binding = persisted.job, persisted.entry, persisted.binding
             if persisted.coalesced:
                 # A recovery wake, page cleanup or shutdown may have invalidated
@@ -531,6 +661,8 @@ class ProjectionFollowups:
                 if key in self.completion_attempts:
                     return 'coalesced'
                 self.completion_attempts.add(key)
+                if sibling_key == key and (own := self.sibling_claims.get(key)) is not None:
+                    own.attempted = True
             try:
                 result = await run_blocking(
                     postprocess_executor,
@@ -579,6 +711,9 @@ class ProjectionFollowups:
             )
             return 'retry'
         finally:
+            if sibling_key is not None:
+                # Before the claim exit, so a release failure cannot strand skipped siblings.
+                self.release_sibling_claim(sibling_key)
             if entered:
                 # Cleanup must not hold a follow-up slot if Redis/the DB pool
                 # stalls. The advisory claim also has its own bounded TTL.
@@ -595,8 +730,8 @@ class ProjectionFollowups:
                         if probe_page == self.pages.get(segment) and not self.closed:
                             self.completed_probes.setdefault(probe_page, {})[binding] = proof
 
-    async def step(self, policy, phase, executor, function, *args, **kwargs):
-        with projection_phase(phase, policy):
+    async def step(self, segment_id, policy, phase, executor, function, *args, **kwargs):
+        with projection_phase(phase, policy, unit_key=segment_id):
             return await run_blocking(executor, function, *args, **kwargs)
 
     async def finish_part(self, item, binding, receipt, index):
@@ -612,21 +747,30 @@ class ProjectionFollowups:
                 canonical = output['conversation_id']
                 if not binding.record_origin:
                     canonical = await self.step(
+                        item.segment_id,
                         policy,
                         'bridge',
                         postprocess_executor,
                         finish_sync_bridges,
                         binding.owner_id,
                         canonical,
+                        require_python_owner=True,
                         **({'silent': True} if receipt.get('silent_redrive') else {}),
                     )
                 if receipt.get('audio_required') and not binding.native_record:
                     if self.projector.playback is not None:
                         await self.step(
-                            policy, 'playback', postprocess_executor, self.projector.playback, item, canonical
+                            item.segment_id,
+                            policy,
+                            'playback',
+                            postprocess_executor,
+                            self.projector.playback,
+                            item,
+                            canonical,
                         )
                     else:
                         await self.step(
+                            item.segment_id,
                             policy,
                             'playback',
                             postprocess_executor,
@@ -641,6 +785,7 @@ class ProjectionFollowups:
                         # being stored. Follow its redirect and recopy late donor
                         # audio even if an earlier bridge already checkpointed it.
                         canonical = await self.step(
+                            item.segment_id,
                             policy,
                             'bridge',
                             postprocess_executor,
@@ -648,12 +793,14 @@ class ProjectionFollowups:
                             binding.owner_id,
                             canonical,
                             audio_source_id=canonical,
+                            require_python_owner=True,
                             **({'silent': True} if receipt.get('silent_redrive') else {}),
                         )
                 canonicals.append(canonical)
             canonical = canonicals[0]
             if receipt['enrichment_required']:
                 await self.step(
+                    item.segment_id,
                     policy,
                     'enrichment',
                     db_executor,

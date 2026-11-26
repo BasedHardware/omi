@@ -375,8 +375,7 @@ def test_modulate_connect_latency_and_rejection_request_id(monkeypatch, caplog):
 # --- real Soniox socket against a real websockets server ---------------------------------------------
 
 
-def test_soniox_vendor_close_frame_and_handshake_request_id_over_a_real_websocket(caplog, monkeypatch):
-    monkeypatch.setattr(soniox, 'resilient_reconnect_enabled', lambda: True)
+def test_soniox_vendor_close_frame_and_handshake_request_id_over_a_real_websocket(caplog):
     caplog.set_level(logging.INFO)
 
     async def run():

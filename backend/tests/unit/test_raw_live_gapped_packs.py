@@ -23,11 +23,15 @@ import pytest
 from google.api_core.exceptions import NotFound, PreconditionFailed
 
 from utils.batch_pipeline import live, source_audio
+from utils.batch_pipeline.artifacts import ArtifactStore, ProtectionContext
 from utils.other import audio_frame_table, audio_opus, raw_audio_read, storage
 from utils.other.audio_frame_table import FRAME_SCHEMA
+from utils.other.gcs_read_reuse import ReadMemo
 from utils.other.audio_outbox import commit_capture, commit_pcm_window
 from utils.other.raw_audio import CapturePack, _get_opuslib
 from utils.batch_pipeline import record_orphan_repair as repair
+from tests.unit.test_batch_pipeline_invalid_manifest_hold import serve
+from tests.unit.test_batch_pipeline_quarantine_recovery import row, setup  # noqa: F401
 from tests.unit.test_audio_durable_outbox import remote  # noqa: F401
 
 UID, CID = 'owner', 'conversation'
@@ -291,6 +295,70 @@ def test_materialized_unit_places_audio_at_its_capture_position(remote, monkeypa
     assert pcm[(640 + gap) * 2 :] == captured[640 * 2 :]
 
 
+def test_pinned_gapped_unframed_pack_recovers_without_digest_refusal(remote, monkeypatch, native_opus, setup):
+    """Recovery must decode the pinned WAL pack with admission's frame-table semantics."""
+    wire(remote, monkeypatch)
+    monkeypatch.setenv('BUCKET_PRIVATE_CLOUD_SYNC', remote.name)
+    monkeypatch.delenv('BUCKET_AUDIO_DERIVED', raising=False)
+    monkeypatch.setattr(sys.modules[__name__], 'UID', 'synthetic-owner')
+    monkeypatch.setattr(sys.modules[__name__], 'CID', 'c')
+    monkeypatch.setattr(sys.modules[__name__], 'NAME', 'c/0/0/session/0')
+
+    receipt, _, _, packets = build_pack(remote, gapped_frames())
+    storage_client = client(remote)
+    chunks = storage.list_audio_chunks(
+        UID, CID, include_raw=True, require_archive=True, client=storage_client, source_metadata=True
+    )
+    units = list(live.retained_record_units(UID, CID, chunks, storage_client, b'0' * 32))
+    assert len(units) == 1
+    start, duration, references = units[0]
+    assert {ref['generation'] for ref in references} == {int(receipt.generation)}
+    body = (
+        source_audio.MAGIC
+        + json.dumps(
+            {
+                'owner_id': UID,
+                'conversation_id': CID,
+                'capture_at': start,
+                'context': {},
+                'references': references,
+            }
+        ).encode()
+    )
+
+    db_client, _, _, artifacts, stt, _ = setup
+    row(db_client).update(conversation_id=CID, capture_at=start, duration_seconds=duration)
+    source = ArtifactStore(
+        storage_client,
+        bucket='synthetic',
+        namespace='batch_pipeline_prod',
+        authorize=lambda _: ProtectionContext('standard', 0),
+        key_for_owner=lambda _: b'0' * 32,
+        register_artifact=lambda *args: None,
+    )
+    source._read = Mock(return_value=body)
+    artifacts.fetch_audio.side_effect = source.fetch_audio
+
+    media = remote.blob(receipt.path)
+    media.download_as_bytes = Mock(wraps=media.download_as_bytes)
+    response = serve(setup, monkeypatch).post(
+        '/v2/batch-pipeline/recover-quarantine', json={'stage': 'prod', 'segment_id': 'bad'}
+    )
+
+    assert response.status_code == 200 and response.json() == {'status': 'recovered'}
+    assert row(db_client)['recovery_state'] == 'recovered'
+    assert 'refusal' not in row(db_client)['recovery']
+    stt.assert_called_once()
+    assert media.download_as_bytes.call_count == 1
+    assert media.download_as_bytes.call_args.kwargs['if_generation_match'] == int(receipt.generation)
+    audio = stt.call_args.args[2]
+    with wave.open(io.BytesIO(audio), 'rb') as stream:
+        recovered = stream.readframes(stream.getnframes())
+    captured = decode_packets(packets)
+    gap = round((1003.02 - 1000.04) * RATE)
+    assert recovered == captured[: 640 * 2] + b'\x00' * (gap * 2) + captured[640 * 2 :]
+
+
 def test_retained_zero_sample_frame_is_kept_but_contributes_no_audio(remote, monkeypatch, native_opus):
     wire(remote, monkeypatch)
     frames = [(1000.0, tone(320, 1)), (1000.02, b''), (1000.04, tone(320, 2))]
@@ -466,3 +534,73 @@ def test_gapped_manifest_can_use_versioned_listing_without_skipping_payload_proo
     else:
         loaded.reload.assert_not_called()
         assert conditions == [fast]
+
+
+@pytest.mark.parametrize('mode', ['on', 'list_off', 'memo_off', 'stale_key'])
+def test_operation_reuses_verified_pack_and_manifest_with_live_proof(remote, monkeypatch, native_opus, mode):
+    wire(remote, monkeypatch)
+    monkeypatch.setenv('BUCKET_PRIVATE_CLOUD_SYNC', remote.name)
+    receipt, _, _, packets = build_pack(remote, gapped_frames())
+    pack, manifest = remote.blob(receipt.path), remote.blob(receipt.manifest_path)
+    pack.metageneration = manifest.metageneration = 1
+    manifest_reload = manifest.reload
+
+    def conditional_reload(**kwargs):
+        if kwargs.get('if_metageneration_match', manifest.metageneration) != manifest.metageneration:
+            raise PreconditionFailed('manifest metadata changed')
+        manifest_reload(**kwargs)
+
+    manifest.reload = Mock(side_effect=conditional_reload)
+    manifest.download_as_bytes = Mock(wraps=manifest.download_as_bytes)
+    pack.reload = Mock(wraps=pack.reload)
+    pack.download_as_bytes = Mock(wraps=pack.download_as_bytes)
+    remote.list_blobs = Mock(wraps=remote.list_blobs)
+    if mode == 'list_off':
+        monkeypatch.setenv('PRIVATE_SYNC_KNOWN_KEY_LIST_REUSE_ENABLED', 'false')
+    if mode == 'memo_off':
+        monkeypatch.setenv('PRIVATE_SYNC_REQUEST_READ_MEMO_ENABLED', 'false')
+    memo = ReadMemo()
+    assert len(raw_audio_read.list_packs(remote, UID, CID, memo=memo)) == 2
+    expected = decode_packets(packets)
+    assert raw_audio_read.read_pack(remote, receipt.path, UID, memo=memo) == expected
+    if mode == 'stale_key':
+        manifest.metageneration = 2
+    assert raw_audio_read.read_pack(remote, receipt.path, UID, memo=memo) == expected
+    assert pack.reload.call_count == 2
+    assert pack.download_as_bytes.call_count == (2 if mode == 'memo_off' else 1)
+    assert manifest.download_as_bytes.call_count == (3 if mode == 'memo_off' else 2 if mode == 'stale_key' else 1)
+    assert remote.list_blobs.call_count == (4 if mode == 'list_off' else 3 if mode == 'stale_key' else 2)
+
+
+def test_new_manifest_precondition_race_restarts_the_live_read(remote, monkeypatch, native_opus):
+    wire(remote, monkeypatch)
+    receipt, _, _, _ = build_pack(remote, gapped_frames())
+    manifest = remote.blob(receipt.manifest_path)
+    manifest.metageneration = 1
+    manifest.reload = Mock(wraps=manifest.reload)
+    manifest.download_as_bytes = Mock(side_effect=[PreconditionFailed('metadata changed'), manifest.data])
+    decoded = audio_frame_table._manifest(
+        remote, UID, receipt.manifest_path, require_frame_schema=False, memo=ReadMemo()
+    )
+    assert decoded['media']['generation'] == receipt.generation
+    first, second = manifest.download_as_bytes.call_args_list
+    assert first.kwargs['if_metageneration_match'] == 1
+    assert 'if_metageneration_match' not in second.kwargs
+    assert manifest.reload.call_count == 2
+
+
+def test_new_pack_precondition_race_restarts_the_live_read(remote, monkeypatch, native_opus):
+    wire(remote, monkeypatch)
+    receipt, _, _, packets = build_pack(remote, gapped_frames())
+    pack = remote.blob(receipt.path)
+    pack.metageneration = 1
+    pack.reload = Mock(wraps=pack.reload)
+    pack.download_as_bytes = Mock(side_effect=[PreconditionFailed('metadata changed'), pack.data])
+    pcm = raw_audio_read.read_pack(
+        remote, receipt.path, UID, {'if_generation_match': int(receipt.generation)}, memo=ReadMemo()
+    )
+    assert pcm == decode_packets(packets)
+    assert pack.reload.call_count == 2
+    first, second = pack.download_as_bytes.call_args_list
+    assert first.kwargs['if_metageneration_match'] == 1
+    assert first.kwargs['if_generation_match'] == second.kwargs['if_generation_match'] == int(receipt.generation)

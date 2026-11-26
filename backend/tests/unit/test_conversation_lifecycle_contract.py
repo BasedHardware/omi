@@ -687,6 +687,33 @@ def test_persist_processed_observes_only_on_first_completion(monkeypatch, lifecy
     assert observed == ['conversation']
 
 
+@pytest.mark.parametrize('initial_creation', [False, True])
+def test_terminal_deferred_intake_observes_shape_only_after_enrichment(monkeypatch, lifecycle_store, initial_creation):
+    observed = []
+    monkeypatch.setattr(
+        lifecycle_service, 'observe_completed_conversation_shape', lambda uid, row: observed.append(row)
+    )
+    payload = {
+        'id': 'conversation',
+        'status': ConversationStatus.completed,
+        'source': 'desktop',
+        'deferred': True,
+        'data_protection_level': 'standard',
+    }
+    if initial_creation:
+        assert lifecycle_service.create_completed_conversation('uid', payload, idempotent=True)
+    else:
+        lifecycle_store.put_conversation('uid', 'conversation', status='processing')
+        assert lifecycle_service.persist_processed_conversation('uid', payload)
+    assert lifecycle_store.conversation('uid', 'conversation')['status'] == 'completed'
+    assert not observed
+
+    lifecycle_store.put_conversation('uid', 'conversation', status='processing', deferred=False)
+    assert lifecycle_service.persist_processed_conversation('uid', {**payload, 'deferred': False})
+    assert len(observed) == 1
+    assert observed[0]['deferred'] is False
+
+
 def test_persist_processed_survives_shape_observer_errors(monkeypatch, lifecycle_store):
     monkeypatch.setattr(
         lifecycle_service,

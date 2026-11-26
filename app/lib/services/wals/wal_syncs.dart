@@ -95,6 +95,7 @@ class WalSyncs implements IWalSync {
     Future<SyncJobFetch> Function(String jobId)? phoneJobStatusFetcher,
     WalCoverageTelemetryEmitter? phoneCoverageTelemetry,
     Future<int?> Function()? phoneFreeDiskBytes,
+    Future<void> Function(List<Wal>)? phonePersistWals,
   }) {
     _phoneSync = phoneSync ??
         LocalWalSyncImpl(
@@ -103,6 +104,7 @@ class WalSyncs implements IWalSync {
           now: phoneNow,
           periodic: phonePeriodic,
           freeDiskBytes: phoneFreeDiskBytes,
+          persistWals: phonePersistWals,
           jobStatusFetcher: phoneJobStatusFetcher,
           coverageTelemetry: phoneCoverageTelemetry,
         );

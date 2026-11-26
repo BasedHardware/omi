@@ -99,7 +99,7 @@ def test_storage_outage_or_permission_error_remains_retryable(setup, monkeypatch
 def test_missing_input_hold_loses_race_without_counting(setup, monkeypatch):
     client, _, _, artifacts, stt, _ = setup
 
-    def lose_intent(_):
+    def lose_intent(*args, **kwargs):
         row(client)['recovery']['token'] = 'new-token'
         raise NotFound('synthetic absent input')
 

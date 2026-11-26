@@ -112,7 +112,7 @@ rg -n 'Projector\(|ProjectionStore\(|serving_for_stage|ProjectionSession\(' back
 rg -n 'after_assign' backend/database/conversations.py backend/utils/batch_pipeline/projection.py backend/routers/listen
 ```
 
-Behavioral evidence is in `tests/unit/test_batch_projection_finish_backoff.py`
+Behavioral evidence is in `tests/unit/test_batch_projection_finish_page.py`
 (flag-off listen-host clock helper; real ready/retirement transactions with flag
 true and false), `test_reconcile_batch_projection_ghost_holds.py` (operator ready
 clock with both flag values), and `test_batch_projection_finish_backfill.py` plus

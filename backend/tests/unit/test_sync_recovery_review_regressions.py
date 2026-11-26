@@ -11,6 +11,7 @@ from tests.unit.test_sync_cross_job_assignment import intake as assign, conversa
 from utils.batch_pipeline import artifact_reupload, projection
 from utils.batch_pipeline.contracts import WorkItem, Priority, ProjectionBinding
 from utils.batch_pipeline.projection_parts import split_result
+from utils.sync import future_capture_request
 from utils.sync.receipt_clock import POLICY
 
 
@@ -62,7 +63,9 @@ def test_disconnected_recovery_parts_retain_both_transcripts_and_replay():
 
 
 @pytest.mark.asyncio
-async def test_missing_recovered_audio_repair_decodes_original_receipt_clock(anchors, tmp_path, monkeypatch):
+@pytest.mark.parametrize('retained_only', [False, True])
+async def test_missing_recovered_audio_repair_counts_with_clamp_off(anchors, tmp_path, monkeypatch, retained_only):
+    monkeypatch.setenv('SYNC_FUTURE_CAPTURE_CLAMP_ENABLED', 'false')
     [original] = units(tmp_path / 'original', [FUTURE], run=None)
     from tests.unit.test_batch_pipeline_audio import pcm
     from pathlib import Path
@@ -80,12 +83,18 @@ async def test_missing_recovered_audio_repair_decodes_original_receipt_clock(anc
     )
     binding = ProjectionBinding('synthetic', 'job', 'content', ('segment',))
     snapshots = {'segment': {'generation': 1}}
+    repair_context = {'capture_clock_policy': POLICY, 'capture_received_at': RECEIVED}
+    if retained_only:
+        repair_context.update(
+            capture_received_at=FUTURE,
+            retained_capture_offsets_by_name={path.name: FUTURE - original.stored_capture_at},
+        )
     monkeypatch.setattr(artifact_reupload, '_repair_plan', lambda *a: (object(), (binding, [asdict(item)], snapshots)))
     monkeypatch.setattr(
         artifact_reupload,
         '_repair_evidence',
         lambda *a: (
-            {'capture_clock_policy': POLICY, 'capture_received_at': RECEIVED},
+            repair_context,
             {'segment': {'stt_language': 'en'}},
         ),
     )
@@ -96,19 +105,34 @@ async def test_missing_recovered_audio_repair_decodes_original_receipt_clock(anc
         return 'gs://restored/audio'
 
     monkeypatch.setattr(artifact_reupload, '_commit_restore', lambda *a: 'job')
-    result = await artifact_reupload.restore_upload(
-        object(),
-        'synthetic',
-        'content',
-        [str(path)],
-        source='omi',
-        should_lock=False,
-        conversation_id=None,
-        client_device_id=None,
-        client_platform=None,
-        intake_context={},
-        artifacts=SimpleNamespace(stage_audio=stage),
-    )
+
+    @future_capture_request.observe_upload
+    async def repair_request():
+        result = await artifact_reupload.restore_upload(
+            object(),
+            'synthetic',
+            'content',
+            [str(path)],
+            source='omi',
+            should_lock=False,
+            conversation_id=None,
+            client_device_id=None,
+            client_platform=None,
+            intake_context={},
+            artifacts=SimpleNamespace(stage_audio=stage),
+        )
+        future_capture_request.mark(future_capture_request.Outcome.PRIOR_CUSTODY)
+        return result
+
+    counters = {
+        outcome: future_capture_request._OUTCOMES.labels(outcome=outcome) for outcome in future_capture_request.Outcome
+    }
+    before = {outcome: counter._value.get() for outcome, counter in counters.items()}
+    result = await repair_request()
+    assert {outcome: counter._value.get() for outcome, counter in counters.items()} == {
+        **before,
+        'reached_offsets': before['reached_offsets'] + 1,
+    }
     assert result == 'job' and len(staged) == 1
     assert staged[0].capture_at == original.stored_capture_at
     assert staged[0].conversation_id == original.recovery_id

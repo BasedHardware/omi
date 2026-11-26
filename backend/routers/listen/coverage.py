@@ -88,7 +88,9 @@ async def publish_committed(host: Any, conversation_id: str, snapshot: dict[str,
     archive = getattr(receiver, 'raw_archive', None)
     if archive is not None and archive.durable and getattr(host, 'private_cloud_sync_enabled', False):
         try:
-            await archive.defer_ack(conversation_id, lambda: _publish_committed(host, conversation_id, snapshot))
+            await archive.defer_ack(
+                conversation_id, lambda: _publish_committed(host, conversation_id, snapshot, archive=archive)
+            )
         except Exception:
             observe('live_coverage', None)
         return
@@ -99,7 +101,7 @@ async def publish_committed(host: Any, conversation_id: str, snapshot: dict[str,
     await _publish_committed(host, conversation_id, snapshot)
 
 
-async def _publish_committed(host: Any, conversation_id: str, snapshot: dict[str, Any]) -> None:
+async def _publish_committed(host: Any, conversation_id: str, snapshot: dict[str, Any], *, archive=None) -> None:
     try:
         events = await host.persistence.call(
             record_committed,
@@ -110,8 +112,14 @@ async def _publish_committed(host: Any, conversation_id: str, snapshot: dict[str
             device_id=getattr(getattr(host, 'client_device_context', None), 'client_device_id', None),
         )
         if serving_for('CAPTURE_COVERAGE_MODE', host.request.uid):
+            bindings = getattr(archive, 'coverage_custody', None)
             for event in events:
-                host.send_event(event)
+                proofs = list(bindings(event)) if bindings is not None else []
+                if proofs:
+                    for proof in proofs:
+                        host.send_event(event.model_copy(update={'audio_custody': proof}))
+                else:
+                    host.send_event(event)
 
     except Exception:
         # Transcript durability already succeeded; an optional custody publication

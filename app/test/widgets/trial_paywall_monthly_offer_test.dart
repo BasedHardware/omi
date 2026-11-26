@@ -55,7 +55,7 @@ class _Usage extends UsageProvider {
   String? refreshError;
 
   @override
-  Future<void> fetchSubscription() async {
+  Future<void> fetchSubscription({bool fresh = false}) async {
     fetches++;
     await refresh;
     debugSetSubscription(server);

@@ -16,7 +16,7 @@ from utils.metrics import OMI_FALLBACK_TOTAL, OMI_LIVE_STT_TERMINAL_FAILURES_TOT
 from utils.observability.transcription import _deployment_environment
 from utils.stt import live_chain, live_failure, streaming as st
 from utils.stt.live_failure import PendingLiveFailover
-from utils.stt.live_metrics import CHAIN_EXHAUSTED, RECONNECT, COST_IGNORED_DEATHS
+from utils.stt.live_metrics import CHAIN_EXHAUSTED, COST_IGNORED_DEATHS
 from utils.stt.live_recovery import select_live_replacement
 
 
@@ -121,12 +121,9 @@ async def test_connect_validation_serve_error_has_one_matching_selection_hop(mon
 @pytest.mark.asyncio
 @pytest.mark.parametrize('language', ['ko', 'ja', 'zh'])
 async def test_connected_terminal_soniox_death_uses_terminal_metric_not_connect_exhaustion(monkeypatch, language):
-    monkeypatch.setenv('STT_RESILIENT_RECONNECT', 'false')
     monkeypatch.setenv('STT_SERVICE_MODELS', 'soniox')
     monkeypatch.setattr(st, 'stt_service_models', ['soniox'])
     receiver, raw = listener(monkeypatch, family='soniox', language=language)
-    receiver._resilient_audio = None
-    reconnect_before = RECONNECT.labels(provider='soniox', reason='connection_lost', outcome='connected')._value.get()
     leg = receiver.stt_socket
     raw.die('connection_lost', 'ws recv closed: synthetic serving transport loss')
     before = observed('soniox', 'provider_failure', 'connection_lost')
@@ -140,11 +137,6 @@ async def test_connected_terminal_soniox_death_uses_terminal_metric_not_connect_
     assert terminal_count('soniox') == terminal_before + 1
     assert fallback_count('soniox', 'connection_lost') == fallback_before
     assert CHAIN_EXHAUSTED.labels(demand_cohort='ineligible')._value.get() == exhausted_before
-    # With reconnect disabled, ordinary terminal handling owns this leg.
-    assert (
-        RECONNECT.labels(provider='soniox', reason='connection_lost', outcome='connected')._value.get()
-        == reconnect_before
-    )
     receiver.host.request.websocket.close.assert_awaited_once_with(
         code=1011, reason='transcription_service_unavailable'
     )

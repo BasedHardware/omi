@@ -10,6 +10,7 @@ region: us-central1
 
 cloud_run:
   backend-staging:
+    memory: 4Gi
     env:
       # live-only on prod, 2026-10-20 inventory (see prod.yaml)
       AUDIO_MERGE_DISPATCH_MODE: cloud_tasks
@@ -25,6 +26,7 @@ cloud_run:
       OMI_LANGSMITH_PROMPT_CACHE_TTL_SECONDS: '3600'
       TYPESENSE_HOST_PORT: '443'
   backend-sync-staging:
+    memory: 6Gi
     env:
       SYNC_TASKS_QUEUE: staging-sync-jobs-fresh
       SYNC_BACKFILL_TASKS_QUEUE: staging-sync-backfill-fresh
@@ -66,6 +68,12 @@ cloud_run:
       # The former 100/20 source is held. A new lead/Release ruling must supersede this.
       BATCH_PIPELINE_SERVING_SWEEP_PAGE_ROWS: '200'
       BATCH_PIPELINE_SERVING_TICK_SECONDS: '10'
+      # SCA-3120/SCA-4454, David 2026-11-26: step in-process follow-up sweep slots
+      # 4 -> 3 to cut wasted attempts, reads and CPU. 3 -> 2 stays held until
+      # random-offset follow-up discovery serves (Firestore owner, SCA-3120).
+      # Rollback: set this key to '4' explicitly (the config train only updates
+      # declared keys, so deleting it leaves the serving value) and verify.
+      BATCH_PIPELINE_PROJECTION_FOLLOWUP_SLOTS: '3'
       BATCH_PROJECTION_FINISH_CLASSIFY_PAGE_LIMIT: '16'
       SYNC_TASKS_QUEUE: staging-sync-jobs-fresh
       SUMMARY_DEBT_REPAIR_ENABLED: 'true'
@@ -133,7 +141,7 @@ cloud_tasks:
     min_backoff: 10s
     max_backoff: 300s
   staging-provider-stt:
-    # Mirrors prod's provider-stt queue; create_queues.sh made it at 16/5 and the config-train raises it.
+    # Staging keeps its lower dispatch capacity (SCA-3552).
     max_concurrent_dispatches: 48
     max_dispatches_per_second: 10
     max_attempts: -1

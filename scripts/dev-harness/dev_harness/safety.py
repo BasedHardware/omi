@@ -262,6 +262,11 @@ def offline_provider_placeholders() -> dict[str, str]:
     return dict(_OFFLINE_PROVIDER_PLACEHOLDERS)
 
 
+# Read-only views for callers that filter a composed environment before handing it over.
+STRIPPED_EXACT_ENV_KEYS = frozenset(_STRIPPED_EXACT_ENV_KEYS)
+STRIPPED_ENV_PREFIXES = _STRIPPED_ENV_PREFIXES
+
+
 def build_child_env(
     parent: Mapping[str, str] | None = None,
     *,

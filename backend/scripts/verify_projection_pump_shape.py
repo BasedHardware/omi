@@ -21,9 +21,10 @@ from typing import Any, Mapping
 SERVICE = 'backend-projection-pump'
 FIXED_INSTANCES = '4'
 TIMEOUT_SECONDS = 3600
+CONCURRENCY = 80
 CPU_LIMIT = '2'
 MEMORY_LIMIT = '4Gi'
-INVOKER_ROLE = 'roles/run.invoker'
+NON_INVOKING_ROLES = frozenset({'roles/run.viewer'})
 PUBLIC_MEMBERS = frozenset({'allUsers', 'allAuthenticatedUsers'})
 PROCESS_ROLE = 'projection_pump'
 # Unconditional: the pump never runs the serving loops, and its startup is always the pump's
@@ -44,9 +45,14 @@ def _application(template_spec: Mapping[str, Any]) -> Mapping[str, Any]:
 
 def _ingress_env(template_spec: Mapping[str, Any]) -> dict[str, str]:
     env: dict[str, str] = {}
+    seen: set[str] = set()
     for entry in _application(template_spec).get('env') or []:
-        if isinstance(entry, Mapping) and isinstance(entry.get('name'), str) and 'valueFrom' not in entry:
-            env[entry['name']] = str(entry.get('value', ''))
+        if isinstance(entry, Mapping) and isinstance(name := entry.get('name'), str):
+            if name in seen:
+                env.pop(name, None)
+            elif 'valueFrom' not in entry and isinstance(entry.get('value'), str):
+                env[name] = entry['value']
+            seen.add(name)
     return env
 
 
@@ -68,12 +74,13 @@ def evaluate(
     *,
     revision: str,
     manifest_env: Mapping[str, str],
+    revision_document: Mapping[str, Any] | None = None,
 ) -> list[str]:
     errors: list[str] = []
     metadata = _mapping(service.get('metadata'))
     annotations = _mapping(metadata.get('annotations'))
     spec = _mapping(service.get('spec'))
-    template = _mapping(spec.get('template'))
+    template = revision_document if revision_document is not None else _mapping(spec.get('template'))
     template_metadata = _mapping(template.get('metadata'))
     template_annotations = _mapping(template_metadata.get('annotations'))
     template_spec = _mapping(template.get('spec'))
@@ -82,14 +89,18 @@ def evaluate(
         errors.append(f'service name is not {SERVICE}')
     if annotations.get('run.googleapis.com/ingress') != 'internal':
         errors.append('ingress must be internal')
+    if annotations.get('run.googleapis.com/invoker-iam-disabled', 'false') != 'false':
+        errors.append('invoker IAM check must be enabled')
     for binding in iam_policy.get('bindings') or []:
         members = set(_mapping(binding).get('members') or [])
         public = sorted(members & PUBLIC_MEMBERS)
         if public:
             errors.append(f'IAM role {_mapping(binding).get("role")} grants public members {public}')
-        # Nothing calls this service: any invoker, public or private, breaks the contract.
-        if _mapping(binding).get('role') == INVOKER_ROLE and members:
-            errors.append(f'{INVOKER_ROLE} must have no members, found {sorted(members)}')
+        # Restrict direct bindings to known read-only permissions. Cloud Run
+        # admin, developer, editor and custom roles can also grant route invocation.
+        role = _mapping(binding).get('role')
+        if members and role not in NON_INVOKING_ROLES:
+            errors.append(f'{role} must have no members, found {sorted(members)}')
     if template_metadata.get('name') != revision:
         errors.append(f'template revision is not {revision}')
     for key in ('autoscaling.knative.dev/minScale', 'autoscaling.knative.dev/maxScale'):
@@ -99,16 +110,20 @@ def evaluate(
     for key in ('run.googleapis.com/minScale', 'run.googleapis.com/maxScale'):
         if key in annotations and str(annotations[key]) != FIXED_INSTANCES:
             errors.append(f'service-level {key} must be absent or {FIXED_INSTANCES}')
+    if annotations.get('run.googleapis.com/scalingMode', 'automatic') != 'automatic':
+        errors.append('service scaling mode must be automatic with fixed bounds')
     if str(template_annotations.get('run.googleapis.com/cpu-throttling', '')).lower() != 'false':
         errors.append('CPU must be always allocated (cpu-throttling false)')
     if template_spec.get('timeoutSeconds') != TIMEOUT_SECONDS:
         errors.append(f'timeoutSeconds must be {TIMEOUT_SECONDS}')
+    if template_spec.get('containerConcurrency') != CONCURRENCY:
+        errors.append(f'containerConcurrency must be {CONCURRENCY}')
     limits = _mapping(_mapping(_application(template_spec).get('resources')).get('limits'))
     if str(limits.get('cpu', '')) != CPU_LIMIT or str(limits.get('memory', '')) != MEMORY_LIMIT:
         errors.append(f'application container limits must be cpu {CPU_LIMIT} and memory {MEMORY_LIMIT}')
     env = _ingress_env(template_spec)
     if not env:
-        errors.append('candidate revision has no unambiguous application container env')
+        errors.append('revision has no unambiguous application container env')
     for name, value in FIXED_ENV.items():
         if env.get(name) != value:
             errors.append(f'{name} must be {value!r} on {SERVICE}')

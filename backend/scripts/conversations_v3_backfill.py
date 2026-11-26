@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""Per-owner conversations v3 repair: re-derive legacy pendant/phone history through live v3.
+"""Per-owner conversations v3 repair: re-derive legacy pendant/phone history through live v3, or
+(--mode rederive-live) replan the owner's finished live v3 windows after a planner fix.
 
 Runtime: PYTHONPATH=backend backend/.venv/bin/python backend/scripts/conversations_v3_backfill.py ...
 with the prod-operator tier (Firestore read/write; it needs no Cloud Tasks or LLM access: the
@@ -12,7 +13,8 @@ only as owner[N]. Output is counts, windows, run ids and outcomes; never content
   run             write the run ledger + start marker, then (default) wait for it to finish
   status          the owner's runs and their partition progress
   resume --run ID re-arm a run whose step retries ran out, or a blocked run after its cause is fixed
-  undo --run ID   restore the run's legacy rows exactly and remove its derived rows
+  undo --run ID   restore the run's legacy rows exactly and remove its derived rows; for a
+                  rederive-live run, restore every row it changed, created or retired
 
 Runbook: backend/docs/runbooks/conversations-v3.md (Backfill and repair).
 """
@@ -28,9 +30,13 @@ import time
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
+from config.conversations_v3 import HISTORICAL_SITDOWN_TIMING
 from database import conversations_v3 as store
 from database import conversations_v3_backfill_runs as runs
-from utils.conversations.v3 import backfill
+from utils.conversations.v3 import Conflict, backfill
+
+# Live speech this recent may still be in an open window or an unsealed recording.
+LIVE_SETTLE = timedelta(minutes=15)
 
 
 def read_owners(path: str) -> list[str]:
@@ -76,21 +82,65 @@ def show(label: str, data: dict) -> None:
     print(label + ' ' + ' '.join(f'{k}={round(v, 4) if isinstance(v, float) else v}' for k, v in data.items()))
 
 
-def plan_owner(uid: str, label: str, since: datetime, until: datetime, mode: str):
+def plan_owner(uid: str, label: str, since: datetime, until: datetime, mode: str, *, historical_sitdown=False):
     meta = store.backfill_window_metadata(uid, since, until)
-    counts = backfill.classify_window(meta)
-    partitions = backfill.plan_partitions(meta, since, until)
+    live = mode == backfill.LIVE_MODE
+    counts = backfill.classify_live_window(meta) if live else backfill.classify_window(meta)
+    partitions = backfill.plan_partitions(
+        meta,
+        since,
+        until,
+        max_rows=backfill.LIVE_PARTITION_ROWS if live else backfill.PARTITION_ROWS,
+        historical_sitdown=historical_sitdown,
+    )
     show(label + ' window', {'since': since.isoformat(), 'until': until.isoformat(), 'mode': mode})
     show(label + ' rows', counts)
     totals: dict = {}
-    for partition in partitions:
-        estimate = backfill.estimate_partition(uid, partition, run_id='dry-run', rederive=mode == 'rederive')
+    if historical_sitdown:
+        gap, lock = HISTORICAL_SITDOWN_TIMING
+        show(label + ' timing', {'silence_seconds': gap, 'landing_lock_seconds': lock})
+    now = datetime.now(timezone.utc) if historical_sitdown else None
+    for index, partition in enumerate(partitions):
+        if live:
+            estimate = backfill.estimate_live_partition(
+                uid,
+                partition,
+                run_id='dry-run',
+                now=now,
+                historical_sitdown=historical_sitdown,
+                internal_end=index + 1 < len(partitions),
+            )
+        else:
+            estimate = backfill.estimate_partition(uid, partition, run_id='dry-run', rederive=mode == 'rederive')
         for key, value in estimate.items():
             totals[key] = totals.get(key, 0) + value
-        partition['estimate'] = {k: estimate[k] for k in ('sources', 'stretches', 'outline_calls', 'notes_calls')}
+        partition['estimate'] = {
+            k: estimate[k]
+            for k in ('sources', 'stretches', 'outline_calls', 'notes_calls', 'windows_after', 'rows_retired_est')
+            if k in estimate
+        }
     totals['usd'] = round(totals.get('usd', 0.0), 4)
     show(label + ' plan', {'partitions': len(partitions), 'forced_cuts': sum(p['forced_cut'] for p in partitions)})
     show(label + ' estimate', totals)
+    if live:
+        show(
+            label + ' preview',
+            {
+                'windows': f"{totals.get('rows_eligible', 0)}->{totals.get('windows_after', 0)}",
+                'visible': f"{totals.get('visible_before', 0)}->{totals.get('visible_after', 0)}",
+                'rows_retired_est': totals.get('rows_retired_est', 0),
+                # Sources too close to Firestore's 1 MiB document limit for a claims update: their rows stay.
+                'sources_size_limit': totals.get('sources_blocked_size_limit', 0),
+                # Live speech no window claimed: the run makes new cards of it.
+                'sources_unclaimed': totals.get('sources_unclaimed', 0),
+                # Windows the run would refuse to write (rederive_live_boundary): move since/until first.
+                'windows_crossing_edge': totals.get('windows_crossing_edge', 0),
+                'llm_calls': totals.get('outline_calls', 0)
+                + totals.get('notes_calls', 0)
+                + totals.get('short_task_calls', 0),
+                'usd': totals['usd'],
+            },
+        )
     return counts, partitions, totals
 
 
@@ -131,32 +181,50 @@ def wait_for(uid: str, label: str, run_id: str, minutes: int) -> str:
 def cmd_run(args) -> int:
     owners = read_owners(args.owners_file)
     since, until = window(args)
+    if args.historical_sitdown and (
+        args.mode != backfill.LIVE_MODE or len(owners) != 1 or not (args.since and args.until)
+    ):
+        raise SystemExit('--historical-sitdown requires rederive-live, one owner and explicit --since and --until')
+    settle = timedelta(seconds=HISTORICAL_SITDOWN_TIMING[1]) if args.historical_sitdown else LIVE_SETTLE
+    if args.mode == backfill.LIVE_MODE and until > datetime.now(timezone.utc) - settle:
+        # The live builder still owns the last minutes; a partition there would block as open.
+        raise SystemExit(f'window: a rederive-live run must end at least {settle} ago (--until)')
+    status = 0
     for number, uid in enumerate(owners, 1):
         label = f'owner[{number}]'
         if active_runs(uid):
             print(
                 f'{label} skipped: a run is planned, running, blocked or undoing; resume or undo it first (see status)'
             )
+            status = 1
             continue
-        counts, partitions, estimate = plan_owner(uid, label, since, until, args.mode)
-        if args.dry_run:
+        try:
+            counts, partitions, estimate = plan_owner(
+                uid, label, since, until, args.mode, historical_sitdown=args.historical_sitdown
+            )
+            if args.dry_run:
+                continue
+            run_id = backfill.create_run(
+                uid,
+                since=since,
+                until=until,
+                mode=args.mode,
+                operator=args.operator,
+                code_sha=code_sha(),
+                partitions=partitions,
+                estimate=estimate,
+                counts=counts,
+                historical_sitdown=args.historical_sitdown,
+            )
+        except (Conflict, backfill.BackfillRunExists) as error:
+            print(f'{label} blocked: {error}')
+            status = 1
             continue
-        run_id = backfill.create_run(
-            uid,
-            since=since,
-            until=until,
-            mode=args.mode,
-            operator=args.operator,
-            code_sha=code_sha(),
-            partitions=partitions,
-            estimate=estimate,
-            counts=counts,
-        )
         print(f'{label} run={run_id} planned; the sweep starts it within ~5 minutes when CONVERSATIONS_V3_BACKFILL=on')
         if args.no_wait:
             if len(owners) > 1:
                 print('owners run one at a time: stopping after the first planned run (--no-wait)')
-                return 0
+                return status
             continue
         outcome = wait_for(uid, label, run_id, args.wait_minutes)
         print(f'{label} run={run_id} outcome={outcome}')
@@ -165,7 +233,7 @@ def cmd_run(args) -> int:
             return 1
         if number < len(owners):
             time.sleep(args.owner_gap_seconds)
-    return 0
+    return status
 
 
 def cmd_status(args) -> int:
@@ -208,6 +276,21 @@ def cmd_undo(args) -> int:
             print(f'{label} run={args.run} is a re-derive: undo the original run instead (see status)')
             status = 1
             continue
+        if run.get('mode') == backfill.LIVE_MODE:
+            priors = runs.list_priors(uid, args.run)
+            show(
+                label + ' undo scope',
+                {
+                    'run': args.run,
+                    'rows_to_restore': sum(1 for p in priors if not p.get('created')),
+                    'rows_to_remove': sum(1 for p in priors if p.get('created')),
+                },
+            )
+            if not args.dry_run:
+                result = backfill.undo_run(uid, args.run)
+                show(label + ' undo', result)
+                status |= result.get('outcome') != 'undone'
+            continue
         docs = store.backfill_run_documents(uid, args.run)
         show(
             label + ' undo scope',
@@ -215,8 +298,9 @@ def cmd_undo(args) -> int:
                 'run': args.run,
                 'donors': sum(1 for d in docs if not d.get('v3_derived')),
                 'derived_rows': sum(1 for d in docs if d.get('v3_derived')),
-                # Donors whose copy the owner deleted stay converted with the copies they share.
-                'donors_deleted_by_owner': sum(
+                'groups': len(backfill.undo_groups(docs)),
+                # A lower bound: it misses a delete whose claim release has not run yet (tombstone only).
+                'donors_deleted_by_owner_min': sum(
                     1 for d in docs if not d.get('v3_derived') and store.deleted_after_backfill(d)
                 ),
             },
@@ -255,7 +339,10 @@ def main(argv=None) -> int:
     run.add_argument('--days', type=float, default=2.0, help='window length ending at --until (default 2)')
     run.add_argument('--since', help='ISO start; overrides --days')
     run.add_argument('--until', help='ISO end (default now)')
-    run.add_argument('--mode', choices=('derive', 'rederive'), default='derive')
+    run.add_argument('--mode', choices=('derive', 'rederive', 'rederive-live'), default='derive')
+    run.add_argument(
+        '--historical-sitdown', action='store_true', help='use the 900/3600 sit-down timing for live repair'
+    )
     run.add_argument('--dry-run', action='store_true', help='counts and estimate only; writes nothing')
     run.add_argument('--operator', default=os.getenv('OMI_OPERATOR') or getpass.getuser())
     run.add_argument('--no-wait', action='store_true', help='plan one owner and return without waiting')

@@ -9,6 +9,7 @@ from copy import deepcopy
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from utils.sync import processing_hold, bridge_pending
+from config.record_wal_duplicate import has_retained_custody
 from config.recorded_time import late_audio_intake_enabled
 from config.conversations_v3 import SPEECH_LANDED_FIELD
 from config.episodes import episodes_enabled, episode_compose_transcript_ready_enabled
@@ -34,6 +35,8 @@ from utils.conversations.size_limit import (
     projected_size_bucket,
 )
 from utils.conversations.summary_delivery import rearm_on_revision_change
+from utils.conversations.v3 import sync_custody
+from utils.conversations.v3.end_sides import ATTACH_KEY as END_CUTS_KEY, separated_by_end
 from utils.observability.fallback import record_fallback
 from utils.sync.size_telemetry import (
     finish_size_attempt,
@@ -221,6 +224,7 @@ class _Plan(NamedTuple):
     estimated_bytes: int
     bridge: dict | None
     append_stats: dict | None = None
+    custody_updates: dict[str, dict] | None = None
 
     @property
     def grows(self) -> bool:
@@ -280,6 +284,8 @@ def assign_in_transaction(
     require_live_target = incoming.pop('_batch_require_live_target', False)
     redrive_target = incoming.pop('_batch_redrive_target', False)
     record_span = incoming.pop('_batch_replace_live', None)
+    # Reliability experiment end_open_conversation: the Ends around this unit's first speech (None when off).
+    end_cuts = incoming.pop(END_CUTS_KEY, None)
     collection = user_ref.collection('conversations')
     read: dict[str, dict | None] = {}
 
@@ -546,6 +552,21 @@ def assign_in_transaction(
 
     live_stats: Optional[dict] = None
     privacy_excluded: frozenset[str] = frozenset()
+    custody_card_reads: set[str] = set()
+
+    def custody_card(cid: str) -> dict | None:
+        if cid not in custody_card_reads and len(custody_card_reads) >= sync_custody.MAX_CLAIMS:
+            raise sync_custody.CustodyBlocked('card_read_budget')
+        custody_card_reads.add(cid)
+        if tombstoned(cid):
+            return None
+        raw = load(cid)
+        if not raw or not raw.get('v3_derived') or raw.get('deleted'):
+            return None
+        try:
+            return decode(raw)
+        except (ValueError, TypeError, transcript_pointer.TranscriptBlobAbsent, transcript_pointer.TranscriptShredded):
+            raise sync_custody.CustodyBlocked('card_unavailable') from None
 
     def plan(
         excluded: frozenset[str],
@@ -553,6 +574,7 @@ def assign_in_transaction(
         *,
         isolated_id: str | None = None,
         speech_interval: bool = False,
+        custody_anchor: str | None = None,
     ) -> _Plan:
         """Choose, merge and encode without writing; ``excluded`` rows stay untouched.
 
@@ -568,8 +590,10 @@ def assign_in_transaction(
         if plan_target_id and own_anchor and own_id != plan_target_id and own_anchor.get('manual_speaker_assignments'):
             raise SyncAssignmentSuperseded('sync anchor has manual speaker assignments')
 
-        receipt_owner = plan_target_id or (
-            own_id if not isolated_id and own_anchor and own_anchor.get('manual_speaker_assignments') else None
+        receipt_owner = (
+            plan_target_id
+            or custody_anchor
+            or (own_id if not isolated_id and own_anchor and own_anchor.get('manual_speaker_assignments') else None)
         )
         matched = {}
         extent = deepcopy(incoming)
@@ -620,6 +644,14 @@ def assign_in_transaction(
                 ):
                     # Live and user-managed rows can only be explicit targets.
                     if not auto_mergeable(raw) and cid != plan_target_id:
+                        continue
+                    # Reliability experiment end_open_conversation: a recording row stays on one side of
+                    # every End. A row found by time or hint that began on the other side of an End from
+                    # this unit is left alone, so the unit starts (or joins) a row on its own side. The
+                    # unit's own row and an explicit target keep their place.
+                    if cid not in (own_id, plan_target_id, target_hint) and separated_by_end(
+                        raw.get('started_at'), end_cuts
+                    ):
                         continue
                     if plan_target and not batch_target_contains(plan_target, decode(raw)):
                         continue
@@ -681,6 +713,7 @@ def assign_in_transaction(
                     segment_indices,
                     isolated_id=isolated_id,
                     speech_interval=speech_interval,
+                    custody_anchor=custody_anchor,
                 )
         if canonical in privacy_excluded:
             # No safe alternative to the rejected retry owner. Do not overwrite
@@ -1084,11 +1117,47 @@ def assign_in_transaction(
             if result.get('recording'):
                 # v3: the landing time commits with the speech it describes.
                 result[SPEECH_LANDED_FIELD] = datetime.now(timezone.utc)
+        donor_updates = {cid: _donor_redirect_patch(raw, canonical) for cid, raw in matched.items() if cid != canonical}
+        custody_donors = {
+            row['id']: row
+            for row in records
+            if row['id'] in donor_updates and (row.get('claims') or row.get('deleted_spans'))
+        }
+        custody_updates = {}
+        if custody_donors:
+            try:
+                if any(row.get('deleted_spans') for row in custody_donors.values()):
+                    raise sync_custody.CustodyBlocked('deletion_custody')
+                custody_updates = sync_custody.transfer(result, custody_donors, custody_card)
+                if any(
+                    projected_document_bytes(collection.document(cid), patch, load(cid))
+                    > CONVERSATION_ABSORPTION_BYTE_CAP
+                    for cid, patch in custody_updates.items()
+                    if cid not in donor_updates and cid != canonical
+                ):
+                    raise sync_custody.CustodyBlocked('card_size_budget')
+            except sync_custody.CustodyBlocked as error:
+                logger.info('event=sync_v3_custody outcome=kept_source reason=%s', error)
+                if own_id in custody_donors and plan_target_id:
+                    raise SyncAssignmentConflict('explicit redirect would strand v3 custody', subtype=Reason.V3_CUSTODY)
+                own_custody_anchor = custody_anchor or (own_id if own_id in custody_donors else None)
+                return plan(
+                    excluded | (custody_donors.keys() - {own_custody_anchor}),
+                    segment_indices,
+                    isolated_id=isolated_id,
+                    speech_interval=speech_interval,
+                    custody_anchor=own_custody_anchor,
+                )
+            if custody_updates:
+                result['claims'] = custody_updates.pop(canonical)['claims']
+                result['v3_pending'] = True
+                result['v3_pending_since'] = result.get('v3_pending_since') or datetime.now(timezone.utc)
+                for cid in custody_donors:
+                    donor_updates[cid].update(custody_updates.pop(cid))
         payload = encode(result)
         payload.pop('photos', None)
         if current is not None:
             _omit_unchanged_authority_fields(payload, current)
-        donor_updates = {cid: _donor_redirect_patch(raw, canonical) for cid, raw in matched.items() if cid != canonical}
         estimated_bytes = _stored_document_bytes(collection.document(canonical), payload, current, invalidate)
         absorption_bytes = max(
             [estimated_bytes]
@@ -1115,6 +1184,7 @@ def assign_in_transaction(
             _stored_document_bytes(collection.document(canonical), payload, current, invalidate),
             bridge,
             append_stats,
+            custody_updates,
         )
 
     # Every plan is read-only, so a full canonical can be dropped and the
@@ -1429,6 +1499,12 @@ def assign_in_transaction(
         for accepted in [chosen, *extra_plans]
     ):
         raise SyncAssignmentConflict('record target discarded', subtype=Reason.RECORD_TARGET_DISCARDED)
+    for accepted in [chosen, *extra_plans]:
+        lineage_updates = set(accepted.donor_updates) | set(accepted.ancestor_updates)
+        if lineage_updates and any(has_retained_custody(load(cid)) for cid in {*lineage_updates, accepted.canonical}):
+            raise SyncAssignmentConflict(
+                'retained WAL lineage requires merge authority', subtype=Reason.ANCESTRY_FLATTEN_REJECTED
+            )
     remember_size_payload(canonical, result)
     for accepted in [chosen, *extra_plans]:
         remember_size_payload(accepted.canonical, accepted.result)
@@ -1447,6 +1523,8 @@ def assign_in_transaction(
             transaction.update(collection.document(cid), patch)
         for ancestor_id, patch in accepted.ancestor_updates.items():
             transaction.update(collection.document(ancestor_id), patch)
+        for cid, patch in (accepted.custody_updates or {}).items():
+            transaction.update(collection.document(cid), patch)
         index.write(accepted.result, set(accepted.matched) | {accepted.canonical})
     if extra_plans:
         result['_sync_size_rollover_rows'] = [(p.result, p.created) for p in extra_plans]

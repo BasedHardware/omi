@@ -132,6 +132,40 @@ func Doc(collection, id string, more ...string) (Ref, error) {
 	return Ref{path: strings.Join(segments, "/")}, nil
 }
 
+// ReadDeletionMarker reads account_deletions/{tenant} from this store's database,
+// including while deletion is in progress. An absent document returns a nil map. A missing
+// database or failed read returns an error so callers cannot mistake an unavailable
+// authority for no marker.
+func (s *Store) ReadDeletionMarker(ctx context.Context, tenant string) (map[string]any, error) {
+	ref, err := Doc(MarkerCollection, tenant)
+	if err != nil {
+		return nil, err
+	}
+	// GetAll represents a missing document as a snapshot, keeping absence
+	// distinct from an RPC failure such as a missing database.
+	snapshots, err := s.client.GetAll(ctx, []*firestore.DocumentRef{s.client.Doc(ref.path)})
+	if err != nil {
+		return nil, classifyMarkerRead(err)
+	}
+	if len(snapshots) != 1 {
+		return nil, &CallError{Kind: KindRejected, Code: "UnexpectedSnapshotCount"}
+	}
+	var fields map[string]any
+	if snapshot := snapshots[0]; snapshot.Exists() {
+		if err := snapshot.DataTo(&fields); err != nil {
+			return nil, &CallError{Kind: KindRejected, Code: "Undecodable"}
+		}
+	}
+	return fields, nil
+}
+
+func classifyMarkerRead(err error) error {
+	if status.Code(err) == codes.NotFound {
+		return &CallError{Kind: KindRejected, Code: codes.NotFound.String()}
+	}
+	return classify(err)
+}
+
 // Tx is one fenced transaction. Its methods are valid only inside the callback.
 type Tx struct {
 	store *Store
@@ -157,19 +191,16 @@ func (s *Store) Fenced(ctx context.Context, live Live, owner string, fn func(*Tx
 		return err
 	}
 	err = s.client.RunTransaction(ctx, func(_ context.Context, tx *firestore.Transaction) error {
-		snapshot, getErr := tx.Get(s.client.Doc(marker.path))
-		exists := getErr == nil
-		if getErr != nil && status.Code(getErr) != codes.NotFound {
+		fenced := &Tx{store: s, tx: tx}
+		var fields map[string]any
+		exists, getErr := fenced.Get(marker, &fields)
+		if getErr != nil {
 			return getErr
 		}
-		var state any
-		if exists {
-			state = snapshot.Data()[markerStatusField]
-		}
-		if Blocks(exists, state) {
+		if Blocks(exists, fields[markerStatusField]) {
 			return ErrOwnerDeleting
 		}
-		if fnErr := fn(&Tx{store: s, tx: tx}); fnErr != nil {
+		if fnErr := fn(fenced); fnErr != nil {
 			return fnErr
 		}
 		return live.Err()
@@ -180,17 +211,8 @@ func (s *Store) Fenced(ctx context.Context, live Live, owner string, fn func(*Tx
 // Get reads a document into dst, a pointer to a struct or map. It reports false when the
 // document does not exist.
 func (t *Tx) Get(ref Ref, dst any) (bool, error) {
-	snapshot, err := t.tx.Get(t.store.client.Doc(ref.path))
-	if status.Code(err) == codes.NotFound {
-		return false, nil
-	}
-	if err != nil {
-		return false, err
-	}
-	if err := snapshot.DataTo(dst); err != nil {
-		return false, &CallError{Kind: KindRejected, Code: "Undecodable"}
-	}
-	return true, nil
+	version, err := t.GetVersion(ref, dst)
+	return !version.IsZero(), err
 }
 
 // Create writes a new document. The transaction fails with ErrExists if one is there.
@@ -219,6 +241,12 @@ func classify(err error) error {
 	if err == nil {
 		return nil
 	}
+	if errors.Is(err, context.Canceled) {
+		return &CallError{Kind: KindTransient, Code: codes.Canceled.String()}
+	}
+	if errors.Is(err, context.DeadlineExceeded) {
+		return &CallError{Kind: KindTransient, Code: codes.DeadlineExceeded.String()}
+	}
 	state, ok := status.FromError(err)
 	if !ok {
 		return err
@@ -231,7 +259,12 @@ func classify(err error) error {
 	case codes.Unavailable, codes.DeadlineExceeded, codes.Aborted, codes.ResourceExhausted, codes.Internal,
 		codes.Canceled, codes.Unknown:
 		return &CallError{Kind: KindTransient, Code: state.Code().String()}
-	case codes.OK, codes.InvalidArgument, codes.PermissionDenied, codes.FailedPrecondition, codes.OutOfRange,
+	case codes.InvalidArgument:
+		if limit := sizeRejection(state.Message()); limit != nil {
+			return limit
+		}
+		return &CallError{Kind: KindRejected, Code: state.Code().String()}
+	case codes.OK, codes.PermissionDenied, codes.FailedPrecondition, codes.OutOfRange,
 		codes.Unimplemented, codes.DataLoss, codes.Unauthenticated:
 		return &CallError{Kind: KindRejected, Code: state.Code().String()}
 	}

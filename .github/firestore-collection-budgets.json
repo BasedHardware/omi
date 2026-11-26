@@ -31,6 +31,56 @@
   },
   "budgets": [
     {
+      "collection": "pager_events",
+      "owner": "SCA-2116 operations pager",
+      "unit": "signed Grafana event admission",
+      "reads_per_unit_budget": 1,
+      "reads_per_day_budget": 300,
+      "basis": "planning-bound",
+      "source": "backend/paging/README.md and run-fixture.sh; one lookup per admission including warm replays, assuming at most 300 events/day for the sole Redis route. Operations database only.",
+      "reviewed": "2026-11-20"
+    },
+    {
+      "collection": "pager_deliveries",
+      "owner": "SCA-2116 operations pager",
+      "unit": "due drain tick",
+      "reads_per_unit_budget": 12,
+      "reads_per_day_budget": 20000,
+      "basis": "planning-bound",
+      "source": "backend/paging/README.md and run-fixture.sh; one Scheduler poll/minute, up to four due rows with two delivery lookups each per tick, plus admission, acknowledgement and transaction retry headroom. Operations database only.",
+      "reviewed": "2026-11-20"
+    },
+    {
+      "collection": "pager_recipient_limits",
+      "owner": "SCA-2116 operations pager",
+      "unit": "first claim of an episode for one recipient",
+      "reads_per_unit_budget": 1,
+      "reads_per_day_budget": 300,
+      "basis": "planning-bound",
+      "source": "backend/paging/README.md and run-fixture.sh; one extra lookup on initial claim, assuming at most 300 admitted events/day for the pilot. Operations database only.",
+      "reviewed": "2026-11-20"
+    },
+    {
+      "collection": "llm_gateway_idempotency_claims",
+      "owner": "Goal: Pipeline (SCA-3176)",
+      "unit": "keyed chat POST or recovery lookup",
+      "reads_per_unit_budget": 10,
+      "reads_per_day_budget": 1000000,
+      "basis": "planning-bound",
+      "source": "backend/docs/llm_gateway.mdx: first success reads its claim twice, and replay or lookup reads it once. The planning budget allows five transaction attempts in each of the two transactions and assumes up to 100,000 keyed HTTP requests per day, including replays and lookups. Account deletion marker reads are separate. Revisit before increasing traffic above that planned envelope.",
+      "reviewed": "2026-11-19"
+    },
+    {
+      "collection": "llm_gateway_idempotency_results",
+      "owner": "Goal: Pipeline (SCA-3176)",
+      "unit": "keyed chat POST or recovery lookup",
+      "reads_per_unit_budget": 5,
+      "reads_per_day_budget": 500000,
+      "basis": "planning-bound",
+      "source": "backend/docs/llm_gateway.mdx: only a committed replay or lookup reads the result, once per transaction attempt. The planning budget assumes up to five transaction attempts and 100,000 keyed HTTP requests per day, including replays and lookups. Revisit before increasing traffic above that planned envelope.",
+      "reviewed": "2026-11-19"
+    },
+    {
       "collection": "conversation_erasure_jobs",
       "owner": "backend conversation deletion (accepted-delete erasure obligations)",
       "unit": "conversation delete accepted behind a busy account gate",
@@ -73,12 +123,32 @@
     {
       "collection": "conversations_v3_backfill_runs",
       "owner": "lane/conversations-v3",
-      "unit": "operator backfill run (one owner, one window)",
+      "unit": "operator run with app deletion and re-protection reads included in daily budget",
       "reads_per_unit_budget": 2000,
-      "reads_per_day_budget": 40000,
+      "reads_per_day_budget": 46000,
       "basis": "planning-bound",
-      "source": "backend/utils/conversations/v3/backfill.py: about 6 ledger reads per partition step (a 2-day owner plans about 20 partitions plus drain continuations) and the operator script's 30 s status poll for up to 6 hours; planning cap 20 operator runs per day. Revisit before any fleet-wide use.",
+      "source": "backend/utils/conversations/v3/backfill.py: operator allowance 2,000 reads per run at 20 runs/day. App deletion and re-protection query only owner live-rederive runs, with at most L+1 billed ledger reads per attempt for L matching runs (one minimum read with none). Add 6,000/day in a planning scenario of 2,000 app attempts/day, averaging at most three ledger reads. The 2026-11-12 phone cascade logs (~1,400/day) are a volume reference. See the V3 runbook for the review threshold.",
       "reviewed": "2026-11-18"
+    },
+    {
+      "collection": "conversations_v3_rederive_priors",
+      "owner": "lane/conversations-v3",
+      "unit": "operator live re-derive run with app deletion and re-protection reads included in daily budget",
+      "reads_per_unit_budget": 2000,
+      "reads_per_day_budget": 52000,
+      "basis": "planning-bound",
+      "source": "backend/database/conversations_v3_backfill_runs.py: operator allowance 2,000 reads per run at 20 runs/day. App deletion and re-protection add L times D point reads per attempt for L owner live-rederive runs and D distinct requested conversation and bridge IDs, before transaction retries. Add 12,000/day in a planning scenario of 2,000 app attempts/day, averaging at most six point reads. See the V3 runbook for the review threshold.",
+      "reviewed": "2026-11-20"
+    },
+    {
+      "collection": "conversations_v3_undo_removals",
+      "owner": "lane/conversations-v3",
+      "unit": "distinct conversation ID in a shared linked-task create transaction attempt",
+      "reads_per_unit_budget": 1,
+      "reads_per_day_budget": 50000,
+      "basis": "planning-bound",
+      "source": "backend/database/action_items.py: one owner-scoped point read per distinct linked conversation ID per attempt, including retries, even when no repairs ran. Planning scenario: 50,000 such ID-attempts/day. A marker hit may add one point read in conversations. Source-less creates do not read markers.",
+      "reviewed": "2026-11-20"
     },
     {
       "collection": "conversations_v3_backfill_starts",
@@ -89,6 +159,16 @@
       "basis": "planning-bound",
       "source": "backend/utils/conversations/v3/backfill.py start_planned: one bounded collection-group list (at most 20 start markers under users/{uid}) per five-minute sweep, 288 ticks per day; the collection is empty except between an operator plan and the next tick.",
       "reviewed": "2026-11-18"
+    },
+    {
+      "collection": "conversations_v3_sync_custody_repairs",
+      "owner": "lane/conversations-v3",
+      "unit": "approved single-chain apply or rollback",
+      "reads_per_unit_budget": 3,
+      "reads_per_day_budget": 60,
+      "basis": "planning-bound",
+      "source": "backend/docs/runbooks/conversations-v3.md: one journal point read per transaction attempt, up to three attempts. No listing or scheduled reads. The daily planning envelope is twenty individually approved commands; the owner and source reads are bounded separately by the runbook.",
+      "reviewed": "2026-11-20"
     }
   ],
   "dynamic": [
@@ -189,6 +269,30 @@
       "reviewed": "2026-11-14"
     },
     {
+      "site": "backend/utils/batch_pipeline/parked_sweep.py",
+      "expression": "f'{namespace}_jobs'",
+      "collection_pattern": "batch_pipeline_*_jobs",
+      "owner": "Goal: Pipeline (SCA-3880)",
+      "unit": "admitted hourly parked GPU page",
+      "reads_per_unit_budget": 200,
+      "reads_per_day_budget": 4800,
+      "basis": "planning-bound",
+      "source": "SCA-3880 DESIGN revision 2. Two indexed metadata pages of 100 rows each. Index-entry billing is separate.",
+      "reviewed": "2026-11-23"
+    },
+    {
+      "site": "backend/utils/batch_pipeline/parked_sweep.py",
+      "expression": "f'{self.store.namespace}_leases'",
+      "collection_pattern": "batch_pipeline_*_leases",
+      "owner": "Goal: Pipeline (SCA-3880)",
+      "unit": "admitted hourly parked GPU page",
+      "reads_per_unit_budget": 2,
+      "reads_per_day_budget": 288,
+      "basis": "planning-bound",
+      "source": "SCA-3880 DESIGN revision 2. One admission read and one cursor checkpoint read per admitted pass. Planning bound includes up to 10 rejected admission attempts per hour (240 extra reads/day), across replicas and restarts. Verify that envelope before rollout; it is not a global limit on rejected claims.",
+      "reviewed": "2026-11-23"
+    },
+    {
       "site": "backend/database/batch_pipeline_store.py",
       "expression": "f'{self.namespace}_allowance_holds'",
       "collection_pattern": "batch_pipeline_*_allowance_holds",
@@ -211,6 +315,18 @@
       "basis": "planning-bound",
       "source": "SCA-2195: COUNT only, no row fetches, <=24 samples/day/environment = <=48000 index-read units/day for two environments; no per-scrape query. Revisit planning envelope above 1M stock.",
       "reviewed": "2026-11-14"
+    },
+    {
+      "site": "backend/database/batch_pipeline_admission_view.py",
+      "expression": "f'{store.namespace}_jobs'",
+      "collection_pattern": "batch_pipeline_*_jobs",
+      "owner": "Conversation API (#25918)",
+      "unit": "conversation list or detail request with eligible capture metadata",
+      "reads_per_unit_budget": 256,
+      "reads_per_day_budget": 2400000,
+      "basis": "planning-bound",
+      "source": "#25918: request cap includes the minimum read for empty queries. Daily planning uses 240000 recordings/day from the native-close intake envelope times 10 billed document equivalents per recording for repeated list/detail views and retained holds. The view frequency is an assumption to verify with Firestore caller metrics, not a serving limit or measured traffic.",
+      "reviewed": "2026-11-24"
     },
     {
       "site": "backend/database/batch_pipeline_purge.py",
@@ -299,8 +415,26 @@
   ],
   "exempt": [
     {
+      "site": "backend/database/memories.py",
+      "expression": "canonical.memory_items",
+      "reason": "Existing canonical memory items. Backfill re-derive reads source links within a removal transaction. These documents store memory records and carry no work state."
+    },
+    {
+      "site": "backend/database/memories.py",
+      "expression": "canonical.memory_evidence",
+      "reason": "Existing canonical memory evidence. Backfill re-derive reads source links within a removal transaction. These documents store provenance and carry no work state."
+    },
+    {
+      "collection": "operational_hold_release_plan_shards",
+      "reason": "Immutable fragments of a reviewed account-erasure approval. The erasure worker reads one exact hash-prefix document for each matching object lookup. This collection carries no queue, lease, retry, or progress state and is never polled."
+    },
+    {
       "collection": "record_seal_repair_backlog_cursor_v1",
       "reason": "Document ID in the existing batch_pipeline_prod_maintenance collection, not a new collection. The computed-name scanner over-approximates .collection(collection_name) sites. Shards append count/index to encrypted document frontiers; no account state or plaintext identifiers are stored. One point read per lane per run and checkpoint writes per attempted metadata page."
+    },
+    {
+      "collection": "parakeet_batch",
+      "reason": "Not a Firestore collection. It is the STT adapter name in backend/testing/pipeline_lab/cassette/adapters.py (class attribute `name = 'parakeet_batch'`); the scanner resolves unrelated `.collection(name)` parameters in backend/database to it. The pipeline lab writes only to local emulators and adds no production collection."
     }
   ]
 }

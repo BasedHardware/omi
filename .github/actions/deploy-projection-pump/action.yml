@@ -11,6 +11,13 @@ inputs:
   admitted_sha:
     description: 'Release Eligibility-admitted source SHA'
     required: true
+  reviewed_control_sha:
+    description: 'Full SHA approved by independent review for the deploy controls'
+    required: true
+  release_disposition:
+    description: 'Release comment UUID and expected revision, source SHA and pinned image for an existing pump'
+    required: false
+    default: ''
   environment:
     description: 'GitHub environment name; only prod is accepted'
     required: true
@@ -40,6 +47,9 @@ runs:
   steps:
     - name: Validate projection pump deploy boundary
       shell: bash
+      env:
+        REVIEWED_CONTROL_SHA: ${{ inputs.reviewed_control_sha }}
+        WORKFLOW_CONTROL_SHA: ${{ github.workflow_sha }}
       run: |
         set -euo pipefail
         [[ "${{ inputs.environment }}" == prod && "${{ inputs.runtime_env }}" == prod &&
@@ -48,17 +58,35 @@ runs:
           echo 'backend-projection-pump deploys only to prod based-hardware/us-central1 from an exact admitted SHA.' >&2
           exit 1
         }
+        if [[ ! "$REVIEWED_CONTROL_SHA" =~ ^[0-9a-f]{40}$ ||
+              "$REVIEWED_CONTROL_SHA" != "$WORKFLOW_CONTROL_SHA" ||
+              "$WORKFLOW_CONTROL_SHA" != "$GITHUB_SHA" ]]; then
+          echo 'The pump dispatch must run the independently reviewed workflow control SHA.' >&2
+          exit 1
+        fi
 
     - name: Checkout workflow-owned deploy-control source
       uses: actions/checkout@v7
       with:
-        ref: ${{ github.sha }}
+        ref: ${{ github.workflow_sha }}
         path: .workflow-source
 
     - name: Stage immutable workflow validation source and deploy-control scripts
       shell: bash
+      env:
+        ADMITTED_SOURCE: ${{ inputs.admitted_sha }}
+        WORKFLOW_CONTROL_SHA: ${{ github.workflow_sha }}
       run: |
         set -euo pipefail
+        test "$(git -C .workflow-source rev-parse HEAD)" = "$WORKFLOW_CONTROL_SHA"
+        {
+          echo "admitted_source=$ADMITTED_SOURCE"
+          echo "dispatch_control=$WORKFLOW_CONTROL_SHA"
+          for path in .github/workflows/gcp_backend.yml .github/actions/deploy-projection-pump/action.yml .github backend/scripts backend/deploy; do
+            object="$(git -C .workflow-source rev-parse "HEAD:$path")"
+            printf '%s=%s\n' "$path" "$object"
+          done
+        } > "$RUNNER_TEMP/pump-deploy-control.txt"
         workflow_source="$RUNNER_TEMP/pump-deploy-workflow-source"
         control_source="$RUNNER_TEMP/pump-deploy-control-source"
         rm -rf "$workflow_source" "$control_source"
@@ -90,6 +118,14 @@ runs:
         rm -rf "$RUNNER_TEMP/pump-deploy-workflow-source" "$RUNNER_TEMP/pump-deploy-control-source"
         printf 'DEPLOY_CONTROL_SCRIPTS=%s\n' "$control_root/backend/scripts" >> "$GITHUB_ENV"
         printf 'DEPLOY_WORKFLOW_ROOT=%s\n' "$workflow_root" >> "$GITHUB_ENV"
+        mkdir -p artifacts
+        cp "$RUNNER_TEMP/pump-deploy-control.txt" artifacts/projection-pump-deploy-control.txt
+        {
+          echo '### Projection pump dispatch custody'
+          echo '```text'
+          cat artifacts/projection-pump-deploy-control.txt
+          echo '```'
+        } >> "$GITHUB_STEP_SUMMARY"
 
     - name: Google Auth (WIF)
       uses: google-github-actions/auth@v3
@@ -146,6 +182,62 @@ runs:
         # digest, so a tag that moves mid-run cannot put other contents under this release.
         echo "ref=${IMAGE%:*}@${digest}" >> "$GITHUB_OUTPUT"
         echo "backend-projection-pump ships ${IMAGE%:*}@${digest} (tag ${IMAGE##*:})"
+
+    # A listing distinguishes a first create from a describe/API failure. For an
+    # existing service, verify what is serving before any deploy or probe mutation.
+    # The one write allowed here pins an existing LATEST route to the disposition's
+    # verified base by name: the same revision keeps serving (SCA-3318).
+    - name: Verify existing projection pump, pinning a LATEST-routed base, before deploy mutations
+      id: pump-service
+      shell: bash
+      env:
+        RELEASE_DISPOSITION: ${{ inputs.release_disposition }}
+      run: |
+        set -euo pipefail
+        count="$(gcloud run services list \
+          --project="${{ inputs.project_id }}" --region="${{ inputs.region }}" \
+          --filter='metadata.name=backend-projection-pump' --format=json \
+          | jq -er '
+              if type != "array" then error("invalid service list")
+              elif length == 0 then 0
+              elif length == 1 and .[0].metadata.name == "backend-projection-pump" then 1
+              else error("unexpected projection pump service listing") end')"
+        case "$count" in
+          0)
+            if [[ -n "$RELEASE_DISPOSITION" ]]; then
+              echo 'The approved inverse is missing. Release must reassess before a first create.' >&2
+              exit 1
+            fi
+            echo 'exists=false' >> "$GITHUB_OUTPUT"
+            ;;
+          1)
+            mkdir -p artifacts
+            # An existing service still routed through LATEST (a first create whose pin never
+            # ran, SCA-3318) is pinned here, inside this prod-train run, to the base the
+            # disposition names, after the same pre-pin verification a first create gets.
+            latest="$(gcloud run services describe backend-projection-pump \
+              --project="${{ inputs.project_id }}" --region="${{ inputs.region }}" --format=json \
+              | jq -er '[.status.traffic[] | select((.percent // 0) > 0)]
+                  | if length == 1 and (.[0].latestRevision // false) then "true" else "false" end')"
+            if [[ "$latest" == true ]]; then
+              # The full four-field disposition (Release comment UUID, base revision, source,
+              # digest) is validated by the verifier before any traffic write.
+              python3 "$DEPLOY_CONTROL_SCRIPTS/verify_projection_pump_inverse.py" \
+                --project="${{ inputs.project_id }}" --region="${{ inputs.region }}" \
+                --disposition="$RELEASE_DISPOSITION" \
+                --before-first-pin | tee artifacts/projection-pump-existing-latest-readback.txt
+              read -r _ base _ <<< "$RELEASE_DISPOSITION"
+              gcloud run services update-traffic backend-projection-pump \
+                --project="${{ inputs.project_id }}" --region="${{ inputs.region }}" \
+                --to-revisions="$base=100" --quiet
+            fi
+            python3 "$DEPLOY_CONTROL_SCRIPTS/verify_projection_pump_inverse.py" \
+              --project="${{ inputs.project_id }}" --region="${{ inputs.region }}" \
+              --disposition="$RELEASE_DISPOSITION" | tee artifacts/projection-pump-existing-dark-readback.txt
+            echo 'exists=true' >> "$GITHUB_OUTPUT"
+            ;;
+          *) exit 1 ;;
+        esac
 
     - name: Install Python deps for deploy scripts
       shell: bash
@@ -298,43 +390,20 @@ runs:
           --cloud-run-service backend-projection-pump \
           --cloud-run-state "$RUNNER_TEMP/backend-runtime-env-state.json"
 
-    # A listing distinguishes a fresh service from an API/auth failure, which must stop
-    # the deploy. gcloud refuses --no-traffic when it creates a service.
-    - name: Detect existing projection pump service
-      id: pump-service
+    - name: Require dark batch flags on first create
+      if: ${{ steps.pump-service.outputs.exists == 'false' }}
       shell: bash
       run: |
-        set -euo pipefail
-        count="$(gcloud run services list \
-          --project="${{ inputs.project_id }}" --region="${{ inputs.region }}" \
-          --filter='metadata.name=backend-projection-pump' --format=json \
-          | jq -er '[.[] | select(.metadata.name == "backend-projection-pump")] | length')"
-        case "$count" in
-          0) echo 'exists=false' >> "$GITHUB_OUTPUT" ;;
-          1) echo 'exists=true' >> "$GITHUB_OUTPUT" ;;
-          *) echo 'Duplicate backend-projection-pump service listing' >&2; exit 1 ;;
-        esac
-        # A first deploy that died between create and the pin step leaves traffic on
-        # latestRevision, which the zero-traffic sidecar attachment refuses. Stop before
-        # any mutation and name the one command that repairs it.
-        if [[ "$count" == 1 ]]; then
-          live="$(gcloud run services describe backend-projection-pump \
-            --project="${{ inputs.project_id }}" --region="${{ inputs.region }}" --format=json)"
-          following="$(jq -er '[.status.traffic[]? | select(.latestRevision == true and (.percent // 0) > 0)] | length' <<<"$live")"
-          if [[ "$following" != 0 ]]; then
-            echo 'ERROR: backend-projection-pump traffic follows latestRevision (an earlier first deploy stopped before pinning).' >&2
-            echo 'Pin it to its ready revision, then rerun: gcloud run services update-traffic backend-projection-pump --project=${{ inputs.project_id }} --region=${{ inputs.region }} --to-revisions=<status.latestReadyRevisionName>=100' >&2
-            exit 1
-          fi
-          # Requested and serving traffic must agree before anything changes: the
-          # pre-promotion snapshot records requested traffic, and a failed promotion
-          # restores it, so a divergence would roll back to a revision that is not serving.
-          routed='[.[]? | select((.percent // 0) > 0) | {revisionName, percent, latestRevision: (.latestRevision // false)}] | sort_by(.revisionName)'
-          if [[ "$(jq -ecS ".spec.traffic | $routed" <<<"$live")" != "$(jq -ecS ".status.traffic | $routed" <<<"$live")" ]]; then
-            echo 'ERROR: backend-projection-pump requested traffic differs from serving traffic; resolve it before deploying.' >&2
-            exit 1
-          fi
-        fi
+        jq -e '
+          .services["backend-projection-pump"].env
+          | map(select(.name == "BATCH_PIPELINE_SERVING_ENABLED" or .name == "BATCH_PIPELINE_PROJECTION_PUMP_ENABLED"))
+          | sort_by(.name)
+          | map({name, value})
+          | . == [
+              {"name": "BATCH_PIPELINE_PROJECTION_PUMP_ENABLED", "value": "false"},
+              {"name": "BATCH_PIPELINE_SERVING_ENABLED", "value": "false"}
+            ]
+        ' "$RUNNER_TEMP/backend-runtime-env-state.json" > /dev/null
 
     # Fixed size (min == max == 4) with CPU always allocated; internal ingress and no
     # public invoker. Scaling literals live here only: ops/prod.yaml takes no entry until
@@ -367,6 +436,18 @@ runs:
           OMI_BACKEND_RELEASE_SHA=${{ inputs.admitted_sha }}
         secrets: ${{ steps.runtime-env.outputs.backend_projection_pump_secrets }}
 
+    # A first create serves LATEST. Inspect the new base before pinning traffic,
+    # then prove the named route before attaching the zero-traffic sidecar.
+    - name: Verify a newly created projection pump base before pinning
+      if: ${{ steps.pump-service.outputs.exists == 'false' }}
+      shell: bash
+      run: |
+        set -euo pipefail
+        python3 "$DEPLOY_CONTROL_SCRIPTS/verify_projection_pump_inverse.py" \
+          --project="${{ inputs.project_id }}" --region="${{ inputs.region }}" \
+          --new-base "backend-projection-pump-${{ steps.image-tag.outputs.revision_suffix }}-base" "${{ inputs.admitted_sha }}" "${{ steps.published-image.outputs.ref }}" \
+          --before-first-pin
+
     # A created service routes LATEST to the base revision; the zero-traffic sidecar
     # attachment refuses latestRevision routing, so pin the dark base revision by name.
     - name: Pin a newly created projection pump service to its base revision
@@ -377,6 +458,16 @@ runs:
         gcloud run services update-traffic backend-projection-pump \
           --project="${{ inputs.project_id }}" --region="${{ inputs.region }}" \
           --to-revisions="backend-projection-pump-${{ steps.image-tag.outputs.revision_suffix }}-base=100" --quiet
+
+    - name: Verify the pinned first projection pump base
+      if: ${{ steps.pump-service.outputs.exists == 'false' }}
+      shell: bash
+      run: |
+        set -euo pipefail
+        python3 "$DEPLOY_CONTROL_SCRIPTS/verify_projection_pump_inverse.py" \
+          --project="${{ inputs.project_id }}" --region="${{ inputs.region }}" \
+          --new-base "backend-projection-pump-${{ steps.image-tag.outputs.revision_suffix }}-base" "${{ inputs.admitted_sha }}" "${{ steps.published-image.outputs.ref }}" \
+          | tee artifacts/projection-pump-first-dark-readback.txt
 
     - name: Attach revision-aware Managed Prometheus to the projection pump candidate
       shell: bash
@@ -487,15 +578,23 @@ runs:
           --environment "${{ inputs.runtime_env }}" \
           --evidence-path artifacts/projection-pump-candidate-release-vector.json
 
-    - name: Capture projection pump pre-promotion traffic snapshot
+    - name: Reverify the projection pump inverse and capture its traffic snapshot
       id: pump-traffic-snapshot
       shell: bash
+      env:
+        PUMP_EXISTS: ${{ steps.pump-service.outputs.exists }}
+        RELEASE_DISPOSITION: ${{ inputs.release_disposition }}
       run: |
-        python3 "$DEPLOY_CONTROL_SCRIPTS/cloud_run_traffic_snapshot.py" capture \
-          --service backend-projection-pump \
-          --project "${{ inputs.project_id }}" \
-          --region "${{ inputs.region }}" \
-          --output artifacts/projection-pump-pre-promotion-traffic-snapshot.json
+        set -euo pipefail
+        if [[ "$PUMP_EXISTS" == true ]]; then
+          expected=(--disposition="$RELEASE_DISPOSITION")
+        else
+          expected=(--new-base "backend-projection-pump-${{ steps.image-tag.outputs.revision_suffix }}-base" "${{ inputs.admitted_sha }}" "${{ steps.published-image.outputs.ref }}")
+        fi
+        python3 "$DEPLOY_CONTROL_SCRIPTS/verify_projection_pump_inverse.py" \
+          --project="${{ inputs.project_id }}" --region="${{ inputs.region }}" \
+          "${expected[@]}" --snapshot artifacts/projection-pump-pre-promotion-traffic-snapshot.json \
+          | tee artifacts/projection-pump-inverse-readback.txt
 
     - name: Verify the validated projection pump revision is still current
       shell: bash
@@ -601,6 +700,11 @@ runs:
       with:
         name: projection-pump-deployment-evidence-${{ github.run_id }}-${{ github.run_attempt }}
         path: |
+          artifacts/projection-pump-deploy-control.txt
+          artifacts/projection-pump-existing-dark-readback.txt
+          artifacts/projection-pump-existing-latest-readback.txt
+          artifacts/projection-pump-first-dark-readback.txt
+          artifacts/projection-pump-inverse-readback.txt
           artifacts/projection-pump-candidate-release-vector.json
           artifacts/projection-pump-pre-promotion-traffic-snapshot.json
           artifacts/projection-pump-serving-release-vector.json

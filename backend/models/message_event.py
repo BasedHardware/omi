@@ -31,6 +31,16 @@ class AudioCustodyEvent(MessageEvent):
     channel: str
     frames: List[dict]
     receipt: dict
+    client_session_id: Optional[str] = None
+    recording_session_id: Optional[str] = None
+
+    def to_json(self):
+        wire = super().to_json()
+        if self.client_session_id is None:
+            wire.pop('client_session_id')
+        if self.recording_session_id is None:
+            wire.pop('recording_session_id')
+        return wire
 
 
 class ConversationEvent(MessageEvent):

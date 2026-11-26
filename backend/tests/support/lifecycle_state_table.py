@@ -609,6 +609,18 @@ STATES = (
             note='Publisher samples queued/leased/blocked_byok/dead_letter, not completed stock',
         ),
         row(
+            'finalization_receipt',
+            'fenced',
+            ('status',),
+            entry_writers=(Writer(FINALIZATION_MODULE, '_record_meeting_receipt_txn'),),
+            exit=Exit('return', f'{FINALIZATION_MODULE}:_record_meeting_receipt_txn'),
+            terminal=True,
+            owner=FINALIZATION_MODULE,
+            derived=True,
+            note='Ownership refusal ends this receipt attempt without changing the conversation or job. '
+            'A later attempt rechecks both owners before it may record a receipt.',
+        ),
+        row(
             'summary_debt',
             'pending',
             ('summary_first_pending_at', 'summary_due_at'),

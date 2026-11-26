@@ -1,10 +1,10 @@
 name: Backend Go Checks
 
-# Runs `make check` for backend-go: vet, the lint contract, the structural rules and every test
-# with the race detector, against Postgres 16 and the Firestore emulator. Neither set of tests
-# may skip here. Also refuses an edit to a migration that already exists on the base branch.
+# Runs `make check` for backend-go: vet, lint, structural rules and every test
+# with the race detector against Postgres 16 and the Firestore emulator. Also
+# refuses edits to migrations already applied on the base branch.
 on:
-  # Nightly calls run this same job against one immutable main snapshot.
+  # Nightly calls run the same check job against one immutable main snapshot.
   workflow_call:
     inputs:
       nightly_main_sha:
@@ -15,12 +15,8 @@ on:
   pull_request:
     paths:
       - "backend-go/**"
+      - "backend/**/*.py"
       - "backend/testing/finalization_replay/**"
-      - "backend/utils/conversations/finalizer.py"
-      - "backend/utils/conversations/process_conversation.py"
-      - "backend/utils/conversations/lifecycle.py"
-      - "backend/database/conversation_finalization_jobs.py"
-      - "backend/database/conversations.py"
       - ".github/scripts/go_port_tasks.py"
       - ".github/scripts/test_go_port_tasks.py"
       - ".github/workflows/backend-go-checks.yml"
@@ -44,7 +40,191 @@ env:
 
 jobs:
   port-tasks:
-    if: inputs.nightly_main_sha == ''
+    if: github.event_name == 'push' && inputs.nightly_main_sha == ''
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    defaults:
+      run:
+        shell: bash
+    permissions:
+      contents: read
+      pull-requests: read
+      issues: write
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+    outputs:
+      go_changed: ${{ steps.scope.outputs.go_changed }}
+      has_candidates: ${{ steps.scope.outputs.has_candidates }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+          fetch-depth: 0
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - name: Install port task dependency
+        run: python -m pip install PyYAML==6.0.3
+      - name: Find mapped Python PRs in first-parent merges
+        id: scope
+        env:
+          BEFORE: ${{ github.event.before }}
+          AFTER: ${{ github.sha }}
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          git merge-base --is-ancestor "$BEFORE" "$AFTER"
+          range="$BEFORE..$AFTER"
+          git log --first-parent --diff-merges=first-parent --format= --name-only -z "$range" \
+            > "$RUNNER_TEMP/changed-paths.nul"
+          python - "$RUNNER_TEMP/changed-paths.nul" "$RUNNER_TEMP/changed-files.json" <<'PY'
+          import json
+          import sys
+          from pathlib import Path
+
+          raw = Path(sys.argv[1]).read_bytes()
+          paths = raw.decode("utf-8", errors="surrogateescape").split("\0")
+          records = [{"filename": path} for path in paths if path]
+          Path(sys.argv[2]).write_text(json.dumps(records), encoding="utf-8")
+          PY
+          go_changed=$(python .github/scripts/go_port_tasks.py --scope-only < "$RUNNER_TEMP/changed-files.json")
+          if [[ "$go_changed" == true ]]; then
+            echo "go_changed=true" >> "$GITHUB_OUTPUT"
+          fi
+          git rev-list --first-parent --reverse "$range" > "$RUNNER_TEMP/port-merges"
+          : > "$RUNNER_TEMP/port-candidates.ndjson"
+          while IFS= read -r sha; do
+            prs=$(gh api --paginate --slurp "repos/$REPO/commits/$sha/pulls?per_page=100" |
+              jq -r --arg sha "$sha" '
+                add | .[] | select(.base.ref == "main" and .merged_at and .merge_commit_sha == $sha) | .number
+              ')
+            while IFS= read -r pr; do
+              [[ -n "$pr" ]] || continue
+              pr_data=$(gh api "repos/$REPO/pulls/$pr")
+              changed_count=$(jq -r '.changed_files' <<< "$pr_data")
+              merge_sha=$(jq -r '.merge_commit_sha' <<< "$pr_data")
+              title=$(jq -r '.title' <<< "$pr_data")
+              [[ "$merge_sha" == "$sha" ]] || { echo "PR #$pr merge SHA does not match $sha" >&2; exit 1; }
+              files_path="$RUNNER_TEMP/pr-$pr-files.json"
+              gh api --paginate --slurp "repos/$REPO/pulls/$pr/files?per_page=100" | jq 'add' > "$files_path"
+              mapped=$(python .github/scripts/go_port_tasks.py --mapped-only --changed-files "$changed_count" < "$files_path")
+              if jq -e 'length > 0' <<< "$mapped" > /dev/null; then
+                jq -cn --arg pr "$pr" --arg sha "$sha" --arg title "$title" \
+                  --argjson changed_count "$changed_count" \
+                  '{pr: ($pr | tonumber), merge_sha: $sha, title: $title, changed_files: $changed_count}' \
+                  >> "$RUNNER_TEMP/port-candidates.ndjson"
+              fi
+            done <<< "$prs"
+          done < "$RUNNER_TEMP/port-merges"
+          python - "$RUNNER_TEMP/port-candidates.ndjson" "$RUNNER_TEMP/port-candidates.json" <<'PY'
+          import json
+          import sys
+          from pathlib import Path
+
+          lines = Path(sys.argv[1]).read_text(encoding="utf-8").splitlines()
+          candidates = [json.loads(line) for line in lines if line]
+          Path(sys.argv[2]).write_text(json.dumps(candidates), encoding="utf-8")
+          if candidates:
+              print(f"Found {len(candidates)} mapped Python PR(s) to replay")
+          PY
+          if [[ -s "$RUNNER_TEMP/port-candidates.ndjson" ]]; then
+            echo "has_candidates=true" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Test the port generator and mapped paths
+        run: python -m unittest discover -s .github/scripts -p test_go_port_tasks.py -v
+      - uses: actions/setup-go@v7
+        if: steps.scope.outputs.has_candidates == 'true'
+        with:
+          go-version-file: backend-go/go.mod
+          cache-dependency-path: backend-go/go.sum
+      - uses: actions/setup-java@v5
+        if: steps.scope.outputs.has_candidates == 'true'
+        with:
+          distribution: temurin
+          java-version: "21"
+      - name: Install firebase-tools
+        if: steps.scope.outputs.has_candidates == 'true'
+        run: npm install -g firebase-tools@15
+      - uses: astral-sh/setup-uv@ecd24dd710f2fb0dca1693a67af11fc4a5c5ec84
+        if: steps.scope.outputs.has_candidates == 'true'
+        with:
+          enable-cache: true
+          cache-dependency-glob: backend/pylock.toml
+      - name: Compare replay results at each merge and first parent
+        if: steps.scope.outputs.has_candidates == 'true'
+        env:
+          TEST_DATABASE_URL: postgres://postgres:test@127.0.0.1:5432/postgres?sslmode=disable
+        run: |
+          set -euo pipefail
+          generator="$GITHUB_WORKSPACE/.github/scripts/go_port_tasks.py"
+          replay="$GITHUB_WORKSPACE/backend-go/tools/replay/test.sh"
+          scratch=$(mktemp -d "$RUNNER_TEMP/go-port-replay.XXXXXXXX")
+          worktree="$scratch/worktree"
+          cleanup() {
+            if [[ -d "$worktree" ]]; then
+              git worktree remove --force "$worktree"
+            fi
+            rm -rf "$scratch"
+          }
+          trap cleanup EXIT
+
+          replay_at() {
+            local sha=$1
+            local reports="$scratch/$sha"
+            [[ ! -f "$reports/gaps.json" ]] || return 0
+            git worktree add --quiet --detach "$worktree" "$sha"
+            (
+              cd "$worktree/backend"
+              ./scripts/sync-python-deps.sh
+              .venv/bin/python -c "import tiktoken; tiktoken.encoding_for_model('text-embedding-3-large')"
+            )
+            # Use the current wrapper with the target tree's source and corpus.
+            # Older commits predate the wrapper's value-free report mode.
+            REPLAY_TASK_OUTPUT_DIR="$reports" "$replay" "$worktree/backend-go"
+            git worktree remove --force "$worktree"
+          }
+
+          : > "$scratch/tasks.ndjson"
+          while IFS= read -r candidate; do
+            pr=$(jq -r '.pr' <<< "$candidate")
+            sha=$(jq -r '.merge_sha' <<< "$candidate")
+            parent=$(git rev-parse "$sha^1")
+            title=$(jq -r '.title' <<< "$candidate")
+            changed_count=$(jq -r '.changed_files' <<< "$candidate")
+            replay_at "$parent"
+            replay_at "$sha"
+            python "$generator" --pr "$pr" --pr-title="$title" --merge-sha "$sha" --parent-sha "$parent" \
+              --changed-files "$changed_count" \
+              --oracle-report "$scratch/$sha/parity.json" \
+              --oracle-report "$scratch/$sha/gaps.json" \
+              --parent-report "$scratch/$parent/parity.json" \
+              --parent-report "$scratch/$parent/gaps.json" \
+              < "$RUNNER_TEMP/pr-$pr-files.json" >> "$scratch/tasks.ndjson"
+          done < "$RUNNER_TEMP/port-candidates.ndjson"
+          jq -s 'add // []' "$scratch/tasks.ndjson" > "$RUNNER_TEMP/go-port-tasks.json"
+      - name: Publish replay follow-ups
+        if: steps.scope.outputs.has_candidates == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        run: |
+          python .github/scripts/go_port_tasks.py --publish "$REPO" --summary "$GITHUB_STEP_SUMMARY" \
+            < "$RUNNER_TEMP/go-port-tasks.json"
+
+  port-task-tests:
+    if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     defaults:
@@ -58,59 +238,38 @@ jobs:
     steps:
       - uses: actions/checkout@v7
         with:
-          ref: ${{ inputs.nightly_main_sha || github.sha }}
+          ref: ${{ github.sha }}
           persist-credentials: false
-          fetch-depth: ${{ github.event_name == 'push' && '0' || '1' }}
-      - name: Scope Go checks and find first-parent merges
-        if: github.event_name == 'push'
-        id: scope
-        env:
-          BEFORE: ${{ github.event.before }}
-          AFTER: ${{ github.sha }}
-        run: |
-          git merge-base --is-ancestor "$BEFORE" "$AFTER"
-          range="$BEFORE..$AFTER"
-          changed=$(git log --first-parent --diff-merges=first-parent --format= --name-only "$range" -- \
-            backend-go/ .github/workflows/backend-go-checks.yml \
-            backend/testing/finalization_replay/ backend/utils/conversations/finalizer.py \
-            backend/utils/conversations/process_conversation.py backend/utils/conversations/lifecycle.py \
-            backend/database/conversation_finalization_jobs.py backend/database/conversations.py)
-          if [[ -n "$changed" ]]; then
-            echo "go_changed=true" >> "$GITHUB_OUTPUT"
-          fi
-          git rev-list --first-parent --merges --reverse "$range" > "$RUNNER_TEMP/port-merges"
       - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
       - name: Install port task dependency
         run: python -m pip install PyYAML==6.0.3
-      - name: Draft port tasks for merged PRs
-        if: github.event_name == 'push'
+      - name: Scope the PR to Go behavior
+        id: scope
         env:
           GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
         run: |
-          while IFS= read -r sha; do
-            prs=$(gh api --paginate --slurp "repos/$GITHUB_REPOSITORY/commits/$sha/pulls?per_page=100" |
-              jq -r --arg sha "$sha" '
-                add | .[] | select(.base.ref == "main" and .merged_at and .merge_commit_sha == $sha) | .number
-              ')
-            if [[ -z "$prs" ]]; then
-              echo "No merged main PR associated with $sha"
-              continue
-            fi
-            while IFS= read -r pr; do
-              count=$(gh api "repos/$GITHUB_REPOSITORY/pulls/$pr" --jq .changed_files)
-              echo "Port task drafts for PR #$pr"
-              gh api --paginate --slurp "repos/$GITHUB_REPOSITORY/pulls/$pr/files?per_page=100" |
-                jq 'add' | python .github/scripts/go_port_tasks.py --pr "$pr" --changed-files "$count"
-            done <<< "$prs"
-          done < "$RUNNER_TEMP/port-merges"
+          set -euo pipefail
+          changed_count=$(gh api "repos/$REPO/pulls/$PR_NUMBER" --jq .changed_files)
+          gh api --paginate --slurp "repos/$REPO/pulls/$PR_NUMBER/files?per_page=100" | jq 'add' > "$RUNNER_TEMP/pr-files.json"
+          go_changed=$(python .github/scripts/go_port_tasks.py --scope-only --changed-files "$changed_count" < "$RUNNER_TEMP/pr-files.json")
+          if [[ "$go_changed" == true ]]; then
+            echo "go_changed=true" >> "$GITHUB_OUTPUT"
+          fi
       - name: Test the port generator and mapped paths
         run: python -m unittest discover -s .github/scripts -p test_go_port_tasks.py -v
 
   check:
-    needs: port-tasks
-    if: ${{ !cancelled() && (github.event_name != 'push' || inputs.nightly_main_sha != '' || needs.port-tasks.outputs.go_changed == 'true') }}
+    needs: [port-tasks, port-task-tests]
+    if: >-
+      ${{ !cancelled() && (
+        github.event_name == 'workflow_call' ||
+        (github.event_name == 'push' && needs.port-tasks.outputs.go_changed == 'true') ||
+        (github.event_name == 'pull_request' && needs.port-task-tests.outputs.go_changed == 'true')
+      ) }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
     defaults:

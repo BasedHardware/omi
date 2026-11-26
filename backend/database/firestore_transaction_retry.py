@@ -40,6 +40,12 @@ except Exception:  # pragma: no cover - lightweight tests may stub only google.c
         """Stub-safe fallback for test environments without google-api-core."""
 
 
+try:
+    from google.cloud.firestore_v1.transaction import Transaction as _SDKTransaction
+except ImportError:  # Unit tests may stub the Firestore SDK.
+    _SDKTransaction = None  # type: ignore[reportAssignmentType]
+
+
 logger = logging.getLogger(__name__)
 
 T = TypeVar("T")
@@ -102,6 +108,33 @@ def _is_transaction_contention(error: BaseException) -> bool:
     return False
 
 
+def is_transaction_retry_failure(error: BaseException) -> bool:
+    """Classify expected storage failures for a request boundary, never for replay."""
+    return isinstance(error, FirestoreContentionExhausted) or _is_transaction_contention(error)
+
+
+def transaction_with_safe_rollback(transaction: Any) -> Any:
+    """Keep Firestore 2.20's rollback from replacing begin, body, or commit failures."""
+    if _SDKTransaction is None or not isinstance(transaction, _SDKTransaction):
+        return transaction
+    rollback: Callable[[], None] = getattr(transaction, '_rollback')
+
+    def best_effort_rollback() -> None:
+        if transaction.in_progress:
+            try:
+                rollback()
+            except Exception as error:
+                logger.warning('firestore_transaction_rollback_failed exception_type=%s', type(error).__name__)
+
+    setattr(transaction, '_rollback', best_effort_rollback)
+    return transaction
+
+
+def is_expired_transaction(error: BaseException) -> bool:
+    """True when ``error`` itself (not its causes) reports a retired transaction chain."""
+    return _is_expired_transaction(error)
+
+
 _retry_deadline: ContextVar[float | None] = ContextVar("firestore_transaction_retry_deadline", default=None)
 
 
@@ -155,6 +188,7 @@ def run_with_transaction_contention_retry(
     operation_name: str,
     max_attempts: int = DEFAULT_MAX_ATTEMPTS,
     deadline: float | None = None,
+    reserve_retry_time: bool = True,
     sleep: Callable[[float], None] = time.sleep,
     random_value: Callable[[], float] = random.random,
     monotonic: Callable[[], float] = time.monotonic,
@@ -184,6 +218,8 @@ def run_with_transaction_contention_retry(
     270 s; callers keep a post-transaction margin (the sync handler's 120 s)
     to absorb that tail.  Callers without a deadline keep the attempt-only
     bound — expiry at three fresh chains, Aborted at ``max_attempts``.
+    Callers that enforce the deadline on each RPC can set
+    ``reserve_retry_time=False`` to retry in any remaining time.
     """
 
     if max_attempts < 1:
@@ -198,7 +234,7 @@ def run_with_transaction_contention_retry(
         if attempt > 1 and deadline is not None:
             remaining = deadline - monotonic()
             reserve = max(last_attempt_seconds * RETRY_RESERVE_FACTOR, RETRY_RESERVE_FLOOR_SECONDS)
-            if remaining < reserve:
+            if remaining <= 0 or (reserve_retry_time and remaining < reserve):
                 logger.error(
                     "firestore_transaction_contention operation=%s attempt=%d/%d outcome=deadline_exhausted "
                     "remaining_ms=%d reserve_ms=%d",
@@ -217,7 +253,7 @@ def run_with_transaction_contention_retry(
                 raise error
         attempt_started = monotonic()
         try:
-            result = operation(transaction_factory())
+            result = operation(transaction_with_safe_rollback(transaction_factory()))
             if attempt > 1:
                 logger.info(
                     "firestore_transaction_contention operation=%s attempt=%d/%d outcome=recovered",

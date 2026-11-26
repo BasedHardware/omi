@@ -18,6 +18,7 @@ import pytest
 
 from database import conversations_v3 as store
 from utils.conversations.v3 import service
+from utils.sync.assignment import assign_in_transaction
 from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore, StrictFirestoreSnapshot
 
 UID = 'synthetic'
@@ -117,6 +118,8 @@ async def run_pass(strict, monkeypatch, sources):
     committed = []
 
     async def blocking(pool, fn, *args, **kwargs):
+        if fn is store.clear_terminal_pending:
+            return None
         if fn is original_load:
             return deepcopy(recordings), deepcopy(existing), []
         if fn is store.adoptable:
@@ -135,6 +138,8 @@ async def run_pass(strict, monkeypatch, sources):
     monkeypatch.setattr(service, 'run_blocking', blocking)
     monkeypatch.setattr(service, 'drain_processing', no_processing)
     monkeypatch.setattr(service, 'has_pending', lambda uid: False)
+    # A window still settling on its landing clock schedules a follow-up pass; no task target here.
+    monkeypatch.setattr(service, 'enqueue', lambda *args, **kwargs: None)
     monkeypatch.setattr(service.models, 'outline', outline)
     monkeypatch.setattr(service.visibility, 'hydrate_recognition', lambda uid, recordings, windows: None)
     monkeypatch.setattr(service.context, 'outline_sources', lambda *a: ({}, [], []))
@@ -448,3 +453,99 @@ async def test_fresh_window_at_a_retained_start_gets_its_own_id(strict, monkeypa
         assert committed and all(len(ids) == len(set(ids)) for ids in committed), committed
     keys = claim_keys('a', strict)
     assert len(keys) == len(set(keys)) == 1
+
+
+def sync_recording(strict, cid, offset, *, candidate=None):
+    row = recording(
+        cid,
+        T0 + timedelta(seconds=offset),
+        [
+            {
+                'id': cid,
+                'start': 0,
+                'end': 20,
+                'text': f'The synthetic speaker described {cid} in detail.',
+                'is_user': True,
+            }
+        ],
+        [],
+    )
+    return assign_in_transaction(
+        strict.transaction(),
+        strict.collection('users').document(UID),
+        row,
+        candidate_id=candidate,
+        decode=deepcopy,
+        encode=deepcopy,
+        invalidate=lambda payload: None,
+    )[0]
+
+
+def publish_card(strict, rid, cid):
+    source = strict.rows[path(rid)]
+    card = {
+        'id': cid,
+        'v3_derived': True,
+        'status': 'completed',
+        'tile_state': 'done',
+        'started_at': source['started_at'],
+        'finished_at': source['finished_at'],
+        'v3_recording_ids': [rid],
+        'transcript_segments': deepcopy(source['transcript_segments']),
+        'structured': {'title': 'A user-edited title'},
+        'user_title': True,
+    }
+    strict.rows[path(cid)] = card
+    source['claims'] = [{'conversation_id': cid, 'start': card['started_at'], 'end': card['finished_at']}]
+    return deepcopy(card)
+
+
+@pytest.mark.asyncio
+async def test_sync_redirect_chain_preserves_finished_claims_and_unrelated_speech(strict, monkeypatch):
+    sync_recording(strict, 'early', 0)
+    sync_recording(strict, 'middle', 180)
+    sync_recording(strict, 'late', 360)
+    card = publish_card(strict, 'late', 'finished')
+    claimed = [(card['id'], card['started_at'], card['finished_at'])]
+
+    assert sync_recording(strict, 'bridge-late', 270, candidate='late')['id'] == 'middle'
+    assert strict.rows[path('late')]['sync_merged_into'] == 'middle'
+    assert claim_keys('late', strict) == []
+    assert claim_keys('middle', strict) == claimed
+    assert strict.rows[path('finished')] == {**card, 'v3_recording_ids': ['middle']}
+
+    for _ in range(2):
+        assert sync_recording(strict, 'bridge-early', 90, candidate='middle')['id'] == 'early'
+    assert strict.rows[path('middle')]['sync_merged_into'] == 'early'
+    assert claim_keys('middle', strict) == []
+    assert claim_keys('early', strict) == claimed
+    assert strict.rows[path('finished')] == {**card, 'v3_recording_ids': ['early']}
+
+    await run_pass(strict, monkeypatch, ['early'])
+    rows = [row for row in strict.rows.values() if row.get('v3_derived') and not row.get('deleted')]
+    by_segment = {}
+    for row in rows:
+        for segment in row['transcript_segments']:
+            by_segment.setdefault(segment['id'], []).append(row['id'])
+    assert by_segment['late'] == ['finished']
+    assert set(by_segment) == {'early', 'bridge-early', 'middle', 'bridge-late', 'late'}
+    assert all(len(owners) == 1 for owners in by_segment.values())
+
+
+@pytest.mark.parametrize('condition', ['playback', 'tombstone', 'different_speech'])
+def test_sync_keeps_donor_when_custody_cannot_be_transferred(strict, condition):
+    sync_recording(strict, 'early', 0)
+    sync_recording(strict, 'late', 180)
+    card = publish_card(strict, 'late', 'finished')
+    if condition == 'playback':
+        strict.rows[path('late')]['audio_files'] = [{'id': 'source-file'}]
+    elif condition == 'tombstone':
+        strict.rows[('users', UID, 'deleted_conversations', 'finished')] = {'deleted': True}
+    elif condition == 'different_speech':
+        strict.rows[path('finished')]['transcript_segments'][0]['text'] = 'Edited by the user.'
+    before = deepcopy(strict.rows[path('late')])
+    assert sync_recording(strict, 'bridge', 90, candidate='late')['id'] == 'early'
+    assert strict.rows[path('late')] == before
+    assert strict.rows[path('finished')]['v3_recording_ids'] == ['late']
+    assert claim_keys('early', strict) == []
+    assert claim_keys('late', strict) == [(card['id'], card['started_at'], card['finished_at'])]

@@ -2,6 +2,83 @@
   "unreleased": [],
   "releases": [
     {
+      "version": "0.12.584",
+      "date": "2026-11-26",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.12.583",
+      "date": "2026-11-25",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.12.582",
+      "date": "2026-11-24",
+      "changes": [
+        "Fixed conversation details getting stuck on processing after opening a saved recording"
+      ]
+    },
+    {
+      "version": "0.12.581",
+      "date": "2026-11-23",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.12.580",
+      "date": "2026-11-23",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.12.579",
+      "date": "2026-11-23",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.12.578",
+      "date": "2026-11-22",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.12.577",
+      "date": "2026-11-21",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.12.576",
+      "date": "2026-11-21",
+      "changes": [
+        "Fixed Chat Prompt Lab failures by using the same active Claude model as chat"
+      ]
+    },
+    {
+      "version": "0.12.575",
+      "date": "2026-11-20",
+      "changes": [
+        "The Floating Bar no longer steals keyboard focus or stays visible while snoozed when you work in another app",
+        "Choose multiple Google calendars to read and import while keeping new events on your primary calendar",
+        "Fixed agent runs that stall on a provider or silent subprocess hanging forever by stopping them at a configurable deadline",
+        "Fixed UI freezes while saving SD card recordings and duplicate audio accounting when stopping a download",
+        "Fixed Screen Capture turning itself back on after you switch it off",
+        "Updated the bundled macOS Node.js runtime to v22.23.5 to include the latest security fixes",
+        "Your AI user profile is now kept in your Omi account and updated automatically, so it stays the same on every device",
+        "Fixed silent conversation deletion failures and stale recording rows, with retry feedback when Omi is busy"
+      ]
+    },
+    {
       "version": "0.12.574",
       "date": "2026-11-11",
       "changes": [

@@ -7,7 +7,7 @@
 
 # Device firmware. Behaviour here ships to hardware in the field and cannot be rolled back the
 # way a server deploy can.
-/omi/firmware/** @TuEmb
+/omi/firmware/** @Git-on-my-level
 
 # BLE and offline sync. These carry recording data between the device and the backend, and a
 # change that looks local has repeatedly broken capture or stranded recordings on devices.

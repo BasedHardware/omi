@@ -25,6 +25,31 @@ final class OnDeviceTranscriptionUsed extends RegisteredEvent {
   Map<String, Object> get properties => {"route": route.wireName, "audio_ms": audioMs, "segment_count": segmentCount};
 }
 
+enum WalWriteReceiptResult {
+  replay("replay"),
+  invalid("invalid"),
+  deletedOwner("deleted_owner"),
+  missingAudio("missing_audio"),
+  contentMismatch("content_mismatch"),
+  budgetExhausted("budget_exhausted"),
+  scanUnavailable("scan_unavailable"),
+  indexUnavailable("index_unavailable"),
+  publishFailed("publish_failed");
+  const WalWriteReceiptResult(this.wireName);
+  final String wireName;
+}
+
+final class WalWriteReceipt extends RegisteredEvent {
+  const WalWriteReceipt({required this.result, required this.recovered, required this.withheld});
+  final WalWriteReceiptResult result;
+  final int recovered;
+  final int withheld;
+  @override
+  String get wireName => "WAL Write Receipt";
+  @override
+  Map<String, Object> get properties => {"result": result.wireName, "recovered": recovered, "withheld": withheld};
+}
+
 enum SavedPendantReconnectObservedTrigger {
   launch("launch"),
   resume("resume"),
@@ -2536,7 +2561,9 @@ enum PaywallOpenedSource {
   onboarding("onboarding"),
   ahaFirstSummary("aha_first_summary"),
   freeCap("free_cap"),
-  onPhoneBanner("on_phone_banner");
+  onPhoneBanner("on_phone_banner"),
+  heldRecording("held_recording"),
+  heldRecordingDetail("held_recording_detail");
   const PaywallOpenedSource(this.wireName);
   final String wireName;
 }
@@ -2626,7 +2653,9 @@ enum UpgradePlanSelectedSource {
   onboarding("onboarding"),
   ahaFirstSummary("aha_first_summary"),
   freeCap("free_cap"),
-  onPhoneBanner("on_phone_banner");
+  onPhoneBanner("on_phone_banner"),
+  heldRecording("held_recording"),
+  heldRecordingDetail("held_recording_detail");
   const UpgradePlanSelectedSource(this.wireName);
   final String wireName;
 }
@@ -2670,6 +2699,42 @@ final class UpgradeSucceededAttributed extends RegisteredEvent {
   String get wireName => "Upgrade Succeeded Attributed";
   @override
   Map<String, Object> get properties => {"plan": plan.wireName, "billing_interval": billingInterval.wireName};
+}
+
+enum UpgradeBillingProviderProvider {
+  stripe("stripe"),
+  play("play");
+  const UpgradeBillingProviderProvider(this.wireName);
+  final String wireName;
+}
+
+enum UpgradeBillingProviderStage {
+  selected("selected"),
+  succeeded("succeeded"),
+  cancelled("cancelled"),
+  pending("pending"),
+  failed("failed");
+  const UpgradeBillingProviderStage(this.wireName);
+  final String wireName;
+}
+
+enum UpgradeBillingProviderBillingInterval {
+  month("month"),
+  year("year"),
+  unknown("unknown");
+  const UpgradeBillingProviderBillingInterval(this.wireName);
+  final String wireName;
+}
+
+final class UpgradeBillingProvider extends RegisteredEvent {
+  const UpgradeBillingProvider({required this.provider, required this.stage, required this.billingInterval});
+  final UpgradeBillingProviderProvider provider;
+  final UpgradeBillingProviderStage stage;
+  final UpgradeBillingProviderBillingInterval billingInterval;
+  @override
+  String get wireName => "Upgrade Billing Provider";
+  @override
+  Map<String, Object> get properties => {"provider": provider.wireName, "stage": stage.wireName, "billing_interval": billingInterval.wireName};
 }
 
 enum SubscriptionPlanChangedPreviousPlan {
@@ -3101,7 +3166,9 @@ enum PaywallVariantShownSource {
   onboarding("onboarding"),
   ahaFirstSummary("aha_first_summary"),
   freeCap("free_cap"),
-  onPhoneBanner("on_phone_banner");
+  onPhoneBanner("on_phone_banner"),
+  heldRecording("held_recording"),
+  heldRecordingDetail("held_recording_detail");
   const PaywallVariantShownSource(this.wireName);
   final String wireName;
 }
@@ -3258,6 +3325,44 @@ final class PendantFramesDropped extends RegisteredEvent {
   String get wireName => "Pendant Frames Dropped";
   @override
   Map<String, Object> get properties => {"count": count, "reason": reason.wireName};
+}
+
+enum MobileHeldWalBacklogTrigger {
+  startup("startup"),
+  foreground("foreground"),
+  hourly("hourly");
+  const MobileHeldWalBacklogTrigger(this.wireName);
+  final String wireName;
+}
+
+enum MobileHeldWalBacklogHoldState {
+  bg300("bg300"),
+  fgPreview300("fg_preview300"),
+  fg60("fg60"),
+  unknown("unknown");
+  const MobileHeldWalBacklogHoldState(this.wireName);
+  final String wireName;
+}
+
+enum MobileHeldWalBacklogCohort {
+  on("on"),
+  off("off");
+  const MobileHeldWalBacklogCohort(this.wireName);
+  final String wireName;
+}
+
+final class MobileHeldWalBacklog extends RegisteredEvent {
+  const MobileHeldWalBacklog({required this.trigger, required this.heldWalCount, required this.oldestHeldAgeS, required this.holdFlagOn, required this.holdState, required this.cohort});
+  final MobileHeldWalBacklogTrigger trigger;
+  final int heldWalCount;
+  final int oldestHeldAgeS;
+  final bool holdFlagOn;
+  final MobileHeldWalBacklogHoldState holdState;
+  final MobileHeldWalBacklogCohort cohort;
+  @override
+  String get wireName => "Mobile Held WAL Backlog";
+  @override
+  Map<String, Object> get properties => {"trigger": trigger.wireName, "held_wal_count": heldWalCount, "oldest_held_age_s": oldestHeldAgeS, "hold_flag_on": holdFlagOn, "hold_state": holdState.wireName, "cohort": cohort.wireName};
 }
 
 final class WalReconcilePollSummary extends RegisteredEvent {
@@ -3555,6 +3660,22 @@ final class SubscriptionPaymentIssueMonthlyFailed extends RegisteredEvent {
   Map<String, Object> get properties => {"reason": reason.wireName};
 }
 
+final class SubscriptionQuietRowShown extends RegisteredEvent {
+  const SubscriptionQuietRowShown();
+  @override
+  String get wireName => "Subscription Quiet Row Shown";
+  @override
+  Map<String, Object> get properties => {};
+}
+
+final class SubscriptionQuietRowTapped extends RegisteredEvent {
+  const SubscriptionQuietRowTapped();
+  @override
+  String get wireName => "Subscription Quiet Row Tapped";
+  @override
+  Map<String, Object> get properties => {};
+}
+
 final class MobileDeviceHealthDailyRingRead extends RegisteredEvent {
   const MobileDeviceHealthDailyRingRead({required this.disconnectsDuringRingRead, required this.disconnectsWithRingReadState, required this.rssiBelowMinus90, required this.rssiMinus90ToMinus80, required this.rssiMinus80ToMinus60, required this.rssiAtLeastMinus60, required this.rssiUnknown});
   final int disconnectsDuringRingRead;
@@ -3568,6 +3689,25 @@ final class MobileDeviceHealthDailyRingRead extends RegisteredEvent {
   String get wireName => "Mobile Device Health Daily";
   @override
   Map<String, Object> get properties => {"disconnects_during_ring_read": disconnectsDuringRingRead, "disconnects_with_ring_read_state": disconnectsWithRingReadState, "ring_read_disconnect_rssi_below_minus90": rssiBelowMinus90, "ring_read_disconnect_rssi_minus90_to_minus80": rssiMinus90ToMinus80, "ring_read_disconnect_rssi_minus80_to_minus60": rssiMinus80ToMinus60, "ring_read_disconnect_rssi_at_least_minus60": rssiAtLeastMinus60, "ring_read_disconnect_rssi_unknown": rssiUnknown};
+}
+
+enum WalStopDrainResult {
+  drained("drained"),
+  pending("pending"),
+  failed("failed"),
+  superseded("superseded");
+  const WalStopDrainResult(this.wireName);
+  final String wireName;
+}
+
+final class WalStopDrain extends RegisteredEvent {
+  const WalStopDrain({required this.lateFramesIndexed, required this.result});
+  final int lateFramesIndexed;
+  final WalStopDrainResult result;
+  @override
+  String get wireName => "WAL Stop Drain";
+  @override
+  Map<String, Object> get properties => {"late_frames_indexed": lateFramesIndexed, "result": result.wireName};
 }
 
 enum OrphanAudioRecoveryResult {
@@ -3661,4 +3801,27 @@ final class OrphanAudioReclaim extends RegisteredEvent {
   String get wireName => "Orphan Audio Reclaim";
   @override
   Map<String, Object> get properties => {"deleted_files": deletedFiles, "deleted_bytes": deletedBytes, "working": working, "unknown_capture_time": unknownCaptureTime, "capture_too_young": captureTooYoung, "mtime_too_young": mtimeTooYoung, "outside_documents": outsideDocuments, "pass_cap": passCap, "sources_changed": sourcesChanged, "referenced": referenced, "file_changed": fileChanged, "sidecar_type": sidecarType, "duration_ms": durationMs, "result": result.wireName, "census_complete": censusComplete};
+}
+
+final class WalCustodyAudit extends RegisteredEvent {
+  const WalCustodyAudit({required this.agreeCovered, required this.agreePending, required this.disagree, required this.unknown, required this.released});
+  final int agreeCovered;
+  final int agreePending;
+  final int disagree;
+  final int unknown;
+  final int released;
+  @override
+  String get wireName => "WAL Custody Audit";
+  @override
+  Map<String, Object> get properties => {"agree_covered": agreeCovered, "agree_pending": agreePending, "disagree": disagree, "unknown": unknown, "released": released};
+}
+
+final class AppForegroundEnded extends RegisteredEvent {
+  const AppForegroundEnded({required this.foregroundSeconds, required this.capturingSeconds});
+  final int foregroundSeconds;
+  final int capturingSeconds;
+  @override
+  String get wireName => "App Foreground Ended";
+  @override
+  Map<String, Object> get properties => {"foreground_seconds": foregroundSeconds, "capturing_seconds": capturingSeconds};
 }

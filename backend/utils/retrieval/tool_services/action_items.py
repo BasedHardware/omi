@@ -30,11 +30,16 @@ logger = logging.getLogger(__name__)
 def create_action_item(uid: str, data: Dict[str, Any], **kwargs) -> str:
     """Shared create boundary; callers retain their HTTP/tool error contracts."""
     validate_task_sources(uid, [data])
+    if data.get('conversation_id') is not None:
+        # The preflight source-validation switch does not disable the commit fence.
+        kwargs['check_undo_removals'] = True
     return action_items_db.create_action_item(uid, data, **kwargs)
 
 
 def create_action_items_batch(uid: str, items: List[Dict[str, Any]]) -> List[str]:
     validate_task_sources(uid, items)  # Validate the whole batch before any write.
+    if any(item.get('conversation_id') is not None for item in items):
+        return action_items_db.create_action_items_batch(uid, items, check_undo_removals=True)
     return action_items_db.create_action_items_batch(uid, items)
 
 

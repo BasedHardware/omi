@@ -192,7 +192,7 @@ maintenance (`utils/batch_pipeline/serving.py:start_serving_from_env.run`).
 
 | Machine:state | Entry writer | Exit writer | Deadline field | Dwell metric | Alert | Flag / kill switch | Rollback behavior |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| `batch:record_pending` | `utils/batch_pipeline/live.py:register_recording` | Normal record admission; `utils/batch_pipeline/live.py:drain_recordings` defer CAS → retained `dead` for aged barrier refusal | `record_dead_letter_deadline_at`, stamped on first literal barrier failure; 14 days, including old rows | `omi_batch_record_dead_letter_total`, `omi_batch_record_dead_letter_units`, `omi_batch_record_dead_letter_observed_at_seconds`; existing pending dwell | `omi-batch-record-dead-letter-volume` (agent); existing pending dwell page | `BATCH_HELD_DEAD_LETTER_ENABLED` (true) | False preserves ordinary defer; no custody/audio/conversation writes; private OIDC requeue-record |
+| `batch:record_pending` | `utils/batch_pipeline/live.py:register_recording` | Normal record admission; `utils/batch_pipeline/live.py:drain_recordings` defer CAS → retained `dead` for aged barrier refusal | `record_dead_letter_deadline_at`, stamped on first literal barrier failure; 14 days, including old rows | `omi_batch_record_dead_letter_total`, `omi_batch_record_dead_letter_units`, `omi_batch_record_dead_letter_observed_at_seconds`; `omi_batch_record_barrier_refusals_total{blocker,token_kind}` and `omi_batch_record_barrier_aged_total{blocker,token_kind}` (`RECORD_BARRIER_CAUSE_METRICS`); existing pending dwell | `omi-batch-record-dead-letter-volume` (agent); existing pending dwell page | `BATCH_HELD_DEAD_LETTER_ENABLED` (true) | False preserves ordinary defer; no custody/audio/conversation writes; private OIDC requeue-record |
 | `batch:ready` | `J:Scheduler.enqueue_in_transaction`, `J:Scheduler.requeue_quarantined_in_transaction` | `J:Scheduler._pull_shard.commit` | none | T | T | No held-specific switch | Existing queue/ownership fences |
 | `batch:leased` | `J:Scheduler._pull_shard.commit` | `J:Scheduler.complete`, `J:Scheduler.recover` | `lease_until` | T | T | No held-specific switch | Token-fenced lease expiry |
 | `batch:retry` | `utils/batch_pipeline/scheduler.py:_defer`, `J:Scheduler.defer` | `J:Scheduler.recover`, then `J:Scheduler._pull_shard.commit` | `available_at` retry schedule; no total dwell deadline | T | T | No held-specific switch | Retain attempts and custody |
@@ -211,6 +211,45 @@ maintenance (`utils/batch_pipeline/serving.py:start_serving_from_env.run`).
 (`R:cancel_fenced_recovery`). Prepared/running intents never age-expire into
 dead letters. Assignment holds can set `recovery_state=held` on a **committed**
 job; that does not turn it into a worker quarantine.
+
+#### `retained_digest_changed` refusal (recovery)
+
+A retained-audio manifest pins every source to `(bucket, path, generation,
+pcm_sha256)`. When the pre-STT `QuarantineRecovery._recover_steps` fetch
+(`ArtifactStore.fetch_audio(confirm_retained_digest=True)`) sees a decoded-PCM
+SHA-256 mismatch, it re-authorizes and re-reads the **same** pinned ref exactly
+once (`source_audio.materialize(confirm_mismatch=...)`); a second mismatch is a
+repeatable disagreement rather than one transient read, and raises the typed
+`RetainedPcmDigestChanged`. Recovery then commits
+`failed_held` with `recovery.refusal.reason='retained_digest_changed'` through
+`R:RecoveryStore.hold_retained_digest_changed` (the shared
+`_hold_unrecoverable_input` privacy/content fence: prepared intent, matching
+token and audio_uri, no result, no artifact write or delete, no paid work).
+It then emits the existing omi_fallback_total counter once with
+`component=stt_selection`, `from_mode=batch`, `to_mode=none`,
+`reason=retained_digest_changed`, and `outcome=degraded`, which also produces
+the matching content-free warning. The exception carries no ref, URI or bytes;
+a generic `ValueError` with the same message keeps its retryable 500 path.
+Rollback: `BATCH_PIPELINE_RETAINED_DIGEST_HOLD_ENABLED=false` restores the
+legacy single read and retryable error with no confirmation read, state write
+or metric.
+
+Consumers: `recovery_candidates`/discovery and `R:RecoveryStore.prepare`
+already exclude `failed_held`, so a committed refusal never re-reads the source
+and a duplicate delivery acks `held`. `held_without_recovery` treats the row
+like any `failed_held`: ordered merge and the held-partial projection keep
+their existing classification. The `held_expired` stock still ages through
+`expire_held_in_transaction` and the same `held_deadline_at`; but for this
+refusal only, the two automatic requeue entry points — nightly
+`R:RecoveryStore.requeue_quarantined(dead_before=...)` and intake-status
+`J:Scheduler.redrive_in_transaction(operator=False)` — skip the row via the
+shared `retained_digest_changed_held` predicate. `held_requeue_eligible`, the
+expiry window, retention and the reviewed operator redrive
+(`requeue_quarantined` without `dead_before`, `redrive_dead`,
+`expected_job` repair) are unchanged and still work in every flag mode.
+The fallback counter counts the hold transition through its reason label; the
+T5 `batch_quality_gate` separately counts durable `failed_held` units. No new
+metric.
 
 ### Projection receipt
 
@@ -325,6 +364,14 @@ Phase 4a, [#24736](https://github.com/BasedHardware/omi/pull/24736), merge
 on `failed_held`. Eligible legacy rows get a full window on first examination,
 never immediate expiry based on capture age. Provider-STT holds are excluded
 from GPU expiry/requeue.
+
+Scheduler quarantine also writes `quarantine_diagnostic` for the last
+scheduler quarantine and records `worker_failure` when supplied. Lease expiry and typed
+worker validation have distinct diagnostic classes. Attempt exhaustion without
+typed worker evidence records an unknown underlying cause. Legacy rows and
+quarantines written outside the scheduler may lack the diagnostic entirely.
+Absence carries no retry or settlement authority. Provider and artifact evidence
+remain in their existing owning records.
 
 `R:expire_held_in_transaction`, called through `R:RecoveryStore.expire_held`
 and `RecoveryStore.checked`, rechecks content/ledger ownership, privacy,
@@ -567,6 +614,8 @@ for these retained shapes. Defaults are code defaults, not measured live values.
 | Flag | Default | Kill-switch location / behavior when disabled |
 | --- | --- | --- |
 | `BATCH_HELD_DEAD_LETTER_ENABLED` | true | `config/policy/kill_switches.py:KILL_SWITCHES`, read by `config/batch_pipeline.py:batch_held_dead_letter_enabled`; set false on serving and worker roles: no new held/record deadlines/expiry, record stock sampling or GPU nightly pass; private record and manual GPU requeue and existing projection release/nightly recovery remain; ghost settle uses its own switch |
+| `BATCH_PARKED_JOB_SWEEPER_ENABLED` | true | `config/batch_pipeline.py:parked_job_sweeper_enabled`; false, a durable `disabled=true` on the `parked_job_sweep` control document, or `BATCH_HELD_DEAD_LETTER_ENABLED=false` stops the hourly parked GPU page. The page publishes expiring aggregates and never changes a job. |
+| `BATCH_PIPELINE_RETAINED_DIGEST_HOLD_ENABLED` | true | `config/policy/kill_switches.py:KILL_SWITCHES`, read inline in `utils/batch_pipeline/quarantine_recovery.py`; false restores the legacy single pinned-source read so a digest mismatch stays a retryable error with no confirmation read, hold write or metric; already-held rows keep their refusal and stay out of automatic nightly and intake-status redrive |
 | `BATCH_PIPELINE_PROJECTION_HOLD_RECOVERY_ENABLED` | true | `config/batch_pipeline.py:projection_hold_recovery_enabled`; false restores older release scope/attempt fences and conflict waiting policy |
 | `BATCH_PIPELINE_PROJECTION_GHOST_SETTLE_ENABLED` | false | `config/policy/kill_switches.py`, `config/batch_pipeline.py:projection_ghost_settle_enabled`; false classifies existing reads only, no ghost writes or extra queries; record dead-letter and assignment expiry use the held switch independently |
 | `PROJECTION_PRIVACY_REFUSAL_RESUME` | true | `config/policy/kill_switches.py`, `config/batch_pipeline.py:projection_privacy_refusal_resume_enabled`; off disables retry of stale privacy refusals; actual privacy fences remain unconditional |
@@ -675,22 +724,6 @@ extra queries. Neither uses `BATCH_HELD_DEAD_LETTER_ENABLED`.
 No enablement is included: the lead owns a separate canary and expansion
 proposal after review. Rollback: set each switch to `false`; logs stop and the
 companion series disappears on collection. No data migration or cleanup.
-
-## Terminal-only merge polling (dark)
-
-`BATCH_HELD_POLL_SKIP_ENABLED` defaults OFF. ON, `fresh_pending` and transactional
-`first_pending` exclude committed/dead/quarantined/privacy_blocked/partial_retired/provider_superseded.
-Unknown strings stay visible; missing/null state is excluded in Firestore, Postgres and simulator.
-**Before enabling: all four prod/dev poll indexes MUST be READY, real query plans MUST succeed,
-and `scripts.batch_pipeline_poll_state_census --project PROJECT` MUST PASS (0).** Run from backend
-with `.venv/bin/python -m`; on this host source `~/.local/bin/gcp-agent-env.sh ro-prod` first.
-The read-only tool COUNTs pending minus pending-in-full-lifecycle-inventory per prod/dev jobs collection,
-prints one combined PASS (0)/FAIL (n) line and exits 0/1; API errors propagate nonzero. No job reads/writes.
-Dead GPU expiry/privacy fencing can retain merge_pending; recovery remains unchanged while merge/scheduler
-head lookup can advance. Held ready/retry/vendor_held heads keep capture order/fresh waiting;
-`held_merge_owners` always uses OFF. Oldest, held SLA gauges and stale-vendor watchdog are untouched.
-Unavailable ON queries fall back to exact OFF; OFF errors propagate. Rollback: flag OFF restores old queries/reads.
-No flag is replaced. Savings are Firestore-only, exclude index-entry costs, and stay booked at zero pending settled SKU.
 
 The merge commit alone writes `results.fresh_capture = (job.fresh_capture is True)`;
 unstamped jobs become backlog (`False`), without backfilling old results or changing

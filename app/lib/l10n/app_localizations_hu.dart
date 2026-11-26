@@ -563,11 +563,11 @@ class AppLocalizationsHu extends AppLocalizations {
   String get hardwareSection => 'Hardver';
 
   @override
-  String get v2Undetected => 'V2 nem észlelhető';
+  String get v2Undetected => 'Az offline szinkronizálás nem érhető el';
 
   @override
   String get v2UndetectedMessage =>
-      'Úgy látjuk, hogy vagy V1 eszközöd van, vagy az eszközöd nincs csatlakoztatva. Az SD kártya funkció csak V2 eszközökön érhető el.';
+      'Az offline szinkronizáláshoz SD-kártyás tárhellyel rendelkező csatlakoztatott Omi eszközre van szükség. A jelenlegi eszközöd ezt nem támogatja.';
 
   @override
   String get endConversation => 'Beszélgetés befejezése';
@@ -7089,6 +7089,26 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get authUnexpectedError => 'Váratlan hiba a bejelentkezés során, kérjük próbálja újra';
+
+  @override
+  String get accountSignInMethods => 'Bejelentkezési módok';
+
+  @override
+  String get accountAddSignInMethod => 'Bejelentkezési mód hozzáadása';
+
+  @override
+  String get accountAddSignInMethodDetails =>
+      'Adj hozzá egy bejelentkezési módot ehhez az Omi-fiókhoz. A csomagod, a felvételeid és az integrációid továbbra is ehhez a fiókhoz tartoznak.';
+
+  @override
+  String get accountSignInConflictTitle => 'Ez a bejelentkezési mód egy másik fiókhoz tartozik';
+
+  @override
+  String get accountSignInConflictDetails =>
+      'Továbbra is ebbe a fiókba vagy bejelentkezve. Minden Omi-fiók megőrzi a saját csomagját, felvételeit és integrációit.';
+
+  @override
+  String get accountSignInMethodAdded => 'Bejelentkezési mód hozzáadva';
 
   @override
   String get authFailedToLinkGoogle => 'Nem sikerült a Google-lel összekapcsolni, kérjük próbálja újra.';
@@ -14418,6 +14438,9 @@ class AppLocalizationsHu extends AppLocalizations {
   String get processingProgress => 'A várakozó felvételeid feldolgozása…';
 
   @override
+  String get waitingForTranscriptionAllowance => 'Várakozás az elérhető átírási keretre';
+
+  @override
   String get processingDeferred => 'Feldolgozásra vár';
 
   @override
@@ -15372,9 +15395,6 @@ class AppLocalizationsHu extends AppLocalizations {
   String get stopThese => 'Ezek leállítása';
 
   @override
-  String get meetingActionItemsTitle => 'Teendők';
-
-  @override
   String get addToTasks => 'Hozzáadás a feladatokhoz';
 
   @override
@@ -15778,4 +15798,106 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get stillWorkingOnIt => 'Még dolgozunk rajta.';
+
+  @override
+  String get deviceReadyToUse => 'Használatra kész';
+
+  @override
+  String get firmwareUpdateFirmwareTooOld =>
+      'Az eszköz firmware-e túl régi ehhez a frissítéshez. Az eszköz frissítéséhez kérjen segítséget az ügyfélszolgálattól.';
+
+  @override
+  String get firmwareUpdateAppRequired =>
+      'Ehhez a firmware-frissítéshez az Omi alkalmazás újabb verziója szükséges. Frissítse az alkalmazást az alkalmazásboltban, majd ellenőrizze újra.';
+
+  @override
+  String get quietPayerTitle => '5 napja nincs felvétel';
+
+  @override
+  String get quietPayerMessage => 'Nézd meg az Omidat.';
+
+  @override
+  String get quietPayerCheck => 'Megnézem';
+
+  @override
+  String get playManageSubscription => 'Előfizetés kezelése';
+
+  @override
+  String get playBilledByGoogle => 'A számlázás a Google Playen keresztül történik';
+
+  @override
+  String get playPurchasePending => 'A fizetés függőben van. Az Omi Pro akkor indul, amikor a Google Play megerősíti.';
+
+  @override
+  String get playPurchaseOtherAccount => 'Ez a Google Play-vásárlás egy másik Omi-fiókhoz tartozik.';
+
+  @override
+  String get playPurchaseNotConfirmed => 'Még nem tudtuk megerősíteni a vásárlást. Automatikusan újrapróbáljuk.';
+
+  @override
+  String get playRenewalTerms =>
+      'Lemondásig automatikusan megújul a feltüntetett áron. Bármikor kezelheted vagy lemondhatod a Google Playen.';
+
+  @override
+  String get playPaidAppUnavailable => 'Androidon nem érhető el';
+
+  @override
+  String get pageNotAvailableInApp => 'Ez az oldal nem érhető el az alkalmazásban.';
+
+  @override
+  String get shopOrderPlacedCheckEmail => 'A rendelés leadva. A visszaigazolást az e-mailjeidben találod.';
+
+  @override
+  String get prepaidCodeEntry => 'Van kódod?';
+
+  @override
+  String get prepaidCodeTitle => 'Kód beváltása';
+
+  @override
+  String get prepaidCodeFieldHint => 'Add meg a kódodat';
+
+  @override
+  String get prepaidCodeRedeem => 'Beváltás';
+
+  @override
+  String get prepaidCodeRedeemed => 'Kód beváltva';
+
+  @override
+  String prepaidCodeResult(String reason) {
+    String _temp0 = intl.Intl.selectLogic(
+      reason,
+      {
+        'invalid': 'Ez a kód érvénytelen. Ellenőrizd, és próbáld újra.',
+        'used': 'Ezt a kódot már felhasználták.',
+        'expired': 'Ez a kód lejárt.',
+        'hasPlan': 'Már van csomagod. A kódodat nem használtuk fel. Váltsd be, amikor a csomagod lejár.',
+        'notPrepaid': 'Ez a kód itt nem váltható be. Használd, amikor csomagot választasz.',
+        'notEligible': 'Ez a kód ezen a fiókon nem használható.',
+        'rateLimited': 'Túl sok próbálkozás. Próbáld újra később.',
+        'other': 'Hiba történt. Próbáld újra.',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get playStripeBilledOnWeb => 'Számlázás az omi.me-n keresztül. Itt bármikor lemondhatod.';
+
+  @override
+  String get playStripeBilledOnWebShort => 'Számlázás az omi.me-n keresztül.';
+
+  @override
+  String playStripePlanPaused(String plan) {
+    return 'A(z) $plan csomagod szünetel.';
+  }
+
+  @override
+  String get firmwareNewestSupportedForDevice => 'Az eszközödön már a legújabb támogatott firmware-verzió fut';
+
+  @override
+  String get firmwareSyncRecordingsFirstTitle => 'Először szinkronizáld a felvételeidet';
+
+  @override
+  String get firmwareSyncRecordingsFirstMessage =>
+      'Néhány felvétel még az eszközödön van. Várd meg, amíg a telefonodra szinkronizálásuk befejeződik, majd indítsd el a frissítést.';
 }

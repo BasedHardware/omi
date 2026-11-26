@@ -3,11 +3,13 @@
 from dataclasses import dataclass, field
 import hashlib
 import math
+import re
 from typing import Protocol, Sequence
 
 
 from config.batch_pipeline import Priority
-from config.batch_language_recovery import language_guarded, below_silence_threshold
+from config.batch_language_recovery import language_guarded, below_silence_threshold, guarded_exhausted
+from config.batch_pipeline_empty_asr import language_guarded_empty_close_enabled
 from utils.batch_pipeline.capacity import PoolCapacity as PoolCapacity
 from utils.batch_pipeline.errors import validate_worker_failure
 from utils.observability.reasons import WorkerValidationReason, WorkOutcome, reason_values
@@ -222,7 +224,14 @@ def held_silence_allowed(job, seconds=None, *, independent=False):
 def held_result_allowed(job, outcome, seconds=None, *, independent=False):
     if outcome == 'silence':
         return held_silence_allowed(job, seconds, independent=independent)
-    return outcome != 'no_recoverable_speech' or not language_guarded(job)
+    # A guarded unit closes as no-speech only behind its switch and on both
+    # recognizers' validated empty receipts, the evidence the operator
+    # disposition already requires.
+    return (
+        outcome != 'no_recoverable_speech'
+        or not language_guarded(job)
+        or (language_guarded_empty_close_enabled() and guarded_exhausted(job))
+    )
 
 
 def vad_receipt(audio_uri, captured_samples, speech_seconds):
@@ -332,6 +341,7 @@ class WorkResult:
     result_uri: str
     outcome: str = 'success'
     language_receipt: dict | None = field(default=None, compare=False)
+    worker_image_digest: str | None = field(default=None, compare=False)
 
     def __post_init__(self):
         if not self.segment_id or len(self.segment_id) > 128 or '/' in self.segment_id:
@@ -340,6 +350,8 @@ class WorkResult:
             raise ValueError('unsupported batch result outcome')
         if not self.result_uri or len(self.result_uri.encode()) > 2048:
             raise ValueError('result_uri must be a bounded durable encrypted reference')
+        if self.worker_image_digest is not None and not re.fullmatch(r'sha256:[0-9a-f]{64}', self.worker_image_digest):
+            raise ValueError('worker_image_digest requires a full SHA-256 digest')
         if self.language_receipt is not None:
             from utils.batch_pipeline.language_receipt import validate
 
@@ -353,6 +365,8 @@ class WorkResult:
         # completed results, including idempotent retries across a rolling deploy.
         if self.language_receipt is None:
             value.pop('language_receipt')
+        if self.worker_image_digest is None:
+            value.pop('worker_image_digest')
         return value
 
     def matches_persisted(self, value):
@@ -361,9 +375,10 @@ class WorkResult:
             return False
         expected = self.to_dict()
         existing = dict(value)
-        if expected.get('language_receipt') is None or existing.get('language_receipt') is None:
-            expected.pop('language_receipt', None)
-            existing.pop('language_receipt', None)
+        for key in ('language_receipt', 'worker_image_digest'):
+            if expected.get(key) is None or existing.get(key) is None:
+                expected.pop(key, None)
+                existing.pop(key, None)
         return existing == expected
 
 

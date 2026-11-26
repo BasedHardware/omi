@@ -23,13 +23,15 @@ outside the default list with a shrinking failed-status write when the mandatory
 from __future__ import annotations
 
 import zlib
-from datetime import datetime
+from datetime import datetime, timezone
 from types import SimpleNamespace
 from typing import Any, Callable, Mapping
 
 from database import conversations as conversations_db
+from models.finalization_owner import python_owns_finalization
 from database._client import transaction_body
 from database.conversation_terminal_effects import stage_terminal_visibility_refresh
+from utils.conversations import terminal_settled
 from utils.conversations.deterministic_minimum import deterministic_minimum_title
 from utils.firestore_document_size import FIRESTORE_MAX_DOCUMENT_BYTES, estimate_firestore_document_bytes
 from utils.conversations.recovery import structured_has_protected_content
@@ -149,11 +151,20 @@ def kept_row_terminal_update(
                 'rules_version': RULES_VERSION,
             },
         }
-    extras = _title_update(uid, conversation, texts, time_zone_for_uid)
+    extras = _settled(uid, conversation, base_update, _title_update(uid, conversation, texts, time_zone_for_uid))
     base_update = with_terminal_relevance(
         uid, conversation, base_update, texts, _decoded, path, conversation_ref, transaction
     )
     return fit_document_limit(conversation, conversation_ref, base_update, extras)
+
+
+def _settled(uid: str, conversation: Mapping[str, Any], base: Mapping[str, Any], extras: dict) -> dict:
+    """The settled stamp is optional growth: at the size ceiling it drops with the title, never the terminal."""
+    if base.get('status') == 'completed':
+        extras.update(
+            terminal_settled.settle(conversation, now=datetime.now(timezone.utc), enabled=terminal_settled.serving(uid))
+        )
+    return extras
 
 
 def dead_letter_conversation_updates(
@@ -186,7 +197,7 @@ def dead_letter_conversation_updates(
     if not isinstance(conversation.get('structured'), Mapping):
         # The API model needs a structured map even to return the row.
         base['structured'] = {'title': '', 'overview': ''}
-    extras = _title_update(uid, conversation, texts, time_zone_for_uid)
+    extras = _settled(uid, conversation, base, _title_update(uid, conversation, texts, time_zone_for_uid))
     described_photo = False
     if (
         failure_code in SUMMARY_RETRYABLE_FAILURE_CODES
@@ -391,21 +402,39 @@ def user_time_zone(client: Any, uid: str) -> str | None:
     return zone if isinstance(zone, str) and zone else None
 
 
-def recover_deferred_processing_failure_txn(transaction: Any, conversation_ref: Any) -> bool:
+def recover_deferred_processing_failure_txn(
+    transaction: Any, conversation_ref: Any, expected_admitted_at: datetime | None = None
+) -> bool:
     """Atomically publish a retryable terminal after deferred enrichment fails."""
     snapshot = conversation_ref.get(transaction=transaction)
     if not getattr(snapshot, 'exists', False):
         return False
     data = snapshot.to_dict() or {}
+    if not python_owns_finalization(data):
+        return False
     if (
         data.get('status') not in {'processing', 'completed'}
         or data.get('discarded')
+        or data.get('deleted')
         or data.get('deferred') is not False
+    ):
+        return False
+    if expected_admitted_at is not None and (
+        data.get('status') != 'processing' or data.get('processing_admitted_at') != expected_admitted_at
     ):
         return False
     terminal = {**data, 'status': 'completed', 'deferred': True}
     stamp_terminal_decision(terminal, path='deferred_retry')
-    transaction.update(conversation_ref, {key: terminal[key] for key in ('status', 'deferred', 'relevance_decision')})
+    uid = uid_from_conversation_path(str(getattr(conversation_ref, 'path', '') or '')) or ''
+    transaction.update(
+        conversation_ref,
+        terminal_settled.stamp(
+            data,
+            {key: terminal[key] for key in ('status', 'deferred', 'relevance_decision')},
+            now=datetime.now(timezone.utc),
+            enabled=terminal_settled.serving(uid),
+        ),
+    )
     return True
 
 

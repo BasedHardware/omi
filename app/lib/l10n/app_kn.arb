@@ -717,11 +717,11 @@
     "@hardwareSection": {
         "description": "Hardware section header"
     },
-    "v2Undetected": "V2 ಪತ್ತೆ ಮಾಡಲಾಗಿಲ್ಲ",
+    "v2Undetected": "ಆಫ್‌ಲೈನ್ ಸಿಂಕ್ ಲಭ್ಯವಿಲ್ಲ",
     "@v2Undetected": {
         "description": "V2 device undeteced dialog title"
     },
-    "v2UndetectedMessage": "ನಾವು ನೀವು ಯಾವುದೇ V1 ಸಾಧನ ಹೊಂದಿದ್ದೇನೆ ಅಥವಾ ನಿಮ್ಮ ಸಾಧನ ಸಂಪರ್ಕ ಆಗಿಲ್ಲ. SD ಕಾರ್ಡ ಕಾರ್ಯವು V2 ಸಾಧನಗಳಿಗೆ ಮಾತ್ರ ಲಭ್ಯ.",
+    "v2UndetectedMessage": "ಆಫ್‌ಲೈನ್ ಸಿಂಕ್‌ಗೆ SD ಕಾರ್ಡ್ ಸಂಗ್ರಹಣೆಯೊಂದಿಗೆ ಸಂಪರ್ಕಿತ Omi ಸಾಧನದ ಅಗತ್ಯವಿದೆ. ನಿಮ್ಮ ಪ್ರಸ್ತುತ ಸಾಧನವು ಇದನ್ನು ಬೆಂಬಲಿಸುವುದಿಲ್ಲ.",
     "@v2UndetectedMessage": {
         "description": "V2 device undeteced dialog message"
     },
@@ -8712,6 +8712,12 @@
     "@authUnexpectedError": {
         "description": "Error message for unexpected error during sign-in"
     },
+    "accountSignInMethods": "ಸೈನ್ ಇನ್ ವಿಧಾನಗಳು",
+    "accountAddSignInMethod": "ಸೈನ್ ಇನ್ ವಿಧಾನವನ್ನು ಸೇರಿಸಿ",
+    "accountAddSignInMethodDetails": "ಈ Omi ಖಾತೆಗೆ ಸೈನ್ ಇನ್ ಮಾಡುವ ಒಂದು ವಿಧಾನವನ್ನು ಸೇರಿಸಿ. ನಿಮ್ಮ ಪ್ಲಾನ್, ರೆಕಾರ್ಡಿಂಗ್‌ಗಳು ಮತ್ತು ಇಂಟಿಗ್ರೇಷನ್‌ಗಳು ಈ ಖಾತೆಯಲ್ಲೇ ಉಳಿಯುತ್ತವೆ.",
+    "accountSignInConflictTitle": "ಈ ಸೈನ್ ಇನ್ ವಿಧಾನವು ಬೇರೆ ಖಾತೆಗೆ ಲಿಂಕ್ ಆಗಿದೆ",
+    "accountSignInConflictDetails": "ನೀವು ಇನ್ನೂ ಈ ಖಾತೆಗೆ ಸೈನ್ ಇನ್ ಆಗಿದ್ದೀರಿ. ಪ್ರತಿ Omi ಖಾತೆಯ ಪ್ಲಾನ್, ರೆಕಾರ್ಡಿಂಗ್‌ಗಳು ಮತ್ತು ಇಂಟಿಗ್ರೇಷನ್‌ಗಳು ಆಯಾ ಖಾತೆಯಲ್ಲೇ ಉಳಿಯುತ್ತವೆ.",
+    "accountSignInMethodAdded": "ಸೈನ್ ಇನ್ ವಿಧಾನವನ್ನು ಸೇರಿಸಲಾಗಿದೆ",
     "authFailedToLinkGoogle": "Google ಸಹಿತ ಲಿಂಕ್ ವಿಫಲವಾಗಿದೆ, ದಯವಿಟ್ಟು ಪುನಃ ಪ್ರಯತ್ನಿಸಿ.",
     "@authFailedToLinkGoogle": {
         "description": "Error message when linking Google account fails"
@@ -11805,6 +11811,7 @@
     "processingNewestFirst": "ಲಭ್ಯವಿರುವ ಕೋಟಾದೊಳಗೆ ಹೊಸ ರೆಕಾರ್ಡಿಂಗ್‌ಗಳನ್ನು ಮೊದಲು ಪ್ರಕ್ರಿಯೆಗೊಳಿಸುತ್ತೇವೆ. ಉಳಿದವು ಕಾಯುತ್ತವೆ.",
     "processingAction": "ಕಾಯುತ್ತಿರುವ ರೆಕಾರ್ಡಿಂಗ್‌ಗಳನ್ನು ಪ್ರಕ್ರಿಯೆಗೊಳಿಸಿ",
     "processingProgress": "ನಿಮ್ಮ ಕಾಯುತ್ತಿರುವ ರೆಕಾರ್ಡಿಂಗ್‌ಗಳನ್ನು ಪ್ರಕ್ರಿಯೆಗೊಳಿಸಲಾಗುತ್ತಿದೆ…",
+    "waitingForTranscriptionAllowance": "ಪ್ರತಿಲೇಖನ ಕೋಟಾ ಲಭ್ಯವಾಗಲು ಕಾಯುತ್ತಿದೆ",
     "processingDeferred": "ಪ್ರಕ್ರಿಯೆಗಾಗಿ ಕಾಯುತ್ತಿದೆ",
     "processingCount": "{count, plural, =1{1 ಸಂಭಾಷಣೆ ಕಾಯುತ್ತಿದೆ} other{{count} ಸಂಭಾಷಣೆಗಳು ಕಾಯುತ್ತಿವೆ}}",
     "playbackPartialAudioSaved": "{saved} ಆಡಿಯೋ ಉಳಿಸಲಾಗಿದೆ, ಒಟ್ಟು {total}",
@@ -12172,7 +12179,6 @@
     "capturePendantDisconnectedShort": "Omi ತಾನಾಗಿಯೇ ಮರುಸಂಪರ್ಕಿಸುತ್ತದೆ",
     "forYou": "ನಿಮಗಾಗಿ",
     "stopThese": "ಇವುಗಳನ್ನು ನಿಲ್ಲಿಸಿ",
-    "meetingActionItemsTitle": "ಮಾಡಬೇಕಾದ ಕೆಲಸಗಳು",
     "addToTasks": "ಕಾರ್ಯಗಳಿಗೆ ಸೇರಿಸಿ",
     "showInTranscript": "ಪ್ರತಿಲಿಪಿಯಲ್ಲಿ ತೋರಿಸಿ",
     "tentativeTaskDueDate": "ಅಂದಾಜು ಅಂತಿಮ ದಿನಾಂಕ {date}",
@@ -12292,5 +12298,32 @@
     "conversationLiveNoEdits": "ಬದಲಾಯಿಸಲು ಅದು ಮುಗಿಯುವವರೆಗೆ ಕಾಯಿರಿ.",
     "finishedSummaryReady": "ಸಾರಾಂಶ ಸಿದ್ಧವಾಗಿದೆ",
     "writingSummaryStatus": "ಸಾರಾಂಶ ಬರೆಯಲಾಗುತ್ತಿದೆ…",
-    "stillWorkingOnIt": "ಇನ್ನೂ ಕೆಲಸ ನಡೆಯುತ್ತಿದೆ."
+    "stillWorkingOnIt": "ಇನ್ನೂ ಕೆಲಸ ನಡೆಯುತ್ತಿದೆ.",
+    "deviceReadyToUse": "ಬಳಸಲು ಸಿದ್ಧ",
+    "firmwareUpdateFirmwareTooOld": "ಈ ನವೀಕರಣಕ್ಕೆ ನಿಮ್ಮ ಸಾಧನದ ಫರ್ಮ್‌ವೇರ್ ತುಂಬಾ ಹಳೆಯದಾಗಿದೆ. ನಿಮ್ಮ ಸಾಧನವನ್ನು ನವೀಕರಿಸಲು ಸಹಾಯಕ್ಕಾಗಿ ಬೆಂಬಲ ತಂಡವನ್ನು ಸಂಪರ್ಕಿಸಿ.",
+    "firmwareUpdateAppRequired": "ಈ ಫರ್ಮ್‌ವೇರ್ ನವೀಕರಣಕ್ಕೆ Omi ಆ್ಯಪ್‌ನ ಹೊಸ ಆವೃತ್ತಿ ಅಗತ್ಯವಿದೆ. ನಿಮ್ಮ ಆ್ಯಪ್ ಸ್ಟೋರ್‌ನಿಂದ ಆ್ಯಪ್ ಅನ್ನು ನವೀಕರಿಸಿ, ನಂತರ ಮತ್ತೆ ಪರಿಶೀಲಿಸಿ.",
+    "quietPayerTitle": "5 ದಿನಗಳಿಂದ ಯಾವುದೇ ರೆಕಾರ್ಡಿಂಗ್ ಇಲ್ಲ",
+    "quietPayerMessage": "ನಿಮ್ಮ Omi ಪರಿಶೀಲಿಸಿ.",
+    "quietPayerCheck": "ಪರಿಶೀಲಿಸಿ",
+    "playManageSubscription": "ಚಂದಾದಾರಿಕೆ ನಿರ್ವಹಿಸಿ",
+    "playBilledByGoogle": "Google Play ಮೂಲಕ ಬಿಲ್ ಮಾಡಲಾಗುತ್ತದೆ",
+    "playPurchasePending": "ನಿಮ್ಮ ಪಾವತಿ ಬಾಕಿ ಇದೆ. Google Play ದೃಢೀಕರಿಸಿದ ತಕ್ಷಣ Omi Pro ಆರಂಭವಾಗುತ್ತದೆ.",
+    "playPurchaseOtherAccount": "ಈ Google Play ಖರೀದಿ ಬೇರೆ Omi ಖಾತೆಗೆ ಸೇರಿದೆ.",
+    "playPurchaseNotConfirmed": "ನಿಮ್ಮ ಖರೀದಿಯನ್ನು ಇನ್ನೂ ದೃಢೀಕರಿಸಲಾಗಲಿಲ್ಲ. ನಾವು ಸ್ವಯಂಚಾಲಿತವಾಗಿ ಮತ್ತೆ ಪ್ರಯತ್ನಿಸುತ್ತೇವೆ.",
+    "playRenewalTerms": "ನೀವು ರದ್ದುಗೊಳಿಸುವವರೆಗೆ ತೋರಿಸಿದ ಬೆಲೆಯಲ್ಲಿ ಸ್ವಯಂಚಾಲಿತವಾಗಿ ನವೀಕರಿಸುತ್ತದೆ. Google Play ನಲ್ಲಿ ಯಾವಾಗ ಬೇಕಾದರೂ ನಿರ್ವಹಿಸಿ ಅಥವಾ ರದ್ದುಗೊಳಿಸಿ.",
+    "playPaidAppUnavailable": "Android ನಲ್ಲಿ ಲಭ್ಯವಿಲ್ಲ",
+    "pageNotAvailableInApp": "ಈ ಪುಟ ಆ್ಯಪ್‌ನಲ್ಲಿ ಲಭ್ಯವಿಲ್ಲ.",
+    "shopOrderPlacedCheckEmail": "ಆರ್ಡರ್ ಮಾಡಲಾಗಿದೆ. ದೃಢೀಕರಣಕ್ಕಾಗಿ ನಿಮ್ಮ ಇಮೇಲ್ ನೋಡಿ.",
+    "prepaidCodeEntry": "ಕೋಡ್ ಇದೆಯೇ?",
+    "prepaidCodeTitle": "ಕೋಡ್ ರಿಡೀಮ್ ಮಾಡಿ",
+    "prepaidCodeFieldHint": "ನಿಮ್ಮ ಕೋಡ್ ನಮೂದಿಸಿ",
+    "prepaidCodeRedeem": "ರಿಡೀಮ್",
+    "prepaidCodeRedeemed": "ಕೋಡ್ ರಿಡೀಮ್ ಆಗಿದೆ",
+    "prepaidCodeResult": "{reason, select, invalid{ಈ ಕೋಡ್ ಮಾನ್ಯವಾಗಿಲ್ಲ. ಪರಿಶೀಲಿಸಿ ಮತ್ತೆ ಪ್ರಯತ್ನಿಸಿ.} used{ಈ ಕೋಡ್ ಈಗಾಗಲೇ ಬಳಸಲಾಗಿದೆ.} expired{ಈ ಕೋಡ್‌ನ ಅವಧಿ ಮುಗಿದಿದೆ.} hasPlan{ನಿಮ್ಮ ಬಳಿ ಈಗಾಗಲೇ ಪ್ಲಾನ್ ಇದೆ. ನಿಮ್ಮ ಕೋಡ್ ಬಳಸಲಾಗಿಲ್ಲ. ಪ್ಲಾನ್ ಮುಗಿದ ನಂತರ ಅದನ್ನು ರಿಡೀಮ್ ಮಾಡಿ.} notPrepaid{ಈ ಕೋಡ್ ಅನ್ನು ಇಲ್ಲಿ ರಿಡೀಮ್ ಮಾಡಲು ಸಾಧ್ಯವಿಲ್ಲ. ಪ್ಲಾನ್ ಆಯ್ಕೆ ಮಾಡುವಾಗ ಬಳಸಿ.} notEligible{ಈ ಕೋಡ್ ಅನ್ನು ಈ ಖಾತೆಯಲ್ಲಿ ಬಳಸಲು ಸಾಧ್ಯವಿಲ್ಲ.} rateLimited{ತುಂಬಾ ಪ್ರಯತ್ನಗಳು. ನಂತರ ಮತ್ತೆ ಪ್ರಯತ್ನಿಸಿ.} other{ಏನೋ ತಪ್ಪಾಗಿದೆ. ದಯವಿಟ್ಟು ಮತ್ತೆ ಪ್ರಯತ್ನಿಸಿ.}}",
+    "playStripeBilledOnWeb": "omi.me ಮೂಲಕ ಬಿಲ್ ಮಾಡಲಾಗುತ್ತದೆ. ಯಾವಾಗ ಬೇಕಾದರೂ ಇಲ್ಲಿ ರದ್ದುಮಾಡಿ.",
+    "playStripeBilledOnWebShort": "omi.me ಮೂಲಕ ಬಿಲ್ ಮಾಡಲಾಗುತ್ತದೆ.",
+    "playStripePlanPaused": "ನಿಮ್ಮ {plan} ಯೋಜನೆಯನ್ನು ವಿರಾಮಗೊಳಿಸಲಾಗಿದೆ.",
+    "firmwareNewestSupportedForDevice": "ನಿಮ್ಮ ಸಾಧನವು ಈಗಾಗಲೇ ಬೆಂಬಲಿತ ಅತ್ಯಂತ ಹೊಸ ಫಾರ್ಮ್‌ವೇರ್ ಆವೃತ್ತಿಯಲ್ಲಿದೆ",
+    "firmwareSyncRecordingsFirstTitle": "ಮೊದಲು ನಿಮ್ಮ ರೆಕಾರ್ಡಿಂಗ್‌ಗಳನ್ನು ಸಿಂಕ್ ಮಾಡಿ",
+    "firmwareSyncRecordingsFirstMessage": "ಕೆಲವು ರೆಕಾರ್ಡಿಂಗ್‌ಗಳು ಇನ್ನೂ ನಿಮ್ಮ ಸಾಧನದಲ್ಲಿವೆ. ಅವುಗಳು ನಿಮ್ಮ ಫೋನ್‌ಗೆ ಸಿಂಕ್ ಆಗಲು ಬಿಡಿ, ನಂತರ ನವೀಕರಣ ಪ್ರಾರಂಭಿಸಿ."
 }

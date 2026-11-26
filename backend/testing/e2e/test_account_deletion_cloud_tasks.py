@@ -143,6 +143,7 @@ def _configure_durable_account_deletion(monkeypatch) -> None:
     """Enable the production Cloud Tasks path with only local configuration."""
 
     monkeypatch.setenv("ACCOUNT_DELETION_DISPATCH_MODE", "cloud_tasks")
+    monkeypatch.setenv("GO_QUEUE_ERASE_REQUIRED", "false")
     monkeypatch.setenv("SYNC_TASKS_PROJECT", _PROJECT)
     monkeypatch.setenv("SYNC_TASKS_LOCATION", _LOCATION)
     monkeypatch.setenv("SYNC_TASKS_INVOKER_SA", _INVOKER_SERVICE_ACCOUNT)
@@ -236,10 +237,12 @@ def _observe_claim_transitions(monkeypatch, fake_firestore, test_uid: str) -> li
     production_claim = users_router.claim_deletion_wipe_for_task
     claimed_markers: list[dict[str, Any]] = []
 
-    def observe_claim(uid: str) -> str:
+    def observe_claim(uid: str, *, expected_job_id: str | None = None) -> str:
+        assert uid == test_uid
+        assert expected_job_id is None
         outcome = production_claim(uid)
         if outcome == "claimed":
-            claimed_markers.append(_read_marker(fake_firestore, test_uid))
+            claimed_markers.append(_read_marker(fake_firestore, uid))
         return outcome
 
     monkeypatch.setattr(users_router, "claim_deletion_wipe_for_task", observe_claim)
@@ -292,6 +295,7 @@ def test_account_deletion_cloud_task_completes_once_and_redelivery_is_acked(
 
     pending_marker = _read_marker(fake_firestore, test_uid)
     assert pending_marker["wipe_status"] == "pending"
+    assert "wipe_due_at" not in pending_marker
     wipe_job_id = pending_marker["wipe_job_id"]
     assert re.fullmatch(r"[0-9a-f]{32}", wipe_job_id)
     payload = _assert_enqueued_task_schema(cloud_tasks_client, wipe_job_id)

@@ -5,6 +5,24 @@ from config.policy import RecoveryPolicy
 # A reviewed operator intent that is not settled can still change its unit.
 OPERATOR_INTENTS = ('speech_redrive', 'terminal_disposition', 'silence_disposition')
 
+# Refusal reason shared by the hold writer and the automatic-redrive guards.
+RETAINED_DIGEST_CHANGED = 'retained_digest_changed'
+
+
+def retained_digest_changed_held(job: dict) -> bool:
+    """The unit's input settled after a repeatable pinned-source digest disagreement.
+
+    Its source cannot be re-read into the original manifest, so automatic
+    maintenance must not requeue it; a reviewed operator redrive still can.
+    """
+    if job.get('recovery_state') != 'failed_held':
+        return False
+    recovery = job.get('recovery')
+    if not isinstance(recovery, dict):
+        return False
+    refusal = recovery.get('refusal')
+    return isinstance(refusal, dict) and refusal.get('reason') == RETAINED_DIGEST_CHANGED
+
 
 def held_without_recovery(job: dict) -> bool:
     """A quarantined unit that nothing automatic will change.

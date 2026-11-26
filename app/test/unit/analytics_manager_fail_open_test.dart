@@ -69,6 +69,7 @@ void main() {
     AnalyticsManager.configure(adapter);
     await AnalyticsManager.init();
 
+    AnalyticsManager().track('Mobile Held WAL Backlog', properties: {'held_wal_count': 2});
     AnalyticsManager().track('Local WAL Stuck', properties: {'pending_wal_count': 2});
     AnalyticsManager().track('Recording Start Failed', properties: {'failure_class': 'capture_unavailable'});
     AnalyticsManager().track('Capture Recovery Resolved', properties: {'trigger': 'upload_silence'});
@@ -76,12 +77,13 @@ void main() {
     await AnalyticsManager.flushPending(force: true);
 
     expect(adapter.events.map((event) => event.eventName), [
+      'Mobile Held WAL Backlog',
       'Local WAL Stuck',
       'Recording Start Failed',
       'Capture Recovery Resolved',
       'Device Connected',
     ]);
-    for (final event in adapter.events.take(3)) {
+    for (final event in adapter.events.take(4)) {
       expect(event.properties['build'], '567', reason: event.eventName);
       expect(event.properties['app_build'], '567', reason: event.eventName);
     }

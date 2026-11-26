@@ -24,6 +24,7 @@ from database import batch_pipeline_coalescing as rows
 from database.batch_pipeline_coalescing_identity import compatibility_key, digest
 from database.batch_pipeline_leader import LeaseLost
 from utils.batch_pipeline.contracts import WorkItem
+from config.request_clock import context_fields
 from utils.batch_pipeline.capture_decode import decode_units
 from utils.batch_pipeline.scheduler import owner_key
 from utils.executors import run_blocking, db_executor, storage_executor, sync_executor
@@ -66,6 +67,7 @@ def member_status(store, uid, intake, read_status):
             **queued(intake),
             'status': 'completed',
             'result': content['result'],
+            'completed_at': content.get('completed_at'),
             'total_segments': intake['original_units'],
             'processed_segments': intake['original_units'],
             'successful_segments': intake['original_units'],
@@ -82,7 +84,7 @@ def member_status(store, uid, intake, read_status):
     result = status.get('result') if complete else None
     if result is not None:
         result = {**result, 'total_segments': intake['original_units']}
-        rows.checkpoint_completion(store, intake, result, time.time())
+        rows.checkpoint_completion(store, intake, result, time.time(), completed_at=status.get('completed_at'))
     return {
         **status,
         'job_id': intake['job_id'],
@@ -181,7 +183,10 @@ async def offer(store, artifacts, seed, *, arguments, context, language, policy,
         EVENTS.labels(outcome='bounded_bypass').inc()
         return None
     body, size, start, end, seconds, unit_count, filenames, source_frames = packed
-    hold = config.hold_seconds(now=now, batch_pre_unit=True)
+    hold = config.window_seconds(
+        upload_context.get('upload_entitlement', 'unknown'),
+        backlog=arguments['lane'] == 'backfill' or int(seed.priority) != 0,
+    )
     if hold <= 0:
         return None
     # This source item is a deletion-outbox identity, never a scheduler job.
@@ -214,6 +219,7 @@ async def offer(store, artifacts, seed, *, arguments, context, language, policy,
         'lane': arguments['lane'],
         'hold_seconds': hold,
         'accepted_at': now,
+        **context_fields(upload_context),
         'policy': policy.to_dict(),
         'language': language,
     }

@@ -352,6 +352,7 @@ def test_default_gate_keeps_fail_fast_contract(gate_client, fast_clock):
 
 def _route_app(monkeypatch, body):
     monkeypatch.setattr(conversations.conversation_tombstones, 'is_deleted', lambda *args: False)
+    monkeypatch.setattr(conversations.conversations_db, 'get_conversation_raw_snapshot', lambda *args, **kwargs: {})
     for name in (
         'delete_owner_prompt_embedding_cache',
         'delete_conversation_screen_frames',
@@ -365,6 +366,7 @@ def _route_app(monkeypatch, body):
     ):
         monkeypatch.setattr(conversations, name, MagicMock())
     monkeypatch.setattr(conversations, '_delete_conversation_under_gate', body)
+    monkeypatch.setattr(conversations, '_legal_hold_defers_delete', lambda uid: False)
     monkeypatch.setattr(deletion_batch_purge, 'is_conversation_batch_purge_dispatch_configured', lambda: False)
     app = FastAPI()
     app.include_router(conversations.router)
@@ -377,7 +379,7 @@ def test_concurrent_same_account_cascade_deletes_all_return_204_serialized(monke
     inside, peak, deleted = [0], [0], []
     counter = threading.Lock()
 
-    def body(conversation_id, *args):
+    def body(conversation_id, *args, **kwargs):
         with counter:
             inside[0] += 1
             peak[0] = max(peak[0], inside[0])
@@ -450,7 +452,9 @@ def test_legal_hold_still_blocks_cascade_delete(monkeypatch, gate_client, fast_c
 def tombstone_db(monkeypatch):
     """One fake plane for tombstones, obligations and the gate; transactions run inline."""
     client = _Client()
+    client.docs[f'users/{UID}/conversations/c1'] = {'created_at': 'original'}
     monkeypatch.setattr(conversation_tombstones, 'db', client)
+    monkeypatch.setattr(conversation_tombstones, '_in_transaction', lambda _client, body: body(_Transaction(client)))
     monkeypatch.setattr(purge_jobs, 'get_firestore_client', lambda: client)
     monkeypatch.setattr(purge_jobs, '_in_transaction', lambda _client, body: body(_Transaction(client)))
     monkeypatch.setattr(
@@ -510,6 +514,7 @@ def test_obligation_is_written_before_fallible_cleanup(monkeypatch, tombstone_db
 
 def _real_route_app(monkeypatch):
     """Real route + tombstone writer; only storage side effects are stubbed."""
+    monkeypatch.setattr(conversations, '_legal_hold_defers_delete', lambda uid: False)
     for name in (
         'delete_owner_prompt_embedding_cache',
         'delete_conversation_screen_frames',
