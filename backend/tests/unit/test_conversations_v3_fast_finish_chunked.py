@@ -1,26 +1,30 @@
-"""Chunked fast first transcript: split, concurrent provider requests, stitch, and the kill switch.
+"""Chunked fast first transcript: split, concurrent provider requests, stitch, deadline, canary, kill switch.
 
 The default path (CONVERSATIONS_V3_FAST_FINISH_CHUNKED on). The serial kill-switch path and the
-admission hook are covered in test_conversations_v3_fast_finish.py.
+admission hook's serial behaviour are covered in test_conversations_v3_fast_finish.py.
 """
 
+import asyncio
 import re
 import threading
 import time
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import pytest
 import yaml
 
 from database import conversations as conversations_db
+from database import conversations_v3
 from database.batch_pipeline_privacy import BatchPrivacyBlocked
+from utils.batch_pipeline import live
 from utils.conversations.v3 import fast_finish
 from utils.executors import get_fast_finish_chunk_executor
+from utils.stt import pre_recorded
 
 UID = 'owner-uid-0000000000000000000'
 START = datetime(2026, 11, 24, 3, 0, tzinfo=timezone.utc)
-# A coarse clock keeps a 30-minute recording a few kilobytes: 10 frames a second.
+# A coarse clock keeps a 40-minute recording a few kilobytes: 10 frames a second.
 RATE = 10
 
 
@@ -28,6 +32,10 @@ RATE = 10
 def chunked(monkeypatch):
     monkeypatch.setenv('CONVERSATIONS_V3_FAST_FINISH', 'on')
     monkeypatch.delenv('CONVERSATIONS_V3_FAST_FINISH_CHUNKED', raising=False)
+    # The long-recording canary at full exposure with a fresh budget; its own tests narrow it.
+    monkeypatch.setenv('CONVERSATIONS_V3_FAST_FINISH_LONG_PERCENT', '100')
+    monkeypatch.delenv('CONVERSATIONS_V3_FAST_FINISH_LONG_DAILY_SECONDS', raising=False)
+    monkeypatch.setattr(fast_finish, 'LONG_BUDGET', fast_finish._DailyBudget())
     monkeypatch.setattr(fast_finish, 'funded', lambda uid, seconds, language: True)
     monkeypatch.setattr(fast_finish, 'SAMPLE_RATE', RATE)
 
@@ -94,20 +102,32 @@ def merged_reader(*readers):
     return read
 
 
-class Provider:
-    """Emits one word per audible second it hears, timed from the start of its chunk."""
+def values(pcm):
+    return [int.from_bytes(pcm[i : i + 2], 'little') for i in range(0, len(pcm), 2)]
 
-    def __init__(self, *, fail_on=None, hold=None, sleep=0.0):
+
+class Provider:
+    """Hears every audible second of its chunk and answers with words or utterances.
+
+    Words: one entry per second, 0.4 s long. Utterances (``group`` seconds of absolute speech each,
+    the shape Parakeet and Modulate return): one entry per group, clipped to the chunk's audio, its
+    text every second heard. ``fail(values, attempt)`` decides whether a request raises.
+    """
+
+    def __init__(self, *, group=None, fail=None, hold=None, sleep=0.0):
         self.lock = threading.Lock()
-        self.calls, self.durations = 0, []
+        self.calls, self.durations, self.attempts = 0, [], {}
         self.in_flight = self.peak = 0
-        self.fail_on, self.hold, self.sleep = fail_on, hold, sleep
+        self.group, self.fail, self.hold, self.sleep = group, fail, hold, sleep
 
     def __call__(self, pcm, language):
         assert language == 'en'
+        heard = values(pcm)
+        first = next((value for value in heard if value), 0)
         with self.lock:
             self.calls += 1
-            call = self.calls
+            self.attempts[first] = self.attempts.get(first, 0) + 1
+            attempt = self.attempts[first]
             self.in_flight += 1
             self.peak = max(self.peak, self.in_flight)
             self.durations.append(len(pcm) / 2 / RATE)
@@ -116,17 +136,30 @@ class Provider:
                 self.hold(self)
             if self.sleep:
                 time.sleep(self.sleep)
-            if self.fail_on == call:
+            if self.fail is not None and self.fail(heard, attempt):
                 raise RuntimeError('provider down')
-            values = [int.from_bytes(pcm[i : i + 2], 'little') for i in range(0, len(pcm), 2)]
-            words, seen = [], set()
-            for frame, value in enumerate(values):
-                if value and value not in seen:
-                    seen.add(value)
-                    words.append(
-                        {'timestamp': [frame / RATE, frame / RATE + 0.4], 'speaker': 'SPEAKER_00', 'text': f'w{value}'}
-                    )
-            return words
+            firsts = {}
+            for frame, value in enumerate(heard):
+                if value:
+                    firsts.setdefault(value, frame)
+                    firsts[-value] = frame  # last frame of that second
+            seconds = sorted(value for value in firsts if value > 0)
+            if self.group is None:
+                return [
+                    {'timestamp': [firsts[v] / RATE, firsts[v] / RATE + 0.4], 'speaker': 'SPEAKER_00', 'text': f'w{v}'}
+                    for v in seconds
+                ]
+            utterances = {}
+            for value in seconds:
+                utterances.setdefault((value - 1) // self.group, []).append(value)
+            return [
+                {
+                    'timestamp': [firsts[members[0]] / RATE, (firsts[-members[-1]] + 1) / RATE],
+                    'speaker': 'SPEAKER_00',
+                    'text': ' '.join(f'w{v}' for v in members),
+                }
+                for _, members in sorted(utterances.items())
+            ]
         finally:
             with self.lock:
                 self.in_flight -= 1
@@ -164,19 +197,25 @@ def test_a_long_unit_is_cut_into_even_overlapping_chunks_of_at_most_five_minutes
     overlap = int(fast_finish.CHUNK_OVERLAP_SECONDS * RATE)
     assert plan[0].lo == 0 and plan[-1].hi == frames
     for chunk in plan:
-        assert 0 < chunk.hi - chunk.lo <= 300 * RATE
-        # No sliver: the remainder is shared evenly.
-        assert chunk.hi - chunk.lo >= 200 * RATE
+        assert 250 * RATE <= chunk.hi - chunk.lo <= 300 * RATE  # even, no sliver
     for before, after in zip(plan, plan[1:]):
-        # Fixed cuts repeat the overlap; the words on either side of its middle have one owner.
         assert after.lo == before.hi - overlap
         assert before.own_hi == after.own_lo == before.hi - overlap // 2
     assert plan[0].own_lo is None and plan[-1].own_hi is None
 
 
-def test_a_silence_in_the_second_half_of_the_window_is_the_preferred_cut():
-    # A 2 s gap at 250..252 s and a 0.5 s one at 290 s (too short to count).
-    gaps = [(250 * RATE, 252 * RATE), (290 * RATE, 290 * RATE + RATE // 2)]
+def test_twenty_minutes_is_five_chunks_and_the_short_class_ends_at_four():
+    # 1191 s and up need a fifth chunk: those passes are long-class (two rounds), not one round.
+    assert len(fast_finish.chunk_plan(1185 * RATE)) == 4
+    assert len(fast_finish.chunk_plan(1200 * RATE)) == 5
+    # The deadline cap: nine chunks reach about 44.6 minutes.
+    assert len(fast_finish.chunk_plan(2676 * RATE)) == 9
+    assert len(fast_finish.chunk_plan(2680 * RATE)) == 10
+
+
+def test_a_silence_near_the_even_length_is_the_preferred_cut():
+    # A 2 s gap at 250..252 s and a 0.5 s one at 190 s (too short to count).
+    gaps = [(250 * RATE, 252 * RATE), (190 * RATE, 190 * RATE + RATE // 2)]
     plan = fast_finish.chunk_plan(400 * RATE, gaps)
     assert plan[0] == fast_finish.Chunk(0, 251 * RATE, None, 251 * RATE)
     # A silence cut needs no overlap.
@@ -209,25 +248,76 @@ def test_a_short_reference_is_refused_inside_a_window():
         fast_finish.window_pcm([ref], lambda r: b'\x00\x00', 0, 4, {})
 
 
-def test_overlap_words_are_kept_once_by_the_chunk_that_owns_their_middle():
-    left = fast_finish.Chunk(0, 300 * RATE, None, 2985 * RATE // 10)
-    right = fast_finish.Chunk(297 * RATE, 600 * RATE, 2985 * RATE // 10, None)
-    words = [{'timestamp': [298.0, 298.4], 'text': 'a'}, {'timestamp': [298.4, 298.9], 'text': 'b'}]
-    in_right = [{'timestamp': [1.0, 1.4], 'text': 'a'}, {'timestamp': [1.4, 1.9], 'text': 'b'}]
-    assert [w['text'] for w in fast_finish.owned_words(words, left)] == ['a']
-    kept = fast_finish.owned_words(in_right, right)
-    assert [w['text'] for w in kept] == ['b'] and kept[0]['timestamp'] == pytest.approx([298.4, 298.9])
-    # A word without a start cannot be placed; one without an end is placed at its start.
-    assert fast_finish.owned_words([{'timestamp': [None, None]}], left) == []
-    assert fast_finish.owned_words([{'timestamp': [1.0, None], 'text': 'c'}], left)[0]['timestamp'] == [1.0, None]
+# --- ownership and the seam -----------------------------------------------------------------------
+
+LEFT = fast_finish.Chunk(0, 300 * RATE, None, 2985)
+RIGHT = fast_finish.Chunk(297 * RATE, 600 * RATE, 2985, None)
+
+
+def entry(start, end, text):
+    return {'timestamp': [start, end], 'speaker': 'SPEAKER_00', 'text': text}
+
+
+def test_a_chunk_owns_what_starts_in_its_span_and_returns_what_straddles_its_left_boundary():
+    kept, straddling = fast_finish.chunk_entries([entry(290.0, 297.0, 'a'), entry(298.6, 299.5, 'b')], LEFT)
+    assert [e['text'] for e in kept] == ['a'] and straddling == []  # 'b' starts after the boundary
+    # On the right chunk's clock (it starts at 297 s): one heard whole by the left chunk, one straddling,
+    # one after the boundary.
+    kept, straddling = fast_finish.chunk_entries(
+        [entry(0.0, 1.0, 'x'), entry(1.0, 4.0, 'y'), entry(1.6, 2.5, 'z')], RIGHT
+    )
+    assert [e['text'] for e in straddling] == ['y'] and straddling[0]['timestamp'] == pytest.approx([298.0, 301.0])
+    assert [e['text'] for e in kept] == ['z']
+
+
+def test_an_untimed_fallback_spans_its_whole_chunk_instead_of_being_dropped():
+    # Parakeet's text-only fallback is stamped [0, 0]; after a fixed cut it would sit before the boundary.
+    kept, straddling = fast_finish.chunk_entries([entry(0.0, 0.0, 'all of it')], RIGHT)
+    assert kept == [] and straddling[0]['timestamp'] == pytest.approx([297.0, 600.0])
+    assert fast_finish.seam([entry(290.0, 300.0, 'other words')], straddling)[0]['text'] == 'all of it'
+
+
+def test_the_seam_drops_the_repeated_head_of_an_utterance():
+    previous = [entry(280.0, 290.0, 'one two'), entry(292.0, 300.0, 'we should go to the')]
+    straddling = [entry(297.0, 305.0, 'go to the store tomorrow')]
+    (trimmed,) = fast_finish.seam(previous, straddling)
+    assert trimmed['text'] == 'store tomorrow' and trimmed['timestamp'][0] == pytest.approx(300.0)
+
+
+def test_the_seam_also_drops_a_word_the_earlier_cut_clipped():
+    previous = [entry(292.0, 300.0, 'we should go to the sto')]
+    (trimmed,) = fast_finish.seam(previous, [entry(297.0, 305.0, 'go to the store tomorrow')])
+    assert trimmed['text'] == 'store tomorrow' and previous[0]['text'] == 'we should go to the'
+
+
+def test_without_a_text_match_the_share_heard_twice_is_dropped():
+    previous = [entry(292.0, 300.0, 'completely different')]
+    # 3 of 8 seconds of this utterance were inside the earlier chunk's last line.
+    (trimmed,) = fast_finish.seam(previous, [entry(297.0, 305.0, 'a b c d e f g h')])
+    assert trimmed['text'] == 'd e f g h' and trimmed['timestamp'][0] == pytest.approx(300.0)
+
+
+def test_a_single_common_word_is_not_a_seam_match():
+    previous = [entry(292.0, 300.0, 'over there the')]
+    (trimmed,) = fast_finish.seam(previous, [entry(299.0, 309.0, 'the end of a b c d e f g')])
+    # No two-token match: the share before 300 s (1 of 10 s) is dropped instead.
+    assert trimmed['text'] == 'end of a b c d e f g'
+
+
+def test_a_straddling_line_the_earlier_chunk_never_transcribed_is_kept_whole():
+    straddling = [entry(297.5, 302.0, 'new speech')]
+    assert fast_finish.seam([entry(100.0, 200.0, 'old')], straddling) == straddling
+    assert fast_finish.seam([], straddling) == straddling
 
 
 # --- long recordings ------------------------------------------------------------------------------
 
 
-def test_a_thirty_minute_finish_that_was_too_long_is_written_whole_once_and_in_order():
+@pytest.mark.parametrize('group', [None, 5, 7])
+def test_a_thirty_minute_finish_that_was_too_long_is_written_whole_once_and_in_order(group):
+    # Words, and utterances lasting seconds (the shape the production providers return).
     unit, read = recording(1800)
-    provider = Provider()
+    provider = Provider(group=group)
     order = []
     outcome, segments = run([unit], read, provider, cut=lambda: order.append('cut'))
     assert outcome == 'written' and order == ['cut']
@@ -242,7 +332,7 @@ def test_a_thirty_minute_finish_that_was_too_long_is_written_whole_once_and_in_o
 def test_a_long_finish_cut_at_its_silences_is_written_whole_once_and_in_order():
     gaps = [(230, 233), (470, 474), (700, 702), (950, 955), (1190, 1192)]
     unit, read = recording(1400, gaps=gaps)
-    provider = Provider()
+    provider = Provider(group=6)
     outcome, segments = run([unit], read, provider)
     audible = [s + 1 for s in range(1400) if not any(a <= s < b for a, b in gaps)]
     assert outcome == 'written' and heard(segments) == audible
@@ -250,6 +340,14 @@ def test_a_long_finish_cut_at_its_silences_is_written_whole_once_and_in_order():
     # Every cut landed in a silence, so no audio was sent twice.
     assert all(before.hi == after.lo for before, after in zip(plan, plan[1:]))
     assert sum(provider.durations) == pytest.approx(1400)
+
+
+def test_more_chunks_than_fit_the_deadline_are_refused_before_any_spend():
+    unit, _ = recording(2700)  # ten chunks
+    never = lambda *args: pytest.fail('must not read audio, fund or transcribe')
+    assert run([unit], never, never, write=never, authorize=never)[0] == 'too_long'
+    many = [(START.timestamp(), 1.0, [])] * (fast_finish.MAX_UNITS + 1)
+    assert run(many, never, never, write=never)[0] == 'too_long'
 
 
 def test_the_same_finish_is_too_long_behind_the_kill_switch(monkeypatch):
@@ -274,8 +372,9 @@ def test_the_kill_switch_restores_one_serial_request_per_unit(monkeypatch):
 
     never = lambda *args: pytest.fail('the chunked provider must not run')
     outcome, segments = run([first, second], merged_reader(read_first, read_second), never, transcribe=transcribe)
-    # Whole units, one after another: no five-minute split.
+    # Whole units, one after another: no five-minute split, no canary, no deadline.
     assert outcome == 'written' and seen == [400, 200] and len(segments) == 2
+    assert fast_finish.pass_class([first, second]) == 'serial'
 
 
 @pytest.mark.parametrize('value', ['on', 'true', '1', 'garbage', ''])
@@ -284,15 +383,35 @@ def test_anything_but_a_false_word_keeps_the_chunked_path(monkeypatch, value):
     assert fast_finish.chunked_enabled() is True
 
 
-def test_the_chunked_ceiling_and_the_unit_limit_still_hold():
-    never = lambda *args: pytest.fail('must not be called')
-    over = [(START.timestamp(), fast_finish.CHUNKED_MAX_SECONDS + 1, [])]
-    assert run(over, never, never, write=never)[0] == 'too_long'
-    many = [(START.timestamp(), 1.0, [])] * (fast_finish.MAX_UNITS + 1)
-    assert run(many, never, never, write=never)[0] == 'too_long'
+# --- the provider route is resolved once per pass ------------------------------------------------
 
 
-# --- concurrency ----------------------------------------------------------------------------------
+def test_the_language_is_resolved_once_and_every_chunk_reuses_it_under_the_deadline(monkeypatch):
+    unit, read = recording(1100)  # four chunks
+    resolved, sent = [], []
+    route = (('modulate', 'en', 'velma-2'), 'en')
+
+    def resolve(pcm, language, **kwargs):
+        resolved.append((len(pcm), language, kwargs))
+        return route
+
+    def provider(pcm, **kwargs):
+        sent.append((kwargs['route'], kwargs['attempts'], pre_recorded._verification_deadline.get()))
+        return []
+
+    monkeypatch.setattr(pre_recorded, 'prerecorded_bytes_route', resolve)
+    monkeypatch.setattr(pre_recorded, 'prerecorded_from_bytes', provider)
+    deadline = time.monotonic() + 40
+    outcome = fast_finish.run(
+        UID, 'cid', row(), [unit], read, write=lambda *a: True, privacy=lambda: True, deadline=deadline
+    )
+    assert outcome == 'empty'
+    assert len(resolved) == 1 and resolved[0][1] == 'en'
+    # Every request reuses the route, makes one provider attempt and has its timeouts capped to the pass.
+    assert sent == [(route, 1, deadline)] * 4
+
+
+# --- concurrency and fairness ---------------------------------------------------------------------
 
 
 def _gate(target, release):
@@ -306,19 +425,53 @@ def _gate(target, release):
     return hold
 
 
-def test_one_pass_keeps_at_most_its_window_in_flight():
-    unit, read = recording(3600)
+def test_a_short_pass_sends_its_whole_window_at_once():
+    unit, read = recording(1100)  # four chunks: one round
     release = threading.Event()
-    provider = Provider(hold=_gate(fast_finish.PASS_CHUNK_WINDOW + 1, release), sleep=0.01)
+    provider = Provider(hold=_gate(fast_finish.PASS_CHUNK_WINDOW, release))
     outcome, segments = run([unit], read, provider)
-    assert outcome == 'written' and heard(segments) == list(range(1, 3601))
-    assert provider.calls == 13
-    # The pool has more workers; the pass window is what bounds one pass's buffers.
-    assert provider.peak == fast_finish.PASS_CHUNK_WINDOW
-    assert get_fast_finish_chunk_executor()._max_workers > fast_finish.PASS_CHUNK_WINDOW
+    assert outcome == 'written' and heard(segments) == list(range(1, 1101))
+    assert provider.peak == fast_finish.PASS_CHUNK_WINDOW and fast_finish.pass_class([unit]) == 'short'
 
 
-def test_two_passes_share_the_process_chunk_pool():
+def test_a_long_pass_keeps_at_most_its_smaller_window_in_flight():
+    unit, read = recording(1800)
+    release = threading.Event()
+    provider = Provider(hold=_gate(fast_finish.LONG_PASS_WINDOW + 1, release), sleep=0.01)
+    outcome, segments = run([unit], read, provider)
+    assert outcome == 'written' and heard(segments) == list(range(1, 1801))
+    assert provider.peak == fast_finish.LONG_PASS_WINDOW and fast_finish.pass_class([unit]) == 'long'
+    # The pool keeps workers free for short Finishes beside a long pass.
+    assert get_fast_finish_chunk_executor()._max_workers - fast_finish.LONG_PASS_WINDOW >= 3
+
+
+def test_a_slow_long_pass_does_not_starve_a_concurrent_short_finish():
+    long_unit, long_read = recording(2600, offset=0)
+    short_unit, short_read = recording(200, offset=5000)
+    blocked, release = threading.Event(), threading.Event()
+
+    def stall(provider):
+        blocked.set()
+        release.wait(10)
+
+    slow = Provider(hold=stall)
+    results = {}
+    thread = threading.Thread(target=lambda: results.update(long=run([long_unit], long_read, slow)[0]))
+    thread.start()
+    try:
+        assert blocked.wait(5)
+        started = time.monotonic()
+        outcome, segments = run([short_unit], short_read, Provider())
+        # Written while every long request is still stalled.
+        assert outcome == 'written' and heard(segments) == list(range(5001, 5201))
+        assert time.monotonic() - started < 2 and slow.in_flight == fast_finish.LONG_PASS_WINDOW
+    finally:
+        release.set()
+        thread.join(30)
+    assert results == {'long': 'written'}
+
+
+def test_two_long_passes_share_the_process_chunk_pool():
     workers = get_fast_finish_chunk_executor()._max_workers
     release = threading.Event()
     provider = Provider(hold=_gate(workers, release), sleep=0.01)
@@ -334,55 +487,121 @@ def test_two_passes_share_the_process_chunk_pool():
     for thread in threads:
         thread.join(30)
     assert results == ['written', 'written']
-    # Eight submissions from two windows; the pool runs six at a time.
+    # Two long windows of three fill the six workers and no more.
     assert provider.peak == workers
 
 
-# --- multi-unit -----------------------------------------------------------------------------------
+# --- pass slots at admission ----------------------------------------------------------------------
 
 
-def test_several_units_are_written_in_one_pass_and_cut_only_after_the_write():
-    units, readers = zip(*(recording(seconds, offset=offset) for seconds, offset in ((420, 0), (90, 600), (360, 900))))
-    order = []
+class _Doc:
+    def collection(self, *_):
+        return self
 
-    def write(uid, cid, segments):
-        order.append(('write', heard(segments)))
-        return True
+    def document(self, *_):
+        return self
 
-    outcome, _ = run(
-        list(units), merged_reader(*readers), Provider(), write=write, cut=lambda: order.append(('cut', None))
+
+class _Store:
+    client = _Doc()
+
+
+def _admit(monkeypatch, units, *, hold=None):
+    """Admission's hook with a fake pass; returns the started conversation ids, in order."""
+    live._FAST_FINISH_STARTED.clear()
+    started = []
+
+    def fake_run(uid, cid, *args, **kwargs):
+        started.append(cid)
+        if hold is not None:
+            hold.wait(5)
+        return 'written'
+
+    monkeypatch.setattr(fast_finish, 'run', fake_run)
+    monkeypatch.setattr(fast_finish, 'enabled', lambda uid: True)
+    monkeypatch.setattr(
+        conversations_db, 'get_conversation', lambda uid, cid, **kwargs: row(_recovery_transcript_decoded=True)
     )
-    expected = list(range(1, 421)) + list(range(601, 691)) + list(range(901, 1261))
-    assert outcome == 'written'
-    assert order == [('write', expected), ('cut', None)]
+    monkeypatch.setattr(conversations_v3, 'promote_manual_end', lambda uid, cid, firestore_client=None: True)
+    return started
 
 
-@pytest.mark.parametrize('written', [False, 'raise'])
-def test_several_units_are_never_cut_without_their_whole_transcript(written):
-    units, readers = zip(*(recording(seconds, offset=offset) for seconds, offset in ((420, 0), (90, 600))))
+def _admit_all(cids_units, release=None, before=None):
+    async def admit():
+        for cid, units in cids_units:
+            await live._manual_finish_admitted(_Store(), UID, cid, row(), units, object(), b'k')
+        if before is not None:
+            await asyncio.sleep(0.05)
+            before()
+        if release is not None:
+            release.set()
+        await asyncio.gather(*list(live._FAST_FINISH_TASKS))
+        await asyncio.sleep(0)
 
-    def write(uid, cid, segments):
-        if written == 'raise':
-            raise RuntimeError('down')
-        return False
+    asyncio.run(admit())
 
-    outcome, _ = run(
-        list(units), merged_reader(*readers), Provider(), write=write, cut=lambda: pytest.fail('must not cut')
-    )
-    assert outcome == ('write_error' if written == 'raise' else 'superseded')
+
+def test_a_long_pass_never_takes_a_short_finish_slot(monkeypatch):
+    long_unit, _ = recording(1800)
+    short_unit, _ = recording(200)
+    release = threading.Event()
+    started = _admit(monkeypatch, [long_unit], hold=release)
+    before = fast_finish.OUTCOMES.labels('busy')._value.get()
+    _admit_all([('long-1', [long_unit]), ('long-2', [long_unit]), ('short-1', [short_unit])], release)
+    # One long pass at a time; the other is busy; the short Finish ran beside the first.
+    assert sorted(started)[1:] == ['short-1'] and sorted(started)[0] in {'long-1', 'long-2'}
+    assert fast_finish.OUTCOMES.labels('busy')._value.get() == before + 1
+
+
+def test_a_short_finish_waits_briefly_for_a_slot_instead_of_answering_busy(monkeypatch):
+    short_unit, _ = recording(200)
+    started = _admit(monkeypatch, [short_unit])
+    assert live._FAST_FINISH_SLOTS.acquire(blocking=False) and live._FAST_FINISH_SLOTS.acquire(blocking=False)
+    released = []
+
+    def free():
+        live._FAST_FINISH_SLOTS.release()
+        live._FAST_FINISH_SLOTS.release()
+        released.append(True)
+
+    try:
+        _admit_all([('short-1', [short_unit])], before=free)
+    finally:
+        if not released:
+            free()
+    assert started == ['short-1']
 
 
 # --- failures fall back to batch -----------------------------------------------------------------
 
 
-def test_one_failed_chunk_stops_the_pass_without_a_write_or_cut():
-    unit, read = recording(3600)
-    provider = Provider(fail_on=2, sleep=0.02)
+def _chunk_with(second):
+    return lambda heard, attempt: second in heard
+
+
+def test_a_chunk_that_fails_twice_stops_the_pass_without_a_write_or_cut():
+    unit, read = recording(1800)
+    provider = Provider(fail=_chunk_with(700), sleep=0.02)
     never = lambda *args: pytest.fail('must not write or cut')
     outcome, _ = run([unit], read, provider, write=never, cut=never)
     assert outcome == 'provider_error'
-    # Queued chunks are cancelled and running ones drained before the pass returns its slot.
-    assert provider.calls < 13 and provider.in_flight == 0
+    # One retry and no more; running chunks are drained before the pass returns (queued ones are
+    # cancelled, which the deadline tests show).
+    assert max(provider.attempts.values()) == 2 and provider.calls <= 7 + 1 and provider.in_flight == 0
+
+
+def test_a_chunk_that_fails_once_is_retried_inside_the_deadline():
+    unit, read = recording(1800)
+    provider = Provider(fail=lambda heard, attempt: 700 in heard and attempt == 1)
+    outcome, segments = run([unit], read, provider)
+    assert outcome == 'written' and heard(segments) == list(range(1, 1801)) and provider.calls == 8
+
+
+def test_no_retry_when_too_little_of_the_deadline_is_left():
+    unit, read = recording(200)
+    provider = Provider(fail=lambda heard, attempt: attempt == 1)
+    deadline = time.monotonic() + fast_finish.RETRY_MIN_SECONDS - 2
+    assert run([unit], read, provider, deadline=deadline)[0] == 'provider_error' and provider.calls == 1
 
 
 def test_an_audio_error_mid_pass_stops_without_a_write():
@@ -400,54 +619,108 @@ def test_an_audio_error_mid_pass_stops_without_a_write():
 
 
 def test_no_words_is_empty():
-    unit, read = recording(600, gaps=[(0, 600)])
-    unit = (
-        unit[0],
-        unit[1],
-        [{'bucket': 'b', 'path': 'x', 'generation': 1, 'start_frame': 0, 'offset_frame': 0, 'frames': 6000}],
-    )
+    ref = {'bucket': 'b', 'path': 'x', 'generation': 1, 'start_frame': 0, 'offset_frame': 0, 'frames': 6000}
+    unit = (START.timestamp(), 600.0, [ref])
     never = lambda *args: pytest.fail('must not write')
-    assert run([unit], lambda ref: bytes(12000), Provider(), write=never)[0] == 'empty'
+    assert run([unit], lambda r: bytes(12000), Provider(), write=never)[0] == 'empty'
 
 
-# --- safety checks are unchanged ----------------------------------------------------------------
+# --- the deadline ---------------------------------------------------------------------------------
 
 
-def test_privacy_is_asked_before_the_audio_and_before_every_round_of_requests():
+def test_a_pass_past_its_deadline_yields_to_batch_without_a_write():
     unit, read = recording(1800)
-    order = []
+    provider = Provider(sleep=0.4)
+    never = lambda *args: pytest.fail('must not write or cut')
+    started = time.monotonic()
+    outcome, _ = run([unit], read, provider, deadline=started + 0.2, write=never, cut=never)
+    assert outcome == 'deadline'
+    # Queued chunks were cancelled: only the first window was ever sent.
+    assert provider.calls == fast_finish.LONG_PASS_WINDOW and provider.in_flight == 0
+
+
+def test_a_chunk_that_waited_past_the_deadline_in_the_queue_is_never_sent():
+    unit, read = recording(1100)
+    pool = get_fast_finish_chunk_executor()
+    gate = threading.Event()
+    blockers = [pool.submit(gate.wait, 5) for _ in range(pool._max_workers)]
+    provider = Provider()
+    try:
+        threading.Timer(0.3, gate.set).start()
+        outcome, _ = run([unit], read, provider, deadline=time.monotonic() + 0.2)
+    finally:
+        gate.set()
+        for blocker in blockers:
+            blocker.result(5)
+    assert outcome == 'deadline' and provider.calls == 0
+
+
+def test_an_expired_admission_budget_reads_no_audio():
+    unit, _ = recording(200)
+    never = lambda *args: pytest.fail('must not read audio')
+    assert run([unit], never, never, deadline=time.monotonic() - 1, write=never)[0] == 'deadline'
+
+
+# --- privacy at provider dispatch ----------------------------------------------------------------
+
+
+def test_privacy_is_asked_before_the_audio_and_again_by_every_request_at_dispatch():
+    unit, read = recording(1800)
+    order, per_thread = [], {}
+
+    def note(name):
+        order.append(name)
+        per_thread.setdefault(threading.get_ident(), []).append(name)
 
     def privacy():
-        order.append('privacy')
+        note('privacy')
         return True
 
     def reader(ref):
-        order.append('audio')
+        note('audio')
         return read(ref)
 
     provider = Provider()
 
     def words(pcm, language):
-        order.append('provider')
+        note('provider')
         return provider(pcm, language)
 
     outcome, _ = run([unit], reader, words, privacy=privacy)
     assert outcome == 'written'
-    assert order[0] == 'privacy' and order[1] == 'audio'
-    # Every request is preceded by a privacy answer given after its audio was read.
-    first_request = order.index('provider')
-    assert order[first_request - 1] == 'privacy' and 'audio' in order[1 : first_request - 1]
-    assert order.count('privacy') <= 1 + order.count('provider')
+    assert order[:2] == ['privacy', 'audio']
+    assert order.count('privacy') == 1 + order.count('provider') == 8
+    # On every pool thread, each request directly follows its own privacy answer.
+    for sequence in per_thread.values():
+        for index, name in enumerate(sequence):
+            if name == 'provider':
+                assert sequence[index - 1] == 'privacy'
 
 
-def test_an_opt_out_between_rounds_sends_no_further_chunk():
-    unit, read = recording(3600)
-    answers = iter([True, True, False])
-    provider = Provider(sleep=0.01)
+def test_consent_that_changes_while_a_chunk_is_queued_stops_that_chunk():
+    unit, read = recording(1100)  # four chunks, one round
+    pool = get_fast_finish_chunk_executor()
+    gate = threading.Event()
+    # Five of six workers busy: one chunk runs, three wait in the queue.
+    blockers = [pool.submit(gate.wait, 5) for _ in range(pool._max_workers - 1)]
+    granted = [True]
+    provider = Provider()
+
+    def words(pcm, language):
+        result = provider(pcm, language)
+        granted[0] = False  # the owner opts out while the other chunks are queued
+        gate.set()
+        return result
+
     never = lambda *args: pytest.fail('must not write or cut')
-    outcome, _ = run([unit], read, provider, privacy=lambda: next(answers, False), write=never, cut=never)
-    assert outcome == 'privacy_blocked'
-    assert provider.calls == fast_finish.PASS_CHUNK_WINDOW
+    try:
+        outcome, _ = run([unit], read, words, privacy=lambda: granted[0], write=never, cut=never)
+    finally:
+        gate.set()
+        for blocker in blockers:
+            blocker.result(5)
+    # The queued chunks were authorized when submitted, asked again when they started, and never sent.
+    assert outcome == 'privacy_blocked' and provider.calls == 1
 
 
 @pytest.mark.parametrize('answer', [None, lambda: False, lambda: 1])
@@ -516,10 +789,85 @@ def test_the_default_writer_is_fenced_and_refuses_after_an_opt_out(monkeypatch):
 def test_the_default_writer_never_publishes_without_the_fence():
     unit, _ = recording(900)
     never = lambda *args: pytest.fail('must not read audio or transcribe')
-    assert (
-        fast_finish.run(UID, 'cid', row(), [unit], never, transcribe_words=never, privacy=lambda: True)
-        == 'privacy_blocked'
+    outcome = fast_finish.run(UID, 'cid', row(), [unit], never, transcribe_words=never, privacy=lambda: True)
+    assert outcome == 'privacy_blocked'
+
+
+# --- multi-unit -----------------------------------------------------------------------------------
+
+
+def test_several_units_are_written_in_one_pass_and_cut_only_after_the_write():
+    units, readers = zip(*(recording(seconds, offset=offset) for seconds, offset in ((420, 0), (90, 600), (360, 900))))
+    order = []
+
+    def write(uid, cid, segments):
+        order.append(('write', heard(segments)))
+        return True
+
+    outcome, _ = run(
+        list(units), merged_reader(*readers), Provider(group=4), write=write, cut=lambda: order.append(('cut', None))
     )
+    expected = list(range(1, 421)) + list(range(601, 691)) + list(range(901, 1261))
+    assert outcome == 'written'
+    assert order == [('write', expected), ('cut', None)]
+
+
+@pytest.mark.parametrize('written', [False, 'raise'])
+def test_several_units_are_never_cut_without_their_whole_transcript(written):
+    units, readers = zip(*(recording(seconds, offset=offset) for seconds, offset in ((420, 0), (90, 600))))
+
+    def write(uid, cid, segments):
+        if written == 'raise':
+            raise RuntimeError('down')
+        return False
+
+    outcome, _ = run(
+        list(units), merged_reader(*readers), Provider(), write=write, cut=lambda: pytest.fail('must not cut')
+    )
+    assert outcome == ('write_error' if written == 'raise' else 'superseded')
+
+
+# --- the long-recording canary and its daily cap -------------------------------------------------
+
+
+@pytest.mark.parametrize('percent,admitted', [('0', False), ('100', True), ('nope', False), ('-5', False)])
+def test_long_recordings_are_a_canary_by_uid_bucket(monkeypatch, percent, admitted):
+    monkeypatch.setenv('CONVERSATIONS_V3_FAST_FINISH_LONG_PERCENT', percent)
+    unit, read = recording(1800)
+    if admitted:
+        assert run([unit], read, Provider())[0] == 'written'
+    else:
+        never = lambda *args: pytest.fail('must not fund, read or transcribe')
+        assert run([unit], never, never, authorize=never, write=never)[0] == 'long_canary'
+
+
+def test_the_canary_bucket_is_stable_and_salted(monkeypatch):
+    monkeypatch.setenv('CONVERSATIONS_V3_FAST_FINISH_LONG_PERCENT', '25')
+    uids = [f'uid-{i:04d}' for i in range(400)]
+    admitted = [uid for uid in uids if fast_finish.long_admitted(uid)]
+    assert admitted == [uid for uid in uids if fast_finish.long_admitted(uid)]
+    assert 60 <= len(admitted) <= 140
+
+
+def test_finishes_up_to_twenty_minutes_are_not_in_the_canary(monkeypatch):
+    monkeypatch.setenv('CONVERSATIONS_V3_FAST_FINISH_LONG_PERCENT', '0')
+    unit, read = recording(1100)
+    assert run([unit], read, Provider())[0] == 'written'
+
+
+def test_the_daily_cap_on_long_audio_stops_further_long_passes(monkeypatch):
+    monkeypatch.setenv('CONVERSATIONS_V3_FAST_FINISH_LONG_DAILY_SECONDS', '3000')
+    unit, read = recording(1800)
+    assert run([unit], read, Provider())[0] == 'written'
+    never = lambda *args: pytest.fail('must not read audio or transcribe')
+    assert run([unit], never, never, write=never)[0] == 'long_cap'
+
+
+def test_the_daily_budget_resets_each_utc_day(monkeypatch):
+    monkeypatch.setenv('CONVERSATIONS_V3_FAST_FINISH_LONG_DAILY_SECONDS', '100')
+    budget, today = fast_finish._DailyBudget(), datetime(2026, 11, 26, 23, 0, tzinfo=timezone.utc)
+    assert budget.reserve(80, now=today) and not budget.reserve(30, now=today)
+    assert budget.reserve(30, now=today + timedelta(hours=2))
 
 
 # --- metrics --------------------------------------------------------------------------------------
@@ -529,21 +877,28 @@ def _count(histogram):
     return next(s.value for f in histogram.collect() for s in f.samples if s.name.endswith('_count'))
 
 
-def test_chunks_chunk_seconds_and_wall_seconds_are_observed():
+def test_chunk_metrics_and_provider_audio_are_observed():
     unit, read = recording(1800)
-    before = [_count(h) for h in (fast_finish.CHUNKS, fast_finish.PROVIDER_CHUNK_SECONDS, fast_finish.WALL_SECONDS)]
+    histograms = (
+        fast_finish.CHUNKS,
+        fast_finish.PROVIDER_CHUNK_SECONDS,
+        fast_finish.CHUNK_QUEUE_SECONDS,
+        fast_finish.WALL_SECONDS,
+    )
+    before = [_count(h) for h in histograms]
+    audio = fast_finish.AUDIO_SECONDS.labels('long')._value.get()
     assert run([unit], read, Provider())[0] == 'written'
-    after = [_count(h) for h in (fast_finish.CHUNKS, fast_finish.PROVIDER_CHUNK_SECONDS, fast_finish.WALL_SECONDS)]
-    assert [b - a for a, b in zip(before, after)] == [1, 7, 1]
-    # Bounded: no labels at all.
-    for histogram in (fast_finish.CHUNKS, fast_finish.PROVIDER_CHUNK_SECONDS, fast_finish.WALL_SECONDS):
+    assert [_count(h) - b for h, b in zip(histograms, before)] == [1, 7, 7, 1]
+    # 1800 s plus 3 s for each of the six fixed cuts.
+    assert fast_finish.AUDIO_SECONDS.labels('long')._value.get() - audio == pytest.approx(1818, abs=1)
+    for histogram in histograms:
         assert all(set(s.labels) <= {'le'} for f in histogram.collect() for s in f.samples)
 
 
 def test_a_pass_that_is_not_written_observes_no_wall_seconds():
     unit, read = recording(900)
     before = _count(fast_finish.WALL_SECONDS)
-    assert run([unit], read, Provider(fail_on=1))[0] == 'provider_error'
+    assert run([unit], read, Provider(fail=lambda heard, attempt: True))[0] == 'provider_error'
     assert _count(fast_finish.WALL_SECONDS) == before
 
 
@@ -551,6 +906,12 @@ def test_cloud_run_sync_scrapes_the_chunk_metrics():
     profile = Path(__file__).resolve().parents[2] / 'deploy' / 'cloud_run_gmp_sync.yaml'
     rules = yaml.safe_load(profile.read_text())['spec']['endpoints'][0]['metricRelabeling']
     (rule,) = [r for r in rules if r['action'] == 'keep' and r['sourceLabels'] == ['__name__']]
-    for histogram in (fast_finish.CHUNKS, fast_finish.PROVIDER_CHUNK_SECONDS, fast_finish.WALL_SECONDS):
-        samples = [s for family in histogram.collect() for s in family.samples]
+    for metric in (
+        fast_finish.CHUNKS,
+        fast_finish.PROVIDER_CHUNK_SECONDS,
+        fast_finish.CHUNK_QUEUE_SECONDS,
+        fast_finish.WALL_SECONDS,
+        fast_finish.AUDIO_SECONDS,
+    ):
+        samples = [s for family in metric.collect() for s in family.samples]
         assert samples and all(re.fullmatch(rule['regex'], s.name) for s in samples)

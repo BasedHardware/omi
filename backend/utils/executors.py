@@ -480,8 +480,9 @@ def get_fast_finish_chunk_executor() -> MonitoredThreadPoolExecutor:
     """Leaf provider requests for v3 fast-finish chunks: six at once per process.
 
     The pass that submits them coordinates from ``storage_executor``, never from this pool. The queue
-    is bounded by its callers, not here: two pass slots times four chunks in flight each is eight
-    submissions at most, and a submission-slot bound would race the done callback that frees it.
+    is bounded by its callers, not here: two short-pass slots of four chunks plus one long-pass slot
+    of three is eleven submissions at most, and a submission-slot bound would race the done callback
+    that frees it. A long pass's three leave three workers for short Finishes.
     """
     global _fast_finish_chunk_executor
     with _fast_finish_chunk_executor_lock:

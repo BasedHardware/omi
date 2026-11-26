@@ -4,6 +4,7 @@ import asyncio
 import itertools
 import re
 import threading
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -561,7 +562,9 @@ def _admit(monkeypatch, current, units, *, fast='written', promoted=True, member
     calls = {'fast': 0, 'promote': 0, 'cut': 0}
     decoded = current if decoded is None else decoded
 
-    def run(uid, cid, row_, units_, read, *, refresh, cut, privacy, fence):
+    def run(uid, cid, row_, units_, read, *, refresh, cut, privacy, fence, deadline):
+        # One end-to-end budget, set at admission and handed to the pass.
+        assert deadline > time.monotonic()
         calls['fast'] += 1
         # The pass is handed a decoded row, never admission's raw snapshot.
         expected = dict(decoded, _recovery_transcript_decoded=True)

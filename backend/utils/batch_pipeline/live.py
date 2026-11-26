@@ -412,11 +412,17 @@ _FAST_FINISH_TASKS: set = set()
 # retried or re-run; one provider transcription per recording is enough.
 _FAST_FINISH_STARTED: dict[str, None] = {}
 _FAST_FINISH_STARTED_MAX = 4096
-# Bounds whole passes, not provider requests. Each pass holds a storage thread as its coordinator
-# and up to fast_finish.PASS_CHUNK_WINDOW five-minute chunk buffers (38 MB); its chunk requests run
-# on the shared fast-finish chunk pool, which caps provider requests for the process. With
-# CONVERSATIONS_V3_FAST_FINISH_CHUNKED=off a pass holds a whole recording of up to 20 minutes instead.
+# Bound whole passes, not provider requests. Each pass holds a storage thread as its coordinator and
+# up to its window of five-minute chunk buffers (9.6 MB each); its chunk requests run on the shared
+# fast-finish chunk pool, which caps provider requests for the process. Short and serial passes share
+# two slots (4 buffers each); a long pass takes its own single slot (3 buffers), so long recordings
+# never hold a short Finish's slot: 11 buffers, about 106 MB, per process at most. With
+# CONVERSATIONS_V3_FAST_FINISH_CHUNKED=off every pass is serial and holds a whole recording of up to
+# 20 minutes instead, as before.
 _FAST_FINISH_SLOTS = threading.BoundedSemaphore(2)
+_FAST_FINISH_LONG_SLOTS = threading.BoundedSemaphore(1)
+# A short Finish waits this long for a slot (inside its deadline) instead of answering busy at once.
+_FAST_FINISH_SHORT_SLOT_WAIT_SECONDS = 10.0
 
 
 def _admitted_these_units(admitted, job_id) -> bool:
@@ -438,6 +444,8 @@ async def _manual_finish_admitted(
     from database import conversations as conversations_db, conversations_v3
     from utils.conversations.v3 import fast_finish, metrics as v3_metrics, triggers as v3_triggers
 
+    # One end-to-end budget for the pass, from here: slot wait and every provider request count.
+    deadline = time.monotonic() + fast_finish.PASS_DEADLINE_SECONDS
     try:
         if not current.get('recording') or not current.get('v3_manual_end_requested'):
             return
@@ -514,9 +522,14 @@ async def _manual_finish_admitted(
         def run():
             # The cohort read is synchronous on this thread. Owners outside the rollout stop here
             # and never take one of the pass slots.
-            if not fast_finish.enabled(uid):
+            shape = fast_finish.pass_class(copied) if fast_finish.enabled(uid) else None
+            slots = _FAST_FINISH_LONG_SLOTS if shape == 'long' else _FAST_FINISH_SLOTS
+            # A short Finish may wait briefly, inside its deadline; a long one and the serial kill-switch
+            # path never wait, as before.
+            patience = min(_FAST_FINISH_SHORT_SLOT_WAIT_SECONDS, deadline - time.monotonic()) if shape == 'short' else 0
+            if shape is None:
                 outcome = 'not_enabled'
-            elif not _FAST_FINISH_SLOTS.acquire(blocking=False):
+            elif not (slots.acquire(timeout=patience) if patience > 0 else slots.acquire(blocking=False)):
                 outcome = 'busy'
                 fast_finish.OUTCOMES.labels('busy').inc()
             else:
@@ -536,9 +549,10 @@ async def _manual_finish_admitted(
                         cut=cut if not recording_finish and (not single or promoted) else None,
                         privacy=privacy,
                         fence=fence,
+                        deadline=deadline,
                     )
                 finally:
-                    _FAST_FINISH_SLOTS.release()
+                    slots.release()
             if outcome == 'written':
                 v3_metrics.BATCH_MANUAL_END.labels('fast_finish').inc()
             elif not single:

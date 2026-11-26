@@ -6133,6 +6133,10 @@ environments:
             CONVERSATIONS_V3_FAST_FINISH_CHUNKED:
               value: 'on'
               category: ops_kill
+            CONVERSATIONS_V3_FAST_FINISH_LONG_PERCENT: {value: '25', category: rollout}
+            CONVERSATIONS_V3_FAST_FINISH_LONG_DAILY_SECONDS:
+              value: '7200'
+              category: config
             CONVERSATION_PARKED_TERMINAL_STATUS_ENABLED: {value: 'off', category: rollout}
             BATCH_PIPELINE_SERVING_SWEEP_PAGE_ROWS: {value: '200', category: rollout}
             BATCH_PIPELINE_SERVING_TICK_SECONDS: {value: '10', category: rollout}
@@ -6644,6 +6648,10 @@ environments:
             CONVERSATIONS_V3_FAST_FINISH_CHUNKED:
               value: 'on'
               category: ops_kill
+            CONVERSATIONS_V3_FAST_FINISH_LONG_PERCENT: {value: '25', category: rollout}
+            CONVERSATIONS_V3_FAST_FINISH_LONG_DAILY_SECONDS:
+              value: '7200'
+              category: config
             CONVERSATION_PARKED_TERMINAL_STATUS_ENABLED: {value: 'off', category: rollout}
             BATCH_PIPELINE_SERVING_SWEEP_PAGE_ROWS: {value: '200', category: rollout}
             BATCH_PIPELINE_SERVING_TICK_SECONDS: {value: '10', category: rollout}

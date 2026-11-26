@@ -10,49 +10,83 @@ from one serial provider request per unit.
 ## What changed
 
 `CONVERSATIONS_V3_FAST_FINISH_CHUNKED` (ops kill, default `on`) changes how the fast first
-transcript (`utils/conversations/v3/fast_finish.py`) calls the provider:
+transcript (`utils/conversations/v3/fast_finish.py`) calls the provider.
 
-- Every unit is split into chunks of at most five minutes. A cut is the middle of a retained-audio
-  silence of at least 1 s near the even chunk length; with none, the cut is at the even length and
-  the next chunk starts 3 s earlier. The rest of the unit is shared evenly, so there are no slivers.
-- Chunks go to the prerecorded provider concurrently: at most four in flight per pass, at most six
-  per process on the new `fast_finish_chunk` pool. `_FAST_FINISH_SLOTS` still bounds whole passes
-  (two per process). The pass coordinates from its storage thread and the chunk requests are
-  leaves on their own pool, so neither pool waits on itself.
-- Words are placed on the unit clock and each is kept once, by the chunk that owns its midpoint.
-  Lines are formed per chunk and stitched in order; each unit keeps its padded outer edges.
-- The recording bound rises from 20 minutes to two hours (still at most eight units). Memory per
-  pass stays explicit: at most four five-minute chunk buffers (38 MB, what the 20-minute cap
-  allowed) plus one decoded source pack, independent of recording length.
-- Multi-unit recordings were already written in one pass with the cut stored only after the whole
-  transcript; they were deferred when that pass was skipped or did not write (most often over the
-  cap). Their units now go out concurrently too, and the cut still waits for the write.
+- **Split.** Each unit becomes chunks of at most five minutes. A cut goes in the middle of a retained-audio
+  silence of at least 1 s near the even chunk length. With none, it goes at the even length and the next
+  chunk starts 3 s earlier. The rest of the unit is shared evenly, so no chunk is a sliver.
+- **One end-to-end deadline.** 45 s from record admission (`PASS_DEADLINE_SECONDS`), so the write, the
+  builder and Home still fit the 60 s target. Slot wait, audio reads, chunk queue wait and provider
+  requests all count, and so does one retry. Provider HTTP timeouts are capped to the time left
+  (`verification_stt_deadline`, which also keeps the provider's own retry and Soniox credit failover off
+  for these requests; batch keeps both). Past the deadline the pass cancels queued chunks, waits for
+  running ones (their timeouts end at the deadline), writes nothing and yields to batch as `deadline`.
+- **Rounds and caps.** A short pass, at most four chunks (about 19.8 minutes), is one round with every
+  chunk in flight. A long pass keeps three in flight and is capped at nine chunks (three rounds, about
+  44.6 minutes). A longer recording returns `too_long` before any spend, because it cannot meet the
+  deadline. A 2-hour recording is 25 chunks, about nine rounds of three, so it is refused up front.
+- **Fairness.**
+  - Short and serial passes share two pass slots. A long pass takes its own single slot, so long passes
+    never hold a short Finish's slot.
+  - A short Finish waits up to 10 s (inside its deadline) for a slot instead of answering `busy` at once.
+  - On the six-worker `fast_finish_chunk` pool, a long pass's three in flight always leave three workers
+    for short Finishes.
+  - Memory per process is at most 11 chunk buffers (about 106 MB) plus one decoded pack per pass.
+- **Privacy at dispatch.** Privacy is asked before any audio is read, as before, and again inside every
+  chunk job just before its provider request (and before its retry). A chunk that waited in the shared
+  pool's queue is therefore asked when it actually starts. A refusal stops the pass. Cancellation stops
+  queued chunks; a request already dispatched may finish, but its result is never written. The write is
+  still fenced inside its transaction.
+- **Retry and language.** A chunk that fails is sent once more if at least 10 s of the deadline is left.
+  The language is resolved once per pass, on the first chunk's audio (`prerecorded_bytes_route`), and
+  every chunk reuses that provider selection.
+- **Stitching.** Parakeet and Modulate return utterances lasting seconds, not words, so ownership is by
+  start time.
+  - At a fixed cut the earlier chunk owns lines that start before the overlap's middle.
+  - A later line that starts in the overlap and ends before that middle was heard whole by the earlier
+    chunk, and is dropped.
+  - A later line that straddles the middle is trimmed at the seam. Where its head repeats the end of the
+    earlier chunk's text (allowing one clipped last token), the repeat is dropped. Otherwise it loses the
+    share of its tokens that falls before the earlier chunk's last line ended.
+  - Parakeet's text-only fallback, stamped `[0, 0]`, spans its whole chunk instead of being dropped.
+- **Multi-unit recordings.** These were already written in one pass, with the cut stored only after the
+  whole transcript was written. They were deferred when that pass was skipped or did not write. Their
+  units now go out concurrently too, and the cut still waits for the write.
 
-Every existing check stays: consent and funding for the whole recording, the privacy answer before
-any audio is read and again before each round of chunk requests, the in-transaction privacy fence,
-eligibility before the provider and before the write (`superseded`), one pass per recording
-(`already_started`), protection level, custody of the canonical transcript. One failed chunk, an
-audio error or a refusal stops the pass: queued chunks are cancelled, running ones drained, nothing
-is written or cut, and the admitted batch job delivers as before.
+## The long-recording canary
+
+Recordings over 20 minutes are the spend this change adds. They take the chunked path only for
+`CONVERSATIONS_V3_FAST_FINISH_LONG_PERCENT` of owners (default 25, salted uid bucket
+`v3-fast-finish-long`; outside it, `long_canary`). They are also limited to
+`CONVERSATIONS_V3_FAST_FINISH_LONG_DAILY_SECONDS` of their audio per process per UTC day (default 7200;
+past it, `long_cap`). Finishes up to 20 minutes are not gated.
 
 ## Metrics
 
-New, unlabelled histograms: `omi_conversations_v3_fast_finish_chunks` (chunks per chunked pass),
-`omi_conversations_v3_fast_finish_chunk_seconds` (one chunk request) and
-`omi_conversations_v3_fast_finish_wall_seconds` (a written pass, start to write and cut). In the
-chunked path `omi_conversations_v3_fast_finish_seconds{stage="provider"}` is the whole concurrent span,
-the interleaved audio reads included; `stage="audio"` is the read time within it. All three are kept
-by `cloud_run_gmp_sync.yaml`.
+New metrics, all with no labels unless noted:
+- `omi_conversations_v3_fast_finish_chunks`
+- `omi_conversations_v3_fast_finish_chunk_seconds`
+- `omi_conversations_v3_fast_finish_chunk_queue_seconds`
+- `omi_conversations_v3_fast_finish_wall_seconds` (every written pass, from admission)
+- `omi_conversations_v3_fast_finish_audio_seconds_total{path=short|long}` (provider audio, retries included)
+
+New outcomes: `deadline`, `long_canary`, `long_cap`. In the chunked path,
+`omi_conversations_v3_fast_finish_seconds{stage="provider"}` is the whole concurrent span. All of these
+are kept by `cloud_run_gmp_sync.yaml`.
 
 ## Rollout and rollback
 
-On by default and declared `on` for prod `backend` and `backend-integration` (the projection pump
-inherits integration's value). Rollback: set `CONVERSATIONS_V3_FAST_FINISH_CHUNKED=off` on
-`backend-integration`; later passes use one serial request per unit and the 20-minute cap. Provisional
-segments already written are replaced by the batch record projection as usual.
+`CONVERSATIONS_V3_FAST_FINISH_CHUNKED` is declared `on` for prod `backend` and `backend-integration`.
+`CONVERSATIONS_V3_FAST_FINISH_LONG_PERCENT=25` and `CONVERSATIONS_V3_FAST_FINISH_LONG_DAILY_SECONDS=7200`
+are declared for `backend-integration`; the projection pump inherits integration's values.
 
-Known limit: diarization labels are per chunk, so a provisional `SPEAKER_00` in one chunk need not be
-the same person in the next. Provisional rows claim no speaker number and the canonical transcript
-replaces them.
+Rollback options:
+- `CONVERSATIONS_V3_FAST_FINISH_LONG_PERCENT=0` stops long passes only.
+- `CONVERSATIONS_V3_FAST_FINISH_CHUNKED=off` restores one serial request per unit and the 20-minute cap.
+
+Provisional segments already written are replaced by the batch record projection as usual.
+
+Known limit: diarization labels are per chunk, so the same provisional `SPEAKER_00` in two chunks may be
+two different people. Provisional rows claim no speaker number, and the canonical transcript replaces them.
 
 [Pipeline contract](../../listen_pusher_pipeline.mdx)

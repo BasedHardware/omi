@@ -131,15 +131,25 @@ recording's language and writes the result with `update_conversation_segments`. 
 recording pending and wakes reconcile, and the stored manual end cuts the window, so notes start
 without waiting for the batch merge and delivery. The batch record projection later replaces the
 provisional segments; once `record_projection_revision` is set the fast write is refused. Recordings
-over two hours or eight units, partial records, custom STT, locked rows and private rows are skipped.
-`CONVERSATIONS_V3_FAST_FINISH_CHUNKED` (default `on`) splits each unit into chunks of at most five
-minutes, cut at retained-audio silences where possible and otherwise at even offsets with a 3 s
-overlap, sends them to the provider concurrently (four in flight per pass, six per process on the
-`fast_finish_chunk` pool) and keeps each word once, by the chunk that owns its midpoint. Set it `off`
-on `backend-integration` to restore one serial request per unit and the 20-minute bound. Read
+of more than nine chunks (about 44 minutes) or eight units, partial records, custom STT, locked rows and
+private rows are skipped. `CONVERSATIONS_V3_FAST_FINISH_CHUNKED` (default `on`) splits each unit into
+chunks of at most five minutes, cut at retained-audio silences where possible and otherwise at even
+offsets with a 3 s overlap, and sends them to the provider concurrently on the six-worker
+`fast_finish_chunk` pool: four in flight for a pass of up to four chunks (one round), three for a longer
+one. A long pass takes its own pass slot, so it never holds a short Finish's slot, and a short Finish
+waits up to 10 s for a slot instead of answering `busy`. Each chunk asks the batch privacy fence again
+when it actually starts, and is retried once if time allows. One 45 s deadline from record admission
+covers slot wait, reads, queueing and provider requests (whose timeouts are capped to it); past it the
+pass cancels queued chunks and yields to batch as `deadline`. At a fixed cut the earlier chunk owns lines
+that start before the overlap's middle; a later line that straddles it loses the text the earlier chunk
+already holds. Recordings over 20 minutes are a canary: `CONVERSATIONS_V3_FAST_FINISH_LONG_PERCENT`
+(default 25, `long_canary` outside it) and `CONVERSATIONS_V3_FAST_FINISH_LONG_DAILY_SECONDS` (default
+7200 per process per UTC day, `long_cap` past it). Set `CONVERSATIONS_V3_FAST_FINISH_CHUNKED=off` on
+`backend-integration` to restore one serial request per unit and the 20-minute bound. Read
 `omi_conversations_v3_fast_finish_total{outcome}`, `omi_conversations_v3_fast_finish_seconds{stage}`,
-`omi_conversations_v3_fast_finish_chunks`, `omi_conversations_v3_fast_finish_chunk_seconds` and
-`omi_conversations_v3_fast_finish_wall_seconds` (written passes only).
+`omi_conversations_v3_fast_finish_chunks`, `omi_conversations_v3_fast_finish_chunk_seconds`,
+`omi_conversations_v3_fast_finish_chunk_queue_seconds`, `omi_conversations_v3_fast_finish_audio_seconds_total{path}`
+and `omi_conversations_v3_fast_finish_wall_seconds` (written passes, from admission).
 A manual finish that never starts the pass is counted in
 `omi_conversations_v3_fast_finish_skipped_total{reason}`: `mode_off`, `already_started`, or the first
 failing `fast_finish.candidate_rejection` predicate (`not_recording`, `no_manual_end`,
