@@ -13,6 +13,8 @@ from threading import Lock, Thread
 from unittest.mock import patch
 from urllib.parse import urlsplit
 
+import tiktoken
+
 from llm_gateway.idempotency_request import CredentialSource, canonical_request, parse_forwarded_byok_headers
 
 _IDEMPOTENCY_KEY = re.compile(r'[A-Za-z0-9._:-]{1,128}')
@@ -20,8 +22,6 @@ _IDEMPOTENCY_KEY = re.compile(r'[A-Za-z0-9._:-]{1,128}')
 
 @lru_cache(maxsize=1)
 def _encoding():
-    import tiktoken
-
     return tiktoken.get_encoding('cl100k_base')
 
 
@@ -110,8 +110,6 @@ def provider_server():
                 if path == '/v1/chat/completions' and request_key is not None:
                     self._reply(400, {'error': {'code': 'idempotency_operations_route_required'}})
                     return
-                if request_key is not None and not _IDEMPOTENCY_KEY.fullmatch(request_key):
-                    raise ValueError('invalid replay operation identity')
                 body = json.loads(self.rfile.read(int(self.headers['Content-Length'])))
                 if path == '/internal/finalization/sync-reference' and self.server.reference is not None:
                     response_status, result = self.server.reference(body, self.headers)
@@ -121,6 +119,8 @@ def provider_server():
                     key = request_key
                     if not key:
                         raise ValueError('missing replay operation identity')
+                    if not _IDEMPOTENCY_KEY.fullmatch(key):
+                        raise ValueError('invalid replay operation identity')
                     forwarded = parse_forwarded_byok_headers(self.headers)
                     source = CredentialSource.SERVICE_FORWARDED_BYOK if forwarded else CredentialSource.OMI_MANAGED
                     # llm_gateway.gateway.idempotency_store::Operation.canonical_request

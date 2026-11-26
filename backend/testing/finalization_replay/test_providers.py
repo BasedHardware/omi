@@ -30,6 +30,27 @@ def test_operation_endpoints_reject_invalid_key():
         assert 'X-Omi-Idempotency-Key' not in get_error.value.headers
 
 
+def test_developer_webhook_accepts_key_longer_than_gateway_operation_limit():
+    calls = []
+    key = 'synthetic-developer-webhook-' + 'x' * 129
+
+    def webhook(*args):
+        calls.append(args)
+
+    with provider_server() as server:
+        server.state = SimpleNamespace(case={}, webhook=webhook)
+        root = f'http://127.0.0.1:{server.server_port}'
+        headers = {'Idempotency-Key': key}
+        with urlopen(Request(root + '/receive/developer-created', b'{}', headers), timeout=2) as response:
+            assert response.status == 200
+        operation = Request(root + '/v1/chat/completions/operations', b'{}', headers)
+        with pytest.raises(HTTPError) as error:
+            urlopen(operation, timeout=2)
+        assert error.value.code == 400
+        assert not server.operations
+    assert calls == [('developer-created', key, {})]
+
+
 def test_ordinary_completions_reject_idempotency_key():
     calls = []
     with provider_server() as server:
