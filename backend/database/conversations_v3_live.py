@@ -243,65 +243,70 @@ def request_finish(uid: str, window_id: str, *, now: datetime, firestore_client:
         cid = members[-1] if isinstance(members, list) and members else None
         if not _valid_document_id(cid):
             return 'no_recording', ''
-        ref = collection.document(cid)
-        row = ref.get(transaction=tx).to_dict() or {}
-        if (
-            row.get('recording') is not True
-            or row.get('status') != 'completed'
-            or not isinstance(row.get('finished_at'), datetime)
-            # An older overlapping source must not cut through already-visible speech.
-            or row['finished_at'] < window['finished_at']
-            or any(row.get(key) for key in ('deleted', 'is_locked', 'sync_merged_into'))
-            or row.get('data_protection_level') == 'private'
-        ):
-            return 'no_recording', ''
-        marked_window = row.get(FINISH_WINDOW_FIELD)
-        request_pending = row.get('v3_manual_end_requested') is True
-        requested_here = request_pending and marked_window == window_id
-        resolved_here = row.get('v3_manual_end_requested') is False and marked_window == window_id
-        if row.get('discarded'):
-            return ('already_empty', cid) if resolved_here else ('no_recording', '')
-        if row.get('v3_manual_end'):
-            return 'already_cut', cid
-        if (
-            request_pending
-            and marked_window
-            and not requested_here
-            and not _can_retarget_finish(row, marked_window, window_id)
-        ):
-            return 'request_conflict', ''
-        if server_batch.owned(row):
-            if row.get('record_audio_partial') or row.get('record_upload_failed'):
-                return 'batch_unavailable', ''
-            state = _native_projection_state(client, tx, uid, cid)
-            if state == 'pending':
-                if not server_batch.manual_end_marker_enabled():
-                    return 'batch_disabled', ''
-                if requested_here:
-                    return 'already_requested', cid
-                tx.update(ref, {'v3_manual_end_requested': True, FINISH_WINDOW_FIELD: window_id})
-                return 'requested', cid
-            if state == 'unavailable':
-                return ('already_empty', cid) if resolved_here else ('batch_unavailable', '')
-            if (resolved_here or state == 'empty' or row.get('has_content') is False) and not has_finish_content(
-                row, window, cid
-            ):
-                if requested_here:
-                    tx.update(ref, {'v3_manual_end_requested': False})
-                    return 'resolved_empty', cid
-                return 'already_empty', cid
-        tx.update(
-            ref,
-            {
-                'v3_manual_end': True,
-                'v3_pending': True,
-                'v3_pending_since': row.get('v3_pending_since') or now,
-                FINISH_WINDOW_FIELD: window_id,
-            },
-        )
-        return ('consumed' if requested_here else 'cut'), cid
+        row = collection.document(cid).get(transaction=tx).to_dict() or {}
+        return _finish_window_tail(client, tx, uid, collection, window, window_id, cid, row, now)
 
     return commit(client.transaction())
+
+
+def _finish_window_tail(client, tx, uid, collection, window, window_id, cid, row, now) -> Tuple[str, str]:
+    """Store the Finish on ``window_id``'s tail source ``cid``; every read is already done."""
+    ref = collection.document(cid)
+    if (
+        row.get('recording') is not True
+        or row.get('status') != 'completed'
+        or not isinstance(row.get('finished_at'), datetime)
+        # An older overlapping source must not cut through already-visible speech.
+        or row['finished_at'] < window['finished_at']
+        or any(row.get(key) for key in ('deleted', 'is_locked', 'sync_merged_into'))
+        or row.get('data_protection_level') == 'private'
+    ):
+        return 'no_recording', ''
+    marked_window = row.get(FINISH_WINDOW_FIELD)
+    request_pending = row.get('v3_manual_end_requested') is True
+    requested_here = request_pending and marked_window == window_id
+    resolved_here = row.get('v3_manual_end_requested') is False and marked_window == window_id
+    if row.get('discarded'):
+        return ('already_empty', cid) if resolved_here else ('no_recording', '')
+    if row.get('v3_manual_end'):
+        return 'already_cut', cid
+    if (
+        request_pending
+        and marked_window
+        and not requested_here
+        and not _can_retarget_finish(row, marked_window, window_id)
+    ):
+        return 'request_conflict', ''
+    if server_batch.owned(row):
+        if row.get('record_audio_partial') or row.get('record_upload_failed'):
+            return 'batch_unavailable', ''
+        state = _native_projection_state(client, tx, uid, cid)
+        if state == 'pending':
+            if not server_batch.manual_end_marker_enabled():
+                return 'batch_disabled', ''
+            if requested_here:
+                return 'already_requested', cid
+            tx.update(ref, {'v3_manual_end_requested': True, FINISH_WINDOW_FIELD: window_id})
+            return 'requested', cid
+        if state == 'unavailable':
+            return ('already_empty', cid) if resolved_here else ('batch_unavailable', '')
+        if (resolved_here or state == 'empty' or row.get('has_content') is False) and not has_finish_content(
+            row, window, cid
+        ):
+            if requested_here:
+                tx.update(ref, {'v3_manual_end_requested': False})
+                return 'resolved_empty', cid
+            return 'already_empty', cid
+    tx.update(
+        ref,
+        {
+            'v3_manual_end': True,
+            'v3_pending': True,
+            'v3_pending_since': row.get('v3_pending_since') or now,
+            FINISH_WINDOW_FIELD: window_id,
+        },
+    )
+    return ('consumed' if requested_here else 'cut'), cid
 
 
 RECENT_FINISH_AGE = timedelta(minutes=5)
@@ -350,6 +355,73 @@ def _recent_finish_sources(collection, tx, now):
     )
 
 
+def _capture_ineligible(row: Mapping[str, Any], now: datetime, *, window_id: Optional[str] = None) -> bool:
+    """Not one just-sealed Listen capture that Finish may cut.
+
+    A capture with no window must be unclaimed and unmarked. The tail of a named window may be
+    claimed by that window alone; its window marker is judged by the window-tail cut.
+    """
+    claims = row.get('claims')
+    return bool(
+        row.get('v3_derived')
+        or row.get('source') not in {'omi', 'phone'}
+        or not (row.get('external_data') or {}).get('recording_session_id')
+        or row.get('recording') is not True
+        or row.get('status') != 'completed'
+        or not isinstance(row.get('created_at'), datetime)
+        or not isinstance(row.get('started_at'), datetime)
+        or not isinstance(row.get('finished_at'), datetime)
+        or not now - RECENT_FINISH_AGE <= row['finished_at'] <= now
+        or not row['started_at'] <= row['finished_at']
+        or row.get('data_protection_level') == 'private'
+        or any(
+            row.get(key)
+            for key in (
+                'deleted',
+                'discarded',
+                'is_locked',
+                'sync_merged_into',
+                'record_audio_partial',
+                'record_upload_failed',
+            )
+        )
+        or (
+            bool(claims or row.get(FINISH_WINDOW_FIELD))
+            if window_id is None
+            else not _claimed_only_by(claims, window_id)
+        )
+    )
+
+
+def _claimed_only_by(claims: Any, window_id: str) -> bool:
+    if not claims:
+        return True
+    return isinstance(claims, list) and all(
+        isinstance(claim, dict) and claim.get('conversation_id') == window_id for claim in claims
+    )
+
+
+def _live_window_or_deleting(client, tx, collection, uid, now) -> Optional[str]:
+    """Why a recording-scoped Finish must not cut now, or None. Reads only; runs before any write."""
+    windows = list(
+        _recent_window_query(collection, now, MAX_IDLE)
+        .order_by('finished_at')
+        .select(FINISH_FIELDS)
+        .limit(READ_CAP)
+        .stream(transaction=tx)
+    )
+    if len(windows) >= READ_CAP:
+        return 'window_lookup_capped'
+    if any(_is_finishable_window(window.to_dict() or {}, now) for window in windows):
+        return 'no_live_window'  # A live window appeared before the recording cut.
+    marker = account_deletion_document(uid, firestore_client=client).get(transaction=tx)
+    if account_deletion_marker_blocks_access(
+        marker_exists=marker.exists, raw_status=(marker.to_dict() or {}).get('wipe_status')
+    ):
+        return 'recording_ineligible'
+    return None
+
+
 def request_recording_finish(uid: str, *, now: datetime, firestore_client: Any = None):
     """Finish one just-sealed Listen source before it has a derived window."""
     client = firestore_client if firestore_client is not None else get_firestore_client()
@@ -371,85 +443,120 @@ def request_recording_finish(uid: str, *, now: datetime, firestore_client: Any =
         if len(captures) != 1:
             return ('recording_ambiguous' if captures else 'no_live_window'), None
         cid, row = captures[0]
-        if (
-            row.get('recording') is not True
-            or row.get('status') != 'completed'
-            or not isinstance(row.get('created_at'), datetime)
-            or not isinstance(row.get('started_at'), datetime)
-            or not isinstance(row.get('finished_at'), datetime)
-            or not now - RECENT_FINISH_AGE <= row['finished_at'] <= now
-            or not row['started_at'] <= row['finished_at']
-            or row.get('data_protection_level') == 'private'
-            or any(
-                row.get(key)
-                for key in (
-                    'claims',
-                    'deleted',
-                    'discarded',
-                    'is_locked',
-                    'sync_merged_into',
-                    'record_audio_partial',
-                    'record_upload_failed',
-                    FINISH_WINDOW_FIELD,
-                )
-            )
-        ):
+        if _capture_ineligible(row, now):
             return 'recording_ineligible', None
-        windows = list(
-            _recent_window_query(collection, now, MAX_IDLE)
-            .order_by('finished_at')
-            .select(FINISH_FIELDS)
-            .limit(READ_CAP)
-            .stream(transaction=tx)
-        )
-        if len(windows) >= READ_CAP:
-            return 'window_lookup_capped', None
-        if any(_is_finishable_window(window.to_dict() or {}, now) for window in windows):
-            return 'no_live_window', None  # A live window appeared before the recording cut.
-        marker = account_deletion_document(uid, firestore_client=client).get(transaction=tx)
-        if account_deletion_marker_blocks_access(
-            marker_exists=marker.exists, raw_status=(marker.to_dict() or {}).get('wipe_status')
-        ):
-            return 'recording_ineligible', None
-        response_row = {key: row[key] for key in ('created_at', 'started_at', 'finished_at', 'source', 'recording')}
-        response_row.update(id=cid, structured={})
-        if row.get(FINISH_RECORDING_FIELD):
-            if row.get('v3_manual_end'):
-                return 'already_cut', response_row
-            if row.get('v3_manual_end_requested') is False:
-                return 'already_empty', response_row
-        elif row.get('v3_manual_end') or row.get('v3_manual_end_requested'):
-            return 'recording_ineligible', None
+        blocked = _live_window_or_deleting(client, tx, collection, uid, now)
+        if blocked:
+            return blocked, None
+        return _finish_capture(client, tx, collection, uid, cid, row, now)
 
-        ref = collection.document(cid)
-        if server_batch.owned(row):
-            state = _native_projection_state(client, tx, uid, cid)
-            if state == 'pending' and server_batch.has_retained_audio(row):
-                if not server_batch.manual_end_marker_enabled():
-                    return 'batch_disabled', None
-                if row.get('v3_manual_end_requested') is True:
-                    return 'already_requested', response_row
-                tx.update(ref, {'v3_manual_end_requested': True, FINISH_RECORDING_FIELD: True})
-                return 'recording_requested', response_row
-            if state not in {'complete', 'empty'}:
-                return 'batch_unavailable', None
-            if not has_finish_content(row, {}, cid):
-                if row.get('v3_manual_end_requested') is True:
-                    tx.update(ref, {'v3_manual_end_requested': False})
-                    return 'resolved_empty', response_row
-                return 'already_empty', response_row
-        elif not (row.get('v3_pending') and has_finish_content(row, {}, cid)):
-            return 'recording_ineligible', None
+    return commit(client.transaction())
 
-        tx.update(
-            ref,
-            {
-                'v3_manual_end': True,
-                'v3_pending': True,
-                'v3_pending_since': row.get('v3_pending_since') or now,
-                FINISH_RECORDING_FIELD: True,
-            },
-        )
-        return ('consumed' if row.get('v3_manual_end_requested') is True else 'recording_cut'), response_row
+
+def _finish_capture(client, tx, collection, uid, cid, row, now):
+    """Store the recording-scoped Finish on capture ``cid``; every other read is already done."""
+    response_row = {key: row[key] for key in ('created_at', 'started_at', 'finished_at', 'source', 'recording')}
+    response_row.update(id=cid, structured={})
+    if row.get(FINISH_RECORDING_FIELD):
+        if row.get('v3_manual_end'):
+            return 'already_cut', response_row
+        if row.get('v3_manual_end_requested') is False:
+            return 'already_empty', response_row
+    elif row.get('v3_manual_end') or row.get('v3_manual_end_requested'):
+        return 'recording_ineligible', None
+
+    ref = collection.document(cid)
+    if server_batch.owned(row):
+        state = _native_projection_state(client, tx, uid, cid)
+        if state == 'pending' and server_batch.has_retained_audio(row):
+            if not server_batch.manual_end_marker_enabled():
+                return 'batch_disabled', None
+            if row.get('v3_manual_end_requested') is True:
+                return 'already_requested', response_row
+            tx.update(ref, {'v3_manual_end_requested': True, FINISH_RECORDING_FIELD: True})
+            return 'recording_requested', response_row
+        if state not in {'complete', 'empty'}:
+            return 'batch_unavailable', None
+        if not has_finish_content(row, {}, cid):
+            if row.get('v3_manual_end_requested') is True:
+                tx.update(ref, {'v3_manual_end_requested': False})
+                return 'resolved_empty', response_row
+            return 'already_empty', response_row
+    elif not (row.get('v3_pending') and has_finish_content(row, {}, cid)):
+        return 'recording_ineligible', None
+
+    tx.update(
+        ref,
+        {
+            'v3_manual_end': True,
+            'v3_pending': True,
+            'v3_pending_since': row.get('v3_pending_since') or now,
+            FINISH_RECORDING_FIELD: True,
+        },
+    )
+    return ('consumed' if row.get('v3_manual_end_requested') is True else 'recording_cut'), response_row
+
+
+NAMED_FINISH_FIELDS = list(dict.fromkeys([*RECENT_FINISH_FIELDS, *FINISH_FIELDS]))
+_NAMED_OUTCOMES = {
+    'cut': 'named_recording_cut',
+    'recording_cut': 'named_recording_cut',
+    'requested': 'named_recording_requested',
+    'recording_requested': 'named_recording_requested',
+}
+
+
+def request_named_finish(
+    uid: str, named_id: str, *, now: datetime, firestore_client: Any = None
+) -> Tuple[str, Optional[Dict[str, Any]], str]:
+    """Finish the just-sealed capture a Finish named after its window left the live set.
+
+    The app names the window it was showing. A pendant capture that seals at a speech pause can
+    end that window before the tap lands, so the name no longer resolves to a live window. The
+    named id is either that window (its tail source is the capture) or the capture itself. Only
+    a capture sealed within ``RECENT_FINISH_AGE`` that passes the recording-Finish checks is cut,
+    and only while no other window is live. Returns ``(outcome, response row, recording id)``.
+    """
+    if not _valid_document_id(named_id):
+        return 'named_not_finishable', None, ''
+    client = firestore_client if firestore_client is not None else get_firestore_client()
+    collection = client.collection('users').document(uid).collection(conversations_collection)
+
+    @firestore.transactional
+    def commit(tx):
+        named = collection.document(named_id).get(transaction=tx, field_paths=NAMED_FINISH_FIELDS).to_dict() or {}
+        window, cid, row = None, named_id, named
+        if named.get('v3_derived'):
+            members = named.get('v3_recording_ids') or []
+            cid = members[-1] if isinstance(members, list) and members else None
+            if (
+                any(named.get(key) for key in ('deleted', 'discarded', 'is_locked'))
+                or not isinstance(named.get('started_at'), datetime)
+                or not isinstance(named.get('finished_at'), datetime)
+                or not _valid_document_id(cid)
+            ):
+                return 'named_not_finishable', None, ''
+            window = named
+            row = collection.document(cid).get(transaction=tx, field_paths=RECENT_FINISH_FIELDS).to_dict() or {}
+        if _capture_ineligible(row, now, window_id=named_id if window is not None else None):
+            return 'named_not_finishable', None, ''
+        blocked = _live_window_or_deleting(client, tx, collection, uid, now)
+        if blocked:
+            return blocked, None, ''
+        if window is None:
+            outcome, response_row = _finish_capture(client, tx, collection, uid, cid, row, now)
+            return _NAMED_OUTCOMES.get(outcome, outcome), response_row, cid if response_row else ''
+        outcome, recording_id = _finish_window_tail(client, tx, uid, collection, window, named_id, cid, row, now)
+        if not recording_id:
+            return outcome, None, ''
+        response_row = {
+            'id': named_id,
+            'created_at': window.get('created_at') or window['started_at'],
+            'started_at': window['started_at'],
+            'finished_at': window['finished_at'],
+            'v3_recording_ids': window.get('v3_recording_ids'),
+            'structured': {},
+        }
+        return _NAMED_OUTCOMES.get(outcome, outcome), response_row, recording_id
 
     return commit(client.transaction())

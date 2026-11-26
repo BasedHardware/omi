@@ -54,6 +54,27 @@ def _finish_source(client, combo, trial):
     )
 
 
+def _named_finish_sources(client, combo, trial):
+    """A just-sealed capture and the ended window it fed; Finish may name either one."""
+    base = f'users/{SHAPE_UID}/conversations'
+    client.documents[f'{base}/source'] = {
+        'source': 'omi',
+        'recording': True,
+        'created_at': FROZEN_NOW,
+        'started_at': FROZEN_NOW,
+        'finished_at': FROZEN_NOW,
+        'status': 'completed',
+        'external_data': {'recording_session_id': 'shape-session'},
+    }
+    client.documents[f'{base}/window'] = {
+        'v3_derived': True,
+        'started_at': FROZEN_NOW,
+        'finished_at': FROZEN_NOW,
+        'status': 'processing',
+        'v3_recording_ids': ['source'],
+    }
+
+
 def _finish_clock(client):
     """The cut is fresh, so the predecessor read runs."""
 
@@ -154,6 +175,21 @@ def entries():
             base={'uid': SHAPE_UID, 'now': FROZEN_NOW},
             setup=_finish_source,
             patchers=(_transaction_without_rpc,),
+        ),
+        DriverEntry(
+            'database.conversations_v3_live.request_named_finish',
+            base={'uid': SHAPE_UID, 'now': FROZEN_NOW},
+            domains={'named_id': ['source', 'window']},
+            setup=_named_finish_sources,
+            patchers=(_transaction_without_rpc,),
+        ),
+        CoveredByEntry(
+            'database.conversations_v3_live._live_window_or_deleting',
+            covered_by=(
+                'database.conversations_v3_live.request_recording_finish',
+                'database.conversations_v3_live.request_named_finish',
+            ),
+            reason='Both recording-scoped Finish transactions run the same live-window recheck before any write.',
         ),
         CoveredByEntry(
             'database.conversations_v3_live._recent_finish_sources',

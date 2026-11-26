@@ -3705,6 +3705,7 @@ for entry in (
         covered_by=(
             'database.conversations_v3_live.recent_windows',
             'database.conversations_v3_live.request_recording_finish',
+            'database.conversations_v3_live.request_named_finish',
         ),
         reason='Builds the indexed filters; live lookup and Finish execute the query with their own field masks.',
         expect_observed=False,
