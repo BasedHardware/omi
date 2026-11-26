@@ -1,13 +1,13 @@
 """The live closure loads a heavy owner's claimed rows without chaining through settled history."""
 
-from datetime import timedelta
+from datetime import datetime, timedelta, timezone
 
 import pytest
 
 from database import conversations_v3 as store, conversations_v3_leases as leases, memories
 from utils.conversations.v3 import Conflict, service, triggers
 from tests.unit.test_conversations_v3_claim_growth import T0, UID, path, strict  # noqa: F401
-from tests.unit.test_conversations_v3_review import AT, MemoryQuery, source
+from tests.unit.test_conversations_v3_review import AT, MemoryQuery, builder, source  # noqa: F401
 
 C = '/users/u/conversations/'
 
@@ -644,6 +644,41 @@ async def test_unvisited_unlocked_wake_is_independent_of_pending_seeds(monkeypat
     await service._wake_unvisited_unlocked('u', store.UnlockedPage(frozenset({'later'})), 'pass-token')
     assert len(calls) == 1
     assert calls[0][0] == 'u' and calls[0][1] > AT
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('outlasts_wake', [False, True])
+async def test_reconcile_wakes_unvisited_unlocked_windows_once_per_pass(builder, monkeypatch, outlasts_wake):
+    from tests.unit.test_conversations_v3_lock_timing import _locked_pair
+
+    _window, existing, recordings = _locked_pair(datetime.now(timezone.utc) - timedelta(hours=2))
+    monkeypatch.setenv('CONVERSATIONS_V3_LOCK_SECONDS', '3600')
+    recordings['r'].update(recording=True, status='completed', v3_pending=True)
+    pages, wakes = [], []
+
+    def load(*a, unlocked_page=None, **kw):
+        unlocked_page.remaining, unlocked_page.cursor = frozenset({'later'}), 'early'
+        pages.append(unlocked_page)
+        return recordings, existing, []
+
+    def commit(*a, unlocked_page=None, **kw):
+        assert unlocked_page is pages[0]  # The page's cursor reaches the lease write.
+        if outlasts_wake:  # This pass's own wake ran (busy) under the lease.
+            late = datetime.now(timezone.utc) + timedelta(minutes=2)
+            monkeypatch.setattr(
+                service, 'datetime', type('Clock', (datetime,), {'now': staticmethod(lambda tz=None: late)})
+            )
+
+    monkeypatch.setattr(store, 'load', load)
+    monkeypatch.setattr(service, '_commit', commit)
+    monkeypatch.setattr(service, 'enqueue', lambda uid, **kw: kw.get('wake_key') and wakes.append(kw['at']))
+    started = datetime.now(timezone.utc)
+    assert await service.reconcile('synthetic') == 'committed'
+    assert len(pages) == 1 and wakes[0] - started >= timedelta(seconds=59)
+    # One wake per pass, re-armed after the lease only when this pass outlasted it.
+    assert len(wakes) == (2 if outlasts_wake else 1)
+    if outlasts_wake:
+        assert wakes[1] > wakes[0] + timedelta(minutes=1)
 
 
 def test_unlocked_continuation_is_not_swallowed_by_an_earlier_same_minute_wake(monkeypatch):
