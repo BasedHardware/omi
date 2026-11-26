@@ -23,7 +23,9 @@ COMMITTED = resolve('audio_single_recording_finish')
 
 
 @pytest.fixture(autouse=True)
-def _env(monkeypatch):
+def _env(monkeypatch, tmp_path):
+    # The scenario lab root (sync work files, recordings): this test's directory, never the host's.
+    monkeypatch.setenv('OMI_PIPELINE_LAB_ROOT', str(tmp_path / 'scenario-lab-root'))
     monkeypatch.setenv('BATCH_PIPELINE_EMPTY_ASR_SAFETY_NET_ENABLED', 'false')
     monkeypatch.setenv('BATCH_PIPELINE_SHORT_SPEECH_SINGLE_ENABLED', 'false')
     register_local_recorder(None)
@@ -302,8 +304,21 @@ def test_batch_lane_turns_the_committed_cassette_into_lines(tmp_path):
     assert distinctive and not distinctive & set(text.lower().replace(',', ' ').split())  # no transcript words
 
 
-def test_sync_lane_turns_a_cassette_into_lines(tmp_path):
+def test_sync_lane_turns_a_cassette_into_lines(tmp_path, monkeypatch):
+    import stat
+    import tempfile
+
+    from testing.pipeline_lab.lanes import sync
     from testing.pipeline_lab.lanes.audio import load_pcm16
+
+    work_dirs = []
+    real_mkdtemp = tempfile.mkdtemp
+
+    def mkdtemp(*args, **kwargs):  # where the sync lane writes the recording's private WAV files
+        work_dirs.append(Path(kwargs['dir']))
+        return real_mkdtemp(*args, **kwargs)
+
+    monkeypatch.setattr(sync.tempfile, 'mkdtemp', mkdtemp)
 
     write_wav(tmp_path / 'a.wav', 4.0)
     raw = scenario_raw({'audio': [0, 10], 'speech': [{'fill': [0, 10]}]})
@@ -318,6 +333,11 @@ def test_sync_lane_turns_a_cassette_into_lines(tmp_path):
     assert sum(len(line.text.split()) for line in lines) == 5 and lines[0].start >= 20.5
     assert report['recordings'][0]['driver'] == 'sync_v1' and report['recordings'][0]['source'] == 'local'
     assert filled.recording('B').lines == scenario.recording('B').lines
+    private = tmp_path / 'scenario-lab-root' / 'tmp' / 'sync'
+    assert work_dirs == [private] and stat.S_IMODE(private.stat().st_mode) == 0o700
+
+    filled, _ = materialize(scenario, prepared, file_vad=lambda path: [{'start': 0.5, 'end': 3.5}], scratch_root=root)
+    assert work_dirs[-1] == root / 'tmp' / 'sync'
 
 
 def test_silent_audio_is_reported_not_an_error(tmp_path):

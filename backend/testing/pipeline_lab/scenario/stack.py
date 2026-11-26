@@ -611,6 +611,26 @@ def check_files(names: Sequence[str], *, as_json: bool) -> int:
     return 0
 
 
+# A run's own files at the top of its output directory (run_set, scenario compare).
+RUN_FILES = ('run.json', 'verdict.json', 'compare.json')
+
+
+def _fresh_output(root: Path) -> None:
+    """Remove an earlier run's output from ``root`` (validated owner-only) before any job starts.
+
+    The runner appends to several artifacts (``v3_tasks.jsonl``, ``decisions.jsonl``, sink logs), so a reused
+    ``--keep`` directory would mix executions: a scenario could report an earlier run's Home rows, and repeats
+    would differ. Removed: every scenario directory (one holding ``scenario.json``) and the run files. Kept:
+    anything else, such as the started stack's ``.stack`` directory. Symlinks are unlinked, never followed."""
+    for child in sorted(root.iterdir()):
+        if child.is_symlink():
+            continue  # never a lab output: a scenario directory is created here, not linked
+        if child.is_dir() and (child / 'scenario.json').is_file():
+            shutil.rmtree(child)
+        elif child.name in RUN_FILES and child.is_file():
+            child.unlink()
+
+
 def output_root(keep: Optional[str], prefix: str = 'plab-scenario-') -> Path:
     """The run's output directory: ``--keep DIR`` (created 0700; an existing one must already be owner-only),
     else a new directory under the private scenario lab root, never the system temp directory. Scenario output
@@ -693,6 +713,7 @@ def run_set(
             raise ScenarioError(f'scenario {scenario.name} given twice')
         scenarios[scenario.name] = (path, scenario)
     root = _private(root, 'scenario output')
+    _fresh_output(root)
     started_at = datetime.now(timezone.utc).isoformat(timespec='seconds')
     started = time.perf_counter()
     for name, (path, _) in scenarios.items():

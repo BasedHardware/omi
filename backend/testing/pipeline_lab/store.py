@@ -140,6 +140,29 @@ def private_dir(path: Path, what: str = 'lab output') -> Path:
         raise StoreRefused(f'{what} {path}: {refused} (use a new path or chmod 700 it yourself)') from None
 
 
+@contextlib.contextmanager
+def private_tempdir(root: Path) -> Iterator[Path]:
+    """``tempfile`` and ``$TMPDIR`` point at ``<root>/tmp/product`` (owner-only) for the block, then back.
+
+    Product code the lab runs on owner data makes its own temp files (``utils/batch_pipeline``, ``utils/sync``)
+    in the system temp directory; under this they land inside the private lab root instead. ``TMPDIR`` is
+    inherited by the lab environment (``stack/env.py``) and by child processes."""
+    import tempfile
+
+    directory = ensure_private_dir(Path(root) / 'tmp' / 'product')
+    previous_env, previous_dir = os.environ.get('TMPDIR'), tempfile.tempdir
+    os.environ['TMPDIR'] = str(directory)
+    tempfile.tempdir = str(directory)
+    try:
+        yield directory
+    finally:
+        tempfile.tempdir = previous_dir
+        if previous_env is None:
+            os.environ.pop('TMPDIR', None)
+        else:
+            os.environ['TMPDIR'] = previous_env
+
+
 def private_write_text(path: Path, text: str) -> Path:
     """Replace ``path`` atomically with ``text``, created 0600 (parents 0700)."""
     atomic_write_bytes(Path(path), text.encode('utf-8'))

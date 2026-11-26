@@ -95,7 +95,10 @@ def main(argv=None) -> int:
     if args.command == 'record-stt':
         if args.adapter == 'prerecorded' and not (args.provider and args.model):
             parser.error('--provider and --model are required for the prerecorded adapter')
-        print(json.dumps(_record(args)))
+        from testing.pipeline_lab.store import ensure_private_dir, lab_root, private_tempdir
+
+        with private_tempdir(ensure_private_dir(lab_root())):
+            print(json.dumps(_record(args)))
         return 0
 
     # Replay plays recorded cassettes only: no vendor or cloud credential may reach the product code it runs.
@@ -112,14 +115,17 @@ def main(argv=None) -> int:
         parser.error('--provider and --model name the cassettes to play')
     vocabulary = tuple(v for v in args.vocabulary.split(',') if v)
     root = ensure_private_dir(lab_root())
-    results = replay_day(
-        safe_segment(args.day, 'day id'),
-        safe_segment(args.run, 'run id'),
-        STTSelection(args.provider, args.model, args.language, vocabulary),
-        sync_mode=args.sync_mode,
-        streaming_via=None if args.streaming_via == 'none' else args.streaming_via,
-        root=root,
-    )
+    from testing.pipeline_lab.store import private_tempdir
+
+    with private_tempdir(root):  # the product STT code's own temp files stay inside the lab root
+        results = replay_day(
+            safe_segment(args.day, 'day id'),
+            safe_segment(args.run, 'run id'),
+            STTSelection(args.provider, args.model, args.language, vocabulary),
+            sync_mode=args.sync_mode,
+            streaming_via=None if args.streaming_via == 'none' else args.streaming_via,
+            root=root,
+        )
     counts: dict[str, int] = {}
     errors: dict[str, int] = {}
     for r in results:
