@@ -112,7 +112,12 @@ def score_conversation(words: list[dict], truth: dict, turns: list[dict], scope:
     truth_voices = len(
         {w['speaker'] for i, w in enumerate(reference) if w['speaker'] not in IGNORED and (scope is None or i in scope)}
     )
-    predicted_voices = len({_voice(t) for t in valid if _voice(t) is not None})
+    if scope is None:
+        # Every output voice, unaligned turns included: counting only matched words would hide over-splitting.
+        predicted_voices = len({_voice(t) for t in valid if _voice(t) is not None})
+    else:  # the voices that hold any of the conversation's own words
+        held = {chosen[i] for i in scope if i < len(chosen) and chosen[i] is not None}
+        predicted_voices = len({_voice(valid[i]) for i in held if _voice(valid[i]) is not None})
     card = {**counts, **rates(counts)}
     card['truth_voices'] = truth_voices
     card['predicted_voices'] = predicted_voices

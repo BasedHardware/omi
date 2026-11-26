@@ -146,3 +146,33 @@ def test_peer_env_points_both_product_urls_at_the_peer(tmp_path, store):
     with pytest.raises(ValueError):
         SpeakerPeer('record-vendor', store=store, workdir=tmp_path)
     assert peer_module.MODES == ('replay', 'record-local')
+
+
+def test_concurrent_misses_of_the_same_audio_get_their_own_request_files(tmp_path):
+    import threading
+
+    from testing.pipeline_lab.speakers.peer import CassetteStore, SpeakerPeer
+
+    seen, gate = [], threading.Barrier(2)
+
+    class Local:
+        def run(self, request):
+            seen.append(request['path'])
+            gate.wait(timeout=5)
+            assert open(request['path'], 'rb').read()  # the other request did not delete this one's input
+            return {'ok': True, 'body': {'turns': [], 'overlaps': [], 'centroids': {}}}
+
+        def close(self):
+            pass
+
+    store = CassetteStore(tmp_path / 'cassettes')
+    (tmp_path / 'cassettes').mkdir(mode=0o700)
+    work = tmp_path / 'work'
+    work.mkdir(mode=0o700)
+    peer = SpeakerPeer('record-local', store=store, workdir=work, local=Local())
+    threads = [threading.Thread(target=peer.answer, args=('/v2/diarization', {}, PCM, 'audio/pcm')) for _ in range(2)]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join(timeout=10)
+    assert len(set(seen)) == 2

@@ -109,7 +109,7 @@ class ScenarioSpeakers:
                 workdir = ensure_private_dir(ensure_private_dir(private_lab_root() / 'tmp') / 'speakers')
             peer = SpeakerPeer(mode, store=store, workdir=workdir)
             if mode == 'record-local' and peer.local is not None:
-                peer.local.process = peer.local._start()  # noqa: SLF001 - under the ambient env, not the lab's
+                peer.local.idle.append(peer.local._start())  # noqa: SLF001 - under the ambient env, not the lab's
             peer.start()
         return cls(mode=mode, peer=peer, gallery=dict(spec.gallery), receipts=spec.receipts)
 

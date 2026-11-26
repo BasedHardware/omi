@@ -169,16 +169,14 @@ def _stored_segments(conversation: corpus_mod.Conversation, source: tuple[str, O
     return value.get('segments') if isinstance(value, dict) else None
 
 
-def stored_turns(words: list[dict], segments: Optional[list[dict]]) -> Optional[list[dict]]:
-    """Stored segments on the audio clock, placed by their text: stored clocks are not on the audio clock
-    (measured 2026-11-26 on an owner corpus: 17 % of segments within 1.5 s), so each stored token is aligned to
-    the corpus words (``difflib``, no junk heuristic) and every aligned word takes its segment's labels. Words
-    between two aligned words of one segment take it too; other words stay unlabeled (an abstention)."""
+def stored_word_labels(words: list[dict], segments: list[dict]) -> list[Optional[int]]:
+    """For each corpus word, the index of the stored segment its text aligns to (``None`` when none does).
+    Stored clocks are not on the audio clock (measured 2026-11-26 on an owner corpus: 17 % of segments within
+    1.5 s), so each stored token is aligned to the corpus words (``difflib``, no junk heuristic). Words between two
+    aligned words of one segment take it too."""
     import difflib
     import re
 
-    if not segments:
-        return None
     pattern = re.compile(r"[a-z0-9]+(?:'[a-z0-9]+)?")
     stored_tokens, stored_owner = [], []
     for index, segment in enumerate(segments):
@@ -204,6 +202,15 @@ def stored_turns(words: list[dict], segments: Optional[list[dict]]) -> Optional[
             for i in range(previous + 1, index):
                 labels[i] = label
         last[label] = index
+    return labels
+
+
+def stored_turns(words: list[dict], segments: Optional[list[dict]]) -> Optional[list[dict]]:
+    """Stored segments on the audio clock, placed by their text (:func:`stored_word_labels`): every aligned word
+    takes its segment's labels; other words stay unlabeled (an abstention)."""
+    if not segments:
+        return None
+    labels = stored_word_labels(words, segments)
     turns: list[dict] = []
     for word, label in zip(words, labels):
         if label is None:

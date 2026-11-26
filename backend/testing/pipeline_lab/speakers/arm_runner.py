@@ -19,6 +19,7 @@ segments the engine produced (clocks on the audio, identity fields) and the engi
 from __future__ import annotations
 
 import json
+import os
 import sys
 import time
 from pathlib import Path
@@ -71,7 +72,9 @@ ENGINES = {'final_pass': final_pass}
 def main(argv: list[str]) -> int:
     job = json.loads(Path(argv[0]).read_text())
     engine = ENGINES[job['engine']]
-    with open(job['out'], 'w') as out:
+    # Owner-only from creation: the output holds transcript text and identity fields.
+    fd = os.open(job['out'], os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    with os.fdopen(fd, 'w') as out:
         for conversation in job['conversations']:
             try:
                 result = engine(conversation, job.get('gallery') or {})

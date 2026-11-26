@@ -133,21 +133,24 @@ def identities(
 
 
 def manual_overrides(conversation: corpus_mod.Conversation, words: list[dict], labels: list[str]) -> dict[str, str]:
+    """The owner's own corrections: each manual segment, placed on the audio by its text (stored clocks are not
+    on the audio clock), names the silver voice holding most of its words."""
     from collections import Counter
 
-    stored = conversation.production or {}
-    offset = stored.get('segment_clock_offset')
-    if offset is None:
+    from testing.pipeline_lab.speakers.bench import stored_word_labels
+
+    segments = (conversation.production or {}).get('segments') or []
+    if not segments:
         return {}
+    placed = stored_word_labels(words, segments)
     out = {}
-    for segment in stored.get('segments') or []:
-        if segment.get('speaker_label_source') != 'manual' or segment.get('start') is None:
+    for index, segment in enumerate(segments):
+        if segment.get('speaker_label_source') != 'manual':
             continue
         identity = 'user' if segment.get('is_user') else segment.get('person_id')
         if not identity:
             continue
-        left, right = segment['start'] - offset, segment['end'] - offset
-        votes = Counter(l for w, l in zip(words, labels) if l != UNSURE and w['start'] < right and w['end'] > left)
+        votes = Counter(l for at, l in zip(placed, labels) if at == index and l != UNSURE)
         if votes:
             out[votes.most_common(1)[0][0]] = identity
     return out

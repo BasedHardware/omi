@@ -72,3 +72,50 @@ def test_gates_fail_on_missing_or_out_of_range_metrics():
     assert bench.check_gates(report, ['base.attribution>=0.75', 'base.wrong_name_rate<=0.05']) == []
     failures = bench.check_gates(report, ['base.attribution>=0.9', 'base.owner_recall>=0.5'])
     assert len(failures) == 2
+
+
+def test_arm_output_is_owner_only_even_under_a_permissive_umask(tmp_path, monkeypatch):
+    import json
+    import os
+    import stat
+
+    from testing.pipeline_lab.speakers import arm_runner
+
+    monkeypatch.setitem(arm_runner.ENGINES, 'echo', lambda conversation, gallery: {'key': conversation['key']})
+    out = tmp_path / 'out.jsonl'
+    job = tmp_path / 'job.json'
+    job.write_text(json.dumps({'engine': 'echo', 'conversations': [{'key': 'k'}], 'out': str(out)}))
+    previous = os.umask(0o022)
+    try:
+        assert arm_runner.main([str(job)]) == 0
+    finally:
+        os.umask(previous)
+    assert stat.S_IMODE(out.stat().st_mode) == 0o600
+
+
+def test_scoped_speaker_count_ignores_voices_outside_the_conversation():
+    words = _words('one two three four five six')
+    truth = {'turns': [{'start': 0, 'end': 10, 'speaker': 'a'}], 'identities': {'a': 'user'}}
+    predicted = [
+        {'start': 0.0, 'end': 1.4, 'speaker_id': 0, 'speaker_id_scope': 's', 'is_user': False},
+        {'start': 1.5, 'end': 3.0, 'speaker_id': 1, 'speaker_id_scope': 's', 'is_user': True},
+    ]
+    owned = {3, 4, 5}
+    assert score.score_conversation(words, truth, predicted)['predicted_voices'] == 2
+    assert score.score_conversation(words, truth, predicted, owned)['predicted_voices'] == 1
+
+
+def test_silver_places_manual_corrections_by_text_not_by_the_stored_clock():
+    from testing.pipeline_lab.speakers.corpus import Conversation
+
+    words = _words('alpha beta gamma delta epsilon zeta')
+    labels = ['A', 'A', 'A', 'B', 'B', 'B']
+    production = {
+        'segment_clock_offset': -500.0,  # a clock that would put every stored segment far from its words
+        'segments': [
+            {'text': 'alpha beta gamma', 'start': 900, 'end': 901, 'speaker_label_source': 'auto'},
+            {'text': 'delta epsilon zeta', 'start': 1, 'end': 2, 'speaker_label_source': 'manual', 'is_user': True},
+        ],
+    }
+    conversation = Conversation(key='k', path=None, production=production)
+    assert silver.manual_overrides(conversation, words, labels) == {'B': 'user'}

@@ -276,7 +276,8 @@ class SpeakerPeer:
             return 409, {'detail': f'speaker cassette miss ({route}); record it with --speakers record-local'}
         from testing.pipeline_lab.store import atomic_write_bytes
 
-        work = self.workdir / f'req-{key[:16]}.{"wav" if route == "/v2/embedding" else "bin"}'
+        # Unique per request: concurrent misses of the same audio must not delete each other's input.
+        work = self.workdir / f'req-{key[:16]}-{os.urandom(6).hex()}.{"wav" if route == "/v2/embedding" else "bin"}'
         atomic_write_bytes(work, audio)
         try:
             reply = self.local.run(
