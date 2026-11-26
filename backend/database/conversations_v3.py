@@ -7,7 +7,6 @@ codec; cached outlines are encrypted. Nothing is cleared after a lost race.
 import json
 import logging
 import os
-import re
 import time
 from bisect import bisect_right
 from dataclasses import dataclass
@@ -330,15 +329,6 @@ def record_blocked(uid, token, reason, *, on_open=False, quarantine=(), firestor
             log=logger,
         )
     return bool(result)
-
-
-_SIZE_ERROR_DOCUMENT = re.compile(r"/documents/users/[^/]+/conversations/([^/'\"\\\s]+)")
-
-
-def size_error_document(error):
-    """The conversation id a Firestore document-size rejection names, or None (never logged: ids stay in)."""
-    match = _SIZE_ERROR_DOCUMENT.search(str(error)) if error is not None and size_error(error) else None
-    return match.group(1) if match else None
 
 
 def size_quarantined(uid, *, firestore_client=None):

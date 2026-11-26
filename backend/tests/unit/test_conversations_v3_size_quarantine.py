@@ -390,10 +390,12 @@ def test_the_size_error_names_its_document_or_nothing():
     named = InvalidArgument(
         f"Document '{path}' cannot be written because its size (1 bytes) exceeds the maximum allowed size"
     )
-    assert store.size_error_document(named) == 'da'
-    assert store.size_error_document(InvalidArgument('The value of property "x" is longer than 1048487 bytes')) is None
-    assert store.size_error_document(InvalidArgument(f"Document '{path}' is locked")) is None
-    assert store.size_error_document(None) is None
+    assert service.size_error_document(named) == 'da'
+    assert (
+        service.size_error_document(InvalidArgument('The value of property "x" is longer than 1048487 bytes')) is None
+    )
+    assert service.size_error_document(InvalidArgument(f"Document '{path}' is locked")) is None
+    assert service.size_error_document(None) is None
 
 
 def test_quarantined_successors_cannot_hide_a_healthy_page_continuation():

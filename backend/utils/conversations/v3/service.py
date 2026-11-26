@@ -396,6 +396,19 @@ async def _load_live_batch(uid, token, parked, unlocked_page=None):
     raise AssertionError('bounded pending batch sizes are empty')
 
 
+_SIZE_ERROR_DOCUMENT = re.compile(r"/documents/users/[^/]+/conversations/([^/'\"\\\s]+)")
+
+
+def size_error_document(error):
+    """The conversation id a Firestore document-size rejection names, or None. Never logged: it holds ids.
+
+    Pure string checks on store's size marker (no store call): this runs on the event loop.
+    """
+    text = str(error) if error is not None else ''
+    match = _SIZE_ERROR_DOCUMENT.search(text) if store.DOCUMENT_TOO_LARGE in text else None
+    return match.group(1) if match else None
+
+
 def _size_quarantine(reason, pending_limit, page, recordings, oversized=None):
     """Every pending recording a one-seed pass loaded when Firestore rejected its commit for size (SCA-2918).
 
@@ -1115,7 +1128,7 @@ async def reconcile(
                 bounded_pending_limit,
                 unlocked_page,
                 recordings,
-                store.size_error_document(error.__cause__),
+                size_error_document(error.__cause__),
             )
             await run_blocking(
                 db_executor,
