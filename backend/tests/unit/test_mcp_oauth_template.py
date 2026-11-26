@@ -1,5 +1,9 @@
+import json
+import shutil
+import subprocess
 from pathlib import Path
 
+import pytest
 from jinja2 import Environment, FileSystemLoader
 
 TEMPLATES_DIR = Path(__file__).resolve().parents[2] / "templates"
@@ -83,6 +87,36 @@ def test_mcp_oauth_template_still_renders_permissions_and_social_sign_in():
     assert "Create, update, and delete your Omi action items" in html
     assert "firebase.auth.GoogleAuthProvider.PROVIDER_ID" in html
     assert "firebaseui-auth-container" in html
+
+
+@pytest.mark.skipif(shutil.which("node") is None, reason="node is not installed")
+@pytest.mark.parametrize("platform", ["Win32", "iPhone"])
+def test_mcp_oauth_starts_google_and_apple_sign_in_on_supported_browsers(platform):
+    # Execute the deployed template's inline script and observe its FirebaseUI
+    # configuration. The browser's platform must not hide a supported provider.
+    inline_script = _render_mcp_template().split("<script>")[1].split("</script>")[0]
+    harness = """
+const { runInNewContext } = require('node:vm');
+const auth = Object.assign(() => ({}), {GoogleAuthProvider: {PROVIDER_ID: 'google.com'}});
+const context = {
+  navigator: {platform: process.argv[1]},
+  document: {getElementById: () => ({addEventListener() {}})},
+  firebase: {initializeApp() {}, auth},
+  firebaseui: {auth: {AuthUI: class {
+    start(selector, options) {
+      console.log(JSON.stringify({selector, providers: options.signInOptions}));
+    }
+  }}},
+};
+runInNewContext(require('node:fs').readFileSync(0, 'utf8'), context);
+"""
+    result = subprocess.run(
+        ["node", "-e", harness, platform], input=inline_script, capture_output=True, text=True, timeout=10, check=True
+    )
+    assert json.loads(result.stdout) == {
+        "selector": "#firebaseui-auth-container",
+        "providers": ["google.com", "apple.com"],
+    }
 
 
 def test_mcp_oauth_template_places_email_sign_in_below_social_options():
