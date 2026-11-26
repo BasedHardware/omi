@@ -95,6 +95,11 @@ on:
         description: 'Named standard deploy only. Exact revision admitted at 100% serving before dispatch.'
         required: false
         default: ''
+      selected_registered_max_instances:
+        description: 'Registered max instances already admitted for a named production integration or sync deploy.'
+        required: false
+        default: ''
+        type: string
       deploy_gateway:
         description: 'Development only: deploy the LLM gateway binary with the backend stack (requires deploy_targets=all)'
         required: true
@@ -1365,6 +1370,7 @@ jobs:
           environment: ${{ github.event.inputs.environment }}
           deploy_targets: ${{ github.event.inputs.deploy_targets }}
           cloud_run_service: ${{ github.event.inputs.cloud_run_service || 'all' }}
+          selected_registered_max_instances: ${{ inputs.selected_registered_max_instances }}
           deploy_gateway: ${{ github.event.inputs.deploy_gateway }}
           service_images: ${{ github.event.inputs.service_images }}
           release_version: ${{ github.event.inputs.release_version }}

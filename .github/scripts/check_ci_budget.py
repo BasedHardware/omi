@@ -211,7 +211,20 @@ def trigger_widened(before: dict, after: dict) -> bool:
             new_set = set(new_values if isinstance(new_values, list) else [new_values]) if new_values is not None else set()
             if not old_set <= new_set:
                 return True
-        if any(field not in ("branches", "paths", "types", "branches-ignore", "paths-ignore") and old.get(field) != new.get(field) for field in set(old) | set(new)):
+        checked_fields = {"branches", "paths", "types", "branches-ignore", "paths-ignore"}
+        if event == "workflow_dispatch":
+            old_inputs = old.get("inputs", {})
+            new_inputs = new.get("inputs", {})
+            # An opt-in string with an empty default does not add an event
+            # subscription. The inventory and workflow rationale still change.
+            if (isinstance(old_inputs, dict) and isinstance(new_inputs, dict)
+                    and all(new_inputs.get(name) == spec for name, spec in old_inputs.items())
+                    and all(isinstance(spec, dict) and spec.get("type") == "string"
+                            and spec.get("required", "false") in (False, "false")
+                            and spec.get("default", "") == ""
+                            for name, spec in new_inputs.items() if name not in old_inputs)):
+                checked_fields.add("inputs")
+        if any(field not in checked_fields and old.get(field) != new.get(field) for field in set(old) | set(new)):
             return True
     return False
 

@@ -7,7 +7,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from check_ci_budget import refresh, totals, validate
+from check_ci_budget import refresh, totals, trigger_widened, validate
 
 WORKFLOW = """name: Fixture
 on:
@@ -48,6 +48,20 @@ class BudgetTests(unittest.TestCase):
         self.assertIn("stale triggers", " ".join(validate(self.root, self.base)))
         refresh(self.root)
         self.assertIn("rationale change", " ".join(validate(self.root, self.base)))
+
+    def test_optional_empty_dispatch_string_does_not_widen_events(self):
+        before = {"workflow_dispatch": {"inputs": {"mode": {"type": "choice"}}}}
+        after = copy.deepcopy(before)
+        after["workflow_dispatch"]["inputs"]["cap"] = {
+            "type": "string", "required": "false", "default": "",
+        }
+        self.assertFalse(trigger_widened(before, after))
+        self.assertTrue(trigger_widened({}, after))
+        after["workflow_dispatch"]["inputs"]["cap"]["default"] = "45"
+        self.assertTrue(trigger_widened(before, after))
+        after["workflow_dispatch"]["inputs"]["cap"]["default"] = ""
+        after["workflow_dispatch"]["inputs"]["mode"]["type"] = "string"
+        self.assertTrue(trigger_widened(before, after))
 
     def test_matrix_expansion_needs_budget_and_rationale(self):
         self.path.write_text(WORKFLOW.replace("    steps: []", "    strategy:\n      matrix:\n        shard: [1, 2]\n    steps: []"))

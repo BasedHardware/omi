@@ -65,6 +65,7 @@ def resolve(
     revisions=None,
     revision_exit=0,
     branch='prod',
+    registered_cap='',
 ):
     resolver, service, _fallback = action
     serving = action[1].endswith('-integration')
@@ -117,6 +118,7 @@ def resolve(
         CLOUD_RUN_PROJECT='test-project',
         CLOUD_RUN_REGION='us-central1',
         GITHUB_OUTPUT=str(output),
+        REGISTERED_MAX_SCALE=registered_cap,
         CAP_TEST_DIR=str(tmp_path),
         CAP_TEST_EXIT=str(exit_code),
         CAP_TEST_REVISION_EXIT=str(revision_exit),
@@ -327,3 +329,28 @@ def test_integration_service_and_revision_caps_take_the_minimum(tmp_path, action
     )
     assert result.returncode == 0, result.stderr
     assert output.splitlines()[0] == f'max_scale={expected}'
+
+
+@pytest.mark.parametrize(
+    'live,registered', [('66', '45'), ('55', '45'), ('45', '45'), ('60', '50'), ('50', '50'), ('45', '55')]
+)
+def test_registered_cap_cannot_change_live_capacity(tmp_path, action, live, registered):
+    if action[1].endswith('-sync-backfill'):
+        pytest.skip('registered dispatch covers integration and sync only')
+    result, output = resolve(tmp_path, action, revision_cap=live, registered_cap=registered)
+    if live == registered:
+        assert result.returncode == 0, result.stderr
+        assert output == f'max_scale={registered}\n'
+    else:
+        assert result.returncode != 0
+        assert 'differs from live' in result.stderr
+        assert not output
+
+
+@pytest.mark.parametrize('live', [None, '999'])
+def test_registered_dispatch_refuses_live_cap_fallback(tmp_path, action, live):
+    if action[1].endswith('-sync-backfill'):
+        pytest.skip('registered dispatch covers integration and sync only')
+    result, output = resolve(tmp_path, action, service_cap=live, registered_cap=action[2])
+    assert result.returncode != 0
+    assert not output
