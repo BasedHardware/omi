@@ -5,9 +5,13 @@ const mocks = vi.hoisted(() => ({
   checkout: vi.fn(async (_priceId: string) => ({
     url: 'https://checkout.stripe.test/pay',
   })),
+  getUserSubscription: vi.fn(async () => null),
   track: vi.fn(),
 }));
-vi.mock('@/lib/api', () => ({ createCheckoutSession: mocks.checkout }));
+vi.mock('@/lib/api', () => ({
+  createCheckoutSession: mocks.checkout,
+  getUserSubscription: mocks.getUserSubscription,
+}));
 vi.mock('@/lib/analytics/posthog', () => ({ PostHogManager: { track: mocks.track } }));
 vi.mock('@/lib/planStorefrontGate', () => ({
   PlanStorefrontGate: { sheetEnabled: async () => false },
@@ -28,7 +32,7 @@ afterEach(() => vi.unstubAllGlobals());
 
 describe('SettingsPage checkout', () => {
   it('shows blocked guidance, retries the same annual offer and tracks each plan selection once', async () => {
-    const checkout = { opener: window };
+    const checkout = { opener: window, closed: true };
     vi.stubGlobal(
       'open',
       vi

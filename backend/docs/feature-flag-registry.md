@@ -682,6 +682,7 @@ and an explicit empty literal renders as `''`.
 | `negative_feedback_remediation_kill` | Stop negative-feedback remediation on macOS | macos | posthog | inverted | — | — | — | expected (kill) | keep | keep | — | unowned |
 | `screen_activity_lossless_sync_kill` | Beta lossless screen sync stop | macos | posthog | inverted | — | — | — | expected (kill) | keep | keep | — | auditfix |
 | `screen_task_jev_gate` | Default-on screen OCR text dedupe gate using Jev; explicit false is the kill switch; flag read failures keep it on | macos | posthog | open | — | — | — | expected (enable) | keep | keep | — | auditfix |
+| `web-checkout-completion` | Default-on web checkout completion event; explicit false disables emission | web-app | posthog | open | — | — | — | absent (enable) | keep | keep | — | Goal: Conversion |
 
 ### config_switch
 

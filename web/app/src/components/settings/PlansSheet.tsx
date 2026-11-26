@@ -38,6 +38,10 @@ import {
   trackUpgradePlanSelected,
   trackUpgradeSucceeded,
 } from '@/lib/analytics/subscriptionFunnel';
+import {
+  watchCheckoutReturn,
+  type SubscriptionRefresh,
+} from '@/lib/analytics/checkoutCompletion';
 
 const PLAY_SUBSCRIPTIONS_URL =
   'https://play.google.com/store/account/subscriptions?sku=omi_pro&package=com.friend.ios';
@@ -46,7 +50,7 @@ interface PlansSheetProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   subscription: UserSubscription | null;
-  onSubscriptionUpdate: () => void;
+  onSubscriptionUpdate: SubscriptionRefresh;
   cachedPlans?: PricingOption[] | null;
 }
 
@@ -67,6 +71,15 @@ export function PlansSheet({
   const [isCanceling, setIsCanceling] = useState(false);
   const [renewalConfirmation, setRenewalConfirmation] = useState<string | null>(null);
   const paywallWasOpen = useRef(false);
+  const checkoutReturnCleanup = useRef<(() => void) | null>(null);
+
+  useEffect(
+    () => () => {
+      checkoutReturnCleanup.current?.();
+      checkoutReturnCleanup.current = null;
+    },
+    [],
+  );
 
   const planIdentity = subscription
     ? subscription.plan_identity ?? decodePlan(subscription.plan)
@@ -220,17 +233,24 @@ export function PlansSheet({
           // Stripe Checkout opens in a new tab. The parent page never sees the
           // cancel URL Stripe returns to, so Upgrade Cancelled is not emitted
           // here. trackUpgradeCancelled exists for a client that can observe it.
-          if (!openPurchaseCheckout(result.url, tier, interval, 'web_plans')) {
+          const checkout = openPurchaseCheckout(result.url, tier, interval, 'web_plans', {
+            plan: subscription?.plan ?? null,
+            paid: subscription?.is_unlimited ?? false,
+            status: subscription?.status ?? null,
+            cancelAtPeriodEnd: subscription?.cancel_at_period_end ?? null,
+          });
+          if (!checkout) {
             setError(CHECKOUT_POPUP_BLOCKED);
             return;
           }
+          checkoutReturnCleanup.current?.();
           onOpenChange(false);
-          // Listen for window focus to refresh subscription
-          const handleFocus = () => {
-            onSubscriptionUpdate();
-            window.removeEventListener('focus', handleFocus);
-          };
-          window.addEventListener('focus', handleFocus);
+          // The checkout tab returns focus once it closes; completion there is
+          // only emitted for a verified paid-state transition.
+          checkoutReturnCleanup.current = watchCheckoutReturn(
+            onSubscriptionUpdate,
+            checkout,
+          );
         } else if (result?.status === 'reactivated') {
           const seconds = renewalDateSeconds(
             result.next_billing_date,
