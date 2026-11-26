@@ -1,0 +1,367 @@
+{
+ "model": "parakeet-tdt-0.6b-v3@541d1f99/cpu-fp32",
+ "source": "local",
+ "windows": "vad",
+ "words": [
+  {
+   "end": 0.536,
+   "start": 0.456,
+   "text": "by"
+  },
+  {
+   "end": 0.776,
+   "start": 0.616,
+   "text": "Harry"
+  },
+  {
+   "end": 1.576,
+   "start": 0.936,
+   "text": "Quilter,"
+  },
+  {
+   "end": 2.216,
+   "start": 1.736,
+   "text": "MA."
+  },
+  {
+   "end": 2.936,
+   "start": 2.696,
+   "text": "Because"
+  },
+  {
+   "end": 3.336,
+   "start": 3.096,
+   "text": "you"
+  },
+  {
+   "end": 3.576,
+   "start": 3.336,
+   "text": "are"
+  },
+  {
+   "end": 4.056,
+   "start": 3.576,
+   "text": "sleeping"
+  },
+  {
+   "end": 4.376,
+   "start": 4.056,
+   "text": "instead"
+  },
+  {
+   "end": 4.616,
+   "start": 4.376,
+   "text": "of"
+  },
+  {
+   "end": 5.416,
+   "start": 4.616,
+   "text": "conquering,"
+  },
+  {
+   "end": 5.896,
+   "start": 5.656,
+   "text": "the"
+  },
+  {
+   "end": 6.296,
+   "start": 5.896,
+   "text": "lovely"
+  },
+  {
+   "end": 6.696,
+   "start": 6.296,
+   "text": "rose"
+  },
+  {
+   "end": 7.096,
+   "start": 6.696,
+   "text": "princess"
+  },
+  {
+   "end": 7.256,
+   "start": 7.096,
+   "text": "has"
+  },
+  {
+   "end": 7.496,
+   "start": 7.256,
+   "text": "become"
+  },
+  {
+   "end": 7.816,
+   "start": 7.496,
+   "text": "a"
+  },
+  {
+   "end": 9.368,
+   "start": 9.208,
+   "text": "He"
+  },
+  {
+   "end": 9.608,
+   "start": 9.368,
+   "text": "has"
+  },
+  {
+   "end": 9.928,
+   "start": 9.608,
+   "text": "gone,"
+  },
+  {
+   "end": 10.248,
+   "start": 10.088,
+   "text": "and"
+  },
+  {
+   "end": 10.568,
+   "start": 10.248,
+   "text": "gone"
+  },
+  {
+   "end": 10.808,
+   "start": 10.568,
+   "text": "for"
+  },
+  {
+   "end": 11.048,
+   "start": 10.808,
+   "text": "good,"
+  },
+  {
+   "end": 11.608,
+   "start": 11.288,
+   "text": "answered"
+  },
+  {
+   "end": 12.488,
+   "start": 11.608,
+   "text": "Polychrome,"
+  },
+  {
+   "end": 12.648,
+   "start": 12.568,
+   "text": "who"
+  },
+  {
+   "end": 12.808,
+   "start": 12.648,
+   "text": "had"
+  },
+  {
+   "end": 13.048,
+   "start": 12.808,
+   "text": "managed"
+  },
+  {
+   "end": 13.208,
+   "start": 13.048,
+   "text": "to"
+  },
+  {
+   "end": 13.688,
+   "start": 13.208,
+   "text": "squeeze"
+  },
+  {
+   "end": 15.144,
+   "start": 14.904,
+   "text": "I"
+  },
+  {
+   "end": 15.304,
+   "start": 15.144,
+   "text": "have"
+  },
+  {
+   "end": 15.784,
+   "start": 15.304,
+   "text": "remained"
+  },
+  {
+   "end": 16.024,
+   "start": 15.784,
+   "text": "a"
+  },
+  {
+   "end": 16.664,
+   "start": 16.024,
+   "text": "prisoner"
+  },
+  {
+   "end": 16.984,
+   "start": 16.664,
+   "text": "only"
+  },
+  {
+   "end": 17.304,
+   "start": 16.984,
+   "text": "because"
+  },
+  {
+   "end": 17.624,
+   "start": 17.304,
+   "text": "I"
+  },
+  {
+   "end": 18.104,
+   "start": 17.624,
+   "text": "wished"
+  },
+  {
+   "end": 18.344,
+   "start": 18.104,
+   "text": "to"
+  },
+  {
+   "end": 18.664,
+   "start": 18.344,
+   "text": "be"
+  },
+  {
+   "end": 18.984,
+   "start": 18.664,
+   "text": "one."
+  },
+  {
+   "end": 20.36,
+   "start": 20.12,
+   "text": "The"
+  },
+  {
+   "end": 20.6,
+   "start": 20.36,
+   "text": "little"
+  },
+  {
+   "end": 20.92,
+   "start": 20.6,
+   "text": "girl"
+  },
+  {
+   "end": 21.08,
+   "start": 20.92,
+   "text": "had"
+  },
+  {
+   "end": 21.32,
+   "start": 21.08,
+   "text": "been"
+  },
+  {
+   "end": 21.88,
+   "start": 21.32,
+   "text": "asleep,"
+  },
+  {
+   "end": 22.28,
+   "start": 22.12,
+   "text": "but"
+  },
+  {
+   "end": 22.44,
+   "start": 22.28,
+   "text": "she"
+  },
+  {
+   "end": 22.68,
+   "start": 22.44,
+   "text": "heard"
+  },
+  {
+   "end": 22.92,
+   "start": 22.68,
+   "text": "the"
+  },
+  {
+   "end": 23.24,
+   "start": 22.92,
+   "text": "raps"
+  },
+  {
+   "end": 23.48,
+   "start": 23.32,
+   "text": "and"
+  },
+  {
+   "end": 23.88,
+   "start": 23.48,
+   "text": "opened"
+  },
+  {
+   "end": 24.12,
+   "start": 23.88,
+   "text": "the"
+  },
+  {
+   "end": 24.28,
+   "start": 24.12,
+   "text": "door."
+  },
+  {
+   "end": 25.512,
+   "start": 25.272,
+   "text": "The"
+  },
+  {
+   "end": 25.912,
+   "start": 25.512,
+   "text": "king"
+  },
+  {
+   "end": 26.072,
+   "start": 25.912,
+   "text": "has"
+  },
+  {
+   "end": 26.312,
+   "start": 26.072,
+   "text": "fled"
+  },
+  {
+   "end": 26.632,
+   "start": 26.472,
+   "text": "in"
+  },
+  {
+   "end": 27.032,
+   "start": 26.632,
+   "text": "disgrace,"
+  },
+  {
+   "end": 27.272,
+   "start": 27.112,
+   "text": "and"
+  },
+  {
+   "end": 27.432,
+   "start": 27.272,
+   "text": "your"
+  },
+  {
+   "end": 27.832,
+   "start": 27.432,
+   "text": "friends"
+  },
+  {
+   "end": 27.992,
+   "start": 27.832,
+   "text": "are"
+  },
+  {
+   "end": 28.392,
+   "start": 27.992,
+   "text": "asking"
+  },
+  {
+   "end": 28.712,
+   "start": 28.392,
+   "text": "for"
+  },
+  {
+   "end": 29.032,
+   "start": 28.712,
+   "text": "you."
+  }
+ ]
+}

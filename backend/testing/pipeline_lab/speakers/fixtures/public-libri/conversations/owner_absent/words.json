@@ -1,0 +1,442 @@
+{
+ "model": "parakeet-tdt-0.6b-v3@541d1f99/cpu-fp32",
+ "source": "local",
+ "windows": "vad",
+ "words": [
+  {
+   "end": 0.744,
+   "start": 0.344,
+   "text": "Well,"
+  },
+  {
+   "end": 1.224,
+   "start": 0.904,
+   "text": "and"
+  },
+  {
+   "end": 1.384,
+   "start": 1.224,
+   "text": "have"
+  },
+  {
+   "end": 1.544,
+   "start": 1.384,
+   "text": "we"
+  },
+  {
+   "end": 1.624,
+   "start": 1.544,
+   "text": "a"
+  },
+  {
+   "end": 2.024,
+   "start": 1.624,
+   "text": "fair"
+  },
+  {
+   "end": 2.424,
+   "start": 2.024,
+   "text": "wind?"
+  },
+  {
+   "end": 3.688,
+   "start": 3.448,
+   "text": "When"
+  },
+  {
+   "end": 3.848,
+   "start": 3.688,
+   "text": "we"
+  },
+  {
+   "end": 4.088,
+   "start": 3.848,
+   "text": "took"
+  },
+  {
+   "end": 4.328,
+   "start": 4.088,
+   "text": "our"
+  },
+  {
+   "end": 4.808,
+   "start": 4.328,
+   "text": "seats"
+  },
+  {
+   "end": 4.968,
+   "start": 4.808,
+   "text": "at"
+  },
+  {
+   "end": 5.208,
+   "start": 4.968,
+   "text": "the"
+  },
+  {
+   "end": 5.848,
+   "start": 5.208,
+   "text": "breakfast"
+  },
+  {
+   "end": 6.248,
+   "start": 5.848,
+   "text": "table,"
+  },
+  {
+   "end": 6.568,
+   "start": 6.408,
+   "text": "it"
+  },
+  {
+   "end": 6.808,
+   "start": 6.568,
+   "text": "was"
+  },
+  {
+   "end": 7.128,
+   "start": 6.808,
+   "text": "with"
+  },
+  {
+   "end": 7.448,
+   "start": 7.128,
+   "text": "the"
+  },
+  {
+   "end": 8.088,
+   "start": 7.928,
+   "text": "My"
+  },
+  {
+   "end": 8.488,
+   "start": 8.088,
+   "text": "uncle"
+  },
+  {
+   "end": 8.728,
+   "start": 8.488,
+   "text": "was"
+  },
+  {
+   "end": 9.288,
+   "start": 8.728,
+   "text": "delighted,"
+  },
+  {
+   "end": 9.768,
+   "start": 9.528,
+   "text": "for"
+  },
+  {
+   "end": 10.168,
+   "start": 9.768,
+   "text": "myself"
+  },
+  {
+   "end": 10.808,
+   "start": 10.408,
+   "text": "moody"
+  },
+  {
+   "end": 11.048,
+   "start": 10.968,
+   "text": "and"
+  },
+  {
+   "end": 11.928,
+   "start": 11.048,
+   "text": "dissatisfied,"
+  },
+  {
+   "end": 14.056,
+   "start": 13.336,
+   "text": "instantly"
+  },
+  {
+   "end": 14.296,
+   "start": 14.056,
+   "text": "they"
+  },
+  {
+   "end": 14.856,
+   "start": 14.296,
+   "text": "absorbed"
+  },
+  {
+   "end": 15.096,
+   "start": 14.856,
+   "text": "all"
+  },
+  {
+   "end": 15.256,
+   "start": 15.096,
+   "text": "my"
+  },
+  {
+   "end": 15.816,
+   "start": 15.256,
+   "text": "attention,"
+  },
+  {
+   "end": 16.216,
+   "start": 15.976,
+   "text": "though"
+  },
+  {
+   "end": 16.296,
+   "start": 16.216,
+   "text": "I"
+  },
+  {
+   "end": 16.616,
+   "start": 16.296,
+   "text": "dared"
+  },
+  {
+   "end": 16.776,
+   "start": 16.616,
+   "text": "not"
+  },
+  {
+   "end": 17.096,
+   "start": 16.776,
+   "text": "give"
+  },
+  {
+   "end": 17.416,
+   "start": 17.096,
+   "text": "them"
+  },
+  {
+   "end": 18.392,
+   "start": 18.232,
+   "text": "But"
+  },
+  {
+   "end": 18.552,
+   "start": 18.392,
+   "text": "no"
+  },
+  {
+   "end": 18.952,
+   "start": 18.552,
+   "text": "ghost"
+  },
+  {
+   "end": 19.112,
+   "start": 18.952,
+   "text": "or"
+  },
+  {
+   "end": 19.352,
+   "start": 19.112,
+   "text": "anything"
+  },
+  {
+   "end": 19.512,
+   "start": 19.352,
+   "text": "else"
+  },
+  {
+   "end": 19.912,
+   "start": 19.592,
+   "text": "appeared"
+  },
+  {
+   "end": 20.152,
+   "start": 19.912,
+   "text": "upon"
+  },
+  {
+   "end": 20.312,
+   "start": 20.152,
+   "text": "the"
+  },
+  {
+   "end": 20.712,
+   "start": 20.312,
+   "text": "ancient"
+  },
+  {
+   "end": 21.352,
+   "start": 20.712,
+   "text": "walls."
+  },
+  {
+   "end": 22.152,
+   "start": 21.752,
+   "text": "Yes,"
+  },
+  {
+   "end": 22.552,
+   "start": 22.312,
+   "text": "and"
+  },
+  {
+   "end": 22.792,
+   "start": 22.552,
+   "text": "a"
+  },
+  {
+   "end": 23.032,
+   "start": 22.792,
+   "text": "very"
+  },
+  {
+   "end": 23.832,
+   "start": 23.032,
+   "text": "respectable"
+  },
+  {
+   "end": 24.152,
+   "start": 23.832,
+   "text": "one."
+  },
+  {
+   "end": 25.112,
+   "start": 24.952,
+   "text": "The"
+  },
+  {
+   "end": 25.512,
+   "start": 25.112,
+   "text": "fact"
+  },
+  {
+   "end": 25.672,
+   "start": 25.512,
+   "text": "is,"
+  },
+  {
+   "end": 26.072,
+   "start": 25.832,
+   "text": "the"
+  },
+  {
+   "end": 26.552,
+   "start": 26.072,
+   "text": "castle"
+  },
+  {
+   "end": 26.712,
+   "start": 26.552,
+   "text": "is"
+  },
+  {
+   "end": 26.872,
+   "start": 26.712,
+   "text": "much"
+  },
+  {
+   "end": 27.272,
+   "start": 26.872,
+   "text": "later"
+  },
+  {
+   "end": 27.432,
+   "start": 27.272,
+   "text": "than"
+  },
+  {
+   "end": 27.512,
+   "start": 27.432,
+   "text": "the"
+  },
+  {
+   "end": 27.672,
+   "start": 27.512,
+   "text": "time"
+  },
+  {
+   "end": 27.832,
+   "start": 27.672,
+   "text": "of"
+  },
+  {
+   "end": 27.912,
+   "start": 27.832,
+   "text": "the"
+  },
+  {
+   "end": 28.472,
+   "start": 27.912,
+   "text": "heroic"
+  },
+  {
+   "end": 28.712,
+   "start": 28.472,
+   "text": "Prince"
+  },
+  {
+   "end": 28.872,
+   "start": 28.712,
+   "text": "of"
+  },
+  {
+   "end": 29.672,
+   "start": 28.872,
+   "text": "Denmark."
+  },
+  {
+   "end": 30.232,
+   "start": 29.992,
+   "text": "The"
+  },
+  {
+   "end": 30.632,
+   "start": 30.232,
+   "text": "lady"
+  },
+  {
+   "end": 30.872,
+   "start": 30.632,
+   "text": "is"
+  },
+  {
+   "end": 31.032,
+   "start": 30.872,
+   "text": "not"
+  },
+  {
+   "end": 31.192,
+   "start": 31.032,
+   "text": "the"
+  },
+  {
+   "end": 31.512,
+   "start": 31.192,
+   "text": "mother"
+  },
+  {
+   "end": 31.672,
+   "start": 31.512,
+   "text": "of"
+  },
+  {
+   "end": 31.912,
+   "start": 31.672,
+   "text": "the"
+  },
+  {
+   "end": 32.312,
+   "start": 31.912,
+   "text": "boys,"
+  },
+  {
+   "end": 32.792,
+   "start": 32.552,
+   "text": "but"
+  },
+  {
+   "end": 33.112,
+   "start": 32.792,
+   "text": "their"
+  },
+  {
+   "end": 33.592,
+   "start": 33.112,
+   "text": "aunt."
+  }
+ ]
+}

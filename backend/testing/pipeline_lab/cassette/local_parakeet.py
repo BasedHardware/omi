@@ -121,6 +121,39 @@ def transcribe_pcm(
     return windowed_words(pcm16, language, window_seconds, engine.window)[0]
 
 
+def transcribe_spans(pcm16: bytes, language: Optional[str], spans: list, *, engine: Any) -> list[Word]:
+    """Each ``[start, end]`` window on its own, words shifted onto the recording clock."""
+    words: list[Word] = []
+    for start, end in spans:
+        left, right = int(start * 16000) * 2, int(end * 16000) * 2
+        found, _ = engine.window(pcm16[left:right], language)
+        words.extend(Word(w.start + start, w.end + start, w.text) for w in found)
+    return words
+
+
+def speech_windows(
+    pcm16: bytes, *, max_seconds: float = WINDOW_SECONDS, join_gap: float = 0.3, pad: float = 0.2
+) -> list[list[float]]:
+    """Production's local Silero VAD spans packed into windows of at most ``max_seconds``, the way the batch
+    worker cuts speech before ASR. Fixed 30 s windows that mix speech with digital silence or abrupt level
+    changes make the CPU model return no words for the whole window (measured 2026-11-26: 38 of 102 words on a
+    two-voice LibriSpeech mix); VAD-packed windows return all of them."""
+    from utils.stt.local_vad import offline_pcm_speech_segments
+
+    duration = len(pcm16) / 32000
+    windows: list[list[float]] = []
+    for span in offline_pcm_speech_segments(pcm16):
+        start, end = max(0.0, span['start'] - pad), min(duration, span['end'] + pad)
+        if windows and start - windows[-1][1] <= join_gap and end - windows[-1][0] <= max_seconds:
+            windows[-1][1] = end
+            continue
+        while end - start > max_seconds:
+            windows.append([start, start + max_seconds])
+            start += max_seconds
+        windows.append([start, end])
+    return [[round(a, 3), round(b, 3)] for a, b in windows if b > a]
+
+
 # ---- recognizers ----------------------------------------------------------------------------------
 
 
@@ -154,7 +187,7 @@ class Worker:
     ):
         self.python, self.revision, self._run, self._work_root = python, revision, run, work_root
 
-    def __call__(self, pcm16: bytes, language: Optional[str]) -> list[LocalWord]:
+    def __call__(self, pcm16: bytes, language: Optional[str], spans: Optional[list] = None) -> list[LocalWord]:
         from testing.pipeline_lab.store import ensure_private_dir
 
         base = ensure_private_dir(self._work_root) if self._work_root is not None else _private_work_root()
@@ -167,6 +200,10 @@ class Worker:
             command += ['--pcm', str(pcm_path), '--out', str(out_path), '--revision', self.revision]
             if language:
                 command += ['--language', language]
+            if spans is not None:
+                spans_path = Path(work, 'spans.json')
+                spans_path.write_text(json.dumps(spans))
+                command += ['--spans', str(spans_path)]
             timeout = 600 + 4 * len(pcm16) / BYTES_PER_SECOND
             done = self._run(command, cwd=BACKEND, capture_output=True, text=True, timeout=timeout)
             if done.returncode != 0:
@@ -216,14 +253,18 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     parser.add_argument('--revision', default=None)
     parser.add_argument('--language', default=None)
     parser.add_argument('--window-seconds', type=float, default=WINDOW_SECONDS)
+    parser.add_argument('--spans', default=None, help='JSON [[start, end], ...] seconds: transcribe only these windows')
     args = parser.parse_args(argv)
     revision = asr_revision()
     if args.revision not in (None, revision):
         raise SystemExit('--revision differs from ASR_REVISION in this checkout')
     started = time.perf_counter()
-    words = transcribe_pcm(
-        Path(args.pcm).read_bytes(), args.language, engine=ParakeetCPU(revision), window_seconds=args.window_seconds
-    )
+    pcm16 = Path(args.pcm).read_bytes()
+    engine = ParakeetCPU(revision)
+    if args.spans:
+        words = transcribe_spans(pcm16, args.language, json.loads(Path(args.spans).read_text()), engine=engine)
+    else:
+        words = transcribe_pcm(pcm16, args.language, engine=engine, window_seconds=args.window_seconds)
     value = {
         'revision': revision,
         'model': model_key(revision),
