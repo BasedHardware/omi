@@ -124,6 +124,18 @@ def test_unordered_rows_with_fresh_uuids_compare_equal_in_either_write_order(tmp
     assert compare_runs(tmp_path / 'a', tmp_path / 'b', only).same
 
 
+def test_a_cached_repeat_without_execution_traces_compares_equal(tmp_path):
+    a = _run_dir(tmp_path / 'a', seconds=1.0, visible=True, call='llm-aa', at='2026-11-25T01:00:00Z')
+    b = _run_dir(tmp_path / 'b', seconds=1.0, visible=True, call='llm-bb', at='2026-11-25T01:00:00Z')
+    (b / 'llm_calls.jsonl').unlink()  # a stage-cache restore writes no call log (orchestrator.RUN_FILES)
+    result = compare_runs(a, b)
+    assert result.same, result.as_dict()
+    assert result.traces_one_sided == ['llm_calls.jsonl']
+    # a product output present on one side only is still a difference
+    (b / 'chain.json').write_text('{}')
+    assert not compare_runs(a, b).same
+
+
 def test_compare_runs_requires_conversations(tmp_path):
     (tmp_path / 'a').mkdir()
     (tmp_path / 'b').mkdir()

@@ -67,6 +67,9 @@ class Artifact:
     drop: frozenset[str] = frozenset()  # extra fields dropped at any depth in this artifact only
     unordered: bool = False  # JSONL rows written by concurrent workers: compare as a multiset
     optional: bool = True  # absent from both runs is fine; present in only one is a difference
+    # An execution trace (calls made, decisions taken): a stage-cache restore does not write it
+    # (``orchestrator.RUN_FILES``), so present in only one run is noted, not a difference.
+    trace: bool = False
 
 
 ARTIFACTS: tuple[Artifact, ...] = (
@@ -81,9 +84,9 @@ ARTIFACTS: tuple[Artifact, ...] = (
     Artifact('baseline.json'),
     # Prompt and answer per call. ``at`` is the proxy's real receive time; ``id`` is random; spend is
     # bookkeeping (a cache hit on the second run costs nothing and records what the first one paid).
-    Artifact('llm_calls.jsonl', drop=frozenset({'at', 'id', 'usd', 'recorded_usd'}), unordered=True),
+    Artifact('llm_calls.jsonl', drop=frozenset({'at', 'id', 'usd', 'recorded_usd'}), unordered=True, trace=True),
     # Orchestrator decisions are stamped with real time (``utc_iso``); the decision itself is semantic.
-    Artifact('decisions.jsonl', drop=frozenset({'at'}), unordered=True),
+    Artifact('decisions.jsonl', drop=frozenset({'at'}), unordered=True, trace=True),
 )
 
 # A scenario run directory (``scenario run --repeat``, ``scenario/verdict.py``): the same rules applied to
@@ -118,6 +121,7 @@ class Difference:
 class Comparison:
     differences: list[Difference] = field(default_factory=list)
     compared: list[str] = field(default_factory=list)
+    traces_one_sided: list[str] = field(default_factory=list)  # e.g. a cached repeat has no llm_calls.jsonl
 
     @property
     def same(self) -> bool:
@@ -130,6 +134,7 @@ class Comparison:
             'compared': self.compared,
             'differences': len(self.differences),
             'paths': [str(d) for d in self.differences[:limit]],
+            'traces_one_sided': self.traces_one_sided,
         }
 
 
@@ -238,8 +243,11 @@ def load_semantic(run_dir: Path, artifacts: Sequence[Artifact] = ARTIFACTS) -> d
 def compare_runs(a: Path, b: Path, artifacts: Sequence[Artifact] = ARTIFACTS) -> Comparison:
     left, right = load_semantic(a, artifacts), load_semantic(b, artifacts)
     result = Comparison(compared=sorted(set(left) | set(right)))
+    traces = [a.pattern for a in artifacts if a.trace]
     for name in result.compared:
-        if name not in right:
+        if (name not in right or name not in left) and any(Path(name).match(t) for t in traces):
+            result.traces_one_sided.append(name)  # one run executed, the other restored from the stage cache
+        elif name not in right:
             result.differences.append(Difference(name, '$', 'only_a'))
         elif name not in left:
             result.differences.append(Difference(name, '$', 'only_b'))
