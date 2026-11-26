@@ -45,11 +45,16 @@ class CountsOnlyParser(argparse.ArgumentParser):
         raise SystemExit(2)
 
 
-def private_cursor_parent(path):
+def private_cursor_parent(path, *, scratch_root=None):
     path = Path(path)
     parent = path.parent.resolve()
+    root = SCRATCH.resolve() if scratch_root is None else Path(scratch_root).resolve()
+    if scratch_root is not None and (
+        not root.is_dir() or root.stat().st_uid != os.geteuid() or root.stat().st_mode & 0o777 != 0o700
+    ):
+        raise ValueError('custom scratch root must be owned by the operator and private (0700)')
     if (
-        not parent.is_relative_to(SCRATCH.resolve())
+        not parent.is_relative_to(root)
         or not parent.is_dir()
         or parent.stat().st_mode & 0o777 != 0o700
         or not os.access(parent, os.W_OK | os.X_OK)
@@ -59,10 +64,10 @@ def private_cursor_parent(path):
     return parent
 
 
-def write_cursor(path, after):
+def write_cursor(path, after, *, scratch_root=None):
     """Atomically checkpoint an opaque page key under private scratch only."""
     path = Path(path)
-    parent = private_cursor_parent(path)
+    parent = private_cursor_parent(path, scratch_root=scratch_root)
     with tempfile.NamedTemporaryFile(mode='w', dir=parent, delete=False) as handle:
         temporary = Path(handle.name)
         try:
@@ -79,6 +84,7 @@ def main(argv=None):
     parser.add_argument('--limit', type=int, default=128)
     parser.add_argument('--after-file')
     parser.add_argument('--next-file', required=True)
+    parser.add_argument('--scratch-root', type=Path, help='Existing operator-owned scratch directory with mode 0700')
     parser.add_argument('--apply', action='store_true')
     parser.add_argument('--approve-plan-sha256')
     parser.add_argument('--pace-seconds', type=float, default=1.0)
@@ -105,7 +111,7 @@ def main(argv=None):
     if args.serving_max_age_hours < 0 or not math.isfinite(args.serving_max_age_hours * 3600):
         parser.reject('serving_age_window')
     try:
-        private_cursor_parent(args.next_file)
+        private_cursor_parent(args.next_file, scratch_root=args.scratch_root)
         same_cursor = args.after_file and Path(args.after_file).resolve() == Path(args.next_file).resolve()
     except (OSError, RuntimeError, ValueError):
         parser.reject('cursor_path')
@@ -119,6 +125,7 @@ def main(argv=None):
     plan = plan_unpark(client, document_ids, now=time.time(), max_age_seconds=age_gate.max_age_seconds())
     report = {
         **summary(plan),
+        'rows_scanned': len(document_ids),
         'apply': args.apply,
         'project': PROJECT,
         'serving_max_age_hours': args.serving_max_age_hours,
@@ -129,7 +136,7 @@ def main(argv=None):
         return
     # Validate and persist the next private checkpoint before any data mutation.
     # It does not advance the input; the operator chooses when to use it.
-    write_cursor(args.next_file, next_after)
+    write_cursor(args.next_file, next_after, scratch_root=args.scratch_root)
     if args.apply:
         os.environ['SYNC_TASKS_PROJECT'] = PROJECT
         os.environ['SYNC_TASKS_LOCATION'] = TASKS_LOCATION

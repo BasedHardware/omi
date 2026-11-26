@@ -60,7 +60,14 @@ from database.batch_pipeline_shadow_hook import shadow_from_env
 from utils.batch_pipeline.artifact_policy import create_artifact_store
 from utils.batch_pipeline.contracts import ProjectionBinding, WorkItem
 from utils.batch_pipeline.scheduler import owner_key
-from utils.batch_pipeline.source_audio import MAGIC, MAX_REFERENCES, read_reference, batch_timing_store
+from utils.batch_pipeline.artifact_reads import ArtifactReadBudget
+from utils.batch_pipeline.source_audio import (
+    MAGIC,
+    MAX_REFERENCES,
+    MAX_SOURCE_BYTES,
+    read_reference,
+    batch_timing_store,
+)
 from utils.batch_pipeline.record_barrier import validate_record_tail
 from utils.batch_pipeline.record_wal_source import attest
 from utils.batch_pipeline.record_language import prove_manifest
@@ -412,8 +419,18 @@ _FAST_FINISH_TASKS: set = set()
 # retried or re-run; one provider transcription per recording is enough.
 _FAST_FINISH_STARTED: dict[str, None] = {}
 _FAST_FINISH_STARTED_MAX = 4096
-# Each pass holds a recording's PCM in memory and a storage thread for a provider call.
+# Bound whole passes, not provider requests. Each pass holds a storage thread as its coordinator and
+# up to its window of five-minute chunk buffers (9.6 MB each); its chunk requests run on the shared
+# fast-finish chunk pool, which caps provider requests for the process. Short and serial passes share
+# two slots (4 buffers each); a long pass (over 20 minutes of audio) takes its own single slot (3
+# buffers), so long recordings never hold a short Finish's slot: 11 buffers, about 106 MB, per process,
+# plus at most one buffer per pool worker for a request a stopped pass left running. With
+# CONVERSATIONS_V3_FAST_FINISH_CHUNKED=off every pass is serial and holds a whole recording of up to
+# 20 minutes instead, as before.
 _FAST_FINISH_SLOTS = threading.BoundedSemaphore(2)
+_FAST_FINISH_LONG_SLOTS = threading.BoundedSemaphore(1)
+# A short Finish waits this long for a slot (inside its deadline) instead of answering busy at once.
+_FAST_FINISH_SHORT_SLOT_WAIT_SECONDS = 10.0
 
 
 def _admitted_these_units(admitted, job_id) -> bool:
@@ -435,6 +452,8 @@ async def _manual_finish_admitted(
     from database import conversations as conversations_db, conversations_v3
     from utils.conversations.v3 import fast_finish, finish_home_sli, metrics as v3_metrics, triggers as v3_triggers
 
+    # One end-to-end budget for the pass, from here: slot wait and every provider request count.
+    deadline = time.monotonic() + fast_finish.PASS_DEADLINE_SECONDS
     try:
         if not current.get('recording') or not current.get('v3_manual_end_requested'):
             return
@@ -471,7 +490,13 @@ async def _manual_finish_admitted(
         copied = [(start, duration, [dict(ref) for ref in refs]) for start, duration, refs in units]
 
         def read(ref):
-            return read_reference(client, ref, uid, conversation_id, allowed, key, source_metadata=True)
+            # A chunked pass's reads end with its deadline: each reference's metadata and download
+            # timeouts are capped to what is left, and one that starts past it refuses at once. The
+            # serial kill-switch path keeps today's 30 s and 60 s timeouts.
+            budget = ArtifactReadBudget(deadline, MAX_SOURCE_BYTES, 1) if fast_finish.chunked_enabled() else None
+            return read_reference(
+                client, ref, uid, conversation_id, allowed, key, source_metadata=True, read_budget=budget
+            )
 
         def refresh():
             # Decoded: an empty stored transcript is not empty bytes. A transcript that cannot be
@@ -512,9 +537,20 @@ async def _manual_finish_admitted(
         def run():
             # The cohort read is synchronous on this thread. Owners outside the rollout stop here
             # and never take one of the pass slots.
-            if not fast_finish.enabled(uid):
+            shape = fast_finish.pass_class(copied) if fast_finish.enabled(uid) else None
+            # Length, the long canary and its daily cap need only the units: a Finish they refuse is
+            # counted as such and never holds a slot, so it can neither wait for one nor read as busy.
+            refused = fast_finish.screen(uid, copied) if shape is not None else None
+            slots = _FAST_FINISH_LONG_SLOTS if shape == 'long' else _FAST_FINISH_SLOTS
+            # A short Finish may wait briefly, inside its deadline; a long one and the serial kill-switch
+            # path never wait, as before.
+            patience = min(_FAST_FINISH_SHORT_SLOT_WAIT_SECONDS, deadline - time.monotonic()) if shape == 'short' else 0
+            if shape is None:
                 outcome = 'not_enabled'
-            elif not _FAST_FINISH_SLOTS.acquire(blocking=False):
+            elif refused is not None:
+                outcome = refused
+                fast_finish.OUTCOMES.labels(refused).inc()
+            elif not (slots.acquire(timeout=patience) if patience > 0 else slots.acquire(blocking=False)):
                 outcome = 'busy'
                 fast_finish.OUTCOMES.labels('busy').inc()
             else:
@@ -522,7 +558,8 @@ async def _manual_finish_admitted(
                     outcome = fast_finish.run(
                         uid,
                         conversation_id,
-                        refresh(),
+                        # No row: the pass reads the decoded row itself, bounded by the deadline.
+                        None,
                         copied,
                         read,
                         refresh=refresh,
@@ -534,9 +571,10 @@ async def _manual_finish_admitted(
                         cut=cut if not recording_finish and (not single or promoted) else None,
                         privacy=privacy,
                         fence=fence,
+                        deadline=deadline,
                     )
                 finally:
-                    _FAST_FINISH_SLOTS.release()
+                    slots.release()
             if outcome == 'written':
                 v3_metrics.BATCH_MANUAL_END.labels('fast_finish').inc()
             elif not single:
