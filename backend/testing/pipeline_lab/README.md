@@ -289,7 +289,8 @@ A scenario with a `speakers` block runs the product's speaker code on real voice
   the truth (`speakers/score.score_conversation`, segment clocks moved from the conversation's `started_at` onto
   the recording's audio clock): `attribution_min`, `owner_precision_min`, `owner_recall_min`,
   `named_accuracy_min`, `named_coverage_min`, `wrong_name_max`, `owner_words_max`, `voices` (`N` or
-  `[N, tolerance]`). A rate with nothing to measure is `null` and fails a minimum. The scorecard (numbers only)
+  `[N, tolerance]`), `final_pass` (the run's last `run_batch_final_pass` outcome) and `resolution` (the stored
+  `speaker_resolution.status`: the app numbers voices only when it is `resolved`). A rate with nothing to measure is `null` and fails a minimum. The scorecard (numbers only)
   is on each conversation row in `result.json` and in the verdict's actual; `scenario compare` reports it as
   metric `speakers` (`speakers/compare_metrics.py`).
 
@@ -428,6 +429,7 @@ about 130 s, on a busier host; the five before those: 35 s); `.github/ci-budget.
 | `home_paging_past_hidden_runs` | Home paged past runs of hidden rows shows every visible conversation once | #25721, #25725, #26193 |
 | `speaker_owner_and_person_finish` | real voices (public LibriSpeech): the owner and an enrolled person, Finish while capturing; owner and person named, attribution high (`receipts: processed`) | speaker scenarios |
 | `speaker_owner_absent` | an enrolled person and a stranger, the owner silent: no word labelled as the owner, the person named, the stranger unnamed (`receipts: processed`) | speaker scenarios |
+| `speaker_partial_final_pass_keeps_voices` | three voices with short turns; the final pass ends partial (diarizer-gap words) and the conversation stays `resolved` on the resolver's voice ids | `BATCH_FINAL_PASS_KEEP_RESOLVED_ON_PARTIAL_ENABLED` |
 
 Turning a production incident into a scenario: [scenario/IMPORTER.md](scenario/IMPORTER.md).
 
