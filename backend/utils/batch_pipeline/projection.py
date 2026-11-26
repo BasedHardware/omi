@@ -36,11 +36,13 @@ from config.batch_pipeline import (
     silence_read_skip_enabled,
 )
 from config.record_latency import recent_native_record
+from config.reliability_experiments import enabled as experiment
 from database import batch_pipeline_projection_release as projection_release
 from database.batch_pipeline_projection import ProjectionBlocked, ProjectionReplay, ProjectionStore
 from database.batch_pipeline_projection_protocol import ProjectionGenerationAmbiguous
 from database.batch_pipeline_projection_protocol import ProjectionPredecessorPending
 from utils.batch_pipeline.projection_delivery import assert_delivery_claim
+from utils.batch_pipeline import frame_outcomes
 from database.batch_pipeline_projection_protocol import PROJECTION_HEAD_BLOCK_TYPE as PROJECTION_HEAD_BLOCK_TYPE
 from database.batch_pipeline_projection_protocol import PROJECTION_HEAD_BLOCKED_SINCE
 from database.batch_pipeline_projection_protocol import normalized_binding
@@ -1170,6 +1172,7 @@ class Projector:
                             projection_item=part,
                             require_lineage_fence=self.require_lineage_fence,
                         )
+                frame_spans: list[int] | None = None
                 if not part_payload['words']:
                     receipt = session.persist_empty()
                 else:
@@ -1203,6 +1206,10 @@ class Projector:
                         incoming['_sync_lineage_eligible'] = True
                     from utils.capture.batch_coverage import admit_projection, record_projection
 
+                    if experiment('batch_frame_outcomes', binding.owner_id):
+                        # Experiment batch_frame_outcomes: where this part's segments lie on the
+                        # unit's sample clock, taken before coverage admission can drop any.
+                        frame_spans = frame_outcomes.segment_samples(incoming, item.capture_at)
                     admit_projection(binding.owner_id, incoming, manifest, capture_at=item.capture_at)
                     session.incoming_segment_count = len(incoming['transcript_segments'])
                     receipt_box = []
@@ -1225,10 +1232,17 @@ class Projector:
                     if not incoming['transcript_segments']:
                         receipt = session.persist_empty()
                     else:
-                        from utils.conversations.v3 import triggers as v3_triggers
+                        from utils.conversations.v3 import triggers as v3_triggers, manual_cuts as v3_manual_cuts
 
                         # Same v3 admission as sync intake, or admitted owners get legacy duplicates.
                         v3_triggers.mark_new(binding.owner_id, incoming)
+                        # Reliability experiment end_open_conversation: a unit recorded after an End does
+                        # not join a recording row that began before it (None, and no read, when off).
+                        ends = v3_manual_cuts.ends_around(
+                            binding.owner_id, incoming, firestore_client=self.store.client
+                        )
+                        if ends is not None:
+                            incoming[v3_manual_cuts.ATTACH_KEY] = ends
                         try:
                             assigned = (self.assign_conversation or conversations_db.assign_sync_conversation)(
                                 binding.owner_id,
@@ -1244,6 +1258,7 @@ class Projector:
                                 **self._index_options(hint),
                             )
                         finally:
+                            incoming.pop(v3_manual_cuts.ATTACH_KEY, None)
                             self._mirror_assignment(session)
                         v3_triggers.committed_sync_assignment(binding.owner_id, assigned[0])
                         transcript_receipts.enqueue(binding.owner_id, assigned[0], firestore_client=self.store.client)
@@ -1258,6 +1273,19 @@ class Projector:
                         )
                         receipt = receipt_box[0]
                         record_labels(assigned[2])
+                if experiment('batch_frame_outcomes', binding.owner_id):
+                    # Experiment batch_frame_outcomes: this part settled above (assigned, or empty),
+                    # so record its text spans for the upload's status. Best-effort and after the
+                    # commit: a replay, hold or supersession leaves no record, hence no verdict.
+                    frame_outcomes.record_part(
+                        self.store,
+                        binding,
+                        item,
+                        entry,
+                        index,
+                        len(parts),
+                        frame_spans if part_payload['words'] else [],
+                    )
             except ProjectionReplay as replay:
                 receipt = replay.receipt
             except ProjectionGenerationAmbiguous:
@@ -1325,16 +1353,22 @@ class Projector:
             from utils.sync.bridge import finish_sync_bridges
 
             with projection_phase('bridge', policy, unit_key=item.segment_id):
-                canonical = (
-                    receipt['conversation_id']
-                    if binding.record_origin
-                    else finish_sync_bridges(
-                        binding.owner_id,
-                        receipt['conversation_id'],
-                        silent=receipt.get('silent_redrive') is True,
-                        require_python_owner=True,
-                    )
-                )
+                if binding.record_origin:
+                    canonical = receipt['conversation_id']
+                else:
+                    try:
+                        canonical = finish_sync_bridges(
+                            binding.owner_id,
+                            receipt['conversation_id'],
+                            silent=receipt.get('silent_redrive') is True,
+                            require_python_owner=True,
+                        )
+                    except SyncAssignmentSuperseded:
+                        # The assignment already committed; a user-managed anchor
+                        # refuses the pending bridge. Keep this receipt's own row
+                        # and settle normally instead of failing the walk.
+                        canonical = receipt['conversation_id']
+                        logger.debug('event=batch_projection action=bridge outcome=superseded')
             outputs = receipt.get('size_rollover_outputs') or [{'conversation_id': canonical}]
             for output in outputs:
                 output_id = output['conversation_id']

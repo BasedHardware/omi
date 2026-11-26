@@ -142,19 +142,37 @@ async function evaluateHead({github, context, headSha}) {
   const status = (state, description) => github.rest.repos.createCommitStatus({
     ...repo,sha,state,context:STATUS,description,
   });
-  await status('pending','Checking account-scoped UI approval');
   try {
-    // Commit statuses are shared by SHA, so every open main PR sharing this
-    // SHA must satisfy its own requirements before any run may write success.
-    const sameHead = async () => (await github.paginate(github.rest.pulls.list, {
-      ...repo,state:'open',base:'main',per_page:100,
-    })).filter(p => p.head.sha === sha);
-    const prs = await sameHead();
-    let allowed = prs.length > 0;
-    for (const summary of prs) {
+    // A commit status is shared by head SHA. Main-target PRs take precedence.
+    // Without one, reconcile every open stack on that SHA.
+    const sameHeadCandidates = async () => {
+      const open = await github.paginate(github.rest.pulls.list, {...repo,state:'open',per_page:100});
+      const sameHead = open.filter(pr => pr.head.sha === sha);
+      const mainTargets = sameHead.filter(pr => pr.base.ref === 'main');
+      return mainTargets.length ? mainTargets : sameHead;
+    };
+    const candidates = await sameHeadCandidates();
+    // Events can refer to historical heads that no open PR uses anymore.
+    if (candidates.length === 0) return;
+    await status('pending','Checking account-scoped UI approval');
+    const stack = candidates[0].base.ref !== 'main';
+    const readMain = async () => {
+      const {data} = await github.rest.git.getRef({...repo,ref:'heads/main'});
+      if (!/^[a-f0-9]{40}$/.test(data.object?.sha || '')) throw new Error('Invalid main snapshot');
+      return data.object.sha;
+    };
+    const main = stack ? await readMain() : null;
+    // All stacks use the same immutable main comparison so inherited UI
+    // changes and authors count. Approval comments remain scoped to each PR.
+    const stackEvidence = stack ? await evidence(github,repo,{base:{sha:main},head:{sha}}) : null;
+    let allowed = true;
+    for (const summary of candidates) {
       const pr = (await github.rest.pulls.get({...repo,pull_number:summary.number})).data;
-      if (pr.head.sha !== sha || pr.base.ref !== 'main') throw new Error('PR snapshot changed');
-      const {files,commits} = await evidence(github,repo,pr);
+      if (pr.state !== 'open' || pr.head.sha !== sha || pr.base.ref !== summary.base.ref
+        || pr.base.sha !== summary.base.sha) {
+        throw new Error('PR snapshot changed');
+      }
+      const {files,commits} = stackEvidence || await evidence(github,repo,pr);
       const comments = await github.paginate(github.rest.issues.listComments, {
         ...repo,issue_number:pr.number,per_page:100,
       });
@@ -175,11 +193,14 @@ async function evaluateHead({github, context, headSha}) {
           + 'Non-UI work and unrelated access are unaffected.'});
       }
     }
-    const latest = await sameHead();
-    const signature = list => list.map(p => `${p.number}:${p.base.sha}`).sort().join(',');
-    if (signature(latest) !== signature(prs)) throw new Error('PR set changed during verification');
+    const latest = await sameHeadCandidates();
+    const signature = list => list.map(pr => JSON.stringify([pr.number,pr.base.ref,pr.base.sha])).sort().join(',');
+    if (signature(latest) !== signature(candidates) || (stack && await readMain() !== main)) {
+      throw new Error('PR set or main moved during verification');
+    }
     await status(allowed ? 'success' : 'failure',allowed
-      ? 'UI approval satisfied or not required on all same-head PRs'
+      ? stack ? 'UI approval satisfied or not required for stacked PR compared with main'
+        : 'UI approval satisfied or not required on all same-head PRs'
       : 'Waiting for Nik or David approval on affected same-head PRs');
   } catch (error) {
     await status('failure','Unable to verify UI approval; see workflow logs');

@@ -25,7 +25,11 @@ from config.batch_pipeline import (
 from config.policy import resolve_batch_policy
 from config.record_gap_fill import gap_fill_enabled
 from config.record_wal_duplicate import MERGE_TARGET_FIELD, RECEIPT_FIELD
-from config.batch_pipeline_coverage_wait import coverage_wait_memo_enabled, record_wait_memo_first_enabled
+from config.batch_pipeline_coverage_wait import (
+    coverage_wait_memo_enabled,
+    coverage_wait_retry_after_seconds,
+    record_wait_memo_first_enabled,
+)
 from config.batch_pipeline_language import admission_language_exclusion_enabled, batch_admission_language
 from database.conversations import claim_record_lane_owner
 from database.batch_pipeline_store import FirestoreStore
@@ -81,6 +85,10 @@ class RecordUploadWait(StrEnum):
     RECEIPT_STATUS_READ_FAILED = 'receipt_status_read_failed'
 
 
+class _WaitResponse(JSONResponse):
+    retry_conversation: str | None = None
+
+
 def _pending(reason: RecordUploadWait, record: str | None = None, *, path: str = '-', memo: str = '-'):
     # These are custody waits, not evidence of Cloud Run refusing a request.
     # Keep the branch vocabulary static and omit identities/audio/error text.
@@ -106,12 +114,16 @@ def _pending(reason: RecordUploadWait, record: str | None = None, *, path: str =
         path,
         memo,
     )
-    return JSONResponse(
+    return _WaitResponse(
         status_code=503,
         content={
             'code': 'record_capture_pending',
             'detail': 'Retain local audio until the registered record is complete',
-            'retry_after_seconds': RECORD_WAIT_CACHE_SECONDS,
+            'retry_after_seconds': (
+                coverage_wait_retry_after_seconds()
+                if path == 'coverage' and memo == 'hit'
+                else RECORD_WAIT_CACHE_SECONDS
+            ),
         },
     )
 
@@ -123,13 +135,21 @@ _MEMOIZED_WAITS = frozenset({RecordUploadWait.RECORD_JOBS_MISSING, RecordUploadW
 
 
 async def conversation_pending(reason: RecordUploadWait, uid: str, conversation_id: str | None):
+    response = _pending(reason, _record_key(uid, conversation_id), path='conversation', memo='miss')
     if reason in _MEMOIZED_WAITS and isinstance(conversation_id, str) and conversation_id:
         await run_blocking(db_executor, remember_record_wait, uid, conversation_id, reason.value)
-    return _pending(reason, _record_key(uid, conversation_id), path='conversation', memo='miss')
+        response.retry_conversation = conversation_id
+    return response
 
 
 def _record_key(uid: str, conversation_id: str | None) -> str | None:
     return record_identity(uid, conversation_id)[0] if isinstance(conversation_id, str) and conversation_id else None
+
+
+async def has_conversation_wait_hint(uid, conversation_id) -> bool:
+    """Cheap invitation only. backend-sync checks handoff and receipts before refusing."""
+    cached = await run_blocking(db_executor, cached_record_wait, uid, conversation_id)
+    return cached in _MEMOIZED_WAITS
 
 
 async def memoized_record_wait(uid, conversation_id) -> JSONResponse | None:
@@ -186,7 +206,10 @@ def _coverage_wait_key(uid, conversation_id, content_id, jobs, upload_identity):
     # content_id already hashes each uploaded basename (capture timestamp and
     # codec) plus its bytes, without decoding. record_identity is stable for the
     # conversation, NOT a revision: hash the current jobs too, so added units or
-    # changed artifact references/timing invalidate immediately. Existing reads
+    # changed artifact references/timing invalidate immediately. The audio_uri
+    # pins an immutable GCS generation. Its retained manifest, if any, also
+    # pins source generations and authenticates the decoded PCM by digest. A
+    # replacement at the same object name needs a new URI in the job. Existing reads
     # supply all inputs; no extra Firestore lookup or local file read is needed.
     # ``upload_identity`` keeps the key sensitive to the upload as well: a second,
     # different WAL for the same record must never inherit this one's miss.

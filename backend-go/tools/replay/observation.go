@@ -23,32 +23,86 @@ func compareObservationsForRun(python, goRun *observation, pythonTokens, goToken
 	terminalChecks := terminalMemoChecks(python, goRun)
 	compareValue(&diffs, "/status", python.Status, goRun.Status)
 	compareAdmissions(&diffs, python, goRun)
-	compareValue(&diffs, "/conversation", python.Document, goConversation(goRun))
-	compareDerivedDocuments(&diffs, python, goRun)
+	compareDocuments(&diffs, python, goRun, terminalChecks)
+	compareObject(&diffs, "/effects", python.Effects, goRun.Effects)
+	compareObject(&diffs, "/provider_calls", countProviderCalls(python.ProviderCalls), countProviderCalls(goRun.ProviderCalls))
+	compareObject(&diffs, "/webhooks", webhookGroups(python), webhookGroups(goRun))
+	pythonFinalization, goFinalization := finalizationBeforeErasure(&diffs, python, goRun)
+	pairedErasure := pythonFinalization != python && goFinalization != goRun
+	if !pairedErasure {
+		reviewSpeakerDifferences(&diffs, pythonFinalization, goFinalization)
+	}
+	reviewRuledSyncWrites(&diffs, python, goRun)
+	applyComparisonRules(diffs, python, goRun, pythonTokens, goTokens, terminalChecks == nil)
+	if pairedErasure {
+		reviewPostErasurePrivacy(diffs, python, goRun, pythonFinalization, goFinalization)
+		preWipe := []difference{}
+		compareDocuments(&preWipe, pythonFinalization, goFinalization, nil)
+		reviewSpeakerDifferences(&preWipe, pythonFinalization, goFinalization)
+		reviewRuledSyncWrites(&preWipe, pythonFinalization, goFinalization)
+		pyPreTokens := homeTokenCountsForView(pythonTokens, python, pythonFinalization)
+		goPreTokens := homeTokenCountsForView(goTokens, goRun, goFinalization)
+		applyComparisonRules(preWipe, pythonFinalization, goFinalization, pyPreTokens, goPreTokens, true)
+		validateTimestampEvidence(&preWipe, "python", pythonFinalization)
+		validateTimestampEvidence(&preWipe, "go", goFinalization)
+		validateHomeTokenEvidence(&preWipe, "python", pythonFinalization, pyPreTokens)
+		validateHomeTokenEvidence(&preWipe, "go", goFinalization, goPreTokens)
+		validateBinding(&preWipe, "/python", pythonFinalization, false)
+		validateBinding(&preWipe, "/go", goFinalization, true)
+		validateEpisodeAttachMemoEvidence(&preWipe, pythonFinalization, goFinalization)
+		validateReviewedGoOnlyFields(&preWipe, pythonFinalization, goFinalization)
+		for _, diff := range preWipe {
+			diff.Path = "/before_erasure" + diff.Path
+			diffs = append(diffs, diff)
+		}
+	}
+	validateTimestampEvidence(&diffs, "python", python)
+	validateTimestampEvidence(&diffs, "go", goRun)
+	validateBatchPrivacyEvidence(&diffs, "python", pythonFinalization)
+	validateBatchPrivacyEvidence(&diffs, "go", goFinalization)
+	validateBatchPrivacyPair(&diffs, pythonFinalization, goFinalization)
+	validateHomeTokenEvidence(&diffs, "python", python, pythonTokens)
+	validateHomeTokenEvidence(&diffs, "go", goRun, goTokens)
+	validateBinding(&diffs, "/python", python, false)
+	validateBinding(&diffs, "/go", goRun, true)
+	if terminalChecks == nil {
+		validateEpisodeAttachMemoEvidence(&diffs, python, goRun)
+	} else {
+		for _, side := range []string{"python", "go"} {
+			if check := terminalChecks[side]; !check.Valid {
+				diffs = append(diffs, difference{Path: "/" + side + "/episode_attach_memo", Kind: "invalid_binding", FailureReason: check.FailureReason})
+			}
+		}
+	}
+	validateReviewedGoOnlyFields(&diffs, python, goRun)
+	return diffs, terminalChecks
+}
+
+func compareDocuments(diffs *[]difference, python, goRun *observation, terminalChecks map[string]attachMemoCheck) {
+	compareValue(diffs, "/conversation", python.Document, goConversation(goRun))
+	compareDerivedDocuments(diffs, python, goRun)
 	if terminalChecks != nil {
-		filtered := diffs[:0]
-		for _, diff := range diffs {
+		filtered := (*diffs)[:0]
+		for _, diff := range *diffs {
 			if episodeAttachMemoField(diff.Path, python) && episodeAttachMemoField(diff.Path, goRun) {
 				continue
 			}
 			filtered = append(filtered, diff)
 		}
-		diffs = filtered
+		*diffs = filtered
 	}
 	if terminalChecks == nil {
-		validateGoAttachMemoEvidence(&diffs, goRun)
+		validateGoAttachMemoEvidence(diffs, goRun)
 	}
-	compareObject(&diffs, "/effects", python.Effects, goRun.Effects)
-	compareObject(&diffs, "/provider_calls", countProviderCalls(python.ProviderCalls), countProviderCalls(goRun.ProviderCalls))
-	compareObject(&diffs, "/webhooks", webhookGroups(python), webhookGroups(goRun))
-	reviewSpeakerDifferences(&diffs, python, goRun)
-	reviewRuledSyncWrites(&diffs, python, goRun)
+}
+
+func applyComparisonRules(diffs []difference, python, goRun *observation, pythonTokens, goTokens map[string]int, compareAttachMemo bool) {
 	for i := range diffs {
 		diff := &diffs[i]
-		if terminalChecks == nil && diff.Reason == "" {
+		if compareAttachMemo && diff.Reason == "" {
 			diff.Reason = approvedEpisodeAttachMemoDifference(diff.Path, python, goRun)
 		}
-		if terminalChecks == nil && diff.Reason == "" && goRun.EpisodeAttachMemoExpected && !goRun.EpisodeAttachMemoValid &&
+		if compareAttachMemo && diff.Reason == "" && goRun.EpisodeAttachMemoExpected && !goRun.EpisodeAttachMemoValid &&
 			episodeAttachMemoField(diff.Path, goRun) {
 			diff.FailureReason = "go_attach_memo_invalid"
 		}
@@ -100,26 +154,6 @@ func compareObservationsForRun(python, goRun *observation, pythonTokens, goToken
 			}
 		}
 	}
-	validateTimestampEvidence(&diffs, "python", python)
-	validateTimestampEvidence(&diffs, "go", goRun)
-	validateBatchPrivacyEvidence(&diffs, "python", python)
-	validateBatchPrivacyEvidence(&diffs, "go", goRun)
-	validateBatchPrivacyPair(&diffs, python, goRun)
-	validateHomeTokenEvidence(&diffs, "python", python, pythonTokens)
-	validateHomeTokenEvidence(&diffs, "go", goRun, goTokens)
-	validateBinding(&diffs, "/python", python, false)
-	validateBinding(&diffs, "/go", goRun, true)
-	if terminalChecks == nil {
-		validateEpisodeAttachMemoEvidence(&diffs, python, goRun)
-	} else {
-		for _, side := range []string{"python", "go"} {
-			if check := terminalChecks[side]; !check.Valid {
-				diffs = append(diffs, difference{Path: "/" + side + "/episode_attach_memo", Kind: "invalid_binding", FailureReason: check.FailureReason})
-			}
-		}
-	}
-	validateReviewedGoOnlyFields(&diffs, python, goRun)
-	return diffs, terminalChecks
 }
 
 func ordinarySyncDiagnosticPair(python, goRun *observation) bool {
@@ -219,6 +253,21 @@ func validateBinding(diffs *[]difference, side string, run *observation, goSide 
 	if run == nil {
 		return
 	}
+	if !goSide || !provedJobdDeparture(run) {
+		validateAdmissionBinding(diffs, side, run, goSide)
+	}
+	if run.Admitted == nil {
+		return
+	}
+	ids := run.Admitted
+	for i, value := range run.Webhooks {
+		if objectField(value, "app") != "developer-created" && objectField(value, "idempotency_key") != ids.Fanout {
+			addDifference(diffs, fmt.Sprintf("%s/webhooks/%d/idempotency_key", side, i), "invalid_binding")
+		}
+	}
+}
+
+func validateAdmissionBinding(diffs *[]difference, side string, run *observation, goSide bool) {
 	if goSide {
 		validateGoFenceBinding(diffs, side, run)
 		validateGoMinimumBinding(diffs, side, run)
@@ -238,11 +287,6 @@ func validateBinding(diffs *[]difference, side string, run *observation, goSide 
 	}
 	if actual := documentField(run, "fanout_key"); (actual != nil || goSide && len(run.Webhooks) > 0) && actual != ids.Fanout {
 		addDifference(diffs, side+"/conversation/fanout_key", "invalid_binding")
-	}
-	for i, value := range run.Webhooks {
-		if objectField(value, "app") != "developer-created" && objectField(value, "idempotency_key") != ids.Fanout {
-			addDifference(diffs, fmt.Sprintf("%s/webhooks/%d/idempotency_key", side, i), "invalid_binding")
-		}
 	}
 }
 

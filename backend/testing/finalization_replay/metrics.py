@@ -9,6 +9,8 @@ from functools import lru_cache
 import json
 from threading import Lock
 
+import grpc
+
 _ACTIVE_STATE = None
 _ACTIVE_LOCK = Lock()
 _METER_SUSPENDED = ContextVar('finalization_replay_meter_suspended', default=False)
@@ -332,13 +334,31 @@ def _wrap_stream(result, method, state):
     return counted()
 
 
+class _CommitFailureMeter(grpc.UnaryUnaryClientInterceptor):
+    def intercept_unary_unary(self, continuation, details, request):
+        state = _active_state() if details.method == '/google.firestore.v1.Firestore/Commit' else None
+        outcome = continuation(details, request)
+        if state is not None and isinstance(outcome, grpc.Call) and outcome.code() != grpc.StatusCode.OK:
+            state.add_firestore_operations(failed_commit_rpcs=1)
+        return outcome
+
+
 def install_firestore_meter():
     """Count emulator RPCs made by Python; the Go child uses firestore_proxy."""
     global _METER_INSTALLED
     if _METER_INSTALLED:
         return
 
+    from google.cloud.firestore_v1 import Client
     from google.cloud.firestore_v1.services.firestore.client import FirestoreClient
+
+    emulator_channel = Client._emulator_channel
+
+    def metered_emulator_channel(self, transport):
+        # Count each transport attempt inside the GAPIC retry loop.
+        return grpc.intercept_channel(emulator_channel(self, transport), _CommitFailureMeter())
+
+    Client._emulator_channel = metered_emulator_channel
 
     streams = {'batch_get_documents', 'run_query', 'list_documents'}
     reads = {'get_document'}

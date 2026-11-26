@@ -43,6 +43,7 @@ from database.legal_holds import (
 from utils.other.account_gate_http import account_gate_busy_http_exception
 from database.firestore_read_metrics import FirestoreReadSite
 from config import historical_tier
+from config import reliability_experiments
 from config import play_billing as play_billing_config
 from utils.conversations import historical_projection, home_step, transcribing_hold
 from utils.conversations.list_filters import aware_datetime, reject_oversized_filter
@@ -186,7 +187,10 @@ from config.app_channel import APP_CHANNEL_HEADER, app_channel
 from utils.episodes import client_gate
 from models.conversation import ConversationsLiveResponse
 from utils.conversations.v3 import audio as v3_audio, client_capability as v3_client_capability, summary as v3_summary
-from utils.conversations.v3 import live as v3_live, policy as v3_policy
+from utils.conversations.v3 import live as v3_live, manual_cuts as v3_manual_cuts, policy as v3_policy
+from utils.conversations.v3 import summary_wake as v3_summary_wake
+from utils.conversations.v3 import end_answer as v3_end_answer
+from utils.conversations.v3 import capture_device as v3_capture_device
 from utils.conversations.v3.finish import finish_live_window
 from database import conversations_v3_live, conversations_v3_processing
 from utils.conversations import list_page_headers
@@ -225,6 +229,14 @@ def get_live_conversation(
             compact['v3_recording_ids'] = [
                 rid for rid in row['v3_recording_ids'][-8:] if isinstance(rid, str) and rid and '/' not in rid
             ]
+        if not row.get('is_locked') and reliability_experiments.any_enabled(
+            uid, 'end_button_by_device', 'instant_live_text', 'vendor_recognizer_on_opened_app'
+        ):
+            # Experiments end_button_by_device, instant_live_text and vendor_recognizer_on_opened_app: the
+            # app install behind the latest speech, for the owner's phone. With all off the field is not served.
+            device = v3_capture_device.served(row)
+            if device:
+                compact[v3_capture_device.FIELD] = device
     if compact and 'structured' in compact:
         compact['structured'] = {
             key: compact['structured'][key] for key in ('title', 'emoji') if key in compact['structured']
@@ -675,23 +687,41 @@ class ConversationTestPromptResponse(BaseModel):
 def process_in_progress_conversation(
     request: ProcessConversationRequest = None,
     uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, "conversations:create")),
+    ended_at: Optional[str] = Header(None, alias=v3_manual_cuts.ENDED_AT_HEADER, include_in_schema=False),
+    response: Response = None,  # type: ignore[assignment]
 ):
+    # Experiment end_open_conversation: End also cuts the owner's v3 conversation, at the End time the app
+    # sent in this header (else now), and wakes the builder at once, so it closes whatever the listening
+    # session's recording below is doing. Off: the header is ignored and nothing is written.
+    cut_id = v3_manual_cuts.record_end(uid, ended_at=v3_manual_cuts.parse_ended_at(ended_at))
     conversation = retrieve_in_progress_conversation(uid)
     if not conversation:
         response = finish_live_window(
             uid,
             request.live_conversation_id if request else None,
-            allow_recording_fallback=request is None or request.empty_body,
+            allow_recording_fallback=request is None or request.finish_only_body,
         )
+        # The baseline path wakes the builder itself when it cut the window (answered as writing); a second
+        # wake at the same instant only collides with it. Every other answer leaves the wake to the experiment.
+        if response is None or getattr(response.conversation, 'tile_state', None) != 'writing':
+            v3_manual_cuts.wake(uid, cut_id)
         if response is not None:
             return response
         raise HTTPException(status_code=404, detail="Conversation in progress not found")
+    v3_manual_cuts.wake(uid, cut_id)
 
     if is_listen_finalization_dispatch_enabled() and not byok.has_byok_keys():
         # Resolve Redis exactly once, then use the same transactional outbox as
         # exact-ID finalization. A disconnected HTTP caller must not own the
         # only processing attempt. BYOK retains its request-scoped credentials.
-        return finalize_conversation(conversation['id'], request=request, uid=uid)
+        finalized = finalize_conversation(conversation['id'], request=request, uid=uid)
+        # Experiment end_open_conversation: the listening session's own recording had nothing to process
+        # (upload mode), but the cut above is stored. Answer with the conversation it ended, or mark the End
+        # accepted when none has landed yet, instead of "this recording is still in progress". With no
+        # stored cut (off, not on v3, or the store failed) this returns the baseline answer untouched.
+        return v3_end_answer.answer(
+            uid, cut_id, finalized, request.live_conversation_id if request else None, response=response
+        )
 
     conversation = deserialize_conversation(conversation)
 
@@ -3167,6 +3197,49 @@ async def conversation_summary_stream(conversation_id: str, uid: str = Depends(a
         v3_summary.stream(uid, conversation, token=token),
         media_type='text/event-stream',
         headers={'Cache-Control': 'no-cache'},
+    )
+
+
+@router.get(
+    '/v1/conversations/{conversation_id}/summary/wait',
+    response_model=Conversation,
+    include_in_schema=False,
+)
+async def wait_for_conversation_summary(
+    conversation_id: str,
+    request: Request,
+    response: Response,
+    until: Literal['outline', 'summary'] = Query('summary'),
+    uid: str = Depends(auth.get_current_user_uid),
+):
+    """Hold the request until the ended conversation reaches `until`, then answer as the detail read does.
+
+    `until=outline` returns once the builder has committed it with its outline (title, emoji, one-liner,
+    summary still to come); `until=summary` (the default) once the summary is stored. `X-Omi-Summary-Wait`
+    says where the row stands: `ready` (done or failed), `outline` (committed, summary to come) or
+    `timeout` (the wait ran out first). The body is always the conversation as it stands, so the caller
+    needs no second read.
+    """
+    # Experiment fast_end_feedback. For an account it is off for, the path answers as an unknown route does.
+    await reliability_experiments.warm(uid)
+    if not v3_summary_wake.enabled(uid):
+        raise HTTPException(status_code=404, detail='Not Found')
+
+    def read_visible():
+        row = _get_valid_conversation_by_id(uid, conversation_id, follow_sync_bridge=True)
+        _assert_detail_visible(row, None)
+        return row
+
+    async def read():
+        return await run_blocking(db_executor, read_visible)
+
+    async def disconnected():
+        return await request.is_disconnected()
+
+    _, state = await v3_summary_wake.wait(uid, conversation_id, read, disconnected, until=until)
+    response.headers['X-Omi-Summary-Wait'] = state
+    return await run_blocking(
+        db_executor, lambda: get_conversation_by_id(conversation_id, None, None, uid, False, None, None, None)
     )
 
 

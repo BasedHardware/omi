@@ -876,6 +876,7 @@ class ServerConversation {
 }
 
 class SyncLocalFilesResponse {
+  final List<wire.GeneratedFrameProcessingRange>? frameOutcomes;
   List<String> newConversationIds = [];
   List<String> updatedConversationIds = [];
   int failedSegments;
@@ -895,6 +896,7 @@ class SyncLocalFilesResponse {
   String? localUploadPermanentError;
 
   SyncLocalFilesResponse({
+    this.frameOutcomes,
     required this.newConversationIds,
     required this.updatedConversationIds,
     this.failedSegments = 0,
@@ -913,6 +915,7 @@ class SyncLocalFilesResponse {
 
   factory SyncLocalFilesResponse.fromGenerated(wire.GeneratedSyncLocalFilesResultResponse generated) {
     return SyncLocalFilesResponse(
+      frameOutcomes: generated.frameOutcomesV1,
       newConversationIds: generated.newMemories ?? [],
       updatedConversationIds: generated.updatedMemories ?? [],
       failedSegments: generated.failedSegments,

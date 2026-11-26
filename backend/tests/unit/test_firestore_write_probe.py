@@ -470,6 +470,31 @@ def test_recording_failure_never_propagates(client, transport, monkeypatch):
 
 
 @pytest.mark.parametrize('is_async', [False, True], ids=['sync', 'async'])
+def test_successful_commit_response_survives_counter_and_warning_failures(transport, monkeypatch, is_async):
+    class _Counter:
+        def inc(self, _amount):
+            raise OSError('counter unavailable')
+
+    class _Metric:
+        def labels(self, **_kwargs):
+            return _Counter()
+
+    write = Write(update=Document(name=f'{ROOT}/users/u1/memories/m1'))
+    request = {'database': 'projects/p/databases/(default)', 'writes': [write]}
+    transport.response = CommitResponse(write_results=[WriteResult()])
+    monkeypatch.setattr(probe, 'FIRESTORE_BILLED_WRITES', _Metric())
+
+    with patch.object(probe.logger, 'warning', side_effect=OSError('logger unavailable')):
+        if is_async:
+            response = asyncio.run(FirestoreAsyncClient.commit(object(), request=request))
+        else:
+            response = FirestoreClient.commit(object(), request=request)
+
+    assert transport.requests == [request]
+    assert response is transport.response
+
+
+@pytest.mark.parametrize('is_async', [False, True], ids=['sync', 'async'])
 def test_successful_commit_response_is_returned_when_request_tally_raises(transport, is_async):
     write = Write(update=Document(name=f'{ROOT}/users/u1/memories/m1'))
     request = {'database': 'projects/p/databases/(default)', 'writes': [write]}
