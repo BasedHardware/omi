@@ -243,6 +243,7 @@ async def one_pass(client, user, *, outline_every, after_batch=None):
         def run(*args, **kwargs):
             before, started, rpcs = snapshot_reads(), time.monotonic(), len(commits)
             phases['in_' + name] += 1
+            phases['calls_' + name] += 1
             try:
                 return fn(*args, **kwargs)
             finally:
@@ -292,6 +293,7 @@ async def one_pass(client, user, *, outline_every, after_batch=None):
         'seconds': round(elapsed, 2),
         'load_seconds': round(phases['load'], 2),
         'commit_seconds': round(phases['commit'], 2),
+        'commit_calls': int(phases['calls_commit']),
         'plan_seconds': round(elapsed - phases['load'] - phases['commit_outer'], 2),
         'reads': int(reads.reads),
         'reads_load': int(reads_at.get('load', 0)),
@@ -443,13 +445,15 @@ async def test_kill_switch_keeps_the_heavy_owner_parked(owner, monkeypatch, swit
 
 
 class _Clock(datetime):
-    """The commit's clock: real time plus an offset the fixture advances after every projection batch."""
+    """The commit's clock: a fixed base (taken when the commit starts) plus an offset the fixture advances after
+    every projection batch. Real elapsed time is ignored, so a slow read or a contention retry cannot move it."""
 
+    base = datetime.now(timezone.utc)
     offset = timedelta(0)
 
     @classmethod
     def now(cls, tz=None):
-        return datetime.now(tz) + cls.offset
+        return (cls.base + cls.offset).astimezone(tz) if tz else (cls.base + cls.offset).replace(tzinfo=None)
 
 
 @pytest.mark.asyncio
@@ -457,9 +461,10 @@ class _Clock(datetime):
 async def test_a_commit_with_more_batches_than_measured_outlives_its_lease_by_renewing(owner, monkeypatch, renewed):
     """A 6-batch commit takes longer than the lease. Per-batch renewal keeps it, and without renewal the lease is lost.
 
-    The lease and commit clocks advance 200 s after every projection batch, against the real 240 s lease. Without
-    renewal, the third batch must see the lease as expired. No wall-clock margin is involved, so a slow host or a
-    contention retry cannot change the outcome.
+    The lease and commit clocks start at a fixed base when the commit starts (right after the caller's renewal,
+    which set the lease to its real start + 240 s) and advance 200 s after every projection batch. Without renewal,
+    the third batch is at base + 400 s and must see the lease as expired. Real elapsed time is ignored, so a slow
+    host or a contention retry cannot change the outcome.
     """
     client, user = owner
     rows, sources = seed(user, tail=3, eligible=False, **SIX_BATCHES)
@@ -470,6 +475,7 @@ async def test_a_commit_with_more_batches_than_measured_outlives_its_lease_by_re
         _Clock.offset += timedelta(seconds=200)
 
     def clocked_commit(uid, token, *args, **kwargs):
+        _Clock.base = datetime.now(timezone.utc)
         monkeypatch.setattr(store, 'datetime', _Clock)
         monkeypatch.setattr(leases, 'datetime', _Clock)
         if not renewed:
@@ -511,6 +517,10 @@ async def test_a_closure_past_the_batch_cap_parks_without_writing(owner, monkeyp
         {'closure_rows': rows, 'closure_sources': sources, **result},
     )
     assert result['result'] == 'blocked' and result['writes_conversations'] == 0 and result['transactions_commit'] == 0
+    # It parked at the commit's batch cap, after a full load within the allowance and the outline step, not at
+    # load time (a load overflow would shrink to 8, then 1, seeds and never plan or reach the commit).
+    assert result['reads_load'] > 3000 and result['outline_calls'] >= 1 and result['reads_commit'] == 0
+    assert result['commit_calls'] == 1
     lease = user.collection('conversation_v3_leases').document('builder').get().to_dict()
     assert lease['v3_blocked_reason'] == 'v3_derived_budget'
     assert user.collection('conversations').document('heavy').get().to_dict()['v3_pending'] is True

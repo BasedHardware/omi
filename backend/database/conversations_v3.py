@@ -50,6 +50,7 @@ from config.record_wal_duplicate import (
 from config.conversations_v3 import (
     bounded_pending_enabled,
     boundary_seconds,
+    commit_lease_renewal_enabled,
     skip_unchanged_writes_enabled,
     stretch_cohesion_enabled,
 )
@@ -105,6 +106,12 @@ def _env_allowance(name, default):
 LOCKED_DERIVED_ALLOWANCE = _env_allowance('CONVERSATIONS_V3_LOCKED_DERIVED_ALLOWANCE', 2048)
 LOCKED_DERIVED_BYTES = _env_allowance('CONVERSATIONS_V3_LOCKED_DERIVED_BYTES', 8 * 1024 * 1024)
 LOCKED_MAX_BATCHES = _env_int('CONVERSATIONS_V3_LOCKED_MAX_BATCHES', 6)
+# A listed owner may run up to 3 inline passes per request while pending remains, so the per-owner ceiling is
+# set by passes, not by one pass: at most this many committed allowance passes per owner per UTC day. That is
+# about 48 x 30k = 1.44M reads, plus parked retries. At the cap, the next pass that day loads with the origin
+# bound (and parks if it overflows, at today's retry cost). 0 turns the allowance off.
+LOCKED_DAILY_PASSES = _env_allowance('CONVERSATIONS_V3_LOCKED_DAILY_PASSES', 48)
+LOCKED_DAY_FIELD, LOCKED_PASSES_FIELD = 'v3_locked_day', 'v3_locked_passes'
 CLAIM_READ_CHUNK = 100
 
 
@@ -427,9 +434,17 @@ def locked_closure_owner(uid):
     return '*' in listed or hashlib.sha256(str(uid).encode()).hexdigest()[:12] in listed
 
 
-def _locked_allowance(uid):
-    """(rows, bytes) the closure may add for locked claimants; (0, 0) off the allowlist or when switched off."""
+def _locked_passes_today(lease, now=None):
+    day = (now or datetime.now(timezone.utc)).date().isoformat()
+    return int(lease.get(LOCKED_PASSES_FIELD) or 0) if lease.get(LOCKED_DAY_FIELD) == day else 0
+
+
+def _locked_allowance(uid, lease=None):
+    """(rows, bytes) the closure may add for locked claimants; (0, 0) off the allowlist, when switched off, or
+    (given the builder lease) once the owner has used today's committed allowance passes."""
     if not LOCKED_DERIVED_ALLOWANCE or not LOCKED_DERIVED_BYTES or not locked_closure_owner(uid):
+        return 0, 0
+    if lease is not None and _locked_passes_today(lease) >= LOCKED_DAILY_PASSES:
         return 0, 0
     return LOCKED_DERIVED_ALLOWANCE, LOCKED_DERIVED_BYTES
 
@@ -532,7 +547,7 @@ def load(
             existing[opened['id']] = opened
     queried = set()
     by_claims = closure_by_claims()
-    extra_rows, extra_bytes = _locked_allowance(uid)
+    extra_rows, extra_bytes = _locked_allowance(uid, state)
     row_limit = DERIVED_LIMIT + extra_rows
     sizes = {cid: _encoded_bytes(row.get('transcript_segments') or []) for cid, row in existing.items()}
     locked = {cid for cid, row in existing.items() if locked_claimant(row)}
@@ -1266,6 +1281,10 @@ def commit_projection(
                 open_ids[0] if open_ids else (lease.get('open_id') if lease.get('open_id') not in existing else None)
             ),
         }
+        if final and heavy:
+            # One committed allowance pass for the owner's daily cap (LOCKED_DAILY_PASSES).
+            lease_update[LOCKED_DAY_FIELD] = now.date().isoformat()
+            lease_update[LOCKED_PASSES_FIELD] = _locked_passes_today(lease, now) + 1
         if final and bounded_pending_limit is not None:
             remembered_limit = bounded_pending_limit if bounded_pending_limit < 32 else None
             if lease.get('v3_bounded_pending_limit') != remembered_limit:
@@ -1305,7 +1324,8 @@ def commit_projection(
         pointers += pointer
     if current or not batches:
         batches.append(current)
-    if key == 'builder' and len(batches) > LOCKED_MAX_BATCHES and _past_origin_bound(uid, existing):
+    heavy = key == 'builder' and _past_origin_bound(uid, existing)
+    if heavy and len(batches) > LOCKED_MAX_BATCHES:
         # Each batch rereads the whole closure: a locked-claimant closure may not buy an unbounded commit.
         # Park on the derived budget before any transaction, so nothing is written and pending stays owed.
         metrics.safe_metric(lambda: logger.info('event=v3_locked_closure_batches batches=%d', len(batches)))
@@ -1315,9 +1335,10 @@ def commit_projection(
     for index, batch in enumerate(batches):
         batch_rows, batch_prepared, final = [r for r, _ in batch], [r for _, r in batch], index == len(batches) - 1
         try:
-            if index:
-                # The caller renewed the lease once before the commit. Each later batch renews it again, so a
-                # multi-batch commit cannot outlive the lease after writing a prefix.
+            if index and commit_lease_renewal_enabled():
+                # The caller renewed the pass's lease (builder, or backfill-builder for a derive pass) once
+                # before the commit. Each later batch renews it again, so a multi-batch commit cannot outlive
+                # the lease after writing a prefix. CONVERSATIONS_V3_COMMIT_LEASE_RENEWAL=off restores one renewal.
                 leases.renew(uid, key, token, firestore_client=client)
             watch.reset()
 

@@ -33,6 +33,11 @@ def bounded_pending_enabled() -> bool:
     return default_on('CONVERSATIONS_V3_BOUNDED_PENDING')
 
 
+def commit_lease_renewal_enabled() -> bool:
+    """Default on: a multi-batch projection commit renews the pass's lease before each later batch."""
+    return default_on('CONVERSATIONS_V3_COMMIT_LEASE_RENEWAL')
+
+
 def transcript_size_cap_enabled() -> bool:
     return default_on('CONVERSATIONS_V3_TRANSCRIPT_SIZE_CAP')
 

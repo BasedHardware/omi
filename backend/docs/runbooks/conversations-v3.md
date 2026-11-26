@@ -304,15 +304,35 @@ A derived-budget park recorded before paging shipped, with indexed unlocked wind
 when it is recorded and waits out the usual backoff. See the [bounded pending](../listen_pusher_pipeline/changes/2026-11-26-v3-bounded-pending.md)
 and [bounded unlocked](../listen_pusher_pipeline/changes/2026-11-26-v3-bounded-unlocked.md) change notes.
 A one-seed closure still over the derived budget (one long recording owning hundreds of locked
-one-line windows) parks with `v3_bounded_pending_attempted` already set. To admit it, take its
-`owner=` tag from the `v3 reconcile blocked reason=v3_derived_budget` log line. Add the tag to
-`CONVERSATIONS_V3_LOCKED_CLOSURE_OWNERS` on backend-sync, comma-separated; this is an env change and
-rolls a revision. Then clear the park as below. The next pass loads the locked claimants within
-the allowance and commits in at most `CONVERSATIONS_V3_LOCKED_MAX_BATCHES` batches. A pass costs about
-6.5k to 30k reads, so admit owners one at a time first. Any step expected to exceed 10M reads a day
-needs the Firestore cost owner (SCA-2173). An owner that still parks needs the fragment repair
-(SCA-2918). Remove the tag to undo. See the
-[locked-closure allowance change note](../listen_pusher_pipeline/changes/2026-11-26-v3-locked-closure-allowance.md).
+one-line windows) parks with `v3_bounded_pending_attempted` already set. To admit it:
+
+1. Take the owner's `owner=` tag from the `v3 reconcile blocked reason=v3_derived_budget` log line.
+2. Add the tag to `CONVERSATIONS_V3_LOCKED_CLOSURE_OWNERS` (comma-separated) on **every runtime that runs
+   `store.load()`**: `backend` and `backend-integration` (the on-open builder), `backend-sync` (builder
+   tasks) and `backend-sync-backfill` (derive). Edit all four in
+   `deploy/runtime_env/prod.overlay.yaml` in one PR, then compose `runtime_env.yaml`. `pusher` and
+   `backend-listen` only mark pending and enqueue; they never load a closure. A loader without the tag
+   keeps parking the owner and re-arming its backoff. The activation manifest
+   (`deploy/activation/conversations-v3.yaml`, `v3-locked-closure-*`) reports a mismatch across the four
+   as not ready. An env change rolls a revision.
+3. Clear the park as below.
+
+The next pass loads the locked claimants within the allowance and commits in at most
+`CONVERSATIONS_V3_LOCKED_MAX_BATCHES` batches. That is about 6.5k to 30k reads per pass.
+
+**Per-owner ceiling.** While pending remains, a pending-seeded request can run up to 3 inline passes, and
+the owner is woken again each minute. Without a cap that is up to 3 x 30k reads a minute (about 130M a
+day) for one listed owner. `CONVERSATIONS_V3_LOCKED_DAILY_PASSES` (default 48) caps the committed
+allowance passes per owner per UTC day; the count is kept on the builder lease. The bound is about
+48 x 30k = 1.44M reads, plus parked retries. Those run at the origin bound, up to about 24 a day at
+about 6k reads. In total that is about 1.6M reads per listed owner per day. Admit owners one at a time
+first. A step expected to exceed 10M reads a day (more than about six listed owners at the cap) needs
+the Firestore cost owner (SCA-2173).
+
+An owner that still parks needs the fragment repair (SCA-2918). Remove the tag to undo.
+`CONVERSATIONS_V3_COMMIT_LEASE_RENEWAL=off` stops the lease renewal before each later projection batch.
+See the [locked-closure allowance change note](../listen_pusher_pipeline/changes/2026-11-26-v3-locked-closure-allowance.md).
+
 A new failed bounded pass records `v3_bounded_pending_attempted` (and, with unlocked windows,
 `v3_unlocked_paging_attempted`) on the builder lease and observes the usual backoff. An operator
 clears the park by deleting `v3_blocked_count`, `v3_blocked_reason`, `v3_backoff_until`,

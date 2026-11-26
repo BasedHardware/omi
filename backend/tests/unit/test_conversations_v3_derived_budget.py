@@ -6,6 +6,7 @@ from unittest.mock import AsyncMock
 import pytest
 
 from database import conversations_v3 as store, conversations_v3_leases as leases, memories
+from database.firestore_transaction_retry import FirestoreContentionExhausted
 from utils.conversations.v3 import Conflict, planner, service, triggers
 from tests.unit.test_conversations_v3_claim_growth import T0, UID, path, strict  # noqa: F401
 from tests.unit.test_conversations_v3_lock_timing import _locked_pair
@@ -1035,7 +1036,9 @@ def test_kill_switch_restores_the_origin_bound(monkeypatch, switch):
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize('allowed, sizes', [(20, [8]), (0, [8, 1])])
-async def test_a_parked_owner_with_a_fragmented_recording_commits_instead_of_parking(monkeypatch, allowed, sizes):
+async def test_a_parked_owner_with_a_fragmented_recording_loads_within_the_allowance_instead_of_parking(
+    monkeypatch, allowed, sizes
+):
     allowance(monkeypatch, allowed)
     client, attempted = MemoryQuery(fragmented(30)), []
 
@@ -1055,20 +1058,32 @@ async def test_a_parked_owner_with_a_fragmented_recording_commits_instead_of_par
     assert attempted == sizes
 
 
-def heavy_commit(strict, monkeypatch, *, listed, past_bound, cap):
-    """Eight planned rows in three batches (BATCH_MAX_WRITES 5), with or without a closure past the origin bound."""
+def heavy_commit(strict, monkeypatch, *, listed, past_bound, cap, key='builder', renew=None, day_lease=None):
+    """Eight planned rows in three batches (BATCH_MAX_WRITES 5), and a closure past the origin bound by rows,
+    by bytes, or not at all. ``renew`` replaces the renewal's outcome; ``day_lease`` seeds the lease counters."""
     strict.rows[path('r')] = {'id': 'r', 'recording': True, 'v3_pending': True, 'status': 'completed'}
     for i in range(3):
         strict.rows[path(f'l{i}')] = derived(f'l{i}', T0, 10, ['r'])
-    token = leases.acquire(UID, 'builder', firestore_client=strict)
+    token = leases.acquire(UID, key, firestore_client=strict)
+    if day_lease:
+        strict.rows[('users', UID, 'conversation_v3_leases', key)].update(day_lease)
     monkeypatch.setattr(store, 'BATCH_MAX_WRITES', 5)
-    monkeypatch.setattr(store, 'DERIVED_LIMIT', 2 if past_bound else 10)
+    monkeypatch.setattr(store, 'DERIVED_LIMIT', 2 if past_bound == 'rows' else 10)
+    if past_bound == 'bytes':
+        monkeypatch.setattr(store, 'DERIVED_BYTES', 1)  # three rows under DERIVED_LIMIT, their speech over the bytes
     monkeypatch.setattr(store, 'LOCKED_DERIVED_ALLOWANCE', 20)
     monkeypatch.setattr(store, 'LOCKED_MAX_BATCHES', cap)
     monkeypatch.setenv('CONVERSATIONS_V3_LOCKED_CLOSURE_OWNERS', '*' if listed else '')
     events = []
     real_renew = leases.renew
-    monkeypatch.setattr(leases, 'renew', lambda *a, **kw: events.append('renew') or real_renew(*a, **kw))
+
+    def renewal(uid, lease_key, *a, **kw):
+        events.append(('renew', lease_key))
+        if renew is not None:
+            raise renew
+        return real_renew(uid, lease_key, *a, **kw)
+
+    monkeypatch.setattr(leases, 'renew', renewal)
     original = store.firestore.transactional
 
     def transactional(body):
@@ -1088,23 +1103,103 @@ def heavy_commit(strict, monkeypatch, *, listed, past_bound, cap):
     ]
     existing = {f'l{i}': {**strict.rows[path(f'l{i}')], '_v3_revision': 1} for i in range(3)}
     store.commit_projection(
-        UID, token, {'r': {**strict.rows[path('r')], '_v3_revision': 1}}, existing, rows, [], firestore_client=strict
+        UID,
+        token,
+        {'r': {**strict.rows[path('r')], '_v3_revision': 1}},
+        existing,
+        rows,
+        [],
+        key=key,
+        firestore_client=strict,
     )
     return events
 
 
+def written(strict):
+    return sorted(p[3] for p in strict.rows if p[2] == 'conversations' and p[3].startswith('c'))
+
+
+R3 = [3, ('renew', 'builder'), 3, ('renew', 'builder'), 2]
+
+
 def test_the_lease_is_renewed_before_every_later_batch(strict, monkeypatch):
-    events = heavy_commit(strict, monkeypatch, listed=False, past_bound=False, cap=6)
-    assert events == [3, 'renew', 3, 'renew', 2]
+    assert heavy_commit(strict, monkeypatch, listed=False, past_bound=False, cap=6) == R3
 
 
-def test_a_locked_closure_needing_more_batches_than_the_cap_parks_before_any_write(strict, monkeypatch):
+def test_a_derive_commit_renews_its_backfill_lease_before_every_later_batch(strict, monkeypatch):
+    events = heavy_commit(strict, monkeypatch, listed=False, past_bound=False, cap=6, key=store.BACKFILL_LEASE)
+    assert events == [3, ('renew', store.BACKFILL_LEASE), 3, ('renew', store.BACKFILL_LEASE), 2]
+
+
+def test_the_renewal_kill_switch_restores_one_renewal_before_the_commit(strict, monkeypatch):
+    monkeypatch.setenv('CONVERSATIONS_V3_COMMIT_LEASE_RENEWAL', 'off')
+    assert heavy_commit(strict, monkeypatch, listed=False, past_bound=False, cap=6) == [3, 3, 2]
+
+
+@pytest.mark.parametrize(
+    'error, caller_sees',
+    [
+        (Conflict('lease_lost'), Conflict),  # reconcile answers 'raced' and wakes the owner next minute
+        (FirestoreContentionExhausted('renewal contention'), FirestoreContentionExhausted),  # the 409 retry
+    ],
+)
+def test_a_failed_renewal_stops_after_the_committed_prefix_and_keeps_pending_owed(
+    strict, monkeypatch, error, caller_sees
+):
+    with pytest.raises(caller_sees) as raised:
+        heavy_commit(strict, monkeypatch, listed=False, past_bound=False, cap=6, renew=error)
+    assert raised.value is error
+    assert written(strict) == ['c0', 'c1', 'c2']  # the first batch only
+    assert strict.rows[path('r')]['v3_pending'] is True  # cleared only by the final batch
+
+
+@pytest.mark.parametrize('bound', ['rows', 'bytes'])
+def test_a_locked_closure_needing_more_batches_than_the_cap_parks_before_any_write(strict, monkeypatch, bound):
     with pytest.raises(Conflict, match='v3_derived_budget'):
-        heavy_commit(strict, monkeypatch, listed=True, past_bound=True, cap=2)
-    assert not any(p[3].startswith('c') for p in strict.rows)
+        heavy_commit(strict, monkeypatch, listed=True, past_bound=bound, cap=2)
+    assert written(strict) == []
     assert strict.rows[path('r')]['v3_pending'] is True
 
 
-@pytest.mark.parametrize('listed, past_bound', [(False, True), (True, False)])
+@pytest.mark.parametrize('listed, past_bound', [(False, 'rows'), (False, 'bytes'), (True, False)])
 def test_the_batch_cap_applies_only_to_a_closure_that_used_the_allowance(strict, monkeypatch, listed, past_bound):
-    assert heavy_commit(strict, monkeypatch, listed=listed, past_bound=past_bound, cap=2) == [3, 'renew', 3, 'renew', 2]
+    assert heavy_commit(strict, monkeypatch, listed=listed, past_bound=past_bound, cap=2) == R3
+
+
+def lease_doc(strict):
+    return strict.rows[('users', UID, 'conversation_v3_leases', 'builder')]
+
+
+TODAY = lambda: datetime.now(timezone.utc).date().isoformat()  # noqa: E731
+
+
+@pytest.mark.parametrize(
+    'seeded, expected',
+    [
+        (None, 1),
+        ({'v3_locked_day': 'today', 'v3_locked_passes': 4}, 5),
+        ({'v3_locked_day': '2026-01-01', 'v3_locked_passes': 9}, 1),
+    ],
+)
+def test_a_committed_allowance_pass_counts_against_the_owners_day(strict, monkeypatch, seeded, expected):
+    if seeded and seeded['v3_locked_day'] == 'today':
+        seeded = {**seeded, 'v3_locked_day': TODAY()}
+    heavy_commit(strict, monkeypatch, listed=True, past_bound='rows', cap=6, day_lease=seeded)
+    assert (lease_doc(strict)['v3_locked_day'], lease_doc(strict)['v3_locked_passes']) == (TODAY(), expected)
+
+
+def test_a_commit_within_the_origin_bound_does_not_count(strict, monkeypatch):
+    heavy_commit(strict, monkeypatch, listed=True, past_bound=False, cap=6)
+    assert 'v3_locked_passes' not in lease_doc(strict)
+
+
+@pytest.mark.parametrize('used, loads', [(47, True), (48, False)])
+def test_the_daily_pass_cap_turns_the_allowance_off_for_the_rest_of_the_day(monkeypatch, used, loads):
+    allowance(monkeypatch, 20)
+    rows = fragmented(30)
+    rows['/users/u/conversation_v3_leases/builder'] = {'v3_locked_day': TODAY(), 'v3_locked_passes': used}
+    if loads:
+        assert len(store.load('u', firestore_client=MemoryQuery(rows))[1]) == 30
+    else:
+        with pytest.raises(Conflict, match='v3_derived_budget'):
+            store.load('u', firestore_client=MemoryQuery(rows))

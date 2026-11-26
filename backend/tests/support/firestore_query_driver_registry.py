@@ -165,7 +165,7 @@ BODY_DIGEST = {
     'utils.support.retention._select_conversations': 'f36920350f4e3a557e0e474e8801ae414c21ce67203e0627f7a39ba820243d16',
     'database.conversations_v3_live._recent_window_query': '6f2c323bfa8df890362c6bdc4796182a70e4c704376bcb4944358560b12edc75',
     'database.conversations_v3._oldest_pending': 'e2da208a3dcbae7d7c7c59335883b422e27dc71c9cfae51568883aa452bcfc57',
-    'database.conversations_v3.commit_projection': 'b1f6802792f211061b0309103eff607b9186d6b865d358fc7eb0e6cf5354fded',
+    'database.conversations_v3.commit_projection': '18d19d57a8bd99cb0a651e165d9a66189176196ba2cc55c5f9c28a918f561bc2',
     'database.batch_pipeline_conversation_purge_scans._claim': 'faa5dabcf01dc5bd377b2e14a149282aa2db93b2872cdc97a3b756157701532c',
     'database.batch_pipeline_conversation_purge_scans.run_job': 'fe5d30b77da198a7e0dc188115c8906fb6446925079a4e96339d36675a55faeb',
     'database.batch_pipeline_store.FirestoreStore.protected_retries': 'b55d2960c94057cb8df9b9cdd2e7728b6af63728bc0a2cb6f5bd333efed443a2',
@@ -3738,9 +3738,10 @@ for entry in (
         'their pending marker using the same fenced point update as deleted sources. '
         'Linked backfill replacements use the existing task and memory query results and loaded claims. '
         'Unlocked paging carries unvisited IDs and the cursor into the existing builder lease write; no new query. '
-        'Re-reviewed 2026-11-26 (SCA-2918 locked-closure allowance): each batch after the first renews the builder '
-        'lease with a transactional point read and update of that one lease document, and the locked-closure '
-        'batch cap only counts the planned batches before any read; no new query.',
+        'Re-reviewed 2026-11-26 (SCA-2918 locked-closure allowance): each batch after the first renews the pass '
+        'lease (builder or backfill-builder) with a transactional point read and update of that one lease document, '
+        'behind CONVERSATIONS_V3_COMMIT_LEASE_RENEWAL; the locked-closure batch cap only counts the planned batches '
+        'before any read; the daily pass counter is two fields in the existing final lease update; no new query.',
         expect_observed=False,
         body_digest=BODY_DIGEST['database.conversations_v3.commit_projection'],
     ),

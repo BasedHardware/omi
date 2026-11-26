@@ -26,15 +26,36 @@ the closure. The commit is capped at `CONVERSATIONS_V3_LOCKED_MAX_BATCHES` (6) b
 before any transaction, after its load (about 3.6k reads in the fixture) and the outline call. The 8 MiB byte
 allowance keeps the batch count from being driven by stored speech.
 
-**Lease.** The caller renews the builder lease once before the commit. The commit now renews it before every
-later batch, so a 6-batch commit cannot outlive the 240 s lease after writing a prefix. This applies to every
-owner and costs one renewal transaction per later batch. The fixture shows a 6-batch commit holding a 5 s
-lease. Without renewal, the same commit loses the lease after two batches and keeps pending owed.
+**Per-owner ceiling.** While pending remains, a pending-seeded request runs up to 3 inline passes, and the owner is
+woken each minute. Uncapped, one listed owner could therefore spend up to 3 x 30k reads a minute (about 130M a day).
+`CONVERSATIONS_V3_LOCKED_DAILY_PASSES` (default 48) caps the committed allowance passes per owner per UTC day. The
+final batch counts them on the builder lease. Past the cap, the owner's passes that day load with the origin bound
+and park as before. The bound is about 1.44M reads for allowance passes plus up to about 0.15M for parked retries:
+about 1.6M reads per listed owner per day.
+
+**Lease.** The caller renews the pass's lease (`builder`, or `backfill-builder` for a derive pass) once before the
+commit. The commit now renews it before every later batch, so a 6-batch commit cannot outlive the 240 s lease after
+writing a prefix. This applies to every owner and costs one renewal transaction per later batch.
+`CONVERSATIONS_V3_COMMIT_LEASE_RENEWAL=off` restores the single renewal.
+
+A failed renewal stops the commit after the committed prefix and leaves pending owed:
+- `lease_lost` makes the pass `raced`, with a wake the next minute;
+- exhausted renewal contention is the reconcile 409 retry.
+
+The emulator fixture shows a 6-batch commit holding its lease while the commit clock advances 200 s per batch.
+Without renewal, the same commit loses the lease after two batches.
+
+**Runtimes.** `store.load()` runs on every runtime that loads a closure: the on-open builder on `backend` and
+`backend-integration`, builder tasks on `backend-sync`, and derive on `backend-sync-backfill`. `pusher` and
+`backend-listen` only mark pending and enqueue (`triggers.changed`); they never load a closure. The allowlist, sizes,
+batch cap and daily passes must agree on the four loaders. The prod runtime env declares them on each, and the
+activation manifest (`deploy/activation/conversations-v3.yaml`, `v3-locked-closure-*`) requires one value. Lease
+renewal is decided per commit, so it is not in the manifest.
 
 **Refinement.** Serving backend-sync runs 300/300 timing, so the live planner never offers refinement. Under
 custom timing it is offered, one merge of 2 to 8 donors per pass, and the fixture keeps custody either way.
 
-**Rollout.** Off by default. List one parked owner whose closure is at most 1,200 rows, then five, then all
-parked owners. Listing `*`, or any step that expects more than 10M reads per day, needs a yes from the
-Firestore cost owner (SCA-2173). Roll back by emptying the list. A follow-up should fence unchanged locked rows
+**Rollout.** Off by default. List one parked owner whose closure is at most 1,200 rows, then five (at most about 8M
+reads a day at the cap), then all parked owners. Listing more than about six owners, `*`, or any step that expects
+more than 10M reads a day needs a yes from the Firestore cost owner (SCA-2173). Roll back by emptying the list. A follow-up should fence unchanged locked rows
 once, not in every batch, which would cut commit reads from about 12k to about 3k per heavy pass.

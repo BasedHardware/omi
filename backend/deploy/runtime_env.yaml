@@ -4448,6 +4448,19 @@ environments:
             BATCH_PIPELINE_PROJECTION_PAGINATION_ENABLED: {value: 'true', category: rollout}
             BATCH_PIPELINE_ASYNC_PROJECTION_ENABLED: {value: 'true', category: rollout}
             BATCH_PIPELINE_RECOVERY_MODE: {value: 'off', category: rollout}
+            CONVERSATIONS_V3_LOCKED_CLOSURE_OWNERS: {value: '', category: rollout}
+            CONVERSATIONS_V3_LOCKED_DERIVED_ALLOWANCE:
+              value: '2048'
+              category: config
+            CONVERSATIONS_V3_LOCKED_DERIVED_BYTES:
+              value: '8388608'
+              category: config
+            CONVERSATIONS_V3_LOCKED_MAX_BATCHES:
+              value: '6'
+              category: config
+            CONVERSATIONS_V3_LOCKED_DAILY_PASSES:
+              value: '48'
+              category: config
             CONVERSATIONS_V3_LIVE_TITLE:
               value: 'on'
               category: ops_kill
@@ -5046,6 +5059,19 @@ environments:
             BATCH_PIPELINE_PROJECTION_PAGINATION_ENABLED: {value: 'true', category: rollout}
             BATCH_PIPELINE_ASYNC_PROJECTION_ENABLED: {value: 'true', category: rollout}
             BATCH_PIPELINE_RECOVERY_MODE: {value: 'off', category: rollout}
+            CONVERSATIONS_V3_LOCKED_CLOSURE_OWNERS: {value: '', category: rollout}
+            CONVERSATIONS_V3_LOCKED_DERIVED_ALLOWANCE:
+              value: '2048'
+              category: config
+            CONVERSATIONS_V3_LOCKED_DERIVED_BYTES:
+              value: '8388608'
+              category: config
+            CONVERSATIONS_V3_LOCKED_MAX_BATCHES:
+              value: '6'
+              category: config
+            CONVERSATIONS_V3_LOCKED_DAILY_PASSES:
+              value: '48'
+              category: config
             CONVERSATION_PARKED_TERMINAL_STATUS_ENABLED: {value: 'off', category: rollout}
             CONVERSATIONS_V3_BACKFILL:
               value: 'on'
@@ -5613,6 +5639,19 @@ environments:
             BATCH_PIPELINE_PROJECTION_PAGINATION_ENABLED: {value: 'true', category: rollout}
             BATCH_PIPELINE_ASYNC_PROJECTION_ENABLED: {value: 'true', category: rollout}
             BATCH_PIPELINE_RECOVERY_MODE: {value: 'off', category: rollout}
+            CONVERSATIONS_V3_LOCKED_CLOSURE_OWNERS: {value: '', category: rollout}
+            CONVERSATIONS_V3_LOCKED_DERIVED_ALLOWANCE:
+              value: '2048'
+              category: config
+            CONVERSATIONS_V3_LOCKED_DERIVED_BYTES:
+              value: '8388608'
+              category: config
+            CONVERSATIONS_V3_LOCKED_MAX_BATCHES:
+              value: '6'
+              category: config
+            CONVERSATIONS_V3_LOCKED_DAILY_PASSES:
+              value: '48'
+              category: config
             CONVERSATIONS_V3_LIVE_TITLE:
               value: 'on'
               category: ops_kill
@@ -6124,6 +6163,19 @@ environments:
             BATCH_PIPELINE_PROJECTION_PAGINATION_ENABLED: {value: 'true', category: rollout}
             BATCH_PIPELINE_ASYNC_PROJECTION_ENABLED: {value: 'true', category: rollout}
             BATCH_PIPELINE_RECOVERY_MODE: {value: 'on', category: rollout}
+            CONVERSATIONS_V3_LOCKED_CLOSURE_OWNERS: {value: '', category: rollout}
+            CONVERSATIONS_V3_LOCKED_DERIVED_ALLOWANCE:
+              value: '2048'
+              category: config
+            CONVERSATIONS_V3_LOCKED_DERIVED_BYTES:
+              value: '8388608'
+              category: config
+            CONVERSATIONS_V3_LOCKED_MAX_BATCHES:
+              value: '6'
+              category: config
+            CONVERSATIONS_V3_LOCKED_DAILY_PASSES:
+              value: '48'
+              category: config
             CONVERSATIONS_V3_LIVE_TITLE:
               value: 'off'
               category: ops_kill
@@ -6640,6 +6692,19 @@ environments:
             BATCH_PIPELINE_PROJECTION_PAGINATION_ENABLED: {value: 'true', category: rollout}
             BATCH_PIPELINE_ASYNC_PROJECTION_ENABLED: {value: 'true', category: rollout}
             BATCH_PIPELINE_RECOVERY_MODE: {value: 'on', category: rollout}
+            CONVERSATIONS_V3_LOCKED_CLOSURE_OWNERS: {value: '', category: rollout}
+            CONVERSATIONS_V3_LOCKED_DERIVED_ALLOWANCE:
+              value: '2048'
+              category: config
+            CONVERSATIONS_V3_LOCKED_DERIVED_BYTES:
+              value: '8388608'
+              category: config
+            CONVERSATIONS_V3_LOCKED_MAX_BATCHES:
+              value: '6'
+              category: config
+            CONVERSATIONS_V3_LOCKED_DAILY_PASSES:
+              value: '48'
+              category: config
             CONVERSATIONS_V3_LIVE_TITLE:
               value: 'on'
               category: ops_kill
