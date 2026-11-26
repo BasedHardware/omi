@@ -1,0 +1,19 @@
+{
+  "version": 1,
+  "images": [
+    {
+      "file": "001-mobile-ios-streaming-live-row.png",
+      "platform": "mobile-ios",
+      "description": "The server live conversation leads Today while capture streams in the Flutter widget fixture.",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "002-mobile-ios-stopped-capture.png",
+      "platform": "mobile-ios",
+      "description": "Today shows the next conversation after capture stops while the server fixture still returns the live window.",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    }
+  ]
+}

@@ -13,11 +13,12 @@ void main() {
           false,
           false,
           'default Home',
-          streaming && !serverUsable ? V3HomeLiveRow.placeholder : serverOrNone
+          streaming ? (serverUsable ? V3HomeLiveRow.server : V3HomeLiveRow.placeholder) : V3HomeLiveRow.none,
         ),
         (false, false, false, false, 'outside v3 Home', V3HomeLiveRow.none),
         (true, true, false, false, 'removed', V3HomeLiveRow.none),
-        (true, false, true, false, 'call active', serverOrNone),
+        (true, false, true, false, 'call active', V3HomeLiveRow.none),
+        (true, false, true, true, 'call active after Finish', V3HomeLiveRow.none),
         (true, false, false, true, 'after Finish', serverOrNone),
       ]) {
         test('$reason, streaming=$streaming, usable server=$serverUsable shows ${expected.name}', () {

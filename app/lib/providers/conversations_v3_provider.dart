@@ -311,6 +311,7 @@ class ConversationsV3Provider extends ChangeNotifier {
     if (a == null || b == null) return a == b;
     return a.id == b.id &&
         a.structured.title == b.structured.title &&
+        a.discarded == b.discarded &&
         a.v3?.tileState == b.v3?.tileState &&
         a.v3?.homeHidden == b.v3?.homeHidden &&
         listEquals(a.v3?.recordingIds, b.v3?.recordingIds) &&

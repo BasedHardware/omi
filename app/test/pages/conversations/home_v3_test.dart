@@ -118,7 +118,18 @@ class _StubConnectivityProvider extends ChangeNotifier implements ConnectivityPr
 
 class _StubPhoneCallProvider extends ChangeNotifier implements PhoneCallProvider {
   @override
-  PhoneCallState get callState => PhoneCallState.idle;
+  PhoneCallState callState = PhoneCallState.idle;
+
+  @override
+  List<TranscriptSegment> get transcriptSegments => [];
+
+  @override
+  Duration get callDuration => const Duration(seconds: 1);
+
+  void setCallState(PhoneCallState state) {
+    callState = state;
+    notifyListeners();
+  }
 
   @override
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
@@ -335,12 +346,14 @@ final _now = DateTime(2026, 11, 16, 12, 30);
 ServerConversation _conversation(String id, DateTime start, String title,
         {ConversationV3Fields? v3,
         ConversationStatus status = ConversationStatus.completed,
+        bool discarded = false,
         Duration length = const Duration(minutes: 25),
         DateTime? lastSpeech,
         List<TranscriptSegment> segments = const []}) =>
     ServerConversation(
       id: id,
       status: status,
+      discarded: discarded,
       speakerResolution: const ConversationSpeakers(status: 'resolved', participantSpeakerIds: [0]),
       createdAt: start,
       startedAt: start,
@@ -420,8 +433,10 @@ class _Home {
   late DateTime liveStart = _now.subtract(const Duration(minutes: 20));
   bool liveHidden = false;
   bool liveFailed = false;
+  bool liveDiscarded = false;
   List<String> liveRecordingIds = const ['rec-1'];
   final sync = _StubSyncProvider();
+  final phoneCall = _StubPhoneCallProvider();
   late final _LiveCapture capture = _LiveCapture()
     ..segments = [
       // The same segment the open window's transcript ends with: this phone's capture is in it.
@@ -483,6 +498,7 @@ class _Home {
                   // The server's finished_at for an open window is its last speech: 11 minutes in.
                   lastSpeech: _now.subtract(const Duration(minutes: 9)),
                   segments: _liveSoFar,
+                  discarded: liveDiscarded,
                   v3: ConversationV3Fields(
                     kind: 'conversation',
                     tileState: liveFailed ? ConversationTileState.failed : ConversationTileState.live,
@@ -544,7 +560,7 @@ Widget _app(_Home home, {Key? boundary, ThemeData? theme}) {
           ChangeNotifierProvider<FolderProvider>.value(value: FolderProvider(foldersFetcher: () async => <Folder>[])),
           ChangeNotifierProvider<HomeProvider>.value(value: HomeProvider()),
           ChangeNotifierProvider<DeviceProvider>.value(value: _StubDeviceProvider()),
-          ChangeNotifierProvider<PhoneCallProvider>.value(value: _StubPhoneCallProvider()),
+          ChangeNotifierProvider<PhoneCallProvider>.value(value: home.phoneCall),
           ChangeNotifierProvider<SpeakerTagPromptsProvider>.value(
             value: SpeakerTagPromptsProvider(
               fetchPrompts: () async => const ApiSuccess(GeneratedSpeakerTagPromptsResponse()),
@@ -613,6 +629,7 @@ Future<void> _dispose(WidgetTester tester, _Home home) async {
   home.episodes.dispose();
   home.conversationsV3.dispose();
   home.sync.dispose();
+  home.phoneCall.dispose();
 }
 
 class _Conversations extends ConversationProvider {
@@ -683,6 +700,10 @@ void main() {
       expect(home.conversationsV3.v3, isTrue);
       expect(home.liveReads, greaterThanOrEqualTo(1));
 
+      home.conversations
+        ..conversations.add(home.conversationsV3.live!)
+        ..groupConversationsByDate();
+      await tester.pump();
       expect(_rowIds(tester),
           ['live-1', 'c-call', 'c-transcribing', 'c-writing', 'c-today', 'c-yesterday', 'c-yesterday-2'],
           reason: 'the live conversation leads Today; the hidden and failed ones are off Home (X5)');
@@ -753,6 +774,11 @@ void main() {
           v3: const ConversationV3Fields(kind: 'conversation', tileState: ConversationTileState.failed),
         ))
         ..groupConversationsByDate();
+      // Fall back while streaming from the phone with no pendant stream.
+      home.capture
+        ..streaming = false
+        ..recordingState = RecordingState.record
+        ..ping();
       home.liveFailed = true;
       await home.conversationsV3.refresh();
       await tester.pump();
@@ -761,6 +787,43 @@ void main() {
       expect(placeholder, findsOneWidget);
       expect(tester.getTopLeft(placeholder).dy, top);
 
+      await _dispose(tester, home);
+    });
+  });
+
+  testWidgets('v3: an active Omi call takes precedence over both live row candidates', (tester) async {
+    await withClock(Clock.fixed(_now), () async {
+      final home = await _pumpHome(tester, v3: true);
+      final serverRow = find.byKey(const ValueKey('live-1'));
+      final placeholder = find.byType(V3LivePlaceholderRow);
+      expect(serverRow, findsOneWidget);
+
+      home.phoneCall.setCallState(PhoneCallState.active);
+      await tester.pump();
+      expect(serverRow, findsNothing);
+      expect(placeholder, findsNothing);
+
+      home.liveOpen = false;
+      await home.conversationsV3.refresh();
+      await tester.pump();
+      expect(placeholder, findsNothing);
+
+      home.phoneCall.setCallState(PhoneCallState.idle);
+      await tester.pump();
+      expect(placeholder, findsOneWidget);
+      await _dispose(tester, home);
+    });
+  });
+
+  testWidgets('v3: a discarded live window does not show a row while streaming', (tester) async {
+    await withClock(Clock.fixed(_now), () async {
+      final home = await _pumpHome(tester, v3: true);
+      home.liveDiscarded = true;
+      await home.conversationsV3.refresh();
+      await tester.pump();
+      expect(home.conversationsV3.live!.discarded, isTrue);
+      expect(find.byKey(const ValueKey('live-1')), findsNothing);
+      expect(find.byType(V3LivePlaceholderRow), findsNothing);
       await _dispose(tester, home);
     });
   });
@@ -1611,6 +1674,41 @@ void main() {
         ),
       );
     }
+
+    testWidgets('v3: stopping capture hides a usable live window still returned by the server', (tester) async {
+      final date = DateTime.now();
+      final now = DateTime(date.year, date.month, date.day, 12);
+      await withClock(Clock.fixed(now), () async {
+        final palette = OmiColors.active;
+        addTearDown(() => OmiColors.active = palette);
+        OmiColors.active = OmiColors.forBrightness(Brightness.dark);
+        final home = await _pumpHome(tester, v3: true, boundary: boundary, theme: theme(), size: const Size(393, 852));
+        final live = home.conversationsV3.live!;
+        home.conversations
+          ..conversations = [
+            live,
+            _conversation('today-note', now.subtract(const Duration(minutes: 40)), 'Morning notes'),
+          ]
+          ..groupConversationsByDate();
+        await tester.pump();
+        final serverRow = find.byKey(ValueKey(live.id));
+        final placeholder = find.byType(V3LivePlaceholderRow);
+        expect(serverRow, findsOneWidget);
+        expect(placeholder, findsNothing);
+        await shoot(tester, '001-mobile-ios-streaming-live-row');
+
+        home.capture
+          ..streaming = false
+          ..ping();
+        await tester.pump();
+        expect(home.conversationsV3.live, same(live));
+        expect(serverRow, findsNothing);
+        expect(placeholder, findsNothing);
+        expect(find.text('Morning notes'), findsOneWidget);
+        await shoot(tester, '002-mobile-ios-stopped-capture');
+        await _dispose(tester, home);
+      });
+    }, variant: TargetPlatformVariant.only(TargetPlatform.iOS));
 
     testWidgets('a list read failure keeps Try Again beside a manual finish', (tester) async {
       await withClock(Clock.fixed(_now), () async {
