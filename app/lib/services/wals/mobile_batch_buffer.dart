@@ -18,6 +18,8 @@ class MobileBatchBuffer {
   MobileBatchBuffer(
       {required this.directory,
       required this.publish,
+      this.onSealed,
+      this.onPublishFailed,
       this.maxBytes = 256 * 1024 * 1024,
       this.maxFiles = 4096,
       RandomAccessFile Function(File)? openWriter})
@@ -47,6 +49,8 @@ class MobileBatchBuffer {
 
   final Directory directory;
   final Future<void> Function(Wal) publish;
+  final void Function(Wal)? onSealed;
+  final void Function(Wal)? onPublishFailed;
   final int maxBytes;
   final int maxFiles;
   final RandomAccessFile Function(File) _openWriter;
@@ -268,14 +272,28 @@ class MobileBatchBuffer {
     _writer = null;
     _wal = null;
     _journal = null;
+    onSealed?.call(wal);
+    var published = false;
     _pending = _pending.then((_) async {
       wal.fileSha256 = (await sha256.bind(File('${directory.path}/${wal.filePath}').openRead()).first).toString();
+      if (wal.mobileBatchHold != null) {
+        try {
+          final tmp = File('${journal.path}.tmp');
+          await tmp.writeAsString(jsonEncode(wal.toJson()), flush: true);
+          await tmp.rename(journal.path);
+        } on FileSystemException {
+          // The existing journal still protects the audio. The index can
+          // carry the hold stamp even if this optional checkpoint failed.
+        }
+      }
       await publish(wal);
+      published = true;
       // publish persists the shared WAL index before removing the journal.
       if (await journal.exists()) await journal.delete();
     }).catchError((Object _) {
       // Keep journal + bytes for recovery, and return to the live path.
       failed = true;
+      if (!published) onPublishFailed?.call(wal);
     });
   }
 

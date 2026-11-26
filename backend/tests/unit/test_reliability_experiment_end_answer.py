@@ -164,3 +164,34 @@ def test_route_keeps_an_answer_the_listening_recording_did_produce(route):
     out = response()
     answer = route.conversations.process_in_progress_conversation(request=None, uid='u', response=out)
     assert answer is route.state['finalized'] and out.headers == {}
+
+
+# --- The result of a pending End: the conversation it closes names the End on every conversation read ---
+
+
+def test_the_conversation_reads_serve_the_end_that_closed_it_without_changing_the_published_schema():
+    """A pending answer names no conversation; the app finds it by the End instant the builder stamps.
+
+    The field is part of what the list read loads and serves (both take the model's field set), keeps
+    the instant the app sent to the millisecond, and stays out of the published schema.
+    """
+    from models.conversation import Conversation
+    from utils.conversations.v3 import planner
+
+    assert planner.CUT_FIELD in Conversation.model_fields
+    assert planner.CUT_FIELD not in Conversation.model_json_schema()['properties']
+
+    sent = datetime(2026, 11, 26, 0, 36, 48, 954000, tzinfo=timezone.utc)
+    row = {
+        'id': 'closed-by-end',
+        'created_at': AT,
+        'started_at': AT,
+        'finished_at': AT,
+        'structured': {'title': 'Russian Microphone Test', 'overview': ''},
+        'manual_end': True,
+        planner.CUT_FIELD: sent,
+    }
+    served = Conversation(**row).model_dump(mode='json')
+    assert datetime.fromisoformat(served[planner.CUT_FIELD].replace('Z', '+00:00')) == sent
+    # A conversation no End closed (or stamped with the experiment off) serves nothing.
+    assert Conversation(**{k: v for k, v in row.items() if k != planner.CUT_FIELD}).v3_manual_cut_at is None

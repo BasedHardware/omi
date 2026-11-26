@@ -96,6 +96,15 @@ void main() {
       expect(outcome.absence, ProcessAbsence.notFound);
       expect(outcome.response, isNull);
 
+      // It names the End time it was stored for, so Home can find the conversation that End closes.
+      final endedAt = DateTime.utc(2026, 11, 26, 0, 36, 48, 954);
+      outcome =
+          await processInProgressConversationOutcome(endedAt: endedAt, sendRequest: (_) async => answer('pending'));
+      expect(outcome.endStoredAt, endedAt);
+      outcome = await processInProgressConversationOutcome(
+          endedAt: endedAt, sendRequest: (_) async => answer('conversation'));
+      expect(outcome.endStoredAt, isNull);
+
       // The End was not stored (no header): the baseline answer, so the app can still say so.
       outcome = await processInProgressConversationOutcome(sendRequest: (_) async => answer(null));
       expect(outcome.absence, isNull);

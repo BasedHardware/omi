@@ -554,6 +554,7 @@ def unique_claims(claims):
 # Firestore's per-document limit is 1 MiB ("... exceeds the maximum allowed size"); a commit request is
 # separately capped ("Request payload size exceeds the limit: N bytes").
 DOCUMENT_TOO_LARGE = 'exceeds the maximum allowed size'
+PROPERTY_TOO_LARGE = ('The value of property', 'is longer than')  # one field over 1 MiB: parks like a document
 REQUEST_TOO_LARGE = 'Request payload size exceeds the limit'
 # Derived-row bytes per transaction, and every write in it (rows, source claim updates, lease): batches
 # split on whichever fills first, so the source rewrites each batch repeats count against the request.
@@ -567,7 +568,7 @@ BATCH_MAX_WRITES = 450
 def size_error(error):
     """'document' or 'request' when a Firestore InvalidArgument is a size limit, else None."""
     text = str(error)
-    if DOCUMENT_TOO_LARGE in text:
+    if DOCUMENT_TOO_LARGE in text or all(marker in text for marker in PROPERTY_TOO_LARGE):
         return 'document'
     if REQUEST_TOO_LARGE in text:
         return 'request'
@@ -1175,13 +1176,15 @@ def commit_projection(
         except Exception as error:
             watch.failed(error, client, coll, held)
             if isinstance(error, InvalidArgument) and size_error(error):
-                log_largest_write(staged, batch=index, batches=len(batches))
-            logger.warning(
-                'event=v3_reconcile stage=projection_commit outcome=%s trace_id=%s batch=%d batches=%d',
-                firestore_failure_reason(error),
-                request_log_trace_id(),
-                index,
-                len(batches),
+                metrics.safe_metric(lambda: log_largest_write(staged, batch=index, batches=len(batches)))
+            metrics.safe_metric(
+                lambda: logger.warning(
+                    'event=v3_reconcile stage=projection_commit outcome=%s trace_id=%s batch=%d batches=%d',
+                    firestore_failure_reason(error),
+                    request_log_trace_id(),
+                    index,
+                    len(batches),
+                )
             )
             raise
         moved.update(batch_moved)
@@ -1190,7 +1193,7 @@ def commit_projection(
 
         for row, _encoded in batch:
             if failure_transitions[row['id']]:
-                metrics.terminal_failure(row.get('v3_process_failure_reason'))
+                metrics.safe_metric(lambda row=row: metrics.terminal_failure(row.get('v3_process_failure_reason')))
         if index != len(batches) - 1:
             # Read back only after our commit; any external race is checked
             # again by the next transaction's revision fence. Pending stays
@@ -1223,8 +1226,12 @@ def commit_projection(
                     if fence is None or not speech_moved(
                         {**recordings[rid], '_v3_fence': {**fence, 'claims': current.get('claims')}}, current
                     ):
-                        logger.warning(
-                            'v3 projection readback changed kind=recording batch=%d fields=%s', index, changed[:8]
+                        metrics.safe_metric(
+                            lambda: logger.warning(
+                                'v3 projection readback changed kind=recording batch=%d fields=%s',
+                                index,
+                                changed[:8],
+                            )
                         )
                         collisions.report(
                             collisions.RACED,
@@ -1253,8 +1260,12 @@ def commit_projection(
                         k for k, value in encoded.items() if k not in COMMIT_STAMPED_FIELDS and current.get(k) != value
                     )
                     if changed:
-                        logger.warning(
-                            'v3 projection readback changed kind=derived_row batch=%d fields=%s', index, changed[:8]
+                        metrics.safe_metric(
+                            lambda: logger.warning(
+                                'v3 projection readback changed kind=derived_row batch=%d fields=%s',
+                                index,
+                                changed[:8],
+                            )
                         )
                         collisions.report(
                             collisions.RACED,

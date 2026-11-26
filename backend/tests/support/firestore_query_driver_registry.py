@@ -164,7 +164,7 @@ BODY_DIGEST = {
     'utils.support.holds._held_deferred_deletes': '612a521045553ef1b02d1eb81aac37a3c63a75c598ce5e99484c007c7c87e878',
     'utils.support.retention._select_conversations': 'f36920350f4e3a557e0e474e8801ae414c21ce67203e0627f7a39ba820243d16',
     'database.conversations_v3_live._recent_window_query': '6f2c323bfa8df890362c6bdc4796182a70e4c704376bcb4944358560b12edc75',
-    'database.conversations_v3.commit_projection': 'fb9765887709017700f9648b2919e09e30d7d18f185656ed3a1c21e98327ff18',
+    'database.conversations_v3.commit_projection': '4dbc63b754697f856e67c886915320c4033fbbf4ce8d9d1154a8a82cd7d6d32b',
     'database.batch_pipeline_conversation_purge_scans._claim': 'faa5dabcf01dc5bd377b2e14a149282aa2db93b2872cdc97a3b756157701532c',
     'database.batch_pipeline_conversation_purge_scans.run_job': 'fe5d30b77da198a7e0dc188115c8906fb6446925079a4e96339d36675a55faeb',
     'database.batch_pipeline_store.FirestoreStore.protected_retries': 'b55d2960c94057cb8df9b9cdd2e7728b6af63728bc0a2cb6f5bd333efed443a2',
@@ -248,7 +248,7 @@ BODY_DIGEST = {
     # Re-reviewed 2026-11-04: atomic blocked_byok_at metadata only; query ownership is unchanged.
     # Re-reviewed: the early user-finish admission judges the snapshot already held; no collection query
     # (cohort mode adds one cached point read of the owner's rollout_cohorts document).
-    'database.user_data_deletion.purge_user_subtree': 'cf0e4ef71588e28f2e011464b65eee12c081eb27ecd676ccb29cf7a914c126ab',
+    'database.user_data_deletion.purge_user_subtree': '9bb7456a9bfd5d6f77f15cd53f67b717d7c0b797ee5338394d0d8ec51b19d10d',
     'database.conversation_finalization_jobs._create_or_get_finalization_intent_txn': '9fad8023fbdcc5a82898573d30afabcf7829ed2b7a992e3c28d3753fa2154136',
     'database.durable_queue_age._publish_queue_ages': '58e66cfc32f39bdc2e9b1e6c805d18599c1ff14be8dbcff68eadc23506656d9b',
     'database.firestore_query_types.FirestoreQuerySpec.build': '2c26a157a8e87be2bcfef668e3bd5cdc0a9c0d96e0b56bada98c30741c8be01a',
@@ -3714,6 +3714,7 @@ for entry in (
         covered_by=(
             'database.conversations_v3_live.recent_windows',
             'database.conversations_v3_live.request_recording_finish',
+            'database.conversations_v3_live.request_named_finish',
         ),
         reason='Builds the indexed filters; live lookup and Finish execute the query with their own field masks.',
         expect_observed=False,
@@ -3730,8 +3731,9 @@ for entry in (
         'The Home index bit is derived from the flags already present in those writes. '
         'Backfill removal enumerates the bounded payload children before deletion. '
         'Write elision uses only the projection snapshots already read under revision fences. '
-        'The collision record and the commit meter add no query: on a lock failure the record re-reads by '
-        'reference the documents the commit had already loaded.',
+        'The collision record and commit meter add no query: on a lock failure the record re-reads by reference '
+        'the documents the commit had already loaded. Re-reviewed 2026-11-26: post-commit telemetry guards and '
+        'diagnostic logging only; query and write shapes remain unchanged.',
         expect_observed=False,
         body_digest=BODY_DIGEST['database.conversations_v3.commit_projection'],
     ),

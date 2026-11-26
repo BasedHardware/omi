@@ -714,3 +714,58 @@ def test_late_words_become_one_line_across_batches_and_a_retry_adds_nothing(monk
     assert [s['text'] for s in assigned['transcript_segments']] == ['some orange spot.']
     retried = late_audio.ingest_late_transcript('u', row, first)
     assert [s['text'] for s in retried['transcript_segments']] == ['some orange spot.']
+
+
+def test_late_transcript_user_managed_anchor_is_terminal_not_retried(monkeypatch, transcript_module):
+    """The live socket must ack a user-managed anchor instead of replaying it."""
+    import asyncio
+    from types import SimpleNamespace
+    from models.conversation import Conversation
+    from models.structured import Structured
+    from models.transcript_segment import TranscriptSegment
+    from routers.listen.transcripts import (
+        LateTranscriptReplyError,
+        LateTranscriptSuperseded,
+        TranscriptProcessor,
+    )
+    from utils.sync.assignment_errors import SyncAssignmentSuperseded
+
+    def guarded(uid, incoming):
+        raise SyncAssignmentSuperseded('sync anchor is user managed')
+
+    monkeypatch.setattr(late_audio.lifecycle, 'ingest_sync_conversation', guarded)
+    processor = TranscriptProcessor.__new__(TranscriptProcessor)
+
+    async def call(fn, *a, **kw):
+        return fn(*a, **kw)
+
+    processor.host = SimpleNamespace(
+        request=SimpleNamespace(uid='u'),
+        state=SimpleNamespace(capture_timeline_v2=False),
+        persistence=SimpleNamespace(call=call),
+    )
+    processor.cache = SimpleNamespace(protection_level='standard')
+    original = Conversation(
+        id='socket-live',
+        created_at=NOW,
+        started_at=T0,
+        finished_at=NOW,
+        source='omi',
+        structured=Structured(title=''),
+        transcript_segments=[],
+    )
+    segment = TranscriptSegment(
+        id='late-word',
+        start=0,
+        end=20,
+        text='We agreed on Friday to review the test results together.',
+        speaker_id=0,
+        is_user=False,
+    )
+
+    with pytest.raises(LateTranscriptSuperseded) as raised:
+        asyncio.run(processor._update_live_conversation(original, [segment], [], NOW, T0))
+
+    # Subclass of the existing terminal handler: callers drop the batch instead
+    # of backing off and replaying the same user-authority guard.
+    assert isinstance(raised.value, LateTranscriptReplyError)

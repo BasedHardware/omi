@@ -2406,6 +2406,50 @@ async def test_sync_task_persistence_fence_terminalizes_backfill_and_releases_it
 
 
 @pytest.mark.asyncio
+async def test_sync_task_superseded_assignment_is_terminal_and_consumes_the_delivery():
+    """A user-managed sync anchor answers the Cloud Tasks delivery, never a retry."""
+    module, saved_modules, _, _, _, _ = _load_sync_router_for_fast_path()
+    request = _configure_task_handler(
+        module,
+        pipeline_error=module.SyncAssignmentSuperseded('sync anchor is user managed'),
+        latest_job={
+            'job_id': 'job-1',
+            'status': 'processing',
+            'stt_provider': 'deepgram',
+            'stt_model': 'nova-3',
+        },
+    )
+    request.json.return_value['lane'] = 'backfill'
+    setattr(module, 'finalize_sync_job_superseded', AsyncMock())
+    module.uid_sequencer.enabled = MagicMock(return_value=False)
+
+    try:
+        response = await module.run_sync_job(request, task_retry_count=0)
+
+        assert response.status_code == 200
+        assert json.loads(response.body) == {'status': 'superseded'}
+        module.finalize_sync_job_superseded.assert_awaited_once_with(
+            job_id='job-1',
+            run_lock_token='1:lock-token',
+            lane='backfill',
+            provider='deepgram',
+            model='nova-3',
+        )
+        module._finalize_sync_job_failure.assert_not_awaited()
+        module.fenced_mark_job_queued_for_retry.assert_not_called()
+        module.release_sync_content_claim_after_job_retired.assert_called_once_with('test-uid', 'content-1', 'job-1')
+    finally:
+        sys.modules.pop('routers.sync', None)
+        sys.modules.pop('utils.sync.pipeline', None)
+        sys.modules.pop('utils.sync.ledger_completion', None)
+        for mod_name, orig in saved_modules.items():
+            if orig is None:
+                sys.modules.pop(mod_name, None)
+            else:
+                sys.modules[mod_name] = orig
+
+
+@pytest.mark.asyncio
 async def test_expired_task_releases_only_its_matching_claim_for_404_reupload_recovery():
     module, saved_modules, _, _, _, _ = _load_sync_router_for_fast_path()
     request = _configure_task_handler(

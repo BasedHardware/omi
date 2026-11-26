@@ -2208,6 +2208,75 @@ void main() {
       });
     });
 
+    // Reliability experiment end_open_conversation: the server stored the End before its conversation
+    // existed, so no id names the result. The row is handed to the conversation that carries the same
+    // End time, and goes after two minutes when none comes.
+    testWidgets('a stored End with no conversation yet hands Processing to the one closed at that time',
+        (tester) async {
+      await withClock(Clock.fixed(_now), () async {
+        final home = await _pumpHome(tester, v3: true, boundary: boundary, theme: theme(), size: const Size(393, 852));
+        final v3 = home.conversationsV3;
+        final endedAt = home.liveStart.add(const Duration(minutes: 3));
+        final pending = OptimisticProcessingPlaceholder.conversation(targetConversationId: 'listening-recording');
+        v3.startManualFinish(pending, 'listening-recording', captureId: home.capture.activeRecordingId);
+        expect(v3.settleManualFinish(pending, null, alreadyClosed: true, endStoredAt: endedAt), isTrue);
+        home.liveOpen = false;
+        await v3.refresh();
+        await tester.pump();
+        expect(find.byKey(const Key('home_processing_row')), findsOneWidget);
+
+        // The conversation an earlier End closed is not this End's result.
+        home.conversations.upsertConversation(
+          _conversation('earlier', home.liveStart.subtract(const Duration(minutes: 9)), 'Earlier talk',
+              v3: ConversationV3Fields(
+                  kind: 'conversation',
+                  tileState: ConversationTileState.done,
+                  manualCutAt: endedAt.subtract(const Duration(seconds: 21)))),
+          preserveHomeStep: false,
+        );
+        await tester.pump();
+        await tester.pump();
+        expect(find.text('Earlier talk'), findsOneWidget);
+        expect(find.byKey(const Key('home_processing_row')), findsOneWidget);
+
+        home.conversations.upsertConversation(
+          _conversation('closed-by-end', home.liveStart, 'Launch checklist',
+              v3: ConversationV3Fields(
+                  kind: 'conversation', tileState: ConversationTileState.done, manualCutAt: endedAt)),
+          preserveHomeStep: false,
+        );
+        await tester.pump();
+        await tester.pump();
+        expect(find.byKey(const Key('home_processing_row')), findsNothing);
+        expect(find.text('Launch checklist'), findsOneWidget);
+        expect(v3.finishRow, isNull);
+        await _dispose(tester, home);
+      });
+    });
+
+    testWidgets('a stored End whose conversation never comes drops Processing after two minutes', (tester) async {
+      await withClock(Clock.fixed(_now), () async {
+        final home = await _pumpHome(tester, v3: true, boundary: boundary, theme: theme(), size: const Size(393, 852));
+        final v3 = home.conversationsV3;
+        final pending = OptimisticProcessingPlaceholder.conversation(targetConversationId: 'listening-recording');
+        v3.startManualFinish(pending, 'listening-recording', captureId: home.capture.activeRecordingId);
+        expect(v3.settleManualFinish(pending, null, alreadyClosed: true, endStoredAt: home.liveStart), isTrue);
+        home.liveOpen = false;
+        await v3.refresh();
+        await tester.pump();
+        expect(find.byKey(const Key('home_processing_row')), findsOneWidget);
+
+        final reads = home.conversations.listReads;
+        await tester.pump(OptimisticProcessingPlaceholder.timeout + const Duration(seconds: 1));
+        await tester.pump();
+        await tester.pump();
+        expect(find.byKey(const Key('home_processing_row')), findsNothing);
+        expect(v3.finishRow, isNull);
+        expect(home.conversations.listReads, greaterThan(reads), reason: 'Home reads its list once');
+        await _dispose(tester, home);
+      });
+    });
+
     for (final (caseName, image) in [
       ('failed summary', '003-mobile-ios-v3-manual-finish-failed'),
       ('legacy failed projection', null),

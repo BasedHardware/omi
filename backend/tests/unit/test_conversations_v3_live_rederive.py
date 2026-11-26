@@ -2075,6 +2075,47 @@ async def test_reconcile_returns_after_post_commit_projection_histogram_raises(o
 
 
 @pytest.mark.asyncio
+async def test_reconcile_returns_after_committed_outcome_counter_raises(owner, strict):
+    sources, rows = lunch(count=3)
+    owner(*sources, *rows)
+    before = conversations(strict)
+    counter = metrics.RECONCILES.labels('committed')
+    committed_at_increment = []
+
+    def fail_after_commit(*_args):
+        committed_at_increment.append(conversations(strict) != before)
+        raise OSError('metrics unavailable')
+
+    with patch.object(counter, 'inc', side_effect=fail_after_commit) as inc:
+        outcome, _ = await rederive()
+
+    inc.assert_called_once()
+    assert committed_at_increment == [True]
+    assert outcome == 'committed'
+    assert conversations(strict) != before
+
+
+@pytest.mark.asyncio
+async def test_reconcile_preserves_primary_exception_when_error_counter_raises(owner, strict, monkeypatch):
+    primary = RuntimeError('projection load failed')
+
+    def fail_load(*_args, **_kwargs):
+        raise primary
+
+    monkeypatch.setattr(rederive_store, 'load_live_rederive', fail_load)
+    counter = metrics.RECONCILES.labels('error')
+
+    with (
+        patch.object(counter, 'inc', side_effect=OSError('metrics unavailable')) as inc,
+        pytest.raises(RuntimeError) as raised,
+    ):
+        await rederive()
+
+    inc.assert_called_once()
+    assert raised.value is primary
+
+
+@pytest.mark.asyncio
 async def test_reconcile_writes_when_equality_fallback_telemetry_raises(owner, strict):
     sources, rows = lunch(count=3)
     owner(*sources, *rows)

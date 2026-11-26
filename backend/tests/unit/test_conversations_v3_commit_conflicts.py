@@ -353,7 +353,14 @@ def test_open_loop_blob_is_reprotected_on_a_level_change(strict, monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_oversized_document_parks_the_owner_instead_of_retrying(builder, monkeypatch):
+@pytest.mark.parametrize(
+    'message',
+    [
+        "Document 'x' cannot be written because its size (1,048,630 bytes) exceeds the maximum allowed size of 1,048,576 bytes.",
+        'The value of property "transcript_segments" is longer than 1048487 bytes.',
+    ],
+)
+async def test_oversized_document_parks_the_owner_instead_of_retrying(builder, monkeypatch, message):
     from google.api_core.exceptions import InvalidArgument
 
     from utils.conversations import lifecycle
@@ -362,9 +369,7 @@ async def test_oversized_document_parks_the_owner_instead_of_retrying(builder, m
     monkeypatch.setattr(service, '_commit', REAL_COMMIT)
 
     def too_large(*a, **kw):
-        raise InvalidArgument(
-            "Document 'x' cannot be written because its size (1,048,630 bytes) exceeds the maximum allowed size of 1,048,576 bytes."
-        )
+        raise InvalidArgument(message)
 
     monkeypatch.setattr(lifecycle, 'commit_v3_projection', too_large)
     blocked = []

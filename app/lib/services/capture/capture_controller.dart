@@ -194,11 +194,13 @@ class CaptureController extends ChangeNotifier
   /// the lane's VAD; reports through [captureEndReporter] when one is installed.
   final CaptureEndDetector _captureEnd = CaptureEndDetector();
   CaptureEndReporter? captureEndReporter;
+  void Function(String recordingSessionId)? onMobileBatchCaptureEnded;
 
   void _reportCaptureEnd(CaptureEndSignal? signal) {
+    if (signal == null) return;
+    onMobileBatchCaptureEnded?.call(signal.recordingSessionId);
     final reporter = captureEndReporter;
-    if (signal == null || reporter == null) return;
-    unawaited(reporter.report(signal));
+    if (reporter != null) unawaited(reporter.report(signal));
   }
 
   void installMobileStandardBatch(MobileStandardBatch lane) {
@@ -1477,6 +1479,7 @@ class CaptureController extends ChangeNotifier
     _liveSocketIdentity = null;
     _mobileStandardBatchAllowed = false;
     _mobileStandardBatch?.authorize(false);
+    if (activeRecordingId case final id?) onMobileBatchCaptureEnded?.call(id);
     _localPreview.end(send: _openSocketSender);
     _captureEvidenceIdentity.reset();
     _sessionOwner?.replaceSession(identity);
