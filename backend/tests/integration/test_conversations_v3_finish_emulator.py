@@ -258,3 +258,111 @@ def test_whole_native_completion_counts_async_empty_finish_once(owner, monkeypat
     counter.labels.assert_called_once_with('whole_record_resolved_empty')
     counter.labels.return_value.inc.assert_called_once_with()
     enqueue.assert_not_called()
+
+
+def _claimed(window_id, end, **fields):
+    row = _recording(end)
+    row.update(claims=[{'conversation_id': window_id, 'start': end - timedelta(seconds=30), 'end': end}], **fields)
+    return row
+
+
+def test_named_finish_cuts_the_capture_that_sealed_after_the_named_window(owner):
+    """A seals and its window ends; B seals 2 min later into a window hidden under the word floor."""
+    client, uid, recordings = owner
+    now = datetime.now(timezone.utc)
+    end_a, end_b = now - timedelta(minutes=2), now - timedelta(seconds=5)
+    recordings.document('capture-a').set(_claimed('window-a', end_a))
+    recordings.document('capture-b').set(_claimed('window-b', end_b))
+    recordings.document('window-a').set(
+        {
+            **_window(end_a, is_live=False),
+            'status': 'processing',
+            'tile_state': 'writing',
+            'v3_recording_ids': ['capture-a'],
+        }
+    )
+    recordings.document('window-b').set(
+        {**_window(end_b, is_live=True), 'home_hidden': True, 'v3_recording_ids': ['capture-b']}
+    )
+    assert store.live_window(uid, now=now, max_idle=live.MAX_IDLE, pick=live.active, firestore_client=client) is None
+
+    outcome, response, recording_id = store.request_named_finish(uid, 'window-a', now=now, firestore_client=client)
+
+    assert (outcome, response['id'], recording_id) == ('named_recording_cut', 'window-b', 'capture-b')
+    b = recordings.document('capture-b').get().to_dict()
+    assert b['v3_manual_end'] and b['v3_pending'] and b[live.FINISH_WINDOW_FIELD] == 'window-b'
+    a = recordings.document('capture-a').get().to_dict()
+    assert 'v3_manual_end' not in a and live.FINISH_WINDOW_FIELD not in a
+
+
+def test_named_finish_leaves_completed_visible_window_unwritten(owner):
+    client, uid, recordings = owner
+    now = datetime.now(timezone.utc)
+    recordings.document('capture-a').set(_claimed('window-a', now))
+    card = {'title': 'Morning standup', 'overview': 'Planned the release train.', 'emoji': '🗓️'}
+    recordings.document('window-a').set(
+        {**_window(now, is_live=False), 'v3_recording_ids': ['capture-a'], 'structured': card, 'starred': True}
+    )
+
+    outcome, response, _ = store.request_named_finish(uid, 'window-a', now=now, firestore_client=client)
+
+    assert (outcome, response['id']) == ('already_visible', 'window-a')
+    assert {key: response['structured'][key] for key in card} == card and response['starred'] is True
+    assert 'v3_manual_end' not in recordings.document('capture-a').get().to_dict()
+
+
+def _named_window_with_sealed_tail(recordings, end):
+    recordings.document('capture-a').set(_claimed('window-a', end))
+    recordings.document('window-a').set(
+        {
+            **_window(end, is_live=False),
+            'status': 'processing',
+            'tile_state': 'writing',
+            'v3_recording_ids': ['capture-a'],
+        }
+    )
+
+
+@pytest.mark.parametrize('speech', [False, True])
+def test_named_finish_ignores_in_progress_successor(owner, speech):
+    """A speech-pause rotation writes the next capture in progress, with a later clock, before A seals."""
+    client, uid, recordings = owner
+    now = datetime.now(timezone.utc)
+    end_a = now - timedelta(seconds=10)
+    _named_window_with_sealed_tail(recordings, end_a)
+    successor = {
+        'created_at': end_a + timedelta(seconds=2),
+        'started_at': end_a + timedelta(seconds=2),
+        'finished_at': end_a + timedelta(seconds=2),
+        'status': 'in_progress',
+        'source': 'omi',
+        'external_data': {'recording_session_id': 'next-listen'},
+    }
+    if speech:
+        successor.update(recording=True, has_content=True, v3_pending=True, v3_speech_landed_at=end_a)
+    recordings.document('capture-next').set(successor)
+
+    outcome, response, recording_id = store.request_named_finish(uid, 'window-a', now=now, firestore_client=client)
+
+    assert (outcome, response['id'], recording_id) == ('named_recording_cut', 'window-a', 'capture-a')
+    assert recordings.document('capture-a').get().to_dict()['v3_manual_end']
+    assert 'v3_manual_end' not in recordings.document('capture-next').get().to_dict()
+
+
+def test_named_finish_declines_two_sealed_captures_tied_after_the_named_one(owner):
+    client, uid, recordings = owner
+    now = datetime.now(timezone.utc)
+    end_a, end_b = now - timedelta(minutes=2), now - timedelta(seconds=5)
+    _named_window_with_sealed_tail(recordings, end_a)
+    for name in ('capture-b', 'capture-c'):
+        recordings.document(name).set(
+            {**_recording(end_b), 'external_data': {'recording_session_id': f'{name}-listen'}}
+        )
+
+    assert store.request_named_finish(uid, 'window-a', now=now, firestore_client=client) == (
+        'recording_ambiguous',
+        None,
+        '',
+    )
+    for name in ('capture-a', 'capture-b', 'capture-c'):
+        assert 'v3_manual_end' not in recordings.document(name).get().to_dict()
