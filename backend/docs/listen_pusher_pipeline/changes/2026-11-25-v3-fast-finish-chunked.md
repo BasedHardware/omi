@@ -69,9 +69,13 @@ transcript (`utils/conversations/v3/fast_finish.py`) calls the provider.
 - **Privacy at dispatch.** Privacy is asked before any audio is read, as before, and again inside every
   chunk job just before its provider request (and before its retry). It is also asked right before the
   language probe posts audio to the vendor or the self-hosted classifier. A refusal stops the pass.
-  The pass's privacy authority is sticky on denial: once any check refuses or errors (the self-hosted
-  shadow gate's included), every later check answers False without asking, so no probe of either
-  kind, chunk request or retry can leave, and the pass ends `privacy_blocked`.
+  The pass's privacy authority is sticky on denial. When any check refuses or errors (the self-hosted
+  shadow gate's included), the denial is recorded before that check returns; every later check then
+  answers False without asking, a check whose read was already in flight answers False when it
+  returns, and each chunk reads the denial again immediately before it is charged and sent. No probe
+  of either kind, chunk request or retry starts after a denial is recorded, and the pass ends
+  `privacy_blocked`. Only a request already started before the denial was recorded can still go out;
+  its result is never written.
   Cancellation stops queued chunks; a request already dispatched may finish, but its result is never
   written. The write is still fenced inside its transaction.
 - **Retry and language.** A chunk that fails is sent once more if at least 10 s of the deadline is left.

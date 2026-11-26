@@ -1189,18 +1189,112 @@ def test_one_denied_probe_check_ends_the_pass_whatever_later_checks_would_say(mo
     assert fast_finish.AUDIO_SECONDS.labels('long')._value.get() == audio and used() == 0
 
 
-def test_a_denial_at_a_chunk_dispatch_also_refuses_every_retry_without_asking():
-    unit, read = recording(200)
-    asked = []
+class _DenialRace:
+    """Drives a privacy denial between concurrent chunk jobs deterministically, with events only.
+
+    ``deny()`` (called from a privacy read) makes that read error. The chunk it denies is held where
+    it raises ``_Refused`` until every other chunk has decided (sent, or refused), so the coordinator
+    cannot set ``stop`` first and hide a missing sticky check. ``wait_for_denial()`` returns once the
+    pass's sticky authority has recorded the denial (or, if that wrapper is absent, once the read raised).
+    """
+
+    def __init__(self, monkeypatch, others: int):
+        self.wrappers: list = []
+        self.raised, self.others_decided = threading.Event(), threading.Event()
+        self.denier, self.decided, self.others = None, 0, others
+        self.lock = threading.Lock()
+        race = self
+
+        class Recording(fast_finish._StickyPrivacy):
+            def __init__(self, privacy):
+                super().__init__(privacy)
+                race.wrappers.append(self)
+
+        class HeldRefused(fast_finish._Refused):
+            def __init__(self):
+                super().__init__()
+                if threading.get_ident() == race.denier:
+                    assert race.others_decided.wait(5), 'the other chunks never decided'
+                else:
+                    race.decide()
+
+        monkeypatch.setattr(fast_finish, '_StickyPrivacy', Recording)
+        monkeypatch.setattr(fast_finish, '_Refused', HeldRefused)
+
+    def decide(self):
+        with self.lock:
+            self.decided += 1
+            if self.decided >= self.others:
+                self.others_decided.set()
+
+    def deny(self):
+        self.denier = threading.get_ident()
+        self.raised.set()
+        raise RuntimeError('privacy authority unavailable')
+
+    def wait_for_denial(self):
+        event = self.wrappers[0]._denied if self.wrappers else self.raised
+        assert event.wait(5), 'no denial was recorded'
+
+
+def test_a_chunk_check_in_flight_when_another_chunk_is_denied_sends_nothing(monkeypatch):
+    race = _DenialRace(monkeypatch, others=2)
+    unit, read = recording(900)  # three chunks, all dispatched at once
+    lock, asked, sends = threading.Lock(), [], []
 
     def privacy():
-        asked.append(1)
-        if len(asked) == 2:
-            raise RuntimeError('privacy authority unavailable')
+        with lock:
+            asked.append(1)
+            k = len(asked)
+        if k == 1:
+            return True  # the pass's own check before the audio
+        if k == 3:
+            race.deny()  # chunk A's read errors
+        # Chunk B (k == 2), and C if asked in time: the read began before A's denial and answers
+        # True only after the denial is recorded.
+        race.wait_for_denial()
         return True
 
-    outcome, _ = run([unit], read, lambda pcm, language: pytest.fail('must not send'), privacy=privacy)
-    assert outcome == 'privacy_blocked' and len(asked) == 2
+    def provider(pcm, language):
+        sends.append(1)
+        race.decide()
+        return []
+
+    outcome, _ = run([unit], read, provider, privacy=privacy)
+    assert outcome == 'privacy_blocked' and sends == []
+
+
+def test_a_denial_at_one_chunks_retry_check_refuses_every_other_chunks_retry(monkeypatch):
+    race = _DenialRace(monkeypatch, others=2)
+    unit, read = recording(900)  # three chunks, all dispatched at once
+    barrier = threading.Barrier(3, timeout=5)
+    lock, asked, calls = threading.Lock(), [], []
+
+    def privacy():
+        with lock:
+            asked.append(1)
+            k = len(asked)
+        if k <= 4:
+            return True  # before the audio, then each chunk's first dispatch
+        if k == 5:
+            race.deny()  # the first retry check: the authority errors
+        race.wait_for_denial()  # the other retries' reads answer True after the denial
+        return True
+
+    def provider(pcm, language):
+        first = next(value for value in values(pcm) if value)
+        with lock:
+            calls.append(first)
+            attempt = calls.count(first)
+        if attempt == 1:
+            barrier.wait()  # every chunk's first request is out before any retry check
+        else:
+            race.decide()
+        raise RuntimeError('provider down')
+
+    outcome, _ = run([unit], read, provider, privacy=privacy)
+    # The three first requests only: after the denial no chunk's retry was sent.
+    assert outcome == 'privacy_blocked' and len(calls) == 3
 
 
 def test_a_chunk_is_not_sent_with_too_little_time_left(monkeypatch):
