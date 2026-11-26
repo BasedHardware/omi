@@ -226,7 +226,8 @@ def test_an_overflowing_closure_stops_decoding_at_the_bound(monkeypatch):
     monkeypatch.setattr(
         store,
         'decode_row',
-        lambda uid, snap, **_kwargs: decoded.append(snap.id) or ({**snap.to_dict(), '_v3_revision': 1} if snap.exists else None),
+        lambda uid, snap, **_kwargs: decoded.append(snap.id)
+        or ({**snap.to_dict(), '_v3_revision': 1} if snap.exists else None),
     )
     rows = fragmented(30)
     rows[C + 'r']['claims'] = []  # only the time query finds the 30 windows
@@ -249,7 +250,9 @@ def test_missing_sources_count_and_the_source_bound_holds_before_reading(monkeyp
     monkeypatch.setattr(store, 'SOURCE_LIMIT', 3)
     reads = []
     real = store.recording_input
-    monkeypatch.setattr(store, 'recording_input', lambda uid, snap, **_kwargs: reads.append(snap.id) or real(uid, snap, **_kwargs))
+    monkeypatch.setattr(
+        store, 'recording_input', lambda uid, snap, **_kwargs: reads.append(snap.id) or real(uid, snap, **_kwargs)
+    )
     rows = {C + 'p': source('p', claims=[claim('d', AT, 10)], v3_pending_since=AT)}
     rows[C + 'd'] = derived('d', AT, 10, ['p', 'gone1', 'gone2', 'gone3'])
     with pytest.raises(Conflict, match='v3_source_closure_budget'):

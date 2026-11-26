@@ -96,7 +96,9 @@ def _pick_none(rows, now):
 
 
 def _decode(client):
-    return patch('database.conversations_v3.decode_row', side_effect=lambda uid, snapshot, **_kwargs: snapshot.to_dict())
+    return patch(
+        'database.conversations_v3.decode_row', side_effect=lambda uid, snapshot, **_kwargs: snapshot.to_dict()
+    )
 
 
 def _transaction_without_rpc(client):

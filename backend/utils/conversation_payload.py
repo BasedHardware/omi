@@ -89,7 +89,7 @@ def pack_conversation(
 
 def hydrate_conversation(
     parent: Mapping[str, Any],
-    chunks: Iterable[bytes] = (),
+    chunks: Iterable[object] = (),
     *,
     client: Any = None,
 ) -> dict[str, Any]:

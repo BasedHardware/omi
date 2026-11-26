@@ -1374,15 +1374,15 @@ def _collect_visible_conversation_page(
         capture_only=capture_only,
         show_held=show_held,
     )
-    visibility_flags = _Scout(
+    scout_policy = _Scout(
         sort_field=sort_field,
         include_recordings=include_recordings,
         hide_home=hide_home,
         hydrate_fields=hydrate_fields,
     )
-    read_row = partial(_list_conversation_row, budget=budget, field_paths=hydrate_fields, hidden=visibility_flags.hidden)
+    read_row = partial(_list_conversation_row, budget=budget, field_paths=hydrate_fields, hidden=scout_policy.hidden)
     # Only budgeted list routes refill lean; internal full-document callers keep their reads.
-    scout = visibility_flags if budget is not None and not include_discarded and _lean_skip_enabled() else None
+    scout = scout_policy if budget is not None and not include_discarded and _lean_skip_enabled() else None
 
     def finish(rows, last_doc, *, storage_rows, has_more, hidden_rows=0):
         if cursor_page is not None:
