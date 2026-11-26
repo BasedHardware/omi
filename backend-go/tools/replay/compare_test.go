@@ -70,11 +70,15 @@ func TestOperationTableSurvivesValueStripping(t *testing.T) {
 		Name: "operation-overage",
 		Python: &observation{
 			Status: "completed", Derived: map[string]any{}, Effects: map[string]any{},
-			Cost: replayCost{Firestore: firestoreOperations{DocumentReads: 2, QueryDocuments: 1, Writes: 2, Deletes: 1}},
+			Cost: replayCost{Firestore: firestoreOperations{
+				DocumentReads: 2, QueryDocuments: 1, Writes: 2, Deletes: 1, FailedCommitRPCs: 1,
+			}},
 		},
 		Go: &observation{
 			Status: "completed", Derived: map[string]any{}, Effects: map[string]any{},
-			Cost: replayCost{Firestore: firestoreOperations{DocumentReads: 4, Writes: 4, Deletes: 1}},
+			Cost: replayCost{Firestore: firestoreOperations{
+				DocumentReads: 4, Writes: 4, Deletes: 1, FailedCommitRPCs: 3,
+			}},
 			FirestoreOperationSources: map[string]operationSource{
 				"users/u/episode_links/c": {Reads: 3, Writes: 1},
 				"users/u/conversations/c": {Reads: 1, Writes: 3, Deletes: 1},
@@ -90,6 +94,7 @@ func TestOperationTableSurvivesValueStripping(t *testing.T) {
 	row := result.OperationTable[0]
 	if row.PythonReads != 3 || row.PythonWrites != 2 || row.PythonDeletes != 1 ||
 		row.GoReads != 4 || row.GoWrites != 4 || row.GoDeletes != 1 ||
+		row.PythonFailedCommitRPCs != 1 || row.GoFailedCommitRPCs != 3 ||
 		row.Difference != 3 || row.Label != "go_gap:ops" {
 		t.Fatalf("unexpected operation row: %+v", row)
 	}

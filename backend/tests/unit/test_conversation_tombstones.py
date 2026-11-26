@@ -7,6 +7,7 @@ collaborators rather than importing network clients or asserting source strings.
 import ast
 import asyncio
 from contextlib import ExitStack, nullcontext
+from itertools import islice
 from pathlib import Path
 from types import SimpleNamespace, MethodType
 from unittest.mock import MagicMock, AsyncMock
@@ -74,11 +75,39 @@ class Ref:
         names = {p[len(prefix) :].split('/')[0] for p in self.store.rows if p.startswith(prefix)}
         return [self.collection(n) for n in names]
 
+    def where(self, *, filter):
+        assert filter.field_path == 'uid'
+        assert filter.op_string == '=='
+        return FinalizationJobsQuery(self, filter.value)
+
     def list_documents(self):
         # Firestore lists child references even when only their subcollections survive.
         prefix = self.path + '/'
         document_ids = {path[len(prefix) :].split('/', 1)[0] for path in self.store.rows if path.startswith(prefix)}
         return [self.document(document_id) for document_id in sorted(document_ids)]
+
+
+class FinalizationJobsQuery:
+    def __init__(self, collection, uid):
+        self.collection = collection
+        self.uid = uid
+
+    def select(self, fields):
+        assert fields == []
+        return self
+
+    def limit(self, size):
+        self.size = size
+        return self
+
+    def stream(self):
+        matches = (
+            ref
+            for ref in self.collection.list_documents()
+            if self.collection.store.rows.get(ref.path, {}).get('uid') == self.uid
+        )
+        for ref in islice(matches, self.size):
+            yield SimpleNamespace(reference=ref)
 
 
 def function(path, name, namespace):
@@ -259,9 +288,12 @@ def test_account_wipe_enumerates_tombstones_even_without_root(store, monkeypatch
     data_plane.rows['rollout_cohorts/u'] = {'cohorts': {'dev': {'batch-pipeline': True}}}
     monkeypatch.setattr(user_data_deletion, 'search_apps_db', lambda _uid, my_apps: [])
     monkeypatch.setattr(user_data_deletion, 'get_data_plane_firestore_client', lambda: data_plane)
-    # Global quiet-job pagination is covered by the real Firestore emulator.
-    quiet_cleanup = MagicMock()
-    monkeypatch.setattr(user_data_deletion, 'stop_quiet_checks_for_account', quiet_cleanup)
+    job_path = 'conversation_finalization_jobs'
+    store.rows[f'{job_path}/ordinary'] = {'uid': 'u', 'conversation_id': 'c', 'status': 'pending'}
+    store.rows[f'{job_path}/quiet'] = {'uid': 'u', 'kind': 'listen_quiet_check'}
+    store.rows[f'{job_path}/merge'] = {'uid': 'u', 'kind': 'conversation_merge'}
+    other_job = f'{job_path}/other'
+    store.rows[other_job] = {'uid': 'other', 'conversation_id': 'c'}
 
     def purge(ref, **kwargs):
         for path in list(store.rows):
@@ -279,11 +311,32 @@ def test_account_wipe_enumerates_tombstones_even_without_root(store, monkeypatch
             'delete_collection_recursive': purge,
         },
     )
-    wipe('u')
-    quiet_cleanup.assert_called_once_with('u', firestore_client=store)
+    assert wipe('u')['status'] == 'ok'
     assert data_plane.rows == {}
-    assert store.rows == {}
+    assert store.rows == {other_job: {'uid': 'other', 'conversation_id': 'c'}}
     assert not tombstones.is_deleted('u', 'c')
+
+
+def test_account_job_purge_retries_after_a_later_batch_failure(store, monkeypatch):
+    collection = store.collection('conversation_finalization_jobs')
+    for index in range(451):
+        collection.document(f'job-{index:03}').create({'uid': 'u'})
+
+    failing_batch = Batch()
+
+    def fail():
+        raise RuntimeError('synthetic batch failure')
+
+    monkeypatch.setattr(failing_batch, 'commit', fail)
+    batches = iter((Batch(), failing_batch))
+    with monkeypatch.context() as patch:
+        patch.setattr(store, 'batch', lambda: next(batches))
+        with pytest.raises(RuntimeError, match='synthetic batch failure'):
+            user_data_deletion.purge_finalization_jobs('u', store)
+
+    assert [ref.id for ref in collection.list_documents()] == ['job-450']
+    user_data_deletion.purge_finalization_jobs('u', store)
+    assert collection.list_documents() == []
 
 
 def test_live_client_chosen_deleted_id_is_closed_before_bootstrap_and_registration(store):

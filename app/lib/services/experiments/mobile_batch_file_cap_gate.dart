@@ -19,7 +19,11 @@ abstract final class MobileBatchFileCapGate {
   /// Debug-build override: `--dart-define=OMI_MOBILE_BATCH_FILE_CAP_SMALLER=true`.
   static const _debugForce = bool.fromEnvironment('OMI_MOBILE_BATCH_FILE_CAP_SMALLER');
 
-  static bool get debugOverrideActive => kDebugMode && _debugForce;
+  /// A `local_dev` profile build runs against a local stack and has no flag snapshot, so no flag
+  /// read can answer true there. The same define therefore also applies to that profile.
+  static const _localDevProfile = String.fromEnvironment('OMI_APP_PROFILE') == 'local_dev';
+
+  static bool get debugOverrideActive => (kDebugMode || _localDevProfile) && _debugForce;
 
   static Future<int> maxFileSeconds({Future<bool> Function(String key)? readFlag}) async {
     if (debugOverrideActive) return shortFileSeconds;

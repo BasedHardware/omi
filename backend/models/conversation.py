@@ -1208,6 +1208,8 @@ class LiveConversation(BaseModel):
 
     is_locked: SkipJsonSchema[Optional[bool]] = None
     v3_recording_ids: SkipJsonSchema[Optional[List[str]]] = None
+    # Reliability experiment end_button_by_device; absent when it is off.
+    v3_capture_device_id: SkipJsonSchema[Optional[str]] = None
 
 
 class ConversationsLiveResponse(BaseModel):

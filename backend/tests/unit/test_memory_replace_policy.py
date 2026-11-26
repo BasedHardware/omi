@@ -1089,3 +1089,47 @@ def test_canonical_capture_deduplicates_unknown_subjects_without_using_quote_aut
     assert payloads[0]["subject_entity_id"] is None
     assert payloads[0]["subject_attribution"] == "unknown"
     assert payloads[0]["subject_kind"] == "unknown"
+
+
+@pytest.mark.parametrize("race", ["revision", "tombstone", "account", "authority", "none"])
+def test_replacement_historical_override_refuses_lost_source(monkeypatch, race):
+    from database.conversation_effect_fence import ConversationEffectFenced, ConversationEffectSource
+    from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
+    from utils.memory import memory_service
+
+    source_path = ("users", "fixture-user", "conversations", "fixture-conversation")
+    override_path = ("users", "fixture-user", "memory_historical_overrides", "fixture-memory")
+    client = StrictFirestore({source_path: {"sync_content_revision": 2}})
+    service = memory_service.MemoryService(db_client=client)
+    monkeypatch.setattr(service, "ensure_canonical_mutation_ready", lambda uid: None)
+
+    def replace_then_race(*args, **kwargs):
+        assert kwargs["effect_source"] == ConversationEffectSource("fixture-conversation", 2, None)
+        if race == "revision":
+            client.rows[source_path]["sync_content_revision"] += 1
+        elif race == "tombstone":
+            client.rows[("users", "fixture-user", "deleted_conversations", "fixture-conversation")] = {}
+        elif race == "account":
+            client.rows[("account_deletions", "fixture-user")] = {"wipe_status": "running"}
+        elif race == "authority":
+            client.rows[source_path].update(finalization_engine="go", finalization_owner_epoch=1)
+        return {"retracted_memory_ids": ["fixture-memory"]}
+
+    monkeypatch.setattr(memory_service, "replace_conversation_sourced_memories", replace_then_race)
+
+    def replace():
+        service.replace_conversation_memories(
+            "fixture-user",
+            "fixture-conversation",
+            [],
+            effect_source=ConversationEffectSource("fixture-conversation", 2, None),
+        )
+
+    if race == "none":
+        replace()
+        assert client.rows[override_path]["status"] == "tombstoned"
+    else:
+        with pytest.raises(ConversationEffectFenced):
+            replace()
+        assert override_path not in client.rows
+        assert not client.transactions[-1].has_written

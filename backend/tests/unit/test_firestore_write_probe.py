@@ -5,6 +5,7 @@ import datetime
 import sys
 import types
 from pathlib import Path
+from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
@@ -466,6 +467,30 @@ def test_recording_failure_never_propagates(client, transport, monkeypatch):
     monkeypatch.setattr(probe, 'FIRESTORE_BILLED_WRITES_BY_ORIGIN', _Exploding())
     client.collection('users').document('u1').set({'a': 1})
     assert len(transport.requests) == 1
+
+
+@pytest.mark.parametrize('is_async', [False, True], ids=['sync', 'async'])
+def test_successful_commit_response_is_returned_when_request_tally_raises(transport, is_async):
+    write = Write(update=Document(name=f'{ROOT}/users/u1/memories/m1'))
+    request = {'database': 'projects/p/databases/(default)', 'writes': [write]}
+    transport.response = CommitResponse(write_results=[WriteResult()])
+    before = _billed('users/memories', 'set')
+
+    with (
+        probe.count_committed_writes() as tally,
+        patch.object(probe.CommittedWrites, 'add', side_effect=OSError('tally unavailable')) as add,
+    ):
+        if is_async:
+            response = asyncio.run(FirestoreAsyncClient.commit(object(), request=request))
+        else:
+            response = FirestoreClient.commit(object(), request=request)
+
+    assert transport.requests == [request]
+    add.assert_called_once_with(1)
+    assert response is transport.response
+    assert _billed('users/memories', 'set') - before == 1
+    with pytest.raises(RuntimeError, match='Firestore write tally incomplete'):
+        _ = tally.total
 
 
 def test_install_is_idempotent(transport):

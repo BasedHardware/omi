@@ -8,6 +8,7 @@ import 'package:omi/services/wals/mobile_batch_buffer.dart';
 import 'package:omi/services/wals/pendant_ring_custody.dart';
 import 'package:omi/services/wals/batch_ring_proof.dart';
 import 'package:omi/services/wals/mobile_batch_vad.dart';
+import 'package:omi/utils/reliability_experiments.dart';
 
 /// Routing owner for pendant Standard capture. No server capability, model,
 /// disk admission, or demand evidence means the existing streaming path.
@@ -21,7 +22,9 @@ class MobileStandardBatch {
     required this.now,
     this.onSpeech,
     PendantRingCustody? custody,
-  }) : custody = custody ?? PendantRingCustody.shared;
+    bool Function()? sealOnOpen,
+  })  : custody = custody ?? PendantRingCustody.shared,
+        _sealOnOpen = sealOnOpen ?? (() => ReliabilityExperiments.enabled('vendor_recognizer_on_opened_app'));
 
   final MobileBatchBuffer buffer;
   final PendantRingCustody custody;
@@ -30,6 +33,7 @@ class MobileStandardBatch {
   final ValueListenable<ListenClientStateSnapshot> visibility;
   final String Function() ownerUid;
   final DateTime Function() now;
+  final bool Function() _sealOnOpen;
 
   /// Told of every frame the VAD scores as speech, with its capture time and
   /// recording. Feeds the end-of-recording clock, which the chunk seal below
@@ -87,6 +91,15 @@ class MobileStandardBatch {
     }
     buffer.seal();
     return all;
+  }
+
+  /// Reliability experiment `end_open_conversation`: the person ended the conversation. Seal the speech
+  /// file being written, so the audio up to the End is published and uploads in the normal order
+  /// instead of waiting for two seconds without speech or the 60 s cap. Frames after this open the
+  /// next file. Nothing to seal is a no-op.
+  void sealForEnd() {
+    if (_closed || !_bufferReady || buffer.failed) return;
+    buffer.seal();
   }
 
   /// The client stopped honouring a local-preview grant (a per-session gate
@@ -231,7 +244,11 @@ class MobileStandardBatch {
   }
 
   void visibilityChanged() {
-    if (visibility.value.transcriptVisible && !_localPreview) buffer.seal();
+    // Reliability experiment vendor_recognizer_on_opened_app: opening a transcript page seals the phone
+    // file being written in a local-preview session too, so the stored text behind the live words
+    // arrives sooner. Off: a local-preview session leaves the open file to its own rules.
+    final sealPreviewToo = _sealOnOpen();
+    if (visibility.value.transcriptVisible && (!_localPreview || sealPreviewToo)) buffer.seal();
   }
 
   Future<void> close() => _closing ??= _close();
