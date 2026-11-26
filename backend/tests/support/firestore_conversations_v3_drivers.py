@@ -113,9 +113,21 @@ def entries():
             neutrals={'budget': (ListReadBudget(deadline_monotonic=10**30, max_documents=53), 'RPC/read budget only')},
         ),
         DriverEntry(
+            'database.conversations_v3.clear_terminal_pending',
+            base={'uid': SHAPE_UID, 'token': 'shape-token'},
+            setup=_pending_source,
+            patchers=(
+                _transaction_without_rpc,
+                lambda client: patch(
+                    'database.conversations_v3.run_preloaded_transaction_with_contention_retry',
+                    return_value=None,
+                ),
+            ),
+        ),
+        DriverEntry(
             'database.conversations_v3.load',
             base={'uid': SHAPE_UID},
-            domains={'conversation_id': [None, 'source']},
+            domains={'conversation_id': [None, 'source'], 'pending_limit': [32, 8, 1]},
             setup=_pending_source,
             patchers=(_decode,),
         ),
