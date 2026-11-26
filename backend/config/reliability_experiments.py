@@ -142,7 +142,7 @@ EXPERIMENTS = {
         'number, and a summary pass still running when such speech lands settles instead of starting again '
         '(v3_tail_absorbed), so batch landing the same speech does not write a second summary. This is a deliberate, bounded '
         'exception to "client-authored text is display only": phone-authored words reach the summary prompt, '
-        'and only there. Off, the message is ignored, live_tail is dropped unread, nothing is stored and the '
+        'and only there, so the notes (title, summary, proposed action items) can reflect them. Off, the message is ignored, live_tail is dropped unread, nothing is stored and the '
         'summary and the rewrite rule are the baseline.'
     ),
 }

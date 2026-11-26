@@ -32,8 +32,9 @@ It is hidden from the published schema and accepted raw, so a malformed one cann
   a recording row or a transcript.
 - When the conversation that End closed is summarised, the words no stored line covers (2 s reach) and
   that lie inside the conversation follow the transcript in the notes prompt, marked as a draft. That
-  prompt is the only reader: the discard and wake-word checks, memory extraction, action items, search
-  and integration payloads read the stored transcript alone.
+  prompt is the only reader, so what the notes say (title, summary, the action items they propose) can
+  reflect those words; the discard and wake-word checks, memory extraction and search read the stored
+  transcript alone.
 - The number of tail words the notes read is stamped on the conversation before the notes are written
   (`v3_summary_tail_words`). Stored words that land afterwards are first taken to be that speech, so the
   late-speech rewrite rule counts only what goes beyond it. The grouping pass marks such a landing
@@ -46,7 +47,8 @@ It is hidden from the published schema and accepted raw, so a malformed one cann
 
 This is a deliberate, bounded exception to the rule that client-authored text is display only (the
 rule `tests/unit/test_client_processing_trust_boundary.py` proves for `client_processing`, which this
-change does not touch): for an admitted account, phone-authored words reach one model prompt.
+change does not touch): for an admitted account, phone-authored words reach one model prompt, and
+through it the conversation's notes.
 
 Queries added on `conversation_v3_manual_cuts`: one equality read on `at` per summary pass of a
 conversation an End closed, and one `at <` read (three rows) per End that carries a tail.

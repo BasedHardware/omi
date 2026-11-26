@@ -23,11 +23,13 @@ with them:
 TRUST: this is a deliberate exception to the rule that client-authored text is display only
 (``tests/unit/test_client_processing_trust_boundary.py`` proves that rule for ``client_processing``,
 and stays as it is). Phone-authored words reach one model call, the notes prompt of the conversation
-their End closed. The bounds: on only under the experiment, at most ``MAX_WORDS`` words and
-``MAX_CHARS`` characters, plain text with control characters removed, only words timed inside the
-ended conversation and before the End, dropped where stored text exists, never stored in the
-transcript, never read by memory extraction, action-item saving, search or any integration payload,
-and removed from the stored End once nothing of it is left uncovered or the End is a day old.
+their End closed, so what those notes say (title, summary, the action items they propose) can
+reflect them, and so can whatever reads the notes afterwards. The bounds: on only under the
+experiment, at most ``MAX_WORDS`` words and ``MAX_CHARS`` characters, plain text with control
+characters removed, only words timed inside the ended conversation and before the End, dropped where
+stored text exists, never stored in the transcript, never read directly by anything but that prompt
+(the discard and wake-word checks, memory extraction and search read the stored transcript), and
+removed from the stored End once nothing of it is left uncovered or the End is a day old.
 
 Off, nothing here runs: the field is dropped unread, nothing is stored, the prompt and the rewrite rule
 are the baseline.

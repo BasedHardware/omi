@@ -44,14 +44,10 @@ def record(uid, at, *, tail=None, tail_words=0, firestore_client=None) -> str:
     return ref.id
 
 
-def _tail_rows(client, uid, at):
-    return _cuts(client, uid).where(filter=FieldFilter('at', '==', at)).limit(2).stream()
-
-
 def tail(uid, at, *, firestore_client=None):
     """The live words stored with the cut at exactly ``at``; None when that cut carries none (one read)."""
     client = firestore_client or get_firestore_client()
-    for row in _tail_rows(client, uid, at):
+    for row in _cuts(client, uid).where(filter=FieldFilter('at', '==', at)).limit(2).stream():
         stored = (row.to_dict() or {}).get(TAIL_FIELD)
         if isinstance(stored, str) and stored:
             lines = json.loads(encryption.decrypt(stored, uid))
@@ -62,7 +58,7 @@ def tail(uid, at, *, firestore_client=None):
 def clear_tail(uid, at, *, firestore_client=None) -> None:
     """Remove the stored words of the cut at ``at``; the cut itself stays."""
     client = firestore_client or get_firestore_client()
-    for row in _tail_rows(client, uid, at):
+    for row in _cuts(client, uid).where(filter=FieldFilter('at', '==', at)).limit(2).stream():
         if TAIL_FIELD in (row.to_dict() or {}):
             row.reference.update({TAIL_FIELD: firestore.DELETE_FIELD})
 
