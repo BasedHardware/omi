@@ -418,6 +418,19 @@ async def test_open_windows_and_rows_over_until_are_untouched(owner, strict):
 
 
 @pytest.mark.asyncio
+async def test_discarded_source_and_its_claimed_window_stay_untouched(owner, strict):
+    discarded = source('discarded', AT, discarded=True)
+    window = fragment('held', discarded)
+    owner(discarded, window)
+    before = conversations(strict)
+    outcome, report = await rederive()
+    assert outcome == 'committed'
+    assert conversations(strict) == before
+    assert report['sources_blocked_discarded'] == 1
+    assert report['protected_source_blocked'] == 1
+
+
+@pytest.mark.asyncio
 async def test_edited_and_locked_rows_are_skipped_and_their_speech_stays_with_them(owner, strict):
     sources, rows = lunch()
     rows[2]['user_title'] = 'My lunch title'
