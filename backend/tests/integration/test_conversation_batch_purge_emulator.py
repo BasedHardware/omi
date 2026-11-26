@@ -1303,13 +1303,29 @@ def test_late_sweep_read_budget_includes_full_artifact_page(plane, monkeypatch):
     assert budget['reads_per_day_budget'] >= budget['reads_per_unit_budget'] * 4 * 24 * 60
 
 
-def test_malformed_intent_is_dead_lettered_at_configured_limit(plane, monkeypatch):
+@pytest.mark.parametrize('malformed', ['missing-owner', 'missing-scope', 'invalid-receipt-id', 'invalid-cursor'])
+def test_malformed_intent_is_dead_lettered_at_configured_limit(plane, monkeypatch, malformed):
     client = plane.client
     clock = [datetime.now(timezone.utc)]
     monkeypatch.setattr(late_sweeps, '_now', lambda: clock[0])
     monkeypatch.setenv('BATCH_PRIVACY_LATE_SWEEP_PERMANENT_ATTEMPTS', '2')
     event = client.collection(late_intents.COLLECTION).document('synthetic-malformed')
-    event.set({'reason': 'recording_policy', 'due_at': clock[0]})
+    event.set(
+        {
+            'uid': plane.uid,
+            'reason': 'recording_policy',
+            'conversation_id': '',
+            'changed_at': clock[0] - late_intents.DELAY,
+            'due_at': clock[0],
+        }
+    )
+    change = {
+        'missing-owner': {'uid': firestore.DELETE_FIELD},
+        'missing-scope': {'conversation_id': firestore.DELETE_FIELD},
+        'invalid-receipt-id': {'artifact_id': None},
+        'invalid-cursor': {'after': 'x' * 1501},
+    }
+    event.update(change[malformed])
     before = _dead_letter_count('malformed_intent')
     assert late_sweeps.reconcile_batch_privacy_late_sweeps(firestore_client=client) == {'retry': 1}
     clock[0] += late_sweeps.RETRY

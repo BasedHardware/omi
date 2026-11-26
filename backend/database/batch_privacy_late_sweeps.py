@@ -50,6 +50,16 @@ def _attempts(previous: Any) -> int:
     return previous + 1 if type(previous) is int and 0 <= previous < 20 else 1
 
 
+def _document_id(value: Any, limit: int = 1500) -> bool:
+    return (
+        isinstance(value, str)
+        and 0 < len(value.encode()) <= limit
+        and '/' not in value
+        and value not in ('.', '..')
+        and not (value.startswith('__') and value.endswith('__'))
+    )
+
+
 def _now() -> datetime:
     return datetime.now(timezone.utc)
 
@@ -287,28 +297,20 @@ def _receipt_failure(client, event, authority, uid, reason, now, artifact, error
 def _run(client, event, now):
     data = event.to_dict() or {}
     uid, reason, changed_at = data.get('uid'), data.get('reason'), data.get('changed_at')
-    index, source, after = data.get('namespace_index', 0), data.get('conversation_id', ''), data.get('after')
+    index, source, after = data.get('namespace_index', 0), data.get('conversation_id'), data.get('after')
     artifact_id = data.get('artifact_id')
     if (
-        not isinstance(uid, str)
-        or not uid
-        or '/' in uid
-        or len(uid.encode()) > 256
+        not _document_id(uid, 256)
         or not isinstance(reason, str)
         or reason not in REASONS
         or not isinstance(changed_at, datetime)
         or changed_at.utcoffset() is None
         or type(index) is not int
         or not 0 <= index <= len(NAMESPACES)
-        or not isinstance(source, str)
-        or '/' in source
-        or len(source.encode()) > 256
+        or (source != '' and not _document_id(source, 256))
         or (reason != 'recording_policy' and source)
-        or (after is not None and (not isinstance(after, str) or not after or '/' in after))
-        or (
-            artifact_id is not None
-            and (not isinstance(artifact_id, str) or not artifact_id or '/' in artifact_id or index == len(NAMESPACES))
-        )
+        or (after is not None and not _document_id(after))
+        or ('artifact_id' in data and (not _document_id(artifact_id) or index == len(NAMESPACES)))
     ):
         raise PermanentSweepError('malformed_intent')
     if source and data.get('scope_verified') is not True:
