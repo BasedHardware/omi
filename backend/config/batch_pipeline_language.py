@@ -39,10 +39,11 @@ def multilingual_profile_routing_enabled() -> bool:
     )
 
 
-# A live session counts as unsupported speech when at least this many of its confidently classified
-# words, and this share of them, are in languages batch Parakeet cannot transcribe. A stray word or two
-# (one 'vi' in 172 'en') is classifier noise, not a speaker of that language.
-PROFILE_MIN_UNSUPPORTED_WORDS = 10
+# A live session counts as unsupported speech when at least this many of its classified transcript
+# segments, and this share of them, are in languages batch Parakeet cannot transcribe. The projection counts
+# segments (utils/stt/language_policy.py increments once per classified segment), not words. A stray
+# segment or two (one 'vi' in 172 'en') is classifier noise, not a speaker of that language.
+PROFILE_MIN_UNSUPPORTED_SEGMENTS = 10
 PROFILE_MIN_UNSUPPORTED_SHARE = 0.2
 # Sessions out of the rolling projection (database/live_language_profile.py keeps the last 20).
 PROFILE_MIN_SESSIONS = 2
@@ -86,7 +87,7 @@ def profile_speaks_unsupported(user: dict) -> bool:
         valid = {code: n for code, n in counts.items() if isinstance(code, str) and type(n) is int and n > 0}
         total = sum(valid.values())
         other = sum(n for code, n in valid.items() if _unsupported_code(normalized_stt_language(code)))
-        if other >= PROFILE_MIN_UNSUPPORTED_WORDS and other >= PROFILE_MIN_UNSUPPORTED_SHARE * total:
+        if other >= PROFILE_MIN_UNSUPPORTED_SEGMENTS and other >= PROFILE_MIN_UNSUPPORTED_SHARE * total:
             hits += 1
     return hits >= PROFILE_MIN_SESSIONS
 

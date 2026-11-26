@@ -23,7 +23,7 @@ MULTILINGUAL = [
     {'en': 17, 'ja': 30},
     {'vi': 28},
 ]
-# English speaker with classifier noise: stray single words never reach the per-session floor.
+# English speaker with classifier noise: stray single segments never reach the per-session floor.
 ENGLISH_WITH_NOISE = [{'en': 172, 'vi': 1}, {'en': 99, 'de': 2}, {'en': 45, 'vi': 1}, {'ja': 1}, {'ja': 1}]
 # European languages are Parakeet's own; a German/English speaker keeps Parakeet.
 EUROPEAN = [{'en': 40, 'de': 60}, {'de': 80}, {'fr': 50, 'en': 10}]
@@ -48,7 +48,7 @@ def multi_user(sessions):
         (None, False),
         ('not-a-list', False),
         ([{'ja': 33}], False),  # one session is not a pattern
-        ([{'ja': 9}, {'ja': 9}], False),  # under the per-session word floor
+        ([{'ja': 9}, {'ja': 9}], False),  # under the per-session segment floor
         ([{'en': 100, 'zh': 15}, {'en': 100, 'zh': 15}], False),  # under the per-session share
         ([{'en': 40, 'zh': 15}, {'en': 40, 'zh': 15}], True),
         ([{'zh': 'many'}, {'zh': True}, {7: 30}, 'row'], False),  # malformed rows count as nothing

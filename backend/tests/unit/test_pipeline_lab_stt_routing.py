@@ -299,3 +299,31 @@ def test_routed_record_run_needs_a_spend_cap(tmp_path, monkeypatch):
     env = {routing.ROUTING_ENV: 'product', routing.INPUTS_ENV: str(tmp_path / 'inputs.json')}
     with pytest.raises(AudioError, match='stt-budget-usd'):
         prepare(load_scenario(tmp_path / 'case.json'), mode='record-vendor', root=tmp_path / 'lab', env=env)
+
+
+def test_legacy_files_take_multi_without_a_probe_when_the_language_guard_is_off():
+    probe = lid('en')
+    with routing.patched_environ({**LEGACY, 'STT_PRERECORDED_LANGUAGE_GUARD_ENABLED': 'false'}):
+        route = decide(USER, {'language': 'zz-unknown'}, bytes(32000 * 4), lid=probe, legacy_file_seconds=2)
+        selected = routing._service('multi')  # resolve_file: the selector's own answer for 'multi'
+    assert probe.calls == [] and (route.provider, route.model) == selected[:2]
+
+
+def test_a_sub_second_legacy_recording_still_has_a_route():
+    with routing.patched_environ(LEGACY):
+        route = decide(USER, {'language': 'zz-unknown'}, bytes(16000), lid=lid('zh'), legacy_file_seconds=2)
+    assert route.route == MULTILINGUAL and route.pieces == ((0.0, 0.5, MULTILINGUAL),)
+
+
+def test_an_ambient_switch_never_stands_in_for_the_arm(monkeypatch, speech):
+    # The lab's own process has the kill switch off; the arm's env does not set it, so production's default
+    # (on) decides.
+    monkeypatch.setenv('BATCH_MULTILINGUAL_PROFILE_ROUTING_ENABLED', 'false')
+    with routing.patched_environ(LEGACY):
+        import os
+
+        assert 'BATCH_MULTILINGUAL_PROFILE_ROUTING_ENABLED' not in os.environ
+        assert decide(USER, {'language': 'en'}, PCM, lid=lid('zh'), self_lid=self_lid('en')).route != PARAKEET
+    import os
+
+    assert os.environ['BATCH_MULTILINGUAL_PROFILE_ROUTING_ENABLED'] == 'false'

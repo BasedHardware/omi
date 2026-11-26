@@ -10,7 +10,7 @@ admitted to Parakeet came back with no Chinese text. Only the overflow sent to l
 Failure class: FC-unknown-language-treated-as-model-capability.
 
 **Change.** A multi-language user whose own rolling live-STT language profile shows unsupported speech
-(at least 2 sessions with 10 or more words, and 20% or more, in batch-unsupported codes) no longer gets
+(at least 2 sessions with 10 or more classified transcript segments, and 20% or more, in batch-unsupported codes; the projection counts segments, not words) no longer gets
 the pin trusted. Admission returns `multilingual_profile`.
 - With legacy ON, sync intake samples it on audio like `unknown_multilingual_conversation`: vendor LID on
   the first speech window, then the self gate on every later window. Only an all-supported upload is

@@ -9,11 +9,12 @@ product's own decisions, under the arm's env, and its words come from the casset
 | Admission language / exclusion | ``config.batch_pipeline_language.batch_admission_language`` | yes |
 | Exclusion and sampling switches | ``admission_language_exclusion_enabled``, ``admission_language_sample_enabled`` | yes |
 | Sampled upload limit | ``intake.SAMPLE_SCAN_SECONDS``: a longer upload is refused to legacy | yes |
+| Sampled units | one per recording: intake joins contiguous files into one unit up to the sampled bound | simulated; an upload with capture gaps is several units in production, each probed |
 | Sampled speech windows | ``intake._speech_windows`` (strict local VAD, 30 s windows) | yes |
 | Sampled first window | vendor audio LID, ``LanguageDecision.parakeet_safe`` and ``evidence == 'audio_lid'`` | yes; answer recorded |
 | Sampled later windows | ``language_class`` of the self gate's top-1 language | yes; answer from a local Whisper-base, recorded |
 | Engine for an admitted upload | the batch GPU worker: Parakeet (``PARAKEET_MODEL_BY_SURFACE[PRERECORDED]``) | yes (by construction) |
-| Engine for a legacy upload | per file: vendor LID, then ``get_prerecorded_service`` (``resolve_file``) | yes; files simulated as fixed pieces |
+| Engine for a legacy upload | per file (``resolve_file``): guard off -> ``multi``; on -> vendor LID, then ``get_prerecorded_service`` | yes; files simulated as fixed pieces; the self gate's confident skip is not modelled (vendor answer used) |
 | Capacity fallback (GPU ring saturated) | not run: the batch lane is assumed unsaturated | simulated |
 | Legacy mode | assumed ``on`` (today's production) | simulated |
 
@@ -43,6 +44,15 @@ LID_SECRET_FILE_ENV = 'OMI_PIPELINE_LAB_LID_KEY_FILE'  # 0600 file holding the v
 SELF_LID_PYTHON_ENV = 'OMI_PIPELINE_LAB_MLX_PYTHON'  # venv with mlx-whisper: the self gate's local stand-in
 LEGACY_FILE_SECONDS_ENV = 'OMI_PIPELINE_LAB_LEGACY_FILE_SECONDS'
 LEGACY_FILE_SECONDS = 60.0  # legacy sync probes each uploaded file; the lab cuts a recording into pieces this long
+# Product switches routing reads: one absent from the arm's env is cleared while routing, so an ambient value in
+# the lab's own process never stands in for production's default.
+ROUTING_SWITCHES = (
+    'BATCH_ADMISSION_LANGUAGE_EXCLUSION_ENABLED',
+    'BATCH_ADMISSION_LANGUAGE_SAMPLE_ENABLED',
+    'BATCH_MULTILINGUAL_PROFILE_ROUTING_ENABLED',
+    'STT_PRERECORDED_LANGUAGE_GUARD_ENABLED',
+    'STT_PRERECORDED_MODEL',
+)
 LAB_ENV_KEYS = (
     ROUTING_ENV,
     INPUTS_ENV,
@@ -90,8 +100,11 @@ def enabled(env: Mapping[str, str]) -> bool:
 def patched_environ(env: Mapping[str, str]) -> Iterator[None]:
     """The product's switches read ``os.environ`` at call time: route under the arm's env, then restore."""
     product = {k: v for k, v in env.items() if k not in LAB_ENV_KEYS}
-    previous = {k: os.environ.get(k) for k in product}
+    cleared = [k for k in ROUTING_SWITCHES if k not in product]
+    previous = {k: os.environ.get(k) for k in (*product, *cleared)}
     os.environ.update(product)
+    for key in cleared:
+        os.environ.pop(key, None)
     try:
         yield
     finally:
@@ -353,7 +366,12 @@ def _sample(pcm16: bytes, *, lid: Callable[[bytes], Any], self_lid: Optional[Cal
 
 
 def _legacy(pcm16: bytes, reason: str, *, lid: Callable[[bytes], Any], file_seconds: float) -> 'Route':
-    """Legacy sync: ``multi`` through ``resolve_file`` for each uploaded file (simulated as fixed pieces)."""
+    """Legacy sync: ``multi`` through ``resolve_file`` for each uploaded file (simulated as fixed pieces).
+
+    With the prerecorded language guard off, ``resolve_file`` selects for ``multi`` without a probe."""
+    from config.prerecorded_language import language_guard_enabled
+
+    guarded = language_guard_enabled()
     step = max(1, int(file_seconds * 16000)) * 2
     pieces = []
     engines = []  # (route, service, model, sent) per file, in file order
@@ -363,8 +381,9 @@ def _legacy(pcm16: bytes, reason: str, *, lid: Callable[[bytes], Any], file_seco
             a, _, r = pieces[-1]
             pieces[-1] = (a, (offset + len(chunk)) / 32000, r)
             continue
-        decision = lid(chunk)
-        service, model, sent = _service(decision.language) if decision.parakeet_safe else _service('multi')
+        decision = lid(chunk) if guarded else None
+        safe = decision is not None and decision.parakeet_safe
+        service, model, sent = _service(decision.language) if safe else _service('multi')
         route = _route_of(service)
         engines.append((route, service, model, sent))
         pieces.append((offset / 32000, (offset + len(chunk)) / 32000, route))
