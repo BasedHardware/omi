@@ -118,7 +118,7 @@ class _FakeRingDevice implements DeviceConnection {
       RingStatus(usedBytes: 0, unreadPackets: ringInfo.unreadPackets, freeBytes: 0, rtcValid: 1);
 
   @override
-  Future<bool> readRingFromSeq(int startSeq, {int? packetCount}) async {
+  Future<bool> readRingFromSeq(int startSeq, {int? packetCount, bool Function()? canStart}) async {
     reads.add(startSeq);
     if (!_readReady.isCompleted) _readReady.complete();
     if (readError != null) throw readError!;
@@ -275,10 +275,10 @@ void main() {
     final sync =
         RingStorageSyncImpl(_Listener(), transferTimer: timer, persistenceTimer: persistenceTimer, clock: clock)
           ..testConnection = card
-          ..testCustody = custody
-          ..testWals = [wal];
+          ..testCustody = custody;
     sync.setLocalSync(local);
     sync.setDevice(BtDevice(id: 'devkit-1', name: 'Omi DevKit', type: DeviceType.omi, rssi: -40));
+    sync.testWals = [wal];
     return sync;
   }
 
@@ -915,9 +915,10 @@ void main() {
 
   test('disconnected connection lookup defers without starting a read or completing the virtual row', () async {
     final wal = ringWal();
-    final sync = RingStorageSyncImpl(_Listener(), connectionResolver: (_) async => null)..testWals = [wal];
+    final sync = RingStorageSyncImpl(_Listener(), connectionResolver: (_) async => null);
     sync.setLocalSync(_FakeLocalSync());
     sync.setDevice(BtDevice(id: 'devkit-1', name: 'Omi', type: DeviceType.omi, rssi: -40));
+    sync.testWals = [wal];
     await sync.syncAll();
     expect(wal.status, WalStatus.miss);
     expect(sync.isSyncing, isFalse);
