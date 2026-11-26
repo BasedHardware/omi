@@ -1,10 +1,12 @@
 """Poll-independent receipt fanout: strict Firestore read/write boundary."""
 
 from copy import deepcopy
+from unittest.mock import Mock, call
 
 import pytest
 
 from database import batch_pipeline_coalescing_completion as completion
+from database import batch_pipeline_upload_metrics as metrics
 from database.sync_ledger import sync_content_ledger_ref
 from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
 from tests.unit.test_batch_upload_coalescing import member
@@ -94,12 +96,15 @@ def test_sixteen_originals_complete_with_windows_unset_and_keep_each_original_cl
     for name in ('FREE', 'BACKLOG'):
         monkeypatch.delenv(f'BATCH_PIPELINE_COALESCING_{name}_WINDOW_SECONDS', raising=False)
     originals = []
-    for i in range(16):
+    states = ['bg300', 'fg60'] * 8
+    for i, state in enumerate(states):
         original = {
             **member(str(i)),
             'coalesce_group': 'group',
             'upload_arrived_at': 10 + i,
             'upload_entitlement': 'free',
+            'upload_hold_state': state,
+            'upload_recovered': i == 0,
         }
         intake_ref = client.collection('synthetic_intakes').document(original['job_id'])
         content_ref = sync_content_ledger_ref(client, 'owner', original['content_id'])
@@ -113,9 +118,17 @@ def test_sixteen_originals_complete_with_windows_unset_and_keep_each_original_cl
     ledger = {'status': 'processing', **completion.manifest({'id': 'group', 'mode': 'merged', 'members': originals})}
     tx = client.transaction()
     prepared = completion.prepare(client, 'synthetic', tx, binding, ledger)
-    assert [m['upload_arrived_at'] for _, _, m, _ in prepared] == list(range(10, 26))
+    members = [m for _, _, m, _ in prepared]
+    assert [m['upload_arrived_at'] for m in members] == list(range(10, 26))
+    assert [m['upload_hold_state'] for m in members] == states
     result = {'new_memories': [], 'updated_memories': [], 'failed_segments': 0, 'total_segments': 1, 'errors': []}
     completion.write(tx, prepared, result, 400)
+    delivered = Mock()
+    monkeypatch.setattr(metrics, 'DELIVERED', delivered)
+    metrics.observe_completion({}, members, merged=True, changed=True, result=result, now=400)
+    assert delivered.labels.call_args_list == [
+        call('free', state, 'true' if index == 0 else 'false') for index, state in enumerate(states)
+    ]
     for original in originals:
         ref = sync_content_ledger_ref(client, 'owner', original['content_id'])
         assert client.rows[ref.path]['status'] == 'completed'
