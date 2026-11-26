@@ -1,11 +1,13 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
 	"net"
 	"net/http"
+	"net/http/httptest"
 	"net/url"
 	"os"
 	"slices"
@@ -13,6 +15,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/jackc/pgx/v5"
 
 	"github.com/BasedHardware/omi/backend-go/internal/adapters/finalizationdocs"
 	"github.com/BasedHardware/omi/backend-go/internal/adapters/integrations"
@@ -34,7 +38,8 @@ func TestOrdinarySyncReplay(t *testing.T) {
 		t.Skip("invoked by the offline ordinary-sync replay driver")
 	}
 	var input ordinaryReplayInput
-	if err := json.NewDecoder(os.Stdin).Decode(&input); err != nil {
+	control := json.NewDecoder(os.Stdin)
+	if err := control.Decode(&input); err != nil {
 		t.Fatal("invalid ordinary-sync replay input")
 	}
 	emulator := os.Getenv("FIRESTORE_EMULATOR_HOST")
@@ -52,6 +57,9 @@ func TestOrdinarySyncReplay(t *testing.T) {
 			!strings.EqualFold(key, "NO_PROXY") {
 			t.Setenv(key, "")
 		}
+	}
+	if input.Lifecycle != "" && input.Lifecycle != "fence" && input.Lifecycle != "erase" {
+		t.Fatal("unknown replay lifecycle")
 	}
 	clk := clock.System{}
 	docs, err := docstore.Open(t.Context(), docstore.Config{Project: input.Project, Emulator: emulator})
@@ -100,6 +108,9 @@ func TestOrdinarySyncReplay(t *testing.T) {
 	if handlers[finalization.Kind] != runtime.family {
 		t.Fatal("ordinary finalization handler is unavailable")
 	}
+	if input.Lifecycle == "fence" {
+		awaitReplayLifecycle(t, control, "fence")
+	}
 	harness.Start(handlers)
 	job := harness.Settled(intent.JobID)
 	if job.Outcome == nil || !slices.Contains(queue.Terminals(), *job.Outcome) {
@@ -107,6 +118,13 @@ func TestOrdinarySyncReplay(t *testing.T) {
 	}
 	if input.CheckStatus {
 		reportReplayStatus(t, runtime.family, intent, "TERMINAL")
+	}
+	if input.Lifecycle == "erase" {
+		if *job.Outcome != queue.TerminalSuccess {
+			t.Fatal("ordinary finalization did not complete before erasure")
+		}
+		awaitReplayLifecycle(t, control, "erase")
+		replayServingErase(t, input.Owner, docs, harness)
 	}
 	fmt.Printf("ORDINARY_SYNC_RESULT=%s\nORDINARY_SYNC_CAUSE=%s\n", *job.Outcome, replayCause(job.Reason))
 }
@@ -117,7 +135,66 @@ type ordinaryReplayInput struct {
 	Key          string `json:"Key"`
 	Owner        string `json:"Owner"`
 	Conversation string `json:"Conversation"`
+	Lifecycle    string `json:"Lifecycle"`
 	CheckStatus  bool   `json:"CheckStatus"`
+}
+
+func awaitReplayLifecycle(t *testing.T, control *json.Decoder, event string) {
+	t.Helper()
+	fmt.Printf("ORDINARY_SYNC_CHECKPOINT=%s\n", event)
+	var command string
+	if err := control.Decode(&command); err != nil || command != event {
+		t.Fatal("missing replay lifecycle acknowledgement")
+	}
+}
+
+const replayEraseJob = "replay-account-wipe"
+const replayEraseClaim = "a3c4a3c4a3c4a3c4a3c4a3c4a3c4a3c4a3c4a3c4a3c4a3c4a3c4a3c4a3c4a3c4"
+
+func replayServingErase(t *testing.T, owner string, docs *docstore.Store, harness *queuetest.Harness) {
+	t.Helper()
+	endpoint := eraseEndpoint{
+		authorize: func(_ context.Context, token string) error {
+			if token != "replay-only" {
+				return fmt.Errorf("unexpected replay authorization")
+			}
+			return nil
+		},
+		markers: docs,
+		erase:   harness.Store.EraseQueue,
+		report:  func(err error) { t.Error(err) },
+	}
+	request, err := json.Marshal(eraseRequest{Tenant: owner, JobID: replayEraseJob, Claim: replayEraseClaim})
+	if err != nil {
+		t.Fatal(err)
+	}
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, erasePath, bytes.NewReader(request))
+	req.Header.Set("Authorization", "Bearer replay-only")
+	response := httptest.NewRecorder()
+	endpoint.routes().ServeHTTP(response, req)
+	var receipt eraseReceipt
+	if response.Code != http.StatusOK || json.Unmarshal(response.Body.Bytes(), &receipt) != nil ||
+		receipt.JobID != replayEraseJob || receipt.Claim != replayEraseClaim {
+		t.Fatalf("serving queue erasure refused: HTTP %d", response.Code)
+	}
+
+	conn, err := pgx.Connect(t.Context(), harness.URL)
+	if err != nil {
+		t.Fatal("could not open replay queue evidence connection")
+	}
+	defer func() {
+		if closeErr := conn.Close(t.Context()); closeErr != nil {
+			t.Error("could not close replay queue evidence connection")
+		}
+	}()
+	var jobs, tenants int
+	err = conn.QueryRow(t.Context(), `
+		SELECT (SELECT count(*) FROM queue_jobs WHERE uid = $1),
+		       (SELECT count(*) FROM queue_tenants WHERE uid = $1)`, owner).Scan(&jobs, &tenants)
+	if err != nil || jobs != 0 || tenants != 0 {
+		t.Fatalf("serving queue erase custody failed: jobs=%d tenants=%d", jobs, tenants)
+	}
+	fmt.Printf("ORDINARY_SYNC_ERASED=%d,%d\n", jobs, tenants)
 }
 
 func replayLocalDependencies(input ordinaryReplayInput, emulator, databaseURL string) (*url.URL, bool) {
