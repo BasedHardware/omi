@@ -108,6 +108,11 @@ def _is_transaction_contention(error: BaseException) -> bool:
     return False
 
 
+def is_transaction_retry_failure(error: BaseException) -> bool:
+    """Classify expected storage failures for a request boundary, never for replay."""
+    return isinstance(error, FirestoreContentionExhausted) or _is_transaction_contention(error)
+
+
 def transaction_with_safe_rollback(transaction: Any) -> Any:
     """Keep Firestore 2.20's rollback from replacing begin, body, or commit failures."""
     if _SDKTransaction is None or not isinstance(transaction, _SDKTransaction):

@@ -127,6 +127,7 @@ class Recorder:
             recorded_at=iso(datetime.fromtimestamp(self.clock(), tz=timezone.utc)),
             usd=charged,
             segments=derive_segments(response.words),
+            source=getattr(self.adapter, 'source', 'vendor'),
         )
         cassette.save(self.root)
         return cassette

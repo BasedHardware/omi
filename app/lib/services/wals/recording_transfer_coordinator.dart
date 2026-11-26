@@ -17,6 +17,7 @@ enum WakeTrigger {
   startup,
   periodic,
   foregrounded,
+  mobileBatchReady,
   connectivityRestored,
   deviceConnected,
   socketReconnected,
@@ -201,7 +202,9 @@ class RecordingTransferCoordinator {
   WakeTrigger? _pendingWake;
   WakeTrigger? _wakeBeforeConfigured;
   bool _configured = false;
-  bool _foreground = true;
+  final _foregroundState = ValueNotifier(true);
+  ValueListenable<bool> get foregroundState => _foregroundState;
+  bool get _foreground => _foregroundState.value;
   bool _wasConnected = true;
   int _failureStreak = 0;
   int _cooldownGeneration = 0;
@@ -338,10 +341,10 @@ class RecordingTransferCoordinator {
   /// running in the background while the process is alive (bounded by
   /// [_maxBackgroundRetries]); a coalesced extra pass stays foreground-only (#5221).
   void setForeground(bool isForeground) {
-    _foreground = isForeground;
-    if (!isForeground) {
+    if (!isForeground && _pendingWake != WakeTrigger.mobileBatchReady) {
       _pendingWake = null;
     }
+    _foregroundState.value = isForeground;
   }
 
   /// Coalesces concurrent events into a single extra serial pass. Five wakes
@@ -385,13 +388,9 @@ class RecordingTransferCoordinator {
     pass.whenComplete(() {
       if (!identical(_inFlight, pass)) return;
       _inFlight = null;
-      if (!_foreground) {
-        _pendingWake = null;
-        return;
-      }
       final lateWake = _pendingWake;
       _pendingWake = null;
-      if (lateWake != null) {
+      if (lateWake != null && (_foreground || lateWake == WakeTrigger.mobileBatchReady)) {
         unawaited(wake(lateWake));
       }
     }).ignore();
@@ -400,6 +399,7 @@ class RecordingTransferCoordinator {
 
   bool _isBackgroundEligible(WakeTrigger trigger) =>
       trigger == WakeTrigger.periodic ||
+      trigger == WakeTrigger.mobileBatchReady ||
       trigger == WakeTrigger.ringChunkDurable ||
       trigger == WakeTrigger.deviceConnected ||
       trigger == WakeTrigger.connectivityRestored ||
@@ -414,7 +414,8 @@ class RecordingTransferCoordinator {
   }
 
   int _wakePriority(WakeTrigger trigger) => switch (trigger) {
-        WakeTrigger.userRetry => 3,
+        WakeTrigger.userRetry => 4,
+        WakeTrigger.mobileBatchReady => 3,
         WakeTrigger.periodic ||
         WakeTrigger.deviceConnected ||
         WakeTrigger.connectivityRestored ||
@@ -441,7 +442,9 @@ class RecordingTransferCoordinator {
         if (!_foreground) {
           final pending = _pendingWake;
           if (pending == null || passes >= 2 || !_isBackgroundEligible(pending)) {
-            _pendingWake = null;
+            // A newly due phone batch still needs a pass if it arrived after
+            // the second background drain took its final pending snapshot.
+            if (pending != WakeTrigger.mobileBatchReady) _pendingWake = null;
             break;
           }
         }
@@ -553,6 +556,9 @@ class RecordingTransferCoordinator {
         trigger == WakeTrigger.deviceConnected ||
         trigger == WakeTrigger.ringChunkDurable ||
         trigger == WakeTrigger.watchdog;
+    // A hold expires on a freshly indexed phone WAL. Keep that wake off the
+    // pendant discovery/download path while its capture may still be live.
+    bool canDrainBacklog() => trigger != WakeTrigger.mobileBatchReady && (_foreground || backlogWake);
     try {
       if (trigger == WakeTrigger.connectivityRestored) {
         await _onConnectivityRestored?.call();
@@ -564,7 +570,7 @@ class RecordingTransferCoordinator {
       // must not stop new recordings from uploading — it is retried instead.
       var reconcileFailed = !await _tryReconcile();
       if (expired()) return;
-      if (_foreground || backlogWake) {
+      if (canDrainBacklog()) {
         await _discover();
       }
       if (expired()) return;
@@ -578,7 +584,7 @@ class RecordingTransferCoordinator {
         return;
       }
 
-      final drain = (_foreground || backlogWake) ? _drain : _drainLiveCapture;
+      final drain = canDrainBacklog() ? _drain : _drainLiveCapture;
       if (drain == null) return;
       final RecordingTransferDrainResult result;
       // A multipart upload can take minutes. Check already accepted jobs on

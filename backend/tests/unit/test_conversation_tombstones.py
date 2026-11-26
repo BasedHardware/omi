@@ -36,6 +36,20 @@ class Store:
         return Batch()
 
 
+class Transaction:
+    def __init__(self, store):
+        self.store = store
+
+    def create(self, ref, data):
+        ref.create(data)
+
+    def set(self, ref, data, merge=False):
+        if merge:
+            self.store.rows.setdefault(ref.path, {}).update(data)
+        else:
+            self.store.rows[ref.path] = data
+
+
 class Batch:
     def __init__(self):
         self.refs = []
@@ -58,7 +72,7 @@ class Ref:
 
     document = collection
 
-    def get(self):
+    def get(self, transaction=None, field_paths=None):
         data = self.store.rows.get(self.path)
         return SimpleNamespace(exists=data is not None, to_dict=lambda: data)
 
@@ -140,6 +154,7 @@ def function(path, name, namespace):
 def store(monkeypatch):
     store = Store()
     monkeypatch.setattr(tombstones, 'db', store)
+    monkeypatch.setattr(tombstones, '_in_transaction', lambda _client, body: body(Transaction(store)))
     monkeypatch.setattr('database.batch_pipeline_purge.purge_batch_owner', MagicMock())
     store.rows['users/u/conversations/c'] = {
         'created_at': 'original-time',
@@ -182,6 +197,11 @@ def test_non_cascade_delete_purges_prompt_evidence_after_intent_without_purging_
         'delete_vector': MagicMock(),
         'delete_transcript_chunk_vectors': MagicMock(),
         'record_product_event': MagicMock(),
+        'conversations_db': SimpleNamespace(
+            get_conversation_raw_snapshot=lambda uid, cid, **kw: store.rows.get(f'users/{uid}/conversations/{cid}')
+        ),
+        'HTTPException': HTTPException,
+        'logger': MagicMock(),
     }
     delete = function('routers/conversations.py', 'delete_conversation', namespace)
     # The handler returns no body: the route is 204 No Content, the contract the
@@ -189,6 +209,31 @@ def test_non_cascade_delete_purges_prompt_evidence_after_intent_without_purging_
     assert delete('c', MagicMock(), False, None, 'u').status_code == 204
     assert calls == [('prompt', True), ('parent', True)]
     audio.assert_not_called()
+
+
+def test_delete_that_loses_the_row_to_backfill_undo_returns_conflict(store):
+    def read_before_undo(uid, cid, **_kwargs):
+        row = store.rows.pop(f'users/{uid}/conversations/{cid}', None)
+        return {'id': cid} if row is not None else None
+
+    namespace = {
+        'logger': MagicMock(),
+        'conversation_tombstones': tombstones,
+        'conversations_db': SimpleNamespace(get_conversation_raw_snapshot=read_before_undo),
+        'HTTPException': HTTPException,
+        'delete_owner_prompt_embedding_cache': MagicMock(),
+        'delete_conversation_screen_frames': MagicMock(),
+        'delete_conversation_and_frame_evidence': MagicMock(),
+        'delete_privacy_conversation_audio': MagicMock(),
+        'delete_vector': MagicMock(),
+        'delete_transcript_chunk_vectors': MagicMock(),
+        'record_product_event': MagicMock(),
+    }
+    delete = function('routers/conversations.py', 'delete_conversation', namespace)
+    with pytest.raises(HTTPException) as error:
+        delete('c', MagicMock(), False, None, 'u')
+    assert error.value.status_code == 409
+    assert 'users/u/deleted_conversations/c' not in store.rows
 
 
 @pytest.mark.parametrize('failure', ['retraction', 'cleanup', None])
@@ -317,7 +362,21 @@ def test_account_wipe_enumerates_tombstones_even_without_root(store, monkeypatch
     assert not tombstones.is_deleted('u', 'c')
 
 
-def test_account_job_purge_retries_after_a_later_batch_failure(store, monkeypatch):
+def test_account_job_purge_logs_only_counts_and_revision_after_multiple_batches(store, monkeypatch, caplog):
+    monkeypatch.setenv('K_REVISION', 'backend-test')
+    caplog.set_level('INFO', logger=user_data_deletion.__name__)
+    collection = store.collection('conversation_finalization_jobs')
+    for index in range(451):
+        collection.document(f'job-{index:03}').create({'uid': 'u'})
+
+    user_data_deletion.purge_finalization_jobs('u', store)
+
+    assert caplog.messages == ['account_erasure_finalization_jobs_purged deleted=451 remaining=0 revision=backend-test']
+
+
+def test_account_job_purge_retries_after_a_later_batch_failure(store, monkeypatch, caplog):
+    monkeypatch.setenv('K_REVISION', 'backend-test')
+    caplog.set_level('INFO', logger=user_data_deletion.__name__)
     collection = store.collection('conversation_finalization_jobs')
     for index in range(451):
         collection.document(f'job-{index:03}').create({'uid': 'u'})
@@ -335,8 +394,14 @@ def test_account_job_purge_retries_after_a_later_batch_failure(store, monkeypatc
             user_data_deletion.purge_finalization_jobs('u', store)
 
     assert [ref.id for ref in collection.list_documents()] == ['job-450']
+    assert caplog.messages == []
     user_data_deletion.purge_finalization_jobs('u', store)
     assert collection.list_documents() == []
+    user_data_deletion.purge_finalization_jobs('u', store)
+    assert caplog.messages == [
+        'account_erasure_finalization_jobs_purged deleted=1 remaining=0 revision=backend-test',
+        'account_erasure_finalization_jobs_purged deleted=0 remaining=0 revision=backend-test',
+    ]
 
 
 def test_live_client_chosen_deleted_id_is_closed_before_bootstrap_and_registration(store):

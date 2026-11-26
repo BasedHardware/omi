@@ -96,3 +96,34 @@ def stage_key(
         model_config=dict(model_config or {}),
         schema_version=schema_version,
     ).hexdigest()
+
+
+def hash_dir(path, *, skip: tuple[str, ...] = (), stat_only: 'tuple[str, ...] | bool' = ()) -> str:
+    """sha256 over every file below ``path`` by relative path: content hashes, except top-level
+    entries named in ``stat_only`` (or every file when it is True; large audio: size and mtime) and ``skip`` (left out). A missing
+    directory hashes as empty."""
+    from pathlib import Path
+
+    base = Path(path)
+    material: dict[str, str] = {}
+    if base.is_dir():
+        for item in sorted(base.rglob('*')):
+            if not item.is_file():
+                continue
+            relative = item.relative_to(base).as_posix()
+            top = relative.split('/', 1)[0]
+            if top in skip or item.name.startswith('.'):
+                continue
+            if stat_only is True or (not isinstance(stat_only, bool) and top in stat_only):
+                info = item.stat()
+                material[relative] = f'stat:{info.st_size}:{info.st_mtime_ns}'
+            else:
+                material[relative] = hash_file(item)
+    return hash_json(material)
+
+
+def hash_files(paths) -> str:
+    """sha256 over named files (missing ones hash as ``missing``), keyed by file name."""
+    from pathlib import Path
+
+    return hash_json({Path(p).name: (hash_file(p) if Path(p).is_file() else 'missing') for p in paths})
