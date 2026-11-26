@@ -1309,7 +1309,10 @@ def get_conversations(
     # query and the page stream runs under the derived per-RPC timeout, so a
     # deep page cannot consume the whole HTTP_GET_TIMEOUT (#11831).
     wall_budget = os.getenv('OMI_LIST_PAGE_WALL_BUDGET_ENABLED', 'true').strip().lower() not in {
-        '0', 'false', 'off', 'no'
+        '0',
+        'false',
+        'off',
+        'no',
     }
     budget_options = (
         {'seconds': min(_LIST_PAGE_READ_SECONDS, resolve_list_read_budget_seconds())} if wall_budget else {}
