@@ -72,6 +72,15 @@ def _unsupported_code(code: str) -> bool:
     return not any(alias in parakeet for alias, canonical in LANGUAGE_EQUIVALENCE.items() if canonical == code)
 
 
+def _profile_class(code: str) -> str:
+    """'unsupported', 'unknown' or 'supported' for one profile code (a Parakeet alias counts as supported)."""
+    from config.prerecorded_language import language_class
+
+    if _unsupported_code(code):
+        return 'unsupported'
+    return 'unknown' if language_class(code) == 'unknown' else 'supported'
+
+
 def profile_speaks_unsupported(user: dict) -> bool:
     """Whether the user's own recent live speech shows a language batch Parakeet cannot transcribe.
 
@@ -85,8 +94,10 @@ def profile_speaks_unsupported(user: dict) -> bool:
         if not isinstance(counts, dict):
             continue
         valid = {code: n for code, n in counts.items() if isinstance(code, str) and type(n) is int and n > 0}
-        total = sum(valid.values())
-        other = sum(n for code, n in valid.items() if _unsupported_code(normalized_stt_language(code)))
+        # Unknown codes ('und') are not evidence either way: they count in neither the numerator nor the share.
+        classes = {code: _profile_class(normalized_stt_language(code)) for code in valid}
+        total = sum(n for code, n in valid.items() if classes[code] != 'unknown')
+        other = sum(n for code, n in valid.items() if classes[code] == 'unsupported')
         if other >= PROFILE_MIN_UNSUPPORTED_SEGMENTS and other >= PROFILE_MIN_UNSUPPORTED_SHARE * total:
             hits += 1
     return hits >= PROFILE_MIN_SESSIONS
@@ -95,9 +106,15 @@ def profile_speaks_unsupported(user: dict) -> bool:
 def pin_untrusted(user: dict) -> bool:
     """A multi-language user whose live speech shows a language Parakeet cannot transcribe (switch on).
 
-    For such a user a supported conversation pin is usually the app language, not evidence."""
+    For such a user a supported conversation pin is usually the app language, not evidence. Either kill switch
+    (this rule's, or the admission exclusion's) restores the former admission and input selection."""
     single = (user.get('transcription_preferences') or {}).get('single_language_mode')
-    return not single and multilingual_profile_routing_enabled() and profile_speaks_unsupported(user)
+    return (
+        not single
+        and admission_language_exclusion_enabled()
+        and multilingual_profile_routing_enabled()
+        and profile_speaks_unsupported(user)
+    )
 
 
 def batch_admission_language(user: dict, conversation: dict) -> tuple[str | None, str | None]:

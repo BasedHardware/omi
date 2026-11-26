@@ -363,6 +363,9 @@ def _prepare_routed(
             except routing.RoutingError as error:
                 raise AudioError(f'stt routing: {error}') from None
             routes = route_all()
+        unrouted = [rec.label for rec in recordings if rec.label not in routes]
+        if unrouted:
+            raise AudioError(f'stt routing: no route after the self-gate pass for {", ".join(unrouted[:5])}')
     out: dict[str, PreparedAudio] = {}
     misses: list[str] = []
     for rec in recordings:

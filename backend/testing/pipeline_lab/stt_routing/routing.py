@@ -17,6 +17,7 @@ product's own decisions, under the arm's env, and its words come from the casset
 | Engine for a legacy upload | per file (``resolve_file``): guard off -> ``multi``; on -> vendor LID, then ``get_prerecorded_service`` | yes; files simulated as fixed pieces; the self gate's confident skip is not modelled (vendor answer used) |
 | Capacity fallback (GPU ring saturated) | not run: the batch lane is assumed unsaturated | simulated |
 | Legacy mode | assumed ``on`` (today's production) | simulated |
+| Admission exclusion off | the pinned language straight to Parakeet; the worker's per-window unsupported refusal is not modelled | simulated |
 
 Inputs are private: ``$OMI_PIPELINE_LAB_STT_ROUTING_INPUTS`` names a JSON file outside Git,
 ``{"user": {...}, "conversations": {"<label>": {...}}, "default_conversation": {...}}``: the owner's user
@@ -52,6 +53,7 @@ ROUTING_SWITCHES = (
     'BATCH_MULTILINGUAL_PROFILE_ROUTING_ENABLED',
     'STT_PRERECORDED_LANGUAGE_GUARD_ENABLED',
     'STT_PRERECORDED_MODEL',
+    'STT_GPU_FLEET_OFF',  # get_prerecorded_service -> provider_is_enabled reads it at call time
 )
 LAB_ENV_KEYS = (
     ROUTING_ENV,
@@ -280,23 +282,33 @@ class SelfLidCache:
             listing, result = Path(work) / 'in.json', Path(work) / 'out.json'
             listing.write_text(json.dumps(list(paths)))
             backend = Path(__file__).resolve().parents[3]
-            subprocess.run(
-                [
-                    self.python,
-                    '-m',
-                    'testing.pipeline_lab.stt_routing.self_lid',
-                    '--in',
-                    str(listing),
-                    '--out',
-                    str(result),
-                ],
-                cwd=backend,
-                check=True,
-            )
-            for row in json.loads(result.read_text(encoding='utf-8')):
-                private_write_text(
-                    self.directory / f'{paths[row["path"]]}.json', json.dumps({'language': row['language']})
+            try:
+                subprocess.run(
+                    [
+                        self.python,
+                        '-m',
+                        'testing.pipeline_lab.stt_routing.self_lid',
+                        '--in',
+                        str(listing),
+                        '--out',
+                        str(result),
+                    ],
+                    cwd=backend,
+                    check=True,
+                    capture_output=True,
+                    text=True,
                 )
+                rows = json.loads(result.read_text(encoding='utf-8'))
+                for row in rows:
+                    private_write_text(
+                        self.directory / f'{paths[row["path"]]}.json', json.dumps({'language': row['language']})
+                    )
+            except subprocess.CalledProcessError as error:
+                raise RoutingError(f'self-gate stand-in failed: {(error.stderr or "").strip()[-500:]}') from None
+            except (OSError, ValueError, KeyError, TypeError) as error:
+                raise RoutingError(f'self-gate stand-in returned unusable output: {error!r}') from None
+            if len(rows) != len(paths):
+                raise RoutingError(f'self-gate stand-in classified {len(rows)} of {len(paths)} windows')
         count = len(self.pending)
         self.calls += count
         self.pending.clear()

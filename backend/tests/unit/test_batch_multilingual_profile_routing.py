@@ -32,6 +32,7 @@ EUROPEAN = [{'en': 40, 'de': 60}, {'de': 80}, {'fr': 50, 'en': 10}]
 @pytest.fixture(autouse=True)
 def defaults(monkeypatch):
     monkeypatch.delenv('BATCH_MULTILINGUAL_PROFILE_ROUTING_ENABLED', raising=False)
+    monkeypatch.delenv('BATCH_ADMISSION_LANGUAGE_EXCLUSION_ENABLED', raising=False)
 
 
 def multi_user(sessions):
@@ -53,6 +54,8 @@ def multi_user(sessions):
         ([{'en': 40, 'zh': 15}, {'en': 40, 'zh': 15}], True),
         ([{'zh': 'many'}, {'zh': True}, {7: 30}, 'row'], False),  # malformed rows count as nothing
         ([{'und': 30}, {'und': 30}], False),  # an unknown language is not evidence
+        ([{'und': 80, 'zh': 15}, {'und': 80, 'zh': 15}], True),  # nor does it dilute the share
+        ([{'und': 10, 'en': 80, 'zh': 15}, {'en': 80, 'zh': 15}], False),
         ([{'sr': 30}, {'sr': 30}], False),  # canonical 'sr' also stands for Parakeet's 'hr'
         ([{'hi': 30}, {'ko': 30}], True),
     ],
@@ -80,6 +83,15 @@ def test_known_unsupported_conversation_is_unchanged():
         None,
         'known_unsupported_language',
     )
+
+
+def test_the_admission_exclusion_kill_switch_also_trusts_the_pin(monkeypatch):
+    from config.batch_pipeline_language import pin_untrusted
+
+    user = multi_user(MULTILINGUAL)
+    assert pin_untrusted(user)
+    monkeypatch.setenv('BATCH_ADMISSION_LANGUAGE_EXCLUSION_ENABLED', 'false')
+    assert not pin_untrusted(user)
 
 
 @pytest.mark.parametrize(

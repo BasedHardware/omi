@@ -10,7 +10,7 @@ admitted to Parakeet came back with no Chinese text. Only the overflow sent to l
 Failure class: FC-unknown-language-treated-as-model-capability.
 
 **Change.** A multi-language user whose own rolling live-STT language profile shows unsupported speech
-(at least 2 sessions with 10 or more classified transcript segments, and 20% or more, in batch-unsupported codes; the projection counts segments, not words) no longer gets
+(at least 2 sessions with 10 or more segments in batch-unsupported codes, making up 20% or more of the session's classified segments; `und` counts in neither; the projection counts segments, not words) no longer gets
 the pin trusted. Admission returns `multilingual_profile`.
 - With legacy ON, sync intake samples it on audio like `unknown_multilingual_conversation`: vendor LID on
   the first speech window, then the self gate on every later window. Only an all-supported upload is
@@ -28,7 +28,9 @@ speech reference comes from Velma's CJK-script words. Unsupported speech sent to
 probes and 50 self-gate windows.
 
 **Rollout.** Ship on behind the kill switch `BATCH_MULTILINGUAL_PROFILE_ROUTING_ENABLED=false`, which trusts
-the pin again. Readback: `outcome=reclassified` log count, and the multilingual intake route share for
+the pin again (`BATCH_ADMISSION_LANGUAGE_EXCLUSION_ENABLED=false` restores it too). The signal depends on
+`STT_LEARNED_LANGUAGE_PROFILE` staying on: the live session projection is written only while it is, and a
+lapsed profile silently returns flagged users to the pinned route. Readback: `outcome=reclassified` log count, and the multilingual intake route share for
 profiled users, after backend-sync serves it.
 
 **Not changed.** The multilingual engine choice (Soniox did best on code-switching in the lab), word

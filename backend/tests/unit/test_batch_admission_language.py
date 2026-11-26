@@ -475,6 +475,40 @@ async def test_existing_batch_owner_of_a_multilingual_profile_never_inherits_the
 
 
 @pytest.mark.asyncio
+async def test_multilingual_profile_with_sampling_off_stays_on_legacy(monkeypatch):
+    monkeypatch.setenv('BATCH_ADMISSION_LANGUAGE_SAMPLE_ENABLED', 'false')
+    excluded = Mock()
+    monkeypatch.setattr(intake, 'record_admission_exclusion', excluded)
+    evidence = IntakeRouteEvidence()
+    response, staged, probe = await upload(
+        monkeypatch,
+        user_language='en',
+        conversation_language='en',
+        mode='on',
+        profile=MANDARIN_PROFILE,
+        evidence=evidence,
+    )
+    assert response is None and staged == [] and probe.call_count == 0 and evidence.language_excluded
+    assert excluded.call_args.args[1] == 'unknown_multilingual_conversation'
+
+
+@pytest.mark.asyncio
+async def test_multilingual_profile_with_live_record_keeps_the_multi_escape_to_legacy(monkeypatch):
+    # A live-record policy declines a 'multi' upload to legacy before sampling (pre-existing escape): Mandarin
+    # still reaches multilingual STT, without a probe.
+    speaking(monkeypatch)
+    response, staged, probe = await upload(
+        monkeypatch,
+        user_language='en',
+        conversation_language='en',
+        mode='on',
+        profile=MANDARIN_PROFILE,
+        record_origin=True,
+    )
+    assert response is None and staged == [] and probe.call_count == 0
+
+
+@pytest.mark.asyncio
 async def test_multilingual_profile_kill_switch_trusts_the_pin_again(monkeypatch):
     monkeypatch.setenv('BATCH_MULTILINGUAL_PROFILE_ROUTING_ENABLED', 'false')
     vad = speaking(monkeypatch)

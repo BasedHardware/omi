@@ -7414,12 +7414,16 @@ Known-unsupported languages are never sampled. False restores the full exclusion
 A supported conversation pin is not capability proof for a multi-language user
 (`single_language_mode` false) whose own live speech shows a language Parakeet
 cannot transcribe: at least 2 of the rolling `users/{uid}.live_stt_language_sessions`
-rows with 10 or more classified segments, and 20% or more, in batch-unsupported codes (`und` is not evidence; a
+rows with 10 or more segments in batch-unsupported codes, making up 20% or more of the session's
+classified segments (`und` counts in neither; a
 canonical code with a Parakeet alias, such as `sr`, counts as supported). Such an
 upload returns `multilingual_profile` (`BATCH_MULTILINGUAL_PROFILE_ROUTING_ENABLED`,
-default on). With legacy ON, sync intake samples it exactly like
+default on; `BATCH_ADMISSION_LANGUAGE_EXCLUSION_ENABLED=false` also restores the former
+behavior). With legacy ON, sync intake samples it exactly like
 `unknown_multilingual_conversation`, input `multi`, and logs
-`event=batch_admission_language outcome=reclassified`. The record lane has no sampler, so a new
+`event=batch_admission_language outcome=reclassified`. A refused sample is recorded under the
+`unknown_multilingual_conversation` exclusion; the reclassified line attributes it. A policy with live record
+enabled keeps its existing `multi` escape to legacy before sampling. The record lane has no sampler, so a new
 owner claim gives it to `legacy_final_pass_v1` like any exclusion. With legacy
 draining or dark, the upload is admitted to batch with input `multi`, classified
 per unit instead of inheriting the pin. Batch inheritance never takes such a user's
