@@ -23,6 +23,7 @@ import os
 import sys
 import time
 from pathlib import Path
+from utils.conversations.final_pass_pyannote import run_final_pass
 
 
 def _segment(segment) -> dict:
@@ -40,7 +41,6 @@ def _segment(segment) -> dict:
 
 
 def final_pass(conversation: dict, gallery: dict) -> dict:
-    from utils.conversations.final_pass_pyannote import run_final_pass
 
     pcm = Path(conversation['pcm_path']).read_bytes()
     words = [{'timestamp': [w['start'], w['end']], 'text': w['text']} for w in conversation['words']]
@@ -58,10 +58,14 @@ def final_pass(conversation: dict, gallery: dict) -> dict:
         include_assignments=False,
         record_outcome=False,
     )
+    summary = {k: v for k, v in outcome.items() if k not in ('assignments', 'centroids')}
+    if segments is None:
+        # The pass failed (cassette miss, timeout, service error): an experiment error, never an empty prediction.
+        return {'key': conversation['key'], 'error': f"final_pass {summary.get('outcome')}", 'outcome': summary}
     return {
         'key': conversation['key'],
-        'segments': [_segment(s) for s in segments or []],
-        'outcome': {k: v for k, v in outcome.items() if k not in ('assignments', 'centroids')},
+        'segments': [_segment(s) for s in segments],
+        'outcome': summary,
         'seconds': round(time.monotonic() - started, 3),
     }
 

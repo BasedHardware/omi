@@ -163,3 +163,37 @@ def test_v3_export_reads_chunks_under_the_source_recording(monkeypatch):
     }
     assert owner_export.conversation_pcm('uid', row) == b'\x01\x00' * 160
     assert holders == ['rec']
+
+
+def test_conflicting_manual_corrections_leave_the_voice_uncertain():
+    from testing.pipeline_lab.speakers.corpus import Conversation
+
+    words = _words('alpha beta gamma delta')
+    production = {
+        'segments': [
+            {'text': 'alpha beta', 'speaker_label_source': 'manual', 'is_user': True},
+            {'text': 'gamma delta', 'speaker_label_source': 'manual', 'person_id': 'p1'},
+        ]
+    }
+    conversation = Conversation(key='k', path=None, production=production)
+    assert silver.manual_overrides(conversation, words, ['A', 'A', 'A', 'A']) == {'A': silver.UNKNOWN}
+
+
+def test_gap_sentinel_words_are_abstentions_not_a_voice():
+    words = _words('a b c d')
+    truth = {'turns': [{'start': 0, 'end': 10, 'speaker': 'x'}], 'identities': {'x': 'user'}}
+    gaps = [{'start': 0, 'end': 10, 'speaker': None, 'speaker_id': 99, 'speaker_id_scope': 'final:pyannote:c'}]
+    card = score.score_conversation(words, truth, gaps)
+    assert card['attribution'] == 0.0 and card['predicted_voices'] == 0
+
+
+def test_failed_final_pass_is_an_arm_error(monkeypatch, tmp_path):
+    from testing.pipeline_lab.speakers import arm_runner
+    from utils.conversations import final_pass_pyannote
+
+    monkeypatch.setattr(final_pass_pyannote, 'run_final_pass', lambda *a, **k: (None, {'outcome': 'failed:service'}))
+    monkeypatch.setattr(arm_runner, 'run_final_pass', final_pass_pyannote.run_final_pass)
+    pcm = tmp_path / 'a.pcm'
+    pcm.write_bytes(b'\0\0' * 1600)
+    result = arm_runner.final_pass({'key': 'k', 'pcm_path': str(pcm), 'words': []}, {})
+    assert result['error'] == 'final_pass failed:service' and 'segments' not in result

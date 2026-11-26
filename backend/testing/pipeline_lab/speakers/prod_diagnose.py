@@ -33,14 +33,17 @@ from unittest import mock
 from testing.pipeline_lab.speakers import corpus as corpus_mod
 from testing.pipeline_lab.speakers.owner_export import SEGMENT_FIELDS, _plain, corpus_key
 from testing.pipeline_lab.v3.prod_export import load_guard, read_only_fence
+import yaml
+from testing.pipeline_lab.stack.runtime_env import ENDPOINTISH, SECRETISH, _scalar, _service_env
+from models.conversation import Conversation
+from testing.pipeline_lab.speakers.peer import SpeakerPeer
+from testing.pipeline_lab.scenario.paths import private_lab_root
+from testing.pipeline_lab.store import ensure_private_dir
 
 BACKEND = Path(__file__).resolve().parents[3]
 
 
 def production_flags(service: str = 'backend-sync') -> dict[str, str]:
-    import yaml
-
-    from testing.pipeline_lab.stack.runtime_env import ENDPOINTISH, SECRETISH, _scalar, _service_env
 
     document = yaml.safe_load((BACKEND / 'deploy' / 'runtime_env.yaml').read_text(encoding='utf-8'))
     env = {}
@@ -112,7 +115,6 @@ def final_pass(uid: str, conversation: Any, receipt: Mapping[str, Any]) -> dict[
 
 def diagnose(uid: str, conversation_id: str, *, run_final_pass: bool = False) -> dict[str, Any]:
     from database import conversations as conversations_db
-    from models.conversation import Conversation
     from utils.conversations import speaker_resolution
 
     reasons: list[str] = []
@@ -185,8 +187,6 @@ def main(argv: Optional[list[str]] = None) -> int:
     parser.add_argument('--label', default='today', help='corpus mode: results go to resolver_<label>.json')
     args = parser.parse_args(argv)
 
-    from testing.pipeline_lab.speakers.peer import SpeakerPeer
-
     guard = load_guard(args.guard)
     uid = guard.owner_uid(args.uid_file)
     guard.load_secret(args.secret_file)
@@ -240,8 +240,6 @@ def _targets(uid: str, args: Any):
     """(key, conversation id, result path): a corpus's conversations, or the newest v3 conversations."""
     if args.recent:
         from database import conversations as conversations_db
-        from testing.pipeline_lab.scenario.paths import private_lab_root
-        from testing.pipeline_lab.store import ensure_private_dir
 
         root = ensure_private_dir(ensure_private_dir(private_lab_root() / 'speakers') / 'diagnose')
         out = ensure_private_dir(Path(args.out).expanduser() if args.out else root / 'recent')

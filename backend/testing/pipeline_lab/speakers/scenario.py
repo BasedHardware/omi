@@ -48,6 +48,16 @@ from typing import Any, Mapping, Optional
 from unittest.mock import patch
 
 from testing.pipeline_lab.speakers.peer import MODES, SpeakerPeer
+from testing.pipeline_lab.scenario.paths import private_lab_root
+from testing.pipeline_lab.speakers.peer import CassetteStore
+from testing.pipeline_lab.store import ensure_private_dir
+from utils.stt.diarization import HttpDiarizer
+from utils.stt.speaker_embedding import extract_embedding_from_bytes
+from database import batch_final_pass
+from database.batch_final_pass import ReferenceUnavailable
+from testing.pipeline_lab.speakers.corpus import PUBLIC_ROOT
+import json
+from testing.pipeline_lab.speakers.score import score_conversation
 
 DEFAULT_MODE = 'replay'
 OWNER = 'user'
@@ -100,9 +110,6 @@ class ScenarioSpeakers:
             public = all(_public(Path(path)) for path in (*audio_files, *spec.gallery.values()))
             store = workdir = None
             if public and mode == 'record-local':
-                from testing.pipeline_lab.scenario.paths import private_lab_root
-                from testing.pipeline_lab.speakers.peer import CassetteStore
-                from testing.pipeline_lab.store import ensure_private_dir
 
                 root = ensure_private_dir(private_lab_root() / 'speakers')
                 store = CassetteStore(ensure_private_dir(root / 'cassettes'), write_public=True)
@@ -134,7 +141,6 @@ class ScenarioSpeakers:
 
     def diarize(self, pcm16: bytes) -> dict[str, Any]:
         """One unit through the product's hosted-diarizer client: the worker's diarization payload shape."""
-        from utils.stt.diarization import HttpDiarizer
 
         result = HttpDiarizer('pyannote').diarize(pcm16, deadline=time.monotonic() + DIARIZE_DEADLINE_SECONDS)
         self._count('batch_lane_diarizations')
@@ -150,7 +156,6 @@ class ScenarioSpeakers:
         """Embed and enroll every gallery voice through product code. Returns counts (no vectors)."""
         from database import users as users_db
         from utils.stt.owner_profile import validated_embedding
-        from utils.stt.speaker_embedding import extract_embedding_from_bytes
 
         enrolled: dict[str, Any] = {}
         people = [label for label in self.gallery if label != OWNER]
@@ -191,8 +196,6 @@ class ScenarioSpeakers:
     # ---- staged-unit stand-in --------------------------------------------------------------------
 
     def install(self, stack: ExitStack) -> None:
-        from database import batch_final_pass
-        from database.batch_final_pass import ReferenceUnavailable
 
         # The product's ownership rule; a tree from before it (compare against an older ref) owns only its own id.
         receipt_owners = getattr(batch_final_pass, 'receipt_owners', None) or (lambda cid, source_ids=(): {cid})
@@ -269,7 +272,6 @@ class ScenarioSpeakers:
 
 
 def _public(path: Path) -> bool:
-    from testing.pipeline_lab.speakers.corpus import PUBLIC_ROOT
 
     scenario_fixtures = Path(__file__).resolve().parents[1] / 'scenario' / 'fixtures'
     resolved = path.resolve()
@@ -288,7 +290,6 @@ class SpeakerScoring:
 
     @classmethod
     def for_scenario(cls, scenario: Any, prepared: Mapping[str, Any]) -> 'SpeakerScoring':
-        import json
 
         spec = scenario.speakers
         rec = scenario.recording(spec.recording)
@@ -299,7 +300,6 @@ class SpeakerScoring:
 
     def card(self, row: Mapping[str, Any]) -> Optional[dict[str, Any]]:
         """The scorecard for one stored conversation row, or None when it has no started_at."""
-        from testing.pipeline_lab.speakers.score import score_conversation
 
         started = row.get('started_at')
         if isinstance(started, str):

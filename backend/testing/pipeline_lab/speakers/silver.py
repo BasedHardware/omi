@@ -35,6 +35,19 @@ from pathlib import Path
 from typing import Any, Optional
 
 from testing.pipeline_lab.speakers import corpus as corpus_mod
+from utils.conversations.final_pass_assignment import assign_words
+from utils.stt.diarization_turns import exclusive_from_activity
+from collections import Counter
+import numpy as np
+from scipy.optimize import linear_sum_assignment
+from statistics import median
+from utils.stt.conversation_speakers import unit_voice_vector, voice_cosine_distance
+from testing.pipeline_lab.speakers.bench import stored_word_labels
+from testing.pipeline_lab.scenario.paths import private_lab_root
+from testing.pipeline_lab.store import atomic_write_json, ensure_private_dir
+from testing.pipeline_lab.speakers.bench import gallery_for
+from testing.pipeline_lab.speakers.peer import LocalModels, SpeakerPeer
+import os
 
 STRICT = 0.45
 MARGIN = 0.10
@@ -45,8 +58,6 @@ UNKNOWN = '?'
 
 
 def word_labels(words: list[dict], turns: list[dict]) -> list[Optional[str]]:
-    from utils.conversations.final_pass_assignment import assign_words
-    from utils.stt.diarization_turns import exclusive_from_activity
 
     clean = [t for t in turns if t['end'] > t['start']]
     if not clean:
@@ -56,10 +67,6 @@ def word_labels(words: list[dict], turns: list[dict]) -> list[Optional[str]]:
 
 
 def map_reference(primary: list[Optional[str]], reference: list[Optional[str]]) -> dict[str, str]:
-    from collections import Counter
-
-    import numpy as np
-    from scipy.optimize import linear_sum_assignment
 
     pairs = Counter((r, p) for p, r in zip(primary, reference) if p is not None and r is not None)
     refs = sorted({r for r, _ in pairs})
@@ -96,9 +103,6 @@ def word_levels(pcm: bytes, words: list[dict]) -> list[Optional[float]]:
 def identities(
     labels: list[str], levels: list[Optional[float]], centroids: dict, gallery: dict
 ) -> tuple[dict[str, Optional[str]], dict[str, Any]]:
-    from statistics import median
-
-    from utils.stt.conversation_speakers import unit_voice_vector, voice_cosine_distance
 
     prints = {k: unit_voice_vector(v) for k, v in gallery.items()}
     prints = {k: v for k, v in prints.items() if v is not None}
@@ -135,15 +139,12 @@ def identities(
 def manual_overrides(conversation: corpus_mod.Conversation, words: list[dict], labels: list[str]) -> dict[str, str]:
     """The owner's own corrections: each manual segment, placed on the audio by its text (stored clocks are not
     on the audio clock), names the silver voice holding most of its words."""
-    from collections import Counter
-
-    from testing.pipeline_lab.speakers.bench import stored_word_labels
 
     segments = (conversation.production or {}).get('segments') or []
     if not segments:
         return {}
     placed = stored_word_labels(words, segments)
-    out = {}
+    named: dict[str, set] = {}
     for index, segment in enumerate(segments):
         if segment.get('speaker_label_source') != 'manual':
             continue
@@ -152,8 +153,10 @@ def manual_overrides(conversation: corpus_mod.Conversation, words: list[dict], l
             continue
         votes = Counter(l for at, l in zip(placed, labels) if at == index and l != UNSURE)
         if votes:
-            out[votes.most_common(1)[0][0]] = identity
-    return out
+            named.setdefault(votes.most_common(1)[0][0], set()).add(identity)
+    # Two corrections naming different people on one silver voice mean the voice merges speakers: its identity is
+    # uncertain, never whichever correction came last.
+    return {voice: (next(iter(ids)) if len(ids) == 1 else UNKNOWN) for voice, ids in named.items()}
 
 
 def to_turns(words: list[dict], labels: list[str]) -> list[dict]:
@@ -171,8 +174,6 @@ def to_turns(words: list[dict], labels: list[str]) -> list[dict]:
 
 
 def reference_turns(conversation: corpus_mod.Conversation, local: Any) -> dict:
-    from testing.pipeline_lab.scenario.paths import private_lab_root
-    from testing.pipeline_lab.store import atomic_write_json, ensure_private_dir
 
     digest = hashlib.sha256(conversation.audio_path.read_bytes()).hexdigest()
     cache = ensure_private_dir(ensure_private_dir(private_lab_root() / 'speakers') / 'reference_cache')
@@ -228,14 +229,11 @@ def main(argv: Optional[list[str]] = None) -> int:
     parser.add_argument('--speakers', choices=('replay', 'record-local'), default='replay')
     parser.add_argument('--key', action='append', default=[])
     args = parser.parse_args(argv)
-    from testing.pipeline_lab.speakers.bench import gallery_for
-    from testing.pipeline_lab.speakers.peer import LocalModels, SpeakerPeer
 
     corpus = corpus_mod.load(args.corpus)
     if corpus.public:
         print('error: public corpora carry exact truth', file=sys.stderr)
         return 2
-    import os
 
     totals = {'conversations': 0, 'words': 0, 'unsure_words': 0, 'owner_voice': 0, 'skipped_gold': 0}
     with SpeakerPeer(args.speakers) as peer:

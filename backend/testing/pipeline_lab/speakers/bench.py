@@ -35,6 +35,15 @@ from typing import Any, Optional
 from testing.pipeline_lab.speakers import corpus as corpus_mod
 from testing.pipeline_lab.speakers import score
 from testing.pipeline_lab.speakers.peer import CassetteStore, SpeakerPeer
+from testing.pipeline_lab.cassette import local_parakeet
+from concurrent.futures import ThreadPoolExecutor
+from utils.stt.speaker_embedding import extract_embedding_from_bytes
+import difflib
+import re
+from testing.pipeline_lab.store import atomic_write_json
+from testing.pipeline_lab.scenario.paths import private_lab_root
+from testing.pipeline_lab.store import ensure_private_dir, private_dir
+from testing.pipeline_lab.store import atomic_write_bytes, ensure_private_dir
 
 BACKEND = Path(__file__).resolve().parents[3]
 RUNNER = Path(__file__).with_name('arm_runner.py')
@@ -86,7 +95,6 @@ def ensure_words(conversation: corpus_mod.Conversation, *, record: bool, private
         return conversation.words['words']
     if not record:
         raise FileNotFoundError(f'{conversation.key}: no words.json; run with --words record-local')
-    from testing.pipeline_lab.cassette import local_parakeet
 
     python = os.environ.get(local_parakeet.PYTHON_ENV) or os.environ.get('OMI_PIPELINE_LAB_LOCAL_SPEAKERS_PYTHON')
     if not python:
@@ -107,7 +115,6 @@ def ensure_words(conversation: corpus_mod.Conversation, *, record: bool, private
 
 def words_main(argv: Optional[list[str]] = None) -> int:
     """``python -m testing.pipeline_lab.speakers words --corpus NAME [--jobs N]``: record missing words locally."""
-    from concurrent.futures import ThreadPoolExecutor
 
     parser = argparse.ArgumentParser(prog='python -m testing.pipeline_lab.speakers words')
     parser.add_argument('--corpus', required=True)
@@ -132,7 +139,6 @@ def gallery_for(corpus: corpus_mod.Corpus) -> dict[str, list[float]]:
     """Stored voiceprints (owner corpora), else the enrollment audio embedded through the peer with product code."""
     if corpus.gallery:
         return corpus.gallery
-    from utils.stt.speaker_embedding import extract_embedding_from_bytes
 
     prints = {}
     for identity, path in corpus.gallery_audio().items():
@@ -158,12 +164,10 @@ def stored_arms(corpus: corpus_mod.Corpus) -> dict[str, tuple[str, Optional[str]
 
 
 def _stored_segments(conversation: corpus_mod.Conversation, source: tuple[str, Optional[str]]) -> Optional[list]:
-    import json as _json
-
     path = conversation.path / source[0]
     if not path.is_file():
         return None
-    value = _json.loads(path.read_text())
+    value = json.loads(path.read_text())
     if source[1] == 'final_pass':
         return ((value.get('final_pass') or {}).get('segments')) or None
     return value.get('segments') if isinstance(value, dict) else None
@@ -174,8 +178,6 @@ def stored_word_labels(words: list[dict], segments: list[dict]) -> list[Optional
     Stored clocks are not on the audio clock (measured 2026-11-26 on an owner corpus: 17 % of segments within
     1.5 s), so each stored token is aligned to the corpus words (``difflib``, no junk heuristic). Words between two
     aligned words of one segment take it too."""
-    import difflib
-    import re
 
     # Unicode word characters, casefolded: owner conversations in any script must align.
     pattern = re.compile(r"\w+(?:'\w+)?")
@@ -259,7 +261,6 @@ def run_arm(
     arm: Arm, jobs: list[dict], gallery: dict, peer_env: dict, work: Path, *, parallel: int = 1
 ) -> dict[str, dict]:
     """The arm's conversations split over ``parallel`` processes (each a fresh product import)."""
-    from concurrent.futures import ThreadPoolExecutor
 
     shards = [jobs[i :: max(1, parallel)] for i in range(max(1, parallel))]
     shards = [s for s in shards if s]
@@ -273,7 +274,6 @@ def run_arm(
 
 
 def _run_shard(arm: Arm, jobs: list[dict], gallery: dict, peer_env: dict, work: Path, index: int) -> dict[str, dict]:
-    from testing.pipeline_lab.store import atomic_write_json
 
     backend = arm.backend or BACKEND
     job_path, out_path = work / f'job-{arm.name}-{index}.json', work / f'out-{arm.name}-{index}.jsonl'
@@ -299,8 +299,6 @@ def _run_shard(arm: Arm, jobs: list[dict], gallery: dict, peer_env: dict, work: 
 
 
 def _out_dir(raw: Optional[str]) -> Path:
-    from testing.pipeline_lab.scenario.paths import private_lab_root
-    from testing.pipeline_lab.store import ensure_private_dir, private_dir
 
     if raw:
         return private_dir(Path(raw).expanduser(), 'speaker bench output')
@@ -320,8 +318,6 @@ def bench(
     write_public_cassettes: bool = False,
     parallel: int = 1,
 ) -> dict:
-    from testing.pipeline_lab.scenario.paths import private_lab_root
-    from testing.pipeline_lab.store import atomic_write_bytes, ensure_private_dir
 
     started = time.monotonic()
     work = ensure_private_dir(out / 'work')
@@ -390,7 +386,6 @@ def bench(
             outcomes=outcomes,
         )
     report['seconds'] = round(time.monotonic() - started, 1)
-    from testing.pipeline_lab.store import atomic_write_json
 
     atomic_write_json(out / 'report.json', report)
     (out / 'summary.md').write_text(summary_markdown(report))

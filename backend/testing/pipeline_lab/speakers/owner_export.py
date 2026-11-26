@@ -37,6 +37,8 @@ from pathlib import Path
 from typing import Any, Iterable, Optional
 
 from testing.pipeline_lab.v3.prod_export import _inside_git_worktree, load_guard, read_only_fence
+from testing.pipeline_lab.store import atomic_write_bytes, atomic_write_json, ensure_private_dir
+from testing.pipeline_lab.speakers.corpus import corpus_dir
 
 SAMPLE_RATE = 16000
 PAGE = 100
@@ -241,7 +243,6 @@ def export(
     refresh: bool = False,
     v3_recent: bool = False,
 ) -> dict:
-    from testing.pipeline_lab.store import atomic_write_bytes, atomic_write_json, ensure_private_dir
 
     end = datetime.now(timezone.utc)
     start = end - timedelta(days=days)
@@ -300,8 +301,6 @@ def main(argv: Optional[list[str]] = None) -> int:
     parser.add_argument('--refresh', action='store_true', help='rewrite conversation.json of exported conversations')
     parser.add_argument('--min-segments', type=int, default=1, help='skip conversations with fewer stored segments')
     args = parser.parse_args(argv)
-
-    from testing.pipeline_lab.speakers.corpus import corpus_dir
 
     guard = load_guard(args.guard)
     uid = guard.owner_uid(args.uid_file)

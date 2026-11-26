@@ -18,6 +18,10 @@ from __future__ import annotations
 
 import json
 from typing import Any, Iterable, Optional
+from utils.conversations.final_pass_assignment import assign_words
+from utils.stt.diarization_turns import exclusive_from_activity
+from utils.stt.speaker_identity import OMI_SPEAKER_ID_SENTINEL
+from utils.stt.diarization_eval import persisted_word_turns, score_words
 
 IGNORED = {None, '', 'unsure', 'noise', 'mixed'}
 UNKNOWN_IDENTITY = '?'
@@ -37,8 +41,6 @@ COUNTS = (
 
 
 def truth_words(words: list[dict], truth: dict) -> list[dict]:
-    from utils.conversations.final_pass_assignment import assign_words
-    from utils.stt.diarization_turns import exclusive_from_activity
 
     turns = [t for t in truth.get('turns') or [] if t['end'] > t['start']]
     exclusive = exclusive_from_activity(turns) if turns else []
@@ -72,6 +74,8 @@ def _voice(turn: Optional[dict]) -> Optional[str]:
     """An opaque voice key for scoring (never display text): the persisted id within its scope."""
     if turn is None:
         return None
+    if turn.get('speaker_id') == OMI_SPEAKER_ID_SENTINEL and turn.get('speaker') is None:
+        return None  # a word in a diarization gap: the pass abstained, it named no voice
     if turn.get('speaker_id') is not None:
         return json.dumps([turn.get('speaker_id_scope') or '', turn['speaker_id']])
     return turn.get('speaker')
@@ -80,7 +84,6 @@ def _voice(turn: Optional[dict]) -> Optional[str]:
 def score_conversation(words: list[dict], truth: dict, turns: list[dict], scope: Optional[set] = None) -> dict:
     """One conversation's counts and rates. ``turns`` are predicted segments on the audio clock. ``scope``
     (word indexes) limits scoring to the words the conversation owns, the same set for every arm."""
-    from utils.stt.diarization_eval import persisted_word_turns, score_words
 
     reference = truth_words(words, truth)
     identities = truth.get('identities') or {}

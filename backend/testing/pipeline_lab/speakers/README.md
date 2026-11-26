@@ -61,3 +61,8 @@ only on conversations younger than that. Run system binaries such as `nice` arou
 strips `DYLD_*` from them, and opus decoding then fails.
 
 Delete an experiment's private corpus when the experiment ends and say so in the report.
+
+Imports are at module scope except at two deliberate boundaries: `local_worker.py` loads the diarizer's model
+modules inside the optional local-models venv, and the owner tools (`owner_export.py`, `prod_diagnose.py`, the
+gallery writers in `scenario.py`) import `database`/`utils` modules that require `ENCRYPTION_SECRET` only after the
+owner guard (or the lab stack) has put it in the process.

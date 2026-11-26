@@ -30,14 +30,15 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Iterator, Optional
 import wave
+from testing.pipeline_lab.scenario.paths import private_lab_root
+from testing.pipeline_lab.store import ensure_private_dir
+from testing.pipeline_lab.store import atomic_write_json
 
 PUBLIC_ROOT = Path(__file__).resolve().parent / 'fixtures'
 SAMPLE_RATE = 16000
 
 
 def private_corpus_root() -> Path:
-    from testing.pipeline_lab.scenario.paths import private_lab_root
-    from testing.pipeline_lab.store import ensure_private_dir
 
     return ensure_private_dir(ensure_private_dir(private_lab_root() / 'speakers') / 'corpus')
 
@@ -51,7 +52,6 @@ def corpus_dir(name: str, *, create: bool = False) -> Path:
         return public
     root = private_corpus_root() / name
     if create:
-        from testing.pipeline_lab.store import ensure_private_dir
 
         return ensure_private_dir(root)
     if not root.is_dir():
@@ -137,7 +137,6 @@ def load(name: str) -> Corpus:
 
 def write_json(path: Path, value: Any, *, private: bool) -> None:
     if private:
-        from testing.pipeline_lab.store import atomic_write_json
 
         atomic_write_json(path, value)
         return

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import sys
+import importlib
 
 
 def main(argv: list[str]) -> int:
@@ -16,7 +17,6 @@ def main(argv: list[str]) -> int:
     if not argv or argv[0] not in commands:
         print('usage: python -m testing.pipeline_lab.speakers {' + '|'.join(commands) + '} ...', file=sys.stderr)
         return 2
-    import importlib
 
     module, _, function = commands[argv[0]].partition(':')
     return getattr(importlib.import_module(module), function or 'main')(argv[1:])

@@ -34,6 +34,10 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any, Optional
 from urllib.parse import parse_qs, urlparse
+from testing.pipeline_lab.store import atomic_write_json, ensure_private_dir
+from testing.pipeline_lab.scenario.paths import private_lab_root
+from testing.pipeline_lab.store import ensure_private_dir
+from testing.pipeline_lab.store import atomic_write_bytes
 
 BACKEND = Path(__file__).resolve().parents[3]
 PUBLIC_CASSETTES = Path(__file__).resolve().parent / 'fixtures' / 'cassettes'
@@ -118,7 +122,6 @@ class CassetteStore:
             return path
         if self.private_root is None:
             raise RuntimeError('no private cassette root')
-        from testing.pipeline_lab.store import atomic_write_json, ensure_private_dir
 
         path = self._path(self.private_root, route, key)
         ensure_private_dir(path.parent)
@@ -236,8 +239,6 @@ class SpeakerPeer:
         self.mode = mode
         self.pins = model_pins()
         if store is None or workdir is None:
-            from testing.pipeline_lab.scenario.paths import private_lab_root
-            from testing.pipeline_lab.store import ensure_private_dir
 
             root = ensure_private_dir(private_lab_root() / 'speakers')
             store = store or CassetteStore(ensure_private_dir(root / 'cassettes'))
@@ -274,7 +275,6 @@ class SpeakerPeer:
         if self.mode == 'replay':
             self.stats.record(route, 'miss', time.monotonic() - started, seconds)
             return 409, {'detail': f'speaker cassette miss ({route}); record it with --speakers record-local'}
-        from testing.pipeline_lab.store import atomic_write_bytes
 
         # Unique per request: concurrent misses of the same audio must not delete each other's input.
         work = self.workdir / f'req-{key[:16]}-{os.urandom(6).hex()}.{"wav" if route == "/v2/embedding" else "bin"}'
