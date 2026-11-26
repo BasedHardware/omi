@@ -191,19 +191,25 @@ class ScenarioSpeakers:
     # ---- staged-unit stand-in --------------------------------------------------------------------
 
     def install(self, stack: ExitStack) -> None:
+        from database import batch_final_pass
         from database.batch_final_pass import ReferenceUnavailable
+
+        # The product's ownership rule; a tree from before it (compare against an older ref) owns only its own id.
+        receipt_owners = getattr(batch_final_pass, 'receipt_owners', None) or (lambda cid, source_ids=(): {cid})
         from utils.conversations import final_pass_batch, speaker_resolution
 
         speakers = self
 
-        def load_reference(store: Any, uid: str, unit: str, conversation_id: str, *, read_budget: Any = None):
+        def load_reference(
+            store: Any, uid: str, unit: str, conversation_id: str, *, read_budget: Any = None, source_ids: Any = ()
+        ):
             speakers._count('stand_in_load_reference')
             lab = speakers.units.get(unit)
             if lab is None or lab.item.owner_id != uid:
                 raise ReferenceUnavailable('failed_incomplete_coverage', 'no_job')
             if speakers.receipts == 'processed':
                 speakers._count('stand_in_load_reference_counterfactual')  # the receipt names this conversation
-            elif conversation_id != lab.receipt_conversation_id:
+            elif lab.receipt_conversation_id not in receipt_owners(conversation_id, source_ids):
                 # Production's rule over the receipts the projection wrote for this unit: they name another
                 # conversation, so this one is a merge target (database/batch_final_pass.py).
                 speakers._count('stand_in_load_reference_skipped_merged')

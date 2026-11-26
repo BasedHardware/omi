@@ -60,12 +60,25 @@ def _source_pin(path: Path, name: str) -> str:
     return match.group(1)
 
 
-def model_pins() -> dict[str, str]:
-    """The diarizer's pinned revisions, read from source (importing those modules needs torch)."""
+# The hosted diarizer's pinned model revisions (diarizer/final_pass.py MODEL_REVISION, diarizer/embedding.py v2
+# revision). Constants, because a compare arm's tree need not carry diarizer/; a unit test keeps them equal to the
+# diarizer source, so a model bump fails CI until cassettes are re-keyed here.
+MODEL_PINS = {
+    'diarization': '3533c8cf8e369892e6b79ff1bf80f7b0286a54ee',
+    'embedding': '837717ddb9ff5507820346191109dc79c958d614',
+}
+
+
+def source_pins(backend: Path = BACKEND) -> dict[str, str]:
+    """The same revisions read from the diarizer source (importing those modules needs torch)."""
     return {
-        'diarization': _source_pin(BACKEND / 'diarizer' / 'final_pass.py', 'MODEL_REVISION'),
-        'embedding': _source_pin(BACKEND / 'diarizer' / 'embedding.py', 'revision'),
+        'diarization': _source_pin(backend / 'diarizer' / 'final_pass.py', 'MODEL_REVISION'),
+        'embedding': _source_pin(backend / 'diarizer' / 'embedding.py', 'revision'),
     }
+
+
+def model_pins() -> dict[str, str]:
+    return dict(MODEL_PINS)
 
 
 def cassette_key(route: str, params: dict, body: bytes, pins: dict[str, str]) -> str:

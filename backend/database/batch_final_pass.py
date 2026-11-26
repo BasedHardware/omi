@@ -20,6 +20,11 @@ class ReferenceUnavailable(ValueError):
         super().__init__(self.reason)
 
 
+def receipt_owners(conversation_id, source_ids=()) -> frozenset:
+    """Conversation ids whose projection receipts belong to ``conversation_id``: itself and its v3 sources."""
+    return frozenset((conversation_id, *source_ids))
+
+
 def load_reference(store, uid, unit, conversation_id, *, read_budget=None, source_ids=()):
     """The staged unit behind ``final:batch:{unit}`` segments of ``conversation_id``.
 
@@ -28,7 +33,7 @@ def load_reference(store, uid, unit, conversation_id, *, read_budget=None, sourc
     recording they were projected onto. Receipts naming the conversation or one of its source recordings are
     this conversation's; any other owner is still a merge or a shared unit and refuses.
     """
-    owners = frozenset((conversation_id, *source_ids))
+    owners = receipt_owners(conversation_id, source_ids)
 
     def read(tx):
         def unavailable(reason: str) -> NoReturn:

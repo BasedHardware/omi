@@ -60,10 +60,13 @@ def _put(store, route, params, body, answer, pins):
     return key
 
 
-def test_model_pins_are_read_from_source_without_torch():
+def test_model_pins_match_the_diarizer_source():
+    # A diarizer model bump must re-key speaker cassettes: update MODEL_PINS with it.
+    from testing.pipeline_lab.speakers.peer import source_pins
+
     pins = model_pins()
     assert set(pins) == {'diarization', 'embedding'}
-    assert all(len(value) == 40 for value in pins.values())
+    assert pins == source_pins()
 
 
 def test_cassette_key_changes_with_audio_params_and_pins():

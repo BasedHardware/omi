@@ -1,6 +1,6 @@
 {
   "name": "speaker_owner_absent",
-  "description": "One batch-lane recording of two real voices (public LibriSpeech, 34 s) in which the owner never speaks: an enrolled person and a stranger take turns while the owner's pendant records. The owner and the person are enrolled. The batch lane diarizes through the speaker peer (production's community-1 answer, from a committed cassette) and the product's resolver and batch final pass label the voices. No word may be labelled as the owner, the enrolled person must be named, and the stranger must not get a name. Counterfactual (speakers.receipts \"processed\", reported in the stand-in notes): the staged-unit stand-in's receipts name the v3 conversation the speaker passes run on. With receipts as production's projection writes them (naming the recording), load_reference answers skipped_merged for the v3 conversation and no voice is named (measured 2026-11-26).",
+  "description": "One batch-lane recording of two real voices (public LibriSpeech, 34 s) in which the owner never speaks: an enrolled person and a stranger take turns while the owner's pendant records. The owner and the person are enrolled. The batch lane diarizes through the speaker peer (production's community-1 answer, from a committed cassette) and the product's resolver and batch final pass label the voices. No word may be labelled as the owner, the enrolled person must be named, and the stranger must not get a name. Receipts are as production's projection writes them (naming the recording); the v3 conversation reads them as its own source recording's. Before that fix, load_reference answered skipped_merged and no voice was named (measured 2026-11-26).",
   "origins": [
     {
       "id": "O",
@@ -26,8 +26,7 @@
       "user": "../../speakers/fixtures/public-libri/gallery_audio/user.wav",
       "person-b": "../../speakers/fixtures/public-libri/gallery_audio/person-b.wav"
     },
-    "truth": "../../speakers/fixtures/public-libri/conversations/owner_absent/truth.json",
-    "receipts": "processed"
+    "truth": "../../speakers/fixtures/public-libri/conversations/owner_absent/truth.json"
   },
   "expect": [
     {
