@@ -29,6 +29,7 @@ from testing.finalization_replay.metrics import (
 from testing.finalization_replay.state import (
     CaseState,
     episode_attach_memo_failure_reason,
+    fenced_sync_attach_memo_failure_reason,
     episode_attach_memo_valid,
     ordinary_sync_attach_memo_failure_reason,
 )
@@ -367,6 +368,30 @@ class ReplayContractTests(unittest.TestCase):
                 content_key_fn=compute_key,
             )
         )
+
+    def test_worker_fence_requires_a_bound_intake_memo_and_an_unchanged_link(self):
+        conversation = {'episode_id': 'episode'}
+        link = {
+            'episode_id': 'episode',
+            'attach_owner_id': 'episode',
+            'attach_revision': 'v2:intake',
+            'attach_completed': 'v2:intake',
+        }
+
+        def check(before, after, row=conversation):
+            return fenced_sync_attach_memo_failure_reason(
+                'owner', 'conversation', row, before, after, intake_key='v2:intake'
+            )
+
+        self.assertEqual(check(link, dict(link)), '')
+        wrong_owner = dict(link, attach_owner_id='other')
+        self.assertEqual(check(wrong_owner, wrong_owner), 'owner_binding_mismatch')
+        self.assertEqual(check(link, link, {'episode_id': 'other'}), 'owner_binding_mismatch')
+        wrong_key = dict(link, attach_revision='v2:stale', attach_completed='v2:stale')
+        self.assertEqual(check(wrong_key, wrong_key), 'completed_key_mismatch')
+        self.assertEqual(check(link, dict(link, attach_finalized='v2:intake')), 'link_changed_after_worker_delete')
+        self.assertEqual(check(link, None), 'link_changed_after_worker_delete')
+        self.assertEqual(check(link, link, None), 'missing_conversation_before_worker_delete')
 
     def test_ordinary_sync_memo_requires_exact_go_key_and_proven_python_cache(self):
         path = 'users/owner/episode_links/conversation'

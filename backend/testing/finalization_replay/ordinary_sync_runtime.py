@@ -98,6 +98,7 @@ class UnexpectedGoOutcome(RuntimeError):
 
 def _apply_go_checkpoint(state, lifecycle, proxy):
     if lifecycle == 'fence':
+        state.capture_memo_before_worker_delete()
         state.conversation.delete()
         return
 
@@ -329,7 +330,7 @@ def run_cases(states, side, binary, database, key, worker_backend, server, clien
                     state.python_retry = retry_to_park(state, worker_backend)
                     return state.python_retry['outcome']
                 if state.replay_fence:
-                    return _run_python_job(state)
+                    return _run_python_job(state, before_worker_delete=state.capture_memo_before_worker_delete)
                 return _python_sync(state)
             privacy_document_path = f"batch_pipeline_privacy/{sha256(state.uid.encode('utf-8')).hexdigest()}"
             with FirestoreProxy(emulator_endpoint(), privacy_document_path, state.home_dirty_receipt_path) as proxy:
@@ -337,9 +338,12 @@ def run_cases(states, side, binary, database, key, worker_backend, server, clien
 
         def attach_at_intake(target):
             row = target.conversation.get().to_dict() or {}
-            key = episode_attach_memo.current_key(target.uid, row) if side == 'python' else None
+            key = episode_attach_memo.current_key(target.uid, row) if side == 'python' or target.replay_fence else None
             result = finalize.attach_synced_at_intake(target.uid, target.cid, row)
-            remember_python_memo(target, key)
+            if target.replay_fence:
+                target.fence_intake_memo_key = key
+            if side == 'python':
+                remember_python_memo(target, key)
             return result
 
         outputs = []
