@@ -396,7 +396,9 @@ def _run_main(args: argparse.Namespace, out: Path, started: float) -> int:
         scenario = load_scenario(args.file)
         arm_overlay = json.loads(Path(args.arm_overlay).read_text()) if args.arm_overlay else None
         # Before the lab environment: recording on a miss may need the ambient env and network.
-        audio = prepare(scenario, mode=args.stt, budget_usd=args.stt_budget_usd)
+        # The env the product runs under (production profile, scenario env, arm env): stt routing decides with it.
+        env = dict(scenario_overlay(scenario, product_runtime_env(), arm_overlay).env)
+        audio = prepare(scenario, mode=args.stt, budget_usd=args.stt_budget_usd, env=env)
         from testing.pipeline_lab.llm_proxy.fake_upstream import FakeUpstream
 
         upstream = FakeUpstream().start()

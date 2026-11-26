@@ -366,6 +366,31 @@ checks evaluated (exit 1 otherwise), so a run that executed nothing cannot be gr
 
 Turning a production incident into a scenario: [scenario/IMPORTER.md](scenario/IMPORTER.md).
 
+### STT routing (which engine transcribes each recording)
+
+By default an `audio_file` recording plays the cassette the scenario pins, so arms that route speech
+differently transcribe identically. With `OMI_PIPELINE_LAB_STT_ROUTING=product` in the scenario or arm env,
+`stt_routing/routing.py` routes each recording with production's own decisions under that arm's env
+(production profile, then scenario env, then arm env): `batch_admission_language`, the sampled LID
+(`probe_wav` + `LanguageDecision.parakeet_safe`) and `get_prerecorded_service` for the legacy path. The
+recording then plays the cassette of the engine chosen. Capacity fallback and legacy modes other than `on`
+are not modelled (see the module's table).
+
+- `OMI_PIPELINE_LAB_STT_ROUTING_INPUTS`: a private JSON file with the user fields routing reads and each
+  label's conversation fields (`{"user", "conversations", "default_conversation"}`).
+- `OMI_PIPELINE_LAB_STT_ROUTE_CASSETTES`: JSON mapping a route (`parakeet`, `multilingual`) to the cassette pin
+  that stands in for it, e.g. `parakeet_local` for production's GPU Parakeet.
+- LID answers are recorded once per 30 s probe under `<lab root>/lid/` on a `--stt record-vendor` run with
+  `OMI_PIPELINE_LAB_LID_KEY_FILE` (a 0600 key file), and replayed after. Every engine's cassettes are
+  recorded beforehand, one pinned `record-*` pass per engine.
+- Metric `stt_routing` (`stt_routing/compare_metrics.py`): recordings and audio per route, LID probes, and with
+  `OMI_PIPELINE_LAB_STT_REFERENCE` (a private per-audio reference, never an arm's own detector) the
+  unsupported-language speech each arm sent to Parakeet.
+
+The batch lane cannot play a multilingual cassette: the real worker refuses a window whose language Parakeet
+does not support (`vad_windows` / `unsupported_language`), as production does before recovery. Route
+multilingual audio through `sync` fragments.
+
 ## affected
 
 `python -m testing.pipeline_lab affected [BASE..HEAD | BASE]` (default: the merge base with `origin/main` to

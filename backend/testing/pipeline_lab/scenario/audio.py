@@ -61,6 +61,7 @@ class PreparedAudio:
     cassette: Cassette
     origin: str  # fixture | lab_root | recorded
     mode: str
+    route: Optional[dict[str, Any]] = None  # stt_routing: the engine production would pick, when routing is on
 
     def summary(self) -> dict[str, Any]:
         c = self.cassette
@@ -77,6 +78,7 @@ class PreparedAudio:
             'audio_seconds': round(c.audio_seconds, 3),
             'cassette_words': len(c.words),
             'usd': c.usd,
+            **({'route': self.route} if self.route is not None else {}),
         }
 
 
@@ -222,8 +224,13 @@ def prepare(
     fixtures: Path = FIXTURE_CASSETTES,
     local: Any = None,
     vendor_adapter: Any = None,
+    env: Optional[dict[str, str]] = None,
 ) -> dict[str, PreparedAudio]:
-    """Every ``audio_file`` recording's PCM and cassette, recording on a miss per ``mode``."""
+    """Every ``audio_file`` recording's PCM and cassette, recording on a miss per ``mode``.
+
+    ``env`` is the scenario env with the arm's on top. With ``OMI_PIPELINE_LAB_STT_ROUTING=product`` in it,
+    each recording is routed by production's batch routing (``stt_routing/routing.py``) and plays the
+    cassette of the engine chosen, so arms that route differently transcribe differently."""
     from testing.pipeline_lab.cassette.local import LocalRecorderNotInstalled
     from testing.pipeline_lab.lanes.audio import load_pcm16
 
@@ -237,6 +244,11 @@ def prepare(
 
         root = scenario_lab_root()
     stt = dict(scenario.stt)
+    from testing.pipeline_lab.stt_routing import routing
+
+    env = dict(env or {})
+    if routing.enabled(env):
+        return _prepare_routed(scenario, recordings, env, mode=mode, root=Path(root), fixtures=fixtures)
     recorder = None
     out: dict[str, PreparedAudio] = {}
     for rec in recordings:
@@ -272,6 +284,98 @@ def prepare(
         origin = 'recorded' if recorder.misses > misses else 'lab_root'
         out[rec.label] = PreparedAudio(rec.label, pcm16, cassette, origin, mode)
     return out
+
+
+def _prepare_routed(
+    scenario: Any, recordings: Sequence[Any], env: dict[str, str], *, mode: str, root: Path, fixtures: Path
+) -> dict[str, PreparedAudio]:
+    """Routing on: each recording's cassette comes from production's route under the arm's env.
+
+    Cassettes of every engine are recorded beforehand (one ``record-*`` pass per engine, each pinned); only
+    the LID answers (vendor probe, local self-gate stand-in) are recorded here, on a ``record-vendor`` run.
+    A legacy upload whose files went to different engines plays each engine's words inside its own files."""
+    from testing.pipeline_lab.lanes.audio import load_pcm16
+    from testing.pipeline_lab.stt_routing import routing
+
+    if mode == 'record-local':
+        raise AudioError('stt routing records LID answers with --stt record-vendor, or replays them with --stt replay')
+    try:
+        inputs = routing.Inputs.load(env)
+        mapping = routing.route_cassettes(env)
+        file_seconds = float(env.get(routing.LEGACY_FILE_SECONDS_ENV) or routing.LEGACY_FILE_SECONDS)
+    except (routing.RoutingError, ValueError) as error:
+        raise AudioError(f'stt routing: {error}') from None
+    from testing.pipeline_lab.store import ensure_private_dir
+
+    private = ensure_private_dir(root)
+    record = mode == 'record-vendor'
+    lid = routing.LidCache(private, record=record, secret_file=env.get(routing.LID_SECRET_FILE_ENV))
+    self_lid = routing.SelfLidCache(private, record=record, python=env.get(routing.SELF_LID_PYTHON_ENV))
+    pcms = {rec.label: load_pcm16(rec.audio_file) for rec in recordings}
+
+    def route_all() -> dict[str, Any]:
+        routes, waiting = {}, False
+        for rec in recordings:
+            try:
+                routes[rec.label] = routing.decide(
+                    inputs.user,
+                    inputs.conversation(rec.label),
+                    pcms[rec.label],
+                    lid=lid.decision,
+                    self_lid=self_lid.language,
+                    legacy_file_seconds=file_seconds,
+                )
+            except routing.PendingSelfLid:
+                waiting = True
+            except routing.RoutingError as error:
+                raise AudioError(f'recording {rec.label}: {error}') from None
+        return routes if not waiting else {}
+
+    with routing.patched_environ(env):
+        routes = route_all()
+        if not routes:  # a record run queued self-gate windows: classify them in one pass, then route again
+            try:
+                self_lid.flush()
+            except routing.RoutingError as error:
+                raise AudioError(f'stt routing: {error}') from None
+            routes = route_all()
+    out: dict[str, PreparedAudio] = {}
+    misses: list[str] = []
+    for rec in recordings:
+        pcm16, route = pcms[rec.label], routes[rec.label]
+        engines = sorted({r for _, _, r in route.pieces}) if route.route == routing.MIXED else [route.route]
+        found = {}
+        for engine in engines:
+            pin = {**dict(scenario.stt), **routing.cassette_pin(route, mapping, engine)}
+            hit = find(pcm16, pin, root=root, fixtures=fixtures)
+            if hit is None:
+                misses.append(_miss_message(scenario, rec, pcm16, pin) + f' (routed {engine}: {route.reason})')
+                break
+            found[engine] = hit
+        if len(found) != len(engines):
+            if not record:
+                break
+            continue
+        cassette, origin = found[engines[0]]
+        if len(engines) > 1:
+            cassette = _spliced(found, route.pieces)
+        summary = {**route.summary(), 'audio_sha256': audio_sha256(pcm16)[:16]}
+        out[rec.label] = PreparedAudio(rec.label, pcm16, cassette, origin, mode, route=summary)
+    if misses:
+        more = f' (+{len(misses) - 1} more)' if len(misses) > 1 else ''
+        recorded = lid.calls + self_lid.calls
+        raise AudioError(misses[0] + more + (f'; recorded {recorded} LID answer(s)' if recorded else ''))
+    return out
+
+
+def _spliced(found: dict[str, tuple[Cassette, str]], pieces: Sequence[tuple[float, float, str]]) -> Cassette:
+    """One cassette for a legacy upload whose files went to different engines: each engine's words that
+    start inside its own files (the multilingual engine's key names it)."""
+    words = []
+    for start, end, engine in pieces:
+        words.extend(w for w in found[engine][0].words if start <= w.start < end)
+    base = found.get('multilingual', next(iter(found.values())))[0]
+    return replace(base, words=sorted(words, key=lambda w: (w.start, w.end)), segments=[])
 
 
 # ---- materialize (inside the lab environment) -----------------------------------------------------
