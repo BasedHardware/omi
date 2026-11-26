@@ -262,7 +262,6 @@ def _measure_reconcile_writes(run):
     return measured
 
 
-@_measure_reconcile_writes
 def _exclude_unclaimed_backfill_donors(recordings, rows, *, rederive):
     claimed = {rid for row in rows for rid in row.get('v3_recording_ids') or []}
     # Keep unclaimed legacy rows visible. Converting them would hide the speech without a replacement.
@@ -275,6 +274,7 @@ def _exclude_unclaimed_backfill_donors(recordings, rows, *, rederive):
     return unclaimed
 
 
+@_measure_reconcile_writes
 async def reconcile(
     uid,
     *,
