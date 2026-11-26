@@ -518,6 +518,7 @@ def decode_unit_evidence(
                 if reason:
                     diagnostics[sid] = reason
             words = [word for word in words if word['segment_id'] not in diagnostics]
+            spans: list[tuple[float, float]] = []
             if owned is not None:
                 # A source recording's unit also holds sibling conversations' speech and speech the owner
                 # deleted: only this conversation's own speech (its own segments' words, on the unit clock)
