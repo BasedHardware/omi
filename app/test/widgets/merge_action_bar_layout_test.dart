@@ -42,7 +42,7 @@ void main() {
       addTearDown(tester.view.resetPhysicalSize);
       addTearDown(tester.view.resetDevicePixelRatio);
 
-      for (final count in [1, 2]) {
+      for (final count in [0, 1, 2]) {
         final selection = _Selection(count);
         await tester.pumpWidget(ChangeNotifierProvider<ConversationProvider>.value(
           value: selection,
@@ -63,7 +63,7 @@ void main() {
         expect(tester.takeException(), isNull, reason: 'No toolbar overflow');
 
         final context = tester.element(find.byType(MergeActionBar));
-        final l10n = AppLocalizations.of(context)!;
+        final l10n = AppLocalizations.of(context);
         final labels = [l10n.cancel, l10n.selectedCount(count), l10n.merge];
         for (final label in labels) {
           final text = find.text(label);
@@ -95,8 +95,8 @@ void main() {
           }
         }
         expect(tester.widget<OmiButton>(targets.last).onPressed != null, count >= 2);
-        expect(tester.widget<OmiIconButton>(targets[1]).onPressed, isNotNull);
-        expect(tester.widget<OmiIconButton>(targets[2]).onPressed, isNotNull);
+        expect(tester.widget<OmiIconButton>(targets[1]).onPressed != null, count > 0);
+        expect(tester.widget<OmiIconButton>(targets[2]).onPressed != null, count > 0);
         await tester.tap(targets.first);
         await tester.pump();
         expect(selection.isSelectionModeActive, isFalse);
