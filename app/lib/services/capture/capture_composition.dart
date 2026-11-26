@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:path_provider/path_provider.dart';
 import 'package:disk_space_2/disk_space_2.dart';
 import 'package:omi/services/wals/mobile_batch_buffer.dart';
+import 'package:omi/services/wals/mobile_batch_upload_hold.dart';
 import 'package:omi/services/wals/mobile_batch_vad.dart';
 import 'package:omi/services/wals/mobile_standard_batch.dart';
 import 'package:omi/services/live_preview/live_preview_composition.dart';
@@ -46,6 +47,7 @@ import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:omi/services/wals/local_wal_sync.dart';
 import 'package:omi/services/experiments/capture_end_marker.dart';
 import 'package:omi/services/experiments/mobile_batch_file_cap_gate.dart';
+import 'package:omi/services/experiments/mobile_batch_upload_hold_gate.dart';
 import 'package:omi/services/capture/capture_end.dart';
 import 'package:omi/backend/http/api/capture_end.dart';
 
@@ -285,8 +287,18 @@ Future<void> _installMobileStandardBatch(CaptureProvider provider) async {
     final directory = await getApplicationDocumentsDirectory();
     final phone = ServiceManager.instance().wal.getSyncs().phone;
     await phone.walReady;
+    if (provider.lifetime.isClosed) return;
+    final coordinator = RecordingTransferCoordinator.instance;
+    final hold = MobileBatchUploadHold(
+      enabled: MobileBatchUploadHoldGate.enabled,
+      foreground: coordinator.foregroundState.value,
+      wake: () => unawaited(coordinator.wake(WakeTrigger.mobileBatchReady)),
+      refreshFlags: MobileBatchUploadHoldGate.refresh,
+    );
     final buffer = MobileBatchBuffer(
         directory: directory,
+        onSealed: hold.sealed,
+        onPublishFailed: hold.forget,
         publish: (wal) async {
           if (wal.ownerUid != SharedPreferencesUtil().uid) throw StateError('Batch owner retired');
           await phone.addExternalWal(wal, admittedGeneration: phone.sessionGeneration);
@@ -294,7 +306,7 @@ Future<void> _installMobileStandardBatch(CaptureProvider provider) async {
               !await phone.hasDurableWal(wal, admittedGeneration: phone.sessionGeneration)) {
             throw StateError('Batch WAL index was not committed');
           }
-          unawaited(RecordingTransferCoordinator.instance.wake(WakeTrigger.periodic));
+          if (!hold.published(wal)) unawaited(coordinator.wake(WakeTrigger.periodic));
         });
     // Never delays the lane: capture starts on the default cap and the gate's
     // answer applies from the next frame after it arrives.
@@ -341,7 +353,29 @@ Future<void> _installMobileStandardBatch(CaptureProvider provider) async {
       observationVersion: () => MobileBatchBuffer.journalRevision,
     );
     provider.captureEndReporter = reporter;
-    if (phone is LocalWalSyncImpl) phone.onRecordingUploadAccepted = reporter.uploadAccepted;
+    provider.onMobileBatchCaptureEnded = (recordingSessionId) {
+      if (hold.enabled()) buffer.seal();
+      hold.captureEnded(recordingSessionId);
+    };
+    provider.lifetime
+        .listenTo(coordinator.foregroundState, () => hold.setForeground(coordinator.foregroundState.value));
+    final preview = provider.livePreview;
+    if (preview != null) {
+      void updatePreview() => hold.setPreview(preview.phase == LivePreviewPhase.streaming);
+      provider.lifetime.listenTo(preview, updatePreview);
+      updatePreview();
+    }
+    if (phone is LocalWalSyncImpl) {
+      phone.mobileBatchUploadHold = hold;
+      phone.onRecordingUploadAccepted = reporter.uploadAccepted;
+    }
+    provider.lifetime.own(() {
+      hold.clear();
+      if (phone is LocalWalSyncImpl && identical(phone.mobileBatchUploadHold, hold)) {
+        phone.mobileBatchUploadHold = null;
+        phone.onRecordingUploadAccepted = null;
+      }
+    });
     provider.installMobileStandardBatch(lane);
   } catch (_) {
     // Directory/plugin availability cannot interrupt the existing live path.

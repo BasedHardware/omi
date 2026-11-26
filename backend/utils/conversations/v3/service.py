@@ -122,8 +122,9 @@ def redacted_cause(error):
     if cause is None:
         return '-'
     text = str(cause)
-    # Pure string checks (store.size_error's markers): this runs on the event loop.
-    kind = 'document' if store.DOCUMENT_TOO_LARGE in text else 'request' if store.REQUEST_TOO_LARGE in text else None
+    # Pure string checks on store's size markers (no store call): this runs on the event loop.
+    big = store.DOCUMENT_TOO_LARGE in text or all(m in text for m in store.PROPERTY_TOO_LARGE)
+    kind = 'document' if big else 'request' if store.REQUEST_TOO_LARGE in text else None
     if not kind:
         return type(cause).__name__
     sizes = ','.join(re.findall(r'\(?(\d+) bytes', text)) or '-'
@@ -136,7 +137,9 @@ async def _drain_blocked(uid, reason):
     try:
         await drain_processing(uid)
     except Exception as error:
-        logger.warning('v3 reconcile blocked drain failed exception_type=%s', type(error).__name__)
+        metrics.safe_metric(
+            lambda: logger.warning('v3 reconcile blocked drain failed exception_type=%s', type(error).__name__)
+        )
 
 
 def recording_short_path(fn):
@@ -241,7 +244,9 @@ async def _release_reconcile_lease(uid, key, token, *, primary_failed):
     except Exception as error:
         if not primary_failed:
             raise
-        logger.warning('v3 reconcile lease release failed exception_type=%s', type(error).__name__)
+        metrics.safe_metric(
+            lambda: logger.warning('v3 reconcile lease release failed exception_type=%s', type(error).__name__)
+        )
 
 
 def _measure_reconcile_writes(run):
@@ -754,8 +759,9 @@ async def reconcile(
             unclaimed = [rid for rid, r in recordings.items() if '_v3_backfill_prior' in r and rid not in claimed]
             for rid in unclaimed:
                 recordings.pop(rid)
-        # A re-derive reuses prior ids; a prior copy no rebuilt window claims is retired with the commit.
+        # The commit removes unplanned prior copies only if they have no task or memory links.
         remove = [cid for cid in existing if cid not in planned] if derive and rederive else []
+        removed_ids: set[str] = set()
         retire, commit_recordings, commit_existing, priors = {}, recordings, existing, []
         if live:
             rows, retire, touched, sources, priors, outcome = _live_outcome(
@@ -786,6 +792,7 @@ async def reconcile(
                 cache[-128:],
                 clear_pending=not on_open,
                 remove=remove,
+                removed_ids=removed_ids,
                 retire=retire,
                 key=key,
             )
@@ -801,12 +808,12 @@ async def reconcile(
             summary_wake.publish_committed(uid, rows, existing)
             cap_starts = {group['lines'][0]['start'] for group in groups if group['after_window_cap']}
             new_cap_starts = {row['started_at'] for row in rows if row['id'] not in existing} & cap_starts
-            metrics.WINDOW_CAP_CUTS.inc(len(new_cap_starts))
+            metrics.safe_metric(lambda: metrics.WINDOW_CAP_CUTS.inc(len(new_cap_starts)))
         report.update(
             sources=len(eligible),
             windows=len(rows),
             rows_new=sum(1 for row in rows if row['id'] not in existing),
-            rows_removed=len(remove),
+            rows_removed=len(removed_ids),
             # A live run's loader already counted unclaimed live speech; its legacy meaning is donors.
             **({} if live else {'sources_unclaimed': len(unclaimed)}),
             notes_queued=sum(1 for row in rows if row.get('v3_backfill_process_pending')),
@@ -816,7 +823,7 @@ async def reconcile(
             # Live speech arrived during the pass: the snapshot's windows are committed and the moved
             # recordings stay owed. Wake the owner at the next minute instead of an immediate re-pass,
             # which would race the same live recording again.
-            metrics.RACES.labels('source_moved').inc()
+            metrics.safe_metric(lambda: metrics.RACES.labels('source_moved').inc())
             await run_blocking(db_executor, enqueue, uid, at=datetime.now(timezone.utc) + RACE_RETRY)
         for group in groups if not derive else ():
             if not (group['locked'] if custom_timing else group['finished']):
@@ -828,7 +835,7 @@ async def reconcile(
         holds = [r[outline.HOLD_UNTIL] for r in recordings.values() if r.get(outline.HOLD_UNTIL) is not None]
         if holds and not derive:
             # A held manual-end cut applies when its wait ends, even if no transcript lands.
-            metrics.FINISH_HELD.inc()
+            metrics.safe_metric(lambda: metrics.FINISH_HELD.inc())
             await run_blocking(db_executor, enqueue, uid, at=max(min(holds), now + timedelta(minutes=1)))
         for row in rows:
             prior = existing.get(row['id']) or {}
@@ -837,14 +844,16 @@ async def reconcile(
                 and row.get('home_hidden_reason') == 'wearer_recognition_uncertain'
                 and (prior.get('home_hidden') or prior.get('home_hidden_reason') != 'wearer_recognition_uncertain')
             ):
-                metrics.UNCERTAIN_SHOWN.inc()
+                metrics.safe_metric(lambda: metrics.UNCERTAIN_SHOWN.inc())
             if row['id'] not in existing:
-                metrics.VISIBLE_LATENCY.observe(max(0, (now - row['started_at']).total_seconds()))
+                metrics.safe_metric(
+                    lambda: metrics.VISIBLE_LATENCY.observe(max(0, (now - row['started_at']).total_seconds()))
+                )
         if not derive and not on_open and live_title_enabled():
             for row in rows:
                 if policy.live_title_candidate(row) and not row.get(policy.LIVE_TITLE_STATE):
                     await _maybe_publish_live_title(uid, key, token, row)
-        metrics.RECONCILES.labels('committed').inc()
+        metrics.safe_metric(lambda: metrics.RECONCILES.labels('committed').inc())
         deferred = preview_wakes(rows, recordings)
     except Conflict as error:
         primary_failed = True
@@ -856,24 +865,28 @@ async def reconcile(
             try:
                 await run_blocking(db_executor, enqueue, uid, at=datetime.now(timezone.utc) + RACE_RETRY)
             except Exception as dispatch:
-                metrics.RECONCILES.labels('dispatch_error').inc()
-                metrics.RECONCILES.labels('error').inc()
-                logger.warning('v3 reconcile race wake failed exception_type=%s', type(dispatch).__name__)
+                metrics.safe_metric(lambda: metrics.RECONCILES.labels('dispatch_error').inc())
+                metrics.safe_metric(lambda: metrics.RECONCILES.labels('error').inc())
+                metrics.safe_metric(
+                    lambda: logger.warning('v3 reconcile race wake failed exception_type=%s', type(dispatch).__name__)
+                )
                 raise error from dispatch
-            metrics.RECONCILES.labels('raced').inc()
-            metrics.RACES.labels(reason).inc()
-            logger.info('v3 reconcile raced reason=%s', reason)
+            metrics.safe_metric(lambda: metrics.RECONCILES.labels('raced').inc())
+            metrics.safe_metric(lambda: metrics.RACES.labels(reason).inc())
+            metrics.safe_metric(lambda: logger.info('v3 reconcile raced reason=%s', reason))
             primary_failed = False
             return 'raced'
         if reason not in BLOCKED:
-            metrics.RECONCILES.labels('error').inc()
+            metrics.safe_metric(lambda: metrics.RECONCILES.labels('error').inc())
             raise
         # A deterministic conflict fails identically on every retry: answer the task (no Cloud Tasks
         # retry storm through the shared queue) and back this owner off; v3_pending stays owed.
-        metrics.RECONCILES.labels('blocked').inc()
-        metrics.BLOCKED.labels(reason).inc()
-        logger.warning(
-            'v3 reconcile blocked reason=%s owner=%s cause=%s', reason, owner_tag(uid), redacted_cause(error)
+        metrics.safe_metric(lambda: metrics.RECONCILES.labels('blocked').inc())
+        metrics.safe_metric(lambda: metrics.BLOCKED.labels(reason).inc())
+        metrics.safe_metric(
+            lambda: logger.warning(
+                'v3 reconcile blocked reason=%s owner=%s cause=%s', reason, owner_tag(uid), redacted_cause(error)
+            )
         )
         report['blocked_reason'] = reason
         if not derive:
@@ -884,7 +897,7 @@ async def reconcile(
     except BaseException as error:
         primary_failed = True
         if isinstance(error, Exception):
-            metrics.RECONCILES.labels('error').inc()
+            metrics.safe_metric(lambda: metrics.RECONCILES.labels('error').inc())
         raise
     finally:
         await _release_reconcile_lease(uid, key, token, primary_failed=primary_failed)
@@ -929,8 +942,12 @@ async def _maybe_publish_live_title(uid, key, token, row):
             if title and live_title_enabled():
                 await run_blocking(db_executor, store.write_live_title_preview, *args, title=title)
     except Exception as error:
-        logger.warning('event=v3_live_title exception_type=%s', type(error).__name__)
-        record_fallback(component='other', from_mode='none', to_mode='none', reason='other', outcome='degraded')
+        metrics.safe_metric(lambda: logger.warning('event=v3_live_title exception_type=%s', type(error).__name__))
+        metrics.safe_metric(
+            lambda: record_fallback(
+                component='other', from_mode='none', to_mode='none', reason='other', outcome='degraded'
+            )
+        )
 
 
 def _held_claims(recordings, cid):
@@ -1129,7 +1146,18 @@ def _live_outcome(rows, existing, recordings, *, since, until, run_id):
 
 
 def _commit(
-    uid, token, recordings, existing, rows, cache, *, clear_pending=True, remove=(), retire=None, key='builder'
+    uid,
+    token,
+    recordings,
+    existing,
+    rows,
+    cache,
+    *,
+    clear_pending=True,
+    remove=(),
+    removed_ids=None,
+    retire=None,
+    key='builder',
 ):
     from google.api_core.exceptions import InvalidArgument
 
@@ -1145,6 +1173,7 @@ def _commit(
             cache,
             clear_pending=clear_pending,
             remove=remove,
+            removed_ids=removed_ids,
             retire=retire,
             key=key,
         )
@@ -1297,8 +1326,14 @@ def _process(uid, row, token):
             return
         if not persisted or not persisted[-1] or getattr(result.status, 'value', result.status) != 'completed':
             raise RuntimeError('v3_processing_not_completed')
-        metrics.SUMMARY_WRITES.labels('rewrite' if row.get('v3_rewrites') else 'first').inc()
-    metrics.SUMMARY_LATENCY.observe(max(0, (datetime.now(timezone.utc) - row['finished_at']).total_seconds()))
+        metrics.safe_metric(
+            lambda: metrics.SUMMARY_WRITES.labels('rewrite' if row.get('v3_rewrites') else 'first').inc()
+        )
+    metrics.safe_metric(
+        lambda: metrics.SUMMARY_LATENCY.observe(
+            max(0, (datetime.now(timezone.utc) - row['finished_at']).total_seconds())
+        )
+    )
     word_floor_outcomes = None
     if not (passive or manual or row.get('backfilled') or row.get('v3_rewrites')) and any(
         map(has_unspaced_script, texts)
