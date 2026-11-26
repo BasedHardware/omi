@@ -17,7 +17,6 @@ import 'package:omi/l10n/app_localizations.dart';
 import 'package:omi/pages/action_items/widgets/goal_form_sheet.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/pages/conversations/widgets/goals_widget.dart';
-import 'package:omi/pages/episodes/finish_capture.dart';
 import 'package:omi/pages/episodes/finished_capture_page.dart';
 import 'package:omi/pages/home/firmware_mixin.dart';
 import 'package:omi/pages/home/firmware_update.dart';
@@ -324,20 +323,6 @@ void main() {
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 600));
     expect(signedOut, 1);
-  });
-
-  testWidgets('C2: the record button with the mic blocked offers Open Settings', (tester) async {
-    await tester.pumpWidget(_app(Scaffold(
-      body: Builder(
-        builder: (context) => TextButton(onPressed: () => showMicBlocked(context), child: const Text('record')),
-      ),
-    )));
-    await tester.tap(find.text('record'));
-    await tester.pump();
-    expect(find.text('Allow the microphone to record.'), findsOneWidget);
-    expect(find.text('Open Settings'), findsOneWidget);
-    expect(find.textContaining('Something went wrong'), findsNothing);
-    await tester.pump(const Duration(seconds: 9));
   });
 
   testWidgets('C6: the processing page ends on its first read when the recording was discarded', (tester) async {

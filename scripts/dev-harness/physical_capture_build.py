@@ -174,7 +174,7 @@ def main():
     parser.add_argument("--auth-port", type=int, required=True)
     parser.add_argument("--fixture-uid", required=True)
     parser.add_argument("--capture-seconds", type=int, default=20)
-    parser.add_argument("--capture-source", choices=("phone_mic", "wearable"), default="phone_mic")
+    parser.add_argument("--capture-source", choices=("wearable",), default="wearable")
     parser.add_argument("--wearable-id", help="Optional discovered wearable ID for the real BLE capture scenario")
     parser.add_argument("--prepare-only", action="store_true")
     args = parser.parse_args()
@@ -283,8 +283,8 @@ def main():
         "OMI_FIREBASE_AUTH_EMULATOR_HOST": args.auth_host,
         "OMI_FIREBASE_AUTH_EMULATOR_PORT": str(args.auth_port),
         "OMI_PHYSICAL_FIXTURE_UID": args.fixture_uid,
-        "OMI_PHYSICAL_CAPTURE_SECONDS": str(args.capture_seconds),
         "OMI_PHYSICAL_CAPTURE_SOURCE": args.capture_source,
+        "OMI_PHYSICAL_CAPTURE_SECONDS": str(args.capture_seconds),
     }
     if args.wearable_id:
         defines["OMI_PHYSICAL_WEARABLE_ID"] = args.wearable_id
@@ -315,7 +315,6 @@ def main():
         "CODE_SIGN_IDENTITY": args.identity, "PROVISIONING_PROFILE_SPECIFIER": profile["UUID"],
         "INFOPLIST_FILE": "Info.plist", "GENERATE_INFOPLIST_FILE": "NO",
         "SWIFT_OBJC_BRIDGING_HEADER": "Runner/Runner-Bridging-Header.h",
-        "HEADER_SEARCH_PATHS": ["$(inherited)", "$(PROJECT_DIR)/Runner/PhoneMic"],
         "SWIFT_VERSION": "5.0", "ENABLE_BITCODE": "NO", "ENABLE_USER_SCRIPT_SANDBOXING": "NO",
         "BUILD_LIBRARY_FOR_DISTRIBUTION": "NO",
         "CLANG_ALLOW_NON_MODULAR_INCLUDES_IN_FRAMEWORK_MODULES": "YES",
@@ -362,7 +361,7 @@ def main():
         run(["pod", "install"], ios, output / "pod-install.log")
     receipt = {"app_source": str(app), "git_head": subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=app, text=True).strip(),
                "bundle_id": args.bundle_id, "defines": defines, "excluded_plugins": sorted(EXCLUDED_PLUGINS),
-               "scope": "Physical capture qualification; real Runner/BLE/phone mic; no extensions or shared entitlements",
+               "scope": "Physical capture qualification; real Runner/BLE; no extensions or shared entitlements",
                "source_sha256": {str(p.relative_to(runner)): hashlib.sha256(p.read_bytes()).hexdigest() for p in runner.rglob("*.swift")},
                "dart_input_sha256": input_hashes(app),
                "native_registry_sha256": hashlib.sha256(registry.read_bytes()).hexdigest(),

@@ -3,8 +3,9 @@ import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path_provider_platform_interface/path_provider_platform_interface.dart';
 
-import 'package:omi/gen/phone_mic_pigeon.g.dart';
 import 'package:omi/services/capture/scenarios/capture_scenario.dart';
+import 'package:omi/backend/schema/bt_device/bt_device.dart';
+import '../../test/support/capture/scripted_device_connection.dart';
 import 'package:omi/services/dev_controls/journey_faults.dart';
 import 'package:omi/services/wals/wal.dart';
 
@@ -15,10 +16,10 @@ import 'support/journey_evidence.dart';
 /// audio (SCA-488 / C2).
 ///
 /// Executes through the C3 `capture-scenario/v1` lane: the REAL production
-/// capture path (CaptureController → NativeMicRecorderService → frame
+/// capture path (CaptureController → BLE device source → frame
 /// processing → file-backed WAL → RecordingTransferCoordinator) over
 /// controlled external I/O (virtual clock, scripted socket, scripted upload
-/// boundary, fake native host). This journey composes the
+/// boundary, scripted BLE connection). This journey composes the
 /// `network-loss-reconnect-during-capture` schedule from the consumer side
 /// and asserts the journey-level outcomes:
 ///
@@ -27,8 +28,7 @@ import 'support/journey_evidence.dart';
 ///   2. reconnect drains the persisted audio through the real upload
 ///      boundary exactly once (no duplicate upload attempts for the same
 ///      bytes),
-///   3. the live recording identity is `activeRecordingId`/native session
-///      id — never `activeCaptureSessionId` uniqueness (documented C3
+///   3. the live recording identity is `activeRecordingId` — never `activeCaptureSessionId` uniqueness (documented C3
 ///      limitation).
 ///
 /// Negative: fail-capture-recovery makes every post-reconnect upload fail
@@ -54,17 +54,19 @@ void main() {
   test('positive: interruption persists recoverable audio; reconnect uploads it exactly once', () async {
     final evidence = JourneyEvidence.begin(journeyId: 'j5_capture_interruption_reconnect', lane: 'hermetic-replay');
     evidence.stateBefore = {'contract': captureScenarioContractVersion};
-    final world = await CaptureReplayWorld.boot(tempDir: tempDir);
+    final world = await CaptureReplayWorld.boot(tempDir: tempDir, pendantCodec: BleAudioCodec.opus);
     addTearDown(world.dispose);
 
-    // Live capture with a real native session id.
-    await world.startLiveCapture();
-    final session1 = world.hostApi.lastStartSessionId!;
-    world.emitNativeState(PhoneMicCaptureState.running);
+    final link = ScriptedDeviceConnection();
+    world.deviceConnection = link;
+    await world.controller
+        .streamDeviceRecording(device: BtDevice(id: 'pendant-j5', name: 'Omi', type: DeviceType.omi, rssi: -40));
+    await world.settle();
 
+    final recordingId = world.controller.activeRecordingId;
     // 5s online, then the transport dies mid-capture.
     for (var s = 0; s < 5; s++) {
-      world.injectAudioFrames(100, sessionId: session1, firstFrameIndex: s * 100);
+      link.emitFixtureFrames(100, firstFrameIndex: s * 100);
       await world.elapse(const Duration(seconds: 1));
     }
     world.setConnected(false);
@@ -75,14 +77,11 @@ void main() {
     // frames keep flowing into the file-backed WAL while elapsing virtual
     // time lets the chunker persist them to disk.
     for (var s = 0; s < 12; s++) {
-      world.injectAudioFrames(100, sessionId: session1, firstFrameIndex: 500 + s * 100);
+      link.emitFixtureFrames(100, firstFrameIndex: 500 + s * 100);
       await world.elapse(const Duration(seconds: 1));
     }
-    await world.stopLiveCapture();
-
-    // Capture the live identity BEFORE process death: reconstruction swaps
-    // the native host, so the authoritative ids come from the pre-kill host.
-    final startSessionIdsBeforeKill = List<int>.of(world.hostApi.startSessionIds);
+    await world.controller.stopStreamDeviceRecording();
+    await world.settle();
 
     // Process death: the object graph is dropped; only real temp files
     // remain. Reconstruction must reload WAL state from disk.
@@ -124,12 +123,10 @@ void main() {
         reason: 'each persisted audio file must be uploaded exactly once after reconnect (got $attemptsByFile)');
 
     // Live identity rule: the authoritative recording identity is the
-    // recording id + native session ids (C3 contract).
-    final identitySane = startSessionIdsBeforeKill.isNotEmpty;
+    // recording id (C3 contract).
+    final identitySane = recordingId != null && recordingId.isNotEmpty;
     evidence.record('live-identity-authoritative',
-        ok: identitySane,
-        invariant:
-            'live capture identity comes from the native session id (activeCaptureSessionId is a window, not a per-recording id)');
+        ok: identitySane, invariant: 'live capture identity comes from the coordinator recording id');
     expect(identitySane, isTrue);
 
     evidence.stateAfter = {'wals_drained': attemptsByFile.length, 'contract': captureScenarioContractVersion};
@@ -144,24 +141,27 @@ void main() {
     final evidence = JourneyEvidence.begin(
         journeyId: 'j5_capture_interruption_reconnect.fail-capture-recovery', lane: 'hermetic-replay');
     evidence.stateBefore = {'contract': captureScenarioContractVersion, 'fault': JourneyFault.failCaptureRecovery.name};
-    final world = await CaptureReplayWorld.boot(tempDir: tempDir);
+    final world = await CaptureReplayWorld.boot(tempDir: tempDir, pendantCodec: BleAudioCodec.opus);
     addTearDown(world.dispose);
 
-    await world.startLiveCapture();
-    final session1 = world.hostApi.lastStartSessionId!;
-    world.emitNativeState(PhoneMicCaptureState.running);
+    final link = ScriptedDeviceConnection();
+    world.deviceConnection = link;
+    await world.controller
+        .streamDeviceRecording(device: BtDevice(id: 'pendant-j5', name: 'Omi', type: DeviceType.omi, rssi: -40));
+    await world.settle();
     for (var s = 0; s < 5; s++) {
-      world.injectAudioFrames(100, sessionId: session1, firstFrameIndex: s * 100);
+      link.emitFixtureFrames(100, firstFrameIndex: s * 100);
       await world.elapse(const Duration(seconds: 1));
     }
     world.setConnected(false);
     world.socket!.emitClose();
     await world.settle();
     for (var s = 0; s < 12; s++) {
-      world.injectAudioFrames(100, sessionId: session1, firstFrameIndex: 500 + s * 100);
+      link.emitFixtureFrames(100, firstFrameIndex: 500 + s * 100);
       await world.elapse(const Duration(seconds: 1));
     }
-    await world.stopLiveCapture();
+    await world.controller.stopStreamDeviceRecording();
+    await world.settle();
 
     // FAULT: every upload attempt fails like a refused request, forever.
     world.uploads.failAll = true;

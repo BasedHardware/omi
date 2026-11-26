@@ -11,7 +11,6 @@ class BatchAudioEnergyTest < Minitest::Test
       Runner/SafeFoundationSinks.swift
       Runner/Batch/BaseBatchAudioWriter.swift
       Runner/Batch/BatchAudioWriter.swift
-      Runner/PhoneMic/PhoneMicBatchAudioWriter.swift
       test/batch_audio_energy_test.swift
     ].map { |path| File.join(ios_root, path) }
     Dir.mktmpdir('omi-batch-energy') do |directory|

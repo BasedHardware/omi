@@ -55,14 +55,6 @@ Never run `flutterfire configure` — it overwrites prod credentials. Config fil
 - Android: `android/app/src/main/kotlin/com/friend/ios/phonecalls/PhoneCallsPlugin.kt`
 - Methods: initialize, makeCall, endCall, toggleMute, toggleSpeaker
 
-### Pigeon (Phone Mic — conversation capture)
-- Contract: `lib/phone_mic_interface.dart` → `lib/gen/phone_mic_pigeon.g.dart` + `ios/Runner/PhoneMic/PhoneMicPigeon.g.swift` + `android/app/src/main/kotlin/com/friend/ios/phonemic/PhoneMicPigeon.g.kt`
-- Regenerate: `dart run pigeon --input lib/phone_mic_interface.dart`
-- Modules: iOS `ios/Runner/PhoneMic/` (self-healing AVAudioEngine capture; interruptions/routes recover natively); Android `android/app/src/main/kotlin/com/friend/ios/phonemic/` (AudioRecord with self-healing rebuild + silencing detection; `PhoneMicForegroundService` keeps background capture alive; batch opus encode via a JNI shim over the plugin-shipped libopus)
-- Dart service: `lib/services/mic/native_mic_recorder_service.dart` behind `ServiceManager.phoneMic`; chat memos/speech profile stay on flutter_sound via `ServiceManager.mic`; `MicArbiter` arbitrates the two stacks
-- Events carry a Dart-minted session id (`start(mode, sessionId)`); Dart drops foreign-id events, `start()` onto a live session adopts the new id and re-emits state, and `stop()` always forwards to native then tears down locally once
-- Two capture modes fixed at `start(mode)`: `stream` (frames → Dart → socket/WAL) and `batch` (Transcribe Later — opus → WAL-compatible `audio_omibatchphone[auto]_…bin`; no frames cross to Dart; liveness = `onBatchProgress`: iOS 4s healthy/1s fault, Android 1Hz; Dart 10s unchanged). Selection: `CaptureController.streamRecording` (explicit/offline); `omibatchphoneauto` uploads on reconnect
-
 On-device speech deadlines and cleanup: [contract](../.github/agent-docs/on-device-speech.md).
 
 ### MethodChannel (On-device tool surface)
@@ -100,7 +92,7 @@ make mobile-verify ARGS="fast --all"                   # full hermetic journey s
 
 `test.sh` bootstraps missing inputs with empty `API_BASE_URL`. Journey selection/receipts/CI: `scripts/dev-harness/MOBILE_VERIFY.md`.
 
-Native: `ruby ios/test/batch_audio_energy_test.rb`; [phone/BLE replay](../scripts/dev-harness/IPHONE_HARNESS.md).
+Native: `ruby ios/test/batch_audio_energy_test.rb`.
 
 ### Performance
 UI: `bash app/tool/perf_gate.sh` ([guide](integration_test/perf/README.md)); red blocks shipping.

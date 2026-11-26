@@ -1119,6 +1119,10 @@ class ReconnectPhoneStage extends CaptureStage {
   const ReconnectPhoneStage();
 }
 
+class ReconnectSystemAudioStage extends CaptureStage {
+  const ReconnectSystemAudioStage();
+}
+
 class MicInterruptionStage extends CaptureStage {
   const MicInterruptionStage({required this.began});
   final bool began;
@@ -3076,6 +3080,7 @@ CaptureTransition _reduceKeepAlive(CaptureCoordinatorState state, KeepAliveTick 
     if (env.deviceRecording && state.connectedDevice != null && !env.paused) {
       return CaptureTransition(state, const [RunStage(ReconnectDeviceStage(testingProbe: true))]);
     }
+    if (env.systemAudioRecording) return CaptureTransition(state, const [RunStage(ReconnectSystemAudioStage())]);
     if (env.micCapturing) return CaptureTransition(state, const [RunStage(ReconnectPhoneStage())]);
   }
   if (!env.deviceServiceReady || env.transcriptReady || !env.signedIn()) {
@@ -3084,7 +3089,10 @@ CaptureTransition _reduceKeepAlive(CaptureCoordinatorState state, KeepAliveTick 
   if (state.phase == CapturePhase.pendantLive && env.deviceRecording && !env.paused) {
     return CaptureTransition(state, const [RunStage(ReconnectDeviceStage())]);
   }
-  if (env.micCapturing && (state.phoneOwns || env.systemAudioRecording)) {
+  if (env.systemAudioRecording) {
+    return CaptureTransition(state, const [RunStage(ReconnectSystemAudioStage())]);
+  }
+  if (env.micCapturing && state.phoneOwns) {
     return CaptureTransition(state, const [RunStage(ReconnectPhoneStage())]);
   }
   return CaptureTransition(state, const []);

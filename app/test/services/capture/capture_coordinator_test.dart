@@ -7,7 +7,6 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/backend/schema/phone_call.dart';
-import 'package:omi/gen/phone_mic_pigeon.g.dart';
 import 'package:omi/services/capture/capture_coordinator.dart';
 import 'package:omi/services/wals/wal.dart';
 import 'package:omi/utils/enums.dart';
@@ -2411,6 +2410,7 @@ void main() {
       world.controller.updateRecordingDevice(null, reconnectDeviceId: pendant.id);
       await world.controller.pendingSourceSwitch;
       expect(world.deviceConnection!.openAudioSubscriptions, 0);
+      expect(world.controller.isPendantAwaitingReconnect, isTrue);
       // Native can deliver a resubscribed packet before the provider's
       // debounced connect publishes recordingDevice again.
       world.deviceConnection!.emitAudio(value: 6);
@@ -2428,6 +2428,7 @@ void main() {
       await world.controller.streamDeviceRecording(device: pendant);
       await world.settle();
       expect(world.controller.activeRecordingId, original);
+      expect(world.controller.isPendantAwaitingReconnect, isFalse);
       expect(world.socketRecordingIds, everyElement(original));
       expect(world.deviceConnection!.openAudioSubscriptions, 1);
       world.deviceConnection!.emitAudio(value: 9);
@@ -2605,68 +2606,6 @@ void main() {
     });
   }
 
-  test('real controller rejects denied phone permission before touching the pendant', () async {
-    await withReviewWorld((world) async {
-      world.deviceConnection = ScriptedDeviceConnection();
-      await world.controller.streamDeviceRecording(device: pendant);
-      await world.settle();
-      final id = world.controller.activeRecordingId;
-      final sockets = world.socketCreates;
-      world.allowMic = false;
-      await expectLater(world.controller.streamRecording(), throwsA(isA<StateError>()));
-      await world.settle();
-      expect(world.controller.liveCaptureSource, 'omi');
-      expect(world.controller.activeRecordingId, id);
-      expect(world.controller.pendantPausedForPhone, isFalse);
-      expect(world.hostApi.startCalls, 0);
-      expect(world.socketCreates, sockets);
-      expect(world.processCalls, 0);
-    });
-  });
-
-  test('denied speech-profile phone resume keeps pendant suspended until an admitted stop', () async {
-    await withReviewWorld((world) async {
-      final connection = world.deviceConnection = ScriptedDeviceConnection();
-      await world.controller.streamDeviceRecording(device: pendant);
-      await world.controller.streamRecording();
-      await world.controller.stopStreamRecording(resumeHandedOffPendant: false);
-      await world.settle();
-      expect(world.controller.liveCaptureSource, isNull);
-      expect(world.controller.pendantPausedForPhone, isTrue);
-      expect(connection.openAudioSubscriptions, 0);
-      world.allowMic = false;
-      await expectLater(world.controller.streamRecording(), throwsA(isA<StateError>()));
-      await world.settle();
-      expect(world.controller.liveCaptureSource, isNull);
-      expect(world.controller.pendantPausedForPhone, isTrue);
-      expect(connection.openAudioSubscriptions, 0);
-      world.allowMic = true;
-      await world.controller.streamRecording();
-      await world.controller.stopStreamRecording();
-      await world.settle();
-      expect(world.controller.liveCaptureSource, 'omi');
-      expect(world.controller.pendantPausedForPhone, isFalse);
-      expect(connection.openAudioSubscriptions, 1);
-    });
-  });
-
-  test('native mic startup failure restores the pendant with a new recording', () async {
-    await withReviewWorld((world) async {
-      world.deviceConnection = ScriptedDeviceConnection();
-      await world.controller.streamDeviceRecording(device: pendant);
-      await world.settle();
-      final oldId = world.controller.activeRecordingId;
-      world.hostApi.nextStartError = () => StateError('injected native start failure');
-      await expectLater(world.controller.streamRecording(), throwsA(isA<StateError>()));
-      await world.settle();
-      expect(world.controller.liveCaptureSource, 'omi');
-      expect(world.controller.pendantPausedForPhone, isFalse);
-      expect(world.controller.activeRecordingId, isNot(oldId));
-      expect(world.controller.activeRecordingId, isNotNull);
-      expect(world.hostApi.nativeRecording, isFalse);
-    });
-  });
-
   test('muted pendant connect retains a telemetry recording id across resume', () async {
     await withReviewWorld((world) async {
       await world.controller.pauseDeviceRecording();
@@ -2737,11 +2676,11 @@ void main() {
       // The recovery start is unawaited and does real WAL/device I/O, so a
       // loaded runner can need more turns than one settle; wait for it, bounded.
       final deadline = DateTime.now().add(const Duration(seconds: 10));
-      while (world.controller.recordingState != RecordingState.pause && DateTime.now().isBefore(deadline)) {
+      while (world.controller.liveCaptureSource == null && DateTime.now().isBefore(deadline)) {
         await world.settle();
+        await world.controller.pendingSourceSwitch;
         await Future<void>.delayed(const Duration(milliseconds: 20));
       }
-      await world.settle();
       expect(world.controller.liveCaptureSource, 'omi');
       expect(world.controller.isPaused, isTrue);
       expect(world.controller.recordingState, RecordingState.pause);
@@ -2794,75 +2733,14 @@ void main() {
     });
   });
 
-  test('real mode change mints a different recording id and identical toggles do not roll', () async {
+  test('an unmuted start without BLE ingress leaves capture idle', () async {
     await withReviewWorld((world) async {
-      await world.startLiveCapture();
-      world.emitNativeState(PhoneMicCaptureState.running);
+      await world.controller.streamDeviceRecording(device: pendant);
       await world.settle();
-      final liveId = world.controller.activeRecordingId;
-      expect(liveId, isNotNull);
-      expect(await world.controller.setBatchMode(true), isTrue);
-      await world.settle();
-      final batchId = world.controller.activeRecordingId;
-      expect(batchId, isNotNull);
-      expect(batchId, isNot(liveId));
-      expect(world.hostApi.lastStartMode, PhoneMicCaptureMode.batch);
-      final startCalls = world.hostApi.startCalls;
-      expect(await world.controller.setBatchMode(true), isTrue);
-      expect(world.controller.activeRecordingId, batchId);
-      expect(world.hostApi.startCalls, startCalls);
-      expect(await world.controller.setBatchMode(false), isTrue);
-      expect(world.controller.activeRecordingId, isNot(batchId));
-    });
-  });
 
-  test('public controller getters publish owner only after a held native start completes', () async {
-    await withReviewWorld((world) async {
-      final hold = world.hostApi.holdNextStart = Completer<void>();
-      final entered = world.hostApi.nextStartEntered = Completer<void>();
-      final start = world.controller.streamRecording();
-      try {
-        await entered.future.timeout(const Duration(seconds: 15));
-        expect(world.hostApi.startCalls, 1);
-        expect(world.controller.liveCaptureSource, isNull);
-        expect(world.controller.isPhoneMicPaused, isFalse);
-        expect(world.controller.isPhoneMicBatchRecording, isFalse);
-        hold.complete();
-        await start;
-        expect(world.controller.liveCaptureSource, 'phone');
-      } finally {
-        if (!hold.isCompleted) hold.complete();
-        await start;
-      }
-    });
-  });
-
-  test('real stall restart is joined by queued pause and cannot reopen the mic afterward', () async {
-    await withReviewWorld((world) async {
-      await world.startLiveCapture();
-      world.emitNativeState(PhoneMicCaptureState.running);
-      world.injectAudioFrames(1, sessionId: world.hostApi.lastStartSessionId!);
-      await world.settle();
-      final hold = world.hostApi.holdNextStart = Completer<void>();
-      final entered = world.hostApi.nextStartEntered = Completer<void>();
-      final stall = world.elapse(const Duration(seconds: 4));
-      try {
-        await entered.future.timeout(const Duration(seconds: 15));
-        expect(world.hostApi.startCalls, 2);
-        final pause = world.controller.pauseCapture();
-        hold.complete();
-        await stall;
-        await pause;
-        await world.settle();
-        expect(world.controller.isPhoneMicPaused, isTrue);
-        expect(world.hostApi.nativeRecording, isFalse);
-        expect(world.hostApi.startCalls, 2);
-        await pumpEventQueue();
-        expect(world.hostApi.nativeRecording, isFalse);
-      } finally {
-        if (!hold.isCompleted) hold.complete();
-        await stall;
-      }
+      expect(world.controller.liveCaptureSource, isNull);
+      expect(world.controller.recordingState, RecordingState.stop);
+      expect(world.controller.activeRecordingId, isNull);
     });
   });
 
@@ -2950,86 +2828,28 @@ void main() {
     });
   });
 
-  test('real killed phone pause restores policy and never resurrects an owner', () async {
-    await withReviewWorld((world) async {
-      await world.startLiveCapture();
-      await world.controller.pauseCapture();
-      await world.settle();
-      expect(world.controller.isPhoneMicPaused, isTrue);
-      world.killProcess();
-      await world.reconstructProcess();
-      await world.controller.pendingSourceSwitch;
-      expect(world.controller.liveCaptureSource, isNull);
-      expect(world.hostApi.nativeRecording, isFalse);
-      expect(SharedPreferencesUtil().capturePolicy.muted, isFalse);
+  test('upgrade restores the capture policy from an interrupted phone recording', () async {
+    final directory = await Directory.systemTemp.createTemp('capture_upgrade_');
+    final world = await CaptureReplayWorld.boot(
+      tempDir: directory,
+      initialPrefs: {
+        'deviceMuted': true,
+        'capturePhoneRestorePending': true,
+        'capturePhoneRestoreMuted': false,
+      },
+    );
+    addTearDown(() async {
+      await world.dispose();
+      await directory.delete(recursive: true);
     });
-  });
+    await world.settle();
 
-  for (final episode in <({String name, List<int> steps})>[
-    (name: 'phone-pause', steps: [2, 4, 5, 3]),
-    (name: 'pendant-handoff', steps: [0, 2, 3]),
-    (name: 'call-suspension', steps: [0, 6, 7]),
-    (name: 'reconnect-under-phone', steps: [2, 0, 3]),
-  ]) {
-    test('real CaptureController agrees with reducer: ${episode.name}', () async {
-      final directory = await Directory.systemTemp.createTemp('capture_coordinator_conformance_');
-      final world = await CaptureReplayWorld.boot(tempDir: directory);
-      final model = SequenceModel();
-      try {
-        for (final code in episode.steps) {
-          switch (code) {
-            case 0:
-              world.deviceConnection = ScriptedDeviceConnection();
-              await world.controller.streamDeviceRecording(device: pendant);
-            case 2:
-              await world.startLiveCapture();
-              world.emitNativeState(PhoneMicCaptureState.running);
-            case 3:
-              await world.stopLiveCapture();
-            case 4:
-              await world.controller.pauseCapture();
-            case 5:
-              await world.controller.resumeCapture();
-            case 6:
-              world.omiCall.value = PhoneCallState.active;
-              await world.controller.pendingSourceSwitch;
-            case 7:
-              world.omiCall.value = PhoneCallState.ended;
-              await world.controller.pendingSourceSwitch;
-          }
-          await world.settle();
-          model.step(ScriptStep(code));
-          final state = model.state;
-          expect(
-            world.controller.liveCaptureSource,
-            state.phoneOwns
-                ? 'phone'
-                : state.pendantOwns
-                    ? 'omi'
-                    : null,
-            reason: '${episode.name} after ${ScriptStep(code)}',
-          );
-          expect(
-            world.controller.pendantPausedForPhone,
-            state.pendantSuspension?.reason == SuspendReason.phone,
-            reason: '${episode.name} after ${ScriptStep(code)}',
-          );
-          expect(
-            world.controller.pendantPausedForCall,
-            state.pendantSuspension?.reason == SuspendReason.call,
-            reason: '${episode.name} after ${ScriptStep(code)}',
-          );
-          if (state.phase == CapturePhase.phonePaused) {
-            expect(world.controller.isPhoneMicPaused, isTrue);
-            expect(world.hostApi.stopCalls, greaterThan(0));
-          }
-        }
-      } finally {
-        await world.dispose();
-        if (directory.existsSync()) directory.deleteSync(recursive: true);
-      }
-    });
-  }
+    final prefs = SharedPreferencesUtil();
+    expect(prefs.capturePolicy.muted, isFalse);
+    expect(prefs.getBool('capturePhoneRestorePending'), isFalse);
+    expect(world.controller.liveCaptureSource, isNull);
+    expect(world.sockets, isEmpty);
+  });
 
   test('serialized dispatch waits for the earlier effect and survives a failing port', () async {
     final fake = HarnessPorts();

@@ -64,17 +64,12 @@ class BuildAttributionTests(unittest.TestCase):
 
             overrides = {"HERE": here}
             if lane == "phone_mic_probe":
-                mic = root / "app/ios/Runner/PhoneMic"
-                mic.mkdir(parents=True)
-                (mic / "PhoneMicPigeon.g.swift").write_text(
-                    "enum PhoneMicCaptureState: Int {\n}\nenum PhoneMicCaptureMode: Int {\n}\n"
-                    "final class PhoneMicPigeonError: Error {\n}\n")
                 (here / "WearableProbe.swift").write_text("synthetic wearable source")
                 models = root / "app/lib/services/devices/models.dart"
                 models.parent.mkdir(parents=True)
                 models.write_text("const String omiServiceUuid = 'a-b';\n"
                                   "const String audioDataStreamCharacteristicUuid = 'c-d';\n")
-                overrides.update(ROOT=root, MIC=mic, SOURCES=[], __file__=str(here / "build.py"))
+                overrides.update(ROOT=root, __file__=str(here / "build.py"))
                 profile = root / "synthetic-profile"
                 profile.write_bytes(b"synthetic")
                 args = argparse.Namespace(check=False, profile=profile, identity="synthetic-identity")

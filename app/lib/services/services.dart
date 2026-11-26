@@ -9,15 +9,12 @@ import 'package:flutter_sound/flutter_sound.dart';
 import 'package:omi/backend/http/http_pool_manager.dart';
 import 'package:omi/services/connectivity_service.dart';
 import 'package:omi/services/devices.dart';
-import 'package:omi/services/mic/mic_arbiter.dart';
-import 'package:omi/services/mic/native_mic_recorder_service.dart';
 import 'package:omi/services/sockets.dart';
 import 'package:omi/services/wals.dart';
 import 'package:omi/utils/logger.dart';
 
 class ServiceManager {
   late IMicRecorderService _mic;
-  late IMicRecorderService _phoneMic;
   late DeviceService _device;
   late ISocketService _socket;
   late IWalService _wal;
@@ -25,26 +22,7 @@ class ServiceManager {
 
   static ServiceManager _create() {
     ServiceManager sm = ServiceManager();
-    final micArbiter = MicArbiter();
-    sm._mic = ArbitratedMic(
-      inner: MicRecorderBackgroundService(runner: BackgroundService()),
-      arbiter: micArbiter,
-      owner: 'mic',
-    );
-    // Conversation capture uses the native recorder on iOS (AVAudioEngine) and
-    // Android (AudioRecord); chat voice memos and the speech profile stay on the
-    // flutter_sound path via [mic]. The shared arbiter keeps the two stacks from
-    // contending for the microphone.
-    // iOS lengthens the healthy-state watchdog poll (5s, deadline-capped).
-    // Android keeps the 1s poll; its native heartbeat also does mode checks
-    // that this flag must not slow down.
-    sm._phoneMic = (Platform.isIOS || Platform.isAndroid)
-        ? ArbitratedMic(
-            inner: NativeMicRecorderService(paceHealthyChecks: Platform.isIOS),
-            arbiter: micArbiter,
-            owner: 'conversation',
-          )
-        : sm._mic;
+    sm._mic = MicRecorderBackgroundService(runner: BackgroundService());
     sm._device = DeviceService();
     sm._socket = SocketServicePool();
     sm._wal = WalService();
@@ -61,10 +39,6 @@ class ServiceManager {
   }
 
   IMicRecorderService get mic => _mic;
-
-  /// The recorder for conversation capture: native on iOS and Android,
-  /// flutter_sound elsewhere. Chat voice memos and speech profile keep using [mic].
-  IMicRecorderService get phoneMic => _phoneMic;
 
   DeviceService get device => _device;
 
@@ -92,9 +66,6 @@ class ServiceManager {
     if (!LocalWalSyncImpl.stopTailDrainEnabled) await _wal.stop();
     try {
       _mic.stop();
-      if (!identical(_phoneMic, _mic)) {
-        _phoneMic.stop();
-      }
       await _device.stop();
     } finally {
       if (LocalWalSyncImpl.stopTailDrainEnabled) await _wal.stop();
@@ -284,18 +255,12 @@ abstract class IMicRecorderService {
     Function()? onStop,
     Function()? onInitializing,
     Function()? onStalled,
-    // Fired with began=true/false around an audio-session interruption. Only
-    // NativeMicRecorderService emits it — capture resumes natively; Dart just
-    // mirrors the state.
+    // Optional audio-session interruption callback used by recorder implementations that report it.
     Function(bool began)? onInterruption,
   });
 
-  // Transcribe Later capture: audio is opus-encoded and written to WAL-compatible
-  // .bin files natively (no onByteReceived — nothing streams to Dart). onBatchStalled
-  // fires when the native liveness feed (onBatchProgress) goes silent; onError
-  // forwards non-fatal native failures (e.g. batch_storage_full). Requires the native
-  // recorder (`ServiceManager.phoneMic` on iOS/Android); the flutter_sound
-  // implementations throw UnsupportedError.
+  // Legacy recorder interface used by capture fixtures. Production Transcribe
+  // Later writes wearable audio through its device-specific batch route.
   Future<void> startBatch({
     Function()? onStop,
     Function(bool began)? onInterruption,
@@ -305,10 +270,7 @@ abstract class IMicRecorderService {
 
   void stop();
 
-  /// Soft-rearm frame/progress liveness after the app returns to foreground.
-  /// iOS may suspend Dart timers while Stage Manager lets another app steal
-  /// the mic (#4706). Must not immediately escalate — that races native rebuild
-  /// and false-restarts healthy sessions. No-op on flutter_sound stacks.
+  /// Optional recorder liveness probe after the app returns to foreground.
   void probeStallAfterForeground();
 }
 

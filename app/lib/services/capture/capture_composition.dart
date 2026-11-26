@@ -43,13 +43,16 @@ import 'package:omi/services/experiments/mobile_batch_file_cap_gate.dart';
 import 'package:omi/services/capture/capture_end.dart';
 import 'package:omi/backend/http/api/capture_end.dart';
 
-/// Aggregate of existing CaptureSeams types plus missing I/O boundaries.
-/// All fields required; supplying some fakes can never select production defaults.
+/// I/O dependencies for device capture. The protected C1 fixtures can still
+/// supply the legacy recorder arguments while their stacked base migrates.
 class CaptureDependencies {
   const CaptureDependencies({
     required this.wal,
-    required this.phoneMic,
-    required this.batchSupported,
+    // These inputs let the protected C1 fixtures run on both sides of the
+    // phone recorder removal. Device capture does not use them.
+    IMicRecorderService? phoneMic,
+    bool? batchSupported,
+    Future<bool> Function()? microphonePermission,
     required this.auth,
     required this.connectivity,
     required this.now,
@@ -62,7 +65,6 @@ class CaptureDependencies {
     required this.location,
     required this.localSegments,
     required this.codec,
-    required this.microphonePermission,
     required this.refreshConversation,
     required this.telemetry,
     required this.ensureDeviceConnection,
@@ -70,13 +72,20 @@ class CaptureDependencies {
     this.pendantReconnectBlocked,
     this.excludeSpeaker,
   });
+  @Deprecated('Conversation capture uses wearable audio.')
+  IMicRecorderService get phoneMic => throw UnsupportedError('Phone conversation capture was removed');
+
+  @Deprecated('Query the wearable capture capability instead.')
+  bool get batchSupported => throw UnsupportedError('Phone batch capture was removed');
+
+  @Deprecated('Conversation capture uses wearable audio.')
+  Future<bool> Function() get microphonePermission => throw UnsupportedError('Phone conversation capture was removed');
+
   final Future<DeviceConnection?> Function(String) ensureDeviceConnection;
   final Future<void> Function(String deviceId)? pendantReconnect;
   final bool Function(String deviceId)? pendantReconnectBlocked;
   final RecordingLifecycleTelemetry telemetry;
   final IWalService wal;
-  final IMicRecorderService phoneMic;
-  final bool batchSupported;
   final CaptureAuthBoundary auth;
   final CaptureConnectivityBoundary connectivity;
   final DateTime Function() now;
@@ -89,7 +98,6 @@ class CaptureDependencies {
   final ConversationLocationCapture location;
   final LocalSegmentStore localSegments;
   final Future<BleAudioCodec> Function(String) codec;
-  final Future<bool> Function() microphonePermission;
   final Future<void> Function() refreshConversation;
   final Future<bool> Function(String conversationId, List<String> segmentIds)? excludeSpeaker;
 }
@@ -100,8 +108,6 @@ class CaptureDependencies {
 /// constructs capture only through [composeProductionCaptureProvider].
 CaptureProvider composeCaptureProvider(CaptureDependencies dependencies) => CaptureProvider(
       walService: dependencies.wal,
-      phoneMicRecorder: dependencies.phoneMic,
-      phoneMicBatchSupported: dependencies.batchSupported,
       authBoundary: dependencies.auth,
       connectivity: dependencies.connectivity,
       now: dependencies.now,
@@ -132,7 +138,6 @@ CaptureProvider composeCaptureProvider(CaptureDependencies dependencies) => Capt
       conversationLocationCapture: dependencies.location,
       inProgressConversationLoader: dependencies.refreshConversation,
       audioCodecLoader: dependencies.codec,
-      microphonePermissionRequester: dependencies.microphonePermission,
       recordingTelemetry: dependencies.telemetry,
       localSegmentStore: dependencies.localSegments,
       deviceConnectionLoader: dependencies.ensureDeviceConnection,

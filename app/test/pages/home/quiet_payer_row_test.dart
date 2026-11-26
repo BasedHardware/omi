@@ -85,9 +85,7 @@ class _FakeCapture extends ChangeNotifier implements CaptureProvider {
   @override
   String? liveCaptureSource;
   @override
-  bool isPhoneMicBatchRecording = false;
-  @override
-  bool get isPhoneMicPaused => false;
+  bool isPendantBatchRecording = false;
 
   @override
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
@@ -296,9 +294,8 @@ void main() {
 
   group('shows nothing while something is being recorded or is on its way', () {
     final signals = <String, void Function(_World)>{
-      'a phone-mic capture is live': (w) => w.capture.recordingState = RecordingState.record,
-      'a pendant or call capture is live': (w) => w.capture.liveCaptureSource = 'call',
-      'a phone-mic batch recording is running': (w) => w.capture.isPhoneMicBatchRecording = true,
+      'a pendant capture is live': (w) => w.capture.liveCaptureSource = 'omi',
+      'a wearable batch recording is running': (w) => w.capture.isPendantBatchRecording = true,
       'a conversation is processing': (w) =>
           w.conversations.processingConversations = [_conversation('processing', const Duration(minutes: 1))],
       'a held recording exists': (w) => w.held.recordings = [_FakeRecording()],

@@ -33,6 +33,7 @@ enum SiriListeningFailure: Error {
     case deviceAlreadyListening
     case recordingOff
     case micDenied
+    case deviceRequired
     case nothingToStop
     case capturePaused
     case unavailable
@@ -42,6 +43,7 @@ enum SiriListeningFailure: Error {
         case "device_already_listening": self = .deviceAlreadyListening
         case "recording_off": self = .recordingOff
         case "mic_permission_denied": self = .micDenied
+        case "device_required": self = .deviceRequired
         case "nothing_to_stop": self = .nothingToStop
         case "capture_paused": self = .capturePaused
         default: self = .unavailable
@@ -53,6 +55,7 @@ enum SiriListeningFailure: Error {
         case .deviceAlreadyListening: "Omi is already listening from your device."
         case .recordingOff: "Turn on audio recording in Omi first."
         case .micDenied: "Allow microphone access in Omi first."
+        case .deviceRequired: "Connect an Omi device to record conversations."
         case .nothingToStop: "Omi isn't listening right now."
         case .capturePaused: "Omi is paused. Open Omi to resume."
         case .unavailable: starting ? "Open Omi to start listening." : "Open Omi to stop listening."

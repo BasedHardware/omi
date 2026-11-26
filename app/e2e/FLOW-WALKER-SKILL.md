@@ -72,8 +72,8 @@ The pipeline has 6 stages. Always use `--json` for machine-readable output.
 ### 1. Initialize Run
 
 ```bash
-FLOW=app/e2e/flows/phone-capture.yaml
-INIT=$(node $(which flow-walker) record init --flow $FLOW --output-dir app/e2e/runs/ --no-video --json)
+FLOW=${1:-app/e2e/flows/device-capture.yaml}
+INIT=$(node $(which flow-walker) record init --flow "$FLOW" --output-dir app/e2e/runs/ --no-video --json)
 RUN_ID=$(echo "$INIT" | jq -r '.id')
 RUN_DIR=$(echo "$INIT" | jq -r '.dir')
 echo "Run: $RUN_ID → $RUN_DIR"
@@ -231,12 +231,10 @@ Snapshots save coordinates and timing from successful runs for fast re-execution
 ```bash
 # Save snapshot after a successful run
 node $(which flow-walker) snapshot save \
-  --flow app/e2e/flows/phone-capture.yaml \
   --run-dir "$RUN_DIR" --json
 
 # Load snapshot for replay planning
 node $(which flow-walker) snapshot load \
-  --flow app/e2e/flows/phone-capture.yaml --json
 ```
 
 Snapshots are saved as `<flow-name>.snapshot.json` next to the YAML. When `record init` finds a snapshot, it returns a replay plan — agents skip full UI exploration and use cached coordinates.
@@ -284,7 +282,6 @@ node $(which flow-walker) walk --dry-run --json
 | `apps-marketplace.yaml` | 7 | Browse, search, enable/disable apps |
 | `memories.yaml` | 6 | View memories, categories, detail |
 | `action-items.yaml` | 7 | Action items list, mark complete |
-| `phone-capture.yaml` | 9 | Phone mic recording, live transcription, process |
 | `device-capture.yaml` | 10 | Omi BLE device recording, mute, process |
 | `device-connect.yaml` | 10 | BLE scan, pair, device details, disconnect |
 
@@ -298,7 +295,7 @@ All snapshots: `app/e2e/flows/*.snapshot.json`
 # Run a flow end-to-end and publish the report
 set -e
 
-FLOW="$1"  # e.g., app/e2e/flows/phone-capture.yaml
+FLOW=${1:-app/e2e/flows/device-capture.yaml}
 FLOW_NAME=$(basename "$FLOW" .yaml)
 
 # 1. Init

@@ -4,10 +4,10 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import 'package:in_app_review/in_app_review.dart';
-import 'package:permission_handler/permission_handler.dart';
 
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/l10n/app_localizations.dart';
+import 'package:omi/pages/capture/connect.dart';
 import 'package:omi/pages/onboarding/variants/yinka/activation/activation_capture.dart';
 import 'package:omi/pages/onboarding/variants/yinka/activation/activation_motion.dart';
 import 'package:omi/pages/onboarding/variants/yinka/activation/activation_visuals.dart';
@@ -28,10 +28,8 @@ const double _kHeadingGap = 76;
 /// for all four, so the card stays in the same place while the words turn into notes.
 const double _kControlHeight = 172;
 
-/// The stages of the first-run activation, in order. Some are skipped: [microphone] with an Omi (or
-/// when already allowed), [taskList] when Omi found no tasks. How to wear and use an Omi is the
-/// device tutorial Home shows after onboarding.
-enum ActivationStage { intro, microphone, dictate, writing, summary, taskList, congrats, rating }
+/// The stages of the first-run activation.
+enum ActivationStage { intro, deviceRequired, dictate, writing, summary, taskList, congrats, rating }
 
 /// Shows people what Omi does with their own words, then hands over to the paywall and Home.
 ///
@@ -46,8 +44,6 @@ class ActivationFlow extends StatefulWidget {
     required this.onFinished,
     this.showPaywall,
     this.capture,
-    this.microphoneGranted,
-    this.requestMicrophone,
     this.requestReview,
     this.notesDeadline = const Duration(seconds: 12),
   });
@@ -64,8 +60,6 @@ class ActivationFlow extends StatefulWidget {
 
   /// Defaults to the app's capture pipeline; replaceable in tests.
   final ActivationCapture Function(BuildContext context)? capture;
-  final Future<bool> Function()? microphoneGranted;
-  final Future<bool> Function()? requestMicrophone;
   final Future<void> Function()? requestReview;
 
   /// How long "Summarizing…" waits for Omi's notes. A few sentences usually take seconds; past this
@@ -83,8 +77,6 @@ class _ActivationFlowState extends State<ActivationFlow> {
   ActivationStage _stage = ActivationStage.intro;
   ActivationCapture? _capture;
 
-  /// The connected wearable was not streaming, so this dictation uses the phone microphone.
-  bool _phoneInstead = false;
   String _heard = '';
   ActivationResult? _result;
   bool _finished = false;
@@ -101,27 +93,13 @@ class _ActivationFlowState extends State<ActivationFlow> {
     setState(() => _stage = next);
   }
 
-  /// The wearable was not streaming and the phone microphone is not allowed yet.
-  void _needsMicrophone() {
-    _phoneInstead = true;
-    _track('device_not_streaming');
-    _go(ActivationStage.microphone);
-  }
+  void _afterIntro() => _go(widget.hasDevice ? ActivationStage.dictate : ActivationStage.deviceRequired);
 
-  Future<void> _afterIntro() async {
-    if (widget.hasDevice) return _go(ActivationStage.dictate);
-    final granted = await (widget.microphoneGranted ?? () => Permission.microphone.isGranted)();
-    _go(granted ? ActivationStage.dictate : ActivationStage.microphone);
-  }
-
-  Future<void> _allowMicrophone() async {
-    final granted = await (widget.requestMicrophone ?? () async => (await Permission.microphone.request()).isGranted)();
-    if (granted) {
-      OmiHaptics.light();
-      _go(ActivationStage.dictate);
-    } else {
-      _skipped();
-    }
+  Future<void> _pairDevice() async {
+    final connected = await Navigator.of(context).push<bool>(omiPageRoute(
+      builder: (routeContext) => ConnectDevicePage(onConnected: () => Navigator.of(routeContext).pop(true)),
+    ));
+    if (connected == true && _stage == ActivationStage.deviceRequired) _go(ActivationStage.dictate);
   }
 
   void _skipped() {
@@ -160,7 +138,7 @@ class _ActivationFlowState extends State<ActivationFlow> {
         ),
       );
     }
-    return PipelineActivationCapture(context, expectDevice: widget.hasDevice && !_phoneInstead);
+    return PipelineActivationCapture(context);
   }
 
   Future<void> _afterRating() async {
@@ -183,15 +161,23 @@ class _ActivationFlowState extends State<ActivationFlow> {
           text: l10n.onboardingActIntro,
           onDone: _afterIntro,
         ),
-      ActivationStage.microphone => _Stage(
-          key: const ValueKey('microphone'),
-          title: l10n.onboardingActMicTitle,
-          subtitle: _phoneInstead ? l10n.onboardingActMicFallbackBody : l10n.onboardingActMicBody,
-          body: const _MicVisual(),
-          bottom: _ContinueButton(
-            stage: 'microphone',
-            label: l10n.onboardingActMicAllow,
-            onPressed: _allowMicrophone,
+      ActivationStage.deviceRequired => _Stage(
+          key: const ValueKey('deviceRequired'),
+          title: l10n.firstCaptureConnectTitle,
+          body: Text(l10n.firstCaptureConnectDescription, textAlign: TextAlign.center),
+          bottom: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              OmiButton(label: l10n.connectDevice, expand: true, onPressed: _pairDevice),
+              const SizedBox(height: OmiSpacing.sm),
+              OmiButton(
+                key: const Key('activation_continue_deviceRequired'),
+                label: l10n.continueButton,
+                variant: OmiButtonVariant.secondary,
+                expand: true,
+                onPressed: _skipped,
+              ),
+            ],
           ),
         ),
       ActivationStage.dictate => _DictationStep(
@@ -199,15 +185,12 @@ class _ActivationFlowState extends State<ActivationFlow> {
           capture: _capture ??= _newCapture(context),
           onDone: _dictated,
           onSkip: _skipped,
-          onNeedsMicrophone: _needsMicrophone,
-          throughOmi: widget.hasDevice && !_phoneInstead,
         ),
       ActivationStage.writing => _Stage(
           key: const ValueKey('writing'),
           title: l10n.onboardingActWriting,
           // The dictation's subtitle keeps its space (unseen), so the card doesn't move between the two.
-          subtitle:
-              widget.hasDevice && !_phoneInstead ? l10n.onboardingActDictateBodyOmi : l10n.onboardingActDictateBody,
+          subtitle: l10n.onboardingActDictateBodyOmi,
           subtitleHidden: true,
           body: CompactingCard(text: _heard, style: _wordsStyle),
           bottom: const CondensingControl(),
@@ -419,46 +402,6 @@ class _IntroLineState extends State<_IntroLine> {
   }
 }
 
-/// The microphone ask: the dark round control and soft ripple of the listening screen that follows,
-/// so allowing the microphone feels like the first step of talking to Omi.
-class _MicVisual extends StatelessWidget {
-  const _MicVisual();
-
-  static const double _size = 180;
-
-  @override
-  Widget build(BuildContext context) {
-    return OneShot(
-      duration: const Duration(milliseconds: 900),
-      builder: (context, t) => rise(
-        t,
-        SizedBox(
-          width: _size,
-          height: _size,
-          child: Stack(
-            alignment: Alignment.center,
-            children: [
-              ScanningRippleWidget(isScanning: true, size: _size, color: OmiColors.textTertiary),
-              Container(
-                width: 112,
-                height: 112,
-                decoration: BoxDecoration(color: OmiColors.textPrimary.withValues(alpha: 0.06), shape: BoxShape.circle),
-              ),
-              Container(
-                width: 80,
-                height: 80,
-                decoration: BoxDecoration(color: OmiColors.accent, shape: BoxShape.circle),
-                child: Icon(Icons.mic_rounded, size: 36, color: OmiColors.onAccent),
-              ),
-            ],
-          ),
-        ),
-        distance: 16,
-      ),
-    );
-  }
-}
-
 /// The card that holds the reader's words, the same on the dictation and "Summarizing…" screens so
 /// it reads as one card.
 class _WordsCard extends StatelessWidget {
@@ -480,17 +423,13 @@ class _DictationStep extends StatefulWidget {
     required this.capture,
     required this.onDone,
     required this.onSkip,
-    required this.onNeedsMicrophone,
-    this.throughOmi = false,
   });
 
   final ActivationCapture capture;
   final void Function(String heard, Future<ActivationResult> result) onDone;
   final VoidCallback onSkip;
-  final VoidCallback onNeedsMicrophone;
 
   /// The reader dictates through their Omi, not the phone.
-  final bool throughOmi;
 
   @override
   State<_DictationStep> createState() => _DictationStepState();
@@ -522,11 +461,6 @@ class _DictationStepState extends State<_DictationStep> {
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       final start = await widget.capture.start();
       if (!mounted) return;
-      if (start == ActivationStart.needsMicrophone) {
-        _leaving = true;
-        widget.onNeedsMicrophone();
-        return;
-      }
       setState(() {
         _started = start == ActivationStart.listening;
         _failed = !_started;
@@ -575,14 +509,13 @@ class _DictationStepState extends State<_DictationStep> {
   @override
   Widget build(BuildContext context) {
     final l10n = context.l10n;
-    final source = widget.capture.usesDevice ? 'Omi' : l10n.onboardingActPhoneMic;
     return ValueListenableBuilder<String>(
       valueListenable: widget.capture.liveText,
       builder: (context, text, _) {
         final heard = text.trim().isNotEmpty;
         return _Stage(
           title: l10n.onboardingActDictateTitle,
-          subtitle: widget.throughOmi ? l10n.onboardingActDictateBodyOmi : l10n.onboardingActDictateBody,
+          subtitle: l10n.onboardingActDictateBodyOmi,
           topRight: _QuietSkip(label: l10n.skip, onTap: _skip),
           body: ReadAlongCard(
             key: const Key('activation_dictation_card'),
@@ -590,15 +523,13 @@ class _DictationStepState extends State<_DictationStep> {
             live: widget.capture.liveText,
             level: widget.capture.level,
             listening: _started && !_failed,
-            levelDriven: !widget.capture.usesDevice,
+            levelDriven: true,
             style: _wordsStyle,
           ),
           // Words that arrive late still bring the ✓ back.
           bottom: !heard && (_failed || _stuck)
               ? _WayOn(
-                  status: _failed
-                      ? l10n.somethingWentWrong
-                      : (widget.capture.usesDevice ? l10n.onboardingActNoAudioOmi : l10n.onboardingActNoAudioPhone),
+                  status: _failed ? l10n.somethingWentWrong : l10n.onboardingActNoAudioOmi,
                   onContinue: _skip,
                 )
               : _ListeningControl(
@@ -613,10 +544,8 @@ class _DictationStepState extends State<_DictationStep> {
                           : !_started
                               ? l10n.listening
                               : _quiet
-                                  ? (widget.capture.usesDevice
-                                      ? l10n.onboardingActNoAudioOmi
-                                      : l10n.onboardingActNoAudioPhone)
-                                  : '${l10n.listening} · $source',
+                                  ? l10n.onboardingActNoAudioOmi
+                                  : '${l10n.listening} · Omi',
                   onDone: _done,
                 ),
           bottomHeight: _kControlHeight,

@@ -6,7 +6,6 @@ import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/message_event.dart';
 import 'package:omi/backend/schema/structured.dart';
-import 'package:omi/gen/phone_mic_pigeon.g.dart';
 import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/services/capture/capture_external_actions.dart';
 import 'package:omi/services/capture/capture_seams.dart';
@@ -19,6 +18,7 @@ import 'package:package_info_plus/package_info_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../support/capture/capture_replay_world.dart';
+import '../../support/capture/scripted_device_connection.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -51,10 +51,8 @@ void main() {
     AnalyticsManager.configure(adapter);
     await AnalyticsManager.init();
 
-    await world.startLiveCapture();
-    world.emitNativeState(PhoneMicCaptureState.running);
-    await world.settle();
-    await world.stopLiveCapture();
+    await _startWearable(world);
+    await world.controller.stopStreamDeviceRecording();
     await _flush();
 
     expect(actions.emptyExplanations, 0);
@@ -84,9 +82,7 @@ void main() {
     AnalyticsManager.configure(adapter);
     await AnalyticsManager.init();
 
-    await world.startLiveCapture();
-    world.emitNativeState(PhoneMicCaptureState.running);
-    await world.settle();
+    await _startWearable(world);
     world.controller.onMessageEventReceived(
       ConversationEvent(memory: _conversation(id: 'finalized'), messages: const []),
     );
@@ -117,9 +113,7 @@ void main() {
       AnalyticsManager.configure(adapter);
       await AnalyticsManager.init();
 
-      await world.startLiveCapture();
-      world.emitNativeState(PhoneMicCaptureState.running);
-      await world.settle();
+      await _startWearable(world);
       final pending = world.controller.forceProcessingCurrentConversation(manualFinish: true);
       await world.settle();
       await pending;
@@ -146,9 +140,7 @@ void main() {
       AnalyticsManager.configure(adapter);
       await AnalyticsManager.init();
 
-      await world.startLiveCapture();
-      world.emitNativeState(PhoneMicCaptureState.running);
-      await world.settle();
+      await _startWearable(world);
       final pending = world.controller.forceProcessingCurrentConversation(manualFinish: true);
       await world.settle();
       await pending;
@@ -229,6 +221,17 @@ void main() {
   });
 }
 
+Future<void> _startWearable(CaptureReplayWorld world) async {
+  final connection = world.deviceConnection = ScriptedDeviceConnection();
+  await world.controller.streamDeviceRecording(
+    device: BtDevice(name: 'Pendant', id: 'pendant-1', type: DeviceType.omi, rssi: -40),
+  );
+  await world.settle();
+  expect(world.controller.liveCaptureSource, 'omi');
+  connection.emitAudio();
+  await world.settle();
+}
+
 Future<void> _flush() async {
   await Future<void>.delayed(Duration.zero);
   await Future<void>.delayed(Duration.zero);
@@ -248,7 +251,7 @@ ServerConversation _conversation({required String id, bool discarded = false}) {
     structured: Structured('Kept', ''),
     status: ConversationStatus.completed,
     discarded: discarded,
-    source: discarded ? null : ConversationSource.phone,
+    source: discarded ? null : ConversationSource.omi,
   );
 }
 

@@ -16,7 +16,7 @@ import kotlin.concurrent.thread
 
 object TtsMp3DecoderPlugin {
     init {
-        System.loadLibrary("phonemicopus")
+        System.loadLibrary("omittsmp3")
     }
 
     private external fun decodeMp3(bytes: ByteArray): ByteArray?

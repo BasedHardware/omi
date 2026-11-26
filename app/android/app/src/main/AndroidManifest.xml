@@ -222,13 +222,6 @@
             android:stopWithTask="false"
             android:exported="false" />
 
-        <!-- Native phone-mic foreground service — keeps mic capture alive in background -->
-        <service
-            android:name="com.friend.ios.phonemic.PhoneMicForegroundService"
-            android:foregroundServiceType="microphone"
-            android:stopWithTask="false"
-            android:exported="false" />
-
         <!-- Recording file-transfer keep-alive — dataSync FGS + wake lock for BLE/cloud sync (#5221) -->
         <service
             android:name="com.friend.ios.sync.SyncTransferForegroundService"

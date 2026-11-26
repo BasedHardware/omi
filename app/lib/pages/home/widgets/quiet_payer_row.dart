@@ -138,7 +138,7 @@ class _NothingInFlight extends StatelessWidget {
     // A missing provider is an unknown answer: nothing.
     final capturing = context.select<CaptureProvider?, bool>(
       (capture) =>
-          capture == null || EpisodePresentation.streamingSource(capture) != null || capture.isPhoneMicBatchRecording,
+          capture == null || EpisodePresentation.streamingSource(capture) != null || capture.isPendantBatchRecording,
     );
     final processing = context.select<ConversationProvider?, bool>(
       (list) => list == null || list.processingConversations.isNotEmpty,

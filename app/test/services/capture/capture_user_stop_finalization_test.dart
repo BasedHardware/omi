@@ -3,7 +3,6 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
-import 'package:omi/gen/phone_mic_pigeon.g.dart';
 import 'package:omi/services/sockets/pure_socket.dart';
 import 'package:omi/services/sockets/transcription_service.dart';
 
@@ -42,42 +41,6 @@ void main() {
     await world.controller.pendingSourceSwitch;
     await world.dispose();
     directory.deleteSync(recursive: true);
-  });
-
-  group('phone recording', () {
-    Future<void> recordPhone() async {
-      await world.startLiveCapture();
-      final sessionId = world.hostApi.lastStartSessionId!;
-      world.emitNativeState(PhoneMicCaptureState.running);
-      world.injectAudioFrames(50, sessionId: sessionId);
-      await world.settle();
-      expect(world.socket!.sentBinary, isNotEmpty);
-    }
-
-    test('Stop sends one user_stop after the last audio and right before close', () async {
-      await recordPhone();
-      final socket = world.socket!;
-
-      await world.stopLiveCapture();
-
-      expect(socket.closeCalls, 1);
-      expectUserStopThenClose(socket);
-    });
-
-    test('a socket drop and its reconnect send no user_stop; the later Stop sends one', () async {
-      await recordPhone();
-      final dropped = world.socket!;
-
-      dropped.emitClose(1006);
-      await world.settle();
-      await world.elapse(const Duration(seconds: 5));
-      expect(world.sockets.length, greaterThan(1), reason: 'the drop must reconnect');
-      expect(userStops(), 0);
-
-      await world.stopLiveCapture();
-      expect(dropped.wire.where(isUserStop), isEmpty);
-      expectUserStopThenClose(world.socket!);
-    });
   });
 
   group('pendant', () {

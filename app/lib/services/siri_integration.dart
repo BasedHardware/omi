@@ -6,7 +6,6 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
-import 'package:permission_handler/permission_handler.dart';
 import 'package:omi/utils/conversations/conversation_title.dart';
 import 'package:omi/app_globals.dart';
 import 'package:omi/pages/home/home_navigation.dart';
@@ -32,23 +31,21 @@ import 'package:omi/utils/platform/platform_manager.dart';
 /// Start/Stop actions. Production resolves these callbacks from CaptureProvider.
 typedef SiriListeningCapture = ({
   Future<void> Function() start,
-  Future<bool> Function() stop,
-  String? Function() source,
+  Future<void> Function() stop,
+  bool Function() listening,
   bool Function() deviceConnected,
-  bool Function() phoneBatchRecording,
-  bool Function() deviceBatchRecording,
-  bool Function() phonePaused,
 });
 
-typedef SiriMemoryPageFetcher = Future<GetMemoriesResult> Function(
-    {required int limit, required int offset, String? cursor});
-typedef SiriTaskPageFetcher = Future<ApiResult<ActionItemsResponse>> Function(
-    {required int limit, required int offset, required bool completed});
-typedef SiriConversationPageFetcher = Future<ApiResult<List<ServerConversation>>> Function({
-  required int limit,
-  required int offset,
-  required DateTime startDate,
-});
+typedef SiriMemoryPageFetcher =
+    Future<GetMemoriesResult> Function({required int limit, required int offset, String? cursor});
+typedef SiriTaskPageFetcher =
+    Future<ApiResult<ActionItemsResponse>> Function({required int limit, required int offset, required bool completed});
+typedef SiriConversationPageFetcher =
+    Future<ApiResult<List<ServerConversation>>> Function({
+      required int limit,
+      required int offset,
+      required DateTime startDate,
+    });
 
 class _PendingSiriReconcile {
   _PendingSiriReconcile(this.type, this.apply);
@@ -99,19 +96,19 @@ Duration siriRemovalRetryDelay(Duration base, int attempt) =>
 /// has accepted a fetch or mutation. All methods are inert on Android.
 class SiriIntegration extends SiriEventsApi {
   SiriIntegration._()
-      : _host = SiriIndexApi(),
-        _isIOS = Platform.isIOS,
-        _testSessionConfig = null,
-        _testListeningCapture = null,
-        _testMemoryPageFetcher = null,
-        _testTaskPageFetcher = null,
-        _testConversationPageFetcher = null,
-        _testRouteOpener = null,
-        _prepareTimeout = const Duration(milliseconds: 1500),
-        _nativeTimeout = const Duration(seconds: 12),
-        _indexCooldown = const Duration(seconds: 30),
-        _retryBase = const Duration(seconds: 1),
-        _delay = Future<void>.delayed;
+    : _host = SiriIndexApi(),
+      _isIOS = Platform.isIOS,
+      _testSessionConfig = null,
+      _testListeningCapture = null,
+      _testMemoryPageFetcher = null,
+      _testTaskPageFetcher = null,
+      _testConversationPageFetcher = null,
+      _testRouteOpener = null,
+      _prepareTimeout = const Duration(milliseconds: 1500),
+      _nativeTimeout = const Duration(seconds: 12),
+      _indexCooldown = const Duration(seconds: 30),
+      _retryBase = const Duration(seconds: 1),
+      _delay = Future<void>.delayed;
 
   /// Inject a Pigeon host for hermetic projection and account fencing tests.
   SiriIntegration.forTest(
@@ -129,21 +126,21 @@ class SiriIntegration extends SiriEventsApi {
     Duration retryBase = const Duration(milliseconds: 20),
     Future<void> Function(Duration)? delay,
     bool coldStart = false,
-  })  : _host = host,
-        _isIOS = true,
-        _testSessionConfig = sessionConfig,
-        _testListeningCapture = listeningCapture,
-        _testMemoryPageFetcher = memoryPageFetcher,
-        _testTaskPageFetcher = taskPageFetcher,
-        _testConversationPageFetcher = conversationPageFetcher,
-        _testRouteOpener = routeOpener,
-        _prepareTimeout = prepareTimeout,
-        _nativeTimeout = nativeTimeout,
-        _indexCooldown = indexCooldown,
-        _retryBase = retryBase,
-        _delay = delay ?? Future<void>.delayed,
-        _uid = coldStart ? null : uid,
-        _nativeGeneration = coldStart ? null : 0;
+  }) : _host = host,
+       _isIOS = true,
+       _testSessionConfig = sessionConfig,
+       _testListeningCapture = listeningCapture,
+       _testMemoryPageFetcher = memoryPageFetcher,
+       _testTaskPageFetcher = taskPageFetcher,
+       _testConversationPageFetcher = conversationPageFetcher,
+       _testRouteOpener = routeOpener,
+       _prepareTimeout = prepareTimeout,
+       _nativeTimeout = nativeTimeout,
+       _indexCooldown = indexCooldown,
+       _retryBase = retryBase,
+       _delay = delay ?? Future<void>.delayed,
+       _uid = coldStart ? null : uid,
+       _nativeGeneration = coldStart ? null : 0;
   static final instance = SiriIntegration._();
   @visibleForTesting
   static SiriIntegration? testInstance;
@@ -250,12 +247,14 @@ class SiriIntegration extends SiriEventsApi {
     if (!_isIOS || _uid == null) return Future<void>.value();
     final uid = _uid;
     final generation = _accountGeneration;
-    _queuedIndexTail = _queuedIndexTail.then((_) async {
-      if (_uid != uid || _accountGeneration != generation) return;
-      await work(this);
-    }).catchError((Object error) {
-      Logger.debug('Siri background index failed: $error');
-    });
+    _queuedIndexTail = _queuedIndexTail
+        .then((_) async {
+          if (_uid != uid || _accountGeneration != generation) return;
+          await work(this);
+        })
+        .catchError((Object error) {
+          Logger.debug('Siri background index failed: $error');
+        });
     return _queuedIndexTail;
   }
 
@@ -289,7 +288,8 @@ class SiriIntegration extends SiriEventsApi {
 
   void _checkFenceBudget() {
     if (_repairRequired || _uid == null) return;
-    final count = _pendingRemovals.values.fold<int>(0, (n, ids) => n + ids.length) +
+    final count =
+        _pendingRemovals.values.fold<int>(0, (n, ids) => n + ids.length) +
         _suppressedIds.values.fold<int>(0, (n, ids) => n + ids.length) +
         _eligibilityFence.values.fold<int>(0, (n, ids) => n + ids.length);
     if (count <= _maxPendingRemovalIds) return;
@@ -628,11 +628,12 @@ class SiriIntegration extends SiriEventsApi {
       for (var page = 0; page < maxPages; page++) {
         ApiResult<ActionItemsResponse> result;
         try {
-          result = await (_testTaskPageFetcher?.call(limit: limit, offset: page * limit, completed: completed) ??
-                  ActionItemsApi(
-                    baseUrl: Env.apiBaseUrl ?? '',
-                  ).list(limit: limit, offset: page * limit, completed: completed))
-              .timeout(const Duration(seconds: 10));
+          result =
+              await (_testTaskPageFetcher?.call(limit: limit, offset: page * limit, completed: completed) ??
+                      ActionItemsApi(
+                        baseUrl: Env.apiBaseUrl ?? '',
+                      ).list(limit: limit, offset: page * limit, completed: completed))
+                  .timeout(const Duration(seconds: 10));
         } catch (error) {
           Logger.debug('Siri task traversal failed: $error');
           break;
@@ -717,7 +718,8 @@ class SiriIntegration extends SiriEventsApi {
       final tokenResult = await user.getIdTokenResult();
       final token = tokenResult.token;
       if (generation != _accountGeneration || user.uid != _uid) return;
-      final config = _testSessionConfig?.call(user, tokenResult, nativeGeneration) ??
+      final config =
+          _testSessionConfig?.call(user, tokenResult, nativeGeneration) ??
           (() {
             final platform = PlatformManager.instance;
             return SiriSessionConfig(
@@ -750,8 +752,10 @@ class SiriIntegration extends SiriEventsApi {
     if (epoch < _minimumSourceEpoch) return;
     try {
       final now = DateTime.now();
-      final removed =
-          rows.where((row) => row.id.isNotEmpty && !siriConversationIsIndexable(row, now)).map((row) => row.id).toSet();
+      final removed = rows
+          .where((row) => row.id.isNotEmpty && !siriConversationIsIndexable(row, now))
+          .map((row) => row.id)
+          .toSet();
       _fenceIneligible('conversation', removed, epoch);
       if (removed.isNotEmpty) await _removeRequired(uid, generation, 'conversation', removed);
       final projected = _conversationProjection(rows, epoch);
@@ -879,11 +883,7 @@ class SiriIntegration extends SiriEventsApi {
       for (var page = 0; page < maxPages; page++) {
         final result =
             await (_testMemoryPageFetcher?.call(limit: limit, offset: cursor == null ? offset : 0, cursor: cursor) ??
-                    getMemoriesResult(
-                      limit: limit,
-                      offset: cursor == null ? offset : 0,
-                      cursor: cursor,
-                    ))
+                    getMemoriesResult(limit: limit, offset: cursor == null ? offset : 0, cursor: cursor))
                 .timeout(const Duration(seconds: 10));
         if (_uid != uid || _accountGeneration != generation) return;
         if (!result.ok || result.truncated) break;
@@ -919,8 +919,10 @@ class SiriIntegration extends SiriEventsApi {
     if (epoch < _minimumSourceEpoch) return;
     try {
       final now = DateTime.now();
-      final removed =
-          rows.where((row) => row.id.isNotEmpty && !siriTaskIsIndexable(row, now)).map((row) => row.id).toSet();
+      final removed = rows
+          .where((row) => row.id.isNotEmpty && !siriTaskIsIndexable(row, now))
+          .map((row) => row.id)
+          .toSet();
       _fenceIneligible('task', removed, epoch);
       if (removed.isNotEmpty) await _removeRequired(uid, generation, 'task', removed);
       final projected = _taskProjection(rows, epoch);
@@ -1053,7 +1055,8 @@ class SiriIntegration extends SiriEventsApi {
 
   @override
   Future<void> setListening(bool enabled) async {
-    final capture = _testListeningCapture ??
+    final capture =
+        _testListeningCapture ??
         (() {
           final context = globalNavigatorKey.currentContext;
           if (context == null) throw StateError('Omi is not ready');
@@ -1061,45 +1064,30 @@ class SiriIntegration extends SiriEventsApi {
           final device = context.read<DeviceProvider>();
           return (
             start: () async {
-              await provider.streamRecording();
+              if (provider.liveCaptureSource == null) {
+                await provider.streamDeviceRecording(device: device.capabilityNormalizedDevice);
+              }
+              if (provider.isPaused) await provider.resumeDeviceRecording();
             },
-            stop: () => provider.stopStreamRecording(),
-            source: () => provider.liveCaptureSource,
+            stop: provider.pauseCapture,
+            listening: () =>
+                !provider.isPaused &&
+                (provider.liveCaptureSource != null ||
+                    provider.isPendantBatchRecording ||
+                    (!enabled && provider.isPendantAwaitingReconnect)),
             deviceConnected: () => device.isConnected,
-            phoneBatchRecording: () => provider.isPhoneMicBatchRecording,
-            deviceBatchRecording: () => provider.isPendantBatchRecording,
-            phonePaused: () =>
-                provider.isPhoneMicPaused || (provider.liveCaptureSource == 'phone' && provider.isPaused),
           );
         })();
     if (enabled) {
-      if (capture.deviceConnected() &&
-          (capture.deviceBatchRecording() || (capture.source() != null && capture.source() != 'phone'))) {
-        throw PlatformException(
-          code: 'device_already_listening',
-          message: 'Omi is already listening from your device.',
-        );
+      if (!capture.deviceConnected()) {
+        throw PlatformException(code: 'device_required', message: 'Connect an Omi device to record conversations.');
       }
-      if ((capture.source() == 'phone' || capture.phoneBatchRecording()) && capture.phonePaused()) {
-        throw PlatformException(code: 'capture_paused', message: 'Omi is paused. Open Omi to resume.');
-      }
-      if (capture.source() == 'phone' || capture.phoneBatchRecording()) return;
-      try {
+      if (!capture.listening()) {
         await capture.start();
-      } catch (_) {
-        if (_testListeningCapture == null) {
-          final status = await Permission.microphone.status;
-          if (status.isDenied || status.isPermanentlyDenied || status.isRestricted) {
-            throw PlatformException(code: 'mic_permission_denied', message: 'Allow microphone access in Omi first.');
-          }
-        }
-        rethrow;
+        if (!capture.listening()) throw PlatformException(code: 'recording_off');
       }
-    } else {
-      if (capture.source() != 'phone' && !capture.phoneBatchRecording()) {
-        throw PlatformException(code: 'nothing_to_stop', message: "Omi isn't listening right now.");
-      }
-      if (!await capture.stop()) throw StateError('Phone conversation capture did not stop');
+    } else if (capture.listening()) {
+      await capture.stop();
     }
   }
 

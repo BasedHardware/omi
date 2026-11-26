@@ -265,14 +265,12 @@ class LocalPreviewAdmission {
   BleAudioCodec pendantCodec = BleAudioCodec.opus;
 
   /// Wires [live] to both taps. Returns the matching teardown.
-  void Function() install(LivePreviewController live, AudioTapListeners device, AudioTapListeners phone) {
+  void Function() install(LivePreviewController live, AudioTapListeners device) {
     preview = live;
     void onPendant(List<int> packet) => live.onPendantPacket(packet, pendantCodec);
     device.add(onPendant);
-    phone.add(live.onPhonePcm);
     return () {
       device.remove(onPendant);
-      phone.remove(live.onPhonePcm);
       if (identical(preview, live)) preview = null;
       live.dispose();
     };

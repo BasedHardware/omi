@@ -17,7 +17,6 @@ import 'package:omi/services/capture/capture_session_owner.dart';
 import 'package:omi/services/capture/conversation_location_capture.dart';
 import 'package:omi/services/capture/local_segment_store.dart';
 import 'package:omi/services/capture/recording_lifecycle_telemetry.dart';
-import 'package:omi/services/services.dart';
 import 'package:omi/services/devices/connectors/device_connection.dart';
 import 'package:omi/services/wals/recording_transfer_coordinator.dart';
 import 'package:omi/services/wals/wal_interfaces.dart';
@@ -26,11 +25,6 @@ import 'package:omi/services/wals/wal_interfaces.dart';
 class _Wal implements IWalService {
   @override
   dynamic noSuchMethod(Invocation i) => throw StateError('Unexpected WAL effect: ${i.memberName}');
-}
-
-class _Mic implements IMicRecorderService {
-  @override
-  dynamic noSuchMethod(Invocation i) => throw StateError('Unexpected mic effect: ${i.memberName}');
 }
 
 class _Ble implements CaptureBleListeners {
@@ -69,8 +63,6 @@ class PendantTutorialHarness {
     );
     capture = composeCaptureProvider(CaptureDependencies(
       wal: _Wal(),
-      phoneMic: _Mic(),
-      batchSupported: false,
       auth: CaptureAuthBoundary(isSignedIn: () => true, refreshIdToken: () async => null),
       connectivity:
           CaptureConnectivityBoundary(initiallyConnected: true, changes: const Stream.empty(), isConnected: () => true),
@@ -96,7 +88,6 @@ class PendantTutorialHarness {
           now: DateTime.now),
       localSegments: LocalSegmentStore.disabled(),
       codec: codec ?? (_) async => BleAudioCodec.opus,
-      microphonePermission: () async => false,
       refreshConversation: () async {},
       telemetry:
           RecordingLifecycleTelemetry(emitter: (_, __) {}, idFactory: () => 'tutorial-fixture', clock: DateTime.now),

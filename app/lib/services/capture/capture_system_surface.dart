@@ -117,13 +117,12 @@ class CaptureSystemSurface {
       'conversationRevision': revision,
       'active': active,
       'status': status,
-      'source': capture.systemSurfacePhoneCapture ? 'phone' : 'pendant',
+      'source': 'pendant',
       'startedAt': _anchor == null ? 0.0 : _anchor!.millisecondsSinceEpoch / 1000,
       'elapsed': _anchor == null ? 0 : (_pausedAt ?? now).difference(_anchor!).inSeconds.clamp(0, 2147483647),
       'paused': paused,
       'canPause': active && !capture.isCallActive && !heldForCall,
-      'canFinish': active &&
-          (capture.systemSurfacePhoneCapture || batch || capture.segments.isNotEmpty || capture.photos.isNotEmpty),
+      'canFinish': active && (batch || capture.segments.isNotEmpty || capture.photos.isNotEmpty),
       'busy': _busy,
       'actionFailed': _failedState != null,
     };

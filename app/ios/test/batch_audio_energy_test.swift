@@ -8,14 +8,6 @@ final class OmiBleManager {
 final class TestFlutterApi {
     func onBatchRecordingFinalized(fileName: String, completion: (Bool) -> Void) {}
 }
-final class CountingDefaults: UserDefaults {
-    var locationReads = 0
-    override func string(forKey key: String) -> String? {
-        if key == "flutter.phoneBatchGeolocation" { locationReads += 1 }
-        return super.string(forKey: key)
-    }
-}
-
 @main
 struct BatchAudioEnergyTests {
     static func check(_ condition: Bool, file: StaticString = #file, line: UInt = #line) {
@@ -35,7 +27,6 @@ struct BatchAudioEnergyTests {
         try testProcessMuteLatch()
         try testIngressPolicyDecodeEconomy()
         try testRevisionRetiresQueuedBleWrites()
-        try testPhoneWriterPolicyAcrossRestart()
         try testConfigChanges()
         try testLocationSnapshot()
         print("PASS: capture policy, revision retirement, single writes, partial failures, config changes, and location lifecycle")
@@ -305,44 +296,6 @@ struct BatchAudioEnergyTests {
         ]))
     }
 
-    static func testPhoneWriterPolicyAcrossRestart() throws {
-        let dir = try directory()
-        defer { try? FileManager.default.removeItem(at: dir) }
-        let suite = "omi.capture.policy.phone.\(UUID().uuidString)"
-        let defaults = UserDefaults(suiteName: suite)!
-        defer { defaults.removePersistentDomain(forName: suite) }
-        let queue = DispatchQueue(label: "test.phone.policy")
-        let packets = [Data([0x01, 0x02])]
-
-        // Generic device mute is honored by the phone batch sink while the
-        // canonical policy has not yet been introduced.
-        defaults.set(true, forKey: "flutter.deviceMuted")
-        let firstWriter = PhoneMicBatchAudioWriter(dir: dir.path, queue: queue, defaults: defaults)
-        queue.sync {
-            firstWriter.append(opusPackets: packets, marker: "omibatchphone")
-        }
-        precondition((try? FileManager.default.contentsOfDirectory(at: dir, includingPropertiesForKeys: nil).isEmpty) == true)
-
-        // A canonical mute survives construction of a replacement writer (the
-        // app-restart boundary) and blocks already-produced opus packets.
-        defaults.set("{\"version\":1,\"revision\":9,\"muted\":true}", forKey: CaptureAdmissionPolicy.defaultsKey)
-        let restartedWriter = PhoneMicBatchAudioWriter(dir: dir.path, queue: queue, defaults: defaults)
-        queue.sync {
-            restartedWriter.append(opusPackets: packets, marker: "omibatchphone")
-        }
-        precondition((try? FileManager.default.contentsOfDirectory(at: dir, includingPropertiesForKeys: nil).isEmpty) == true)
-
-        defaults.set("{\"version\":1,\"revision\":10,\"muted\":false}", forKey: CaptureAdmissionPolicy.defaultsKey)
-        queue.sync {
-            restartedWriter.append(opusPackets: packets, marker: "omibatchphone")
-            restartedWriter.closeNowLocked("test")
-        }
-        let files = try FileManager.default.contentsOfDirectory(at: dir, includingPropertiesForKeys: nil)
-        let finalized = files.filter { $0.path.hasSuffix(".bin") }
-        precondition(finalized.count == 1)
-        check(try Data(contentsOf: finalized[0]) == Data([2, 0, 0, 0, 0x01, 0x02]))
-    }
-
     static func testFrameWrites() throws {
         let dir = try directory()
         defer { try? FileManager.default.removeItem(at: dir) }
@@ -473,53 +426,29 @@ struct BatchAudioEnergyTests {
     static func testLocationSnapshot() throws {
         let dir = try directory()
         defer { try? FileManager.default.removeItem(at: dir) }
-        let suite = "omi.batch.location.test.\(UUID().uuidString)"
-        let defaults = CountingDefaults(suiteName: suite)!
-        defer { defaults.removePersistentDomain(forName: suite) }
-        let queue = DispatchQueue(label: "test.phone")
-        let writer = PhoneMicBatchAudioWriter(dir: dir.path, queue: queue, defaults: defaults)
+        let writer = OmiBatchAudioWriter()
         let location = "{\"latitude\":1,\"longitude\":2}"
-        try queue.sync {
-            func append() { writer.append(opusPackets: [Data([1, 2])], marker: "omibatchphone") }
-            append() // no initial location: keep trying
-            defaults.set("broken", forKey: "flutter.phoneBatchGeolocation")
-            append()
-            defaults.set(location, forKey: "flutter.phoneBatchGeolocation")
-            // The audio handle stays valid across a directory rename, but the
-            // sidecar path becomes temporarily unwritable. Restore it to prove
-            // the phone writer does not latch failure and retries the next chunk.
-            let relocated = dir.appendingPathExtension("temporarily-moved")
-            try FileManager.default.moveItem(at: dir, to: relocated)
-            append()
-            let readsAfterFailure = defaults.locationReads
-            try FileManager.default.moveItem(at: relocated, to: dir)
-            append()
-            precondition(defaults.locationReads == readsAfterFailure + 1)
-            let readsAfterSave = defaults.locationReads
-            defaults.set("{\"latitude\":3}", forKey: "flutter.phoneBatchGeolocation")
-            for _ in 0..<100 { append() }
-            precondition(defaults.locationReads == readsAfterSave)
-            let sidecars = try FileManager.default.contentsOfDirectory(at: dir, includingPropertiesForKeys: nil).filter { $0.path.hasSuffix(".geolocation.json") }
-            precondition(sidecars.count == 1)
-            check(try String(contentsOf: sidecars[0], encoding: .utf8) == location)
-            writer.closeNowLocked("test")
-            append() // new recording gets the new location and resets its latch
-            precondition(defaults.locationReads > readsAfterSave)
-            writer.closeNowLocked("test")
-
-            // Existing snapshots are immutable, and failed writes remain retryable.
-            let base = BaseBatchAudioWriter(tag: "test", queueLabel: "unused", recoveryPrefix: "test_")
-            precondition(base.persistRecordingGeolocationSidecar(rawGeolocation: "{\"latitude\":9}", audioURL: URL(fileURLWithPath: String(sidecars[0].path.dropLast(".geolocation.json".count)))))
-            // An existing snapshot wins even when the current preference is invalid:
-            // the caller must latch instead of rereading defaults on every append.
-            precondition(base.persistRecordingGeolocationSidecar(rawGeolocation: "broken", audioURL: URL(fileURLWithPath: String(sidecars[0].path.dropLast(".geolocation.json".count)))))
-            precondition(base.persistRecordingGeolocationSidecar(rawGeolocation: nil, audioURL: URL(fileURLWithPath: String(sidecars[0].path.dropLast(".geolocation.json".count)))))
-            check(try String(contentsOf: sidecars[0], encoding: .utf8) == location)
-            let missingDir = dir.appendingPathComponent("missing")
-            let audio = missingDir.appendingPathComponent("recording.bin")
-            precondition(!base.persistRecordingGeolocationSidecar(rawGeolocation: location, audioURL: audio))
-            try FileManager.default.createDirectory(at: missingDir, withIntermediateDirectories: true)
-            precondition(base.persistRecordingGeolocationSidecar(rawGeolocation: location, audioURL: audio))
+        let configKey = "flutter.nativeBleStreamConfig"
+        let previousConfig = UserDefaults.standard.object(forKey: configKey)
+        defer { UserDefaults.standard.set(previousConfig, forKey: configKey) }
+        UserDefaults.standard.set("{\"geolocation\":\(location)}", forKey: configKey)
+        let missing = dir.appendingPathComponent("not-created-yet")
+        let audio = missing.appendingPathComponent("omibatch.bin")
+        let sidecar = URL(fileURLWithPath: audio.path + ".geolocation.json")
+        try writer.queue.sync {
+            precondition(writer.openLocked(dirPath: dir.path, fileName: "omibatch.bin.part", startSec: 1, nowMs: 0))
+            let openedSidecar = dir.appendingPathComponent("omibatch.bin.geolocation.json")
+            let snapshot = try JSONSerialization.jsonObject(with: Data(contentsOf: openedSidecar)) as? [String: Int]
+            precondition(snapshot == ["latitude": 1, "longitude": 2])
+            writer.closeCurrentLocked("test")
+            precondition(!writer.persistRecordingGeolocationSidecar(rawGeolocation: location, audioURL: audio))
+            try FileManager.default.createDirectory(at: missing, withIntermediateDirectories: true)
+            precondition(!writer.persistRecordingGeolocationSidecar(rawGeolocation: nil, audioURL: audio))
+            precondition(writer.persistRecordingGeolocationSidecar(rawGeolocation: location, audioURL: audio))
+            for newerLocation in ["{\"latitude\":9}", "broken", nil] as [String?] {
+                precondition(writer.persistRecordingGeolocationSidecar(rawGeolocation: newerLocation, audioURL: audio))
+            }
+            check(try String(contentsOf: sidecar, encoding: .utf8) == location)
         }
     }
 }

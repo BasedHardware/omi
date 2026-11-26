@@ -1,0 +1,12 @@
+{
+  "version": 1,
+  "images": [
+    {
+      "file": "001-mobile-ios-connect-recording-device.png",
+      "platform": "mobile-ios",
+      "description": "Home offers device pairing when no recording device is connected",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    }
+  ]
+}

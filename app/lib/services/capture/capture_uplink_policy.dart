@@ -133,6 +133,11 @@ extension _CaptureUplinkPolicy on CaptureController {
         await _ensureDeviceSocketConnection();
         if (!_committedUplinkAdmitted) continue;
         if (_bleBytesStream == null) await _initiateDeviceAudioStreaming();
+        if (_committedUplinkAdmitted &&
+            recordingState == RecordingState.deviceRecord &&
+            (!_usesNativeIngress || _ingressPort?.supportsIngressHealth == false)) {
+          _markCaptureStarted();
+        }
         _fenceUplinkForSync();
       }
     } catch (error, stack) {
@@ -214,9 +219,6 @@ extension _CaptureUplinkPolicy on CaptureController {
 
   bool get _shouldReconnectTranscriptionSocket {
     final activeDeviceCapture = _recordingDevice != null && recordingState == RecordingState.deviceRecord && !isPaused;
-    final activePhoneOrSystemCapture = recordingState == RecordingState.record ||
-        recordingState == RecordingState.interrupted ||
-        recordingState == RecordingState.systemAudioRecord;
-    return activeDeviceCapture || activePhoneOrSystemCapture;
+    return activeDeviceCapture || recordingState == RecordingState.systemAudioRecord;
   }
 }

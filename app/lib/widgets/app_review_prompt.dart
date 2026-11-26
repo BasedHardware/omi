@@ -101,7 +101,6 @@ class _AppReviewPromptState extends State<AppReviewPrompt> {
     return preferences.onboardingCompleted &&
         preferences.uid.isNotEmpty &&
         capture?.isCallActive != true &&
-        capture?.isPhoneMicBatchRecording != true &&
         !const {
           RecordingState.initialising,
           RecordingState.record,

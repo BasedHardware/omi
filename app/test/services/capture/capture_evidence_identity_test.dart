@@ -1,13 +1,11 @@
 import 'dart:convert';
 import 'dart:io';
-import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
-import 'package:omi/gen/phone_mic_pigeon.g.dart';
 import 'package:omi/services/wals/sync_upload_batch.dart';
 import 'package:omi/services/wals/wal.dart';
 
@@ -20,7 +18,7 @@ void main() {
 
   setUp(() async {
     tempDir = await Directory.systemTemp.createTemp('capture_evidence_');
-    world = await CaptureReplayWorld.boot(tempDir: tempDir);
+    world = await CaptureReplayWorld.boot(tempDir: tempDir, pendantCodec: BleAudioCodec.opus);
   });
 
   tearDown(() async {
@@ -53,18 +51,20 @@ void main() {
   }
 
   Future<List<List<int>>> captureSeconds(int seconds, {required int frameCursor}) async {
-    final sessionId = world.hostApi.lastStartSessionId!;
     final frames = <List<int>>[];
     for (var s = 0; s < seconds; s++) {
-      frames.addAll(world.injectAudioFrames(100, sessionId: sessionId, firstFrameIndex: frameCursor + s * 100));
+      frames.addAll(world.deviceConnection!.emitFixtureFrames(100, firstFrameIndex: frameCursor + s * 100));
       await world.elapse(const Duration(seconds: 1));
     }
     return frames;
   }
 
   Future<void> startRunning() async {
-    await world.startLiveCapture();
-    world.emitNativeState(PhoneMicCaptureState.running);
+    world.deviceConnection = ScriptedDeviceConnection();
+    await world.controller.streamDeviceRecording(
+      device: BtDevice(id: 'evidence-pendant', name: 'Omi', type: DeviceType.omi, rssi: -40),
+    );
+    await world.settle();
   }
 
   group('capture evidence', () {
@@ -113,43 +113,13 @@ void main() {
       expect(tuples(after).intersection(tuples(before)), isEmpty);
     });
 
-    test('logout order and bare uid changes rotate the evidence root', () async {
-      SharedPreferencesUtil().uid = 'account-a';
-      await startRunning();
-      await captureSeconds(1, frameCursor: 0);
-      final rootA = singleRoot(evidenceRecords());
-      var cursor = evidenceRecords().length;
-
-      world.wal.syncs.phone.clearUserData();
-      world.injectAudioFrames(1, sessionId: world.hostApi.lastStartSessionId!, firstFrameIndex: 10000);
-      SharedPreferencesUtil().uid = 'account-b';
-      await captureSeconds(1, frameCursor: 20000);
-
-      final afterSwitch = evidenceRecords().sublist(cursor);
-      expect(afterSwitch, hasLength(101));
-      final rootReset = afterSwitch.first['capture_root'] as String;
-      expect(rootReset, isNot(rootA));
-      final rootB = singleRoot(afterSwitch.sublist(1));
-      expect(rootB, isNot(rootA));
-      expect(rootB, isNot(rootReset));
-      cursor += afterSwitch.length;
-
-      SharedPreferencesUtil().uid = 'account-c';
-      await captureSeconds(1, frameCursor: 30000);
-      final afterUid = evidenceRecords().sublist(cursor);
-      expect(afterUid, hasLength(100));
-      final rootC = singleRoot(afterUid);
-      expect(rootC, isNot(rootB));
-      expect(rootC, isNot(rootA));
-    });
-
     test('codec change on the same allocator rotates the root and restarts the ordinal', () async {
       await startRunning();
       await captureSeconds(1, frameCursor: 0);
       final before = evidenceRecords();
       final rootBefore = singleRoot(before);
 
-      await world.wal.syncs.phone.onAudioCodecChanged(BleAudioCodec.pcm16);
+      await world.wal.syncs.phone.onAudioCodecChanged(BleAudioCodec.opusFS320);
       await captureSeconds(1, frameCursor: 10000);
 
       final after = evidenceRecords().sublist(before.length);
@@ -221,7 +191,7 @@ void main() {
 
       final freshDir = Directory('${tempDir.path}/fresh')..createSync();
       SharedPreferences.setMockInitialValues({});
-      world = await CaptureReplayWorld.boot(tempDir: freshDir);
+      world = await CaptureReplayWorld.boot(tempDir: freshDir, pendantCodec: BleAudioCodec.opus);
       expect(await world.wal.syncs.phone.getAllWals(), isEmpty);
 
       await startRunning();
@@ -325,7 +295,11 @@ void main() {
       final claim = world.uploads.attempts.last.captureEvidence;
       expect(claim, isNotNull);
       final parsed = jsonDecode(claim!);
-      expect((parsed['files'] as List).map((f) => f['capture_root']).toSet(), {rootB});
+      final names = world.uploads.attempts.last.fileNames;
+      final uploadedRoots =
+          wals.where((wal) => names.contains(wal.filePath?.split('/').last)).map((wal) => wal.captureRoot).toSet();
+      expect((parsed['files'] as List).map((f) => f['capture_root']).toSet(), uploadedRoots);
+      expect(uploadedRoots, contains(rootB));
     });
 
     test('a pendant opus_fs320 stream claims with the normalized opus codec', () async {
@@ -364,76 +338,6 @@ void main() {
       expect(file['codec'], 'opus', reason: 'the wire token stays opus for every supported Opus variant');
       expect(file['frame_count'], wal.totalFrames);
       expect(file['capture_root'], wal.captureRoot);
-    });
-
-    test('a native interruption and recovery keeps one root with contiguous ordinals', () async {
-      SharedPreferencesUtil().unlimitedLocalStorageEnabled = true;
-      await startRunning();
-      await captureSeconds(1, frameCursor: 0);
-      final root = singleRoot(evidenceRecords());
-      final sessionId = world.hostApi.lastStartSessionId!;
-
-      world.emitNativeState(PhoneMicCaptureState.interrupted, sessionId: sessionId);
-      await world.settle();
-      world.emitNativeState(PhoneMicCaptureState.running, sessionId: sessionId);
-      await world.settle();
-      await captureSeconds(1, frameCursor: 10000);
-
-      final records = evidenceRecords();
-      expect(records, hasLength(200));
-      expect(singleRoot(records), root);
-      expect([for (final r in records) r['source_frame']], List.generate(200, (i) => i));
-
-      world.setConnected(false);
-      world.socket!.emitClose();
-      await world.settle();
-      await captureSeconds(1, frameCursor: 20000);
-      await world.wal.syncs.phone.finalizeCurrentSession();
-
-      final rooted = (await world.wal.syncs.phone.getAllWals()).where((w) => w.captureRoot != null).toList();
-      expect(rooted, isNotEmpty);
-      expect(rooted.map((w) => w.captureRoot).toSet(), {root});
-    });
-
-    test('a padded phone-mic flush tail keeps the session root and frame count', () async {
-      SharedPreferencesUtil().unlimitedLocalStorageEnabled = true;
-      await startRunning();
-      final sessionId = world.hostApi.lastStartSessionId!;
-
-      world.setConnected(false);
-      world.socket!.emitClose();
-      await world.settle();
-      world.mic.onAudioFrame(Uint8List.fromList(List.filled(700, 0xAB)), sessionId);
-      await world.settle();
-      await world.stopLiveCapture();
-      await world.wal.syncs.phone.finalizeCurrentSession();
-
-      final rooted = (await world.wal.syncs.phone.getAllWals()).where((w) => w.captureRoot != null).toList();
-      expect(rooted, isNotEmpty, reason: 'the padded tail lands in a rooted WAL');
-      final wal = rooted.last;
-      final root = wal.captureRoot;
-      expect(wal.sourceFrameStart, 0);
-      expect(wal.totalFrames, 3, reason: 'two full frames plus one zero-padded tail');
-      final walPath = await Wal.getFilePath(wal.filePath);
-      final bytes = await File(walPath!).readAsBytes();
-      var offset = 0;
-      var frames = 0;
-      var lastLength = 0;
-      while (offset + 4 <= bytes.length) {
-        lastLength = ByteData.sublistView(bytes, offset).getUint32(0, Endian.little);
-        offset += 4 + lastLength;
-        frames++;
-      }
-      expect(frames, 3);
-      expect(lastLength, 320);
-
-      world.setConnected(true);
-      await world.wal.syncs.phone.syncAll();
-      final claim = world.uploads.attempts.last.captureEvidence;
-      expect(claim, isNotNull);
-      final parsed = jsonDecode(claim!);
-      expect((parsed['files'] as List).map((f) => f['frame_count']).toSet(), {3});
-      expect((parsed['files'] as List).map((f) => f['capture_root']).toSet(), {root});
     });
 
     test('a reconnect keeps the claim namespace and uploads the recovered WAL claims', () async {

@@ -23,15 +23,12 @@ import 'package:provider/provider.dart';
 
 const _seconds = int.fromEnvironment('OMI_PHYSICAL_CAPTURE_SECONDS', defaultValue: 20);
 const _wearable = String.fromEnvironment('OMI_PHYSICAL_WEARABLE_ID');
-const _requestedSource = String.fromEnvironment('OMI_PHYSICAL_CAPTURE_SOURCE', defaultValue: 'phone_mic');
-const _isWearable = _requestedSource == 'wearable' || _wearable != '';
-const _source = _isWearable ? 'wearable' : 'phone_mic';
+const _source = 'wearable';
 String _entryStage = 'starting';
 
 void main() {
   if (!PhysicalQualification.enabled) throw StateError('Physical qualification opt-in required.');
   if (_seconds < 5 || _seconds > 300) throw StateError('Capture duration must be 5–300 seconds.');
-  if (!['phone_mic', 'wearable'].contains(_requestedSource)) throw StateError('Unknown physical capture source.');
   app.main();
   unawaited(_run().catchError((Object error, StackTrace stack) async {
     // Keep failures visible and durable without logging auth values or audio.
@@ -215,20 +212,12 @@ Future<void> _run() async {
     if (!ConnectivityService().isConnected) throw StateError('Private backend health must be reachable.');
     await capture.setBatchMode(false);
     final previous = (await phone.getAllWals()).map((wal) => wal.id).toSet();
-    String? selectedWearableId;
-    final selectedDevice = _isWearable ? await _connectWearable(boot) : null;
-    selectedWearableId = selectedDevice?.id;
+    final selectedDevice = await _connectWearable(boot);
+    final selectedWearableId = selectedDevice.id;
     await runBoundedPhysicalCapture(
       duration: const Duration(seconds: _seconds),
       start: () async {
-        if (selectedDevice == null) {
-          await capture!.streamRecording();
-          if (capture.isPhoneMicBatchRecording) {
-            throw StateError('Unexpected batch fallback; stream/WAL lane required.');
-          }
-        } else {
-          await capture!.streamDeviceRecording(device: selectedDevice);
-        }
+        await capture!.streamDeviceRecording(device: selectedDevice);
       },
       reportStarted: () {
         _entryStage = 'capturing';
@@ -236,11 +225,7 @@ Future<void> _run() async {
       },
       stop: () async {
         _entryStage = 'stopping_capture';
-        if (selectedDevice == null) {
-          await capture!.stopStreamRecording();
-        } else {
-          await capture!.stopStreamDeviceRecording();
-        }
+        await capture!.stopStreamDeviceRecording();
       },
     );
     _entryStage = 'finalizing_wal';

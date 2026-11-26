@@ -10,6 +10,8 @@ abstract final class CaptureSources {
     switch (source) {
       case 'desktop':
         return Icons.desktop_mac_outlined;
+      case 'system_audio':
+        return Icons.speaker_outlined;
       case 'omi':
       case 'friend':
       case 'friend_com':
@@ -34,6 +36,8 @@ abstract final class CaptureSources {
     switch (source) {
       case 'desktop':
         return context.l10n.captureSourceDesktop;
+      case 'system_audio':
+        return context.l10n.systemAudio;
       // The wearable is "Pendant" wherever a capture source is named (design ruling 2026-09-24),
       // never "Omi", which is the app.
       case 'omi':

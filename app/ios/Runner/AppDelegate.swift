@@ -116,7 +116,6 @@ final class QuickActionsIconPatcher: NSObject {
   private var livePreviewPlugin: LivePreviewPlugin?
   private var livePreviewNotesPlugin: LivePreviewNotesPlugin?
   private let deviceToolsService = DeviceToolsService()
-  private var phoneMicController: PhoneMicController?
   private var notificationTitleOnKill: String?
   private var notificationBodyOnKill: String?
 
@@ -363,18 +362,6 @@ final class QuickActionsIconPatcher: NSObject {
           let rayBanApi = RayBanMetaHostApiImpl(flutterAPI: rayBanFlutterApi)
           rayBanMetaHostApi = rayBanApi
           RayBanMetaHostAPISetup.setUp(binaryMessenger: messenger, api: rayBanApi)
-      }
-
-      // Native phone-mic capture (conversation recording) — Pigeon APIs.
-      // Self-healing AVAudioEngine capture; interruption/route recovery is
-      // handled natively, Dart only mirrors the state.
-      do {
-          let messenger = messenger
-          let phoneMicFlutterApi = PhoneMicFlutterApi(binaryMessenger: messenger)
-          let micController = PhoneMicController(
-              environment: PhoneMicLiveEnvironment.make(sink: phoneMicFlutterApi))
-          phoneMicController = micController
-          PhoneMicHostApiSetup.setUp(binaryMessenger: messenger, api: PhoneMicHostApiImpl(controller: micController))
       }
 
       // Native capture admission latch. Mute is applied before Dart persists

@@ -79,7 +79,6 @@ import 'package:omi/services/wals/wal.dart' show Wal;
 import 'package:omi/services/wals/wal_interfaces.dart';
 import 'package:omi/utils/analytics/analytics_adapter.dart';
 import 'package:omi/utils/analytics/analytics_manager.dart';
-import 'package:omi/utils/enums.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/widgets/conversation_bottom_bar.dart' show ConversationTab;
@@ -241,15 +240,6 @@ class _LiveCapture extends CaptureProvider {
 
   @override
   bool hasClosedServerRecording(String recordingId) => closedRecordingIds.contains(recordingId);
-  int phoneStopCalls = 0;
-
-  @override
-  Future<bool> stopStreamRecording({String reason = 'user_stopped', bool resumeHandedOffPendant = true}) async {
-    phoneStopCalls++;
-    recordingState = RecordingState.stop;
-    notifyListeners();
-    return true;
-  }
 
   @override
   Future<InProgressProcessOutcome> finishCaptureWithOutcome({String? liveConversationId}) async {
@@ -1015,31 +1005,6 @@ void main() {
     });
   });
 
-  testWidgets('v3: the placeholder page shows Finish while the phone recorder is restoring', (tester) async {
-    await withClock(Clock.fixed(_now), () async {
-      final home = await _pumpHome(tester, v3: true);
-      home.liveOpen = false;
-      home.capture
-        ..streaming = false
-        ..recordingState = RecordingState.record
-        ..segments = [];
-      await home.conversationsV3.refresh();
-      await tester.pump();
-      await tester.tap(find.byType(V3LivePlaceholderRow));
-      await settleDetailTab(tester);
-      expect(find.byType(LiveEpisodePage), findsOneWidget);
-      expect(finishButton.hitTestable(), findsOneWidget);
-      await tester.tap(finishButton);
-      await settleDetailTab(tester);
-      await tester.pump(const Duration(milliseconds: 500));
-      // The restoring recorder is this phone's: it finishes through Process Now, not a bare stop.
-      expect(home.capture.finishCalls, 1);
-      expect(home.capture.phoneStopCalls, 0);
-      expect(find.byType(LiveEpisodePage), findsNothing);
-      await _dispose(tester, home);
-    });
-  });
-
   testWidgets("End is hidden on a live window that is not this phone's capture", (tester) async {
     await withClock(Clock.fixed(_now), () async {
       final home = await _pumpHome(tester, v3: true);
@@ -1611,6 +1576,27 @@ void main() {
         ),
       );
     }
+
+    testWidgets('Home explains that conversations require a recording device', (tester) async {
+      await withClock(Clock.fixed(_now), () async {
+        final palette = OmiColors.active;
+        addTearDown(() => OmiColors.active = palette);
+        OmiColors.active = OmiColors.forBrightness(Brightness.dark);
+        final home = await _pumpHome(tester, v3: true, boundary: boundary, theme: theme(), size: const Size(393, 852));
+        home.capture.streaming = false;
+        home.capture.notifyListeners();
+        home.liveOpen = false;
+        await home.conversationsV3.refresh();
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 300));
+
+        expect(find.text('Pair your Omi and it captures your conversations hands-free, all day.'), findsOneWidget);
+        expect(find.text('Connect Device'), findsOneWidget);
+        expect(find.bySemanticsLabel('Start Recording'), findsNothing);
+        await shoot(tester, '001-mobile-ios-connect-recording-device');
+        await _dispose(tester, home);
+      });
+    });
 
     testWidgets('a list read failure keeps Try Again beside a manual finish', (tester) async {
       await withClock(Clock.fixed(_now), () async {

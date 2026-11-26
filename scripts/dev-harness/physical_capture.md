@@ -51,8 +51,8 @@ firewall. The build's native dependency exclusions and endpoint configuration
 remain required. Native Firebase Auth stays connected to the genuine local
 emulator, with the synthetic UID checked on every boot.
 
-For wearable capture, use a new qualification bundle, fixture UID and API port
-with `OMI_PHYSICAL_CAPTURE_SOURCE=wearable`. The production DeviceService scans
+Use a new qualification bundle, fixture UID and API port for each run. The build
+receipt records `OMI_PHYSICAL_CAPTURE_SOURCE=wearable` for the collector. The production DeviceService scans
 and reports `wearable_candidates` to the authenticated collector, containing
 a fresh `scan_id` and `{peripheral_id,name,rssi}` records filtered to the actual
 Omi service classification. Zero or multiple candidates fail; RSSI never chooses
@@ -73,12 +73,9 @@ a separate probe's identifier is not assumed transferable. An optional explicit
 `OMI_PHYSICAL_WEARABLE_ID` remains available when the correct UUID is already
 known, but must still match the sole fresh Omi candidate.
 
-Without a wearable source or ID define, the app calls `streamRecording` through
-the real phone microphone service. Both choose live stream mode to exercise
-the Flutter WAL path; batch fallback is rejected for the phone lane. Durable
-capture state records source and fixture UID, and refuses recovery under a
-different source or principal. Use separate bundles for separate runs so the
-completed phone recording remains untouched.
+Qualification uses live wearable streaming to exercise the Flutter WAL path.
+Durable capture state records the wearable source and fixture UID and refuses
+recovery under a different source or principal.
 
 ## Host/device sequence
 

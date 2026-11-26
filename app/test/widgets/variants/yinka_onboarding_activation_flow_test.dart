@@ -11,16 +11,12 @@ import 'package:omi/pages/onboarding/variants/yinka/activation/activation_captur
 import 'package:omi/pages/onboarding/variants/yinka/activation/activation_flow.dart';
 
 class _FakeCapture implements ActivationCapture {
-  _FakeCapture(this.result, {this.startsAs = ActivationStart.listening, this.device = false});
+  _FakeCapture(this.result, {this.startsAs = ActivationStart.listening});
 
   final ActivationResult result;
   final ActivationStart startsAs;
-  final bool device;
   final ValueNotifier<String> live = ValueNotifier('');
   bool cancelled = false;
-
-  @override
-  bool get usesDevice => device;
 
   @override
   ValueListenable<String> get liveText => live;
@@ -65,11 +61,10 @@ void main() {
 
   Future<({_FakeCapture capture, List<String> events})> pump(
     WidgetTester tester, {
-    bool hasDevice = false,
+    bool hasDevice = true,
     ActivationResult result = notes,
     Completer<void>? paywall,
     _FakeCapture Function()? capture,
-    Future<bool> Function()? requestMicrophone,
     Future<bool> Function()? finish,
   }) async {
     final captures = <_FakeCapture>[];
@@ -96,8 +91,6 @@ void main() {
               }
               return next();
             },
-            microphoneGranted: () async => true,
-            requestMicrophone: requestMicrophone,
             requestReview: () async => events.add('review'),
             showPaywall: () {
               events.add('paywall');
@@ -197,26 +190,20 @@ void main() {
     await tester.pump(const Duration(seconds: 5));
   });
 
-  testWidgets('when the Omi is not streaming, the microphone is asked for before the dictation', (tester) async {
-    var asked = false;
-    await pump(
-      tester,
-      hasDevice: true,
-      capture: () => _FakeCapture(notes, startsAs: ActivationStart.needsMicrophone),
-      requestMicrophone: () async => asked = true,
-    );
+  testWidgets('without a wearable, explains how to record and lets onboarding continue', (tester) async {
+    await pump(tester, hasDevice: false);
     await tester.pump(const Duration(seconds: 4));
-    await tester.pump(const Duration(seconds: 1));
-    expect(find.text("Your Omi isn't sending audio yet. Use your phone for now."), findsOneWidget);
-    await tapKey(tester, 'activation_continue_microphone');
-    expect(asked, isTrue);
-    expect(find.text('Tell Omi about your day'), findsOneWidget, reason: 'listening again, through the phone');
+    expect(find.text('Connect your Omi'), findsOneWidget);
+    expect(find.text('Connect Device').hitTestable(), findsOneWidget);
+    expect(find.text('Tell Omi about your day'), findsNothing);
+    await tapKey(tester, 'activation_continue_deviceRequired');
+    expect(SharedPreferencesUtil().getBool(ActivationFlow.welcomeCardKey), isTrue);
     await tester.pumpWidget(const SizedBox());
-    await tester.pump(const Duration(seconds: 13));
+    await tester.pump(const Duration(seconds: 15));
   });
 
   testWidgets('after a quiet stretch the dictation says it cannot hear the Omi', (tester) async {
-    await pump(tester, hasDevice: true, capture: () => _FakeCapture(notes, device: true));
+    await pump(tester, hasDevice: true, capture: () => _FakeCapture(notes));
     await tester.pump(const Duration(seconds: 4));
     await tester.pump(const Duration(seconds: 13));
     expect(find.text("Can't hear your Omi. Make sure it's on and close by."), findsOneWidget);

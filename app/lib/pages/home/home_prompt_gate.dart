@@ -7,10 +7,8 @@ import 'package:omi/providers/phone_call_provider.dart';
 import 'package:omi/ui/prompts/prompt_queue.dart';
 import 'package:omi/utils/enums.dart';
 
-/// Recording states in which a prompt would interrupt the person: phone-mic capture starting or
-/// running, system-audio capture, and a mic taken by another app. Passive wearable capture
-/// (`deviceRecord`) and a muted pendant (`pause`) are not busy — the same rule as the review
-/// prompt (`widgets/app_review_prompt.dart`).
+/// Active or transitional recording states that block Home prompts. Passive wearable capture
+/// and a muted pendant still allow prompts, as they do in the app review prompt.
 const Set<RecordingState> kPromptBlockingRecordingStates = {
   RecordingState.initialising,
   RecordingState.record,
@@ -28,13 +26,11 @@ const Set<PhoneCallState> kPromptBlockingCallStates = {
 /// or a firmware update running.
 bool promptsBlocked({
   required RecordingState recordingState,
-  required bool phoneMicBatchRecording,
   required bool micInterruptedByCall,
   required PhoneCallState callState,
   required bool firmwareUpdateInProgress,
 }) {
   return kPromptBlockingRecordingStates.contains(recordingState) ||
-      phoneMicBatchRecording ||
       micInterruptedByCall ||
       kPromptBlockingCallStates.contains(callState) ||
       firmwareUpdateInProgress;
@@ -58,7 +54,6 @@ class HomePromptGate {
     final device = _device;
     return promptsBlocked(
       recordingState: capture?.recordingState ?? RecordingState.stop,
-      phoneMicBatchRecording: capture?.isPhoneMicBatchRecording ?? false,
       micInterruptedByCall: capture?.isCallActive ?? false,
       callState: _callState.value,
       firmwareUpdateInProgress: device?.isFirmwareUpdateInProgress ?? false,

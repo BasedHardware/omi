@@ -27,7 +27,6 @@ import 'package:omi/services/sockets/listen_client_state.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/conversations/conversation_title.dart';
 import 'package:omi/utils/l10n_extensions.dart';
-import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:omi/widgets/capture_sources.dart';
 
 /// Switch the home IndexedStack to Home (the conversation list) *before* popping the live route so
@@ -128,13 +127,10 @@ class LiveEpisodePageState extends State<LiveEpisodePage> with SingleTickerProvi
     setState(() => _mutePending = true);
     try {
       OmiHaptics.medium();
-      final phone = provider.liveCaptureSource == 'phone';
       if (provider.isPaused) {
         await provider.resumeCapture();
-        if (phone && !provider.isPaused) PlatformManager.instance.analytics.phoneMicRecordingStarted();
       } else {
         await provider.pauseCapture();
-        if (phone) PlatformManager.instance.analytics.phoneMicRecordingStopped();
       }
     } catch (_) {
       if (mounted) OmiFeedback.error(context, context.l10n.somethingWentWrong);
@@ -192,13 +188,8 @@ class LiveEpisodePageState extends State<LiveEpisodePage> with SingleTickerProvi
     }
   }
 
-  // Home can open this page while the phone recorder is active but is still establishing
-  // coordinator ownership, before either the capture source or its transcript is available.
   static bool _hasCapture(CaptureProvider capture) =>
-      capture.liveCaptureSource != null ||
-      EpisodePresentation.streamingSource(capture) != null ||
-      capture.segments.isNotEmpty ||
-      capture.photos.isNotEmpty;
+      capture.liveCaptureSource != null || capture.segments.isNotEmpty || capture.photos.isNotEmpty;
 
   @override
   Widget build(BuildContext context) {
@@ -252,7 +243,6 @@ class LiveEpisodePageState extends State<LiveEpisodePage> with SingleTickerProvi
         bufferingFor: shell.bufferingFor,
         sourceLabel: switch (shell.source) {
           null => null,
-          'phone' => context.l10n.captureSourcePhoneMic,
           final source => CaptureSources.label(context, source),
         },
       ),
@@ -362,9 +352,6 @@ class LiveEpisodePageState extends State<LiveEpisodePage> with SingleTickerProvi
                   now: now,
                   unavailable: episodes.notesUnavailable(
                     captureStart: context.select<CaptureProvider, DateTime?>((c) => c.liveCaptureStartedAt),
-                    captureId: context.select<CaptureProvider, String?>(
-                      (c) => c.liveCaptureSource == 'phone' ? c.activeRecordingId : null,
-                    ),
                   ),
                   // The admitted preview session, when this capture has one: its on-device notes
                   // (So far) hang off it.
