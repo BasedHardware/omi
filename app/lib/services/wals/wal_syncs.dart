@@ -45,6 +45,7 @@ class WalSyncs implements IWalSync {
   int _ringGeneration = 0;
   int? _ringPassGeneration;
   bool Function()? _shouldDrainRing;
+  bool _independentDrainAllowed = true;
   bool _retryRingAfterSettlement = false;
   int _uploadCancellation = 0;
   int get uploadCancellation => _uploadCancellation;
@@ -52,12 +53,27 @@ class WalSyncs implements IWalSync {
   bool _ringPausedByUser = false;
 
   bool get usesIndependentRingDrain =>
-      ringDrainRecoveryEnabled && _shouldDrainRing != null && isRingBufferFirmware(_resolvedFirmware);
+      ringDrainRecoveryEnabled &&
+      _independentDrainAllowed &&
+      _shouldDrainRing != null &&
+      isRingBufferFirmware(_resolvedFirmware);
 
-  void enableRingDrain(bool Function() shouldDrain, {void Function()? onDurableChunk}) {
+  /// SCA-4753 samples the same decision that routes the connected pendant.
+  /// No cohort applies before policy is configured or for non-ring firmware.
+  String? get drainCohort {
+    if (_shouldDrainRing == null || !isRingBufferFirmware(_resolvedFirmware)) return null;
+    return usesIndependentRingDrain ? 'on' : 'holdout';
+  }
+
+  void configureRingDrain(
+    bool Function() shouldDrain, {
+    bool independentDrainAllowed = true,
+    void Function()? onDurableChunk,
+  }) {
     _shouldDrainRing = shouldDrain;
+    _independentDrainAllowed = independentDrainAllowed;
     _ringPausedByUser = false;
-    ring.independentDiscovery = ringDrainRecoveryEnabled;
+    ring.independentDiscovery = ringDrainRecoveryEnabled && independentDrainAllowed;
     ring.onDurableChunk = onDurableChunk;
     unawaited(wakeRingDrain());
   }

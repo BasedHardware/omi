@@ -20,6 +20,7 @@ import 'package:omi/backend/http/shared.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/services/connectivity_service.dart';
+import 'package:omi/services/experiments/pendant_ring_drain_gate.dart';
 import 'package:omi/services/capture/capture_wedge_monitor.dart';
 import 'package:omi/services/services.dart';
 import 'package:omi/services/sync_health_watchdog.dart';
@@ -440,6 +441,11 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
     _admittedWorkGeneration = -1;
     if (_startBackgroundSync) RecordingTransferCoordinator.instance.cancelManualRingSync();
     _walService.getSyncs().clearUserData();
+    final syncs = _deviceSyncs;
+    if (_startBackgroundSync && syncs != null) {
+      // A holdout decision belongs to the launch's signed-in account.
+      _configureRingDrain(syncs, independentDrainAllowed: true);
+    }
     // The capture monitor singleton outlives the provider: without this, the
     // previous account's unseen flag and storage/upload counts light the bell
     // for the next login.
@@ -480,16 +486,11 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
       if (!_isCurrent(generation)) return;
       final syncs = _deviceSyncs;
       if (_startBackgroundSync && syncs != null) {
-        RecordingTransferCoordinator.instance
-          ..onRingWake = syncs.wakeRingDrain
-          ..onManualRingWake = syncs.wakeManualRingDrain;
-        syncs.enableRingDrain(
-          () =>
-              !_isDisposed &&
-              !SharedPreferencesUtil().useCustomStt &&
-              SharedPreferencesUtil().autoSyncOfflineRecordings,
-          onDurableChunk: RecordingTransferCoordinator.instance.wakeForRingChunk,
-        );
+        // Pin the lane before either reader starts. A launch never mixes cohorts
+        // or changes custody ownership while a read is settling.
+        final allowIndependentDrain = await PendantRingDrainGate.independentDrainAllowed();
+        if (!_isCurrent(generation)) return;
+        _configureRingDrain(syncs, independentDrainAllowed: allowIndependentDrain);
       }
       await _uploadGate.reconcileFairUseStatus();
       if (!_isCurrent(generation)) return;
@@ -499,6 +500,18 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
     } catch (error, stackTrace) {
       Logger.error('SyncProvider: initialization failed: $error\n$stackTrace');
     }
+  }
+
+  void _configureRingDrain(WalSyncs syncs, {required bool independentDrainAllowed}) {
+    final coordinator = RecordingTransferCoordinator.instance;
+    coordinator
+      ..onRingWake = independentDrainAllowed ? syncs.wakeRingDrain : null
+      ..onManualRingWake = independentDrainAllowed ? syncs.wakeManualRingDrain : null;
+    syncs.configureRingDrain(
+      () => !_isDisposed && !SharedPreferencesUtil().useCustomStt && SharedPreferencesUtil().autoSyncOfflineRecordings,
+      independentDrainAllowed: independentDrainAllowed,
+      onDurableChunk: coordinator.wakeForRingChunk,
+    );
   }
 
   void _onRateLimiterChanged() {

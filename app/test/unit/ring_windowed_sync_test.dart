@@ -374,7 +374,7 @@ void main() {
       await File('${tempDir.path}/${wal.filePath}').writeAsBytes([1, 0, 0, 0, 42]);
     }
     final syncs = WalSyncs(listener, phoneSync: phone, ringSync: storage);
-    syncs.enableRingDrain(() => true);
+    syncs.configureRingDrain(() => true);
     final timedOut = Completer<void>();
     final uploadExited = Completer<void>();
     final coordinator = RecordingTransferCoordinator(
@@ -486,7 +486,7 @@ void main() {
     addTearDown(coordinator.dispose);
     addTearDown(syncs.disableRingDrain);
     expect(SharedPreferencesUtil().autoSyncOfflineRecordings, isFalse);
-    syncs.enableRingDrain(() => false, onDurableChunk: coordinator.wakeForRingChunk);
+    syncs.configureRingDrain(() => false, onDurableChunk: coordinator.wakeForRingChunk);
     syncs.setDevice(pendant.device);
     await syncs.wakeRingDrain(); // Settle the connection's discovery-only pass.
 
@@ -556,7 +556,7 @@ void main() {
     );
     addTearDown(coordinator.dispose);
     addTearDown(syncs.disableRingDrain);
-    syncs.enableRingDrain(() => true);
+    syncs.configureRingDrain(() => true);
     syncs.setDevice(pendant.device);
     await syncs.wakeRingDrain();
 
