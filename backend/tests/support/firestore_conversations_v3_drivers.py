@@ -1,6 +1,6 @@
 """Execute recording-builder and sweeper query shapes without external effects."""
 
-from datetime import timedelta
+from datetime import datetime, timedelta
 from importlib import import_module
 from unittest.mock import patch
 
@@ -54,6 +54,43 @@ def _finish_source(client, combo, trial):
     )
 
 
+def _named_finish_sources(client, combo, trial):
+    """A just-sealed capture, and another that fed an ended window; Finish may name either one."""
+    base = f'users/{SHAPE_UID}/conversations'
+    capture = {
+        'source': 'omi',
+        'recording': True,
+        'created_at': FROZEN_NOW,
+        'started_at': FROZEN_NOW,
+        'finished_at': FROZEN_NOW,
+        'status': 'completed',
+        'external_data': {'recording_session_id': 'shape-session'},
+    }
+    client.documents[f'{base}/source'] = capture
+    client.documents[f'{base}/tail'] = {
+        **capture,
+        'claims': [{'conversation_id': 'window', 'start': FROZEN_NOW, 'end': FROZEN_NOW}],
+    }
+    client.documents[f'{base}/window'] = {
+        'v3_derived': True,
+        'started_at': FROZEN_NOW,
+        'finished_at': FROZEN_NOW,
+        'status': 'processing',
+        'v3_recording_ids': ['tail'],
+    }
+
+
+def _finish_clock(client):
+    """The cut is fresh, so the predecessor read runs."""
+
+    class Clock(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return FROZEN_NOW
+
+    return patch('database.conversations_v3_finish_predecessors.datetime', Clock)
+
+
 def _pick_none(rows, now):
     return None
 
@@ -81,6 +118,23 @@ def entries():
             domains={'conversation_id': [None, 'source']},
             setup=_pending_source,
             patchers=(_decode,),
+        ),
+        DriverEntry(
+            'database.conversations_v3_finish_predecessors.attach',
+            base={
+                'coll': ref_collection(f'users/{SHAPE_UID}/conversations'),
+                'recordings': {
+                    'finish': {
+                        'id': 'finish',
+                        'started_at': FROZEN_NOW,
+                        'finished_at': FROZEN_NOW,
+                        'v3_manual_end': True,
+                        'external_data': {'recording_origin_id': 'shape-origin'},
+                    }
+                },
+                'existing': {},
+            },
+            patchers=(_finish_clock,),
         ),
         DriverEntry(
             'database.conversations_v3._mark_successor_pending',
@@ -127,10 +181,28 @@ def entries():
             setup=_finish_source,
             patchers=(_transaction_without_rpc,),
         ),
+        DriverEntry(
+            'database.conversations_v3_live.request_named_finish',
+            base={'uid': SHAPE_UID, 'now': FROZEN_NOW},
+            domains={'named_id': ['source', 'window']},
+            setup=_named_finish_sources,
+            patchers=(_transaction_without_rpc,),
+        ),
+        CoveredByEntry(
+            'database.conversations_v3_live._live_window_or_deleting',
+            covered_by=(
+                'database.conversations_v3_live.request_recording_finish',
+                'database.conversations_v3_live.request_named_finish',
+            ),
+            reason='Both recording-scoped Finish transactions run the same live-window recheck before any write.',
+        ),
         CoveredByEntry(
             'database.conversations_v3_live._recent_finish_sources',
-            covered_by=('database.conversations_v3_live.request_recording_finish',),
-            reason='The Finish transaction scans the same bounded source query on every call.',
+            covered_by=(
+                'database.conversations_v3_live.request_recording_finish',
+                'database.conversations_v3_live.request_named_finish',
+            ),
+            reason='Both recording-scoped Finish transactions scan the same bounded source query.',
         ),
         DriverEntry(
             'database.conversations_v3.merge_donors_have_tasks',
@@ -156,6 +228,9 @@ def entries():
         ),
         DriverEntry('database.conversations_v3_backfill_runs.pending_starts', base={'limit': 20}),
         DriverEntry('database.conversations_v3_processing.pending_created', base={'uid': SHAPE_UID}),
+        # Owner-level End instants (flag end_open_conversation): single-field range reads on the cut time.
+        DriverEntry('database.conversations_v3_manual_cuts.around', base={'uid': SHAPE_UID, 'at': FROZEN_NOW}),
+        DriverEntry('database.conversations_v3_manual_cuts.load', base={'uid': SHAPE_UID, 'since': FROZEN_NOW}),
         DriverEntry(
             'utils.conversations.v3.service.has_pending',
             base={'uid': SHAPE_UID},

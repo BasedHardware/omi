@@ -27,6 +27,7 @@ import 'package:omi/providers/phone_call_provider.dart';
 import 'package:omi/pages/review/widgets/review_entry_card.dart';
 import 'package:omi/pages/episodes/episode_presentation.dart';
 import 'live_episode_visibility.dart';
+import 'v3_live_row_visibility.dart';
 import 'home_rows.dart';
 import 'home_card_rows.dart';
 import 'package:omi/providers/home_feed_provider.dart';
@@ -39,6 +40,9 @@ import 'package:omi/providers/conversations_v3_provider.dart';
 import 'package:omi/providers/episode_provider.dart';
 import 'package:omi/providers/home_provider.dart';
 import 'package:omi/services/capture/empty_recording_notice.dart';
+import 'package:omi/services/live_preview/live_preview_controller.dart';
+import 'package:omi/services/live_preview/live_words_log.dart';
+import 'package:omi/services/live_preview/speech_after_end.dart';
 import 'package:omi/providers/local_recordings_provider.dart';
 import 'package:omi/providers/review_provider.dart';
 import 'package:omi/services/pending_work/pending_work_store.dart';
@@ -62,6 +66,7 @@ import 'package:omi/pages/home/widgets/quiet_payer_row.dart';
 import 'package:omi/providers/usage_provider.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/l10n_extensions.dart';
+import 'package:omi/utils/reliability_experiments.dart';
 
 import 'package:omi/widgets/home_bottom_bar.dart';
 
@@ -398,6 +403,42 @@ class _ConversationsPageState extends State<ConversationsPage>
   String? _v3LiveId;
   DateTime? _v3LiveCreatedAt;
   DateTime? _v3EventRefreshAt;
+
+  // Reliability experiment instant_live_text: while an End hides the Listening row, the phone's own
+  // recogniser is watched, and the first words spoken after that End bring the row back.
+  LivePreviewController? _afterEndPreview;
+  ({DateTime since, String? captureId})? _afterEnd;
+
+  void _watchSpeechAfterEnd(LivePreviewController? preview, DateTime? since, String? captureId) {
+    final watched = since == null ? null : preview;
+    _afterEnd = watched == null ? null : (since: since!, captureId: captureId);
+    if (identical(_afterEndPreview, watched)) return;
+    _afterEndPreview?.removeListener(_onPreviewAfterEnd);
+    _afterEndPreview = watched;
+    watched?.addListener(_onPreviewAfterEnd);
+    // Words may already be there (the End was pressed on another page); never notify during a build.
+    if (watched != null) WidgetsBinding.instance.addPostFrameCallback((_) => _onPreviewAfterEnd());
+  }
+
+  void _onPreviewAfterEnd() {
+    final preview = _afterEndPreview;
+    final target = _afterEnd;
+    if (!mounted || preview == null || target == null) return;
+    final spokenAt = SpeechAfterEnd.firstHeard(preview.lines, target.since);
+    if (spokenAt != null) {
+      final resumed = context.read<ConversationsV3Provider?>()?.resumeListeningAfterFinish(target.captureId) ?? false;
+      if (resumed && ReliabilityExperiments.enabled('vendor_recognizer_on_opened_app')) {
+        // Local timing record (no text): how long after the End, and after the first word spoken after
+        // it, the Listening row came back.
+        LiveWordsLog.event('listening_row_back', {
+          'after_end_ms': DateTime.now().difference(target.since).inMilliseconds,
+          'after_first_word_ms': DateTime.now().difference(spokenAt).inMilliseconds,
+          'own_results': preview.ownResultsHeard,
+          'vendor_words': preview.vendorWordsSeen,
+        });
+      }
+    }
+  }
 
   /// Episodes were asked for before the switch answered (and so made no call); ask again once it says
   /// this account is not on v3.
@@ -809,6 +850,8 @@ class _ConversationsPageState extends State<ConversationsPage>
     if (_v3Watching) _v3?.unwatch();
     _v3Watching = false;
     _stopV3Quick();
+    _afterEndPreview?.removeListener(_onPreviewAfterEnd);
+    _afterEndPreview = null;
     WidgetsBinding.instance.removeObserver(this);
     _watchedHome?.removeListener(_onHomeProviderChanged);
     _watchedHome = null;
@@ -907,6 +950,13 @@ class _ConversationsPageState extends State<ConversationsPage>
     // Recordings and conversations (v3): a flat list of conversations, the one in progress on top.
     final v3 = context.watch<ConversationsV3Provider?>();
     final v3On = v3?.v3 == true;
+    // Under vendor_recognizer_on_opened_app the watched lines are the merged ones: the phone's own
+    // recogniser's, and the vendor's where it returned nothing.
+    if (ReliabilityExperiments.enabled('instant_live_text') ||
+        ReliabilityExperiments.enabled('vendor_recognizer_on_opened_app')) {
+      _watchSpeechAfterEnd(context.select<CaptureProvider, LivePreviewController?>((c) => c.livePreview),
+          v3?.listeningSuppressedSince(captureId), captureId);
+    }
     // No answer yet (first launch): the plain list, with no feed or episode reads.
     final v3Pending = v3 != null && !v3.resolved;
     if (_legacyAfterAnswer) WidgetsBinding.instance.addPostFrameCallback((_) => _afterLegacyAnswer());
@@ -965,34 +1015,24 @@ class _ConversationsPageState extends State<ConversationsPage>
             if (mounted) v3!.acknowledgeManualFinish(manualFinish);
           });
         }
-        // A streaming capture with no server window to show (none yet, between windows, or one Home
-        // hides) is the live placeholder row: first under Today, the slot the server's live row takes
-        // when it arrives, so the row never jumps sections. An Omi call is shown as the call card
-        // instead; the placeholder never doubles it.
         final callActive = context.select<PhoneCallProvider?, bool>((p) => switch (p?.callState) {
               PhoneCallState.active || PhoneCallState.connecting || PhoneCallState.ringing => true,
               _ => false,
             });
-        final v3LiveShown = v3Live != null &&
-            v3Live.v3?.homeHidden != true &&
-            !isFailedConversation(v3Live) &&
-            !v3Live.discarded &&
-            !convoProvider.memoriesToDelete.containsKey(v3Live.id) &&
-            !SharedPreferencesUtil().isConversationDeleteConfirmed(v3Live.id);
-        // A deleted or discarded live window shows nothing (the owner removed it); only a window Home
-        // hides (still below the word minimum, say) is stood in for by the placeholder.
         final liveRemoved = v3Live != null &&
             (v3Live.discarded ||
                 convoProvider.memoriesToDelete.containsKey(v3Live.id) ||
-                SharedPreferencesUtil().isConversationDeleteConfirmed(
-                  v3Live.id,
-                ));
-        final livePlaceholder = v3Home &&
-            streaming &&
-            !v3!.suppressListeningAfterFinish(captureId) &&
-            (v3Live == null || v3Live.v3?.homeHidden == true) &&
-            !liveRemoved &&
-            !callActive;
+                SharedPreferencesUtil().isConversationDeleteConfirmed(v3Live.id));
+        final liveRow = v3HomeLiveRow(
+          v3Home: v3Home,
+          streaming: streaming,
+          serverUsable: v3Live != null && v3Live.v3?.homeHidden != true && !isFailedConversation(v3Live),
+          liveRemoved: liveRemoved,
+          callActive: callActive,
+          listeningSuppressed: v3Home && v3!.suppressListeningAfterFinish(captureId),
+        );
+        final liveServerRow = liveRow == V3HomeLiveRow.server ? v3Live : null;
+        final livePlaceholder = liveRow == V3HomeLiveRow.placeholder;
         if (v3Home) {
           final waiting = streaming && v3Live == null;
           final signature =
@@ -1069,11 +1109,11 @@ class _ConversationsPageState extends State<ConversationsPage>
                   if (c.id != v3Live?.id && shownOnV3Home(c)) c,
               ],
           };
-          if (v3LiveShown) {
+          if (liveServerRow != null) {
             // The conversation in progress always leads Today, even when it started before midnight:
             // the live row never sits in an earlier day or above the day list (David, 2026-11-21).
             final day = localHomeDay(clock.now());
-            conversationsByDate[day] = [v3Live, ...?conversationsByDate[day]];
+            conversationsByDate[day] = [liveServerRow, ...?conversationsByDate[day]];
           }
         }
         final cardById = <String, HomeFeedCard>{};
@@ -1245,8 +1285,9 @@ class _ConversationsPageState extends State<ConversationsPage>
             ? _withProcessingRows(rowsWithLocalProcessing, [manualFinish], clock.now())
             : rowsWithLocalProcessing;
         // Pin the server live row after inserting Processing, which treats it as an ordinary conversation.
-        final conversationRows =
-            !episodeLive && v3LiveShown ? _pinFirstInDay(rowsWithManualFinish, v3Live.id) : rowsWithManualFinish;
+        final conversationRows = !episodeLive && liveServerRow != null
+            ? _pinFirstInDay(rowsWithManualFinish, liveServerRow.id)
+            : rowsWithManualFinish;
 
         if (showRecordings &&
             !convoProvider.isSelectionModeActive &&

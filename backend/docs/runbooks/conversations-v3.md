@@ -134,7 +134,7 @@ even below 20 words. Naturally ended media is hidden. Background hides only
 with positive wearer recognition somewhere in the contributing recordings:
 `is_user: true` or a segment-bound wearer label from authoritative speaker
 evidence. Without it, background becomes conversation and uses the normal
-300-word rule or the manual-end override. `kind`, `outline_kind` and the
+150-word rule or the manual-end override. `kind`, `outline_kind` and the
 classification reason remain available for analytics.
 Set `CONVERSATIONS_V3_MANUAL_END_HOME_VISIBLE=off` on every service that runs the
 v3 reconcile (`backend` for on-open rebuilds, `backend-sync`, `backend-sync-backfill`)
@@ -187,7 +187,7 @@ proof of acoustic silence; qualify transcript completeness separately.
 `CONVERSATIONS_V3_STRETCH_COHESION` defaults to `on`. The outline renders
 stretch-local speaker labels, and short conversational topics fold within the
 same silence, manual-end and two-hour cap boundaries. Home evaluates the
-300-word threshold against that fresh stretch. Media, recognized background
+150-word threshold against that fresh stretch. Media, recognized background
 and late fragments around published claims retain their own visibility rules.
 Set the switch to `off` on v3 builder and backfill runners to restore the prior
 prompt and per-topic Home minimum for subsequent passes. Existing published
@@ -198,12 +198,22 @@ controls recorded-speech grouping (120–1800 seconds), and `CONVERSATIONS_V3_LO
 controls when a card locks and owes notes (120–3600 seconds). Both default to
 300. Invalid values use the defaults. When either value differs from its
 default, the existing summary-open path and explicit End bypass the lock timer.
-Setting both values back to 300 or disabling cohesion restores the prior
-timing; provisional rows remain reachable for the builder to finish.
+Setting both values back to 300 restores the default lock delay, still counted
+from landing unless `CONVERSATIONS_V3_SETTLE_ON_LANDING=off`; disabling cohesion
+restores the prior timing. Provisional rows remain reachable for the builder to finish.
 A lock delay shorter than the silence threshold can finalize an initial card
 while later speech still belongs to the same outline stretch. Later speech
 gets its own continuation. Reconciliation can merge settled cards when the
 outline and the loaded source claims cover the complete merge.
+
+`CONVERSATIONS_V3_TRANSCRIPT_SIZE_CAP` defaults to on. A new derived window also splits
+before its estimated encoded `transcript_segments` (enhanced encryption included) passes
+900 KiB, below Firestore's 1,048,487-byte per-field limit. Splits use the duration cap's
+continuation path; only unpublished windows split, and locked rows keep their boundaries.
+Count `event=v3_transcript_size_cap_split` log lines to see splits. A commit Firestore still
+rejects for size (whole document or one property) parks the owner as `document_too_large`
+instead of retrying. To roll back, set `CONVERSATIONS_V3_TRANSCRIPT_SIZE_CAP=off` on builder
+and backfill runners.
 
 `CONVERSATIONS_V3_MAX_WINDOW_SECONDS` defaults to 10800 (three hours).
 The first transcript line whose recorded start reaches the limit starts a new
@@ -241,13 +251,16 @@ rows cut by earlier code or an earlier pass keep their cut (even when a turn
 straddles it or a held turn is revised) and the cap counts from there. A locked
 row that owns none of the stretch's lines never cuts it.
 
-Under custom timing (either setting differs from 300), the lock delay counts
+With stretch cohesion on, live passes count the lock delay
 from the later of the stretch's last speech and when that speech landed
 (`v3_speech_landed_at`, written in the same transaction as the speech by the
 live transcript write and sync assignment, and only when the speech changed). A
 batch of old speech from
 offline sync then waits the lock delay after landing instead of locking on
-arrival. Default timing still counts from the last speech.
+arrival. Custom timing (either setting differs from 300) always uses this clock.
+At the default timing, `CONVERSATIONS_V3_SETTLE_ON_LANDING` (default on) selects it;
+set it to `off` to count from the last speech again. Backfill and re-derive keep the
+recorded clock.
 
 The recording-speaker picker for a derived conversation reads and edits only
 that copied window. Shared source scopes cannot expand it into other product
@@ -461,16 +474,36 @@ PYTHONPATH=backend backend/.venv/bin/python $S run --owners-file $O --since 2026
   builder leases before it lists the run's documents, so no pass commits while it works. It refuses
   while either is held or a notes write for the owner is in flight, and records the refusal in the
   ledger (`undo.reason`); rerun it. `undo` and `resume` exit 1 when no listed owner has the run.
-  Otherwise it restores every donor field exactly, then deletes the run's derived rows. It writes no
-  tombstones and touches no audio. A donor whose backfilled copy the owner deleted is not restored
-  (that would resurrect the deletion): it stays a hidden source, together with every copy it shares
-  and those copies' donors. The ledger and `undo --dry-run` count them (`donors_kept_deleted`,
-  `rows_kept_deleted`, `donors_deleted_by_owner`). Undo a re-derive by undoing the original run;
+  Otherwise it works one connected group at a time (donors and the copies that claim them): in one
+  transaction it restores every donor field exactly and deletes the group's copies, so nothing is
+  hidden or doubled partway. It writes no tombstones and touches no audio. A group in which the owner
+  deleted a copy (a deletion tombstone for a copy id, or a donor deleted span added after the run;
+  both read inside the transaction, so a delete racing undo is seen) stays as backfilled v3, so undo
+  never resurrects a deletion; its surviving copies' owed notes move to the live notes marker (the
+  deleted copy's notes are never written). Totals and removed copy ids are written in each group's own
+  transaction. If the owner deletes a copy in the instant undo removes it (before the delete path
+  writes its tombstone), the legacy row is visible again: undo lists those copy ids as
+  `deleted_during_undo_ids` (every attempt's removals are checked), so delete the matching legacy
+  rows by hand. A run with kept groups or a raced delete ends `undone_partial`, never `undone`, and
+  the operator exits 1. A group whose copy a live builder pass extended with recordings captured
+  after the run (the copy then holds live capture as well as donor lines) also stays as v3, counted
+  as `groups_kept_live`/`donors_kept_live`. A group containing a copy stamped with another run
+  uses the same counters. Undo leaves the other run’s rows and notes obligations untouched. The ledger
+  records `groups_kept_deleted` and `donors_kept_deleted`; `undo --dry-run` prints the group count
+  and `donors_deleted_by_owner_min`, a lower bound (it counts deleted spans and deleted copies
+  recorded on donors, and misses only a delete whose claim release has not run yet). Undoing a run
+  already `undone` or `undone_partial` reports its recorded result and changes nothing. A group
+  that is both live-extended and owner-deleted counts as kept-deleted. A group whose reads (two, plus one per donor and three per copy) would exceed 500 is
+  refused (`undo_group_too_large`); partitions keep groups far below that. Undo a re-derive by undoing the original run;
   `undo` on a re-derive run id says so and exits 1. Not undone: outline cache entries, speaker-resolution and media-boundary
   evidence that the notes path wrote, and gateway spend.
 - **Blocked.** A partition over the loader's 128-document limit, a planned id that is already a live
   row (`target_exists`), a tombstoned window, or a converted donor that no longer reads
-  (`backfill_source_unreadable`; its copies are kept) blocks the run. The partition and its reason are
+  (`backfill_source_unreadable`; its copies are kept), a re-derive in which a converted donor no rebuilt window claims
+  (`backfill_donor_unclaimed`; when the owner deleted that donor's copy, undo keeps it, so undo the
+  run and plan a new one around that range instead of resuming), or account deletion starting mid-drain (`account_deletion`;
+  no further transcript goes to the notes model) blocks the run. One owner's blocked plan prints
+  its reason and the operator continues with the next owner (exit 1). The partition and its reason are
   recorded in the ledger. Fix the cause, then `resume`. Never describe a blocked or partial run as
   complete. `status` shows partitions committed, windows, Home-visible rows, outline calls and
   notes processed or failed.

@@ -28,7 +28,10 @@ def test_verified_runtime_precedes_credentials_and_private_overlay():
     steps = {s['name']: s for s in job['steps']}
     order = list(steps)
     assert order.index('Reconstruct evidence runtime before credentials') < order.index('Google Auth (prod WIF)')
+    assert order.index('Reconstruct image-only runtime before credentials') < order.index('Google Auth (prod WIF)')
     assert steps['Reconstruct evidence runtime before credentials']['if'] == "${{ inputs.mode == 'evidence' }}"
-    assert steps['Install Helm']['if'] == "${{ inputs.mode != 'evidence' }}"
+    assert steps['Install Helm']['if'] == "${{ inputs.mode != 'evidence' && inputs.mode != 'image-only' }}"
     assert '-I -B' in steps['Produce private-overlay effect receipt without mutation']['run']
-    assert job['runs-on'] == "${{ inputs.mode == 'evidence' && 'ubuntu-22.04' || 'ubuntu-latest' }}"
+    assert job['runs-on'] == (
+        "${{ (inputs.mode == 'evidence' || inputs.mode == 'image-only') && 'ubuntu-22.04' || 'ubuntu-latest' }}"
+    )

@@ -1,0 +1,3 @@
+{
+  "change": "Some recording retries can now wait for sync without sending the same audio again."
+}

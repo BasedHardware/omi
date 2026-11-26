@@ -326,7 +326,7 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
                 ? null
                 : () => _togglePause(provider),
           );
-      final card = preview != null && provider.localPreviewAdmitted && provider.segments.isEmpty
+      final card = preview != null && provider.liveWordsShown && provider.segments.isEmpty
           ? ListenableBuilder(listenable: preview, builder: (context, _) => buildCard(preview.latestLine))
           : buildCard(provider.segments.lastOrNull?.text);
       return Column(

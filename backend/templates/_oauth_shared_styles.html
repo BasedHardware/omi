@@ -29,6 +29,7 @@
         --provider-bg: #ffffff;
         --provider-fg: #131312;
         --provider-bg-hover: #f5f5f1;
+        --apple-icon-filter: brightness(0);
 
         /* Feedback */
         --ring: rgba(19, 19, 18, 0.14);
@@ -71,6 +72,7 @@
             --provider-bg: #232327;
             --provider-fg: #f4f4f1;
             --provider-bg-hover: #2b2b30;
+            --apple-icon-filter: none;
 
             --ring: rgba(255, 255, 255, 0.22);
             --danger: #ff7a6e;
@@ -719,6 +721,11 @@
 
     #firebaseui-auth-container .firebaseui-idp-icon-wrapper {
         left: 16px !important;
+    }
+
+    /* FirebaseUI's Apple icon is white, including on our light button. */
+    #firebaseui-auth-container [data-provider-id="apple.com"] .firebaseui-idp-icon {
+        filter: var(--apple-icon-filter);
     }
 
     #firebaseui-auth-container .firebaseui-textfield {

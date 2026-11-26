@@ -333,16 +333,138 @@ def compare_reference_render(desired, predecessor, inverse, live, private_keys, 
     require(expected[primary_name]['image'] == observed[primary_name]['image'] == image, 'reference_image_changed')
     require(all(reconnect not in env(container) for container in observed.values()), 'reference_reconnect_present')
 
+    require_private_references(observed[primary_name], private_keys, secret_name)
+    return primary['name']
+
+
+def require_private_references(container, private_keys, secret_name):
     require(isinstance(private_keys, list) and 0 < len(private_keys) == len(set(private_keys))
             and isinstance(secret_name, str) and NAME.fullmatch(secret_name), 'reference_inventory')
-    private_env = env(observed[primary_name])
+    private_env = env(container)
     for key in private_keys:
         require(isinstance(key, str) and KEY.fullmatch(key), 'reference_inventory')
         require(private_env.get(key) == {'valueFrom': {
             'secretKeyRef': {'name': secret_name, 'key': key, 'optional': False}
         }},
                 'reference_binding_changed')
-    return primary['name']
+
+
+BACKEND_IMAGE_TAG = re.compile(r'gcr\.io/based-hardware/backend:[0-9a-f]{7,40}')
+IMAGE_PATH = '/spec/template/spec/containers/0/image'
+
+
+def image_only_manifest(previous, old_image, new_image):
+    """Render forward from the stored Helm bytes; allow exactly one scalar replacement."""
+    require(all(BACKEND_IMAGE_TAG.fullmatch(image) for image in (old_image, new_image))
+            and old_image != new_image, 'image_only_image')
+    original = documents(previous)
+    deployments = [key for key in original if key[1] == 'Deployment']
+    require(len(deployments) == 1 and deployments[0][3] == TARGET, 'deployment_coverage')
+    target = deployments[0]
+    expected = copy.deepcopy(original)
+    primary = expected[target]['spec']['template']['spec']['containers'][0]
+    require(primary['name'] == 'backend-listen' and primary['image'] == old_image
+            and 'LISTEN_BATCH_RECONNECT_ENABLED' not in env(primary), 'image_only_predecessor')
+    primary['image'] = new_image
+    line = re.compile(r'^([ \t]*image:[ \t]*)(["\']?)' + re.escape(old_image) + r'\2([ \t]*)$', re.M)
+    rendered, count = line.subn(lambda match: match[1] + match[2] + new_image + match[2] + match[3], previous)
+    require(count == 1 and documents(rendered) == expected, 'image_only_render_diff')
+    return rendered, expected, target
+
+
+def image_only_patch(live, old_image, new_image):
+    meta = version(live)
+    containers_ = live['spec']['template']['spec']['containers']
+    require(containers_[0]['name'] == 'backend-listen' and containers_[0]['image'] == old_image
+            and 'LISTEN_BATCH_RECONNECT_ENABLED' not in env(containers_[0]), 'image_only_live_predecessor')
+    return [
+        {'op': 'test', 'path': '/metadata/uid', 'value': meta['uid']},
+        {'op': 'test', 'path': '/metadata/resourceVersion', 'value': meta['resourceVersion']},
+        {'op': 'test', 'path': IMAGE_PATH, 'value': old_image},
+        {'op': 'replace', 'path': IMAGE_PATH, 'value': new_image},
+    ]
+
+
+def image_only_plan(reader, revision, old_image, new_image):
+    require(release_revision(reader) == revision, 'reference_revision_mismatch')
+    previous = reader.run(['helm', '-n', NS, 'get', 'manifest', TARGET, '--revision', str(revision)]).decode()
+    installed = documents(previous)
+    targets = [key for key in installed if key[1] == 'Deployment' and key[3] == TARGET]
+    require(len(targets) == 1, 'deployment_coverage')
+    target = targets[0]
+    installed_image = installed[target]['spec']['template']['spec']['containers'][0]['image']
+    if installed_image == old_image:
+        rendered, desired, _ = image_only_manifest(previous, old_image, new_image)
+    else:
+        # A rollback restores the stored image; Helm history did not move.
+        require(installed_image == new_image, 'image_only_predecessor')
+        rolled, _, _ = image_only_manifest(previous, new_image, old_image)
+        previous, rendered, desired = rolled, previous, installed
+    live = reader.reference_objects(sorted(desired))
+    deployment = live[target]
+    expected_env = containers(desired[target])
+    observed_env = containers(deployment)
+    require(expected_env.keys() == observed_env.keys()
+            and all(env(expected_env[name], normalize_fieldrefs=True) ==
+                    env(observed_env[name], normalize_fieldrefs=True) for name in expected_env),
+            'reference_live_env_drift')
+    patch = image_only_patch(deployment, old_image, new_image)
+    command = ['kubectl', '-n', NS, 'patch', 'deployment', TARGET, '--type=json', '-p',
+               canonical(patch).decode(), '-o', 'json']
+    def other_workloads():
+        return [body(reader.obj('ConfigMap', 'prod-omi-backend-config', NS)),
+                body(reader.obj('Deployment', 'prod-omi-neg-coverage-exporter', 'prod-omi-monitoring'))]
+    outside = other_workloads()
+    require(all(doc is not None for doc in outside), 'image_only_scope_missing')
+    admitted = json_read(reader.run([*command, '--dry-run=server']))
+    expected_live = copy.deepcopy(deployment)
+    expected_live['spec']['template']['spec']['containers'][0]['image'] = new_image
+    require(body(admitted) == body(expected_live), 'image_only_admission_diff')
+    require(other_workloads() == outside, 'image_only_scope_moved')
+    require({k: version(v) for k, v in reader.reference_objects(sorted(desired)).items()} ==
+            {k: version(v) for k, v in live.items()}, 'live_moved')
+    require(release_revision(reader) == revision, 'release_revision_moved')
+    proof = {'path': IMAGE_PATH, 'before': old_image, 'after': new_image,
+             'before_manifest_sha256': sha(previous.encode()), 'after_manifest_sha256': sha(rendered.encode())}
+    return command, expected_live, desired, live, proof
+
+
+def apply_image_only(reader, environ):
+    require(environ.get('GITHUB_REPOSITORY') == 'BasedHardware/omi'
+            and environ.get('GITHUB_EVENT_NAME') == 'workflow_dispatch'
+            and environ.get('GITHUB_REF') == 'refs/heads/main'
+            and environ.get('GITHUB_RUN_ATTEMPT') == '1', 'image_only_workflow')
+    require(not 13 <= time.gmtime().tm_hour < 22, 'image_only_peak')
+    intent = json_read(environ['IMAGE_ONLY_PROOF'].encode())
+    require(set(intent) == {'revision', 'image_diff', 'image', 'source_sha', 'control_sha'}
+            and type(intent['revision']) is int and intent['revision'] > 0
+            and intent['control_sha'] == environ['GITHUB_SHA']
+            and SHA.fullmatch(intent['source_sha']) and intent['source_sha'] == environ['BACKEND_LISTEN_SOURCE_SHA'],
+            'image_only_proof')
+    require(reader.run(['kubectl', 'config', 'current-context']).decode().strip() ==
+            'gke_based-hardware_us-central1_prod-omi-gke', 'cluster_binding')
+    tag = environ['BACKEND_LISTEN_IMAGE_TAG']
+    require(re.fullmatch(r'[0-9a-f]{7}', tag) and intent['source_sha'].startswith(tag), 'image_source_invalid')
+    image = 'gcr.io/based-hardware/backend:' + tag
+    digest = reader.run(['gcloud', 'container', 'images', 'describe', image,
+                         '--format=value(image_summary.digest)']).decode().strip()
+    require(re.fullmatch(r'sha256:[0-9a-f]{64}', digest)
+            and intent['image'] == 'gcr.io/based-hardware/backend@' + digest, 'image_digest_mismatch')
+    command, expected, _, _, proof = image_only_plan(reader, intent['revision'], intent['image_diff']['before'], image)
+    require(intent['image_diff'] == proof, 'image_only_proof_changed')
+    require(not 13 <= time.gmtime().tm_hour < 22, 'image_only_peak')
+    observed = json_read(reader.run(command))
+    require(body(observed) == body(expected), 'image_only_live_diff')
+    return proof
+
+
+def verify_image_only(reader, environ):
+    intent = json_read(environ['IMAGE_ONLY_PROOF'].encode())
+    deployment = reader.obj('Deployment', TARGET, NS)
+    require(release_revision(reader) == intent['revision']
+            and deployment['spec']['template']['spec']['containers'][0]['image'] == intent['image_diff']['after'],
+            'image_only_live_diff')
+    return {'ready_pods': len(serving_pods(reader, deployment, 'backend-listen', intent['image']))}
 
 
 def serving_pods(reader, deployment, primary, image):
@@ -411,6 +533,10 @@ def validate_request(request, now):
     if 'reference_helm_revision' in request:
         fields.add('reference_helm_revision')
         require(type(reference_revision) is int and reference_revision > 0, 'reference_revision_unknown')
+    if 'image_only_from' in request:
+        fields.add('image_only_from')
+        require(reference_revision and BACKEND_IMAGE_TAG.fullmatch(request['image_only_from']),
+                'image_only_predecessor')
     if 'ledger_binding' in request:
         fields.add('ledger_binding')
         require(isinstance(request['ledger_binding'], str) and HASH.fullmatch(request['ledger_binding']),
@@ -459,6 +585,9 @@ def validate_request(request, now):
             and inputs['allow_direct_model_exception'] in {'chart-default', 'true', 'false'}, 'overlay_dispatch_binding')
     for key in ('stt_service_models', 'translation_service_models'):
         require(re.fullmatch('[A-Za-z0-9_.,+-]{0,512}', inputs[key]), 'overlay_dispatch_binding')
+    if 'image_only_from' in request:
+        require(all(inputs[key] == DISPATCH_DEFAULTS[key] for key in DISPATCH_DEFAULTS
+                    if key not in ('expected_sha', 'image_tag')), 'image_only_overrides')
     require(isinstance(request['helm_args'], list) and all(isinstance(v, str) and '\n' not in v and '\0' not in v
                                                          for v in request['helm_args']), 'overlay_argv_binding')
 
@@ -514,7 +643,9 @@ def produce(request, reader, environ, root, private_file, overrides, now):
             and inputs.get('expected_sha') == request['candidate_sha']
             and inputs.get('image_tag') == request['image_tag']
             and not inputs.get('listen_edge_image_digest') and not inputs.get('helm_revision'), 'dispatch_binding')
-    require({k: v for k, v in inputs.items() if not k.startswith('evidence_')} == request['dispatch_inputs'],
+    require(inputs.get('control_sha', '') == ''
+            and {k: v for k, v in inputs.items() if not k.startswith('evidence_') and k != 'control_sha'}
+            == request['dispatch_inputs'],
             'dispatch_binding')
     raw = private_file.read_bytes()
     require(len(raw) <= MAX_BYTES, 'overlay_bound')
@@ -533,6 +664,31 @@ def produce(request, reader, environ, root, private_file, overrides, now):
                               '--format=value(image_summary.digest)']).decode().strip()
     require(request['image'] == 'gcr.io/based-hardware/backend@' + image_digest, 'image_digest_mismatch')
     overlay = {'state': request['overlay_state'], 'updatedAt': request['overlay_updated_at'], 'sha256': sha(raw)}
+    if 'image_only_from' in request:
+        reference_args = ['helm', '-n', NS, 'get', 'manifest', TARGET, '--revision', str(reference_revision)]
+        require(request['helm_args'] == reference_args and not overrides, 'request_argv_mismatch')
+        _, _, desired, live, proof = image_only_plan(
+            reader, reference_revision, request['image_only_from'], 'gcr.io/based-hardware/backend:' + image_tag)
+        deployment = next(live[key] for key in live if key[1] == 'Deployment')
+        require_private_references(containers(deployment)['containers/backend-listen'],
+                                   private_spec['keys'], private_spec['secretName'])
+        prior_digest = reader.run(['gcloud', 'container', 'images', 'describe', request['image_only_from'],
+                                   '--format=value(image_summary.digest)']).decode().strip()
+        require(re.fullmatch(r'sha256:[0-9a-f]{64}', prior_digest), 'image_digest_mismatch')
+        serving_pods(reader, deployment, 'backend-listen', 'gcr.io/based-hardware/backend@' + prior_digest)
+        coverage = compare(desired, live, desired, set(private_spec['keys']), references=True)
+        for doc in coverage['documents']:
+            changed = doc['kind'] == 'Deployment' and doc['name'] == TARGET
+            doc.update(effect='changed' if changed else 'same', changes=[IMAGE_PATH] if changed else [])
+        require(all(row['effect'] == 'same' for row in coverage['env']), 'reference_live_env_drift')
+        receipt = {key: request[key] for key in ('schema', 'request_id', 'expires', 'candidate_sha', 'control_sha',
+                                                'target', 'namespace', 'bindings', 'dispatch_inputs', 'image', 'helm_args')}
+        receipt.update(created=now, overlay=overlay, run_id=environ['GITHUB_RUN_ID'],
+                       run_attempt=environ['GITHUB_RUN_ATTEMPT'], coverage=coverage, helm_revision=reference_revision,
+                       reference_helm_revision=reference_revision, image_diff=proof,
+                       inverse=[proof['after'], proof['before']], read_count=reader.calls, read_bytes=reader.bytes)
+        require(len(canonical(receipt)) <= MAX_RECEIPT, 'receipt_bound')
+        return receipt
     args = helm_args(root / 'backend/charts/backend-listen',
                      root / 'backend/charts/backend-listen/prod_omi_backend_listen_values.yaml',
                      request['image_tag'], 'based-hardware', 'based-hardware', overrides)
@@ -599,10 +755,10 @@ def produce(request, reader, environ, root, private_file, overrides, now):
 
 def main():
     p = argparse.ArgumentParser(description=__doc__)
-    p.add_argument('mode', choices=['argv', 'produce', 'job'])
+    p.add_argument('mode', choices=['argv', 'produce', 'job', 'apply-image-only', 'verify-image-only'])
     p.add_argument('--root', type=Path, default=Path('.'))
     p.add_argument('--overrides-file', type=Path)
-    p.add_argument('--output', type=Path, required=True)
+    p.add_argument('--output', type=Path)
     p.add_argument('--request', type=Path)
     p.add_argument('--private-file', type=Path)
     p.add_argument('--image-tag')
@@ -618,6 +774,13 @@ def main():
     if a.mode != 'argv':
         signal.alarm(120)
     try:
+        if a.mode == 'apply-image-only':
+            print(canonical(apply_image_only(Reader(), os.environ)).decode())
+            return 0
+        if a.mode == 'verify-image-only':
+            print(canonical(verify_image_only(Reader(), os.environ)).decode())
+            return 0
+        require(a.output is not None, 'output_required')
         overrides = a.overrides_file.read_text().splitlines() if a.overrides_file else []
         if a.mode == 'job':
             from listen_helm_env_overrides import (check_private_env_against_chart, check_translation_endpoint,
@@ -640,9 +803,10 @@ def main():
                          'translation_service_models': 'TRANSLATION_SERVICE_MODELS'}
                 named = {v: request['dispatch_inputs'].get(k, '') for k, v in names.items()}
                 private = load_private_env(private_file) if private_file.stat().st_size else {}
-                check_private_env_against_chart(private, values, named)
-                check_translation_endpoint(values, named, private)
-                overrides = resolve_env_override_argv(values, named)
+                if 'image_only_from' not in request:
+                    check_private_env_against_chart(private, values, named)
+                    check_translation_endpoint(values, named, private)
+                    overrides = resolve_env_override_argv(values, named)
                 if private_file.stat().st_size:
                     overrides += ['-f', str(private_file)]
                 result = produce(request, Reader(), os.environ, a.root.resolve(), private_file, overrides, int(time.time()))
@@ -659,9 +823,11 @@ def main():
         with os.fdopen(fd, 'w') as f:
             f.write(data)
         return 0
-    except Exception:
+    except Exception as error:
         # Never stringify an exception from YAML/Helm/subprocess/private data.
         print('LISTEN_OVERLAY_EVIDENCE_REFUSED', file=__import__('sys').stderr)
+        if isinstance(error, Refused) and len(error.args) == 1 and re.fullmatch(r'image_only_[a-z_]+', error.args[0]):
+            print(error.args[0], file=sys.stderr)
         return 3
 
 

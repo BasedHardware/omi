@@ -161,6 +161,90 @@ def build_parser() -> argparse.ArgumentParser:
     live.add_argument('--out', required=True, help='write here (outside git)')
     live.add_argument('--owner-uid-file', required=True, help='0600 file holding the owner uid (scrubs uid lists)')
 
+    scenario = sub.add_parser('scenario', parents=[common], help='scripted capture -> Finish -> Home scenarios (v3)')
+    scenario_sub = scenario.add_subparsers(dest='scenario_command', required=True)
+    scenario_run = scenario_sub.add_parser(
+        'run', parents=[common], help='run scenario files on a local emulator + Redis (started here unless given)'
+    )
+    scenario_run.add_argument(
+        'files', nargs='*', help='scenario JSON files, or names under scenario/scenarios/ (default: all committed)'
+    )
+    scenario_run.add_argument('--keep', help='output directory (outside git; default a fresh temp dir)')
+    scenario_run.add_argument('--timeout', type=float, default=240.0, help='seconds per scenario')
+    scenario_run.add_argument(
+        '--clock',
+        choices=('frozen', 'tick'),
+        default='frozen',
+        help='frozen (default): each event runs at its scripted instant; tick: real elapsed time is added',
+    )
+    scenario_run.add_argument(
+        '--jobs', type=int, default=1, help='scenarios run at once on the shared stack (each isolated; default 1)'
+    )
+    scenario_run.add_argument(
+        '--repeat',
+        type=int,
+        default=1,
+        help='run each scenario N times; outcome nondeterministic (exit 1) when result.json differs',
+    )
+    scenario_run.add_argument(
+        '--stt',
+        choices=('replay', 'record-vendor', 'record-local'),
+        default='replay',
+        help='audio_file words: replay cassettes only (default); on a miss record from the vendor or a local model',
+    )
+    scenario_run.add_argument('--stt-budget-usd', type=float, help='spend cap for --stt record-vendor')
+    scenario_run.add_argument(
+        '--trace-calls', action='store_true', help='record the backend files each scenario calls (for scenario reach)'
+    )
+    scenario_reach = scenario_sub.add_parser(
+        'reach', parents=[common], help='write scenario/reach.json from a `scenario run --trace-calls --keep` directory'
+    )
+    scenario_reach.add_argument('run_dir')
+    scenario_summary = scenario_sub.add_parser(
+        'summary', parents=[common], help='markdown verdict summary of a `scenario run --keep` directory'
+    )
+    scenario_summary.add_argument('run_dir')
+    scenario_check = scenario_sub.add_parser('check', parents=[common], help='validate files, print planned timelines')
+    scenario_check.add_argument('files', nargs='+')
+    scenario_stack = scenario_sub.add_parser(
+        'stack', parents=[common], help='a long-lived Firestore emulator + Redis that scenario runs on this host share'
+    )
+    scenario_stack.add_argument('stack_action', choices=('up', 'down', 'status'))
+    scenario_compare = scenario_sub.add_parser(
+        'compare', parents=[common], help='run the same scenarios on two backend refs and list what differs'
+    )
+    scenario_compare.add_argument('base', help='base ref (branch, tag or sha; not fetched)')
+    scenario_compare.add_argument('head', nargs='?', help='head ref (default: this working tree, as --worktree)')
+    scenario_compare.add_argument('--worktree', action='store_true', help='head is this working tree')
+    scenario_compare.add_argument(
+        '--scenario', action='append', dest='files', help='scenario file or name (repeatable; default all committed)'
+    )
+    scenario_compare.add_argument('--keep', help='output directory (outside git; default a fresh temp dir)')
+    scenario_compare.add_argument('--timeout', type=float, default=240.0, help='seconds per scenario')
+    scenario_compare.add_argument('--jobs', type=int, default=1, help='scenarios run at once per side')
+    scenario_compare.add_argument('--clock', choices=('frozen', 'tick'), default='frozen')
+    scenario_view = scenario_sub.add_parser(
+        'view', parents=[common], help='read-only web page for a scenario run directory (loopback, no stack)'
+    )
+    scenario_view.add_argument('run_dir', help='a `scenario run --keep` directory, a compare run, or one scenario')
+    scenario_view.add_argument('--port', type=int, default=0, help='port to bind (default: a free one)')
+
+    affected = sub.add_parser(
+        'affected', parents=[common], help='earliest stage and scenarios a change can influence (BASE..HEAD)'
+    )
+    affected.add_argument(
+        'range', nargs='?', help='BASE..HEAD, or BASE alone (to the working tree); default merge-base with origin/main'
+    )
+    affected.add_argument('--repo', help='git repo (default: this checkout)')
+    view = sub.add_parser(
+        'view',
+        parents=[common],
+        help='open results on loopback: a scenario run or compare dir, or a store root / day run',
+    )
+    view.add_argument(
+        'path', help='scenario run (--keep) or compare directory, lab store root, or <root>/runs/<run id>'
+    )
+    view.add_argument('--port', type=int, default=0, help='port to bind (default: a free one)')
     sub.add_parser('stages', parents=[common], help='stages in order and their registered drivers')
     sub.add_parser('doctor', parents=[common], help='roots, permissions and plugins')
     return parser
@@ -210,7 +294,10 @@ def dispatch(args: argparse.Namespace, store: Store, registry: Registry, as_json
 
         return write_sample(store), 0
     if command == 'run':
-        return _run(args, store, registry)
+        body, code = _run(args, store, registry)
+        if not as_json:  # the per-stage cache table, for people; the JSON body carries it as stage_report
+            print('\n'.join((body.get('stage_report') or {}).get('table') or []), file=sys.stderr)
+        return body, code
     if command == 'runs':
         return [_run_summary(run) for run in store.list_runs(args.day)], 0
     if command == 'show':
@@ -465,6 +552,75 @@ def _llm_proxy(args: argparse.Namespace, store: Store) -> Any:
     return {'stopped': True, 'counters': proxy.counters, 'ledger': ledger.snapshot()}
 
 
+def _scenario(args: argparse.Namespace, as_json: bool) -> int:
+    """Scenarios need no run store: their output goes to ``--keep`` or a temp dir, never into git."""
+    from testing.pipeline_lab.scenario import stack
+    from testing.pipeline_lab.scenario.spec import ScenarioError
+
+    try:
+        if args.scenario_command == 'check':
+            return stack.check_files(args.files, as_json=as_json)
+        if args.scenario_command == 'view':
+            from testing.pipeline_lab.inspector import scenario_view
+            from testing.pipeline_lab.inspector.reader import NotFound
+
+            try:
+                return scenario_view.serve(args.run_dir, port=args.port)
+            except NotFound as error:
+                raise ScenarioError(str(error)) from None
+        if args.scenario_command == 'stack':
+            return stack.stack_command(args.stack_action, as_json=as_json)
+        if args.scenario_command == 'summary':
+            from testing.pipeline_lab.scenario.verdict import markdown_summary
+
+            try:
+                sys.stdout.write(markdown_summary(Path(args.run_dir)))
+            except (OSError, ValueError) as error:
+                raise ScenarioError(f'{args.run_dir}: no readable verdict.json ({error})') from None
+            return 0
+        if args.scenario_command == 'reach':
+            from testing.pipeline_lab.scenario import reach
+
+            try:
+                print(json.dumps(reach.write_reach(Path(args.run_dir)), indent=None if as_json else 1))
+            except (ValueError, OSError) as error:
+                raise ScenarioError(str(error)) from None
+            return 0
+        if args.scenario_command == 'compare':
+            from testing.pipeline_lab.scenario import compare
+
+            if args.head and args.worktree:
+                raise ScenarioError('give a head ref or --worktree, not both')
+            return compare.compare_refs(
+                args.base,
+                args.head,
+                names=args.files or None,
+                keep=args.keep,
+                timeout=args.timeout,
+                jobs=args.jobs,
+                clock=args.clock,
+                as_json=as_json,
+            )
+        return stack.run_files(
+            args.files,
+            keep=args.keep,
+            timeout=args.timeout,
+            as_json=as_json,
+            clock=args.clock,
+            jobs=args.jobs,
+            repeat=args.repeat,
+            stt=args.stt,
+            stt_budget_usd=args.stt_budget_usd,
+            trace_calls=args.trace_calls,
+        )
+    except (ScenarioError, RuntimeError) as error:
+        if as_json:
+            print(json.dumps({'error': str(error), 'kind': type(error).__name__}))
+        else:
+            print(f'error: {error}', file=sys.stderr)
+        return orchestrator.EXIT_ERROR
+
+
 class _Raw(str):
     """Already-formatted output (verdict export) printed verbatim."""
 
@@ -494,6 +650,26 @@ def main(argv: Optional[Sequence[str]] = None, *, registry: Optional[Registry] =
         parser.error('unrecognized arguments: ' + ' '.join(unknown))
     args.rest = unknown
     as_json = bool(getattr(args, 'json', False))
+    if args.command == 'scenario':
+        return _scenario(args, as_json)
+    if args.command == 'view':  # picks the page from the path; no run store is opened here
+        from testing.pipeline_lab.inspector import view as viewer
+
+        try:
+            return viewer.view(args.path, port=args.port, verdicts=args.verdicts)
+        except viewer.NotAViewable as error:
+            print(json.dumps({'error': str(error)}) if as_json else f'error: {error}', file=sys.stderr)
+            return orchestrator.EXIT_ERROR
+    if args.command == 'affected':  # reads git and the tree only: no run store
+        from testing.pipeline_lab import affected as affected_map
+
+        try:
+            report = affected_map.affected(Path(args.repo) if args.repo else default_repo(), args.range)
+        except ValueError as error:
+            print(json.dumps({'error': str(error)}) if as_json else f'error: {error}', file=sys.stderr)
+            return orchestrator.EXIT_ERROR
+        _emit(report if as_json else _Raw(affected_map.format_text(report) + '\n'), as_json)
+        return 0
     try:
         store = Store.open(Path(args.root) if args.root else None, Path(args.verdicts) if args.verdicts else None)
         if registry is None:

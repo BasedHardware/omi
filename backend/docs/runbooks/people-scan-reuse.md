@@ -28,7 +28,7 @@ the same transaction/batch as the People mutation:
 | `_client` | recursive People deletion batches; account purge deletes generation last |
 | `utils/person_evidence_backfill` | evidence repair |
 
-Meeting context, dream prescan and dream seed references are readers. The
+Meeting context and Dream seed references are readers. The
 emulator script's writes are synthetic test setup. The pinned AST inventory
 detects new/changed People-reference or generation-helper scopes; it does not
 by itself prove transaction atomicity. Re-audit before `--write`, then run the

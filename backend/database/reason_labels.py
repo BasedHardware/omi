@@ -39,6 +39,7 @@ class ReasonFamily(StrEnum):
     SYNC_FUTURE_CAPTURE_RECOVERY = 'sync_future_capture_recovery'
     SYNC_FUTURE_CAPTURE_REQUEST = 'sync_future_capture_request'
     SYNC_BRIDGE_CONTAINMENT = 'sync_bridge_containment'
+    SYNC_BRIDGE_TERMINAL = 'sync_bridge_terminal'
     SYNC_PROCESSING_HOLD = 'sync_processing_hold'
     APP_REVIEW_CONFIG = 'app_review_config'
     ADMISSION_HOLD = 'admission_hold'
@@ -58,6 +59,7 @@ class ReasonFamily(StrEnum):
     SUMMARY_REPAIR_DISCOVERY = 'summary_repair_discovery'
     RECORD_SEAL_REPAIR = 'record_seal_repair'
     HISTORICAL_SUMMARY_OPEN = 'historical_summary_open'
+    MONTHLY_USAGE_SHADOW = 'monthly_usage_shadow'
 
 
 REASON_UNKNOWN_TOTAL = Counter(
