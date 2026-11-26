@@ -4,11 +4,10 @@
 Selected by ``scripts/pr-preflight --all``, ``OMI_PREFLIGHT_ALL=1`` for direct
 calls, or ``PRE_PUSH_PREFLIGHT_ALL=1`` for hook calls. The hook variable is
 included in the pre-push single-flight fingerprint.
-The default preflight stays fail-fast on purpose: the push is already blocked
-by the first failing gate. Keep-going is opt-in because it runs selected gates
-after failures. Each failed gate is reported with its name, first error line,
-log path, and a repro command; gates that no longer fit the wall budget are
-reported as skipped for time instead of silently passing.
+The default local preflight collects failures in the shared manifest runner.
+This opt-in orchestrator adds persistent per-gate diagnostics. Each failed
+gate is reported with its name, first error line, log path, and repro command.
+Gates that no longer fit the wall budget are reported as skipped for time.
 """
 
 from __future__ import annotations

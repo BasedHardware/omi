@@ -22,6 +22,7 @@ class ReasonFamily(StrEnum):
     WORK_OUTCOME = 'work_outcome'
     QUARANTINE = 'quarantine'
     FALLBACK = 'fallback'
+    GATEWAY_FLEX_FALLBACK = 'gateway_flex_fallback'
     RETRY = 'retry'
     CONSUMER = 'consumer'
     PROVIDER_STT = 'provider_stt'
@@ -37,7 +38,9 @@ class ReasonFamily(StrEnum):
     SYNC_DISPATCH = 'sync_dispatch'
     SYNC_CAPTURE_TIME = 'sync_capture_time'
     SYNC_FUTURE_CAPTURE_RECOVERY = 'sync_future_capture_recovery'
+    SYNC_FUTURE_CAPTURE_REQUEST = 'sync_future_capture_request'
     SYNC_BRIDGE_CONTAINMENT = 'sync_bridge_containment'
+    SYNC_BRIDGE_TERMINAL = 'sync_bridge_terminal'
     SYNC_PROCESSING_HOLD = 'sync_processing_hold'
     APP_REVIEW_CONFIG = 'app_review_config'
     ADMISSION_HOLD = 'admission_hold'
@@ -58,6 +61,7 @@ class ReasonFamily(StrEnum):
     RECORD_SEAL_REPAIR = 'record_seal_repair'
     HISTORICAL_SUMMARY_OPEN = 'historical_summary_open'
     PREVIEW_CUSTODY = 'preview_custody'
+    MONTHLY_USAGE_SHADOW = 'monthly_usage_shadow'
 
 
 REASON_UNKNOWN_TOTAL = Counter(

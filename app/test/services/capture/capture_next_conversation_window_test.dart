@@ -35,7 +35,7 @@ void main() {
     );
     // This regression exercises the legacy saved-transcript coverage contract. Committed receipt
     // custody, and Custom STT's deliberate coverage fallback, have separate assertions below.
-    await setRefactorFlags({'custody_capture_committed_release': false});
+    await setRefactorFlags({'custody_durable_audio_release': false});
   });
 
   tearDown(() async {
@@ -246,6 +246,27 @@ void main() {
     expect(framesOf(wals.where((wal) => wal.conversationId == 'c2')), 2000);
     await recoveryPass();
     expect(world.uploads.attempts, isEmpty);
+  });
+
+  test('pendant: an in-progress Process Now answer still guards the later processing event for that id', () async {
+    final link = await connectPendant();
+    final firstOrigin = world.clock.now();
+    await streamPendant(link, 20);
+    final p1 = conversation('p1', firstOrigin, end: 20);
+    p1.status = ConversationStatus.in_progress;
+    world.processOutcome =
+        () async => InProgressProcessOutcome(response: CreateConversationResponse(messages: [], conversation: p1));
+    await world.controller.forceProcessingCurrentConversation();
+    await world.elapse(const Duration(milliseconds: 50));
+    expect(world.controller.hasClosedServerRecording('p1'), isFalse,
+        reason: 'an in_progress answer did not close the recording, so it grants End nothing');
+
+    await streamPendant(link, 20);
+    final secondWindow = world.controller.activeCaptureSessionId;
+    expect(secondWindow, isNotNull);
+    world.controller.onMessageEventReceived(ConversationProcessingStartedEvent(memory: p1));
+    expect(world.controller.activeCaptureSessionId, secondWindow,
+        reason: 'the server event for the already-answered p1 cannot cut the next window again');
   });
 
   test('pendant: delayed typed Process Now result keeps its snapshot when c2 closes first', () async {
@@ -473,7 +494,7 @@ void main() {
         if (!await WalFileManager.saveWals(wals)) throw StateError('test WAL index write failed');
       },
     );
-    await setRefactorFlags({'custody_capture_committed_release': false});
+    await setRefactorFlags({'custody_durable_audio_release': false});
     final link = await connectPendant();
     final origin = world.clock.now();
     await streamPendant(link, 20);
@@ -534,7 +555,7 @@ void main() {
         if (!await WalFileManager.saveWals(wals)) throw StateError('test WAL index write failed');
       },
     );
-    await setRefactorFlags({'custody_capture_committed_release': false});
+    await setRefactorFlags({'custody_durable_audio_release': false});
     world.autoUploadAllowed = false;
     world.processOutcome = () => firstResponse.future;
     final link = await connectPendant();
@@ -607,7 +628,7 @@ void main() {
 
   for (final rawAudio in [false, true]) {
     test('Custom STT second window preserves partial coverage and upload choice rawAudio=$rawAudio', () async {
-      await setRefactorFlags({'custody_capture_committed_release': true});
+      await setRefactorFlags({'custody_durable_audio_release': true});
       await SharedPreferencesUtil().saveCustomSttConfig(
           CustomSttConfig(provider: SttProvider.geminiLive, apiKey: 'synthetic-key', sendRawAudioToOmi: rawAudio));
       world.autoUploadAllowed = false;

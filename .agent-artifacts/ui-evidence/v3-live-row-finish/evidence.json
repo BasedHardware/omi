@@ -1,0 +1,47 @@
+{
+  "version": 1,
+  "images": [
+    {
+      "file": "001-mobile-ios-live-detail-end.png",
+      "platform": "mobile-ios",
+      "description": "The live conversation detail shows End when the current capture ID matches and local transcript segments are empty.",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "002-mobile-ios-placeholder-page-finish.png",
+      "platform": "mobile-ios",
+      "description": "The live transcript page opened from Home’s placeholder shows Finish before any local transcript segments arrive.",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "003-mobile-ios-home-processing-after-end.png",
+      "platform": "mobile-ios",
+      "description": "After End on the live detail, Home shows the Processing row.",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "004-mobile-ios-listening-and-processing.png",
+      "platform": "mobile-ios",
+      "description": "Listening stays above Processing on Home. A left swipe leaves the Listening row in place.",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "005-mobile-ios-next-detail-end.png",
+      "platform": "mobile-ios",
+      "description": "End Conversation is available on the next live detail while the previous finish is processing.",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "006-mobile-ios-next-placeholder-finish.png",
+      "platform": "mobile-ios",
+      "description": "Finish is available on the next local capture page with only the active capture ID and no transcript.",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    }
+  ]
+}

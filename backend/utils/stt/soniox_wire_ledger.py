@@ -271,7 +271,7 @@ class OrderedSonioxProviderClock(SonioxProviderClock):
         # 2026-11-23 (scripts/soniox_finalize_padding_probe.py): neither v5 nor v6
         # pads any more; each <fin> reports the exact sent cursor. A prediction
         # still has to match the reported progress, so a mismatch invalidates
-        # capture instead of placing it. Keep SONIOX_ORDERED_FINALIZE off.
+        # capture instead of placing it.
         quantum = 1920
         self.samples = (before // quantum + 1) * quantum
         self._predictions.append((before, self.samples, self._emitted))

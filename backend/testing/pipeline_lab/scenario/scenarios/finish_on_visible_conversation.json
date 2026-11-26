@@ -1,0 +1,73 @@
+{
+  "name": "finish_on_visible_conversation",
+  "description": "Recording A's conversation is done and on Home with a title and notes at 400 s; Finish is tapped at 410 s with nothing in progress. The server answers that nothing is open (the 404 of #26241 / #26242: an already-closed Finish is not a failure), and Home keeps the conversation's title and notes in one conversation: no blank copy.",
+  "origins": [
+    {
+      "id": "O",
+      "source": "omi"
+    }
+  ],
+  "recordings": [
+    {
+      "id": "A",
+      "origin": "O",
+      "session": "S1",
+      "audio": [
+        0,
+        60
+      ],
+      "transcript_at": 70,
+      "speech": [
+        {
+          "fill": [
+            0.5,
+            60
+          ],
+          "every": 4,
+          "words": 10,
+          "speakers": [
+            "SPEAKER_00",
+            "SPEAKER_01"
+          ]
+        }
+      ]
+    }
+  ],
+  "finish": {
+    "at": 410,
+    "fast_finish": true
+  },
+  "expect": [
+    {
+      "at": 400,
+      "label": "on_home_titled_before",
+      "conversation_of": "A",
+      "on_home": true,
+      "home_titled": true,
+      "home_has_notes": true
+    },
+    {
+      "label": "finish_answers_already_closed",
+      "finish_response": 1,
+      "outcome": "not_found"
+    },
+    {
+      "label": "one_conversation",
+      "conversation_of": "A",
+      "holders": 1
+    },
+    {
+      "label": "home_keeps_title",
+      "conversation_of": "A",
+      "on_home": true,
+      "home_titled": true,
+      "home_has_notes": true,
+      "titled": true,
+      "has_notes": true
+    }
+  ],
+  "budget": {
+    "reads": 195, "writes": 55, "deletes": 1, "noop_writes": 4, "vendor_calls": {"stt": 0, "llm": 7},
+    "note": "Measured 2026-11-26 at the merged head (176 reads, 48 writes, 1 delete(s), 4 no-op, 0 STT, 7 LLM; caps about +10%). noop_writes=4 is the current count, not a target: every one is database/conversations_v3_leases.py:72 renew (service.reconcile run_blocking renew) rewriting the lease until at the instant it was claimed. The lab clock does not move inside one event; production's does, so this is a lab-clock repeat, reported in the PR."
+  }
+}

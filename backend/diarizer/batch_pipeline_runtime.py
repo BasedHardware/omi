@@ -4,6 +4,9 @@ This deployment drains already admitted work; it never admits uploads or enables
 a cohort. All storage and model construction happens after the explicit switch.
 """
 
+from database.batch_coalescing_capabilities import advertise
+from utils.executors import db_executor, run_blocking
+
 import asyncio
 from concurrent.futures import ThreadPoolExecutor
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -28,6 +31,7 @@ from utils.other.private_sync_get_metrics import OBJECT_GETS
 from utils.observability.stt_cap_dispatch import AUDIO_SECONDS
 from utils.observability.firestore_probe_export import register_probe_collectors
 from utils.stt.allowance_metrics import COLLECTORS as ALLOWANCE_WATCH_COLLECTORS
+from database.batch_pipeline_upload_metrics import COLLECTORS as UPLOAD_COLLECTORS
 from config.batch_pipeline import worker_pipeline_depth, worker_processes
 from config.batch_pipeline_providers import provider_config
 from database._client import get_data_plane_firestore_client
@@ -49,6 +53,7 @@ from diarizer.batch_pipeline import is_fatal_cuda_error
 from diarizer.batch_pipeline_startup import ChainMemoryProbe, load_worker, synchronize_gpu
 from utils.batch_pipeline.artifact_policy import create_artifact_store
 from utils.batch_pipeline.capacity import PoolCapacity
+from utils.batch_pipeline.commit_wake_sender import sender_from_env as commit_wake_sender_from_env
 from utils.batch_pipeline.metrics import QueueMetrics
 from utils.batch_pipeline.language_metrics import ROUTES as LANGUAGE_ROUTES
 from utils.batch_pipeline.correctness_metrics import TRANSITIONS, DURATION, LABELS
@@ -163,6 +168,8 @@ def health_server(
         registry.register(AUDIO_SECONDS)
     for collector in ALLOWANCE_WATCH_COLLECTORS:  # batch_gpu observations live in the default registry
         registry.register(collector)
+    for collector in UPLOAD_COLLECTORS:
+        registry.register(collector)
     registry.register(TRANSITIONS)
     registry.register(DURATION)
     registry.register(LABELS)
@@ -243,6 +250,10 @@ async def supervise(pump: Any, state: RuntimeState, stop_event: asyncio.Event, s
 
 
 async def run_process(store: Any, artifacts: Any, registry: CollectorRegistry, state: RuntimeState) -> None:
+    try:
+        await run_blocking(db_executor, advertise, store)
+    except Exception:
+        logger.warning('event=batch_coalescing outcome=capability_unavailable')
     config = provider_config()
     if config.pool_kind != 'dedicated_batch':
         raise ValueError('worker deployment requires the dedicated batch GPU pool')
@@ -298,6 +309,8 @@ async def run_process(store: Any, artifacts: Any, registry: CollectorRegistry, s
             leader=LeaderLease(store, PUMP_RECOVERY, ttl_seconds=30),
             inline_metrics=False,  # supervise() samples on its own task.
             shadow=ShadowRunner(ShadowStore(store), shadow_recover, process_index=process_index()),
+            # Reliability experiment commit_wake: the hook decides per owner and sends nothing while it is off.
+            on_committed=commit_wake_sender_from_env(),
         )
         # Sibling processes share the pod's queue view: one sampler per pod
         # keeps Firestore reads and the HPA's per-pod series as with one process.

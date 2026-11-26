@@ -23,7 +23,13 @@ from config.batch_pipeline import (
     record_capture_eligible,
 )
 from config.policy import resolve_batch_policy
-from config.batch_pipeline_coverage_wait import coverage_wait_memo_enabled, record_wait_memo_first_enabled
+from config.record_gap_fill import gap_fill_enabled
+from config.record_wal_duplicate import MERGE_TARGET_FIELD, RECEIPT_FIELD
+from config.batch_pipeline_coverage_wait import (
+    coverage_wait_memo_enabled,
+    coverage_wait_retry_after_seconds,
+    record_wait_memo_first_enabled,
+)
 from config.batch_pipeline_language import admission_language_exclusion_enabled, batch_admission_language
 from database.conversations import claim_record_lane_owner
 from database.batch_pipeline_store import FirestoreStore
@@ -46,7 +52,7 @@ from utils.batch_pipeline.language_metrics import record_admission_exclusion
 from utils.batch_pipeline.capture_decode import decode_units
 from utils.capture.batch_coverage import covered_response
 from utils.batch_pipeline import record_gap_fill, record_wal_handoff, record_wal_metrics, record_wal_sample
-from config.record_gap_fill import gap_fill_enabled
+from utils.batch_pipeline import record_wal_duplicate
 from utils.executors import db_executor, storage_executor, run_blocking, sync_executor
 from utils.metrics import OMI_PIPELINE_RECORD_WAIT_ANSWERS_TOTAL, OMI_PIPELINE_RECORD_WAIT_MEMO_HITS_TOTAL
 from utils.observability.reasons import ReasonFamily, reason_label
@@ -79,6 +85,10 @@ class RecordUploadWait(StrEnum):
     RECEIPT_STATUS_READ_FAILED = 'receipt_status_read_failed'
 
 
+class _WaitResponse(JSONResponse):
+    retry_conversation: str | None = None
+
+
 def _pending(reason: RecordUploadWait, record: str | None = None, *, path: str = '-', memo: str = '-'):
     # These are custody waits, not evidence of Cloud Run refusing a request.
     # Keep the branch vocabulary static and omit identities/audio/error text.
@@ -104,12 +114,16 @@ def _pending(reason: RecordUploadWait, record: str | None = None, *, path: str =
         path,
         memo,
     )
-    return JSONResponse(
+    return _WaitResponse(
         status_code=503,
         content={
             'code': 'record_capture_pending',
             'detail': 'Retain local audio until the registered record is complete',
-            'retry_after_seconds': RECORD_WAIT_CACHE_SECONDS,
+            'retry_after_seconds': (
+                coverage_wait_retry_after_seconds()
+                if path == 'coverage' and memo == 'hit'
+                else RECORD_WAIT_CACHE_SECONDS
+            ),
         },
     )
 
@@ -121,13 +135,21 @@ _MEMOIZED_WAITS = frozenset({RecordUploadWait.RECORD_JOBS_MISSING, RecordUploadW
 
 
 async def conversation_pending(reason: RecordUploadWait, uid: str, conversation_id: str | None):
+    response = _pending(reason, _record_key(uid, conversation_id), path='conversation', memo='miss')
     if reason in _MEMOIZED_WAITS and isinstance(conversation_id, str) and conversation_id:
         await run_blocking(db_executor, remember_record_wait, uid, conversation_id, reason.value)
-    return _pending(reason, _record_key(uid, conversation_id), path='conversation', memo='miss')
+        response.retry_conversation = conversation_id
+    return response
 
 
 def _record_key(uid: str, conversation_id: str | None) -> str | None:
     return record_identity(uid, conversation_id)[0] if isinstance(conversation_id, str) and conversation_id else None
+
+
+async def has_conversation_wait_hint(uid, conversation_id) -> bool:
+    """Cheap invitation only. backend-sync checks handoff and receipts before refusing."""
+    cached = await run_blocking(db_executor, cached_record_wait, uid, conversation_id)
+    return cached in _MEMOIZED_WAITS
 
 
 async def memoized_record_wait(uid, conversation_id) -> JSONResponse | None:
@@ -184,7 +206,10 @@ def _coverage_wait_key(uid, conversation_id, content_id, jobs, upload_identity):
     # content_id already hashes each uploaded basename (capture timestamp and
     # codec) plus its bytes, without decoding. record_identity is stable for the
     # conversation, NOT a revision: hash the current jobs too, so added units or
-    # changed artifact references/timing invalidate immediately. Existing reads
+    # changed artifact references/timing invalidate immediately. The audio_uri
+    # pins an immutable GCS generation. Its retained manifest, if any, also
+    # pins source generations and authenticates the decoded PCM by digest. A
+    # replacement at the same object name needs a new URI in the job. Existing reads
     # supply all inputs; no extra Firestore lookup or local file read is needed.
     # ``upload_identity`` keeps the key sensitive to the upload as well: a second,
     # different WAL for the same record must never inherit this one's miss.
@@ -396,7 +421,13 @@ async def registered_record_response(
                 'retryable': False,
             },
         )
-    if row.get('deleted') or row.get('source') != source or row.get('client_device_id') != client_device_id:
+    retained_merge = bool(row.get(MERGE_TARGET_FIELD))
+    if (
+        row.get('deleted')
+        and not retained_merge
+        or row.get('source') != source
+        or row.get('client_device_id') != client_device_id
+    ):
         return _pending(RecordUploadWait.OWNER_CONTEXT_MISMATCH)
     content, _ = record_identity(uid, conversation_id)
 
@@ -419,6 +450,24 @@ async def registered_record_response(
                 'detail': 'Capture is unavailable for server processing',
             },
         )
+    claims = capture_claims or {}
+    proof_args = (store, uid, conversation_id, source, client_device_id, content_id, recording_session_id)
+    if RECEIPT_FIELD in prior:
+        try:
+            status = await record_wal_duplicate.replay(*proof_args, claims)
+        except Exception:
+            return _pending(RecordUploadWait.RECEIPT_STATUS_READ_FAILED, content)
+        return start_response(status) if status else _pending(RecordUploadWait.RECEIPT_STATUS_MISSING, content)
+    if retained_merge:
+        return _pending(RecordUploadWait.AUDIO_COVERAGE_UNPROVEN, content)
+    duplicate_mode, shadow_slot = record_wal_duplicate.select(uid, content_id)
+    if duplicate_mode == 'settle' and not prior and jobs and client_device_id and claims:
+        try:
+            status = await record_wal_duplicate.evaluate(*proof_args, paths, claims, 'settle')
+        except Exception:
+            return _pending(RecordUploadWait.ALIAS_WRITE_FAILED, content)
+        if status is not None:
+            return start_response(status)
     response = await _answer_registered_upload(
         store,
         uid,
@@ -433,6 +482,8 @@ async def registered_record_response(
         jobs,
         before_coverage,
     )
+    if duplicate_mode == 'shadow' and response.status_code == 503 and not prior and client_device_id:
+        await record_wal_duplicate.evaluate(*proof_args, paths, claims, 'shadow', shadow_slot)
     await record_wal_sample.observe(
         store=store,
         uid=uid,
@@ -541,6 +592,9 @@ async def _answer_registered_upload(
             current = tx.get('content', f'{uid}/{content_id}')
             original = tx.get('content', f'{uid}/{content}')
             tx.check_privacy(uid, (conversation_id,))
+            if RECEIPT_FIELD in current:
+                # A concurrent settlement owns this alias. Retry reads its receipt.
+                return False
             if current and current.get('job_id') != original.get('job_id'):
                 return False
             tx.put(

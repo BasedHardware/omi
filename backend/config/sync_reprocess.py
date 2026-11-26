@@ -66,5 +66,26 @@ def dedupe_enabled() -> bool:
     return _enabled('CONVERSATION_LLM_INPUT_DEDUPE_ENABLED', default=True)
 
 
+# Mirrors ``utils.enrichment.outbox.LIVE_DEFER_SECONDS``, the legacy sync handler's
+# empty-output defer. Kept here so the push consumer reads the same default without a
+# config -> utils import.
+DEFAULT_EMPTY_OUTPUT_BACKOFF_SECONDS = 120
+
+
+def empty_output_backoff_seconds() -> int:
+    """Kill switch: how long an empty first summary waits before its next attempt.
+
+    Default 120s, matching the legacy ``sync_handler`` defer. ``0`` restores the
+    immediate 409 that let Cloud Tasks rerun the callback at once (SCA-3667).
+    """
+    raw = os.getenv('ENRICHMENT_EMPTY_OUTPUT_BACKOFF_SECONDS', '').strip()
+    if not raw:
+        return DEFAULT_EMPTY_OUTPUT_BACKOFF_SECONDS
+    try:
+        return max(0, min(3600, int(raw)))
+    except ValueError:
+        return DEFAULT_EMPTY_OUTPUT_BACKOFF_SECONDS
+
+
 def settle_seconds() -> int:
     return max(1, min(86400, int(os.getenv('SYNC_REPROCESS_SETTLE_SECONDS', '600'))))

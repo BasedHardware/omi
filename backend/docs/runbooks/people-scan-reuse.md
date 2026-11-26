@@ -28,12 +28,19 @@ the same transaction/batch as the People mutation:
 | `_client` | recursive People deletion batches; account purge deletes generation last |
 | `utils/person_evidence_backfill` | evidence repair |
 
-Meeting context, dream prescan and dream seed references are readers. The
+Meeting context and Dream seed references are readers. The
 emulator script's writes are synthetic test setup. The pinned AST inventory
 detects new/changed People-reference or generation-helper scopes; it does not
 by itself prove transaction atomicity. Re-audit before `--write`, then run the
 strict writer unit tests and loopback emulator contract. A changed writer
 without a generation bump invalidates the inventory test.
+
+## Chat edit fence audit 2026-11-23
+
+#26100 changed only `chat_edits.apply_update`'s outer field validation: an
+unsupported field now raises the typed `UnsupportedChatEditField(ValueError)`.
+The transactional `apply_update.apply` and `restore` writers, including their
+generation bump, keep their pinned fingerprints. Only the outer scope is re-pinned.
 
 ## Recurring-voice scope audit 2026-11-04
 
@@ -68,6 +75,16 @@ writer and inventory suites passed 17 tests, and
 `scripts/fsr_people_generation_emulator_test.py` passed 31 checks on an owned
 loopback emulator, including review apply/undo/redo, enrollment, evidence backfill,
 rollback and concurrent increments. The emulator was stopped after verification.
+
+## Account erasure scope audit 2026-11-23
+
+SCA-3883 changes `user_data_deletion.purge_user_subtree` only in its rollout-cohort
+step: before deleting `rollout_cohorts/{uid}` it now enumerates that document's
+subcollections (the `go_finalization_audit` rows) and deletes each with the same
+`delete_collection` helper on the data-plane client. Re-audit found the People
+subtree walk, its generation-helper calls and their order unchanged; the new step
+touches no People document and adds or removes no generation bump. Only this scope
+is re-pinned, regenerated with the backend Python 3.11 environment.
 
 ## Measure before enabling
 

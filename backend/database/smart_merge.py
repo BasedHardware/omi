@@ -38,6 +38,7 @@ from database.firestore_index_registry import (
     CONVERSATIONS_SMART_MERGE_PARTITION_QUERY,
 )
 from database.people_stats_cache import invalidate_people_stats_cache
+from config.record_wal_duplicate import has_retained_custody
 from config.sync_live_dedupe import sync_live_dedupe_active_for
 from utils.conversations.smart_merge_policy import rebase_donor_segments
 from utils.conversations.summary_delivery import rearm_on_revision_change
@@ -88,6 +89,8 @@ _PRECEDING_FIELDS = (
     'external_data.duplicate_capture_of',
     'relevance_decision.trigger',
     'sync_merged_into',
+    'v3_derived',
+    'recording',
     SMART_MERGE_FIELD,
 )
 
@@ -400,6 +403,8 @@ def absorb_conversation(
             return AbsorbResult('rejected', 'conversation_not_eligible')
         if not survivor_raw or survivor_raw.get('deleted'):
             return AbsorbResult('rejected', 'survivor_changed')
+        if has_retained_custody(donor_raw) or has_retained_custody(survivor_raw):
+            return AbsorbResult('rejected', 'conversation_not_eligible')
         # Corrections own captured segment anchors. Intake must not absorb or
         # re-key either side underneath an encrypted correction receipt.
         if survivor_raw.get('has_transcript_corrections') or donor_raw.get('has_transcript_corrections'):
@@ -425,6 +430,8 @@ def absorb_conversation(
                 ancestor_id: collection.document(ancestor_id).get(transaction=transaction).to_dict()
                 for ancestor_id in union_ancestors
             }
+            if any(has_retained_custody(row) for row in ancestor_rows.values()):
+                return AbsorbResult('rejected', 'conversation_not_eligible')
         else:
             ancestor_rows = {}
         try:

@@ -188,12 +188,41 @@ if [ "$selected_count" -eq 0 ]; then
 fi
 
 echo "Selected $selected_count backend unit test file(s)${shard_note}: $reason"
-BACKEND_UNIT_TEST_FILE_LIST="$selected_tests" \
-BACKEND_FAST_UNIT_WARN_SECONDS="0.1" \
-BACKEND_FAST_UNIT_FAIL_SECONDS="1.0" \
-BACKEND_PYTEST_FILE_ISOLATION="1" \
-BACKEND_PYTEST_MARK_EXPR="not integration and not slow" \
-BACKEND_PYTEST_XDIST="auto" \
-BACKEND_PYTEST_WORKERS="${BACKEND_PYTEST_WORKERS:-auto}" \
-PYTHON="$PYTHON_BIN" \
-bash test.sh
+export BACKEND_FAST_UNIT_WARN_SECONDS="0.1"
+export BACKEND_FAST_UNIT_FAIL_SECONDS="1.0"
+export BACKEND_PYTEST_FILE_ISOLATION="1"
+export BACKEND_PYTEST_MARK_EXPR="not integration and not slow"
+export BACKEND_PYTEST_XDIST="auto"
+export BACKEND_PYTEST_WORKERS="${BACKEND_PYTEST_WORKERS:-auto}"
+export PYTHON="$PYTHON_BIN"
+
+timing_dir="$(mktemp -d "${TMPDIR:-/tmp}/omi-backend-unit-timing.XXXXXX")"
+trap 'rm -f "$selected_tests" "$selection_reason"; rm -rf "$timing_dir"' EXIT
+status=0
+# Pytest queues timing overruns and preserves the ordinary suite result.
+BACKEND_UNIT_TIMING_RECHECK_DIR="$timing_dir" BACKEND_UNIT_TIMING_RESULT="" \
+  BACKEND_UNIT_TEST_FILE_LIST="$selected_tests" bash test.sh || status=$?
+
+# Wait until all shard workers have exited before measuring each node on its own.
+for timing_report in "$timing_dir"/*.tsv; do
+  [ -f "$timing_report" ] || continue
+  while IFS=$'\t' read -r cpu1 nodeid; do
+    echo "Confirming backend unit timing overrun: $nodeid (${cpu1}s CPU)"
+    result="$timing_dir/recheck"
+    rm -f "$result"
+    if BACKEND_UNIT_TIMING_RECHECK_DIR="" BACKEND_UNIT_TIMING_RESULT="$result" \
+       BACKEND_UNIT_TEST_FILE_LIST="" BACKEND_PYTEST_PARALLEL_SESSION=0 BACKEND_PYTEST_WORKERS=1 \
+       bash test.sh "$nodeid"; then
+      if [ -s "$result" ] && IFS=$'\t' read -r cpu2 rechecked_node < "$result" && [ "$rechecked_node" = "$nodeid" ]; then
+        echo "::warning title=Backend unit timing overrun cleared::$nodeid measured ${cpu1}s CPU initially and ${cpu2}s in isolation"
+        printf 'FLAKE-LEDGER timing-guard %s %s %s\n' "$nodeid" "$cpu1" "$cpu2"
+      else
+        echo "::error title=Backend unit timing recheck missing::$nodeid did not produce a passing measurement"
+        status=1
+      fi
+    else
+      status=1
+    fi
+  done < "$timing_report"
+done
+exit "$status"

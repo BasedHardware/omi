@@ -22,6 +22,7 @@ import 'dart:io';
 
 import 'package:omi/utils/analytics/analytics_manager.dart' show AnalyticsManager;
 import 'package:omi/utils/platform/platform_manager.dart';
+import 'package:omi/utils/reliability_experiments.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
@@ -72,7 +73,6 @@ import 'package:omi/services/capture/finish_outcome.dart';
 import 'package:omi/services/capture/live_finalize_gate.dart';
 import 'package:omi/services/capture/optimistic_processing.dart';
 import 'package:omi/services/capture/speaker_suggestions.dart';
-import 'package:omi/backend/schema/capture_committed_event.dart';
 import 'package:omi/services/experiments/client_refactor_flags.dart';
 import 'package:omi/services/capture/manual_live_labels.dart';
 import 'package:omi/services/services.dart';
@@ -94,6 +94,7 @@ import 'package:omi/services/audio_sources/phone_mic_source.dart';
 import 'package:omi/services/wals.dart';
 import 'package:omi/services/wals/mobile_standard_batch.dart';
 import 'package:omi/services/live_preview/live_preview_controller.dart';
+import 'package:omi/services/live_preview/live_words_coordinator.dart';
 import 'package:omi/services/live_preview/local_preview_admission.dart';
 import 'package:omi/utils/alerts/app_snackbar.dart';
 import 'package:omi/utils/batch_recording.dart';
@@ -134,7 +135,7 @@ enum _VoiceCommandTrigger { toggle, legacyLongPress }
 
 class CaptureController extends ChangeNotifier
     with MessageNotifierMixin, CaptureSpeakerAssignment
-    implements ITransctiptSegmentSocketServiceListener {
+    implements ITransctiptSegmentSocketServiceListener, ListenCustodyReceiptListener, LiveWordsCapture {
   static const MethodChannel _nativeBleTranscriptChannel = MethodChannel('com.friend.ios/native_ble_transcript');
   static const int _maxInProgressConversationRefreshAttempts = 30;
   static const Duration _inProgressConversationRefreshInterval = Duration(seconds: 2);
@@ -160,6 +161,7 @@ class CaptureController extends ChangeNotifier
   final Future<bool> Function(String deviceId, int level)? _speakerHaptic;
   final Future<CreateConversationResponse?> Function()? _processInProgressConversationOverride;
   final Future<InProgressProcessOutcome> Function()? _processInProgressOutcomeOverride;
+  final InProgressConversationRequestSender? _processRequestSender;
   final _PhoneDiscardState _phoneDiscard;
   final Future<DeviceConnection?> Function(String deviceId)? _deviceConnectionLoader;
   final Future<void> Function(String deviceId)? _pendantReconnectLoader;
@@ -192,11 +194,13 @@ class CaptureController extends ChangeNotifier
   /// the lane's VAD; reports through [captureEndReporter] when one is installed.
   final CaptureEndDetector _captureEnd = CaptureEndDetector();
   CaptureEndReporter? captureEndReporter;
+  void Function(String recordingSessionId)? onMobileBatchCaptureEnded;
 
   void _reportCaptureEnd(CaptureEndSignal? signal) {
+    if (signal == null) return;
+    onMobileBatchCaptureEnded?.call(signal.recordingSessionId);
     final reporter = captureEndReporter;
-    if (signal == null || reporter == null) return;
-    unawaited(reporter.report(signal));
+    if (reporter != null) unawaited(reporter.report(signal));
   }
 
   void installMobileStandardBatch(MobileStandardBatch lane) {
@@ -235,6 +239,27 @@ class CaptureController extends ChangeNotifier
       _localPreview.preserveForAccountChange(frames, _mobileStandardBatch, activeRecordingId);
   LivePreviewController? get livePreview => _localPreview.preview;
   bool get localPreviewAdmitted => _localPreview.admitted;
+
+  // Reliability experiment vendor_recognizer_on_opened_app (lib/services/live_preview/live_words_coordinator.dart).
+  // Routing keeps reading [localPreviewAdmitted]; only what the screens show reads [liveWordsShown].
+
+  /// Live words can show: the server granted the on-phone preview, or, under the experiment, capture
+  /// is active with the app in front. Without the experiment this equals [localPreviewAdmitted].
+  bool get liveWordsShown => localPreviewAdmitted || _liveWordsInFront;
+  bool _liveWordsInFront = false;
+
+  /// The codec of the pendant packets on the device audio tap.
+  BleAudioCodec get pendantTapCodec => _localPreview.pendantCodec;
+
+  @override
+  void sealOpenPhoneFile() => _mobileStandardBatch?.sealForEnd();
+
+  @override
+  void showLiveWordsInFront(bool value) {
+    if (_liveWordsInFront == value) return;
+    _liveWordsInFront = value;
+    if (!_captureControllerDisposed) notifyListeners();
+  }
 
   void installLivePreview(LivePreviewController preview) {
     if (_captureControllerDisposed) return preview.dispose();
@@ -450,6 +475,7 @@ class CaptureController extends ChangeNotifier
     Future<bool?> Function(String deviceId)? deviceMuteReader,
     Future<void> Function(String deviceId, bool muted)? deviceMuteWriter,
     Future<InProgressProcessOutcome> Function()? processInProgressOutcome,
+    @visibleForTesting InProgressConversationRequestSender? processRequestSender,
     Future<bool> Function(String conversationId)? deleteDiscardedConversation,
     List<Duration> discardDeleteRetryDelays = const [Duration(seconds: 5), Duration(seconds: 30), Duration(minutes: 2)],
     Future<DeviceConnection?> Function(String deviceId)? deviceConnectionLoader,
@@ -481,6 +507,7 @@ class CaptureController extends ChangeNotifier
         _sessionOwner = sessionOwner,
         _processInProgressConversationOverride = processInProgressConversation,
         _processInProgressOutcomeOverride = processInProgressOutcome,
+        _processRequestSender = processRequestSender,
         _phoneDiscard = _PhoneDiscardState(
           retryDelays: discardDeleteRetryDelays,
           deleteOverride: deleteDiscardedConversation,
@@ -859,7 +886,19 @@ class CaptureController extends ChangeNotifier
   /// conversation so the pipeline can be joined without timing heuristics.
   String? get activeRecordingId => _recordingTelemetry.recordingId;
 
-  ({String uid, String recordingId, CaptureSessionToken? token})? _liveSocketIdentity;
+  /// Live segments received by this capture, excluding account-wide snapshot-only segments.
+  Iterable<String> get locallyReceivedSegmentIds =>
+      segments.map((segment) => segment.id).where(_segmentArrivals.containsKey);
+
+  ({String uid, String? recordingId, CaptureSessionToken? token})? _liveSocketIdentity;
+
+  bool get _canReuseTranscriptionSocket {
+    final socket = _socket;
+    return socket != null &&
+        socket.state == SocketServiceState.connected &&
+        (!socket.audioCustodyEnabled ||
+            socket.hasCurrentListenOwner(_preferences.uid) && socket.clientConversationId == activeRecordingId);
+  }
 
   /// Recording provenance from this phone's active listen connection. A
   /// per-user in-progress pointer or a nearby timestamp cannot prove it.
@@ -868,6 +907,8 @@ class CaptureController extends ChangeNotifier
     final socket = _socket;
     if (identity == null ||
         socket == null ||
+        !socket.localPreview ||
+        identity.recordingId == null ||
         identity.uid.isEmpty ||
         identity.uid != _preferences.uid ||
         identity.recordingId != activeRecordingId ||
@@ -882,6 +923,9 @@ class CaptureController extends ChangeNotifier
     // when the direct connection and its client capture identifier stay valid.
     return socket.liveRecording?.recordingId;
   }
+
+  /// Whether the capture has seen the server close this exact recording.
+  bool hasClosedServerRecording(String recordingId) => _closedServerRecordings.contains(recordingId);
 
   // Identifies a conversation boundary within a continuous recording. This is
   // presentation/action identity, not another capture authorization generation.
@@ -1029,6 +1073,7 @@ class CaptureController extends ChangeNotifier
 
   final Map<String, _ConversationClose> _pendingConversationCloses = {};
   final Set<String> _seenConversationCloses = {};
+  final Set<String> _closedServerRecordings = {};
   final Set<_ConversationClose> _admittedConversationCloses = {};
   final Set<_ConversationClose> _pendingProcessCloses = {};
   int _conversationCustodyEpoch = 0;
@@ -1141,6 +1186,7 @@ class CaptureController extends ChangeNotifier
   Timer? _voiceCommandTimeoutTimer; // 15s auto-end timer for voice questions
   static const Duration _voiceCommandAutoSubmitGrace = Duration(seconds: 2);
 
+  @override
   RecordingState recordingState = RecordingState.stop;
 
   // -- One live source at a time (CAPTURE_POLICY.md, "Live sources") -------------------------
@@ -1226,11 +1272,15 @@ class CaptureController extends ChangeNotifier
   /// Finish through the coordinator and return that exact Process Now answer, with why it has no
   /// conversation when it has none (transport, not found, empty). Throws [StateError] when this
   /// finish made no request (a phone Transcribe Later recording).
-  Future<InProgressProcessOutcome> finishCaptureWithOutcome() async {
+  Future<InProgressProcessOutcome> finishCaptureWithOutcome({String? liveConversationId}) async {
     _lastProcessRequest = null;
     _firstCaptureProcess = true;
     try {
-      await finishCapture();
+      if (liveConversationId == null) {
+        await finishCapture();
+      } else {
+        await _requestFinish(FinishRequested(liveConversationId: liveConversationId));
+      }
       final request = _lastProcessRequest;
       if (request == null) throw FinishMadeNoRequest();
       return await request;
@@ -1375,6 +1425,7 @@ class CaptureController extends ChangeNotifier
   /// the in-flight target read `_capture.stagedReadModel.phoneOwnsCapture`.
   bool get _phoneOwnsCapture => _capture.readModel.phoneOwnsCapture;
 
+  @override
   bool get isPaused => _preferences.deviceMuted;
   bool get isCallActive => _capture.readModel.micInterrupted;
 
@@ -1428,6 +1479,7 @@ class CaptureController extends ChangeNotifier
     _liveSocketIdentity = null;
     _mobileStandardBatchAllowed = false;
     _mobileStandardBatch?.authorize(false);
+    if (activeRecordingId case final id?) onMobileBatchCaptureEnded?.call(id);
     _localPreview.end(send: _openSocketSender);
     _captureEvidenceIdentity.reset();
     _sessionOwner?.replaceSession(identity);
@@ -1993,9 +2045,7 @@ class CaptureController extends ChangeNotifier
     if (!identical(_socket, socket)) {
       _socket?.unsubscribe(this);
       _socket = socket;
-      final recordingId = activeRecordingId;
-      _liveSocketIdentity =
-          recordingId == null ? null : (uid: _preferences.uid, recordingId: recordingId, token: sessionToken);
+      _liveSocketIdentity = (uid: _preferences.uid, recordingId: activeRecordingId, token: sessionToken);
       _lastPublishedSocketCustomStt = socket.customSttMode;
       _localPreview.socketPublished(declared: socket.localPreview, send: _sendPendantToSocket);
       _socket?.subscribe(this, this);
@@ -2281,7 +2331,15 @@ class CaptureController extends ChangeNotifier
         Logger.debug("Double tap: processing conversation");
         PlatformManager.instance.analytics.omiDoubleTap(feature: 'process_conversation');
         HapticFeedback.lightImpact(); // The tap's only feedback on the phone until the processing row.
-        forceProcessingCurrentConversation();
+        unawaited(
+          forceProcessingCurrentConversation(manualFinish: true).catchError(
+            (Object error, StackTrace stack) => _reportDetachedCaptureError(
+              'capture_process_now',
+              error,
+              stack,
+            ),
+          ),
+        );
       }
       return;
     }
@@ -2643,7 +2701,7 @@ class CaptureController extends ChangeNotifier
 
     if (language != _socket?.language ||
         codec != _socket?.codec ||
-        _socket?.state != SocketServiceState.connected ||
+        !_canReuseTranscriptionSocket ||
         _socket?.sttConfigId != sttConfigId ||
         _sessionGeolocationDiffersFromSocket()) {
       await _initiateWebsocket(audioCodec: codec, force: true, source: _getConversationSourceFromDevice());
@@ -2740,7 +2798,6 @@ class CaptureController extends ChangeNotifier
   void _refreshLimitlessCustomLiveWatch() {
     final connection = _limitlessAudioConnection;
     if (connection == null) return;
-    connection.stopCustomLiveAudioWatch();
     final device = _recordingDevice;
     final session = _capture.stagedReadModel.state.active;
     final recordingId = session?.recordingId;
@@ -2754,6 +2811,7 @@ class CaptureController extends ChangeNotifier
         accountId.isEmpty ||
         !config.isEnabled ||
         config.provider != SttProvider.customLive) {
+      connection.stopCustomLiveAudioWatch();
       return;
     }
     final configId = config.sttConfigId;
@@ -2782,9 +2840,13 @@ class CaptureController extends ChangeNotifier
       return _preferences.customSttConfig.sttConfigId == configId;
     }
 
-    if (!isCurrent()) return;
+    if (!isCurrent()) {
+      connection.stopCustomLiveAudioWatch();
+      return;
+    }
     _recordingTelemetry.observeCustomLiveAudioEligibility();
     if (_customLiveAudioRecoveryKilled) {
+      connection.stopCustomLiveAudioWatch();
       _recordingTelemetry.observeCustomLiveAudioDetection(enabled: false);
       return;
     }
@@ -3415,8 +3477,10 @@ class CaptureController extends ChangeNotifier
   /// Finish the live capture: the one stop for the live page and the Home button. A phone
   /// recording is stopped and processed before a pendant it took over from resumes, so the
   /// processing request reaches the phone's conversation, not the pendant's next one.
-  Future<void> finishCapture() async {
-    final outcome = await _capture.dispatch(const FinishRequested());
+  Future<void> finishCapture() => _requestFinish(const FinishRequested());
+
+  Future<void> _requestFinish(FinishRequested event) async {
+    final outcome = await _capture.dispatch(event);
     outcome.throwIfFailed();
   }
 
@@ -4206,6 +4270,35 @@ class CaptureController extends ChangeNotifier
   }
 
   @override
+  void onCustodyReceipt(
+    TranscriptSegmentSocketService socket,
+    MessageEvent event, {
+    required String owner,
+    String? recordingSessionId,
+  }) {
+    final identity = _liveSocketIdentity;
+    if (_captureControllerDisposed ||
+        !identical(_socket, socket) ||
+        socket.state != SocketServiceState.connected ||
+        socket.stoppedIntentionally ||
+        !socket.hasCurrentListenOwner(owner) ||
+        identity == null ||
+        identity.uid != owner ||
+        owner != _preferences.uid ||
+        !_captureSessionIsCurrent(identity.token) ||
+        recordingSessionId != socket.clientConversationId ||
+        (recordingSessionId != null && recordingSessionId != activeRecordingId)) {
+      return;
+    }
+    final phone = _wal.getSyncs().phone;
+    if (phone is LocalWalSyncImpl) {
+      unawaited(phone.recordCustodyReceipt(event, owner: owner, recordingSessionId: recordingSessionId).catchError(
+            (Object _) => Logger.debug('event=refactor_shadow lane=L5 check=custody_commit outcome=error'),
+          ));
+    }
+  }
+
+  @override
   void onMessageEventReceived(MessageEvent event) {
     if (_captureControllerDisposed) return;
     if (event is ConversationSessionEvent) {
@@ -4248,15 +4341,6 @@ class CaptureController extends ChangeNotifier
       return;
     }
 
-    if (event is CaptureCommittedEvent) {
-      final phone = _wal.getSyncs().phone;
-      if (phone is LocalWalSyncImpl) {
-        unawaited(phone.recordCaptureCommitted(event).catchError((Object _) {
-          Logger.debug('event=refactor_shadow lane=L5 check=custody_commit outcome=error');
-        }));
-      }
-      return;
-    }
     if (event is SpeakerLabelSuggestionEvent) {
       _handleSpeakerLabelSuggestionEvent(event);
       return;
@@ -4350,18 +4434,33 @@ class CaptureController extends ChangeNotifier
     }
   }
 
-  Future<void> forceProcessingCurrentConversation() async {
+  Future<void> forceProcessingCurrentConversation({bool manualFinish = false, String? liveConversationId}) async {
+    // Reliability experiment end_open_conversation: the End happened now, not when the request leaves
+    // (it waits for the disk below). Seal the speech file still being written so the audio up to this
+    // moment is published, and send the moment with the request. Off: neither happens.
+    final endedAt = ReliabilityExperiments.enabled('end_open_conversation') ? DateTime.now() : null;
+    if (endedAt != null) _mobileStandardBatch?.sealForEnd();
     final recordingSessionId = activeRecordingId;
     final conversationRevision = _systemSurfaceConversationRevision;
     final close = _admitConversationClose(processNow: true);
     _pendingProcessCloses.add(close);
     final placeholderOwner = ++_processingPlaceholderOwner;
     var requestAdmitted = false;
+    final confirmedProcessing = _firstCaptureProcess;
+    final showManualFinish = manualFinish || confirmedProcessing;
+    final placeholder = OptimisticProcessingPlaceholder.conversation(
+      targetConversationId: _conversation?.id,
+    );
+    final actions = externalActions;
+    final sourceId = verifiedLiveServerRecordingId ?? _conversation?.id;
     try {
       // Publish the skeleton before waiting for disk, preserving immediate Process Now feedback.
-      externalActions.addProcessingConversation(
-        OptimisticProcessingPlaceholder.conversation(targetConversationId: _conversation?.id),
-      );
+      if (showManualFinish) {
+        final openSourceId = sourceId != null && hasClosedServerRecording(sourceId) ? null : sourceId;
+        actions.onManualFinishStarted(placeholder, openSourceId,
+            liveConversationId: liveConversationId, captureId: recordingSessionId);
+      }
+      actions.addProcessingConversation(placeholder);
       _finalizeGate.markFinalized();
       externalActions.onLiveFinalized();
       await close.snapshot;
@@ -4371,39 +4470,50 @@ class CaptureController extends ChangeNotifier
           conversationRevision != _systemSurfaceConversationRevision) {
         // A matching server close may already have bound this cut during the drain.
         close.bind(null);
+        if (showManualFinish) actions.onManualFinishSettled(placeholder, null, showFailure: false);
         if (placeholderOwner == _processingPlaceholderOwner) {
           externalActions.removeProcessingConversation(OptimisticProcessingPlaceholder.id);
         }
         return;
       }
       _resetLiveConversationWindow();
-      final confirmedProcessing = _firstCaptureProcess;
       final Future<InProgressProcessOutcome> request = _processInProgressOutcomeOverride != null
           ? _processInProgressOutcomeOverride!()
           : _processInProgressConversationOverride != null
               ? _processInProgressConversationOverride!().then((result) =>
                   InProgressProcessOutcome(response: result, absence: result == null ? ProcessAbsence.transport : null))
-              : processInProgressConversationOutcome();
+              : processInProgressConversationOutcome(
+                  liveConversationId: liveConversationId, endedAt: endedAt, sendRequest: _processRequestSender);
       requestAdmitted = true;
       if (confirmedProcessing) _lastProcessRequest = request;
       _processInFlight = request.then((_) {}, onError: (_) {});
       request.then<void>((outcome) async {
         // Bind before any asynchronous publication and before awaiting the ordered stamp slot.
-        final conversationId = outcome.response?.conversation?.id;
+        final saved = outcome.response?.conversation;
+        final conversationId = saved?.id;
         close.bind(conversationId);
         _pendingProcessCloses.remove(close);
         if (!_closeStoreIsCurrent(close) || _captureControllerDisposed) return;
-        if (conversationId != null) _rememberConversationClose(conversationId);
+        if (saved != null) {
+          // Always remembered: a later processing-started event for this id must not cut again.
+          final closed = saved.status != ConversationStatus.in_progress;
+          _rememberConversationClose(saved.id, closed: closed);
+          if (closed && saved.id == verifiedLiveServerRecordingId) notifyListeners();
+        }
+        if (showManualFinish) actions.onManualFinishSettled(placeholder, outcome, showFailure: !confirmedProcessing);
+        // After the manual-finish bookkeeping, so the provider already knows which window this End closed.
+        if (saved != null) actions.onEndAccepted(saved, liveConversationId: liveConversationId);
         await OptimisticProcessingPlaceholder.applyProcessResult(
           result: outcome.response,
           absence: outcome.absence,
           actions: externalActions,
           onCreated: _processConversationCreated,
-          onNoConversation: _onProcessProducedNoConversation,
+          // A manual v3 finish that reports its own failure owns the user copy; keep analytics here.
+          onNoConversation: (absence) => _onProcessProducedNoConversation(absence,
+              finishOwnsCopy: showManualFinish && !confirmedProcessing && actions.v3FinishFeedbackEnabled),
           removePlaceholder: placeholderOwner == _processingPlaceholderOwner,
         );
         if (close.sessionStartSeconds > 0 && conversationId != null) {
-          final saved = outcome.response?.conversation;
           if (saved != null && close.phone is LocalWalSyncImpl) {
             await _confirmSessionTranscript(close.sessionStartSeconds, saved, close.segmentArrivals,
                 close: close, needsRepair: close.needsRepair, allowTranscriptCoverageFallback: close.customStt);
@@ -4415,6 +4525,9 @@ class CaptureController extends ChangeNotifier
         close.bind(null);
         _pendingProcessCloses.remove(close);
         if (!_closeStoreIsCurrent(close) || _captureControllerDisposed) return;
+        if (showManualFinish) {
+          actions.onManualFinishSettled(placeholder, null, showFailure: !confirmedProcessing);
+        }
         await OptimisticProcessingPlaceholder.handleFailure(
           actions: externalActions,
           removePlaceholder: placeholderOwner == _processingPlaceholderOwner,
@@ -4425,6 +4538,16 @@ class CaptureController extends ChangeNotifier
       });
     } catch (_) {
       close.bind(null);
+      if (showManualFinish) {
+        // The detail button is still available to retry a failed local drain.
+        actions.onManualFinishSettled(placeholder, null,
+            showFailure: !confirmedProcessing && liveConversationId == null);
+      }
+      if (placeholderOwner == _processingPlaceholderOwner) {
+        actions.removeProcessingConversation(
+          OptimisticProcessingPlaceholder.id,
+        );
+      }
       rethrow;
     } finally {
       if (!requestAdmitted) _pendingProcessCloses.remove(close);
@@ -4511,12 +4634,13 @@ class CaptureController extends ChangeNotifier
     return null;
   }
 
-  void _onProcessProducedNoConversation(ProcessAbsence absence) {
+  void _onProcessProducedNoConversation(ProcessAbsence absence, {bool finishOwnsCopy = false}) {
     if (_conversationDeliveredForCurrentCapture) return;
     switch (absence) {
       case ProcessAbsence.emptyBody:
-        _announceNoConversation(EmptyRecordingReason.emptyDeleted);
+        _announceNoConversation(EmptyRecordingReason.emptyDeleted, showUserCopy: !finishOwnsCopy);
       case ProcessAbsence.notFound:
+        if (externalActions.v3FinishFeedbackEnabled) return;
         // POST /v1/conversations returns 404 both when nothing was captured and
         // when the conversation was already finalized. Let the conversation-created
         // path set [_deliveredExplanationGeneration] before treating this as empty.
@@ -4913,7 +5037,7 @@ class CaptureController extends ChangeNotifier
             _closeBleStream(disableNativeBackground: disableNativeBackground),
         startBleStream: () => _initiateDeviceAudioStreaming(),
         openSocket: (spec) async {
-          if (spec.ensureOnly && _socket?.state == SocketServiceState.connected) return;
+          if (spec.ensureOnly && _canReuseTranscriptionSocket) return;
           await _initiateWebsocket(
             audioCodec: spec.codec,
             sampleRate: spec.sampleRate,
@@ -4985,7 +5109,7 @@ class CaptureController extends ChangeNotifier
           FlushPhoneFramesStage() => Future.sync(_flushPhoneFrames),
           RecordingMarkStage() => Future.sync(() => updateRecordingState(stage.state)),
           DeviceStopTelemetryStage() => _deviceStopTelemetryBody(cleanDevice: stage.cleanDevice),
-          ProcessConversationStage() => _processConversationBody(),
+          ProcessConversationStage() => _processConversationBody(stage.liveConversationId),
           SocketClosedStage() => _socketClosedBody(stage.closeCode),
           SocketConnectedStage() => _socketConnectedBody(),
           SocketErrorStage() => _socketErrorBody(stage.error),
@@ -5003,8 +5127,8 @@ class CaptureController extends ChangeNotifier
           StartPhoneBatchStage() => _startPhoneMicBatchBody(auto: stage.auto),
         };
 
-  Future<void> _processConversationBody() async {
-    await forceProcessingCurrentConversation();
+  Future<void> _processConversationBody(String? liveConversationId) async {
+    await forceProcessingCurrentConversation(liveConversationId: liveConversationId);
     await _processInFlight;
   }
 }

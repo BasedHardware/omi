@@ -22,8 +22,17 @@ from database.redis_connection import (
     redis_connection_kwargs as _redis_connection_kwargs,
     create_bounded_redis_client as create_bounded_redis_client,
 )
+from utils.other.request_deadline import request_deadline_remaining_seconds
 
 r: Any = redis.Redis(**_redis_connection_kwargs())
+# Deadline-bound request dependencies use bounded connect/read waits so an
+# abandoned executor future cannot strand a worker on Redis.
+_REQUEST_DEADLINE_REDIS_CLIENT: Any = create_bounded_redis_client(1.0)
+
+
+def request_deadline_redis_client() -> Any:
+    """Return a bounded Redis client only while a request deadline is active."""
+    return r if request_deadline_remaining_seconds() is None else _REQUEST_DEADLINE_REDIS_CLIENT
 
 
 # Longer than the 10-minute max approval TTL (contract §5) plus clock-skew
@@ -1152,7 +1161,11 @@ def check_rate_limit(key: str, policy: str, max_requests: int, window: int) -> t
         (allowed, remaining, retry_after_seconds)
     """
     redis_key = f'rl:{policy}:{key}'
-    current, ttl = _RATE_LIMIT_LUA(keys=[redis_key], args=[window])
+    redis_client = request_deadline_redis_client()
+    if redis_client is r:
+        current, ttl = _RATE_LIMIT_LUA(keys=[redis_key], args=[window])
+    else:
+        current, ttl = _RATE_LIMIT_LUA(keys=[redis_key], args=[window], client=redis_client)
     remaining = max(0, max_requests - current)
     allowed = current <= max_requests
     retry_after = max(0, ttl) if not allowed else 0
@@ -1294,7 +1307,9 @@ def try_acquire_listen_lock(uid: str, ttl: int = 7) -> bool:
 def try_acquire_client_device_write_lock(uid: str, client_device_id: str, ttl: int = 600) -> bool:
     """Throttle client_devices registry upserts to once per (uid, device) every `ttl` seconds."""
     try:
-        result = r.set(f'users:{uid}:client_device_write:{client_device_id}', '1', ex=ttl, nx=True)
+        result = request_deadline_redis_client().set(
+            f'users:{uid}:client_device_write:{client_device_id}', '1', ex=ttl, nx=True
+        )
         return result is not None
     except Exception:
         return True
@@ -1307,7 +1322,7 @@ def try_acquire_user_platform_write_lock(uid: str, platform: str, ttl: int = 600
     change immediately.
     """
     try:
-        result = r.set(f'users:{uid}:platform_write:{platform}', '1', ex=ttl, nx=True)
+        result = request_deadline_redis_client().set(f'users:{uid}:platform_write:{platform}', '1', ex=ttl, nx=True)
         return result is not None
     except Exception:
         # Fail-open: if Redis is down, let the caller write through. Firestore
@@ -1432,10 +1447,58 @@ def try_acquire_ai_profile_refresh_lock(uid: str, ttl: int = 10 * 60) -> bool:
     return result is not None
 
 
-def try_acquire_ai_profile_auto_cooldown(uid: str, ttl: int = 60 * 60) -> bool:
-    """At most one automatic AI-profile refresh attempt per owner per ``ttl``."""
-    result = r.set(f'users:{uid}:ai_profile_auto_cooldown', '1', ex=ttl, nx=True)
-    return result is not None
+# The cooldown value also records independent demand while a conversation
+# attempt is active. One key keeps admission and handoff atomic across pods.
+_AI_PROFILE_ADMIT = """
+if redis.call('SET', KEYS[1], ARGV[1], 'EX', ARGV[2], 'NX') then
+    return 1
+end
+local owner = redis.call('GET', KEYS[1])
+if ARGV[1] == '1' and owner and string.match(owner, '^conversation:[0-9a-f]+$') then
+    redis.call('SET', KEYS[1], owner .. ':pending', 'KEEPTTL')
+end
+return 0
+"""
+
+_AI_PROFILE_SETTLE = """
+local owner = redis.call('GET', KEYS[1])
+local pending = owner == ARGV[1] .. ':pending'
+if owner ~= ARGV[1] and not pending then
+    return 0
+end
+if ARGV[2] == 'source_fenced' then
+    if pending then
+        redis.call('SET', KEYS[1], ARGV[1] .. ':independent', 'KEEPTTL')
+        return 1
+    end
+    redis.call('DEL', KEYS[1])
+elseif ARGV[2] == 'clear' then
+    redis.call('DEL', KEYS[1])
+else
+    redis.call('SET', KEYS[1], '1', 'KEEPTTL')
+end
+return 0
+"""
+
+
+def try_acquire_ai_profile_auto_cooldown(uid: str, ttl: int = 60 * 60, *, token: str | None = None) -> bool:
+    """Admit an automatic attempt or record independent demand on an active conversation attempt."""
+    owner = '1' if token is None else f'conversation:{token}'
+    return bool(r.eval(_AI_PROFILE_ADMIT, 1, f'users:{uid}:ai_profile_auto_cooldown', owner, ttl))
+
+
+def settle_ai_profile_auto_cooldown(uid: str, token: str, *, source_fenced: bool) -> bool:
+    """Settle only our attempt and reserve the cooldown for any owed independent retry."""
+    outcome = 'source_fenced' if source_fenced else 'settled'
+    return bool(
+        r.eval(_AI_PROFILE_SETTLE, 1, f'users:{uid}:ai_profile_auto_cooldown', f'conversation:{token}', outcome)
+    )
+
+
+def finish_ai_profile_auto_retry(uid: str, token: str, *, clear: bool) -> None:
+    """Release or settle the handoff only while it still owns the cooldown."""
+    outcome = 'clear' if clear else 'settled'
+    r.eval(_AI_PROFILE_SETTLE, 1, f'users:{uid}:ai_profile_auto_cooldown', f'conversation:{token}:independent', outcome)
 
 
 def release_ai_profile_refresh_lock(uid: str) -> None:
@@ -1477,7 +1540,11 @@ end
 
 def release_token_lock(key: str, token: str) -> None:
     """Release a shared Redis lease only while the caller's token owns it."""
-    _RELEASE_NOTIFICATIONS_JOB_RUN_LOCK_LUA(keys=[key], args=[token])
+    client = request_deadline_redis_client()
+    if client is r:
+        _RELEASE_NOTIFICATIONS_JOB_RUN_LOCK_LUA(keys=[key], args=[token])
+    else:
+        _RELEASE_NOTIFICATIONS_JOB_RUN_LOCK_LUA(keys=[key], args=[token], client=client)
 
 
 def try_acquire_notifications_job_run_lock(token: str, ttl: int = 55 * 60) -> bool:
@@ -1506,7 +1573,7 @@ def set_credits_invalidation_signal(uid: str, ttl: int = 120) -> None:
     TTL is 2 min — long enough for all streams to see it on their next 60s tick.
     Uses GET (not GETDEL) so multiple concurrent streams all see the signal.
     """
-    r.set(f'credits_invalidated:{uid}', '1', ex=ttl)
+    request_deadline_redis_client().set(f'credits_invalidated:{uid}', '1', ex=ttl)
 
 
 @try_catch_decorator

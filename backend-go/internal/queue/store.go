@@ -3,6 +3,7 @@ package queue
 import (
 	"context"
 	"fmt"
+	"strconv"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -68,8 +69,14 @@ func Open(
 	}
 	beat := main.Copy()
 	beat.MaxConns = pg.Int32(min(heartbeatPoolLimit, cfg.Workers))
-	beat.ConnConfig.RuntimeParams["statement_timeout"] = "2000"
-	beat.ConnConfig.RuntimeParams["lock_timeout"] = "1000"
+	// A beat starts one third of the way through the lease. Give it time to wait
+	// for a concurrent Save, with a separate margin for the rest of the statement.
+	// Keep the existing floors for short leases and bound waits on the shared pool
+	// by the work pool's own timeout ceilings.
+	lockTimeout := min(12000, max(1000, (cfg.Lease/2).Milliseconds()))
+	statementTimeout := min(15000, max(2000, (cfg.Lease-cfg.Lease/3).Milliseconds()))
+	beat.ConnConfig.RuntimeParams["lock_timeout"] = strconv.FormatInt(lockTimeout, 10)
+	beat.ConnConfig.RuntimeParams["statement_timeout"] = strconv.FormatInt(statementTimeout, 10)
 	heartbeat, err := pgxpool.NewWithConfig(ctx, beat)
 	if err != nil {
 		pool.Close()
@@ -238,34 +245,61 @@ WHERE job_key=$1 AND state='parked' AND uid=$3 AND lease_token=$4`, key, sc.stor
 	return nil
 }
 
-// Stats returns the number of jobs in each state and the age in seconds of the oldest job
-// that is not terminal.
-func (s *Store) Stats(ctx context.Context) (map[State]int64, float64, error) {
-	rows, err := s.pool.Query(ctx, `SELECT state,count(*),
-COALESCE(max(extract(epoch FROM clock_timestamp()-created_at)) FILTER (WHERE outcome IS NULL),0)::float8
-FROM queue_jobs GROUP BY state`)
+// CustomerWait counts custody held by funding, separately from owed work.
+type CustomerWait struct {
+	Owners, Units   int64
+	AudioSeconds    float64
+	ExpiredUnfunded int64
+}
+
+const customerWaitSQL = `SELECT count(distinct uid),count(*),coalesce(sum(audio_seconds),0),
+(SELECT expired_unfunded FROM queue_settings)
+FROM queue_jobs WHERE outcome IS NULL AND (custody_deadline IS NOT NULL OR timed_deadline IS NOT NULL)`
+
+// WaitingOnCustomer reports current funding holds and the lifetime count expired.
+func (s *Store) WaitingOnCustomer(ctx context.Context) (CustomerWait, error) {
+	var w CustomerWait
+	err := s.pool.QueryRow(ctx, customerWaitSQL).Scan(&w.Owners, &w.Units, &w.AudioSeconds, &w.ExpiredUnfunded)
+	return w, err
+}
+
+// Stats counts eligible jobs and keeps customer wait outside backlog and oldest age.
+type Stats struct {
+	Counts            map[State]int64
+	OldestSeconds     float64
+	WaitingOnCustomer CustomerWait
+}
+
+// Stats computes both populations at the same database snapshot.
+func (s *Store) Stats(ctx context.Context) (Stats, error) {
+	// The summary row also exists for an empty queue, after the last owner is erased.
+	rows, err := s.pool.Query(ctx, `WITH owed AS (
+ SELECT state,count(*) AS jobs,COALESCE(max(extract(epoch FROM statement_timestamp()-coalesce(owed_since,created_at)))
+      FILTER (WHERE outcome IS NULL),0)::float8 AS age
+ FROM queue_jobs WHERE custody_deadline IS NULL AND timed_deadline IS NULL AND outcome IS DISTINCT FROM 'expired_unfunded' GROUP BY state)
+ SELECT state,jobs,age,0,0,0::float8,0 FROM owed
+ UNION ALL SELECT '',0,0,w.* FROM (`+customerWaitSQL+`) w`)
 	if err != nil {
-		return nil, 0, fmt.Errorf("stats: %w", err)
+		return Stats{}, fmt.Errorf("stats: %w", err)
 	}
 	defer rows.Close()
-	counts := make(map[State]int64)
-	var oldest float64
+	out := Stats{Counts: make(map[State]int64)}
 	for rows.Next() {
-		var (
-			state State
-			count int64
-			age   float64
-		)
-		if err := rows.Scan(&state, &count, &age); err != nil {
-			return nil, 0, fmt.Errorf("stats: %w", err)
+		var state State
+		var jobs int64
+		var age float64
+		var w CustomerWait
+		if err := rows.Scan(&state, &jobs, &age, &w.Owners, &w.Units, &w.AudioSeconds, &w.ExpiredUnfunded); err != nil {
+			return Stats{}, err
 		}
-		counts[state] = count
-		oldest = max(oldest, age)
+		if state == "" {
+			out.WaitingOnCustomer = w
+			continue
+		}
+		out.Counts[state] = jobs
+		out.OldestSeconds = max(out.OldestSeconds, age)
 	}
-	if err := rows.Err(); err != nil {
-		return nil, 0, fmt.Errorf("stats: %w", err)
-	}
-	return counts, oldest, nil
+	return out, rows.Err()
 }
 
 // Stranded reports due jobs whose kind or format this binary did not declare. During a
@@ -286,7 +320,7 @@ func (s *Store) stranded(ctx context.Context, can supported) (int64, float64, er
 	)
 	err := s.pool.QueryRow(ctx, `SELECT count(*),
 COALESCE(max(extract(epoch FROM clock_timestamp()-ready_at)),0)::float8
-FROM queue_jobs WHERE ready_at <= clock_timestamp()
+FROM queue_jobs WHERE ready_at <= clock_timestamp() AND timed_deadline IS NULL
  AND (kind,format) NOT IN (SELECT k,f FROM unnest($1::text[],$2::int[]) AS s(k,f))`,
 		can.kinds, can.formats).Scan(&count, &oldest)
 	if err != nil {
@@ -298,6 +332,7 @@ FROM queue_jobs WHERE ready_at <= clock_timestamp()
 // silent is the Observer used when the caller passes none.
 type silent struct{}
 
+func (silent) EntitlementReleased(time.Duration)  {}
 func (silent) Outcome(string, Terminal, Cause)    {}
 func (silent) Retry(string, Cause)                {}
 func (silent) Yield(string, Cause)                {}

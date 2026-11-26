@@ -2,7 +2,7 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 
-from config.conversations_v3 import boundary_seconds
+from config.conversations_v3 import boundary_seconds, max_window_seconds
 from utils.conversations.summary_selection import render_sections_markdown, select_primary_summary
 from utils.conversations.v3 import context, outline
 
@@ -25,6 +25,29 @@ def test_boundary_settings(monkeypatch, gap, lock, expected):
     monkeypatch.setenv('CONVERSATIONS_V3_LOCK_SECONDS', lock)
     assert boundary_seconds(cohesion=True) == expected
     assert boundary_seconds(cohesion=False) == (300, 300)
+
+
+@pytest.mark.parametrize(
+    'value,expected',
+    [
+        (None, 10800),
+        ('  OFF ', 0),
+        ('0', 0),
+        ('120', 120),
+        ('7200', 7200),
+        ('119', 10800),
+        ('10801', 10800),
+        ('-1', 10800),
+        ('invalid', 10800),
+    ],
+)
+def test_window_cap_setting(monkeypatch, value, expected):
+    key = 'CONVERSATIONS_V3_MAX_WINDOW_SECONDS'
+    if value is None:
+        monkeypatch.delenv(key, raising=False)
+    else:
+        monkeypatch.setenv(key, value)
+    assert max_window_seconds() == expected
 
 
 def test_gap_and_lock_deadlines_are_independent():

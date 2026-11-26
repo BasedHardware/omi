@@ -403,8 +403,7 @@ def with_audio_timeline_span_env(payload: str) -> str:
         '        {"name": "LIVE_CAPTURE_WINDOW_MERGE_UNION", "value": "false"},\n'
         '        {"name": "LIVE_CAPTURE_WINDOW_TRANSLATOR_SENDS", "value": "false"},\n'
         '        {"name": "SONIOX_CAPTURE_AXIS_DIAGNOSTICS", "value": "false"},\n'
-        '        {"name": "SONIOX_WIRE_LEDGER", "value": "false"},\n'
-        '        {"name": "SONIOX_ORDERED_FINALIZE", "value": "false"},',
+        '        {"name": "SONIOX_WIRE_LEDGER", "value": "false"},',
     )
 
 
@@ -662,6 +661,7 @@ def with_cloud_run_oauth_secrets(payload: str) -> str:
         r'\n        {"name": "PROCESSING_ATTENTION_NON_RETRYABLE_EXPIRY_ENABLED", "value": "true"},'
         r'\n        {"name": "HOME_LIVE_MEMBER_NOTES_BOUNDED_ENABLED", "value": "true"},'
         r'\n        {"name": "BATCH_HELD_DEAD_LETTER_ENABLED", "value": "true"},'
+        r'\n        {"name": "BATCH_PARKED_JOB_SWEEPER_ENABLED", "value": "true"},'
         r'\n        {"name": "BATCH_ACCOUNT_PRIVACY_WRITER_ENABLED", "value": "true"},'
         r'\n        {"name": "CONVERSATION_TERMINAL_FAMILY_MODE", "value": "on"},',
         payload,
@@ -2023,6 +2023,7 @@ _MISSING_GATEWAY_CLOUD_RUN_STATE = '''
         {"name": "TRANSLATION_NEGATIVE_CACHE_TTL", "value": "21600"},
         {"name": "VAD_CACHE_TTL_SECONDS", "value": "86400"},
         {"name": "REVIEW_SURFACE_MODE", "value": "on"},
+        {"name": "PREPAID_CODE_REDEEM", "value": "off"},
         {"name": "CONVERSATION_SMART_MERGE_FLATTEN_ENABLED", "value": "true"},
         {"name": "SYNC_BRIDGE_CONTAINED_DONOR_MERGE_ENABLED", "value": "off"},
         {"name": "OMI_SHAPED_AGENT_MODE", "value": "on"},
@@ -2349,6 +2350,7 @@ def test_cloud_run_workflow_validation_uses_custom_manifest_for_runtime_env_outp
         {"name": "TRANSLATION_NEGATIVE_CACHE_TTL", "value": "21600"},
         {"name": "VAD_CACHE_TTL_SECONDS", "value": "86400"},
         {"name": "REVIEW_SURFACE_MODE", "value": "on"},
+        {"name": "PREPAID_CODE_REDEEM", "value": "off"},
         {"name": "CONVERSATION_SMART_MERGE_FLATTEN_ENABLED", "value": "true"},
         {"name": "SYNC_BRIDGE_CONTAINED_DONOR_MERGE_ENABLED", "value": "off"},
         {"name": "OMI_SHAPED_AGENT_MODE", "value": "on"},
@@ -2434,6 +2436,7 @@ def test_cloud_run_state_rejects_old_secret_versions(tmp_path):
         {"name": "TRANSLATION_NEGATIVE_CACHE_TTL", "value": "21600"},
         {"name": "VAD_CACHE_TTL_SECONDS", "value": "86400"},
         {"name": "REVIEW_SURFACE_MODE", "value": "on"},
+        {"name": "PREPAID_CODE_REDEEM", "value": "off"},
         {"name": "CONVERSATION_SMART_MERGE_FLATTEN_ENABLED", "value": "true"},
         {"name": "SYNC_BRIDGE_CONTAINED_DONOR_MERGE_ENABLED", "value": "off"},
         {"name": "OMI_SHAPED_AGENT_MODE", "value": "on"},
@@ -4165,6 +4168,7 @@ def test_quality_push_switches_are_bound_on_every_owning_backend_host(environmen
         for key in (
             'RECORD_SEAL_REPAIR_FRESH_ENABLED',
             'BATCH_HELD_DEAD_LETTER_ENABLED',
+            'BATCH_PARKED_JOB_SWEEPER_ENABLED',
             'RECORD_INTAKE_AGE_PRIORITY_ENABLED',
         ):
             assert key in classification['kinds']['config']
@@ -4204,6 +4208,19 @@ def test_record_close_notify_bound_on_all_listener_hosts(environment):
             _assert_record_close_listener_bindings(missing)
 
 
+@pytest.fixture(scope='module')
+def listener_close_runtime_yaml():
+    validator = load_validator()
+    parsed = {validator.DEFAULT_MANIFEST: validator._load_yaml(validator.DEFAULT_MANIFEST)}
+
+    def load(path):
+        if path not in parsed:
+            parsed[path] = validator._load_yaml(path)
+        return copy.deepcopy(parsed[path])
+
+    return load
+
+
 @pytest.mark.parametrize(
     'key,value',
     [
@@ -4213,8 +4230,13 @@ def test_record_close_notify_bound_on_all_listener_hosts(environment):
         ('PUSHER_RECORD_CLOSE_NOTIFY_ENABLED_SERVE_UID_SHA256S', ''),
     ],
 )
-def test_cloud_run_runtime_rejects_missing_listener_close_binding(tmp_path, key, value):
+def test_cloud_run_runtime_rejects_missing_listener_close_binding(
+    tmp_path, monkeypatch, listener_close_runtime_yaml, key, value
+):
     validator = load_validator()
+    # Each case mutates the rendered JSON. Reuse the parsed YAML inputs to
+    # exercise all missing bindings without repeatedly parsing the fleet manifest.
+    monkeypatch.setattr(manifest_validation, '_load_yaml', listener_close_runtime_yaml)
     payload = with_cloud_run_oauth_secrets(_MISSING_GATEWAY_CLOUD_RUN_STATE)
     payload = payload.replace(json.dumps({'name': key, 'value': value}) + ',', '')
     path = tmp_path / 'missing-close-switch.json'

@@ -48,12 +48,16 @@ class AuditCaptureProvider extends ChangeNotifier implements CaptureProvider {
   LivePreviewController? get livePreview => null;
   @override
   bool get localPreviewAdmitted => false;
+  @override
+  bool get liveWordsShown => false;
 
   AuditCaptureProvider(this.live);
   final AuditLive live;
   @override
   LocalSttFailure? get localSttFailure => null;
 
+  @override
+  String? get activeRecordingId => null;
   @override
   bool get pendantCaptureVerified => true;
   @override

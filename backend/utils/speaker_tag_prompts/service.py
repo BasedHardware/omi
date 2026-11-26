@@ -23,6 +23,7 @@ import numpy as np
 from config.speaker_prior import pinned_speaker_prior_enabled
 from database import owner_confirmation as owner_confirmation_db
 from database import conversations as conversations_db
+from database.legal_holds import external_write_fence
 from database import redis_db
 from database import users as users_db
 from database import voice_profiles as voice_profiles_db
@@ -636,7 +637,8 @@ def _resolve_person(
     now = datetime.now(timezone.utc)
     person_id = str(uuid.uuid4())
     person: Dict[str, Any] = {'id': person_id, 'name': name, 'created_at': now, 'updated_at': now}
-    users_db.create_person(uid, person)
+    with external_write_fence(uid):
+        users_db.create_person(uid, person)
     return person_id, person
 
 

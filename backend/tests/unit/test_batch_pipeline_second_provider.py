@@ -314,6 +314,163 @@ def test_default_safety_net_keeps_two_empty_answers_held(setup, monkeypatch, leg
     artifacts.persist_recovery_result.assert_not_called()
 
 
+def test_two_recognizer_close_switch_settles_two_empty_answers_under_the_safety_net(
+    setup, monkeypatch, legacy_dependencies, caplog
+):
+    caplog.set_level('INFO')
+    client, binding, artifacts, alternate, second, recovery = second_setup(setup, monkeypatch, legacy_dependencies)
+    monkeypatch.setenv('BATCH_PIPELINE_EMPTY_ASR_SAFETY_NET_ENABLED', 'true')
+    monkeypatch.setenv('BATCH_PIPELINE_TWO_RECOGNIZER_EMPTY_CLOSE_ENABLED', 'true')
+    assert recovery.recover('bad', binding.owner_id) == 'recovered'
+    job = row(client)
+    assert job['result']['outcome'] == 'no_recoverable_speech'
+    assert all(r['outcome'] == 'empty' for r in job['recovery']['recognizers'].values())
+    payload = artifacts.persist_recovery_result.call_args.args[1]
+    assert result_outcome(payload) == 'no_recoverable_speech'
+    assert payload['recognition_evidence'] == TWO_PROVIDER_EMPTY_EVIDENCE
+    assert payload['words'] == [] and payload['speech_seconds'] == 5
+    assert set(payload['recognizer_receipts']) == {'modulate', 'soniox'}
+    assert 'reason=no_recoverable_speech' in caplog.text
+    # Still one paid call each, and nothing more on later sweeps.
+    assert recovery.recover('bad', binding.owner_id) == 'held'
+    alternate.assert_called_once()
+    second.assert_called_once()
+
+
+@pytest.mark.parametrize('error', [TimeoutError('synthetic'), ('malformed',)])
+def test_two_recognizer_close_switch_needs_a_validated_second_empty_answer(
+    setup, monkeypatch, legacy_dependencies, error
+):
+    soniox = Mock(side_effect=error) if isinstance(error, Exception) else Mock(return_value=error)
+    client, binding, artifacts, _, second, recovery = second_setup(
+        setup, monkeypatch, legacy_dependencies, soniox=soniox
+    )
+    monkeypatch.setenv('BATCH_PIPELINE_EMPTY_ASR_SAFETY_NET_ENABLED', 'true')
+    monkeypatch.setenv('BATCH_PIPELINE_TWO_RECOGNIZER_EMPTY_CLOSE_ENABLED', 'true')
+    assert recovery.recover('bad', binding.owner_id) == 'failed_held'
+    assert not row(client).get('result')
+    artifacts.persist_recovery_result.assert_not_called()
+    second.assert_called_once()
+
+
+def test_two_recognizer_close_switch_leaves_the_language_guard_held(setup, monkeypatch, legacy_dependencies):
+    client, binding, artifacts, _, second, recovery = second_setup(
+        setup, monkeypatch, legacy_dependencies, soniox=Mock(return_value=([], 'vi')), speech=(0, 1)
+    )
+    job = row(client)
+    job.pop('worker_empty_evidence')
+    job['worker_failure'] = {'stage': 'vad_windows', 'reason': 'unsupported_language'}
+    monkeypatch.setenv('BATCH_PIPELINE_EMPTY_ASR_SAFETY_NET_ENABLED', 'true')
+    monkeypatch.setenv('BATCH_PIPELINE_TWO_RECOGNIZER_EMPTY_CLOSE_ENABLED', 'true')
+    assert recovery.recover('bad', binding.owner_id) == 'failed_held'
+    second.assert_called_once()
+    job = row(client)
+    assert job['recovery']['recognizers']['soniox']['outcome'] == 'empty'
+    assert not job.get('result')
+    artifacts.persist_recovery_result.assert_not_called()
+
+
+@pytest.fixture
+def settlements(monkeypatch):
+    from prometheus_client import CollectorRegistry, Counter
+    from utils.batch_pipeline import correctness_metrics as metrics
+
+    registry = CollectorRegistry()
+    monkeypatch.setattr(
+        metrics,
+        'RECOGNIZER_OUTCOMES',
+        Counter(
+            'omi_batch_pipeline_recovery_recognizer_outcomes_total',
+            '',
+            ['modulate', 'soniox', 'speech', 'language_guarded', 'result'],
+            registry=registry,
+        ),
+    )
+    monkeypatch.setenv('BATCH_PIPELINE_CORRECTNESS_METRICS_ENABLED', 'true')
+
+    def count(**labels):
+        return registry.get_sample_value('omi_batch_pipeline_recovery_recognizer_outcomes_total', labels) or 0
+
+    def total():
+        return sum(
+            sample.value for metric in registry.collect() for sample in metric.samples if sample.name.endswith('_total')
+        )
+
+    return count, total
+
+
+@pytest.mark.parametrize('close', [False, True])
+def test_settlement_counter_names_both_empty_answers_and_measured_speech(
+    setup, monkeypatch, legacy_dependencies, settlements, close
+):
+    count, total = settlements
+    client, binding, _, _, _, recovery = second_setup(setup, monkeypatch, legacy_dependencies)
+    monkeypatch.setenv('BATCH_PIPELINE_EMPTY_ASR_SAFETY_NET_ENABLED', 'true')
+    monkeypatch.setenv('BATCH_PIPELINE_TWO_RECOGNIZER_EMPTY_CLOSE_ENABLED', 'true' if close else 'false')
+    result = 'no_recoverable_speech' if close else 'failed_held'
+    assert recovery.recover('bad', binding.owner_id) == ('recovered' if close else 'failed_held')
+    labels = dict(modulate='empty', soniox='empty', speech='2s_or_more', language_guarded='false', result=result)
+    assert count(**labels) == 1
+    # A later sweep settles nothing, so it reports nothing.
+    assert recovery.recover('bad', binding.owner_id) == 'held'
+    assert total() == 1
+
+
+def test_settlement_counter_separates_a_second_recognizer_that_found_words(
+    setup, monkeypatch, legacy_dependencies, settlements
+):
+    count, total = settlements
+    soniox = Mock(return_value=(WORDS, 'en'))
+    client, binding, _, _, _, recovery = second_setup(setup, monkeypatch, legacy_dependencies, soniox=soniox)
+    assert recovery.recover('bad', binding.owner_id) == 'recovered'
+    assert count(modulate='empty', soniox='words', speech='2s_or_more', language_guarded='false', result='words') == 1
+    assert total() == 1
+
+
+def test_settlement_counter_marks_the_language_guard_and_short_speech(
+    setup, monkeypatch, legacy_dependencies, settlements
+):
+    count, total = settlements
+    client, binding, _, _, _, recovery = second_setup(
+        setup, monkeypatch, legacy_dependencies, soniox=Mock(return_value=([], 'vi')), speech=(0, 1)
+    )
+    job = row(client)
+    job.pop('worker_empty_evidence')
+    job['worker_failure'] = {'stage': 'vad_windows', 'reason': 'unsupported_language'}
+    assert recovery.recover('bad', binding.owner_id) == 'failed_held'
+    labels = dict(modulate='empty', soniox='empty', speech='under_2s', language_guarded='true', result='failed_held')
+    assert count(**labels) == 1
+    assert total() == 1
+
+
+def test_settlement_counter_is_closed_and_off_with_correctness_metrics(monkeypatch, settlements):
+    from utils.batch_pipeline import correctness_metrics as metrics
+
+    count, total = settlements
+    assert [metrics.speech_bucket(v) for v in (None, True, float('nan'), -1, 0, 0.031, 0.032, 1.99, 2, 3600)] == [
+        'unmeasured',
+        'unmeasured',
+        'unmeasured',
+        'unmeasured',
+        'none',
+        'none',
+        'under_2s',
+        'under_2s',
+        '2s_or_more',
+        '2s_or_more',
+    ]
+    # Unknown receipt shapes and results fold into closed tokens and never raise.
+    metrics.record_recovery_settlement({'modulate': {'outcome': 'surprise'}, 'soniox': 'bad'}, None, False, 'new')
+    metrics.record_recovery_settlement(None, 3, True, 'silence')
+    labels = dict(modulate='not_called', soniox='not_called', language_guarded='false', result='other')
+    assert count(speech='unmeasured', **labels) == 1
+    labels = dict(modulate='not_called', soniox='not_called', language_guarded='true', result='silence')
+    assert count(speech='2s_or_more', **labels) == 1
+    monkeypatch.setenv('BATCH_PIPELINE_CORRECTNESS_METRICS_ENABLED', 'false')
+    metrics.record_recovery_settlement({}, 3, False, 'words')
+    assert total() == 2
+
+
 @pytest.mark.parametrize('words', [False, True])
 def test_subsecond_worker_speech_hold_uses_second_chance_with_zero_cpu_vad(
     setup, monkeypatch, legacy_dependencies, words
@@ -374,3 +531,136 @@ def test_byok_admission_still_checks_managed_soniox_allowance(setup, monkeypatch
     assert recovery.recover('bad', binding.owner_id) == 'failed_held'
     second.assert_not_called()
     assert allowed.call_args.args[2] == 'soniox'
+
+
+def guarded_setup(setup, monkeypatch, legacy_dependencies, *, soniox=None, speech=(0, 5), close='true'):
+    """A language-guarded held unit under the safety net; both recognizers answer empty by default."""
+    client, binding, artifacts, alternate, second, recovery = second_setup(
+        setup, monkeypatch, legacy_dependencies, soniox=soniox or Mock(return_value=([], 'vi')), speech=speech
+    )
+    job = row(client)
+    job.pop('worker_empty_evidence')
+    job['worker_failure'] = {'stage': 'vad_windows', 'reason': 'unsupported_language'}
+    monkeypatch.setenv('BATCH_PIPELINE_EMPTY_ASR_SAFETY_NET_ENABLED', 'true')
+    monkeypatch.setenv('BATCH_PIPELINE_LANGUAGE_GUARDED_EMPTY_CLOSE_ENABLED', close)
+    return client, binding, artifacts, alternate, second, recovery
+
+
+def test_language_guarded_close_switch_settles_two_empty_answers(setup, monkeypatch, legacy_dependencies, caplog):
+    caplog.set_level('INFO')
+    client, binding, artifacts, alternate, second, recovery = guarded_setup(setup, monkeypatch, legacy_dependencies)
+    assert recovery.recover('bad', binding.owner_id) == 'recovered'
+    job = row(client)
+    assert job['result']['outcome'] == 'no_recoverable_speech'
+    assert all(r['outcome'] == 'empty' and r['word_count'] == 0 for r in job['recovery']['recognizers'].values())
+    assert set(job['recovery']['recognizers']) == {'modulate', 'soniox'}
+    payload = artifacts.persist_recovery_result.call_args.args[1]
+    assert result_outcome(payload) == 'no_recoverable_speech'
+    # Parakeet never ran: the evidence names the guard, never a GPU retry.
+    assert payload['recognition_evidence'] == LANGUAGE_GUARD_EMPTY_EVIDENCE
+    assert payload['words'] == [] and payload['speech_seconds'] == 5
+    assert set(payload['recognizer_receipts']) == {'modulate', 'soniox'}
+    assert 'reason=no_recoverable_speech' in caplog.text
+    # Still one paid call each, and nothing more on later sweeps.
+    assert recovery.recover('bad', binding.owner_id) == 'held'
+    alternate.assert_called_once()
+    second.assert_called_once()
+
+
+@pytest.mark.parametrize('other_switch', ['false', 'true'])
+def test_language_guarded_close_is_default_off_and_independent_of_the_unguarded_switch(
+    setup, monkeypatch, legacy_dependencies, other_switch
+):
+    client, binding, artifacts, _, second, recovery = guarded_setup(
+        setup, monkeypatch, legacy_dependencies, close='false'
+    )
+    monkeypatch.setenv('BATCH_PIPELINE_TWO_RECOGNIZER_EMPTY_CLOSE_ENABLED', other_switch)
+    assert recovery.recover('bad', binding.owner_id) == 'failed_held'
+    second.assert_called_once()
+    assert not row(client).get('result')
+    artifacts.persist_recovery_result.assert_not_called()
+
+
+def test_language_guarded_close_switch_leaves_an_unguarded_unit_held(setup, monkeypatch, legacy_dependencies):
+    client, binding, artifacts, _, second, recovery = second_setup(setup, monkeypatch, legacy_dependencies)
+    monkeypatch.setenv('BATCH_PIPELINE_EMPTY_ASR_SAFETY_NET_ENABLED', 'true')
+    monkeypatch.setenv('BATCH_PIPELINE_LANGUAGE_GUARDED_EMPTY_CLOSE_ENABLED', 'true')
+    assert recovery.recover('bad', binding.owner_id) == 'failed_held'
+    second.assert_called_once()
+    artifacts.persist_recovery_result.assert_not_called()
+
+
+@pytest.mark.parametrize('error', [TimeoutError('synthetic'), ('malformed',)])
+def test_language_guarded_close_switch_needs_a_validated_second_empty_answer(
+    setup, monkeypatch, legacy_dependencies, error
+):
+    soniox = Mock(side_effect=error) if isinstance(error, Exception) else Mock(return_value=error)
+    client, binding, artifacts, _, second, recovery = guarded_setup(
+        setup, monkeypatch, legacy_dependencies, soniox=soniox
+    )
+    assert recovery.recover('bad', binding.owner_id) == 'failed_held'
+    assert not row(client).get('result')
+    artifacts.persist_recovery_result.assert_not_called()
+    second.assert_called_once()
+
+
+def test_language_guarded_close_switch_keeps_second_recognizer_words(setup, monkeypatch, legacy_dependencies):
+    client, binding, _, _, second, recovery = guarded_setup(
+        setup, monkeypatch, legacy_dependencies, soniox=Mock(return_value=(WORDS, 'vi'))
+    )
+    assert recovery.recover('bad', binding.owner_id) == 'recovered'
+    assert row(client)['result']['outcome'] == 'success'
+
+
+def test_language_guarded_close_switch_never_closes_without_the_second_recognizer(
+    setup, monkeypatch, legacy_dependencies
+):
+    """Above the independent ceiling Soniox is not asked, so one empty answer keeps the unit held."""
+    client, binding, artifacts, alternate, second, recovery = guarded_setup(setup, monkeypatch, legacy_dependencies)
+    monkeypatch.setenv('BATCH_PIPELINE_INDEPENDENT_RECOVERY_MAX_SECONDS', '0.001')
+    assert recovery.recover('bad', binding.owner_id) == 'failed_held'
+    second.assert_not_called()
+    assert not row(client).get('result')
+    artifacts.persist_recovery_result.assert_not_called()
+
+
+def test_language_guarded_close_needs_terminal_disposition(setup, monkeypatch, legacy_dependencies):
+    client, binding, artifacts, _, second, recovery = guarded_setup(setup, monkeypatch, legacy_dependencies)
+    monkeypatch.setenv('BATCH_PIPELINE_TERMINAL_EMPTY_DISPOSITION_ENABLED', 'false')
+    assert recovery.recover('bad', binding.owner_id) == 'failed_held'
+    artifacts.persist_recovery_result.assert_not_called()
+
+
+def test_guarded_no_speech_fence_needs_the_switch_and_both_empty_receipts(monkeypatch):
+    from utils.batch_pipeline.contracts import held_result_allowed
+
+    empty = lambda name: {'provider': name, 'outcome': 'empty', 'word_count': 0}
+    guarded = {
+        'duration_seconds': 5,
+        'worker_failure': {'stage': 'vad_windows', 'reason': 'unsupported_language'},
+        'recovery': {'recognizers': {'modulate': empty('modulate'), 'soniox': empty('soniox')}},
+    }
+    monkeypatch.delenv('BATCH_PIPELINE_LANGUAGE_GUARDED_EMPTY_CLOSE_ENABLED', raising=False)
+    assert not held_result_allowed(guarded, 'no_recoverable_speech')
+    monkeypatch.setenv('BATCH_PIPELINE_LANGUAGE_GUARDED_EMPTY_CLOSE_ENABLED', 'true')
+    assert held_result_allowed(guarded, 'no_recoverable_speech')
+    # A saved result cannot settle on one receipt, an error, a refusal or words.
+    for soniox in (None, {**empty('soniox'), 'outcome': 'error'}, {'provider': 'soniox', 'outcome': 'refused'}):
+        recognizers = {'modulate': empty('modulate'), **({'soniox': soniox} if soniox else {})}
+        assert not held_result_allowed({**guarded, 'recovery': {'recognizers': recognizers}}, 'no_recoverable_speech')
+    words = {'provider': 'modulate', 'outcome': 'words', 'word_count': 3}
+    recognizers = {'modulate': words, 'soniox': empty('soniox')}
+    assert not held_result_allowed({**guarded, 'recovery': {'recognizers': recognizers}}, 'no_recoverable_speech')
+    # Words and unguarded units keep their existing rule either way.
+    assert held_result_allowed(guarded, 'success')
+    assert held_result_allowed({'duration_seconds': 5}, 'no_recoverable_speech')
+
+
+def test_settlement_counter_reports_a_language_guarded_close(setup, monkeypatch, legacy_dependencies, settlements):
+    count, total = settlements
+    client, binding, _, _, _, recovery = guarded_setup(setup, monkeypatch, legacy_dependencies)
+    assert recovery.recover('bad', binding.owner_id) == 'recovered'
+    labels = dict(modulate='empty', soniox='empty', speech='2s_or_more', language_guarded='true')
+    assert count(result='no_recoverable_speech', **labels) == 1
+    assert count(result='failed_held', **labels) == 0
+    assert total() == 1

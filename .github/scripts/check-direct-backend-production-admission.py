@@ -4,7 +4,10 @@
 from __future__ import annotations
 
 from pathlib import Path
+from functools import lru_cache
 import re
+
+import yaml
 
 WORKFLOWS = (
     Path(".github/workflows/gcp_backend_listen_helm.yml"),
@@ -67,6 +70,10 @@ def validate_listen_control_admission(text: str) -> list[str]:
     trigger, _, helm_job = text.partition("\n  helm-upgrade:\n")
     helm_job = helm_job.partition("\n  deploy-neg-coverage-exporter:\n")[0]
     steps = re.split(r"(?m)^      - ", helm_job.partition("\n    steps:\n")[2])[1:]
+    # Accept the same exact checkout action pin that the real-step inventory admits.
+    if len(steps) >= 2:
+        steps[1] = re.sub(r'(?m)^        uses: actions/checkout@' + CHECKOUT_PIN + r'(?: # v7)?$',
+                          '        uses: actions/checkout@v7', steps[1])
     checkout = (
         "name: Checkout\n"
         "        uses: actions/checkout@v7\n"
@@ -182,6 +189,129 @@ def validate_gateway_break_glass_hatch(text: str) -> list[str]:
     return errors
 
 
+# Closed recognition only: the rollout lead approved this exact checkout pin.
+CHECKOUT_PIN = "9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0"
+CHECKOUT_ACTIONS = {"actions/checkout@v7", "actions/checkout@" + CHECKOUT_PIN}
+
+
+@lru_cache(maxsize=8)
+def workflow_steps(text: str) -> list[dict]:
+    """Read real job step mappings with the repository's existing YAML loader.
+
+    Reject aliases and duplicate keys rather than letting scalar text or a
+    second interpretation supply admission authority. No workflow is executed.
+    """
+    if any(isinstance(event, yaml.AliasEvent) for event in yaml.parse(text)):
+        raise ValueError("aliased workflow source")
+    root = yaml.compose(text, Loader=yaml.BaseLoader)
+
+    def mapping(node):
+        if not isinstance(node, yaml.MappingNode):
+            raise ValueError("expected workflow mapping")
+        result = {}
+        for key, value in node.value:
+            if not isinstance(key, yaml.ScalarNode) or key.value in result:
+                raise ValueError("ambiguous workflow key")
+            result[key.value] = value
+        return result
+
+    def scalar(node):
+        if not isinstance(node, yaml.ScalarNode):
+            raise ValueError("expected step scalar")
+        return node.value
+
+    jobs = mapping(mapping(root)['jobs'])
+    steps = []
+    for job_name, job in jobs.items():
+        job = mapping(job)
+        if 'steps' not in job:
+            continue
+        sequence = job['steps']
+        if not isinstance(sequence, yaml.SequenceNode):
+            raise ValueError("expected workflow steps")
+        for index, node in enumerate(sequence.value):
+            step = mapping(node)
+            if 'job' in step or 'index' in step:
+                raise ValueError('reserved step field')
+            values = {'job': job_name, 'index': index}
+            for key, value in step.items():
+                values[key] = mapping(value) if key in ('with', 'env') else scalar(value)
+            for key in ('with', 'env'):
+                if key in values:
+                    values[key] = {name: scalar(value) for name, value in values[key].items()}
+            steps.append(values)
+    return steps
+
+
+def checkout_inventory(text: str) -> tuple[str, int, bool]:
+    steps = workflow_steps(text)
+    checkouts = [step['uses'] for step in steps if re.search(r'(?:^|/)checkout(?:@|$)', step.get('uses', '').lower())]
+    # Normalization is only for retained legacy text guards; counts and
+    # exemptions below derive exclusively from actual YAML step mappings.
+    normalized = text.replace('actions/checkout@' + CHECKOUT_PIN, 'actions/checkout@v7')
+    return normalized, len(checkouts), any(value not in CHECKOUT_ACTIONS for value in checkouts)
+
+
+def isolated_checkout_count(text: str, contract: str) -> int:
+    target = (
+        '.github/listen-evidence-control' if 'listen-evidence-control' in contract else '.github/firestore-workflow'
+    )
+    return sum(
+        step.get('uses') in CHECKOUT_ACTIONS
+        and step.get('with', {}).get('ref') == '${{ github.workflow_sha }}'
+        and step.get('with', {}).get('path') == target
+        and step.get('with', {}).get('persist-credentials') == 'false'
+        for step in workflow_steps(text)
+    )
+
+
+BOOTSTRAP_RUN = 'python3 .github/listen-evidence-control/.github/scripts/listen_runtime.py reconstruct --root "$RUNNER_TEMP/listen-runtime"\necho "$RUNNER_TEMP/listen-runtime/helm/linux-amd64" >> "$GITHUB_PATH"\n'
+
+
+PRODUCER_RUN = 'set -euo pipefail\numask 077\nexport LD_LIBRARY_PATH="$RUNNER_TEMP/listen-runtime/python/lib"\nunset LD_PRELOAD PYTHONHOME PYTHONPATH\n"$RUNNER_TEMP/listen-runtime/python/bin/python3.12" -I -B .github/listen-evidence-control/.github/scripts/listen_overlay_evidence.py job \\\n  --root "$GITHUB_WORKSPACE" --output "$RUNNER_TEMP/listen-overlay-receipt.json"\n'
+
+
+def evidence_commands_bound(text: str) -> bool:
+    steps = workflow_steps(text)
+    controls = [step for step in steps if step.get('with', {}).get('path') == '.github/listen-evidence-control']
+    if (
+        len(controls) != 1
+        or controls[0]['job'] != 'helm-upgrade'
+        or controls[0].get('if') != "${{ inputs.mode == 'evidence' }}"
+    ):
+        return False
+    expected = {
+        'Reconstruct evidence runtime before credentials': BOOTSTRAP_RUN,
+        'Produce private-overlay effect receipt without mutation': PRODUCER_RUN,
+    }
+    indices = [controls[0]['index']]
+    for name, run in expected.items():
+        matches = [step for step in steps if step.get('name') == name]
+        if len(matches) != 1:
+            return False
+        step = matches[0]
+        if (
+            step['job'] != 'helm-upgrade'
+            or step.get('run') != run
+            or step.get('if') != "${{ inputs.mode == 'evidence' }}"
+            or any(key in step for key in ('uses', 'working-directory', 'shell', 'continue-on-error'))
+        ):
+            return False
+        expected_env = (
+            {}
+            if name.startswith('Reconstruct')
+            else {
+                'EVIDENCE_REQUEST': '${{ inputs.evidence_request }}',
+                'LISTEN_PRIVATE_VALUES_YAML': ("${{ fromJSON(inputs.evidence_request).overlay_state != 'references' "
+                                               "&& secrets.LISTEN_PRIVATE_VALUES_YAML || '' }}"),
+            }
+        )
+        if step.get('env', {}) != expected_env:
+            return False
+        indices.append(step['index'])
+    return indices == sorted(set(indices))
+
+
 def validate(root: Path) -> list[str]:
     errors: list[str] = []
     for relative in WORKFLOWS:
@@ -200,13 +330,27 @@ def validate(root: Path) -> list[str]:
             errors.append(f"{relative} must diagnose a rejected checked-out source identity")
         if "${GITHUB_SHA::7}" in text:
             errors.append(f"{relative} must not label built source with GITHUB_SHA")
-        source_checkouts = text.count("uses: actions/checkout@v7") - text.count(CONTROL_CHECKOUT)
+        try:
+            checkout_text, checkout_count, unknown_checkout = checkout_inventory(text)
+            firestore_controls = isolated_checkout_count(checkout_text, CONTROL_CHECKOUT)
+            evidence_controls = isolated_checkout_count(checkout_text, LISTEN_EVIDENCE_CONTROL)
+            commands_bound = evidence_commands_bound(text) if relative == LISTEN_WORKFLOW else True
+        except (ValueError, KeyError, TypeError, yaml.YAMLError):
+            errors.append(f"{relative} must have unambiguous real workflow steps")
+            checkout_count, unknown_checkout = -100, True
+            firestore_controls = evidence_controls = 0
+            commands_bound = False
+        if unknown_checkout:
+            errors.append(f"{relative} has an unapproved checkout action or version")
+        source_checkouts = checkout_count - firestore_controls
         if relative == LISTEN_WORKFLOW:
             # A separate immutable control checkout is not an application source.
             # Recognize only the exact path/ref/nonpersistent-credentials contract.
-            source_checkouts -= text.count(LISTEN_EVIDENCE_CONTROL)
-            if text.count(LISTEN_EVIDENCE_CONTROL) != 1:
+            source_checkouts -= evidence_controls
+            if evidence_controls != 1:
                 errors.append(f"{relative} evidence controls must use immutable workflow source in their isolated path")
+            if not commands_bound:
+                errors.append(f"{relative} evidence commands must execute isolated immutable controls in order")
         expected_checkouts = 2 if relative == LISTEN_WORKFLOW else 1
         if source_checkouts != expected_checkouts:
             errors.append(f"{relative} must not check out a second source after production admission")

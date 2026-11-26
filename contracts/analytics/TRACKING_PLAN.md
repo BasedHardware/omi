@@ -178,6 +178,7 @@ Source: events.json. Presence is not task success. Existing SDK provenance/ident
 | freeCapSheetChoice | Free Cap Sheet Choice | choice | active | subscription-funnel |
 | upgradePlanSelected | Upgrade Plan Selected | plan, billing_interval, source | active | subscription-funnel |
 | upgradeSucceededAttributed | Upgrade Succeeded Attributed | plan, billing_interval | active | subscription-funnel |
+| upgradeBillingProvider | Upgrade Billing Provider | provider, stage, billing_interval | active | subscription-funnel |
 | subscriptionPlanChanged | Subscription Plan Changed | previous_plan, new_plan, billing_interval, change_source | active | subscription-funnel |
 | subscriptionCancelReasonSelected | Subscription Cancel Reason Selected | reason | active | subscription-funnel |
 | subscriptionCancelConfirmed | Subscription Cancel Confirmed | reason, has_details | active | subscription-funnel |
@@ -209,6 +210,7 @@ Source: events.json. Presence is not task success. Existing SDK provenance/ident
 | onboardingWebviewFallback | Onboarding Webview Fallback | reason | active | mobile-instrumentation-presence |
 | captureRecoveryObserved | Capture Recovery Observed | kind, trigger | active | capture-recovery |
 | pendantFramesDropped | Pendant Frames Dropped | count, reason | active | wal-backlog-health |
+| mobileHeldWalBacklog | Mobile Held WAL Backlog | trigger, held_wal_count, oldest_held_age_s, hold_flag_on, hold_state, cohort | active | mobile-held-wal-backlog |
 | walReconcilePollSummary | WAL Reconcile Poll Summary | backlog_jobs, polled_jobs, transient_jobs, throttled_jobs, missing_confirmation_jobs, locally_deferred_jobs | active | wal-backlog-health |
 | nativeCustodyObserved | Native Custody Observed | outcome | active | native-custody-health |
 | livePreviewEngineSelected | Live Preview Engine | engine, reason, platform, os_major, bundled_installed | active | live-preview |
@@ -231,6 +233,8 @@ Source: events.json. Presence is not task success. Existing SDK provenance/ident
 | walStopDrain | WAL Stop Drain | late_frames_indexed, result | active | wal-stop-drain |
 | orphanAudioRecovery | Orphan Audio Recovery | class_working_count, class_working_bytes, class_unparseable_count, class_unparseable_bytes, class_recoverable_count, class_recoverable_bytes, class_expired_count, class_expired_bytes, class_owner_unknown_count, class_owner_unknown_bytes, age_0_7_count, age_0_7_bytes, age_8_14_count, age_8_14_bytes, age_15_28_count, age_15_28_bytes, age_29_45_count, age_29_45_bytes, age_over_45_count, age_over_45_bytes, age_unknown_count, age_unknown_bytes, adopted, changed, referenced, passCap, dailyCap, pressureCap, result, census_complete, expired_since_census, outside_documents | active | orphan-audio-recovery |
 | orphanAudioReclaim | Orphan Audio Reclaim | deleted_files, deleted_bytes, working, unknown_capture_time, capture_too_young, mtime_too_young, outside_documents, pass_cap, sources_changed, referenced, file_changed, sidecar_type, duration_ms, result, census_complete | active | orphan-audio-reclaim |
+| walCustodyAudit | WAL Custody Audit | agree_covered, agree_pending, disagree, unknown, released | active | wal-custody-audit |
+| appForegroundEnded | App Foreground Ended | foreground_seconds, capturing_seconds | active | app-foreground-time |
 
 ## App Review Opportunity decisions
 

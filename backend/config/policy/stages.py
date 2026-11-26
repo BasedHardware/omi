@@ -2,6 +2,7 @@
 
 from dataclasses import dataclass
 import math
+import os
 from typing import Literal, overload
 
 from config.policy.parts import PolicyPart, boolean, member, policy_environment, source_role
@@ -15,6 +16,17 @@ class ProjectionPolicy(PolicyPart):
     authoritative_labels: bool = False
     require_live_target: bool = False
     projection_timing: bool = False
+
+
+def projection_phase_sample_percent() -> int:
+    """Read live logging controls without changing persisted projection policy IDs."""
+    if os.environ.get('BATCH_PIPELINE_PROJECTION_PHASE_SAMPLE_ENABLED', '').strip().lower() != 'true':
+        return 100
+    try:
+        percent = int(os.environ.get('BATCH_PIPELINE_PROJECTION_PHASE_SAMPLE_PERCENT', '1'))
+    except ValueError:
+        return 100
+    return percent if 0 <= percent <= 100 else 100
 
 
 @dataclass(frozen=True)

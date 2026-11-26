@@ -1,10 +1,47 @@
 """Per-owner admission. Downstream work follows the stored recording marker."""
 
+import logging
 import os
 
-from config.rollout_cohorts import in_rollout_cohort, parse_cohort, valid_uid
+from config.refactor_modes import default_on
+from config.rollout_cohorts import (
+    V3_HOLDOUT_COHORT,
+    RolloutCohortUnavailable,
+    in_rollout_cohort,
+    parse_cohort,
+    valid_uid,
+)
 from utils.conversations.v3 import client_capability
 from utils.episodes import client_gate
+from utils.observability.fallback import record_fallback
+
+logger = logging.getLogger(__name__)
+
+
+def v3_intake_held_out(uid: str) -> bool:
+    """Owner is in the ``conversations-v3-holdout`` cohort: their NEW captures keep legacy intake.
+
+    Ask only after ``conversations_v3_enabled`` admitted the owner, and only where new intake is
+    decided (``triggers.mark_new``, manual cuts, Home's read mode, ``/live`` with no active window).
+    Stage admission itself never consults it, so Finish, ``/live`` and builders still reach existing
+    v3 work. ``CONVERSATIONS_V3_HOLDOUT=off`` skips the read. Unknown membership admits (fails open)
+    and is counted: failing closed would move every owner's new captures to legacy during a
+    membership-store outage, and a cold cache can therefore still admit a held-out owner.
+    """
+    if not default_on('CONVERSATIONS_V3_HOLDOUT'):
+        return False
+    try:
+        return in_rollout_cohort(uid, V3_HOLDOUT_COHORT)
+    except RolloutCohortUnavailable:
+        record_fallback(
+            component='feature_flags',
+            from_mode='v3_holdout',
+            to_mode='admitted',
+            reason='unavailable',
+            outcome='degraded',
+            log=logger,
+        )
+        return False
 
 
 def conversations_v3_enabled(uid: str) -> bool:
@@ -13,6 +50,7 @@ def conversations_v3_enabled(uid: str) -> bool:
     Neither admits an owner whose apps all predate v3: those builds show the raw recording a capture
     ends with as a blank card that 404s (utils/conversations/v3/client_capability.py). The episodes
     marker alone is not proof: code before #25500 also wrote it for store-channel episode callers.
+    New-intake callers also ask ``v3_intake_held_out`` after this returns True.
     """
     if not uid or os.getenv('CONVERSATIONS_V3', '').strip().lower() == 'off':
         return False
@@ -22,6 +60,22 @@ def conversations_v3_enabled(uid: str) -> bool:
     if stage == 'all' and client_capability.capable_cached(uid):
         return True
     return in_rollout_cohort(uid, 'conversations-v3')
+
+
+def skip_unchanged_writes_enabled() -> bool:
+    return default_on('CONVERSATIONS_V3_SKIP_UNCHANGED_WRITES')
+
+
+def bounded_pending_enabled() -> bool:
+    return default_on('CONVERSATIONS_V3_BOUNDED_PENDING')
+
+
+def transcript_size_cap_enabled() -> bool:
+    return default_on('CONVERSATIONS_V3_TRANSCRIPT_SIZE_CAP')
+
+
+def finish_no_pointer_enabled() -> bool:
+    return os.getenv('CONVERSATIONS_V3_FINISH_NO_POINTER', 'on').strip().lower() not in {'off', 'false', '0', 'no'}
 
 
 def live_recap_enabled(uid: str) -> bool:
@@ -34,6 +88,10 @@ def live_recap_enabled(uid: str) -> bool:
         return False
     members, _ = parsed
     return not any(set(member) & set('*?[]') for member in members) and uid in members
+
+
+def live_title_enabled() -> bool:
+    return os.getenv('CONVERSATIONS_V3_LIVE_TITLE', 'on').strip().lower() == 'on'
 
 
 ROTATION_COHORT = 'v3-recording-rotation'
@@ -60,13 +118,40 @@ def rotation_seconds() -> tuple[float, float]:
     return age, cap
 
 
+def manual_end_home_visible_enabled() -> bool:
+    return os.getenv('CONVERSATIONS_V3_MANUAL_END_HOME_VISIBLE', 'on').strip().lower() not in {
+        'off',
+        'false',
+        '0',
+        'no',
+    }
+
+
+def capture_continuity_enabled() -> bool:
+    """Default on. A stream gap inside one capture origin is not silence, and a manual-end cut waits
+    (bounded) for the batch transcript of its own or a preceding sealed recording. Off restores the
+    previous cut and gap rules and skips the predecessor read."""
+    return os.getenv('CONVERSATIONS_V3_CAPTURE_CONTINUITY', 'on').strip().lower() not in {
+        'off',
+        'false',
+        '0',
+        'no',
+    }
+
+
 def stretch_cohesion_enabled() -> bool:
     return os.getenv('CONVERSATIONS_V3_STRETCH_COHESION', 'on').strip().lower() not in {'off', 'false', '0', 'no'}
 
 
+def settle_on_landing_enabled(*, custom_timing: bool, cohesion: bool, derive: bool) -> bool:
+    return custom_timing or (cohesion and not derive and default_on('CONVERSATIONS_V3_SETTLE_ON_LANDING'))
+
+
 DEFAULT_BOUNDARY_SECONDS = 300
+DEFAULT_MAX_WINDOW_SECONDS = 10800
 HISTORICAL_SITDOWN_TIMING = (900, 3600)
-# Stamped by the transaction that makes new recording speech visible; custom lock timing counts from it.
+# Stamped by the transaction that makes new recording speech visible. Live stretch cohesion settles from it
+# (default timing under CONVERSATIONS_V3_SETTLE_ON_LANDING, custom timing always).
 SPEECH_LANDED_FIELD = 'v3_speech_landed_at'
 
 
@@ -85,6 +170,17 @@ def boundary_seconds(*, cohesion: bool) -> tuple[int, int]:
         _boundary_seconds('CONVERSATIONS_V3_SILENCE_GAP_SECONDS', 1800),
         _boundary_seconds('CONVERSATIONS_V3_LOCK_SECONDS', 3600),
     )
+
+
+def max_window_seconds() -> int:
+    raw = os.getenv('CONVERSATIONS_V3_MAX_WINDOW_SECONDS', '').strip().lower()
+    if raw == 'off':
+        return 0
+    try:
+        value = int(raw)
+    except ValueError:
+        return DEFAULT_MAX_WINDOW_SECONDS
+    return value if value == 0 or 120 <= value <= DEFAULT_MAX_WINDOW_SECONDS else DEFAULT_MAX_WINDOW_SECONDS
 
 
 def backfill_enabled() -> bool:

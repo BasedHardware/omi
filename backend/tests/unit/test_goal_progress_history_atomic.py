@@ -109,3 +109,46 @@ def test_rejected_event_leaves_all_projections_unchanged(store, failure):
             store, value=9 if failure == 'conflicting_key' else 7, generation=1 if failure == 'stale_generation' else 0
         )
     assert store.rows == before
+
+
+@pytest.mark.parametrize('race', ['revision', 'tombstone', 'account', 'authority', 'none'])
+def test_eager_progress_fences_the_transaction_after_planning(store, monkeypatch, race):
+    from database.conversation_effect_fence import ConversationEffectFenced, ConversationEffectSource
+
+    source_path = ('users', 'u1', 'conversations', 'c1')
+    store.rows[source_path] = {
+        'sync_content_revision': 3,
+        'finalization_engine': 'python',
+        'finalization_owner_epoch': 1,
+    }
+    expected = deepcopy(store.rows)
+    original_append = goals.FirestoreGoals.append_progress_document
+
+    def append_after_race(self, *args, **kwargs):
+        if race == 'revision':
+            self.client.rows[source_path]['sync_content_revision'] += 1
+        elif race == 'tombstone':
+            self.client.rows[('users', 'u1', 'deleted_conversations', 'c1')] = {'conversation_id': 'c1'}
+        elif race == 'account':
+            self.client.rows[('account_deletions', 'u1')] = {'wipe_status': 'pending_deletion'}
+        elif race == 'authority':
+            self.client.rows[source_path]['finalization_owner_epoch'] += 1
+        expected.update(deepcopy(self.client.rows))
+        return original_append(self, *args, **kwargs)
+
+    monkeypatch.setattr(goals.FirestoreGoals, 'append_progress_document', append_after_race)
+
+    def update():
+        return goals.update_goal_progress(
+            'u1', 'g1', 7, firestore_client=store, effect_source=ConversationEffectSource('c1', 3, 1)
+        )
+
+    if race == 'none':
+        assert update()['current_value'] == 7
+        assert store.rows[GOAL_PATH]['current_value'] == 7
+    else:
+        with pytest.raises(ConversationEffectFenced):
+            update()
+        assert store.rows == expected
+        tx = store.transactions[-1]
+        assert not (tx.creates or tx.updates or tx.sets)

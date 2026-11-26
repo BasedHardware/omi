@@ -420,6 +420,7 @@ def owner_recognition_already_observed(
     status is intake's, not an observation. A previous ``process_conversation``
     pass stores ``relevance_decision.trigger`` as a processing trigger; intake
     stores ``sync_intake`` or nothing, and promotion deletes a rule discard.
+    Desktop intake can also store completed before first-open enrichment.
     """
     if not is_reprocess:
         return False
@@ -427,7 +428,10 @@ def owner_recognition_already_observed(
         return True
     if trigger is ProcessingTrigger.SYNC_UPDATE:
         return _relevance_trigger(prior_relevance_decision) in _PROCESSED_TRIGGERS
-    return _status_value(conversation) == ConversationStatus.completed.value
+    return (
+        _status_value(conversation) == ConversationStatus.completed.value
+        and _field(conversation, 'deferred') is not True
+    )
 
 
 def emit_finalized_owner_recognition(
