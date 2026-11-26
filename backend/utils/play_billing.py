@@ -355,15 +355,18 @@ def _record_stripe_conflict(uid: str, token_hash: str, state: PlayState) -> None
     Runbook: backend/docs/runbooks/play-billing-double-charge.md.
     """
     stripe_ids, prepaid_codes, listing_failed = _paid_stripe_subscription_ids(uid)
-    if prepaid_codes and len(prepaid_codes) == len(stripe_ids):
-        # Only prepaid code subscriptions: they charge nothing, so no double charge and no user notice.
-        logger.error(prepaid_code_config.PLAY_OVERLAP_LOG, uid, token_hash[:12], prepaid_codes[0])
-        return
+    has_billable_id = len(stripe_ids) > len(prepaid_codes)
     unverified = (
-        not stripe_ids and listing_failed and _holds_live_paid_row(uid, exclude_play=True, require_billable_stripe=True)
+        not has_billable_id
+        and listing_failed
+        and _holds_live_paid_row(uid, exclude_play=True, require_billable_stripe=True)
     )
-    if not stripe_ids and not unverified:
-        logger.warning('play_billing Stripe overlap not confirmed as a paid subscription uid=%s', uid)
+    if not has_billable_id and not unverified:
+        if prepaid_codes:
+            # Only prepaid codes were found. They charge nothing, so there is no double charge to report.
+            logger.error(prepaid_code_config.PLAY_OVERLAP_LOG, uid, token_hash[:12], prepaid_codes[0])
+        else:
+            logger.warning('play_billing Stripe overlap not confirmed as a paid subscription uid=%s', uid)
         return
     logger.error(DOUBLE_CHARGE_LOG, uid, token_hash[:12], state.state)
     now = int(time.time())

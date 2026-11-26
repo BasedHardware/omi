@@ -313,7 +313,7 @@ def test_play_recovery_next_to_stripe_keeps_both_and_records_it_once(conflict, c
 
 
 @pytest.mark.parametrize('caller', ['notification', 'verify'])
-@pytest.mark.parametrize('listing', ['failed', 'paid_id', 'no_stripe_row'])
+@pytest.mark.parametrize('listing', ['failed', 'prepaid_then_failed', 'paid_then_failed', 'paid_id', 'no_stripe_row'])
 def test_stripe_conflict_settlement(conflict, caplog, monkeypatch, caller, listing):
     monkeypatch.setattr(play_billing.time, 'time', lambda: NOW)
     env = conflict.env
@@ -323,6 +323,23 @@ def test_stripe_conflict_settlement(conflict, caplog, monkeypatch, caller, listi
             raise RuntimeError('Stripe unavailable')
 
         monkeypatch.setattr(play_billing.stripe.Subscription, 'list', unavailable)
+    elif listing.endswith('_then_failed'):
+        data = env.stripe_subs[0].copy()
+        if listing == 'prepaid_then_failed':
+            data['metadata'] = {
+                **data['metadata'],
+                'prepaid_code_redemption': '1',
+                'redeemed_promotion_code_id': 'promo_prepaid',
+            }
+
+        def subscriptions(**kwargs):
+            def pages():
+                yield SimpleNamespace(to_dict=lambda: data)
+                raise RuntimeError('Stripe pagination unavailable')
+
+            return SimpleNamespace(auto_paging_iter=pages)
+
+        monkeypatch.setattr(play_billing.stripe.Subscription, 'list', subscriptions)
     elif listing == 'no_stripe_row':
         env.users.rows.pop(UID)
         env.stripe_subs.clear()
@@ -351,7 +368,9 @@ def test_stripe_conflict_settlement(conflict, caplog, monkeypatch, caller, listi
         assert not conflict.notices
         assert not _double_charge_lines(caplog)
         assert _row(env).provider == 'play'
-    assert purchase.get(play_billing.CONFLICT_UNVERIFIED_FIELD) == (NOW if listing == 'failed' else None)
+    assert purchase.get(play_billing.CONFLICT_UNVERIFIED_FIELD) == (
+        NOW if listing in ('failed', 'prepaid_then_failed') else None
+    )
 
 
 @pytest.mark.parametrize('failure', [RuntimeError('fcm down'), 'failed'])

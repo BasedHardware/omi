@@ -24,9 +24,9 @@ severity>=ERROR AND (textPayload:"play_billing_double_charge" OR jsonPayload.mes
 ```
 
 The purchase id is the SHA-256 of the token, never the token. If Stripe listing fails before it
-finds a qualifying subscription and the local row still grants paid access from a recurring, non-prepaid
+finds a qualifying billable subscription and the local row still grants paid access from a recurring, non-prepaid
 Stripe subscription, the backend raises the same alert and notice and also stamps
-`stripe_conflict_listing_failed_at`. Confirm the current provider state before acting. A successful
+`stripe_conflict_listing_failed_at` the first time this happens. Confirm the current provider state before acting. A successful
 listing without a qualifying Stripe subscription still produces no double-charge alert.
 
 ## Confirm it is real
