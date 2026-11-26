@@ -1092,13 +1092,23 @@ class LivePreviewTail extends StatefulWidget {
       this.catchUp,
       this.lines,
       this.whenEmpty,
-      this.includeBottomInset = true});
+      this.includeBottomInset = true,
+      this.showHeading = true,
+      this.horizontalInset = OmiSpacing.md});
 
   final LivePreviewController preview;
   final LivePreviewCoverage coverage;
   final List<LivePreviewLine> Function()? lines;
   final Widget? whenEmpty;
   final bool includeBottomInset;
+
+  /// The "Just now, on this phone" heading over the lines. The conversation page shows the lines
+  /// without it.
+  final bool showHeading;
+
+  /// The lines' own side inset. Zero where the parent already insets the transcript, so the lines
+  /// start at the transcript's left edge.
+  final double horizontalInset;
 
   /// What sits between the final transcript and the preview, rebuilt with the preview's ticks.
   final WidgetBuilder? catchUp;
@@ -1118,6 +1128,17 @@ class _LivePreviewTailState extends State<LivePreviewTail> {
     _rows.clear();
   }
 
+  /// Without the heading the first line keeps the heading's gap from the transcript above it.
+  double get _firstLineTop => widget.showHeading ? OmiSpacing.xs : OmiSpacing.md;
+
+  @override
+  void didUpdateWidget(LivePreviewTail oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.showHeading != widget.showHeading || oldWidget.horizontalInset != widget.horizontalInset) {
+      _rows.clear();
+    }
+  }
+
   Widget _line(LivePreviewLine line, bool first) {
     final cached = _rows[line.id];
     if (cached != null && cached.text == line.text && cached.isFinal == line.isFinal && cached.first == first) {
@@ -1125,7 +1146,8 @@ class _LivePreviewTailState extends State<LivePreviewTail> {
     }
     final row = Padding(
       key: ValueKey('live_preview_tail_${line.id}'),
-      padding: EdgeInsets.fromLTRB(OmiSpacing.md, first ? OmiSpacing.xs : 0, OmiSpacing.md, OmiSpacing.sm),
+      padding:
+          EdgeInsets.fromLTRB(widget.horizontalInset, first ? _firstLineTop : 0, widget.horizontalInset, OmiSpacing.sm),
       child: Text(line.text,
           style: OmiType.body
               .copyWith(height: 1.4, color: line.isFinal ? OmiColors.textSecondary : OmiColors.textTertiary)),
@@ -1148,7 +1170,7 @@ class _LivePreviewTailState extends State<LivePreviewTail> {
           mainAxisSize: MainAxisSize.min,
           children: [
             if (widget.catchUp case final catchUp?) catchUp(context),
-            if (lines.isNotEmpty) const LivePreviewDivider(),
+            if (lines.isNotEmpty && widget.showHeading) const LivePreviewDivider(),
             for (var i = 0; i < lines.length; i++) _line(lines[i], i == 0),
             if (widget.includeBottomInset) SizedBox(height: MediaQuery.paddingOf(context).bottom + 84),
           ],

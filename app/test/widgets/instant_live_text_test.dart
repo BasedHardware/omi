@@ -313,6 +313,9 @@ void main() {
       expect(find.textContaining('Server words', findRichText: true), findsWidgets);
       expect(tail, findsOneWidget);
       expect(find.text('the phone heard this just now'), findsOneWidget);
+      // They continue the transcript: no heading over them, and they start at the page's own inset.
+      expect(find.byKey(const Key('live_preview_divider')), findsNothing);
+      expect(tester.getTopLeft(find.text('the phone heard this just now')).dx, 16.0);
       // Words from before this conversation began belong to the one before it.
       expect(earlier, findsNothing);
     });

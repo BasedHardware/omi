@@ -1425,6 +1425,9 @@ class ConversationDetailPageState extends State<ConversationDetailPage>
       preview: preview,
       coverage: LivePreviewCoverage.forFinals(conversation.transcriptSegments, startedAt),
       includeBottomInset: false,
+      // On this page the lines continue the transcript: no heading, and the page already insets them.
+      showHeading: false,
+      horizontalInset: 0,
       whenEmpty: whenEmpty,
       lines: () {
         if (!isVerified()) return const [];
