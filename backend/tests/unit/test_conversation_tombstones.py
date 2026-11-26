@@ -317,7 +317,21 @@ def test_account_wipe_enumerates_tombstones_even_without_root(store, monkeypatch
     assert not tombstones.is_deleted('u', 'c')
 
 
-def test_account_job_purge_retries_after_a_later_batch_failure(store, monkeypatch):
+def test_account_job_purge_logs_only_counts_and_revision_after_multiple_batches(store, monkeypatch, caplog):
+    monkeypatch.setenv('K_REVISION', 'backend-test')
+    caplog.set_level('INFO', logger=user_data_deletion.__name__)
+    collection = store.collection('conversation_finalization_jobs')
+    for index in range(451):
+        collection.document(f'job-{index:03}').create({'uid': 'u'})
+
+    user_data_deletion.purge_finalization_jobs('u', store)
+
+    assert caplog.messages == ['account_erasure_finalization_jobs_purged deleted=451 remaining=0 revision=backend-test']
+
+
+def test_account_job_purge_retries_after_a_later_batch_failure(store, monkeypatch, caplog):
+    monkeypatch.setenv('K_REVISION', 'backend-test')
+    caplog.set_level('INFO', logger=user_data_deletion.__name__)
     collection = store.collection('conversation_finalization_jobs')
     for index in range(451):
         collection.document(f'job-{index:03}').create({'uid': 'u'})
@@ -335,8 +349,14 @@ def test_account_job_purge_retries_after_a_later_batch_failure(store, monkeypatc
             user_data_deletion.purge_finalization_jobs('u', store)
 
     assert [ref.id for ref in collection.list_documents()] == ['job-450']
+    assert caplog.messages == []
     user_data_deletion.purge_finalization_jobs('u', store)
     assert collection.list_documents() == []
+    user_data_deletion.purge_finalization_jobs('u', store)
+    assert caplog.messages == [
+        'account_erasure_finalization_jobs_purged deleted=1 remaining=0 revision=backend-test',
+        'account_erasure_finalization_jobs_purged deleted=0 remaining=0 revision=backend-test',
+    ]
 
 
 def test_live_client_chosen_deleted_id_is_closed_before_bootstrap_and_registration(store):
