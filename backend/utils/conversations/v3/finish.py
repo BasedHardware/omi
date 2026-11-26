@@ -40,12 +40,12 @@ def finish_live_window(
             outcome, recording_id = conversations_v3_live.request_finish(uid, window['id'], now=now)
             if outcome != 'no_live_window':
                 return _acknowledge(uid, window, outcome, recording_id)
-    if named_only:
-        named_outcome, named, recording_id = conversations_v3_live.request_named_finish(uid, window_id, now=now)
-        if not named:
-            return None
-        _recovered('named_window')
-        return _acknowledge(uid, named, named_outcome, recording_id)
+        if named_only:
+            named_outcome, named, recording_id = conversations_v3_live.request_named_finish(uid, window_id, now=now)
+            if not named:
+                return None
+            _recovered('named_window')
+            return _acknowledge(uid, named, named_outcome, recording_id)
     window = conversations_v3_live.live_window(uid, now=now, max_idle=live.MAX_IDLE, pick=live.active)
     if window is None:
         named_outcome = None
