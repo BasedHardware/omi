@@ -10,14 +10,14 @@ the oversize documents were ones it doesn't measure:
 `_oldest_pending` re-seeded the same recording every backoff, so one closure froze each owner's
 backlog.
 
-`CONVERSATIONS_V3_SIZE_QUARANTINE` (default on): a one-seed pass Firestore rejects for size records
-every pending recording it loaded in the builder lease's `v3_size_quarantine` (all or nothing, at most
-64), so seeds sharing that closure are set aside together.
+`CONVERSATIONS_V3_SIZE_QUARANTINE` (default on): when a one-seed pass's commit is rejected for size and
+Firestore names a document on the seed's side (the seed, its rows, or the sources written for them), the
+seed and the pending sources the commit writes for its rows go into the builder lease's
+`v3_size_quarantine` (all or nothing, at most 64). Nothing the open window or an unlocked seed reaches
+transitively is charged to the seed. Unnamed rejections park.
 - Closures still load quarantined rows, so claims are never filtered. Live seeding, the pass chain and the
-  sweep skip them, and the next independent seed runs on the following wake.
-- The lease's open window loads on every pass by itself. With one loaded, a pass quarantines only when
-  Firestore names an oversize document outside that window.
-- New quarantines record a degraded `omi_fallback_total` (component `conversations_v3`).
+  sweep skip them. Held ids that stop being pending are pruned on the next size park.
+- New quarantines record a degraded `omi_fallback_total`; a full list records an exhausted one.
 
 This change doesn't shrink any document. Rows bloated by alias `legacy_ids` stay quarantined until a
 follow-up slims them. `/v1/sync/audio/{conversation_id}/{audio_file_id}` still resolves old client

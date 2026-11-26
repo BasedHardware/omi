@@ -409,24 +409,57 @@ def size_error_document(error):
     return match.group(1) if match else None
 
 
-def _size_quarantine(reason, pending_limit, page, recordings, oversized=None):
-    """Every pending recording a one-seed pass loaded when Firestore rejected its commit for size (SCA-2918).
+def _size_quarantine(reason, pending_limit, page, commit, oversized):
+    """The pending recordings a one-seed pass's rejected commit pins to its seed (SCA-2918), or ().
 
     A one-seed park otherwise re-seeds the same oldest recording every backoff and freezes the owner's
-    whole backlog behind it. Any pending recording in that closure would be seeded into the same rejection
-    (closures are followed through claimants, sources and pieces both ways), so the closure is set aside as
-    a whole. An unlocked seed could own the oversize document instead, so it disqualifies. So does the
-    lease's open window, which every pass loads on its own: unless Firestore named an oversize document
-    outside it (``oversized``), quarantining seeds would only walk healthy seeds into the same rejection.
+    whole backlog behind it. Quarantine needs positive attribution: Firestore must name the oversize
+    document (``oversized``), and it must be the seed, a row the seed claims or feeds, or a source the
+    commit writes for those rows. Nothing the load pulls in on its own (the open window and unlocked seeds)
+    reaches, through claims and sources transitively, is charged to the seed: it loads on every pass, so
+    quarantining seeds would only walk healthy ones into the same rejection. The set is the seed plus the
+    pending sources the commit writes for the seed's rows: they would be seeded into the same rejection.
+    Recordings only loaded alongside (time siblings of unrelated rows) are not set aside. ``commit`` is the
+    (recordings, existing rows, planned rows) of the rejected commit.
     """
     if reason != 'document_too_large' or pending_limit != 1 or page is None or not size_quarantine_enabled():
         return ()
-    if page.seeds[1] or len(page.pending_ids) != 1:
+    if len(page.pending_ids) != 1 or oversized is None or not commit:
         return ()
-    if page.independent and (oversized is None or oversized in page.independent):
-        return ()
+    recordings, existing, planned = commit
     (seed,) = page.pending_ids
-    return (seed, *sorted(rid for rid, row in recordings.items() if rid != seed and row.get('v3_pending')))
+    if seed not in recordings or oversized in _reached(page.independent, recordings, existing, planned):
+        return ()
+    rows = {c.get('conversation_id') for c in recordings[seed].get('claims') or [] if isinstance(c, dict)}
+    rows |= {row['id'] for row in planned if seed in (row.get('v3_recording_ids') or ())}
+    rows.discard(None)
+    fed = {rid for row in planned if row['id'] in rows for rid in row.get('v3_recording_ids') or ()}
+    members = {seed} | {
+        rid
+        for rid, recording in recordings.items()
+        if rid in fed
+        or any(isinstance(c, dict) and c.get('conversation_id') in rows for c in recording.get('claims') or [])
+    }
+    if oversized not in rows | members:
+        return ()
+    return (seed, *sorted(rid for rid in members - {seed} if recordings[rid].get('v3_pending')))
+
+
+def _reached(starts, recordings, existing, planned):
+    """Every loaded document ``starts`` reach through claims (recording -> row) and sources (row -> recording)."""
+    rows = {**existing, **{row['id']: row for row in planned}}
+    seen, frontier = set(), set(starts)
+    while frontier:
+        doc = frontier.pop()
+        if doc in seen:
+            continue
+        seen.add(doc)
+        claims = (recordings.get(doc) or {}).get('claims') or ()
+        frontier.update(c.get('conversation_id') for c in claims if isinstance(c, dict) and c.get('conversation_id'))
+        row = rows.get(doc) or {}
+        frontier.update(row.get('v3_recording_ids') or ())
+        frontier.update(p['recording_id'] for p in row.get('recording_pieces') or () if p.get('recording_id'))
+    return seen
 
 
 def _lane_without_seed(options, page):
@@ -542,7 +575,6 @@ async def reconcile(
         return 'busy'
     primary_failed = False
     bounded_pending_limit = None
-    recordings: dict[str, dict[str, Any]] = {}
     unlocked_page = None
     unlocked_wake = None
     try:
@@ -1028,7 +1060,10 @@ async def reconcile(
                 bounded_pending_limit=bounded_pending_limit,
                 unlocked_page=unlocked_page,
             )
-        except Exception:
+        except Exception as failure:
+            if isinstance(failure, Conflict) and str(failure) == 'document_too_large':
+                # What the rejected commit wrote, for the size quarantine's attribution.
+                failure.size_commit = (commit_recordings, commit_existing, rows)
             if live:
                 # Copies of rows this attempt did not write go, whatever failed; a resume records them
                 # again. If this cleanup fails too, the partition stays unfinished until resume or undo.
@@ -1127,7 +1162,7 @@ async def reconcile(
                 reason,
                 bounded_pending_limit,
                 unlocked_page,
-                recordings,
+                getattr(error, 'size_commit', None),
                 size_error_document(error.__cause__),
             )
             await run_blocking(
@@ -1671,8 +1706,15 @@ async def sweep():
     for uid, ids in stale.items():
         # Recordings set aside for size stay pending until repaired; they alone must not wake the owner
         # every sweep (SCA-2918). One lease read per stale owner, against the full stale-pending scan above.
-        if size_quarantine_enabled() and ids <= await run_blocking(db_executor, store.size_quarantined, uid):
-            continue
+        if size_quarantine_enabled():
+            try:
+                held = await run_blocking(db_executor, store.size_quarantined, uid)
+            except Exception as error:
+                # One unreadable lease must not stop the sweep: treat the owner as not quarantined.
+                logger.warning('event=v3_size_quarantine_read outcome=error exception_type=%s', type(error).__name__)
+                held = frozenset()
+            if ids <= held:
+                continue
         users.add(uid)
         await run_blocking(db_executor, enqueue, uid)
     cursor = None

@@ -272,13 +272,15 @@ def record_blocked(uid, token, reason, *, on_open=False, quarantine=(), firestor
     """Deterministic conflicts back off per owner instead of retrying through the shared queue.
 
     Fenced by the builder token: a stale pass must not park an owner after a successor committed.
-    ``quarantine`` names every pending recording a one-seed pass loaded when Firestore rejected its commit
-    for size: that whole closure is set aside at once (all or nothing, up to SIZE_QUARANTINE_MAX), so a
-    later seed sharing it is never seeded into the same rejection. The early attempt is re-armed so the
-    next seed runs on the following wake. A list too full for the closure parks with the usual backoff.
+    ``quarantine`` names the pending recordings a one-seed pass's rejected commit pinned to its seed: they
+    are set aside at once (all or nothing, up to SIZE_QUARANTINE_MAX), so a later seed sharing them is never
+    seeded into the same rejection. The early attempt is re-armed so the next seed runs on the following
+    wake. Held ids no longer pending (landed, deleted or repaired) are pruned first. A list too full for the
+    closure parks with the usual backoff and reports it.
     """
     client = firestore_client or get_firestore_client()
     ref = leases.lease_ref(client, uid, 'builder')
+    settled = _settled_quarantine(client, uid, ref) if reason == 'document_too_large' else frozenset()
 
     @firestore.transactional
     def park(tx):
@@ -300,20 +302,19 @@ def record_blocked(uid, token, reason, *, on_open=False, quarantine=(), firestor
                 bool(row.get('v3_bounded_pending_attempted')) if on_open else bounded_pending_enabled()
             ),
         }
-        held = list(row.get(SIZE_QUARANTINE_FIELD) or [])
+        stored = list(row.get(SIZE_QUARANTINE_FIELD) or [])
+        held = [rid for rid in stored if rid not in settled]
         added = [rid for rid in dict.fromkeys(quarantine) if rid not in held]
-        quarantined = bool(
-            added
-            and reason == 'document_too_large'
-            and size_quarantine_enabled()
-            and len(held) + len(added) <= SIZE_QUARANTINE_MAX
-        )
+        wanted = bool(added and reason == 'document_too_large' and size_quarantine_enabled())
+        quarantined = wanted and len(held) + len(added) <= SIZE_QUARANTINE_MAX
         if quarantined:
-            update[SIZE_QUARANTINE_FIELD] = [*held, *added]
+            held = [*held, *added]
             # The backlog outside the set-aside closure is not blocked: run the next seed without the backoff.
             update['v3_bounded_pending_attempted'] = False
+        if held != stored:
+            update[SIZE_QUARANTINE_FIELD] = held
         tx.update(ref, update)
-        return 'quarantined' if quarantined else True
+        return 'quarantined' if quarantined else 'full' if wanted else True
 
     result = run_preloaded_transaction_with_contention_retry(client, park)
     if result == 'quarantined':
@@ -328,7 +329,28 @@ def record_blocked(uid, token, reason, *, on_open=False, quarantine=(), firestor
             outcome='degraded',
             log=logger,
         )
+    elif result == 'full':
+        # Quarantine stopped engaging for this owner: it is back to head-of-line backoff until repair.
+        metrics.safe_metric(lambda: metrics.RECONCILES.labels('size_quarantine_full').inc())
+        record_fallback(
+            component='conversations_v3',
+            from_mode='pending_retry',
+            to_mode='size_quarantine',
+            reason='document_size_limit',
+            outcome='exhausted',
+            log=logger,
+        )
     return bool(result)
+
+
+def _settled_quarantine(client, uid, ref):
+    """Held quarantine ids that are no longer v3_pending (landed, deleted or repaired): one field read each."""
+    held = (ref.get().to_dict() or {}).get(SIZE_QUARANTINE_FIELD) or []
+    if not held:
+        return frozenset()
+    coll = user_conversations(client, uid)
+    snapshots = client.get_all([coll.document(rid) for rid in held], field_paths=['v3_pending'])
+    return frozenset(s.id for s in snapshots if not s.exists or (s.to_dict() or {}).get('v3_pending') is not True)
 
 
 def size_quarantined(uid, *, firestore_client=None):
@@ -385,6 +407,12 @@ def backoff_state(uid, *, firestore_client=None):
 
 TERMINAL_PENDING_SCAN_LIMIT = 50
 TERMINAL_PENDING_CLEAR = {'v3_pending': False, 'v3_pending_since': None}
+
+
+def _direct_documents(row):
+    """A derived row and the sources it names directly."""
+    pieces = (p.get('recording_id') for p in row.get('recording_pieces') or () if p.get('recording_id'))
+    return frozenset({row['id'], *(row.get('v3_recording_ids') or ()), *pieces})
 
 
 def _oldest_pending(coll, limit):
@@ -513,6 +541,7 @@ def load(
     cache = json.loads(decrypt(state['outline_cache'], uid)) if state.get('outline_cache') else []
     if unlocked_page is not None:
         unlocked_page.remaining, unlocked_page.cursor = frozenset(), None
+        unlocked_page.independent = frozenset()
         seeded = tuple(doc.id for doc in pending if doc.id in recordings or doc.id in unreadable)
         unlocked_page.seeds, unlocked_page.pending_ids = (len(seeded), 0), seeded
         unlocked_page.quarantined = quarantined
@@ -527,13 +556,7 @@ def load(
         if opened:
             existing[opened['id']] = opened
             if unlocked_page is not None:
-                unlocked_page.independent = frozenset(
-                    {
-                        opened['id'],
-                        *(opened.get('v3_recording_ids') or ()),
-                        *(p.get('recording_id') for p in opened.get('recording_pieces') or () if p.get('recording_id')),
-                    }
-                )
+                unlocked_page.independent = _direct_documents(opened)
     queried = set()
     by_claims = closure_by_claims()
     loaded_bytes = sum(_encoded_bytes(row.get('transcript_segments') or []) for row in existing.values())
@@ -567,6 +590,9 @@ def load(
                     raise Conflict('recording_decode_unavailable') from error
                 if row:
                     add(row)
+                    if unlocked_page is not None:
+                        # Loaded on its own, not through a pending seed: never charged to the seed.
+                        unlocked_page.independent = unlocked_page.independent | _direct_documents(row)
 
     missing = set()
     # Follow linked recordings until the closure converges. Each round adds at least one recording and

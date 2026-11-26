@@ -10,7 +10,6 @@ from google.api_core.exceptions import InvalidArgument
 
 from database import conversations_v3 as store, conversations_v3_leases as leases
 from utils.conversations.v3 import Conflict, UnlockedPage, service
-from tests.unit.test_conversations_v3_claim_growth import UID, strict  # noqa: F401
 from tests.unit.test_conversations_v3_derived_budget import claim, derived
 from tests.unit.test_conversations_v3_review import AT, MemoryQuery, source
 
@@ -28,37 +27,67 @@ def backlog(n=3):
     return rows
 
 
-def test_a_size_park_sets_its_closure_aside_and_runs_the_next_seed_without_the_backoff(strict):
-    token = leases.acquire(UID, 'builder', firestore_client=strict)
-    held = strict.rows[leases.lease_ref(strict, UID, 'builder').path]
-    assert store.record_blocked(UID, token, 'document_too_large', quarantine=('a', 'b'), firestore_client=strict)
+@pytest.fixture
+def lease(owner):
+    """An unparked builder lease under token 'token', on the same in-memory rows as load and the sweep."""
+    owner.rows[LEASE] = {'token': 'token', 'until': datetime.now(timezone.utc) + timedelta(hours=1)}
+    return owner
+
+
+def pending(lease, *ids, value=True):
+    for rid in ids:
+        lease.rows[C + rid] = {'id': rid, 'recording': True, 'v3_pending': value}
+
+
+def test_a_size_park_sets_its_closure_aside_and_runs_the_next_seed_without_the_backoff(lease):
+    pending(lease, 'a', 'b')
+    token = 'token'
+    held = lease.rows[LEASE]
+    assert store.record_blocked('u', token, 'document_too_large', quarantine=('a', 'b'))
     assert held[store.SIZE_QUARANTINE_FIELD] == ['a', 'b']
     # Re-armed early attempt: the backoff does not hold the backlog outside the set-aside closure.
-    assert store.backoff_state(UID, firestore_client=strict) == (None, 'document_too_large')
-    store.mark_bounded_attempt(UID, token, firestore_client=strict)
-    assert store.backoff_state(UID, firestore_client=strict)[0] is not None
+    assert store.backoff_state('u') == (None, 'document_too_large')
+    store.mark_bounded_attempt('u', token)
+    assert store.backoff_state('u')[0] is not None
     # Nothing new to set aside: the park spends the usual backoff.
-    assert store.record_blocked(UID, token, 'document_too_large', quarantine=('b',), firestore_client=strict)
+    assert store.record_blocked('u', token, 'document_too_large', quarantine=('b',))
     assert held[store.SIZE_QUARANTINE_FIELD] == ['a', 'b']
-    assert store.backoff_state(UID, firestore_client=strict)[0] is not None
-    assert store.size_quarantined(UID, firestore_client=strict) == {'a', 'b'}
+    assert store.backoff_state('u')[0] is not None
+    assert store.size_quarantined('u') == {'a', 'b'}
 
 
-def test_the_quarantine_is_bounded_all_or_nothing_and_only_for_size_parks(strict, monkeypatch):
-    token = leases.acquire(UID, 'builder', firestore_client=strict)
-    held = strict.rows[leases.lease_ref(strict, UID, 'builder').path]
-    assert store.record_blocked(UID, token, 'v3_derived_budget', quarantine=('a',), firestore_client=strict)
+def test_held_ids_that_landed_or_were_deleted_are_pruned_so_the_list_never_silts_up(lease, monkeypatch):
+    monkeypatch.setattr(store, 'SIZE_QUARANTINE_MAX', 2)
+    pending(lease, 'a', 'b', 'c')
+    token = 'token'
+    held = lease.rows[LEASE]
+    store.record_blocked('u', token, 'document_too_large', quarantine=('a', 'b'))
+    pending(lease, 'a', value=False)  # Landed (or repaired).
+    del lease.rows[C + 'b']  # Deleted.
+    # The list was full, but both held ids settled: they make room for the new closure.
+    assert store.record_blocked('u', token, 'document_too_large', quarantine=('c',))
+    assert held[store.SIZE_QUARANTINE_FIELD] == ['c']
+
+
+def test_the_quarantine_is_bounded_all_or_nothing_and_a_full_list_is_reported(lease, monkeypatch):
+    calls = []
+    monkeypatch.setattr(store, 'record_fallback', lambda **kw: calls.append(kw['outcome']))
+    pending(lease, 'a', 'b', 'c', 'd', 'e')
+    token = 'token'
+    held = lease.rows[LEASE]
+    assert store.record_blocked('u', token, 'v3_derived_budget', quarantine=('a',))
     assert store.SIZE_QUARANTINE_FIELD not in held
     monkeypatch.setattr(store, 'SIZE_QUARANTINE_MAX', 3)
-    store.record_blocked(UID, token, 'document_too_large', quarantine=('a', 'b'), firestore_client=strict)
+    store.record_blocked('u', token, 'document_too_large', quarantine=('a', 'b'))
     # A closure that no longer fits is not split: none of it is set aside and the owner backs off as before.
-    store.record_blocked(UID, token, 'document_too_large', quarantine=('c', 'd'), firestore_client=strict)
+    store.record_blocked('u', token, 'document_too_large', quarantine=('c', 'd'))
     assert held[store.SIZE_QUARANTINE_FIELD] == ['a', 'b']
-    assert store.backoff_state(UID, firestore_client=strict)[0] is not None
+    assert store.backoff_state('u')[0] is not None
+    assert calls == ['degraded', 'exhausted']  # The full list is not silent.
     monkeypatch.setenv('CONVERSATIONS_V3_SIZE_QUARANTINE', 'off')
-    store.record_blocked(UID, token, 'document_too_large', quarantine=('e',), firestore_client=strict)
+    store.record_blocked('u', token, 'document_too_large', quarantine=('e',))
     assert held[store.SIZE_QUARANTINE_FIELD] == ['a', 'b']
-    assert store.size_quarantined(UID, firestore_client=strict) == frozenset()
+    assert store.size_quarantined('u') == frozenset()
 
 
 @pytest.mark.parametrize('enabled', [True, False])
@@ -83,16 +112,60 @@ def test_on_open_and_unpaged_loads_ignore_the_quarantine():
     assert list(recordings) == ['r0']
 
 
+def _commit_of(**rows):
+    """A rejected commit: ``a`` and ``b`` claim ``da``; ``s`` is a time sibling feeding the unrelated ``dx``."""
+    recordings = {
+        'a': {'v3_pending': True, 'claims': [{'conversation_id': 'da'}]},
+        'b': {'v3_pending': True, 'claims': [{'conversation_id': 'da'}]},
+        'settled': {'v3_pending': False, 'claims': [{'conversation_id': 'da'}]},
+        's': {'v3_pending': True, 'claims': [{'conversation_id': 'dx'}]},
+        **rows,
+    }
+    planned = [{'id': 'da', 'v3_recording_ids': ['a', 'b', 'settled']}, {'id': 'dx', 'v3_recording_ids': ['s']}]
+    return recordings, {}, planned
+
+
 @pytest.mark.parametrize(
-    'seeded,unlocked,expected',
-    [(('r0',), 0, ('r0', 'r1')), (('r0',), 1, ()), (('r0', 'r2'), 0, ())],
+    'oversized,expected',
+    [
+        ('da', ('a', 'b')),  # The seed's own row: the seed and the pendings that share it.
+        ('a', ('a', 'b')),  # The seed itself.
+        ('settled', ('a', 'b')),  # A co-source the commit writes for the seed's row.
+        ('dx', ()),  # Only a time sibling's row: no evidence against the seed.
+        ('s', ()),
+        (None, ()),  # Unnamed (a property-size error): never attributable.
+    ],
 )
-def test_a_lone_pending_seed_sets_aside_every_pending_source_of_its_closure(seeded, unlocked, expected):
-    page = UnlockedPage(seeds=(len(seeded), unlocked), pending_ids=seeded)
-    recordings = {'r0': {'v3_pending': True}, 'r1': {'v3_pending': True}, 'settled': {'v3_pending': False}}
-    assert service._size_quarantine('document_too_large', 1, page, recordings) == expected
-    assert service._size_quarantine('v3_derived_budget', 1, page, recordings) == ()
-    assert service._size_quarantine('document_too_large', 8, page, recordings) == ()
+def test_only_the_rejected_documents_seed_side_is_set_aside(oversized, expected):
+    page = UnlockedPage(seeds=(1, 0), pending_ids=('a',))
+    assert service._size_quarantine('document_too_large', 1, page, _commit_of(), oversized) == expected
+    assert service._size_quarantine('v3_derived_budget', 1, page, _commit_of(), oversized) == ()
+    assert service._size_quarantine('document_too_large', 8, page, _commit_of(), oversized) == ()
+    two = UnlockedPage(seeds=(2, 0), pending_ids=('a', 'b'))
+    assert service._size_quarantine('document_too_large', 1, two, _commit_of(), oversized) == ()
+    # An unlocked seed beside the pending one no longer disqualifies; only its own documents are vetoed.
+    unlocked = UnlockedPage(seeds=(1, 1), pending_ids=('a',), independent=frozenset({'du', 'u'}))
+    assert service._size_quarantine('document_too_large', 1, unlocked, _commit_of(), oversized) == expected
+    assert service._size_quarantine('document_too_large', 1, unlocked, _commit_of(), 'du') == ()
+
+
+def test_nothing_the_open_window_reaches_transitively_is_charged_to_the_seed():
+    """The open window's source ``o`` also claims the finished ``dz``, which the seed claims too: ``dz``
+    loads on every pass through the open window, so a rejection naming it is not the seed's."""
+    page = UnlockedPage(seeds=(1, 0), pending_ids=('a',), independent=frozenset({'do', 'o'}))
+    recordings, existing, planned = _commit_of(
+        a={'v3_pending': True, 'claims': [{'conversation_id': 'da'}, {'conversation_id': 'dz'}]},
+        o={'v3_pending': False, 'claims': [{'conversation_id': 'do'}, {'conversation_id': 'dz'}]},
+    )
+    existing = {'do': {'id': 'do', 'v3_recording_ids': ['o']}, 'dz': {'id': 'dz', 'v3_recording_ids': ['o', 'a']}}
+    commit = (recordings, existing, planned)
+    assert service._size_quarantine('document_too_large', 1, page, commit, 'dz') == ()
+    # ...and so is everything it reaches from there: the seed and the rows it shares with ``dz``'s sources.
+    assert service._size_quarantine('document_too_large', 1, page, commit, 'da') == ()
+    # Without that link, the seed's own row is attributable again.
+    recordings['o']['claims'] = [{'conversation_id': 'do'}]
+    existing['dz']['v3_recording_ids'] = ['a']
+    assert service._size_quarantine('document_too_large', 1, page, commit, 'dz') == ('a', 'b')
 
 
 class TxMemory(MemoryQuery):
@@ -218,7 +291,7 @@ def owner(monkeypatch):
         'outline',
         lambda uid, prompt: '{"conversations":[{"first_line":1,"title":"A plan","line":"A plan.","kind":"conversation"}]}',
     )
-    return SimpleNamespace(rows=rows, passes=passes, wakes=wakes, state=state)
+    return SimpleNamespace(rows=rows, passes=passes, wakes=wakes, state=state, client=client)
 
 
 @pytest.mark.asyncio
@@ -265,13 +338,73 @@ async def test_the_sweep_does_not_wake_an_owner_whose_only_stale_work_is_set_asi
     assert await service.sweep() == 1 and len(owner.wakes) == 1
 
 
+def unlocked_window(rows):
+    """An unlocked window in the lease's index: the one-seed attempt seeds it beside the pending seed."""
+    at = AT + timedelta(hours=12)
+    rows[C + 'u'] = source('u', started_at=at, claims=[claim('du', at, 10)])
+    rows[C + 'u']['v3_pending'] = False
+    rows[C + 'du'] = derived('du', at, 10, ['u'], v3_unlocked=True)
+    rows[LEASE]['unlocked_ids'] = ['du']
+
+
 @pytest.mark.asyncio
-async def test_a_one_seed_size_rejection_with_an_unlocked_seed_sets_nothing_aside(owner, monkeypatch):
-    rows = owner.rows
-    rows[C + 'da']['v3_unlocked'] = True
-    rows[LEASE]['unlocked_ids'] = ['da']
+async def test_an_oversize_pending_seed_beside_an_unlocked_window_still_drains(owner):
+    unlocked_window(owner.rows)
     assert await service.reconcile('u') == 'blocked'
-    assert store.SIZE_QUARANTINE_FIELD not in rows[LEASE]
+    assert 'du' in owner.passes[0][1]  # The unlocked window was seeded beside the pending seed.
+    assert owner.rows[LEASE][store.SIZE_QUARANTINE_FIELD] == ['a', 'b']
+    assert await service.reconcile('u') == 'committed'
+    assert owner.rows[C + 'c']['v3_pending'] is False
+
+
+@pytest.mark.asyncio
+async def test_an_oversize_unlocked_window_is_never_charged_to_the_pending_seed(owner):
+    unlocked_window(owner.rows)
+    owner.state.oversized = 'du'
+    assert await service.reconcile('u') == 'blocked'
+    assert store.SIZE_QUARANTINE_FIELD not in owner.rows[LEASE]
+    assert store.backoff_state('u')[0] is not None
+
+
+@pytest.mark.asyncio
+async def test_a_time_sibling_loaded_beside_the_seed_is_not_set_aside(owner):
+    rows = owner.rows
+    at = AT + timedelta(minutes=15)  # Inside load's time window around the seed, past the silence gap.
+    rows[C + 's'] = source(
+        's',
+        started_at=at,
+        finished_at=at + timedelta(seconds=10),
+        claims=[claim('dx', at, 10)],
+        v3_pending_since=AT + timedelta(hours=3),
+    )
+    rows[C + 'dx'] = derived('dx', at, 10, ['s'])
+    assert await service.reconcile('u') == 'blocked'
+    assert 's' in owner.passes[0][0]  # Loaded through the unrelated time-sibling row.
+    assert rows[LEASE][store.SIZE_QUARANTINE_FIELD] == ['a', 'b']
+    assert rows[C + 's']['v3_pending'] is True
+
+
+@pytest.mark.asyncio
+async def test_an_unnamed_size_rejection_parks_even_without_an_open_window(owner):
+    owner.state.named = False
+    assert await service.reconcile('u') == 'blocked'
+    assert store.SIZE_QUARANTINE_FIELD not in owner.rows[LEASE]
+    assert store.backoff_state('u')[0] is not None
+
+
+@pytest.mark.asyncio
+async def test_one_unreadable_lease_does_not_stop_the_sweep(owner, monkeypatch, caplog):
+    owner.rows[C + 'c']['v3_pending'] = False
+    owner.rows[LEASE][store.SIZE_QUARANTINE_FIELD] = ['a', 'b']
+    monkeypatch.setattr(service, 'python_owns_finalization', lambda row: True)
+
+    def unreadable(uid, **kw):
+        raise RuntimeError('transient')
+
+    monkeypatch.setattr(store, 'size_quarantined', unreadable)
+    with caplog.at_level('WARNING'):
+        assert await service.sweep() == 1  # Treated as not quarantined: the owner is still woken.
+    assert 'event=v3_size_quarantine_read outcome=error exception_type=RuntimeError' in caplog.messages
 
 
 def open_window(rows):
@@ -303,13 +436,14 @@ async def test_an_independently_loaded_open_window_is_never_charged_to_the_seed(
         assert store.backoff_state('u')[0] is not None
 
 
-def test_a_new_quarantine_reports_a_degraded_fallback_once(strict, monkeypatch):
+def test_a_new_quarantine_reports_a_degraded_fallback_once(lease, monkeypatch):
     calls = []
     monkeypatch.setattr(store, 'record_fallback', lambda **kw: calls.append(kw))
-    token = leases.acquire(UID, 'builder', firestore_client=strict)
-    store.record_blocked(UID, token, 'document_too_large', quarantine=('a',), firestore_client=strict)
-    store.record_blocked(UID, token, 'document_too_large', quarantine=('a',), firestore_client=strict)
-    store.record_blocked(UID, token, 'v3_derived_budget', firestore_client=strict)
+    pending(lease, 'a')
+    token = 'token'
+    store.record_blocked('u', token, 'document_too_large', quarantine=('a',))
+    store.record_blocked('u', token, 'document_too_large', quarantine=('a',))
+    store.record_blocked('u', token, 'v3_derived_budget')
     assert calls == [
         {
             'component': 'conversations_v3',
@@ -347,3 +481,19 @@ def test_quarantined_successors_cannot_hide_a_healthy_page_continuation():
     )
     assert list(recordings) == ['s']
     assert recordings['s'].get('_v3_page_continues') is True
+
+
+@pytest.mark.asyncio
+async def test_a_finished_row_the_open_windows_source_also_claims_is_never_charged_to_the_seed(owner):
+    rows = owner.rows
+    open_window(rows)
+    at = AT + timedelta(hours=9)
+    # The open window's source also claims the finished "dz", which the seed claims too (Codex r4713792971).
+    rows[C + 'o']['claims'].append(claim('dz', at, 5))
+    rows[C + 'a']['claims'].append(claim('dz', AT, 5))
+    rows[C + 'dz'] = derived('dz', AT, 5, ['a', 'o'])
+    owner.state.oversized = 'dz'
+    assert await service.reconcile('u') == 'blocked'
+    assert 'dz' in owner.passes[0][1] and 'o' in owner.passes[0][0]
+    assert store.SIZE_QUARANTINE_FIELD not in rows[LEASE]
+    assert store.backoff_state('u')[0] is not None

@@ -220,24 +220,27 @@ and backfill runners.
 
 The cap budgets `transcript_segments` only. A finished row that predates it, a source recording
 already at 1 MiB, or recording aliases can still fill a document. `CONVERSATIONS_V3_SIZE_QUARANTINE`
-defaults to on. When a live pass that seeded exactly one pending recording and no unlocked window
-parks on `document_too_large`, the builder lease records **every pending recording that pass loaded**
-in `v3_size_quarantine`, all or nothing, at most 64 ids. That closure follows claimants, sources and
-pieces, so a later seed sharing the oversize document is set aside in the same park instead of being
-seeded into the same rejection. The early attempt is re-armed, so the next seed runs on the following wake.
-- Seeding is the only thing that skips quarantined ids. Closures still load them, so claims are never
-  filtered. The pass chain and the 5-minute sweep don't wake an owner whose only stale pending rows are
-  quarantined.
-- A closure that doesn't fit the list parks with the usual backoff.
-- The lease's open window loads on every pass by itself, so it's never charged to the seed. When an open
-  window was loaded, the pass quarantines only if Firestore's error names an oversize document outside that
-  window and its direct sources. Otherwise it parks with the usual backoff.
-- Each new quarantine records `omi_fallback_total{component="conversations_v3",to_mode="size_quarantine",reason="document_size_limit",outcome="degraded"}`.
-- Quarantined rows stay `v3_pending`, and the lease keeps naming them after the park clears. A recovered
-  owner is not a repaired recording: count owners whose park cleared separately from quarantined ids, and
-  `omi_conversations_v3_reconciles_total{outcome="size_quarantined"}` for parks that set work aside.
-- Repair the oversize document, then remove the ids from the list. Set the switch off on live builders to
-  restore head-of-line retries; stored ids are then ignored.
+defaults to on. When a live pass that seeded exactly one pending recording parks on `document_too_large`,
+it may set work aside in `v3_size_quarantine` on the builder lease (all or nothing, at most 64 ids):
+- **Attribution.** Firestore's error must name the oversize document. It must be the seed, a row the seed
+  claims or feeds, or a source the commit writes for those rows. It must also lie outside everything the
+  lease's open window and any unlocked seed reach through claims and sources: those load on every pass. An
+  unnamed or unattributable rejection parks with the usual backoff.
+- **The set** is the seed plus the pending sources the rejected commit writes for the seed's rows. Time
+  siblings of unrelated rows are not set aside. The early attempt is re-armed, so the next seed runs on the
+  following wake.
+- **Skipping.** Seeding is the only thing that skips quarantined ids: closures still load them, so claims
+  are never filtered. The pass chain and the 5-minute sweep don't wake an owner whose only stale pending rows
+  are quarantined. A failed lease read in the sweep counts as not quarantined.
+- **Pruning.** Each size park first drops held ids that are no longer `v3_pending` (landed, deleted or
+  repaired). A closure that still doesn't fit parks with the usual backoff and records
+  `omi_fallback_total{component="conversations_v3",outcome="exhausted"}` and
+  `reconciles_total{outcome="size_quarantine_full"}`. Each new quarantine records `outcome="degraded"` and
+  `reconciles_total{outcome="size_quarantined"}`.
+- **Readback.** The lease keeps naming quarantined rows after the park clears. Count owners whose park
+  cleared separately from quarantined ids.
+- **Repair and rollback.** Repair the oversize document; the next size park prunes the id. Set the switch
+  off on live builders to restore head-of-line retries; stored ids are then ignored.
 
 See the [size quarantine](../listen_pusher_pipeline/changes/2026-11-26-v3-size-quarantine.md)
 change note.
