@@ -9,6 +9,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/jackc/pgx/v5"
+
 	"github.com/BasedHardware/omi/backend-go/internal/platform/pgtest"
 )
 
@@ -128,6 +130,74 @@ func TestWorkersRenewTheLeaseWhileTheHandlerSavesProgress(t *testing.T) {
 	}
 	if errs := seen.all(); len(errs) != 0 {
 		t.Errorf("unexpected reports: %v", errs)
+	}
+}
+
+func TestRenewalWaitsForProgressRowLock(t *testing.T) {
+	t.Parallel()
+	ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
+	defer cancel()
+	cfg := testConfig()
+	cfg.Lease = 5 * time.Second
+	s := openStore(t, pgtest.New(t), cfg, testKinds())
+	enqueue(t, ctx, s, demo("job", "tenant"))
+	r := claim(t, ctx, s)
+
+	// Hold the same row lock as Save, using a transaction to control when it releases.
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() {
+		if rollbackErr := tx.Rollback(t.Context()); rollbackErr != nil && !errors.Is(rollbackErr, pgx.ErrTxClosed) {
+			t.Errorf("rollback progress write: %v", rollbackErr)
+		}
+	}()
+	var blocker uint32
+	var originalDeadline time.Time
+	err = tx.QueryRow(ctx, `UPDATE queue_jobs SET step='late', updated_at=clock_timestamp()
+WHERE job_key=$1 RETURNING pg_backend_pid(), lease_until`, r.lease.key).Scan(&blocker, &originalDeadline)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	renewed := make(chan error, 1)
+	go func() { renewed <- s.renew(ctx, r.lease) }()
+	eventually(t, ctx, "renewal waits on the progress write", func() bool {
+		var waiting bool
+		if queryErr := s.pool.QueryRow(ctx, `SELECT EXISTS (
+SELECT 1 FROM pg_stat_activity WHERE $1 = ANY(pg_blocking_pids(pid)))`, blocker).Scan(&waiting); queryErr != nil {
+			t.Fatal(queryErr)
+		}
+		return waiting
+	})
+	var leaseStillValid bool
+	err = tx.QueryRow(ctx, `SELECT pg_sleep(1.2), clock_timestamp() < $1`, originalDeadline).Scan(nil, &leaseStillValid)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !leaseStillValid {
+		t.Fatal("the original lease expired while arranging contention")
+	}
+	if err := tx.Commit(ctx); err != nil {
+		t.Fatal(err)
+	}
+	renewErr := <-renewed
+
+	// Compete for the job once the original lease would have expired.
+	eventually(t, ctx, "the original lease deadline passes", func() bool {
+		var expired bool
+		if err := s.pool.QueryRow(ctx, "SELECT clock_timestamp() >= $1", originalDeadline).Scan(&expired); err != nil {
+			t.Fatal(err)
+		}
+		return expired
+	})
+	reclaimed, claimErr := tryClaim(ctx, s)
+	if reclaimed != nil {
+		t.Fatalf("job reclaimed on attempt %d after renewal returned %v", reclaimed.Job().Attempts, renewErr)
+	}
+	if renewErr != nil || !errors.Is(claimErr, ErrAbsent) {
+		t.Fatalf("renewal: %v, competing claim: %v", renewErr, claimErr)
 	}
 }
 

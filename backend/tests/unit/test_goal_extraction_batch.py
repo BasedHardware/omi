@@ -13,6 +13,9 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+# Keep the real fence available when this legacy harness substitutes the database package.
+import database.conversation_effect_fence  # noqa: F401
+
 os.environ.setdefault(
     "ENCRYPTION_SECRET",
     "omi_ZwB2ZNqB2HHpMK6wStk7sTpavJiPTFg7gXUHnc4tFABPU6pZ2c2DKgehtfgi4RZv",

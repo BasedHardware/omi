@@ -36,12 +36,25 @@ def _anchors(packets: Sequence[Packet], check: Callable[[float], object]) -> Ite
 
 
 def index_live(
-    live_runs: Sequence[Sequence[Packet]], check: Callable[[float], object]
+    live_runs: Sequence[Sequence[Packet]],
+    check: Callable[[float], object],
+    *,
+    include_cross_run_ambiguity: bool = False,
 ) -> dict[Anchor, Placement | None]:
     index: dict[Anchor, Placement | None] = {}
     for run, packets in enumerate(live_runs):
         for key, position in _anchors(packets, check):
             index[key] = None if key in index else (run, position)
+    if include_cross_run_ambiguity:
+        # A contiguous occurrence split over archive packs can disqualify an
+        # in-pack anchor. It does not itself supply an in-pack placement.
+        tail: list[Packet] = []
+        for packets in live_runs:
+            boundary = tail + list(packets[: ANCHOR_PACKETS - 1])
+            for key, _ in _anchors(boundary, check):
+                if key in index:
+                    index[key] = None
+            tail = (tail + list(packets[-(ANCHOR_PACKETS - 1) :]))[-(ANCHOR_PACKETS - 1) :]
     return index
 
 

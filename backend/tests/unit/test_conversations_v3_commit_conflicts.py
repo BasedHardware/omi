@@ -80,7 +80,7 @@ async def test_deterministic_conflict_answers_the_task_and_backs_the_owner_off(b
 
     monkeypatch.setattr(service, '_commit', conflict)
     blocked = []
-    monkeypatch.setattr(store, 'record_blocked', lambda uid, token, why: blocked.append((token, why)))
+    monkeypatch.setattr(store, 'record_blocked', lambda uid, token, why, **kw: blocked.append((token, why)))
     assert await service.reconcile('u') == 'blocked'
     assert blocked == [('token', reason)]
 
@@ -173,7 +173,7 @@ async def test_paid_outline_is_kept_when_the_commit_conflicts(builder, monkeypat
         raise Conflict('target_exists')
 
     monkeypatch.setattr(service, '_commit', conflict)
-    monkeypatch.setattr(store, 'record_blocked', lambda *a: None)
+    monkeypatch.setattr(store, 'record_blocked', lambda *a, **kw: None)
     await service.reconcile('u')
     assert len(messages) == 1
     assert len(saved) == 1 and saved[0][1][0]['title'] == 'A plan'
@@ -353,7 +353,14 @@ def test_open_loop_blob_is_reprotected_on_a_level_change(strict, monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_oversized_document_parks_the_owner_instead_of_retrying(builder, monkeypatch):
+@pytest.mark.parametrize(
+    'message',
+    [
+        "Document 'x' cannot be written because its size (1,048,630 bytes) exceeds the maximum allowed size of 1,048,576 bytes.",
+        'The value of property "transcript_segments" is longer than 1048487 bytes.',
+    ],
+)
+async def test_oversized_document_parks_the_owner_instead_of_retrying(builder, monkeypatch, message):
     from google.api_core.exceptions import InvalidArgument
 
     from utils.conversations import lifecycle
@@ -362,13 +369,11 @@ async def test_oversized_document_parks_the_owner_instead_of_retrying(builder, m
     monkeypatch.setattr(service, '_commit', REAL_COMMIT)
 
     def too_large(*a, **kw):
-        raise InvalidArgument(
-            "Document 'x' cannot be written because its size (1,048,630 bytes) exceeds the maximum allowed size of 1,048,576 bytes."
-        )
+        raise InvalidArgument(message)
 
     monkeypatch.setattr(lifecycle, 'commit_v3_projection', too_large)
     blocked = []
-    monkeypatch.setattr(store, 'record_blocked', lambda uid, token, why: blocked.append(why))
+    monkeypatch.setattr(store, 'record_blocked', lambda uid, token, why, **kw: blocked.append(why))
     assert await service.reconcile('u') == 'blocked'
     assert blocked == ['document_too_large']
 
@@ -384,3 +389,22 @@ def test_other_invalid_arguments_still_raise(monkeypatch):
     monkeypatch.setattr(lifecycle, 'commit_v3_projection', bad)
     with pytest.raises(InvalidArgument):
         REAL_COMMIT('u', 't', {}, {}, [], [])
+
+
+@pytest.mark.asyncio
+async def test_handled_race_still_surfaces_lease_release_failure(builder, monkeypatch):
+    monkeypatch.setattr(store, 'load', lambda *a, **kw: ({'r': source()}, {}, []))
+    wakes = []
+
+    def conflict(*a, **kw):
+        raise Conflict('source_changed')
+
+    def release_failure(*_args):
+        raise RuntimeError('release failed after race')
+
+    monkeypatch.setattr(service, '_commit', conflict)
+    monkeypatch.setattr(service, 'enqueue', lambda uid, **_kwargs: wakes.append(uid))
+    monkeypatch.setattr(leases, 'release', release_failure)
+    with pytest.raises(RuntimeError, match='release failed after race'):
+        await service.reconcile('u')
+    assert wakes == ['u']

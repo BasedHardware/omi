@@ -39,6 +39,12 @@ def test_same_sentences_ignore_punctuation_case_diarization_and_account_for_orig
     assert all(text not in str(decision.evidence()) for text in SENTENCES)
 
 
+def test_parked_capture_is_ineligible_even_with_matching_speech():
+    first, second = row(), {**row(offset=5), 'deferred': True}
+    decision = matcher.measure_overlap_shared_speech(first, second)
+    assert not decision.would_join and decision.reason == 'ineligible'
+
+
 @pytest.mark.parametrize('case', ['silent', 'outside_overlap', 'time_shift', 'repetition', 'one_sentence', 'different'])
 def test_false_fold_classes_abstain(case):
     first, second = row(), row(offset=5)

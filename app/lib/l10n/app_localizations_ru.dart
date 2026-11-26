@@ -7078,6 +7078,26 @@ class AppLocalizationsRu extends AppLocalizations {
   String get authUnexpectedError => 'Непредвиденная ошибка при входе, пожалуйста, попробуйте снова';
 
   @override
+  String get accountSignInMethods => 'Способы входа';
+
+  @override
+  String get accountAddSignInMethod => 'Добавить способ входа';
+
+  @override
+  String get accountAddSignInMethodDetails =>
+      'Добавьте способ входа в этот аккаунт Omi. Ваш тариф, записи и интеграции останутся в этом аккаунте.';
+
+  @override
+  String get accountSignInConflictTitle => 'Этот способ входа привязан к другому аккаунту';
+
+  @override
+  String get accountSignInConflictDetails =>
+      'Вы по-прежнему в этом аккаунте. У каждого аккаунта Omi остаются свои тариф, записи и интеграции.';
+
+  @override
+  String get accountSignInMethodAdded => 'Способ входа добавлен';
+
+  @override
   String get authFailedToLinkGoogle => 'Не удалось связать с Google, пожалуйста, попробуйте снова.';
 
   @override
@@ -14408,6 +14428,9 @@ class AppLocalizationsRu extends AppLocalizations {
   String get processingProgress => 'Обработка ожидающих записей…';
 
   @override
+  String get waitingForTranscriptionAllowance => 'Ожидание доступной квоты на транскрипцию';
+
+  @override
   String get processingDeferred => 'Ожидает обработки';
 
   @override
@@ -15363,9 +15386,6 @@ class AppLocalizationsRu extends AppLocalizations {
   String get stopThese => 'Отключить такие';
 
   @override
-  String get meetingActionItemsTitle => 'Пункты действий';
-
-  @override
   String get addToTasks => 'Добавить в задачи';
 
   @override
@@ -15791,4 +15811,88 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get quietPayerCheck => 'Проверить';
+
+  @override
+  String get playManageSubscription => 'Управлять подпиской';
+
+  @override
+  String get playBilledByGoogle => 'Оплата через Google Play';
+
+  @override
+  String get playPurchasePending =>
+      'Платёж ожидает подтверждения. Omi Pro начнётся, как только Google Play его подтвердит.';
+
+  @override
+  String get playPurchaseOtherAccount => 'Эта покупка в Google Play принадлежит другому аккаунту Omi.';
+
+  @override
+  String get playPurchaseNotConfirmed => 'Пока не удалось подтвердить покупку. Мы попробуем снова автоматически.';
+
+  @override
+  String get playRenewalTerms =>
+      'Продлевается автоматически по указанной цене, пока вы не отмените. Управляйте подпиской или отменяйте её в Google Play.';
+
+  @override
+  String get playPaidAppUnavailable => 'Недоступно на Android';
+
+  @override
+  String get pageNotAvailableInApp => 'Эта страница недоступна в приложении.';
+
+  @override
+  String get shopOrderPlacedCheckEmail => 'Заказ оформлен. Подтверждение придёт на вашу почту.';
+
+  @override
+  String get prepaidCodeEntry => 'Есть код?';
+
+  @override
+  String get prepaidCodeTitle => 'Активировать код';
+
+  @override
+  String get prepaidCodeFieldHint => 'Введите ваш код';
+
+  @override
+  String get prepaidCodeRedeem => 'Активировать';
+
+  @override
+  String get prepaidCodeRedeemed => 'Код активирован';
+
+  @override
+  String prepaidCodeResult(String reason) {
+    String _temp0 = intl.Intl.selectLogic(
+      reason,
+      {
+        'invalid': 'Этот код недействителен. Проверьте его и попробуйте снова.',
+        'used': 'Этот код уже использован.',
+        'expired': 'Срок действия этого кода истёк.',
+        'hasPlan': 'У вас уже есть план. Ваш код не использован. Активируйте его после окончания плана.',
+        'notPrepaid': 'Этот код нельзя активировать здесь. Используйте его при выборе плана.',
+        'notEligible': 'Этот код нельзя использовать в этом аккаунте.',
+        'rateLimited': 'Слишком много попыток. Попробуйте позже.',
+        'other': 'Что-то пошло не так. Попробуйте снова.',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get playStripeBilledOnWeb => 'Оплата через omi.me. Отменить можно здесь в любое время.';
+
+  @override
+  String get playStripeBilledOnWebShort => 'Оплата через omi.me.';
+
+  @override
+  String playStripePlanPaused(String plan) {
+    return 'Ваш план $plan приостановлен.';
+  }
+
+  @override
+  String get firmwareNewestSupportedForDevice =>
+      'На вашем устройстве уже установлена последняя поддерживаемая версия прошивки';
+
+  @override
+  String get firmwareSyncRecordingsFirstTitle => 'Сначала синхронизируйте записи';
+
+  @override
+  String get firmwareSyncRecordingsFirstMessage =>
+      'Некоторые записи всё ещё находятся на устройстве. Дождитесь завершения их синхронизации с телефоном, а затем начните обновление.';
 }

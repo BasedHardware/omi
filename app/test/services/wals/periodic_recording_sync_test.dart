@@ -46,11 +46,9 @@ void main() {
         },
         drainLiveCapture: () async => throw StateError('must drain the backlog'),
         autoUploadEnabled: () => true,
-        onTransferStarted: () async {
+        acquireTransferLease: () async {
           holds++;
-        },
-        onTransferFinished: () async {
-          releases++;
+          return () async => releases++;
         },
       )..setForeground(false);
       await coordinator.wake(trigger);
@@ -99,11 +97,9 @@ void main() {
       drainLiveCapture: () async => throw StateError('must drain the backlog'),
       autoUploadEnabled: () => true,
       scheduleCooldown: (_, __) => cooldowns++,
-      onTransferStarted: () async {
+      acquireTransferLease: () async {
         holds++;
-      },
-      onTransferFinished: () async {
-        releases++;
+        return () async => releases++;
       },
     )..setForeground(false);
     addTearDown(coordinator.dispose);

@@ -24,6 +24,7 @@ from typing import Any, Callable, Dict, List, Optional, Set, Tuple
 from google.api_core import exceptions as google_exceptions
 
 import database.conversations as conversations_db
+from database.record_audio import fence_record_audio_removal
 from database import conversation_tombstones, conversations_v3_backfill_runs
 from database.conversation_merge_policy import source_has_merge_receipt
 from database._client import db as firestore_db
@@ -1003,16 +1004,9 @@ def delete_conversation_with_sync_sources(
     _purge_rederive_priors(uid, [conversation_id, *(row.get('sync_merged_from') or [])])
     for source_id in row.get('sync_merged_from', []):
         if source_id != conversation_id:
-            # The source row is destroyed below; without intent its from-segments
-            # session id would re-derive the same id on the next backlog retry and
-            # resurrect a merge donor the user deleted with the survivor. Best-effort:
-            # a tombstone write that cannot reach Firestore must not block the purge
-            # the user asked for (the caller's later from-segments retry re-checks the
-            # survivor's tombstone through the same module before recreating).
-            try:
-                conversation_tombstones.record_deletion(uid, source_id)
-            except Exception:
-                logger.exception('merge-source tombstone write failed uid=%s source=%s', uid, source_id)
+            # Erasure must invalidate the donor's custody fence before any
+            # prefix is removed. Leave the cascade retryable on write failure.
+            conversation_tombstones.record_deletion(uid, source_id)
             _delete_conversation_and_related_data(
                 uid,
                 source_id,
@@ -1056,6 +1050,8 @@ def _delete_conversation_and_related_data(
     - Vector embedding
     - Conversation document
     """
+    if merged_into and not retain_capture:
+        retain_capture = fence_record_audio_removal(uid, conversation_id)
     # Import here to avoid circular imports
     import database.action_items as action_items_db
 

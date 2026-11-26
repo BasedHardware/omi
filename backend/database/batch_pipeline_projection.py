@@ -4,6 +4,9 @@ No transcript bodies are copied into scheduler metadata. Durable completion is
 separate from the Redis client projection, and can repair a lost Redis reply.
 """
 
+from database.batch_coalescing_capabilities import advertise
+from database.batch_pipeline_upload_metrics import observe_completion
+
 from contextlib import nullcontext
 from datetime import datetime, timedelta, timezone
 import logging
@@ -14,11 +17,23 @@ from google.cloud import firestore
 
 from config.batch_pipeline import projection_followup_page_enabled, projection_source_deleted_enabled
 from config.record_latency import recent_native_record_notes, record_notes_eager_enabled
+from config.reliability_experiments import enabled as experiment
 from utils.enrichment import outbox as reprocess
 from database.outbox_firestore import FirestoreEnrichmentOutbox
 from config.sync_reprocess import settle_seconds
 from utils.batch_pipeline.held_terminal import OPERATOR_INTENTS, held_without_recovery
-from config.record_audio import require_record_audio_barrier
+from config.record_audio import record_identity, require_record_audio_barrier
+from config.server_batch import manual_end_marker_enabled
+from utils.conversations.v3 import metrics as v3_metrics, triggers as v3_triggers
+from utils.conversations.v3.live import (
+    FINISH_FIELDS,
+    FINISH_RECORDING_FIELD,
+    FINISH_SOURCE_FIELDS,
+    FINISH_WINDOW_FIELD,
+    active,
+    has_finish_content,
+)
+from utils.batch_pipeline.empty_transcription import EMPTY_OUTCOMES
 from database.batch_pipeline_policy import load_stage_policy
 from database.batch_pipeline_delivered_share import delivery_stamp
 from database.batch_pipeline_shadow_hook import mirror_refresh
@@ -27,6 +42,7 @@ from database.fsr_read_cache import writing
 from database.monthly_usage_totals import queue_increment
 from database.batch_pipeline_store import FirestoreStore
 from database import batch_pipeline_coalescing_completion as coalescing_completion
+from database import sync_jobs
 from database.batch_pipeline_projection_finish import (
     PROJECTION_FINISH_ASYNC_CLOCK,
     PROJECTION_FINISH_DUE_FIELD,
@@ -82,6 +98,11 @@ def usage_stamp(now: datetime, usage_period: Any) -> datetime:
 class ProjectionStore:
     def __init__(self, store: FirestoreStore):
         self.store = store
+        try:
+            advertise(store)
+        except Exception:
+            # Missing capability advertisement keeps producers on legacy packing.
+            logger.warning('event=batch_coalescing outcome=capability_unavailable')
 
     @property
     def client(self):
@@ -126,6 +147,20 @@ class ProjectionStore:
             )
         except Exception:
             logger.warning('event=free_allowance_lease decision=settlement_unavailable')
+
+    @staticmethod
+    def _wake_receipt_waiters(binding: ProjectionBinding, members: list[tuple[str, str]]) -> None:
+        """Publish the completed upload's job id, and each coalesced member's own handle.
+
+        Best-effort: the ledger is authoritative and a waiter rechecks on expiry, so a
+        Redis fault must neither fail nor undo a completion that already committed.
+        """
+        for job_id in (binding.job_id, *(member for _, member in members)):
+            try:
+                sync_jobs.leave_receipt_note(binding.owner_id, job_id)
+                sync_jobs.r.publish(sync_jobs.receipt_channel(binding.owner_id), job_id)
+            except Exception as error:
+                logger.warning('sync receipt wake unavailable exception_type=%s', type(error).__name__)
 
     @staticmethod
     def _wake_notes(outbox: FirestoreEnrichmentOutbox, row_id: str, token: str) -> None:
@@ -796,16 +831,23 @@ class ProjectionStore:
         coalescing_receipts: list[tuple[str, str]] = []
         notes_wakes = []
         sealed_proofs: list[str] = []
+        delivered_uploads = []
+        completion_upload = {}
+        finish_resolution: list[tuple[str, str]] = []
 
         @firestore.transactional
         def commit(transaction):
             nonlocal completion_accounting
+            finish_resolution.clear()
             coalescing_receipts.clear()
             zero_speech = accounting is None
             notes_wakes.clear()
             sealed_proofs.clear()
+            delivered_uploads.clear()
             session = self.session(segment_id, binding, now, policy=policy)
             session.prepare(transaction, replay=False)
+            completion_upload.clear()
+            completion_upload.update(session.ledger)
             if zero_speech and (
                 binding.record_origin
                 or binding.native_record
@@ -832,6 +874,7 @@ class ProjectionStore:
             members = coalescing_completion.prepare(
                 self.client, self.store.namespace, transaction, binding, session.ledger
             )
+            delivered_uploads.extend(member for _, _, member, _ in members)
             coalescing_receipts.extend(
                 ('intakes', member['job_id']) for member in (session.ledger.get('coalescing') or {}).get('members', [])
             )
@@ -841,6 +884,7 @@ class ProjectionStore:
             erased_count = 0
             captured_seconds = 0.0
             terminal_empty_count = 0
+            silent_count = 0
             for sibling in binding.segment_ids:
                 if zero_speech and sibling == segment_id:
                     job, entry = session.job, session.entry
@@ -882,6 +926,8 @@ class ProjectionStore:
                     receipts.append({'state': 'ready', 'conversation_id': None, 'created': False})
                     erased_count += 1
                     continue
+                if entry.get('result', {}).get('outcome') in EMPTY_OUTCOMES:
+                    silent_count += 1
                 if entry.get('result', {}).get('outcome') == 'no_recoverable_speech':
                     terminal_empty_count += 1
                 live_siblings.append(sibling)
@@ -982,6 +1028,33 @@ class ProjectionStore:
             )
             if seconds != completion_accounting['seconds']:
                 raise ProjectionBlocked('speech accounting changed during completion')
+            cid = binding.target_conversation_id
+            silent = silent_count == len(binding.segment_ids) or result['outcome'] == 'expected_silence'
+            recording_ref = None
+            finish_update = {}
+            finish_outcome = 'whole_record_resolved_empty'
+            if (
+                cid
+                and binding.native_record
+                and not binding.partial_record
+                and not (result.get('reason_code') or erased_count or superseded_count or deleted_output_count)
+                and manual_end_marker_enabled()
+            ):
+                content, _ = record_identity(binding.owner_id, cid)
+                if binding.content_id == content and binding.job_id == 'bp_' + content:
+                    collection = self.client.collection('users').document(binding.owner_id).collection('conversations')
+                    recording_ref = collection.document(cid)
+                    row = conversation_rows.get(cid)
+                    if row is None:
+                        row = (
+                            recording_ref.get(transaction=transaction, field_paths=FINISH_SOURCE_FIELDS).to_dict() or {}
+                        )
+                    if silent or len(binding.segment_ids) > 1 or row.get(FINISH_RECORDING_FIELD):
+                        finish_update = self._v3_finish_update(transaction, collection, cid, row, silent, session, now)
+                    if finish_update.get('v3_manual_end'):
+                        finish_outcome = 'whole_record_consumed'
+                    elif row.get('sync_merged_into'):
+                        finish_outcome = 'whole_record_redirected'
             if (
                 record_notes_eager_enabled()
                 and not source_deleted
@@ -1106,6 +1179,9 @@ class ProjectionStore:
                             notes_wakes.append((outbox, row_id, token))
                 for ref, data in writes:
                     transaction.set(ref, data)
+            if finish_update and recording_ref is not None:
+                transaction.update(recording_ref, finish_update)
+                finish_resolution.append((recording_ref.id, finish_outcome))
             if not source_deleted:
                 self._commit_usage(
                     transaction, session.ledger_ref, session.ledger, binding, completion_accounting, seconds, now
@@ -1145,6 +1221,25 @@ class ProjectionStore:
             else writing('usage_month_cache', binding.owner_id)
         ):
             result, changed, seconds = self.run(commit, policy=policy)
+        # Only a first durable publication owns the upload sample. Observe it
+        # before post-commit work that could fail and leave a replay to finish.
+        observe_completion(
+            completion_upload,
+            delivered_uploads,
+            merged=bool(coalescing_receipts),
+            changed=changed,
+            result=result,
+            now=now,
+        )
+        if changed and not binding.native_record and experiment('receipt_long_poll', binding.owner_id):
+            # Experiment receipt_long_poll: the upload's durable status just became completed.
+            # Wake its waiters now that the ledger is committed, as a finished legacy job does.
+            self._wake_receipt_waiters(binding, coalescing_receipts)
+        if finish_resolution:
+            recording_id, outcome = finish_resolution[0]
+            v3_metrics.FINISH_NO_POINTER.labels(outcome).inc()
+            if outcome == 'whole_record_consumed':
+                v3_triggers.enqueue_pending(binding.owner_id, manual_end_id=recording_id)
         if changed:
             # Before any notes wake: the woken callback's seal proof reads this stage.
             self._observe_transcription(binding, now, completion_accounting, result)
@@ -1161,6 +1256,53 @@ class ProjectionStore:
                 logger.info('event=batch_projection action=completion outcome=source_deleted')
             record_correctness('projection_completed', seconds=seconds)
         return result
+
+    def _v3_finish_update(self, transaction, collection, cid, row, silent, session, now):
+        window_id = row.get(FINISH_WINDOW_FIELD)
+        upload_revision = session.job.get('record_input_upload_revision')
+        if (
+            not (window_id or row.get(FINISH_RECORDING_FIELD))
+            or not row.get('v3_manual_end_requested')
+            or row.get('v3_manual_end')
+            or any(row.get(k) for k in ('record_audio_partial', 'record_upload_failed', 'is_locked'))
+            or row.get('data_protection_level') == 'private'
+            or (upload_revision is not None and upload_revision != row.get('record_upload_revision'))
+        ):
+            return {}
+        if row.get('sync_merged_into'):
+            # A redirect proves custody, but the survivor may contain speech beyond this recording's cut.
+            return {'v3_manual_end_requested': False} if row.get(FINISH_RECORDING_FIELD) is True else {}
+        if (
+            row.get('deleted')
+            or not row.get('recording')
+            or row.get('status') != 'completed'
+            or not row.get('finished_at')
+        ):
+            return {}
+        clock = datetime.fromtimestamp(now, timezone.utc)
+        if silent and not window_id:
+            if row.get('discarded') or not has_finish_content(row, {}, cid):
+                return {'v3_manual_end_requested': False}
+        elif silent:
+            window = (
+                collection.document(window_id).get(transaction=transaction, field_paths=FINISH_FIELDS).to_dict() or {}
+            )
+            if (
+                row.get('discarded')
+                or not active([window], clock)
+                or window.get('is_locked')
+                or row['finished_at'] < (window.get('finished_at') or row['finished_at'])
+                or cid not in (window.get('v3_recording_ids') or ())
+                or not has_finish_content(row, window, cid)
+            ):
+                return {'v3_manual_end_requested': False}
+        elif row.get('discarded') or not row.get('record_projection_revision'):
+            return {}
+        return {
+            'v3_manual_end': True,
+            'v3_pending': True,
+            'v3_pending_since': row.get('v3_pending_since') or clock,
+        }
 
     def _visible(
         self, transaction, binding: ProjectionBinding, receipts, *, source_deleted=False, rows_out=None
@@ -1193,11 +1335,12 @@ class ProjectionStore:
                 )
                 if not row or (row.get('deleted') and not row.get('sync_merged_into')):
                     raise ProjectionBlocked('projected conversation deleted')
-                if not row.get('sync_merged_into'):
-                    if rows_out is not None:
-                        rows_out[cid] = row
+                target = row.get('sync_merged_into')
+                if rows_out is not None and (not target or cid == binding.target_conversation_id):
+                    rows_out[cid] = row
+                if not target:
                     break
-                cid = row['sync_merged_into']
+                cid = target
             if cid:
                 mapped.append((cid, receipt['created'] and cid == original_id))
         new = sorted({cid for cid, created in mapped if created})

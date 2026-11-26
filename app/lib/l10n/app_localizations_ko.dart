@@ -6954,6 +6954,24 @@ class AppLocalizationsKo extends AppLocalizations {
   String get authUnexpectedError => '로그인 중 예기치 않은 오류가 발생했습니다. 다시 시도해 주세요';
 
   @override
+  String get accountSignInMethods => '로그인 방법';
+
+  @override
+  String get accountAddSignInMethod => '로그인 방법 추가';
+
+  @override
+  String get accountAddSignInMethodDetails => '이 Omi 계정에 로그인할 방법을 추가하세요. 요금제, 녹음, 연동은 이 계정에 그대로 유지됩니다.';
+
+  @override
+  String get accountSignInConflictTitle => '이 로그인 방법은 다른 계정에 연결되어 있습니다';
+
+  @override
+  String get accountSignInConflictDetails => '현재 계정에 로그인된 상태입니다. 요금제, 녹음, 연동은 각 Omi 계정에 그대로 유지됩니다.';
+
+  @override
+  String get accountSignInMethodAdded => '로그인 방법이 추가되었습니다';
+
+  @override
   String get authFailedToLinkGoogle => 'Google 연결에 실패했습니다. 다시 시도해 주세요.';
 
   @override
@@ -14159,6 +14177,9 @@ class AppLocalizationsKo extends AppLocalizations {
   String get processingProgress => '대기 중인 녹음을 처리하는 중…';
 
   @override
+  String get waitingForTranscriptionAllowance => '사용 가능한 전사 한도를 기다리는 중';
+
+  @override
   String get processingDeferred => '처리 대기 중';
 
   @override
@@ -15093,9 +15114,6 @@ class AppLocalizationsKo extends AppLocalizations {
   String get stopThese => '이 유형 중지';
 
   @override
-  String get meetingActionItemsTitle => '실행 항목';
-
-  @override
   String get addToTasks => '작업에 추가';
 
   @override
@@ -15516,4 +15534,84 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get quietPayerCheck => '확인';
+
+  @override
+  String get playManageSubscription => '구독 관리';
+
+  @override
+  String get playBilledByGoogle => 'Google Play에서 청구됩니다';
+
+  @override
+  String get playPurchasePending => '결제가 대기 중입니다. Google Play에서 확인되면 Omi Pro가 시작됩니다.';
+
+  @override
+  String get playPurchaseOtherAccount => '이 Google Play 구매는 다른 Omi 계정에 속해 있습니다.';
+
+  @override
+  String get playPurchaseNotConfirmed => '아직 구매를 확인하지 못했습니다. 자동으로 다시 시도합니다.';
+
+  @override
+  String get playRenewalTerms => '해지할 때까지 표시된 가격으로 자동 갱신됩니다. Google Play에서 언제든지 관리하거나 해지할 수 있습니다.';
+
+  @override
+  String get playPaidAppUnavailable => 'Android에서는 사용할 수 없음';
+
+  @override
+  String get pageNotAvailableInApp => '이 페이지는 앱에서 볼 수 없습니다.';
+
+  @override
+  String get shopOrderPlacedCheckEmail => '주문이 완료되었습니다. 확인 메일을 확인하세요.';
+
+  @override
+  String get prepaidCodeEntry => '코드가 있나요?';
+
+  @override
+  String get prepaidCodeTitle => '코드 사용';
+
+  @override
+  String get prepaidCodeFieldHint => '코드를 입력하세요';
+
+  @override
+  String get prepaidCodeRedeem => '사용';
+
+  @override
+  String get prepaidCodeRedeemed => '코드가 적용되었습니다';
+
+  @override
+  String prepaidCodeResult(String reason) {
+    String _temp0 = intl.Intl.selectLogic(
+      reason,
+      {
+        'invalid': '유효하지 않은 코드입니다. 확인 후 다시 시도하세요.',
+        'used': '이미 사용된 코드입니다.',
+        'expired': '만료된 코드입니다.',
+        'hasPlan': '이미 플랜이 있습니다. 코드는 사용되지 않았습니다. 플랜이 끝난 후에 사용하세요.',
+        'notPrepaid': '이 코드는 여기에서 사용할 수 없습니다. 플랜을 선택할 때 사용하세요.',
+        'notEligible': '이 계정에서는 이 코드를 사용할 수 없습니다.',
+        'rateLimited': '시도 횟수가 너무 많습니다. 나중에 다시 시도하세요.',
+        'other': '문제가 발생했습니다. 다시 시도하세요.',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get playStripeBilledOnWeb => 'omi.me를 통해 청구됩니다. 여기에서 언제든 취소할 수 있습니다.';
+
+  @override
+  String get playStripeBilledOnWebShort => 'omi.me를 통해 청구됩니다.';
+
+  @override
+  String playStripePlanPaused(String plan) {
+    return '$plan 플랜이 일시 중지되었습니다.';
+  }
+
+  @override
+  String get firmwareNewestSupportedForDevice => '기기가 이미 지원되는 최신 펌웨어 버전을 사용하고 있습니다';
+
+  @override
+  String get firmwareSyncRecordingsFirstTitle => '먼저 녹음을 동기화하세요';
+
+  @override
+  String get firmwareSyncRecordingsFirstMessage => '일부 녹음이 아직 기기에 남아 있습니다. 휴대폰으로의 동기화가 완료되면 업데이트를 시작해 주세요.';
 }

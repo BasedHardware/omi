@@ -37,6 +37,8 @@ STAGING_DIFF_ALLOWLIST: tuple[str, ...] = (
     'FIREBASE_SIGNER_SERVICE_ACCOUNT',
     '*_SERVICE_ACCOUNT',
     '*_INVOKER_SA',
+    # Google Play Billing push identity: prod-only, empty (routes closed) in staging.
+    'PLAY_RTDN_PUSH_SA',
     'OMI_DEPLOYMENT',
     '*_CEILING_USD',
     '*_DAILY_USD',

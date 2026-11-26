@@ -223,10 +223,10 @@ when the peer opts in with the WebSocket query `audio_custody=1`.
 The event carries the receipt and per-frame source mappings when supplied by
 the client. Unknown mappings cannot release a device WAL. Pusher can emit
 opcode 203 with the same receipt when the caller opts in with
-`audio_custody=1`; legacy peers receive no new opcode. Existing
-`capture_committed` remains a transcript receipt. Client adoption of audio-only
-WAL release is a separate compatibility/deployment requirement; this server
-change cannot certify the retention behavior of already installed legacy apps.
+`audio_custody=1`; legacy peers receive no new opcode. Capable phone builds journal receipts in shadow. Their
+`custody_durable_audio_release` switch opts into synced retention once every local frame
+matches durable evidence. A `capture_committed` range contributes only frames in its
+explicit `audio_custody` binding. Earlier builds retain their existing upload path.
 Windowed custody increases time-to-ACK and client WAL retention from roughly
 one relay cycle to pack completion: up to an active 60-second pack plus storage
 latency for audio-only receipts (or an earlier boundary). A coalesced coverage
@@ -313,6 +313,22 @@ Known-deleted retained owners use the existing gone-owner disposition before
 retry. Close, abandon and marker operations remain ungated on their metadata
 executor. No ACK means the source WAL must retain and replay. This does not
 measure listen's re-offer cadence or certify installed client WAL behavior.
+
+A durable dispatch that fails or is cancelled before its receipt has no known
+storage outcome. That socket settles exactly one terminal disposition instead of
+raising on every later flush: the fence closes, the retained window and its
+producer token stay unacknowledged for WAL replay, and the socket closes once
+with `1011` (`event=pusher_receive_failed`) rather than ending in a repeated
+unhandled `custody commit unresolved` traceback per tail. Later flushes and the
+shutdown tail return without rerunning storage or emitting a second record. The
+disposition is `event=durable_custody_commit_disposition disposition=unresolved
+stage=commit|window_tail exception_type=<class> raised_by=<frame>`. The
+settlement records one `omi_audio_custody_would_drop_total{stage}` and leaves
+`omi_audio_custody_failures_total` to the storage helper, which already records
+the dispatch fault as `stage="commit"` before re-raising; a live failure is
+therefore one failure series, never two. A refusal (a known non-commit) is not a
+disposition and keeps its existing no-error-close behavior. The disposition is
+socket-local; it is not persisted and no other service reads it.
 
 `omi_pusher_storage_pcm_inflight_bytes` measures submitted custody PCM. When
 admission is enabled, accounting and capacity remain held until storage actually

@@ -55,7 +55,7 @@ def test_outline_labels_are_stretch_local_and_abstentions_share_one_label(monkey
 
 
 def test_six_short_topics_fold_into_one_visible_517_word_card():
-    raw = recording([segment(i * 2, count) for i, count in enumerate([25, 181, 80, 100, 65, 66])])
+    raw = recording([segment(i * 2, count) for i, count in enumerate([25, 140, 80, 100, 65, 107])])
     groups = outline.stretches([raw], AT + timedelta(minutes=10))
     entries = [[entry(i) for i in range(1, 7)]]
     legacy = planner.windows(groups, entries)
@@ -70,7 +70,7 @@ def test_six_short_topics_fold_into_one_visible_517_word_card():
 
 
 def test_silence_does_not_pool_word_eligibility():
-    raw = recording([segment(0, 260), segment(302, 260)])
+    raw = recording([segment(0, 130), segment(302, 130)])
     groups = outline.stretches([raw], AT + timedelta(minutes=20))
     windows = planner.windows(groups, [[entry(1)], [entry(1)]], cohesion=True)
     assert len(windows) == 2
@@ -96,7 +96,7 @@ def test_manual_cut_preserves_whole_straddling_segment_and_open_short_tail():
 
 def test_cap_does_not_pool_word_eligibility(monkeypatch):
     monkeypatch.setattr(planner, 'CAP', timedelta(seconds=10))
-    raw = recording([segment(0, 200), segment(8, 50), segment(16, 200)])
+    raw = recording([segment(0, 100), segment(8, 25), segment(16, 100)])
     groups = outline.stretches([raw], AT + timedelta(minutes=10))
     windows = planner.windows(groups, [[entry(1), entry(2), entry(3)]], cohesion=True)
     assert len(windows) == 2

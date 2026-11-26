@@ -1,0 +1,47 @@
+{
+  "version": 1,
+  "images": [
+    {
+      "file": "001-mobile-android-play-plans-code-entry.png",
+      "platform": "mobile-android",
+      "description": "Play build Plans & Billing, free reader: Have a code? under Subscribe, Restore and the Play disclosure (widget render, default text)",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "002-mobile-android-play-plans-code-entry-xxxl.png",
+      "platform": "mobile-android",
+      "description": "Same sheet at the largest text size: price stacks under the title, entry still last",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "003-mobile-android-trial-paywall-code-entry.png",
+      "platform": "mobile-android",
+      "description": "Play build trial paywall, free reader: Have a code? under Try for Free and the Play disclosure (default text)",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "004-mobile-android-trial-paywall-code-xxxl.png",
+      "platform": "mobile-android",
+      "description": "Trial paywall at the largest text size: notes scroll with the page, entry under the Play disclosure",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "005-mobile-android-payment-row-plan-paused.png",
+      "platform": "mobile-android",
+      "description": "Home payment row on a Play build: neutral 'Your Omi Pro plan is paused.' (default text)",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "006-mobile-android-payment-row-plan-paused-xxxl.png",
+      "platform": "mobile-android",
+      "description": "Same row at the largest text size",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    }
+  ]
+}

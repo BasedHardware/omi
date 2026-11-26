@@ -1,0 +1,3 @@
+{
+  "change": "Offline Sync can skip uploading a recording after the phone verifies that the server already holds every audio frame."
+}

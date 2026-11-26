@@ -46,8 +46,7 @@ def gate_values(mode):
 @pytest.mark.parametrize('ordered', [False, True])
 async def test_duplicate_ack_must_not_reanchor_to_previous_control(monkeypatch, ordered):
     """Reviewer's exact F1=2760, F2=2880, F3=3000 false persistence repro."""
-    monkeypatch.setenv('SONIOX_ORDERED_FINALIZE', str(ordered).lower())
-    receiver, epoch, processor, store, leg, peer, _ = await setup_peer(monkeypatch)
+    receiver, epoch, processor, store, leg, peer, _ = await setup_peer(monkeypatch, ordered=ordered)
     try:
         send_observed(receiver, leg, 42732)
         leg.finalize()
@@ -79,8 +78,7 @@ async def test_duplicate_ack_must_not_reanchor_to_previous_control(monkeypatch, 
 @pytest.mark.parametrize('ordered', [False, True])
 @pytest.mark.parametrize('bad', ['verified_duplicate', 'unsolicited', 'combined', 'mismatch', 'malformed', 'overlap'])
 async def test_association_loss_survives_many_clean_looking_acks(monkeypatch, ordered, bad):
-    monkeypatch.setenv('SONIOX_ORDERED_FINALIZE', str(ordered).lower())
-    receiver, epoch, processor, store, leg, peer, _ = await setup_peer(monkeypatch)
+    receiver, epoch, processor, store, leg, peer, _ = await setup_peer(monkeypatch, ordered=ordered)
     try:
         send_observed(receiver, leg, 42732)
         if bad != 'unsolicited':
@@ -118,8 +116,7 @@ async def test_association_loss_survives_many_clean_looking_acks(monkeypatch, or
 @pytest.mark.asyncio
 @pytest.mark.parametrize('ordered', [False, True])
 async def test_new_idle_transport_recovers_after_old_association_loss(monkeypatch, ordered):
-    monkeypatch.setenv('SONIOX_ORDERED_FINALIZE', str(ordered).lower())
-    receiver, epoch, processor, store, leg, peer, _ = await setup_peer(monkeypatch)
+    receiver, epoch, processor, store, leg, peer, _ = await setup_peer(monkeypatch, ordered=ordered)
     transports = [leg.raw]
 
     async def connect(callback):
@@ -160,7 +157,6 @@ async def test_new_idle_transport_recovers_after_old_association_loss(monkeypatc
 @pytest.fixture
 async def gate_accounting_peer(monkeypatch, request):
     ordered = request.node.callspec.params['ordered']
-    monkeypatch.setenv('SONIOX_ORDERED_FINALIZE', str(ordered).lower())
     mode = 'ordered' if ordered else 'reported'
     before = gate_values(mode)
     gauge = (
@@ -173,7 +169,7 @@ async def gate_accounting_peer(monkeypatch, request):
         outcome: soniox_wire_metrics.ordered_finalize_metrics().labels(outcome=outcome)._value.get()
         for outcome in ('verified', 'mismatch', 'unverified')
     }
-    receiver, _, _, _, leg, peer, _ = await setup_peer(monkeypatch)
+    receiver, _, _, _, leg, peer, _ = await setup_peer(monkeypatch, ordered=ordered)
     yield receiver, leg, peer, mode, before, gauge, states, occupancy, lost_before, ordered_before
     await close(leg)
 
@@ -252,7 +248,6 @@ async def test_gate_counts_successful_controls_once_and_releases_occupancy(
 
 @pytest.mark.asyncio
 async def test_reported_pcm_race_recovers_only_with_association_intact(monkeypatch):
-    monkeypatch.setenv('SONIOX_ORDERED_FINALIZE', 'false')
     metric = soniox_wire_metrics.finalize_gate_metrics().recoveries.labels(mode='reported')
     previous = metric._value.get()
     receiver, _, _, _, leg, peer, _ = await setup_peer(monkeypatch)
@@ -282,7 +277,6 @@ async def test_r16_parity_receipt(monkeypatch):
     adversarial = os.getenv('R16_ADVERSARIAL', 'false') == 'true'
     idle_reopen = os.getenv('R16_IDLE', 'false') == 'true'
     monkeypatch.setenv('SONIOX_WIRE_LEDGER', str(wire_on).lower())
-    monkeypatch.setenv('SONIOX_ORDERED_FINALIZE', 'false')
     monkeypatch.setattr(soniox.time, 'monotonic', lambda: 100.0)
     ids = iter(range(1, 100))
     monkeypatch.setattr(soniox_capture_uuid, 'uuid4', lambda: UUID(int=next(ids)))

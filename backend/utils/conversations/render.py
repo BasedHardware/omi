@@ -286,6 +286,8 @@ def redact_conversation_for_integration(conv: Dict[str, Any]) -> Dict[str, Any]:
     conv.pop('geolocation', None)
     # Server-computed capture badge stays on app views, outside the integration contract.
     conv.pop('capture_coverage', None)
+    # Per-recording allowance/processing evidence is for the authenticated app views.
+    conv.pop('transcription_admission', None)
     # First-party speaker-exclusion state is not part of the public integration
     # contract either; stays on app views (same §capture_coverage precedent).
     conv.pop('excluded_speakers', None)

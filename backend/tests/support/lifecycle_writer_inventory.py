@@ -1,6 +1,21 @@
 """Reviewed payload sites, including values/keys and duplicate sites. Never refresh in a test."""
 
 FIELD_SITES = {
+    # An End answered while its conversation is still open projects processing into the HTTP response
+    # only (flag end_open_conversation). Nothing is stored.
+    'utils/conversations/v3/end_answer.py': [
+        ('ended_conversation', 'status', 'ConversationStatus.processing', ('status',)),
+    ],
+    # A per-frame verdict (text or empty) in an upload's status result (flag batch_frame_outcomes). Not a
+    # lifecycle state: the key is a range's own label.
+    'utils/batch_pipeline/frame_outcomes.py': [
+        ('completed_ranges', 'status', 'status', ('capture_root', 'clock_epoch', 'end', 'start', 'status')),
+    ],
+    # Finish projects processing into the HTTP response. Only the v3 builder stores window status.
+    'utils/conversations/v3/finish.py': [
+        ('_acknowledge', 'status', 'ConversationStatus.completed', ('status',)),
+        ('_acknowledge', 'status', 'ConversationStatus.processing', ('status',)),
+    ],
     'database/batch_summary_debt.py': [
         ('arm_projection_summary', 'summary_due_at', "candidate['summary_due_at']", ('summary_due_at',)),
         (
@@ -91,6 +106,26 @@ FIELD_SITES = {
             ),
         ),
     ],
+    # Frozen owner-scoped reply nested in the WAL witness; never writes conversation status.
+    'database/record_wal_duplicate.py': [
+        (
+            '_completed_status',
+            'status',
+            "'completed'",
+            (
+                'failed_segments',
+                'job_id',
+                'lane',
+                'poll_after_ms',
+                'processed_segments',
+                'result',
+                'status',
+                'successful_segments',
+                'total_files',
+                'total_segments',
+            ),
+        ),
+    ],
     # Client polling adapter only; never writes conversation lifecycle status.
     'database/record_wal_handoff.py': [
         (
@@ -124,11 +159,14 @@ FIELD_SITES = {
                 'structured',
                 'summary_covers_through',
                 'title_locked',
+                'v3_backfill_attempts',
+                'v3_backfill_process_pending',
                 'v3_notes_written',
                 'v3_process_attempts',
                 'v3_process_failed',
                 'v3_process_failure_reason',
                 'v3_process_fingerprint',
+                'v3_process_pending',
                 'v3_rewrites',
             ),
         ),
@@ -170,6 +208,7 @@ FIELD_SITES = {
         ('plan_partitions', 'status', "'pending'", ('documents', 'forced_cut', 'since', 'status', 'until')),
         ('resume_run', 'status', "'pending'", ('status',)),
         ('resume_run', 'status', "(run or {}).get('status')", ('outcome', 'status')),
+        ('run_step', 'status', "'blocked'", ('notes_failed', 'notes_processed', 'notes_remaining', 'reason', 'status')),
         ('run_step', 'status', "'blocked'", ('reason', 'status')),
         ('run_step', 'status', "'committed'", ('status',)),
         ('run_step', 'status', "'deriving'", ('code_sha', 'status')),
@@ -405,7 +444,20 @@ FIELD_SITES = {
             'enqueue.commit',
             'state',
             "'holding'",
-            ('bytes', 'files', 'first_accept_at', 'id', 'key', 'members', 'release_by', 'scan_at', 'seconds', 'state'),
+            (
+                'bytes',
+                'files',
+                'first_accept_at',
+                'id',
+                'key',
+                'members',
+                'profile',
+                'release_by',
+                'scan_at',
+                'seconds',
+                'state',
+                'window_seconds',
+            ),
         ),
         (
             'enqueue.commit',
@@ -1442,6 +1494,7 @@ FIELD_SITES = {
         ),
         ('_record_meeting_receipt_txn', 'status', "'fenced'", ('status',)),
         ('_record_meeting_receipt_txn', 'status', "'fenced'", ('status',)),
+        ('_record_meeting_receipt_txn', 'status', "'fenced'", ('status',)),
         ('_record_meeting_receipt_txn', 'status', "'identity_mismatch'", ('status',)),
         ('_record_meeting_receipt_txn', 'status', "'missing'", ('status',)),
         ('_record_meeting_receipt_txn', 'status', "'recorded'", ('job_id', 'status')),
@@ -1656,6 +1709,9 @@ FIELD_SITES = {
             ('client_mutation_id', 'conversation', 'conversation_id', 'status'),
         ),
     ],
+    'database/conversation_parked_status.py': [
+        ('settle_in_transaction', 'status', "'completed'", ('status',)),
+    ],
     'database/conversation_processing_recovery.py': [
         ('_complete_orphan_conversation_txn', 'status', "'completed'", ('status',)),
         ('_complete_unstampable_orphan_conversation_txn', 'status', "'completed'", ('status',)),
@@ -1703,6 +1759,9 @@ FIELD_SITES = {
             ),
         ),
         ('ensure_quiet_check_progress.repair', 'status', "'quiet_done'", ('reconcile_after_at', 'status')),
+    ],
+    'database/conversation_tombstones.py': [
+        ('accept_deletion.body', 'status', "'completed'", ('status',)),
     ],
     'database/conversation_terminal_title.py': [
         (
@@ -3385,6 +3444,7 @@ FIELD_SITES = {
     ],
     'utils/conversations/process_conversation.py': [
         ('_store_budget_waiting', 'status', 'ConversationStatus.completed', ('status',)),
+        ('_store_deferred_conversation', 'status', 'ConversationStatus.completed', ('status',)),
         ('_store_deferred_conversation', 'status', 'ConversationStatus.processing', ('status',)),
         ('process_conversation', 'status', 'ConversationStatus.completed', ('status',)),
         ('process_conversation', 'status', 'ConversationStatus.completed', ('status',)),
@@ -3424,6 +3484,10 @@ FIELD_SITES = {
         ('stamp_projection_debt', 'summary_due_at', 'accepted + deadline_seconds()', ('summary_due_at',)),
         ('stamp_projection_debt', 'summary_first_pending_at', 'accepted', ('summary_first_pending_at',)),
     ],
+    # The one settled stamp every completed-status writer splats or applies (not the claim's family).
+    'utils/conversations/terminal_settled.py': [
+        ('settle', 'terminal_family_at', 'now', ('terminal_family_at',)),
+    ],
     'utils/conversations/transcript_for_llm.py': [
         ('render_cluster_transcript', 'status', "'resolved' if resolution_available else 'unavailable'", ('status',))
     ],
@@ -3451,7 +3515,6 @@ FIELD_SITES = {
                 'usage_unknown',
             ),
         ),
-        ('run_pass', 'status', "'not_admitted'", ('levers', 'reason', 'status', 'trigger')),
         ('run_pass', 'status', "'not_admitted'", ('reason', 'status')),
         ('run_pass', 'status', "'not_admitted'", ('reason', 'status')),
         ('run_pass', 'status', "'not_admitted'", ('reason', 'status')),
@@ -4198,13 +4261,7 @@ FIELD_SITES = {
     ],
     'utils/memory/memory_service.py': [
         (
-            'MemoryService._write_historical_override',
-            'status',
-            'status.value',
-            ('memory_id', 'origin', 'public_id', 'status', 'uid', 'updated_at'),
-        ),
-        (
-            'MemoryService._write_historical_overrides',
+            'MemoryService._historical_override_payload',
             'status',
             'status.value',
             ('memory_id', 'origin', 'public_id', 'status', 'uid', 'updated_at'),
@@ -4440,6 +4497,7 @@ FIELD_SITES = {
     'utils/processing_backlog.py': [
         ('allowance_increased.limit', 'status', "'active'", ('current_period_end', 'status'))
     ],
+    'utils/prepaid_code_redemption.py': [('_result', 'status', "'redeemed'", ('ends_at', 'months', 'plan', 'status'))],
     'utils/promotion_redemption.py': [
         (
             'redeem_promotion_code',
@@ -4772,6 +4830,8 @@ FIELD_SITES = {
     'utils/workers/retry.py': [('retry_response', 'status', "'retry'", ('reason', 'status'))],
     'utils/conversations/transcribing_hold.py': [
         ('project', 'status', "'completed' if status == 'failed' else status", ('status', 'structured')),
+        # Current same-owner job evidence changes only the list/detail wire copy.
+        ('project', 'status', "'processing'", ('status', 'structured', 'summary_retryable', 'transcription_admission')),
         # API response only; never sent to a lifecycle persistence helper.
         ('retry_wire', 'status', "'processing'", ('home_step', 'status', 'structured', 'summary_retryable')),
     ],
@@ -4787,10 +4847,16 @@ FIELD_SITES = {
 # Unclassified sites remain visible pending the typed-outcome redesign.
 KNOWN_TERMINAL_WRITERS = {
     'conversation': {
+        # A terminal-empty acknowledgement is an HTTP projection, with no conversation status write.
+        ('utils/conversations/v3/finish.py', '_acknowledge'): 'response_only',
         (
             'database/conversations_v3.py',
             'commit_projection.commit',
         ): 'known_extra_writer: lifecycle v3 projection; lease/revision/claim fenced',
+        (
+            'database/conversations_v3.py',
+            'undo_backfill_group.undo',
+        ): 'known_extra_writer: backfill undo restores converted donors and removes backfill copies; backfill lease fenced',
         (
             'utils/conversations/v3/service.py',
             'recording_short_path.guarded',
@@ -4819,6 +4885,7 @@ KNOWN_TERMINAL_WRITERS = {
             '_terminalize_exhausted_requeued_job_txn',
         ): 'known_extra_writer: dead_letter',
         ('database/conversation_merge_jobs.py', 'finish_recovery.commit'): 'unclassified',
+        ('database/conversation_tombstones.py', 'accept_deletion.body'): 'known_extra_writer: deletion_tombstone',
         (
             'database/conversation_processing_recovery.py',
             '_complete_orphan_conversation_txn',
@@ -4850,6 +4917,7 @@ KNOWN_TERMINAL_WRITERS = {
         ('utils/conversations/lifecycle.py', 'fail_and_discard_processing'): 'owner',
         ('utils/conversations/lifecycle.py', 'transition'): 'owner',
         ('utils/conversations/process_conversation.py', '_store_budget_waiting'): 'unclassified',
+        ('utils/conversations/process_conversation.py', '_store_deferred_conversation'): 'owner',
         ('utils/conversations/process_conversation.py', 'process_conversation'): 'unclassified',
         ('scripts/staging/replay.py', 'StagingFirestoreSeeder.seed_capture'): 'unclassified',
         ('utils/dream_canary.py', 'seed'): 'unclassified',

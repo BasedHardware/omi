@@ -1,13 +1,20 @@
 from collections import Counter
+from functools import partial
 import hashlib
 import json
+from pathlib import Path
+import re
+import runpy
 import struct
 import time
 from types import SimpleNamespace
 from unittest.mock import Mock
 
 from google.api_core.exceptions import AlreadyExists
+import prometheus_client
+from prometheus_client.parser import text_string_to_metric_families
 import pytest
+import yaml
 
 from config import record_wal_sample as config
 from database import record_wal_sample as state
@@ -16,6 +23,44 @@ from utils.batch_pipeline import record_wal_sample as sampler
 from utils.batch_pipeline.artifact_reads import ArtifactReadBudget, ArtifactReadLimit
 from utils.batch_pipeline.record_wal_alignment import CLOCK_RATE, Packet
 from utils.other.raw_audio import WAL_FORMAT
+
+ATTEMPT_COUNTER = 'omi_record_wal_handoff_sample_attempts_total'
+IO_COUNTER = 'omi_record_wal_handoff_sample_io_total'
+IO_UNITS = ('point_reads', 'gcs_requests', 'remote_bytes')
+
+
+@pytest.mark.parametrize(
+    ('service', 'revision', 'expected_available'),
+    [
+        ('backend-sync', 'backend-sync-guard-fixture', True),
+        ('backend-sync', '', False),
+        ('backend-integration', 'backend-integration-guard-fixture', False),
+    ],
+)
+def test_dark_startup_exports_exact_revision_cap_zeros(monkeypatch, service, revision, expected_available):
+    monkeypatch.setenv('K_SERVICE', service)
+    monkeypatch.setenv('K_REVISION', revision)
+    monkeypatch.delenv('RECORD_WAL_SAMPLE_START_EPOCH', raising=False)
+    registry = prometheus_client.CollectorRegistry()
+    monkeypatch.setattr(prometheus_client, 'Counter', partial(prometheus_client.Counter, registry=registry))
+    runpy.run_path(sampler.__file__)
+
+    profile = Path(__file__).resolve().parents[2] / 'deploy/cloud_run_gmp_sync.yaml'
+    rules = yaml.safe_load(profile.read_text())['spec']['endpoints'][0]['metricRelabeling']
+    exported = prometheus_client.generate_latest(registry).decode()
+    samples = {}
+    for family in text_string_to_metric_families(exported):
+        for sample in family.samples:
+            if sample.name not in (ATTEMPT_COUNTER, IO_COUNTER):
+                continue
+            for rule in rules:
+                fields = {**sample.labels, '__name__': sample.name}
+                value = ';'.join(fields.get(label, '') for label in rule['sourceLabels'])
+                assert bool(re.fullmatch(rule['regex'], value)) == (rule['action'] == 'keep')
+            assert sample.labels['revision'] == revision
+            samples[sample.labels.get('outcome') or sample.labels['unit']] = sample.value
+    expected = dict.fromkeys(('claimed_slot', *IO_UNITS), 0) if expected_available else {}
+    assert samples == expected
 
 
 def budget():
@@ -70,7 +115,7 @@ def _pack(tmp_path):
 
 def test_counts_encoded_packet_matches_and_clock_without_releasing_custody(tmp_path):
     path = _pack(tmp_path)
-    files = sampler._upload_packets([path], budget())
+    files = sampler.read_staged_packets([path], budget())
     _, size, wal = files[0]
     live = [Packet(p.digest, p.ticks, p.start + 2 * CLOCK_RATE, p.size) for p in wal]
     measured, offsets = sampler._count(files, [live], {}, False, budget())
@@ -84,7 +129,7 @@ def test_counts_encoded_packet_matches_and_clock_without_releasing_custody(tmp_p
 
 def test_bracketed_hole_remains_ambiguous_with_unverified_upload_ordinals(tmp_path):
     path = _pack(tmp_path)
-    files = sampler._upload_packets([path], budget())
+    files = sampler.read_staged_packets([path], budget())
     _, _, wal = files[0]
     live = [
         Packet(p.digest, p.ticks, p.start, p.size, ('track', 0, index))
@@ -174,6 +219,13 @@ def test_manifest_body_only_with_both_preconditions(monkeypatch):
     media.generation += 1
     with pytest.raises(ValueError):
         sampler._manifest(bucket, 'owner', 'record', media, listed, spent)
+    media.generation -= 1
+    for invalid in (b'null', b'[]', b'"manifest"'):
+        listed.size = len(invalid)
+        listed.metadata['sha256'] = hashlib.sha256(invalid).hexdigest()
+        blob.download_as_bytes.return_value = invalid
+        with pytest.raises(ValueError, match='manifest must be a JSON object'):
+            sampler._manifest(bucket, 'owner', 'record', media, listed, budget())
 
 
 def test_continuation_is_ambiguous_and_never_paginated():
@@ -191,13 +243,15 @@ def test_continuation_is_ambiguous_and_never_paginated():
 @pytest.mark.asyncio
 async def test_privacy_race_drops_the_sample_before_any_measurement_publishes(monkeypatch, tmp_path):
     slot = 5001
+    revision = 'backend-sync-privacy-fixture'
     monkeypatch.setattr(sampler, 'slot_at', lambda now: slot)
     monkeypatch.setattr(sampler, '_latest_attempted', -1)
+    monkeypatch.setattr(sampler, '_REVISION', revision)
     monkeypatch.setattr(state, 'claim_slot', Mock(return_value=True))
     monkeypatch.setattr(
         state, 'authority', Mock(side_effect=[(1, {}), BatchPrivacyBlocked('privacy_generation_changed')])
     )
-    monkeypatch.setattr(sampler, '_inventory', Mock(return_value=([], False)))
+    monkeypatch.setattr(sampler, 'read_manifest_inventory', Mock(return_value=([], False)))
     counted = Mock(return_value=(Counter(), Counter()))
     monkeypatch.setattr(sampler, '_count', counted)
     attempts = Mock()
@@ -223,13 +277,13 @@ async def test_privacy_race_drops_the_sample_before_any_measurement_publishes(mo
         has_jobs=True,
     )
     counted.assert_not_called()
-    attempts.labels.assert_any_call('authority_refused')
+    attempts.labels.assert_any_call('authority_refused', revision)
     assert state.authority.call_args.kwargs['expected_generation'] == 1
 
 
 def test_alternate_chunks_suppress_gaps_without_discarding_positive_evidence(monkeypatch, tmp_path):
     path = _pack(tmp_path)
-    files = sampler._upload_packets([path], budget())
+    files = sampler.read_staged_packets([path], budget())
     _, size, wal = files[0]
     media = SimpleNamespace(name='raw-live/owner/record/pack/hash.bin')
     listed = SimpleNamespace(name='audio-outbox/owner/record/pack/hash.bin')
@@ -242,7 +296,7 @@ def test_alternate_chunks_suppress_gaps_without_discarding_positive_evidence(mon
     monkeypatch.setattr(sampler, 'get_private_cloud_sync_bucket', lambda: root)
     monkeypatch.setattr(sampler, '_manifest', lambda *_: wal)
     inventory_budget = budget()
-    runs, no_alternate = sampler._inventory('owner', 'record', True, inventory_budget)
+    runs, no_alternate = sampler.read_manifest_inventory('owner', 'record', True, inventory_budget)
     measured, _ = sampler._count(files, runs, {}, no_alternate, budget())
     assert not no_alternate
     assert measured['duplicate', 'bytes'] == size
@@ -256,7 +310,7 @@ def test_staged_durations_come_from_headers_and_bad_sibling_keeps_its_byte_count
     variable.write_bytes(struct.pack('<I', len(short)) + short + struct.pack('<I', len(nominal)) + nominal)
     bad = variable.with_name(variable.name.replace('1700000000', '1700000010'))
     bad.write_bytes(struct.pack('<I', 100) + short)
-    files = sampler._upload_packets([str(variable), str(bad)], budget())
+    files = sampler.read_staged_packets([str(variable), str(bad)], budget())
     measured, _ = sampler._count(files, [], {}, False, budget())
     assert measured['ambiguous', 'ticks'] == 480 + 960
     assert measured['ambiguous', 'bytes'] == variable.stat().st_size + bad.stat().st_size
@@ -269,12 +323,25 @@ async def test_observe_publishes_counted_duplicate_bytes_under_the_existing_repl
     monkeypatch, tmp_path, status, dispatch
 ):
     path = _pack(tmp_path)
-    _, size, wal = sampler._upload_packets([str(path)], budget())[0]
+    _, size, wal = sampler.read_staged_packets([str(path)], budget())[0]
     monkeypatch.setattr(sampler, 'slot_at', lambda now: 5002)
     monkeypatch.setattr(sampler, '_latest_attempted', -1)
     monkeypatch.setattr(state, 'claim_slot', Mock(return_value=True))
-    monkeypatch.setattr(state, 'authority', Mock(return_value=(1, {})))
-    monkeypatch.setattr(sampler, '_inventory', Mock(return_value=([wal], False)))
+    revision = 'backend-sync-active-fixture'
+    monkeypatch.setattr(sampler, '_REVISION', revision)
+
+    def authority(store, uid, cid, source, device, budget, reads, **options):
+        reads.timeout(1)
+        return 1, {}
+
+    def inventory(uid, cid, candidate, budget):
+        budget.begin()
+        budget.reserve(17)
+        budget.received_bytes += 17
+        return [wal], False
+
+    monkeypatch.setattr(state, 'authority', authority)
+    monkeypatch.setattr(sampler, 'read_manifest_inventory', inventory)
     observed = Mock()
     monkeypatch.setattr(sampler, 'totals', observed)
 
@@ -285,6 +352,11 @@ async def test_observe_publishes_counted_duplicate_bytes_under_the_existing_repl
     content = next(
         str(i) for i in range(10000) if int(hashlib.sha256(str(i).encode()).hexdigest()[:12], 16) % 1000 == 0
     )
+    registry = prometheus_client.REGISTRY
+    claimed = {'outcome': 'claimed_slot', 'revision': revision}
+    io_labels = [{'unit': unit, 'revision': revision} for unit in IO_UNITS]
+    previous_claims = registry.get_sample_value(ATTEMPT_COUNTER, claimed) or 0
+    previous_io = [registry.get_sample_value(IO_COUNTER, labels) or 0 for labels in io_labels]
     await sampler.observe(
         store=object(),
         uid='owner',
@@ -302,3 +374,6 @@ async def test_observe_publishes_counted_duplicate_bytes_under_the_existing_repl
         (dispatch, 'duplicate', 'ticks'),
     ]
     assert [call.args for call in observed.labels.return_value.inc.call_args_list] == [(size,), (9600,)]
+    assert registry.get_sample_value(ATTEMPT_COUNTER, claimed) == previous_claims + 1
+    current_io = [registry.get_sample_value(IO_COUNTER, labels) for labels in io_labels]
+    assert current_io == [value + increase for value, increase in zip(previous_io, (2, 1, 17))]

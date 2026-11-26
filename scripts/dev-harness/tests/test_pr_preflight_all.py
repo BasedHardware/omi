@@ -9,7 +9,9 @@ error line, log path, and repro command, and the exit code is nonzero.
 
 from __future__ import annotations
 
+import json
 import os
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -100,9 +102,12 @@ def _build_slow_repo(base: Path) -> tuple[Path, str]:
 
 
 def _gate_env(**extra: str) -> dict[str, str]:
-    # The outer harness may export GIT_* (hooks) and OMI_PREFLIGHT_* knobs; a
-    # fixture repository must run without either leaking in (#11183 class).
-    env = {key: value for key, value in clean_git_env().items() if not key.startswith("OMI_PREFLIGHT_")}
+    # Keep hook settings and Git repository selection out of fixture runs.
+    env = {
+        key: value
+        for key, value in clean_git_env().items()
+        if not key.startswith(("OMI_PREFLIGHT_", "PRE_PUSH_"))
+    }
     env["OMI_PREFLIGHT_BACKGROUND"] = "0"
     env.update(extra)
     return env
@@ -308,7 +313,7 @@ def test_wrapper_env_flag_dispatches_to_keep_going(tmp_path: Path, flag_name: st
     assert "keep-going" in result.stdout
 
 
-def test_wrapper_without_all_keeps_fail_fast_default(tmp_path: Path) -> None:
+def test_wrapper_without_all_uses_shared_manifest_selection(tmp_path: Path) -> None:
     repo, base_sha = _build_repo(tmp_path / "legacy", FAIL_FIRST_MANIFEST, backend_change=True)
     result = subprocess.run(
         [_bash(), str(WRAPPER), "--list", "--lane", "local", "--base", base_sha, "--head", "HEAD", "--root", str(repo)],
@@ -324,8 +329,71 @@ def test_wrapper_without_all_keeps_fail_fast_default(tmp_path: Path) -> None:
 
     assert result.returncode == 0
     assert "keep-going" not in result.stdout
-    # The legacy fail-fast preflight still owns the default path.
     assert result.stdout.startswith("PR preflight: lane=local")
+    assert "SELECTED backend-ratchet-preflight" not in result.stdout
+
+
+def test_singleflight_local_default_reports_both_manifest_failures(tmp_path: Path) -> None:
+    bash = _bash()
+    manifest = FAIL_FIRST_MANIFEST + """  - id: second-failure
+    command: ["python3", "second_gate.py"]
+    triggers: ["all"]
+    lanes: ["local", "ci"]
+    reason: "fixture gate that fails after a passing gate"
+"""
+    repo, base_sha = _build_repo(tmp_path, manifest, backend_change=True)
+    (repo / "second_gate.py").write_text('print("FAIL: fixture gate two is broken")\nraise SystemExit(1)\n')
+    body = repo / "pr-body.md"
+    body.write_text("fixture metadata\n")
+    for path in (
+        "scripts/dev-harness/_resolve_python.sh",
+        "scripts/pre-push-singleflight",
+        "scripts/pr-preflight",
+        ".github/scripts/git_bash.py",
+        ".github/scripts/preflight_runner.py",
+        ".github/scripts/pr_metadata.py",
+        ".github/scripts/pr_preflight.py",
+        ".github/scripts/run_checks.py",
+    ):
+        destination = repo / path
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(REPO_ROOT / path, destination)
+    # Isolate the real PR preflight entry point from the hook's other phases.
+    hook = repo / "scripts/pre-push"
+    hook.write_text('#!/usr/bin/env bash\nexec scripts/pr-preflight "$@"\n')
+    hook.chmod(0o755)
+    state_dir = tmp_path / "state"
+
+    def run(lane: str, **mode: str) -> tuple[str, str]:
+        result = subprocess.run(
+            [bash, "scripts/pre-push-singleflight", "--lane", lane, "--base", base_sha, "--pr-body-file", str(body)],
+            cwd=repo,
+            env=_gate_env(PYTHON=sys.executable, OMI_CHECKS_JOBS="1", OMI_PREFLIGHT_STATE_DIR=str(state_dir), **mode),
+            input="",
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+            encoding="utf-8",
+            check=False,
+        )
+        assert result.returncode == 1, result.stdout
+        fingerprint = json.loads((state_dir / "pre-push/result.json").read_text(encoding="utf-8"))["fingerprint"]
+        return result.stdout, fingerprint
+
+    output, default_fingerprint = run("local")
+    assert output.index("==> always-fail") < output.index("<== PASS always-pass") < output.index("==> second-failure")
+    assert "Manifest checks failed: always-fail, second-failure" in output
+    assert "SELECTED backend-ratchet-preflight" not in output
+
+    for mode in ({"OMI_PREFLIGHT_ALL": "false"}, {"PRE_PUSH_PREFLIGHT_ALL": "0"}):
+        output, fail_fast_fingerprint = run("local", **mode)
+        assert fail_fast_fingerprint != default_fingerprint
+        assert "Manifest checks failed: always-fail\n" in output
+        assert "==> second-failure" not in output
+
+    output, _ = run("ci")
+    assert "Manifest checks failed: always-fail\n" in output
+    assert "==> second-failure" not in output
 
 
 def test_wrapper_all_flag_is_removed_when_delegating_metadata_only(tmp_path: Path) -> None:

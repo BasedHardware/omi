@@ -53,6 +53,10 @@ func (s *Store) Migrate(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
+	return s.migrate(ctx, files)
+}
+
+func (s *Store) migrate(ctx context.Context, files []migration) error {
 	return pg.InTx(ctx, s.pool, func(tx pgx.Tx) error {
 		if _, err := tx.Exec(ctx, "SELECT pg_advisory_xact_lock($1)", int64(migrationLock)); err != nil {
 			return fmt.Errorf("migration lock: %w", err)

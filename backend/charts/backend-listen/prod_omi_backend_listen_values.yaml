@@ -180,6 +180,8 @@ env:
       configMapKeyRef: {name: prod-omi-backend-config, key: RECORD_TOKEN_LEASE_DEPLOYED_AT}
   - name: BATCH_ACCOUNT_PRIVACY_WRITER_ENABLED
     value: "false"
+  - name: CONVERSATION_PARKED_TERMINAL_STATUS_ENABLED
+    value: "off"
   - name: CONVERSATION_TERMINAL_FAMILY_MODE
     value: "on"
   - name: HOME_TRANSCRIPTION_PRESENTATION_GATE
@@ -873,8 +875,6 @@ env:
     value: "true"
   - name: SONIOX_WIRE_LEDGER
     value: "true"
-  - name: SONIOX_ORDERED_FINALIZE
-    value: "false"
   - name: SONIOX_CAPTURE_AXIS_DIAGNOSTICS
     value: "true"
   # Fair-use system (PR #5748)
@@ -930,6 +930,11 @@ env:
     value: 'true'
   # Quiet-check empty exit; evaluated on backend-sync (Cloud Tasks handler), pinned here for consistency (lead2 9b4ffd).
   - name: QUIET_EMPTY_EXIT_ENABLED
+    value: 'true'
+  # SCA-4019: hold a mobile server-batch capture across a socket drop for the 120 s reconnect
+  # grace; the producer drain releases the lease and persists a bounded deadline, so a held row
+  # seals at the deadline. Rollback: 'false' here and on backend-sync in one config train.
+  - name: LISTEN_BATCH_RECONNECT_ENABLED
     value: 'true'
   - name: LISTEN_FINALIZATION_ORPHAN_STALE_SECONDS
     value: "900"
@@ -1093,4 +1098,4 @@ affinity:
 # Set bulkInterval to 60s to restore the prior bulk cadence.
 podMonitoring:
   bulkInterval: 120s
-  fastMetrics: 'backend_listen_active_ws_connections|pusher_active_ws_connections|privacy_.*|omi_audio_.*|omi_record_.*|omi_firestore_billed_reads_by_caller_total|omi_firestore_caller_label_overflow_total|omi_batch_pipeline_completed_audio_seconds_total|.*_(timestamp|refreshed_at|observed_at)_seconds'
+  fastMetrics: 'omi_usage_month_total_shadow_total|backend_listen_active_ws_connections|pusher_active_ws_connections|privacy_.*|omi_audio_.*|omi_record_.*|omi_firestore_billed_reads_by_caller_total|omi_firestore_billed_writes_by_(caller|origin)_total|omi_firestore_caller_label_overflow_total|omi_batch_pipeline_completed_audio_seconds_total|.*_(timestamp|refreshed_at|observed_at)_seconds'

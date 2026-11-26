@@ -11,10 +11,12 @@ from database.record_wal_handoff import check_owner_authority
 from utils.batch_pipeline.artifact_reads import ArtifactReadBudget
 
 
-def claim_slot(store: FirestoreStore, slot: int, budget: ArtifactReadBudget) -> bool:
-    ref = FirestoreTransaction.intake_reference(store.client, NAMESPACE, f'wal_sample_slot_v1_{slot}')
+def claim_slot(store: FirestoreStore, slot: int, budget: ArtifactReadBudget, *, duplicate_shadow=False) -> bool:
+    kind = 'record_wal_duplicate_shadow_slot' if duplicate_shadow else 'record_wal_sample_slot'
+    prefix = 'wal_duplicate_shadow_slot_v1' if duplicate_shadow else 'wal_sample_slot_v1'
+    ref = FirestoreTransaction.intake_reference(store.client, NAMESPACE, f'{prefix}_{slot}')
     try:
-        ref.create({'kind': 'record_wal_sample_slot', 'slot': slot}, timeout=budget.timeout(0.25), retry=None)
+        ref.create({'kind': kind, 'slot': slot}, timeout=budget.timeout(0.25), retry=None)
     except AlreadyExists:
         return False
     return True

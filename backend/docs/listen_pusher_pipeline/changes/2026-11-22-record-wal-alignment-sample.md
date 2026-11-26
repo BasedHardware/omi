@@ -9,8 +9,9 @@ individual offsets or account and capture identifiers.
 
 The window is off by default. Release can set
 `RECORD_WAL_SAMPLE_START_EPOCH` on backend-sync to a UTC epoch divisible by
-180, after written approval for that exact window. Unset the value to stop
-early. Disable independently of `RECORD_WAL_HANDOFF_ENABLED`. The sample
+180, after recording a scoped go-ahead for a window covered by written
+approval. Unset the value to stop early. Disable independently of
+`RECORD_WAL_HANDOFF_ENABLED`. The sample
 expires after 24 hours and does not accept or settle custody or start recovery.
 
 Each candidate has a stable 1-in-1,000 selection by the existing server-derived
@@ -26,6 +27,26 @@ RPCs and create contenders are separate. Each attempt has up to 8 MiB of
 staged WAL, 16 MiB of manifest bodies, bounded single-page object listings
 and six possible pinned manifest GETs. The request wait and operation
 deadlines are two seconds. There are no vendor requests.
+
+Before a replacement window, verify a dark backend-sync revision at 100%
+positive traffic with the future-capture clamp enabled. The sampler exports
+four zero-initialized children with the actual Cloud Run revision. Query
+`omi_record_wal_handoff_sample_attempts_total{outcome="claimed_slot"}`
+and `omi_record_wal_handoff_sample_io_total` for `point_reads`,
+`gcs_requests` and `remote_bytes`, all with the exact `revision` label and
+backend-sync scrape scope. Require fresh finite zero samples for all four
+before Release qualifies a window. Healthy targets alone cannot prove zero work.
+Verify the exact activation revision too, including its sampler epoch and
+clamp. Missing or stale samples, a reset, or a disappearing target that
+obscures cumulative work cannot clear the guard. The I/O limits are 4,800 point reads, 6,720
+GCS requests and 8,053,063,680 manifest bytes across at most 480 claims.
+Scrapes observe the guard counters; the durable slot and request budgets
+enforce the hard ceilings.
+
+The sync scrape also retains `omi_pipeline_record_wait_answers_total` and
+`omi_pipeline_record_wait_memo_hits_total` for the record-wait reason readback.
+Use Cloud Monitoring request counts for the matched HTTP 503 and 503/(200+202)
+readback.
 
 The WAL sample counters distinguish accepted, refused and other replies; the
 probe does not change the reply or bypass a coverage memo. Conversation-memo

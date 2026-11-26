@@ -198,6 +198,7 @@ class MobileReleaseAdmissionTests(unittest.TestCase):
             "android-emulator-checks": "success",
             "ios-compile-check": "skipped",
             "dart-tests-kiritimati": "skipped",
+            "dart-tests-pago-pago": "skipped",
         }
         GUARD.validate_mobile_job_results(results)
         self.assert_admitted(with_nested(proof(), "mobile_aggregate", job_results=results))
@@ -213,6 +214,7 @@ class MobileReleaseAdmissionTests(unittest.TestCase):
             "android-emulator-checks": "skipped",
             "ios-compile-check": "skipped",
             "dart-tests-kiritimati": "skipped",
+            "dart-tests-pago-pago": "skipped",
         }
         with self.assertRaisesRegex(GUARD.MobileReleaseAdmissionError, "failed"):
             self.assert_admitted(with_nested(proof(), "mobile_aggregate", job_results=results))
@@ -228,6 +230,7 @@ class MobileReleaseAdmissionTests(unittest.TestCase):
             "android-emulator-checks": "skipped",
             "ios-compile-check": "skipped",
             "dart-tests-kiritimati": "skipped",
+            "dart-tests-pago-pago": "skipped",
         }
         with self.assertRaisesRegex(GUARD.MobileReleaseAdmissionError, "changes"):
             self.assert_admitted(with_nested(proof(), "mobile_aggregate", job_results=results))
@@ -273,6 +276,7 @@ class MobileReleaseAdmissionTests(unittest.TestCase):
             "android-emulator-checks",
             "ios-compile-check",
             "dart-tests-kiritimati",
+            "dart-tests-pago-pago",
         ):
             self.assertIn(f"      - {job_id}", workflow)
 
@@ -363,9 +367,11 @@ class MobileReleaseAdmissionTests(unittest.TestCase):
             "ANDROID_COMPILE_RESULT",
             "ANDROID_UNIT_RESULT",
             "IOS_COMPILE_RESULT",
-            "DART_TIMEZONE_RESULT",
+            "DART_TIMEZONE_KIRITIMATI_RESULT",
+            "DART_TIMEZONE_PAGO_PAGO_RESULT",
         ):
             environment[name] = "success"
+        environment["DART_TIMEZONE_EXPECTED"] = "false"
         for result in ("failure", "cancelled", "skipped", "", "success"):
             with self.subTest(result=result):
                 environment["ANDROID_EMULATOR_RESULT"] = result

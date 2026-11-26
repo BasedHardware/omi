@@ -19,6 +19,7 @@ from typing import Any, Dict, List, Literal, Optional
 from pydantic import BaseModel, Field, model_validator
 from database.account_deletion_policy import account_deletion_blocks_access, normalize_account_deletion_status
 from database.legal_holds import assert_no_destructive_operation_transaction
+from database.conversation_effect_fence import ConversationEffectSource
 from database.memory_apply_store import apply_long_term_patch_firestore, require_canonical_intake_enabled
 from models.memory_evidence import SourceState
 from models.memory_apply import (
@@ -340,6 +341,7 @@ def apply_consolidation_decision(
     now: datetime,
     db_client: Any,
     quarantine: bool = False,
+    effect_source: ConversationEffectSource | None = None,
 ) -> List[str]:
     """Atomically settle one source item, including LT graph assertion/supersedes."""
     source = pending_by_id.get(decision.source_memory_id)
@@ -417,6 +419,7 @@ def apply_consolidation_decision(
             operation_id=operation.operation_id,
             patch_payload=patch_payload,
             proposed_operation=operation,
+            effect_source=effect_source,
             db_client=db_client,
         )
         if result.status != ApplyStatus.retryable_head_mismatch:
@@ -757,7 +760,7 @@ def _load_observation_intake(uid, memory_ids, *, db_client):
     return control, items
 
 
-def _settle_observation_intake(uid, context, decisions, report, *, db_client, now, run_id):
+def _settle_observation_intake(uid, context, decisions, report, *, db_client, now, run_id, effect_source=None):
     control, items = context
     by_id = {item.memory_id: item for item in items}
     if len(decisions) != len(items) or {d.source_memory_id for d in decisions} != set(by_id):
@@ -784,6 +787,7 @@ def _settle_observation_intake(uid, context, decisions, report, *, db_client, no
             run_id=run_id,
             now=now,
             db_client=db_client,
+            **({"effect_source": effect_source} if effect_source is not None else {}),
         )
         if decision.route == 'promote':
             report.promoted_memory_ids.append(source.memory_id)
@@ -811,7 +815,7 @@ def observation_intake_enabled() -> bool:
     return os.getenv('MEMORY_OBSERVATION_INTAKE_ENABLED', 'true').strip().lower() not in {'0', 'false', 'off', 'no'}
 
 
-def complete_observation_intake(uid, *, memory_ids, db_client, now, run_id, planner=None):
+def complete_observation_intake(uid, *, memory_ids, db_client, now, run_id, planner=None, effect_source=None):
     """Route committed observations independently of Dream cleanup eligibility.
 
     The extraction caller is already a synchronous postprocessing leaf. Expiry
@@ -828,7 +832,16 @@ def complete_observation_intake(uid, *, memory_ids, db_client, now, run_id, plan
         context = _load_observation_intake(uid, ids, db_client=db_client)
         if context[1]:
             decisions = (planner or plan_observation_intake)(context[1])
-            _settle_observation_intake(uid, context, decisions, report, db_client=db_client, now=now, run_id=run_id)
+            _settle_observation_intake(
+                uid,
+                context,
+                decisions,
+                report,
+                db_client=db_client,
+                now=now,
+                run_id=run_id,
+                effect_source=effect_source,
+            )
     except Exception as exc:
         _observation_intake_failed(report, ids, exc)
     return report

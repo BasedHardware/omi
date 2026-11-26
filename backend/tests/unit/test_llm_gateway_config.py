@@ -329,6 +329,7 @@ def test_v3_lanes_preserve_legacy_catalog_and_separate_foreground_tier():
     config = load_gateway_config(prod_mode=True)
     assert 'conversation_v3_summary' not in get_all_configured_features()
     for feature, effort in [
+        ('conversation_v3_live_title', 'none'),
         ('conversation_v3_outline', 'none'),
         ('conversation_v3_summary', 'low'),
         ('conversation_v3_summary_open', 'low'),
@@ -338,5 +339,6 @@ def test_v3_lanes_preserve_legacy_catalog_and_separate_foreground_tier():
         assert route.primary.model == LUNA_MODEL
         assert route.provider_options['reasoning_effort'] == effort
         assert lane.capabilities.structured_output != StructuredOutputMode.NONE
-    assert 'omi:auto:conversation-v3-summary' in DEFAULT_FLEX_FIRST_LANES
+    # Neither summary lane tries Flex first; both stay separate lanes so background and on-open usage are metered apart.
+    assert 'omi:auto:conversation-v3-summary' not in DEFAULT_FLEX_FIRST_LANES
     assert 'omi:auto:conversation-v3-summary-open' not in DEFAULT_FLEX_FIRST_LANES

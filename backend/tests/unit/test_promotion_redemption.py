@@ -328,3 +328,20 @@ def test_optional_attribution_write_failure_does_not_undo_code_benefit(failure):
     env.release.assert_not_called()
     assert env.promo_modify.call_count == 1
     assert env.promo_modify.call_args.kwargs['active'] is False
+
+
+def test_a_prepaid_plan_refuses_another_code_and_the_code_is_not_consumed():
+    # A "once" prepaid plan after its first invoice: active, no discount left, the redeem marker set.
+    prepaid = _subscription(
+        price={'id': 'price_month', 'product': 'prod_unlimited', 'currency': 'usd', 'unit_amount': 2999},
+        status='active',
+        metadata={'uid': 'uid_1', 'prepaid_code_redemption': '1'},
+        cancel_at=1_900_000_000,
+    )
+    with _Env(subscription=prepaid) as env:
+        with pytest.raises(RedemptionError) as error:
+            redeem_promotion_code('uid_1', 'OMI-AAAA-BBBB')
+    assert error.value.status_code == 409
+    env.claim.assert_not_called()
+    env.promo_modify.assert_not_called()
+    env.sub_modify.assert_not_called()

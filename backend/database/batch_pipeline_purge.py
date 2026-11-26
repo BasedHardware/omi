@@ -10,6 +10,7 @@ from google.cloud import firestore
 from database._client import get_data_plane_firestore_client
 from database import batch_pipeline_privacy_queries as queries
 from database import record_wal_capacity
+from database.privacy_check_metrics import PURGE_COMPLETED, PURGE_ROWS
 from utils.batch_pipeline.record_wal_erasure import purge_record_wal_owner
 from database.batch_pipeline_privacy import (
     PRIVACY_COLLECTION,
@@ -325,6 +326,9 @@ def purge_batch_owner(
         purge_jobstore_owner(namespace, uid)
     if conversation_id is None:
         finish_privacy_purge(client, uid, generation)
+    scope = 'conversation' if conversation_id is not None else reason
+    PURGE_COMPLETED.labels(scope).inc()
+    PURGE_ROWS.labels(scope).inc(deleted)
     return deleted
 
 

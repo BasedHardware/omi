@@ -68,6 +68,7 @@ HELPER_KILL_SWITCHES = {
     'RECORD_FOLLOWUP_WAKE_ENABLED',
     'RECORD_SEAL_WAKE_PRESERVED_ENABLED',
     'BATCH_PIPELINE_FRESH_GUARD_ENABLED',
+    'ENRICHMENT_AGE_GATE_UNPARK_ENABLED',
     'BATCH_ACCOUNT_PRIVACY_WRITER_ENABLED',
     'BATCH_PIPELINE_DELIVERED_SHARE_ENABLED',
     'BATCH_PROJECTION_OUTBOX',
@@ -243,6 +244,7 @@ def test_helper_kill_switch_budget_entries_match_the_live_registry():
         'BATCH_PIPELINE_PROVIDER_BACKLOG_RELEASE_ENABLED',
         'BATCH_PIPELINE_MERGE_TX_FRESH_GATE_ENABLED',
         'BATCH_PIPELINE_MERGE_STALE_HEAD_PROMOTE_ENABLED',
+        'BATCH_PIPELINE_MERGE_AGED_GPU_RELEASE_ENABLED',
         'BATCH_PIPELINE_READY_DISCOVERY_CURSOR_ENABLED',
         'BATCH_PIPELINE_BACKLOG_RELEASE_METER_ENABLED',
         'BATCH_SOURCE_REUSE_ENABLED',
@@ -343,6 +345,7 @@ def test_helper_kill_switch_budget_entries_match_the_live_registry():
             'SUMMARY_PROJECTION_DEBT_ENABLED',
             'HOME_EMPTY_OUTPUT_NOISE',
             'EPISODE_COMPOSER_REUSE',
+            'ENRICHMENT_AGE_GATE_UNPARK_ENABLED',
         }:
             assert entry['owner'] == 'refactor-lead'
             assert entry['review_by'] == '2026-12-10'
@@ -366,7 +369,7 @@ def test_helper_kill_switch_budget_entries_match_the_live_registry():
         else:
             striped = name == 'BATCH_PIPELINE_PROJECTION_STRIPING_ENABLED'
             assert entry['owner'] == ('omi-pipeline' if striped else 'rollout-meetings / occasion architecture')
-            assert entry['review_by'] == ('2026-12-06' if striped else '2026-11-28')
+            assert entry['review_by'] == ('2026-12-06' if striped else '2026-12-05')
         assert flag['kind'] == 'env'
         assert 'backend' in flag['surfaces']
         if name == 'BATCH_PIPELINE_PROTECTED_SHARE_ENABLED':

@@ -53,6 +53,7 @@ from routers.listen.registry import proactive_message_dispatcher
 from utils.other.timeout import TimeoutMiddleware
 from utils.observability import log_langsmith_status
 from utils.subscription import validate_stripe_price_ids
+from services.monthly_usage_shadow import install_month_shadow
 from utils.http_client import close_all_clients
 from utils.metrics import start_metrics_sidecar_server, stop_metrics_sidecar_server
 from utils.observability.sync_phases import shutdown_sync_metrics
@@ -255,6 +256,7 @@ async def startup_event():
         start_mutations()
         app.state.pinecone_restore_signal = install_shutdown_drain(drain_mutations)
         app.state.messaging_runtime = await start_adapters(messaging.register_adapter)
+    install_month_shadow()
     start_metrics_sidecar_server()
     start_background_task(refresh_stt_cap_cohort_forever(), name='stt_cap_cohort_refresh')
     if full:

@@ -133,7 +133,7 @@ async def test_supervisor_uses_configured_tick(monkeypatch, raw, expected):
         monkeypatch.delenv('BATCH_PIPELINE_SERVING_TICK_SECONDS', raising=False)
     else:
         monkeypatch.setenv('BATCH_PIPELINE_SERVING_TICK_SECONDS', raw)
-    service = SimpleNamespace(store=Mock(), reconcile_async=AsyncMock())
+    service = SimpleNamespace(store=Mock(), reconcile_async=AsyncMock(), sweep_held_dead_letters=Mock())
     monkeypatch.setattr(serving, 'current_stage', lambda: 'dev')
     monkeypatch.setattr(serving, 'serving_for_stage', lambda stage: service)
     monkeypatch.setattr(serving, 'drain_recordings', AsyncMock(return_value=None))
@@ -163,4 +163,4 @@ async def test_supervisor_uses_configured_tick(monkeypatch, raw, expected):
         runtime[0].set()
         await asyncio.gather(runtime[1], return_exceptions=True)
     assert ticks == [expected]
-    service.reconcile_async.assert_awaited_once_with(recover_quarantine=True, periodic=True)
+    service.reconcile_async.assert_awaited_once_with(recover_quarantine=True, periodic=True, run_held_expiry=False)
