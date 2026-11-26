@@ -26,6 +26,7 @@ from tests.unit.test_sync_reprocess_coalesce import state
 @pytest.fixture
 def world(monkeypatch):
     monkeypatch.delenv('CONVERSATION_MERGE_BEFORE_PROCESSING', raising=False)
+    monkeypatch.delenv('CONVERSATION_MERGE_BEFORE_PROCESSING_V3_EXCLUSION', raising=False)
     monkeypatch.setenv('CONVERSATION_SMART_MERGE_MODE', 'merge')
     monkeypatch.setenv('OMI_ENV_STAGE', 'prod')
     w = World(monkeypatch)
@@ -69,6 +70,28 @@ def test_v3_owned_survivor_is_never_rewritten_by_a_legacy_absorb(world, owner_fl
     invoke(world)
     assert 'sync_merged_into' not in world.raw('n')
     assert world.raw('p') == survivor
+
+
+@pytest.mark.parametrize('side', ['p', 'n'])
+@pytest.mark.parametrize('owner_flag', ['v3_derived', 'recording'])
+def test_row_turning_v3_owned_after_the_decision_is_refused_inside_the_absorb(world, side, owner_flag):
+    # The transaction re-runs check_pair on current rows: ownership that lands between the decision
+    # and the absorb still refuses the pair, and neither row is rewritten.
+    def race():
+        world.raw(side)[owner_flag] = True
+
+    world.on_ask = race
+    invoke(world)
+    assert 'sync_merged_into' not in world.raw('n') and not world.raw('p').get('smart_merge')
+
+
+def test_v3_survivor_owing_a_legacy_refresh_is_not_refreshed(world, monkeypatch):
+    world.raw('p')['v3_derived'] = True
+    monkeypatch.setattr(smart_merge, 'refresh_owed', lambda *a, **kw: True)
+    refresh = Mock()  # _decide swallows refresh errors, so assert on the call itself.
+    monkeypatch.setattr(smart_merge, 'refresh_survivor', refresh)
+    invoke(world)
+    assert not refresh.called and 'sync_merged_into' not in world.raw('n')
 
 
 def test_v3_owned_survivor_kill_switch_restores_absorb(world, monkeypatch):

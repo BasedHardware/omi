@@ -26,6 +26,12 @@ def v3_excluded() -> bool:
     return value.strip().lower() not in {'false', '0', 'off', 'no'}
 
 
+def v3_owned(row: Any) -> bool:
+    """v3 derived rows and v3 recordings, from a stored row or a model: v3 owns their boundaries and claims."""
+    get = row.get if isinstance(row, Mapping) else (lambda key: getattr(row, key, None))
+    return get('v3_derived') is True or get('recording') is True
+
+
 def already_processed(row: Mapping[str, Any]) -> bool:
     """Metadata-only donor fence; old rows fall back to their stored structure.
 

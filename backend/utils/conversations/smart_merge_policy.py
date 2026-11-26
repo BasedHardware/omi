@@ -15,7 +15,12 @@ device partition and a user-managed row are.
 from __future__ import annotations
 
 from utils.sync import processing_hold
-from config.merge_before_processing import enabled as merge_before_processing_enabled, already_processed, v3_excluded
+from config.merge_before_processing import (
+    enabled as merge_before_processing_enabled,
+    already_processed,
+    v3_excluded,
+    v3_owned,
+)
 from utils.conversations.summary_delivery import present as summary_present
 
 import re
@@ -316,11 +321,6 @@ def predecessor_status_skip(row: Mapping[str, Any]) -> Optional[str]:
     if user_ended(row):
         return SkipReason.PREDECESSOR_USER_ENDED
     return None
-
-
-def v3_owned(row: Mapping[str, Any]) -> bool:
-    """v3 derived rows and v3 recordings: v3 owns their boundaries and claims."""
-    return row.get('v3_derived') is True or row.get('recording') is True
 
 
 @dataclass(frozen=True)
