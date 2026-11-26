@@ -166,6 +166,59 @@ func TestPairedErasureRejectsUnverifiedGoSpeakerResults(t *testing.T) {
 	})
 }
 
+func TestPairedErasureValidatesEachAdmissionBinding(t *testing.T) {
+	tests := []struct {
+		name, side, field, want string
+		value                   any
+	}{
+		{name: "valid"},
+		{"Python missing job", "python", "finalization_job_id", "finalization_job_id", nil},
+		{"Python mismatched fanout", "python", "fanout_key", "fanout_key", "foreign-fanout"},
+		{"Go missing job", "go", "finalization_job_id", "finalization_job_id", nil},
+		{"Go mismatched fanout", "go", "fanout_key", "fanout_key", "foreign-fanout"},
+		{"Go missing fence", "go", "finalization_owner_epoch", "finalization_owner_epoch", nil},
+		{"Go mismatched fence", "go", "finalization_revision", "finalization_engine", json.Number("4")},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			py, goRun, _ := pairedErasureRuns(t)
+			for side, run := range map[string]*observation{"python": py, "go": goRun} {
+				run.Admitted = &admission{Job: side + "-job", Fanout: side + "-fanout"}
+				run.QueueFanout = run.Admitted.Fanout
+				doc := mustMap(run.BeforeErasure.Document)
+				doc["finalization_job_id"] = run.Admitted.Job
+				doc["fanout_key"] = run.Admitted.Fanout
+				if side == "go" {
+					run.Admitted.Engine, run.Admitted.OwnerEpoch, run.Admitted.Revision = "go", 2, 3
+					doc["finalization_engine"] = "go"
+					doc["finalization_owner_epoch"] = json.Number("2")
+					doc["finalization_revision"] = json.Number("3")
+				}
+				if side == test.side {
+					if test.value == nil {
+						delete(doc, test.field)
+					} else {
+						doc[test.field] = test.value
+					}
+				}
+			}
+			diffs := compareObservations(py, goRun)
+			if test.want != "" {
+				path := "/before_erasure/" + test.side + "/conversation/" + test.want
+				if !hasKindPath(diffs, "invalid_binding", path) {
+					t.Fatalf("missing binding finding at %s: %+v", path, diffs)
+				}
+				return
+			}
+			for _, diff := range diffs {
+				if diff.Kind == "invalid_binding" {
+					t.Fatalf("valid bindings rejected: %+v", diff)
+				}
+			}
+		})
+	}
+}
+
 func TestPairedErasureStillRejectsBadFinalizationWitnesses(t *testing.T) {
 	tests := []struct {
 		name   string

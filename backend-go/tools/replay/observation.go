@@ -47,6 +47,8 @@ func compareObservationsForRun(python, goRun *observation, pythonTokens, goToken
 		validateTimestampEvidence(&preWipe, "go", goFinalization)
 		validateHomeTokenEvidence(&preWipe, "python", pythonFinalization, pyPreTokens)
 		validateHomeTokenEvidence(&preWipe, "go", goFinalization, goPreTokens)
+		validateBinding(&preWipe, "/python", pythonFinalization, false)
+		validateBinding(&preWipe, "/go", goFinalization, true)
 		validateEpisodeAttachMemoEvidence(&preWipe, pythonFinalization, goFinalization)
 		validateReviewedGoOnlyFields(&preWipe, pythonFinalization, goFinalization)
 		for _, diff := range preWipe {
