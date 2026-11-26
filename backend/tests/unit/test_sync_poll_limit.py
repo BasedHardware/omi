@@ -202,8 +202,9 @@ def custody_poll_status(request, monkeypatch):
 
     def durable_status(job_id, uid, *, artifact_retry=False):
         assert uid == 'owner'
-        status = 'partial_failure' if artifact_retry and reason == 'batch_artifact_missing' else 'processing'
-        return {'job_id': job_id, 'status': status, 'reason_code': reason}
+        if artifact_retry and reason == 'batch_artifact_missing':
+            return {'job_id': job_id, 'status': 'failed', 'reason_code': reason, 'poll_after_ms': 0}
+        return {'job_id': job_id, 'status': 'processing', 'reason_code': reason}
 
     monkeypatch.setattr(sync_router, 'get_durable_job_status', durable_status)
     return reason
@@ -230,6 +231,6 @@ def test_authenticated_custody_poll_preserves_hold(
         'poll_after_ms': 300000,
     }
     if repair_protocol and custody_poll_status == 'batch_artifact_missing':
-        expected['status'] = 'partial_failure'
-        del expected['poll_after_ms']
+        expected['status'] = 'failed'
+        expected['poll_after_ms'] = 0
     assert response.json() == expected
