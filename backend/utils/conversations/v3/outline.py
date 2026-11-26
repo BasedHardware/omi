@@ -196,6 +196,7 @@ def stretches(
     settle_on_landing=False,
     max_window=timedelta(0),
     continuity=False,
+    finish_routes=None,
 ):
     """``continuity`` (``CONVERSATIONS_V3_CAPTURE_CONTINUITY``): a stream gap inside one capture origin
     is not silence, and a manual-end cut waits for a pending transcript (``_held_cuts``)."""
@@ -262,6 +263,8 @@ def stretches(
         # pending), so the window it closes is the last one and can stay open without joining later speech.
         first = min(held)
         until, finishing, awaited = held[first]
+        if finish_routes is not None and any(source['id'] != finishing for source in awaited):
+            finish_routes.add(finishing)
         waiting = {finishing} | {line['conversation_id'] for line in lines if line['start'] >= first}
         lines = [line for line in lines if line['start'] < first]
         hold = first, until
@@ -276,20 +279,23 @@ def stretches(
             if start is not None and end is not None and start < first:
                 placeholders.append({'start': start, 'end': max(start, end), 'conversation_id': row['id']})
         marks = sorted([*lines, *placeholders], key=lambda mark: (mark['start'], mark['conversation_id']))
-    cuts = iter(
-        sorted(
-            cut
-            for cut in (utc(r['finished_at']) for r in members if r.get('v3_manual_end') and r.get('finished_at'))
-            if hold is None or cut < hold[0]
-        )
+    cut_sources = sorted(
+        (utc(row['finished_at']), row['id']) for row in members if row.get('v3_manual_end') and row.get('finished_at')
     )
+    cuts = iter((at, rid) for at, rid in cut_sources if hold is None or at < hold[0])
+
+    def apply_cut(group, source):
+        if finish_routes is not None and not group['manual_end']:
+            group['_finish_sli_sources'] = (source,)
+        group['manual_end'] = True
+
     cut = next(cuts, None)
     for mark in marks:
         previous = groups[-1] if groups else None
         # A segment belongs to the side on which it starts, even if it crosses the cut.
-        while cut is not None and cut <= mark['start']:
-            if previous and previous['first'] < cut:
-                previous['manual_end'] = True
+        while cut is not None and cut[0] <= mark['start']:
+            if previous and previous['first'] < cut[0]:
+                apply_cut(previous, cut[1])
             cut = next(cuts, None)
         silence = previous is None
         if previous is not None:
@@ -338,8 +344,8 @@ def stretches(
     groups = [group for group in groups if group['lines']]
     for group in groups:
         group['end'] = max(line['end'] for line in group['lines'])
-    if groups and cut is not None and cut <= now:
-        groups[-1]['manual_end'] = True
+    if groups and cut is not None and cut[0] <= now:
+        apply_cut(groups[-1], cut[1])
     # The window the held cut will close: the last one, when the awaited speech joins it.
     closing = groups[-1] if hold is not None and groups and groups[-1].pop('awaits', False) else None
     if hold is not None and closing is not None and not closing['manual_end']:

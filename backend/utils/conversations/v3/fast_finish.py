@@ -353,6 +353,9 @@ def _run(uid, conversation_id, row, units, read, *, write, transcribe, refresh, 
     SECONDS.labels('write').observe(time.monotonic() - started)
     if written is False:
         return 'superseded'
+    from utils.conversations.v3 import finish_home_sli
+
+    finish_home_sli.observe_route(uid, conversation_id, 'fast')
     if cut is not None:
         try:
             cut()

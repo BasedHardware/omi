@@ -652,3 +652,13 @@ def test_copy_carries_the_recording_location_and_keeps_its_own():
         'geolocation': kept,
     }
     assert planner.build('u', window, {'r': row}, prior)['geolocation'] == kept
+
+
+def test_finish_sli_keeps_adjacent_cuts_on_their_own_cards():
+    a = recording('a', NOW, finished_at=NOW + timedelta(seconds=15), v3_manual_end=True)
+    b = recording('b', NOW + timedelta(seconds=16), finished_at=NOW + timedelta(seconds=35), v3_manual_end=True)
+    c = recording('c', NOW + timedelta(seconds=36), finished_at=NOW + timedelta(seconds=45), v3_manual_end=True)
+    c['transcript_segments'] = []
+    groups = outline.stretches([a, b, c], NOW + timedelta(minutes=2), finish_routes=set())
+    windows = planner.windows(groups, [[entry()], [entry()]])
+    assert [w['_finish_sli_sources'] for w in windows] == [('a',), ('b',)]

@@ -29,6 +29,7 @@ import 'package:flutter/widgets.dart';
 import 'package:flutter_provider_utilities/flutter_provider_utilities.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:permission_handler/permission_handler.dart';
+import 'package:uuid/uuid.dart';
 import 'package:omi/services/capture/capture_evidence_identity.dart';
 
 import 'package:omi/backend/http/api/conversations.dart';
@@ -4409,6 +4410,12 @@ class CaptureController extends ChangeNotifier
   Future<void> forceProcessingCurrentConversation({bool manualFinish = false, String? liveConversationId}) async {
     final recordingSessionId = activeRecordingId;
     final conversationRevision = _systemSurfaceConversationRevision;
+    // The app's deliberate Finish names the live window. Pendant Finish uses
+    // the current recording. Capture the cut before awaiting the WAL snapshot.
+    final finishSource = liveConversationId == null ? 'pendant' : 'app';
+    final finishCut = manualFinish && Env.isTestFlight
+        ? '$finishSource,${const Uuid().v4()},${DateTime.now().millisecondsSinceEpoch}'
+        : null;
     final close = _admitConversationClose(processNow: true);
     _pendingProcessCloses.add(close);
     final placeholderOwner = ++_processingPlaceholderOwner;
@@ -4450,7 +4457,7 @@ class CaptureController extends ChangeNotifier
               ? _processInProgressConversationOverride!().then((result) =>
                   InProgressProcessOutcome(response: result, absence: result == null ? ProcessAbsence.transport : null))
               : processInProgressConversationOutcome(
-                  liveConversationId: liveConversationId, sendRequest: _processRequestSender);
+                  liveConversationId: liveConversationId, finishCut: finishCut, sendRequest: _processRequestSender);
       requestAdmitted = true;
       if (confirmedProcessing) _lastProcessRequest = request;
       _processInFlight = request.then((_) {}, onError: (_) {});

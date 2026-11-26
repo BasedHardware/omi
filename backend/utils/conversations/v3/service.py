@@ -57,7 +57,7 @@ from utils.conversations.v3 import (
     visibility,
     context,
 )
-from utils.conversations.v3 import refinement, preview_wakes
+from utils.conversations.v3 import finish_home_sli, refinement, preview_wakes
 from utils.conversations.v3.word_floor import MIN_TASK_WORDS, has_unspaced_script, text_word_count
 from utils.conversations.processing_trigger import ProcessingTrigger
 from utils.conversations.meeting_treatment import deduplicated_transcribed_speech_seconds
@@ -337,6 +337,8 @@ async def reconcile(
         eligible = [r for r in recordings.values() if policy.builder_eligible(r)]
         custom_timing = (silence_seconds, lock_seconds) != (DEFAULT_BOUNDARY_SECONDS, DEFAULT_BOUNDARY_SECONDS)
         silence_gap, lock_delay = timedelta(seconds=silence_seconds), timedelta(seconds=lock_seconds)
+        measure_finish = not (derive or on_open) and finish_home_sli.enabled()
+        held_finishes = set() if measure_finish else None
         if historical_timing is not None:
             groups = historical_stretches(eligible, now, since=since, until=until, internal_end=internal_end)
         else:
@@ -349,7 +351,10 @@ async def reconcile(
                 max_window=timedelta(seconds=max_window_seconds()),
                 # Live passes only: backfill and re-derive keep their windowing (cuts there are long settled).
                 continuity=capture_continuity_enabled() and not derive,
+                **({'finish_routes': held_finishes} if measure_finish else {}),
             )
+        for recording_id in held_finishes or ():
+            finish_home_sli.observe_route(uid, recording_id, 'held')
         if live and any(not g['finished'] or (g.get('window_cap_end') and not g['locked']) for g in groups):
             # Speech within five minutes of now is still the live builder's; refuse before any paid call.
             raise Conflict('rederive_live_open')
@@ -495,7 +500,10 @@ async def reconcile(
             and not eligible_ids.intersection(row.get('v3_recording_ids') or ())
         }
 
+        finish_windows = {}
+
         async def plan():
+            finish_windows.clear()
             # One ownership index per plan (adoption can add rows before a replan), shared by the
             # two-hour cap and both projections below.
             ownership = planner.Ownership(existing, recordings)
@@ -698,6 +706,8 @@ async def reconcile(
                     # queue never pick up historical notes.
                     row['v3_process_pending'] = False
                     row['v3_backfill_process_pending'] = True
+                if measure_finish and ended and window.get('manual_end') and window.get('_finish_sli_sources'):
+                    finish_windows[row['id']] = window['_finish_sli_sources']
                 rows.append(row)
                 for rid, claims in row['_v3_claims'].items():
                     allocated.setdefault(rid, []).extend((claim['start'], claim['end']) for claim in claims)
@@ -767,6 +777,15 @@ async def reconcile(
                 # again. If this cleanup fails too, the partition stays unfinished until resume or undo.
                 await run_blocking(db_executor, rederive_store.drop_unwritten_priors, uid, run_id, priors)
             raise
+        if finish_windows:
+            for row in rows:
+                finish_sources = finish_windows.get(row['id'], ())
+                for recording_id in finish_sources:
+                    finish_home_sli.observe_window(uid, recording_id, row['id'])
+                if finish_sources and not row.get('v3_process_pending'):
+                    # Some visible windows can reuse notes already written while
+                    # hidden. The projection write preserves that receipt.
+                    finish_home_sli.observe_home_summary(uid, {**existing.get(row['id'], {}), **row})
         if not derive and not on_open:
             cap_starts = {group['lines'][0]['start'] for group in groups if group['after_window_cap']}
             new_cap_starts = {row['started_at'] for row in rows if row['id'] not in existing} & cap_starts

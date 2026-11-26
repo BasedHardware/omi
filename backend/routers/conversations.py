@@ -187,6 +187,7 @@ from utils.episodes import client_gate
 from models.conversation import ConversationsLiveResponse
 from utils.conversations.v3 import audio as v3_audio, client_capability as v3_client_capability, summary as v3_summary
 from utils.conversations.v3 import live as v3_live, policy as v3_policy
+from utils.conversations.v3 import finish_home_sli
 from utils.conversations.v3.finish import finish_live_window
 from database import conversations_v3_live, conversations_v3_processing
 from utils.conversations import list_page_headers
@@ -675,13 +676,16 @@ class ConversationTestPromptResponse(BaseModel):
 def process_in_progress_conversation(
     request: ProcessConversationRequest = None,
     uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, "conversations:create")),
+    http_request: Request = None,  # type: ignore[assignment]
 ):
+    finish = finish_home_sli.from_request(uid, http_request)
     conversation = retrieve_in_progress_conversation(uid)
     if not conversation:
         response = finish_live_window(
             uid,
             request.live_conversation_id if request else None,
             allow_recording_fallback=request is None or request.empty_body,
+            **({'observe_recording': finish.bind} if finish else {}),
         )
         if response is not None:
             return response
@@ -691,8 +695,13 @@ def process_in_progress_conversation(
         # Resolve Redis exactly once, then use the same transactional outbox as
         # exact-ID finalization. A disconnected HTTP caller must not own the
         # only processing attempt. BYOK retains its request-scoped credentials.
-        return finalize_conversation(conversation['id'], request=request, uid=uid)
+        response = finalize_conversation(conversation['id'], request=request, uid=uid)
+        if finish and conversation.get('recording') is True:
+            finish.bind(conversation['id'])
+        return response
 
+    if finish and conversation.get('recording') is True:
+        finish.bind(conversation['id'])
     conversation = deserialize_conversation(conversation)
 
     # Inject calendar context if provided

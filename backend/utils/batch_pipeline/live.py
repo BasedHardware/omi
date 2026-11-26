@@ -433,13 +433,14 @@ async def _manual_finish_admitted(
     """
     from config.server_batch import manual_end_marker_enabled
     from database import conversations as conversations_db, conversations_v3
-    from utils.conversations.v3 import fast_finish, metrics as v3_metrics, triggers as v3_triggers
+    from utils.conversations.v3 import fast_finish, finish_home_sli, metrics as v3_metrics, triggers as v3_triggers
 
     try:
         if not current.get('recording') or not current.get('v3_manual_end_requested'):
             return
         if not manual_end_marker_enabled():
             return
+        finish_home_sli.observe_route(uid, conversation_id, 'batch')
         single = len(units) == 1
         recording_finish = bool(current.get(FINISH_RECORDING_FIELD))
         promoted = False

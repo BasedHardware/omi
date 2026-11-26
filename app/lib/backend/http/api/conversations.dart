@@ -66,13 +66,16 @@ Future<CreateConversationResponse?> processInProgressConversation() async {
 
 Future<InProgressProcessOutcome> processInProgressConversationOutcome({
   String? liveConversationId,
+  String? finishCut,
   InProgressConversationRequestSender? sendRequest,
   @visibleForTesting Future<void> Function(Duration)? waitBeforeRetry,
   @visibleForTesting void Function(http.Response)? reportUnexpectedResponse,
 }) async {
   final request = ApiRequest(
     url: '${Env.apiBaseUrl}v1/conversations',
-    headers: const {},
+    headers: {
+      if (Env.isTestFlight && !Env.hasApiBaseUrlOverride) 'X-Omi-Finish-Cut': finishCut ?? 'none',
+    },
     method: 'POST',
     body: jsonEncode({if (liveConversationId != null) 'live_conversation_id': liveConversationId}),
   );
