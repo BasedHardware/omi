@@ -267,6 +267,21 @@ def test_capture_and_first_output_and_visible_return_use_real_clocks(monkeypatch
     assert visible._sum.get() - before_visible == 3
 
 
+def _registry_label_sets(name: str) -> set[frozenset]:
+    """One registry pass: every child of ``name`` as an immutable label set.
+
+    ``REGISTRY.get_sample_value`` collects the whole registry on every call, so a
+    cardinality assertion over 144 connected-seconds children would spend its
+    entire fast-unit CPU budget there instead of testing the product.
+    """
+    return {
+        frozenset(sample.labels.items())
+        for family in REGISTRY.collect()
+        for sample in family.samples
+        if sample.name == name
+    }
+
+
 def test_metrics_only_expose_closed_labels():
     for metric in (
         telemetry.WIRE_AUDIO,
@@ -300,35 +315,42 @@ def test_metrics_only_expose_closed_labels():
                     assert reason in telemetry.INELIGIBLE_REASONS or reason == 'none'
                     if sample.labels['demand_cohort'] != 'ineligible':
                         assert reason == 'none'
+    wire_labels = _registry_label_sets('omi_stt_provider_wire_audio_seconds_total')
+    capture_labels = _registry_label_sets('omi_listen_demand_capture_audio_seconds_total')
+    connected_labels = _registry_label_sets('omi_soniox_connected_seconds_total')
     for cohort in telemetry.DEMAND_COHORTS:
         assert (
-            REGISTRY.get_sample_value(
-                'omi_stt_provider_wire_audio_seconds_total',
-                {'provider': 'soniox', 'demand_cohort': cohort, 'origin': 'initial'},
+            frozenset(
+                {
+                    'provider': 'soniox',
+                    'demand_cohort': cohort,
+                    'origin': 'initial',
+                }.items()
             )
-            is not None
+            in wire_labels
         )
         for visibility in telemetry.VISIBILITY_BUCKETS:
             assert (
-                REGISTRY.get_sample_value(
-                    'omi_listen_demand_capture_audio_seconds_total',
-                    {'demand_cohort': cohort, 'visibility': visibility},
+                frozenset(
+                    {
+                        'demand_cohort': cohort,
+                        'visibility': visibility,
+                    }.items()
                 )
-                is not None
+                in capture_labels
             )
             for fallback_reason in telemetry.FALLBACK_REASONS:
                 assert (
-                    REGISTRY.get_sample_value(
-                        'omi_soniox_connected_seconds_total',
+                    frozenset(
                         {
                             'provider': 'soniox',
                             'demand_cohort': cohort,
                             'origin': 'initial',
                             'visibility': visibility,
                             'fallback_reason': fallback_reason,
-                        },
+                        }.items()
                     )
-                    is not None
+                    in connected_labels
                 )
 
 

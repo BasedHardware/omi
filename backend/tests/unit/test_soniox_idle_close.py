@@ -1093,25 +1093,29 @@ def test_default_rearm_holds_a_reopened_socket_for_sixty_seconds(monkeypatch):
     asyncio.run(run())
 
 
+def _connected_seconds_total(*, origin=None):
+    """Sum the connected-seconds children in one registry pass.
+
+    ``REGISTRY.get_sample_value`` re-collects every metric on every call, so
+    summing this metric's 48 visibility/fallback children that way spends the
+    whole fast-unit CPU budget on the registry instead of on the meter.
+    """
+    return sum(
+        sample.value
+        for family in REGISTRY.collect()
+        for sample in family.samples
+        if sample.name == 'omi_soniox_connected_seconds_total'
+        and sample.labels.get('provider') == 'soniox'
+        and sample.labels.get('demand_cohort') == 'ineligible'
+        and (origin is None or sample.labels.get('origin') == origin)
+    )
+
+
 def test_connected_seconds_counts_open_wall_time_once(monkeypatch):
     from utils.observability import demand_cohort
 
     def value():
-        return sum(
-            REGISTRY.get_sample_value(
-                'omi_soniox_connected_seconds_total',
-                {
-                    'provider': 'soniox',
-                    'demand_cohort': 'ineligible',
-                    'origin': 'initial',
-                    'visibility': visibility,
-                    'fallback_reason': fallback_reason,
-                },
-            )
-            or 0.0
-            for visibility in demand_cohort.VISIBILITY_BUCKETS
-            for fallback_reason in demand_cohort.FALLBACK_REASONS
-        )
+        return _connected_seconds_total(origin='initial')
 
     clock = [1000.0]
     monkeypatch.setattr(demand_cohort, 'monotonic', lambda: clock[0])
@@ -1143,22 +1147,7 @@ def test_connected_seconds_stop_while_idle_closed(monkeypatch):
     from utils.observability import demand_cohort
 
     def value():
-        return sum(
-            REGISTRY.get_sample_value(
-                'omi_soniox_connected_seconds_total',
-                {
-                    'provider': 'soniox',
-                    'demand_cohort': 'ineligible',
-                    'origin': origin,
-                    'visibility': visibility,
-                    'fallback_reason': fallback_reason,
-                },
-            )
-            or 0.0
-            for origin in demand_cohort.TRANSPORT_ORIGINS
-            for visibility in demand_cohort.VISIBILITY_BUCKETS
-            for fallback_reason in demand_cohort.FALLBACK_REASONS
-        )
+        return _connected_seconds_total()
 
     async def run():
         socket, idle, _, peers, _, tick = build(monkeypatch, seconds=20)
