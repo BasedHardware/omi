@@ -16,6 +16,7 @@ import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:omi/utils/reliability_experiments.dart';
+import 'package:omi/widgets/footer_glass.dart';
 
 /// Ends the conversation this phone is capturing: the same action as a pendant double-tap
 /// (`CaptureProvider.forceProcessingCurrentConversation`). It sits in the live conversation's detail
@@ -126,6 +127,11 @@ class _LiveConversationEndButtonState extends State<LiveConversationEndButton> {
     }
     if (!mine) return const SizedBox.shrink();
     final label = context.l10n.endConversation;
+    final text = FittedBox(
+      fit: BoxFit.scaleDown,
+      child: Text(label,
+          maxLines: 1, overflow: TextOverflow.ellipsis, style: OmiType.headline.copyWith(color: OmiColors.danger)),
+    );
     return Padding(
       padding: EdgeInsetsDirectional.only(start: widget.leadingGap),
       child: Semantics(
@@ -137,11 +143,13 @@ class _LiveConversationEndButtonState extends State<LiveConversationEndButton> {
           color: Colors.transparent,
           child: Ink(
             height: 56,
-            decoration: BoxDecoration(
-              color: OmiColors.surface1,
-              borderRadius: OmiRadius.pillAll,
-              border: Border.all(color: OmiColors.border, width: 1),
-            ),
+            decoration: FooterGlass.enabled
+                ? null
+                : BoxDecoration(
+                    color: OmiColors.surface1,
+                    borderRadius: OmiRadius.pillAll,
+                    border: Border.all(color: OmiColors.border, width: 1),
+                  ),
             child: InkWell(
               borderRadius: OmiRadius.pillAll,
               onTap: () async {
@@ -189,18 +197,9 @@ class _LiveConversationEndButtonState extends State<LiveConversationEndButton> {
               // line, then ellipsizes, rather than overflowing a 320pt screen.
               child: ConstrainedBox(
                 constraints: BoxConstraints(maxWidth: MediaQuery.sizeOf(context).width * 0.45),
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
-                  child: Center(
-                    child: FittedBox(
-                      fit: BoxFit.scaleDown,
-                      child: Text(label,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: OmiType.headline.copyWith(color: OmiColors.danger)),
-                    ),
-                  ),
-                ),
+                child: FooterGlass.enabled
+                    ? FooterGlassSurface(height: 56, padding: const EdgeInsets.symmetric(horizontal: 16), child: text)
+                    : Padding(padding: const EdgeInsets.symmetric(horizontal: 16), child: Center(child: text)),
               ),
             ),
           ),

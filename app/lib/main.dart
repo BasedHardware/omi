@@ -129,6 +129,7 @@ import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/platform/platform_service.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:omi/utils/notification_channel_strings.dart';
+import 'package:omi/widgets/footer_glass.dart';
 
 /// Firebase parameters for the current flavor, resolved identically in every engine.
 FirebaseOptions _firebaseOptionsForFlavor() => Env.profile == AppEnvironmentProfile.localDev
@@ -535,6 +536,7 @@ void main() {
       // Before any capture/WAL service exists. Never throws; with no selection
       // file and no build-time selection every experiment is off.
       await ReliabilityExperiments.load();
+      FooterGlass.setUp();
       await _start();
     },
     (error, stack) {

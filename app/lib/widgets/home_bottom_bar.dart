@@ -4,6 +4,7 @@ import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 
 import 'package:omi/ui/omi_tokens.dart';
 import 'package:omi/utils/l10n_extensions.dart';
+import 'package:omi/widgets/footer_glass.dart';
 
 /// The two-bubbles glyph (FontAwesome `comments`, regular weight) that marks Ask Omi everywhere it
 /// appears, so every entry point reads as one family.
@@ -55,6 +56,8 @@ class HomeChatBarBackdrop extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Glass needs the list behind it; a solid block would leave it nothing to refract.
+    if (FooterGlass.enabled) return const SizedBox.shrink();
     final solid = homeChatBarOffset(context) + kHomeChatBarHeight;
     final height = solid + kHomeBottomFadeHeight;
     return Positioned(
@@ -87,6 +90,15 @@ class HomeAskAnythingButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final label = context.l10n.askAnything;
+    final text = Text(
+      label,
+      style: OmiType.subhead.copyWith(
+        color: OmiColors.textPrimary,
+        fontWeight: FontWeight.w500,
+      ),
+      textAlign: TextAlign.center,
+      overflow: TextOverflow.ellipsis,
+    );
     return Semantics(
       container: true,
       button: true,
@@ -95,24 +107,18 @@ class HomeAskAnythingButton extends StatelessWidget {
         key: const ValueKey('home_ask_omi_bar'),
         behavior: HitTestBehavior.opaque,
         onTap: onTap,
-        child: Container(
-          height: kHomeChatBarHeight,
-          alignment: Alignment.center,
-          decoration: BoxDecoration(
-            color: OmiColors.surface1,
-            borderRadius: OmiRadius.pillAll,
-            border: Border.all(color: OmiColors.border, width: 1),
-          ),
-          child: Text(
-            label,
-            style: OmiType.subhead.copyWith(
-              color: OmiColors.textPrimary,
-              fontWeight: FontWeight.w500,
-            ),
-            textAlign: TextAlign.center,
-            overflow: TextOverflow.ellipsis,
-          ),
-        ),
+        child: FooterGlass.enabled
+            ? FooterGlassSurface(height: kHomeChatBarHeight, child: text)
+            : Container(
+                height: kHomeChatBarHeight,
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  color: OmiColors.surface1,
+                  borderRadius: OmiRadius.pillAll,
+                  border: Border.all(color: OmiColors.border, width: 1),
+                ),
+                child: text,
+              ),
       ),
     );
   }

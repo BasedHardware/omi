@@ -1747,7 +1747,7 @@ class ConversationDetailPageState extends State<ConversationDetailPage>
 
               // Floating bottom bar — hidden while keyboard is up (e.g. inline summary edit). The page
               // colour fades in behind it so text never runs under the bar.
-              if (MediaQuery.of(context).viewInsets.bottom == 0 && hasBar)
+              if (MediaQuery.of(context).viewInsets.bottom == 0 && hasBar && ConversationBottomBar.needsBackdrop)
                 _DetailBarBackdrop(barBottom: detailFloatingBarBottom(MediaQuery.viewPaddingOf(context).bottom)),
               if (MediaQuery.of(context).viewInsets.bottom == 0)
                 Positioned(

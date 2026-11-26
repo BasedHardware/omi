@@ -30,6 +30,7 @@ import 'package:omi/backend/schema/phone_call.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/widgets/capture_sources.dart';
 import 'package:omi/widgets/header_circle_button.dart';
+import 'package:omi/widgets/footer_glass.dart';
 
 /// The header pills paint 36pt tall; this transparent margin, inside an opaque
 /// GestureDetector, makes the touch target [kMinTapTarget] without moving them
@@ -424,6 +425,22 @@ class _HomeRecordButtonState extends State<HomeRecordButton> {
         // The options sheet only adds a phone call; with calls hidden there is nothing else to offer.
         final canShowOptions = PhoneCallsFeature.visible && !isRecording && !isInitialising;
         final l10n = context.l10n;
+        final Widget glyph = isRecording
+            ? Container(
+                width: 18,
+                height: 18,
+                decoration: BoxDecoration(
+                  color: OmiColors.textPrimary,
+                  borderRadius: _stopGlyphRadius,
+                ),
+              )
+            : isInitialising
+                ? const OmiSpinner(size: OmiSpinnerSize.small)
+                : Container(
+                    width: 20,
+                    height: 20,
+                    decoration: BoxDecoration(color: OmiColors.textPrimary, shape: BoxShape.circle),
+                  );
         final circle = Semantics(
           button: true,
           label: isRecording ? l10n.stopRecording : l10n.startRecording,
@@ -440,32 +457,19 @@ class _HomeRecordButtonState extends State<HomeRecordButton> {
             onLongPress: canShowOptions ? () => _showRecordOptions(context) : null,
             // "Record with this phone": a neutral circle with a white dot, a stop square while the
             // phone records. The ⌄ badge opens the other ways to record.
-            child: Container(
-              width: 62,
-              height: 62,
-              alignment: Alignment.center,
-              decoration: BoxDecoration(
-                color: OmiColors.surface1,
-                shape: BoxShape.circle,
-                border: Border.all(color: OmiColors.border, width: 1),
-              ),
-              child: isRecording
-                  ? Container(
-                      width: 18,
-                      height: 18,
-                      decoration: BoxDecoration(
-                        color: OmiColors.textPrimary,
-                        borderRadius: _stopGlyphRadius,
-                      ),
-                    )
-                  : isInitialising
-                      ? const OmiSpinner(size: OmiSpinnerSize.small)
-                      : Container(
-                          width: 20,
-                          height: 20,
-                          decoration: BoxDecoration(color: OmiColors.textPrimary, shape: BoxShape.circle),
-                        ),
-            ),
+            child: FooterGlass.enabled
+                ? FooterGlassSurface(height: 62, circle: true, child: glyph)
+                : Container(
+                    width: 62,
+                    height: 62,
+                    alignment: Alignment.center,
+                    decoration: BoxDecoration(
+                      color: OmiColors.surface1,
+                      shape: BoxShape.circle,
+                      border: Border.all(color: OmiColors.border, width: 1),
+                    ),
+                    child: glyph,
+                  ),
           ),
         );
         // The badge is its own control (and its own accessibility node) beside the circle's.

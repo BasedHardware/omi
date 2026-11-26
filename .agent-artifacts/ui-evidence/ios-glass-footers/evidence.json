@@ -1,0 +1,47 @@
+{
+  "version": 1,
+  "images": [
+    {
+      "file": "001-mobile-ios-home-dark-before.png",
+      "platform": "mobile-ios",
+      "description": "Home, dark, before: flat Ask anything and record buttons over a solid page-coloured backdrop. iOS 27.2 simulator, production widgets with fixture data.",
+      "captured_by": "agent",
+      "source": "screencapture"
+    },
+    {
+      "file": "002-mobile-ios-home-dark-glass.png",
+      "platform": "mobile-ios",
+      "description": "Home, dark, after: glass buttons with the list passing behind them and no backdrop. iOS 27.2 simulator, production widgets with fixture data.",
+      "captured_by": "agent",
+      "source": "screencapture"
+    },
+    {
+      "file": "003-mobile-ios-home-light-before.png",
+      "platform": "mobile-ios",
+      "description": "Home, light, before. iOS 27.2 simulator, production widgets with fixture data.",
+      "captured_by": "agent",
+      "source": "screencapture"
+    },
+    {
+      "file": "004-mobile-ios-home-light-glass.png",
+      "platform": "mobile-ios",
+      "description": "Home, light, after. iOS 27.2 simulator, production widgets with fixture data.",
+      "captured_by": "agent",
+      "source": "screencapture"
+    },
+    {
+      "file": "005-mobile-ios-conversation-ask-bar-before.png",
+      "platform": "mobile-ios",
+      "description": "Conversation page, dark, before: flat Ask Omi bar. iOS 27.2 simulator, production widgets with fixture data.",
+      "captured_by": "agent",
+      "source": "screencapture"
+    },
+    {
+      "file": "006-mobile-ios-conversation-ask-bar-glass.png",
+      "platform": "mobile-ios",
+      "description": "Conversation page, dark, after: glass Ask Omi bar. iOS 27.2 simulator, production widgets with fixture data.",
+      "captured_by": "agent",
+      "source": "screencapture"
+    }
+  ]
+}
