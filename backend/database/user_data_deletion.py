@@ -7,6 +7,7 @@ from config.refactor_modes import default_on
 from database.action_item_fence import fenced_action_item_commit
 from database.home_feed_writer import suppress_during_account_erasure
 import logging
+import os
 from typing import Any
 from uuid import uuid4
 
@@ -36,14 +37,22 @@ def purge_finalization_jobs(uid: str, client: Any) -> None:
         .select([])
         .limit(450)
     )
+    deleted = 0
     while True:
         page = list(query.stream())
         if not page:
+            logger.info(
+                'account_erasure_finalization_jobs_purged deleted=%d remaining=%d revision=%s',
+                deleted,
+                len(page),
+                os.getenv('K_REVISION') or 'unknown',
+            )
             return
         batch = client.batch()
         for job in page:
             batch.delete(job.reference)
         batch.commit()
+        deleted += len(page)
 
 
 @invalidate_around_write
