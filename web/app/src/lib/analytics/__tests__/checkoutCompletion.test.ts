@@ -26,6 +26,13 @@ import {
 } from '@/lib/analytics/checkoutCompletionStore';
 import type { UserSubscription } from '@/types/user';
 
+const BEFORE_FREE = {
+  plan: 'basic',
+  paid: false,
+  status: 'active',
+  cancelAtPeriodEnd: false,
+};
+
 const PAID: UserSubscription = {
   plan: 'unlimited_v2',
   status: 'active',
@@ -41,12 +48,18 @@ const FREE: UserSubscription = {
 const completions = () =>
   track.mock.calls.filter(([event]) => event === 'Subscription Checkout Completed');
 
-function stage(paidBefore = false) {
-  stageWebCheckout({
-    plan: 'unlimited_v2',
+function stage({
+  before = BEFORE_FREE,
+  plan = 'unlimited_v2',
+}: {
+  before?: typeof BEFORE_FREE;
+  plan?: string;
+} = {}) {
+  return stageWebCheckout({
+    plan,
     interval: 'month',
     source: 'web_plans',
-    paidBefore,
+    before,
   });
 }
 
@@ -58,14 +71,13 @@ describe('web checkout completion', () => {
     window.sessionStorage.clear();
   });
 
-  it('emits exactly one closed-contract completion for a verified paid transition', async () => {
-    stage();
-    const refresh = vi.fn(async () => null);
+  it('emits exactly one closed-contract completion for the selected paid transition', async () => {
+    const checkoutId = stage();
+    const refresh = vi.fn(async () => PAID);
 
     expect(
       await completeWebCheckout(refresh, {
-        attempts: 1,
-        readSubscription: async () => PAID,
+        expectedCheckoutId: checkoutId,
       }),
     ).toBe(true);
 
@@ -83,108 +95,135 @@ describe('web checkout completion', () => {
   });
 
   it('a second return inside one checkout window cannot emit again', async () => {
-    stage();
-    const read = async () => PAID;
+    const checkoutId = stage();
 
     expect(
-      await completeWebCheckout(async () => null, {
-        attempts: 1,
-        readSubscription: read,
+      await completeWebCheckout(async () => PAID, {
+        expectedCheckoutId: checkoutId,
       }),
     ).toBe(true);
     expect(
-      await completeWebCheckout(async () => null, {
-        attempts: 1,
-        readSubscription: read,
+      await completeWebCheckout(async () => PAID, {
+        expectedCheckoutId: checkoutId,
       }),
     ).toBe(false);
     expect(completions()).toHaveLength(1);
   });
 
   it('bare focus, reload or a later visit without a staged checkout emits nothing', async () => {
-    const refresh = vi.fn(async () => null);
-    expect(
-      await completeWebCheckout(refresh, {
-        attempts: 1,
-        readSubscription: async () => PAID,
-      }),
-    ).toBe(false);
+    const refresh = vi.fn(async () => PAID);
+    expect(await completeWebCheckout(refresh)).toBe(false);
     expect(refresh).toHaveBeenCalledOnce();
     expect(completions()).toHaveLength(0);
   });
 
-  it('fails closed when the subscription read is null, throws or is not paid', async () => {
-    stage();
-    expect(
-      await completeWebCheckout(async () => null, {
-        attempts: 1,
-        readSubscription: async () => null,
-      }),
-    ).toBe(false);
-
-    stage();
-    expect(
-      await completeWebCheckout(async () => null, {
-        attempts: 1,
-        readSubscription: async () => {
-          throw new Error('network');
-        },
-      }),
-    ).toBe(false);
-
-    stage();
-    expect(
-      await completeWebCheckout(async () => null, {
-        attempts: 1,
-        readSubscription: async () => FREE,
-      }),
-    ).toBe(false);
-    expect(completions()).toHaveLength(0);
-  });
-
-  it('an inactive paid snapshot is not a verified transition', async () => {
-    stage();
-    await completeWebCheckout(async () => null, {
-      attempts: 1,
-      readSubscription: async () => ({ ...PAID, status: 'inactive' }),
+  it('a no-record focus refresh rejection is swallowed', async () => {
+    const refresh = vi.fn(async () => {
+      throw new Error('refresh failed');
     });
+    await expect(completeWebCheckout(refresh)).resolves.toBe(false);
+    expect(refresh).toHaveBeenCalledOnce();
+  });
+
+  it('does not attribute another paid plan to this checkout', async () => {
+    const checkoutId = stage();
+    const read = vi.fn(async () => ({ ...PAID, plan: 'plus' }));
+
+    expect(
+      await completeWebCheckout(async () => undefined, {
+        expectedCheckoutId: checkoutId,
+        readSubscription: read,
+      }),
+    ).toBe(false);
+    expect(read).toHaveBeenCalledOnce();
     expect(completions()).toHaveLength(0);
   });
 
-  it('a paid snapshot that did not move is not a new checkout completion', () => {
+  it('requires the selected plan and a change from the saved subscription snapshot', () => {
     const pending = {
       checkoutId: 'x',
       plan: 'unlimited_v2',
       interval: 'month',
       source: 'web_plans',
-      paidBefore: true,
+      before: {
+        plan: 'plus',
+        paid: true,
+        status: 'active',
+        cancelAtPeriodEnd: false,
+      },
       openedAt: Date.now(),
     };
-    expect(isVerifiedPaidTransition(pending, PAID)).toBe(false);
-    expect(isVerifiedPaidTransition({ ...pending, plan: 'plus' }, PAID)).toBe(true);
+    expect(isVerifiedPaidTransition(pending, PAID)).toBe(true);
+    expect(isVerifiedPaidTransition(pending, { ...PAID, plan: 'architect' })).toBe(false);
+    expect(
+      isVerifiedPaidTransition(
+        { ...pending, before: { ...pending.before, plan: 'unlimited_v2' } },
+        PAID,
+      ),
+    ).toBe(false);
+    expect(isVerifiedPaidTransition(pending, { ...PAID, plan: 'unknown' })).toBe(false);
   });
 
-  it('the kill switch being explicitly off suppresses the event without touching exposure events', async () => {
-    flag.mockResolvedValue(false);
-    stage();
+  it('does not emit for a null refresh result, a rejected refresh or an unpaid state', async () => {
+    const read = vi.fn(async () => PAID);
+
+    const nullId = stage();
     expect(
       await completeWebCheckout(async () => null, {
-        attempts: 1,
-        readSubscription: async () => PAID,
+        expectedCheckoutId: nullId,
+        readSubscription: read,
+      }),
+    ).toBe(false);
+
+    const rejectedId = stage();
+    expect(
+      await completeWebCheckout(
+        async () => {
+          throw new Error('refresh failed');
+        },
+        { expectedCheckoutId: rejectedId, readSubscription: read },
+      ),
+    ).toBe(false);
+
+    const unpaidId = stage();
+    expect(
+      await completeWebCheckout(async () => FREE, {
+        expectedCheckoutId: unpaidId,
+        readSubscription: read,
+      }),
+    ).toBe(false);
+
+    expect(read).not.toHaveBeenCalled();
+    expect(completions()).toHaveLength(0);
+  });
+
+  it('an inactive paid snapshot is not a verified transition', () => {
+    const checkoutId = stage();
+    expect(checkoutId).toBeTruthy();
+    const pending = takePendingWebCheckout();
+    expect(isVerifiedPaidTransition(pending!, { ...PAID, status: 'inactive' })).toBe(
+      false,
+    );
+  });
+
+  it('the kill switch being explicitly off suppresses emission', async () => {
+    flag.mockResolvedValue(false);
+    const checkoutId = stage();
+    expect(
+      await completeWebCheckout(async () => PAID, {
+        expectedCheckoutId: checkoutId,
       }),
     ).toBe(false);
     expect(completions()).toHaveLength(0);
-    // The record is consumed so a later focus cannot resurrect it.
     expect(takePendingWebCheckout()).toBeNull();
   });
 
   it('a default-on flag read still emits when the flag store cannot answer', async () => {
     flag.mockRejectedValue(new Error('flag store down'));
-    stage();
+    const checkoutId = stage();
     expect(
-      await completeWebCheckout(async () => null, {
-        attempts: 1,
-        readSubscription: async () => PAID,
+      await completeWebCheckout(async () => PAID, {
+        expectedCheckoutId: checkoutId,
       }),
     ).toBe(true);
   });
@@ -193,19 +232,14 @@ describe('web checkout completion', () => {
     const setItem = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
       throw new Error('denied');
     });
-    stage();
+    expect(stage()).toBeNull();
     setItem.mockRestore();
 
-    expect(
-      await completeWebCheckout(async () => null, {
-        attempts: 1,
-        readSubscription: async () => PAID,
-      }),
-    ).toBe(false);
+    expect(await completeWebCheckout(async () => PAID)).toBe(false);
     expect(completions()).toHaveLength(0);
   });
 
-  it('a stale record is discarded', async () => {
+  it('a stale record is discarded', () => {
     window.sessionStorage.setItem(
       'omi.web.checkout.pending.v1',
       JSON.stringify({
@@ -213,25 +247,20 @@ describe('web checkout completion', () => {
         plan: 'unlimited_v2',
         interval: 'month',
         source: 'web_plans',
-        paidBefore: false,
+        before: BEFORE_FREE,
         openedAt: Date.now() - 61 * 60 * 1000,
       }),
     );
-    expect(
-      await completeWebCheckout(async () => null, {
-        attempts: 1,
-        readSubscription: async () => PAID,
-      }),
-    ).toBe(false);
-    expect(completions()).toHaveLength(0);
+    expect(takePendingWebCheckout()).toBeNull();
+    expect(window.sessionStorage.getItem('omi.web.checkout.pending.v1')).toBeNull();
   });
 
-  it('the refresh result is used as the verified read when it is a subscription', async () => {
-    stage();
+  it('the refresh result is used without a second subscription read', async () => {
+    const checkoutId = stage();
     const read = vi.fn(async () => null);
     expect(
       await completeWebCheckout(async () => PAID, {
-        attempts: 1,
+        expectedCheckoutId: checkoutId,
         readSubscription: read,
       }),
     ).toBe(true);
@@ -239,30 +268,84 @@ describe('web checkout completion', () => {
     expect(completions()).toHaveLength(1);
   });
 
-  it('watchCheckoutReturn is single-shot', async () => {
-    stage();
-    const refresh = vi.fn(async () => PAID);
-    watchCheckoutReturn(refresh);
-    window.dispatchEvent(new Event('focus'));
-    window.dispatchEvent(new Event('focus'));
-    await vi.waitFor(() => expect(completions()).toHaveLength(1));
-    expect(refresh).toHaveBeenCalledOnce();
-  });
-
-  it('retries absorb webhook lag without emitting twice', async () => {
-    stage();
+  it('a void refresh uses at most one authoritative read', async () => {
+    const checkoutId = stage();
     let reads = 0;
-    const read = async () => {
-      reads += 1;
-      return reads >= 2 ? PAID : FREE;
-    };
     expect(
-      await completeWebCheckout(async () => null, {
-        attempts: 3,
-        retryDelayMs: 1,
-        readSubscription: read,
+      await completeWebCheckout(async () => undefined, {
+        expectedCheckoutId: checkoutId,
+        readSubscription: async () => {
+          reads += 1;
+          return PAID;
+        },
       }),
     ).toBe(true);
+    expect(reads).toBe(1);
     expect(completions()).toHaveLength(1);
+  });
+
+  it('a failed storage removal fails closed', async () => {
+    const checkoutId = stage();
+    const removeItem = vi
+      .spyOn(Storage.prototype, 'removeItem')
+      .mockImplementation(() => {
+        throw new Error('storage denied');
+      });
+
+    expect(
+      await completeWebCheckout(async () => PAID, {
+        expectedCheckoutId: checkoutId,
+      }),
+    ).toBe(false);
+    expect(completions()).toHaveLength(0);
+    removeItem.mockRestore();
+  });
+
+  it('overlapping checkouts invalidate both completion signals', async () => {
+    const firstCheckoutId = stage();
+    const secondCheckoutId = stage();
+    expect(firstCheckoutId).toBeTruthy();
+    expect(secondCheckoutId).toBeNull();
+    expect(
+      await completeWebCheckout(async () => PAID, {
+        expectedCheckoutId: firstCheckoutId,
+      }),
+    ).toBe(false);
+    expect(completions()).toHaveLength(0);
+  });
+
+  it('focus while checkout stays open retains the record until the window closes', async () => {
+    const checkoutId = stage();
+    const checkoutState = { closed: false };
+    const checkoutWindow = checkoutState as Window;
+    const refresh = vi.fn(async () => PAID);
+    const cleanup = watchCheckoutReturn(refresh, { checkoutWindow, checkoutId });
+
+    window.dispatchEvent(new Event('focus'));
+    expect(refresh).not.toHaveBeenCalled();
+    expect(completions()).toHaveLength(0);
+    expect(window.sessionStorage.getItem('omi.web.checkout.pending.v1')).not.toBeNull();
+
+    checkoutState.closed = true;
+    window.dispatchEvent(new Event('focus'));
+    await vi.waitFor(() => expect(completions()).toHaveLength(1));
+    window.dispatchEvent(new Event('focus'));
+    expect(refresh).toHaveBeenCalledOnce();
+    expect(completions()).toHaveLength(1);
+    cleanup();
+  });
+
+  it('component cleanup removes its listener and pending record', async () => {
+    const checkoutId = stage();
+    const checkoutWindow = { closed: true } as Window;
+    const refresh = vi.fn(async () => PAID);
+    const cleanup = watchCheckoutReturn(refresh, { checkoutWindow, checkoutId });
+
+    cleanup();
+    window.dispatchEvent(new Event('focus'));
+    await Promise.resolve();
+    expect(refresh).not.toHaveBeenCalled();
+    expect(completions()).toHaveLength(0);
+    expect(window.sessionStorage.getItem('omi.web.checkout.pending.v1')).toBeNull();
   });
 });

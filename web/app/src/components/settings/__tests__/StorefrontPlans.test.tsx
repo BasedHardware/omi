@@ -9,6 +9,7 @@ import { CHECKOUT_POPUP_BLOCKED } from '@/lib/checkoutWindow';
 const api = vi.hoisted(() => ({
   getStorefront: vi.fn(),
   createCheckoutSession: vi.fn(),
+  getUserSubscription: vi.fn(async () => null),
   upgradeSubscription: vi.fn(),
   getCustomerPortal: vi.fn(),
 }));
@@ -124,7 +125,7 @@ describe('StorefrontPlans', () => {
 
 describe('StorefrontPanel purchase routing', () => {
   it('keeps the selected annual offer retryable after a blocked checkout tab', async () => {
-    const checkout = { opener: window };
+    const checkout = { opener: window, closed: true };
     vi.stubGlobal('open', vi.fn().mockReturnValueOnce(null).mockReturnValue(checkout));
     const data = golden('free_settings');
     api.getStorefront.mockImplementation(async () => {

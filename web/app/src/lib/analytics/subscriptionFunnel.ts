@@ -1,7 +1,15 @@
 import { purchasePayload, type PurchaseEventId } from './purchaseContract.generated';
-import { stageWebCheckout } from './checkoutCompletionStore';
+import {
+  stageWebCheckout,
+  type CheckoutSubscriptionSnapshot,
+} from './checkoutCompletionStore';
 import { openCheckoutWindow } from '@/lib/checkoutWindow';
 import { PostHogManager } from '@/lib/analytics/posthog';
+
+export interface OpenedPurchaseCheckout {
+  checkoutWindow: Window;
+  checkoutId: string | null;
+}
 
 const PLANS = new Set([
   'basic',
@@ -117,10 +125,11 @@ export function openPurchaseCheckout(
   plan: string,
   interval: string,
   source: string,
-  paidBefore = false,
-): boolean {
-  if (!openCheckoutWindow(url)) return false;
-  stageWebCheckout({ plan, interval, source, paidBefore });
+  before: CheckoutSubscriptionSnapshot,
+): OpenedPurchaseCheckout | null {
+  const checkoutWindow = openCheckoutWindow(url);
+  if (!checkoutWindow) return null;
+  const checkoutId = stageWebCheckout({ plan, interval, source, before });
   trackPurchaseEvent('checkoutOpened', {
     plan: subscriptionPlanWire(plan),
     billing_interval: subscriptionIntervalWire(interval),
@@ -128,5 +137,5 @@ export function openPurchaseCheckout(
     stage: 'hosted_checkout',
     result: 'opened',
   });
-  return true;
+  return { checkoutWindow, checkoutId };
 }

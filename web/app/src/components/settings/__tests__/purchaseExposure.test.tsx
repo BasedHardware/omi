@@ -1,10 +1,11 @@
 import { fireEvent, render, screen, waitFor, cleanup } from '@testing-library/react';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
+import type { UserSubscription } from '@/types/user';
 const state = vi.hoisted(() => ({
   track: vi.fn(),
   checkout: vi.fn(),
   plans: vi.fn(),
-  subscription: vi.fn(async () => null),
+  subscription: vi.fn(async (): Promise<UserSubscription | null> => null),
 }));
 vi.mock('@/lib/analytics/posthog', () => ({ PostHogManager: { track: state.track } }));
 vi.mock('@/lib/omiFlags', () => ({ omiFlagEnabled: vi.fn(async () => true) }));
@@ -42,7 +43,7 @@ beforeEach(() => {
   window.sessionStorage.clear();
   vi.stubGlobal(
     'open',
-    vi.fn(() => ({})),
+    vi.fn(() => ({ closed: true })),
   );
 });
 afterEach(() => {
@@ -111,6 +112,23 @@ it('one verified paid transition after the checkout tab returns emits one comple
   await new Promise((resolve) => setTimeout(resolve, 0));
   expect(count('Checkout Completed')).toBe(1);
   expect(JSON.stringify(state.track.mock.calls)).not.toContain('private-session');
+});
+
+it('unmounting removes the checkout return listener and pending record', async () => {
+  state.checkout.mockResolvedValue({
+    url: 'https://checkout.stripe.test/private-session',
+  });
+  const tree = render(<PlansSheet open {...props} />);
+  fireEvent.click(await screen.findByRole('button', { name: 'Continue to Payment' }));
+  await waitFor(() => expect(count('Checkout Opened')).toBe(1));
+
+  tree.unmount();
+  fireEvent.focus(window);
+  await Promise.resolve();
+
+  expect(state.subscription).not.toHaveBeenCalled();
+  expect(count('Checkout Completed')).toBe(0);
+  expect(window.sessionStorage.getItem('omi.web.checkout.pending.v1')).toBeNull();
 });
 it.each(['failed', 'blocked'])(
   'no opened or completion for %s checkout',

@@ -170,7 +170,7 @@ describe('PlansSheet checkout', () => {
   it('keeps a blocked checkout retryable and only closes after a tab opens', async () => {
     const onOpenChange = vi.fn();
     const onSubscriptionUpdate = vi.fn();
-    const open = vi.fn().mockReturnValueOnce(null).mockReturnValue({});
+    const open = vi.fn().mockReturnValueOnce(null).mockReturnValue({ closed: true });
     vi.stubGlobal('open', open);
     render(
       <PlansSheet

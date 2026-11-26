@@ -877,6 +877,15 @@ export function UsageSectionContent({
   const [renewalConfirmation, setRenewalConfirmation] = useState<string | null>(null);
   const [showCancelConfirm, setShowCancelConfirm] = useState(false);
   const [isCanceling, setIsCanceling] = useState(false);
+  const checkoutReturnCleanup = useRef<(() => void) | null>(null);
+
+  useEffect(
+    () => () => {
+      checkoutReturnCleanup.current?.();
+      checkoutReturnCleanup.current = null;
+    },
+    [],
+  );
   const [showUpgradeOptions, setShowUpgradeOptions] = useState(false);
   const [storefrontEnabled, setStorefrontEnabled] = useState(false);
 
@@ -1011,13 +1020,29 @@ export function UsageSectionContent({
         purchaseRoute = 'checkout';
         const result = await createCheckoutSession(selectedPriceId);
         if (result?.url) {
-          if (!openPurchaseCheckout(result.url, tier, interval, 'usage_page', isPaid)) {
+          const checkout = openPurchaseCheckout(
+            result.url,
+            tier,
+            interval,
+            'usage_page',
+            {
+              plan: subscription?.plan ?? null,
+              paid: subscription?.is_unlimited ?? false,
+              status: subscription?.status ?? null,
+              cancelAtPeriodEnd: subscription?.cancel_at_period_end ?? null,
+            },
+          );
+          if (!checkout) {
             setError(CHECKOUT_POPUP_BLOCKED);
             return;
           }
+          checkoutReturnCleanup.current?.();
           // The checkout tab returns focus once it closes; completion there is
           // only emitted for a verified paid-state transition.
-          watchCheckoutReturn(onSubscriptionUpdate);
+          checkoutReturnCleanup.current = watchCheckoutReturn(
+            onSubscriptionUpdate,
+            checkout,
+          );
         } else if (result?.status === 'reactivated') {
           const seconds = renewalDateSeconds(
             result.next_billing_date,

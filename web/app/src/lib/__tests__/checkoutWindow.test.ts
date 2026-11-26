@@ -14,14 +14,14 @@ describe('checkout browser launch', () => {
         return null;
       }),
     );
-    expect(openCheckoutWindow(url)).toBe(false);
+    expect(openCheckoutWindow(url)).toBeNull();
   });
 
   it('nulls the opener and keeps the URL/target without the noopener feature', () => {
     const checkout = { opener: window };
     const open = vi.fn(() => checkout);
     vi.stubGlobal('open', open);
-    expect(openCheckoutWindow(url)).toBe(true);
+    expect(openCheckoutWindow(url)).toBe(checkout);
     expect(open).toHaveBeenCalledExactlyOnceWith(url, '_blank');
     expect(checkout.opener).toBeNull();
   });
@@ -36,6 +36,6 @@ describe('checkout browser launch', () => {
       'open',
       vi.fn(() => checkout),
     );
-    expect(openCheckoutWindow(url)).toBe(true);
+    expect(openCheckoutWindow(url)).toBe(checkout);
   });
 });

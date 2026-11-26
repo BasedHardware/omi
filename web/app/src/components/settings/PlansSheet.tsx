@@ -71,6 +71,15 @@ export function PlansSheet({
   const [isCanceling, setIsCanceling] = useState(false);
   const [renewalConfirmation, setRenewalConfirmation] = useState<string | null>(null);
   const paywallWasOpen = useRef(false);
+  const checkoutReturnCleanup = useRef<(() => void) | null>(null);
+
+  useEffect(
+    () => () => {
+      checkoutReturnCleanup.current?.();
+      checkoutReturnCleanup.current = null;
+    },
+    [],
+  );
 
   const planIdentity = subscription
     ? subscription.plan_identity ?? decodePlan(subscription.plan)
@@ -224,14 +233,24 @@ export function PlansSheet({
           // Stripe Checkout opens in a new tab. The parent page never sees the
           // cancel URL Stripe returns to, so Upgrade Cancelled is not emitted
           // here. trackUpgradeCancelled exists for a client that can observe it.
-          if (!openPurchaseCheckout(result.url, tier, interval, 'web_plans', isPaid)) {
+          const checkout = openPurchaseCheckout(result.url, tier, interval, 'web_plans', {
+            plan: subscription?.plan ?? null,
+            paid: subscription?.is_unlimited ?? false,
+            status: subscription?.status ?? null,
+            cancelAtPeriodEnd: subscription?.cancel_at_period_end ?? null,
+          });
+          if (!checkout) {
             setError(CHECKOUT_POPUP_BLOCKED);
             return;
           }
+          checkoutReturnCleanup.current?.();
           onOpenChange(false);
           // The checkout tab returns focus once it closes; completion there is
           // only emitted for a verified paid-state transition.
-          watchCheckoutReturn(onSubscriptionUpdate);
+          checkoutReturnCleanup.current = watchCheckoutReturn(
+            onSubscriptionUpdate,
+            checkout,
+          );
         } else if (result?.status === 'reactivated') {
           const seconds = renewalDateSeconds(
             result.next_billing_date,

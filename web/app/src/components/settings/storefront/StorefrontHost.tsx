@@ -28,6 +28,7 @@ import {
 import { PlanStorefrontGate } from '@/lib/planStorefrontGate';
 import {
   openPurchaseCheckout,
+  type OpenedPurchaseCheckout,
   trackPaywallOpened,
   trackUpgradePlanSelected,
   trackUpgradeSucceeded,
@@ -99,6 +100,7 @@ async function purchase(
   source: string,
   livePlanId: string | null | undefined,
   onSubscriptionUpdate: SubscriptionRefresh,
+  onCheckoutOpened: (checkout: OpenedPurchaseCheckout) => void,
 ): Promise<string | null> {
   const decision = storefrontCheckoutDecision(data, tier, price, livePlanId);
   if (decision === 'refuse' || price.id === null) return null;
@@ -115,11 +117,22 @@ async function purchase(
   }
   const result = await createCheckoutSession(price.id);
   if (result?.url) {
-    if (!openPurchaseCheckout(result.url, tier.planId, price.interval, source, paid))
-      return CHECKOUT_POPUP_BLOCKED;
+    const checkout = openPurchaseCheckout(
+      result.url,
+      tier.planId,
+      price.interval,
+      source,
+      {
+        plan: data.current?.planId ?? livePlanId ?? null,
+        paid,
+        status: null,
+        cancelAtPeriodEnd: data.current?.cancelAtPeriodEnd ?? null,
+      },
+    );
+    if (!checkout) return CHECKOUT_POPUP_BLOCKED;
     // The checkout tab returns focus once it closes; completion there is only
     // emitted for a verified paid-state transition.
-    watchCheckoutReturn(onSubscriptionUpdate);
+    onCheckoutOpened(checkout);
     return null;
   }
   if (result?.status === 'reactivated') {
@@ -150,11 +163,20 @@ export function StorefrontPanel({
   const [busyPriceId, setBusyPriceId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const opened = useRef(false);
+  const checkoutReturnCleanup = useRef<(() => void) | null>(null);
   const recordPurchaseView = usePurchaseExposure(
     false,
     source,
     data?.current?.planId ?? 'unknown',
     'storefront',
+  );
+
+  useEffect(
+    () => () => {
+      checkoutReturnCleanup.current?.();
+      checkoutReturnCleanup.current = null;
+    },
+    [],
   );
   useAllowanceObservation(
     false,
@@ -193,6 +215,13 @@ export function StorefrontPanel({
         source,
         livePlanId,
         onSubscriptionUpdate,
+        (checkout) => {
+          checkoutReturnCleanup.current?.();
+          checkoutReturnCleanup.current = watchCheckoutReturn(
+            onSubscriptionUpdate,
+            checkout,
+          );
+        },
       );
       setError(purchaseError);
       checkoutBlocked = purchaseError === CHECKOUT_POPUP_BLOCKED;
