@@ -2191,7 +2191,7 @@ def _ingest_conversation_from_segments(
                     strip_client_processing(dict(existing_conversation))
                 )
             elif stale_claim is None:
-                return _replay_from_segments(uid, existing_conversation, request, continue_processing)
+                return _replay_from_segments(uid, existing_conversation, request, client_kind)
 
     resolved_client_device_id = client_device_id or request.client_device_id
     resolved_client_platform = client_platform or request.client_platform
@@ -2317,9 +2317,9 @@ def _ingest_conversation_from_segments(
 
 
 def _replay_from_segments(
-    uid: str, existing_conversation: dict, request: CreateConversationFromTranscriptRequest, continue_processing: bool
+    uid: str, existing_conversation: dict, request: CreateConversationFromTranscriptRequest, client_kind: str | None
 ) -> ConversationResponse:
-    if continue_processing and existing_conversation.get('status') == ConversationStatus.processing:
+    if client_kind == 'mobile_ios' and existing_conversation.get('status') == ConversationStatus.processing:
         # iOS acknowledges uploads by HTTP status alone. Keep its local copy
         # until the admitted worker has persisted the completed conversation.
         raise retryable_processing_response('from_segments_processing_in_flight')
@@ -2368,7 +2368,7 @@ def _process_validated_from_segments(
                     conversations_db.get_conversation, uid, conversation_id
                 )
                 if existing_conversation:
-                    return _replay_from_segments(uid, existing_conversation, request, continue_processing)
+                    return _replay_from_segments(uid, existing_conversation, request, client_kind)
                 raise HTTPException(status_code=409, detail="Conversation creation already in progress")
 
     # Process conversation. The idempotent (client_session_id) path creates a

@@ -6589,10 +6589,10 @@ to continue after a response.
 The 25-second HTTP deadline bounds intake and the enrichment wait for keyed uploads.
 During continued processing, an admitted worker keeps its existing processing
 claim while enrichment runs under a separate budget. An HTTP budget cut uses
-`request_budget_exhausted`. A replay that finds a live claim uses
+`request_budget_exhausted`. A keyed iOS replay that finds a live claim uses
 `from_segments_processing_in_flight` with the same retryable 503 body and
-headers. A replay of a completed row returns the existing conversation
-response, independent of enrichment capacity. An aged claim can be retaken
+headers in every rollout mode. A replay of a completed row returns the existing
+conversation response, independent of enrichment capacity. An aged claim can be retaken
 only if the lease observed at intake still matches, using the stored transcript.
 See the [SCA-4146 change note](listen_pusher_pipeline/changes/2026-11-25-from-segments-continued-processing.md).
 

@@ -8,6 +8,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.testclient import TestClient
 import pytest
 
+from config import refactor_modes
 import database.conversations as conversations_db
 from database.firestore_read_metrics import FirestoreReadSite
 import routers.developer as developer
@@ -612,6 +613,49 @@ def test_client_session_id_concurrent_claim_loser_returns_existing_without_proce
 
     assert response.id == expected_id
     assert response.status == 'processing'
+    process.assert_not_called()
+
+
+@pytest.mark.parametrize(
+    'rollout_mode', [pytest.param('off', id='flag-off'), pytest.param('shadow', id='outside-cohort')]
+)
+@pytest.mark.parametrize('claim_race', [False, True], ids=['existing-claim', 'claim-race'])
+def test_keyed_ios_processing_replay_is_retryable_without_continuation(
+    monkeypatch, segment_api_client, caplog, rollout_mode, claim_race
+):
+    session = 'keyed-ios-replay'
+    conversation_id = developer._from_segments_conversation_id('uid1', session)
+    row = {'id': conversation_id, 'status': ConversationStatus.processing, 'discarded': False}
+    monkeypatch.setenv(refactor_modes.FROM_SEGMENTS_CONTINUED_PROCESSING_MODE_ENV, rollout_mode)
+    monkeypatch.setenv(refactor_modes.FROM_SEGMENTS_CONTINUED_PROCESSING_SERVE_PERCENT_ENV, '0')
+    monkeypatch.setenv(
+        refactor_modes.FROM_SEGMENTS_CONTINUED_PROCESSING_SERVE_UID_SHA256S_ENV,
+        refactor_modes.uid_digest('another-user'),
+    )
+    lookup = MagicMock(side_effect=[None, row, row] if claim_race else [row, row])
+    claim = MagicMock(return_value=False)
+    process = MagicMock()
+    monkeypatch.setattr(conversations_db, 'get_conversation', lookup)
+    monkeypatch.setattr(developer.lifecycle_service, 'create_processing_conversation', claim)
+    monkeypatch.setattr(developer, 'process_conversation', process)
+    body = _request(source='phone', client_session_id=session).model_dump(mode='json')
+    headers = {'X-App-Platform': 'ios'}
+    path = '/v1/conversations/from-segments'
+
+    active = segment_api_client.post(path, headers=headers, json=body)
+
+    assert active.status_code == 503
+    assert active.headers['Retry-After'] == '2'
+    assert any(getattr(record, 'raise_site', None) == 'from_segments_processing_in_flight' for record in caplog.records)
+    assert claim.call_count == int(claim_race)
+    assert row['status'] == ConversationStatus.processing
+
+    row['status'] = ConversationStatus.completed
+    completed = segment_api_client.post(path, headers=headers, json=body)
+
+    assert completed.status_code == 200
+    assert completed.json()['id'] == conversation_id
+    assert completed.json()['status'] == 'completed'
     process.assert_not_called()
 
 
