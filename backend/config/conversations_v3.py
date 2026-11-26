@@ -98,10 +98,15 @@ def stretch_cohesion_enabled() -> bool:
     return os.getenv('CONVERSATIONS_V3_STRETCH_COHESION', 'on').strip().lower() not in {'off', 'false', '0', 'no'}
 
 
+def settle_on_landing_enabled(*, custom_timing: bool, cohesion: bool, derive: bool) -> bool:
+    return custom_timing or (cohesion and not derive and default_on('CONVERSATIONS_V3_SETTLE_ON_LANDING'))
+
+
 DEFAULT_BOUNDARY_SECONDS = 300
 DEFAULT_MAX_WINDOW_SECONDS = 10800
 HISTORICAL_SITDOWN_TIMING = (900, 3600)
-# Stamped by the transaction that makes new recording speech visible; custom lock timing counts from it.
+# Stamped by the transaction that makes new recording speech visible. Live stretch cohesion settles from it
+# (default timing under CONVERSATIONS_V3_SETTLE_ON_LANDING, custom timing always).
 SPEECH_LANDED_FIELD = 'v3_speech_landed_at'
 
 

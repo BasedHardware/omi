@@ -36,6 +36,7 @@ from config.conversations_v3 import (
     live_title_enabled,
     manual_end_home_visible_enabled,
     max_window_seconds,
+    settle_on_landing_enabled,
     stretch_cohesion_enabled,
 )
 from utils.conversations.v3.triggers import enqueue, changed
@@ -355,7 +356,9 @@ async def reconcile(
                 now,
                 silence_gap=silence_gap,
                 lock_delay=lock_delay,
-                settle_on_landing=custom_timing,
+                settle_on_landing=settle_on_landing_enabled(
+                    custom_timing=custom_timing, cohesion=cohesion, derive=derive
+                ),
                 max_window=timedelta(seconds=max_window_seconds()),
                 **({'manual_cuts': owner_cuts} if owner_cuts else {}),
                 # Live passes only: backfill and re-derive keep their windowing (cuts there are long settled).
