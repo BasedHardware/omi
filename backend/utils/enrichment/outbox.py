@@ -35,6 +35,9 @@ from config.summary_guarantee import (
     ADMITTED_OWNER,
     deadline_seconds,
     first_summary_pending,
+    first_week_enabled,
+    first_week_open,
+    first_week_window_end,
     preserves_admitted,
 )
 from config.policy import FirstSummaryPolicy, resolve_stage_policy
@@ -311,10 +314,12 @@ def _recent_conversation(uid: str, conversation_id: str, now: float) -> bool:
 
 
 def dispatch_binding(
-    *, backfill: bool = False, effects_only: bool = False, recent: bool = False
+    *, backfill: bool = False, effects_only: bool = False, recent: bool = False, first_week: bool = False
 ) -> dict[str, str] | None:
     if enrichment_config.route() == 'enrichment_queue':
-        binding = enrichment_config.dispatch_binding(backfill=backfill, effects_only=effects_only, recent=recent)
+        binding = enrichment_config.dispatch_binding(
+            backfill=backfill, effects_only=effects_only, recent=recent, first_week=first_week
+        )
         if valid_dispatch_binding(binding):
             return binding
         record_fallback(
@@ -425,6 +430,7 @@ def mark(
         raise RuntimeError('sync reprocess projection requires production or a Firestore emulator')
     current = time.time() if now is None else now
     stamps: list[tuple[str, str]] = []
+    first_week = _first_week_for_obligation(uid, current, effects_only=effects_only)
     update = mark_update(
         uid,
         conversation_id,
@@ -435,6 +441,7 @@ def mark(
         effects_only=effects_only,
         batch=mutate is not None,
         snapshot_summary=snapshot_summary,
+        first_week=first_week,
         stamps=stamps,
         sync_hold=sync_hold,
         merge_hold=merge_hold,
@@ -463,6 +470,7 @@ def mark_update(
     policy_id: str | None = None,
     new_dispatch: Callable[[], dict[str, str] | None] | None = None,
     snapshot_summary: bool = False,
+    first_week: dict[str, Any] | None = None,
     stamps: list[tuple[str, str]] | None = None,
     sync_hold: bool = False,
     merge_hold: bool = False,
@@ -576,6 +584,11 @@ def mark_update(
             )
 
         row.setdefault('summary_lane', 'batch' if batch else summary_delivery.lane({}))
+        if first_week and not isinstance(row.get('first_week_summary'), dict):
+            # Stored once on the row so the deadline, demotion and age-gate readers
+            # never recompute a window from wall-clock age (SCA-4790).
+            row['first_week_summary'] = dict(first_week)
+        open_first_week = first_week_open(row, now=current)
         backfill = row['summary_lane'] == 'backfill' and not first_summary_pending(row)
         # Reserved slots serve first summaries only; refreshes need no clock lookup.
         if (old is None or old.get('dormant')) and first_summary_pending(row) and recent is None:
@@ -588,10 +601,14 @@ def mark_update(
                 task_due_at=row['due_at'],
                 lease_until=0,
                 dispatch=(new_dispatch() if new_dispatch else None)
-                or dispatch_binding(backfill=backfill, effects_only=effects_only, recent=fresh),
+                or dispatch_binding(
+                    backfill=backfill, effects_only=effects_only, recent=fresh, first_week=open_first_week
+                ),
             )
         elif old.get('dormant'):
-            row['dispatch'] = dispatch_binding(backfill=backfill, effects_only=effects_only, recent=fresh)
+            row['dispatch'] = dispatch_binding(
+                backfill=backfill, effects_only=effects_only, recent=fresh, first_week=open_first_week
+            )
         elif not valid_dispatch_binding(row.get('dispatch')):
             row['dispatch'] = None
         wake = old is None
@@ -632,10 +649,27 @@ def expedite_update(now: float) -> Callable[[Row | None], tuple[Row | None, Row 
 
 
 def _deadline_seconds(row: Row) -> int:
+    end = first_week_window_end(row)
+    first = row.get('first_pending_at')
+    if end is not None and first_week_enabled() and isinstance(first, (int, float)) and not isinstance(first, bool):
+        # An open first-week obligation is due no earlier than its stored window
+        # end; today's 60/120 s deadline does not close it (SCA-4790).
+        return max(60, int(end - first))
     snapshot = row.get('first_summary_policy')
     if snapshot is not None:
         return FirstSummaryPolicy.from_dict(snapshot).first_summary_deadline_seconds
     return deadline_seconds()
+
+
+def _first_week_for_obligation(uid: str, current: float, *, effects_only: bool) -> dict[str, Any] | None:
+    if effects_only or not first_week_enabled():
+        return None
+    from database import users as users_db
+
+    try:
+        return users_db.first_week_stamp_for(uid, current)
+    except Exception:
+        return None
 
 
 def summary_policy_for(row: Row) -> bool:
@@ -1129,9 +1163,10 @@ def sweep(
             # identity. Rotate the token in this CAS so old deliveries are stale.
             # Effects and completed-summary backfill keep their binding and custody.
             fresh_queue = enrichment_config.fresh_queue()
+            reserved_queue = enrichment_config.first_week_queue() or fresh_queue
             if (
                 not injected
-                and fresh_queue
+                and reserved_queue
                 and enrichment_config.route() == 'enrichment_queue'
                 and first_summary_pending(row)
                 and not row.get('fresh_demoted')
@@ -1140,7 +1175,7 @@ def sweep(
             ):
                 if recent is None:
                     recent = _recent_conversation(row['uid'], row['conversation_id'], current)
-                desired = dispatch_binding(recent=recent)
+                desired = dispatch_binding(recent=recent, first_week=first_week_open(row, now=current))
                 previous = row['dispatch']
                 if (
                     desired is not None
@@ -1177,6 +1212,7 @@ def sweep(
                     recent=(
                         first_summary_pending(row) and _recent_conversation(row['uid'], row['conversation_id'], current)
                     ),
+                    first_week=first_week_open(row, now=current),
                 )
                 if binding is None:
                     return old, ('unbound', None)

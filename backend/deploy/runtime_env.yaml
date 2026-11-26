@@ -4572,6 +4572,15 @@ environments:
             ENRICHMENT_FRESH_TASKS_QUEUE:
               value: enrichment-fresh
               category: reliability
+            ENRICHMENT_FIRST_WEEK_TASKS_QUEUE:
+              value: enrichment-first-week
+              category: reliability
+            FIRST_WEEK_SUMMARY_DEADLINE_HOURS:
+              value: '168'
+              category: config
+            FIRST_WEEK_SUMMARY_GUARANTEE_ENABLED:
+              value: 'true'
+              category: ops_kill
             ENRICHMENT_TASKS_HANDLER_URL:
               value: https://backend-integration-hhibjajaja-uc.a.run.app/v2/enrichment/run
               category: reliability
@@ -5155,6 +5164,15 @@ environments:
             ENRICHMENT_FRESH_TASKS_QUEUE:
               value: enrichment-fresh
               category: reliability
+            ENRICHMENT_FIRST_WEEK_TASKS_QUEUE:
+              value: enrichment-first-week
+              category: reliability
+            FIRST_WEEK_SUMMARY_DEADLINE_HOURS:
+              value: '168'
+              category: config
+            FIRST_WEEK_SUMMARY_GUARANTEE_ENABLED:
+              value: 'true'
+              category: ops_kill
             ENRICHMENT_TASKS_HANDLER_URL:
               value: https://backend-integration-hhibjajaja-uc.a.run.app/v2/enrichment/run
               category: reliability
@@ -5725,6 +5743,15 @@ environments:
             ENRICHMENT_FRESH_TASKS_QUEUE:
               value: enrichment-fresh
               category: reliability
+            ENRICHMENT_FIRST_WEEK_TASKS_QUEUE:
+              value: enrichment-first-week
+              category: reliability
+            FIRST_WEEK_SUMMARY_DEADLINE_HOURS:
+              value: '168'
+              category: config
+            FIRST_WEEK_SUMMARY_GUARANTEE_ENABLED:
+              value: 'true'
+              category: ops_kill
             ENRICHMENT_TASKS_HANDLER_URL:
               value: https://backend-integration-hhibjajaja-uc.a.run.app/v2/enrichment/run
               category: reliability
@@ -6249,6 +6276,15 @@ environments:
             ENRICHMENT_FRESH_TASKS_QUEUE:
               value: enrichment-fresh
               category: reliability
+            ENRICHMENT_FIRST_WEEK_TASKS_QUEUE:
+              value: enrichment-first-week
+              category: reliability
+            FIRST_WEEK_SUMMARY_DEADLINE_HOURS:
+              value: '168'
+              category: config
+            FIRST_WEEK_SUMMARY_GUARANTEE_ENABLED:
+              value: 'true'
+              category: ops_kill
             ENRICHMENT_TASKS_HANDLER_URL:
               value: https://backend-integration-hhibjajaja-uc.a.run.app/v2/enrichment/run
               category: reliability
@@ -6758,6 +6794,15 @@ environments:
             ENRICHMENT_FRESH_TASKS_QUEUE:
               value: enrichment-fresh
               category: reliability
+            ENRICHMENT_FIRST_WEEK_TASKS_QUEUE:
+              value: enrichment-first-week
+              category: reliability
+            FIRST_WEEK_SUMMARY_DEADLINE_HOURS:
+              value: '168'
+              category: config
+            FIRST_WEEK_SUMMARY_GUARANTEE_ENABLED:
+              value: 'true'
+              category: ops_kill
             ENRICHMENT_TASKS_HANDLER_URL:
               value: https://backend-integration-hhibjajaja-uc.a.run.app/v2/enrichment/run
               category: reliability

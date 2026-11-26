@@ -53,6 +53,7 @@ _PAYLOAD_FIELDS = (
     'summary_expected_revision',
     'v3_custody_defers',
     'first_summary_policy',  # E1 snapshot; the consumer decides first summary from it
+    'first_week_summary',  # SCA-4790 stored paid-start window; deadline/lane/age-gate readers
 )
 
 

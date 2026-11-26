@@ -4280,6 +4280,18 @@ for _method in ('claim', 'sweep'):
 
 _add(
     DriverEntry(
+        # SCA-4790 close-out: one sparse collection-group page of uncounted
+        # first-week conversations whose stored window has ended, oldest first.
+        'database.first_week_queries.due_first_week_conversations',
+        neutrals={
+            'now': (T0.timestamp(), 'timestamp operand only'),
+            'limit': (100, 'per-query ceiling; the tick time budget bounds the pass'),
+        },
+    )
+)
+
+_add(
+    DriverEntry(
         'database.summary_debt_queries.due_conversations',
         neutrals={
             'now': (T0.timestamp(), 'timestamp operand only'),

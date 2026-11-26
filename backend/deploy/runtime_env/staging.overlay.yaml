@@ -129,6 +129,7 @@ cloud_run:
     batch-quarantine-recovery: staging-batch-quarantine-recovery
     enrichment: staging-enrichment
     enrichment-fresh: staging-enrichment-fresh
+    enrichment-first-week: staging-enrichment-first-week
     provider-stt: staging-provider-stt
     conversations-v3: staging-conversations-v3
     conversations-v3-backfill: staging-conversations-v3-backfill

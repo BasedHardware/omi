@@ -22,6 +22,7 @@ import hashlib
 import json
 import logging
 import os
+import time
 import uuid
 import zlib
 from collections.abc import Mapping
@@ -376,6 +377,35 @@ def update_owner_recognition_diagnostics(uid: str, conversation_id: str, diagnos
     return run_transactional(client, persist)
 
 
+def _first_week_created_epoch(data: Dict[str, Any]) -> float:
+    value = data.get('created_at') or data.get('started_at')
+    if isinstance(value, datetime):
+        return (value if value.tzinfo else value.replace(tzinfo=timezone.utc)).timestamp()
+    if isinstance(value, (int, float)) and not isinstance(value, bool):
+        return float(value)
+    return time.time()
+
+
+def _first_week_for_write(data: Dict[str, Any], uid: str) -> Optional[dict]:
+    """Resolve the paid-start window once per conversation write, outside the codec.
+
+    The codec is also reached by partial writes, so this only resolves for a write
+    that could stamp a first obligation. The subscription read is the existing
+    60 s cached one; a missing paid-start epoch returns None and leaves today's
+    deadline, lane and age gate in place (SCA-4790).
+    """
+    if 'first_week_summary' in data or not isinstance(data.get('structured'), dict):
+        return None
+    if data.get('processing_tier') == 'historical':
+        return None
+    from database import users as users_db
+
+    try:
+        return users_db.first_week_stamp_for(uid, _first_week_created_epoch(data))
+    except Exception:
+        return None
+
+
 def _prepare_conversation_for_write(
     data: Dict[str, Any],
     uid: str,
@@ -396,7 +426,7 @@ def _prepare_conversation_for_write(
         data.update(stamp_home_display(uid, data, 'conversation'))
     stamp_scope_index(data)
     conversation_recorded_time.stamp_for_write(data)
-    summary_delivery.prepare(data, uid)
+    summary_delivery.prepare(data, uid, first_week=_first_week_for_write(data, uid))
     if owner_diagnostics.FIELD in data:
         try:
             value = owner_diagnostics.normalize(data[owner_diagnostics.FIELD])

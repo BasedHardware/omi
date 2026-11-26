@@ -140,6 +140,10 @@ class Subscription(BaseModel):
     # have None until their first post-deploy webhook fires (renewal/cancel/etc.)
     # and are treated as pre-cutoff (grandfathered) until then.
     current_period_start: Optional[int] = None
+    # Commercial first-paid epoch: set once on the free->paid transition and never
+    # moved by a renewal. Missing for rows that predate the field, so those payers
+    # are never covered by the first-week guarantee (SCA-4790).
+    paid_since: Optional[int] = None
     stripe_subscription_id: Optional[str] = None
     current_price_id: Optional[str] = None
     features: List[str] = []

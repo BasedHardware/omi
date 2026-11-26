@@ -1714,6 +1714,60 @@ def get_user_by_stripe_customer_id(customer_id: str):
     return None
 
 
+PAID_START_STATUSES = frozenset({'active', 'past_due'})
+
+
+def _plan_value(subscription: Any) -> str:
+    if not isinstance(subscription, dict):
+        return ''
+    plan = subscription.get('plan')
+    value = getattr(plan, 'value', plan)
+    return value.strip().lower() if isinstance(value, str) else ''
+
+
+def _status_value(subscription: Any) -> str:
+    if not isinstance(subscription, dict):
+        return ''
+    status = subscription.get('status')
+    value = getattr(status, 'value', status)
+    return value.strip().lower() if isinstance(value, str) else ''
+
+
+def _is_paid_plan(subscription: Any) -> bool:
+    plan = _plan_value(subscription)
+    return bool(plan) and plan not in {'basic', 'free'}
+
+
+def _paid_since_patch(stored: Any, incoming: dict, *, now: float | None = None) -> dict[str, int]:
+    """The commercial first-paid epoch, set once on the free->paid transition.
+
+    ``current_period_start`` moves on every renewal, so it cannot identify a first
+    week. A row that predates this field has no epoch and is never covered. A
+    trial that was never charged, and a renewal of an already-paid plan, do not
+    start a window (SCA-4790).
+    """
+    existing = stored.get('paid_since') if isinstance(stored, dict) else None
+    if isinstance(existing, int) and not isinstance(existing, bool) and existing > 0:
+        return {'paid_since': existing}
+    carried = incoming.get('paid_since')
+    if isinstance(carried, int) and not isinstance(carried, bool) and carried > 0:
+        return {'paid_since': carried}
+    if _is_paid_plan(stored) or not _is_paid_plan(incoming):
+        return {}
+    status = _status_value(incoming)
+    if status and status not in PAID_START_STATUSES:
+        return {}
+    return {'paid_since': int(now if now is not None else datetime.now(timezone.utc).timestamp())}
+
+
+def _stored_subscription_payload(user_ref: Any) -> Any:
+    try:
+        snapshot = user_ref.get(['subscription'])
+    except Exception:
+        return None
+    return (snapshot.to_dict() or {}).get('subscription') if snapshot.exists else None
+
+
 @cache_writer('subscription_cache')
 def update_user_subscription(uid: str, subscription_data: dict):
     """Updates the user's subscription information, removing dynamic fields before storing."""
@@ -1731,6 +1785,8 @@ def update_user_subscription(uid: str, subscription_data: dict):
 
             write_commercial_subscription(uid, subscription_data_to_store, client=db)
         else:
+            paid_patch = _paid_since_patch(_stored_subscription_payload(user_ref), subscription_data_to_store)
+            subscription_data_to_store.update(paid_patch)
             user_ref.update({'subscription': subscription_data_to_store})
     finally:
         invalidate_subscription(uid)
@@ -2253,6 +2309,30 @@ def get_user_valid_subscription(
 
     # Fallback to default basic subscription
     return get_default_basic_subscription()
+
+
+def first_week_stamp_for(uid: str, created_at: Any, *, interval_from: tuple[Any, Any] | None = None) -> dict | None:
+    """The first-week window for a conversation this owner created inside a paid start.
+
+    Reads the commercial subscription through the existing 60 s cache — never the
+    promotion projection, so a referral grant cannot stamp a paid start — and
+    never inside a conversation write codec. Missing epoch returns None, which
+    leaves today's behavior (SCA-4790).
+    """
+    from config.summary_guarantee import first_week_enabled, first_week_interval, first_week_stamp
+
+    if not first_week_enabled():
+        return None
+    try:
+        subscription = get_user_subscription(uid, read_only=True)
+    except Exception:
+        return None
+    if subscription is None:
+        return None
+    period = interval_from or (subscription.current_period_start, subscription.current_period_end)
+    return first_week_stamp(
+        getattr(subscription, 'paid_since', None), created_at, interval=first_week_interval(*period)
+    )
 
 
 # **************************************

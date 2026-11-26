@@ -373,7 +373,13 @@ def write_commercial_subscription(uid: str, subscription: dict, *, client=None, 
         state = _data(state_ref, transaction)
         grant = user.get(GRANT_FIELD)
         requeued = requeue_grant_for_paid_period(grant, subscription, now=now)
-        patch = {'subscription': subscription}
+        # Commercial first-paid epoch: set once on the free->paid transition in
+        # the same write that installs the paid subscription (SCA-4790).
+        from database.users import _paid_since_patch
+
+        stored = user.get('subscription')
+        paid_patch = _paid_since_patch(stored, subscription, now=now.timestamp())
+        patch = {'subscription': {**subscription, **paid_patch} if paid_patch else subscription}
         if requeued is not None and requeued != grant:
             patch[GRANT_FIELD] = requeued
         transaction.update(user_ref, patch)

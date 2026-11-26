@@ -40,6 +40,12 @@ def timestamp(value) -> float | None:
 
 
 def expired(row, created_at=None, *, now: float) -> bool:
+    # A stamped first-week window is not historical history: parking it would
+    # silently end a new payer's guarantee days before the window closes.
+    from config.summary_guarantee import first_week_open
+
+    if first_week_open(row, now=now):
+        return False
     seconds = max_age_seconds()
     if seconds == 0:
         return False
