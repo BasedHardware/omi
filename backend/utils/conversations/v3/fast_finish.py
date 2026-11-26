@@ -89,8 +89,12 @@ STOP_GRACE_SECONDS = 2.0
 # and the pass keeps the row's language. The whole language resolution is abandoned at the deadline.
 PROBE_MIN_SECONDS = 3.0
 # A long pass reserves from the fleet budget (at admission, and again before each chunk retry) only
-# with at least this much left: the bounded Redis client answers within about 2 s (1 s connect, 1 s
-# read), so the reservation ends before the deadline.
+# with at least this much left. Each Redis call is bounded (1 s connect, 1 s per read), but one
+# reservation can take about 3-4 s in the worst case: AUTH on a new connection, the health-check
+# PING, the INCRBYFLOAT pipeline and, over the cap, the give-back round trip. It can therefore end
+# past the deadline. The slot bound holds anyway, because every wait on that call is bounded: the
+# pass waits for running chunks at most until the deadline plus STOP_GRACE_SECONDS, and a retry that
+# returns from its reservation past the deadline is not sent (its seconds are refunded at settle).
 RESERVE_MIN_SECONDS = 3.0
 # A chunked pass's row refresh, transcript write and cut after its chunks may run this far past the
 # deadline; past it each is abandoned, so a stalled call releases the slot within STOP_GRACE_SECONDS.
@@ -1079,6 +1083,9 @@ def _chunk_job(
             # Stopped while Redis answered: reserved but not sent, so the settle refunds it.
             if stop.is_set():
                 raise _Abandoned()
+            # The reservation itself ran past the deadline: not sent, refunded at settle.
+            if time.monotonic() >= deadline:
+                raise _Expired()
         # Immediately before the charge and the send: a denial another chunk recorded after this
         # chunk's check passed still stops it, before the coordinator has set ``stop``.
         if _privacy_denied(privacy):

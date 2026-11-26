@@ -5,9 +5,13 @@ admission hook's serial behaviour are covered in test_conversations_v3_fast_fini
 """
 
 import asyncio
+import os
 import re
+import subprocess
+import sys
 import threading
 import time
+from concurrent.futures import wait
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -1867,6 +1871,71 @@ def test_a_denial_or_stop_before_the_retry_reserves_nothing(monkeypatch, how):
         assert len(asked) == (1 if how == 'denied_by_another_check' else 2)
 
 
+def test_a_retry_whose_reservation_ends_past_the_deadline_is_not_sent(monkeypatch):
+    monkeypatch.setattr(fast_finish, 'RETRY_MIN_SECONDS', 0.0)
+    monkeypatch.setattr(fast_finish, 'RESERVE_MIN_SECONDS', 0.1)
+    monkeypatch.setattr(fast_finish, 'CHUNK_SEND_MIN_SECONDS', 0.0)
+    budget = fast_finish._FleetBudget(fakeredis.FakeRedis())
+    monkeypatch.setattr(fast_finish, 'LONG_BUDGET', budget)
+    key = budget.reserve(300)
+    sent = fast_finish._Sent(key, 300)
+    deadline = time.monotonic() + 0.5
+    take = budget.take
+
+    def slow_take(key, seconds):
+        kept = take(key, seconds)
+        time.sleep(max(deadline - time.monotonic(), 0) + 0.05)  # Redis answers after the deadline
+        return kept
+
+    monkeypatch.setattr(budget, 'take', slow_take)
+    result, calls = _job(sent, deadline=deadline)
+    # Reserved, then expired: not sent, and the settle refunds the reserved retry.
+    assert isinstance(result, fast_finish._Expired) and len(calls) == 1
+    reserved, spent = sent.close()
+    assert reserved == pytest.approx(550) and spent == pytest.approx(250)
+    budget.settle(key, reserved, spent)
+    assert budget.used() == pytest.approx(250)
+
+
+def test_an_abandoned_chunk_that_reaches_its_send_after_the_settle_sends_and_charges_nothing(monkeypatch):
+    # The pass ends at its deadline with three long chunks held just before their send; they go on
+    # only once run() has returned and the pass has settled (``_run`` closes its ``_Sent`` there).
+    monkeypatch.setattr(fast_finish, 'RESERVE_MIN_SECONDS', 0.1)
+    monkeypatch.setattr(fast_finish, 'CHUNK_SEND_MIN_SECONDS', 0.1)
+    monkeypatch.setattr(fast_finish, 'STOP_GRACE_SECONDS', 0.05)
+    pool = get_fast_finish_chunk_executor()
+    futures, held, gate = [], [], threading.Event()
+
+    class Recording:
+        def submit(self, *args):
+            future = pool.submit(*args)
+            futures.append(future)
+            return future
+
+    denied = fast_finish._privacy_denied
+
+    def hold_before_send(privacy):
+        if threading.current_thread().name.startswith('ff-chunk'):
+            held.append(1)
+            assert gate.wait(5), 'never released'
+        return denied(privacy)
+
+    monkeypatch.setattr(fast_finish, 'get_fast_finish_chunk_executor', lambda: Recording())
+    monkeypatch.setattr(fast_finish, '_privacy_denied', hold_before_send)
+    unit, read = recording(1800)
+    provider = Provider()
+    audio = fast_finish.AUDIO_SECONDS.labels('long')._value.get()
+    outcome, written = run([unit], read, provider, deadline=time.monotonic() + 1.0)
+    assert outcome == 'deadline' and written is None and len(held) == fast_finish.LONG_PASS_WINDOW
+    charged = used()  # the settle has landed: admission refunded down to what was sent (nothing)
+    gate.set()
+    wait(futures, timeout=5)
+    assert all(isinstance(f.exception(), fast_finish._Abandoned) for f in futures)
+    # No provider call after the settle, and no audio seconds that the counter does not carry.
+    assert provider.calls == 0 and charged == 0 and used() == pytest.approx(sum(provider.durations))
+    assert fast_finish.AUDIO_SECONDS.labels('long')._value.get() == audio
+
+
 def test_a_retry_with_too_little_time_left_reserves_nothing(monkeypatch):
     monkeypatch.setattr(fast_finish, 'RETRY_MIN_SECONDS', 0.0)
     budget = fast_finish._FleetBudget(fakeredis.FakeRedis())
@@ -1951,12 +2020,26 @@ def test_a_pass_that_is_not_written_observes_no_wall_seconds():
     assert _count(fast_finish.WALL_SECONDS) == before
 
 
+def test_every_outcome_is_pre_initialised_at_import():
+    # A fresh process: no earlier test can have created a label by counting it. A zero then reads as
+    # zero, not as a missing series.
+    script = (
+        'from utils.conversations.v3 import fast_finish\n'
+        "print(' '.join(sorted({s.labels['outcome'] for f in fast_finish.OUTCOMES.collect() for s in f.samples})))"
+    )
+    backend = Path(__file__).resolve().parents[2]
+    result = subprocess.run(
+        [sys.executable, '-c', script], cwd=backend, env=dict(os.environ), capture_output=True, text=True, timeout=120
+    )
+    assert result.returncode == 0, result.stderr[-2000:]
+    outcomes = set(result.stdout.split())
+    assert {'long_cap', 'retry_cap', 'deadline', 'provider_error', 'written'} <= outcomes
+
+
 def test_cloud_run_sync_scrapes_the_chunk_metrics():
     profile = Path(__file__).resolve().parents[2] / 'deploy' / 'cloud_run_gmp_sync.yaml'
     rules = yaml.safe_load(profile.read_text())['spec']['endpoints'][0]['metricRelabeling']
     (rule,) = [r for r in rules if r['action'] == 'keep' and r['sourceLabels'] == ['__name__']]
-    outcomes = {s.labels['outcome'] for f in fast_finish.OUTCOMES.collect() for s in f.samples}
-    assert {'long_cap', 'retry_cap'} <= outcomes  # pre-initialised: a zero reads as zero, not missing
     for metric in (
         fast_finish.OUTCOMES,
         fast_finish.CHUNKS,
