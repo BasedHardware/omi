@@ -34,7 +34,6 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
   contractTest('C1 generation roll drops queued segment writes but preserves already-issued old-session write',
       () async {
-    pendingContract('C1');
     final dir = await Directory.systemTemp.createTemp('c1-store-');
     final world = await CaptureReplayWorld.boot(tempDir: dir);
     try {

@@ -113,7 +113,6 @@ CaptureDependencies dependencies(
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
   contractTest('C1 production composition refuses flutter test before resolving defaults', () {
-    pendingContract('C1');
     Object? refusal;
     try {
       composeProductionCaptureProvider();
@@ -125,7 +124,6 @@ void main() {
   });
 
   contractTest('C1 production provider constructs with every seam and no initialized globals', () async {
-    pendingContract('C1');
     // Deliberately no preferences init, ServiceManager, Firebase or plugin registration.
     final ble = TrackedBle();
     final changes = StreamController<bool>.broadcast(sync: true);
@@ -147,7 +145,6 @@ void main() {
   });
 
   contractTest('C1 production provider drops ABA device codec completion before opening socket', () async {
-    pendingContract('C1');
     final dir = await Directory.systemTemp.createTemp('c1-replay-');
     final world = await CaptureReplayWorld.boot(tempDir: dir);
     try {
@@ -193,7 +190,6 @@ void main() {
   });
 
   contractTest('C1 real provider joins keepalive reconnect and disposes all newly scheduled timers', () async {
-    pendingContract('C1');
     final dir = await Directory.systemTemp.createTemp('c1-replay-');
     final world = await CaptureReplayWorld.boot(tempDir: dir);
     try {
