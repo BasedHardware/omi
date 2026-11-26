@@ -1999,6 +1999,45 @@ def test_live_window_finish_newer_capture_kill_switch_restores_the_tail_cut(newe
     counter.labels.assert_called_once_with('cut')
 
 
+def _spy_request_finish(monkeypatch):
+    calls = []
+    real = v3_finish.conversations_v3_live.request_finish
+
+    def spy(*args, **kwargs):
+        calls.append(kwargs.get('newer_capture'))
+        return real(*args, **kwargs)
+
+    monkeypatch.setattr(v3_finish.conversations_v3_live, 'request_finish', spy)
+    return calls
+
+
+def test_named_only_finish_never_redirects_to_a_newer_capture(newer_capture_route, monkeypatch):
+    # The holdout Finish (named_only) answers for the named window alone, even with the newer-capture flag on.
+    client, db, paths, enqueued, counter = newer_capture_route
+    calls = _spy_request_finish(monkeypatch)
+
+    response = v3_finish.finish_live_window(_UID, 'window', named_only=True)
+
+    assert calls == [False]
+    assert response.conversation.id == 'window'
+    assert db.rows[paths['latest']]['v3_manual_end'] is True
+    assert all(field not in db.rows[_B] for field in ('v3_manual_end', FINISH_RECORDING_FIELD, FINISH_WINDOW_FIELD))
+    assert enqueued == [(_UID, {'manual_end_id': 'latest'})]
+    counter.labels.assert_called_once_with('cut')
+
+
+@pytest.mark.parametrize('window_id', [None, 'window'])
+def test_finish_outside_named_only_still_offers_the_newer_capture(newer_capture_route, monkeypatch, window_id):
+    client, db, paths, enqueued, counter = newer_capture_route
+    calls = _spy_request_finish(monkeypatch)
+
+    response = v3_finish.finish_live_window(_UID, window_id)
+
+    assert calls == [True]
+    assert response.conversation.id == 'capture-b'
+    counter.labels.assert_called_once_with('newer_recording_cut')
+
+
 @pytest.mark.parametrize('b_lands', ['speech', 'silence'])
 def test_one_finish_cuts_a_at_once_and_consumes_b_once_across_resolution_and_retry(
     newer_capture_route, monkeypatch, b_lands

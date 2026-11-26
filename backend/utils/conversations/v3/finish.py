@@ -39,7 +39,8 @@ def finish_live_window(
         return None
 
     now = datetime.now(timezone.utc)
-    newer_capture = finish_newer_capture_enabled()
+    # A holdout named_only Finish answers for the named window alone, so it never redirects to a newer capture.
+    newer_capture = finish_newer_capture_enabled() and not named_only
     if window_id:
         window = conversations_v3_live.live_window_by_id(uid, window_id, now=now)
         if window is not None:

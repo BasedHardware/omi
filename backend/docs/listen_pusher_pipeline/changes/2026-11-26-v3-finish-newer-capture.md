@@ -28,6 +28,9 @@ documents). A capture qualifies when it:
 The newest qualifying capture wins, as in `_latest_capture`. The same
 account-deletion check as the recording fallback runs before any write.
 
+A holdout Finish (`named_only=True`, used while a legacy row is in progress)
+never redirects: it passes `newer_capture=False` and cuts only the named window.
+
 ## What Finish stores
 
 - **The capture's speech has landed**: it takes the recording-scoped cut
