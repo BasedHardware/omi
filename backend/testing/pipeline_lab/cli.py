@@ -603,9 +603,7 @@ def _scenario(args: argparse.Namespace, as_json: bool) -> int:
             try:
                 sys.stdout.write(markdown_summary(Path(args.run_dir)))
                 if args.require_committed:
-                    from testing.pipeline_lab.scenario.compare import committed_scenarios
-
-                    expected = committed_scenarios()
+                    expected = sorted(path.stem for path in stack.SCENARIO_DIR.glob('*.json'))
                     problems = coverage_problems(Path(args.run_dir), expected, args.repeat)
                     if problems:
                         sys.stdout.write('\n**Coverage: incomplete**\n\n' + ''.join(f'- {p}\n' for p in problems))

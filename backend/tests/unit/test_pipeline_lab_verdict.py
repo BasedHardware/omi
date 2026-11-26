@@ -10,7 +10,8 @@ import pytest
 
 from testing.pipeline_lab import cli
 from testing.pipeline_lab.scenario import stack, verdict as verdicts
-from testing.pipeline_lab.scenario.spec import load_scenario
+from testing.pipeline_lab.scenario.compare import committed_scenarios
+from testing.pipeline_lab.scenario.spec import load_scenario, parse_scenario
 
 FAST = stack.SCENARIO_DIR / 'finish_single_recording_fast.json'
 CONV = {
@@ -66,8 +67,6 @@ def test_scenario_verdict_rows_carry_expected_and_actual():
 def test_timed_fact_rows_show_the_facts_seen_at_their_checkpoint():
     # #26395: a timed ``recording`` / ``finish_response`` check passes on the facts at its instant; its verdict
     # row must show those facts, not the run's end (fast_finish "none" at 30 s, "written" by the end).
-    from testing.pipeline_lab.scenario.spec import parse_scenario
-
     fill = [{'fill': [0, 40], 'every': 4, 'words': 10}]
     parsed = parse_scenario(
         {
@@ -331,8 +330,6 @@ def test_coverage_requires_every_committed_scenario_with_its_repeats(tmp_path):
 
 
 def test_summary_require_committed_fails_closed(tmp_path, capsys):
-    from testing.pipeline_lab.scenario.compare import committed_scenarios
-
     names = committed_scenarios()
     full = write_run(tmp_path / 'full', names, repeat=2)
     assert cli.main(['scenario', 'summary', str(full), '--require-committed', '--repeat', '2']) == 0

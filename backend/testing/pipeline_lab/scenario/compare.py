@@ -39,8 +39,12 @@ import tempfile
 import time
 from typing import Any, Mapping, Optional, Sequence
 
+from testing.pipeline_lab import worktrees
+from testing.pipeline_lab.orchestrator import redact_overlay
 from testing.pipeline_lab.scenario import metrics as metric_registry, stack, verdict as verdicts
-from testing.pipeline_lab.scenario.spec import ScenarioError
+from testing.pipeline_lab.scenario.spec import ScenarioError, load_scenario
+from testing.pipeline_lab.stack.overlay import Overlay
+from testing.pipeline_lab.store import private_write_text
 
 SCHEMA = 2
 # The conversation fields compare reads (no handle: it is a random id).
@@ -78,8 +82,6 @@ class ArmSpec:
         """The overlay mapping the arm's scenario processes apply (``scenario/run.py --arm-overlay``), or None."""
         if self.overlay is None and not self.env:
             return None
-        from testing.pipeline_lab.stack.overlay import Overlay
-
         try:
             base = Overlay.load(self.overlay) if self.overlay is not None else Overlay()
             merged = Overlay.from_mapping({**base.to_mapping(), 'env': {**base.env, **self.env}, 'name': self.name})
@@ -90,12 +92,8 @@ class ArmSpec:
     def describe(self) -> dict[str, Any]:
         """What compare.json records of the arm's configuration: env with secret-shaped values redacted, the
         overlay file's name and digest and the names it sets (never its values: it may carry allow-lists)."""
-        from testing.pipeline_lab.orchestrator import redact_overlay
-
         out: dict[str, Any] = {'env': redact_overlay({'env': dict(self.env)}).get('env', {}), 'overlay': None}
         if self.overlay is not None:
-            from testing.pipeline_lab.stack.overlay import Overlay
-
             overlay = Overlay.load(self.overlay)
             out['overlay'] = {
                 'file': self.overlay.name,
@@ -291,8 +289,6 @@ def harness_report(
 ) -> dict[str, Any]:
     """Whether each arm's own ref carries the harness that ran (this checkout's ``backend/testing/pipeline_lab``,
     working tree included), and which harness files differ, by group (``scenarios``: expect rows and budgets)."""
-    from testing.pipeline_lab import worktrees
-
     note = (
         "every arm ran the invoking checkout's harness (backend/testing/pipeline_lab: checks, budgets, scenario "
         'files); an arm whose own ref has a different harness was judged by assertions that ref does not carry'
@@ -464,8 +460,6 @@ def metric_lines(report: Mapping[str, Any], order: Sequence[str], baseline: str)
 
 def _side(repo: Path, ref: Optional[str], vendor_root: Path) -> tuple[Optional[stack.Arm], dict[str, Any]]:
     """The arm for ``ref`` (``None`` = this working tree) and its run.json identity."""
-    from testing.pipeline_lab import worktrees
-
     if ref is None:
         return None, stack.backend_identity()
     tree = worktrees.ensure_worktree(repo, ref)
@@ -519,9 +513,6 @@ def compare_arm_set(
     as_json: bool = False,
     metric_names: Optional[Sequence[str]] = None,
 ) -> int:
-    from testing.pipeline_lab.scenario.spec import load_scenario
-    from testing.pipeline_lab.store import private_write_text
-
     baseline = check_arms(arms, baseline)
     order = [arm.name for arm in arms]
     paths = [stack.resolve(name) for name in (names or committed_scenarios())]

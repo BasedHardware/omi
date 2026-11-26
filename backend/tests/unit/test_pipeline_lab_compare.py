@@ -4,11 +4,15 @@ from __future__ import annotations
 
 from contextlib import contextmanager
 import json
+import subprocess
 
 import pytest
 
 from testing.pipeline_lab import cli
-from testing.pipeline_lab.scenario import compare, stack
+from testing.pipeline_lab.scenario import compare, metrics, stack
+from testing.pipeline_lab.scenario.run import scenario_overlay
+from testing.pipeline_lab.scenario.spec import load_scenario
+from testing.pipeline_lab.stack import runtime_env
 
 CONV = {
     'handle': 'aaaa1111',
@@ -291,8 +295,6 @@ def test_compare_cli_refuses_mixed_forms(tmp_path, arm_runs, capsys):
 
 @pytest.fixture
 def scratch_metric():
-    from testing.pipeline_lab.scenario import metrics
-
     names = []
 
     def add(name, fn):
@@ -305,8 +307,6 @@ def scratch_metric():
 
 
 def test_a_registered_metric_reaches_the_report_without_touching_compare(tmp_path, arm_runs, scratch_metric, capsys):
-    from testing.pipeline_lab.scenario import metrics
-
     def lengths(run_dir):
         return {'name_len': len(run_dir.name), 'mode': 'long' if len(run_dir.name) > 2 else 'short'}
 
@@ -340,8 +340,6 @@ def test_a_failing_or_malformed_metric_exits_two(tmp_path, arm_runs, scratch_met
 
 
 def test_metric_registration_rules():
-    from testing.pipeline_lab.scenario import metrics
-
     with pytest.raises(metrics.MetricError):
         metrics.register_metric('ops', lambda run_dir: {})  # taken by the built-in
     with pytest.raises(metrics.MetricError):
@@ -349,8 +347,6 @@ def test_metric_registration_rules():
 
 
 def test_metric_modules_are_discovered_by_file_name_and_env(tmp_path):
-    from testing.pipeline_lab.scenario import metrics
-
     (tmp_path / 'speakers').mkdir()
     (tmp_path / 'speakers' / 'compare_metrics.py').write_text('')
     (tmp_path / 'scenario' / 'deep').mkdir(parents=True)
@@ -370,8 +366,6 @@ def test_metric_modules_are_discovered_by_file_name_and_env(tmp_path):
 
 
 def git_repo(tmp_path):
-    import subprocess
-
     repo = tmp_path / 'repo'
     lab = repo / compare.HARNESS
     (lab / 'scenario' / 'scenarios').mkdir(parents=True)
@@ -430,10 +424,6 @@ def test_harness_report_degrades_to_a_warning_outside_git(tmp_path):
 
 
 def test_an_arm_overlay_lands_on_top_of_the_scenario_env(monkeypatch):
-    from testing.pipeline_lab.scenario.run import scenario_overlay
-    from testing.pipeline_lab.scenario.spec import load_scenario
-    from testing.pipeline_lab.stack import runtime_env
-
     # The production profile itself is not under test (parsing it costs seconds): a small stand-in.
     profile = {'name': 'prod', 'env': {'PROFILE_FLAG': 'on'}, 'serving': {'PROFILE_SERVE': True}}
     monkeypatch.setattr(runtime_env, 'overlay_from_runtime_env', lambda *a, **k: (dict(profile), {}))
