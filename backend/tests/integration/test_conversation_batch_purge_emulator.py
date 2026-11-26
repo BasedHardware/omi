@@ -868,7 +868,8 @@ def test_post_window_sweep_erases_a_late_commit_and_keeps_unrelated_rows(plane, 
     rollback = '{"bpp_tokenless_write_cache":0}'
     monkeypatch.setenv('FIRESTORE_READ_LEVERS', rollback)
     assert parse_levers(rollback) == {'bpp_tokenless_write_cache': 0}
-    monkeypatch.setattr(jobs, '_now', lambda: row['post_window_started_at'] + jobs.POST_WINDOW_DELAY)
+    eligible_at = max(row['due_at'], row['post_window_started_at'] + jobs.POST_WINDOW_DELAY)
+    monkeypatch.setattr(jobs, '_now', lambda: eligible_at + timedelta(seconds=1))
     [(job, generation)] = _reconcile(monkeypatch)
     assert job == delayed.id
     completed = privacy_check_metrics.POST_WINDOW_SWEEPS.labels('conversation_deleted')
