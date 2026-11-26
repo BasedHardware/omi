@@ -2102,6 +2102,8 @@ checks:
     lanes: ["local", "ci"]
     reason: "the MCP tools page hand-paraphrased all 26 advertised tools and had already lagged the registry (missing fields/summary_only/cursor/timezone parameters on conversation and screen-activity tools); the tool inventory (name, description, scope) is now generated from TOOL_SPECS so an undocumented new tool fails the drift check"
 exempt:
+  - path: "backend/scripts/check_cloud_run_env_drift.py"
+    reason: "named only in backend-emulator-proofs.yml's path filter (a proof imports it, #26303); no workflow invokes it as a check"
   - path: ".github/scripts/check-desktop-beta-freshness.py"
     reason: "hourly doctor job hits the public beta appcast; behavioral coverage is desktop-beta-freshness-tests"
   - path: ".github/scripts/check-desktop-prod-promotion-policy.py"

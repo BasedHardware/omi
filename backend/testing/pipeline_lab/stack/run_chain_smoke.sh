@@ -4,7 +4,12 @@
 # testing.pipeline_lab.stack.chain_smoke, and stops what it started by PID.
 #   FS_PORT=8295 REDIS_PORT=6391 backend/testing/pipeline_lab/stack/run_chain_smoke.sh [--keep DIR]
 # SMOKE_MODULE=testing.pipeline_lab.v3.smoke runs the conversations-v3 smoke instead.
+# The emulator needs Java 21: a Homebrew openjdk@21 goes first on PATH when present, as
+# `scenario run` does (scenario/stack.py JAVA_HOMES), so no PATH edit is needed.
 set -euo pipefail
+for java_home in /opt/homebrew/opt/openjdk@21/bin /usr/local/opt/openjdk@21/bin; do
+  if [ -x "$java_home/java" ]; then PATH="$java_home:$PATH"; export PATH; break; fi
+done
 BACKEND="$(cd "$(dirname "$0")/../../.." && pwd)"
 FS_PORT="${FS_PORT:-8295}"
 REDIS_PORT="${REDIS_PORT:-6391}"

@@ -19,6 +19,23 @@ import os
 _OFF = {'false', '0', 'off'}
 
 
+def _bounded_seconds(value: str | None, minimum: int, default: int) -> int:
+    if value is None:
+        return default
+    try:
+        return min(default, max(minimum, int(value)))
+    except ValueError:
+        return default
+
+
+def coverage_wait_ttl_seconds() -> int:
+    return _bounded_seconds(os.getenv('SYNC_RECORD_COVERAGE_WAIT_TTL_SECONDS'), 30, 6 * 60 * 60)
+
+
+def coverage_wait_retry_after_seconds() -> int:
+    return _bounded_seconds(os.getenv('SYNC_RECORD_COVERAGE_WAIT_RETRY_AFTER_SECONDS'), 30, 30 * 60)
+
+
 def coverage_wait_memo_enabled() -> bool:
     return os.getenv('SYNC_RECORD_COVERAGE_WAIT_MEMO', 'true').strip().lower() not in _OFF
 

@@ -283,6 +283,8 @@ async def test_two_concurrent_reconciles_publish_one_copy(strict, monkeypatch):
     monkeypatch.setattr(store, 'get_firestore_client', lambda: strict)
 
     async def blocking(pool, fn, *args, **kwargs):
+        if fn is store.clear_terminal_pending:
+            return None
         if fn is original_load:
             entered.set()
             await resume.wait()
@@ -899,6 +901,34 @@ def test_projection_partitions_bytes_and_keeps_pending_until_last_batch(
     assert len(strict.rows[R]['claims']) == 128
 
 
+def test_terminal_failure_metric_failure_does_not_stop_later_projection_batches(strict, monkeypatch):
+    strict.rows[R] = {'id': 'r', 'recording': True, 'v3_pending': True, 'status': 'completed'}
+    token = leases.acquire('synthetic', 'builder', firestore_client=strict)
+    rows = [
+        {
+            'id': f'c{i}',
+            'status': 'processing',
+            'v3_process_failed': True,
+            'v3_process_failure_reason': 'processing',
+            'started_at': AT,
+            'finished_at': AT,
+            'v3_recording_ids': ['r'],
+            'transcript_segments': [{'text': 'x' * 60000}],
+        }
+        for i in range(128)
+    ]
+    terminal_failure = Mock(side_effect=OSError('metrics unavailable'))
+    monkeypatch.setattr(metrics, 'terminal_failure', terminal_failure)
+
+    store.commit_projection(
+        'synthetic', token, {'r': {**strict.rows[R], '_v3_revision': 1}}, {}, rows, [], firestore_client=strict
+    )
+
+    assert terminal_failure.call_count == len(rows)
+    assert all(('users', 'synthetic', 'conversations', row['id']) in strict.rows for row in rows)
+    assert strict.rows[R]['v3_pending'] is False
+
+
 def test_multi_batch_backfill_conversion_is_not_its_own_race_and_keeps_an_obligation(strict, monkeypatch):
     # A backfill donor is a plain conversation until the first batch hides it as a recording.
     strict.rows[R] = {'id': 'r', 'status': 'completed', 'structured': {'title': 'Old notes'}}
@@ -1032,6 +1062,24 @@ def test_exhausted_retry_budget_is_failed_and_retryable(strict):
     assert strict.rows[path]['v3_process_attempts'] == 1
 
 
+def test_attempts_exhausted_metric_failure_keeps_committed_terminal_state(strict, monkeypatch):
+    path = ('users', 'synthetic', 'conversations', 'c')
+    row = {'id': 'c', 'v3_derived': True, 'transcript_segments': [{'text': 'real speech'}]}
+    strict.rows[path] = dict(row)
+    token = leases.acquire('synthetic', 'summary-c', firestore_client=strict)
+    for _ in range(2):
+        assert writers.begin_processing('synthetic', row, token, firestore_client=strict)
+    terminal_failure = Mock(side_effect=OSError('metrics unavailable'))
+    monkeypatch.setattr(metrics, 'terminal_failure', terminal_failure)
+
+    outcome = writers.begin_processing('synthetic', row, token, firestore_client=strict)
+
+    assert outcome is writers.TERMINAL
+    terminal_failure.assert_called_once_with('attempts_exhausted')
+    assert strict.rows[path]['tile_state'] == 'failed'
+    assert strict.rows[path]['v3_process_failed'] is True
+
+
 def test_successful_pass_resets_the_attempt_budget(strict):
     path = ('users', 'synthetic', 'conversations', 'c')
     row = {'id': 'c', 'v3_derived': True, 'transcript_segments': [{'text': 'unchanged speech'}]}
@@ -1106,6 +1154,46 @@ def test_terminal_failure_counter_counts_committed_transitions_once(strict):
     assert writers.fail_processing('synthetic', 'c', token, 1, firestore_client=strict)
     assert not writers.fail_processing('synthetic', 'c', token, 1, firestore_client=strict)
     assert metrics.TERMINAL_FAILURES.labels('processing')._value.get() == before + 1
+
+
+def test_settlement_metric_failure_keeps_committed_processing_state(strict, monkeypatch):
+    path = ('users', 'synthetic', 'conversations', 'c')
+    strict.rows[path] = {'id': 'c', 'v3_derived': True, 'status': 'completed', 'v3_process_pending': True}
+    token = leases.acquire('synthetic', 'summary-c', firestore_client=strict)
+    counter = writers.summary_delivery.SETTLED_UNSUMMARIZED.labels('live', 'no_notes')
+    inc = Mock(side_effect=OSError('metrics unavailable'))
+    monkeypatch.setattr(counter, 'inc', inc)
+
+    armed = writers.settle_processing('synthetic', 'c', token, None, AT, notes=False, firestore_client=strict)
+
+    inc.assert_called_once()
+    assert armed is False
+    assert strict.rows[path]['v3_process_pending'] is False
+    assert strict.rows[path]['tile_state'] == 'done'
+
+
+def test_terminal_processing_metrics_failure_keeps_committed_failure(strict, monkeypatch):
+    path = ('users', 'synthetic', 'conversations', 'c')
+    strict.rows[path] = {
+        'id': 'c',
+        'v3_derived': True,
+        'sync_content_revision': 1,
+        'transcript_segments': [{'text': 'speech'}],
+    }
+    token = leases.acquire('synthetic', 'summary-c', firestore_client=strict)
+    counter = writers.summary_delivery.SETTLED_UNSUMMARIZED.labels('live', 'failed')
+    terminal_failure = Mock(side_effect=OSError('metrics unavailable'))
+    unsummarized = Mock(side_effect=OSError('metrics unavailable'))
+    monkeypatch.setattr(metrics, 'terminal_failure', terminal_failure)
+    monkeypatch.setattr(counter, 'inc', unsummarized)
+
+    changed = writers.fail_processing('synthetic', 'c', token, 1, firestore_client=strict)
+
+    terminal_failure.assert_called_once_with('processing')
+    unsummarized.assert_called_once()
+    assert changed is True
+    assert strict.rows[path]['v3_process_failed'] is True
+    assert strict.rows[path]['status'] == 'completed'
 
 
 def test_locked_refinement_commits_redirect_and_transferred_claims_together(strict, monkeypatch):

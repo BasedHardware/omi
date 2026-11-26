@@ -1661,7 +1661,9 @@ def test_jobs_newest_first_ties_resume_encrypted_and_wrap(monkeypatch, setting):
         after = frontier.read(budget)
     assert len(observed) == 3
     assert cluster.discover_jobs(client, budget=budget, after=after) == ([], False, None)
-    assert cluster.discover_jobs(client, budget=budget, max_rows=1)[0][0] == observed[0]
+    wrapped, _, _ = cluster.discover_jobs(client, budget=budget, max_rows=1)
+    # A new sweep can report a different age for the same job.
+    assert wrapped[0][0] == observed[0][0]
     assert b'synthetic' not in state.state['cursor']
     assert client.queries[0].filters[0] == ('state', '==', 'record_pending')
     assert client.queries[0].filters[1] == ('enqueued_at', '<=', after['horizon'].timestamp())
@@ -1676,7 +1678,8 @@ def test_jobs_frozen_horizon_wraps_despite_new_inflow(monkeypatch):
     second, _, cursor = cluster.discover_jobs(client, budget=SweepBudget(60), after=cursor, max_rows=1)
     assert len(second) == 1 and first != second and cursor['horizon'] == horizon
     assert cluster.discover_jobs(client, budget=SweepBudget(60), after=cursor) == ([], False, None)
-    assert cluster.discover_jobs(client, budget=SweepBudget(60), max_rows=1)[0] == first
+    wrapped, _, _ = cluster.discover_jobs(client, budget=SweepBudget(60), max_rows=1)
+    assert [path for path, _ in wrapped] == [path for path, _ in first]
 
 
 @pytest.mark.parametrize('enqueued', [None, 'old', True, float('nan'), float('inf'), -float('inf'), 'missing'])

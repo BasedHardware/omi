@@ -1,0 +1,47 @@
+{
+  "version": 1,
+  "images": [
+    {
+      "file": "001-mobile-ios-selection-one-light.png",
+      "platform": "mobile-ios",
+      "description": "One selected, light. Left: source-verified native original on 65d789439081. Right: native candidate, identical targeted scenario on iPhone 17 Pro / iOS 26.4. Original pixels joined under labels.",
+      "captured_by": "agent",
+      "source": "screencapture"
+    },
+    {
+      "file": "002-mobile-ios-selection-one-dark.png",
+      "platform": "mobile-ios",
+      "description": "One selected, dark. Left: source-verified native original on 65d789439081. Right: native candidate, identical targeted scenario on iPhone 17 Pro / iOS 26.4. Original pixels joined under labels.",
+      "captured_by": "agent",
+      "source": "screencapture"
+    },
+    {
+      "file": "003-mobile-ios-selection-one-max.png",
+      "platform": "mobile-ios",
+      "description": "One selected, max. Left: source-verified native original on 65d789439081. Right: native candidate, identical targeted scenario on iPhone 17 Pro / iOS 26.4. Original pixels joined under labels.",
+      "captured_by": "agent",
+      "source": "screencapture"
+    },
+    {
+      "file": "004-mobile-ios-selection-two-light.png",
+      "platform": "mobile-ios",
+      "description": "Two selected, light. Left: source-verified native original on 65d789439081. Right: native candidate, identical targeted scenario on iPhone 17 Pro / iOS 26.4. Original pixels joined under labels.",
+      "captured_by": "agent",
+      "source": "screencapture"
+    },
+    {
+      "file": "005-mobile-ios-selection-two-dark.png",
+      "platform": "mobile-ios",
+      "description": "Two selected, dark. Left: source-verified native original on 65d789439081. Right: native candidate, identical targeted scenario on iPhone 17 Pro / iOS 26.4. Original pixels joined under labels.",
+      "captured_by": "agent",
+      "source": "screencapture"
+    },
+    {
+      "file": "006-mobile-ios-selection-two-max.png",
+      "platform": "mobile-ios",
+      "description": "Two selected, max. Left: source-verified native original on 65d789439081. Right: native candidate, identical targeted scenario on iPhone 17 Pro / iOS 26.4. Original pixels joined under labels.",
+      "captured_by": "agent",
+      "source": "screencapture"
+    }
+  ]
+}

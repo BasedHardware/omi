@@ -92,6 +92,18 @@ class _SegmentSTT:
         return self.span.words(offset, duration)
 
 
+def private_scratch(root: str | Path | None = None) -> Path:
+    """Owner-only directory for the sync lane's WAV work files: ``<root>/tmp/sync`` for a day replay's store root,
+    else under the scenario lab root (``scenario/paths.py``)."""
+    from testing.pipeline_lab.store import ensure_private_dir
+
+    if root is None:
+        from testing.pipeline_lab.scenario.paths import private_lab_root
+
+        root = private_lab_root()
+    return ensure_private_dir(Path(root) / 'tmp' / 'sync')
+
+
 def replay_sync_lane(
     conversation: SyncConversation,
     *,
@@ -137,6 +149,8 @@ def replay_sync_lane(
         result.outcome, result.error = 'failed', 'no_start_time'
         return result
     epoch = round(start.timestamp(), 3)
+    if scratch is None:  # owner audio as WAV files: under the private lab root, never the system temp directory
+        scratch = private_scratch()
     work = Path(tempfile.mkdtemp(prefix='plab-sync-', dir=scratch))
     try:
         source_wav = _source_wav(conversation, work, epoch, result)

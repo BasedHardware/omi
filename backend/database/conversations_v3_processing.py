@@ -43,8 +43,10 @@ def _lane(row):
 
 def _observe_first_notes(row):
     """After the commit that first set ``v3_notes_written``: the v3 lane's first usable summary."""
-    summary_delivery.observe_processed(
-        _lane(row), summary_delivery.processed_latencies(row.get('finished_at'), row.get('arrival_at'), time.time())
+    metrics.safe_metric(
+        lambda: summary_delivery.observe_processed(
+            _lane(row), summary_delivery.processed_latencies(row.get('finished_at'), row.get('arrival_at'), time.time())
+        )
     )
 
 
@@ -355,19 +357,19 @@ def settle_processing(
         run_preloaded_transaction_with_contention_retry(client, settle)
     )
     if skipped_reason is not None:
-        metrics.RECONCILES.labels('processing_skipped_' + skipped_reason).inc()
+        metrics.safe_metric(lambda: metrics.RECONCILES.labels('processing_skipped_' + skipped_reason).inc())
     if outcome is not None:
         first, row = outcome
         if first == 'notes':
             _observe_first_notes(row)
         else:
-            summary_delivery.SETTLED_UNSUMMARIZED.labels(_lane(row), first).inc()
+            metrics.safe_metric(lambda: summary_delivery.SETTLED_UNSUMMARIZED.labels(_lane(row), first).inc())
     if manual_visibility is not None:
-        metrics.MANUAL_END_HOME.labels(*manual_visibility).inc()
+        metrics.safe_metric(lambda: metrics.MANUAL_END_HOME.labels(*manual_visibility).inc())
     if finish_settled:
-        metrics.FINISH_NO_POINTER.labels('settled').inc()
+        metrics.safe_metric(lambda: metrics.FINISH_NO_POINTER.labels('settled').inc())
     if settled and word_floor_outcomes is not None:
-        metrics.observe_word_floor(*word_floor_outcomes)
+        metrics.safe_metric(lambda: metrics.observe_word_floor(*word_floor_outcomes))
     return armed
 
 
@@ -524,12 +526,13 @@ class _Terminal:
 TERMINAL = _Terminal()
 
 
-def begin_processing(uid, row, token, *, force=False, firestore_client=None):
+def begin_processing(uid, row, token, *, force=False, backfill_prior=None, firestore_client=None):
     """Claim one processing pass: True when it began, TERMINAL when the row is already exhausted.
 
     False means the row cannot be processed right now (missing, deleted or locked). The budget
     counts consecutive attempts on one content fingerprint: `settle_processing` clears it on
-    success, so only a run of failures can reach the terminal outcome.
+    success, so only a run of failures can reach the terminal outcome. Backfill callers can
+    capture the fields changed by this attempt so a blocked admission can restore them.
     """
     client = firestore_client or store.get_firestore_client()
     ref = store.user_conversations(client, uid).document(row['id'])
@@ -560,25 +563,26 @@ def begin_processing(uid, row, token, *, force=False, firestore_client=None):
         if attempts >= 2:
             tx.update(ref, failure_patch(retryable=bool(row.get('transcript_segments')), reason='attempts_exhausted'))
             return 'failed' if not current.get('v3_process_failed') else 'terminal'
-        tx.update(
-            ref,
-            {
-                'v3_process_fingerprint': fingerprint,
-                'v3_process_attempts': attempts + 1,
-                **({'v3_process_retry_after': None} if current.get('v3_process_retry_after') else {}),
-                'v3_process_failed': False,
-                'v3_process_failure_reason': None,
-                'summary_retryable': False,
-                'tile_state': 'writing',
-                'status': 'processing',
-                'v3_process_pending': True,
-            },
-        )
+        patch = {
+            'v3_process_fingerprint': fingerprint,
+            'v3_process_attempts': attempts + 1,
+            **({'v3_process_retry_after': None} if current.get('v3_process_retry_after') else {}),
+            'v3_process_failed': False,
+            'v3_process_failure_reason': None,
+            'summary_retryable': False,
+            'tile_state': 'writing',
+            'status': 'processing',
+            'v3_process_pending': True,
+        }
+        if backfill_prior is not None:
+            backfill_prior.clear()
+            backfill_prior.update({key: current.get(key, firestore.DELETE_FIELD) for key in patch})
+        tx.update(ref, patch)
         return True
 
     result = run_preloaded_transaction_with_contention_retry(client, begin)
     if result == 'failed':
-        metrics.terminal_failure('attempts_exhausted')
+        metrics.safe_metric(lambda: metrics.terminal_failure('attempts_exhausted'))
     if result in ('failed', 'terminal'):
         return TERMINAL
     return result is True
@@ -631,10 +635,31 @@ def fail_processing(uid, cid, token, revision, *, content_hash=None, retryable=T
 
     changed = run_preloaded_transaction_with_contention_retry(client, fail)
     if changed:
-        metrics.terminal_failure('processing')
+        metrics.safe_metric(lambda: metrics.terminal_failure('processing'))
         if failed_row:
-            summary_delivery.SETTLED_UNSUMMARIZED.labels(_lane(failed_row), 'failed').inc()
+            metrics.safe_metric(lambda: summary_delivery.SETTLED_UNSUMMARIZED.labels(_lane(failed_row), 'failed').inc())
     return changed
+
+
+def park_backfill_processing(uid, cid, token, prior, *, firestore_client=None):
+    """Restore a blocked backfilled attempt without consuming a live processing try."""
+    client = firestore_client or store.get_firestore_client()
+    ref = store.user_conversations(client, uid).document(cid)
+    held = leases.lease_ref(client, uid, 'summary-' + cid)
+
+    @firestore.transactional
+    def park(tx):
+        row = ref.get(transaction=tx).to_dict() or {}
+        lease = held.get(transaction=tx).to_dict() or {}
+        if lease.get('token') != token or not lease.get('until') or lease['until'] <= datetime.now(timezone.utc):
+            raise Conflict('lease_lost')
+        if row.get('backfilled') and row.get('v3_process_pending') and not row.get('deleted'):
+            patch = {**prior}
+            if row.get('v3_backfill_process_pending'):
+                patch['v3_process_pending'] = False
+            tx.update(ref, patch)
+
+    run_preloaded_transaction_with_contention_retry(client, park)
 
 
 def settle_backfill_processing(uid, cid, *, failed, max_attempts, firestore_client=None):

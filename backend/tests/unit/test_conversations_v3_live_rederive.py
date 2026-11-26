@@ -418,6 +418,19 @@ async def test_open_windows_and_rows_over_until_are_untouched(owner, strict):
 
 
 @pytest.mark.asyncio
+async def test_discarded_source_and_its_claimed_window_stay_untouched(owner, strict):
+    discarded = source('discarded', AT, discarded=True)
+    window = fragment('held', discarded)
+    owner(discarded, window)
+    before = conversations(strict)
+    outcome, report = await rederive()
+    assert outcome == 'committed'
+    assert conversations(strict) == before
+    assert report['sources_blocked_discarded'] == 1
+    assert report['protected_source_blocked'] == 1
+
+
+@pytest.mark.asyncio
 async def test_edited_and_locked_rows_are_skipped_and_their_speech_stays_with_them(owner, strict):
     sources, rows = lunch()
     rows[2]['user_title'] = 'My lunch title'
@@ -2072,6 +2085,47 @@ async def test_reconcile_returns_after_post_commit_projection_histogram_raises(o
     assert committed_at_observe == [True]
     assert outcome == 'committed'
     assert conversations(strict) != before
+
+
+@pytest.mark.asyncio
+async def test_reconcile_returns_after_committed_outcome_counter_raises(owner, strict):
+    sources, rows = lunch(count=3)
+    owner(*sources, *rows)
+    before = conversations(strict)
+    counter = metrics.RECONCILES.labels('committed')
+    committed_at_increment = []
+
+    def fail_after_commit(*_args):
+        committed_at_increment.append(conversations(strict) != before)
+        raise OSError('metrics unavailable')
+
+    with patch.object(counter, 'inc', side_effect=fail_after_commit) as inc:
+        outcome, _ = await rederive()
+
+    inc.assert_called_once()
+    assert committed_at_increment == [True]
+    assert outcome == 'committed'
+    assert conversations(strict) != before
+
+
+@pytest.mark.asyncio
+async def test_reconcile_preserves_primary_exception_when_error_counter_raises(owner, strict, monkeypatch):
+    primary = RuntimeError('projection load failed')
+
+    def fail_load(*_args, **_kwargs):
+        raise primary
+
+    monkeypatch.setattr(rederive_store, 'load_live_rederive', fail_load)
+    counter = metrics.RECONCILES.labels('error')
+
+    with (
+        patch.object(counter, 'inc', side_effect=OSError('metrics unavailable')) as inc,
+        pytest.raises(RuntimeError) as raised,
+    ):
+        await rederive()
+
+    inc.assert_called_once()
+    assert raised.value is primary
 
 
 @pytest.mark.asyncio
