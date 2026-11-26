@@ -222,6 +222,14 @@ def test_step_census_refuses_an_unclassified_new_step():
     # `Resolve production backend memory` reads local ops config and writes only
     # step outputs. It runs for the production backend/sync deploy paths.
     # SCA-3681 removes the manual development datastore smoke from the census.
+    policy_steps = (
+        'Check the Release resource policy pin',
+        'Checkout the pinned Release resource policy',
+        'Admit production ops capacity declarations',
+    )
+    for name in policy_steps:
+        assert step(name)['if'] == "${{ inputs.runtime_env == 'prod' && inputs.resource_raise_policy_sha != '' }}"
+        assert STEPS.index(step(name)) < STEPS.index(step('Resolve production backend memory'))
     memory = step('Resolve production backend memory')
     assert memory['if'] == (
         "${{ inputs.runtime_env == 'prod' && inputs.integration_only != 'true' && "
@@ -230,7 +238,7 @@ def test_step_census_refuses_an_unclassified_new_step():
     )
     assert (
         hashlib.sha256(json.dumps([s['name'] for s in STEPS]).encode()).hexdigest()
-        == "5e6374a62dc5795f042318f5f355a5ec8b27d99d535d292097f960557f05853b"
+        == "6f15e94946da3eb8d7409e34c91bde414c11f6e277ea588879e00d485fb0fda3"
     )
 
 

@@ -1113,7 +1113,7 @@ runs:
         DEFAULT_MAX_SCALE: '50'
       run: |
         set -euo pipefail
-        if [[ -n "$POLICY_SHA" ]]; then
+        if [[ -n "${POLICY_SHA:-}" ]]; then
           policy="${R34_POLICY_ROOT:?missing pinned resource policy}"
           MAX_SCALE="$(python3 "$policy/infra/rollout/release-system/raise_ci.py" --repo "$policy" --sha "$POLICY_SHA" \
             cap "$CLOUD_RUN_PROJECT" "$CLOUD_RUN_REGION" "$CLOUD_RUN_SERVICE")"
@@ -1307,7 +1307,7 @@ runs:
         DEFAULT_MAX_SCALE: ${{ inputs.runtime_env == 'prod' && '35' || '50' }}
       run: |
         set -euo pipefail
-        if [[ -n "$POLICY_SHA" ]]; then
+        if [[ -n "${POLICY_SHA:-}" ]]; then
           policy="${R34_POLICY_ROOT:?missing pinned resource policy}"
           MAX_SCALE="$(python3 "$policy/infra/rollout/release-system/raise_ci.py" --repo "$policy" --sha "$POLICY_SHA" \
             cap "$CLOUD_RUN_PROJECT" "$CLOUD_RUN_REGION" "$CLOUD_RUN_SERVICE")"
