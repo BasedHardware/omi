@@ -992,13 +992,15 @@ def commit_projection(
             raise
         except Exception as error:
             if isinstance(error, InvalidArgument) and size_error(error):
-                log_largest_write(staged, batch=index, batches=len(batches))
-            logger.warning(
-                'event=v3_reconcile stage=projection_commit outcome=%s trace_id=%s batch=%d batches=%d',
-                firestore_failure_reason(error),
-                request_log_trace_id(),
-                index,
-                len(batches),
+                metrics.safe_metric(lambda: log_largest_write(staged, batch=index, batches=len(batches)))
+            metrics.safe_metric(
+                lambda: logger.warning(
+                    'event=v3_reconcile stage=projection_commit outcome=%s trace_id=%s batch=%d batches=%d',
+                    firestore_failure_reason(error),
+                    request_log_trace_id(),
+                    index,
+                    len(batches),
+                )
             )
             raise
         moved.update(batch_moved)
@@ -1007,7 +1009,7 @@ def commit_projection(
 
         for row, _encoded in batch:
             if failure_transitions[row['id']]:
-                metrics.terminal_failure(row.get('v3_process_failure_reason'))
+                metrics.safe_metric(lambda row=row: metrics.terminal_failure(row.get('v3_process_failure_reason')))
         if index != len(batches) - 1:
             # Read back only after our commit; any external race is checked
             # again by the next transaction's revision fence. Pending stays
@@ -1040,8 +1042,12 @@ def commit_projection(
                     if fence is None or not speech_moved(
                         {**recordings[rid], '_v3_fence': {**fence, 'claims': current.get('claims')}}, current
                     ):
-                        logger.warning(
-                            'v3 projection readback changed kind=recording batch=%d fields=%s', index, changed[:8]
+                        metrics.safe_metric(
+                            lambda: logger.warning(
+                                'v3 projection readback changed kind=recording batch=%d fields=%s',
+                                index,
+                                changed[:8],
+                            )
                         )
                         raise Conflict('source_changed')
                     moved.add(rid)
@@ -1061,8 +1067,12 @@ def commit_projection(
                         k for k, value in encoded.items() if k not in COMMIT_STAMPED_FIELDS and current.get(k) != value
                     )
                     if changed:
-                        logger.warning(
-                            'v3 projection readback changed kind=derived_row batch=%d fields=%s', index, changed[:8]
+                        metrics.safe_metric(
+                            lambda: logger.warning(
+                                'v3 projection readback changed kind=derived_row batch=%d fields=%s',
+                                index,
+                                changed[:8],
+                            )
                         )
                         raise Conflict('source_changed')
                     existing[raw['id']] = {**raw, '_v3_revision': snapshot.update_time}
