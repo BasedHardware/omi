@@ -26,6 +26,7 @@ import 'package:omi/utils/reliability_experiments.dart';
 import 'package:omi/widgets/transcript.dart';
 
 import '../helpers/recording_speaker_fixtures.dart';
+import '../support/surface_render.dart';
 
 const _jump = ValueKey('transcript_jump_to_latest');
 
@@ -43,6 +44,7 @@ TranscriptSegment _stored(int i) => TranscriptSegment(
 List<TranscriptSegment> _storedLines(int count) => [for (var i = 0; i < count; i++) _stored(i)];
 
 void main() {
+  setUpAll(loadSurfaceRenderFonts);
   setUpAll(() => Env.init(RecordingSpeakerFixtureEnv()));
   setUp(() async {
     SharedPreferences.setMockInitialValues({});
@@ -474,6 +476,7 @@ void main() {
       expect(list.jumpToLatestButtonBottom, greaterThanOrEqualTo(32 + 56 + 28));
       expect(position(tester).pixels, closeTo(position(tester).maxScrollExtent, 0.5));
       expect(position(tester).maxScrollExtent, greaterThan(500));
+      await writeSurfaceRender(tester, 'live-transcript-opens-at-newest-line');
     });
 
     double footer(WidgetTester tester) =>

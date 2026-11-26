@@ -19,6 +19,8 @@ import 'package:omi/utils/conversations/conversation_title.dart';
 import 'package:omi/utils/reliability_experiments.dart';
 import 'package:omi/widgets/conversation_bottom_bar.dart';
 
+import '../support/surface_render.dart';
+
 ServerConversation _conversation({required bool live, String title = 'Launch plan review'}) =>
     ServerConversation.fromJson({
       'id': 'open',
@@ -40,6 +42,8 @@ ServerConversation _conversation({required bool live, String title = 'Launch pla
     });
 
 void main() {
+  setUpAll(loadSurfaceRenderFonts);
+
   setUp(() async {
     SharedPreferences.setMockInitialValues({'uid': 'owner-1'});
     await SharedPreferencesUtil.init();
@@ -97,6 +101,7 @@ void main() {
 
       expect(find.byKey(player), findsOneWidget);
       expect(find.byKey(askBar), findsNothing);
+      await writeSurfaceRender(tester, 'live-conversation-bar-with-player');
     });
 
     testWidgets('on: a conversation in progress has no player, and the bar is Ask Omi', (tester) async {
@@ -106,6 +111,7 @@ void main() {
       expect(find.byKey(player), findsNothing);
       expect(find.bySemanticsLabel('Play'), findsNothing);
       expect(find.byKey(askBar), findsOneWidget);
+      await writeSurfaceRender(tester, 'live-conversation-bar-no-player');
 
       // A seek from the page (a source opened from Summary) loads and plays nothing.
       await seek?.call(0, 4);
