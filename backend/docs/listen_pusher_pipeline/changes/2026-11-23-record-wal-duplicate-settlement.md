@@ -96,7 +96,9 @@ erasure and replay behavior serving, including with settlement disabled.
   the window is 4 h of 30 s slots, closing `ATTEMPT_SECONDS` early: 480
   durable slots, separate from the Nov 24 sampler, whose 3-minute, 24-hour
   constants are unchanged. Each claimed slot runs one proof bounded to
-  2 s, well inside its 30 s slot. Shadow preserves the existing reply,
+  2 s, well inside its 30 s slot. The shadow considers one content ID in
+  167 (1 in 1000 scaled from 180 s to 30 s slots), so each slot sees as many
+  candidates as the original design. Shadow preserves the existing reply,
   writes no settlement receipts and never commits. Only requests with a
   nonempty capture claim set and one claim per staged file can claim a
   shadow slot. Inverse: unset the gate and the epoch on backend-sync.

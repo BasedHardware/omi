@@ -2,11 +2,12 @@
 
 import hashlib
 import time
+from unittest.mock import Mock
 
 import pytest
 
 from config import record_wal_sample as sampler
-from config.record_wal_duplicate import SHADOW_SLOT_SECONDS, SHADOW_WINDOW_SECONDS, mode
+from config.record_wal_duplicate import SHADOW_CONTENT_MODULUS, SHADOW_SLOT_SECONDS, SHADOW_WINDOW_SECONDS, mode
 from database import record_wal_duplicate as ledger
 from utils.batch_pipeline import record_wal_duplicate as duplicate
 from utils.batch_pipeline import record_wal_sample as sample
@@ -162,3 +163,52 @@ def test_shadow_constants_are_separate_and_keep_the_proof_cap():
     assert proofs * budget.max_objects == 9_600
     assert proofs * budget.max_bytes == proofs * sample.MAX_MANIFEST_TOTAL == int(7.5 * 1024**3)
     assert ledger.MAX_VIEW_READS == 52
+
+
+def _content(hit_shadow, hit_sampler):
+    def digest(n):
+        return int(hashlib.sha256(str(n).encode()).hexdigest()[:12], 16)
+
+    return next(
+        str(n)
+        for n in range(1_000_000)
+        if (digest(n) % SHADOW_CONTENT_MODULUS == 0) is hit_shadow and (digest(n) % 1000 == 0) is hit_sampler
+    )
+
+
+def test_shadow_content_filter_scales_with_slot_length(env, monkeypatch):
+    # 1000 content IDs per candidate at 180 s slots -> about 167 at 30 s, so a slot sees as many candidates.
+    assert SHADOW_CONTENT_MODULUS == 167
+    assert SHADOW_CONTENT_MODULUS == round(1000 * SHADOW_SLOT_SECONDS / sampler.SLOT_SECONDS)
+    env(RECORD_WAL_DUPLICATE_SHADOW_PRE_FENCE='true', RECORD_WAL_DUPLICATE_SHADOW_EPOCH=str(EPOCH))
+    monkeypatch.setattr(duplicate.time, 'time', lambda: EPOCH)
+    assert duplicate.select('owner', _content(True, False)) == ('shadow', EPOCH // 30)
+    assert duplicate.select('owner', _content(False, False)) == ('off', None)
+
+
+@pytest.mark.parametrize('content', (_content(True, False), _content(False, False)))
+def test_settle_ignores_the_content_filter(env, monkeypatch, content):
+    env(RECORD_WAL_DUPLICATE_SOURCE_FENCE_VERIFIED='true', RECORD_WAL_DUPLICATE_PERCENT='100')
+    assert duplicate.select('owner', content) == ('settle', None)
+
+
+@pytest.mark.parametrize(('shadow_hit', 'sampled'), ((True, False), (False, True)))
+@pytest.mark.asyncio
+async def test_sampler_keeps_its_one_in_1000_filter(monkeypatch, shadow_hit, sampled):
+    monkeypatch.setattr(sample, 'slot_at', lambda now: 1)
+    local = Mock(return_value=False)
+    monkeypatch.setattr(sample, '_try_process_slot', local)
+    monkeypatch.setattr(sample, 'attempts', Mock())
+    await sample.observe(
+        store=object(),
+        uid='owner',
+        cid='record',
+        source='device',
+        device='model',
+        paths=[],
+        content_id=_content(shadow_hit, sampled),
+        claims={},
+        status_code=503,
+        has_jobs=True,
+    )
+    assert local.called is sampled

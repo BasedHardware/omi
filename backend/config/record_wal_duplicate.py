@@ -4,7 +4,7 @@ import hashlib
 import os
 
 from config.batch_pipeline_record_wal_handoff import handoff_enabled
-from config.record_wal_sample import ATTEMPT_SECONDS
+from config.record_wal_sample import ATTEMPT_SECONDS, SLOT_SECONDS
 
 ARCHIVE_BUCKET = 'omi-private-cloud-sync'
 MAX_JOBS = 4
@@ -13,6 +13,9 @@ RECEIPT_FIELD = 'wal_duplicate_settlement_v1'
 # Shadow-only: 4 h of 30 s slots keeps the 480-proof cap; the sampler's slots are separate.
 SHADOW_SLOT_SECONDS = 30
 SHADOW_WINDOW_SECONDS = 14_400
+# The 1-in-1000 content filter was sized for 180 s slots; scale it so each slot sees as many candidates.
+DESIGN_CONTENT_MODULUS = 1000
+SHADOW_CONTENT_MODULUS = round(DESIGN_CONTENT_MODULUS * SHADOW_SLOT_SECONDS / SLOT_SECONDS)
 
 
 def mode(uid: str, now: float) -> tuple[str, int | None]:
