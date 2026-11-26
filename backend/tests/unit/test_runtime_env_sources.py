@@ -161,5 +161,18 @@ def test_prod_v3_kill_switch_reaches_every_writer():
         if isinstance(job, dict):
             values.add(job['env']['CONVERSATIONS_V3']['value'])
     values.add(prod['gke']['config_map']['entries']['CONVERSATIONS_V3']['value'])
+    values.add(prod['desktop_backend']['env']['CONVERSATIONS_V3']['value'])
     assert len(values) == 1 and values <= {'on', 'off'}
     assert 'CONVERSATIONS_V3' not in manifest['environments']['dev']['gke']['config_map']['entries']
+
+
+def test_v3_kill_switch_rejects_rendered_name_at_source_scope():
+    with pytest.raises(ValueError, match='use conversations_v3 at environment scope'):
+        COMPOSER['_apply_conversations_v3_stage']({'CONVERSATIONS_V3': 'off'})
+
+
+def test_v3_desktop_env_is_created_when_missing():
+    env = {'conversations_v3_stage': 'beta', 'conversations_v3': 'off'}
+    COMPOSER['_apply_conversations_v3_stage'](env)
+    assert env['desktop_backend']['env']['CONVERSATIONS_V3_STAGE']['value'] == 'beta'
+    assert env['desktop_backend']['env']['CONVERSATIONS_V3']['value'] == 'off'

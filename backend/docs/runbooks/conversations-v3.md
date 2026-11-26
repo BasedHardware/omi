@@ -3,8 +3,9 @@
 The shared source (`backend/deploy/runtime_env/_base.yaml`) sets `CONVERSATIONS_V3_STAGE=all`.
 The code default remains `beta`. Change the stage in the shared source, regenerate the runtime
 manifest, and deploy every participating runtime, including a separate desktop-backend production
-run. `CONVERSATIONS_V3=off`
-stops marking new mobile pendant documents. Stages are `cohort`, `beta`, `all`;
+run. For the hard stop on new mobile pendant markings, set `conversations_v3: 'off'`
+under `overlay` in `backend/deploy/runtime_env/prod.overlay.yaml`, regenerate the
+manifest, and redeploy the same set. Stages are `cohort`, `beta`, `all`;
 `rollout_cohorts/conversations-v3` is for named qualification accounts. Admission
 needs a v3-capable app: only those builds call `GET /v1/conversations/live`, on any
 channel, which refreshes the 14-day `conversations_v3:client_capable:{uid}` marker
@@ -24,8 +25,9 @@ Provision the dedicated queue on dev/prod before enabling admission; the prod
 ops manifest declares its bounded concurrency/retry policy. The same stage must reach backend/API, backend-listen (including realtime role),
 backend-sync, backend-sync-backfill, sync-backfill-worker, backend-integration,
 and pusher wherever their deployed image can create or finalize pendant rows.
-The desktop backend must use the same value for capability/episode responses;
-its desktop creates remain one-to-one. Refresh the runtime image/service census
+Desktop-backend receives the stage and kill switch for manifest parity. Its
+entrypoint has no v3 admission routes, so the run can follow the Cloud Run
+writers in the activation order. Refresh the runtime image/service census
 before rollout. `backend/deploy/runtime_env/_base.yaml` is the shared stage
 source; composition binds Cloud Run services/jobs and desktop directly, and
 backend-listen/pusher through the generated shared ConfigMap. The uninstalled

@@ -265,10 +265,14 @@ def _staging_substitute(value: str, *, run_url_template: str, inputs: dict[str, 
 
 def _apply_conversations_v3_stage(env_config: ConfigDict) -> None:
     """One stage source moves API, capture, finalizers and jobs together (staging mirrors prod)."""
+    if 'CONVERSATIONS_V3' in env_config:
+        raise ValueError('use conversations_v3 at environment scope; CONVERSATIONS_V3 is the rendered env name')
     stage = env_config.pop('conversations_v3_stage', None)
     # Kill switch (CONVERSATIONS_V3=off): stops new v3 admission on every writer; marked rows keep draining.
     kill = env_config.pop('conversations_v3', None)
-    desktop_env = env_config.get('desktop_backend', {}).get('env', {})
+    if stage is None and kill is None:
+        return
+    desktop_env = env_config.setdefault('desktop_backend', {}).setdefault('env', {})
     if kill is not None:
         kill_descriptor = {'value': str(kill), 'category': 'ops_kill'}
         desktop_env['CONVERSATIONS_V3'] = deepcopy(kill_descriptor)

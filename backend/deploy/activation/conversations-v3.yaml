@@ -53,7 +53,7 @@ services:
     service: backend-integration
     contains: *v3_writer
   desktop-backend:
-    # Separate release; only its stage must agree (capability/episode responses).
+    # Separate release; its stage and kill switch must agree for manifest parity.
     kind: cloud_run
     service: desktop-backend
   llm-gateway:
@@ -112,16 +112,16 @@ env:
     any_of: [CONVERSATIONS_V3_TASKS_URL, SYNC_TASKS_HANDLER_URL]
     runtimes: *v3_writers
   - id: v3-stage
-    why: config/conversations_v3.py; every writer and the desktop backend must admit the same owners (runbook)
+    why: config/conversations_v3.py; writers must admit the same owners, and desktop must match the manifest
     keys: [CONVERSATIONS_V3_STAGE]
     default: beta
-    runtimes: [backend, backend-sync, backend-sync-backfill, backend-integration, desktop-backend, pusher, backend-listen]
+    runtimes: &v3_parity_runtimes [backend, backend-sync, backend-sync-backfill, backend-integration, desktop-backend, pusher, backend-listen]
     equal: true
   - id: v3-kill-switch
     why: CONVERSATIONS_V3=off stops admission; a writer that disagrees admits owners the others refuse
     keys: [CONVERSATIONS_V3]
     default: 'on'
-    runtimes: *v3_writers
+    runtimes: *v3_parity_runtimes
     equal: true
   - id: v3-gateway-endpoint
     why: >-
