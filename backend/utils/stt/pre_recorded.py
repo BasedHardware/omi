@@ -1462,25 +1462,6 @@ def prerecorded(
     return result
 
 
-def prerecorded_bytes_route(
-    audio_bytes: bytes,
-    language: Optional[str],
-    *,
-    sample_rate: int = 16000,
-    channels: int = 1,
-    encoding: Optional[str] = None,
-) -> Tuple[Tuple[str, Optional[str], str], Optional[str]]:
-    """The selected service and the language to construct its provider with, for these bytes."""
-    from utils.stt.batch_language import resolve_language, select_decision
-
-    decision = resolve_language(language, audio_bytes, sample_rate=sample_rate, channels=channels, encoding=encoding)
-    resolved = decision.language if decision.parakeet_safe else language
-    if not language_guard_enabled() or language_class(language) != 'unknown':
-        resolved = language
-    selected = select_decision(language, decision, get_prerecorded_service)
-    return selected, resolved
-
-
 def prerecorded_from_bytes(
     audio_bytes: bytes,
     sample_rate: int = 16000,
@@ -1494,18 +1475,13 @@ def prerecorded_from_bytes(
     keywords: Optional[Sequence[str]] = None,
     *,
     return_provider: bool = False,
-    route: Optional[Tuple[Tuple[str, Optional[str], str], Optional[str]]] = None,
+    route: Optional[Tuple[Any, Optional[str]]] = None,
 ) -> Any:
-    """Route pre-recorded bytes transcription through STT_PRERECORDED_MODEL.
+    """Route pre-recorded bytes transcription through STT_PRERECORDED_MODEL; ``route`` reuses a resolved one."""
+    from utils.stt.prerecorded_route import prerecorded_bytes_route
 
-    ``route`` is a ``prerecorded_bytes_route`` result: a caller that sends several pieces of one
-    recording resolves the language once and reuses the selection for every piece.
-    """
-    if route is None:
-        route = prerecorded_bytes_route(
-            audio_bytes, language, sample_rate=sample_rate, channels=channels, encoding=encoding
-        )
-    selected, resolved = route
+    kwargs = {'sample_rate': sample_rate, 'channels': channels, 'encoding': encoding}
+    selected, resolved = route or prerecorded_bytes_route(audio_bytes, language, **kwargs)
     provider = get_prerecorded_provider(resolved, selected_service=selected)
     result = provider.transcribe_bytes(
         audio_bytes,

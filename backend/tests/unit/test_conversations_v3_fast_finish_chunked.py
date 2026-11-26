@@ -20,7 +20,7 @@ from database.batch_pipeline_privacy import BatchPrivacyBlocked
 from utils.batch_pipeline import live
 from utils.conversations.v3 import fast_finish
 from utils.executors import get_fast_finish_chunk_executor
-from utils.stt import pre_recorded
+from utils.stt import pre_recorded, prerecorded_route
 
 UID = 'owner-uid-0000000000000000000'
 START = datetime(2026, 11, 24, 3, 0, tzinfo=timezone.utc)
@@ -399,7 +399,7 @@ def test_the_language_is_resolved_once_and_every_chunk_reuses_it_under_the_deadl
         sent.append((kwargs['route'], kwargs['attempts'], pre_recorded._verification_deadline.get()))
         return []
 
-    monkeypatch.setattr(pre_recorded, 'prerecorded_bytes_route', resolve)
+    monkeypatch.setattr(prerecorded_route, 'prerecorded_bytes_route', resolve)
     monkeypatch.setattr(pre_recorded, 'prerecorded_from_bytes', provider)
     deadline = time.monotonic() + 40
     outcome = fast_finish.run(

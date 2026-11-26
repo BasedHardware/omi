@@ -518,7 +518,8 @@ def _transcribe_words(pcm: bytes, language: str | None, *, route=None, deadline:
 
 def _routed_transcriber(pcm: bytes, language: str | None, deadline: float):
     """The pass's provider call, with the language resolved once, on its first chunk's audio."""
-    from utils.stt.pre_recorded import prerecorded_bytes_route, verification_stt_deadline
+    from utils.stt.pre_recorded import verification_stt_deadline
+    from utils.stt.prerecorded_route import prerecorded_bytes_route
 
     with verification_stt_deadline(deadline) if deadline is not None else nullcontext():
         route = prerecorded_bytes_route(pcm, language, sample_rate=SAMPLE_RATE, channels=1, encoding='linear16')
