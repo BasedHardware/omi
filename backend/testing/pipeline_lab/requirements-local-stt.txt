@@ -1,0 +1,15 @@
+# Optional extra for `scenario run --stt record-local` (cassette/local_parakeet.py): production's Parakeet
+# batch model on this machine's CPU. Never part of the default install, a lock or CI.
+# Install into its own venv outside the repository, never backend/.venv:
+#   uv venv -p python3.11 /Volumes/scratch/local-stt/venv
+#   uv pip install -p /Volumes/scratch/local-stt/venv/bin/python -r backend/testing/pipeline_lab/requirements-local-stt.txt
+#   export OMI_PIPELINE_LAB_LOCAL_STT_PYTHON=/Volumes/scratch/local-stt/venv/bin/python HF_HOME=/Volumes/scratch/local-stt/hf
+# macOS arm64 wheels, Python 3.11 (measured 2026-11-25, about 1.3 GB). Model: 2.51 GB download on first use.
+# Pins match backend/diarizer/requirements-batch-pipeline.txt (the production batch image).
+torch==2.8.0
+torchaudio==2.8.0
+nemo_toolkit[asr]==2.7.1
+numpy==2.3.5
+huggingface-hub==0.36.2
+# The product import chain of diarizer.batch_pipeline_models (ParakeetWords, pin_parakeet_decoding).
+prometheus-client==0.22.1

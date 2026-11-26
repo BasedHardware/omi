@@ -1,0 +1,21 @@
+{
+  "name": "finish_single_recording_fast",
+  "description": "One batch-lane recording, Finish tapped at 38 s while capturing, fast finish on: the provisional transcript lands 15 s later and the Finish conversation is visible on Home from then on, before the batch transcript (120 s).",
+  "origins": [{"id": "O", "source": "omi"}],
+  "recordings": [
+    {
+      "id": "B",
+      "origin": "O",
+      "session": "S1",
+      "audio": [0, 40],
+      "transcript_at": 120,
+      "speech": [{"fill": [0.5, 40], "every": 4, "words": 10, "speakers": ["SPEAKER_00", "SPEAKER_01"]}]
+    }
+  ],
+  "finish": {"at": 38, "fast_finish": true, "provisional_latency": 15},
+  "expect": [
+    {"at": 60, "conversation_of": "@finish", "recordings": ["B"], "visible": true, "manual_end": true},
+    {"conversation_of": "@finish", "recordings": ["B"], "visible": true, "manual_end": true},
+    {"no_hidden_with": "B"}
+  ]
+}

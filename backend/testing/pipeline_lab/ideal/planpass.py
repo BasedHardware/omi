@@ -11,6 +11,11 @@ needs Firestore: the background-sources block and stored wearer-recognition evid
 ``is_user`` counts), the incremental arrival order, finished-window locking and notes. So it isolates
 the cutting policy; the same skips apply to every ref compared.
 
+The child process runs on this lab's simulated clock (``stack/clock.py``, mode ``sim``), frozen at the
+day's end (the ``now`` the planner is given), with the product's monotonic clock on it too: a product
+read of ``datetime.now()``, ``time.time()`` or ``time.monotonic()`` sees the same instant every run.
+The clock modules are loaded from this lab by path, so the ref's own ``testing`` tree is never imported.
+
 Output: ``runs/<id>/conversations/*.json`` in contract shape, scored like any replay
 (``ideal.score --run``).
 """
@@ -42,6 +47,32 @@ for r in recordings.values():
         if isinstance(r.get(k), str):
             r[k] = outline.utc(r[k])
 now = outline.utc(args['now'])
+
+
+def lab_clock(at):
+    # This lab's clock, by path; registered under its own names so its patcher skips itself.
+    import contextlib, importlib.util
+    stack_dir = os.environ.get('PLANPASS_LAB_STACK')
+    if not stack_dir:
+        return contextlib.nullcontext(None)
+    for name in ('patching', 'clock'):
+        spec = importlib.util.spec_from_file_location(
+            f'testing.pipeline_lab.stack.{name}', os.path.join(stack_dir, f'{name}.py')
+        )
+        module = importlib.util.module_from_spec(spec)
+        sys.modules[spec.name] = module
+        spec.loader.exec_module(module)
+    clock = sys.modules['testing.pipeline_lab.stack.clock']
+    return clock.installed_clock(clock.LabClock.for_mode(at, 'sim'), product_monotonic=True)
+
+
+_clock = lab_clock(now)
+_clock.__enter__()
+import time as _time
+# What the product would read now: the day's end exactly when the lab clock is in.
+_lab = sys.modules.get('testing.pipeline_lab.stack.clock')
+on_lab = _lab is not None and _lab.LabDatetime.now(timezone.utc) == now and _time.time() == now.timestamp()
+clock_mode = 'sim' if on_lab else 'real'
 eligible = [r for r in recordings.values() if policy.builder_eligible(r)]
 sitdown = bool(getattr(cfg, 'sitdown_enabled', lambda: False)())
 kwargs = {}
@@ -131,7 +162,9 @@ for w in windows:
         'structured': {'title': w.get('title') or '', 'emoji': w.get('emoji') or ''},
         'v3': {'kind': kind, 'home_hidden': hidden, 'visible': not hidden, 'home_hidden_reason': reason},
     })
+_clock.__exit__(None, None, None)
 json.dump({'conversations': out, 'stretches': len(groups), 'outline_failed': failed, 'sitdown': sitdown,
+           'clock': clock_mode,
            'silence_seconds': (kwargs.get('silence') or kwargs.get('silence_gap') or outline.SILENCE).total_seconds()}, sys.stdout)
 '''
 
@@ -140,7 +173,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     from testing.pipeline_lab import contracts as c
     from testing.pipeline_lab.ledger import SpendLedger
     from testing.pipeline_lab.llm_proxy.server import LlmProxy, ProxyConfig
-    from testing.pipeline_lab.store import Store, atomic_write_json, ensure_private_dir, read_jsonl
+    from testing.pipeline_lab.store import Store, atomic_write_json, ensure_private_dir, private_subdir, read_jsonl
 
     parser = argparse.ArgumentParser(prog='python -m testing.pipeline_lab.ideal.planpass')
     parser.add_argument('--root', required=True)
@@ -173,6 +206,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     env = {k: v for k, v in os.environ.items() if not k.startswith(('GOOGLE_', 'CLOUDSDK_', 'FIRESTORE_'))}
     env.update(
         PLANPASS_BACKEND=str(Path(args.backend).resolve()),
+        PLANPASS_LAB_STACK=str(Path(__file__).resolve().parents[1] / 'stack'),
         ENCRYPTION_SECRET=secrets.token_hex(16),  # imports need one; nothing is decrypted
         PYTHONPATH='',
     )
@@ -186,7 +220,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         )
         # Run from an empty directory so the product's own ``testing`` package cannot shadow anything.
         empty = root / 'private' / 'planpass-cwd'
-        empty.mkdir(parents=True, exist_ok=True)
+        private_subdir(empty)
         done = subprocess.run(
             [sys.executable, '-I', '-c', CHILD], input=payload, capture_output=True, text=True, env=env, cwd=empty
         )
