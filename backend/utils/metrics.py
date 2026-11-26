@@ -1701,7 +1701,7 @@ OMI_SYNC_JOB_COMPLETION_TO_FIRST_TERMINAL_READ_SECONDS = Histogram(
     'omi_sync_job_completion_to_first_terminal_read_seconds',
     'Seconds from sync job completion to its first terminal status read observed by this process',
     ['cohort'],
-    buckets=(1, 5, 10, 20, 30, 60, 120, 300, 600, 1800, 3600, 7200),
+    buckets=(1, 5, 10, 20, 30, 60, 120, 300, 600, 1800, 3600, 7200, 14400, 43200, 86400),
 )
 OMI_SYNC_JOB_POLL_THROTTLED_TOTAL = Counter(
     'omi_sync_job_poll_throttled_total',

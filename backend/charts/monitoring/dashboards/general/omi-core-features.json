@@ -5556,6 +5556,366 @@
       ],
       "title": "Subscription lifecycle \u2014 did the user stay?",
       "type": "row"
+    },
+    {
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 40
+      },
+      "id": 100,
+      "panels": [],
+      "title": "Offline sync backlog",
+      "type": "row"
+    },
+    {
+      "datasource": {
+        "type": "stackdriver",
+        "uid": "beuxmaq8oxhq8e"
+      },
+      "description": "Failed / started upload attempts at the application on v1 and v2 sync-local-files, including HTTP 207 and exceptions. The Cloud Run series is the HTTP 503 share across requests reaching backend-sync revisions across all routes. Both are trailing one-hour ratios with different denominators.",
+      "fieldConfig": {
+        "defaults": {
+          "min": 0,
+          "unit": "percentunit",
+          "max": 1
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byFrameRefID",
+              "options": "A"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Failed / started uploads"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byFrameRefID",
+              "options": "B"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "HTTP 503 / all backend-sync requests"
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 41
+      },
+      "id": 101,
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "none"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "stackdriver",
+            "uid": "beuxmaq8oxhq8e"
+          },
+          "queryType": "promQL",
+          "refId": "A",
+          "promQLQuery": {
+            "expr": "(sum(increase(omi_sync_upload_total{namespace=\"backend-sync\",job=\"omi-cloud-run-application-metrics\",outcome=\"failed\"}[1h])) or 0 * sum(increase(omi_sync_upload_total{namespace=\"backend-sync\",job=\"omi-cloud-run-application-metrics\",outcome=\"started\"}[1h]))) / (sum(increase(omi_sync_upload_total{namespace=\"backend-sync\",job=\"omi-cloud-run-application-metrics\",outcome=\"started\"}[1h])) > 0)",
+            "projectName": "based-hardware",
+            "step": "5m"
+          },
+          "timeSeriesList": {
+            "projectName": "based-hardware"
+          }
+        },
+        {
+          "datasource": {
+            "type": "stackdriver",
+            "uid": "beuxmaq8oxhq8e"
+          },
+          "queryType": "promQL",
+          "refId": "B",
+          "promQLQuery": {
+            "expr": "(sum(increase(run_googleapis_com:request_count{monitored_resource=\"cloud_run_revision\",service_name=\"backend-sync\",response_code=\"503\"}[1h])) or 0 * sum(increase(run_googleapis_com:request_count{monitored_resource=\"cloud_run_revision\",service_name=\"backend-sync\"}[1h]))) / (sum(increase(run_googleapis_com:request_count{monitored_resource=\"cloud_run_revision\",service_name=\"backend-sync\"}[1h])) > 0)",
+            "projectName": "based-hardware",
+            "step": "5m"
+          },
+          "timeSeriesList": {
+            "projectName": "based-hardware"
+          }
+        }
+      ],
+      "title": "Upload refusal rate (attempt-weighted)",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "stackdriver",
+        "uid": "beuxmaq8oxhq8e"
+      },
+      "description": "Share of v2 uploads with a valid trace whose oldest sealed phone audio waited over 1 h or 6 h. Counters include retries and are recorded before admission. The 6 h line uses instances exposing the new bucket during rollout.",
+      "fieldConfig": {
+        "defaults": {
+          "min": 0,
+          "unit": "percentunit",
+          "max": 1
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byFrameRefID",
+              "options": "A"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Over 1 h"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byFrameRefID",
+              "options": "B"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Over 6 h"
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 41
+      },
+      "id": 102,
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "none"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "stackdriver",
+            "uid": "beuxmaq8oxhq8e"
+          },
+          "queryType": "promQL",
+          "refId": "A",
+          "promQLQuery": {
+            "expr": "1 - sum(increase(omi_sync_seal_to_accept_seconds_bucket{namespace=\"backend-sync\",job=\"omi-cloud-run-application-metrics\",le=~\"3600([.]0+)?\"}[1h])) / (sum(increase(omi_sync_seal_to_accept_seconds_bucket{namespace=\"backend-sync\",job=\"omi-cloud-run-application-metrics\",le=\"+Inf\"}[1h])) > 0)",
+            "projectName": "based-hardware",
+            "step": "5m"
+          },
+          "timeSeriesList": {
+            "projectName": "based-hardware"
+          }
+        },
+        {
+          "datasource": {
+            "type": "stackdriver",
+            "uid": "beuxmaq8oxhq8e"
+          },
+          "queryType": "promQL",
+          "refId": "B",
+          "promQLQuery": {
+            "expr": "1 - sum(increase(omi_sync_seal_to_accept_seconds_bucket{namespace=\"backend-sync\",job=\"omi-cloud-run-application-metrics\",le=~\"21600([.]0+)?\"}[1h])) / (sum(increase(omi_sync_seal_to_accept_seconds_bucket{namespace=\"backend-sync\",job=\"omi-cloud-run-application-metrics\",le=\"+Inf\"}[1h]) and ignoring(le) increase(omi_sync_seal_to_accept_seconds_bucket{namespace=\"backend-sync\",job=\"omi-cloud-run-application-metrics\",le=~\"21600([.]0+)?\"}[1h])) > 0)",
+            "projectName": "based-hardware",
+            "step": "5m"
+          },
+          "timeSeriesList": {
+            "projectName": "based-hardware"
+          }
+        }
+      ],
+      "title": "Oldest audio at upload (attempt-weighted)",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "stackdriver",
+        "uid": "beuxmaq8oxhq8e"
+      },
+      "description": "Share of traced v2 upload attempts over 6 h by platform and allowlisted mobile build. Older groups other numeric builds and unknown covers requests without a usable build. Installations that never sent an upload do not contribute.",
+      "fieldConfig": {
+        "defaults": {
+          "min": 0,
+          "unit": "percentunit",
+          "max": 1
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byFrameRefID",
+              "options": "A"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "${__field.labels.platform} ${__field.labels.build_band}"
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 49
+      },
+      "id": 103,
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "none"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "stackdriver",
+            "uid": "beuxmaq8oxhq8e"
+          },
+          "queryType": "promQL",
+          "refId": "A",
+          "promQLQuery": {
+            "expr": "(sum by (platform, build_band) (increase(omi_sync_upload_trace_age_total{namespace=\"backend-sync\",job=\"omi-cloud-run-application-metrics\",age=\"gt_6h\"}[1h])) or 0 * sum by (platform, build_band) (increase(omi_sync_upload_trace_age_total{namespace=\"backend-sync\",job=\"omi-cloud-run-application-metrics\"}[1h]))) / (sum by (platform, build_band) (increase(omi_sync_upload_trace_age_total{namespace=\"backend-sync\",job=\"omi-cloud-run-application-metrics\"}[1h])) > 0)",
+            "projectName": "based-hardware",
+            "step": "5m"
+          },
+          "timeSeriesList": {
+            "projectName": "based-hardware"
+          }
+        }
+      ],
+      "title": "Upload age over 6 h by build (attempt-weighted)",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "stackdriver",
+        "uid": "beuxmaq8oxhq8e"
+      },
+      "description": "Elapsed time from job completion to the first observed terminal status read, split by sync poll backoff cohort. Only jobs with an observed terminal read count. Uses the 24 h bucket layout to keep cohorts comparable during rollout.",
+      "fieldConfig": {
+        "defaults": {
+          "min": 0,
+          "unit": "s"
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byFrameRefID",
+              "options": "A"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "p50 ${__field.labels.cohort}"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byFrameRefID",
+              "options": "B"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "p95 ${__field.labels.cohort}"
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 49
+      },
+      "id": 104,
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "none"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "stackdriver",
+            "uid": "beuxmaq8oxhq8e"
+          },
+          "queryType": "promQL",
+          "refId": "A",
+          "promQLQuery": {
+            "expr": "histogram_quantile(0.5, sum by (le, cohort) (increase(omi_sync_job_completion_to_first_terminal_read_seconds_bucket{namespace=\"backend-sync\",job=\"omi-cloud-run-application-metrics\"}[1h]) and ignoring(le) increase(omi_sync_job_completion_to_first_terminal_read_seconds_bucket{namespace=\"backend-sync\",job=\"omi-cloud-run-application-metrics\",le=~\"86400([.]0+)?\"}[1h])))",
+            "projectName": "based-hardware",
+            "step": "5m"
+          },
+          "timeSeriesList": {
+            "projectName": "based-hardware"
+          }
+        },
+        {
+          "datasource": {
+            "type": "stackdriver",
+            "uid": "beuxmaq8oxhq8e"
+          },
+          "queryType": "promQL",
+          "refId": "B",
+          "promQLQuery": {
+            "expr": "histogram_quantile(0.95, sum by (le, cohort) (increase(omi_sync_job_completion_to_first_terminal_read_seconds_bucket{namespace=\"backend-sync\",job=\"omi-cloud-run-application-metrics\"}[1h]) and ignoring(le) increase(omi_sync_job_completion_to_first_terminal_read_seconds_bucket{namespace=\"backend-sync\",job=\"omi-cloud-run-application-metrics\",le=~\"86400([.]0+)?\"}[1h])))",
+            "projectName": "based-hardware",
+            "step": "5m"
+          },
+          "timeSeriesList": {
+            "projectName": "based-hardware"
+          }
+        }
+      ],
+      "title": "Job settlement lag by cohort (attempt-weighted)",
+      "type": "timeseries"
     }
   ],
   "refresh": "5m",
