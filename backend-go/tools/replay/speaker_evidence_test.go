@@ -25,7 +25,7 @@ func TestJobdResolverDepartureRequiresAbsentRowAndProof(t *testing.T) {
 		{"worker-missing-row-fence", "fenced", map[string]any{"job": map[string]any{"outcome": "fenced"}}},
 		{"erase-removes-owner-and-jobs", "completed", map[string]any{
 			"job": map[string]any{"state": "completed"},
-			"erasure": map[string]any{"user_document_absent": true, "jobs_for_uid": json.Number("0"),
+			"erasure": map[string]any{"user_document_absent": true, "conversation_absent": true, "jobs_for_uid": json.Number("0"),
 				"tenants_for_uid": json.Number("0")},
 		}},
 	} {
@@ -42,6 +42,9 @@ func TestJobdResolverDepartureRequiresAbsentRowAndProof(t *testing.T) {
 			g := ruleRun()
 			g.OwnerID, g.ConversationID = py.OwnerID, py.ConversationID
 			g.Document, g.Status, g.GoEvidence = nil, test.status, test.evidence
+			if erasure, ok := test.evidence["erasure"]; ok {
+				g.Effects["erasure"] = erasure
+			}
 			diffs := compareObservations(py, g)
 			if !slices.Contains(diffs, difference{Path: "/conversation", Kind: "different_value"}) ||
 				hasKindPath(diffs, "invalid_binding", "/go"+clockPath) ||

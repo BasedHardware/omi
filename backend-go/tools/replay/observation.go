@@ -35,6 +35,7 @@ func compareObservationsForRun(python, goRun *observation, pythonTokens, goToken
 	reviewRuledSyncWrites(&diffs, python, goRun)
 	applyComparisonRules(diffs, python, goRun, pythonTokens, goTokens, terminalChecks == nil)
 	if pairedErasure {
+		reviewPostErasurePrivacy(diffs, python, goRun, pythonFinalization, goFinalization)
 		preWipe := []difference{}
 		compareDocuments(&preWipe, pythonFinalization, goFinalization, nil)
 		reviewSpeakerDifferences(&preWipe, pythonFinalization, goFinalization)
@@ -250,6 +251,21 @@ func validateBinding(diffs *[]difference, side string, run *observation, goSide 
 	if run == nil {
 		return
 	}
+	if !goSide || !provedJobdDeparture(run) {
+		validateAdmissionBinding(diffs, side, run, goSide)
+	}
+	if run.Admitted == nil {
+		return
+	}
+	ids := run.Admitted
+	for i, value := range run.Webhooks {
+		if objectField(value, "app") != "developer-created" && objectField(value, "idempotency_key") != ids.Fanout {
+			addDifference(diffs, fmt.Sprintf("%s/webhooks/%d/idempotency_key", side, i), "invalid_binding")
+		}
+	}
+}
+
+func validateAdmissionBinding(diffs *[]difference, side string, run *observation, goSide bool) {
 	if goSide {
 		validateGoFenceBinding(diffs, side, run)
 		validateGoMinimumBinding(diffs, side, run)
@@ -269,11 +285,6 @@ func validateBinding(diffs *[]difference, side string, run *observation, goSide 
 	}
 	if actual := documentField(run, "fanout_key"); (actual != nil || goSide && len(run.Webhooks) > 0) && actual != ids.Fanout {
 		addDifference(diffs, side+"/conversation/fanout_key", "invalid_binding")
-	}
-	for i, value := range run.Webhooks {
-		if objectField(value, "app") != "developer-created" && objectField(value, "idempotency_key") != ids.Fanout {
-			addDifference(diffs, fmt.Sprintf("%s/webhooks/%d/idempotency_key", side, i), "invalid_binding")
-		}
 	}
 }
 

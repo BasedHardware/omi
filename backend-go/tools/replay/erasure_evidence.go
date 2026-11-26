@@ -24,8 +24,7 @@ func finalizationBeforeErasure(diffs *[]difference, python, goRun *observation) 
 	const fixture = "erase-removes-owner-and-jobs"
 	if python.ConversationID != fixture || goRun.ConversationID != fixture ||
 		python.OwnerID != "replay-"+fixture || goRun.OwnerID != python.OwnerID ||
-		!completedErasure(python) || !completedErasure(goRun) || !provedJobdDeparture(goRun) ||
-		!equalReplayValue(goRun.Effects["erasure"], goRun.GoEvidence["erasure"]) {
+		!completedErasure(python) || !provedJobdDeparture(goRun) {
 		addDifference(diffs, "/effects/erasure", "invalid_binding")
 		return python, goRun
 	}

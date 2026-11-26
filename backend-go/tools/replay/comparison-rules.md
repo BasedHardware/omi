@@ -57,6 +57,21 @@ wrong vector-to-task binding, changed embedding input, and a missing vector.
 For the same fixture, each stored notes output digest must match that side's
 independently recomputed digest, including when the stored digests agree.
 
+## Post-erasure evidence
+
+A recorded fence or matching erasure receipt can prove that Go's conversation
+is absent. Only then does the oracle skip its conversation and admission
+bindings. The effects, webhooks, erasure and pre-wipe comparisons still run.
+
+After paired erasure, account-operation receipts under the same privacy owner
+digest may have different IDs. Pair each side's unique receipt by account epoch
+and purge generation, where a null purge generation identifies the non-purge
+operation. The remaining receipt fields must match, and each 90-day expiration
+must bind to a write within that side's wipe window. A mismatch or duplicate
+stays visible. Post-wipe privacy memo tokens qualify independently of the
+pre-wipe token only when both sides rotate to fresh UUIDv4 tokens, retain the
+same schema, and leave matching blocked privacy state with evidence of a write.
+
 ## Go coordination stamps
 
 The exact fields `go_sync_inline_fanout_epoch`, `go_sync_inline_fanout_revision`,

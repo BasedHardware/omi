@@ -88,6 +88,9 @@ def _run_side(cases, side, binary, database, key, worker_backend):
 
 
 def _paired(payload, worker_binary, worker_backend):
+    side_timeout = int(os.environ.get('ORACLE_DIAG_SIDE_TIMEOUT_SECONDS', '240'))
+    if side_timeout <= 0:
+        raise ValueError('ORACLE_DIAG_SIDE_TIMEOUT_SECONDS must be positive')
     sides = []
     for side in ('python', 'go'):
         result = subprocess.run(
@@ -105,7 +108,7 @@ def _paired(payload, worker_binary, worker_backend):
             ],
             input=payload,
             capture_output=True,
-            timeout=240,
+            timeout=side_timeout,
         )
         if result.returncode:
             detail = result.stderr.decode(errors='replace')[-2000:]

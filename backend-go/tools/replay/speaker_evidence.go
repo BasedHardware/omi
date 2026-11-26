@@ -147,7 +147,7 @@ const resolverPath = "/conversation/owner_recognition_diagnostics"
 
 // Use the post-event observation to prove an absent conversation.
 func provedJobdDeparture(run *observation) bool {
-	if run.Document != nil {
+	if run.Document != nil || run.OwnerID != "replay-"+run.ConversationID {
 		return false
 	}
 	job := run.GoEvidence["job"]
@@ -159,8 +159,8 @@ func provedJobdDeparture(run *observation) bool {
 		erasure := run.GoEvidence["erasure"]
 		jobs, jobsOK := integerValue(objectField(erasure, "jobs_for_uid"))
 		tenants, tenantsOK := integerValue(objectField(erasure, "tenants_for_uid"))
-		return run.Status == "completed" && objectField(job, "state") == "completed" &&
-			objectField(erasure, "user_document_absent") == true && jobsOK && tenantsOK && jobs == 0 && tenants == 0
+		return completedErasure(run) && equalReplayValue(erasure, run.Effects["erasure"]) &&
+			objectField(job, "state") == "completed" && jobsOK && tenantsOK && jobs == 0 && tenants == 0
 	default:
 		return false
 	}

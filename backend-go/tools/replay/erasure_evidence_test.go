@@ -201,3 +201,114 @@ func TestPairedErasureStillRejectsBadFinalizationWitnesses(t *testing.T) {
 		})
 	}
 }
+
+func TestGoDepartureSkipsOnlyAbsentAdmissionAndConversationBindings(t *testing.T) {
+	for _, fixture := range []string{"worker-missing-row-fence", "erase-removes-owner-and-jobs"} {
+		t.Run(fixture, func(t *testing.T) {
+			_, run, _ := pairedErasureRuns(t)
+			run.OwnerID, run.ConversationID = "replay-"+fixture, fixture
+			if fixture == "worker-missing-row-fence" {
+				run.Status = "fenced"
+				run.GoEvidence = map[string]any{"job": map[string]any{"outcome": "fenced"}}
+			}
+			run.Admitted = &admission{Job: "go-job", Fanout: "job-fanout", Engine: "go"}
+			run.Webhooks = []any{map[string]any{"app": "fixture", "idempotency_key": "wrong"}}
+			var diffs []difference
+			validateBinding(&diffs, "/go", run, true)
+			if len(diffs) != 1 || !hasKindPath(diffs, "invalid_binding", "/go/webhooks/0/idempotency_key") {
+				t.Fatalf("proved departure must preserve the webhook finding: %+v", diffs)
+			}
+
+			evidence := run.GoEvidence
+			for _, document := range []any{map[string]any{"finalization_job_id": "go-job"}, nil} {
+				run.Document = document
+				if document == nil {
+					run.GoEvidence = nil
+				} else {
+					run.GoEvidence = evidence
+				}
+				diffs = nil
+				validateBinding(&diffs, "/go", run, true)
+				for _, path := range []string{
+					"/go/conversation/finalization_engine",
+					"/go/conversation/finalization_owner_epoch",
+					"/go/conversation/finalization_revision",
+					"/go/admitted",
+				} {
+					if !hasKindPath(diffs, "invalid_binding", path) {
+						t.Fatalf("missing %s for present or unproved row: %+v", path, diffs)
+					}
+				}
+			}
+		})
+	}
+}
+
+func TestPostErasurePrivacyUsesOnlyWitnessedIdentityExceptions(t *testing.T) {
+	tests := []struct {
+		name            string
+		mutate          func(*observation, string, string)
+		pairOK, tokenOK bool
+	}{
+		{"matching operations", func(*observation, string, string) {}, true, true},
+		{"different account epoch", func(run *observation, _, receipt string) {
+			mustMap(run.Derived[receipt])["account_epoch"] = json.Number("3")
+		}, false, true},
+		{"different operation kind", func(run *observation, _, receipt string) {
+			mustMap(run.Derived[receipt])["purge_generation"] = json.Number("1")
+		}, false, true},
+		{"wrong expiration", func(run *observation, _, receipt string) {
+			mustMap(run.Derived[receipt])["expires_at"] = wrappedStamp(run.Finished)
+		}, false, true},
+		{"wrong owner digest", func(run *observation, path, receipt string) {
+			run.Derived[batchPrivacyDocumentPath("other")+strings.TrimPrefix(receipt, path)] = run.Derived[receipt]
+			delete(run.Derived, receipt)
+		}, false, true},
+		{"ambiguous duplicate", func(run *observation, path, receipt string) {
+			run.Derived[path+"/account_operations/"+strings.Repeat("c", 64)] = run.Derived[receipt]
+		}, false, true},
+		{"unblocked privacy", func(run *observation, _, _ string) {
+			run.BatchPrivacy.Final.Fields["blocked"] = false
+		}, true, false},
+		{"reused pre-wipe memo", func(run *observation, _, _ string) {
+			run.BatchPrivacy.Final.Fields["memo_token"] = run.BeforeErasure.BatchPrivacy.Fields["memo_token"]
+		}, true, false},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			python, goRun, path := pairedErasureRuns(t)
+			var goReceipt string
+			for i, run := range []*observation{python, goRun} {
+				fields := run.BatchPrivacy.Final.Fields
+				fields["generation"], fields["account_epoch"] = json.Number("1"), json.Number("2")
+				fields["blocked"], fields["purging"] = true, false
+				fields["memo_token"] = []string{"423e4567e89b42d3a456426614174000", "523e4567e89b42d3a456426614174000"}[i]
+				run.Cost.Firestore.BatchPrivacyDocumentWrites += 2
+				receipt := path + "/account_operations/" + strings.Repeat([]string{"a", "b"}[i], 64)
+				run.Derived[receipt] = map[string]any{
+					"account_epoch": json.Number("2"), "purge_generation": nil,
+					"expires_at": wrappedStamp(run.Finished.Add(90 * 24 * time.Hour)),
+				}
+				goReceipt = receipt
+			}
+			test.mutate(goRun, path, goReceipt)
+
+			diffs := compareObservations(python, goRun)
+			paired, memoApproved, unmatched := 0, false, 0
+			for _, diff := range diffs {
+				if diff.Reason == "generated_identity" {
+					paired++
+				}
+				if diff.Path == "/derived_documents/"+escapePointer(path)+"/memo_token" {
+					memoApproved = diff.Reason == postErasureMemoReason
+				}
+				if strings.Contains(diff.Path, "~1account_operations~1") && diff.Reason == "" {
+					unmatched++
+				}
+			}
+			if (paired == 2) != test.pairOK || memoApproved != test.tokenOK || (!test.pairOK && unmatched == 0) {
+				t.Fatalf("incorrect privacy exceptions: %+v", diffs)
+			}
+		})
+	}
+}
