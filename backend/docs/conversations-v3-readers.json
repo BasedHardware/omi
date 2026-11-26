@@ -895,6 +895,10 @@
     "policy": "conversations",
     "reason": "Product and derived readers must apply is_visible_conversation or the validated by-id boundary; home_hidden is not a general visibility filter."
   },
+  "backend/utils/enrichment/unpark.py:collection": {
+    "policy": "conversations",
+    "reason": "The unpark transaction reads the conversation by exact ID after validating the user and conversation IDs against the outbox row key."
+  },
   "backend/utils/entity_pages.py:collection": {
     "policy": "conversations",
     "reason": "Product and derived readers must apply is_visible_conversation or the validated by-id boundary; home_hidden is not a general visibility filter."

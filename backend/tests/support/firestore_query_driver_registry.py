@@ -165,7 +165,7 @@ BODY_DIGEST = {
     'utils.support.retention._select_conversations': 'f36920350f4e3a557e0e474e8801ae414c21ce67203e0627f7a39ba820243d16',
     'database.conversations_v3_live._recent_window_query': '6f2c323bfa8df890362c6bdc4796182a70e4c704376bcb4944358560b12edc75',
     'database.conversations_v3._oldest_pending': 'e2da208a3dcbae7d7c7c59335883b422e27dc71c9cfae51568883aa452bcfc57',
-    'database.conversations_v3.commit_projection': '8105dd5d27d6475098159c7b16ca41bf3ceeb09334e1941d697f1bfc75c52c26',
+    'database.conversations_v3.commit_projection': '4f070f852f6b023db0d1299b647cc91afc723aa976922d916e8ffa3adf77f1e0',
     'database.batch_pipeline_conversation_purge_scans._claim': '662c759fc79795f0851e0b18082b7dcb006e109253e45ba1fde2190d542bddf8',
     'database.batch_privacy_late_sweeps.reconcile_batch_privacy_late_sweeps': 'bd0c62aeb7bab5e86e3fdbb73bc9b6cb395a1218923110590d0a8fcaacabd5f6',
     'database.batch_pipeline_conversation_purge_scans.run_job': 'fe5d30b77da198a7e0dc188115c8906fb6446925079a4e96339d36675a55faeb',
@@ -3771,7 +3771,8 @@ for entry in (
         'The collision record and commit meter add no query: on a lock failure the record re-reads by reference '
         'the documents the commit had already loaded. Re-reviewed 2026-11-26: discarded sources clear '
         'their pending marker using the same fenced point update as deleted sources. '
-        'Linked backfill replacements use the existing task and memory query results and loaded claims; no new query.',
+        'Linked backfill replacements use the existing task and memory query results and loaded claims. '
+        'Unlocked paging carries unvisited IDs and the cursor into the existing builder lease write; no new query.',
         expect_observed=False,
         body_digest=BODY_DIGEST['database.conversations_v3.commit_projection'],
     ),
