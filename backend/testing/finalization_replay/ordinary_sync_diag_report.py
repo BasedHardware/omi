@@ -369,6 +369,9 @@ def enrich(report: dict) -> dict:
                 'label': 'go_gap:ops' if difference > 0 else None,
                 'go_top_operation_sources': top_sources,
             }
+            for side, ops in (('python', python_ops), ('go', go_ops)):
+                if 'failed_commit_rpcs' in ops:
+                    operation_row[f'{side}_failed_commit_rpcs'] = ops['failed_commit_rpcs']
         else:
             operation_row = dict(operation_row)
         operation_table.append(operation_row)
