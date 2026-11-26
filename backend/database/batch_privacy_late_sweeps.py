@@ -5,7 +5,7 @@ import hashlib
 import logging
 import os
 import re
-from typing import Any
+from typing import Any, TypeGuard
 
 from google.api_core.exceptions import FailedPrecondition, GoogleAPICallError, InvalidArgument, NotFound
 from google.cloud import firestore
@@ -50,7 +50,7 @@ def _attempts(previous: Any) -> int:
     return previous + 1 if type(previous) is int and 0 <= previous < 20 else 1
 
 
-def _document_id(value: Any, limit: int = 1500) -> bool:
+def _document_id(value: Any, limit: int = 1500) -> TypeGuard[str]:
     return (
         isinstance(value, str)
         and 0 < len(value.encode()) <= limit
