@@ -569,3 +569,30 @@ async def test_discovery_interval_zero_keeps_every_pass(monkeypatch):
         clock_box[0] = 1000.0 + step
         await followups.schedule()
     assert reads == [1000.0, 1001.0, 1002.0]
+
+
+@pytest.mark.asyncio
+async def test_targeted_wake_to_start_latency_is_observed_once(monkeypatch):
+    clock_box = [500.0]
+    followups, _ = _paced_runner(monkeypatch, clock_box)
+    observed = []
+    monkeypatch.setattr(projection_followup.TARGETED_START_SECONDS, 'observe', observed.append)
+    release = asyncio.Event()
+
+    async def run(_):
+        await release.wait()
+
+    followups.run = AsyncMock(side_effect=run)
+    monkeypatch.setenv('BATCH_PIPELINE_PROJECTION_FOLLOWUP_SLOTS', '1')
+    await followups.schedule(['busy'], discover=False)  # takes the only slot at t=500
+    await followups.schedule(['waits'], discover=False)  # queued behind the slot
+    assert observed == [0.0]
+    clock_box[0] = 503.0
+    release.set()
+    await asyncio.gather(*list(followups.tasks.values()))
+    followups.launch_targeted()
+    assert observed == [0.0, 3.0]
+    assert followups.wake_marks == {}
+    release.clear()
+    release.set()
+    await asyncio.gather(*list(followups.tasks.values()))

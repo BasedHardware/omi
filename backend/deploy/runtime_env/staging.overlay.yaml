@@ -248,7 +248,6 @@ overlay:
           BATCH_PIPELINE_SERVING_SWEEP_PAGE_ROWS: {value: '200', category: rollout}
           BATCH_PIPELINE_SERVING_TICK_SECONDS: {value: '10', category: rollout}
           BATCH_PIPELINE_PROJECTION_FOLLOWUP_SLOTS: {value: '3', category: rollout}
-          BATCH_PIPELINE_PROJECTION_FOLLOWUP_DISCOVERY_INTERVAL_SECONDS: {value: '60', category: rollout}
           BATCH_PROJECTION_FINISH_CLASSIFY_PAGE_LIMIT: {value: '16', category: rollout}
           # Staging has no projection pump (STAGING_EXCLUDED_SERVICES), so integration keeps the serving
           # sweep; prod turns it off only because the pump owns it there (SCA-3318 step 3).

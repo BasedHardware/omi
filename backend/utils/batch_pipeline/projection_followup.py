@@ -18,7 +18,7 @@ import socket
 import time
 from typing import TYPE_CHECKING
 
-from prometheus_client import Counter
+from prometheus_client import Counter, Histogram
 
 from database.batch_pipeline_privacy import BatchPrivacyBlocked, matches_live_privacy_version
 from database.batch_privacy_attempt import with_batch_privacy_attempt
@@ -81,6 +81,12 @@ OUTCOMES = Counter(
     'Async projection follow-up attempts and discovery skips by outcome',
     ['outcome'],
 )
+TARGETED_START_SECONDS = Histogram(
+    'omi_batch_pipeline_projection_followup_targeted_start_seconds',
+    'Targeted follow-up wake to actual attempt start (including slot wait), per serving process',
+    buckets=(0.05, 0.1, 0.25, 0.5, 1, 2, 5, 10, 30, 60, 120, 300, 600, 1800),
+)
+MAX_WAKE_MARKS = 20_000
 # Walk-owed rows held between discovery passes. Dropped rows stay durable and
 # are rediscovered; the bound only caps memory.
 MAX_OWED = 256
@@ -147,6 +153,8 @@ class ProjectionFollowups:
         # Skipped siblings still finishing when their claimant gave up: re-queue on finish.
         self.sibling_requeue: set[str] = set()
         self.completed_probes: dict[int, dict[ProjectionBinding, FollowupPrivacyProof]] = {}
+        # Targeted wake time per segment, for wake-to-attempt-start latency (SCA-3120).
+        self.wake_marks: dict[str, float] = {}
         # Monotonic time of this process's last periodic discovery read (pacing only).
         self.last_discovery: float | None = None
         self.backoff_ceiling = projection_followup_backoff_seconds()
@@ -323,6 +331,7 @@ class ProjectionFollowups:
                 self.pending = deque(segment for segment in self.pending if segment not in selected)
                 queued = set(self.targeted_pending)
                 self.targeted_pending.extend(segment for segment in first if segment not in queued)
+                self.mark_wakes(first)
             self.launch_targeted()
             return
         if priority:
@@ -334,6 +343,7 @@ class ProjectionFollowups:
                 self.forget_page(segment)  # Targeted recovery wakes always probe completion.
             self.prioritized.update(first)
             self.pending = deque(first + [segment for segment in self.pending if segment not in first])
+            self.mark_wakes(first)
             self.launch()
             if not discover or self.pending or not self.owed:
                 return
@@ -380,6 +390,18 @@ class ProjectionFollowups:
         self.pending = deque(queued + discovered + owed)
         self.launch()
 
+    def mark_wakes(self, segments):
+        now = _monotonic()
+        for segment in segments:
+            self.wake_marks.setdefault(segment, now)
+        while len(self.wake_marks) > MAX_WAKE_MARKS:
+            self.wake_marks.pop(next(iter(self.wake_marks)))
+
+    def observe_wake(self, segment):
+        marked = self.wake_marks.pop(segment, None)
+        if marked is not None:
+            TARGETED_START_SECONDS.observe(max(0.0, _monotonic() - marked))
+
     def launch(self):
         self.launch_targeted()
         while self.pending and len(self.tasks) < projection_followup_slots(MAX_FOLLOWUPS) and not self.closed:
@@ -387,7 +409,9 @@ class ProjectionFollowups:
             if segment in self.tasks:
                 # One task owns a segment's custody accounting; never overwrite it.
                 self.prioritized.discard(segment)
+                self.wake_marks.pop(segment, None)  # the running attempt absorbs the wake
                 continue
+            self.observe_wake(segment)
             task = start_background_task(self.run(segment), name='batch_projection_followup')
             self.tasks[segment] = task
             if segment in self.prioritized:
@@ -401,7 +425,9 @@ class ProjectionFollowups:
         while self.targeted_pending and len(self.tasks) < projection_followup_slots(MAX_FOLLOWUPS) and not self.closed:
             segment = self.targeted_pending.popleft()
             if segment in self.tasks:
+                self.wake_marks.pop(segment, None)  # the running attempt absorbs the wake
                 continue
+            self.observe_wake(segment)
             task = start_background_task(self.run(segment), name='batch_projection_followup')
             self.tasks[segment] = task
             task.add_done_callback(lambda done, sid=segment: self.finished(sid, done, targeted=True))
