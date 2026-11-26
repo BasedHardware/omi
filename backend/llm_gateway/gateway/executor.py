@@ -65,7 +65,7 @@ from llm_gateway.gateway.validator import ValidatedChatCompletionRequest
 from utils.llm.model_config import uses_explicit_cache_and_chat_sanitizer
 from utils.llm.model_constants import LUNA_MODEL
 from utils.log_sanitizer import sanitize
-from utils.observability.reasons import ConvStructureFlexFallbackReason
+from utils.observability.reasons import ConvStructureFlexFallbackReason, FlexFirstOutcome, ReasonFamily, reason_label
 
 logger = logging.getLogger(__name__)
 monotonic = time.monotonic
@@ -826,7 +826,7 @@ async def _attempt_provider(
             flex_attempt = (flex_deadline - monotonic()) * 1000 >= BACKGROUND_FLEX_MIN_ATTEMPT_MS
         if flex_attempt:
             flex_attempts += 1
-            FLEX_FIRST_TOTAL.labels(lane_id=route.lane_id, outcome='attempt').inc()
+            FLEX_FIRST_TOTAL.labels(lane_id=route.lane_id, outcome=FlexFirstOutcome.ATTEMPT.value).inc()
         else:
             standard_attempts += 1
         retry_ordinal = flex_attempts + standard_attempts
@@ -869,8 +869,14 @@ async def _attempt_provider(
                     metadata=response.accounting,
                 )
             if flex_attempt:
-                outcome = 'flex' if legacy_flex or response.accounting.traffic_type == 'flex' else 'unconfirmed_tier'
-                FLEX_FIRST_TOTAL.labels(lane_id=route.lane_id, outcome=outcome).inc()
+                FLEX_FIRST_TOTAL.labels(
+                    lane_id=route.lane_id,
+                    outcome=(
+                        FlexFirstOutcome.FLEX.value
+                        if legacy_flex or response.accounting.traffic_type == 'flex'
+                        else FlexFirstOutcome.UNCONFIRMED_TIER.value
+                    ),
+                ).inc()
             return response, None
         except ProviderFailure as exc:
             error = _map_provider_failure(exc, credential_context, provider_ref)
@@ -895,7 +901,9 @@ async def _attempt_provider(
                 if exc.failure_class == FailureClass.TIMEOUT_BEFORE_OUTPUT or (
                     flex_deadline is not None and (exc.accounting is not None or not rejected)
                 ):
-                    FLEX_FIRST_TOTAL.labels(lane_id=route.lane_id, outcome='stopped_after_error').inc()
+                    FLEX_FIRST_TOTAL.labels(
+                        lane_id=route.lane_id, outcome=FlexFirstOutcome.STOPPED_AFTER_ERROR.value
+                    ).inc()
                     raise _BackgroundFlexTerminalError(error) from exc
                 if flex_deadline is not None and rejected and flex_attempts < BACKGROUND_FLEX_MAX_ATTEMPTS:
                     retry_slack = flex_deadline - monotonic() - BACKGROUND_FLEX_MIN_ATTEMPT_MS / 1000
@@ -909,13 +917,22 @@ async def _attempt_provider(
                         if (flex_deadline - monotonic()) * 1000 >= BACKGROUND_FLEX_MIN_ATTEMPT_MS:
                             continue
                 flex_deadline = None
-                reason = {
-                    FailureClass.PROVIDER_429_OMI_PAID: ConvStructureFlexFallbackReason.HTTP_429.value,
-                }.get(exc.failure_class, ConvStructureFlexFallbackReason.OTHER.value)
-                FLEX_FIRST_TOTAL.labels(lane_id=route.lane_id, outcome='fallback_standard').inc()
-                FLEX_FALLBACK_REASON_TOTAL.labels(lane_id=route.lane_id, reason=reason).inc()
+                reason = (
+                    ConvStructureFlexFallbackReason.HTTP_429
+                    if exc.failure_class == FailureClass.PROVIDER_429_OMI_PAID
+                    else ConvStructureFlexFallbackReason.OTHER
+                )
+                FLEX_FIRST_TOTAL.labels(lane_id=route.lane_id, outcome=FlexFirstOutcome.FALLBACK_STANDARD.value).inc()
+                FLEX_FALLBACK_REASON_TOTAL.labels(
+                    lane_id=route.lane_id,
+                    reason=reason_label(ReasonFamily.GATEWAY_FLEX_FALLBACK, reason, ConvStructureFlexFallbackReason),
+                ).inc()
                 if route.lane_id == 'omi:auto:conv-structure':
-                    CONV_STRUCTURE_FLEX_FALLBACK_REASON_TOTAL.labels(reason=reason).inc()
+                    CONV_STRUCTURE_FLEX_FALLBACK_REASON_TOTAL.labels(
+                        reason=reason_label(
+                            ReasonFamily.GATEWAY_FLEX_FALLBACK, reason, ConvStructureFlexFallbackReason
+                        ),
+                    ).inc()
                 continue
             if error.failure_class not in RETRYABLE_PROVIDER_FAILURE_CLASSES:
                 return None, error
