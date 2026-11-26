@@ -294,7 +294,6 @@ async def _reconcile_groups(
     derive,
     on_open,
 ):
-    """Plan the pass's stretches; returns ``(groups, owner_cuts, measure_finish)``."""
     measure_finish = not (derive or on_open) and finish_home_sli.enabled()
     held_finishes = set() if measure_finish else None
     owner_cuts = []
