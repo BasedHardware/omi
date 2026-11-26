@@ -5,6 +5,7 @@ only when an archive window commits. A finish before that used to be answered ``
 ignored, so the recording stayed open until the socket closed or the quiet timer fired.
 """
 
+import json
 from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 
@@ -13,7 +14,8 @@ from google.cloud import firestore
 
 from config import server_batch
 from database import conversation_finalization_jobs as jobs
-from utils.conversations import finalizer
+from routers import conversation_finalization as worker_router
+from utils.conversations import demand_processing, finalizer
 from utils.conversations import lifecycle
 from utils.conversations.processing_trigger import ProcessingTrigger
 from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
@@ -145,7 +147,7 @@ def _worker(monkeypatch, first, later):
     async def load(*_args):
         return None, first, SimpleNamespace(transcript_segments=[], photos=[])
 
-    async def run(_executor, function, *args, **_kwargs):
+    async def run(_executor, function, *args, **kwargs):
         if function is finalizer.conversations_db.get_conversation:
             calls.append('read')
             return reads.pop(0) if reads else first
@@ -155,6 +157,9 @@ def _worker(monkeypatch, first, later):
         if function is finalizer.lifecycle_service.complete_server_batch_capture:
             calls.append(('complete', args[2]))
             return 'completed'
+        if function is jobs.mark_finalization_retryable:
+            calls.append('defer')
+            return function(*args, **kwargs)
         raise AssertionError(function)
 
     monkeypatch.setattr(finalizer, '_load_admitted_conversation', load)
@@ -187,14 +192,51 @@ async def test_worker_waits_for_the_live_commit_then_hands_the_recording_to_batc
 
 
 @pytest.mark.asyncio
-async def test_worker_keeps_the_not_closed_retry_when_the_audio_never_commits(monkeypatch):
+async def test_worker_defers_an_uncommitted_finish_and_replays_without_spending_an_attempt(monkeypatch):
+    intent, db = _admit(_live(), ProcessingTrigger.CLIENT_FINALIZE)
+    job_id = intent['job_id']
+    job_path = (jobs.FINALIZATION_JOBS_COLLECTION, job_id)
+    db.rows[job_path].update(dispatch_requested_at=NOW, attempt_count=4, worker_claim_count=4)
+    monkeypatch.setattr(jobs, '_client', lambda firestore_client=None: firestore_client or db)
+    monkeypatch.setattr(jobs, '_now', lambda: NOW)
+
+    async def inline(_executor, function, *args, **kwargs):
+        return function(*args, **kwargs)
+
+    monkeypatch.setattr(worker_router, 'run_blocking', inline)
+    monkeypatch.setattr(worker_router, 'try_acquire_job_run_lock', lambda key: 'lock-token')
+    monkeypatch.setattr(worker_router, 'release_job_run_lock', lambda key, token: None)
+    monkeypatch.setattr(worker_router, 'account_deletion_blocks_user_work', lambda uid: False)
+    monkeypatch.setattr(worker_router, 'should_skip_background_account_mutation', lambda uid: False)
+    monkeypatch.setattr(demand_processing, 'admit', lambda *args, **kwargs: True)
+    assert finalizer.LIVE_ARCHIVE_COMMIT_WAIT_SECONDS <= 5
     monkeypatch.setattr(finalizer, 'LIVE_ARCHIVE_COMMIT_WAIT_SECONDS', 0)
-    calls = _worker(monkeypatch, _live(status='processing'), [])
+    calls = _worker(monkeypatch, db.rows[ROW], [])
 
-    with pytest.raises(finalizer.ServerBatchArchiveNotClosed):
-        await _finalize(ProcessingTrigger.CLIENT_FINALIZE)
+    async def payload():
+        return {'job_id': job_id, 'dispatch_generation': 1}
 
-    assert calls == []
+    response = await worker_router.run_listen_finalization_job(SimpleNamespace(json=payload), task_retry_count=0)
+
+    assert response.status_code == 200
+    assert json.loads(response.body) == {'status': 'deferred'}
+    assert calls == ['defer']
+    job = db.rows[job_path]
+    assert job['status'] == 'queued'
+    assert job['attempt_count'] == job['worker_claim_count'] == 4
+    assert job['last_failure_code'] == 'live_archive_uncommitted'
+    due = NOW + timedelta(seconds=10)
+    assert job['reconcile_after_at'] == due
+
+    stale_after = timedelta(minutes=5)
+    monkeypatch.setattr(jobs, '_now', lambda: due - timedelta(seconds=1))
+    assert not jobs.claim_finalization_replay(job_id, stale_after=stale_after)['created']
+    monkeypatch.setattr(jobs, '_now', lambda: due)
+    replay = jobs.claim_finalization_replay(job_id, stale_after=stale_after, max_attempts=5)
+    assert replay['created']
+    assert replay['dispatch_generation'] == 2
+    assert db.rows[job_path]['attempt_count'] == db.rows[job_path]['worker_claim_count'] == 4
+    assert not jobs.claim_finalization_replay(job_id, stale_after=stale_after)['created']
 
 
 @pytest.mark.asyncio
@@ -211,7 +253,5 @@ async def test_a_natural_end_does_not_wait(monkeypatch):
 async def test_a_deleted_row_ends_the_wait(monkeypatch):
     calls = _worker(monkeypatch, _live(status='processing'), [None])
 
-    with pytest.raises(finalizer.ServerBatchArchiveNotClosed):
-        await _finalize(ProcessingTrigger.CLIENT_FINALIZE)
-
+    assert await _finalize(ProcessingTrigger.CLIENT_FINALIZE) is finalizer.ConversationFinalizationDisposition.fenced
     assert calls == ['read']
