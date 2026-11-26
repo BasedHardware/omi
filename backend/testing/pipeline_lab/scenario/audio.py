@@ -248,7 +248,9 @@ def prepare(
 
     env = dict(env or {})
     if routing.enabled(env):
-        return _prepare_routed(scenario, recordings, env, mode=mode, root=Path(root), fixtures=fixtures)
+        return _prepare_routed(
+            scenario, recordings, env, mode=mode, root=Path(root), fixtures=fixtures, budget_usd=budget_usd
+        )
     recorder = None
     out: dict[str, PreparedAudio] = {}
     for rec in recordings:
@@ -287,7 +289,14 @@ def prepare(
 
 
 def _prepare_routed(
-    scenario: Any, recordings: Sequence[Any], env: dict[str, str], *, mode: str, root: Path, fixtures: Path
+    scenario: Any,
+    recordings: Sequence[Any],
+    env: dict[str, str],
+    *,
+    mode: str,
+    root: Path,
+    fixtures: Path,
+    budget_usd: Optional[float] = None,
 ) -> dict[str, PreparedAudio]:
     """Routing on: each recording's cassette comes from production's route under the arm's env.
 
@@ -309,7 +318,14 @@ def _prepare_routed(
 
     private = ensure_private_dir(root)
     record = mode == 'record-vendor'
-    lid = routing.LidCache(private, record=record, secret_file=env.get(routing.LID_SECRET_FILE_ENV))
+    ledger = None
+    if record:
+        if budget_usd is None:
+            raise AudioError('record-vendor needs --stt-budget-usd (the hard spend cap for LID probes)')
+        from testing.pipeline_lab.ledger import SpendLedger
+
+        ledger = SpendLedger(_record_dir(private, scenario.name) / 'lid_ledger.json', budget_usd=budget_usd)
+    lid = routing.LidCache(private, record=record, secret_file=env.get(routing.LID_SECRET_FILE_ENV), ledger=ledger)
     self_lid = routing.SelfLidCache(private, record=record, python=env.get(routing.SELF_LID_PYTHON_ENV))
     pcms = {rec.label: load_pcm16(rec.audio_file) for rec in recordings}
 
@@ -347,6 +363,12 @@ def _prepare_routed(
         found = {}
         for engine in engines:
             pin = {**dict(scenario.stt), **routing.cassette_pin(route, mapping, engine)}
+            if not pin.get('provider') or not pin.get('model'):
+                misses.append(
+                    f'recording {rec.label}: routed to {engine}, which has no cassette pin; map it in '
+                    f'{routing.CASSETTES_ENV} ({route.reason})'
+                )
+                break
             hit = find(pcm16, pin, root=root, fixtures=fixtures)
             if hit is None:
                 misses.append(_miss_message(scenario, rec, pcm16, pin) + f' (routed {engine}: {route.reason})')

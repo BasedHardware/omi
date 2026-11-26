@@ -7411,6 +7411,20 @@ the first unit's LID runs before any staging, and only a Parakeet-safe answer ad
 the upload. An unsafe, low-confidence, skipped or refused sample keeps it on legacy.
 Known-unsupported languages are never sampled. False restores the full exclusion.
 
+A supported conversation pin is not capability proof for a multi-language user
+(`single_language_mode` false) whose own live speech shows a language Parakeet
+cannot transcribe: at least 2 of the rolling `users/{uid}.live_stt_language_sessions`
+rows with 10 or more words, and 20% or more, in batch-unsupported codes (`und` is not evidence; a
+canonical code with a Parakeet alias, such as `sr`, counts as supported). Such an
+upload returns `multilingual_profile` (`BATCH_MULTILINGUAL_PROFILE_ROUTING_ENABLED`,
+default on). With legacy ON, sync intake samples it exactly like
+`unknown_multilingual_conversation`, input `multi`, and logs
+`event=batch_admission_language outcome=reclassified`. The record lane has no sampler, so a new
+owner claim gives it to `legacy_final_pass_v1` like any exclusion. With legacy
+draining or dark it is admitted to batch with input `multi`, classified per unit
+instead of inheriting the pin. Explicit `single_language_mode` and an existing owner win.
+False trusts the pin again (2026-11-26, changes note `2026-11-26-multilingual-profile-routing.md`).
+
 Batch self-LID evidence is bound to the authenticated item's owner, segment and
 versioned intake context. The worker requires nonempty job, content and source
 provenance, a finite probability, and a probe duration matching the first 30

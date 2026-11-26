@@ -18,6 +18,7 @@ from fastapi.responses import JSONResponse
 from config.batch_pipeline import Priority, known_unsupported_batch_language, language_inheritance_enabled, priority_for
 from config.batch_language_recovery import inherited_language
 from config.batch_pipeline_language import (
+    MULTILINGUAL_PROFILE,
     admission_language_exclusion_enabled,
     admission_language_sample_enabled,
     batch_admission_language,
@@ -133,11 +134,21 @@ def _speech_windows(wav: bytes) -> list[bytes] | None:
     return windows
 
 
-def _sampled_refusal(target: dict, user: dict, evidence) -> None:
-    """An unsafe, silent, refused-to-legacy or unclassified sample keeps today's legacy route."""
-    record_admission_exclusion(
-        target.get('language') or user.get('language'), 'unknown_multilingual_conversation', legacy_available=True
-    )
+def _batch_admission(user: dict, target: dict) -> tuple[str | None, str | None]:
+    """``batch_admission_language``, with a multilingual-profile upload classified on audio like an unknown one.
+
+    Its admission language is 'multi' (never the conversation's supported pin) where legacy draining or dark
+    admits it unsampled. Outside ``accept_upload``, which is at the type checker's complexity limit."""
+    language, reason = batch_admission_language(user, target)
+    if reason != MULTILINGUAL_PROFILE:
+        return language, reason
+    logger.info('event=batch_admission_language outcome=reclassified reason=%s', reason)
+    return 'multi', 'unknown_multilingual_conversation'
+
+
+def _sampled_refusal(target: dict, user: dict, evidence, reason: str = 'unknown_multilingual_conversation') -> None:
+    """An unsafe, silent, refused-to-legacy or unclassified sample (or an admission exclusion) keeps legacy."""
+    record_admission_exclusion(target.get('language') or user.get('language'), reason, legacy_available=True)
     if evidence is not None:
         evidence.language_excluded = True
     return None
@@ -763,7 +774,7 @@ async def accept_upload(
         admission_language = None
         sampled = False
         if admission_language_exclusion_enabled() and target.get('record_lane_owner') != 'batch_sync_v1':
-            admission_language, exclusion_reason = batch_admission_language(user, target)
+            admission_language, exclusion_reason = _batch_admission(user, target)
             # Exclusion is safe only while this owner still has legacy. Once its
             # legacy is draining/dark the upload is admitted (C8's provider route
             # serves it) instead of being refused by both lanes; a supported
@@ -777,13 +788,7 @@ async def accept_upload(
                 # before any staging, and an unsafe answer keeps the upload on legacy.
                 sampled = True
             elif exclusion_reason and mode is LegacySyncMode.ON:
-                record_admission_exclusion(
-                    target.get('language') or user.get('language'),
-                    exclusion_reason,
-                    legacy_available=True,
-                )
-                if evidence is not None:
-                    evidence.language_excluded = True
+                _sampled_refusal(target, user, evidence, exclusion_reason)
                 future_capture_request.mark(FutureCaptureOutcome.ROUTE_DECLINED)
                 return None
         fresh = seed.priority == Priority.FRESH
@@ -847,8 +852,9 @@ async def accept_upload(
             language = input_language = 'multi'
         if admission_language is not None:
             language = input_language = admission_language
-        if sampled:
-            # The user's declared language is not capability proof without single-language mode.
+        if sampled or admission_language == 'multi':
+            # The user's declared language (or a multilingual profile's supported pin, admitted unsampled
+            # while legacy drains or is dark) is not capability proof without single-language mode.
             inherited = None
             language = input_language = 'multi'
         if mode is LegacySyncMode.ON and language_guard_enabled() and language_class(input_language) == 'unsupported':

@@ -7,6 +7,7 @@ the sampled LID path decides instead of admitting the upload straight to Parakee
 import pytest
 
 from config.batch_pipeline_language import (
+    MULTILINGUAL_PROFILE,
     PROFILE_FIELD,
     batch_admission_language,
     multilingual_profile_routing_enabled,
@@ -51,6 +52,9 @@ def multi_user(sessions):
         ([{'en': 100, 'zh': 15}, {'en': 100, 'zh': 15}], False),  # under the per-session share
         ([{'en': 40, 'zh': 15}, {'en': 40, 'zh': 15}], True),
         ([{'zh': 'many'}, {'zh': True}, {7: 30}, 'row'], False),  # malformed rows count as nothing
+        ([{'und': 30}, {'und': 30}], False),  # an unknown language is not evidence
+        ([{'sr': 30}, {'sr': 30}], False),  # canonical 'sr' also stands for Parakeet's 'hr'
+        ([{'hi': 30}, {'ko': 30}], True),
     ],
 )
 def test_profile_speaks_unsupported(sessions, expected):
@@ -58,10 +62,7 @@ def test_profile_speaks_unsupported(sessions, expected):
 
 
 def test_multilingual_profile_does_not_trust_the_en_pin():
-    assert batch_admission_language(multi_user(MULTILINGUAL), {'language': 'en'}) == (
-        None,
-        'unknown_multilingual_conversation',
-    )
+    assert batch_admission_language(multi_user(MULTILINGUAL), {'language': 'en'}) == (None, MULTILINGUAL_PROFILE)
 
 
 @pytest.mark.parametrize('sessions', [ENGLISH_WITH_NOISE, EUROPEAN, None])
@@ -88,5 +89,5 @@ def test_kill_switch(monkeypatch, value, enabled):
     if value is not None:
         monkeypatch.setenv('BATCH_MULTILINGUAL_PROFILE_ROUTING_ENABLED', value)
     assert multilingual_profile_routing_enabled() is enabled
-    expected = (None, 'unknown_multilingual_conversation') if enabled else ('en', None)
+    expected = (None, MULTILINGUAL_PROFILE) if enabled else ('en', None)
     assert batch_admission_language(multi_user(MULTILINGUAL), {'language': 'en'}) == expected

@@ -29,6 +29,7 @@ from utils.sync import final_pass_rehome
 
 @pytest.fixture(autouse=True)
 def defaults(monkeypatch):
+    monkeypatch.delenv('BATCH_MULTILINGUAL_PROFILE_ROUTING_ENABLED', raising=False)
     monkeypatch.delenv('BATCH_ADMISSION_LANGUAGE_EXCLUSION_ENABLED', raising=False)
     monkeypatch.delenv('BATCH_ADMISSION_LANGUAGE_SAMPLE_ENABLED', raising=False)
     monkeypatch.delenv('BATCH_PIPELINE_LANGUAGE_ELIGIBILITY_ENABLED', raising=False)
@@ -388,6 +389,61 @@ def test_speech_windows_cover_every_strict_speech_second_in_full_thirty_second_w
     assert len(intake._speech_windows(body.getvalue())) == 1  # speech that fits the sample has no further window
     monkeypatch.setattr(local_vad, 'offline_pcm_speech_segments', lambda pcm: [])
     assert intake._speech_windows(body.getvalue()) is None
+
+
+# A multi-language owner whose live speech is mostly Mandarin (live STT labels it 'ja'); the app pins 'en'.
+MANDARIN_PROFILE = [{'en': 4, 'ja': 21}, {'ja': 33}, {'en': 17, 'ja': 30}]
+
+
+@pytest.mark.asyncio
+async def test_multilingual_profile_en_pin_is_sampled_and_chinese_stays_on_legacy(monkeypatch):
+    speaking(monkeypatch)
+    evidence = IntakeRouteEvidence()
+    response, staged, probe = await upload(
+        monkeypatch,
+        user_language='en',
+        conversation_language='en',
+        mode='on',
+        profile=MANDARIN_PROFILE,
+        decision=decision('zh', False),
+        evidence=evidence,
+    )
+    assert response is None and staged == [] and evidence.language_excluded
+    # The pin is not trusted: the speech itself is classified as 'multi'.
+    assert probe.call_count == 1 and probe.call_args.args[:2] == ('multi', SPEECH)
+
+
+@pytest.mark.asyncio
+async def test_multilingual_profile_en_pin_admits_english_speech_after_the_sample(monkeypatch):
+    speaking(monkeypatch, [SPEECH, pcm_wav(30)])
+    gate = self_lid(monkeypatch, 'en')
+    response, staged, probe = await upload(
+        monkeypatch, user_language='en', conversation_language='en', mode='on', profile=MANDARIN_PROFILE
+    )
+    assert admitted(response, staged) and gate.call_count == 1
+    assert probe.call_args.args[:2] == ('multi', SPEECH) and probe.staged_context['stt_language'] == 'en'
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('mode', ['draining', 'dark'])
+async def test_multilingual_profile_without_legacy_enters_batch_as_multi(monkeypatch, mode):
+    vad = speaking(monkeypatch)
+    response, staged, probe = await upload(
+        monkeypatch, user_language='en', conversation_language='en', mode=mode, profile=MANDARIN_PROFILE
+    )
+    # No legacy to refuse to: admitted, but each unit is classified instead of inheriting the 'en' pin.
+    assert admitted(response, staged) and vad.call_count == 0
+    assert probe.call_args.args[0] == 'multi'
+
+
+@pytest.mark.asyncio
+async def test_multilingual_profile_kill_switch_trusts_the_pin_again(monkeypatch):
+    monkeypatch.setenv('BATCH_MULTILINGUAL_PROFILE_ROUTING_ENABLED', 'false')
+    vad = speaking(monkeypatch)
+    response, staged, probe = await upload(
+        monkeypatch, user_language='en', conversation_language='en', mode='on', profile=MANDARIN_PROFILE
+    )
+    assert admitted(response, staged) and vad.call_count == 0 and probe.call_args.args[0] == 'en'
 
 
 @pytest.mark.asyncio

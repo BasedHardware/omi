@@ -47,10 +47,28 @@ PROFILE_MIN_UNSUPPORTED_SHARE = 0.2
 # Sessions out of the rolling projection (database/live_language_profile.py keeps the last 20).
 PROFILE_MIN_SESSIONS = 2
 PROFILE_FIELD = 'live_stt_language_sessions'
+# The admission reason for this rule: intake samples it like unknown_multilingual_conversation, and the record
+# lane gives it to legacy multilingual STT like any exclusion. Distinct so logs and readbacks can attribute it.
+MULTILINGUAL_PROFILE = 'multilingual_profile'
 
 
 def _parakeet_batch_languages() -> frozenset[str]:
     return PARAKEET_SUPPORTED_LANGUAGES_BY_MODEL[PARAKEET_MODEL_BY_SURFACE[STTServingSurface.PRERECORDED]] - {'multi'}
+
+
+def _unsupported_code(code: str) -> bool:
+    """A profile code that is batch-unsupported by the codebase's own boundary (``language_class``).
+
+    Unknown codes ('und') are not evidence. Live profiles store canonical codes ('sr' for 'hr'/'bs', 'hi' for
+    'ur'), so a code with a Parakeet-supported alias is supported speech, not a reason to leave Parakeet.
+    """
+    from config.prerecorded_language import language_class
+    from config.stt_provider_policy import LANGUAGE_EQUIVALENCE
+
+    if language_class(code) != 'unsupported':
+        return False
+    parakeet = _parakeet_batch_languages()
+    return not any(alias in parakeet for alias, canonical in LANGUAGE_EQUIVALENCE.items() if canonical == code)
 
 
 def profile_speaks_unsupported(user: dict) -> bool:
@@ -61,14 +79,13 @@ def profile_speaks_unsupported(user: dict) -> bool:
     sessions = user.get(PROFILE_FIELD)
     if not isinstance(sessions, list):
         return False
-    parakeet = _parakeet_batch_languages()
     hits = 0
     for counts in sessions:
         if not isinstance(counts, dict):
             continue
         valid = {code: n for code, n in counts.items() if isinstance(code, str) and type(n) is int and n > 0}
         total = sum(valid.values())
-        other = sum(n for code, n in valid.items() if normalized_stt_language(code) not in parakeet)
+        other = sum(n for code, n in valid.items() if _unsupported_code(normalized_stt_language(code)))
         if other >= PROFILE_MIN_UNSUPPORTED_WORDS and other >= PROFILE_MIN_UNSUPPORTED_SHARE * total:
             hits += 1
     return hits >= PROFILE_MIN_SESSIONS
@@ -83,8 +100,9 @@ def batch_admission_language(user: dict, conversation: dict) -> tuple[str | None
 
     For a multi-language user whose own live speech shows a language Parakeet cannot
     transcribe, a supported conversation pin is not evidence either: it is usually the
-    app language, stamped on every conversation. Such uploads are classified on audio
-    (the sampled LID path) instead of going straight to Parakeet.
+    app language, stamped on every conversation. Such uploads return ``multilingual_profile``:
+    sync intake classifies them on audio (the sampled LID path) and the record lane gives a new
+    owner to legacy multilingual STT, instead of either going straight to Parakeet.
     """
     parakeet = _parakeet_batch_languages()
 
@@ -102,6 +120,6 @@ def batch_admission_language(user: dict, conversation: dict) -> tuple[str | None
         if conversation_language not in parakeet:
             return None, 'unknown_multilingual_conversation'
         if not single and multilingual_profile_routing_enabled() and profile_speaks_unsupported(user):
-            return None, 'unknown_multilingual_conversation'
+            return None, MULTILINGUAL_PROFILE
         return conversation_language, None
     return effective or user_language, None

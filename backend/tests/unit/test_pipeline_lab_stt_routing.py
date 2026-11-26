@@ -204,3 +204,98 @@ def test_compare_metric_counts_unsupported_speech_on_parakeet(tmp_path, monkeypa
     assert out['recordings'] == 3 and out['parakeet_recordings'] == 2 and out['lid_probes'] == 1
     assert out['unsupported_on_parakeet_s'] == 40 and out['unsupported_s'] == 60 and out['unreferenced'] == 1
     assert out['unsupported_on_parakeet_share'] == round(40 / 60, 3)
+
+
+def test_a_refused_upload_counts_only_the_windows_the_self_gate_classified(speech):
+    with routing.patched_environ(LEGACY):
+        route = decide(
+            USER, {'language': 'en'}, PCM, lid=lid('en'), self_lid=self_lid(lambda n: 'zh' if n == 1 else 'en')
+        )
+    assert route.reason == 'legacy:sampled_later_window_unsupported' and route.self_lid_windows == 1
+
+
+def test_a_profiled_upload_carries_the_multilingual_profile_reason():
+    from config.batch_pipeline_language import MULTILINGUAL_PROFILE
+
+    long_pcm = bytes(32000 * 601)
+    with routing.patched_environ(LEGACY):
+        route = decide(USER, {'language': 'en'}, long_pcm, lid=lid('zh'), self_lid=self_lid('en'))
+    assert route.reason == 'legacy:sampled_over_scan_limit' and MULTILINGUAL_PROFILE == 'multilingual_profile'
+    with routing.patched_environ({**LEGACY, 'BATCH_ADMISSION_LANGUAGE_SAMPLE_ENABLED': 'false'}):
+        assert decide(USER, {'language': 'en'}, PCM, lid=lid('zh')).reason == f'legacy:{MULTILINGUAL_PROFILE}'
+
+
+def test_a_uniform_legacy_upload_keeps_the_first_files_language():
+    answers = iter(['de', 'fr'])
+
+    def per_file(pcm16):
+        return LanguageDecision(next(answers), 0.999, 'audio_lid', 2.0)
+
+    with routing.patched_environ(LEGACY):
+        route = decide(USER, {'language': 'zz-unknown'}, bytes(32000 * 4), lid=per_file, legacy_file_seconds=2)
+    assert route.route == PARAKEET and route.language == 'de'
+
+
+def test_an_empty_legacy_upload_is_an_error_not_a_route():
+    with pytest.raises(RoutingError, match='no audio'):
+        routing._legacy(b'', 'x', lid=lid('en'), file_seconds=2)
+
+
+def test_cassette_pin_never_returns_an_empty_key():
+    route = decide(MULTI_USER, {'language': 'en'}, PCM, lid=lid('en'))
+    pin = routing.cassette_pin(route, {}, MULTILINGUAL)
+    assert pin == {'language': 'multi'}  # no provider/model: the caller refuses it instead of matching anything
+
+
+def test_recording_a_lid_answer_needs_a_ledger_and_settles_its_price(tmp_path, monkeypatch):
+    from testing.pipeline_lab.ledger import SpendLedger
+
+    with pytest.raises(RoutingError, match='budget'):
+        LidCache(tmp_path, record=True, secret_file='unused').decision(PCM)
+    ledger = SpendLedger(tmp_path / 'ledger.json', budget_usd=1.0)
+    cache = LidCache(tmp_path, record=True, secret_file='unused', ledger=ledger)
+    monkeypatch.setattr(cache, '_detect', lambda body: {'language': 'zh', 'confidence': 0.99, 'evidence': 'audio_lid'})
+    assert cache.decision(PCM).language == 'zh' and cache.calls == 1
+    _, seconds = routing._probe(PCM)
+    snapshot = ledger.snapshot()
+    assert snapshot['settled_usd'] == round(routing.lid_probe_usd(seconds), 6) > 0
+    assert snapshot['in_flight_usd'] == 0
+    cache.decision(PCM)  # replayed: no second charge
+    assert cache.calls == 1 and ledger.snapshot()['settled_usd'] == snapshot['settled_usd']
+
+
+def test_a_failed_probe_releases_its_reservation(tmp_path, monkeypatch):
+    from testing.pipeline_lab.ledger import SpendLedger
+
+    ledger = SpendLedger(tmp_path / 'ledger.json', budget_usd=1.0)
+    cache = LidCache(tmp_path, record=True, secret_file='unused', ledger=ledger)
+
+    def fail(body):
+        raise RoutingError('LID probe failed: upstream_error')
+
+    monkeypatch.setattr(cache, '_detect', fail)
+    with pytest.raises(RoutingError):
+        cache.decision(PCM)
+    assert ledger.snapshot()['committed_usd'] == 0
+
+
+def test_routed_record_run_needs_a_spend_cap(tmp_path, monkeypatch):
+    from testing.pipeline_lab.scenario.audio import AudioError, prepare
+    from testing.pipeline_lab.scenario.spec import load_scenario
+
+    monkeypatch.setenv('OMI_PIPELINE_LAB_ROOT', str(tmp_path / 'lab'))
+    import wave
+
+    with wave.open(str(tmp_path / 'a.wav'), 'wb') as handle:
+        handle.setparams((1, 2, 16000, 0, 'NONE', 'not compressed'))
+        handle.writeframes(PCM)
+    raw = {
+        'name': 'routed',
+        'origins': [{'id': 'O'}],
+        'recordings': [{'id': 'B', 'origin': 'O', 'session': 'S1', 'audio_file': 'a.wav'}],
+    }
+    (tmp_path / 'case.json').write_text(json.dumps(raw))
+    (tmp_path / 'inputs.json').write_text(json.dumps({'user': USER}))
+    env = {routing.ROUTING_ENV: 'product', routing.INPUTS_ENV: str(tmp_path / 'inputs.json')}
+    with pytest.raises(AudioError, match='stt-budget-usd'):
+        prepare(load_scenario(tmp_path / 'case.json'), mode='record-vendor', root=tmp_path / 'lab', env=env)

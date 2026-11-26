@@ -380,9 +380,14 @@ are not modelled (see the module's table).
   label's conversation fields (`{"user", "conversations", "default_conversation"}`).
 - `OMI_PIPELINE_LAB_STT_ROUTE_CASSETTES`: JSON mapping a route (`parakeet`, `multilingual`) to the cassette pin
   that stands in for it, e.g. `parakeet_local` for production's GPU Parakeet.
+- A routed engine with no provider/model pin (from the mapping or the route itself) is a miss, never a
+  wildcard match.
 - LID answers are recorded once per 30 s probe under `<lab root>/lid/` on a `--stt record-vendor` run with
-  `OMI_PIPELINE_LAB_LID_KEY_FILE` (a 0600 key file), and replayed after. Every engine's cassettes are
-  recorded beforehand, one pinned `record-*` pass per engine.
+  `OMI_PIPELINE_LAB_LID_KEY_FILE` (a 0600 key file) and `--stt-budget-usd`. Each probe reserves and settles its
+  list price in `lid_ledger.json`. Answers are replayed after that. The self gate's later windows (Whisper-base
+  in production) are classified locally by `stt_routing/self_lid.py` under `OMI_PIPELINE_LAB_MLX_PYTHON` (a
+  venv with `mlx-whisper`) and cached under `<lab root>/self_lid/`. Every engine's cassettes are recorded
+  beforehand, one pinned `record-*` pass per engine.
 - Metric `stt_routing` (`stt_routing/compare_metrics.py`): recordings and audio per route, LID probes, and with
   `OMI_PIPELINE_LAB_STT_REFERENCE` (a private per-audio reference, never an arm's own detector) the
   unsupported-language speech each arm sent to Parakeet.

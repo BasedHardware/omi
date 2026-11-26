@@ -145,13 +145,22 @@ def _probe(pcm16: bytes) -> tuple[bytes, float]:
     return probe_wav(pcm16_to_wav(pcm16))
 
 
+def lid_probe_usd(seconds: float) -> float:
+    """List price of one vendor LID probe, from the repo's finops card (``modulate_prices.json``)."""
+    from testing.pipeline_lab.cassette.adapters import _PRICES
+
+    micro = json.loads(Path(_PRICES).read_text(encoding='utf-8'))['lid']['micro_usd_per_hour']
+    return micro / 1_000_000 * float(seconds) / 3600
+
+
 class LidCache:
     """``<root>/lid/<sha256 of the probe WAV>.json``: the vendor's answer for one 30 s probe (owner-only)."""
 
-    def __init__(self, root: Path, *, record: bool, secret_file: Optional[str] = None):
+    def __init__(self, root: Path, *, record: bool, secret_file: Optional[str] = None, ledger: Any = None):
         self.directory = Path(root) / 'lid'
         self.record = record
         self.secret_file = secret_file
+        self.ledger = ledger  # a SpendGuard: every recorded probe reserves and settles its list price
         self.calls = 0
 
     def decision(self, pcm16: bytes):
@@ -168,7 +177,16 @@ class LidCache:
                 f'and {LID_SECRET_FILE_ENV} set (one paid 30 s probe per upload)'
             )
         else:
-            row = self._detect(body)
+            if self.ledger is None:
+                raise RoutingError('recording a LID answer needs --stt-budget-usd (the spend cap for probes)')
+            usd = lid_probe_usd(seconds)
+            reservation = self.ledger.reserve(usd, purpose='stt_routing:lid_probe')
+            try:
+                row = self._detect(body)
+            except BaseException:
+                self.ledger.release(reservation)
+                raise
+            self.ledger.settle(reservation, usd)
             from testing.pipeline_lab.store import private_write_text
 
             self.directory.mkdir(mode=0o700, parents=True, exist_ok=True)
@@ -301,7 +319,9 @@ def _wav_pcm(wav: bytes) -> bytes:
 
 
 def _sample(pcm16: bytes, *, lid: Callable[[bytes], Any], self_lid: Optional[Callable[[bytes], str]]):
-    """Intake's ``_sample_language_units`` on one upload: (admitted, refusal reason, first decision, windows)."""
+    """Intake's ``_sample_language_units`` on one upload.
+
+    Returns (admitted, refusal reason, first-window decision, later windows the self gate classified)."""
     from config.prerecorded_language import language_class
     from testing.pipeline_lab.cassette.adapters import pcm16_to_wav
     from utils.batch_pipeline.intake import SAMPLE_SCAN_SECONDS, _speech_windows
@@ -313,41 +333,47 @@ def _sample(pcm16: bytes, *, lid: Callable[[bytes], Any], self_lid: Optional[Cal
         return False, 'no_speech', None, 0
     first = lid(_wav_pcm(windows[0]))
     if not first.parakeet_safe or first.evidence != 'audio_lid':
-        return False, 'first_window_unsafe', first, len(windows)
+        return False, 'first_window_unsafe', first, 0
     if self_lid is None:
         raise RoutingError('the sampled path needs the self-gate stand-in for windows after the first')
     pending = False
+    classified = 0
     for window in windows[1:]:
         try:
-            if language_class(self_lid(window)) != 'supported':
-                return False, 'later_window_unsupported', first, len(windows)
+            language = self_lid(window)
         except PendingSelfLid:
             pending = True
+            continue
+        classified += 1
+        if language_class(language) != 'supported':
+            return False, 'later_window_unsupported', first, classified
     if pending:
         raise PendingSelfLid('windows queued')
-    return True, None, first, len(windows)
+    return True, None, first, classified
 
 
 def _legacy(pcm16: bytes, reason: str, *, lid: Callable[[bytes], Any], file_seconds: float) -> 'Route':
     """Legacy sync: ``multi`` through ``resolve_file`` for each uploaded file (simulated as fixed pieces)."""
     step = max(1, int(file_seconds * 16000)) * 2
     pieces = []
-    engines = set()
+    engines = []  # (route, service, model, sent) per file, in file order
     for offset in range(0, len(pcm16), step):
         chunk = pcm16[offset : offset + step]
-        if len(chunk) < 32000:  # under a second: joins the previous file's engine
-            if pieces:
-                a, _, r = pieces[-1]
-                pieces[-1] = (a, (offset + len(chunk)) / 32000, r)
+        if len(chunk) < 32000 and pieces:  # a sub-second tail joins the previous file's engine
+            a, _, r = pieces[-1]
+            pieces[-1] = (a, (offset + len(chunk)) / 32000, r)
             continue
         decision = lid(chunk)
         service, model, sent = _service(decision.language) if decision.parakeet_safe else _service('multi')
         route = _route_of(service)
-        engines.add((route, service, model, sent))
+        engines.append((route, service, model, sent))
         pieces.append((offset / 32000, (offset + len(chunk)) / 32000, route))
+    if not pieces:
+        raise RoutingError('the upload has no audio to route')
     routes = {r for _, _, r in pieces}
     if len(routes) == 1:
-        route, service, model, sent = next(iter(engines))
+        # The first file's engine and language: deterministic across runs, unlike a set's order.
+        route, service, model, sent = engines[0]
         return Route(route, f'legacy:{reason}', service, model, sent, pieces=tuple(pieces))
     service, model, sent = _service('multi')
     return Route(MIXED, f'legacy:{reason}', service, model, sent, pieces=tuple(pieces))
@@ -368,6 +394,7 @@ def decide(
     sampling on -> intake's sampled classification of the whole upload; admitted -> Parakeet, refused ->
     legacy. Any other exclusion, or a refused sample -> legacy sync, which classifies each file."""
     from config.batch_pipeline_language import (
+        MULTILINGUAL_PROFILE,
         admission_language_exclusion_enabled,
         admission_language_sample_enabled,
         batch_admission_language,
@@ -381,9 +408,9 @@ def decide(
     if reason is None:
         service, model, sent = _batch(admission)
         return Route(PARAKEET, 'admitted_pinned', service, model, sent, admission_language=admission)
-    if reason == 'unknown_multilingual_conversation' and admission_language_sample_enabled():
+    if reason in ('unknown_multilingual_conversation', MULTILINGUAL_PROFILE) and admission_language_sample_enabled():
         admitted, refusal, first, windows = _sample(pcm16, lid=lid, self_lid=self_lid)
-        lid_fields = {'self_lid_windows': max(0, windows - 1) if windows else None}
+        lid_fields = {'self_lid_windows': windows}
         if first is not None:
             lid_fields.update(
                 lid_language=first.language,
@@ -399,14 +426,16 @@ def decide(
 
 
 def cassette_pin(route: Route, mapping: Mapping[str, Mapping[str, str]], which: Optional[str] = None) -> dict[str, str]:
-    """The cassette that stands in for a route (``which`` picks one engine of a mixed route)."""
+    """The cassette keys that stand in for a route (``which`` picks one engine of a mixed route).
+
+    Only keys that resolve are returned, so an unmapped engine of a mixed route keeps the scenario's own pin
+    (and misses loudly) instead of becoming a wildcard that matches another engine's cassette."""
     name = which or route.route
-    pin = mapping.get(name) or {}
-    default_provider, default_model, default_language = (
-        (route.provider, route.model, route.language) if name == route.route else ('', '', '')
-    )
-    return {
-        'provider': pin.get('provider') or default_provider,
-        'model': pin.get('model') or default_model,
-        'language': pin.get('language') or default_language or ('multi' if name == MULTILINGUAL else 'en'),
-    }
+    pin = dict(mapping.get(name) or {})
+    if name == route.route:
+        pin.setdefault('provider', route.provider)
+        pin.setdefault('model', route.model)
+        pin.setdefault('language', route.language)
+    else:
+        pin.setdefault('language', 'multi' if name == MULTILINGUAL else 'en')
+    return {key: str(value) for key, value in pin.items() if key in ('provider', 'model', 'language') and value}
