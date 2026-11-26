@@ -135,10 +135,10 @@ class InProcess:
 def _private_work_root() -> Path:
     """Where the worker's PCM and words go: an owner-only directory under the scenario lab root, never the
     system temp directory (private audio and words stay inside the lab root, even if the process is killed)."""
-    from testing.pipeline_lab.scenario.paths import scenario_lab_root
+    from testing.pipeline_lab.scenario.paths import private_lab_root
     from testing.pipeline_lab.store import ensure_private_dir
 
-    return ensure_private_dir(scenario_lab_root() / 'tmp' / 'local-stt')
+    return ensure_private_dir(private_lab_root() / 'tmp' / 'local-stt')
 
 
 class Worker:

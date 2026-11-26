@@ -35,6 +35,7 @@ from typing import Any, Optional, Sequence
 from testing.pipeline_lab.scenario.checks import OUTCOMES, evaluate, outcome
 from testing.pipeline_lab.scenario.home import HOME_MODULES, HomeRecorder
 from testing.pipeline_lab.scenario.spec import Scenario, load_scenario, plan_events
+from testing.pipeline_lab.store import StoreRefused, private_dir, private_write_text
 
 FAST_FINISH_ENV = 'CONVERSATIONS_V3_FAST_FINISH'
 RUNTIME_ENV = Path(__file__).resolve().parents[3] / 'deploy' / 'runtime_env.yaml'
@@ -173,7 +174,7 @@ async def run_scenario(
             if trace is not None:
                 from testing.pipeline_lab.scenario.reach import CALLED_FILE
 
-                (out_dir / CALLED_FILE).write_text(json.dumps(trace.stop(), indent=0) + '\n')
+                private_write_text(out_dir / CALLED_FILE, json.dumps(trace.stop(), indent=0) + '\n')
     results = []
     for index_, check in enumerate(scenario.checks):
         if check.at is not None:
@@ -245,8 +246,14 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     if not host.startswith(('127.0.0.1:', 'localhost:')):
         print(json.dumps({'outcome': 'error', 'error': 'FIRESTORE_EMULATOR_HOST must name a loopback emulator'}))
         return OUTCOMES['error']
-    out = Path(args.out)
-    out.mkdir(parents=True, exist_ok=True, mode=0o700)
+    # Every file this process and its children create (the product's local storage blobs, a local STT worker's
+    # files, anything the overlay's code writes) is owner-only, not only the files the lab writes itself.
+    os.umask(0o077)
+    try:
+        out = private_dir(Path(args.out), '--out')
+    except StoreRefused as refused:
+        print(json.dumps({'outcome': 'error', 'error': str(refused)}))
+        return OUTCOMES['error']
     started = time.perf_counter()
     from testing.pipeline_lab.scenario.audio import AudioError, prepare
 
@@ -273,10 +280,10 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     except AudioError as error:
         result = {'scenario': Path(args.file).stem, 'outcome': 'error', 'error': str(error)}
     except Exception as error:  # noqa: BLE001 - reported as the scenario's error outcome
-        (out / 'scenario_error.log').write_text(traceback.format_exc())
+        private_write_text(out / 'scenario_error.log', traceback.format_exc())
         result = {'outcome': 'error', 'error': type(error).__name__, 'log': str(out / 'scenario_error.log')}
     result['seconds'] = round(time.perf_counter() - started, 3)
-    (out / 'result.json').write_text(json.dumps(result, indent=1, default=str))
+    private_write_text(out / 'result.json', json.dumps(result, indent=1, default=str))
     print(json.dumps(result, default=str))
     return OUTCOMES.get(result.get('outcome', 'error'), 2)
 

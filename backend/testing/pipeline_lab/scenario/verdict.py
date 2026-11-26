@@ -116,7 +116,11 @@ def transcript_sources(result: Mapping[str, Any]) -> dict[str, str]:
 
 
 def write_json(path: Path, value: Any) -> None:
-    path.write_text(json.dumps(value, indent=1, sort_keys=False, default=str) + '\n')
+    """Atomically, 0600: run.json and verdict.json are numbers and labels, compare.json too, but they sit beside
+    private output and cost nothing to keep private."""
+    from testing.pipeline_lab.store import private_write_text
+
+    private_write_text(path, json.dumps(value, indent=1, sort_keys=False, default=str) + '\n')
 
 
 def read_json(path: Path) -> Any:

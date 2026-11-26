@@ -13,7 +13,9 @@ python -m testing.pipeline_lab view DIR                        # look at the res
 - **A pass** means every `expect` row of the scenario held on the conversations the real v3 code built, and
   on the answer the product's Home route gave (exit 0). `failed` (exit 1) is a check that did not hold, or
   `nondeterministic` when `--repeat` runs disagree; `error` (exit 2) is a run that could not finish.
-- **The run directory** goes to `--keep DIR`, else a fresh temp dir (printed at the end); never into git.
+- **The run directory** goes to `--keep DIR`, else a fresh directory under the scenario lab root's
+  `scenario-runs/` (printed at the end); never into git or the system temp directory. Both are owner-only: a
+  new `--keep` directory is created `0700`, and an existing one that is group/other accessible is refused.
   `view` takes it, a `scenario compare` directory, the lab store root, or one day-replay run, and opens
   the matching page. `python -m testing.pipeline_lab scenario summary DIR` prints the verdict as markdown
   for a pull request.

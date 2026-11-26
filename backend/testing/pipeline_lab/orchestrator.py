@@ -525,6 +525,8 @@ def run_pipeline(
                     if extra_inputs is not None:
                         prefix = 'driver:' if driver is drivers[0] else f'driver:{driver.stage}:'
                         inputs.update({f'{prefix}{k}': v for k, v in extra_inputs(ctx0).items()})
+                if code is not None and any(getattr(d, 'ambient_env', False) for d in drivers):
+                    inputs['ambient_env'] = code.ambient_env(group, overlay=env)
                 key_overlay, key_model = _key_overlay(drivers[0], request.overlay)
                 scoped = code is not None and all(getattr(d, 'scoped_code', False) for d in drivers)
                 key = keys.stage_key(
@@ -574,7 +576,8 @@ def run_pipeline(
                     if entry.get('artifact_digest'):
                         artifact_digests[first] = entry['artifact_digest']
                     continue
-                before = _snapshot(store.run_dir(run_id)) if cacheable else {}
+                # Always: downstream keys need what this stage wrote even when its result is not stored.
+                before = _snapshot(store.run_dir(run_id))
                 outputs = {}
                 calls_by_stage: dict[str, list[dict[str, Any]]] = {}
                 for stage, driver in zip(group, drivers):
@@ -621,8 +624,14 @@ def run_pipeline(
                     run.warnings.append(f'{first}: not stored in the stage cache ({refusal})')
                     for stage in group:
                         reports[stage]['cache'] = 'off'
+                artifacts = _changed(before, _snapshot(store.run_dir(run_id)))
+                # The artifacts' identity keys every later stage, whether or not this result is stored: a refused
+                # (transient) or uncached result still feeds its files downstream, and its summary counts alone
+                # cannot tell two different sets of transcripts apart.
+                artifact_digests[first] = keys.hash_json(
+                    {rel: keys.hash_file(store.run_dir(run_id) / rel) for rel in artifacts}
+                )
                 if cacheable and not refusal:
-                    artifacts = _changed(before, _snapshot(store.run_dir(run_id)))
                     digests = store.cache_put_files(first, key, store.run_dir(run_id), artifacts)
                     digest = keys.hash_json(digests)
                     artifact_digests[first] = digest

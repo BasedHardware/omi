@@ -289,9 +289,10 @@ class HomeRecorder:
         return doc
 
     def write(self) -> Path:
-        path = self.out_dir / 'home.json'
-        path.write_text(json.dumps(self.document(), indent=1, default=str))
-        return path
+        from testing.pipeline_lab.store import private_write_text
+
+        # Home bodies: card titles and summaries of the owner's conversations when a recording is owner audio.
+        return private_write_text(self.out_dir / 'home.json', json.dumps(self.document(), indent=1, default=str))
 
     def failures(self) -> list[str]:
         """Each capture where either Home route raised or did not answer 200, as ``label: route status``.
