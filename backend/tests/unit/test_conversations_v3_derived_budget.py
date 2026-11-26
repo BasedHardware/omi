@@ -278,6 +278,8 @@ async def test_large_pending_backlog_commits_oldest_complete_slice(strict, monke
     monkeypatch.setattr(store, 'DERIVED_LIMIT', 12)
 
     async def run_fixture(_, fn, *args, **kwargs):
+        if fn is store.mark_bounded_attempt:
+            return None  # the lease marker is covered by test_early_attempt_is_spent_under_the_lease_before_work
         return fn(*args, firestore_client=client, **kwargs)
 
     monkeypatch.setattr(service, 'run_blocking', run_fixture)
@@ -337,6 +339,21 @@ def test_legacy_park_gets_one_early_attempt(strict, monkeypatch, reason):
     assert store.backoff_until(UID, firestore_client=strict)
 
 
+@pytest.mark.parametrize('reason', ['v3_derived_budget', 'document_too_large'])
+def test_early_attempt_is_spent_under_the_lease_before_work(strict, monkeypatch, reason):
+    # A transient failure in the early attempt (no record_blocked) must not reopen the bypass.
+    token = leases.acquire(UID, 'builder', firestore_client=strict)
+    monkeypatch.setenv('CONVERSATIONS_V3_BOUNDED_PENDING', 'off')
+    assert store.record_blocked(UID, token, reason, firestore_client=strict)
+    monkeypatch.delenv('CONVERSATIONS_V3_BOUNDED_PENDING')
+    assert store.backoff_state(UID, firestore_client=strict) == (None, reason)
+    store.mark_bounded_attempt(UID, 'other-token', firestore_client=strict)
+    assert store.backoff_state(UID, firestore_client=strict) == (None, reason)
+    store.mark_bounded_attempt(UID, token, firestore_client=strict)
+    backoff, parked = store.backoff_state(UID, firestore_client=strict)
+    assert backoff and parked == reason
+
+
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
     'parked,error,sizes',
@@ -347,11 +364,14 @@ def test_legacy_park_gets_one_early_attempt(strict, monkeypatch, reason):
     ],
 )
 async def test_bounded_loader_only_shrinks_budget_failures(monkeypatch, parked, error, sizes):
-    attempted, renewals = [], []
+    attempted, renewals, marked = [], [], []
 
     async def run_fixture(_, fn, *args, **kwargs):
         if fn is leases.renew:
             renewals.append(args)
+            return
+        if fn is store.mark_bounded_attempt:
+            marked.append(args)
             return
         attempted.append(kwargs.get('pending_limit', 32))
         if error and len(attempted) == 1:
@@ -366,3 +386,4 @@ async def test_bounded_loader_only_shrinks_budget_failures(monkeypatch, parked, 
         assert await service._load_live_batch('u', 'token', parked) == ({}, {}, [])
     assert attempted == sizes
     assert renewals == [('u', 'builder', 'token')] * (len(sizes) - 1)
+    assert marked == ([('u', 'token')] if parked else [])

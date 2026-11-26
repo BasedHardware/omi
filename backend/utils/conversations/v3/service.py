@@ -252,6 +252,9 @@ async def _release_reconcile_lease(uid, key, token, *, primary_failed):
 
 async def _load_live_batch(uid, token, parked):
     """Reduce pending seeds without clipping any selected source's ownership closure."""
+    if parked in store.BOUNDED_RETRY_REASONS:
+        # Spend a legacy park's one early attempt under this lease before any paid work.
+        await run_blocking(db_executor, store.mark_bounded_attempt, uid, token)
     budget_reasons = {'v3_derived_budget', 'v3_source_closure_budget'}
     sizes = (32, 8, 1)
     if parked == 'document_too_large':

@@ -293,6 +293,23 @@ def record_blocked(uid, token, reason, *, on_open=False, firestore_client=None):
 BOUNDED_RETRY_REASONS = frozenset({'v3_derived_budget', 'v3_source_closure_budget', 'document_too_large'})
 
 
+def mark_bounded_attempt(uid, token, *, firestore_client=None):
+    """Spend a legacy park's one early attempt under the acquired builder lease, before any paid work.
+
+    A transient failure in that attempt (a provider error Cloud Tasks retries) must not reopen the bypass.
+    """
+    client = firestore_client or get_firestore_client()
+    ref = leases.lease_ref(client, uid, 'builder')
+
+    @firestore.transactional
+    def mark(tx):
+        row = ref.get(transaction=tx).to_dict() or {}
+        if row.get('token') == token and not row.get('v3_bounded_pending_attempted'):
+            tx.update(ref, {'v3_bounded_pending_attempted': True})
+
+    run_preloaded_transaction_with_contention_retry(client, mark)
+
+
 def backoff_until(uid, *, firestore_client=None):
     return backoff_state(uid, firestore_client=firestore_client)[0]
 
