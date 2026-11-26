@@ -326,6 +326,19 @@ token transactionally. Existing 120s group custody leases and privacy/erasure
 checks remain authoritative for already claimed audio. See
 [coalescing scan coordination](listen_pusher_pipeline/changes/2026-11-14-coalescing-scan-leader.md).
 
+## Pusher playback inventory manifest reuse
+
+`PUSHER_INVENTORY_MANIFEST_LONG_TTL_ENABLED` defaults to false, for a
+120-second lifetime. Set it to true on Pusher to use 900 seconds. The cache
+has one 8 MiB process-local byte budget. Reuse requires both
+`PRIVATE_SYNC_INVENTORY_MANIFEST_BODY_CACHE_ENABLED` and
+`PRIVATE_SYNC_LISTED_MANIFEST_READ_ENABLED`, which default to true.
+Ordinary gapped playback inventory requires a unique current manifest,
+rechecks its generation and metageneration on every hit, and verifies its
+body, media binding and gap count before using frames. Fresh, strict and
+deadline-bound inventory reads bypass this cache. See the
+[rollout and readback runbook](runbooks/private-sync-inventory-manifest-reuse.md).
+
 ## Retained seal proof rules
 
 `RECORD_SEAL_REPAIR_FRESH_ENABLED` defaults true (`false`, `off`, or `0` disables
