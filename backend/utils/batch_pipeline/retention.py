@@ -114,6 +114,7 @@ def _register_batch_artifact(
     expected_generation: int,
     *,
     item: Any = None,
+    record_origin: bool = False,
 ) -> str:
     """Register BEFORE object upload; rejected late upload must delete its object.
 
@@ -139,6 +140,11 @@ def _register_batch_artifact(
         if shadow and job.get('owner_key') != privacy_owner_key(uid):
             raise BatchPrivacyBlocked('shadow_artifact_owner')
         binding = job.get('projection_binding') or {}
+        # Admission persists provenance on the job. Preserve positive proof on
+        # older jobs, whose only recording marker was in the projection binding.
+        origin = job.get('record_origin')
+        if record_origin or binding.get('record_origin') or binding.get('native_record'):
+            origin = True
         voice_write = kind == 'voice_evidence'
         projected_ids = []
         voice_due = None
@@ -287,7 +293,7 @@ def _register_batch_artifact(
                     'capture_at': getattr(item, 'capture_at', None) or job.get('capture_at'),
                     'duration_seconds': getattr(item, 'duration_seconds', None) or job.get('duration_seconds'),
                     'privacy_generation': expected_generation,
-                    **({'record_origin': True} if binding.get('record_origin') or binding.get('native_record') else {}),
+                    'record_origin': origin,
                     'write_pending_until': datetime.now(timezone.utc) + timedelta(seconds=UPLOAD_PENDING_SECONDS),
                     **({'cleanup_after': voice_due} if voice_write else {}),
                     **(
@@ -297,6 +303,8 @@ def _register_batch_artifact(
                     ),
                 },
             )
+        elif origin is True and (existing.to_dict() or {}).get('record_origin') is not True:
+            transaction.update(reference, {'record_origin': True})
 
     register(client.transaction())
     mirror_refresh(namespace, [('artifacts', artifact_id)])  # A2 shadow: no-op unless shadow mode
@@ -584,9 +592,13 @@ def batch_artifact_authorize(store: Any, item: Any, *, snapshots: dict | None = 
     return firestore.transactional(authorize)(store.client.transaction())
 
 
-def batch_artifact_register(store: Any, item: Any, uri: str, kind: str, context: Any) -> None:
+def batch_artifact_register(
+    store: Any, item: Any, uri: str, kind: str, context: Any, *, record_origin: bool = False
+) -> None:
     """B's register_artifact(item, uri, kind, context) callback (before upload)."""
-    register_batch_artifact(store, item.owner_id, item.segment_id, uri, kind, context.generation, item=item)
+    register_batch_artifact(
+        store, item.owner_id, item.segment_id, uri, kind, context.generation, item=item, record_origin=record_origin
+    )
 
 
 def purge_batch_storage_owner(uid: str, namespace: str, *, wal_originals: bool = False) -> None:
@@ -619,12 +631,15 @@ def register_batch_artifact(
     expected_generation: int,
     *,
     item: Any = None,
+    record_origin: bool = False,
 ) -> str:
     """Scoped entry point (lever bpp_attempt_scope, key = uid); see _register_batch_artifact."""
     from database.batch_privacy_attempt import scoped_privacy_attempt
 
     with scoped_privacy_attempt(uid):
-        return _register_batch_artifact(store, uid, segment_id, uri, kind, expected_generation, item=item)
+        return _register_batch_artifact(
+            store, uid, segment_id, uri, kind, expected_generation, item=item, record_origin=record_origin
+        )
 
 
 def expire_completed_segment(store: Any, uid: str, segment_id: str, now: float) -> bool:

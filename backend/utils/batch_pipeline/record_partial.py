@@ -350,6 +350,7 @@ async def admit_page(
             artifacts.stage_audio,
             item,
             MAGIC + json.dumps(manifest, separators=(',', ':')).encode(),
+            record_origin=True,
         )
         staged.append(replace(item, audio_uri=uri, timing_store=batch_timing_store(refs)))
     intake = {

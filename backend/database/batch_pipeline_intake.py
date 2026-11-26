@@ -231,6 +231,7 @@ def admit(
             if not created and previous_binding != serialized_binding:
                 raise ValueError('existing segment cannot change its immutable intake binding')
             job['projection_binding'] = serialized_binding
+            job['record_origin'] = binding.record_origin or binding.native_record
             if created and packing_observations and item.segment_id in packing_observations:
                 job['packing_observation'] = packing_observations[item.segment_id]
             if created and binding.native_record:

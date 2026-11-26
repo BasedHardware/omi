@@ -450,7 +450,8 @@ async def test_failed_restore_metadata_does_not_admit_or_process_full_archive(re
     monkeypatch.setattr(live, 'list_audio_chunks', lambda *a, **kw: [{'generation': 1}])
     monkeypatch.setattr(live, 'retained_record_units', lambda *a, **kw: (unit for unit in [(100, 10, [])]))
 
-    def stage_audio(item, body):
+    def stage_audio(item, body, *, record_origin):
+        assert record_origin is True
         uri = 'gs://synthetic-batch/manifest#1'
         store.run(
             lambda tx: tx.put(

@@ -161,9 +161,9 @@ def test_cancelled_audit_sample_is_counted_as_dropped(monkeypatch, site):
 
 @pytest.mark.parametrize(
     'setting,draw,sampled',
-    [(None, 99, True), (None, 100, False), (0, 0, False), (50, 49, True), (50, 50, False)],
+    [(None, 0, False), (0, 0, False), (50, 49, True), (50, 50, False), (100, 99, True), (100, 100, False)],
 )
-def test_enforced_audit_sampling_defaults_to_one_percent_and_has_an_inverse(monkeypatch, setting, draw, sampled):
+def test_enforced_audit_sampling_defaults_off_with_configurable_sampling(monkeypatch, setting, draw, sampled):
     if setting is None:
         monkeypatch.delenv('FIRESTORE_READ_LEVERS', raising=False)
     else:

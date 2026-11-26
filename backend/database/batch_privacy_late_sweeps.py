@@ -62,7 +62,8 @@ def _matches(snapshot, data, uid, reason, source, changed_at):
         return False
     if reason == 'data_protection':
         return True
-    return data.get('record_origin') is True and (not source or source in (data.get('conversation_ids') or ()))
+    # A legacy reservation can predate both provenance stamping and job admission.
+    return data.get('record_origin') is not False and (not source or source in (data.get('conversation_ids') or ()))
 
 
 def _account_is_erased(client, uid, transaction):

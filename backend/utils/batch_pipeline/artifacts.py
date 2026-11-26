@@ -63,7 +63,7 @@ class ArtifactStore:
         namespace: str,
         authorize: Callable[[WorkItem], ProtectionContext],
         key_for_owner: Callable[[str], bytes],
-        register_artifact: Callable[[WorkItem, str, str, ProtectionContext], None],
+        register_artifact: Callable[..., None],
         shadow_result: Callable | None = None,
         authorize_read: Callable | None = None,
     ) -> None:
@@ -126,7 +126,16 @@ class ArtifactStore:
         sealed = leaf_timings.call('encrypt', AESGCM(key).encrypt, nonce, body, self._aad(item, kind, context))
         return MAGIC + nonce + sealed
 
-    def _write(self, item: WorkItem, kind: str, body: bytes, limit: int, *, result_key: str | None = None) -> str:
+    def _write(
+        self,
+        item: WorkItem,
+        kind: str,
+        body: bytes,
+        limit: int,
+        *,
+        result_key: str | None = None,
+        record_origin: bool = False,
+    ) -> str:
         if not body or len(body) > limit:
             raise ValueError('batch artifact exceeds bounded payload size')
         context = self.authorize(item)
@@ -141,7 +150,13 @@ class ArtifactStore:
         # may erase this unique name before the provider returns its generation.
         registered_at = time.monotonic()
         leaf_timings.call(
-            'artifact_register', self.register_artifact, item, f'gs://{self.bucket_name}/{name}', kind, context
+            'artifact_register',
+            self.register_artifact,
+            item,
+            f'gs://{self.bucket_name}/{name}',
+            kind,
+            context,
+            **({'record_origin': True} if record_origin else {}),
         )
         self._unchanged(item, context)
         if kind == 'voice_evidence':
@@ -324,9 +339,9 @@ class ArtifactStore:
             raise PermissionError('voice evidence expired or unbound')
         return payload
 
-    def stage_audio(self, item: WorkItem, wav: bytes) -> str:
+    def stage_audio(self, item: WorkItem, wav: bytes, *, record_origin: bool = False) -> str:
         """Admission calls this before enqueue; audio AAD excludes its own URI."""
-        return self._write(item, 'audio', wav, AUDIO_LIMIT)
+        return self._write(item, 'audio', wav, AUDIO_LIMIT, record_origin=record_origin)
 
     def stage_record_plan(self, item: WorkItem, plan: dict) -> str:
         """Small encrypted continuation, attached to the record coordinator.
@@ -335,7 +350,7 @@ class ArtifactStore:
         immutable source slices and is never sent to a compute worker.
         """
         body = json.dumps(plan, allow_nan=False, separators=(',', ':')).encode()
-        return self._write(item, 'audio', body, RESULT_LIMIT)
+        return self._write(item, 'audio', body, RESULT_LIMIT, record_origin=True)
 
     def load_record_plan(self, item: WorkItem, uri: str) -> dict:
         return json.loads(self._read(item, uri, 'audio', RESULT_LIMIT))

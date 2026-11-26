@@ -1094,7 +1094,8 @@ async def test_native_admission_stages_references_and_drains_after_rollback(
     monkeypatch.setattr(live, 'read_reference', lambda *args, **kwargs: b'\x01\x00' * 16000)
     manifests = []
 
-    def stage(item, body):
+    def stage(item, body, *, record_origin):
+        assert record_origin is True
         manifests.append(json.loads(body[len(MAGIC) :]))
         assert body.startswith(MAGIC) and len(body) < 2000
         uri = 'gs://synthetic-manifest/audio#1'
@@ -1136,6 +1137,7 @@ async def test_native_admission_stages_references_and_drains_after_rollback(
     assert unit_reads
     assert result == {'outcome': 'batch', 'job_id': 'bp_' + content}
     job = store.rows['jobs', segment]
+    assert job['record_origin'] is True
     if current.get('record_upload_revision') == 9:
         assert job['record_input_upload_revision'] == 9
     else:

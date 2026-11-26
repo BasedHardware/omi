@@ -11,7 +11,7 @@ import hashlib
 import os
 import threading
 import time
-from datetime import timedelta
+from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 from unittest.mock import MagicMock
 from uuid import uuid4
@@ -21,6 +21,12 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from google.auth.credentials import AnonymousCredentials
 from google.cloud import firestore
+
+from database import batch_privacy_late_intents as late_intents, batch_privacy_late_sweeps as late_sweeps
+from database.batch_pipeline_store import FirestoreStore
+from utils.batch_pipeline.artifact_policy import create_artifact_store
+from utils.batch_pipeline.contracts import Priority, WorkItem
+from utils.other.local_storage import LocalBlob, LocalStorageClient
 
 pytestmark = pytest.mark.integration
 
@@ -888,7 +894,7 @@ def test_late_privacy_sweep_recovers_an_inflight_object(plane, monkeypatch, tmp_
     cid = 'synthetic-recording'
     pending = datetime.now(timezone.utc) + timedelta(minutes=30)
 
-    def receipt(key, owner=uid, source=cid):
+    def receipt(key, owner=uid, source=cid, record_origin=True):
         segment = f'synthetic-{key}'
         object_name = f'batch-pipeline/batch_pipeline_prod/owners/{plane.key}/results/{segment}/{uuid4().hex}.enc'
         ref = artifacts.document(key)
@@ -899,7 +905,7 @@ def test_late_privacy_sweep_recovers_an_inflight_object(plane, monkeypatch, tmp_
                 'segment_id': segment,
                 'conversation_ids': [source],
                 'kind': 'results',
-                'record_origin': True,
+                'record_origin': record_origin,
                 'uri': f'gs://{name}/{object_name}',
                 'write_pending_until': pending,
             }
@@ -909,6 +915,9 @@ def test_late_privacy_sweep_recovers_an_inflight_object(plane, monkeypatch, tmp_
     old, stale = receipt('late')
     other, unrelated = receipt('unrelated', owner='another-synthetic-owner')
     unrelated.upload_from_string(b'outside the erasure scope')
+    if reason == 'recording_policy':
+        nonrecord, nonrecord_audio = receipt('nonrecord', record_origin=False)
+        nonrecord_audio.upload_from_string(b'known non-recording audio')
     user = client.collection('users').document(uid)
     if policy == 'conversation_recording':
         conversation = user.collection('conversations').document(cid)
@@ -964,9 +973,99 @@ def test_late_privacy_sweep_recovers_an_inflight_object(plane, monkeypatch, tmp_
         assert new.get().exists and fresh.exists()
     if policy == 'conversation_recording':
         assert other_source.get().exists and other_audio.exists()
+    if reason == 'recording_policy':
+        assert nonrecord.get().exists and nonrecord_audio.exists()
     assert ('batch_pipeline_prod', uid) in mirrored
     assert completed._value.get() == before + 1
     assert sweeps.reconcile_batch_privacy_late_sweeps(firestore_client=client) == {}
+
+
+@pytest.mark.parametrize('legacy', [False, True], ids=['native-provenance', 'missing-provenance'])
+def test_recording_revocation_recovers_crashed_pre_admission_upload(plane, monkeypatch, tmp_path, legacy):
+    client, uid = plane.client, plane.uid
+    namespace, bucket = 'batch_pipeline_dev', 'synthetic-late-batch'
+    storage = LocalStorageClient(tmp_path / 'crashed-upload')
+    monkeypatch.setenv('OMI_ENV_STAGE', 'dev')
+    monkeypatch.setenv('BUCKET_BATCH_PIPELINE', bucket)
+    monkeypatch.setattr(late_sweeps, 'create_storage_client', lambda: storage)
+    monkeypatch.setattr(late_sweeps, 'purge_owner', lambda namespace, owner: 0)
+    user = client.collection('users').document(uid)
+    user.update({'private_cloud_sync_enabled': True})
+    cid = 'synthetic-recording'
+    user.collection('conversations').document(cid).set(
+        {'record_lane_owner': 'batch_live_v1', 'private_cloud_sync_enabled': True}
+    )
+    store = FirestoreStore(namespace, firestore_client=client)
+    artifacts = create_artifact_store(store, storage, bucket, b'x' * 32)
+    item = WorkItem(
+        'synthetic-unit', uid, 100, 'record:pending', 1, Priority.FRESH, conversation_id=cid, privacy_generation=0
+    )
+    receipt_collection = client.collection(f'{namespace}_artifacts')
+    unit_job = client.collection(f'{namespace}_jobs').document(item.segment_id)
+
+    class UploadProcessExited(BaseException):
+        pass
+
+    upload = LocalBlob.upload_from_file
+
+    def revoke_during_upload(blob, file_obj, *args, **kwargs):
+        assert not unit_job.get().exists
+        [receipt] = receipt_collection.stream()
+        assert receipt.get('record_origin') is True
+        if legacy:
+            receipt.reference.update({'record_origin': firestore.DELETE_FIELD})
+        assert not blob.exists()
+        user.update({'private_cloud_sync_enabled': False})
+        upload(blob, file_obj, *args, **kwargs)
+        raise UploadProcessExited()
+
+    monkeypatch.setattr(LocalBlob, 'upload_from_file', revoke_during_upload)
+    with pytest.raises(UploadProcessExited):
+        artifacts.stage_audio(item, b'synthetic audio', record_origin=True)
+
+    [receipt] = receipt_collection.stream()
+    assert ('record_origin' in receipt.to_dict()) is not legacy
+    [intent] = client.collection(late_intents.COLLECTION).stream()
+    assert intent.get('reason') == 'recording_policy'
+    assert not unit_job.get().exists
+    blob = storage.bucket(bucket).blob(receipt.get('uri').removeprefix(f'gs://{bucket}/'))
+    assert blob.exists()
+
+    clock = [intent.get('changed_at') + late_intents.DELAY + timedelta(seconds=1)]
+    monkeypatch.setattr(late_sweeps, '_now', lambda: clock[0])
+    # The first page visits the empty prod-named namespace of this emulator.
+    assert late_sweeps.reconcile_batch_privacy_late_sweeps(firestore_client=client) == {'progress': 1}
+    clock[0] += late_sweeps.PAGE_RETRY
+    assert late_sweeps.reconcile_batch_privacy_late_sweeps(firestore_client=client) == {'waiting_for_upload': 1}
+    assert blob.exists()
+
+    clock[0] = receipt.get('write_pending_until') + timedelta(seconds=10)
+    for _ in range(10):
+        outcomes = late_sweeps.reconcile_batch_privacy_late_sweeps(firestore_client=client)
+        assert 'retry' not in outcomes
+        if outcomes == {'completed': 1}:
+            break
+        clock[0] += late_sweeps.PAGE_RETRY
+
+    assert not intent.reference.get().exists
+    assert not receipt.reference.get().exists and not blob.exists()
+
+
+def test_existing_record_job_supplies_artifact_provenance_without_projection_binding(plane, monkeypatch, tmp_path):
+    namespace = 'batch_pipeline_dev'
+    monkeypatch.setenv('OMI_ENV_STAGE', 'dev')
+    store = FirestoreStore(namespace, firestore_client=plane.client)
+    storage = LocalStorageClient(tmp_path / 'record-job-artifact')
+    artifacts = create_artifact_store(store, storage, 'synthetic-late-batch', b'x' * 32)
+    item = WorkItem('synthetic-unit', plane.uid, 100, 'record:pending', 1, Priority.FRESH, privacy_generation=0)
+    plane.client.collection(f'{namespace}_jobs').document(item.segment_id).set(
+        {'owner_id': plane.uid, 'record_origin': True}
+    )
+
+    artifacts.stage_audio(item, b'synthetic audio')
+
+    [receipt] = plane.client.collection(f'{namespace}_artifacts').stream()
+    assert receipt.get('record_origin') is True
 
 
 def test_tokenless_write_cache_is_limited_to_existing_compute_admitted_leases(plane, monkeypatch):
@@ -987,7 +1086,7 @@ def test_tokenless_write_cache_is_limited_to_existing_compute_admitted_leases(pl
     monkeypatch.setattr(cache, '_redis', lambda: redis)
     monkeypatch.setattr(cache, 'available', lambda client: True)
     monkeypatch.setattr(authority, 'ttl_disabled', lambda: False)
-    monkeypatch.setenv('FIRESTORE_READ_LEVERS', '{"bpp_tokenless_write_cache":100}')
+    monkeypatch.setenv('FIRESTORE_READ_LEVERS', '{"bpp_tokenless_write_cache":100,"bpp_tokenless_write_audit":100}')
     store = FirestoreStore('batch_pipeline_dev', firestore_client=plane.client)
     assert store.run(lambda tx: tx._probe_write_privacy(plane.uid, ('source',), 0)) == 0
 

@@ -33,6 +33,11 @@ under its current revision, and durably redrives Postgres mirror reconciliation.
 Receipts issued after the event survive. Existing obligations continue when
 either authorization lever is off.
 
+Native recording and partial continuation uploads stamp recording provenance
+when they reserve an artifact before admission. Admission also stores that
+provenance on the job for later uploads. A recording opt-out sweeps an in-flight
+receipt in scope when its provenance is unknown.
+
 The same conversation reconciler polls at most four due intents per minute.
 Each slice reads at most one page of 100 batch artifact receipts. Readback
 includes cache and shadow outcomes, due queue age, durable completions, and
@@ -44,8 +49,8 @@ authorization, use six hours with evaluated samples at each site and zero
 scenario assumes much wider proven sink coverage and GPU connectivity.
 
 For canary expansion, `bpp_tokenless_write_audit` samples enforced hits after
-the transaction succeeds. The lever defaults to 100 basis points (1%) and
-accepts 0–100. Audits use a fresh read-only snapshot capped at two seconds and
+the transaction succeeds. The lever defaults to zero and accepts 0–100 basis
+points. Set it to 100 (1%) for the canary. Audits use a fresh read-only snapshot capped at two seconds and
 32 point reads on a two-slot executor with no queue.
 `omi_batch_pipeline_privacy_tokenless_audit_total` counts completed comparisons
 by `role` and `outcome=agree|disagree_within_window|disagree_beyond_window`.
