@@ -746,6 +746,7 @@ async def sync_local_files_v2(
     x_omi_conversation_geolocation: Optional[str] = Header(None, alias='X-Omi-Conversation-Geolocation'),
     x_omi_upload_trace: Optional[str] = Header(None, alias='X-Omi-Upload-Trace', include_in_schema=False),
     x_omi_upload_hold: Optional[str] = Header(None, alias='X-Omi-Upload-Hold', include_in_schema=False),
+    x_omi_upload_recovered: Optional[str] = Header(None, alias='X-Omi-Upload-Recovered', include_in_schema=False),
     x_omi_upload_hold_age_ms: Optional[str] = Header(None, alias='X-Omi-Upload-Hold-Age-Ms', include_in_schema=False),
 ):
     """
@@ -1268,6 +1269,7 @@ async def sync_local_files_v2(
             # nor rollback may start a legacy twin or release this batch claim.
             sequencer_registration_started = True
             batch_attempted = True
+            upload_recovered = x_omi_upload_recovered == '1'
             batch_response = await accept_batch_upload(
                 uid=uid,
                 job_id=job_id,
@@ -1290,6 +1292,7 @@ async def sync_local_files_v2(
                         if isinstance(x_omi_upload_hold, str)
                         else {}
                     ),
+                    **({'upload_recovered': True} if upload_recovered else {}),
                     **({'capture_source_conversation_id': recovery_source_id} if recovery_source_id else {}),
                     **({'capture_clock_policy': capture_clock_policy} if capture_clock_policy is not None else {}),
                     **(
@@ -1335,7 +1338,7 @@ async def sync_local_files_v2(
                 # owner is a follow-on, not a batch landing).
                 if intake_evidence.batch_accepted and not intake_evidence.final_pass_owner_followed:
                     record_upload_outcome('batch')
-                    observe_hold_age(x_omi_upload_hold_age_ms, x_omi_upload_hold)
+                    observe_hold_age(x_omi_upload_hold_age_ms, x_omi_upload_hold, upload_recovered)
                 return batch_response
             sequencer_registration_started = False
 
