@@ -169,6 +169,25 @@ def release_of(revision, repo, service=None):
     return serving_has.image_source(revision, repo, service=service)
 
 
+def contains_commit(repo, commit, release):
+    """True only when COMMIT resolves to a commit that equals RELEASE or is one of its ancestors.
+
+    Ancestry only: a squash-merged reviewed head is not accepted as contained here."""
+
+    def git(*args):
+        return subprocess.run([serving_has.GIT, '-C', repo, *args], capture_output=True, text=True, timeout=60)
+
+    resolved = []
+    for value in (commit, release):
+        if not re.fullmatch(r'[0-9a-f]{7,40}', value or ''):
+            return False
+        r = git('rev-parse', '--verify', '--quiet', '--end-of-options', value + '^{commit}')
+        if r.returncode:
+            return False
+        resolved.append(r.stdout.strip())
+    return git('merge-base', '--is-ancestor', *resolved).returncode == 0
+
+
 def validate(doc, revision_name, revision, opts):
     env = entries(revision)
     release = release_of(revision, opts.repo, getattr(opts, 'service', None))
@@ -192,23 +211,8 @@ def validate(doc, revision_name, revision, opts):
         raise ValueError('release_sha_mismatch')
     if opts.created_after and timestamp(revision['metadata']['creationTimestamp']) <= timestamp(opts.created_after):
         raise ValueError('revision_too_old')
-    if opts.contains:
-        # Ancestor, or a proven-equivalent squash merge of that reviewed head (lead 7bc379).
-        r = subprocess.run(
-            [
-                sys.executable,
-                '-I',
-                str(Path(__file__).resolve().with_name('contains_commit.py')),
-                '--repo',
-                opts.repo,
-                opts.contains,
-                release,
-            ],
-            capture_output=True,
-            timeout=120,
-        )
-        if r.returncode:
-            raise ValueError('release_does_not_contain_commit')
+    if opts.contains and not contains_commit(opts.repo, opts.contains, release):
+        raise ValueError('release_does_not_contain_commit')
     return release, env, label_state
 
 

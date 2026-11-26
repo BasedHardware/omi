@@ -468,22 +468,33 @@ def judge(sha, rows, repo, registry, service=None):
 
 
 def default_repo():
-    """SERVING_HAS_REPO, else $OMI_WORKSPACE_ROOT/upstream-keep-clean, else the checkout this file lives in. The
-    rollout-tools worktree sits outside the workspace, so parents[3] alone has no upstream-keep-clean there."""
+    """SERVING_HAS_REPO, else $OMI_WORKSPACE_ROOT/upstream-keep-clean, else a workspace upstream-keep-clean beside
+    this checkout, else the repository that contains this file. The rollout-tools worktree sits outside the
+    workspace, so parents[3] alone has no upstream-keep-clean there; a normal checkout has no workspace at all."""
     if os.environ.get('SERVING_HAS_REPO'):
         return os.environ['SERVING_HAS_REPO']
     root = os.environ.get('OMI_WORKSPACE_ROOT')
     if root and (Path(root) / 'upstream-keep-clean').is_dir():
         return str(Path(root) / 'upstream-keep-clean')
-    workspace = Path(__file__).resolve().parents[3]
+    here = Path(__file__).resolve()
+    workspace = here.parents[3]
     local = workspace / 'upstream-keep-clean'
     if local.is_dir():
         return str(local)
     try:
-        common = command([GIT, '-C', str(workspace), 'rev-parse', '--git-common-dir']).strip()
-        return str((workspace / common).resolve().parent / 'upstream-keep-clean')
+        common = command([GIT, '-C', str(here.parent), 'rev-parse', '--git-common-dir']).strip()
+        shared = (here.parent / common).resolve().parent / 'upstream-keep-clean'
+        if shared.is_dir():
+            return str(shared)
     except (Unknown, OSError, subprocess.TimeoutExpired):
-        return str(local)
+        pass
+    try:
+        top = command([GIT, '-C', str(here.parent), 'rev-parse', '--show-toplevel']).strip()
+        if top:
+            return top
+    except (Unknown, OSError, subprocess.TimeoutExpired):
+        pass
+    return str(here.parents[2])
 
 
 def main(argv=None, registry=None, describe=None):

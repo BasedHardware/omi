@@ -189,13 +189,18 @@ def allocations(plan, candidate, donor_percent=0):
     return result
 
 
-def promote(service, wire, candidate, transport, guard, *, sleep=time.sleep, now=None):
+def promote(service, wire, candidate, transport, guard, *, floor_check, sleep=time.sleep, now=None):
     """Guard a named candidate and return only after its final map is observed.
 
     For a split service a guarded canary first borrows up to 10 percentage
     points from the donor. At every step allocations of other revisions stay
     fixed. A failed guard or move restores the original map if this operation
     still owns the requested traffic.
+
+    floor_check(revision) must return True only when the revision passes the
+    backend release floor. Every revision this operation can route traffic to
+    (the candidate and each inverse revision it may restore) is checked before
+    the first move, so a TRIP or error can never restore a pre-floor binary.
     """
     plan = decode_plan(service, wire)
     inverse, donor = plan['inverse'], plan['donor']
@@ -210,6 +215,9 @@ def promote(service, wire, candidate, transport, guard, *, sleep=time.sleep, now
         or initial.observed != inverse
     ):
         raise ValueError('named_inverse_mismatch')
+    for revision in (*sorted(inverse), candidate):
+        if floor_check(revision) is not True:
+            raise ValueError('release_floor_rejected')
 
     def read():
         current = transport.read()
@@ -316,6 +324,22 @@ def guard_command(command, project, region, *, run=subprocess.run):
     return evaluate
 
 
+def release_floor_command(script, project, region, *, run=subprocess.run):
+    """Run the reviewed verify_backend_release_floor.py for one revision."""
+
+    def check(revision):
+        try:
+            result = run(
+                [sys.executable, '-I', str(script), '--revision', revision, '--project', project, '--region', region],
+                timeout=120,
+            )
+        except (OSError, subprocess.TimeoutExpired):
+            return False
+        return result.returncode == 0
+
+    return check
+
+
 def gcloud_json(method, url, *, body=None, timeout=15):
     # WIF tokens may expire during the soak. Obtain current credentials per
     # request. The workflow provides the account through its existing auth step.
@@ -383,6 +407,7 @@ def main(argv=None):
             command.add_argument('--project', required=True)
             command.add_argument('--region', required=True)
         if mode == 'promote':
+            command.add_argument('--release-floor-check', type=Path, required=True)
             command.add_argument('--guard-command', nargs=argparse.REMAINDER)
     args = parser.parse_args(argv)
     try:
@@ -394,7 +419,9 @@ def main(argv=None):
         default = [sys.executable, '-I', str(Path(__file__).with_name('guard_eval.py'))]
         guard = guard_command(args.guard_command or default, args.project, args.region)
         transport = CloudRunTraffic(args.project, args.region, args.service, gcloud_json)
-        print(json.dumps(promote(args.service, args.plan, args.candidate, transport, guard), sort_keys=True))
+        floor_check = release_floor_command(args.release_floor_check, args.project, args.region)
+        result = promote(args.service, args.plan, args.candidate, transport, guard, floor_check=floor_check)
+        print(json.dumps(result, sort_keys=True))
         return 0
     except Hold as error:
         print(f'HOLDBACK_HELD {error}', file=sys.stderr)

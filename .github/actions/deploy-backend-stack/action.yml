@@ -1796,9 +1796,17 @@ runs:
             *) exit 1 ;;
           esac
           executor="$DEPLOY_CONTROL_SCRIPTS/cloud_run_split_canary.py"
+          # The executor checks every revision it may route to (candidate and
+          # each restorable inverse) against origin/main's release floor first.
+          history_args=()
+          if [[ "$(git rev-parse --is-shallow-repository)" == true ]]; then
+            history_args=(--unshallow)
+          fi
+          git fetch --no-tags "${history_args[@]}" origin +refs/heads/main:refs/remotes/origin/main
           result="$(python3 -I "$executor" promote \
             --service "$SERVICE" --plan "$PLAN" --binding "$BINDING" \
             --candidate "$candidate" --project "$PROJECT" --region "$REGION" \
+            --release-floor-check "$DEPLOY_WORKFLOW_ROOT/.github/scripts/verify_backend_release_floor.py" \
             --guard-command python3 -I "$executor" workflow-guard)" || {
               rc=$?
               if ((rc == 75)); then

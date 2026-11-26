@@ -583,6 +583,11 @@ sys.exit(int(os.environ['EXIT_CODE']))
     gcloud = tmp_path / 'gcloud'
     gcloud.write_text('#!/bin/sh\nexit 99\n')
     gcloud.chmod(0o700)
+    # The step refreshes origin/main so the executor's release-floor check reads the current floor.
+    git_calls = tmp_path / 'git-calls'
+    git = tmp_path / 'git'
+    git.write_text('#!/bin/sh\necho "$*" >> "$GIT_CALLS"\nif [ "$1" = rev-parse ]; then echo false; fi\n')
+    git.chmod(0o700)
     plan = f'holdback-v1;{service}-old;{service}-old=100;5;7200'
     binding = hashlib.sha256(plan.encode()).hexdigest()
     result = subprocess.run(
@@ -591,6 +596,8 @@ sys.exit(int(os.environ['EXIT_CODE']))
             os.environ,
             PATH=str(tmp_path) + ':' + os.environ['PATH'],
             DEPLOY_CONTROL_SCRIPTS=str(tmp_path),
+            DEPLOY_WORKFLOW_ROOT='/workflow-root',
+            GIT_CALLS=str(git_calls),
             SELECTED_CLOUD_RUN_SERVICES=service,
             SERVICE=service,
             PLAN=plan,
@@ -625,11 +632,17 @@ sys.exit(int(os.environ['EXIT_CODE']))
         'based-hardware',
         '--region',
         'us-central1',
+        '--release-floor-check',
+        '/workflow-root/.github/scripts/verify_backend_release_floor.py',
         '--guard-command',
         'python3',
         '-I',
         str(guard),
         'workflow-guard',
+    ]
+    assert git_calls.read_text().splitlines() == [
+        'rev-parse --is-shallow-repository',
+        'fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main',
     ]
     if exit_code == 0:
         assert output.read_text() == 'promoted=true\nserving_percent=80\n'
