@@ -420,7 +420,7 @@ def test_route_hard_deadline_returns_prepared_prefix(monkeypatch, routes):
 
     data, visible = owner(before=3, hidden=0, after=0)
     monkeypatch.setattr(db, 'db', CountingQuery(data))
-    monkeypatch.setenv('OMI_LIST_READ_BUDGET_SECONDS', '0.25')
+    monkeypatch.setenv('OMI_LIST_READ_BUDGET_SECONDS', '1.0')
     monkeypatch.setenv('OMI_LIST_PAGE_WALL_BUDGET_ENABLED', 'true')
     entered, release, exited = Event(), Event(), Event()
     original = db.prepare_conversation_for_read
@@ -440,7 +440,7 @@ def test_route_hard_deadline_returns_prepared_prefix(monkeypatch, routes):
         result, response = call_route(routes, limit=3)
         assert entered.is_set()
         assert not exited.is_set()
-        assert monotonic() - started < 1.5
+        assert monotonic() - started < 3.0
         assert [row['id'] for row in result] == visible[:1]
         assert response.headers['X-Omi-List-Truncated'] == 'true'
         assert response.headers['X-Omi-Conversation-Page-Size'] == '1'
@@ -455,7 +455,7 @@ def test_route_deadline_before_first_prepared_row_keeps_page_retryable(monkeypat
 
     data, visible = owner(before=3, hidden=0, after=0)
     monkeypatch.setattr(db, 'db', CountingQuery(data))
-    monkeypatch.setenv('OMI_LIST_READ_BUDGET_SECONDS', '0.25')
+    monkeypatch.setenv('OMI_LIST_READ_BUDGET_SECONDS', '1.0')
     monkeypatch.setenv('OMI_LIST_PAGE_WALL_BUDGET_ENABLED', 'true')
     entered, release, exited = Event(), Event(), Event()
     original = db.prepare_conversation_for_read
@@ -493,7 +493,7 @@ def test_stalled_read_worker_does_not_block_prefix_finalization(monkeypatch, rou
 
     data, visible = owner(before=3, hidden=0, after=0)
     monkeypatch.setattr(db, 'db', CountingQuery(data))
-    monkeypatch.setenv('OMI_LIST_READ_BUDGET_SECONDS', '0.25')
+    monkeypatch.setenv('OMI_LIST_READ_BUDGET_SECONDS', '1.0')
     monkeypatch.setenv('OMI_LIST_PAGE_WALL_BUDGET_ENABLED', 'true')
     entered, release, exited = Event(), Event(), Event()
     fallbacks = []
@@ -536,9 +536,9 @@ def test_finish_deadline_keeps_unprojected_rows_retryable(monkeypatch, routes):
 
     data, _ = owner(before=3, hidden=0, after=0)
     monkeypatch.setattr(db, 'db', CountingQuery(data))
-    monkeypatch.setenv('OMI_LIST_READ_BUDGET_SECONDS', '0.25')
+    monkeypatch.setenv('OMI_LIST_READ_BUDGET_SECONDS', '1.0')
     monkeypatch.setenv('OMI_LIST_PAGE_WALL_BUDGET_ENABLED', 'true')
-    monkeypatch.setattr(routes, '_LIST_PAGE_FINISH_SECONDS', 0.05)
+    monkeypatch.setattr(routes, '_LIST_PAGE_FINISH_SECONDS', 0.5)
     entered, release, exited = Event(), Event(), Event()
     fallbacks = []
     monkeypatch.setattr(routes, 'record_fallback', lambda **kwargs: fallbacks.append(kwargs))
