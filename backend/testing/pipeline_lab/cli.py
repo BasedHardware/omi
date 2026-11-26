@@ -194,6 +194,18 @@ def build_parser() -> argparse.ArgumentParser:
     )
     scenario_run.add_argument('--stt-budget-usd', type=float, help='spend cap for --stt record-vendor')
     scenario_run.add_argument(
+        '--windows',
+        choices=('vad', 'fixed'),
+        default='vad',
+        help='--stt record-local: transcribe VAD-packed speech spans (default) or fixed 30 s windows',
+    )
+    scenario_run.add_argument(
+        '--speakers',
+        choices=('replay', 'record-local'),
+        default='replay',
+        help='speakers scenarios: speaker peer cassettes only (default), or record a miss with the local models',
+    )
+    scenario_run.add_argument(
         '--trace-calls', action='store_true', help='record the backend files each scenario calls (for scenario reach)'
     )
     scenario_reach = scenario_sub.add_parser(
@@ -664,6 +676,8 @@ def _scenario(args: argparse.Namespace, as_json: bool) -> int:
             stt=args.stt,
             stt_budget_usd=args.stt_budget_usd,
             trace_calls=args.trace_calls,
+            windows=args.windows,
+            speakers=args.speakers,
         )
     except (ScenarioError, RuntimeError) as error:
         if as_json:
