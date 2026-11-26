@@ -1,5 +1,5 @@
 {
- "model": "parakeet-tdt-0.6b-v3@541d1f99/cpu-fp32",
+ "model": "parakeet-tdt-0.6b-v3@541d1f99/cpu-fp32/vad",
  "source": "local",
  "windows": "vad",
  "words": [

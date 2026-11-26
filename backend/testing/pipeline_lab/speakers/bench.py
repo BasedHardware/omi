@@ -96,7 +96,7 @@ def ensure_words(conversation: corpus_mod.Conversation, *, record: bool, private
     words = local_parakeet.Worker(python, revision)(pcm, None, spans=local_parakeet.speech_windows(pcm))
     value = {
         'source': 'local',
-        'model': local_parakeet.model_key(revision),
+        'model': local_parakeet.model_key(revision, 'vad'),
         'windows': 'vad',
         'words': [{'start': round(w.start, 3), 'end': round(w.end, 3), 'text': w.text} for w in words],
     }
@@ -116,6 +116,8 @@ def words_main(argv: Optional[list[str]] = None) -> int:
     args = parser.parse_args(argv)
     corpus = corpus_mod.load(args.corpus)
     todo = [c for c in corpus.conversations(args.key or None) if c.words is None]
+    # One Parakeet process per job: cap each one's threads so the jobs share the machine instead of fighting.
+    os.environ.setdefault('OMP_NUM_THREADS', str(max(1, (os.cpu_count() or 2) // max(1, args.jobs))))
 
     def one(conversation: corpus_mod.Conversation) -> int:
         return len(ensure_words(conversation, record=True, private=not corpus.public))

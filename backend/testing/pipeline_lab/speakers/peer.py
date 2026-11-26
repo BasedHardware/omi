@@ -143,6 +143,10 @@ class LocalModels:
             raise RuntimeError(INSTALL)
         env = {**os.environ, 'OMI_PIPELINE_LAB_SPEAKERS_WORKDIR': str(self.workdir)}
         env.setdefault('HF_HUB_OFFLINE', '1')
+        # Each torch process otherwise takes every core: N workers would oversubscribe the machine N-fold.
+        threads = str(max(1, (os.cpu_count() or 2) // self.workers))
+        env.setdefault('OMP_NUM_THREADS', threads)
+        env.setdefault('MKL_NUM_THREADS', threads)
         process = subprocess.Popen(
             [self.python, str(Path(__file__).with_name('local_worker.py'))],
             stdin=subprocess.PIPE,
