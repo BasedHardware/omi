@@ -7,6 +7,7 @@ import 'device_capture_clock.dart';
 /// Vocabulary, rather than arbitrary log text, keeps this buffer content-free.
 enum RingDiagnosticEvent {
   connection,
+  captureMuteReadback,
   liveGrant,
   readRequest,
   readBegin,
@@ -83,6 +84,8 @@ class RingCustodyDiagnostics {
       int? records,
       int? status,
       bool? granted,
+      bool? requestedMuted,
+      bool? observedMuted,
       RingDiagnosticReason reason = RingDiagnosticReason.none}) {
     final t = _trace(deviceId);
     final at = _now().millisecondsSinceEpoch;
@@ -102,6 +105,8 @@ class RingCustodyDiagnostics {
       if (records != null) 'records': records,
       if (status != null) 'status': status,
       if (granted != null) 'granted': granted,
+      if (requestedMuted != null) 'requested_muted': requestedMuted,
+      if (observedMuted != null) 'observed_muted': observedMuted,
     });
     while (t.events.length > maxEvents) {
       t.events.removeFirst();

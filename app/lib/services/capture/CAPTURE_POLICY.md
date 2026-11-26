@@ -35,6 +35,12 @@ the same policy before admission and recheck the revision at a deferred write.
 The Android native background live path applies the same gate. A callback from
 an older authorization cannot resume sending or writing after mute/unmute.
 
+On supported pendants, Device Diagnostics records the requested mute bit, the
+GATT readback when valid, and the phone timestamp of that readback. Compare
+the event's connection epoch and time with nearby ring samples and their
+decoded device capture timestamps. The bounded current-process log records
+observations only. A missing event does not establish the pendant's state.
+
 The transition is conservative: absent canonical policy reads the OR of the two
 old mute preferences. Dart initialization persists that value before deleting
 legacy keys. A malformed or unsupported canonical policy denies capture. The
