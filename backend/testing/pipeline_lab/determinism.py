@@ -212,6 +212,10 @@ def _read(path: Path) -> Any:
     return json.loads(path.read_text(encoding='utf-8'))
 
 
+def _id_blind_key(row: Any) -> str:
+    return _UUID4.sub('<uuid4>', json.dumps(row, sort_keys=True, default=str))
+
+
 def load_semantic(run_dir: Path, artifacts: Sequence[Artifact] = ARTIFACTS) -> dict[str, Any]:
     """Every semantic artifact of one run directory, canonical, keyed by its relative path."""
     run_dir = Path(run_dir)
@@ -219,7 +223,12 @@ def load_semantic(run_dir: Path, artifacts: Sequence[Artifact] = ARTIFACTS) -> d
     out: dict[str, Any] = {}
     for artifact in artifacts:
         for path in sorted(run_dir.glob(artifact.pattern)):
-            value = canonical(_read(path), drop=artifact.drop, rename=rename)
+            raw = _read(path)
+            if artifact.unordered and isinstance(raw, list):
+                # Order rows with their random ids masked first, so the ordinal each id gets does not depend on
+                # write order (two runs writing the same rows in a different order compare equal).
+                raw = sorted(raw, key=_id_blind_key)
+            value = canonical(raw, drop=artifact.drop, rename=rename)
             if artifact.unordered and isinstance(value, list):
                 value = sorted(value, key=lambda row: json.dumps(row, sort_keys=True))
             out[str(path.relative_to(run_dir))] = value

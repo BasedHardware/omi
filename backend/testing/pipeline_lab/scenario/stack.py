@@ -470,12 +470,19 @@ def run_one(
 
         env = worktrees.arm_env(child)
         command, cwd = worktrees.arm_command(arm.vendor, arm.backend, MODULE, args), arm.backend
+    # Its own process group, so a timeout also ends what the scenario started (a local STT worker on its own
+    # interpreter, for one) instead of leaving it running without supervision.
+    process = subprocess.Popen(
+        command, cwd=cwd, env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, start_new_session=True
+    )
     try:
-        done = subprocess.run(command, cwd=cwd, env=env, capture_output=True, text=True, timeout=timeout)
+        stdout, stderr = process.communicate(timeout=timeout)
     except subprocess.TimeoutExpired:
+        _stop(process)
+        process.communicate()
         return {'scenario': path.stem, 'outcome': 'error', 'error': f'timed out after {timeout:g}s'}
-    (out / 'stderr.log').write_text(done.stderr or '')
-    lines = (done.stdout or '').strip().splitlines()
+    (out / 'stderr.log').write_text(stderr or '')
+    lines = (stdout or '').strip().splitlines()
     try:
         return json.loads(lines[-1])
     except (IndexError, json.JSONDecodeError):

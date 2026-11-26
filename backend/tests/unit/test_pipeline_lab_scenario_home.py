@@ -223,7 +223,13 @@ def test_recorder_captures_each_checkpoint_once_and_annotates_snapshots(tmp_path
         'status': 200,
         'response': {'v3': True, 'conversation': None},
     }
-    assert rec.summary() == {'route': 'GET /v1/conversations', 'snapshots': 2, 'disagreements': 0, 'errors': 0}
+    assert rec.summary() == {
+        'route': 'GET /v1/conversations',
+        'snapshots': 2,
+        'disagreements': 0,
+        'errors': 0,
+        'failures': [],
+    }
 
 
 def test_recorder_records_a_disagreement_once(tmp_path):
@@ -250,6 +256,14 @@ def test_recorder_records_a_disagreement_once(tmp_path):
     assert doc['disagreements'] == rec.disagreements
 
 
+def test_recorder_reports_an_unsuccessful_live_route(tmp_path):
+    rec, _ = recorder(tmp_path, [])
+    final(rec)
+    assert rec.failures() == []
+    rec.snapshots[-1]['live']['status'] = 500
+    assert rec.failures() == ['final: GET /v1/conversations/live 500']
+
+
 def test_recorder_keeps_running_when_the_route_cannot_be_built(tmp_path):
     def broken(uid):
         raise ImportError('synthetic: router import failed')
@@ -262,6 +276,9 @@ def test_recorder_keeps_running_when_the_route_cannot_be_built(tmp_path):
     doc = json.loads((tmp_path / 'home.json').read_text())
     assert doc['snapshots'][0]['status'] == 0
     assert 'ImportError' in doc['errors'][0]
+    # A Home route that cannot answer makes the scenario an error (scenario/run.py), even with no on_home check.
+    assert rec.failures() == ['final: GET /v1/conversations 0 (ImportError: synthetic: router import failed)']
+    assert rec.summary()['failures'] == rec.failures()
 
 
 # ---- the on_home check field --------------------------------------------------------------------

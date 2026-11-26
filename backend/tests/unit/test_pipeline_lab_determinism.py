@@ -106,6 +106,24 @@ def test_compare_runs_ignores_wall_clock_and_names_only_paths(tmp_path):
     assert 'False' not in json.dumps(diff['paths'])  # paths, never values
 
 
+def test_unordered_rows_with_fresh_uuids_compare_equal_in_either_write_order(tmp_path):
+    from testing.pipeline_lab.determinism import Artifact
+
+    rows = [
+        {'id': '11111111-1111-4111-8111-111111111111', 'title': 'first'},
+        {'id': '22222222-2222-4222-9222-222222222222', 'title': 'second'},
+    ]
+    other = [  # the same notifications with new random ids, written in the other order
+        {'id': '33333333-3333-4333-a333-333333333333', 'title': 'second'},
+        {'id': '44444444-4444-4444-b444-444444444444', 'title': 'first'},
+    ]
+    only = (Artifact('notifications.jsonl', unordered=True),)
+    for name, data in (('a', rows), ('b', other)):
+        (tmp_path / name).mkdir()
+        (tmp_path / name / 'notifications.jsonl').write_text(''.join(json.dumps(r) + '\n' for r in data))
+    assert compare_runs(tmp_path / 'a', tmp_path / 'b', only).same
+
+
 def test_compare_runs_requires_conversations(tmp_path):
     (tmp_path / 'a').mkdir()
     (tmp_path / 'b').mkdir()

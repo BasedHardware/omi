@@ -183,7 +183,11 @@ async def run_scenario(
             results.append(evaluate(check, final, ops.finish_label))
     errors = [e for e in report.events if e.outcome == 'error']
     result.update(
-        outcome=outcome(scenario, results, error='event errors' if errors else None),
+        outcome=outcome(
+            scenario,
+            results,
+            error='event errors' if errors else ('home route failed' if home.failures() else None),
+        ),
         finish_target=ops.finish_label,
         checks=[r.as_dict() for r in results],
         expected_failure=scenario.expected_failure,

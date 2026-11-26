@@ -293,6 +293,22 @@ class HomeRecorder:
         path.write_text(json.dumps(self.document(), indent=1, default=str))
         return path
 
+    def failures(self) -> list[str]:
+        """Each capture where either Home route raised or did not answer 200, as ``label: route status``.
+
+        A broken Home route makes the scenario an error even when no check reads ``on_home``."""
+        out = []
+        for snap in self.snapshots:
+            label = snap.get('label')
+            if snap.get('status') != 200:
+                out.append(
+                    f"{label}: {ROUTE} {snap.get('status')}" + (f" ({snap['error']})" if snap.get('error') else '')
+                )
+            live = snap.get('live') or {}
+            if live and live.get('status') != 200:
+                out.append(f"{label}: {live.get('route', LIVE_ROUTE)} {live.get('status')}")
+        return out
+
     def summary(self) -> dict[str, Any]:
         """For ``result.json``: counts only."""
         return {
@@ -300,4 +316,5 @@ class HomeRecorder:
             'snapshots': len(self.snapshots),
             'disagreements': len(self.disagreements),
             'errors': len(self.errors),
+            'failures': self.failures(),
         }

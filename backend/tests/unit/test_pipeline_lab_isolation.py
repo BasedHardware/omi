@@ -244,3 +244,43 @@ def test_two_concurrent_runs_on_one_emulator_and_redis_do_not_see_each_other(tmp
     finally:
         for process in reversed(started):
             stack._stop(process)
+
+
+def test_run_one_timeout_ends_the_scenarios_descendants(tmp_path, monkeypatch):
+    """A scenario that started a worker and then hung: the timeout stops the worker too."""
+    import os
+    import signal
+    import sys as _sys
+    import time as _time
+
+    from testing.pipeline_lab.scenario import stack
+
+    pid_file = tmp_path / 'worker.pid'
+    hang = (
+        'import subprocess, sys, time\n'
+        f'w = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(600)"])\n'
+        f'open({str(pid_file)!r}, "w").write(str(w.pid))\n'
+        'time.sleep(600)\n'
+    )
+    monkeypatch.setattr(stack, 'MODULE', '__lab_hang__')
+    real_popen = stack.subprocess.Popen
+
+    def popen(command, **kwargs):
+        return real_popen([_sys.executable, '-c', hang], **kwargs)
+
+    monkeypatch.setattr(stack.subprocess, 'Popen', popen)
+    out = tmp_path / 'out'
+    out.mkdir()
+    result = stack.run_one(tmp_path / 'x.json', out, {}, timeout=3.0)
+    assert result['outcome'] == 'error' and 'timed out' in result['error']
+    worker = int(pid_file.read_text())
+    deadline = _time.monotonic() + 10
+    while _time.monotonic() < deadline:
+        try:
+            os.kill(worker, 0)
+        except ProcessLookupError:
+            break
+        _time.sleep(0.1)
+    else:
+        os.kill(worker, signal.SIGKILL)
+        raise AssertionError('the scenario worker outlived the timeout')
