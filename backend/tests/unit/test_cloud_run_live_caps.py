@@ -131,6 +131,49 @@ def resolve(
     return result, output.read_text() if output.exists() else ''
 
 
+@pytest.mark.parametrize(
+    'action',
+    [
+        ('deploy-backend-stack', 'sync', '50', 'live-max-scale'),
+        ('deploy-backend-stack', 'integration', '35', 'live-integration-max-scale'),
+    ],
+    indirect=True,
+)
+@pytest.mark.parametrize('authorized', [True, False])
+def test_pinned_cap_never_falls_back_to_live(tmp_path, action, authorized):
+    resolver, service, _ = action
+    policy = tmp_path / 'policy' / 'infra' / 'rollout' / 'release-system'
+    policy.mkdir(parents=True)
+    (policy / 'raise_ci.py').write_text(
+        'import sys\n'
+        'assert sys.argv[-4:] == ["cap", "test-project", "us-central1", '
+        + repr(service)
+        + ']\n'
+        + ('print(45)\n' if authorized else 'raise SystemExit(75)\n')
+    )
+    gcloud = tmp_path / 'gcloud'
+    gcloud.write_text('#!/bin/bash\ntouch "$GITHUB_OUTPUT.gcloud"\nexit 1\n')
+    gcloud.chmod(0o755)
+    output = tmp_path / 'output'
+    env = dict(
+        os.environ,
+        PATH=str(tmp_path) + os.pathsep + os.environ['PATH'],
+        GITHUB_OUTPUT=str(output),
+        POLICY_SHA='a' * 40,
+        R34_POLICY_ROOT=str(tmp_path / 'policy'),
+        CLOUD_RUN_SERVICE=service,
+        CLOUD_RUN_PROJECT='test-project',
+        CLOUD_RUN_REGION='us-central1',
+    )
+    result = subprocess.run(['bash', '-c', resolver['run']], env=env, capture_output=True, text=True)
+    assert result.returncode == (0 if authorized else 75), result.stderr
+    assert not output.with_suffix('.gcloud').exists()
+    if authorized:
+        assert output.read_text() == 'max_scale=45\n'
+    else:
+        assert not output.exists()
+
+
 @pytest.mark.parametrize('cap', ['8', '16', '32', '80'])
 def test_service_cap_takes_precedence_over_stale_revision(tmp_path, action, cap):
     result, output = resolve(tmp_path, action, service_cap=cap, revision_cap='40')
