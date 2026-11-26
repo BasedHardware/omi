@@ -118,6 +118,10 @@ cloud_run:
       # Rollback: set this key to '4' explicitly (the config train only updates
       # declared keys, so deleting it leaves the serving value) and verify.
       BATCH_PIPELINE_PROJECTION_FOLLOWUP_SLOTS: '3'
+      # SCA-3120/SCA-4454 (Compute headroom, David R40 2026-11-26): pace periodic follow-up
+      # discovery to one read per 120 s per process. Targeted wakes are unaffected.
+      # Rollback: set '0' explicitly (the config train only updates declared keys).
+      BATCH_PIPELINE_PROJECTION_FOLLOWUP_DISCOVERY_INTERVAL_SECONDS: '120'
       BATCH_PROJECTION_FINISH_CLASSIFY_PAGE_LIMIT: '16'
       SYNC_TASKS_QUEUE: sync-jobs-fresh
       # C4 (lane 9): enrichment-maintenance targets backend-integration.

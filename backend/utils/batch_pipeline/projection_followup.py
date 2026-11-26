@@ -24,6 +24,7 @@ from database.batch_pipeline_privacy import BatchPrivacyBlocked, matches_live_pr
 from database.batch_privacy_attempt import with_batch_privacy_attempt
 from config.batch_pipeline import (
     projection_followup_backoff_seconds,
+    projection_followup_discovery_interval_seconds,
     projection_followup_claimed_sibling_skip_enabled,
     projection_followup_early_coalesce_enabled,
     projection_followup_page_enabled,
@@ -146,6 +147,8 @@ class ProjectionFollowups:
         # Skipped siblings still finishing when their claimant gave up: re-queue on finish.
         self.sibling_requeue: set[str] = set()
         self.completed_probes: dict[int, dict[ProjectionBinding, FollowupPrivacyProof]] = {}
+        # Monotonic time of this process's last periodic discovery read (pacing only).
+        self.last_discovery: float | None = None
         self.backoff_ceiling = projection_followup_backoff_seconds()
         # Desync needs the keyset cursor: with pagination off every page is the
         # head, so offset, backoff and pass bounds stay off (the legacy path).
@@ -343,6 +346,14 @@ class ProjectionFollowups:
                 return
         if not discover:
             return
+        # Pace only the periodic sweep (SCA-3120). Targeted wakes and queued rows
+        # were handled above; owed rows wait for the next paced discovery.
+        interval = projection_followup_discovery_interval_seconds()
+        now = _monotonic()
+        if interval > 0 and self.last_discovery is not None and now - self.last_discovery < interval:
+            OUTCOMES.labels('discovery_paced').inc()
+            return
+        self.last_discovery = now
         # No await of slow follow-ups. Durable rows are rediscovered after restart.
         segments = await run_blocking(db_executor, self.candidates)
         if self.after in segments:

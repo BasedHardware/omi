@@ -493,3 +493,79 @@ def test_config_matrix_takes_the_bounded_path_or_exactly_the_legacy_path(monkeyp
         assert followups.backoff == {} and followups.wrap_at is None
         if pagination == 'false':
             assert second[0] == 'r000'  # every page is the head, as before
+
+
+INTERVAL_KNOB = 'BATCH_PIPELINE_PROJECTION_FOLLOWUP_DISCOVERY_INTERVAL_SECONDS'
+
+
+@pytest.mark.parametrize(
+    ('raw', 'expected'),
+    [(None, 0.0), ('0', 0.0), ('120', 120.0), ('900', 900.0), ('901', 0.0), ('-1', 0.0), ('x', 0.0), ('nan', 0.0)],
+)
+def test_discovery_interval_knob_parsing(monkeypatch, raw, expected):
+    from config.batch_pipeline import projection_followup_discovery_interval_seconds
+
+    if raw is None:
+        monkeypatch.delenv(INTERVAL_KNOB, raising=False)
+    else:
+        monkeypatch.setenv(INTERVAL_KNOB, raw)
+    assert projection_followup_discovery_interval_seconds() == expected
+
+
+def _paced_runner(monkeypatch, clock_box):
+    followups, _ = runner(backlog(5), monkeypatch)
+    reads = []
+
+    def candidates():
+        reads.append(clock_box[0])
+        return []
+
+    followups.candidates = candidates
+    monkeypatch.setattr(projection_followup, '_monotonic', lambda: clock_box[0])
+    return followups, reads
+
+
+@pytest.mark.asyncio
+async def test_discovery_interval_paces_only_the_periodic_sweep(monkeypatch):
+    monkeypatch.setenv(INTERVAL_KNOB, '120')
+    clock_box = [1000.0]
+    followups, reads = _paced_runner(monkeypatch, clock_box)
+    await followups.schedule()
+    assert reads == [1000.0]
+    clock_box[0] = 1100.0
+    await followups.schedule()  # inside the interval: no discovery read
+    assert reads == [1000.0]
+    clock_box[0] = 1120.0
+    await followups.schedule()
+    assert reads == [1000.0, 1120.0]
+
+
+@pytest.mark.asyncio
+async def test_discovery_interval_never_delays_targeted_wakes(monkeypatch):
+    monkeypatch.setenv(INTERVAL_KNOB, '120')
+    clock_box = [1000.0]
+    followups, reads = _paced_runner(monkeypatch, clock_box)
+    started = []
+
+    async def run(segment):
+        started.append(segment)
+
+    followups.run = AsyncMock(side_effect=run)
+    await followups.schedule()
+    clock_box[0] = 1001.0
+    await followups.schedule(['wake'], discover=False)
+    await followups.schedule(['wake2'])
+    await asyncio.gather(*list(followups.tasks.values()))
+    assert started == ['wake', 'wake2']
+    assert reads == [1000.0]
+
+
+@pytest.mark.asyncio
+async def test_discovery_interval_zero_keeps_every_pass(monkeypatch):
+    monkeypatch.setenv(INTERVAL_KNOB, '0')
+    clock_box = [1000.0]
+    followups, reads = _paced_runner(monkeypatch, clock_box)
+    for step in range(3):
+        clock_box[0] = 1000.0 + step
+        await followups.schedule()
+    assert reads == [1000.0, 1001.0, 1002.0]
