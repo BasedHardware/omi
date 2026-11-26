@@ -858,6 +858,8 @@ def test_projection_partitions_bytes_and_keeps_pending_until_last_batch(
         wrapped = original(body)
 
         def run(tx, *args):
+            if body.__name__ != 'commit':  # lease renewals between batches are transactions too
+                return wrapped(tx, *args)
             if abort_second_batch and len(observations) == 1:
                 raise Aborted('cross-transaction contention')
             result = wrapped(tx, *args)

@@ -6,7 +6,7 @@ from unittest.mock import AsyncMock
 import pytest
 
 from database import conversations_v3 as store, conversations_v3_leases as leases, memories
-from utils.conversations.v3 import Conflict, service, triggers
+from utils.conversations.v3 import Conflict, planner, service, triggers
 from tests.unit.test_conversations_v3_claim_growth import T0, UID, path, strict  # noqa: F401
 from tests.unit.test_conversations_v3_lock_timing import _locked_pair
 from tests.unit.test_conversations_v3_review import AT, MemoryQuery, builder, source  # noqa: F401
@@ -134,7 +134,8 @@ def test_commit_batches_stay_under_the_write_cap(strict, monkeypatch, remove, ex
         wrapped = original(body)
 
         def run(tx, *args):
-            commits.append(len(args[0]))
+            if body.__name__ == 'commit':  # lease renewals between batches are transactions too
+                commits.append(len(args[0]))
             return wrapped(tx, *args)
 
         return run
@@ -902,13 +903,84 @@ def test_rewritable_rows_keep_the_byte_bound_and_locked_rows_use_the_byte_allowa
         store.load('u', firestore_client=MemoryQuery(rows))
 
 
-def test_locked_claimant_matches_the_planners_protected_rows():
-    row = derived('d', AT, 10, ['r'])
-    assert store.locked_claimant(row)
-    assert not store.locked_claimant({**row, 'v3_unlocked': True})
-    assert not store.locked_claimant({**row, 'status': 'in_progress'})
-    assert not store.locked_claimant({**row, 'finished_at': None})
-    assert not store.locked_claimant({**row, 'v3_refined': True, 'v3_claims_transferred_to': 'x'})
+SHAPES = [
+    dict(
+        status=status,
+        unlocked=unlocked,
+        started=started,
+        finished=finished,
+        refined=refined,
+        moved=moved,
+        deleted=deleted,
+    )
+    for status in ('completed', 'processing', 'in_progress')
+    for unlocked in (False, True)
+    for started in (True, False)
+    for finished in (True, False)
+    for refined in (False, True)
+    for moved in (False, True)
+    for deleted in (False, True)
+]
+
+
+def shaped(index, shape):
+    start = AT + timedelta(seconds=30 * index)
+    row = {
+        'id': f'm{index}',
+        'v3_derived': True,
+        'status': shape['status'],
+        'v3_recording_ids': ['r'],
+        'transcript_segments': [{'id': f's{index}', 'text': f'line {index}', 'start': 0.0, 'end': 10.0}],
+    }
+    row.update({'started_at': start} if shape['started'] else {})
+    row.update({'finished_at': start + timedelta(seconds=10)} if shape['finished'] else {})
+    row.update({'v3_unlocked': True} if shape['unlocked'] else {})
+    row.update({'v3_refined': True} if shape['refined'] else {})
+    row.update({'v3_claims_transferred_to': 'elsewhere'} if shape['moved'] else {})
+    row.update({'deleted': True} if shape['deleted'] else {})
+    return row
+
+
+def test_locked_claimant_is_the_planners_protected_predicate():
+    for index, shape in enumerate(SHAPES):
+        row = shaped(index, shape)
+        expected = (
+            not planner.is_unlocked(row)
+            and bool(row.get('started_at'))
+            and bool(row.get('finished_at'))
+            and not (row.get('v3_refined') and row.get('v3_claims_transferred_to'))
+        )
+        assert store.locked_claimant(row) is expected, shape
+
+
+def test_every_row_load_counts_as_locked_is_one_preserve_finished_windows_keeps_fixed():
+    # One recording line per row, held exactly by that row. preserve_finished_windows retains a line to its
+    # owner only when the owner is protected, so the retained ids are its protected set over these shapes.
+    existing, lines, claims = {}, [], []
+    for index, shape in enumerate(SHAPES):
+        row = shaped(index, shape)
+        existing[row['id']] = row
+        start = AT + timedelta(seconds=30 * index)
+        segment = {'id': f's{index}', 'text': f'line {index}', 'start': 30.0 * index, 'end': 30.0 * index + 10}
+        lines.append(
+            {
+                'conversation_id': 'r',
+                'start': start,
+                'end': start + timedelta(seconds=10),
+                'segment': segment,
+                'text': segment['text'],
+            }
+        )
+        claims.append({'conversation_id': row['id'], 'start': start, 'end': start + timedelta(seconds=10)})
+    recordings = {'r': {'id': 'r', 'recording': True, 'started_at': AT, 'claims': claims}}
+    window = {'lines': lines, 'finished': True, 'manual_end': False, 'kind': 'conversation', 'title': ''}
+    kept = planner.preserve_finished_windows([window], existing, recordings)
+    protected = {w['existing_id'] for w in kept if w.get('existing_id')}
+    counted = {cid for cid, row in existing.items() if store.locked_claimant(row)}
+    # Rows without both timestamps hold no line, so they can be neither.
+    assert counted == protected
+    assert any(existing[cid].get('deleted') for cid in counted)  # a locked tombstone is protected and counted
+    assert not any(existing[cid].get('v3_unlocked') for cid in counted)
 
 
 TAG = __import__('hashlib').sha256(b'u').hexdigest()[:12]
@@ -936,8 +1008,14 @@ def test_the_allowance_applies_only_to_listed_owners(monkeypatch, owners, allowe
 
 
 def test_the_allowlist_is_off_by_default(monkeypatch):
+    # Positive sizes, so only the (absent) allowlist can switch the allowance off.
+    monkeypatch.setattr(store, 'LOCKED_DERIVED_ALLOWANCE', 20)
+    monkeypatch.setattr(store, 'LOCKED_DERIVED_BYTES', 1 << 20)
     monkeypatch.delenv('CONVERSATIONS_V3_LOCKED_CLOSURE_OWNERS', raising=False)
+    assert store.locked_closure_owner('u') is False
     assert store._locked_allowance('u') == (0, 0)
+    monkeypatch.setenv('CONVERSATIONS_V3_LOCKED_CLOSURE_OWNERS', '*')
+    assert store._locked_allowance('u') == (20, 1 << 20)
 
 
 @pytest.mark.parametrize('raw, expected', [('0', 0), ('', 2048), ('junk', 2048), ('-3', 2048), ('4096', 4096)])
@@ -975,3 +1053,58 @@ async def test_a_parked_owner_with_a_fragmented_recording_commits_instead_of_par
         with pytest.raises(Conflict, match='v3_derived_budget'):
             await service._load_live_batch('u', 'token', 'v3_derived_budget')
     assert attempted == sizes
+
+
+def heavy_commit(strict, monkeypatch, *, listed, past_bound, cap):
+    """Eight planned rows in three batches (BATCH_MAX_WRITES 5), with or without a closure past the origin bound."""
+    strict.rows[path('r')] = {'id': 'r', 'recording': True, 'v3_pending': True, 'status': 'completed'}
+    for i in range(3):
+        strict.rows[path(f'l{i}')] = derived(f'l{i}', T0, 10, ['r'])
+    token = leases.acquire(UID, 'builder', firestore_client=strict)
+    monkeypatch.setattr(store, 'BATCH_MAX_WRITES', 5)
+    monkeypatch.setattr(store, 'DERIVED_LIMIT', 2 if past_bound else 10)
+    monkeypatch.setattr(store, 'LOCKED_DERIVED_ALLOWANCE', 20)
+    monkeypatch.setattr(store, 'LOCKED_MAX_BATCHES', cap)
+    monkeypatch.setenv('CONVERSATIONS_V3_LOCKED_CLOSURE_OWNERS', '*' if listed else '')
+    events = []
+    real_renew = leases.renew
+    monkeypatch.setattr(leases, 'renew', lambda *a, **kw: events.append('renew') or real_renew(*a, **kw))
+    original = store.firestore.transactional
+
+    def transactional(body):
+        wrapped = original(body)
+
+        def run(tx, *args):
+            if body.__name__ == 'commit':
+                events.append(len(args[0]))
+            return wrapped(tx, *args)
+
+        return run
+
+    monkeypatch.setattr(store.firestore, 'transactional', transactional)
+    rows = [
+        {'id': f'c{i}', 'status': 'processing', 'started_at': T0, 'finished_at': T0, 'v3_recording_ids': ['r']}
+        for i in range(8)
+    ]
+    existing = {f'l{i}': {**strict.rows[path(f'l{i}')], '_v3_revision': 1} for i in range(3)}
+    store.commit_projection(
+        UID, token, {'r': {**strict.rows[path('r')], '_v3_revision': 1}}, existing, rows, [], firestore_client=strict
+    )
+    return events
+
+
+def test_the_lease_is_renewed_before_every_later_batch(strict, monkeypatch):
+    events = heavy_commit(strict, monkeypatch, listed=False, past_bound=False, cap=6)
+    assert events == [3, 'renew', 3, 'renew', 2]
+
+
+def test_a_locked_closure_needing_more_batches_than_the_cap_parks_before_any_write(strict, monkeypatch):
+    with pytest.raises(Conflict, match='v3_derived_budget'):
+        heavy_commit(strict, monkeypatch, listed=True, past_bound=True, cap=2)
+    assert not any(p[3].startswith('c') for p in strict.rows)
+    assert strict.rows[path('r')]['v3_pending'] is True
+
+
+@pytest.mark.parametrize('listed, past_bound', [(False, True), (True, False)])
+def test_the_batch_cap_applies_only_to_a_closure_that_used_the_allowance(strict, monkeypatch, listed, past_bound):
+    assert heavy_commit(strict, monkeypatch, listed=listed, past_bound=past_bound, cap=2) == [3, 'renew', 3, 'renew', 2]

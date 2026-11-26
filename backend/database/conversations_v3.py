@@ -96,11 +96,15 @@ def _env_allowance(name, default):
 # extra room. Rewritable rows keep DERIVED_LIMIT and DERIVED_BYTES.
 # Off by default. Only owners listed in CONVERSATIONS_V3_LOCKED_CLOSURE_OWNERS get the allowance: the
 # list holds comma-separated owner tags (sha256(uid)[:12], the `owner=` tag of the blocked log), or `*`
-# for every owner. A pass that commits such a closure costs about 6.5k to 15k reads (most of them commit
-# revision fences: every batch rereads the whole loaded closure), so the ramp is per owner.
+# for every owner. Every commit batch rereads the whole loaded closure to fence revisions, so a pass costs
+# about (batches x closure) reads: 6.5k to 15k measured. The cost is bounded by the commit itself. A listed
+# owner's closure past the origin bound may need at most LOCKED_MAX_BATCHES batches; otherwise it parks before
+# any transaction, so the pass ceiling is about 30k reads. The bytes allowance stays small (8 MiB) because
+# stored speech is what splits batches (BATCH_ROW_BYTES).
 # An empty list, or either size set to 0, is the kill switch: the origin bound applies to every row.
 LOCKED_DERIVED_ALLOWANCE = _env_allowance('CONVERSATIONS_V3_LOCKED_DERIVED_ALLOWANCE', 2048)
-LOCKED_DERIVED_BYTES = _env_allowance('CONVERSATIONS_V3_LOCKED_DERIVED_BYTES', 32 * 1024 * 1024)
+LOCKED_DERIVED_BYTES = _env_allowance('CONVERSATIONS_V3_LOCKED_DERIVED_BYTES', 8 * 1024 * 1024)
+LOCKED_MAX_BATCHES = _env_int('CONVERSATIONS_V3_LOCKED_MAX_BATCHES', 6)
 CLAIM_READ_CHUNK = 100
 
 
@@ -430,6 +434,15 @@ def _locked_allowance(uid):
     return LOCKED_DERIVED_ALLOWANCE, LOCKED_DERIVED_BYTES
 
 
+def _past_origin_bound(uid, existing):
+    """The closure used the locked-claimant allowance: a listed owner past DERIVED_LIMIT or DERIVED_BYTES."""
+    if _locked_allowance(uid) == (0, 0):
+        return False
+    if len(existing) > DERIVED_LIMIT:
+        return True
+    return sum(_encoded_bytes(row.get('transcript_segments') or []) for row in existing.values()) > DERIVED_BYTES
+
+
 def locked_claimant(row):
     """A row whose boundaries this pass cannot move: the planner's preserve_finished_windows predicate."""
     return bool(
@@ -571,7 +584,7 @@ def load(
 
     missing = set()
     # Follow linked recordings until the closure converges. Each round adds at least one recording and
-    # derived rows stay bounded by DERIVED_LIMIT; a fixed hop depth failed the same owner on every retry.
+    # derived rows stay bounded by the pass row_limit; a fixed hop depth failed the same owner on every retry.
     for _round in range(LIMIT + 1):
         ids = {rid for row in existing.values() for rid in row.get('v3_recording_ids') or []}
         ids.update(
@@ -1292,11 +1305,20 @@ def commit_projection(
         pointers += pointer
     if current or not batches:
         batches.append(current)
+    if key == 'builder' and len(batches) > LOCKED_MAX_BATCHES and _past_origin_bound(uid, existing):
+        # Each batch rereads the whole closure: a locked-claimant closure may not buy an unbounded commit.
+        # Park on the derived budget before any transaction, so nothing is written and pending stays owed.
+        metrics.safe_metric(lambda: logger.info('event=v3_locked_closure_batches batches=%d', len(batches)))
+        raise Conflict('v3_derived_budget')
     if replacing_claimants and len(batches) > 1:
         raise Conflict('backfill_partition_budget')
     for index, batch in enumerate(batches):
         batch_rows, batch_prepared, final = [r for r, _ in batch], [r for _, r in batch], index == len(batches) - 1
         try:
+            if index:
+                # The caller renewed the lease once before the commit. Each later batch renews it again, so a
+                # multi-batch commit cannot outlive the lease after writing a prefix.
+                leases.renew(uid, key, token, firestore_client=client)
             watch.reset()
 
             def execute():

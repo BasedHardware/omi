@@ -213,7 +213,7 @@ def outline_entries(group, every):
     )
 
 
-async def one_pass(client, user, *, outline_every):
+async def one_pass(client, user, *, outline_every, slow_commit=0.0):
     """One reconcile (no inline follow-up pass), with its reads, writes, transactions and phase timings."""
     paths, commits, rollbacks, phases, outline_calls = [], [], [], Counter(), []
     reads_at = {}
@@ -230,6 +230,8 @@ async def one_pass(client, user, *, outline_every):
     def commit(*args, **kwargs):
         request = kwargs.get('request') or {}
         commits.append(bool(request.get('transaction')))
+        if slow_commit and phases['in_commit']:
+            time.sleep(slow_commit)
         return original_commit(*args, **kwargs)
 
     def rollback(*args, **kwargs):
@@ -239,9 +241,11 @@ async def one_pass(client, user, *, outline_every):
     def timed(name, fn):
         def run(*args, **kwargs):
             before, started, rpcs = snapshot_reads(), time.monotonic(), len(commits)
+            phases['in_' + name] += 1
             try:
                 return fn(*args, **kwargs)
             finally:
+                phases['in_' + name] -= 1
                 phases[name] += time.monotonic() - started
                 phases[name + '_transactions'] += len(commits) - rpcs
                 reads_at[name] = reads_at.get(name, 0) + delta_reads(before).reads
@@ -333,6 +337,8 @@ def custody(user, *, recordings):
     claims = {rid: [(c['conversation_id'], c['start'], c['end']) for c in docs[rid]['claims']] for rid in recordings}
     return docs, live, lease, owners, segments, claims
 
+
+SIX_BATCHES = dict(heavy=1300, neighbours=16, per_neighbour=62)  # about 2,280 rows: more batches than measured (5)
 
 SHAPES = {
     # measured closures: 1,994 rows / 17 recordings (most rows), 1,678 / 64 (most sources), ~1,150 / 20 (median)
@@ -430,6 +436,64 @@ async def test_kill_switch_keeps_the_heavy_owner_parked(owner, monkeypatch, swit
     blocked = await one_pass(client, user, outline_every=0)
     _report('rows_1156_sources_20', 'serving_timing', f'kill_switch_{switch}', blocked)
     assert blocked['result'] == 'blocked'
+    lease = user.collection('conversation_v3_leases').document('builder').get().to_dict()
+    assert lease['v3_blocked_reason'] == 'v3_derived_budget'
+    assert user.collection('conversations').document('heavy').get().to_dict()['v3_pending'] is True
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('renewed', [True, False], ids=['renewed_per_batch', 'control_without_renewal'])
+async def test_a_commit_with_more_batches_than_measured_outlives_its_lease_by_renewing(owner, monkeypatch, renewed):
+    """A 6-batch commit takes longer than the lease. Per-batch renewal keeps it, and without renewal the lease is lost.
+
+    The lease is shortened to 5 s at commit, and every commit RPC during the commit is slowed by 1 s.
+    """
+    client, user = owner
+    rows, sources = seed(user, tail=3, eligible=False, **SIX_BATCHES)
+    real_commit, real_renew = store.commit_projection, leases.renew
+
+    def short_lease_commit(uid, token, *args, **kwargs):
+        monkeypatch.setattr(leases, 'LEASE_SECONDS', 5)
+        real_renew(uid, 'builder', token)
+        if not renewed:
+            monkeypatch.setattr(leases, 'renew', lambda *a, **k: None)
+        try:
+            return real_commit(uid, token, *args, **kwargs)
+        finally:
+            monkeypatch.setattr(leases, 'LEASE_SECONDS', 240)
+            monkeypatch.setattr(leases, 'renew', real_renew)
+
+    monkeypatch.setattr(store, 'commit_projection', short_lease_commit)
+    result = await one_pass(client, user, outline_every=0, slow_commit=1.0)
+    _report(
+        'rows_2276_sources_17',
+        'serving_timing',
+        f'six_batches_{"renewed" if renewed else "control"}',
+        {'closure_rows': rows, 'closure_sources': sources, **result},
+    )
+    heavy = user.collection('conversations').document('heavy').get().to_dict()
+    if renewed:
+        assert result['result'] == 'committed'
+        assert result['transactions_commit'] > 5 + 5  # six batches plus a renewal before each later one
+        assert heavy['v3_pending'] is False
+    else:
+        assert result['result'] == 'raced'  # lease_lost after writing a prefix; pending stays owed
+        assert heavy['v3_pending'] is True
+
+
+@pytest.mark.asyncio
+async def test_a_closure_past_the_batch_cap_parks_without_writing(owner, monkeypatch):
+    client, user = owner
+    monkeypatch.setattr(store, 'LOCKED_MAX_BATCHES', 5)
+    rows, sources = seed(user, tail=3, eligible=False, **SIX_BATCHES)
+    result = await one_pass(client, user, outline_every=0)
+    _report(
+        'rows_2276_sources_17',
+        'serving_timing',
+        'batch_cap_5',
+        {'closure_rows': rows, 'closure_sources': sources, **result},
+    )
+    assert result['result'] == 'blocked' and result['writes_conversations'] == 0 and result['transactions_commit'] == 0
     lease = user.collection('conversation_v3_leases').document('builder').get().to_dict()
     assert lease['v3_blocked_reason'] == 'v3_derived_budget'
     assert user.collection('conversations').document('heavy').get().to_dict()['v3_pending'] is True

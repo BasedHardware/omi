@@ -303,6 +303,16 @@ A derived-budget park recorded before paging shipped, with indexed unlocked wind
 `v3_unlocked_paging_attempted` yet, gets one more early attempt that sets it; a new park sets it
 when it is recorded and waits out the usual backoff. See the [bounded pending](../listen_pusher_pipeline/changes/2026-11-26-v3-bounded-pending.md)
 and [bounded unlocked](../listen_pusher_pipeline/changes/2026-11-26-v3-bounded-unlocked.md) change notes.
+A one-seed closure still over the derived budget (one long recording owning hundreds of locked
+one-line windows) parks with `v3_bounded_pending_attempted` already set. To admit it, take its
+`owner=` tag from the `v3 reconcile blocked reason=v3_derived_budget` log line. Add the tag to
+`CONVERSATIONS_V3_LOCKED_CLOSURE_OWNERS` on backend-sync, comma-separated; this is an env change and
+rolls a revision. Then clear the park as below. The next pass loads the locked claimants within
+the allowance and commits in at most `CONVERSATIONS_V3_LOCKED_MAX_BATCHES` batches. A pass costs about
+6.5k to 30k reads, so admit owners one at a time first. Any step expected to exceed 10M reads a day
+needs the Firestore cost owner (SCA-2173). An owner that still parks needs the fragment repair
+(SCA-2918). Remove the tag to undo. See the
+[locked-closure allowance change note](../listen_pusher_pipeline/changes/2026-11-26-v3-locked-closure-allowance.md).
 A new failed bounded pass records `v3_bounded_pending_attempted` (and, with unlocked windows,
 `v3_unlocked_paging_attempted`) on the builder lease and observes the usual backoff. An operator
 clears the park by deleting `v3_blocked_count`, `v3_blocked_reason`, `v3_backoff_until`,
