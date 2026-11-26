@@ -118,7 +118,10 @@ env:
     runtimes: &v3_parity_runtimes [backend, backend-sync, backend-sync-backfill, backend-integration, desktop-backend, pusher, backend-listen]
     equal: true
   - id: v3-kill-switch
-    why: CONVERSATIONS_V3=off stops admission; a writer that disagrees admits owners the others refuse
+    why: >-
+      CONVERSATIONS_V3=off stops admission; a writer that disagrees admits owners the others refuse.
+      Desktop-backend currently reads no v3 environment settings. It is bound for manifest parity
+      because a different value in its config would mislead operators.
     keys: [CONVERSATIONS_V3]
     default: 'on'
     runtimes: *v3_parity_runtimes

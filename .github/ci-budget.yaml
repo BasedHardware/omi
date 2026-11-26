@@ -716,7 +716,7 @@
       "matrix_size": 1,
       "needs": [],
       "owner": "CI maintainers",
-      "rationale": "SCA-2918 adds a one-minute planning allowance for runtime-manifest-only deploy triggers on main. This workflow runs outside the PR budget.",
+      "rationale": "SCA-2918 adds a one-minute planning allowance for shared base, dev overlay, and generated manifest deploy triggers on main. This workflow runs outside the PR budget.",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -4231,7 +4231,7 @@
     "desktop_backend_auto_dev.yml": {
       "name": "Auto Deploy Desktop Backend to Development",
       "owner": "CI maintainers",
-      "rationale": "SCA-2918 redeploys development desktop-backend when its shared runtime manifest or source overlays change on main.",
+      "rationale": "SCA-2918 redeploys development desktop-backend when the shared base, dev overlay, or generated runtime manifest changes on main.",
       "triggers": {
         "push": {
           "branches": [
@@ -4241,7 +4241,8 @@
             "backend/Dockerfile.desktop_backend",
             "backend/**/*.py",
             "backend/deploy/cloud_run_gmp_sidecar.yaml",
-            "backend/deploy/runtime_env/**",
+            "backend/deploy/runtime_env/_base.yaml",
+            "backend/deploy/runtime_env/dev.overlay.yaml",
             "backend/deploy/runtime_env.yaml",
             "backend/pylock.runtime.toml",
             "backend/runtime_images.json",
