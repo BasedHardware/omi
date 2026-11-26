@@ -362,8 +362,10 @@ class ScenarioOps(ProductV3Ops):
         if self.home is not None:  # Home at this instant first, so the snapshot's rows carry on_home
             await asyncio.to_thread(self.home_snapshot, check.at)
         snapshot = await asyncio.to_thread(self.snapshot, uid)
-        result = evaluate(check, snapshot, self.finish_label, self.facts())
-        self.checkpoints[event.check_index or 0] = {'result': result, 'snapshot': snapshot}
+        facts = self.facts()
+        result = evaluate(check, snapshot, self.finish_label, facts)
+        # The facts are kept with the result so the verdict row shows what this instant saw, not the run's end.
+        self.checkpoints[event.check_index or 0] = {'result': result, 'snapshot': snapshot, 'facts': facts}
         return {'outcome': 'ok' if result.ok else 'mismatch', 'conversations': len(snapshot)}
 
     # ---- reading --------------------------------------------------------------------------------
