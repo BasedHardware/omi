@@ -1325,16 +1325,22 @@ class Projector:
             from utils.sync.bridge import finish_sync_bridges
 
             with projection_phase('bridge', policy, unit_key=item.segment_id):
-                canonical = (
-                    receipt['conversation_id']
-                    if binding.record_origin
-                    else finish_sync_bridges(
-                        binding.owner_id,
-                        receipt['conversation_id'],
-                        silent=receipt.get('silent_redrive') is True,
-                        require_python_owner=True,
-                    )
-                )
+                if binding.record_origin:
+                    canonical = receipt['conversation_id']
+                else:
+                    try:
+                        canonical = finish_sync_bridges(
+                            binding.owner_id,
+                            receipt['conversation_id'],
+                            silent=receipt.get('silent_redrive') is True,
+                            require_python_owner=True,
+                        )
+                    except SyncAssignmentSuperseded:
+                        # The assignment already committed; a user-managed anchor
+                        # refuses the pending bridge. Keep this receipt's own row
+                        # and settle normally instead of failing the walk.
+                        canonical = receipt['conversation_id']
+                        logger.debug('event=batch_projection action=bridge outcome=superseded')
             outputs = receipt.get('size_rollover_outputs') or [{'conversation_id': canonical}]
             for output in outputs:
                 output_id = output['conversation_id']
