@@ -77,6 +77,7 @@ def test_readback_keeps_missing_and_late_finishes_in_the_cohort():
         event('binding', 7, finish='a', recording='wrong-rec'),
         event('route', 8, recording='a-rec', route='batch'),
         event('route', 40, recording='a-rec', route='fast'),
+        event('summary', 42, card='a-card'),  # Previous notes on a reused card.
         event('window', 45, recording='a-rec', card='a-card'),
         event('summary', 60, card='a-card'),
         event('summary', 100, card='a-card'),
@@ -105,6 +106,7 @@ def test_readback_keeps_missing_and_late_finishes_in_the_cohort():
         ('held', 'pendant'),
         ('unknown', 'unknown'),
     ]
+    assert result['by_route_source'][0]['p95_seconds'] == 60
     with pytest.raises(ValueError, match='full 60 seconds'):
         readback.readback(events, START, THROUGH - timedelta(microseconds=1))
 

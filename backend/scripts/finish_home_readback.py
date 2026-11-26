@@ -110,7 +110,12 @@ def readback(events, start, through):
         timing_basis[basis if basis in {'client_cut', 'server_cut'} else 'unknown'] += 1
         recording = bindings[finish][1] if finish in bindings else None
         first_ready = min(
-            (ready for _, card in windows.get(recording, ()) for ready in summaries.get(card, ()) if ready >= cut),
+            (
+                ready
+                for linked_at, card in windows.get(recording, ())
+                for ready in summaries.get(card, ())
+                if ready >= max(cut, linked_at)
+            ),
             default=None,
         )
         route_signals = {route for t, route in routes.get(recording, ()) if cut <= t <= (first_ready or through)}
