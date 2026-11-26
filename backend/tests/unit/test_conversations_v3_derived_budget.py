@@ -631,6 +631,54 @@ def test_paged_unlocked_load_closes_claims_and_rotates_past_an_unlocked_preview(
 
 
 @pytest.mark.asyncio
+async def test_seed_lanes_that_overflow_together_each_advance_on_successive_passes(monkeypatch):
+    lease_path = '/users/u/conversation_v3_leases/builder'
+    late = AT + timedelta(hours=6)
+    rows = {
+        lease_path: {'unlocked_ids': ['u']},
+        C + 'u': derived('u', late, 10, ['ru'], v3_unlocked=True),
+        C
+        + 'ru': source(
+            'ru',
+            started_at=late,
+            finished_at=late + timedelta(seconds=10),
+            v3_pending=False,
+            claims=[claim('u', late, 10)],
+        ),
+        C + 'p1': derived('p1', AT, 5, ['rp']),
+        C + 'p2': derived('p2', AT + timedelta(seconds=5), 5, ['rp']),
+        C
+        + 'rp': source(
+            'rp',
+            started_at=AT,
+            finished_at=AT + timedelta(seconds=10),
+            v3_pending_since=AT,
+            claims=[claim('p1', AT, 5), claim('p2', AT + timedelta(seconds=5), 5)],
+        ),
+    }
+    client = MemoryQuery(rows)
+    monkeypatch.setattr(store, 'DERIVED_LIMIT', 2)  # Each lane's closure fits alone; together they overflow.
+
+    async def run_fixture(_, fn, *args, **kwargs):
+        if fn in (store.mark_bounded_attempt, store.clear_terminal_pending, leases.renew):
+            return None
+        return fn(*args, firestore_client=client, **kwargs)
+
+    monkeypatch.setattr(service, 'run_blocking', run_fixture)
+    loaded = []
+    for minute in (0, 1):  # Successive passes lead with alternate lanes.
+        clock = AT.replace(minute=minute)
+        monkeypatch.setattr(
+            service, 'datetime', type('Clock', (datetime,), {'now': staticmethod(lambda tz=None: clock)})
+        )
+        page = store.UnlockedPage()
+        recordings, existing, _, limit = await service._load_live_batch('u', 'token', None, page)
+        loaded.append((set(recordings), set(existing), page.remaining, limit))
+    assert loaded[0] == ({'rp'}, {'p1', 'p2'}, {'u'}, 1)  # The unvisited window stays owed to a later pass.
+    assert loaded[1] == ({'ru'}, {'u'}, frozenset(), 1)
+
+
+@pytest.mark.asyncio
 async def test_unvisited_unlocked_wake_is_independent_of_pending_seeds(monkeypatch):
     calls = []
 

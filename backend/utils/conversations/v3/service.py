@@ -265,20 +265,26 @@ async def _load_live_batch(uid, token, parked, unlocked_page=None):
         sizes = (1,)
     elif parked in budget_reasons or remembered == 8:
         sizes = (8, 1)
-    for size in sizes:
+    attempts: list[dict[str, Any]] = [{'pending_limit': size} if size < 32 else {} for size in sizes]
+    if unlocked_page is not None:
+        # One pending and one unlocked seed can overflow together while each fits alone. Seed one lane at a
+        # time, leading with the other lane on alternate minutes so neither starves the other.
+        lanes = [{'pending_limit': 1, 'unlocked_limit': 0}, {'pending_limit': 0, 'unlocked_limit': 1}]
+        attempts += lanes[::-1] if datetime.now(timezone.utc).minute % 2 else lanes
+    for index, options in enumerate(attempts):
         try:
-            options: dict[str, Any] = {'pending_limit': size} if size < 32 else {}
-            if unlocked_page is not None:
-                options['unlocked_page'] = unlocked_page
-            result = await run_blocking(db_executor, store.load, uid, **options)
+            extra = {'unlocked_page': unlocked_page} if unlocked_page is not None else {}
+            result = await run_blocking(db_executor, store.load, uid, **options, **extra)
         except Conflict as error:
-            if size == sizes[-1] or str(error) not in budget_reasons:
+            if index == len(attempts) - 1 or str(error) not in budget_reasons:
                 raise
             await run_blocking(db_executor, leases.renew, uid, 'builder', token)
         else:
+            size = options.get('pending_limit', 32)
             if size < 32:
-                logger.info('event=v3_bounded_pending pending_limit=%d', size)
-            return (*result, size)
+                lane = f" unlocked_limit={options['unlocked_limit']}" if 'unlocked_limit' in options else ''
+                logger.info('event=v3_bounded_pending pending_limit=%d%s', size, lane)
+            return (*result, max(size, 1))
     raise AssertionError('bounded pending batch sizes are empty')
 
 

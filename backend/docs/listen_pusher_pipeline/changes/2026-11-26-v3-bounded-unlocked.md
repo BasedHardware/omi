@@ -7,6 +7,12 @@ the builder lease rotates selection when an earlier preview stays unlocked.
 The final transaction preserves the indexed IDs outside the loaded closure
 and replaces the visited portion with the planned unlocked windows.
 
+One pending recording and one indexed window can overflow the budgets
+together while each fits alone. After the one-seed attempt, the builder
+seeds one lane at a time, pending only or unlocked only, and leads with the
+other lane on alternate minutes so neither starves. The omitted lane stays
+owed: unvisited indexed IDs are kept and pending markers stay set.
+
 A paged pass schedules a next-minute continuation for the omitted windows
 even when no pending recording or selected group needs a wake. The selected
 groups keep their normal lock deadlines. The continuation is queued before

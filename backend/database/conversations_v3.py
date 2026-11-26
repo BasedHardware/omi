@@ -394,7 +394,7 @@ def _is_discarded_or_deleted(row):
     return row.get('recording') and (row.get('discarded') or row.get('deleted'))
 
 
-def _select_unlocked(state, existing, pending_limit, page):
+def _select_unlocked(state, existing, limit, page):
     ids = sorted(set(state.get('unlocked_ids') or ()) - existing.keys())
     if page is None:
         if len(ids) > DERIVED_LIMIT:
@@ -403,11 +403,17 @@ def _select_unlocked(state, existing, pending_limit, page):
     # Rotate even when a visited preview stays unlocked, so it cannot hide later obligations.
     offset = bisect_right(ids, state.get('v3_unlocked_cursor') or '')
     ordered = ids[offset:] + ids[:offset]
-    return ordered[: min(8, pending_limit, DERIVED_LIMIT)]
+    return ordered[: min(limit, DERIVED_LIMIT)]
 
 
 def load(
-    uid, *, conversation_id=None, pending_limit=32, unlocked_page: UnlockedPage | None = None, firestore_client=None
+    uid,
+    *,
+    conversation_id=None,
+    pending_limit=32,
+    unlocked_page: UnlockedPage | None = None,
+    unlocked_limit=None,
+    firestore_client=None,
 ):
     client = firestore_client or get_firestore_client()
     if account_deletion_blocks_user_work(uid):
@@ -421,7 +427,8 @@ def load(
         ids = (opened or {}).get('v3_recording_ids') or []
         pending = [coll.document(rid).get() for rid in ids]
     else:
-        pending = list(_oldest_pending(coll, pending_limit).stream())
+        # A zero limit seeds only unlocked windows (the bounded retry's one-lane fallback).
+        pending = list(_oldest_pending(coll, pending_limit).stream()) if pending_limit else []
     recordings, unreadable = {}, {}
     for doc in pending:
         row = recording_input(uid, doc, skip_terminal=skip_terminal)
@@ -478,7 +485,8 @@ def load(
             raise Conflict('v3_derived_budget')
 
     if not conversation_id:
-        ordered_unlocked = _select_unlocked(state, existing, pending_limit, unlocked_page)
+        limit = min(8, pending_limit) if unlocked_limit is None else unlocked_limit
+        ordered_unlocked = _select_unlocked(state, existing, limit, unlocked_page)
         for start in range(0, len(ordered_unlocked), CLAIM_READ_CHUNK):
             ids = ordered_unlocked[start : start + CLAIM_READ_CHUNK]
             for snapshot in client.get_all([coll.document(cid) for cid in ids]):
@@ -597,7 +605,8 @@ def load(
         unlocked_page.remaining = frozenset(
             set(state.get('unlocked_ids') or ()) - existing.keys() - set(ordered_unlocked)
         )
-        unlocked_page.cursor = ordered_unlocked[-1] if unlocked_page.remaining else None
+        cursor = ordered_unlocked[-1] if ordered_unlocked else state.get('v3_unlocked_cursor')
+        unlocked_page.cursor = cursor if unlocked_page.remaining else None
     return {**recordings, **unreadable}, existing, cache
 
 
