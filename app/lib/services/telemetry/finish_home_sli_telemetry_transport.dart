@@ -1,3 +1,5 @@
+// Authenticated transport for content-free Finish cut observations.
+// Uses a dedicated local outbox and the fixed beta API authority.
 import 'dart:async';
 import 'dart:io';
 

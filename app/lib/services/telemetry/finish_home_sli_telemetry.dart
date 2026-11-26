@@ -1,3 +1,5 @@
+// Durable, content-free client observations for deliberate TestFlight Finishes.
+// These cuts are persisted before capture drains and retried independently.
 import 'dart:async';
 
 import 'package:omi/services/telemetry/client_telemetry_outbox.dart';
