@@ -14,7 +14,7 @@ from types import SimpleNamespace
 import pytest
 
 from database import conversations_v3 as store
-from utils.conversations.v3 import policy, service
+from utils.conversations.v3 import metrics, policy, service
 from utils.home_feed.projection import reveal_display
 from tests.unit.test_conversations_v3_claim_growth import strict, owners_import, path, UID  # noqa: F401
 
@@ -136,6 +136,58 @@ def timing(monkeypatch, gap, lock):
 
 
 @pytest.mark.asyncio
+async def test_post_commit_latency_metric_failure_keeps_reconcile_successful(strict, monkeypatch):
+    put_recording(strict, speech(8), status='completed', landed=T0)
+    committed_at_observe = []
+
+    def fail_after_commit(*_args):
+        committed_at_observe.append(bool(derived(strict)))
+        raise OSError('metrics unavailable')
+
+    monkeypatch.setattr(metrics.VISIBLE_LATENCY, 'observe', fail_after_commit)
+    outcome = await reconcile_at(strict, monkeypatch, T0 + timedelta(minutes=30))
+
+    assert committed_at_observe == [True]
+    assert derived(strict)
+    assert outcome == 'committed'
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ('reason', 'outcome'),
+    [('source_changed', 'raced'), ('multiple_open_conversations', 'blocked')],
+)
+async def test_conflict_outcome_survives_telemetry_failure_after_projection_commit(
+    strict, monkeypatch, reason, outcome
+):
+    put_recording(strict, speech(8), status='completed', landed=T0)
+    original_commit = service._commit
+
+    def commit_then_conflict(*args, **kwargs):
+        original_commit(*args, **kwargs)
+        assert derived(strict)
+        raise service.Conflict(reason)
+
+    monkeypatch.setattr(service, '_commit', commit_then_conflict)
+
+    def fail_metric(*_args, **_kwargs):
+        raise OSError('metrics unavailable')
+
+    if outcome == 'raced':
+        monkeypatch.setattr(metrics.RECONCILES.labels('raced'), 'inc', fail_metric)
+        monkeypatch.setattr(metrics.RACES.labels(reason), 'inc', fail_metric)
+        monkeypatch.setattr(service.logger, 'info', fail_metric)
+    else:
+        monkeypatch.setattr(metrics.RECONCILES.labels('blocked'), 'inc', fail_metric)
+        monkeypatch.setattr(metrics.BLOCKED.labels(reason), 'inc', fail_metric)
+        monkeypatch.setattr(service.logger, 'warning', fail_metric)
+        monkeypatch.setattr(service.store, 'record_blocked', lambda *_args, **_kwargs: None)
+
+    assert await reconcile_at(strict, monkeypatch, T0 + timedelta(minutes=30)) == outcome
+    assert derived(strict)
+
+
+@pytest.mark.asyncio
 async def test_live_recording_inside_the_lock_delay_keeps_one_open_card(strict, monkeypatch):
     # (a) A ten-minute recording arrives a minute at a time; its latest speech stays inside the lock delay.
     timing(monkeypatch, 900, 900)
@@ -190,6 +242,29 @@ async def test_live_title_is_attempted_once_and_final_outline_wins(strict, monke
     assert not planner_open(row)
     assert row['structured']['title'] == 'Talk'
     assert calls == [UID]
+
+
+@pytest.mark.asyncio
+async def test_live_title_telemetry_failure_after_projection_commit_keeps_successful_result(strict, monkeypatch):
+    timing(monkeypatch, 300, 300)
+    monkeypatch.delenv('CONVERSATIONS_V3_LIVE_TITLE', raising=False)
+    segments = speech(8)
+    now = T0 + timedelta(seconds=segments[-1]['end'] + 1)
+    put_recording(strict, segments, status='in_progress', landed=now)
+
+    def fail_provider(_uid, _segments):
+        assert derived(strict)
+        raise TimeoutError('synthetic title timeout')
+
+    def fail_telemetry(*_args, **_kwargs):
+        raise OSError('telemetry unavailable')
+
+    monkeypatch.setattr(service.models, 'live_title', fail_provider)
+    monkeypatch.setattr(service.logger, 'warning', fail_telemetry)
+    monkeypatch.setattr(service, 'record_fallback', fail_telemetry)
+
+    assert await reconcile_at(strict, monkeypatch, now) == 'committed'
+    assert derived(strict)
 
 
 @pytest.mark.parametrize(

@@ -268,20 +268,32 @@ def _record(writes: Iterable[Any], caller: str) -> None:
         try:
             FIRESTORE_BILLED_WRITES.labels(collection=collection, op=op, database=database).inc(amount)
         except Exception:
-            logger.warning('firestore write probe failed to record', exc_info=True)
+            _warn_record_failure()
         attribution_op = _ATTRIBUTION_OPS.get(op, op)
         try:
             FIRESTORE_BILLED_WRITES_BY_CALLER.labels(collection=collection, op=attribution_op, caller=write_caller).inc(
                 amount
             )
         except Exception:
-            logger.warning('firestore write probe failed to record', exc_info=True)
+            _warn_record_failure()
         try:
             FIRESTORE_BILLED_WRITES_BY_ORIGIN.labels(origin=origin, collection=collection, op=attribution_op).inc(
                 amount
             )
         except Exception:
             pass  # Attribution must never affect a write or the counters above.
+
+
+def _warn_record_failure() -> None:
+    """Keep both counter and warning failures outside the Firestore result path."""
+    try:
+        # Import lazily: v3 metrics imports this probe for its write-count context manager.
+        from utils.conversations.v3.metrics import safe_metric
+
+        safe_metric(lambda: logger.warning('firestore write probe failed to record', exc_info=True))
+    except Exception:
+        # The probe runs after an RPC may have committed, so telemetry imports must fail closed too.
+        pass
 
 
 def _request_writes(request: Any, kwargs: dict[str, Any]) -> list:

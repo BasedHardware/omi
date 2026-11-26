@@ -601,6 +601,45 @@ def test_process_applies_word_floor_to_automatic_windows(
     assert settlements[0]['word_floor_outcomes'] == expected_floor
 
 
+def test_processing_metrics_failure_does_not_skip_settlement(monkeypatch):
+    from types import SimpleNamespace
+    from database import conversations_v3_processing as writers
+    from utils.conversations import process_conversation as process
+
+    row = {
+        'id': 'window',
+        'v3_derived': True,
+        'kind': 'conversation',
+        'created_at': AT,
+        'started_at': AT,
+        'finished_at': AT,
+        'structured': {},
+        'transcript_segments': [{'text': 'speech ' * 40, 'start': 0, 'end': 10, 'is_user': False}],
+    }
+    settlements = []
+    metric_failures = []
+    monkeypatch.setattr(writers, 'begin_processing', lambda *a, **kw: True)
+    monkeypatch.setattr(writers, 'settle_processing', lambda *a, **kw: settlements.append(kw))
+
+    def notes(_uid, _language, _conversation, **kwargs):
+        kwargs['persistence_observer'](True)
+        return SimpleNamespace(status='completed')
+
+    def fail_metric(*_args, **_kwargs):
+        metric_failures.append(True)
+        raise OSError('metrics unavailable')
+
+    monkeypatch.setattr(process, 'process_conversation', notes)
+    monkeypatch.setattr(service.metrics.SUMMARY_WRITES.labels('first'), 'inc', fail_metric)
+    monkeypatch.setattr(service.metrics.SUMMARY_LATENCY, 'observe', fail_metric)
+
+    service._process('u', row, 'token')
+
+    assert len(metric_failures) == 2
+    assert len(settlements) == 1
+    assert settlements[0]['notes'] is True
+
+
 @pytest.mark.asyncio
 @pytest.mark.parametrize('failure', ['transcription', 'outline'])
 async def test_builder_terminal_failure_is_visible_and_retryable(builder, monkeypatch, failure):
