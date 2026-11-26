@@ -221,15 +221,25 @@ and backfill runners.
 The cap budgets `transcript_segments` only. A finished row that predates it, a source recording
 already at 1 MiB, or recording aliases can still fill a document. `CONVERSATIONS_V3_SIZE_QUARANTINE`
 defaults to on. When a live pass that seeded exactly one pending recording and no unlocked window
-parks on `document_too_large`, the builder lease records that seed in `v3_size_quarantine` (at most
-64 ids). The early attempt is re-armed, so the next seed runs on the following wake. Live loads and
-the pass chain skip quarantined ids, which stay `v3_pending` until an operator repairs the
-oversize document and removes the id from the list. Set the switch off on live builders to
-restore head-of-line retries; stored ids are then ignored. `CONVERSATIONS_V3_ALIAS_SLIM` (default
-on) stops recording aliases on derived rows from copying the source file's `legacy_ids`. Alias ids
-are `uuid5(recording:file)`, so those superseded source ids never match an alias, and playback
-resolves the original through `recording_file_id`. Set it off on builder and backfill runners to
-copy them again. See the [size quarantine](../listen_pusher_pipeline/changes/2026-11-26-v3-size-quarantine.md)
+parks on `document_too_large`, the builder lease records **every pending recording that pass loaded**
+in `v3_size_quarantine`, all or nothing, at most 64 ids. That closure follows claimants, sources and
+pieces, so a later seed sharing the oversize document is set aside in the same park instead of being
+seeded into the same rejection. The early attempt is re-armed, so the next seed runs on the following wake.
+- Seeding is the only thing that skips quarantined ids. Closures still load them, so claims are never
+  filtered. The pass chain and the 5-minute sweep don't wake an owner whose only stale pending rows are
+  quarantined.
+- A closure that doesn't fit the list parks with the usual backoff.
+- Quarantined rows stay `v3_pending`, and the lease keeps naming them after the park clears. A recovered
+  owner is not a repaired recording: count owners whose park cleared separately from quarantined ids, and
+  `omi_conversations_v3_reconciles_total{outcome="size_quarantined"}` for parks that set work aside.
+- Repair the oversize document, then remove the ids from the list. Set the switch off on live builders to
+  restore head-of-line retries; stored ids are then ignored.
+
+`CONVERSATIONS_V3_ALIAS_SLIM` (default on) stops recording aliases on derived rows from carrying the
+source file's `legacy_ids`, including aliases a retained row carries forward. Alias ids are
+`uuid5(recording:file)`, so those superseded source ids never match an alias, and playback resolves the
+original through `recording_file_id`. Files a legacy merge copied in (no `recording_id`) keep theirs. Set it
+off on builder and backfill runners to copy them again. See the [size quarantine](../listen_pusher_pipeline/changes/2026-11-26-v3-size-quarantine.md)
 change note.
 
 `CONVERSATIONS_V3_MAX_WINDOW_SECONDS` defaults to 10800 (three hours).

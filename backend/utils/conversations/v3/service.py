@@ -396,17 +396,20 @@ async def _load_live_batch(uid, token, parked, unlocked_page=None):
     raise AssertionError('bounded pending batch sizes are empty')
 
 
-def _size_quarantine_seed(reason, pending_limit, page):
-    """The one pending seed of a pass Firestore rejected for size, when nothing else seeded it (SCA-2918).
+def _size_quarantine(reason, pending_limit, page, recordings):
+    """Every pending recording a one-seed pass loaded when Firestore rejected its commit for size (SCA-2918).
 
     A one-seed park otherwise re-seeds the same oldest recording every backoff and freezes the owner's
-    whole backlog behind it. An unlocked seed could own the oversize document instead, so it disqualifies.
+    whole backlog behind it. Any pending recording in that closure would be seeded into the same rejection
+    (closures are followed through claimants, sources and pieces both ways), so the closure is set aside as
+    a whole. An unlocked seed could own the oversize document instead, so it disqualifies.
     """
     if reason != 'document_too_large' or pending_limit != 1 or page is None or not size_quarantine_enabled():
-        return None
+        return ()
     if page.seeds[1] or len(page.pending_ids) != 1:
-        return None
-    return page.pending_ids[0]
+        return ()
+    (seed,) = page.pending_ids
+    return (seed, *sorted(rid for rid, row in recordings.items() if rid != seed and row.get('v3_pending')))
 
 
 def _lane_without_seed(options, page):
@@ -522,6 +525,7 @@ async def reconcile(
         return 'busy'
     primary_failed = False
     bounded_pending_limit = None
+    recordings: dict[str, dict[str, Any]] = {}
     unlocked_page = None
     unlocked_wake = None
     try:
@@ -1102,7 +1106,7 @@ async def reconcile(
         report['blocked_reason'] = reason
         if not derive:
             # A backfill conflict must not park the owner's live builder.
-            quarantine = _size_quarantine_seed(reason, bounded_pending_limit, unlocked_page)
+            quarantine = _size_quarantine(reason, bounded_pending_limit, unlocked_page, recordings)
             await run_blocking(
                 db_executor,
                 store.record_blocked,
@@ -1617,6 +1621,7 @@ async def sweep():
     client = await run_blocking(db_executor, store.get_firestore_client)
     now = datetime.now(timezone.utc)
     users = set()
+    stale: dict[str, set[str]] = {}
     cursor = None
     while True:
         query = (
@@ -1635,12 +1640,17 @@ async def sweep():
             since = row['v3_pending_since']
             parts = doc.reference.path.split('/')
             if len(parts) == 4 and parts[0] == 'users':
-                users.add(parts[1])
+                stale.setdefault(parts[1], set()).add(parts[3])
                 metrics.PENDING_AGE.observe((now - since).total_seconds())
         if len(rows) < 1000:
             break
         cursor = rows[-1]
-    for uid in users:
+    for uid, ids in stale.items():
+        # Recordings set aside for size stay pending until repaired; they alone must not wake the owner
+        # every sweep (SCA-2918). One lease read per stale owner, against the full stale-pending scan above.
+        if size_quarantine_enabled() and ids <= await run_blocking(db_executor, store.size_quarantined, uid):
+            continue
+        users.add(uid)
         await run_blocking(db_executor, enqueue, uid)
     cursor = None
     while True:

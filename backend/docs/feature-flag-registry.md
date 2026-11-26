@@ -461,7 +461,7 @@ and an explicit empty literal renders as `''`.
 | `CONVERSATIONS_V3_MAX_WINDOW_SECONDS` | Default 10800 seconds; split v3 recorded-speech stretches at the cap. Set 0 or off to disable. | backend | env | open | — | — | — | — | keep | keep | — | Goal: Pipeline |
 | `CONVERSATIONS_V3_RECONCILE_RETRY_RESPONSE` | Default on; return HTTP 409 for exhausted Firestore contention or expiry and fenced v3 reconcile processing races. | backend | env | open | — | — | — | — | keep | keep | — | Goal: Pipeline |
 | `CONVERSATIONS_V3_SETTLE_ON_LANDING` | Default on; allow delayed speech to settle from transcript landing in live v3 stretch cohesion. | backend | env | open | — | — | — | — | keep | keep | — | Goal: Pipeline |
-| `CONVERSATIONS_V3_SIZE_QUARANTINE` | Default on. A one-seed v3 pass Firestore rejects for size sets that pending recording aside so the backlog behind it drains. | backend | env | open | — | — | — | — | keep | keep | — | Goal: Pipeline |
+| `CONVERSATIONS_V3_SIZE_QUARANTINE` | Default on. A one-seed v3 pass Firestore rejects for size sets every pending recording of its closure aside so the rest of the backlog drains. | backend | env | open | — | — | — | — | keep | keep | — | Goal: Pipeline |
 | `CONVERSATIONS_V3_SKIP_UNCHANGED_WRITES` | Default on; skip unchanged conversations v3 projection and repeated pending writes using existing Firestore snapshots. | backend | env | open | — | — | — | — | keep | keep | — | Goal: Margin |
 | `CONVERSATIONS_V3_STRETCH_COHESION` | Default on; normalize outline speaker labels and fold short topics within each hard-bounded v3 stretch | backend | env | open | — | — | — | — | keep | keep | — | v3-rollout coordinator |
 | `CONVERSATIONS_V3_TRANSCRIPT_SIZE_CAP` | Default on; split unpublished v3 windows at a deterministic inline transcript size budget. | backend | env | open | — | — | — | — | keep | keep | — | Goal: Pipeline |
@@ -1341,7 +1341,7 @@ their code default (`fail` tells you which way a missing value resolves).
 - `CONVERSATIONS_V3_RECONCILE_RETRY_RESPONSE` — Default on; return HTTP 409 for exhausted Firestore contention or expiry and fenced v3 reconcile processing races. (fail: open)
 - `CONVERSATIONS_V3_SETTLE_ON_LANDING` — Default on; allow delayed speech to settle from transcript landing in live v3 stretch cohesion. (fail: open)
 - `CONVERSATIONS_V3_SILENCE_GAP_SECONDS` — Default 300 seconds, bounded 120–1800; controls the v3 recorded-speech grouping gap; above 300 it also switches on sit-down cutting (fail: closed)
-- `CONVERSATIONS_V3_SIZE_QUARANTINE` — Default on. A one-seed v3 pass Firestore rejects for size sets that pending recording aside so the backlog behind it drains. (fail: open)
+- `CONVERSATIONS_V3_SIZE_QUARANTINE` — Default on. A one-seed v3 pass Firestore rejects for size sets every pending recording of its closure aside so the rest of the backlog drains. (fail: open)
 - `CONVERSATIONS_V3_SKIP_UNCHANGED_WRITES` — Default on; skip unchanged conversations v3 projection and repeated pending writes using existing Firestore snapshots. (fail: open)
 - `CONVERSATIONS_V3_STRETCH_COHESION` — Default on; normalize outline speaker labels and fold short topics within each hard-bounded v3 stretch (fail: open)
 - `CONVERSATIONS_V3_TASKS_QUEUE` — Optional dedicated named-task queue; defaults to the conversations-v3 queue (fail: closed)

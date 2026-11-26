@@ -260,18 +260,21 @@ def save_outline(uid, token, fingerprint, entries, *, key='builder', preview=Non
 BLOCKED_BACKOFF_MAX = timedelta(hours=1)
 
 
-# Pending recordings a one-seed pass could not commit for size (SCA-2918). Live loads seed past them, so one
-# oversize closure no longer freezes the whole backlog behind it; they stay v3_pending for an operator repair.
+# Pending recordings whose closure a one-seed pass could not commit for size (SCA-2918). Seeding is the only
+# thing that skips them: closures still load them, so claims are never filtered. They stay v3_pending, and the
+# lease keeps naming them after the park clears, until an operator repairs the oversize document.
 SIZE_QUARANTINE_FIELD = 'v3_size_quarantine'
 SIZE_QUARANTINE_MAX = 64
 
 
-def record_blocked(uid, token, reason, *, on_open=False, quarantine=None, firestore_client=None):
+def record_blocked(uid, token, reason, *, on_open=False, quarantine=(), firestore_client=None):
     """Deterministic conflicts back off per owner instead of retrying through the shared queue.
 
     Fenced by the builder token: a stale pass must not park an owner after a successor committed.
-    ``quarantine`` names the one pending seed of a pass Firestore rejected for size: it is set aside (up to
-    SIZE_QUARANTINE_MAX) and the early attempt re-armed, so the next seed runs on the following wake.
+    ``quarantine`` names every pending recording a one-seed pass loaded when Firestore rejected its commit
+    for size: that whole closure is set aside at once (all or nothing, up to SIZE_QUARANTINE_MAX), so a
+    later seed sharing it is never seeded into the same rejection. The early attempt is re-armed so the
+    next seed runs on the following wake. A list too full for the closure parks with the usual backoff.
     """
     client = firestore_client or get_firestore_client()
     ref = leases.lease_ref(client, uid, 'builder')
@@ -297,20 +300,33 @@ def record_blocked(uid, token, reason, *, on_open=False, quarantine=None, firest
             ),
         }
         held = list(row.get(SIZE_QUARANTINE_FIELD) or [])
-        if (
-            quarantine
+        added = [rid for rid in dict.fromkeys(quarantine) if rid not in held]
+        quarantined = bool(
+            added
             and reason == 'document_too_large'
             and size_quarantine_enabled()
-            and quarantine not in held
-            and len(held) < SIZE_QUARANTINE_MAX
-        ):
-            update[SIZE_QUARANTINE_FIELD] = [*held, quarantine]
-            # The backlog behind the set-aside seed is not blocked: let the next seed run without the backoff.
+            and len(held) + len(added) <= SIZE_QUARANTINE_MAX
+        )
+        if quarantined:
+            update[SIZE_QUARANTINE_FIELD] = [*held, *added]
+            # The backlog outside the set-aside closure is not blocked: run the next seed without the backoff.
             update['v3_bounded_pending_attempted'] = False
         tx.update(ref, update)
-        return True
+        return 'quarantined' if quarantined else True
 
-    return run_preloaded_transaction_with_contention_retry(client, park)
+    result = run_preloaded_transaction_with_contention_retry(client, park)
+    if result == 'quarantined':
+        metrics.safe_metric(lambda: metrics.RECONCILES.labels('size_quarantined').inc())
+    return bool(result)
+
+
+def size_quarantined(uid, *, firestore_client=None):
+    """Pending recordings set aside for size on the owner's builder lease (empty with the switch off)."""
+    if not size_quarantine_enabled():
+        return frozenset()
+    client = firestore_client or get_firestore_client()
+    row = leases.lease_ref(client, uid, 'builder').get().to_dict() or {}
+    return frozenset(row.get(SIZE_QUARANTINE_FIELD) or ())
 
 
 BOUNDED_RETRY_REASONS = frozenset({'v3_derived_budget', 'v3_source_closure_budget', 'document_too_large'})

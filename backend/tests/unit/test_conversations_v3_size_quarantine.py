@@ -1,13 +1,16 @@
 """A recording whose closure Firestore rejects for size must not freeze the owner's backlog (SCA-2918)."""
 
-from datetime import timedelta
+from copy import deepcopy
+from datetime import datetime, timedelta, timezone
+from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
 import pytest
 
 from database import conversations_v3 as store, conversations_v3_leases as leases
-from utils.conversations.v3 import Conflict, UnlockedPage, outline, planner, service
+from utils.conversations.v3 import Conflict, UnlockedPage, audio, outline, planner, service
 from tests.unit.test_conversations_v3_claim_growth import UID, strict  # noqa: F401
+from tests.unit.test_conversations_v3_derived_budget import claim, derived
 from tests.unit.test_conversations_v3_review import AT, MemoryQuery, source
 
 C = '/users/u/conversations/'
@@ -24,34 +27,37 @@ def backlog(n=3):
     return rows
 
 
-def test_a_size_park_sets_its_one_seed_aside_and_runs_the_next_seed_without_the_backoff(strict):
+def test_a_size_park_sets_its_closure_aside_and_runs_the_next_seed_without_the_backoff(strict):
     token = leases.acquire(UID, 'builder', firestore_client=strict)
-    assert store.record_blocked(UID, token, 'document_too_large', quarantine='r0', firestore_client=strict)
     held = strict.rows[leases.lease_ref(strict, UID, 'builder').path]
-    assert held[store.SIZE_QUARANTINE_FIELD] == ['r0']
-    # Re-armed early attempt: the backoff does not hold the backlog behind the set-aside seed.
+    assert store.record_blocked(UID, token, 'document_too_large', quarantine=('a', 'b'), firestore_client=strict)
+    assert held[store.SIZE_QUARANTINE_FIELD] == ['a', 'b']
+    # Re-armed early attempt: the backoff does not hold the backlog outside the set-aside closure.
     assert store.backoff_state(UID, firestore_client=strict) == (None, 'document_too_large')
     store.mark_bounded_attempt(UID, token, firestore_client=strict)
     assert store.backoff_state(UID, firestore_client=strict)[0] is not None
-    # The same seed is not listed twice, and a repeat spends the usual backoff.
-    assert store.record_blocked(UID, token, 'document_too_large', quarantine='r0', firestore_client=strict)
-    assert held[store.SIZE_QUARANTINE_FIELD] == ['r0']
+    # Nothing new to set aside: the park spends the usual backoff.
+    assert store.record_blocked(UID, token, 'document_too_large', quarantine=('b',), firestore_client=strict)
+    assert held[store.SIZE_QUARANTINE_FIELD] == ['a', 'b']
     assert store.backoff_state(UID, firestore_client=strict)[0] is not None
+    assert store.size_quarantined(UID, firestore_client=strict) == {'a', 'b'}
 
 
-def test_the_quarantine_is_bounded_and_only_for_size_parks(strict, monkeypatch):
+def test_the_quarantine_is_bounded_all_or_nothing_and_only_for_size_parks(strict, monkeypatch):
     token = leases.acquire(UID, 'builder', firestore_client=strict)
     held = strict.rows[leases.lease_ref(strict, UID, 'builder').path]
-    assert store.record_blocked(UID, token, 'v3_derived_budget', quarantine='r0', firestore_client=strict)
+    assert store.record_blocked(UID, token, 'v3_derived_budget', quarantine=('a',), firestore_client=strict)
     assert store.SIZE_QUARANTINE_FIELD not in held
-    monkeypatch.setattr(store, 'SIZE_QUARANTINE_MAX', 2)
-    for rid in ('r0', 'r1', 'r2'):
-        store.record_blocked(UID, token, 'document_too_large', quarantine=rid, firestore_client=strict)
-    assert held[store.SIZE_QUARANTINE_FIELD] == ['r0', 'r1']
-    assert store.backoff_state(UID, firestore_client=strict)[0] is not None  # A full list backs off as before.
+    monkeypatch.setattr(store, 'SIZE_QUARANTINE_MAX', 3)
+    store.record_blocked(UID, token, 'document_too_large', quarantine=('a', 'b'), firestore_client=strict)
+    # A closure that no longer fits is not split: none of it is set aside and the owner backs off as before.
+    store.record_blocked(UID, token, 'document_too_large', quarantine=('c', 'd'), firestore_client=strict)
+    assert held[store.SIZE_QUARANTINE_FIELD] == ['a', 'b']
+    assert store.backoff_state(UID, firestore_client=strict)[0] is not None
     monkeypatch.setenv('CONVERSATIONS_V3_SIZE_QUARANTINE', 'off')
-    store.record_blocked(UID, token, 'document_too_large', quarantine='r3', firestore_client=strict)
-    assert held[store.SIZE_QUARANTINE_FIELD] == ['r0', 'r1']
+    store.record_blocked(UID, token, 'document_too_large', quarantine=('e',), firestore_client=strict)
+    assert held[store.SIZE_QUARANTINE_FIELD] == ['a', 'b']
+    assert store.size_quarantined(UID, firestore_client=strict) == frozenset()
 
 
 @pytest.mark.parametrize('enabled', [True, False])
@@ -78,31 +84,113 @@ def test_on_open_and_unpaged_loads_ignore_the_quarantine():
 
 @pytest.mark.parametrize(
     'seeded,unlocked,expected',
-    [(('r0',), 0, 'r0'), (('r0',), 1, None), (('r0', 'r1'), 0, None)],
+    [(('r0',), 0, ('r0', 'r1')), (('r0',), 1, ()), (('r0', 'r2'), 0, ())],
 )
-def test_only_a_lone_pending_seed_is_set_aside(seeded, unlocked, expected):
+def test_a_lone_pending_seed_sets_aside_every_pending_source_of_its_closure(seeded, unlocked, expected):
     page = UnlockedPage(seeds=(len(seeded), unlocked), pending_ids=seeded)
-    assert service._size_quarantine_seed('document_too_large', 1, page) == expected
-    assert service._size_quarantine_seed('v3_derived_budget', 1, page) is None
-    assert service._size_quarantine_seed('document_too_large', 8, page) is None
+    recordings = {'r0': {'v3_pending': True}, 'r1': {'v3_pending': True}, 'settled': {'v3_pending': False}}
+    assert service._size_quarantine('document_too_large', 1, page, recordings) == expected
+    assert service._size_quarantine('v3_derived_budget', 1, page, recordings) == ()
+    assert service._size_quarantine('document_too_large', 8, page, recordings) == ()
 
 
-def _pass(monkeypatch, commit):
-    """One live builder pass with a bounded one-seed load of ``r0`` and ``r1`` set aside earlier."""
-    window_rows = backlog(1)
-    recordings = {'r0': {**window_rows[C + 'r0'], '_v3_revision': 1}}
-    parked = []
+class TxMemory(MemoryQuery):
+    """MemoryQuery plus the point-transaction surface record_blocked, mark_bounded_attempt and
+    clear_terminal_pending use, so the real lease state machine runs against the same rows as load."""
+
+    def copy(self, **kw):
+        fields = dict(
+            rows=self.rows,
+            path=self.path,
+            filters=self.filters,
+            orders=self.orders,
+            cap=self.cap,
+            after=self.after,
+            calls=self.calls,
+            projection=self.projection,
+        )
+        return TxMemory(**(fields | kw))
+
+    def get(self, transaction=None):
+        return super().get()
+
+    def update(self, data):
+        self.rows.setdefault(self.path, {}).update(deepcopy(data))
+
+
+class Tx:
+    def update(self, ref, data):
+        ref.update(data)
+
+
+def three_seeds():
+    """``a`` and ``b`` share the oversize claimant ``da``; ``c`` hours later is independent."""
+    now = datetime.now(timezone.utc)
+    rows = {
+        C + 'a': source('a', started_at=AT, claims=[claim('da', AT, 10)], v3_pending_since=AT),
+        C
+        + 'b': source(
+            'b',
+            started_at=AT + timedelta(seconds=20),
+            finished_at=AT + timedelta(seconds=30),
+            claims=[claim('da', AT + timedelta(seconds=20), 10)],
+            v3_pending_since=AT + timedelta(hours=1),
+        ),
+        C + 'da': derived('da', AT, 30, ['a', 'b']),
+        C
+        + 'c': source(
+            'c',
+            started_at=AT + timedelta(hours=6),
+            finished_at=AT + timedelta(hours=6, seconds=10),
+            claims=[claim('dc', AT + timedelta(hours=6), 10)],
+            v3_pending_since=AT + timedelta(hours=2),
+        ),
+        C + 'dc': derived('dc', AT + timedelta(hours=6), 10, ['c']),
+        # The 12 owners' shape: parked on document_too_large, early attempt spent, backoff just over.
+        LEASE: {
+            'token': 'token',
+            'until': now + timedelta(hours=1),
+            'v3_blocked_reason': 'document_too_large',
+            'v3_blocked_count': 10,
+            'v3_backoff_until': now - timedelta(minutes=1),
+            'v3_bounded_pending_attempted': True,
+            'v3_bounded_pending_limit': None,
+        },
+    }
+    return rows
+
+
+@pytest.fixture
+def owner(monkeypatch):
+    rows = three_seeds()
+    client = TxMemory(rows)
+    passes, wakes = [], []
 
     async def blocking(pool, fn, *args, **kwargs):
         return fn(*args, **kwargs)
 
-    def load(*a, unlocked_page=None, **kw):
-        unlocked_page.seeds, unlocked_page.pending_ids = (1, 0), ('r0',)
-        unlocked_page.quarantined = frozenset({'r1'})
-        return recordings, {}, []
+    def commit(uid, token, recordings, existing, planned, cache, **kw):
+        loaded = sorted(recordings)
+        passes.append((loaded, sorted(existing)))
+        if 'da' in existing:
+            # Firestore rejects the oversize claimant row: the transaction writes nothing.
+            raise Conflict('document_too_large')
+        for rid in recordings:
+            rows[C + rid]['v3_pending'] = False
+        # The final batch's lease update (commit_projection) clears the park.
+        rows[LEASE].update(v3_blocked_count=0, v3_backoff_until=None, v3_blocked_reason=None)
+        return set()
 
+    monkeypatch.setattr(store, 'get_firestore_client', lambda: client)
+    monkeypatch.setattr(leases, 'get_firestore_client', lambda: client)
+    monkeypatch.setattr(store.firestore, 'transactional', lambda body: body)
+    monkeypatch.setattr(store, 'run_preloaded_transaction_with_contention_retry', lambda c, fn, *a: fn(Tx(), *a))
+    monkeypatch.setattr(store, 'account_deletion_blocks_user_work', lambda *a: False)
+    monkeypatch.setattr(store, 'account_deletion_document', lambda *a, **kw: client.document('deletion'))
+    monkeypatch.setattr(
+        store, 'decode_row', lambda uid, snap: {**snap.to_dict(), '_v3_revision': 1} if snap.exists else None
+    )
     monkeypatch.setattr(service, 'run_blocking', blocking)
-    monkeypatch.setattr(service.context, 'outline_sources', lambda *a: ({}, [], []))
     monkeypatch.setattr(leases, 'acquire', lambda *a, promote_llm=False: 'token')
     monkeypatch.setattr(leases, 'renew', lambda *a: None)
     monkeypatch.setattr(leases, 'release', lambda *a: None)
@@ -111,59 +199,132 @@ def _pass(monkeypatch, commit):
         'save_outline': lambda *a, **kw: None,
         'adoptable': lambda *a: {},
         'merge_donors_have_tasks': lambda *a, **kw: False,
-        'backoff_state': lambda *a: (None, 'document_too_large'),
-        'clear_terminal_pending': lambda *a: None,
-        'mark_bounded_attempt': lambda *a: None,
-        'load': load,
-        'record_blocked': lambda *a, **kw: parked.append((a, kw)),
     }.items():
         monkeypatch.setattr(store, name, fake)
     monkeypatch.setattr(service, '_commit', commit)
-    monkeypatch.setattr(service, 'enqueue', lambda *a, **kw: None)
+    monkeypatch.setattr(service, 'enqueue', lambda uid, **kw: wakes.append(kw))
     monkeypatch.setattr(service, 'drain_processing', AsyncMock())
+    monkeypatch.setattr(service.visibility, 'hydrate_recognition', lambda *a: None)
+    monkeypatch.setattr(service.context, 'outline_sources', lambda *a: ({}, [], []))
     monkeypatch.setattr(
         service.models,
         'outline',
         lambda uid, prompt: '{"conversations":[{"first_line":1,"title":"A plan","line":"A plan.","kind":"conversation"}]}',
     )
-    return parked
+    return SimpleNamespace(rows=rows, passes=passes, wakes=wakes)
 
 
 @pytest.mark.asyncio
-async def test_a_one_seed_size_rejection_parks_with_that_seed_set_aside(monkeypatch):
-    def commit(*a, **kw):
-        raise Conflict('document_too_large')
+async def test_a_shared_closure_stays_blocked_with_its_claims_while_an_independent_seed_commits(owner):
+    rows = owner.rows
+    before = {cid: deepcopy(rows[C + cid]) for cid in ('a', 'b', 'da')}
 
-    parked = _pass(monkeypatch, commit)
+    # Pass 1 seeds the oldest recording; its closure follows the shared claimant to "b". Both are set aside
+    # in one park, so "b" is never seeded into the same rejection on a later pass.
     assert await service.reconcile('u') == 'blocked'
-    ((args, kwargs),) = parked
-    assert args[2] == 'document_too_large' and kwargs['quarantine'] == 'r0'
+    assert owner.passes == [(['a', 'b'], ['da'])]
+    assert rows[LEASE][store.SIZE_QUARANTINE_FIELD] == ['a', 'b']
+    assert rows[LEASE]['v3_blocked_reason'] == 'document_too_large'
+    assert owner.wakes and owner.wakes[-1].get('wake_key') == 'token'  # The next seed runs on the post-park wake.
+
+    # Pass 2 seeds the independent recording and commits; nothing pulls the set-aside closure back in.
+    assert await service.reconcile('u') == 'committed'
+    assert owner.passes[1] == (['c'], ['dc'])
+    assert rows[C + 'c']['v3_pending'] is False
+
+    # The shared closure is untouched and still pending, and the lease still names it as blocked after the
+    # park cleared: a recovered owner is not a repaired recording.
+    for cid, row in before.items():
+        assert rows[C + cid] == row
+    assert rows[C + 'a']['v3_pending'] is True and rows[C + 'b']['v3_pending'] is True
+    assert rows[LEASE]['v3_blocked_reason'] is None
+    assert rows[LEASE][store.SIZE_QUARANTINE_FIELD] == ['a', 'b']
+    assert len(owner.passes) == 2  # The set-aside rows do not chain another pass.
 
 
 @pytest.mark.asyncio
-async def test_set_aside_recordings_do_not_keep_the_pass_chain_hot(monkeypatch):
-    seen = []
-    _pass(monkeypatch, lambda *a, **kw: set())
-    monkeypatch.setattr(service, 'has_pending', lambda uid, skip=(): seen.append(set(skip)) or bool(set() - set(skip)))
-    assert await service.reconcile('u') == 'committed'
-    assert seen == [{'r1'}]
+@pytest.mark.parametrize('enabled', [True, False])
+async def test_the_sweep_does_not_wake_an_owner_whose_only_stale_work_is_set_aside(owner, monkeypatch, enabled):
+    rows = owner.rows
+    rows[C + 'c']['v3_pending'] = False
+    rows[LEASE][store.SIZE_QUARANTINE_FIELD] = ['a', 'b']
+    monkeypatch.setenv('CONVERSATIONS_V3_SIZE_QUARANTINE', 'on' if enabled else 'off')
+    monkeypatch.setattr(service, 'python_owns_finalization', lambda row: True)
+    assert await service.sweep() == (0 if enabled else 1)
+    assert len(owner.wakes) == (0 if enabled else 1)
+    # Any other stale pending recording still wakes the owner.
+    rows[C + 'c']['v3_pending'] = True
+    owner.wakes.clear()
+    assert await service.sweep() == 1 and len(owner.wakes) == 1
+
+
+@pytest.mark.asyncio
+async def test_a_one_seed_size_rejection_with_an_unlocked_seed_sets_nothing_aside(owner, monkeypatch):
+    rows = owner.rows
+    rows[C + 'da']['v3_unlocked'] = True
+    rows[LEASE]['unlocked_ids'] = ['da']
+    assert await service.reconcile('u') == 'blocked'
+    assert store.SIZE_QUARANTINE_FIELD not in rows[LEASE]
 
 
 def _with_audio(legacy):
     segments = [{'id': '0', 'start': 0, 'end': 1, 'text': 'speech ' * 30}]
-    audio = {'id': 'f', 'duration': 60, 'chunk_timestamps': [AT.timestamp()], 'legacy_ids': legacy}
-    return {'id': 'r', 'started_at': AT, 'transcript_segments': segments, 'audio_files': [audio]}
+    audio_file = {'id': 'f', 'duration': 60, 'chunk_timestamps': [AT.timestamp()], 'legacy_ids': legacy}
+    return {'id': 'r', 'started_at': AT, 'transcript_segments': segments, 'audio_files': [audio_file]}
+
+
+def _window(raw):
+    groups = outline.stretches([raw], AT + timedelta(minutes=10))
+    (window,) = planner.windows(groups, [[{'first_line': 1, 'title': 'Topic', 'line': '', 'kind': 'conversation'}]])
+    return window
 
 
 @pytest.mark.parametrize('enabled', [True, False])
 def test_recording_aliases_leave_out_superseded_source_file_ids(monkeypatch, enabled):
     monkeypatch.setenv('CONVERSATIONS_V3_ALIAS_SLIM', 'on' if enabled else 'off')
     raw = _with_audio(['old-%d' % i for i in range(128)])
-    groups = outline.stretches([raw], AT + timedelta(minutes=10))
-    entry = {'first_line': 1, 'title': 'Topic', 'line': '', 'kind': 'conversation'}
-    (window,) = planner.windows(groups, [[entry]])
-    (alias,) = planner.build('synthetic', window, {'r': raw})['audio_files']
+    (alias,) = planner.build('synthetic', _window(raw), {'r': raw})['audio_files']
     assert alias['recording_id'] == 'r' and alias['recording_file_id'] == 'f'
     assert alias['chunk_timestamps'] == [AT.timestamp()]  # Playback and the model still read these.
     assert ('legacy_ids' in alias) is not enabled
     assert raw['audio_files'][0]['legacy_ids']  # The source recording keeps its own aliases.
+
+
+def test_a_retained_rows_carried_aliases_are_slimmed_and_still_resolve(monkeypatch):
+    raw = _with_audio(['old'])
+    first = planner.build('synthetic', _window(raw), {'r': raw})
+    # The prior row carries an alias from an earlier source this pass does not regenerate, plus a file a
+    # legacy merge copied in (no recording alias): only the alias loses its superseded ids.
+    carried = {
+        'id': 'carried',
+        'recording_id': 'earlier',
+        'recording_file_id': 'e',
+        'duration': 60,
+        'chunk_timestamps': [AT.timestamp()],
+        'legacy_ids': ['older'],
+    }
+    merged = {'id': 'merged', 'duration': 60, 'chunk_timestamps': [AT.timestamp()], 'legacy_ids': ['y']}
+    prior = {
+        **first,
+        'status': 'completed',
+        'tile_state': 'done',
+        'audio_files': [*first['audio_files'], carried, merged],
+    }
+    assert not planner.is_unlocked(prior)
+    row = planner.build('synthetic', _window(raw), {'r': raw}, prior)
+    files = {af['id']: af for af in row['audio_files']}
+    assert 'legacy_ids' not in files['carried'] and files['carried']['recording_file_id'] == 'e'
+    assert files['merged']['legacy_ids'] == ['y']
+    assert all('legacy_ids' not in af for af in row['audio_files'] if af.get('recording_id'))
+
+    # Playback and download resolve a slimmed alias to the source recording's original file.
+    (alias,) = [af for af in row['audio_files'] if af.get('recording_id') == 'r']
+    original = raw['audio_files'][0]
+    recording = {**raw, 'recording': True, 'claims': [{'conversation_id': row['id'], 'start': AT, 'end': AT}]}
+    stored = {row['id']: {**row, 'id': row['id']}, 'r': recording}
+    monkeypatch.setattr(audio.conversations_db, 'get_conversation', lambda uid, cid: deepcopy(stored.get(cid)))
+    rid, resolved, source_row = audio.resolve('synthetic', {'id': row['id']}, alias)
+    assert rid == 'r' and resolved == original and resolved['legacy_ids'] == ['old']
+    parts = audio.playback_snapshot('synthetic', {'id': row['id']})['_v3_playback_parts']
+    resolved_parts = [part for part in parts if part.get('recording_id') == 'r']
+    assert resolved_parts and all(part['source'] == original for part in resolved_parts)
