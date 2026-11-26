@@ -6140,7 +6140,7 @@ environments:
             CONVERSATION_PARKED_TERMINAL_STATUS_ENABLED: {value: 'off', category: rollout}
             BATCH_PIPELINE_SERVING_SWEEP_PAGE_ROWS: {value: '200', category: rollout}
             BATCH_PIPELINE_SERVING_TICK_SECONDS: {value: '10', category: rollout}
-            BATCH_PIPELINE_PROJECTION_FOLLOWUP_SLOTS: {value: '3', category: rollout}
+            BATCH_PIPELINE_PROJECTION_FOLLOWUP_SLOTS: {value: '4', category: rollout}
             BATCH_PROJECTION_FINISH_CLASSIFY_PAGE_LIMIT: {value: '16', category: rollout}
             BATCH_PIPELINE_FOLLOWUP_CLAIMED_SIBLING_SKIP_ENABLED:
               value: 'false'
@@ -6656,7 +6656,7 @@ environments:
             CONVERSATION_PARKED_TERMINAL_STATUS_ENABLED: {value: 'off', category: rollout}
             BATCH_PIPELINE_SERVING_SWEEP_PAGE_ROWS: {value: '200', category: rollout}
             BATCH_PIPELINE_SERVING_TICK_SECONDS: {value: '10', category: rollout}
-            BATCH_PIPELINE_PROJECTION_FOLLOWUP_SLOTS: {value: '3', category: rollout}
+            BATCH_PIPELINE_PROJECTION_FOLLOWUP_SLOTS: {value: '4', category: rollout}
             BATCH_PROJECTION_FINISH_CLASSIFY_PAGE_LIMIT: {value: '16', category: rollout}
             BATCH_PIPELINE_FOLLOWUP_CLAIMED_SIBLING_SKIP_ENABLED:
               value: 'false'
