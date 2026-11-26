@@ -523,7 +523,7 @@ def test_true_vad_silence_replaces_unprotected_provisional_speech(lane, monkeypa
     assert row['record_projection_revision'] == 1 and not row['transcript_segments']
     assert empty_transcription.terminal(row)
     assert row['finalization_status'] == 'completed'
-    assert not row.get('summary_due_at')
+    assert 'summary_projection_finalization' not in row
     assert finalizer.get().to_dict() == finalizer_receipt
 
 

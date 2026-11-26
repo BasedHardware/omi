@@ -154,6 +154,33 @@ def test_core_does_not_mutate_inputs_or_run_hooks(store, monkeypatch):
     assert db.claim_conversation_status_in_txn(current, expected_status='merging', claimed_status='completed') is None
 
 
+@pytest.mark.parametrize(
+    'current_status,updates,expected',
+    [
+        ('queued', {}, 'completed'),
+        ('leased', {}, 'completed'),
+        ('dead_letter', {}, None),
+        ('blocked_byok', {}, None),
+        ('queued', {'discarded': False}, None),
+        ('queued', {'finalization_revision': 3}, None),
+    ],
+)
+def test_discard_settles_only_its_queued_finalization_projection(store, current_status, updates, expected):
+    current = {
+        **store.rows[PATH],
+        'discarded': True,
+        'finalization_job_id': 'bound-job',
+        'finalization_revision': 2,
+        'finalization_status': current_status,
+    }
+    patch = db.claim_conversation_status_in_txn(
+        current, expected_status='processing', claimed_status='completed', extra_updates=updates, allow_discarded=True
+    )
+    assert patch is not None
+    assert patch.get('finalization_status') == expected
+    assert current['finalization_status'] == current_status
+
+
 @pytest.mark.parametrize('family', sorted(db.TERMINAL_FAILURE_FAMILIES) + [None])
 @pytest.mark.parametrize('status', ['processing', 'completed', 'failed'])
 def test_late_persist_keeps_failure_and_merges_content(store, family, status):
