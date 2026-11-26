@@ -26,6 +26,11 @@
   "seed_review_by": "2026-11-15",
   "budget": 159,
   "names": {
+    "ENRICHMENT_AGE_GATE_UNPARK_ENABLED": {
+      "owner": "refactor-lead",
+      "review_by": "2026-12-10",
+      "registry": "config/feature-flags.yaml"
+    },
     "BATCH_ACCOUNT_PRIVACY_WRITER_ENABLED": {
       "owner": "batch-custody / lead2",
       "review_by": "2026-12-16",

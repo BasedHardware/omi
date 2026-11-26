@@ -1454,6 +1454,7 @@ def commit_v3_projection(
     retire=None,
     key='builder',
     bounded_pending_limit=None,
+    unlocked_page=None,
 ):
     """The lifecycle owner delegates the atomic derived-row/claim transaction."""
     from database import conversations_v3
@@ -1471,4 +1472,5 @@ def commit_v3_projection(
         retire=retire,
         key=key,
         **({'bounded_pending_limit': bounded_pending_limit} if bounded_pending_limit is not None else {}),
+        **({'unlocked_page': unlocked_page} if unlocked_page is not None else {}),
     )

@@ -139,6 +139,7 @@ class StrictFirestoreDocument:
                     'finalization_engine',
                     'finalization_owner_epoch',
                 ],
+                ['created_at', 'summary_blocked_reason'],
                 ["is_locked"],
                 ["folder_id"],
                 ["language"],

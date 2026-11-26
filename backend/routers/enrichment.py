@@ -23,11 +23,12 @@ from utils.enrichment import outbox as reprocess
 from fastapi.responses import JSONResponse
 
 from config import enrichment as enrichment_config
+from database.firestore_transaction_retry import transaction_retry_deadline_scope
 from utils.enrichment import fresh_demotion
 from utils.executors import db_executor, postprocess_executor, run_blocking
 from utils.observability.reasons import RetryReason
 from utils.workers.consumer import http_response, run_push
-from utils.workers.retry import retry_response
+from utils.workers.retry import firestore_retry_reason, retry_response
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -137,7 +138,21 @@ async def run_enrichment_task(request: Request, _retry_count: int = Depends(veri
     task = _task(payload)
     if payload is None or task is None:
         return JSONResponse(status_code=400, content={'status': 'invalid_enrichment_task'})
-    if payload['kind'] == 'batch_final_pass':
+    budget = _delivery_budget()
+    try:
+        if budget > 0:
+            with transaction_retry_deadline_scope(time.monotonic() + budget):
+                return await _deliver_task(request, payload['kind'], task, budget)
+        return await _deliver_task(request, payload['kind'], task, budget)
+    except Exception as error:
+        reason = firestore_retry_reason(error)
+        if reason is None:
+            raise
+        return retry_response(reason)
+
+
+async def _deliver_task(request: Request, kind: str, task: tuple[str, str], budget: float) -> JSONResponse:
+    if kind == 'batch_final_pass':
         from utils.conversations.final_pass_retry import consume as consume_speaker_pass
 
         return JSONResponse(
@@ -172,7 +187,6 @@ async def run_enrichment_task(request: Request, _retry_count: int = Depends(veri
             if not transient_dependency(error):
                 raise
             return retry_response(RetryReason.DEPENDENCY_WARMING)
-    budget = _delivery_budget()
     if budget <= 0:  # Kill switch: 0 restores the middleware-only cut.
         return http_response(await run_blocking(postprocess_executor, consume, *task, time.monotonic()))
     abandoned = threading.Event()
@@ -291,10 +305,10 @@ async def enrichment_response(payload: dict):
             # The leased outbox and task watchdog retain custody after this ACK.
             return JSONResponse(status_code=200, content={'status': status})
         return JSONResponse(status_code=200, content={'status': status})
-    except (ValueError, TypeError):
-        return JSONResponse(status_code=400, content={'status': 'invalid_enrichment_task'})
     except Exception as error:
-        reason = expected_retry_reason(error)
+        reason = firestore_retry_reason(error) or expected_retry_reason(error)
+        if reason is None and isinstance(error, (ValueError, TypeError)):
+            return JSONResponse(status_code=400, content={'status': 'invalid_enrichment_task'})
         if reason is None:
             ENRICHMENT_RETRIES.labels('unexpected').inc()
             logger.error(

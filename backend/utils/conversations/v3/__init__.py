@@ -2,6 +2,7 @@
 
 from contextlib import contextmanager
 from contextvars import ContextVar
+from dataclasses import dataclass
 from datetime import datetime
 from typing import Iterator, Mapping
 
@@ -27,6 +28,13 @@ def request_log_trace_id() -> str:
 
 class Conflict(RuntimeError):
     """Retryable v3 ownership and source-revision conflicts."""
+
+
+@dataclass
+class UnlockedPage:
+    remaining: frozenset[str] = frozenset()
+    cursor: str | None = None
+    seeds: tuple[int, int] = (0, 0)  # (pending, unlocked) seeds this load read
 
 
 def preview_wakes(rows, recordings) -> dict[str, datetime]:

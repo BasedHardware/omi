@@ -32,7 +32,7 @@ from pathlib import Path
 import sys
 import time
 import traceback
-from typing import Any, Optional, Sequence
+from typing import Any, Mapping, Optional, Sequence
 
 from testing.pipeline_lab.scenario import budget as budgets
 from testing.pipeline_lab.scenario.checks import OUTCOMES, evaluate, outcome
@@ -55,8 +55,11 @@ def product_runtime_env() -> Path:
     return RUNTIME_ENV
 
 
-def scenario_overlay(scenario: Scenario, runtime_env: Path = RUNTIME_ENV) -> Any:
-    """Production's backend-sync profile at this checkout, then fast finish per the scenario, then its env."""
+def scenario_overlay(
+    scenario: Scenario, runtime_env: Path = RUNTIME_ENV, arm: Optional[Mapping[str, Any]] = None
+) -> Any:
+    """Production's backend-sync profile at this checkout, then fast finish per the scenario, then its env, then
+    a ``scenario compare`` arm's overlay (``--arm-overlay``: its env, serving, gates and model_config win)."""
     from testing.pipeline_lab.stack.overlay import Overlay
     from testing.pipeline_lab.stack.runtime_env import overlay_from_runtime_env
     from testing.pipeline_lab.v3.run import lab_overlay
@@ -67,6 +70,13 @@ def scenario_overlay(scenario: Scenario, runtime_env: Path = RUNTIME_ENV) -> Any
         env[FAST_FINISH_ENV] = 'on' if scenario.finish.fast_finish else 'off'
     env.update(scenario.env)
     payload = {**payload, 'env': env, 'name': f'scenario:{scenario.name}'}
+    if arm:
+        extra = Overlay.from_mapping(arm)
+        payload['env'] = {**env, **extra.env}
+        for key in ('serving', 'gates', 'model_config'):
+            payload[key] = {**(payload.get(key) or {}), **getattr(extra, key)}
+        payload['strict'] = bool(payload.get('strict')) or extra.strict
+        payload['name'] = f'scenario:{scenario.name}+{extra.name or "arm"}'
     return lab_overlay(Overlay.from_mapping(payload))
 
 
@@ -153,6 +163,7 @@ async def run_scenario(
     audio: Optional[dict] = None,
     trace_calls: bool = False,
     llm_requests: Optional[Any] = None,
+    arm_overlay: Optional[Mapping[str, Any]] = None,
 ) -> dict[str, Any]:
     from testing.pipeline_lab.chain.barrier import ExecutorBarrier
     from testing.pipeline_lab.chain.driver import ProductFinalizer
@@ -180,11 +191,13 @@ async def run_scenario(
     timings: dict[str, float] = {}
     mark = time.perf_counter()
     result: dict[str, Any] = {'scenario': scenario.name, 'timings': timings}
+    if arm_overlay:
+        result['arm_overlay'] = str(arm_overlay.get('name') or 'arm')
     embedder = FakeEmbedder(3072)
     index = NumericVectorIndex(dimension=embedder.dimension)
     with lab_environment(
         config,
-        scenario_overlay(scenario, product_runtime_env()),
+        scenario_overlay(scenario, product_runtime_env(), arm_overlay),
         run_dir=out_dir,
         preimport=PRODUCT_MODULES + V3_MODULES + SCENARIO_MODULES + HOME_MODULES,
     ) as env, ExitStack() as stack:
@@ -307,7 +320,7 @@ async def run_scenario(
         ],
         conversations=final,
         checkpoints={
-            str(i): {'t': scenario.checks[i].at, 'conversations': seen['snapshot']}
+            str(i): {'t': scenario.checks[i].at, 'conversations': seen['snapshot'], 'facts': seen.get('facts')}
             for i, seen in sorted(ops.checkpoints.items())
         },
         recordings=recordings,
@@ -347,6 +360,9 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     parser.add_argument('--stt', choices=('replay', 'record-vendor', 'record-local'), default='replay')
     parser.add_argument('--stt-budget-usd', type=float, default=None)
     parser.add_argument('--trace-calls', action='store_true', help='write called_files.json (scenario/reach.py)')
+    parser.add_argument(
+        '--arm-overlay', help='a `scenario compare` arm: lab overlay JSON applied on top of the scenario env'
+    )
     args = parser.parse_args(argv)
     host = os.environ.get('FIRESTORE_EMULATOR_HOST', '')
     if not host.startswith(('127.0.0.1:', 'localhost:')):
@@ -378,6 +394,7 @@ def _run_main(args: argparse.Namespace, out: Path, started: float) -> int:
 
     try:
         scenario = load_scenario(args.file)
+        arm_overlay = json.loads(Path(args.arm_overlay).read_text()) if args.arm_overlay else None
         # Before the lab environment: recording on a miss may need the ambient env and network.
         audio = prepare(scenario, mode=args.stt, budget_usd=args.stt_budget_usd)
         from testing.pipeline_lab.llm_proxy.fake_upstream import FakeUpstream
@@ -393,6 +410,7 @@ def _run_main(args: argparse.Namespace, out: Path, started: float) -> int:
                     audio=audio,
                     trace_calls=args.trace_calls,
                     llm_requests=lambda: list(upstream.requests),
+                    arm_overlay=arm_overlay,
                 )
             )
         finally:
