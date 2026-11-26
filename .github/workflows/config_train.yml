@@ -116,6 +116,41 @@ jobs:
           python3 -m pip install -q PyYAML==6.0.1
           python3 backend/scripts/ops_train.py validate
 
+      - name: Check the Release resource policy pin
+        if: github.event.inputs.environment == 'prod' && vars.OMI_RESOURCE_RAISE_POLICY_SHA != ''
+        shell: bash
+        env:
+          POLICY_SHA: ${{ vars.OMI_RESOURCE_RAISE_POLICY_SHA }}
+          POLICY_TOKEN: ${{ secrets.OMI_RESOURCE_RAISE_POLICY_READ_TOKEN }}
+          POLICY_REPO: ${{ vars.OMI_RESOURCE_RAISE_POLICY_REPO }}
+        run: |
+          set -euo pipefail
+          [[ "$POLICY_SHA" =~ ^[0-9a-f]{40}$ && -n "$POLICY_TOKEN" ]]
+          [[ "$POLICY_REPO" =~ ^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$ ]]
+
+      - name: Checkout the pinned Release resource policy
+        if: github.event.inputs.environment == 'prod' && vars.OMI_RESOURCE_RAISE_POLICY_SHA != ''
+        uses: actions/checkout@v7
+        with:
+          repository: ${{ vars.OMI_RESOURCE_RAISE_POLICY_REPO }}
+          ref: ${{ vars.OMI_RESOURCE_RAISE_POLICY_SHA }}
+          token: ${{ secrets.OMI_RESOURCE_RAISE_POLICY_READ_TOKEN }}
+          persist-credentials: false
+          path: .release-resource-policy
+          sparse-checkout: infra/rollout/release-system
+
+      - name: Admit production ops capacity declarations
+        if: github.event.inputs.environment == 'prod' && vars.OMI_RESOURCE_RAISE_POLICY_SHA != ''
+        shell: bash
+        env:
+          POLICY_SHA: ${{ vars.OMI_RESOURCE_RAISE_POLICY_SHA }}
+        run: |
+          set -euo pipefail
+          policy="$GITHUB_WORKSPACE/.release-resource-policy"
+          [[ "$(git -C "$policy" rev-parse HEAD)" == "$POLICY_SHA" ]]
+          python3 "$policy/infra/rollout/release-system/raise_ci.py" --repo "$policy" --sha "$POLICY_SHA" \
+            config "backend/deploy/ops/prod.yaml"
+
       - name: Google Auth (prod WIF)
         if: github.event.inputs.environment == 'prod'
         uses: google-github-actions/auth@v3
@@ -153,8 +188,14 @@ jobs:
         shell: bash
         env:
           REVISION_SUFFIX: ${{ steps.source.outputs.suffix }}
+          POLICY_SHA: ${{ vars.OMI_RESOURCE_RAISE_POLICY_SHA }}
         run: |
           set -euo pipefail
+          if [[ "$OPS_ENV" == prod && -n "$POLICY_SHA" ]]; then
+            policy="$GITHUB_WORKSPACE/.release-resource-policy"
+            python3 "$policy/infra/rollout/release-system/raise_ci.py" --repo "$policy" --sha "$POLICY_SHA" \
+              config "backend/deploy/ops/prod.yaml"
+          fi
           python3 backend/scripts/ops_train.py apply --env "$OPS_ENV" \
             --revision-suffix "$REVISION_SUFFIX" --report artifacts/config-train-apply.json
           echo "- applied and verified (revision suffix \`$REVISION_SUFFIX\`)" >> "$GITHUB_STEP_SUMMARY"

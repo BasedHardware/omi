@@ -1351,6 +1351,9 @@ jobs:
           LADDER_V1_ARCHITECT_MONTH_PRICE_ID: ${{ vars.LADDER_V1_ARCHITECT_MONTH_PRICE_ID }}
           LADDER_V1_ARCHITECT_YEAR_PRICE_ID: ${{ vars.LADDER_V1_ARCHITECT_YEAR_PRICE_ID }}
         with:
+          resource_raise_policy_repo: ${{ vars.OMI_RESOURCE_RAISE_POLICY_REPO }}
+          resource_raise_policy_sha: ${{ vars.OMI_RESOURCE_RAISE_POLICY_SHA }}
+          resource_raise_policy_token: ${{ secrets.OMI_RESOURCE_RAISE_POLICY_READ_TOKEN }}
           deploy_profile: manual
           # SCA-2283 captain ruling 01a1dca2: finite exact-source path only.
           integration_canary: ${{ github.event.inputs.environment == 'prod' && (needs.validate-production-boundary.outputs.integration_only == 'true' || needs.firestore_readiness.outputs.admitted_sha == '0714c5198be8f0183c8fd7dd3810d53c91af17a4') && 'true' || 'false' }}

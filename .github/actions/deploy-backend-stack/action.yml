@@ -4,6 +4,18 @@ description: >-
   surfaces, and shared release-vector evidence for manual and auto-dev deploys.
 
 inputs:
+  resource_raise_policy_repo:
+    description: 'Release-controlled policy repository'
+    required: false
+    default: ''
+  resource_raise_policy_sha:
+    description: 'Release-approved immutable omi-workspace R34 policy commit'
+    required: false
+    default: ''
+  resource_raise_policy_token:
+    description: 'Read-only credential for the private R34 policy repository'
+    required: false
+    default: ''
   rollback_revision:
     description: 'Exact admitted predecessor for a named deploy or integration canary'
     required: false
@@ -399,6 +411,41 @@ runs:
     - name: Install Python deps for deploy scripts
       shell: bash
       run: python3 -m pip install -q pyyaml
+
+    - name: Check the Release resource policy pin
+      if: ${{ inputs.runtime_env == 'prod' && inputs.resource_raise_policy_sha != '' }}
+      shell: bash
+      env:
+        POLICY_SHA: ${{ inputs.resource_raise_policy_sha }}
+        POLICY_TOKEN: ${{ inputs.resource_raise_policy_token }}
+        POLICY_REPO: ${{ inputs.resource_raise_policy_repo }}
+      run: |
+        set -euo pipefail
+        [[ "$POLICY_SHA" =~ ^[0-9a-f]{40}$ && -n "$POLICY_TOKEN" ]]
+        [[ "$POLICY_REPO" =~ ^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$ ]]
+
+    - name: Checkout the pinned Release resource policy
+      if: ${{ inputs.runtime_env == 'prod' && inputs.resource_raise_policy_sha != '' }}
+      uses: actions/checkout@v7
+      with:
+        repository: ${{ inputs.resource_raise_policy_repo }}
+        ref: ${{ inputs.resource_raise_policy_sha }}
+        token: ${{ inputs.resource_raise_policy_token }}
+        persist-credentials: false
+        path: .release-resource-policy
+        sparse-checkout: infra/rollout/release-system
+
+    - name: Admit production ops capacity declarations
+      if: ${{ inputs.runtime_env == 'prod' && inputs.resource_raise_policy_sha != '' }}
+      shell: bash
+      env:
+        POLICY_SHA: ${{ inputs.resource_raise_policy_sha }}
+      run: |
+        set -euo pipefail
+        policy="$GITHUB_WORKSPACE/.release-resource-policy"
+        [[ "$(git -C "$policy" rev-parse HEAD)" == "$POLICY_SHA" ]]
+        python3 "$policy/infra/rollout/release-system/raise_ci.py" --repo "$policy" --sha "$POLICY_SHA" \
+          config "$DEPLOY_CONTROL_SCRIPTS/../deploy/ops/prod.yaml"
 
     - name: Resolve production backend memory
       if: ${{ inputs.runtime_env == 'prod' && inputs.integration_only != 'true' && (inputs.cloud_run_service == 'all' || inputs.cloud_run_service == 'backend' || inputs.cloud_run_service == 'backend-sync') }}
@@ -1055,12 +1102,20 @@ runs:
       id: live-max-scale
       shell: bash
       env:
+        POLICY_SHA: ${{ inputs.runtime_env == 'prod' && inputs.resource_raise_policy_sha || '' }}
         CLOUD_RUN_SERVICE: ${{ inputs.service }}-sync
         CLOUD_RUN_PROJECT: ${{ inputs.project_id }}
         CLOUD_RUN_REGION: ${{ inputs.region }}
         DEFAULT_MAX_SCALE: '50'
       run: |
         set -euo pipefail
+        if [[ -n "$POLICY_SHA" ]]; then
+          policy="$GITHUB_WORKSPACE/.release-resource-policy"
+          MAX_SCALE="$(python3 "$policy/infra/rollout/release-system/raise_ci.py" --repo "$policy" --sha "$POLICY_SHA" \
+            cap "$CLOUD_RUN_PROJECT" "$CLOUD_RUN_REGION" "$CLOUD_RUN_SERVICE")"
+          echo "max_scale=$MAX_SCALE" >> "$GITHUB_OUTPUT"
+          exit 0
+        fi
         # Service-level caps are the live ops control; older services may only have a revision cap.
         # Listing distinguishes a fresh service from an API/auth failure, which must stop deployment.
         MAX_SCALE="$(gcloud run services list \
@@ -1241,12 +1296,20 @@ runs:
       id: live-integration-max-scale
       shell: bash
       env:
+        POLICY_SHA: ${{ inputs.runtime_env == 'prod' && inputs.resource_raise_policy_sha || '' }}
         CLOUD_RUN_SERVICE: ${{ inputs.service }}-integration
         CLOUD_RUN_PROJECT: ${{ inputs.project_id }}
         CLOUD_RUN_REGION: ${{ inputs.region }}
         DEFAULT_MAX_SCALE: ${{ inputs.runtime_env == 'prod' && '35' || '50' }}
       run: |
         set -euo pipefail
+        if [[ -n "$POLICY_SHA" ]]; then
+          policy="$GITHUB_WORKSPACE/.release-resource-policy"
+          MAX_SCALE="$(python3 "$policy/infra/rollout/release-system/raise_ci.py" --repo "$policy" --sha "$POLICY_SHA" \
+            cap "$CLOUD_RUN_PROJECT" "$CLOUD_RUN_REGION" "$CLOUD_RUN_SERVICE")"
+          echo "max_scale=$MAX_SCALE" >> "$GITHUB_OUTPUT"
+          exit 0
+        fi
         # Integration carries its cap on the serving revision (no service cap), so a capacity revision's
         # cap survives the next train instead of being reset to the former 35 literal (2026-11-20).
         # The cap is the minimum of the service cap (when set) and the cap of every revision
