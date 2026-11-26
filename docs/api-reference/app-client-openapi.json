@@ -18718,6 +18718,43 @@
         "title": "FolderMutationResponse",
         "type": "object"
       },
+      "FrameProcessingRange": {
+        "properties": {
+          "capture_root": {
+            "title": "Capture Root",
+            "type": "string"
+          },
+          "clock_epoch": {
+            "title": "Clock Epoch",
+            "type": "integer"
+          },
+          "end": {
+            "title": "End",
+            "type": "integer"
+          },
+          "start": {
+            "title": "Start",
+            "type": "integer"
+          },
+          "status": {
+            "enum": [
+              "text",
+              "empty"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "capture_root",
+          "clock_epoch",
+          "start",
+          "end",
+          "status"
+        ],
+        "title": "FrameProcessingRange",
+        "type": "object"
+      },
       "FrameRange": {
         "properties": {
           "end": {
@@ -36549,6 +36586,20 @@
             "default": 0,
             "title": "Failed Segments",
             "type": "integer"
+          },
+          "frame_outcomes_v1": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/FrameProcessingRange"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Frame Outcomes V1"
           },
           "held_audio": {
             "anyOf": [

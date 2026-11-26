@@ -40,6 +40,9 @@ import 'package:omi/providers/conversations_v3_provider.dart';
 import 'package:omi/providers/episode_provider.dart';
 import 'package:omi/providers/home_provider.dart';
 import 'package:omi/services/capture/empty_recording_notice.dart';
+import 'package:omi/services/live_preview/live_preview_controller.dart';
+import 'package:omi/services/live_preview/live_words_log.dart';
+import 'package:omi/services/live_preview/speech_after_end.dart';
 import 'package:omi/providers/local_recordings_provider.dart';
 import 'package:omi/providers/review_provider.dart';
 import 'package:omi/services/pending_work/pending_work_store.dart';
@@ -63,6 +66,7 @@ import 'package:omi/pages/home/widgets/quiet_payer_row.dart';
 import 'package:omi/providers/usage_provider.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/l10n_extensions.dart';
+import 'package:omi/utils/reliability_experiments.dart';
 
 import 'package:omi/widgets/home_bottom_bar.dart';
 
@@ -399,6 +403,42 @@ class _ConversationsPageState extends State<ConversationsPage>
   String? _v3LiveId;
   DateTime? _v3LiveCreatedAt;
   DateTime? _v3EventRefreshAt;
+
+  // Reliability experiment instant_live_text: while an End hides the Listening row, the phone's own
+  // recogniser is watched, and the first words spoken after that End bring the row back.
+  LivePreviewController? _afterEndPreview;
+  ({DateTime since, String? captureId})? _afterEnd;
+
+  void _watchSpeechAfterEnd(LivePreviewController? preview, DateTime? since, String? captureId) {
+    final watched = since == null ? null : preview;
+    _afterEnd = watched == null ? null : (since: since!, captureId: captureId);
+    if (identical(_afterEndPreview, watched)) return;
+    _afterEndPreview?.removeListener(_onPreviewAfterEnd);
+    _afterEndPreview = watched;
+    watched?.addListener(_onPreviewAfterEnd);
+    // Words may already be there (the End was pressed on another page); never notify during a build.
+    if (watched != null) WidgetsBinding.instance.addPostFrameCallback((_) => _onPreviewAfterEnd());
+  }
+
+  void _onPreviewAfterEnd() {
+    final preview = _afterEndPreview;
+    final target = _afterEnd;
+    if (!mounted || preview == null || target == null) return;
+    final spokenAt = SpeechAfterEnd.firstHeard(preview.lines, target.since);
+    if (spokenAt != null) {
+      final resumed = context.read<ConversationsV3Provider?>()?.resumeListeningAfterFinish(target.captureId) ?? false;
+      if (resumed && ReliabilityExperiments.enabled('vendor_recognizer_on_opened_app')) {
+        // Local timing record (no text): how long after the End, and after the first word spoken after
+        // it, the Listening row came back.
+        LiveWordsLog.event('listening_row_back', {
+          'after_end_ms': DateTime.now().difference(target.since).inMilliseconds,
+          'after_first_word_ms': DateTime.now().difference(spokenAt).inMilliseconds,
+          'own_results': preview.ownResultsHeard,
+          'vendor_words': preview.vendorWordsSeen,
+        });
+      }
+    }
+  }
 
   /// Episodes were asked for before the switch answered (and so made no call); ask again once it says
   /// this account is not on v3.
@@ -810,6 +850,8 @@ class _ConversationsPageState extends State<ConversationsPage>
     if (_v3Watching) _v3?.unwatch();
     _v3Watching = false;
     _stopV3Quick();
+    _afterEndPreview?.removeListener(_onPreviewAfterEnd);
+    _afterEndPreview = null;
     WidgetsBinding.instance.removeObserver(this);
     _watchedHome?.removeListener(_onHomeProviderChanged);
     _watchedHome = null;
@@ -908,6 +950,13 @@ class _ConversationsPageState extends State<ConversationsPage>
     // Recordings and conversations (v3): a flat list of conversations, the one in progress on top.
     final v3 = context.watch<ConversationsV3Provider?>();
     final v3On = v3?.v3 == true;
+    // Under vendor_recognizer_on_opened_app the watched lines are the merged ones: the phone's own
+    // recogniser's, and the vendor's where it returned nothing.
+    if (ReliabilityExperiments.enabled('instant_live_text') ||
+        ReliabilityExperiments.enabled('vendor_recognizer_on_opened_app')) {
+      _watchSpeechAfterEnd(context.select<CaptureProvider, LivePreviewController?>((c) => c.livePreview),
+          v3?.listeningSuppressedSince(captureId), captureId);
+    }
     // No answer yet (first launch): the plain list, with no feed or episode reads.
     final v3Pending = v3 != null && !v3.resolved;
     if (_legacyAfterAnswer) WidgetsBinding.instance.addPostFrameCallback((_) => _afterLegacyAnswer());

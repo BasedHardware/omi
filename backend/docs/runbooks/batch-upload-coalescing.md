@@ -78,7 +78,7 @@ Production data/account documents are not part of the inventory.
 counts non-shadow unit creation only after durable admission, not transaction
 retries or receipt re-ACKs. Unclassified/native adapters report unknown rather
 than guessing. This is a post-commit observation and can undercount a lost reply.
-`omi_batch_pipeline_upload_to_transcript_seconds{entitlement=...,hold_state=...}` retains each
+`omi_batch_pipeline_upload_to_transcript_seconds{entitlement=...,hold_state=...,recovered=...}` retains each
 original sync request-arrival timestamp (before multipart parsing) through a hold, merged admission
 and completion. It observes one sample per first original terminal receipt,
 including server hold, queue and processing time; replays do not refresh the clock or
@@ -97,7 +97,9 @@ without measurements for its expected state leaves the guard blind. The
 rollback expression per state is
 `p90(omi_batch_pipeline_upload_hold_age_seconds) + p90(omi_batch_pipeline_upload_to_transcript_seconds) > H + 300 s`.
 Use H = 60 s for `fg60` and H = 300 s for `bg300` or `fg_preview300`.
-The guard uses these three held cohorts. The phone histogram captures age
+For both histograms, filter to `recovered="false"` for the guard and chart
+`recovered="true"` separately. During the exporter rollout, wait for both
+histograms to expose the label before using this filter. The phone histogram captures age
 through send, including time spent suspended, on each fresh batch admission.
 The server histogram starts at request arrival. The sum of their p90s is the
 rollout guard and is not a directly measured end-to-end p90.

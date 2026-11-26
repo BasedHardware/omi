@@ -76,6 +76,7 @@ class ConversationV3Fields {
     this.summaryCoversThrough,
     this.liveSummary,
     this.recording = false,
+    this.captureDeviceId,
   });
 
   /// `conversation`, `voice_work`, `media` or `background`.
@@ -100,6 +101,10 @@ class ConversationV3Fields {
   /// delivers them by recording id for released builds; a v3 Home never shows one as a row.
   final bool recording;
 
+  /// Reliability experiment `end_button_by_device`: the app install (`{platform}_{hash}`) behind the
+  /// open conversation's latest speech, on the live read only. Null when the server does not send it.
+  final String? captureDeviceId;
+
   static const _keys = [
     'kind',
     'home_hidden',
@@ -118,6 +123,7 @@ class ConversationV3Fields {
     final pieces = json['recording_pieces'];
     final recordingIds = json['v3_recording_ids'];
     final covers = json['summary_covers_through'];
+    final captureDevice = json['v3_capture_device_id'];
     return ConversationV3Fields(
       kind: json['kind'] is String ? json['kind'] as String : null,
       homeHidden: json['home_hidden'] == true,
@@ -131,6 +137,7 @@ class ConversationV3Fields {
       summaryCoversThrough: covers is String ? DateTime.tryParse(covers) : null,
       liveSummary: _readLiveSummary(json['live_summary']),
       recording: json['recording'] == true,
+      captureDeviceId: captureDevice is String && captureDevice.isNotEmpty ? captureDevice : null,
     );
   }
 
@@ -157,5 +164,6 @@ class ConversationV3Fields {
         if (recordingIds.isNotEmpty) 'v3_recording_ids': recordingIds,
         if (summaryCoversThrough != null) 'summary_covers_through': summaryCoversThrough!.toUtc().toIso8601String(),
         if (recording) 'recording': true,
+        if (captureDeviceId != null) 'v3_capture_device_id': captureDeviceId,
       };
 }
