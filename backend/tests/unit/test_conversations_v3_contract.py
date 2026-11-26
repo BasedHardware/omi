@@ -68,10 +68,208 @@ def test_switch_is_per_owner_not_device(monkeypatch, stage, seen, capable, cohor
     monkeypatch.delenv('CONVERSATIONS_V3', raising=False)
     monkeypatch.setattr(switch.client_gate, 'client_seen_cached', lambda uid: seen)
     monkeypatch.setattr(switch.client_capability, 'capable_cached', lambda uid: capable)
-    monkeypatch.setattr(switch, 'in_rollout_cohort', lambda uid, key: cohort)
+    monkeypatch.setattr(switch, 'in_rollout_cohort', lambda uid, key: cohort and key == 'conversations-v3')
     assert switch.conversations_v3_enabled('synthetic') is expected
     monkeypatch.setenv('CONVERSATIONS_V3', 'off')
     assert switch.conversations_v3_enabled('synthetic') is False
+
+
+class _Holdout:
+    """Synthetic holdout membership behind the real admission predicates; stage ``all``, capable owner."""
+
+    def __init__(self, monkeypatch):
+        self.member, self.unavailable, self.reads, self.fallbacks = False, False, [], []
+        monkeypatch.setenv('CONVERSATIONS_V3_STAGE', 'all')
+        monkeypatch.delenv('CONVERSATIONS_V3', raising=False)
+        monkeypatch.delenv('CONVERSATIONS_V3_HOLDOUT', raising=False)
+        monkeypatch.setattr(switch.client_gate, 'client_seen_cached', lambda uid: False)
+        monkeypatch.setattr(switch.client_capability, 'capable_cached', lambda uid: True)
+        monkeypatch.setattr(switch, 'in_rollout_cohort', self._membership)
+        monkeypatch.setattr(switch, 'record_fallback', lambda **kw: self.fallbacks.append(kw))
+        for module in (triggers, routes):
+            monkeypatch.setattr(module, 'conversations_v3_enabled', switch.conversations_v3_enabled)
+            monkeypatch.setattr(module, 'v3_intake_held_out', switch.v3_intake_held_out)
+
+    def _membership(self, uid, key):
+        self.reads.append(key)
+        if key != 'conversations-v3-holdout':
+            return False
+        if self.unavailable:
+            raise switch.RolloutCohortUnavailable('synthetic outage')
+        return self.member
+
+    def new_row(self):
+        row = {'source': 'omi', 'data_protection_level': 'standard'}
+        triggers.mark_new('synthetic', row)
+        return row
+
+
+def _serve_live(monkeypatch, window):
+    monkeypatch.setattr(routes.client_gate, 'note_client_seen', lambda uid: None)
+    monkeypatch.setattr(routes.v3_client_capability, 'note_capable', lambda uid: None)
+    monkeypatch.setattr(routes.reliability_experiments, 'any_enabled', lambda *a: False)
+    monkeypatch.setattr(routes.conversations_v3_live, 'live_window', lambda uid, **kw: window.get('row'))
+
+
+def test_holdout_keeps_stage_admission_for_existing_v3_work(monkeypatch):
+    holdout = _Holdout(monkeypatch)
+    holdout.member = True
+    for stage in ('all', 'beta', 'cohort'):
+        monkeypatch.setenv('CONVERSATIONS_V3_STAGE', stage)
+        monkeypatch.setattr(switch.client_gate, 'client_seen_cached', lambda uid: True)
+        monkeypatch.setattr(switch, 'in_rollout_cohort', lambda uid, key: True)
+        # Finish, episodes and builders keep reaching the owner's stored v3 work.
+        assert switch.conversations_v3_enabled('synthetic') is True
+        assert switch.v3_intake_held_out('synthetic') is True
+
+
+def test_intake_with_known_membership(monkeypatch):
+    holdout = _Holdout(monkeypatch)
+    assert holdout.new_row()['recording'] is True
+    holdout.member = True
+    row = holdout.new_row()
+    assert 'recording' not in row and 'v3_pending' not in row
+    assert holdout.fallbacks == [] and set(holdout.reads) == {'conversations-v3-holdout'}
+
+
+def test_intake_with_unavailable_membership_admits_and_records_fallback(monkeypatch):
+    holdout = _Holdout(monkeypatch)
+    holdout.member = holdout.unavailable = True
+    assert holdout.new_row()['recording'] is True
+    assert holdout.fallbacks == [
+        {
+            'component': 'feature_flags',
+            'from_mode': 'v3_holdout',
+            'to_mode': 'admitted',
+            'reason': 'unavailable',
+            'outcome': 'degraded',
+            'log': switch.logger,
+        }
+    ]
+
+
+@pytest.mark.parametrize('value', ['off', 'false', '0', 'no'])
+def test_holdout_env_off_ignores_cohort_and_skips_read(monkeypatch, value):
+    holdout = _Holdout(monkeypatch)
+    holdout.member = True
+    monkeypatch.setenv('CONVERSATIONS_V3_HOLDOUT', value)
+    assert holdout.new_row()['recording'] is True
+    assert holdout.reads == []
+
+
+def test_kill_switch_wins_without_a_holdout_read(monkeypatch):
+    holdout = _Holdout(monkeypatch)
+    monkeypatch.setenv('CONVERSATIONS_V3', 'off')
+    assert 'recording' not in holdout.new_row()
+    assert holdout.reads == []
+
+
+def test_holdout_added_mid_capture_serves_the_active_window_then_legacy(monkeypatch):
+    holdout = _Holdout(monkeypatch)
+    window = {'row': None}
+    _serve_live(monkeypatch, window)
+    capturing = holdout.new_row()
+    window['row'] = {'id': 'open', 'status': 'in_progress', 'tile_state': 'live', 'structured': {'title': 't'}}
+    holdout.member = True
+    # The capture already admitted keeps its stored marker; only the next generation is legacy.
+    assert capturing['recording'] is True and 'recording' not in holdout.new_row()
+    reads = len(holdout.reads)
+    live = routes.get_live_conversation('synthetic', 'store')
+    assert live['v3'] is True and live['conversation']['id'] == 'open'
+    assert len(holdout.reads) == reads  # An active window is served without the membership read.
+    window['row'] = None
+    assert routes.get_live_conversation('synthetic', 'store') == {'v3': False, 'conversation': None}
+
+
+def test_holdout_removed_mid_capture_readmits_the_next_row(monkeypatch):
+    holdout = _Holdout(monkeypatch)
+    window = {'row': None}
+    _serve_live(monkeypatch, window)
+    holdout.member = True
+    capturing = holdout.new_row()
+    assert routes.get_live_conversation('synthetic', 'store') == {'v3': False, 'conversation': None}
+    holdout.member = False
+    # The legacy capture in flight stays legacy; the next new row is v3 again.
+    assert 'recording' not in capturing and holdout.new_row()['recording'] is True
+    assert routes.get_live_conversation('synthetic', 'store') == {'v3': True, 'conversation': None}
+
+
+def test_existing_v3_work_drains_for_a_held_out_owner(monkeypatch):
+    from utils.conversations.v3 import finish, manual_cuts
+
+    holdout = _Holdout(monkeypatch)
+    holdout.member = True
+    window = {'id': 'open', 'status': 'in_progress', 'v3_derived': True}
+    acknowledged = []
+    monkeypatch.setattr(finish, 'finish_no_pointer_enabled', lambda: True)
+    monkeypatch.setattr(finish, 'conversations_v3_enabled', switch.conversations_v3_enabled)
+    monkeypatch.setattr(finish.conversations_v3_live, 'live_window', lambda uid, **kw: window)
+    monkeypatch.setattr(finish.conversations_v3_live, 'request_finish', lambda uid, wid, **kw: ('cut', 'rec'))
+    monkeypatch.setattr(finish, '_acknowledge', lambda *a: acknowledged.append(a) or 'answer')
+    assert finish.finish_live_window('synthetic') == 'answer'
+    assert acknowledged == [('synthetic', window, 'cut', 'rec')]
+    # End cuts follow new intake: a held-out owner gets experiment-off End handling.
+    monkeypatch.setattr(manual_cuts, 'enabled', lambda uid: True)
+    monkeypatch.setattr(manual_cuts, 'conversations_v3_enabled', switch.conversations_v3_enabled)
+    monkeypatch.setattr(manual_cuts, 'v3_intake_held_out', switch.v3_intake_held_out)
+    monkeypatch.setattr(manual_cuts.cuts_db, 'record', lambda *a: pytest.fail('held-out owner recorded a cut'))
+    assert manual_cuts.record_end('synthetic') is None
+
+
+def test_held_out_owner_reads_legacy_home_with_v3_cards_and_held_pieces(monkeypatch):
+    from tests.unit.test_home_held_sync_piece import piece
+
+    holdout = _Holdout(monkeypatch)
+    calls = []
+    monkeypatch.setattr(
+        routes.conversations_db, 'get_conversations_without_photos', lambda *a, **kw: calls.append(kw) or []
+    )
+    monkeypatch.setattr(routes, '_heal_locked_conversations_if_eligible', lambda *a: None)
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+    from utils.other import endpoints as auth
+
+    app = FastAPI()
+    app.include_router(routes.router)
+    app.dependency_overrides[auth.get_current_user_uid] = lambda: 'synthetic'
+    with TestClient(app) as client:
+        assert (
+            client.get('/v1/conversations', headers={routes.list_page_headers.HOME_MODE_HEADER: 'auto'}).status_code
+            == 200
+        )
+        holdout.member = True
+        legacy = client.get('/v1/conversations', headers={routes.list_page_headers.HOME_MODE_HEADER: 'auto'})
+    assert [kw['show_held'] for kw in calls] == [False, True]
+    assert legacy.headers.get(routes.list_page_headers.HOME_MODE_HEADER) == 'legacy'
+    # Legacy Home shows the owner's existing v3 card next to a new legacy piece held for notes.
+    card = {'id': 'card', 'status': 'completed', 'v3_derived': True, 'structured': {'title': 't'}}
+    for show_held, expected in ((True, True), (False, False)):
+        kwargs = dict(presentation=True, hide_home=True, show_held=show_held)
+        assert db.is_visible_conversation(card, **kwargs) is True
+        assert db.is_visible_conversation(piece(), **kwargs) is expected
+
+
+def test_runtime_resolver_reports_unknown_holdout_membership(monkeypatch):
+    from utils import rollout_cohorts as runtime
+
+    monkeypatch.setattr(runtime._cache, 'get', lambda uid: None)
+    with pytest.raises(runtime.policy.RolloutCohortUnavailable):
+        runtime._in_rollout_cohort('synthetic', 'conversations-v3-holdout')
+    # Other cohorts keep reading an unknown membership as a plain miss.
+    assert runtime._in_rollout_cohort('synthetic', 'conversations-v3') is False
+    monkeypatch.setenv('OMI_ENV_STAGE', 'prod')
+    monkeypatch.setattr(runtime._cache, 'get', lambda uid: {'prod': {'conversations-v3-holdout': True}})
+    assert runtime._in_rollout_cohort('synthetic', 'conversations-v3-holdout') is True
+
+
+def test_rollout_cohort_script_accepts_holdout_cohort(tmp_path, capsys):
+    from scripts import rollout_cohort
+
+    uid_file = tmp_path / 'uid'
+    uid_file.write_text('synthetic-owner')
+    argv = ['--uid-file', str(uid_file), '--cohort', 'conversations-v3-holdout', '--project', 'based-hardware-dev']
+    assert rollout_cohort.main(argv + ['--environment', 'dev', '--add', '--dry-run']) == 0
+    assert 'cohorts=conversations-v3-holdout' in capsys.readouterr().out
 
 
 @pytest.mark.parametrize('channel,expected', [('beta', ['seen', 'capable', 'check']), ('store', ['capable', 'check'])])

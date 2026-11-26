@@ -183,7 +183,7 @@ import logging
 logger = logging.getLogger(__name__)
 
 from config.llm_spend import v3_summary_first_open_gating_enabled
-from config.conversations_v3 import conversations_v3_enabled, live_recap_enabled
+from config.conversations_v3 import conversations_v3_enabled, live_recap_enabled, v3_intake_held_out
 from config.app_channel import APP_CHANNEL_HEADER, app_channel
 from utils.episodes import client_gate
 from models.conversation import ConversationsLiveResponse
@@ -212,6 +212,10 @@ def get_live_conversation(
         return {'v3': False, 'conversation': None}
     now = datetime.now(timezone.utc)
     row = conversations_v3_live.live_window(uid, now=now, max_idle=v3_live.MAX_IDLE, pick=v3_live.active)
+    if row is None and v3_intake_held_out(uid):
+        # Holdout (SCA-2918): an existing active window is still served; without one, the
+        # owner's new captures are legacy, so the app shows its legacy live card.
+        return {'v3': False, 'conversation': None}
     compact = (
         {
             key: row[key]
@@ -1291,7 +1295,9 @@ def get_conversations(
     default_home = not (reveal or start_date or end_date)
     # Legacy Home only: a v3 owner's Home is built from derived rows, so a held
     # legacy sync piece there would duplicate them.
-    v3_home = default_home and conversations_v3_enabled(uid)
+    # A held-out owner (SCA-2918) reads legacy Home: it shows their v3_derived cards too, and their new
+    # legacy pieces held for notes, which v3 Home would hide for the whole capture.
+    v3_home = default_home and conversations_v3_enabled(uid) and not v3_intake_held_out(uid)
     show_held = default_home and not v3_home
     requested_mode = request.headers.get(list_page_headers.HOME_MODE_HEADER) if request is not None else None
     first_page = offset == 0 and not cursor
