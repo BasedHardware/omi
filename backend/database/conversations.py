@@ -1083,11 +1083,12 @@ class _PageFill:
     would charge every full page one more read to save that rare request.
     """
 
-    def __init__(self, conversations_ref, *, limit, budget, visible, scout=None):
+    def __init__(self, conversations_ref, *, limit, budget, visible, scout=None, consume=None):
         self.conversations_ref = conversations_ref
         self.limit = limit
         self.budget = budget
         self.visible = visible
+        self.consume = consume
         # Lean refills (see :class:`_Scout`); None keeps full-document refills.
         self.scout = scout if scout is not None and hasattr(conversations_ref, 'select') else None
         # Hidden rows of the first, full window that the scout's flags alone would have caught.
@@ -1115,10 +1116,15 @@ class _PageFill:
             fetched = 0
             for doc in budgeted_stream_iter(query, self.budget):
                 fetched += 1
+                conversation = document_data_with_revision(doc)
+                visible = conversation is not None and self.visible(conversation)
+                if self.consume is not None:
+                    self.budget.check()
+                    if visible:
+                        self.consume(conversation, doc, self.consumed + 1, self.skipped)
                 self.consumed += 1
                 self.last_doc = doc
-                conversation = document_data_with_revision(doc)
-                if conversation is None or not self.visible(conversation):
+                if not visible:
                     self.skipped += 1
                     if self.scout is not None and conversation is not None and self.scout.hidden(conversation):
                         self.scout_hits += 1
@@ -1174,7 +1180,10 @@ class _PageFill:
             try:
                 for doc in budgeted_stream_iter(scout_ref.start_after(self.last_doc).limit(batch_limit), self.budget):
                     fetched += 1
-                    if self.scout.hidden(doc.to_dict() or {}):
+                    hidden = self.scout.hidden(doc.to_dict() or {})
+                    if self.consume is not None:
+                        self.budget.check()
+                    if hidden:
                         self.consumed += 1
                         self.last_doc = doc
                         self.skipped += 1
@@ -1184,17 +1193,17 @@ class _PageFill:
                         continue
                     if rewind is None:
                         rewind = (self.consumed, self.last_doc)
+                    pending.append((doc, self.consumed, self.last_doc))
                     self.consumed += 1
                     self.last_doc = doc
-                    pending.append(doc)
                     if len(self.rows) + len(pending) >= self.limit:
                         stop = True
                         break
-                self._hydrate(pending)
             except ListReadBudgetExhausted:
                 if rewind is not None:
                     self.consumed, self.last_doc = rewind
                 raise
+            self._hydrate(pending)
             if len(self.rows) >= self.limit or self.skipped >= self.cap:
                 # A full page, or the hidden-row cap: more may follow.
                 self.has_more = True
@@ -1207,17 +1216,32 @@ class _PageFill:
     def _hydrate(self, pending):
         if not pending:
             return
-        snapshots = {
-            snapshot.id: snapshot
-            for snapshot in budgeted_get_all(
-                db, [doc.reference for doc in pending], self.budget, field_paths=self.scout.hydrate_fields
-            )
-        }
+        try:
+            snapshots = {
+                snapshot.id: snapshot
+                for snapshot in budgeted_get_all(
+                    db, [doc.reference for doc, _, _ in pending], self.budget, field_paths=self.scout.hydrate_fields
+                )
+            }
+        except ListReadBudgetExhausted:
+            _, self.consumed, self.last_doc = pending[0]
+            raise
         self.hydrated += len(pending)
-        for doc in pending:
-            snapshot = snapshots.get(doc.id)
-            conversation = document_data_with_revision(snapshot) if snapshot is not None else None
-            if conversation is None or not self.visible(conversation):
+        for doc, preceding_count, preceding_doc in pending:
+            try:
+                if self.consume is not None:
+                    self.budget.check()
+                snapshot = snapshots.get(doc.id)
+                conversation = document_data_with_revision(snapshot) if snapshot is not None else None
+                visible = conversation is not None and self.visible(conversation)
+                if self.consume is not None:
+                    self.budget.check()
+                    if visible:
+                        self.consume(conversation, doc, preceding_count + 1, self.skipped)
+            except ListReadBudgetExhausted:
+                self.consumed, self.last_doc = preceding_count, preceding_doc
+                raise
+            if not visible:
                 self.skipped += 1
                 continue
             self.rows.append(conversation)
@@ -1270,6 +1294,7 @@ def _collect_cursor_conversation_page(
     show_held=False,
     report=None,
     scout=None,
+    consume=None,
 ):
     """Bound the scan by page size plus the hidden-row allowance.
 
@@ -1288,6 +1313,7 @@ def _collect_cursor_conversation_page(
             show_held=show_held,
         ),
         scout=scout,
+        consume=consume,
     ).run(conversations_ref.start_after(bookmark).limit(limit), limit)
     if report is not None:
         report.update(storage_rows=fill.consumed, has_more=fill.has_more, hidden_rows=fill.skipped)
@@ -1313,6 +1339,7 @@ def _collect_visible_conversation_page(
     show_held: bool = False,
     hydrate_fields: Optional[List[str]] = None,
     indexed_home: bool = False,
+    on_prepared=None,
 ) -> List[Dict[str, Any]]:
     """Page visible rows.
 
@@ -1372,6 +1399,24 @@ def _collect_visible_conversation_page(
                     logger.warning('conversation_list_cursor: ordering key unavailable; next cursor omitted')
         return rows
 
+    def consume(row, doc, storage_rows, hidden_rows):
+        budget.check()
+        try:
+            prepared = prepare_conversation_for_read(row, uid, read_budget=budget)
+        except ListReadBudgetExhausted as error:
+            budget.mark_exhausted(error.reason)
+            raise
+        budget.check()
+        checkpoint = dict(storage_rows=storage_rows, has_more=True, hidden_rows=hidden_rows)
+        if cursor_enabled:
+            try:
+                checkpoint['next_cursor'] = encode_cursor(row.get(sort_field), doc.id, scope)
+            except (ValueError, TypeError, AttributeError):
+                pass
+        on_prepared(prepared, checkpoint)
+
+    consume_row = consume if on_prepared is not None else None
+
     if cursor_enabled and cursor is not None:
         try:
             stamp, doc_id = decode_cursor(cursor, scope)
@@ -1402,6 +1447,7 @@ def _collect_visible_conversation_page(
                 show_held=show_held,
                 bookmark=BookmarkDict({sort_field: stamp, '__name__': doc_id}),
                 scout=scout,
+                consume=consume_row,
             )
             return finish(rows, last_doc, **report)
 
@@ -1412,13 +1458,20 @@ def _collect_visible_conversation_page(
         has_more = False
         try:
             for doc in budgeted_stream_iter(conversations_ref, budget):
-                last_doc = doc
                 conversation = document_data_with_revision(doc)
-                if conversation is None or not visible(conversation):
+                is_visible = conversation is not None and visible(conversation)
+                if consume_row is not None:
+                    budget.check()
+                if not is_visible:
+                    last_doc = doc
                     continue
                 if skipped_visible < offset:
                     skipped_visible += 1
+                    last_doc = doc
                     continue
+                if consume_row is not None:
+                    consume_row(conversation, doc, len(conversations) + 1, 0)
+                last_doc = doc
                 conversations.append(conversation)
                 if len(conversations) >= limit:
                     has_more = True
@@ -1436,9 +1489,9 @@ def _collect_visible_conversation_page(
             # Nothing was read, so there is no position to resume from; a retry
             # would pay the same charge and stop here again.
             return finish([], None, storage_rows=0, has_more=False)
-    fill = _PageFill(conversations_ref, limit=limit, budget=budget, visible=visible, scout=scout).run(
-        conversations_ref.limit(limit).offset(offset), limit
-    )
+    fill = _PageFill(
+        conversations_ref, limit=limit, budget=budget, visible=visible, scout=scout, consume=consume_row
+    ).run(conversations_ref.limit(limit).offset(offset), limit)
     return finish(
         fill.rows, fill.last_doc, storage_rows=fill.consumed, has_more=fill.has_more, hidden_rows=fill.skipped
     )
@@ -2527,6 +2580,8 @@ def get_conversations_without_photos(
     page_envelope: bool = False,
     cursor_page: Optional[Dict[str, Any]] = None,
     indexed_home: bool = False,
+    metadata_only: bool = False,
+    on_prepared=None,
 ):
     """
     Same as get_conversations but without loading photos.
@@ -2627,6 +2682,7 @@ def get_conversations_without_photos(
         cursor_page=cursor_page,
         hydrate_fields=hydrate_fields,
         indexed_home=indexed_home,
+        on_prepared=on_prepared,
         cursor_filters=dict(
             statuses=statuses,
             sources=sources,

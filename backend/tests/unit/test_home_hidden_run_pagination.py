@@ -411,3 +411,74 @@ def test_home_gate_rollback_restarts_indexed_continuations(monkeypatch, routes):
     body, response = call_route(routes, request=home_request('indexed'), offset=1000, cursor='old-cursor')
     assert [row['id'] for row in body] == visible[:PAGE]
     assert response.headers['X-Omi-Home-Page-Mode'] == 'legacy'
+
+
+def test_route_hard_deadline_returns_prepared_prefix(monkeypatch, routes):
+    from threading import Event
+    from time import monotonic
+
+    data, visible = owner(before=3, hidden=0, after=0)
+    monkeypatch.setattr(db, 'db', CountingQuery(data))
+    monkeypatch.setenv('OMI_LIST_READ_BUDGET_SECONDS', '0.25')
+    monkeypatch.setenv('OMI_LIST_PAGE_WALL_BUDGET_ENABLED', 'true')
+    entered, release, exited = Event(), Event(), Event()
+    original = db.prepare_conversation_for_read
+
+    def prepare(row, uid, **kwargs):
+        if row['id'] == visible[1]:
+            entered.set()
+            try:
+                release.wait(5)
+            finally:
+                exited.set()
+        return original(row, uid, **kwargs)
+
+    monkeypatch.setattr(db, 'prepare_conversation_for_read', prepare)
+    started = monotonic()
+    try:
+        result, response = call_route(routes, limit=3)
+        assert entered.is_set()
+        assert not exited.is_set()
+        assert monotonic() - started < 1.5
+        assert [row['id'] for row in result] == visible[:1]
+        assert response.headers['X-Omi-List-Truncated'] == 'true'
+        assert response.headers['X-Omi-Conversation-Page-Size'] == '1'
+    finally:
+        release.set()
+        if entered.is_set():
+            assert exited.wait(2)
+
+
+@pytest.mark.parametrize('use_cursor', [False, True])
+def test_overlay_budget_exhaustion_resumes_at_the_failed_row(monkeypatch, routes, use_cursor):
+    from utils.other.list_budget import ListReadBudgetExhausted
+
+    data, visible = owner(before=4, hidden=0, after=0)
+    monkeypatch.setattr(db, 'db', CountingQuery(data))
+    monkeypatch.setenv('OMI_LIST_PAGE_WALL_BUDGET_ENABLED', 'true')
+    if use_cursor:
+        monkeypatch.setenv('FIRESTORE_READ_LEVERS', '{"conversation_list_cursor":100}')
+    original = db.prepare_conversation_for_read
+    attempted = set()
+
+    def prepare(row, uid, *, read_budget):
+        if row['id'] == visible[1] and not attempted:
+            attempted.add(row['id'])
+            raise ListReadBudgetExhausted('deadline')
+        return original(row, uid, read_budget=read_budget)
+
+    monkeypatch.setattr(db, 'prepare_conversation_for_read', prepare)
+    prefix, response = call_route(routes, limit=3)
+    assert [row['id'] for row in prefix] == visible[:1]
+    assert response.headers['X-Omi-List-Truncated'] == 'true'
+    assert response.headers['X-Omi-Has-More'] == 'true'
+    assert response.headers['X-Omi-Conversation-Page-Size'] == '1'
+
+    continuation = (
+        {'cursor': response.headers['X-Omi-Next-Cursor']}
+        if use_cursor
+        else {'offset': int(response.headers['X-Omi-Conversation-Page-Size'])}
+    )
+    suffix, response = call_route(routes, limit=3, **continuation)
+    assert [row['id'] for row in suffix] == visible[1:]
+    assert 'X-Omi-List-Truncated' not in response.headers
