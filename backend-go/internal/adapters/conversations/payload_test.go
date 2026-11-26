@@ -110,7 +110,7 @@ func TestApplyFinalizationRepacksSpilledStructured(t *testing.T) {
 	if err != nil || before.Title != "Spilled title" || before.Overview != "Spilled overview" {
 		t.Fatalf("spilled notes readback failed: %v", err)
 	}
-	title, overview := "New title", "New overview"
+	title, overview := "New title", strings.Repeat("_", 1_250_000)
 	sections := []string{"first", "second"}
 	patch := conversations.Finalization{Title: &title, Overview: &overview, Sections: &sections}
 	if writeErr := store.ApplyFinalization(t.Context(), guard, before.Revision, patch); writeErr != nil {
@@ -143,8 +143,8 @@ func assertSpilledMetadata(t *testing.T, b docstoretest.Bench, ref conversations
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(chunks) != 5 {
-		t.Fatalf("expected one active five-part generation, got %d chunks", len(chunks))
+	if len(chunks) != 9 {
+		t.Fatalf("expected one active nine-part generation, got %d chunks", len(chunks))
 	}
 	var wire []byte
 	for _, chunk := range chunks {
@@ -180,7 +180,7 @@ func TestApplyFinalizationHoldsOverBudgetPayloadWithoutChangingIt(t *testing.T) 
 	if err != nil {
 		t.Fatal(err)
 	}
-	overview := strings.Repeat("_", 1_048_576)
+	overview := strings.Repeat("_", 3*1024*1024)
 	err = store.ApplyFinalization(t.Context(), guard, before.Revision, conversations.Finalization{Overview: &overview})
 	if err == nil || queue.FromError(err, "test_unknown") != queue.Hold(conversations.CausePayloadWrite, time.Minute) {
 		t.Fatalf("expected held write, got %v", err)

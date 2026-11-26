@@ -9,7 +9,6 @@ from dataclasses import dataclass
 from typing import Any
 
 from google.cloud.firestore_v1 import _helpers
-from google.cloud.firestore_v1.types import MapValue
 from google.protobuf.message import DecodeError
 
 from utils.firestore_document_size import FIRESTORE_MAX_DOCUMENT_BYTES, estimate_firestore_document_bytes
@@ -70,6 +69,8 @@ def pack_conversation(
             raise ConversationProjectionTooLarge('conversation category must stay in the indexed parent')
         raise ConversationProjectionTooLarge('conversation has no eligible payload fields')
 
+    from google.cloud.firestore_v1.types import MapValue
+
     wire_value = MapValue(fields=_helpers.encode_dict(payload))
     wire_bytes = MapValue.pb(wire_value).SerializeToString(deterministic=True)
     parent[PAYLOAD_FIELD] = {
@@ -108,6 +109,8 @@ def hydrate_conversation(
         wire.extend(chunk)
     if len(wire) != size or hashlib.sha256(wire).digest() != digest:
         raise InvalidConversationPayload('conversation payload failed integrity check')
+
+    from google.cloud.firestore_v1.types import MapValue
 
     try:
         fields = MapValue.deserialize(bytes(wire)).fields

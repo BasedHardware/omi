@@ -327,7 +327,7 @@ FIELD_SITES = {
     ],
     # Home visibility defaults and response metadata only; no lifecycle writes.
     'database/home_feed.py': [
-        ('_visible', 'status', "'completed'", ('status',)),
+        ('_eligible_by_metadata', 'status', "'completed'", ('status',)),
         (
             'feed.project',
             'status',

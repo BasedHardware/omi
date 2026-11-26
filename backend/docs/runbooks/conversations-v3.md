@@ -515,8 +515,9 @@ PYTHONPATH=backend backend/.venv/bin/python $S run --owners-file $O --since 2026
     With `OMI_V3_CONVERSATION_PAYLOAD_WRITES=on`, a chunked row can be rebuilt after its
     revision-fenced undo copy is saved under the run. The copy owns its chunks and survives
     replacement of the live generation. Undo reads and restores saved copies with promotion off.
-    Enable promotion after all re-derive, deletion and protection-migration workers can read
-    and erase these copies.
+    The atomic generation ceiling is 3 MiB across twelve 256 KiB chunks.
+    Enable promotion after Python and Go readers and writers, including re-derive, deletion
+    and protection-migration workers, support the twelve-chunk format.
   - App deletion and re-protection page only the owner's live re-derive runs, 200 IDs at a time.
     For `L` matching runs and `D` distinct conversation and bridge IDs, the lookup costs at most
     `L + 1` billed ledger reads and `L × D` prior point reads per attempt before transaction retries.
@@ -526,7 +527,7 @@ PYTHONPATH=backend backend/.venv/bin/python $S run --owners-file $O --since 2026
     combined deletion and re-protection attempts at averages of three and six reads respectively.
     These are planning assumptions. Revisit the estimate with actual per-owner run history,
     duplicate attempts and migration batch sizes if observed traffic exceeds that scenario.
-    Erasing a chunked prior also reads its bounded child set, up to eight documents per prior.
+    Erasing a chunked prior also reads its bounded child set, up to twelve documents per prior.
     [Firestore query billing](https://firebase.google.com/docs/firestore/pricing#minimum-charge-for-queries)
     A failed commit drops the copies of rows it did not write (a resume records them again).
     Each partition reads only its own copies, by id; `resume` and `undo` check every copy of the run

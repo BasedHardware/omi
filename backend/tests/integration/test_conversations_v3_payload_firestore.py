@@ -65,7 +65,7 @@ def test_integration_create_overflow_lifecycle_and_readback(row, monkeypatch):
     monkeypatch.setattr(lifecycle, 'observe_completed_conversation_shape', lambda *_: None)
     monkeypatch.setattr(conversations.transcript_pointer.config, 'write_admitted', lambda *_: False)
     monkeypatch.delenv('OMI_INTEGRATION_CONVERSATION_PAYLOAD_WRITES', raising=False)
-    text = Random(2520).randbytes(470_000).hex()
+    text = Random(2520).randbytes(850_000).hex()
 
     def create():
         return lifecycle.create_completed_conversation(
@@ -106,6 +106,7 @@ def test_integration_create_overflow_lifecycle_and_readback(row, monkeypatch):
     assert projection['structured']['title'] == 'Synthetic title'
     assert 'transcript_segments' not in projection
     assert PAYLOAD_FIELD in projection
+    assert projection[PAYLOAD_FIELD]['size'] > 2 * 1024 * 1024
     monkeypatch.delenv('OMI_INTEGRATION_CONVERSATION_PAYLOAD_WRITES')
     detail = conversations.get_conversation(uid, ref.id, firestore_client=client)
     [listed] = conversations.get_conversations(uid)
@@ -1030,7 +1031,7 @@ def test_builder_publishes_oversized_derived_row_and_replaces_it_after_rollback(
         monkeypatch.setattr(store, 'PROJECTION_BYTES', 4096)
         monkeypatch.setattr(payload_codec, 'PROJECTION_BYTES', 4096)
         monkeypatch.setenv('CONVERSATIONS_V3_SKIP_UNCHANGED_WRITES', 'on')
-    text = Random(2520).randbytes(10_000 if elide_unchanged else 470_000).hex()
+    text = Random(2520).randbytes(10_000 if elide_unchanged else 1_000_000).hex()
     candidate = {
         'id': ref.id,
         'status': 'completed',
@@ -1047,6 +1048,8 @@ def test_builder_publishes_oversized_derived_row_and_replaces_it_after_rollback(
     store.commit_projection(uid, token, {}, {}, [candidate], [], firestore_client=client)
     snapshot = ref.get()
     assert PAYLOAD_FIELD in snapshot.to_dict()
+    if not elide_unchanged:
+        assert snapshot.to_dict()[PAYLOAD_FIELD]['size'] > 11 * payload_codec.CHUNK_BYTES
     original_chunks = set(ref.collection(PAYLOAD_CHUNKS).list_documents())
 
     monkeypatch.delenv('OMI_V3_CONVERSATION_PAYLOAD_WRITES')

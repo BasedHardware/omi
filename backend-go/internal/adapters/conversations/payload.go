@@ -15,7 +15,7 @@ const (
 	payloadField      = "_conversation_payload"
 	payloadCollection = "conversation_payload_chunks"
 	payloadChunkBytes = 256 * 1024
-	payloadMaxChunks  = 8
+	payloadMaxChunks  = 12
 )
 
 type conversationPayload struct {

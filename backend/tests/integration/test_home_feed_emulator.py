@@ -180,9 +180,9 @@ def test_ready_member_cards_replace_with_composed_owner_across_real_transactions
     assert [(card['id'], card['member_count']) for card in after['items']] == [('episode:episode', 2)]
 
 
-def seed_payload_notes(client, ref, title):
+def seed_payload_notes(client, ref, title, *, section_bytes=1_100_000):
     prepared = source(title)
-    prepared['structured']['sections'] = [{'title': 'Synthetic section', 'content': 'a' * 1_100_000}]
+    prepared['structured']['sections'] = [{'title': 'Synthetic section', 'content': 'a' * section_bytes}]
     prepared['structured']['action_items'] = [{'description': 'Synthetic task'}]
 
     @firestore.transactional
@@ -200,7 +200,7 @@ def test_prepare_hydrates_chunked_notes_for_episodes_and_dirty_updates(world, mo
     client, uid, user = world
     monkeypatch.delenv('OMI_V3_CONVERSATION_PAYLOAD_WRITES', raising=False)
     ref = user.collection('conversations').document('member')
-    seed_payload_notes(client, ref, 'Initial title')
+    seed_payload_notes(client, ref, 'Initial title', section_bytes=2_200_000)
     member_link = user.collection('episode_links').document(ref.id)
     member_link.set({'episode_id': 'episode'}, merge=True)
     user.collection('episodes').document('episode').set(

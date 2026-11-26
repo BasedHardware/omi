@@ -942,12 +942,12 @@ def commit_projection(
         extra_bytes = 0
         row_bytes = None
 
-        def charge_payload(writes, size):
+        def charge_payload(writes, size, *, parent_bytes_delta=0):
             nonlocal extra_writes, extra_bytes, row_bytes
             if not writes:
                 return
             extra_writes += writes
-            extra_bytes += size + 1024 * writes
+            extra_bytes += size + 1024 * writes + parent_bytes_delta
             if row_bytes is None:
                 row_bytes = sum(_encoded_bytes(item) for item in batch_prepared)
             if fixed_writes + len(batch_rows) + extra_writes > BATCH_MAX_WRITES or (
@@ -981,9 +981,10 @@ def commit_projection(
             except ConversationProjectionTooLarge as error:
                 raise Conflict('document_too_large') from error
 
-        for raw, row in zip(batch_rows, batch_prepared):
+        for raw, encoded in zip(batch_rows, batch_prepared):
             if raw.get('deleted'):
                 continue
+            row = encoded
             if final and row['id'] in retire:
                 # A live re-derive survivor's bridge list lands with the bridges it names.
                 row = {**row, **retire[row['id']]}
@@ -1000,19 +1001,18 @@ def commit_projection(
             written.add(cid)
             snapshot = snapshots[cid]
             ref = coll.document(cid)
-            previous = snapshot.to_dict() or {}
-            uses_payload = PAYLOAD_FIELD in previous
-            if not uses_payload and (
+            if PAYLOAD_FIELD not in (snapshot.to_dict() or {}) and (
                 not allow_promotion or estimate_firestore_document_bytes(row, ref.path) <= PROJECTION_BYTES
             ):
                 tx.set(ref, row)
                 continue
             try:
-                charge_payload(
-                    *stage_conversation_payload(
-                        tx, snapshot, row, spill_fields={'transcript_segments'}, allow_promotion=allow_promotion
-                    )
+                writes, size, parent = stage_conversation_payload(
+                    tx, snapshot, row, spill_fields={'transcript_segments'}, allow_promotion=allow_promotion
                 )
+                # Row bytes already include the logical payload. Charge its staged projection instead.
+                parent_bytes_delta = estimate_firestore_document_bytes(parent, ref.path) - _encoded_bytes(encoded)
+                charge_payload(writes, size, parent_bytes_delta=parent_bytes_delta)
             except ConversationProjectionTooLarge as error:
                 raise Conflict('document_too_large') from error
         for cid, survivor in absorbed.items():

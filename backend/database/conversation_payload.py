@@ -9,7 +9,6 @@ from uuid import uuid4
 
 from google.cloud import firestore
 from google.cloud.firestore_v1 import _helpers
-from google.cloud.firestore_v1.field_path import FieldPath
 
 from models.conversation_enums import ConversationSource
 from utils.conversation_payload import (
@@ -26,9 +25,9 @@ from utils.firestore_document_size import estimate_firestore_document_bytes
 from utils.other.list_budget import ListReadBudgetExhausted, budgeted_document_get, budgeted_get_all
 
 PAYLOAD_CHUNKS = 'conversation_payload_chunks'
-# Limit the single-row atomic path to 2 MiB of new chunks, with the same bound
-# on retiring old chunks. Multi-row callers must also budget the entire commit.
-MAX_ATOMIC_CHUNKS = 8
+# Keep each generation within 3 MiB so Home's 4 MiB preparation budget has room
+# for metadata. Multi-row callers still budget the entire commit.
+MAX_ATOMIC_CHUNKS = 12
 
 
 def integration_payload_promotion_enabled():
@@ -80,6 +79,8 @@ def read_conversation_payload(
     hydrated = hydrate_conversation(parent, (chunks[ref.id] for ref in refs), client=client)
     if field_paths is None:
         return hydrated
+
+    from google.cloud.firestore_v1.field_path import FieldPath
 
     # Firestore applied the mask to the parent. Apply it to the spilled fields
     # too, including nested fields such as structured.overview.
@@ -143,7 +144,7 @@ def stage_conversation_payload(
     write = pack_conversation(prepared, ref.path, spill_fields=spill_fields, generation=uuid4().hex)
     if write.chunks and not old_refs and not allow_promotion:
         raise ConversationProjectionTooLarge('conversation payload promotion is disabled')
-    cost = _stage_replacement_chunks(transaction, ref, previous, old_refs, write)
+    chunk_writes, chunk_bytes = _stage_replacement_chunks(transaction, ref, previous, old_refs, write)
     if retire_children is not None:
         referenced = set(old_refs)
         for child in retire_children:
@@ -153,7 +154,7 @@ def stage_conversation_payload(
         transaction.set(ref, write.parent)
     else:
         transaction.create(ref, write.parent)
-    return cost
+    return chunk_writes, chunk_bytes, write.parent
 
 
 def stage_conversation_payload_patch(transaction, snapshot, hydrated, patch, *, overflow_fields, allow_promotion=False):
