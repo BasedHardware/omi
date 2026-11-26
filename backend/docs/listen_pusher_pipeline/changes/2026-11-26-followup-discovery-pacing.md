@@ -27,19 +27,28 @@ behaviour. Values outside 0–900 or that do not parse read as 0. It is register
 `config/feature-flags.yaml` (owner `compute-headroom`, review by 2026-12-10).
 
 Plan: ship at 0, then read a matched 1 h baseline of the histogram. Record a wake-latency threshold on
-SCA-3120, then set `60` on `backend-integration` only, in its own config window. Rollback: set the key
-to `0` explicitly. The config train applies only the keys it declares, so deleting the key leaves the
-old value serving.
+SCA-3120, then set `60` on `backend-integration` only, in its own config window. The rollback is below.
 
-## Readback
+## Readback and guards
 
-On `backend-integration` during matched peak hours, compared with the baseline taken at 0:
+Each guard is read on 1 h windows on `backend-integration`, against a matched 1 h baseline taken at `0`.
+Throughput comes first. Breaching any guard reverts the step.
 
-- Follow-up attempts per completion and batch-pipeline reads per completion fall.
-- Completions per input unit stay within 5% of the pre-change trend. On 2026-11-26 the slots 3 + tick 20 s
-  window cut reads 32% but breached this guard at −8% and was reverted (SCA-4084), so the pacing step is
-  judged on drain rate first. The oldest projection-drain age must not rise.
-- Targeted wake-to-start p90 stays within the threshold recorded on SCA-3120.
+1. **Completions per input unit** stay within ±2% of the matched baseline, and within 5% of the same day's
+   pre-change trend. On 2026-11-26 the slots 3 + tick 20 s window cut reads 32% but breached this guard at
+   −8% and was reverted (SCA-4084).
+2. **Follow-up and completion p90 latency** rise by 15 min or less.
+3. **Targeted wake-to-start p90** (`omi_batch_pipeline_projection_followup_targeted_start_seconds`) stays at
+   or below the baseline plus the threshold recorded on SCA-3120 before the step.
+4. **Neither oldest-age gauge** (`omi_batch_projection_drain_oldest_age_seconds` or
+   `omi_batch_projection_obligation_oldest_age_seconds`) rises by more than 10 min.
+5. **An independently measured eligible stock** does not grow. `followup:candidates` does not count.
+6. **blocked + retry + claim_busy per completion** does not rise.
+
+**Expected effect:** follow-up attempts per completion and batch-pipeline reads per completion fall.
+
+**Rollback:** set the key to `'0'` explicitly, then verify that the serving revision's env reads `0`. The
+config train only updates the keys it declares, so deleting the key leaves the old value serving.
 
 ## Evidence
 
