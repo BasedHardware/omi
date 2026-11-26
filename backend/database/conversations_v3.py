@@ -280,7 +280,9 @@ def record_blocked(uid, token, reason, *, on_open=False, quarantine=(), firestor
     """
     client = firestore_client or get_firestore_client()
     ref = leases.lease_ref(client, uid, 'builder')
-    settled = _settled_quarantine(client, uid, ref) if reason == 'document_too_large' else frozenset()
+    # Pruning only runs with the switch on: off restores today's park exactly, with no extra read.
+    pruning = reason == 'document_too_large' and size_quarantine_enabled()
+    settled = _settled_quarantine(client, uid, ref) if pruning else frozenset()
 
     @firestore.transactional
     def park(tx):
@@ -344,13 +346,28 @@ def record_blocked(uid, token, reason, *, on_open=False, quarantine=(), firestor
 
 
 def _settled_quarantine(client, uid, ref):
-    """Held quarantine ids that are no longer v3_pending (landed, deleted or repaired): one field read each."""
-    held = (ref.get().to_dict() or {}).get(SIZE_QUARANTINE_FIELD) or []
-    if not held:
+    """Held quarantine ids that are no longer v3_pending (landed, deleted or repaired): one field read each.
+
+    Best effort: a failed read keeps every held id, so the park transaction still records its backoff.
+    """
+    try:
+        held = (ref.get().to_dict() or {}).get(SIZE_QUARANTINE_FIELD) or []
+        if not held:
+            return frozenset()
+        coll = user_conversations(client, uid)
+        snapshots = client.get_all([coll.document(rid) for rid in held], field_paths=['v3_pending'])
+        return frozenset(s.id for s in snapshots if not s.exists or (s.to_dict() or {}).get('v3_pending') is not True)
+    except Exception as error:
+        logger.warning('event=v3_size_quarantine_prune outcome=error exception_type=%s', type(error).__name__)
+        record_fallback(
+            component='conversations_v3',
+            from_mode='size_quarantine_prune',
+            to_mode='keep_held',
+            reason='unavailable',
+            outcome='degraded',
+            log=logger,
+        )
         return frozenset()
-    coll = user_conversations(client, uid)
-    snapshots = client.get_all([coll.document(rid) for rid in held], field_paths=['v3_pending'])
-    return frozenset(s.id for s in snapshots if not s.exists or (s.to_dict() or {}).get('v3_pending') is not True)
 
 
 def size_quarantined(uid, *, firestore_client=None):

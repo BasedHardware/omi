@@ -1,6 +1,8 @@
 """A recording whose closure Firestore rejects for size must not freeze the owner's backlog (SCA-2918)."""
 
+from collections.abc import MutableMapping
 from copy import deepcopy
+from functools import partial
 from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
@@ -11,6 +13,12 @@ from google.api_core.exceptions import InvalidArgument
 from database import conversations_v3 as store, conversations_v3_leases as leases
 from utils.conversations.v3 import Conflict, UnlockedPage, service
 from tests.unit.test_conversations_v3_derived_budget import claim, derived
+from tests.unit.fixtures.strict_firestore_transaction import (
+    StrictFirestore,
+    StrictFirestoreCollection,
+    StrictFirestoreDocument,
+    StrictFirestoreSnapshot,
+)
 from tests.unit.test_conversations_v3_review import AT, MemoryQuery, source
 
 C = '/users/u/conversations/'
@@ -67,6 +75,56 @@ def test_held_ids_that_landed_or_were_deleted_are_pruned_so_the_list_never_silts
     # The list was full, but both held ids settled: they make room for the new closure.
     assert store.record_blocked('u', token, 'document_too_large', quarantine=('c',))
     assert held[store.SIZE_QUARANTINE_FIELD] == ['c']
+
+
+def test_a_failed_prune_read_keeps_the_list_and_still_records_the_backoff(lease, monkeypatch, caplog):
+    calls = []
+    monkeypatch.setattr(store, 'record_fallback', lambda **kw: calls.append(kw))
+    pending(lease, 'a', 'b')
+    lease.rows[LEASE][store.SIZE_QUARANTINE_FIELD] = ['a']
+    pending(lease, 'a', value=False)  # Settled, but the prune cannot read it.
+
+    def unreadable(*a, **kw):
+        raise RuntimeError('transient')
+
+    monkeypatch.setattr(lease.strict, 'get_all', unreadable)
+    with caplog.at_level('WARNING'):
+        assert store.record_blocked('u', 'token', 'document_too_large')
+    held = lease.rows[LEASE]
+    assert held['v3_blocked_count'] == 1 and held['v3_blocked_reason'] == 'document_too_large'
+    assert store.backoff_state('u')[0] is not None  # The park is recorded as without the quarantine.
+    assert held[store.SIZE_QUARANTINE_FIELD] == ['a']  # Kept until a prune can read it.
+    assert 'event=v3_size_quarantine_prune outcome=error exception_type=RuntimeError' in caplog.messages
+    assert calls == [
+        {
+            'component': 'conversations_v3',
+            'from_mode': 'size_quarantine_prune',
+            'to_mode': 'keep_held',
+            'reason': 'unavailable',
+            'outcome': 'degraded',
+            'log': store.logger,
+        }
+    ]
+
+
+@pytest.mark.parametrize('enabled', [True, False])
+def test_with_the_switch_off_a_size_park_reads_only_its_lease(lease, monkeypatch, enabled):
+    monkeypatch.setenv('CONVERSATIONS_V3_SIZE_QUARANTINE', 'on' if enabled else 'off')
+    pending(lease, 'a', 'b')
+    lease.rows[LEASE][store.SIZE_QUARANTINE_FIELD] = ['a']
+    reads = []
+    document_get = StrictFirestoreDocument.get
+
+    def counted(self, transaction=None, **kw):
+        reads.append((self.path[-1], transaction is not None))
+        return document_get(self, transaction, **kw)
+
+    monkeypatch.setattr(StrictFirestoreDocument, 'get', counted)
+    assert store.record_blocked('u', 'token', 'document_too_large', quarantine=('b',))
+    # Off: the park transaction's own lease read and nothing else, as before the quarantine shipped.
+    expected = [('builder', False), ('a', False), ('builder', True)] if enabled else [('builder', True)]
+    assert reads == expected
+    assert lease.rows[LEASE][store.SIZE_QUARANTINE_FIELD] == (['a', 'b'] if enabled else ['a'])
 
 
 def test_the_quarantine_is_bounded_all_or_nothing_and_a_full_list_is_reported(lease, monkeypatch):
@@ -168,33 +226,32 @@ def test_nothing_the_open_window_reaches_transitively_is_charged_to_the_seed():
     assert service._size_quarantine('document_too_large', 1, page, commit, 'dz') == ('a', 'b')
 
 
-class TxMemory(MemoryQuery):
-    """MemoryQuery plus the point-transaction surface record_blocked, mark_bounded_attempt and
-    clear_terminal_pending use, so the real lease state machine runs against the same rows as load."""
+class Rows(MutableMapping):
+    """The in-memory rows keyed by StrictFirestore's path tuples, so its transactions and load's queries share
+    one store: ('users', 'u', 'conversations', 'a') <-> '/users/u/conversations/a'."""
 
-    def copy(self, **kw):
-        fields = dict(
-            rows=self.rows,
-            path=self.path,
-            filters=self.filters,
-            orders=self.orders,
-            cap=self.cap,
-            after=self.after,
-            calls=self.calls,
-            projection=self.projection,
-        )
-        return TxMemory(**(fields | kw))
+    def __init__(self, rows):
+        self.rows = rows
 
-    def get(self, transaction=None):
-        return super().get()
+    def __getitem__(self, path):
+        return self.rows['/' + '/'.join(path)]
 
-    def update(self, data):
-        self.rows.setdefault(self.path, {}).update(deepcopy(data))
+    def __setitem__(self, path, value):
+        self.rows['/' + '/'.join(path)] = value
+
+    def __delitem__(self, path):
+        del self.rows['/' + '/'.join(path)]
+
+    def __iter__(self):
+        return (tuple(key.strip('/').split('/')) for key in self.rows)
+
+    def __len__(self):
+        return len(self.rows)
 
 
-class Tx:
-    def update(self, ref, data):
-        ref.update(data)
+# The lease state machine's transactions run on StrictFirestore (reads before the first write, as Firestore
+# enforces); load, has_pending and the sweep's queries run on MemoryQuery over the same rows.
+STRICT = ('record_blocked', 'mark_bounded_attempt', 'clear_terminal_pending', 'backoff_state', 'size_quarantined')
 
 
 def three_seeds():
@@ -237,7 +294,9 @@ def three_seeds():
 @pytest.fixture
 def owner(monkeypatch):
     rows = three_seeds()
-    client = TxMemory(rows)
+    client = MemoryQuery(rows)
+    strict = StrictFirestore()
+    strict.rows = Rows(rows)
     passes, wakes = [], []
     # The document Firestore rejects for size, and whether its error names it (as the real one does).
     state = SimpleNamespace(oversized='da', named=True)
@@ -266,9 +325,22 @@ def owner(monkeypatch):
     monkeypatch.setattr(store, 'get_firestore_client', lambda: client)
     monkeypatch.setattr(leases, 'get_firestore_client', lambda: client)
     monkeypatch.setattr(store.firestore, 'transactional', lambda body: body)
-    monkeypatch.setattr(store, 'run_preloaded_transaction_with_contention_retry', lambda c, fn, *a: fn(Tx(), *a))
+    for name in STRICT:
+        monkeypatch.setattr(store, name, partial(getattr(store, name), firestore_client=strict))
+    monkeypatch.setattr(StrictFirestoreSnapshot, 'update_time', 1, raising=False)
+    oldest = store._oldest_pending
+    # StrictFirestore models no queries: the terminal-pending scan reads the same rows through MemoryQuery.
+    monkeypatch.setattr(
+        store,
+        '_oldest_pending',
+        lambda coll, limit: oldest(
+            client.document('/'.join(coll._path)) if isinstance(coll, StrictFirestoreCollection) else coll, limit
+        ),
+    )
     monkeypatch.setattr(store, 'account_deletion_blocks_user_work', lambda *a: False)
-    monkeypatch.setattr(store, 'account_deletion_document', lambda *a, **kw: client.document('deletion'))
+    monkeypatch.setattr(
+        store, 'account_deletion_document', lambda uid, firestore_client=None: strict.document('deletions/' + uid)
+    )
     monkeypatch.setattr(
         store, 'decode_row', lambda uid, snap: {**snap.to_dict(), '_v3_revision': 1} if snap.exists else None
     )
@@ -293,7 +365,7 @@ def owner(monkeypatch):
         'outline',
         lambda uid, prompt: '{"conversations":[{"first_line":1,"title":"A plan","line":"A plan.","kind":"conversation"}]}',
     )
-    return SimpleNamespace(rows=rows, passes=passes, wakes=wakes, state=state, client=client)
+    return SimpleNamespace(rows=rows, passes=passes, wakes=wakes, state=state, client=client, strict=strict)
 
 
 @pytest.mark.asyncio

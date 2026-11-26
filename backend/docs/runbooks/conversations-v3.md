@@ -233,8 +233,10 @@ it may set work aside in `v3_size_quarantine` on the builder lease (all or nothi
   are never filtered. The pass chain and the 5-minute sweep don't wake an owner whose only stale pending rows
   are quarantined. A failed lease read in the sweep counts as not quarantined and wakes the owner,
   recorded as `omi_fallback_total{component="conversations_v3",to_mode="unfiltered_wake",outcome="recovered"}`.
-- **Pruning.** Each size park first drops held ids that are no longer `v3_pending` (landed, deleted or
-  repaired). A closure that still doesn't fit parks with the usual backoff and records
+- **Pruning.** With the switch on, each size park first drops held ids that are no longer `v3_pending`
+  (landed, deleted or repaired). A failed prune read keeps the list, records
+  `omi_fallback_total{component="conversations_v3",from_mode="size_quarantine_prune",outcome="degraded"}` and
+  still parks with the usual backoff. With the switch off nothing is read for pruning. A closure that still doesn't fit parks with the usual backoff and records
   `omi_fallback_total{component="conversations_v3",outcome="exhausted"}` and
   `reconciles_total{outcome="size_quarantine_full"}`. Each new quarantine records `outcome="degraded"` and
   `reconciles_total{outcome="size_quarantined"}`.
