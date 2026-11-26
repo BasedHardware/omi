@@ -5,7 +5,7 @@ from datetime import timedelta
 import pytest
 
 from database import conversations_v3 as store, conversations_v3_leases as leases, memories
-from utils.conversations.v3 import Conflict, service
+from utils.conversations.v3 import Conflict, service, triggers
 from tests.unit.test_conversations_v3_claim_growth import T0, UID, path, strict  # noqa: F401
 from tests.unit.test_conversations_v3_review import AT, MemoryQuery, source
 
@@ -634,16 +634,27 @@ def test_paged_unlocked_load_closes_claims_and_rotates_past_an_unlocked_preview(
 async def test_unvisited_unlocked_wake_is_independent_of_pending_seeds(monkeypatch):
     calls = []
 
-    async def run_fixture(_, fn, uid, *, at):
-        assert fn is service.enqueue
+    async def run_fixture(_, fn, uid, *, at, wake_key):
+        assert fn is service.enqueue and wake_key == 'pass-token'
         calls.append((uid, at))
 
     monkeypatch.setattr(service, 'run_blocking', run_fixture)
-    await service._wake_unvisited_unlocked('u', store.UnlockedPage())
+    await service._wake_unvisited_unlocked('u', store.UnlockedPage(), 'pass-token')
     assert not calls
-    await service._wake_unvisited_unlocked('u', store.UnlockedPage(frozenset({'later'})))
+    await service._wake_unvisited_unlocked('u', store.UnlockedPage(frozenset({'later'})), 'pass-token')
     assert len(calls) == 1
     assert calls[0][0] == 'u' and calls[0][1] > AT
+
+
+def test_unlocked_continuation_is_not_swallowed_by_an_earlier_same_minute_wake(monkeypatch):
+    names = []
+    monkeypatch.setenv('CONVERSATIONS_V3_TASKS_URL', 'https://test.invalid')
+    monkeypatch.setattr(triggers, 'enqueue_named_task', lambda queue, url, task_id, *a, **kw: names.append(task_id))
+    minute = AT + timedelta(minutes=1)
+    triggers.enqueue('u', at=minute)  # An earlier wake: it can run busy under this pass's lease and be consumed.
+    triggers.enqueue('u', at=minute + timedelta(seconds=20), wake_key='pass-token')
+    triggers.enqueue('u', at=minute + timedelta(seconds=40), wake_key='pass-token')  # Same pass stays idempotent.
+    assert names[0] != names[1] == names[2]
 
 
 def test_previous_bounded_pending_park_gets_one_unlocked_paging_attempt(strict):

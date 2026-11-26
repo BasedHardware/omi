@@ -282,13 +282,14 @@ async def _load_live_batch(uid, token, parked, unlocked_page=None):
     raise AssertionError('bounded pending batch sizes are empty')
 
 
-async def _wake_unvisited_unlocked(uid, page, scheduled_at=None):
+async def _wake_unvisited_unlocked(uid, page, token, scheduled_at=None):
     now = datetime.now(timezone.utc)
     if page is not None and page.remaining and (scheduled_at is None or scheduled_at <= now):
         # An omitted window may already be due. Its next scan cannot depend on
         # the selected groups' deadlines or on the presence of pending recordings.
         scheduled_at = now + timedelta(minutes=1)
-        await run_blocking(db_executor, enqueue, uid, at=scheduled_at)
+        # The pass's lease token names the task, so an earlier same-minute wake cannot swallow it.
+        await run_blocking(db_executor, enqueue, uid, at=scheduled_at, wake_key=token)
     return scheduled_at
 
 
@@ -837,7 +838,7 @@ async def reconcile(
                 stale = sorted({*existing, *(entry['id'] for entry in priors)})
                 await run_blocking(db_executor, rederive_store.drop_stale_priors, uid, run_id, stale)
                 await run_blocking(db_executor, backfill_runs.save_priors, uid, run_id, priors)
-            unlocked_wake = await _wake_unvisited_unlocked(uid, unlocked_page)
+            unlocked_wake = await _wake_unvisited_unlocked(uid, unlocked_page, token)
             await run_blocking(db_executor, leases.renew, uid, key, token)
             moved = await run_blocking(
                 db_executor,
@@ -967,7 +968,7 @@ async def reconcile(
             with suspend_committed_write_count():
                 await _drain_blocked(uid, blocked)
         return 'blocked'
-    await _wake_unvisited_unlocked(uid, unlocked_page, unlocked_wake)
+    await _wake_unvisited_unlocked(uid, unlocked_page, token, unlocked_wake)
     if on_open:
         await run_blocking(db_executor, enqueue, uid, at=datetime.now(timezone.utc) + timedelta(minutes=1))
         return 'committed'
