@@ -33,6 +33,7 @@ import sys
 import time
 import traceback
 from typing import Any, Mapping, Optional, Sequence
+from unittest.mock import patch
 
 from testing.pipeline_lab.scenario import budget as budgets
 from testing.pipeline_lab.scenario.checks import OUTCOMES, evaluate, outcome
@@ -164,6 +165,7 @@ async def run_scenario(
     trace_calls: bool = False,
     llm_requests: Optional[Any] = None,
     arm_overlay: Optional[Mapping[str, Any]] = None,
+    speakers: Optional[Any] = None,
 ) -> dict[str, Any]:
     from testing.pipeline_lab.chain.barrier import ExecutorBarrier
     from testing.pipeline_lab.chain.driver import ProductFinalizer
@@ -183,6 +185,8 @@ async def run_scenario(
     from testing.pipeline_lab.vector.index import NumericVectorIndex
 
     config = replace(LabStackConfig.from_env(), llm_proxy_url=llm_url, lab_root=out_dir / 'lab')
+    if speakers is not None:  # the speaker peer (speakers/scenario.py) is one more loopback peer
+        config = replace(config, extra_loopback_ports=(*config.extra_loopback_ports, *speakers.ports()))
     redis_lease = os.environ.get(REDIS_LEASE_ENV) or None  # read now: the lab environment clears os.environ
     trace_writes = os.environ.get(budgets.WRITE_SITES_ENV) == '1'
     events = plan_events(scenario)
@@ -220,10 +224,16 @@ async def run_scenario(
             from testing.pipeline_lab.scenario.reach import CallTrace
 
             trace = CallTrace().start()
+        if speakers is not None:
+            # The speaker peer's URLs, set after the overlay (its random port would make the overlay digest differ
+            # between repeats), and the staged-unit reads answered from this run's batch lane (speakers/scenario.py).
+            stack.enter_context(patch.dict(os.environ, speakers.env()))
+            env.decisions.record('speaker_peer', speakers.mode, 'lab_peer')
+            speakers.install(stack)
         if audio:  # audio_file recordings: their words through the lab's batch/sync lane code (scenario/audio.py)
             from testing.pipeline_lab.scenario.audio import materialize
 
-            scenario, result['audio'] = materialize(scenario, audio)
+            scenario, result['audio'] = materialize(scenario, audio, speakers=speakers)
         # Home (home.json): the product's own Home routes, called by ops before each checkpoint's snapshot
         # and here before the final one, inside this run's isolated emulator project and Redis database.
         home = HomeRecorder(uid=config.uid, out_dir=out_dir, offset=scenario.offset, now=clock.now)
@@ -235,10 +245,17 @@ async def run_scenario(
             home=home,
         )
         ops.install(stack)
+        if speakers is not None and scenario.speakers is not None and scenario.speakers.truth is not None:
+            from testing.pipeline_lab.speakers.scenario import SpeakerScoring
+
+            ops.speaker_scoring = SpeakerScoring.for_scenario(scenario, audio or {})
+            ops.speaker_scoring.final_pass = speakers.final_pass
         ops.stt_sources = {row['label']: row['source'] for row in (result.get('audio') or {}).get('recordings', [])}
         clock.set(start)
         reset_lab_state(env.firestore, env.redis, config.uid, redis_lease=redis_lease)
         result['account'] = seed_account(config.uid, scenario.account.private_cloud_sync_enabled)
+        if speakers is not None:  # the enrolled gallery, through product writers (not counted)
+            speakers.seed_gallery(config.uid, clock.now())
         seeded = seed_history(env.firestore, config.uid, scenario) if scenario.seed else None
         if seeded is not None:
             ops.seeded = {handle for handle in seeded['visible'] + seeded['hidden']}
@@ -339,6 +356,8 @@ async def run_scenario(
     )
     from testing.pipeline_lab.scenario.standins import audio_steps, stand_in_notes
 
+    if speakers is not None:
+        result['speakers'] = speakers.summary()
     result.update(stand_in_notes=stand_in_notes(result), audio_steps=audio_steps(result))
     return result
 
@@ -359,6 +378,10 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     parser.add_argument('--clock', choices=('frozen', 'tick'), default='frozen')
     parser.add_argument('--stt', choices=('replay', 'record-vendor', 'record-local'), default='replay')
     parser.add_argument('--stt-budget-usd', type=float, default=None)
+    parser.add_argument('--windows', choices=('vad', 'fixed'), default='vad', help='record-local: how audio is cut')
+    parser.add_argument(
+        '--speakers', choices=('replay', 'record-local'), default='replay', help='speaker peer cassette mode'
+    )
     parser.add_argument('--trace-calls', action='store_true', help='write called_files.json (scenario/reach.py)')
     parser.add_argument(
         '--arm-overlay', help='a `scenario compare` arm: lab overlay JSON applied on top of the scenario env'
@@ -396,9 +419,15 @@ def _run_main(args: argparse.Namespace, out: Path, started: float) -> int:
         scenario = load_scenario(args.file)
         arm_overlay = json.loads(Path(args.arm_overlay).read_text()) if args.arm_overlay else None
         # Before the lab environment: recording on a miss may need the ambient env and network.
-        audio = prepare(scenario, mode=args.stt, budget_usd=args.stt_budget_usd)
+        audio = prepare(scenario, mode=args.stt, budget_usd=args.stt_budget_usd, windows=args.windows)
         from testing.pipeline_lab.llm_proxy.fake_upstream import FakeUpstream
 
+        speakers = None
+        if scenario.speakers is not None:  # before the lab env: the peer's cassette root needs the ambient env
+            from testing.pipeline_lab.speakers.scenario import ScenarioSpeakers
+
+            files = tuple(rec.audio_file for rec in scenario.audio_recordings)
+            speakers = ScenarioSpeakers.start(scenario.speakers, args.speakers, audio_files=files)
         upstream = FakeUpstream().start()
         try:
             result = asyncio.run(
@@ -411,10 +440,13 @@ def _run_main(args: argparse.Namespace, out: Path, started: float) -> int:
                     trace_calls=args.trace_calls,
                     llm_requests=lambda: list(upstream.requests),
                     arm_overlay=arm_overlay,
+                    speakers=speakers,
                 )
             )
         finally:
             upstream.stop()
+            if speakers is not None:
+                speakers.stop()
     except AudioError as error:
         result = {'scenario': Path(args.file).stem, 'outcome': 'error', 'error': str(error)}
     except Exception as error:  # noqa: BLE001 - reported as the scenario's error outcome

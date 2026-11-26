@@ -8,7 +8,7 @@ from datetime import datetime, timezone
 from urllib.parse import urlsplit
 
 from config import reliability_experiments
-from config.conversations_v3 import SPEECH_LANDED_FIELD, conversations_v3_enabled
+from config.conversations_v3 import SPEECH_LANDED_FIELD, conversations_v3_enabled, v3_intake_held_out
 from database import conversations_v3 as store
 from database.helpers import set_data_protection_level
 from utils.cloud_tasks import enqueue_named_task
@@ -21,13 +21,17 @@ logger = logging.getLogger(__name__)
 FOLLOW_UP_SLOT_SECONDS = 15
 
 
-def mark_new(uid, row):
+def mark_new(uid, row, *, continuation=False):
+    """``continuation``: a v3 rotation successor of a recording row, the same capture, not new intake."""
     if (
         getattr(row.get('source'), 'value', row.get('source')) in {'omi', 'phone'}
         and not row.get('imported')
         and not row.get('v3_derived')
         and row.get('data_protection_level') != 'private'
         and conversations_v3_enabled(uid)
+        # Holdout (SCA-2918): a held-out owner's new rows stay legacy; stored v3 rows keep draining,
+        # and so does a capture in flight, whose rotation successor stays v3.
+        and (continuation or not v3_intake_held_out(uid))
     ):
         _mark_resolved(uid, row)
 

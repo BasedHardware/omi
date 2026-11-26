@@ -4,6 +4,11 @@ Markers are durable obligations. Dispatch failure never clears one; the sweeper
 retries it. Switching admission off does not stop existing obligations.
 """
 
+from config.llm_spend import (
+    background_outline_flex_enabled,
+    outline_cache_prefix_enabled,
+    v3_summary_first_open_gating_enabled,
+)
 from database import conversations_v3_leases as leases
 
 from database import conversations_v3_processing as writers
@@ -74,6 +79,11 @@ logger = logging.getLogger(__name__)
 # Live capture keeps appending to its recording while a pass runs, so the commit's revision fence
 # loses these races routinely. They answer the task and wake the owner again at the next minute
 # (one coalesced named task per owner-minute) instead of burning Cloud Tasks attempts on a 500.
+OUTLINE_BACKGROUND_BUDGET_SECONDS = 110
+OUTLINE_MIN_FLEX_BUDGET_SECONDS = 60
+OUTLINE_PUBLICATION_RESERVE_SECONDS = 15
+OUTLINE_PUBLICATION_DEADLINE = timedelta(hours=2)
+
 RACES = frozenset({'source_changed', 'lease_lost'})
 RACE_RETRY = timedelta(minutes=1)
 
@@ -242,6 +252,94 @@ def historical_stretches(eligible, now, *, since, until, internal_end=False):
     return groups
 
 
+def _outline_flex_budget(group, flex_owner_deadline):
+    if flex_owner_deadline is None or not group['finished'] or group['manual_end']:
+        return 0
+    seconds_to_publish = (group['end'] + OUTLINE_PUBLICATION_DEADLINE - datetime.now(timezone.utc)).total_seconds()
+    return int(
+        min(
+            flex_owner_deadline - time.monotonic(),
+            seconds_to_publish - OUTLINE_PUBLICATION_RESERVE_SECONDS,
+        )
+        * 1000
+    )
+
+
+async def _derive_outline(
+    uid, key, token, group, messages, fingerprint, report, *, cohesion, silence_gap, preview_key, flex_owner_deadline
+):
+    keyed = {'key': key} if key != 'builder' else {}
+    background_attempt = False
+
+    def record_attempt():
+        metrics.MODEL_CALLS.labels('outline').inc()
+        report['outline_calls'] = report.get('outline_calls', 0) + 1
+
+    async def claim_background_attempt():
+        nonlocal background_attempt
+        budget_ms = _outline_flex_budget(group, flex_owner_deadline)
+        if budget_ms < OUTLINE_MIN_FLEX_BUDGET_SECONDS * 1000:
+            return 0
+        background_attempt = await run_blocking(
+            db_executor, store.outline_attempt, uid, token, fingerprint, preemptible=True
+        )
+        if not background_attempt:
+            return 0
+        await run_blocking(db_executor, leases.require_current, uid, key, token)
+        budget_ms = _outline_flex_budget(group, flex_owner_deadline)
+        if budget_ms < OUTLINE_MIN_FLEX_BUDGET_SECONDS * 1000:
+            return 0
+        record_attempt()
+        return budget_ms
+
+    try:
+        if outline_cache_prefix_enabled():
+            # Keep the existing result-cache key across prompt and transport experiments.
+            messages = (
+                outline.messages(group, timezone.utc, cohesion=cohesion, silence_gap=silence_gap, cache_prefix=True)
+                + messages[2:]
+            )
+        content = None
+        if _outline_flex_budget(group, flex_owner_deadline) >= OUTLINE_MIN_FLEX_BUDGET_SECONDS * 1000:
+            await run_blocking(
+                db_executor,
+                models.require_current_generated_compute,
+                'conversation_v3_outline',
+                uid=uid,
+                provider='openai',
+                allow_byok=False,
+            )
+            try:
+                content = await models.background_outline(uid, messages, claim=claim_background_attempt)
+            finally:
+                if background_attempt:
+                    await run_blocking(db_executor, leases.mark_llm_preemptible, uid, key, token, False)
+        if content is None:
+            if not await run_blocking(db_executor, store.outline_attempt, uid, token, fingerprint, **keyed):
+                return [{**entry, '_outline_failed': True} for entry in outline.fallback(group)], {}
+            record_attempt()
+            content = await leased_work(uid, key, token, llm_executor, models.outline, uid, messages)
+    except RuntimeError as error:
+        if str(error) != 'v3_lease_lifetime_exhausted':
+            raise
+        content = ''
+
+    preview_fields = {}
+    try:
+        entries = outline.parse(content, group)
+        if preview_key and not group['locked']:
+            preview_fields = {'preview_key': preview_key, 'anchors': outline.preview_anchors(group, entries)}
+            await run_blocking(
+                db_executor, store.save_outline, uid, token, fingerprint, entries, key=key, preview=preview_fields
+            )
+        else:
+            await run_blocking(db_executor, store.save_outline, uid, token, fingerprint, entries, **keyed)
+        return entries, preview_fields
+    except (ValueError, KeyError, TypeError):
+        metrics.RECONCILES.labels('outline_fallback').inc()
+        return [{**entry, '_outline_failed': True} for entry in outline.fallback(group)], preview_fields
+
+
 async def _release_reconcile_lease(uid, key, token, *, primary_failed):
     try:
         await run_blocking(db_executor, leases.release, uid, key, token)
@@ -401,6 +499,7 @@ async def reconcile(
     uid,
     *,
     on_open=False,
+    promote_llm=False,
     conversation_id=None,
     derive=False,
     since=None,
@@ -410,6 +509,7 @@ async def reconcile(
     live=False,
     historical_timing=None,
     internal_end=False,
+    background=False,
     report=None,
     _pass=0,
 ):
@@ -428,8 +528,6 @@ async def reconcile(
     parked = None
     moved = set()
     deferred: dict[str, datetime] = {}
-    # Live passes call the outline-cache writers exactly as before; only a backfill names its lease.
-    keyed = {'key': key} if derive else {}
     if not on_open and not derive:
         backoff, parked = await run_blocking(db_executor, store.backoff_state, uid)
         if backoff and backoff > datetime.now(timezone.utc):
@@ -438,7 +536,16 @@ async def reconcile(
             with suspend_committed_write_count():
                 await _drain_blocked(uid, parked)
             return 'backoff'
-    token = await run_blocking(db_executor, leases.acquire, uid, key)
+    first_open_gating = v3_summary_first_open_gating_enabled()
+    flex_enabled = background_outline_flex_enabled()
+    retry_failed_outlines = first_open_gating or flex_enabled
+    flex_owner_deadline = (
+        time.monotonic() + OUTLINE_BACKGROUND_BUDGET_SECONDS
+        if background and flex_enabled and not (on_open or derive or internal_end)
+        else None
+    )
+    promote = {'promote_llm': True} if on_open and promote_llm and flex_enabled and not derive else {}
+    token = await run_blocking(db_executor, leases.acquire, uid, key, **promote)
     if token is None:
         metrics.RECONCILES.labels('busy').inc()
         return 'busy'
@@ -531,6 +638,8 @@ async def reconcile(
             if not groups:
                 return 'stored'
         # Keep a bounded cache; every fingerprint is checked even for finished stretches.
+        if retry_failed_outlines:
+            cached = [row for row in cached if not any(entry.get('_outline_failed') for entry in row['entries'])]
         saved = {row['fingerprint']: row for row in cached}
         preview_prefix = f'{silence_seconds}:'
         scoped_preview_keys = {f"{preview_prefix}{group['key']}" for group in groups} if custom_timing else set()
@@ -538,7 +647,7 @@ async def reconcile(
         unmatched_previews = {key: row for key, row in previews.items() if key not in scoped_preview_keys}
         consumed_previews = set()
         outlines, cache = [], []
-        background = await run_blocking(db_executor, context.outline_sources, uid, groups)
+        sources = await run_blocking(db_executor, context.outline_sources, uid, groups)
         for group in groups:
             await run_blocking(db_executor, leases.renew, uid, key, token)
             messages = outline.messages(group, timezone.utc, cohesion=cohesion, silence_gap=silence_gap)
@@ -546,7 +655,7 @@ async def reconcile(
                 (
                     'human',
                     context.outline_block(
-                        group, background, [entry['title'] for entries in outlines for entry in entries]
+                        group, sources, [entry['title'] for entries in outlines for entry in entries]
                     ),
                 )
             )
@@ -571,42 +680,19 @@ async def reconcile(
                 entries = outline.reuse_preview(group, preview)
                 report['outline_cache_hits'] = report.get('outline_cache_hits', 0) + 1
             elif group['outline_ready'] or on_open:
-                if await run_blocking(db_executor, store.outline_attempt, uid, token, fingerprint, **keyed):
-                    metrics.MODEL_CALLS.labels('outline').inc()
-                    report['outline_calls'] = report.get('outline_calls', 0) + 1
-                    try:
-                        content = await leased_work(uid, key, token, llm_executor, models.outline, uid, messages)
-                    except RuntimeError as error:
-                        if str(error) != 'v3_lease_lifetime_exhausted':
-                            raise
-                        content = ''
-                    try:
-                        entries = outline.parse(content, group)
-                        if preview_key and not group['locked']:
-                            preview_fields = {
-                                'preview_key': preview_key,
-                                'anchors': outline.preview_anchors(group, entries),
-                            }
-                            await run_blocking(
-                                db_executor,
-                                store.save_outline,
-                                uid,
-                                token,
-                                fingerprint,
-                                entries,
-                                key=key,
-                                preview=preview_fields,
-                            )
-                        else:
-                            await run_blocking(
-                                db_executor, store.save_outline, uid, token, fingerprint, entries, **keyed
-                            )
-                    except (ValueError, KeyError, TypeError):
-                        entries = outline.fallback(group)
-                        entries = [{**entry, '_outline_failed': True} for entry in entries]
-                        metrics.RECONCILES.labels('outline_fallback').inc()
-                else:
-                    entries = [{**entry, '_outline_failed': True} for entry in outline.fallback(group)]
+                entries, preview_fields = await _derive_outline(
+                    uid,
+                    key,
+                    token,
+                    group,
+                    messages,
+                    fingerprint,
+                    report,
+                    cohesion=cohesion,
+                    silence_gap=silence_gap,
+                    preview_key=preview_key,
+                    flex_owner_deadline=flex_owner_deadline,
+                )
             else:
                 # First speech is visible before either the title preview or the outline is ready.
                 entries = [
@@ -621,8 +707,11 @@ async def reconcile(
                     }
                 ]
             outlines.append(entries)
-            if group['outline_ready'] or on_open or preview is not None:
-                if preview_key and not group['locked'] and not any(e.get('_outline_failed') for e in entries):
+            outline_failed = any(entry.get('_outline_failed') for entry in entries)
+            if (group['outline_ready'] or on_open or preview is not None) and (
+                not retry_failed_outlines or not outline_failed
+            ):
+                if preview_key and not group['locked'] and not outline_failed:
                     preview_fields = {'preview_key': preview_key, 'anchors': outline.preview_anchors(group, entries)}
                 cache.append({'fingerprint': fingerprint, 'entries': entries, **preview_fields})
 
@@ -828,7 +917,22 @@ async def reconcile(
                     # The old summary no longer covers the window: without this the covered-summary guard
                     # returns the previous notes and the only automatic rewrite is spent on nothing.
                     row['summary_covers_through'] = None
-                if prior is not None and was_ended and not rewrite and not promoted:
+                outline_recovered = (
+                    first_open_gating
+                    and on_open
+                    and prior
+                    and prior.get('v3_process_failure_reason') == 'outline'
+                    and not window.get('_outline_failed')
+                )
+                needs_processing = (
+                    not was_ended
+                    or rewrite
+                    or promoted
+                    or outline_recovered
+                    or (prior or {}).get('tile_state') == 'transcribing'
+                )
+                keep_prior_status = not needs_processing if first_open_gating else not (rewrite or promoted)
+                if prior is not None and was_ended and keep_prior_status:
                     row['status'] = prior['status']
                     row['tile_state'] = prior.get('tile_state', 'done')
                 waiting = not transcription_failed and any(
@@ -839,11 +943,9 @@ async def reconcile(
                     row['v3_process_pending'] = False
                     if not derive:
                         await run_blocking(db_executor, enqueue, uid, at=now + timedelta(minutes=1))
-                if (
-                    ended
-                    and not waiting
-                    and (not was_ended or rewrite or promoted or (prior or {}).get('tile_state') == 'transcribing')
-                ):
+                if ended and not waiting and needs_processing:
+                    if outline_recovered:
+                        row.update(v3_process_failed=False, v3_process_failure_reason=None, summary_retryable=False)
                     row['v3_process_pending'] = True
                     row.pop('v3_process_retry_after', None)
                     row['v3_rewrites'] = int((prior or {}).get('v3_rewrites') or 0) + int(rewrite)
@@ -856,9 +958,7 @@ async def reconcile(
                     # Notes written while hidden; the window now shows on Home without a re-note,
                     # so this is its first visible completed moment and it owes the created fanout.
                     row['v3_created_pending'] = True
-                if ended and (
-                    not was_ended or rewrite or promoted or (prior or {}).get('tile_state') == 'transcribing'
-                ):
+                if ended and needs_processing:
                     if not row.get('is_locked') and (transcription_failed or window.get('_outline_failed')):
                         row.update(
                             await run_blocking(
@@ -1071,7 +1171,7 @@ async def reconcile(
     )
     if pending:
         if _pass < 2:
-            return await reconcile(uid, _pass=_pass + 1)
+            return await reconcile(uid, background=background, _pass=_pass + 1)
         else:
             await run_blocking(db_executor, enqueue, uid, at=datetime.now(timezone.utc) + timedelta(minutes=1))
     return 'committed'
@@ -1362,9 +1462,23 @@ async def drain_processing(uid):
             continue
         primary_failed = False
         try:
-            await _process_leased(uid, row, token)
+            # The pending scan can precede a foreground write that releases
+            # this lease. Use its latest input and coverage to reuse the notes
+            # while still running the remaining processing and derived effects.
+            current = await run_blocking(db_executor, _load_processing_row, uid, row['id'])
+            if current and current.get('v3_process_pending'):
+                await _process_leased(uid, current, token)
         except FinalizationOwnedElsewhere:
             continue
+        except Conflict as error:
+            if str(error) != 'lease_lost':
+                primary_failed = True
+                raise
+            try:
+                await run_blocking(db_executor, enqueue, uid, at=datetime.now(timezone.utc) + RACE_RETRY)
+            except BaseException:
+                primary_failed = True
+                raise
         except BaseException:
             primary_failed = True
             raise
@@ -1376,6 +1490,11 @@ async def drain_processing(uid):
     from utils.conversations.v3 import created
 
     await created.deliver(uid)
+
+
+def _load_processing_row(uid, cid):
+    snapshot = store.user_conversations(store.get_firestore_client(), uid).document(cid).get()
+    return store.decode_row(uid, snapshot) if snapshot.exists else None
 
 
 PROCESSING_SCAN_MAX_PAGES = 4
@@ -1455,8 +1574,13 @@ def _process(uid, row, token):
                 except Exception as error:
                     logger.warning('event=v3_summary_shown_early outcome=error exception_type=%s', type(error).__name__)
 
+        summary_lease = None
+        if not (manual or row.get('backfilled') or row.get('v3_unlocked') or policy.live_summary_target(row)):
+            summary_lease = (row['id'], token, row.get('finished_at'))
         try:
-            with fence.writer(uid, row['id'], token), models.notes_mode(uid, backfilled=bool(row.get('backfilled'))):
+            with fence.writer(uid, row['id'], token), models.notes_mode(
+                uid, backfilled=bool(row.get('backfilled')), background_lease=summary_lease
+            ):
                 result = process_conversation(
                     uid,
                     row.get('language') or 'en',

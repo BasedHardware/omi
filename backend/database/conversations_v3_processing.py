@@ -554,6 +554,37 @@ class _Terminal:
 TERMINAL = _Terminal()
 
 
+def acquire_open_summary(uid, cid, *, firestore_client=None):
+    """Hand off a preemptible notes pass and refund its attempt in the same transaction."""
+
+    def refund(client, tx):
+        ref = store.user_conversations(client, uid).document(cid)
+        row = (
+            ref.get(
+                transaction=tx,
+                field_paths=[
+                    'v3_process_pending',
+                    'v3_process_attempts',
+                    'deleted',
+                    'is_locked',
+                    'finalization_engine',
+                    'finalization_owner_epoch',
+                ],
+            ).to_dict()
+            or {}
+        )
+        attempts = row.get('v3_process_attempts', 0)
+        if (
+            row.get('v3_process_pending')
+            and attempts
+            and not (row.get('deleted') or row.get('is_locked'))
+            and python_owns_finalization(row)
+        ):
+            tx.update(ref, {'v3_process_attempts': attempts - 1})
+
+    return leases.acquire(uid, 'summary-' + cid, promote_llm=True, on_promote=refund, firestore_client=firestore_client)
+
+
 def begin_processing(uid, row, token, *, force=False, backfill_prior=None, firestore_client=None):
     """Claim one processing pass: True when it began, TERMINAL when the row is already exhausted.
 

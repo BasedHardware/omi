@@ -36,6 +36,40 @@ worktree. Leave `CONVERSATIONS_V3_FIRST_APP_BUILD` unset in source. At rollout,
 lead2 sets it through the shared runtime source from the first TestFlight build
 containing this PR; unset/invalid yields unknown and cannot qualify deletion evidence.
 
+## Per-owner holdout
+
+An owner in the `conversations-v3-holdout` rollout cohort keeps legacy intake for NEW captures at
+every stage. Use it to return specific heavy owners to legacy at `all` without a roll. Stage
+admission (`conversations_v3_enabled`) ignores the holdout. New-intake sites ask
+`v3_intake_held_out` after admission:
+
+- `triggers.mark_new` (in-progress create, sync ingest, batch projection): no `recording` marker on new rows.
+  A listen v3 rotation successor is the same capture continuing, so it stays v3.
+- Manual cuts (`record_end`, `ends_around`): experiment-off End handling.
+- Home list: legacy read mode (offset paging, `show_held`). It still shows the owner's existing
+  `v3_derived` cards, and their new legacy pieces held for notes.
+- `GET /v1/conversations/live`: an existing active v3 window is still served (`v3:true`).
+  Without one, the answer is `v3:false`.
+
+Finish, episodes and the builders keep stage admission, so existing v3 recordings drain on the
+v3 path and an active v3 capture can still be finished. While a legacy row is in progress beside an
+older v3 window, a Finish that names a different id finishes only that named window (or its just-sealed
+capture) and leaves the legacy row recording. An unnamed Finish, or a miss, runs the legacy Finish. The cohort starts empty. Add or remove
+one owner per command from a private UID file (never pass a UID on the command line):
+
+```bash
+GCP_AGENT_TIER=prod-operator python backend/scripts/rollout_cohort.py --uid-file <private-file> \
+  --cohort conversations-v3-holdout --project based-hardware --environment prod --add --apply
+# --remove instead of --add writes an explicit false and returns the owner to normal admission.
+```
+
+Allow about 60 s for the per-process cohort cache, plus up to 120 s for the capability read cache.
+The capture in flight keeps its layer; only new rows move. An unknown membership read admits as
+before and counts `omi_fallback_total{component="feature_flags",from_mode="v3_holdout"}`, so a cold
+cache can still admit a held-out owner. Check: once the writers have resolved membership, the owner
+gets no new `recording`-marked rows. `CONVERSATIONS_V3_HOLDOUT=off` (default on) skips the check and
+its read; members stay stored.
+
 ## Internal live recap beta
 
 `CONVERSATIONS_V3_LIVE_RECAP_COHORT` controls the authenticated API detail

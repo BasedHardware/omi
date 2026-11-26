@@ -620,7 +620,8 @@ def _get_shaped_conversation_notes(
                 call_model = isolated_model
 
             async def model_turn(shape: Mount, messages: list[Any]) -> Turn:
-                response = await call_model.ainvoke(messages)
+                async with v3_models.summary_model_attempt():
+                    response = await call_model.ainvoke(messages)
                 content = getattr(response, 'content', response)
                 if isinstance(content, list):
                     content = ''.join(part.get('text', '') if isinstance(part, dict) else str(part) for part in content)

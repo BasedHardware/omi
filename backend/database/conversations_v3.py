@@ -1998,7 +1998,9 @@ def transfer_claims(uid, sources, target, *, firestore_client=None):
     transfer(client.transaction())
 
 
-def outline_attempt(uid, token, fingerprint, *, key='builder', firestore_client=None):
+def outline_attempt(uid, token, fingerprint, *, key='builder', preemptible=False, firestore_client=None):
+    if preemptible and key != 'builder':
+        raise ValueError('only the live builder outline can be promoted on open')
     client = firestore_client or get_firestore_client()
     ref = leases.lease_ref(client, uid, key)
 
@@ -2009,12 +2011,16 @@ def outline_attempt(uid, token, fingerprint, *, key='builder', firestore_client=
             timezone.utc
         ):
             raise Conflict('lease_lost')
-        attempts = dict(row.get('outline_attempts') or {})
+        field = 'outline_flex_attempts' if preemptible else 'outline_attempts'
+        attempts = dict(row.get(field) or {})
         count = attempts.get(fingerprint, 0)
-        if count >= 2:
+        if count >= (1 if preemptible else 2):
             return False
         attempts[fingerprint] = count + 1
-        tx.update(ref, {'outline_attempts': dict(list(attempts.items())[-128:])})
+        update: dict[str, Any] = {field: dict(list(attempts.items())[-128:])}
+        if preemptible:
+            update['llm_preemptible'] = True
+        tx.update(ref, update)
         return True
 
     return run_preloaded_transaction_with_contention_retry(client, begin)

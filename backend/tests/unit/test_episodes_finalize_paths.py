@@ -1383,6 +1383,19 @@ def test_named_finish_cuts_capture_that_sealed_after_the_named_window(sealed_nam
     counter.labels.assert_called_once_with('named_recording_cut')
 
 
+@pytest.mark.parametrize('owner', ['window-b', None])
+def test_strict_named_finish_never_moves_to_a_later_capture(sealed_named_route, owner):
+    # The mixed legacy/v3 Finish (SCA-2918) asks for exactly the named target: no supersession.
+    client, db, paths, enqueued, counter = sealed_named_route
+    a, b = _later_capture(db, paths, owner=owner)
+
+    assert v3_finish.finish_live_window(_UID, 'window', named_only=True) is None
+
+    assert all(not tx.updates for tx in db.transactions) and not enqueued
+    assert 'v3_manual_end' not in a and 'v3_manual_end' not in b
+    counter.labels.assert_called_once_with('named_superseded')
+
+
 @pytest.mark.parametrize('case', ['private', 'two_owners', 'not_window_tail', 'tie'])
 def test_named_finish_declines_when_the_later_capture_is_unproven(sealed_named_route, case):
     client, db, paths, enqueued, counter = sealed_named_route
