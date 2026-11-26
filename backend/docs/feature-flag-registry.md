@@ -647,6 +647,7 @@ and an explicit empty literal renders as `''`.
 | `SCREEN_TASK_STOP` | Stop screen-task gate and flagged extraction admission; default false; clients poll every 30 seconds with a 55-second lease | backend | env | inverted | — | — | — | — | keep | keep | — | auditfix |
 | `SERVER_BATCH_ONLY_ENABLED` | Default on; consented supported-language platform sessions reserve durable batch ownership and open no managed live STT | backend | env | open | — | — | — | — | keep | keep | — | auditfix |
 | `SONIOX_IDLE_CLOSE_SECONDS` | Default on at 45 s; close paid Soniox transports after continuous active-VAD silence or 20 s with no client frames; 0 or off is the kill switch | backend | env | open | — | — | — | — | keep | keep | — | backend |
+| `SPEAKER_EVIDENCE_ERASURE_CHECK_ENABLED` | Default on. Verify the post-root speaker evidence sweep with one name-only child list per swept conversation. Off skips verification reads and records disabled coverage. | backend | env | open | — | — | — | — | keep | keep | — | Backend / SCA-4262 |
 | `SPEAKER_IDENTITY_REPAIR_ENABLED` | Default on; repair unsupported notes participant bindings while preserving People-spelled prose mentions and owner names | backend | env | open | — | — | — | — | keep | keep | — | auditfix |
 | `SPEAKER_RECURRING_VOICES_ENABLED` | Default on; private recurring voices learned only after the batch final pass revalidates | backend | env | open | — | — | — | — | keep | keep | — | speaker rollout lead |
 | `SPEAKER_ROLE_PROJECTION_ENABLED` | Shared evidence-backed prompt roles for notes, memory quote sources and tasks; on unless explicitly false | backend | env | open | — | — | — | — | keep | keep | — | auditfix |
@@ -1577,6 +1578,7 @@ their code default (`fail` tells you which way a missing value resolves).
 - `SPACES_SYNC_API_ENABLED` — Default off; /v1/spaces change-feed, snapshot, mutation and cursor endpoints over the cell store (fail: closed)
 - `SPEAKER_AUTO_ENROLL_ENABLED` — Default on; explicit speaker tags teach an encrypted vector-only roster for retained private-cloud sync users (fail: closed)
 - `SPEAKER_BATCH_STORE_ENABLED` — Default on; a final:batch unit speaker window refused for overlapping stores is proven and cut only on its admission-stamped timing store, inside the per-window cohort (fail: closed)
+- `SPEAKER_EVIDENCE_ERASURE_CHECK_ENABLED` — Default on. Verify the post-root speaker evidence sweep with one name-only child list per swept conversation. Off skips verification reads and records disabled coverage. (fail: open)
 - `SPEAKER_EVIDENCE_MODE` — off/shadow/serve; default shadow records ranked speaker evidence without changing labels (fail: closed)
 - `SPEAKER_EVIDENCE_MODE_SERVE_PERCENT` — Default zero; deterministic percentage cohort for speaker evidence projection (fail: closed)
 - `SPEAKER_EVIDENCE_MODE_SERVE_UID_SHA256S` — Default empty; SHA256 digests for the explicit speaker evidence serve cohort (fail: closed)
