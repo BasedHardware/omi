@@ -442,8 +442,12 @@ runs:
         POLICY_SHA: ${{ inputs.resource_raise_policy_sha }}
       run: |
         set -euo pipefail
-        policy="$GITHUB_WORKSPACE/.release-resource-policy"
+        # Keep the private control checkout out of the product Docker context.
+        control_dir="$(mktemp -d "$RUNNER_TEMP/r34-policy.XXXXXX")"
+        policy="$control_dir/control"
+        mv "$GITHUB_WORKSPACE/.release-resource-policy" "$policy"
         [[ "$(git -C "$policy" rev-parse HEAD)" == "$POLICY_SHA" ]]
+        printf 'R34_POLICY_ROOT=%s\n' "$policy" >> "$GITHUB_ENV"
         python3 "$policy/infra/rollout/release-system/raise_ci.py" --repo "$policy" --sha "$POLICY_SHA" \
           config "$DEPLOY_CONTROL_SCRIPTS/../deploy/ops/prod.yaml"
 
@@ -1110,7 +1114,7 @@ runs:
       run: |
         set -euo pipefail
         if [[ -n "$POLICY_SHA" ]]; then
-          policy="$GITHUB_WORKSPACE/.release-resource-policy"
+          policy="${R34_POLICY_ROOT:?missing pinned resource policy}"
           MAX_SCALE="$(python3 "$policy/infra/rollout/release-system/raise_ci.py" --repo "$policy" --sha "$POLICY_SHA" \
             cap "$CLOUD_RUN_PROJECT" "$CLOUD_RUN_REGION" "$CLOUD_RUN_SERVICE")"
           echo "max_scale=$MAX_SCALE" >> "$GITHUB_OUTPUT"
@@ -1304,7 +1308,7 @@ runs:
       run: |
         set -euo pipefail
         if [[ -n "$POLICY_SHA" ]]; then
-          policy="$GITHUB_WORKSPACE/.release-resource-policy"
+          policy="${R34_POLICY_ROOT:?missing pinned resource policy}"
           MAX_SCALE="$(python3 "$policy/infra/rollout/release-system/raise_ci.py" --repo "$policy" --sha "$POLICY_SHA" \
             cap "$CLOUD_RUN_PROJECT" "$CLOUD_RUN_REGION" "$CLOUD_RUN_SERVICE")"
           echo "max_scale=$MAX_SCALE" >> "$GITHUB_OUTPUT"
