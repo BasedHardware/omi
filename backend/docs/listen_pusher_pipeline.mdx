@@ -7878,9 +7878,13 @@ Setting the repair flag to false stops only that scan.
 A lease-admitted finalizer processes its own completed server minimum before
 finishing its job, using the same summary gate and existing retry/fanout fences.
 It still skips a completed row that already contains a summary or is excluded
-by the repair safety policy. `finalization_status=queued` on a conversation is
-an admission projection, not current job state: inspect its durable job and
-actual output presence before diagnosing missing summaries.
+by the repair safety policy. The server-batch capture handoff settles the
+conversation's `finalization_status` with its bound job in the same transaction.
+Home still shows transcription in progress using the independent wait stamp.
+An authoritative discard also settles a queued conversation projection without
+changing the job receipt or retained audio. A later verified speech or full
+silence projection can settle a historical queued capture handoff. Inspect its
+durable job and actual output before diagnosing missing summaries.
 
 The 120-second budget is dispatch, not model completion.
 With the same master flag on, both sync and finalization enrichment adapters

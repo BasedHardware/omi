@@ -482,6 +482,7 @@ def test_stale_finalizer_and_late_socket_cannot_overwrite_record(lane):
 
 @pytest.mark.parametrize('contended', [False, True])
 def test_true_vad_silence_replaces_unprotected_provisional_speech(lane, monkeypatch, contended):
+    monkeypatch.setenv('BATCH_PIPELINE_RECORD_PROTOCOL_READY', 'true')
     monkeypatch.setenv('BATCH_PIPELINE_PROJECTION_CONTENTION_ENABLED', str(contended).lower())
     if contended:
         redis = fakeredis.FakeRedis()
@@ -496,6 +497,21 @@ def test_true_vad_silence_replaces_unprotected_provisional_speech(lane, monkeypa
 
         monkeypatch.setattr(lane.projector, 'assign_record_silence', lost_reply)
     item, binding, live = native(lane)
+    job_id = 'synthetic-finalizer'
+    lane.user.collection('conversations').document(live['id']).update(
+        {'finalization_job_id': job_id, 'finalization_revision': 1, 'finalization_status': 'queued'}
+    )
+    finalizer = lane.client.collection('conversation_finalization_jobs').document(job_id)
+    finalizer_receipt = {
+        'uid': lane.uid,
+        'conversation_id': live['id'],
+        'finalization_revision': 1,
+        'status': 'completed',
+        'terminal_outcome': 'success',
+        'finalization_outcome': 'server_batch_capture',
+        'fanout_status': 'completed',
+    }
+    finalizer.set(finalizer_receipt)
     register_recording(lane.uid, live, store=lane.store, now=0)
     admit(lane.store, [item], binding, 0, namespace=lane.store.namespace)
     lease = lane.queue.pull(0)[0]
@@ -506,6 +522,9 @@ def test_true_vad_silence_replaces_unprotected_provisional_speech(lane, monkeypa
     assert result['updated_memories'] == ['live-record']
     assert row['record_projection_revision'] == 1 and not row['transcript_segments']
     assert empty_transcription.terminal(row)
+    assert row['finalization_status'] == 'completed'
+    assert not row.get('summary_due_at')
+    assert finalizer.get().to_dict() == finalizer_receipt
 
 
 def test_native_record_preserves_real_correction_translation_and_manual_receipt(lane):
