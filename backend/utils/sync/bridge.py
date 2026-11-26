@@ -239,6 +239,13 @@ def _finish_pending_live_bridge(uid: str, conversation_id: str, *, require_pytho
             )
         else:
             assigned, _, _ = conversations_db.assign_sync_conversation(uid, source, target_id=target_id)
+    except SyncAssignmentSuperseded:
+        # User authority owns the pending source row, so the bridge can never
+        # fold it into the target. That is terminal for this attempt: keep the
+        # source as its own record (the pending marker expires on its own) and
+        # never replay the assignment or fail the caller's request.
+        logger.debug('event=sync_bridge outcome=superseded reason=pending_live_anchor')
+        return conversation_id
     except SyncAssignmentConflict as error:
         if error.subtype != SyncAssignmentConflictReason.CONTAINED_DONOR_NOT_CONTAINED:
             raise

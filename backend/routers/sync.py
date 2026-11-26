@@ -120,6 +120,7 @@ from routers.listen.contracts import persisted_started_seconds
 from config.stt_cap_dispatch import offline_admission_enabled as cap_dispatch_enabled
 from utils.sync.cap_hold import hold_capture_if_exhausted
 from utils.sync.admission_responses import sync_content_in_progress_response, sync_finalization_retrying
+from utils.sync.assignment_errors import SyncAssignmentSuperseded
 from utils.analytics import record_sync_v1_usage as record_usage
 from utils.other import endpoints as auth
 from utils.account_cutover.access import should_skip_background_account_mutation
@@ -3680,7 +3681,9 @@ async def _run_sync_job_attempt(request: Request, task_retry_count: int, attempt
                 )
         except BackfillStoragePressure:
             raise
-        except SyncConversationPersistenceFenced:
+        except (SyncConversationPersistenceFenced, SyncAssignmentSuperseded):
+            # Both mean another generation or the user owns this conversation.
+            # Acknowledge the delivery terminally: retrying cannot change it.
             latest_job = await run_blocking(db_executor, get_sync_job, job_id) or job
             await finalize_sync_job_superseded(
                 job_id=job_id,
