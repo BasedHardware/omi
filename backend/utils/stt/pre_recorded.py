@@ -1480,8 +1480,9 @@ def prerecorded_from_bytes(
     """Route pre-recorded bytes transcription through STT_PRERECORDED_MODEL; ``route`` reuses a resolved one."""
     from utils.stt.prerecorded_route import prerecorded_bytes_route
 
-    kwargs = {'sample_rate': sample_rate, 'channels': channels, 'encoding': encoding}
-    selected, resolved = route or prerecorded_bytes_route(audio_bytes, language, **kwargs)
+    selected, resolved = route or prerecorded_bytes_route(
+        audio_bytes, language, sample_rate=sample_rate, channels=channels, encoding=encoding
+    )
     provider = get_prerecorded_provider(resolved, selected_service=selected)
     result = provider.transcribe_bytes(
         audio_bytes,

@@ -521,7 +521,7 @@ def _routed_transcriber(pcm: bytes, language: str | None, deadline: float):
     from utils.stt.pre_recorded import verification_stt_deadline
     from utils.stt.prerecorded_route import prerecorded_bytes_route
 
-    with verification_stt_deadline(deadline) if deadline is not None else nullcontext():
+    with verification_stt_deadline(deadline):
         route = prerecorded_bytes_route(pcm, language, sample_rate=SAMPLE_RATE, channels=1, encoding='linear16')
     return functools.partial(_transcribe_words, route=route, deadline=deadline)
 
