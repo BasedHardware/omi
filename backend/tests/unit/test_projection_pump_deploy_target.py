@@ -223,6 +223,8 @@ def test_prod_pump_is_integration_plus_the_dark_overrides():
     assert pump['forbidden_env'] == [*integration['forbidden_env'], *sorted(integration_only_logging)]
     assert pump['service_account'] == integration['service_account']
     train_pins = {'BATCH_ACCOUNT_PRIVACY_WRITER_ENABLED', 'BATCH_PROJECTION_OUTBOX'}
+    live_title_key = 'CONVERSATIONS_V3_LIVE_TITLE'
+    fast_finish_key = 'CONVERSATIONS_V3_FAST_FINISH'
     # The dark pump keeps the dark successor's silence-skip value (SCA-3318).
     overridden = (
         set(ACTIVE_OVERRIDES)
@@ -231,12 +233,33 @@ def test_prod_pump_is_integration_plus_the_dark_overrides():
             'BATCH_PIPELINE_INDEPENDENT_LANGUAGE_RECOVERY_ENABLED',
             'BATCH_PIPELINE_SILENCE_READ_SKIP_ENABLED',
             'BATCH_PIPELINE_SERVING_PROJECTION_SWEEP',
+            live_title_key,
+            fast_finish_key,
         }
         | train_pins
     )
     assert set(pump['env']) - set(integration['env']) <= overridden
     for name in set(integration['env']) - overridden:
         assert pump['env'][name] == integration['env'][name], name
+    # SCA-4316: each lane keeps its serving title setting.
+    backfill_env = services['backend-sync-backfill']['env']
+    assert integration['env'][live_title_key]['value'] == 'off'
+    assert backfill_env[live_title_key]['value'] == 'on'
+    assert pump['env'][live_title_key] == {'value': 'on', 'category': 'ops_kill'}
+    # Fast Finish ships to all users on the two API services that serve Finish. Every other
+    # service keeps the cohort code default; the pump, which derives from integration, pins it.
+    fast_finish_on = {'value': 'on', 'category': 'ops_kill'}
+    assert services['backend']['env'][fast_finish_key] == fast_finish_on
+    assert integration['env'][fast_finish_key] == fast_finish_on
+    assert pump['env'][fast_finish_key] == {'value': 'cohort', 'category': 'ops_kill'}
+    for name, service in services.items():
+        if name not in {'backend', 'backend-integration', PROJECTION_PUMP}:
+            assert fast_finish_key not in service.get('env', {}), name
+    for env_name, env_config in MANIFEST['environments'].items():
+        if env_name == 'prod':
+            continue
+        for name, service in env_config.get('cloud_run', {}).get('services', {}).items():
+            assert fast_finish_key not in (service or {}).get('env', {}), (env_name, name)
     # SCA-3318 2026-11-22: the pump is back to dark (integration's sweep carries the work).
     for name, value in DARK_OVERRIDES.items():
         assert pump['env'][name]['value'] == value, name

@@ -15375,9 +15375,6 @@ class AppLocalizationsNl extends AppLocalizations {
   String get stopThese => 'Deze stoppen';
 
   @override
-  String get meetingActionItemsTitle => 'Actiepunten';
-
-  @override
   String get addToTasks => 'Toevoegen aan Taken';
 
   @override
@@ -15865,4 +15862,25 @@ class AppLocalizationsNl extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get playStripeBilledOnWeb => 'Gefactureerd via omi.me. Annuleer hier op elk moment.';
+
+  @override
+  String get playStripeBilledOnWebShort => 'Gefactureerd via omi.me.';
+
+  @override
+  String playStripePlanPaused(String plan) {
+    return 'Je $plan-abonnement is gepauzeerd.';
+  }
+
+  @override
+  String get firmwareNewestSupportedForDevice => 'Je apparaat heeft al de nieuwste ondersteunde firmwareversie';
+
+  @override
+  String get firmwareSyncRecordingsFirstTitle => 'Synchroniseer eerst je opnames';
+
+  @override
+  String get firmwareSyncRecordingsFirstMessage =>
+      'Sommige opnames staan nog op je apparaat. Laat ze eerst volledig synchroniseren naar je telefoon en start daarna de update.';
 }

@@ -313,11 +313,21 @@ redirecting at it (a multi-hop chain inside one lineage). When a chunk later lan
 on a smart-merge survivor and matches that row, the one-hop flatten re-points
 every hop of such a chain at the survivor in the same transaction. The finalize
 bridge accepts a chain that stays inside the survivor's lineage and ends at it.
-A chain that leaves the lineage, cycles, or crosses a non-tombstone still
-conflicts. `event=sync_ancestry_flatten outcome=rejected reason=...` and
-`event=sync_bridge outcome=source_rejected kind=...` name what was left. Kill
-switch: `CONVERSATION_SMART_MERGE_FLATTEN_CHAIN_REPAIR=off` restores the strict
-one-hop check (`ancestry_flatten_rejected` / `bridge_source_not_tombstone`).
+A chain that leaves the lineage, cycles, or crosses a non-tombstone is left alone.
+`event=sync_ancestry_flatten outcome=rejected reason=...` names what the flatten
+declined. A source that the bridge can no longer redirect at its survivor —
+missing, hard-deleted, no longer a tombstone, or a chain that left the lineage —
+is terminal: the bridge logs `event=sync_bridge outcome=source_terminal kind=...`,
+counts `omi_sync_bridge_terminal_total{outcome}`, leaves both rows untouched, and
+still settles the sources that resolve. It does not raise, so one stale ancestry
+entry can no longer fail an enrichment resume. A later append re-reads the entry,
+so a source that does become a tombstone is cleaned up then. Kill
+switch: `SYNC_FINALIZE_TARGET_RECOVERY_ENABLED=off` restores the strict
+`event=sync_bridge outcome=source_rejected` / `bridge_source_not_tombstone`
+failure for every bridge caller. Separately,
+`CONVERSATION_SMART_MERGE_FLATTEN_CHAIN_REPAIR=off` restores the strict one-hop
+check and leaves same-lineage chains to the same terminal path
+(`ancestry_flatten_rejected`).
 
 ## Run ownership and recovery
 

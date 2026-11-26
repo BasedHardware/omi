@@ -53,7 +53,8 @@ def put_recording(strict, segments, *, status, landed):
     }
 
 
-async def reconcile_at(strict, monkeypatch, now, outline_entries=None, derive_run=None):
+async def reconcile_at(strict, monkeypatch, now, outline_entries=None, derive_run=None, loader=None):
+    """``loader`` replaces the default full read of the fixture (the stub for ``store.load``)."""
     for row in strict.rows.values():
         row['_test_revision'] = 1
 
@@ -81,7 +82,7 @@ async def reconcile_at(strict, monkeypatch, now, outline_entries=None, derive_ru
 
     async def blocking(pool, fn, *args, **kwargs):
         if fn is store.load:
-            return load(*args, **kwargs)
+            return (loader or load)(*args, **kwargs)
         if fn is store.load_derive:
             return load_derive(*args, **kwargs)
         if fn is store.adoptable:
@@ -283,9 +284,8 @@ def planner_open(row):
 @pytest.mark.asyncio
 @pytest.mark.parametrize('gap, lock', [(900, 900), (300, 300)])
 async def test_offline_batches_of_old_speech_do_not_lock_on_arrival(strict, monkeypatch, gap, lock):
-    # (b) Offline sync lands the same ten minutes in three batches two hours later: every batch's speech
-    # is already older than the lock delay. Custom timing counts the lock from landing, so the batches
-    # build one card. Default timing keeps today's behaviour (asserted below, documented in the PR).
+    # Offline sync lands the same ten minutes in three batches two hours later.
+    # Both timings wait for more speech before committing the conversation.
     timing(monkeypatch, gap, lock)
     arrival = T0 + timedelta(hours=2)
     for batch, count in enumerate((7, 14, 20)):
@@ -293,9 +293,6 @@ async def test_offline_batches_of_old_speech_do_not_lock_on_arrival(strict, monk
         put_recording(strict, speech(count), status='in_progress' if count < 20 else 'completed', landed=landed)
         assert await reconcile_at(strict, monkeypatch, landed) == 'committed'
     rows = derived(strict)
-    if (gap, lock) == (300, 300):
-        assert len(rows) >= 1  # unchanged default: each aged batch may lock on arrival
-        return
     assert len(rows) == 1 and not slivers(rows), [(r['started_at'], r['finished_at'], r['status']) for r in rows]
     # Once the lock delay passes after the last landing, the card locks whole.
     assert await reconcile_at(strict, monkeypatch, arrival + timedelta(minutes=4, seconds=lock + 60)) == 'committed'
@@ -843,3 +840,62 @@ async def test_one_ownership_index_per_plan(strict, monkeypatch):
     put_recording(strict, segments, status='in_progress', landed=end)
     assert await reconcile_at(strict, monkeypatch, end + timedelta(seconds=30)) == 'committed'
     assert built == [1]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('delivery', ['together', 'incremental', 'switch_off'])
+async def test_delayed_short_topics_across_recordings(strict, monkeypatch, delivery):
+    timing(monkeypatch, 300, 300)
+    monkeypatch.delenv('CONVERSATIONS_V3_SETTLE_ON_LANDING', raising=False)
+    if delivery == 'switch_off':
+        monkeypatch.setenv('CONVERSATIONS_V3_SETTLE_ON_LANDING', 'off')
+    arrivals = T0 + timedelta(hours=2)
+    segment_count = 30
+    for i in range(segment_count):
+        rid = f'rotation-{i // 5}'
+        at = T0 + timedelta(seconds=50 * i)
+        landed = arrivals + timedelta(seconds=20 * (i + 1))
+        row = strict.rows.setdefault(
+            path(rid),
+            {
+                'id': rid,
+                'recording': True,
+                'source': 'omi',
+                'status': 'completed',
+                'started_at': at,
+                'data_protection_level': 'standard',
+                'transcript_segments': [],
+            },
+        )
+        offset = (at - row['started_at']).total_seconds()
+        row['transcript_segments'].append(
+            {'id': str(i), 'text': 'word ' * 12, 'start': offset, 'end': offset + 1, 'is_user': True}
+        )
+        row.update(finished_at=at + timedelta(seconds=1), v3_pending=True, v3_speech_landed_at=landed)
+        if delivery != 'together':
+            assert await reconcile_at(strict, monkeypatch, landed) == 'committed'
+
+    entries = [
+        {
+            'first_line': i + 1,
+            'kind': {10: 'voice_work', 29: 'media'}.get(i, 'conversation'),
+            'title': f'Topic {i}',
+            'line': '',
+            'people': [f'Speaker {i}'],
+            'sections': [],
+        }
+        for i in range(segment_count)
+    ]
+    assert (
+        await reconcile_at(strict, monkeypatch, landed + timedelta(minutes=6), outline_entries=entries) == 'committed'
+    )
+    rows = derived(strict)
+    if delivery == 'switch_off':
+        assert len(rows) == segment_count
+        assert all(row['home_hidden_reason'] == 'below_word_minimum' for row in rows)
+    else:
+        assert [(row['kind'], len(row['transcript_segments'])) for row in rows] == [
+            ('conversation', 29),
+            ('media', 1),
+        ]
+        assert rows[0]['home_hidden'] is False

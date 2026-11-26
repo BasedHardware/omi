@@ -5,6 +5,7 @@ import 'package:url_launcher/url_launcher.dart';
 import 'package:omi/models/subscription.dart';
 import 'package:omi/pages/paywall/paywall_checkout.dart';
 import 'package:omi/pages/settings/widgets/plans/plan_cards.dart';
+import 'package:omi/pages/settings/widgets/plans/prepaid_code_sheet.dart';
 import 'package:omi/providers/auth_provider.dart';
 import 'package:omi/providers/usage_provider.dart';
 import 'package:omi/services/billing/play_billing.dart';
@@ -18,8 +19,8 @@ typedef PlayUrlOpener = Future<bool> Function(Uri uri);
 Future<bool> _openExternal(Uri uri) => launchUrl(uri, mode: LaunchMode.externalApplication);
 
 /// PlansSheet body for a reader who buys through Google Play: Play's prices, Play's purchase sheet,
-/// Restore, and Play's subscription center for a Play subscriber (on any platform). No Stripe offer,
-/// code or link.
+/// Restore, and Play's subscription center for a Play subscriber (on any platform). No Stripe offer
+/// or link; under the Play actions, "Have a code?" redeems a prepaid code the reader already has.
 class PlayPlansContent extends StatefulWidget {
   const PlayPlansContent({super.key, required this.analyticsSource, this.openUrl, this.onPurchased});
 
@@ -151,6 +152,14 @@ class _PlayPlansContentState extends State<PlayPlansContent> {
     ];
   }
 
+  // Below every Play action, never above Subscribe. Same entry and style as the Stripe plans sheet.
+  List<Widget> _codeEntry(UsageProvider usage) => [
+        if (usage.canRedeemPrepaidCode) ...[
+          const SizedBox(height: OmiSpacing.md),
+          const Center(child: PrepaidCodeEntry()), // centered like the Stripe sheet's entry
+        ],
+      ];
+
   List<Widget> _purchaser(BuildContext context, UsageProvider usage) {
     final l10n = context.l10n;
     final offers = usage.playOffers;
@@ -173,6 +182,7 @@ class _PlayPlansContentState extends State<PlayPlansContent> {
             message: l10n.checkConnectionTryAgain,
             onRetry: usage.retryPlayOffers,
           ),
+        ..._codeEntry(usage),
       ];
     }
     final plans = [offers.yearly, offers.monthly].whereType<PlayPlanOffer>().toList();
@@ -215,6 +225,7 @@ class _PlayPlansContentState extends State<PlayPlansContent> {
         child: Text(l10n.restoreAction),
       ),
       PlayBillingDisclosure(openUrl: widget.openUrl),
+      ..._codeEntry(usage),
     ];
   }
 }

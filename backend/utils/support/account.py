@@ -1,7 +1,6 @@
 """``account`` commands: allowlisted, ticket-scoped account operations.
 
-v1 ships only the read-only ``summary``. Write operations are added one at a
-time after review; deletes and refunds are never offered here.
+Includes the read-only account summary and the audited Stripe plan correction.
 """
 
 from __future__ import annotations
@@ -12,6 +11,7 @@ from typing import Any
 from database import legal_holds
 from database.account_deletion_marker import account_deletion_firestore_client
 from database.support_actions import ActionContext, ActionRecord
+from utils.support import plan_correction
 
 # Profile fields a support operator needs to identify and triage an account.
 _SUMMARY_FIELDS = (
@@ -51,10 +51,11 @@ def summary(args: argparse.Namespace, ctx: ActionContext, record: ActionRecord) 
 
 
 def register(groups: Any) -> None:
-    group = groups.add_parser("account", help="allowlisted account operations (v1: read-only summary)")
+    group = groups.add_parser("account", help="allowlisted account operations")
     actions = group.add_subparsers(dest="action", required=True)
     summary_parser = actions.add_parser(
         "summary", help="identify an account: profile basics, plan, hold and deletion state"
     )
     summary_parser.add_argument("uid")
     summary_parser.set_defaults(handler=summary)
+    plan_correction.register(actions)

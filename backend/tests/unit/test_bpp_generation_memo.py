@@ -614,7 +614,11 @@ async def test_serving_attempt_second_commit_reads_only_token_and_mutations_bloc
 
         monkeypatch.setenv('BATCH_PIPELINE_SERVING_ENABLED', 'true')
         monkeypatch.setenv('BATCH_PIPELINE_RECOVERY_DISPATCH_INTERVAL_SECONDS', 'off')
-        service = SimpleNamespace(store=store, reconcile_async=AsyncMock())
+        service = SimpleNamespace(
+            store=store,
+            reconcile_async=AsyncMock(),
+            sweep_held_dead_letters=Mock(),
+        )
         monkeypatch.setattr(serving, 'serving_for_stage', lambda stage: service)
 
         async def no_upload_drain(_store):

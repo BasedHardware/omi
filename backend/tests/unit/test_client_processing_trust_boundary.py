@@ -286,8 +286,6 @@ PINNED_REFERENCES: FrozenSet[Reference] = frozenset(
         Reference('routers/developer.py', '_parse_client_projection', 'ClientProcessing'),
         Reference('routers/developer.py', '_bind_projection_to_segments', 'ClientProcessing'),
         Reference('routers/developer.py', '_bind_late_client_projection', 'client_processing'),
-        # Budget retries restore the stored display projection through the existing attachment path.
-        Reference('routers/developer.py', '_ingest_conversation_from_segments', 'client_processing'),
         Reference('routers/developer.py', '_ingest_conversation_from_segments', 'client_projection'),
         Reference('routers/developer_segments.py', 'admit_segments', 'client_processing'),
         Reference('routers/developer_segments.py', 'common', 'client_processing'),
@@ -801,6 +799,10 @@ PINNED_CONVERSATION_FIELDS: FrozenSet[str] = frozenset(
         'tile_state',
         'title_locked',
         'v3_derived',
+        # Reliability experiment end_open_conversation: the End instant that closed the conversation,
+        # stamped by the live builder only. A timestamp, never client-authored text; the app matches
+        # its just-ended Home row by it. NOT projection-family.
+        'v3_manual_cut_at',
         'v3_pending',
         'v3_process_pending',
         'v3_recording_ids',

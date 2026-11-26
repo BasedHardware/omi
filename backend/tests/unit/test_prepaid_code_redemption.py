@@ -143,6 +143,9 @@ def world(monkeypatch):
         monkeypatch.setattr(redemption.redemptions_db, name, getattr(state.ledger, name))
     monkeypatch.setattr(redemption.users_db, 'get_existing_user_subscription', lambda uid: state.row)
     monkeypatch.setattr(redemption.users_db, 'get_stripe_customer_id', lambda uid: state.customer_id)
+    monkeypatch.setattr(
+        redemption.users_db, 'get_existing_user_subscription_and_fields', lambda uid, fields: (state.row, {})
+    )
 
     def set_customer(uid, customer_id):
         state.customer_id = customer_id
@@ -645,33 +648,23 @@ def test_subscription_route_reads_no_cohort_with_the_switch_off(monkeypatch, war
     assert 'prepaid-code-redeem' in reads
 
 
-def test_a_play_billed_android_caller_is_refused_before_any_lookup(monkeypatch, route):
+def test_a_play_billed_android_caller_redeems_whatever_the_switch(monkeypatch, route):
+    """A Play build has no other way to activate a code (test_play_prepaid_code_entry.py covers the refusals)."""
     from fastapi import HTTPException
 
-    monkeypatch.setattr(route.module.prepaid_code_config, 'enabled_for', lambda uid: True)
-    monkeypatch.setattr(route.module, 'redeem_prepaid_code', lambda uid, code: pytest.fail('looked up a code'))
+    monkeypatch.setattr(route.module.prepaid_code_config, 'enabled_for', lambda uid: False)
     monkeypatch.setenv('ANDROID_BILLING', 'play')
     monkeypatch.setenv('ANDROID_PLAY_BILLING_MIN_BUILD', '1700')
     monkeypatch.setenv('PLAY_ACCOUNT_ID_HMAC_KEY', 'test-only-play-account-key-0123456789abcdef')
     body = route.module.RedeemCodeRequest(code='OMI-1')
-    with pytest.raises(HTTPException) as error:
-        route.module.redeem_prepaid_code_endpoint(body, uid=UID, x_app_platform='android', x_app_build='1700')
-    assert (error.value.status_code, error.value.detail) == (409, 'play_billed')
-    assert route.calls == []  # refused before the rate-limit bucket or Stripe
-    # The same server on iOS, or an Android build below the Play floor, still redeems.
-    monkeypatch.setattr(
-        route.module,
-        'redeem_prepaid_code',
-        lambda uid, code: {'status': 'redeemed', 'plan': 'Omi Pro', 'ends_at': 1, 'months': 12},
-    )
-    assert (
-        route.module.redeem_prepaid_code_endpoint(body, uid=UID, x_app_platform='ios', x_app_build='1700')['status']
-        == 'redeemed'
-    )
-    assert (
-        route.module.redeem_prepaid_code_endpoint(body, uid=UID, x_app_platform='android', x_app_build='1699')['status']
-        == 'redeemed'
-    )
+    result = route.module.redeem_prepaid_code_endpoint(body, uid=UID, x_app_platform='android', x_app_build='1700')
+    assert result['status'] == 'redeemed'
+    assert route.calls == [(UID, 'payments:prepaid_code')]  # same per-user rate limit
+    # The same server on iOS, or an Android build below the Play floor, still follows the switch.
+    for platform, build in (('ios', '1700'), ('android', '1699')):
+        with pytest.raises(HTTPException) as error:
+            route.module.redeem_prepaid_code_endpoint(body, uid=UID, x_app_platform=platform, x_app_build=build)
+        assert error.value.status_code == 404
 
 
 def test_customer_portal_is_refused_before_the_webhook_marks_the_row(monkeypatch, payment_router):

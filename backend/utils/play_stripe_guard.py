@@ -8,8 +8,10 @@ from __future__ import annotations
 
 import logging
 import time
+from typing import Mapping, Optional
 
 import database.play_subscriptions as play_subscriptions_db
+from config import prepaid_code_redeem as prepaid_config
 from models.users import Subscription
 from utils import stripe as stripe_utils
 from utils.executors import db_executor, run_blocking, stripe_executor
@@ -34,8 +36,19 @@ def live_play_row(subscription: Subscription | None) -> bool:
     )
 
 
-async def refuse_stripe_for_play_subscriber(uid: str, stripe_subscription_id: str) -> None:
-    """A Stripe subscription appeared for a user Google Play already bills: undo it, never keep both."""
+async def refuse_stripe_for_play_subscriber(
+    uid: str, stripe_subscription_id: str, subscription: Optional[Mapping] = None
+) -> None:
+    """A Stripe subscription appeared for a user Google Play already bills: undo it, never keep both.
+
+    A prepaid code's subscription charges nothing, so there is no double charge to stop: it is kept (cancelling
+    it would destroy the included term and not return the code) and logged for a person to refund Google.
+    """
+    if subscription is not None and prepaid_config.is_prepaid_subscription(subscription):
+        pointer = await run_blocking(db_executor, play_subscriptions_db.get_user_pointer, uid)
+        code = (subscription.get('metadata') or {}).get('redeemed_promotion_code_id')
+        logger.error(prepaid_config.PLAY_OVERLAP_LOG, uid, (pointer or '')[:12], code)
+        return
     result = await run_blocking(
         stripe_executor, stripe_utils.cancel_and_refund_checkout_subscription, stripe_subscription_id
     )

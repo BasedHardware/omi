@@ -139,14 +139,17 @@ class ProviderCaptureExternalActions implements CaptureExternalActions {
   }) {
     final v3 = conversationsV3;
     final result = outcome?.response?.conversation;
-    if (v3 == null || !v3.settleManualFinish(placeholder, result)) return;
-    if (showFailure) {
+    final alreadyClosed = outcome?.absence == ProcessAbsence.notFound;
+    if (v3 == null ||
+        !v3.settleManualFinish(placeholder, result, alreadyClosed: alreadyClosed, endStoredAt: outcome?.endStoredAt)) {
+      return;
+    }
+    if (showFailure && !alreadyClosed) {
       final l10n = globalNavigatorKey.currentContext?.l10n;
       if (l10n != null) {
         if (outcome?.absence == ProcessAbsence.emptyBody || result?.discarded == true) {
           AppSnackbar.showSnackbar(l10n.discardedOnlyRecording);
         } else if (result == null) {
-          // A 404 has no active recording. It does not establish whether a summary exists yet.
           AppSnackbar.showSnackbarError(l10n.finishFailed);
         } else if (result.status == ConversationStatus.in_progress) {
           AppSnackbar.showSnackbar(l10n.finishAudioNotReceived);
@@ -154,13 +157,36 @@ class ProviderCaptureExternalActions implements CaptureExternalActions {
       }
     }
     unawaited(v3.refreshAfterManualFinish().catchError((Object _) {}));
-    unawaited(
-      conversationProvider.forceRefreshConversations().then<void>(
-            (_) {},
-            onError: (Object _) {},
-          ),
-    );
+    // A 404 leaves the pending row on Home. Reload once, with transient filters already cleared.
+    final refresh = alreadyClosed && !conversationProvider.showsPendingFinishOnHome
+        ? conversationProvider.resetToDefaultHome()
+        : conversationProvider.forceRefreshConversations();
+    unawaited(refresh.catchError((Object _) {}));
   }
+
+  @override
+  void onEndAccepted(ServerConversation saved, {String? liveConversationId}) {
+    final v3 = conversationsV3;
+    if (v3 == null || saved.discarded || saved.status == ConversationStatus.in_progress) return;
+    v3.awaitSummaryAfterEnd(
+        summaryWaitTarget(saved, liveConversationId, v3.liveWindowIdFor, openConversationId: v3.openConversationId),
+        refreshRows: conversationProvider.forceRefreshConversations,
+        showRow: (row) => conversationProvider.upsertConversation(row, preserveHomeStep: false));
+  }
+
+  /// The waits are for the conversation, not the recording it is made from. In order: the id End named;
+  /// the conversation the server answered with; the open conversation the last live read made from the
+  /// answered recording; and, when the answer is a recording no conversation lists yet (the listening
+  /// session's own recording while the speech travels as uploads), the account's open conversation,
+  /// which is the one this End closes. Null when none is known; the app's polls then carry on alone.
+  static String? summaryWaitTarget(
+    ServerConversation saved,
+    String? liveConversationId,
+    String? Function(String recordingId) liveWindowIdFor, {
+    String? openConversationId,
+  }) =>
+      liveConversationId ??
+      (saved.v3?.recording == true ? (liveWindowIdFor(saved.id) ?? openConversationId) : saved.id);
 
   @override
   Future<Person?> createPerson(String name) {

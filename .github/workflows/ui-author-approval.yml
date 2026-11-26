@@ -1,8 +1,7 @@
 name: UI author approval
 on:
   pull_request_target:
-    branches: [main]
-    types: [opened, synchronize, reopened, ready_for_review]
+    types: [opened, synchronize, reopened, ready_for_review, edited, closed]
   issue_comment:
     types: [created, edited, deleted]
   workflow_dispatch:
@@ -20,7 +19,7 @@ env:
 jobs:
   resolve:
     name: Request UI approval evaluation
-    if: github.event_name == 'pull_request_target' || github.event.issue.pull_request
+    if: (github.event_name == 'pull_request_target' && (github.event.action != 'edited' || github.event.changes.base.ref)) || github.event.issue.pull_request
     permissions:
       actions: write
       contents: write
@@ -39,8 +38,10 @@ jobs:
       - uses: actions/github-script@v9
         with:
           script: |
-            await require('./.github/scripts/ui-author-approval.cjs').requestEvaluation({github, context});
-            core.notice('Evaluation requested. See the UI author approval commit status for the decision.');
+            const requested = await require('./.github/scripts/ui-author-approval.cjs').requestEvaluation({github, context});
+            core.notice(requested
+              ? 'Evaluation requested. See the UI author approval commit status for the decision.'
+              : 'No open pull request uses the affected heads.');
   guard:
     name: Evaluate UI author approval
     if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'

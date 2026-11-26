@@ -1,9 +1,13 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
+
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/services/wals/local_wal_sync.dart';
+import 'package:omi/services/wals/receipt_waiter.dart';
 import 'package:omi/services/wals/recording_transfer_coordinator.dart';
 import 'package:omi/utils/logger.dart';
+import 'package:omi/utils/reliability_experiments.dart';
 
 /// Called with the conversation ids surfaced by a reconcile pass so the
 /// presentation layer can fetch + show them. Provided by the provider so this
@@ -33,9 +37,29 @@ class SyncReconciler {
   // whenever a pass makes progress (surfaces conversations / changes state).
   static const List<int> _backoffSecs = [20, 20, 30, 45, 60, 120];
 
+  /// Seconds until the next foreground pass after [idleStreak] passes without progress.
+  @visibleForTesting
+  static int idleDelaySeconds(int idleStreak) {
+    final secs = _backoffSecs[idleStreak.clamp(0, _backoffSecs.length - 1)];
+    // Experiment receipt_finished_note: the once-a-minute status poll of a waiting job needs a
+    // pass at least that often. Off: the idle backoff grows to two minutes.
+    if (secs > ReceiptWaiter.backstop.inSeconds &&
+        ReliabilityExperiments.enabled('receipt_long_poll') &&
+        ReliabilityExperiments.enabled('receipt_finished_note')) {
+      return ReceiptWaiter.backstop.inSeconds;
+    }
+    return secs;
+  }
+
   void attach(LocalWalSyncImpl phone, ConversationSurfaceCallback onConversations) {
+    if (!identical(_phone, phone)) _phone?.stopReceiptWait();
     _phone = phone;
     _onConversations = onConversations;
+    if (_foreground && ReliabilityExperiments.enabled('receipt_long_poll')) phone.startReceiptWait(_surface);
+  }
+
+  Future<void> _surface(SyncLocalFilesResponse result) async {
+    await _onConversations?.call(result);
   }
 
   /// Run one reconcile pass now. Wake coalescing belongs to
@@ -86,7 +110,7 @@ class SyncReconciler {
       _idleStreak = 0;
       return; // nothing pending — go quiet until the next poke
     }
-    final secs = _backoffSecs[_idleStreak.clamp(0, _backoffSecs.length - 1)];
+    final secs = idleDelaySeconds(_idleStreak);
     _idleStreak++;
     _timer = Timer(Duration(seconds: secs), () {
       unawaited(RecordingTransferCoordinator.instance.wake(WakeTrigger.cooldownElapsed));
@@ -96,6 +120,7 @@ class SyncReconciler {
   /// App came to the foreground — resume fast cadence and check immediately.
   void onForeground() {
     _foreground = true;
+    if (ReliabilityExperiments.enabled('receipt_long_poll')) _phone?.startReceiptWait(_surface);
     _idleStreak = 0;
     RecordingTransferCoordinator.instance.setForeground(true);
     unawaited(RecordingTransferCoordinator.instance.wake(WakeTrigger.foregrounded));
@@ -106,12 +131,17 @@ class SyncReconciler {
   /// (#5221); this timer must not start a new drain from screen-off.
   void onBackground() {
     _foreground = false;
+    _phone?.stopReceiptWait();
     _timer?.cancel();
     _timer = null;
     RecordingTransferCoordinator.instance.setForeground(false);
   }
 
   void dispose() {
+    if (ReliabilityExperiments.enabled('receipt_long_poll')) {
+      _phone?.stopReceiptWait();
+      _phone = null;
+    }
     _timer?.cancel();
     _timer = null;
   }

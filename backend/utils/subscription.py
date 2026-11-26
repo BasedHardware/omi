@@ -1304,6 +1304,43 @@ def new_buyer_single_plan_violation(uid: str, target_price_id: Optional[str]) ->
     return NEW_BUYER_SINGLE_PLAN_ERROR
 
 
+PLAY_ON_HOLD_STATES = frozenset({'SUBSCRIPTION_STATE_ON_HOLD', 'SUBSCRIPTION_STATE_PAUSED'})
+PLAY_PENDING_REASON = "Your Google Play purchase is still being processed. Try again once it completes."
+PLAY_BILLED_REASON = "Your Omi Pro subscription is billed through Google Play. Manage it in the Play Store."
+PLAY_ON_HOLD_REASON = "You have a Google Play subscription on hold. Fix the payment in Google Play."
+PLAY_CHECK_UNAVAILABLE_REASON = "We could not check your Google Play subscription. Try again in a minute."
+# Typed codes for the refusals added with the Play guards (released clients read ``detail`` only).
+PLAY_REFUSAL_CODES = {
+    PLAY_ON_HOLD_REASON: 'play_subscription_on_hold',
+    PLAY_CHECK_UNAVAILABLE_REASON: 'play_check_unavailable',
+}
+
+
+def play_admission_refusal(uid: str, fields: Optional[dict] = None) -> Optional[str]:
+    """Why a new Stripe agreement must wait for a Google Play one, or None.
+
+    ``fields`` are the user's Play fields when the caller already read them; otherwise they are read here
+    (the read the pending check always made). A user with no Play history gets no further read. Otherwise
+    every purchase they own that is not provably ended, pending included, is re-read from Google.
+    Independent of ``ANDROID_BILLING``: a rollback keeps it.
+    """
+    if fields is None:
+        fields = play_subscriptions_db.get_user_fields(uid)
+    if not play_subscriptions_db.has_play_history(fields):
+        return None
+    from utils import play_publisher
+
+    try:
+        state = play_publisher.recoverable_play_purchase(uid)
+    except play_publisher.PlayStateUnavailable:
+        return PLAY_CHECK_UNAVAILABLE_REASON
+    if state in PLAY_ON_HOLD_STATES:
+        return PLAY_ON_HOLD_REASON
+    if state == 'SUBSCRIPTION_STATE_PENDING':
+        return PLAY_PENDING_REASON
+    return PLAY_BILLED_REASON if state else None
+
+
 @fresh_reader
 def can_user_make_payment(uid: str, target_price_id: Optional[str] = None) -> Tuple[bool, str]:
     """
@@ -1326,8 +1363,9 @@ def can_user_make_payment(uid: str, target_price_id: Optional[str] = None) -> Tu
     # A live Google Play subscription is managed in Play; never start a second (Stripe) one.
     if subscription is not None and subscription.provider == 'play' and is_paid_plan(subscription.plan):
         return False, "Your Omi Pro subscription is billed through Google Play. Manage it in the Play Store."
-    if play_subscriptions_db.pending_play_purchase(uid):
-        return False, "Your Google Play purchase is still being processed. Try again once it completes."
+    play_refusal = play_admission_refusal(uid)
+    if play_refusal:
+        return False, play_refusal
     if target_price_id in configured_ladder_prices() and subscription is not None:
         if subscription.plan != PlanType.basic and ladder_policy.entitlements(subscription) is None:
             return False, "Legacy subscriptions keep their current plan"

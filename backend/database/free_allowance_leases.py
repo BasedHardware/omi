@@ -152,9 +152,10 @@ def reserve(
     user = client.collection('users').document(uid)
 
     @firestore.transactional
-    def commit(transaction: Any) -> Decision:
+    def commit(transaction: Any) -> tuple[Decision, dict, Any]:
         with monthly_usage_totals.publication_fence(user, transaction, firestore_client=client):
-            usage = monthly_usage_totals.month_ref(user, billing_date).get(transaction=transaction).to_dict()
+            snapshot = monthly_usage_totals.month_ref(user, billing_date).get(transaction=transaction)
+            usage = snapshot.to_dict()
             used = monthly_usage_totals.verified_transcription_seconds(usage, billing_date)
             state = _state(_ref(user, month).get(transaction=transaction).to_dict())
             receipt = _receipt(user, month, key).get(transaction=transaction)
@@ -162,11 +163,15 @@ def reserve(
             operation_data = operation_ref.get(transaction=transaction).to_dict()
             months = _operation_months(operation_data)
             remaining = max(0.0, limit - used - state['ptt_seconds'] - _held(state))
+
+            def decided(reason: str, remaining: float, lease: Lease | None = None) -> tuple[Decision, dict, Any]:
+                return Decision(reason, remaining, lease), usage, snapshot
+
             if receipt.exists or (operation_data or {}).get('status') == 'settled':
-                return Decision('already_settled', remaining)
+                return decided('already_settled', remaining)
             if month not in months:
                 if len(months) >= 3:
-                    return Decision('operation_too_old', remaining)
+                    return decided('operation_too_old', remaining)
                 months.append(month)
 
             def record(reason: str) -> None:
@@ -187,33 +192,35 @@ def reserve(
             previous = state['holds'].get(key)
             if previous is not None and previous['expires_at'] <= now.timestamp():
                 record('lease_expired')
-                return Decision('lease_expired', remaining)
+                return decided('lease_expired', remaining)
             available = remaining + (previous['seconds'] if previous is not None else 0)
             amount = min(seconds, available) if partial else seconds
             if amount <= 0 or amount > available:
                 record('allowance_exhausted')
-                return Decision('allowance_exhausted', remaining)
+                return decided('allowance_exhausted', remaining)
             if previous is None and len(state['holds']) >= MAX_OPEN_LEASES:
                 record('ledger_full')
-                return Decision('ledger_full', remaining)
+                return decided('ledger_full', remaining)
             # Existing leases may shrink only through billing settlement, never
             # through a retry with a smaller duration or a different provider.
             amount = max(amount, previous['seconds'] if previous is not None else 0)
             if amount > available:
                 record('allowance_exhausted')
-                return Decision('allowance_exhausted', remaining)
+                return decided('allowance_exhausted', remaining)
             expiry = min(now.timestamp() + LEASE_SECONDS, end)
             if partial:
                 if amount <= elapsed_seconds:
                     record('allowance_exhausted')
-                    return Decision('allowance_exhausted', remaining)
+                    return decided('allowance_exhausted', remaining)
                 expiry = min(expiry, now.timestamp() + amount - elapsed_seconds)
             state['holds'][key] = {'seconds': amount, 'expires_at': expiry}
             transaction.set(_ref(user, month), state)
             record('reserved')
-            return Decision('reserved', max(0.0, available - amount), Lease(uid, month, key, amount, expiry))
+            return decided('reserved', max(0.0, available - amount), Lease(uid, month, key, amount, expiry))
 
-    return commit(client.transaction(max_attempts=3))
+    decision, usage, snapshot = commit(client.transaction(max_attempts=3))
+    monthly_usage_totals.observe_verified_month(uid, billing_date, usage, getattr(snapshot, 'read_time', None), client)
+    return decision
 
 
 def chargeable_seconds(uid: str, now: datetime, *, firestore_client: Any = None) -> float:
@@ -224,14 +231,17 @@ def chargeable_seconds(uid: str, now: datetime, *, firestore_client: Any = None)
     now = now.astimezone(timezone.utc)
 
     @firestore.transactional
-    def read(transaction: Any) -> float:
+    def read(transaction: Any) -> tuple[float, Any, Any]:
         with monthly_usage_totals.publication_fence(user, transaction, firestore_client=client):
-            usage = monthly_usage_totals.month_ref(user, now).get(transaction=transaction).to_dict()
+            snapshot = monthly_usage_totals.month_ref(user, now).get(transaction=transaction)
+            usage = snapshot.to_dict()
             used = monthly_usage_totals.verified_transcription_seconds(usage, now)
             state = _state(_ref(user, month).get(transaction=transaction).to_dict())
-            return used + state['ptt_seconds'] + _held(state)
+            return used + state['ptt_seconds'] + _held(state), usage, snapshot
 
-    return read(client.transaction(max_attempts=3))
+    chargeable, usage, snapshot = read(client.transaction(max_attempts=3))
+    monthly_usage_totals.observe_verified_month(uid, now, usage, getattr(snapshot, 'read_time', None), client)
+    return chargeable
 
 
 def prepare_settlement(

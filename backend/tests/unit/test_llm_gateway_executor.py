@@ -992,11 +992,8 @@ async def test_embedding_429_retry_sleeps_and_stays_on_the_same_provider(monkeyp
 
 def test_flex_first_default_lanes_and_kill_switch(monkeypatch):
     monkeypatch.delenv(executor.FLEX_FIRST_LANES_ENV_VAR, raising=False)
-    assert executor.flex_first_lanes() == {
-        'omi:auto:conv-structure',
-        'omi:auto:memory-l1',
-        'omi:auto:conversation-v3-summary',
-    }
+    # The v3 summary lanes are Standard-only: Flex served about 5% of conversation-v3-summary in prod.
+    assert executor.flex_first_lanes() == {'omi:auto:conv-structure', 'omi:auto:memory-l1'}
     for off in ('off', '', 'none', 'false', '0'):
         monkeypatch.setenv(executor.FLEX_FIRST_LANES_ENV_VAR, off)
         assert executor.flex_first_lanes() == frozenset()

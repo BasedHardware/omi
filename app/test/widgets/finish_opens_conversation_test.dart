@@ -15,9 +15,11 @@ import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/coordinators/provider_capture_external_actions.dart';
 import 'package:omi/l10n/app_localizations.dart';
 import 'package:omi/pages/conversation_detail/page.dart';
+import 'package:omi/pages/conversations/widgets/live_conversation_end_button.dart';
 import 'package:omi/pages/episodes/finish_capture.dart';
 import 'package:omi/pages/episodes/finished_capture_page.dart';
 import 'package:omi/pages/episodes/live_episode_page.dart';
+import 'package:omi/pages/home/widgets/home_recording_bar.dart';
 import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/providers/conversations_v3_provider.dart';
@@ -34,6 +36,8 @@ import 'package:omi/services/capture/local_segment_store.dart';
 import 'package:omi/services/capture/optimistic_processing.dart';
 import 'package:omi/services/live_preview/live_preview_controller.dart';
 import 'package:omi/services/wals/wal_interfaces.dart';
+import 'package:omi/utils/enums.dart';
+import 'package:omi/utils/reliability_experiments.dart';
 
 // Nik, 2026-11-18 (TestFlight 1.0.593, pendant, v3): Finish on the live page did nothing and went
 // back to the list; the conversation showed up 4 minutes later. A batch pendant's page shows only
@@ -44,6 +48,14 @@ class _ManualFinishConversations extends ConversationProvider {
   _ManualFinishConversations() : super(isSignedIn: () => false);
 
   int refreshes = 0;
+  int listReads = 0;
+
+  @override
+  Future<bool> fetchConversations({bool restoreMergeWatches = true}) async {
+    expect(showsPendingFinishOnHome, isTrue);
+    listReads++;
+    return true;
+  }
 
   @override
   Future<void> forceRefreshConversations({bool reconcileHeldRecordings = false}) async {
@@ -126,10 +138,18 @@ class _Capture extends CaptureProvider {
         );
 
   final LivePreviewController? preview;
-  final ({String id, DateTime at, int previewWords, int previewSession})? closed;
+  ({String id, DateTime at, int previewWords, int previewSession})? closed;
   CreateConversationResponse? answer;
   final Future<void>? answerDelay;
   var finishes = 0;
+  final finishWindowIds = <String?>[];
+  final receivedSegmentIds = <String>{};
+
+  @override
+  Iterable<String> get locallyReceivedSegmentIds => receivedSegmentIds;
+
+  @override
+  DateTime get liveCaptureStartedAt => DateTime.now().subtract(const Duration(minutes: 1));
   ProcessAbsence failure = ProcessAbsence.transport;
 
   @override
@@ -145,6 +165,11 @@ class _Capture extends CaptureProvider {
   @override
   ({String id, DateTime at, int previewWords, int previewSession})? get lastServerClose => closed;
 
+  final closedRecordings = <String>{};
+
+  @override
+  bool hasClosedServerRecording(String recordingId) => closedRecordings.contains(recordingId);
+
   @override
   void noteClientFinish() => lastClientFinish = (
         at: DateTime.now(),
@@ -156,8 +181,9 @@ class _Capture extends CaptureProvider {
   String? get liveCaptureSource => 'omi';
 
   @override
-  Future<InProgressProcessOutcome> finishCaptureWithOutcome() async {
+  Future<InProgressProcessOutcome> finishCaptureWithOutcome({String? liveConversationId}) async {
     finishes++;
+    finishWindowIds.add(liveConversationId);
     await answerDelay;
     final reply = answer;
     return InProgressProcessOutcome(response: reply, absence: reply == null ? failure : null);
@@ -290,6 +316,170 @@ void main() {
   setUp(() async {
     SharedPreferences.setMockInitialValues({});
     await SharedPreferencesUtil.init();
+  });
+
+  test('a closed verified recording cannot own the current live window', () {
+    final capture = _Capture()
+      ..verifiedLiveServerRecordingId = 'closed'
+      ..closedRecordings.add('closed')
+      ..recordingState = RecordingState.record;
+    addTearDown(capture.dispose);
+    ServerConversation window(String source) => _conversation('live', extra: {
+          'kind': 'conversation',
+          'tile_state': 'live',
+          'status': 'in_progress',
+          'v3_recording_ids': [source],
+          'transcript_segments': [
+            {'id': 'fresh', 'text': 'New words.', 'start': 0.0, 'end': 4.0, 'is_user': true},
+          ],
+        });
+
+    expect(LiveConversationEndButton.phoneCaptures(window('next'), capture, currentLiveId: 'live'), isFalse);
+    capture.receivedSegmentIds.add(window('next').transcriptSegments.single.id);
+    expect(LiveConversationEndButton.phoneCaptures(window('closed'), capture, currentLiveId: 'live'), isFalse);
+    expect(LiveConversationEndButton.phoneCaptures(window('next'), capture, currentLiveId: 'live'), isTrue);
+  });
+
+  group('experiment end_button_by_device', () {
+    const phone = 'ios_06b76a44';
+    final platformDeviceId = LiveConversationEndButton.ownDeviceId;
+    tearDown(() {
+      ReliabilityExperiments.overrideForTesting(null);
+      LiveConversationEndButton.ownDeviceId = platformDeviceId;
+    });
+
+    // Upload mode: the listening session's own recording is empty, so it is never a source.
+    ServerConversation open() => _conversation('live', extra: {
+          'kind': 'conversation',
+          'tile_state': 'live',
+          'status': 'in_progress',
+          'v3_recording_ids': ['uploaded-1', 'uploaded-2'],
+        });
+    _Capture uploading() {
+      final capture = _Capture()
+        ..verifiedLiveServerRecordingId = 'empty-session-recording'
+        ..recordingState = RecordingState.record;
+      addTearDown(capture.dispose);
+      return capture;
+    }
+
+    test('the live read carries the device behind the latest speech', () {
+      expect(_conversation('live', extra: {'tile_state': 'live', 'v3_capture_device_id': phone}).v3?.captureDeviceId,
+          phone);
+      expect(_conversation('live', extra: {'tile_state': 'live'}).v3?.captureDeviceId, isNull);
+      expect(
+          _conversation('live', extra: {'tile_state': 'live', 'v3_capture_device_id': 7}).v3?.captureDeviceId, isNull);
+    });
+
+    test('off: a matching device does not show End', () {
+      LiveConversationEndButton.ownDeviceId = () => phone;
+      expect(
+          LiveConversationEndButton.phoneCaptures(open(), uploading(),
+              currentLiveId: 'live', liveCaptureDeviceId: phone),
+          isFalse);
+    });
+
+    test('on: End shows on the open conversation this install feeds, without a listening source', () {
+      ReliabilityExperiments.overrideForTesting({'end_button_by_device'});
+      LiveConversationEndButton.ownDeviceId = () => phone;
+      bool shows(ServerConversation conversation, CaptureProvider capture, {String? liveId, String? device}) =>
+          LiveConversationEndButton.phoneCaptures(conversation, capture,
+              currentLiveId: liveId, liveCaptureDeviceId: device);
+
+      expect(shows(open(), uploading(), liveId: 'live', device: phone), isTrue);
+      // Not capturing at all (pendant off, no listening session): the device still decides.
+      final idle = _Capture();
+      addTearDown(idle.dispose);
+      expect(shows(open(), idle, liveId: 'live', device: phone), isTrue);
+      // Another install's speech is the latest, the server named no device, or this is not the
+      // account's open conversation: today's rule decides, and it says no here.
+      expect(shows(open(), uploading(), liveId: 'live', device: 'macos_0a1b2c3d'), isFalse);
+      expect(shows(open(), uploading(), liveId: 'live'), isFalse);
+      expect(shows(open(), uploading(), liveId: 'another', device: phone), isFalse);
+    });
+
+    test('on: an install that does not know its own id yet matches nothing', () {
+      ReliabilityExperiments.overrideForTesting({'end_button_by_device'});
+      LiveConversationEndButton.ownDeviceId = () => null;
+      expect(
+          LiveConversationEndButton.phoneCaptures(open(), uploading(),
+              currentLiveId: 'live', liveCaptureDeviceId: phone),
+          isFalse);
+    });
+
+    test('on: today\'s rule still shows End where the device is unknown', () {
+      ReliabilityExperiments.overrideForTesting({'end_button_by_device'});
+      LiveConversationEndButton.ownDeviceId = () => phone;
+      final capture = uploading()..verifiedLiveServerRecordingId = 'uploaded-2';
+      expect(LiveConversationEndButton.phoneCaptures(open(), capture, currentLiveId: 'live'), isTrue);
+    });
+  });
+
+  testWidgets('Home Wrap Up keeps the owned live window id on retry', (tester) async {
+    final live = _conversation('owned-window', extra: {
+      'kind': 'conversation',
+      'tile_state': 'live',
+      'status': 'in_progress',
+      'v3_recording_ids': ['rec-1'],
+    });
+    final v3 = ConversationsV3Provider(
+      uid: () => 'owner',
+      cached: 'owner:1',
+      fetchLive: () async => ApiSuccess(ConversationsLiveRead(v3: true, conversation: live)),
+    );
+    final capture = _Capture()..verifiedLiveServerRecordingId = 'rec-1';
+    addTearDown(v3.dispose);
+    addTearDown(capture.dispose);
+    await v3.refresh();
+    await tester.pumpWidget(MultiProvider(
+      providers: [
+        ChangeNotifierProvider<CaptureProvider>.value(value: capture),
+        ChangeNotifierProvider<ConversationsV3Provider>.value(value: v3),
+      ],
+      child: const MaterialApp(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: [Locale('en')],
+        home: Scaffold(body: HomeRecordingBar()),
+      ),
+    ));
+
+    await tester.tap(find.byKey(const ValueKey('home_recording_bar_wrap_up')));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
+    expect(capture.finishWindowIds, ['owned-window']);
+
+    capture.verifiedLiveServerRecordingId = null;
+    await tester.tap(find.text('Try Again'));
+    await tester.pump();
+    expect(capture.finishWindowIds, ['owned-window', 'owned-window']);
+    await tester.pumpWidget(const SizedBox());
+  });
+
+  testWidgets('a pending v3 Finish returns to default Home from a filtered view', (tester) async {
+    final v3 = ConversationsV3Provider(uid: () => 'owner', cached: 'owner:1');
+    addTearDown(v3.dispose);
+    final capture = _Capture()
+      ..verifiedLiveServerRecordingId = 'rec-1'
+      ..failure = ProcessAbsence.notFound;
+    final harness = await _pump(tester, capture, v3: v3, filterStart: DateTime(2026, 11, 1));
+    final conversations = tester.element(find.byType(LiveEpisodePage)).read<ConversationProvider>();
+    conversations
+      ..showStarredOnly = true
+      ..selectedFolderId = 'folder';
+    final row = OptimisticProcessingPlaceholder.conversation(targetConversationId: 'rec-1');
+    v3.startManualFinish(row, 'rec-1');
+    v3.settleManualFinish(row, null, alreadyClosed: true);
+    expect(conversations.showsDefaultHome, isFalse);
+
+    expect(await _finishAndCapturePushed(tester, capture), isNull);
+    await tester.pumpAndSettle();
+    expect(find.text('home'), findsOneWidget);
+    expect(find.byType(LiveEpisodePage), findsNothing);
+    expect(harness.home.selectedIndex, HomeProvider.homeTab);
+    expect(conversations.showsDefaultHome, isTrue);
+    expect(v3.finishRow, same(row));
+    v3.acknowledgeManualFinish(row);
+    await tester.pumpWidget(const SizedBox());
   });
 
   testWidgets('a batch pendant Finish with only preview lines processes the capture', (tester) async {
@@ -512,6 +702,19 @@ void main() {
     v3.acknowledgeManualFinish(row);
   });
 
+  test('a Finish 404 uses the placeholder target to match its successor', () {
+    final v3 = ConversationsV3Provider(uid: () => 'owner', cached: 'owner:1');
+    addTearDown(v3.dispose);
+    final row = OptimisticProcessingPlaceholder.conversation(targetConversationId: 'rec-1');
+    v3.startManualFinish(row, null);
+
+    expect(v3.settleManualFinish(row, null, alreadyClosed: true), isTrue);
+    expect(v3.finishHasSuccessor([_derived('other', 'rec-2')]), isFalse);
+    expect(v3.finishHasSuccessor([_derived('window-1', 'rec-1')]), isTrue);
+    expect(v3.acknowledgeManualFinish(row), isTrue);
+    expect(v3.finishRow, isNull);
+  });
+
   testWidgets('v3 Wrap Up returns to the published Home processing row', (tester) async {
     final v3 = ConversationsV3Provider(uid: () => 'owner', cached: 'owner:1');
     addTearDown(v3.dispose);
@@ -551,25 +754,56 @@ void main() {
     v3.dispose();
   });
 
-  testWidgets('v3 Wrap Up sends a verified pendant finish with no transcript and explains a 404', (tester) async {
+  for (final v3On in [true, false]) {
+    testWidgets('an already closed Finish returns to Home without an error (v3: $v3On)', (tester) async {
+      final v3 = ConversationsV3Provider(uid: () => 'owner', cached: 'owner:${v3On ? 1 : 0}');
+      addTearDown(v3.dispose);
+      final capture = _Capture(preview: v3On ? null : _Preview(const [_line], 4))
+        ..verifiedLiveServerRecordingId = 'rec-1'
+        ..failure = ProcessAbsence.notFound;
+      await _pump(tester, capture, v3: v3);
+
+      expect(await _finishAndCapturePushed(tester, capture), isNull);
+      expect(capture.finishes, 1);
+      await tester.pumpAndSettle();
+      expect(find.byType(LiveEpisodePage), findsNothing);
+      expect(find.text("Didn't go through. Your audio is safe."), findsNothing);
+      expect(find.text("Already saved. It's on Home."), v3On ? findsNothing : findsOneWidget);
+      expect(find.text('home'), findsOneWidget);
+      await tester.pumpWidget(const SizedBox());
+    });
+  }
+
+  for (final stale in [false, true]) {
+    testWidgets("a v3 404 does not open the previous window's late close (stale verified id: $stale)", (tester) async {
+      final v3 = ConversationsV3Provider(uid: () => 'owner', cached: 'owner:1');
+      addTearDown(v3.dispose);
+      final capture = _Capture()
+        ..verifiedLiveServerRecordingId = stale ? 'rec-1' : 'rec-2'
+        ..failure = ProcessAbsence.notFound;
+      if (stale) capture.closedRecordings.add('rec-1');
+      await _pump(tester, capture, v3: v3);
+      final navigator = Navigator.of(tester.element(find.byType(LiveEpisodePage)));
+      navigator.pop();
+      await tester.pumpAndSettle();
+      capture.lastClientFinish =
+          (at: DateTime.now().subtract(const Duration(minutes: 2)), previewWords: 0, previewSession: 0);
+      capture.closed =
+          (id: 'rec-1', at: DateTime.now().subtract(const Duration(minutes: 1)), previewWords: 0, previewSession: 0);
+
+      final outcome = await finishLiveCapture(tester.element(find.text('home')), capture);
+
+      expect(outcome, isA<FinishAwaitingResult>());
+      expect(capture.finishes, 1);
+      await tester.pumpWidget(const SizedBox());
+    });
+  }
+
+  testWidgets('a v3 404 opens the recording that closed while Finish was in flight', (tester) async {
     final v3 = ConversationsV3Provider(uid: () => 'owner', cached: 'owner:1');
     addTearDown(v3.dispose);
-    final capture = _Capture()
-      ..verifiedLiveServerRecordingId = 'rec-1'
-      ..failure = ProcessAbsence.notFound;
-    await _pump(tester, capture, v3: v3);
-
-    expect(await _finishAndCapturePushed(tester, capture), isNull);
-    expect(capture.finishes, 1);
-    expect(find.byType(LiveEpisodePage), findsOneWidget);
-    expect(find.text("Didn't go through. Your audio is safe."), findsOneWidget);
-    await tester.pumpWidget(const SizedBox());
-  });
-
-  testWidgets('the shared Home finish helper classifies a v3 404 as a failure', (tester) async {
-    final v3 = ConversationsV3Provider(uid: () => 'owner', cached: 'owner:1');
-    addTearDown(v3.dispose);
-    final capture = _Capture()
+    final reply = Completer<void>();
+    final capture = _Capture(answerDelay: reply.future)
       ..verifiedLiveServerRecordingId = 'rec-1'
       ..failure = ProcessAbsence.notFound;
     await _pump(tester, capture, v3: v3);
@@ -577,8 +811,12 @@ void main() {
     navigator.pop();
     await tester.pumpAndSettle();
 
-    final outcome = await finishLiveCapture(tester.element(find.text('home')), capture);
-    expect(outcome, isA<FinishFailed>());
+    final finish = finishLiveCapture(tester.element(find.text('home')), capture);
+    capture.closed = (id: 'rec-1', at: DateTime.now(), previewWords: 0, previewSession: 0);
+    reply.complete();
+    final outcome = await finish;
+
+    expect(outcome, isA<FinishProcessing>().having((value) => value.recordingId, 'recordingId', 'rec-1'));
     expect(capture.finishes, 1);
     await tester.pumpWidget(const SizedBox());
   });
@@ -594,7 +832,7 @@ void main() {
           return const ApiSuccess(ConversationsLiveRead(v3: true, conversation: null));
         },
       );
-      final conversations = _ManualFinishConversations();
+      final conversations = _ManualFinishConversations()..showStarredOnly = true;
       final messages = MessageProvider();
       final people = PeopleProvider();
       final usage = UsageProvider();
@@ -630,13 +868,25 @@ void main() {
           showFailure: true);
       await tester.pump();
       final message = switch (absence) {
+        ProcessAbsence.notFound => null,
         ProcessAbsence.emptyBody => 'That recording was too short or empty to keep.',
         null => "Audio's still on its way.",
         _ => "Didn't go through. Your audio is safe.",
       };
-      expect(find.text(message), findsOneWidget);
-      expect(conversations.refreshes, 1);
+      if (message != null) expect(find.text(message), findsOneWidget);
+      final pending = absence == ProcessAbsence.notFound;
+      expect(conversations.refreshes, pending ? 0 : 1);
+      expect(conversations.listReads, pending ? 1 : 0);
+      expect(conversations.showStarredOnly, !pending);
       expect(liveReads, 1);
+      if (absence == ProcessAbsence.notFound) {
+        expect(find.text("Didn't go through. Your audio is safe."), findsNothing);
+        expect(v3.finishFailures, 0);
+        await tester.pump(const Duration(minutes: 19));
+        expect(v3.finishRow, same(row));
+        await tester.pump(const Duration(minutes: 1));
+        expect(v3.takeHomeReconcile(), isTrue);
+      }
       expect(v3.finishRow, isNull);
       await tester.pump(const Duration(seconds: 10));
       await tester.pumpWidget(const SizedBox());
@@ -653,6 +903,23 @@ void main() {
       ];
       expect(FinishedCapturePage.match(rows, 'rec-1')?.id, '714c4186');
       expect(FinishedCapturePage.match(rows, 'rec-3'), isNull);
+    });
+
+    test('matches a derived conversation by source recording ID without audio pieces', () {
+      final row = _conversation('derived', extra: {
+        'v3_recording_ids': ['rec-1'],
+      });
+
+      expect(row.v3!.recordingPieces, isEmpty);
+      expect(FinishedCapturePage.match([row], 'rec-1'), same(row));
+    });
+
+    test('ignores a derived conversation with unrelated source recording IDs', () {
+      final row = _conversation('derived', extra: {
+        'v3_recording_ids': ['rec-2'],
+      });
+
+      expect(FinishedCapturePage.match([row], 'rec-1'), isNull);
     });
 
     test('of several conversations from one recording it opens the newest, the top Home row', () {

@@ -4622,7 +4622,6 @@
     "capturePendantDisconnectedShort": "Omi sẽ tự kết nối lại",
     "forYou": "Dành Cho Bạn",
     "stopThese": "Dừng Loại Này",
-    "meetingActionItemsTitle": "Việc cần làm",
     "addToTasks": "Thêm vào Công việc",
     "showInTranscript": "Hiển thị bản chép lời",
     "tentativeTaskDueDate": "Hạn vào khoảng {date}",
@@ -4763,5 +4762,11 @@
     "prepaidCodeFieldHint": "Nhập mã của bạn",
     "prepaidCodeRedeem": "Đổi",
     "prepaidCodeRedeemed": "Đã đổi mã",
-    "prepaidCodeResult": "{reason, select, invalid{Mã này không hợp lệ. Hãy kiểm tra và thử lại.} used{Mã này đã được sử dụng.} expired{Mã này đã hết hạn.} hasPlan{Bạn đã có gói. Mã của bạn chưa được sử dụng. Hãy đổi mã sau khi gói của bạn kết thúc.} notPrepaid{Không thể đổi mã này tại đây. Hãy dùng khi bạn chọn gói.} notEligible{Không thể dùng mã này cho tài khoản này.} rateLimited{Quá nhiều lần thử. Hãy thử lại sau.} other{Đã xảy ra lỗi. Vui lòng thử lại.}}"
+    "prepaidCodeResult": "{reason, select, invalid{Mã này không hợp lệ. Hãy kiểm tra và thử lại.} used{Mã này đã được sử dụng.} expired{Mã này đã hết hạn.} hasPlan{Bạn đã có gói. Mã của bạn chưa được sử dụng. Hãy đổi mã sau khi gói của bạn kết thúc.} notPrepaid{Không thể đổi mã này tại đây. Hãy dùng khi bạn chọn gói.} notEligible{Không thể dùng mã này cho tài khoản này.} rateLimited{Quá nhiều lần thử. Hãy thử lại sau.} other{Đã xảy ra lỗi. Vui lòng thử lại.}}",
+    "playStripeBilledOnWeb": "Thanh toán qua omi.me. Hủy tại đây bất cứ lúc nào.",
+    "playStripeBilledOnWebShort": "Thanh toán qua omi.me.",
+    "playStripePlanPaused": "Gói {plan} của bạn đang tạm dừng.",
+    "firmwareNewestSupportedForDevice": "Thiết bị của bạn đã dùng phiên bản firmware mới nhất được hỗ trợ",
+    "firmwareSyncRecordingsFirstTitle": "Hãy đồng bộ bản ghi âm của bạn trước",
+    "firmwareSyncRecordingsFirstMessage": "Một số bản ghi âm vẫn còn trên thiết bị của bạn. Hãy đợi chúng đồng bộ xong lên điện thoại, sau đó bắt đầu cập nhật."
 }

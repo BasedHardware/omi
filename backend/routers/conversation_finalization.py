@@ -7,6 +7,7 @@ import logging
 from typing import Any
 
 from fastapi import APIRouter, Depends, Request
+from utils.enrichment.retry_reason import expected_retry_reason
 from fastapi.responses import JSONResponse
 
 from config.conversation_processing_retry import DETERMINISTIC_PROCESSING_FAILURE, PROCESSING_BURST_ATTEMPTS
@@ -133,11 +134,9 @@ async def run_listen_finalization_job(
         except (ValueError, TypeError):
             return JSONResponse(status_code=400, content={'status': 'invalid_enrichment_task'})
         except Exception as error:
-            # Same mapping as routers.batch_pipeline.enrichment_response: an expected retry (for example a
+            # Same mapping as routers.enrichment.enrichment_response: an expected retry (for example a
             # first summary whose callback is still pending) answers 409; only an unexpected failure is 500.
             # Never 503 (contract (d)): Cloud Tasks system-throttles the whole queue on it.
-            from routers.batch_pipeline import expected_retry_reason
-
             reason = expected_retry_reason(error)
             if reason is None:
                 logger.error(

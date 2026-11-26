@@ -15450,9 +15450,6 @@ class AppLocalizationsDe extends AppLocalizations {
   String get stopThese => 'Diese stoppen';
 
   @override
-  String get meetingActionItemsTitle => 'Aktionspunkte';
-
-  @override
   String get addToTasks => 'Zu Aufgaben hinzufügen';
 
   @override
@@ -15940,4 +15937,26 @@ class AppLocalizationsDe extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get playStripeBilledOnWeb => 'Abgerechnet über omi.me. Hier jederzeit kündbar.';
+
+  @override
+  String get playStripeBilledOnWebShort => 'Abgerechnet über omi.me.';
+
+  @override
+  String playStripePlanPaused(String plan) {
+    return 'Dein $plan-Tarif ist pausiert.';
+  }
+
+  @override
+  String get firmwareNewestSupportedForDevice =>
+      'Ihr Gerät verwendet bereits die neueste unterstützte Firmware-Version';
+
+  @override
+  String get firmwareSyncRecordingsFirstTitle => 'Synchronisieren Sie zuerst Ihre Aufnahmen';
+
+  @override
+  String get firmwareSyncRecordingsFirstMessage =>
+      'Einige Aufnahmen sind noch auf Ihrem Gerät. Warten Sie, bis sie vollständig mit Ihrem Telefon synchronisiert wurden, und starten Sie dann die Aktualisierung.';
 }

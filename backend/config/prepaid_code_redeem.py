@@ -40,6 +40,11 @@ def enabled_for(uid: Optional[str], environ: Optional[Mapping[str, str]] = None)
         return False
 
 
+# A prepaid subscription and a live Google Play purchase on one account. Never cancelled automatically (it
+# charges nothing; cancelling it would destroy the included term). Runbook: play-billing-double-charge.md.
+PLAY_OVERLAP_LOG = 'prepaid_code_play_overlap uid=%s purchase=%s code=%s'
+
+
 def is_prepaid_subscription(stripe_sub: object) -> bool:
     """A no-card prepaid subscription. Plan changes and reactivation must never touch it: without a
     card, any change that outlives the code would end in a failed charge."""

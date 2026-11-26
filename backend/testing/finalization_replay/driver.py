@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from contextlib import ExitStack, redirect_stdout, redirect_stderr
 from datetime import datetime, timezone
+import importlib
 import json
 import logging
 import os
@@ -16,25 +17,32 @@ from uuid import uuid4
 
 from testing.finalization_replay.candidate import migrate, replay_database, run_candidate
 from testing.finalization_replay.corpus import DEFAULT_TEST_KEY, pack, read_corpus
-from testing.finalization_replay.metrics import install_firestore_meter, measure
+from testing.finalization_replay.metrics import install_firestore_meter, measure, suspend_meter
 from testing.finalization_replay.providers import allow_provider_port, provider_server
-from testing.finalization_replay.reference import run_reference
-from testing.finalization_replay.state import CaseState
+from testing.finalization_replay.reference import erase_reference, run_reference
+from testing.finalization_replay.state import CaseState, load_memo_bindings, seeded_token_hashes
 from testing.replay_harness.env import emulator_endpoint, replay_environment
 from testing.replay_harness.guard import private_text
 
 
-def _observe(state, run, output, side):
+def _observe(state, run, output, side, *, setup=None):
     try:
-        before = state.documents()
+        state.initial_documents = state.documents()
         state.start()
         with measure(state):
+            if setup is not None:
+                with suspend_meter():
+                    setup(state)
             status = run(state)
-        output[side] = state.observe(status, before)
+        with suspend_meter():
+            output[side] = state.observe(status, state.initial_documents, load_memo_bindings=load_memo_bindings)
     except Exception as error:
         output['errors'][side] = type(error).__name__
         finished = datetime.now(timezone.utc)
         output[side] = {
+            'owner_id': getattr(state, 'uid', ''),
+            'conversation_id': getattr(state, 'cid', ''),
+            'seeded_token_hashes': getattr(state, 'seeded_token_hashes', []),
             'status': 'execution_error',
             'queue_fanout_key': state.queue_fanout_key,
             'updated_at_changed': False,
@@ -84,6 +92,9 @@ def _seed(client, cases, url):
         raise ValueError('each case needs its own replay uid')
     for state in states:
         state.seed(url)
+    seeded = seeded_token_hashes(client)
+    for state in states:
+        state.seeded_token_hashes = seeded
     return states
 
 
@@ -129,11 +140,24 @@ def replay(cases, jobd, dsn, key):
                 with fakeredis.FakeRedis() as redis, patch.object(redis_db, 'r', redis), patch.object(
                     redis_db, 'create_bounded_redis_client', lambda *_a, **_kw: redis
                 ):
+                    speaker_trace = importlib.import_module('testing.finalization_replay.speaker_trace')
                     for state, output in zip(reference_cases, outputs, strict=True):
                         server.state = state
                         server.errors.clear()
                         with ExitStack() as leaves:
-                            _observe(state, lambda target: run_reference(target, leaves, url), output, 'python')
+                            speaker_trace.record_speaker_trace(state, leaves)
+
+                            def run_python(target):
+                                status = run_reference(target, leaves, url)
+                                if target.case.get('erase_after'):
+                                    if status not in {'completed', 'discarded'}:
+                                        raise RuntimeError('Python replay did not complete before erase')
+                                    with suspend_meter():
+                                        target.capture_before_erasure()
+                                    target.effects['erasure'] = erase_reference(target)
+                                return status
+
+                            _observe(state, run_python, output, 'python')
                         if server.errors:
                             output['errors']['python'] = 'ReplayProviderError'
     return outputs

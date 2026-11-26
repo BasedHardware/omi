@@ -217,7 +217,7 @@ def test_account_purge_removes_creator_owned_public_apps_and_nested_data(monkeyp
     monkeypatch.setattr('database.user_data_deletion.get_data_plane_firestore_client', lambda: data_plane)
     monkeypatch.setattr('database.user_data_deletion.delete_generic_cache', delete_generic_cache)
     monkeypatch.setattr('database.user_data_deletion.delete_app_cache_by_id', delete_app_cache)
-    monkeypatch.setattr('database.user_data_deletion.stop_quiet_checks_for_account', lambda *_a, **_kw: None)
+    monkeypatch.setattr('database.user_data_deletion.purge_finalization_jobs', lambda *_a, **_kw: None)
 
     assert purge_user_subtree('creator', client, recursive)['status'] == 'ok'
 

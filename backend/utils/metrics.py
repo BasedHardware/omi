@@ -22,6 +22,9 @@ from utils.conversations import (
     processing_metrics as _retry_metrics,  # pyright: ignore[reportUnusedImport]  # noqa: F401
 )
 from utils.episodes import metrics as _episode_metrics  # pyright: ignore[reportUnusedImport]  # noqa: F401
+from utils.observability import (
+    speaker_evidence_erasure as _evidence_erasure,  # pyright: ignore[reportUnusedImport]  # noqa: F401
+)
 from utils.sync import absorption_metrics as _absorption_metrics  # pyright: ignore[reportUnusedImport]  # noqa: F401
 
 if TYPE_CHECKING:

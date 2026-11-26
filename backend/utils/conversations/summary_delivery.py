@@ -47,6 +47,17 @@ CLOSED_LATENCY = Histogram(
     ['lane'],
     buckets=(30, 60, 120, 180, 300, 600, 1800, 3600, 14400),
 )
+PROCESSED_LATENCY = Histogram(
+    'omi_conversation_processed_seconds',
+    'First usable summary durable, once per conversation, from last speech or from the later of last speech and sync',
+    ['lane', 'basis'],
+    buckets=(30, 60, 120, 300, 600, 1800, 3600, 14400, 43200, 86400),
+)
+SETTLED_UNSUMMARIZED = Counter(
+    'omi_conversation_settled_unsummarized_total',
+    'Conversations that settled without a summary; with the processed histogram count, the denominator',
+    ['lane', 'reason'],
+)
 DEBT = Gauge('omi_summary_debt_overdue', 'Overdue summary debt in the bounded repair window')
 OLDEST = Gauge('omi_summary_debt_oldest_age_seconds', 'Oldest overdue summary debt observed by repair')
 SAMPLED_AT = Gauge('omi_summary_debt_sample_timestamp_seconds', "Timestamp of this replica's bounded debt sample")
@@ -502,7 +513,9 @@ def merge_result(existing: Row, write: Row, uid: str, *, now: float | None = Non
         write['summary_due_at'] = None
         write['summary_blocked_reason'] = 'local_only'
         if existing.get('summary_blocked_reason') != 'local_only':
-            return dict(lane=lane(existing), reason='local_only', present=False, latency=None)
+            return dict(
+                lane=lane(existing), reason='local_only', present=False, latency=None, unsummarized='local_only'
+            )
         return None
     accepted = existing.get('summary_first_pending_at', ACCEPT_CONTEXT.get())
     if existing.get('summary_discard_receipted') and ACCEPT_CONTEXT.get() is not None:
@@ -586,17 +599,45 @@ def merge_result(existing: Row, write: Row, uid: str, *, now: float | None = Non
         if rich:
             write['summary_title_provenance'] = 'generated'
         finished = write.get('finished_at', existing.get('finished_at'))
+        arrival = write.get('arrival_at', existing.get('arrival_at'))
+        # Rows admitted without summary metadata still carry the server receive time.
+        server_accepted = accepted if accepted is not None else _timestamp(arrival)
         closed_latency = None
-        if accepted is not None and isinstance(finished, datetime) and finished.timestamp() <= current:
-            closed_latency = max(0, current - max(accepted, finished.timestamp()))
+        if server_accepted is not None and isinstance(finished, datetime) and finished.timestamp() <= current:
+            closed_latency = max(0, current - max(server_accepted, finished.timestamp()))
         return dict(
             lane=lane(existing),
             reason=('discarded' if discarded else 'summary') if accepted is not None else 'accept_unknown',
             present=rich,
             latency=max(0, current - accepted) if accepted is not None else None,
             closed_latency=closed_latency,
+            # v3 rows publish a preview first; their notes commit owns the observation.
+            processed=(
+                processed_latencies(finished, arrival, current) if rich and not existing.get('v3_derived') else None
+            ),
+            unsummarized=None if rich else 'discarded',
         )
     return None
+
+
+def _timestamp(value: Any) -> float | None:
+    return value.timestamp() if isinstance(value, datetime) else None
+
+
+def processed_latencies(finished: Any, arrival: Any, now: float) -> dict[str, float] | None:
+    """Seconds from last speech, and from the later of last speech and server receipt (sync)."""
+    end = _timestamp(finished)
+    if end is None or end > now:
+        return None
+    received = _timestamp(arrival)
+    synced = end if received is None else max(end, received)
+    return {'finished': max(0.0, now - end), 'end_or_sync': max(0.0, now - synced)}
+
+
+def observe_processed(lane_value: str, latencies: Mapping[str, float] | None) -> None:
+    """Call once per conversation, after the commit that made its first usable summary durable."""
+    for basis, seconds in (latencies or {}).items():
+        PROCESSED_LATENCY.labels(lane_value, basis).observe(seconds)
 
 
 def lane(row: Row) -> str:
@@ -623,6 +664,10 @@ def emit(receipt: Row | None) -> None:
         LATENCY.labels(receipt['lane']).observe(receipt['latency'])
     if receipt['present'] and receipt.get('closed_latency') is not None:
         CLOSED_LATENCY.labels(receipt['lane']).observe(receipt['closed_latency'])
+    if receipt['present']:
+        observe_processed(receipt['lane'], receipt.get('processed'))
+    elif receipt.get('unsummarized'):
+        SETTLED_UNSUMMARIZED.labels(receipt['lane'], receipt['unsummarized']).inc()
 
 
 def emit_result(

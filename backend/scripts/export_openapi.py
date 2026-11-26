@@ -158,6 +158,10 @@ UNDOCUMENTED_PUBLIC_ROUTES: dict[tuple[str, str], str] = {
         '/v1/conversations/{conversation_id}/summary/open',
     ): 'Firebase-authenticated first-party historical summary-on-open; not a Developer API key route.',
     (
+        'GET',
+        '/v1/conversations/{conversation_id}/summary/wait',
+    ): 'Firebase-authenticated first-party wait for an ended conversation (flag fast_end_feedback); not a Developer API key route.',
+    (
         'POST',
         '/v1/conversations/deletion-batch-purges/run',
     ): 'Cloud Tasks worker on backend-sync, service OIDC only; not a browser, app or Developer API surface.',

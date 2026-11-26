@@ -181,7 +181,7 @@ def test_independent_shadow_and_settlement_controls_fail_closed(monkeypatch):
     monkeypatch.setenv('K_SERVICE', 'backend-sync')
     monkeypatch.setenv('RECORD_WAL_DUPLICATE_SOURCE_FENCE_VERIFIED', 'true')
     monkeypatch.setenv('RECORD_WAL_DUPLICATE_SHADOW_EPOCH', '1080')
-    assert mode('owner', 1080) == ('shadow', 6)
+    assert mode('owner', 1080) == ('shadow', 36)
     assert mode('owner', 1080 + 86400) == ('off', None)
     monkeypatch.setenv('RECORD_WAL_DUPLICATE_PERCENT', '100')
     assert mode('owner', 1080) == ('off', None)

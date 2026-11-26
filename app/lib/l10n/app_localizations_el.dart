@@ -15438,9 +15438,6 @@ class AppLocalizationsEl extends AppLocalizations {
   String get stopThese => 'Διακοπή αυτών';
 
   @override
-  String get meetingActionItemsTitle => 'Ενέργειες';
-
-  @override
   String get addToTasks => 'Προσθήκη στις Εργασίες';
 
   @override
@@ -15928,4 +15925,26 @@ class AppLocalizationsEl extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get playStripeBilledOnWeb => 'Χρεώνεται μέσω omi.me. Ακυρώστε εδώ οποιαδήποτε στιγμή.';
+
+  @override
+  String get playStripeBilledOnWebShort => 'Χρεώνεται μέσω omi.me.';
+
+  @override
+  String playStripePlanPaused(String plan) {
+    return 'Το πρόγραμμά σας $plan είναι σε παύση.';
+  }
+
+  @override
+  String get firmwareNewestSupportedForDevice =>
+      'Η συσκευή σας έχει ήδη την πιο πρόσφατη υποστηριζόμενη έκδοση υλικολογισμικού';
+
+  @override
+  String get firmwareSyncRecordingsFirstTitle => 'Συγχρονίστε πρώτα τις ηχογραφήσεις σας';
+
+  @override
+  String get firmwareSyncRecordingsFirstMessage =>
+      'Μερικές ηχογραφήσεις βρίσκονται ακόμη στη συσκευή σας. Περιμένετε να ολοκληρωθεί ο συγχρονισμός τους στο τηλέφωνό σας και, στη συνέχεια, ξεκινήστε την ενημέρωση.';
 }

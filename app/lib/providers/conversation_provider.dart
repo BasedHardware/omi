@@ -27,6 +27,7 @@ import 'package:omi/services/telemetry/client_telemetry.dart';
 import 'package:omi/services/siri_integration.dart';
 import 'package:omi/services/notifications/merge_notification_handler.dart';
 import 'package:omi/utils/conversations/capture_groups.dart';
+import 'package:omi/utils/conversations/early_title.dart';
 import 'package:omi/utils/conversations/home_member_fallback.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:omi/providers/transcription_pending_conversations.dart';
@@ -110,12 +111,10 @@ class ConversationProvider extends ChangeNotifier {
   bool hasDailySummaries = false; // whether user has any daily summaries
   bool get hasActiveHomeFilter => showStarredOnly || selectedFolderId != null || selectedStartDate != null;
 
-  bool get showsDefaultHome =>
-      !hasActiveSearch &&
-      !hasActiveHomeFilter &&
-      !showShortConversations &&
-      !showDiscardedConversations &&
-      !isSelectionModeActive;
+  bool get showsDefaultHome => showsPendingFinishOnHome && !showShortConversations && !showDiscardedConversations;
+
+  /// Saved list preferences filter conversations, while a pending Finish is an activity row.
+  bool get showsPendingFinishOnHome => !hasActiveSearch && !hasActiveHomeFilter && !isSelectionModeActive;
 
   DateTime? selectedStartDate;
   DateTime? selectedEndDate;
@@ -219,6 +218,7 @@ class ConversationProvider extends ChangeNotifier {
   /// The server's resume point after the last loaded page, when its cursor is enabled; the next page
   /// sends it alongside the offset, and an older server ignores it.
   String? _conversationServerCursor;
+  String? _conversationServerMode;
   final Set<String> _conversationServerLoadedIds = {};
 
   /// The server-side filters the paging position above belongs to, and whether it has moved past the
@@ -439,6 +439,7 @@ class ConversationProvider extends ChangeNotifier {
     _conversationServerOffset = 0;
     _conversationServerHasMore = false;
     _conversationServerCursor = null;
+    _conversationServerMode = null;
     _conversationServerLoadedIds.clear();
     _conversationPagingKey = null;
     _conversationPagedDeeper = false;
@@ -738,6 +739,35 @@ class ConversationProvider extends ChangeNotifier {
     }
   }
 
+  /// Clear transient Home filters and reload the list for the pending Finish row.
+  Future<void> resetToDefaultHome() async {
+    if (showsPendingFinishOnHome) return;
+
+    showStarredOnly = false;
+    selectedFolderId = null;
+    selectedStartDate = null;
+    selectedEndDate = null;
+    isSelectionModeActive = false;
+    selectedConversationIds.clear();
+    _searchRequestGeneration++;
+    previousQuery = '';
+    selectedSpeakerId = null;
+    searchStartDate = null;
+    searchEndDate = null;
+    searchedConversations = [];
+    currentSearchPage = 0;
+    totalSearchPages = 0;
+    lastSearchResult = null;
+    _isLoadingConversationSearch = false;
+    isFetchingConversations = false;
+    isLoadingConversations = _isLoadingConversationList;
+
+    assert(showsPendingFinishOnHome, 'Reset every transient filter that hides the pending Finish row.');
+    groupedConversations = {};
+    notifyListeners();
+    await fetchConversations();
+  }
+
   void toggleStarredFilter() {
     showStarredOnly = !showStarredOnly;
 
@@ -912,11 +942,12 @@ class ConversationProvider extends ChangeNotifier {
       _conversationServerHasMore = result.page
           .more(storageCount: result.storageCount, pageSize: _conversationPageSize, truncated: result.truncated);
       _conversationServerCursor = result.page.nextCursor;
+      _conversationServerMode = result.page.homeMode;
       _conversationPagingKey = pagingKey;
       _conversationPagedDeeper = false;
     }
     final currentlyProcessingIds = processingConversations
-        .where((conversation) => _isActiveProcessingStatus(conversation.status))
+        .where((conversation) => _isActiveProcessingStatus(conversation.status) && !titledBeforeSummary(conversation))
         .map((conversation) => conversation.id)
         .toSet();
 
@@ -1027,6 +1058,10 @@ class ConversationProvider extends ChangeNotifier {
         return false;
       }
     }
+    return _fetchConversations(restoreMergeWatches: restoreMergeWatches);
+  }
+
+  Future<bool> _fetchConversations({required bool restoreMergeWatches}) async {
     if (restoreMergeWatches) _restoreMergeWatches();
     loadMoreFailed = false;
     final generation = _sessionGeneration;
@@ -1111,7 +1146,9 @@ class ConversationProvider extends ChangeNotifier {
     );
     final pageHasMore = result.page
         .more(storageCount: result.storageCount, pageSize: _conversationPageSize, truncated: result.truncated);
-    if (_conversationPagedDeeper && _conversationPagingKey == pagingKey) {
+    if (_conversationPagedDeeper &&
+        _conversationPagingKey == pagingKey &&
+        _conversationServerMode == result.page.homeMode) {
       // Same filters, older pages already loaded and still on screen: keep the deeper position.
       // Restarting at page two would re-read every page the reader already has before any new row.
       _recordServerPageIds(result.items, result.storageCount);
@@ -1120,6 +1157,7 @@ class ConversationProvider extends ChangeNotifier {
       _conversationServerOffset = _recordServerPageIds(result.items, result.storageCount);
       _conversationServerHasMore = pageHasMore;
       _conversationServerCursor = result.page.nextCursor;
+      _conversationServerMode = result.page.homeMode;
       _conversationPagingKey = pagingKey;
       _conversationPagedDeeper = false;
     }
@@ -1129,7 +1167,7 @@ class ConversationProvider extends ChangeNotifier {
     // this page, so changed completed rows win. Delete and processing fences
     // apply to cached rows too.
     final currentlyProcessingIds = processingConversations
-        .where((conversation) => _isActiveProcessingStatus(conversation.status))
+        .where((conversation) => _isActiveProcessingStatus(conversation.status) && !titledBeforeSummary(conversation))
         .map((conversation) => conversation.id)
         .toSet();
     final completedById = <String, ServerConversation>{
@@ -1476,6 +1514,7 @@ class ConversationProvider extends ChangeNotifier {
 
     final pageOffset = _conversationServerOffset;
     final pageCursor = _conversationServerCursor;
+    final homeMode = _conversationServerMode;
     final typedApi = _conversationApi;
     late final _HomePage pageResult;
     if (conversationPageFetcherOverride != null) {
@@ -1489,7 +1528,7 @@ class ConversationProvider extends ChangeNotifier {
         typed: null
       );
     } else if (typedApi != null) {
-      pageResult = await _getTypedHomePage(typedApi, pageOffset, pageCursor, startDate, endDate);
+      pageResult = await _getTypedHomePage(typedApi, pageOffset, pageCursor, homeMode, startDate, endDate);
     } else {
       var storageCount = 0;
       var page = const ConversationPageHeaders();
@@ -1499,6 +1538,7 @@ class ConversationProvider extends ChangeNotifier {
         onPageHeaders: (headers) => page = headers,
         offset: pageOffset,
         cursor: pageCursor,
+        homeMode: homeMode,
         includeDiscarded: showDiscardedConversations,
         startDate: startDate,
         endDate: endDate,
@@ -1530,6 +1570,10 @@ class ConversationProvider extends ChangeNotifier {
       return false;
     }
     loadMoreFailed = false;
+    if (homeMode == 'indexed' && pageResult.page.homeMode != homeMode) {
+      // A gate rollback or an older backend invalidated the indexed continuation.
+      return _fetchConversations(restoreMergeWatches: false);
+    }
     final newConversations = pageResult.items;
     _conversationServerOffset += _recordServerPageIds(newConversations, pageResult.storageCount);
     _conversationServerHasMore = pageResult.page

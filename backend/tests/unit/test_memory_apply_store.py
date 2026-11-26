@@ -2790,3 +2790,56 @@ def test_receipt_sweep_stops_after_peer_takeover_preserving_next_receipt(store, 
         assert authority.rows[("legal_holds", "u1")]["active"] is True
         assert store.cleanup_expired_memory_deletion_receipts("u1", db_client=db, now=now) == 0
         assert paths[1] in db.docs
+
+
+@pytest.mark.parametrize("race", ["revision", "tombstone", "account", "authority", "none"])
+def test_source_replacement_refuses_lost_conversation_after_planning(store, monkeypatch, race):
+    from database.conversation_effect_fence import ConversationEffectFenced, ConversationEffectSource
+
+    control = MemoryControlState(uid="u1", head_commit_id="head0", account_generation=1, source_generation=2)
+    old = _short_term_target(memory_id="mem1")
+    planned = _db_with(control=control, target_items=[old])
+    client = _RollbackStrictFirestore({tuple(path.split("/")): row for path, row in planned.docs.items()})
+    source = ("users", "u1", "conversations", "conv1")
+    client.rows[source] = {"sync_content_revision": 2, "finalization_engine": "python", "finalization_owner_epoch": 1}
+    replacement_id, replacement_digest, replacement_operation, write = _replacement_operation_and_write(store, control)
+    expected = {}
+    original_transaction = client.transaction
+
+    def transaction_after_race():
+        if race == "revision":
+            client.rows[source]["sync_content_revision"] += 1
+        elif race == "tombstone":
+            client.rows[("users", "u1", "deleted_conversations", "conv1")] = {"conversation_id": "conv1"}
+        elif race == "account":
+            # A malformed durable marker must also block the write.
+            client.rows[("account_deletions", "u1")] = {}
+        elif race == "authority":
+            client.rows[source]["finalization_engine"] = "go"
+        expected.update(copy.deepcopy(client.rows))
+        return original_transaction()
+
+    monkeypatch.setattr(client, "transaction", transaction_after_race)
+
+    def replace():
+        return store.replace_conversation_source_firestore(
+            uid="u1",
+            conversation_id="conv1",
+            replacement_id=replacement_id,
+            replacement_digest=replacement_digest,
+            replacement_operation=replacement_operation,
+            observed_control=control,
+            expected_source_items=[old],
+            expected_reactivation_items=[],
+            writes=[write],
+            effect_source=ConversationEffectSource("conv1", 2, 1),
+            db_client=client,
+        )
+
+    if race == "none":
+        assert replace().committed_memory_ids == ["mem2"]
+    else:
+        with pytest.raises(ConversationEffectFenced):
+            replace()
+        assert client.rows == expected
+        assert not client.transactions[-1].has_written

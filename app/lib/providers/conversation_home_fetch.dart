@@ -116,6 +116,7 @@ extension _ConversationHomeFetch on ConversationProvider {
         heldHomeEpisodes: _homeEpisodeAcknowledgements,
         onStorageCount: (count) => storageCount = count,
         onPageHeaders: (headers) => page = headers,
+        homeMode: 'auto',
         includeDiscarded: showDiscardedConversations,
         startDate: startDate,
         endDate: endDate,
@@ -145,6 +146,7 @@ extension _ConversationHomeFetch on ConversationProvider {
       heldHomeEpisodes: _homeEpisodeAcknowledgements,
       onStorageCount: (count) => storageCount = count,
       onPageHeaders: (headers) => page = headers,
+      homeMode: 'auto',
       includeDiscarded: showDiscardedConversations,
       startDate: startDate,
       endDate: endDate,
@@ -162,7 +164,13 @@ extension _ConversationHomeFetch on ConversationProvider {
   }
 
   Future<_HomePage> _getTypedHomePage(
-      ConversationApi api, int offset, String? cursor, DateTime? startDate, DateTime? endDate) async {
+    ConversationApi api,
+    int offset,
+    String? cursor,
+    String? homeMode,
+    DateTime? startDate,
+    DateTime? endDate,
+  ) async {
     var storageCount = 0;
     var page = const ConversationPageHeaders();
     final result = await api.list(
@@ -172,6 +180,7 @@ extension _ConversationHomeFetch on ConversationProvider {
       limit: ConversationProvider._conversationPageSize,
       offset: offset,
       cursor: cursor,
+      homeMode: homeMode,
       includeDiscarded: showDiscardedConversations,
       startDate: startDate,
       endDate: endDate,

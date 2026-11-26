@@ -4622,7 +4622,6 @@
     "capturePendantDisconnectedShort": "Omi가 자동으로 다시 연결해요",
     "forYou": "나를 위한 추천",
     "stopThese": "이 유형 중지",
-    "meetingActionItemsTitle": "실행 항목",
     "addToTasks": "작업에 추가",
     "showInTranscript": "스크립트에서 보기",
     "tentativeTaskDueDate": "기한 약 {date}",
@@ -4763,5 +4762,11 @@
     "prepaidCodeFieldHint": "코드를 입력하세요",
     "prepaidCodeRedeem": "사용",
     "prepaidCodeRedeemed": "코드가 적용되었습니다",
-    "prepaidCodeResult": "{reason, select, invalid{유효하지 않은 코드입니다. 확인 후 다시 시도하세요.} used{이미 사용된 코드입니다.} expired{만료된 코드입니다.} hasPlan{이미 플랜이 있습니다. 코드는 사용되지 않았습니다. 플랜이 끝난 후에 사용하세요.} notPrepaid{이 코드는 여기에서 사용할 수 없습니다. 플랜을 선택할 때 사용하세요.} notEligible{이 계정에서는 이 코드를 사용할 수 없습니다.} rateLimited{시도 횟수가 너무 많습니다. 나중에 다시 시도하세요.} other{문제가 발생했습니다. 다시 시도하세요.}}"
+    "prepaidCodeResult": "{reason, select, invalid{유효하지 않은 코드입니다. 확인 후 다시 시도하세요.} used{이미 사용된 코드입니다.} expired{만료된 코드입니다.} hasPlan{이미 플랜이 있습니다. 코드는 사용되지 않았습니다. 플랜이 끝난 후에 사용하세요.} notPrepaid{이 코드는 여기에서 사용할 수 없습니다. 플랜을 선택할 때 사용하세요.} notEligible{이 계정에서는 이 코드를 사용할 수 없습니다.} rateLimited{시도 횟수가 너무 많습니다. 나중에 다시 시도하세요.} other{문제가 발생했습니다. 다시 시도하세요.}}",
+    "playStripeBilledOnWeb": "omi.me를 통해 청구됩니다. 여기에서 언제든 취소할 수 있습니다.",
+    "playStripeBilledOnWebShort": "omi.me를 통해 청구됩니다.",
+    "playStripePlanPaused": "{plan} 플랜이 일시 중지되었습니다.",
+    "firmwareNewestSupportedForDevice": "기기가 이미 지원되는 최신 펌웨어 버전을 사용하고 있습니다",
+    "firmwareSyncRecordingsFirstTitle": "먼저 녹음을 동기화하세요",
+    "firmwareSyncRecordingsFirstMessage": "일부 녹음이 아직 기기에 남아 있습니다. 휴대폰으로의 동기화가 완료되면 업데이트를 시작해 주세요."
 }

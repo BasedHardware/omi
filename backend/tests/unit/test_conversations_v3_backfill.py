@@ -340,7 +340,7 @@ def test_estimate_prices_each_stretch_on_the_live_notes_floors(monkeypatch):
 @pytest.mark.parametrize('letter', ['界', 'あ'])
 def test_backfill_estimate_uses_script_aware_notes_floors(monkeypatch, letter):
     sources = {}
-    for index, words in enumerate((19, 20, 299, 300)):
+    for index, words in enumerate((19, 20, 149, 150)):
         cid = f'capture-{index}'
         row = legacy(cid, AT + timedelta(minutes=10 * index), words)
         row['transcript_segments'][0]['text'] = letter * words
@@ -349,7 +349,7 @@ def test_backfill_estimate_uses_script_aware_notes_floors(monkeypatch, letter):
     estimate = backfill.estimate_partition(
         'u', {'since': AT, 'until': AT + timedelta(days=1)}, RUN, now=AT + timedelta(days=2)
     )
-    assert estimate['words'] == 19 + 20 + 299 + 300
+    assert estimate['words'] == 19 + 20 + 149 + 150
     assert estimate['no_model_windows'] == 1
     assert estimate['short_task_calls'] == 2
     assert estimate['notes_calls'] == 1
@@ -539,10 +539,12 @@ def stored(row):
 def test_conversion_keeps_legacy_notes_and_undo_restores_the_donor_exactly(strict):
     token = convert(strict)
     assert strict.rows[R]['recording'] is True and strict.rows[R]['structured'] == LEGACY_DONOR['structured']
+    assert strict.rows[R]['home_list_visible'] is False
+    assert strict.rows[COPY]['home_list_visible'] is True
     assert strict.rows[R]['claims'] and strict.rows[COPY]['backfilled'] is True
     assert store.restore_backfill_donors('synthetic', token, ['r'], firestore_client=strict) == (1, [])
     assert store.delete_backfill_rows('synthetic', token, ['c0'], firestore_client=strict) == 1
-    assert stored(strict.rows[R]) == LEGACY_DONOR
+    assert stored(strict.rows[R]) == {**LEGACY_DONOR, 'home_list_visible': True}
     assert COPY not in strict.rows
     # No tombstone: the window can be derived again later.
     assert ('users', 'synthetic', 'deleted_conversations', 'c0') not in strict.rows

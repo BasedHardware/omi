@@ -29,7 +29,11 @@ from config.batch_pipeline import (
 from database.batch_pipeline_privacy import BatchPrivacyBlocked
 from database.batch_pipeline_policy import load_stage_policy, refresh_disabled_recovery
 from config.policy import kill_switch
-from config.batch_pipeline_empty_asr import safety_net_enabled, terminal_empty_allowed
+from config.batch_pipeline_empty_asr import (
+    language_guarded_empty_close_enabled,
+    safety_net_enabled,
+    terminal_empty_allowed,
+)
 from config.stt_provider_policy import HELD_RECOVERY_SECOND_PROVIDER
 from config.batch_language_recovery import (
     MAX_AUDIO_SECONDS,
@@ -77,6 +81,7 @@ from utils.batch_pipeline.recovery_disposition import (
     terminal_empty_payload,
     TWO_PROVIDER_EMPTY_EVIDENCE,
     SECOND_CHANCE_EMPTY_EVIDENCE,
+    LANGUAGE_GUARD_EMPTY_EVIDENCE,
     independent_silence_payload,
     log_result_held,
 )
@@ -218,6 +223,11 @@ class QuarantineRecovery:
             pass
         if outcome in ('words', 'empty'):
             metered(record_accepted, owner_id, provider, item.duration_seconds)
+        # Both recognizers answered and both answers were validated empty.
+        both_empty = {
+            name: {'provider': name, 'outcome': 'empty', 'word_count': 0, 'vad_speech_seconds': measured}
+            for name in ('modulate', provider)
+        }
         if guarded:
             if (
                 outcome == 'empty'
@@ -227,28 +237,37 @@ class QuarantineRecovery:
                 )
             ):
                 return independent_silence_payload(empty.duration, empty.spans)
+            if (
+                language_guarded_empty_close_enabled()
+                and outcome == 'empty'
+                and first_empty
+                and bool(empty.spans)
+                and policy.terminal_empty_disposition
+                and terminal_empty_allowed(empty.spans, recognizer_receipts=both_empty, language_guarded=True)
+            ):
+                # Parakeet never ran on a guarded unit; the evidence names the
+                # language guard and the two recognizers that did answer.
+                return terminal_empty_payload(
+                    empty.duration,
+                    empty.spans,
+                    LANGUAGE_GUARD_EMPTY_EVIDENCE,
+                    recognizer_receipts=both_empty,
+                    language_guarded=True,
+                )
             return payload
         if (
             outcome == 'empty'
             and first_empty
             and bool(empty.spans)
             and policy.terminal_empty_disposition
-            and terminal_empty_allowed(empty.spans)
+            and terminal_empty_allowed(empty.spans, recognizer_receipts=both_empty)
         ):
             evidence = (
                 TWO_PROVIDER_EMPTY_EVIDENCE
                 if (job or {}).get('worker_empty_evidence') == {'padded_retry': 'skipped_long_speech', 'version': 1}
                 else SECOND_CHANCE_EMPTY_EVIDENCE
             )
-            return terminal_empty_payload(
-                empty.duration,
-                empty.spans,
-                evidence,
-                recognizer_receipts={
-                    name: {'provider': name, 'outcome': 'empty', 'word_count': 0, 'vad_speech_seconds': measured}
-                    for name in ('modulate', provider)
-                },
-            )
+            return terminal_empty_payload(empty.duration, empty.spans, evidence, recognizer_receipts=both_empty)
         return payload
 
     def recover(self, segment_id, owner_id):

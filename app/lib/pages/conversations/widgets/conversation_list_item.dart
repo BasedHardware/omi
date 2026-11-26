@@ -180,6 +180,7 @@ class _ConversationListItemState extends State<ConversationListItem> {
         conversation.isLocked,
         conversation.processingDeferred,
         conversation.v3?.tileState,
+        conversation.v3?.titleLocked,
         widget.fillingSeconds,
         widget.homeEpisode?.members.length,
         widget.homeCard?.revision,

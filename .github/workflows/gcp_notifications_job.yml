@@ -24,6 +24,20 @@ on:
         description: 'Release version (optional)'
         required: false
         default: ''
+      mode:
+        description: 'Full deploy, or prod image-only validate/apply/rollback'
+        type: choice
+        default: full
+        options: [full, image-only-validate, image-only-apply, image-only-rollback]
+      release_sha:
+        description: 'Image-only source SHA with main Release Eligibility proof'
+        type: string
+      expected_generation:
+        description: 'Live Cloud Run Job generation approved for this image-only operation'
+        type: string
+      validation_run:
+        description: 'Successful image-only validation run ID (required for apply and rollback)'
+        type: string
 
 env:
   # Abort a git HTTP transfer that stays under 1 KB/s for 60 s, so actions/checkout
@@ -40,6 +54,7 @@ concurrency:
 
 jobs:
   deploy:
+    if: inputs.mode == 'full'
     environment: ${{ github.event.inputs.environment == 'prod' && 'prod' || 'development' }}
     permissions:
       contents: 'read'
@@ -494,3 +509,201 @@ jobs:
           status: ${{ job.status }}
           telegram_bot_token: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           telegram_chat_id: ${{ secrets.TELEGRAM_CHAT_ID }}
+
+  image-only:
+    if: inputs.mode != 'full'
+    environment: prod
+    permissions:
+      actions: read
+      contents: read
+      id-token: write
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      MODE: ${{ inputs.mode }}
+      TARGET_ENVIRONMENT: ${{ inputs.environment }}
+      RELEASE_SHA: ${{ inputs.release_sha }}
+      EXPECTED_GENERATION: ${{ inputs.expected_generation }}
+      VALIDATION_RUN: ${{ inputs.validation_run }}
+      IMAGE_REPOSITORY: gcr.io/based-hardware/notifications-job
+      GCP_PROJECT: ${{ vars.GCP_PROJECT_ID }}
+    steps:
+      - name: Admit image-only inputs
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REF" = refs/heads/main
+          test "$TARGET_ENVIRONMENT" = prod
+          test "$GCP_PROJECT" = based-hardware
+          [[ "$RELEASE_SHA" =~ ^[0-9a-f]{40}$ ]]
+          [[ "$EXPECTED_GENERATION" =~ ^[1-9][0-9]*$ ]]
+          case "$MODE" in
+            image-only-validate) test -z "$VALIDATION_RUN" ;;
+            image-only-apply|image-only-rollback) [[ "$VALIDATION_RUN" =~ ^[1-9][0-9]*$ ]] ;;
+            *) exit 1 ;;
+          esac
+
+      - name: Checkout immutable workflow controls
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.workflow_sha }}
+          persist-credentials: false
+
+      - name: Admit immutable main release source
+        if: inputs.mode != 'image-only-rollback'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          proof="$RUNNER_TEMP/notifications-release-proof.json"
+          gh api "repos/$GITHUB_REPOSITORY/actions/workflows/release-eligibility.yml/runs?event=push&branch=main&status=completed&head_sha=$RELEASE_SHA&per_page=100" > "$proof"
+          python3 .github/scripts/verify_backend_release_admission.py \
+            --sha "$RELEASE_SHA" --repository "$GITHUB_REPOSITORY" --workflow-runs "$proof" --require-first-attempt
+
+      - name: Read the successful validation receipt
+        if: inputs.mode != 'image-only-validate'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          workflow="repos/$GITHUB_REPOSITORY/actions/workflows/gcp_notifications_job.yml"
+          workflow_id="$(gh api "$workflow" --jq .id)"
+          attempt="$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$VALIDATION_RUN" |
+            jq -er --arg workflow_id "$workflow_id" --arg repository "$GITHUB_REPOSITORY" '
+              select((.workflow_id | tostring) == $workflow_id and .head_repository.full_name == $repository
+                     and .head_branch == "main" and .event == "workflow_dispatch"
+                     and .status == "completed" and .conclusion == "success") | .run_attempt
+            ')"
+          gh run download "$VALIDATION_RUN" --repo "$GITHUB_REPOSITORY" \
+            --name "notifications-image-validation-$attempt" --dir "$RUNNER_TEMP/notifications-validation"
+
+      - name: Free runner disk for the image build
+        if: inputs.mode == 'image-only-validate'
+        run: rm -rf /opt/hostedtoolcache
+
+      - name: Set up Python for deploy controls
+        if: inputs.mode != 'image-only-rollback'
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.11'
+
+      - name: Install pinned deploy script dependency
+        if: inputs.mode != 'image-only-rollback'
+        run: |
+          python3 -m pip install --require-hashes --only-binary=:all: --no-deps -r /dev/stdin <<'REQUIREMENTS'
+          PyYAML==6.0.1 --hash=sha256:d2b04aac4d386b172d5b9692e2d2da8de7bfb6c387fa4f801fbf6fb2e6ba4673
+          REQUIREMENTS
+
+      - name: Checkout immutable Firestore gate controls
+        if: inputs.mode != 'image-only-rollback'
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.workflow_sha }}
+          path: .github/firestore-workflow
+          persist-credentials: false
+          fetch-depth: 1
+          sparse-checkout: |
+            .github/actions/firestore-readiness
+            backend/scripts
+            backend/database
+
+      - name: Verify serving Firestore indexes
+        if: inputs.mode != 'image-only-rollback'
+        uses: ./.github/firestore-workflow/.github/actions/firestore-readiness
+        with:
+          source_sha: ${{ inputs.release_sha }}
+          project_id: ${{ vars.RUNTIME_GCP_PROJECT_ID }}
+          workload_identity_provider: projects/208440318997/locations/global/workloadIdentityPools/omi-gha-notif-prod/providers/github
+          service_account: omi-ci-index-check@based-hardware.iam.gserviceaccount.com
+
+      - name: Checkout admitted image source
+        if: inputs.mode == 'image-only-validate'
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.release_sha }}
+          path: .github/notifications-image-source
+          persist-credentials: false
+
+      - name: Export only tracked build inputs
+        if: inputs.mode == 'image-only-validate'
+        run: |
+          set -euo pipefail
+          source=.github/notifications-image-source
+          test "$(git -C "$source" rev-parse 'HEAD^{commit}')" = "$RELEASE_SHA"
+          mkdir "$RUNNER_TEMP/notifications-context"
+          git -C "$source" archive "$RELEASE_SHA" .dockerignore backend |
+            tar -xf - -C "$RUNNER_TEMP/notifications-context"
+
+      - name: Google Auth (prod WIF)
+        uses: google-github-actions/auth@v3
+        with:
+          workload_identity_provider: projects/208440318997/locations/global/workloadIdentityPools/omi-gha-notif-prod/providers/github
+          service_account: omi-gha-notif-job-prod@based-hardware.iam.gserviceaccount.com
+
+      - uses: google-github-actions/setup-gcloud@v3
+
+      - name: Login to GCR
+        run: gcloud auth configure-docker gcr.io --quiet
+
+      - uses: docker/setup-buildx-action@v4
+
+      - name: Build dedicated notifications image
+        if: inputs.mode == 'image-only-validate'
+        uses: docker/build-push-action@v7
+        with:
+          context: ${{ runner.temp }}/notifications-context
+          file: ${{ runner.temp }}/notifications-context/backend/modal/Dockerfile.notifications_job
+          platforms: linux/amd64
+          push: false
+          load: true
+          tags: ${{ env.IMAGE_REPOSITORY }}:${{ inputs.release_sha }}-${{ github.run_id }}-${{ github.run_attempt }}
+          labels: org.opencontainers.image.revision=${{ inputs.release_sha }}
+
+      - name: Smoke and publish the verified image
+        if: inputs.mode != 'image-only-rollback' && inputs.mode == 'image-only-validate'
+        run: |
+          set -euo pipefail
+          image="$IMAGE_REPOSITORY:$RELEASE_SHA-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
+          (
+            cd .github/notifications-image-source
+            python3 backend/scripts/runtime_image_contracts.py smoke \
+              --dockerfile backend/modal/Dockerfile.notifications_job --image "$image"
+          )
+          docker push "$image"
+          docker image inspect "$image" --format '{{range .RepoDigests}}{{println .}}{{end}}' |
+            awk -v prefix="$IMAGE_REPOSITORY@" 'index($0, prefix) == 1' > "$RUNNER_TEMP/notifications-pushed-image"
+
+      - name: Get GKE credentials for gateway serving gate
+        if: inputs.mode != 'image-only-rollback'
+        uses: google-github-actions/get-gke-credentials@v3
+        with:
+          cluster_name: ${{ vars.GKE_CLUSTER }}
+          location: ${{ env.REGION }}
+          project_id: based-hardware
+
+      - name: Verify LLM Gateway serving data plane
+        if: inputs.mode != 'image-only-rollback'
+        id: image-gateway
+        run: |
+          python3 backend/scripts/verify-llm-gateway-serving.py \
+            --environment=prod --project=based-hardware --region="$REGION" \
+            --github-output "$GITHUB_OUTPUT"
+
+      - name: Validate or apply only the notifications job image
+        if: inputs.mode != 'image-only-rollback'
+        env:
+          OMI_LLM_GATEWAY_URL: ${{ steps.image-gateway.outputs.gateway_url }}
+        run: |
+          set -euo pipefail
+          python3 backend/scripts/notifications_job_image_only_forward.py
+
+      - name: Roll back only the notifications job image
+        if: inputs.mode == 'image-only-rollback'
+        run: python3 backend/scripts/notifications_job_image_only.py
+
+      - name: Publish image-only validation receipt
+        if: inputs.mode == 'image-only-validate'
+        uses: actions/upload-artifact@v7
+        with:
+          name: notifications-image-validation-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/notifications-image-receipt.json
+          if-no-files-found: error

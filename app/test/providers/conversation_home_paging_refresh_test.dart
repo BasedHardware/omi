@@ -7,6 +7,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'package:omi/backend/http/api/conversation_page_headers.dart';
 import 'package:omi/backend/http/api/conversations.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/conversation.dart';
@@ -26,11 +27,12 @@ ServerConversation row(int i, {String? title}) {
       structured: Structured(title ?? 'Fixture $i', 'Summary'));
 }
 
-http.Response page(Iterable<ServerConversation> rows, {String? cursor, bool more = true}) =>
+http.Response page(Iterable<ServerConversation> rows, {String? cursor, bool more = true, String? mode}) =>
     http.Response(jsonEncode([for (final c in rows) c.toJson()]), 200, headers: {
       'x-omi-conversation-page-size': '${rows.length}',
       'x-omi-has-more': '$more',
       if (cursor != null) 'x-omi-next-cursor': cursor,
+      if (mode != null) 'x-omi-home-page-mode': mode,
     });
 
 List<ServerConversation> rows(int from, int to) => [for (var i = from; i < to; i++) row(i)];
@@ -75,6 +77,42 @@ void main() {
     expect(await provider.getMoreConversationsFromServer(), isTrue);
     expect(requests.last.queryParameters['cursor'], 'k2', reason: 'the next page, not page two again');
     expect(provider.conversations, hasLength(120));
+    expect(provider.hasMoreConversations, isFalse);
+  });
+
+  test('an indexed continuation restarts at page one when the server rolls back', () async {
+    final requests = <(String?, String?, String?)>[];
+    var rolledBack = false;
+    final api = ConversationApi(
+      baseUrl: 'http://127.0.0.1:1/',
+      send: (request) async {
+        final uri = Uri.parse(request.url);
+        final cursor = uri.queryParameters['cursor'];
+        final offset = uri.queryParameters['offset'];
+        final mode = request.headers[ConversationPageHeaders.homeModeHeader];
+        requests.add((mode, cursor, offset));
+        if (!rolledBack && cursor == null) return page(rows(0, 50), cursor: 'i1', mode: 'indexed');
+        if (!rolledBack) return page(rows(50, 100), cursor: 'i2', mode: 'indexed');
+        if (cursor == 'l1') return page(rows(50, 100), mode: 'legacy', more: false);
+        return page(rows(0, 50), cursor: 'l1', mode: 'legacy');
+      },
+    );
+    final provider = ConversationProvider(conversationApi: api, isSignedIn: () => true);
+    addTearDown(provider.dispose);
+
+    expect(await provider.fetchConversations(), isTrue);
+    expect(await provider.getMoreConversationsFromServer(), isTrue);
+    rolledBack = true;
+    expect(await provider.getMoreConversationsFromServer(), isTrue);
+    expect(await provider.getMoreConversationsFromServer(), isTrue);
+    expect(requests, [
+      ('auto', null, '0'),
+      ('indexed', 'i1', '50'),
+      ('indexed', 'i2', '100'),
+      ('auto', null, '0'),
+      ('legacy', 'l1', '50'),
+    ]);
+    expect(provider.conversations, hasLength(100));
     expect(provider.hasMoreConversations, isFalse);
   });
 

@@ -15370,9 +15370,6 @@ class AppLocalizationsUk extends AppLocalizations {
   String get stopThese => 'Вимкнути такі';
 
   @override
-  String get meetingActionItemsTitle => 'Пункти дій';
-
-  @override
   String get addToTasks => 'Додати до Завдань';
 
   @override
@@ -15857,4 +15854,25 @@ class AppLocalizationsUk extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get playStripeBilledOnWeb => 'Оплата через omi.me. Скасовуйте тут будь-коли.';
+
+  @override
+  String get playStripeBilledOnWebShort => 'Оплата через omi.me.';
+
+  @override
+  String playStripePlanPaused(String plan) {
+    return 'Ваш план $plan призупинено.';
+  }
+
+  @override
+  String get firmwareNewestSupportedForDevice => 'Ваш пристрій уже працює на найновішій підтримуваній версії прошивки';
+
+  @override
+  String get firmwareSyncRecordingsFirstTitle => 'Спочатку синхронізуйте свої записи';
+
+  @override
+  String get firmwareSyncRecordingsFirstMessage =>
+      'Деякі записи ще зберігаються на вашому пристрої. Дочекайтеся завершення синхронізації з телефоном, а потім почніть оновлення.';
 }
