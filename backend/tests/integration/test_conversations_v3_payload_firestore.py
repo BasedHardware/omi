@@ -718,11 +718,22 @@ def test_backfill_builder_retires_chunks_in_the_row_removal_commit(row, monkeypa
         )
 
     with monkeypatch.context() as budget:
-        budget.setattr(store, 'BATCH_MAX_WRITES', 2)
+        # The lease, removal marker and parent delete fit before charging chunks.
+        budget.setattr(store, 'BATCH_MAX_WRITES', 3)
         with pytest.raises(store.Conflict, match='request_too_large'):
             remove()
     assert ref.get().update_time == original.update_time
-    assert list(ref.collection(PAYLOAD_CHUNKS).list_documents())
+    original_chunks = set(ref.collection(PAYLOAD_CHUNKS).list_documents())
+    assert original_chunks
+
+    link = ref.parent.parent.collection('memories').document('linked')
+    link.set({'conversation_id': ref.id})
+    try:
+        remove()
+        assert ref.get().update_time == original.update_time
+        assert set(ref.collection(PAYLOAD_CHUNKS).list_documents()) == original_chunks
+    finally:
+        link.delete()
 
     remove()
     assert not ref.get().exists
