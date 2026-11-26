@@ -38,10 +38,29 @@ when they reserve an artifact before admission. Sync intake forwards the
 provenance from its admission decision, including when it identifies a
 non-recording upload. Admission also stores provenance on the job for later
 uploads. A recording opt-out sweeps an in-flight receipt in scope when its
-provenance is unknown.
+provenance is unknown. A conversation policy edit becomes eligible for erasure
+only after the reconciler certifies the same native-recording denial as the
+write authority at the policy commit. It persists that proof before waiting
+for the upload window or a legal hold. When the current row has changed, it
+uses the commit snapshot. An unavailable expired snapshot leaves durable
+recovery debt.
+
+Permanent receipt failures move to a dedicated retry row while the cursor
+continues to other artifacts. After five attempts by default
+(`BATCH_PRIVACY_LATE_SWEEP_PERMANENT_ATTEMPTS`, bounded to 1–20), the invalid
+intent or receipt retry stays in `batch_privacy_late_sweeps` without a
+`due_at`. Alert on
+`omi_batch_pipeline_privacy_post_window_dead_letters_total` and verify the
+original scope and storage identity before requeueing. Transient failures
+retain their existing retry path. Post-commit Redis invalidation errors log
+and increment the `invalidation_error` outcome while the acknowledged write
+still returns its result.
 
 The same conversation reconciler polls at most four due intents per minute.
-Each slice reads at most one page of 100 batch artifact receipts. Readback
+Each slice reads at most one page of 100 batch artifact receipts. The planning
+allocation is 250 Firestore reads per slice and 1,440,000 per day at four
+slices a minute, including 576,000 possible artifact-page reads per day.
+Configured Postgres reconciliation also rereads primary mirror keys. Readback
 includes cache and shadow outcomes, due queue age, durable completions, and
 Firestore, Postgres and object-storage work from
 `omi_batch_pipeline_privacy_post_window_operations_total`. Before widening

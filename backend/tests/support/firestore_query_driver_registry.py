@@ -166,7 +166,7 @@ BODY_DIGEST = {
     'database.conversations_v3_live._recent_window_query': '6f2c323bfa8df890362c6bdc4796182a70e4c704376bcb4944358560b12edc75',
     'database.conversations_v3.commit_projection': '089bd7e2e91ed7ac408dbbbdcb1940889f008525f52bbe06b09b740b2f7ba8b7',
     'database.batch_pipeline_conversation_purge_scans._claim': '662c759fc79795f0851e0b18082b7dcb006e109253e45ba1fde2190d542bddf8',
-    'database.batch_privacy_late_sweeps.reconcile_batch_privacy_late_sweeps': '470e3d3aaaf87a8a0387371178f944380bcdd0c4b3cc358ddd3e478b26c777cc',
+    'database.batch_privacy_late_sweeps.reconcile_batch_privacy_late_sweeps': '0d774cdc9791b539ea9442e3f3e22363f78e9c1702df0d1ea747f39585b5c52f',
     'database.batch_pipeline_conversation_purge_scans.run_job': 'fe5d30b77da198a7e0dc188115c8906fb6446925079a4e96339d36675a55faeb',
     'database.batch_pipeline_store.FirestoreStore.protected_retries': 'b55d2960c94057cb8df9b9cdd2e7728b6af63728bc0a2cb6f5bd333efed443a2',
     'database.batch_pipeline_store.FirestoreTransaction.protected_ready': 'c722019b927498cd74c6d5c4d3e52506c4e1318ef5ae74da4ddd17af978ae564',

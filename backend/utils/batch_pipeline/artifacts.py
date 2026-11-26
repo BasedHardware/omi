@@ -408,7 +408,7 @@ class ArtifactStore:
             return wav
         return body
 
-    def persist_result(self, item: WorkItem, payload: dict[str, Any]) -> str:
+    def persist_result(self, item: WorkItem, payload: dict[str, Any], *, record_origin: bool | None = None) -> str:
         if item.shadow:
             # Shadow transcripts/diarization never enter durable storage.
             if self.shadow_result is None:
@@ -417,7 +417,7 @@ class ArtifactStore:
             self.shadow_result(item, payload)
             return 'shadow:' + item.segment_id
         body = json.dumps(payload, allow_nan=False, separators=(',', ':')).encode()
-        return self._write(item, 'results', body, RESULT_LIMIT)
+        return self._write(item, 'results', body, RESULT_LIMIT, record_origin=record_origin)
 
     def persist_recovery_result(self, item: WorkItem, payload: dict[str, Any], token: str) -> str:
         if item.shadow:

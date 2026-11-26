@@ -1,5 +1,6 @@
 """Real SDK commit encoding, preconditions, result metadata and bulk atomicity."""
 
+from datetime import datetime, timezone
 from types import SimpleNamespace
 
 import pytest
@@ -17,9 +18,15 @@ from google.cloud.firestore_v1.types import (
     WriteResult,
 )
 from google.rpc.status_pb2 import Status
+from google.protobuf.timestamp_pb2 import Timestamp
 
 from database.batch_account_authority_schema import USER_POLICY_FIELDS
-from database import _client, batch_privacy_write_fence as fence, memory_change_head
+from database import (
+    _client,
+    batch_privacy_write_cache as write_cache,
+    batch_privacy_write_fence as fence,
+    memory_change_head,
+)
 from database.batch_pipeline_privacy import privacy_owner_key
 
 ROOT = 'projects/demo/databases/(default)/documents'
@@ -339,6 +346,49 @@ def test_flattened_arguments_idempotent_install_and_failed_transport():
     with pytest.raises(ValueError, match='labeled'):
         bulk(None, request={'labels': {'a': 'b'}, 'writes': [Write(delete=f'{ROOT}/users/u')]})
     assert not called
+
+
+@pytest.mark.parametrize('asynchronous', [False, True])
+async def test_committed_write_returns_its_result_when_cache_invalidation_raises(monkeypatch, caplog, asynchronous):
+    monkeypatch.setenv('REDIS_DB_HOST', 'synthetic-redis')
+    committed = []
+    when = datetime(2026, 11, 26, tzinfo=timezone.utc)
+
+    def commit(client, request, **kwargs):
+        committed.append(request)
+        return CommitResponse(commit_time=when, write_results=[WriteResult(update_time=when)] * len(request.writes))
+
+    def broken(paths, commit_time):
+        assert TOKEN in paths and commit_time == when
+        raise RuntimeError('synthetic invalidation failure')
+
+    monkeypatch.setattr(fence, 'invalidate_tokenless', broken)
+    metric = write_cache.TOKENLESS.labels('invalidation_error')._value
+    before = metric.get()
+    request = CommitRequest(writes=[Write(delete=f'{ROOT}/users/u/conversations/c')])
+    if asynchronous:
+
+        async def async_commit(client, request, **kwargs):
+            return commit(client, request, **kwargs)
+
+        result = await fence._wrap_commit(async_commit)(None, request)
+    else:
+        result = fence._wrap_commit(commit)(None, request)
+    assert len(committed) == len(result.write_results) == 1
+    assert result.commit_time == when
+    assert metric.get() == before + 1
+    assert 'RuntimeError' in caplog.text
+
+
+@pytest.mark.parametrize(
+    'timestamp',
+    [
+        Timestamp(seconds=123, nanos=456789123),
+        CommitResponse(commit_time={'seconds': 123, 'nanos': 456789123}).commit_time,
+    ],
+)
+def test_redis_invalidation_keeps_firestore_timestamp_precision(timestamp):
+    assert write_cache._revision(timestamp) == 123_456_789_123
 
 
 @pytest.mark.parametrize(

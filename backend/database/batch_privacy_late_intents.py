@@ -14,7 +14,7 @@ PROTECTION_FIELDS = frozenset({'data_protection_level', 'migration_status'})
 
 def _field(write: Write, field: str) -> Value | None:
     mask = write.update_mask.field_paths
-    if not write.update.name or (mask and field not in mask):
+    if not write.update.name or (Write.pb(write).HasField('update_mask') and field not in mask):
         return None
     return write.update.fields.get(field)
 
@@ -50,11 +50,25 @@ def _scopes(write: Write, parts: list[str]) -> list[tuple[str, str]]:
             reasons.append(('data_protection', ''))
         # Only a batch capture denial can erase batch artifacts. The
         # separate playback-storage preference still invalidates decisions.
-        if 'private_cloud_sync_enabled' in mask and _denies_recording(write, 'private_cloud_sync_enabled'):
+        if _denies_recording(write, 'private_cloud_sync_enabled'):
             reasons.append(('recording_policy', ''))
         return reasons
-    if len(parts) == 9 and parts[7] == 'conversations' and write.update_mask.field_paths:
-        if any(_denies_recording(write, field) for field in ('private_cloud_sync_enabled', 'uses_custom_stt')):
+    if len(parts) == 9 and parts[7] == 'conversations':
+        # A masked edit may omit the lane. The reconciler verifies the scope
+        # at the policy commit before it can act on this candidate.
+        maskless = not Write.pb(write).HasField('update_mask')
+        lane = _field(write, 'record_lane_owner')
+        if (maskless or lane is not None) and (lane is None or lane.string_value != 'batch_live_v1'):
+            return []
+        sync = _field(write, 'private_cloud_sync_enabled')
+        clears_sync = (maskless or 'private_cloud_sync_enabled' in write.update_mask.field_paths) and (
+            sync is None or Value.pb(sync).WhichOneof('value_type') == 'null_value'
+        )
+        if (
+            clears_sync
+            or _denies_recording(write, 'private_cloud_sync_enabled')
+            or _denies_recording(write, 'uses_custom_stt')
+        ):
             return [('recording_policy', parts[8])]
     return []
 
@@ -69,7 +83,7 @@ def late_sweep_writes(writes) -> list[Write]:
             scopes.update((root, uid, reason, source) for reason, source in _scopes(write, parts))
     if not scopes:
         return []
-    due = datetime.now(timezone.utc) + DELAY
+    now = datetime.now(timezone.utc)
     return [
         Write(
             update=Document(
@@ -78,7 +92,7 @@ def late_sweep_writes(writes) -> list[Write]:
                     'uid': Value(string_value=uid),
                     'reason': Value(string_value=reason),
                     'conversation_id': Value(string_value=source),
-                    'due_at': Value(timestamp_value=due),
+                    'due_at': Value(timestamp_value=now if source else now + DELAY),
                 },
             ),
             update_transforms=[

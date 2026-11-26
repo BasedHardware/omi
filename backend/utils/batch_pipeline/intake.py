@@ -1094,6 +1094,7 @@ async def accept_upload(
                         'client_device_id': client_device_id,
                         'client_platform': client_platform,
                     },
+                    record_origin=record_origin,
                 )
                 if alias is not None:
                     staged, proposal = alias

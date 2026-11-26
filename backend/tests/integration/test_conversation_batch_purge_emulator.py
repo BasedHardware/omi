@@ -8,7 +8,9 @@ Run: firebase emulators:exec --only firestore --project demo-omi \
 """
 
 import hashlib
+import json
 import os
+from pathlib import Path
 import threading
 import time
 from datetime import datetime, timedelta, timezone
@@ -21,11 +23,18 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from google.auth.credentials import AnonymousCredentials
 from google.cloud import firestore
+from prometheus_client import REGISTRY
 
 from database import batch_privacy_late_intents as late_intents, batch_privacy_late_sweeps as late_sweeps
 from database.batch_pipeline_store import FirestoreStore
+from config.firestore_read_levers import _parse as parse_levers
+from config.policy import BatchUnitPolicy
+from utils import funded_processing, stt_cap_dispatch
+from utils.batch_pipeline import intake
 from utils.batch_pipeline.artifact_policy import create_artifact_store
+from utils.batch_pipeline.audio import audio_unit
 from utils.batch_pipeline.contracts import Priority, WorkItem
+from utils.stt import batch_language
 from utils.other.local_storage import LocalBlob, LocalStorageClient
 
 pytestmark = pytest.mark.integration
@@ -856,7 +865,9 @@ def test_post_window_sweep_erases_a_late_commit_and_keeps_unrelated_rows(plane, 
     row = delayed.get().to_dict()
     assert row['post_window'] is True
     assert _reconcile(monkeypatch) == []
-    monkeypatch.setenv('FIRESTORE_READ_LEVERS', '{"bpp_tokenless_owner_cache":0}')
+    rollback = '{"bpp_tokenless_write_cache":0}'
+    monkeypatch.setenv('FIRESTORE_READ_LEVERS', rollback)
+    assert parse_levers(rollback) == {'bpp_tokenless_write_cache': 0}
     monkeypatch.setattr(jobs, '_now', lambda: row['post_window_started_at'] + jobs.POST_WINDOW_DELAY)
     [(job, generation)] = _reconcile(monkeypatch)
     assert job == delayed.id
@@ -869,7 +880,17 @@ def test_post_window_sweep_erases_a_late_commit_and_keeps_unrelated_rows(plane, 
     assert _quick(job, generation) == 'missing'
 
 
-@pytest.mark.parametrize('policy', ['account_deleted', 'data_protection', 'recording_policy', 'conversation_recording'])
+@pytest.mark.parametrize(
+    'policy',
+    [
+        'account_deleted',
+        'data_protection',
+        'recording_policy',
+        'conversation_recording',
+        'replaced_recording',
+        'replaced_recording_without_sync',
+    ],
+)
 def test_late_privacy_sweep_recovers_an_inflight_object(plane, monkeypatch, tmp_path, policy):
     from datetime import datetime, timezone
 
@@ -878,7 +899,8 @@ def test_late_privacy_sweep_recovers_an_inflight_object(plane, monkeypatch, tmp_
     from utils.other.local_storage import LocalStorageClient
 
     client, uid = plane.client, plane.uid
-    reason = 'recording_policy' if policy == 'conversation_recording' else policy
+    scoped = policy in {'conversation_recording', 'replaced_recording', 'replaced_recording_without_sync'}
+    reason = 'recording_policy' if scoped else policy
     storage = LocalStorageClient(tmp_path / 'late-purge')
     name = 'synthetic-late-batch'
     monkeypatch.setenv('BUCKET_BATCH_PIPELINE', name)
@@ -919,12 +941,19 @@ def test_late_privacy_sweep_recovers_an_inflight_object(plane, monkeypatch, tmp_
         nonrecord, nonrecord_audio = receipt('nonrecord', record_origin=False)
         nonrecord_audio.upload_from_string(b'known non-recording audio')
     user = client.collection('users').document(uid)
-    if policy == 'conversation_recording':
+    if scoped:
         conversation = user.collection('conversations').document(cid)
         conversation.set({'record_lane_owner': 'batch_live_v1', 'private_cloud_sync_enabled': True})
         other_source, other_audio = receipt('another-recording', source='another-synthetic-conversation')
         other_audio.upload_from_string(b'outside the recording scope')
-        conversation.update({'private_cloud_sync_enabled': False})
+        if policy == 'replaced_recording':
+            conversation.set({'record_lane_owner': 'batch_live_v1', 'private_cloud_sync_enabled': False})
+        elif policy == 'replaced_recording_without_sync':
+            conversation.set({'record_lane_owner': 'batch_live_v1'})
+        else:
+            conversation.update({'private_cloud_sync_enabled': False})
+        # Even a re-enable before reconciliation cannot cancel the earlier obligation.
+        conversation.update({'private_cloud_sync_enabled': True})
     elif reason == 'account_deleted':
         # Irreversible completion, after the primary wipe has removed the root.
         user.delete()
@@ -937,7 +966,9 @@ def test_late_privacy_sweep_recovers_an_inflight_object(plane, monkeypatch, tmp_
     [intent] = list(client.collection(intents.COLLECTION).stream())
     data = intent.to_dict()
     assert data['reason'] == reason
-    assert sweeps.reconcile_batch_privacy_late_sweeps(firestore_client=client) == {}
+    assert sweeps.reconcile_batch_privacy_late_sweeps(firestore_client=client) == (
+        {'scope_verified': 1} if scoped else {}
+    )
 
     # The delayed provider write lands after the privacy mutation, while the
     # original create-only receipt still predates the new policy.
@@ -971,7 +1002,7 @@ def test_late_privacy_sweep_recovers_an_inflight_object(plane, monkeypatch, tmp_
     assert other.get().exists and unrelated.exists()
     if reason != 'account_deleted':
         assert new.get().exists and fresh.exists()
-    if policy == 'conversation_recording':
+    if scoped:
         assert other_source.get().exists and other_audio.exists()
     if reason == 'recording_policy':
         assert nonrecord.get().exists and nonrecord_audio.exists()
@@ -1072,6 +1103,225 @@ def test_existing_record_job_supplies_artifact_provenance_without_projection_bin
 
     [receipt] = plane.client.collection(f'{namespace}_artifacts').stream()
     assert receipt.get('record_origin') is True
+
+
+@pytest.mark.parametrize('origin', [False, True])
+async def test_sync_intake_persists_provenance_before_admission(plane, monkeypatch, tmp_path, origin):
+    namespace = 'batch_pipeline_dev'
+    monkeypatch.setenv('OMI_ENV_STAGE', 'dev')
+    monkeypatch.setenv('BATCH_ADMISSION_LANGUAGE_EXCLUSION_ENABLED', 'false')
+    monkeypatch.setattr(funded_processing, 'consent_allows', lambda *_: True)
+    monkeypatch.setattr(stt_cap_dispatch, 'sync_allowed', lambda *a, **k: True)
+    store = FirestoreStore(namespace, firestore_client=plane.client)
+    storage = LocalStorageClient(tmp_path / 'sync-stage')
+    artifacts = create_artifact_store(store, storage, 'synthetic-late-batch', b'x' * 32)
+    monkeypatch.setattr(intake, 'artifacts_for', lambda _: artifacts)
+    monkeypatch.setattr(intake.legacy_dark, 'current_mode', lambda *_: intake.LegacySyncMode.ON)
+    monkeypatch.setattr(
+        batch_language,
+        'resolve_language',
+        lambda *a, **k: SimpleNamespace(
+            language='en', evidence='declared', confidence=1.0, parakeet_safe=True, probe_seconds=0
+        ),
+    )
+    user = plane.client.collection('users').document(plane.uid)
+    user.update({'language': 'en', 'private_cloud_sync_enabled': True})
+    cid = 'synthetic-sync-capture'
+    user.collection('conversations').document(cid).set(
+        {'language': 'en', **({'record_lane_owner': 'batch_sync_v1'} if origin else {})}
+    )
+
+    class StopBeforeAdmission(BaseException):
+        pass
+
+    observed = {}
+
+    def check_receipt(blob, file_obj, *args, **kwargs):
+        [receipt] = plane.client.collection(f'{namespace}_artifacts').stream()
+        observed['record_origin'] = receipt.get('record_origin')
+        observed['job_exists'] = (
+            plane.client.collection(f'{namespace}_jobs').document(receipt.get('segment_id')).get().exists
+        )
+        observed['object_exists'] = blob.exists()
+        raise StopBeforeAdmission()
+
+    monkeypatch.setattr(LocalBlob, 'upload_from_file', check_receipt)
+    with pytest.raises(StopBeforeAdmission):
+        await intake.accept_upload(
+            uid=plane.uid,
+            job_id='synthetic-sync',
+            content_id='synthetic-sync',
+            paths=[],
+            lane='fresh',
+            recording_age_seconds=0,
+            source='desktop' if origin else 'omi',
+            should_lock=False,
+            conversation_id=cid,
+            client_device_id=None,
+            client_platform='ios',
+            decode=lambda _: (unit for unit in (audio_unit(100, b'\x01\x00' * 16000),)),
+            policy=BatchUnitPolicy(batch_enabled=True, live_record_enabled=origin),
+        )
+    assert observed == {'record_origin': origin, 'job_exists': False, 'object_exists': False}
+
+
+@pytest.mark.parametrize('policy', [{'uses_custom_stt': True}, {'private_cloud_sync_enabled': False}])
+@pytest.mark.parametrize('claim_after_edit', [False, True])
+def test_ordinary_conversation_policy_edit_preserves_pending_unknown_artifact(
+    plane, monkeypatch, tmp_path, policy, claim_after_edit
+):
+    client, uid = plane.client, plane.uid
+    bucket = 'synthetic-late-batch'
+    storage = LocalStorageClient(tmp_path / 'ordinary-capture')
+    monkeypatch.setenv('BUCKET_BATCH_PIPELINE', bucket)
+    monkeypatch.setattr(late_sweeps, 'create_storage_client', lambda: storage)
+    mirror = MagicMock(return_value=0)
+    monkeypatch.setattr(late_sweeps, 'purge_owner', mirror)
+    cid = 'ordinary-sync-conversation'
+    conversation = client.collection('users').document(uid).collection('conversations').document(cid)
+    conversation.set({'private_cloud_sync_enabled': True})
+    path = f'batch-pipeline/batch_pipeline_prod/owners/{plane.key}/audio/unit/{uuid4().hex}.enc'
+    blob = storage.bucket(bucket).blob(path)
+    blob.upload_from_string(b'pending ordinary audio')
+    receipt = client.collection('batch_pipeline_prod_artifacts').document('ordinary-audio')
+    deadline = datetime.now(timezone.utc) + timedelta(minutes=30)
+    receipt.set(
+        {
+            'owner_key': plane.key,
+            'owner_id': uid,
+            'conversation_ids': [cid],
+            'kind': 'audio',
+            'segment_id': 'unit',
+            'uri': f'gs://{bucket}/{path}',
+            'write_pending_until': deadline,
+        }
+    )
+    conversation.update(policy)
+    if claim_after_edit:
+        conversation.update({'record_lane_owner': 'batch_live_v1'})
+    clock = [deadline + timedelta(seconds=10)]
+    monkeypatch.setattr(late_sweeps, '_now', lambda: clock[0])
+    for _ in range(8):
+        late_sweeps.reconcile_batch_privacy_late_sweeps(firestore_client=client)
+        clock[0] += timedelta(seconds=10)
+    assert receipt.get().exists and blob.exists()
+    assert not list(client.collection(late_intents.COLLECTION).stream())
+    mirror.assert_not_called()
+
+
+def test_maskless_account_revocation_arms_recording_erasure(plane):
+    user = plane.client.collection('users').document(plane.uid)
+    user.set({'private_cloud_sync_enabled': True})
+    assert not list(plane.client.collection(late_intents.COLLECTION).stream())
+    user.set({'private_cloud_sync_enabled': False})
+    [intent] = plane.client.collection(late_intents.COLLECTION).stream()
+    assert intent.get('reason') == 'recording_policy'
+    assert intent.get('conversation_id') == ''
+
+
+@pytest.mark.parametrize('invalid', ['identity', 'bucket', 'missing-uri'])
+def test_permanent_receipt_failure_dead_letters_and_valid_rows_recover(plane, monkeypatch, tmp_path, invalid):
+    client, uid = plane.client, plane.uid
+    bucket = 'synthetic-late-batch'
+    storage = LocalStorageClient(tmp_path / 'dead-letter')
+    monkeypatch.setenv('BUCKET_BATCH_PIPELINE', bucket)
+    monkeypatch.setattr(late_sweeps, 'create_storage_client', lambda: storage)
+    monkeypatch.setattr(late_sweeps, 'purge_owner', lambda *_: 0)
+    artifacts = client.collection('batch_pipeline_prod_artifacts')
+    user = client.collection('users').document(uid)
+    user.update({'private_cloud_sync_enabled': True})
+    pending = datetime.now(timezone.utc) + timedelta(minutes=30)
+    root = f'batch-pipeline/batch_pipeline_prod/owners/{plane.key}/audio/unit'
+    valid_path = f'{root}/{uuid4().hex}.enc'
+    bad_bucket = 'synthetic-unconfigured' if invalid == 'bucket' else bucket
+    bad_path = f'{root}/mutable.enc' if invalid == 'identity' else f'{root}/{uuid4().hex}.enc'
+    common = {
+        'owner_key': plane.key,
+        'owner_id': uid,
+        'kind': 'audio',
+        'segment_id': 'unit',
+        'record_origin': True,
+        'write_pending_until': pending,
+    }
+    good, bad = artifacts.document('b-valid'), artifacts.document('a-malformed')
+    good.set({**common, 'uri': f'gs://{bucket}/{valid_path}'})
+    bad.set(common if invalid == 'missing-uri' else {**common, 'uri': f'gs://{bad_bucket}/{bad_path}'})
+    good_blob = storage.bucket(bucket).blob(valid_path)
+    bad_blob = storage.bucket(bad_bucket).blob(bad_path)
+    good_blob.upload_from_string(b'valid recording')
+    bad_blob.upload_from_string(b'unverified identity')
+    user.update({'private_cloud_sync_enabled': False})
+    error = 'artifact_identity' if invalid == 'identity' else 'artifact_address'
+    before = _dead_letter_count(error)
+    clock = [pending + timedelta(seconds=10)]
+    monkeypatch.setattr(late_sweeps, '_now', lambda: clock[0])
+    assert late_sweeps.reconcile_batch_privacy_late_sweeps(firestore_client=client) == {'retry': 1}
+    clock[0] += late_sweeps.PAGE_RETRY
+    assert late_sweeps.reconcile_batch_privacy_late_sweeps(firestore_client=client) == {'progress': 1}
+    assert not good.get().exists and not good_blob.exists()
+    for _ in range(4):
+        clock[0] += late_sweeps.PAGE_RETRY
+        late_sweeps.reconcile_batch_privacy_late_sweeps(firestore_client=client)
+    for _ in range(3):
+        clock[0] += late_sweeps.RETRY + timedelta(seconds=10)
+        assert late_sweeps.reconcile_batch_privacy_late_sweeps(firestore_client=client) == {'retry': 1}
+    clock[0] += late_sweeps.RETRY + timedelta(seconds=10)
+    assert late_sweeps.reconcile_batch_privacy_late_sweeps(firestore_client=client) == {'dead_lettered': 1}
+    for _ in range(8):
+        clock[0] += timedelta(seconds=10)
+        late_sweeps.reconcile_batch_privacy_late_sweeps(firestore_client=client)
+    assert not good.get().exists and not good_blob.exists()
+    assert bad.get().exists and bad_blob.exists()
+    [debt] = list(client.collection(late_intents.COLLECTION).stream())
+    assert debt.get('artifact_id') == bad.id
+    assert debt.get('permanent_attempts') == 5
+    assert 'due_at' not in debt.to_dict()
+    assert _dead_letter_count(error) == before + 1
+
+
+def test_late_sweep_read_budget_includes_full_artifact_page(plane, monkeypatch):
+    from testing.firestore_read_budget import delta_reads, snapshot_reads
+
+    client, uid = plane.client, plane.uid
+    artifacts = client.collection('batch_pipeline_prod_artifacts')
+    batch = client.batch()
+    for i in range(100):
+        # The scan still pays to read unrelated-to-the-event receipts.
+        batch.set(artifacts.document(f'synthetic-{i:03}'), {'owner_key': plane.key, 'owner_id': uid})
+    batch.commit()
+    client.collection('users').document(uid).update({'private_cloud_sync_enabled': False})
+    [event] = client.collection(late_intents.COLLECTION).stream()
+    monkeypatch.setattr(late_sweeps, '_now', lambda: event.get('due_at') + timedelta(seconds=1))
+    before = snapshot_reads()
+    assert late_sweeps.reconcile_batch_privacy_late_sweeps(firestore_client=client) == {'progress': 1}
+    reads = delta_reads(before).reads
+    manifest = json.loads(
+        (Path(__file__).resolve().parents[3] / '.github/firestore-collection-budgets.json').read_text()
+    )
+    [budget] = [row for row in manifest['budgets'] if row['collection'] == late_intents.COLLECTION]
+    assert 100 < reads <= budget['reads_per_unit_budget']
+    assert budget['reads_per_day_budget'] >= budget['reads_per_unit_budget'] * 4 * 24 * 60
+
+
+def test_malformed_intent_is_dead_lettered_at_configured_limit(plane, monkeypatch):
+    client = plane.client
+    clock = [datetime.now(timezone.utc)]
+    monkeypatch.setattr(late_sweeps, '_now', lambda: clock[0])
+    monkeypatch.setenv('BATCH_PRIVACY_LATE_SWEEP_PERMANENT_ATTEMPTS', '2')
+    event = client.collection(late_intents.COLLECTION).document('synthetic-malformed')
+    event.set({'reason': 'recording_policy', 'due_at': clock[0]})
+    before = _dead_letter_count('malformed_intent')
+    assert late_sweeps.reconcile_batch_privacy_late_sweeps(firestore_client=client) == {'retry': 1}
+    clock[0] += late_sweeps.RETRY
+    assert late_sweeps.reconcile_batch_privacy_late_sweeps(firestore_client=client) == {'dead_lettered': 1}
+    assert late_sweeps.reconcile_batch_privacy_late_sweeps(firestore_client=client) == {}
+    row = event.get().to_dict()
+    assert row['permanent_attempts'] == 2 and row['dead_letter_error'] == 'malformed_intent'
+    assert _dead_letter_count('malformed_intent') == before + 1
+
+
+def _dead_letter_count(error):
+    return REGISTRY.get_sample_value('omi_batch_pipeline_privacy_post_window_dead_letters_total', {'error': error}) or 0
 
 
 def test_tokenless_write_cache_is_limited_to_existing_compute_admitted_leases(plane, monkeypatch):

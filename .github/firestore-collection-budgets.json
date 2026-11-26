@@ -84,10 +84,10 @@
       "collection": "batch_privacy_late_sweeps",
       "owner": "Goal: Margin (SCA-3508)",
       "unit": "due post-window artifact sweep slice",
-      "reads_per_unit_budget": 6,
-      "reads_per_day_budget": 36000,
+      "reads_per_unit_budget": 250,
+      "reads_per_day_budget": 1440000,
       "basis": "planning-bound",
-      "source": "One minute polling on the existing conversation reconciliation leader, up to four due intents per tick. Includes due-query results, custody rechecks and a bounded retry allowance. An intent reads at most one page of 100 artifacts per slice, a separate ceiling of 576,000 artifact reads per day before retries at that maximum. Revisit against measured queue and artifact counts before increasing the cadence or limit.",
+      "source": "Planning allocation on the existing one-minute reconciliation leader: four due slices per minute times 1,440 minutes. Each slice budgets the full 100-document artifact page (576,000/day) plus 150 reads for intent/cursor reads, recording-scope certification, legal-hold and account gates, receipt rechecks and transaction retries (864,000/day). Total planned sweep allocation is 250/slice and 1,440,000/day. Existing optional Postgres owner reconciliation adds up to two primary point reads per reconciled mirror key; that owner-size-dependent work is tracked separately via the Postgres outcome counter. Validate against billed readback before expanding cadence.",
       "reviewed": "2026-11-24"
     },
     {

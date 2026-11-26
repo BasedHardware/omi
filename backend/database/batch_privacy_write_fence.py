@@ -8,6 +8,7 @@ positions are preserved. Install in every writer process before enabling readers
 import functools
 import hashlib
 import inspect
+import logging
 from typing import Any, cast
 from uuid import uuid4
 
@@ -37,7 +38,7 @@ from database.batch_account_authority_schema import (
     PRIVACY_COLLECTION,
     USER_POLICY_FIELDS,
 )
-from database.batch_privacy_write_cache import invalidate_tokenless
+from database.batch_privacy_write_cache import TOKENLESS, invalidate_tokenless
 from database.batch_privacy_late_intents import late_sweep_writes
 from database.privacy_check_metrics import ACCOUNT_AUTHORITY_WRITES
 from utils.executors import db_executor, run_blocking
@@ -46,6 +47,7 @@ from database.batch_privacy_attempt import CONVERSATION_AUTHORITY_FIELDS, TOKEN_
 
 # Protobuf builds this class dynamically; the installed module has no typed declaration.
 Status = cast(Any, status_pb2).Status
+logger = logging.getLogger(__name__)
 
 _ROOT_AUTHORITIES = frozenset({ACCOUNT_DELETION_COLLECTION, 'legal_holds', 'legal_hold_deletion_gates'})
 _CONVERSATION_FIELDS = CONVERSATION_AUTHORITY_FIELDS
@@ -261,6 +263,14 @@ def augment_commit(request: Any, *, invalidations: set[str] | None = None) -> tu
     return prepared, count
 
 
+def _invalidation_failed(error: Exception) -> None:
+    try:
+        TOKENLESS.labels('invalidation_error').inc()
+        logger.warning('batch privacy post-commit invalidation failed error_type=%s', type(error).__name__)
+    except Exception:
+        pass  # Telemetry also runs after the acknowledged Commit.
+
+
 def _wrap_commit(original: Any) -> Any:
     if getattr(original, '_omi_batch_privacy_fence', False):
         return original
@@ -288,7 +298,10 @@ def _wrap_commit(original: Any) -> Any:
             prepared, count, source, invalidations = prepare(request, kwargs)
             result = await original(client, request=prepared, **kwargs)
             if invalidations and getattr(result, "commit_time", None):
-                await run_blocking(db_executor, invalidate_tokenless, invalidations, result.commit_time)
+                try:
+                    await run_blocking(db_executor, invalidate_tokenless, invalidations, result.commit_time)
+                except Exception as error:
+                    _invalidation_failed(error)
             _observe_account_writes(source)
             return response(result, count)
 
@@ -301,7 +314,10 @@ def _wrap_commit(original: Any) -> Any:
             prepared, count, source, invalidations = prepare(request, kwargs)
             result = original(client, request=prepared, **kwargs)
             if invalidations and getattr(result, "commit_time", None):
-                invalidate_tokenless(invalidations, result.commit_time)
+                try:
+                    invalidate_tokenless(invalidations, result.commit_time)
+                except Exception as error:
+                    _invalidation_failed(error)
             _observe_account_writes(source)
             return response(result, count)
 

@@ -10,6 +10,7 @@ from datetime import datetime
 from functools import lru_cache
 from math import floor, isfinite
 
+from google.protobuf.timestamp_pb2 import Timestamp
 from prometheus_client import Counter
 import redis
 
@@ -116,8 +117,12 @@ def _tokenless_key(database: str, owner: str) -> str:
     return f'batch-privacy-write-window:v1:{database}:{owner}'
 
 
-def _revision(value: datetime) -> int:
-    return int(value.timestamp()) * 1_000_000_000 + getattr(value, 'nanosecond', value.microsecond * 1000)
+def _revision(value: datetime | Timestamp) -> int:
+    if isinstance(value, Timestamp):
+        return value.seconds * 1_000_000_000 + value.nanos
+    return int(value.replace(microsecond=0).timestamp()) * 1_000_000_000 + getattr(
+        value, 'nanosecond', value.microsecond * 1000
+    )
 
 
 def _signature(key: str, changed: int, payload) -> str | None:
@@ -207,7 +212,7 @@ def store_tokenless(lookup: TokenlessLookup, ids: frozenset[str], snapshot, vers
         _fallback(error, 'set_error')
 
 
-def invalidate_tokenless(paths, commit_time: datetime) -> None:
+def invalidate_tokenless(paths, commit_time: datetime | Timestamp) -> None:
     """Invalidate after an acknowledged authority commit; errors leave the hard TTL."""
     if not os.getenv(f'{_redis_prefix()}HOST') or time.monotonic() < _redis_retry_at:
         return

@@ -24,3 +24,11 @@ USER_POLICY_FIELDS = frozenset(ACCOUNT_FIELD_GROUPS[USER_COLLECTION]) | {
     SPEAKER_PRIVACY_VERSION,
     'store_recording_permission',
 }
+
+
+def recording_policy_denies(conversation: dict, user_sync_enabled: bool = True) -> bool:
+    return conversation.get('record_lane_owner') == 'batch_live_v1' and (
+        bool(conversation.get('uses_custom_stt'))
+        or not conversation.get('private_cloud_sync_enabled')
+        or not user_sync_enabled
+    )

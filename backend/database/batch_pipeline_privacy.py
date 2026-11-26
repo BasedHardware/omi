@@ -16,6 +16,7 @@ from typing import Any
 from config.firestore_read_levers import lever_enabled, lever_percent
 from database.account_deletion_policy import account_deletion_blocks_access, normalize_account_deletion_status
 from database.batch_account_authority_schema import PRIVACY_COLLECTION as PRIVACY_COLLECTION
+from database.batch_account_authority_schema import recording_policy_denies
 from database.batch_privacy_attempt import SCHEMA_FIELD, TOKEN_FIELD, TOKEN_SCHEMA, current_attempt, token_version
 from database import privacy_check_metrics as metrics
 from database import batch_privacy_owner_cache as shared_cache
@@ -878,13 +879,7 @@ def _verify_conversation_ids(
             chain[conversation_id] = bool(conversation.exists)
             if snapshots is not None:
                 snapshots.setdefault('conversations', {})[conversation_id] = row
-            if row.get('record_lane_owner') == 'batch_live_v1' and (
-                row.get('uses_custom_stt')
-                or not row.get('private_cloud_sync_enabled')
-                # Match users.get_user_private_cloud_sync_enabled without an
-                # out-of-transaction read: absent means enabled, opt-out wins.
-                or not user_sync_enabled
-            ):
+            if recording_policy_denies(row, user_sync_enabled):
                 raise BatchPrivacyBlocked('recording_privacy_changed')
             if redirected and not conversation.exists:
                 raise BatchPrivacyBlocked('conversation_redirect_missing')

@@ -107,6 +107,8 @@ async def test_real_admission_receipts_drainer_and_off_preserve_every_original(
     group = holds[0].to_dict()
     assert len(group['members']) == 2
     assert list(store.client.collection(store.namespace + '_jobs').stream()) == []
+    receipts = list(store.client.collection(store.namespace + '_artifacts').stream())
+    assert len(receipts) == 2 and all(receipt.get('record_origin') is False for receipt in receipts)
     assert intake.durable_status(store, uid, ids[0])['status'] == 'queued'
     assert __import__('pathlib').Path(first['paths'][0]).read_bytes() == original1
     assert __import__('pathlib').Path(second['paths'][0]).read_bytes() == original2

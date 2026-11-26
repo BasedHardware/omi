@@ -495,7 +495,7 @@ async def _periodic_listen_finalization_reconcile(interval_seconds: int | None =
         await asyncio.sleep(poll_delay(interval_seconds))
         try:
             result = await run_blocking(
-                erasure_executor,
+                db_executor,
                 _run_fsr_loop,
                 'reconcile_listen_finalization_jobs',
                 reconcile_listen_finalization_jobs,
@@ -507,7 +507,7 @@ async def _periodic_listen_finalization_reconcile(interval_seconds: int | None =
             logger.error(f"Periodic listen-finalization reconciliation failed: {e}")
         try:
             stale_result = await run_blocking(
-                erasure_executor,
+                db_executor,
                 _run_fsr_loop,
                 'reconcile_stale_processing_conversations',
                 reconcile_stale_processing_conversations,
@@ -519,7 +519,7 @@ async def _periodic_listen_finalization_reconcile(interval_seconds: int | None =
             logger.error(f"Periodic stale-processing reconciliation failed: {e}")
         try:
             in_progress_result = await run_blocking(
-                erasure_executor,
+                db_executor,
                 _run_fsr_loop,
                 'reconcile_stale_in_progress_conversations',
                 reconcile_stale_in_progress_conversations,
@@ -531,7 +531,7 @@ async def _periodic_listen_finalization_reconcile(interval_seconds: int | None =
             logger.error(f"Periodic stale-in-progress reconciliation failed: {e}")
         try:
             byok_result = await run_blocking(
-                erasure_executor,
+                db_executor,
                 _run_fsr_loop,
                 'reconcile_abandoned_byok_finalization_jobs',
                 reconcile_abandoned_byok_finalization_jobs,
@@ -545,7 +545,7 @@ async def _periodic_listen_finalization_reconcile(interval_seconds: int | None =
             continue  # The alert publisher has an independent takeover clock.
         try:
             await run_blocking(
-                erasure_executor,
+                db_executor,
                 _run_fsr_loop,
                 'publish_all_queue_oldest_ready_ages',
                 publish_all_queue_oldest_ready_ages,

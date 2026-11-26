@@ -529,7 +529,13 @@ def test_real_startup_and_periodic_bodies_are_leased_and_attributed(fleet, monke
     for loop in loops:
         namespace[loop] = lambda loop=loop: calls.append((loop, current_read_origin())) or {}
 
-    async def run_blocking(_, callback, *args):
+    namespace['db_executor'] = object()
+    namespace['erasure_executor'] = object()
+    executions = {}
+
+    async def run_blocking(executor, callback, *args):
+        if callback is namespace['_run_fsr_loop']:
+            executions[args[0]] = executor
         return callback(*args)
 
     namespace['run_blocking'] = run_blocking
@@ -574,6 +580,10 @@ def test_real_startup_and_periodic_bodies_are_leased_and_attributed(fleet, monke
     assert {name for name, _ in calls} == expected
     assert len(calls) == len(expected)
     assert all(origin == f'job:{name}' for name, origin in calls)
+    if periodic:
+        for name in expected - {'reconcile_conversation_batch_purges'}:
+            assert executions[name] is namespace['db_executor'], name
+        assert executions['reconcile_conversation_batch_purges'] is namespace['erasure_executor']
 
 
 def test_cadence_defaults_overrides_and_ttl_floor(monkeypatch):

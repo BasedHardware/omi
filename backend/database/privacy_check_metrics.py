@@ -62,6 +62,11 @@ POST_WINDOW_SWEEPS = Counter(
     'Delayed privacy sweeps that durably completed',
     ['reason'],
 )
+POST_WINDOW_DEAD_LETTERS = Counter(
+    'omi_batch_pipeline_privacy_post_window_dead_letters_total',
+    'Permanent delayed erasure failures retained for recovery',
+    ['error'],
+)
 POST_WINDOW_OPERATIONS = Counter(
     'omi_batch_pipeline_privacy_post_window_operations_total',
     'Delayed sweep erasure or reconciliation operations, including retry work',
