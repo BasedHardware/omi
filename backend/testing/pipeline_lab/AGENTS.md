@@ -24,9 +24,6 @@ The README's hard rules come first. In practice:
 - Run `affected`, run the scenarios it names (`scenario run NAME ... --keep DIR`) and attach the verdict
   summary (`scenario summary DIR`) to the pull request.
 - A production escape in the capture -> Finish -> Home path gets a scenario before its fix merges.
-- A change that moves a scenario's operation counts (`ops` in its `result.json`, the `reads`/`writes`/
-  `no-op writes` columns of `scenario summary`) past its `budget` fails that scenario. Raise a budget only
-  with the reason in the pull request; a new no-op write site is a finding to report, not a cap to raise.
 
 ## Judging a change with a replay
 

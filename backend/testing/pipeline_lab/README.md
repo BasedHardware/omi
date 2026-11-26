@@ -205,7 +205,9 @@ view, and they are compared between `--repeat` runs like every other result fiel
 (`{"reads": N, "writes": N, "deletes": N, "noop_writes": N, "vendor_calls": {"stt": N, "llm": N}, "note"}`)
 turns each key into a check labelled `budget_<key>` (`budget_vendor_stt`) that fails above the cap. Set a
 committed scenario's budget from its measured counts plus a small margin; when it shows no-op writes, set
-`noop_writes` to the current count and say where they come from in `note`, never higher to hide them.
+`noop_writes` to the current count and say where they come from in `note`, never higher to hide them. A change
+that moves a scenario past its budget fails it: raise a budget only with the reason in the pull request; a new
+no-op write site is a finding to report, not a cap to raise.
 Read no-op sites against the lab clock: it does not move inside one event, so a write of a `now`-derived
 value (a v3 lease renewal's `until`, `database/conversations_v3_leases.py` `renew`) repeats exactly in the
 lab where production's would move.
