@@ -27150,6 +27150,17 @@
             "$ref": "#/components/schemas/PlanLimits",
             "default": {}
           },
+          "paid_since": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Paid Since"
+          },
           "plan": {
             "$ref": "#/components/schemas/PlanType",
             "default": "basic"
@@ -35954,6 +35965,17 @@
           "limits": {
             "$ref": "#/components/schemas/PlanLimits",
             "default": {}
+          },
+          "paid_since": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Paid Since"
           },
           "plan": {
             "$ref": "#/components/schemas/PlanType",
