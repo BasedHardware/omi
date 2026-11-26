@@ -383,11 +383,13 @@ def test_cli_dry_run_outputs_only_counts_digest_and_checkpoint(source, monkeypat
     output = capsys.readouterr()
     report = json.loads(output.out)
     assert report['dispositions'] == {'eligible': 1} and report['apply'] is False
+    assert report['rows_scanned'] == report['count'] == 1
     assert report['project'] == 'based-hardware' and report['serving_max_age_hours'] == 84
     assert set(report) == {
         'operation',
         'plan_sha256',
         'count',
+        'rows_scanned',
         'dispositions',
         'apply',
         'project',
@@ -395,7 +397,7 @@ def test_cli_dry_run_outputs_only_counts_digest_and_checkpoint(source, monkeypat
     }
     assert all(value not in output.out + output.err for value in (UID, CID, KEY, next_file, 'a' * 32))
     client.assert_called_once_with(project='based-hardware')
-    write.assert_called_once_with(next_file, cursor)
+    write.assert_called_once_with(next_file, cursor, scratch_root=None)
     assert no_writes(source)
 
 
@@ -501,7 +503,8 @@ def test_cli_rejects_public_checkpoint_before_client_access(monkeypatch, capsys,
     client.assert_not_called()
 
 
-def test_cli_passes_private_checkpoint_back_to_discovery(monkeypatch, capsys, operator_cli):
+@pytest.mark.parametrize('custom_root', [False, True])
+def test_cli_passes_private_checkpoint_back_to_discovery(monkeypatch, capsys, operator_cli, tmp_path, custom_root):
     monkeypatch.setenv('GCP_AGENT_TIER', 'ro-prod')
     monkeypatch.delenv('FIRESTORE_EMULATOR_HOST', raising=False)
     monkeypatch.delenv('SERVICE_ACCOUNT_JSON', raising=False)
@@ -515,20 +518,57 @@ def test_cli_passes_private_checkpoint_back_to_discovery(monkeypatch, capsys, op
     query.stream.side_effect = [[page], []]
     monkeypatch.setattr(operator_cli.firestore, 'Client', Mock(return_value=client))
     monkeypatch.setattr(unpark, 'prepare', Mock(return_value=('blocked', None)))
-    first = operator_cli.SCRATCH / 'first.json'
-    second = operator_cli.SCRATCH / 'second.json'
     args = ['--serving-max-age-hours', '72', '--limit', '1']
+    scratch = operator_cli.SCRATCH
+    if custom_root:
+        operator_cli.SCRATCH = tmp_path / 'absent-default'
+        scratch = tmp_path / 'alternate'
+        scratch.mkdir(mode=0o700)
+        args += ['--scratch-root', str(scratch)]
+    first = scratch / 'first.json'
+    second = scratch / 'second.json'
 
     operator_cli.main(args + ['--next-file', str(first)])
-    assert json.loads(capsys.readouterr().out)['count'] == 1
+    report = json.loads(capsys.readouterr().out)
+    assert report['count'] == report['rows_scanned'] == 1
     assert json.loads(first.read_text()) == {'after': {'deferred_since': NOW, 'path': path}}
+    assert first.stat().st_mode & 0o777 == 0o600
     query.start_after.assert_not_called()
 
     operator_cli.main(args + ['--after-file', str(first), '--next-file', str(second)])
-    assert json.loads(capsys.readouterr().out)['count'] == 0
+    report = json.loads(capsys.readouterr().out)
+    assert report['count'] == report['rows_scanned'] == 0
     client.document.assert_called_once_with(path)
     query.start_after.assert_called_once_with({'deferred_since': NOW, '__name__': client.document.return_value})
     assert json.loads(second.read_text()) == {'after': None}
+
+
+@pytest.mark.parametrize('public_root', [False, True])
+def test_cli_rejects_unsafe_custom_scratch_before_client_access(
+    monkeypatch, capsys, operator_cli, tmp_path, public_root
+):
+    monkeypatch.setenv('GCP_AGENT_TIER', 'ro-prod')
+    monkeypatch.delenv('FIRESTORE_EMULATOR_HOST', raising=False)
+    monkeypatch.delenv('SERVICE_ACCOUNT_JSON', raising=False)
+    root = tmp_path / 'alternate'
+    root.mkdir(mode=0o700)
+    outside = tmp_path / 'outside'
+    outside.mkdir(mode=0o700)
+    child = root / 'checkpoint'
+    if public_root:
+        root.chmod(0o755)
+        child.mkdir(mode=0o700)
+    else:
+        child.symlink_to(outside, target_is_directory=True)
+    client = Mock()
+    monkeypatch.setattr(operator_cli.firestore, 'Client', client)
+    with pytest.raises(SystemExit) as error:
+        operator_cli.main(
+            ['--scratch-root', str(root), '--next-file', str(child / 'next.json'), '--serving-max-age-hours', '72']
+        )
+    assert error.value.code == 2
+    assert json.loads(capsys.readouterr().out)['reason'] == 'cursor_path'
+    client.assert_not_called()
 
 
 def test_cli_error_reports_type_without_exception_message(monkeypatch, capsys, operator_cli):
