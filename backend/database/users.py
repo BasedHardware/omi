@@ -1738,7 +1738,7 @@ def _is_paid_plan(subscription: Any) -> bool:
     return bool(plan) and plan not in {'basic', 'free'}
 
 
-def _paid_since_patch(stored: Any, incoming: dict, *, now: float | None = None) -> dict[str, int]:
+def paid_since_patch(stored: Any, incoming: dict, *, now: float | None = None) -> dict[str, int]:
     """The commercial first-paid epoch, set once on the free->paid transition.
 
     ``current_period_start`` moves on every renewal, so it cannot identify a first
@@ -1785,7 +1785,7 @@ def update_user_subscription(uid: str, subscription_data: dict):
 
             write_commercial_subscription(uid, subscription_data_to_store, client=db)
         else:
-            paid_patch = _paid_since_patch(_stored_subscription_payload(user_ref), subscription_data_to_store)
+            paid_patch = paid_since_patch(_stored_subscription_payload(user_ref), subscription_data_to_store)
             subscription_data_to_store.update(paid_patch)
             user_ref.update({'subscription': subscription_data_to_store})
     finally:

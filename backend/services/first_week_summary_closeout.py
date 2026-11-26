@@ -72,7 +72,12 @@ def classify(row: Mapping[str, Any]) -> tuple[str, str]:
     """The terminal outcome and the stored interval for one closed window."""
     stamp = row.get('first_week_summary')
     stamp = stamp if isinstance(stamp, Mapping) else {}
-    interval = stamp.get('interval') if stamp.get('interval') in {'monthly', 'yearly', 'unknown'} else 'unknown'
+    raw_interval = stamp.get('interval')
+    interval = (
+        raw_interval
+        if isinstance(raw_interval, str) and raw_interval in {'monthly', 'yearly', 'unknown'}
+        else 'unknown'
+    )
     end = _epoch(stamp.get('window_end_at'))
     completed = _epoch(row.get('summary_completed_at'))
     if row.get('summary_output_present') and (completed is None or end is None or completed <= end):
@@ -89,7 +94,7 @@ def classify(row: Mapping[str, Any]) -> tuple[str, str]:
 
 def outcome_patch(row: Mapping[str, Any], *, now: float) -> dict[str, Any] | None:
     """The one-write patch that closes a window, or None when it is already counted."""
-    if not isinstance(row, Mapping) or row.get(OUTCOME_FIELD) is not None:
+    if row.get(OUTCOME_FIELD) is not None:
         return None
     outcome, _ = classify(row)
     return {OUTCOME_FIELD: outcome, OUTCOME_AT_FIELD: now}

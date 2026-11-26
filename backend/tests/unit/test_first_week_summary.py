@@ -95,18 +95,18 @@ def test_interval_comes_from_the_period_length_not_a_catalog():
 def test_paid_since_is_set_once_on_a_free_to_paid_transition():
     stored = {'plan': 'basic', 'status': 'active'}
     incoming = {'plan': 'unlimited', 'status': 'active'}
-    patch = users_db._paid_since_patch(stored, incoming, now=PAID)
+    patch = users_db.paid_since_patch(stored, incoming, now=PAID)
     assert patch == {'paid_since': PAID}
     # A renewal never moves it, and a legacy paid row without the epoch is never covered.
-    assert users_db._paid_since_patch({**stored, 'paid_since': PAID}, incoming, now=PAID + 99) == {'paid_since': PAID}
-    assert users_db._paid_since_patch({'plan': 'unlimited', 'status': 'active'}, incoming, now=PAID) == {}
+    assert users_db.paid_since_patch({**stored, 'paid_since': PAID}, incoming, now=PAID + 99) == {'paid_since': PAID}
+    assert users_db.paid_since_patch({'plan': 'unlimited', 'status': 'active'}, incoming, now=PAID) == {}
 
 
 def test_paid_since_ignores_a_trial_that_was_never_charged():
     stored = {'plan': 'basic', 'status': 'active'}
-    assert users_db._paid_since_patch(stored, {'plan': 'unlimited', 'status': 'trialing'}, now=PAID) == {}
+    assert users_db.paid_since_patch(stored, {'plan': 'unlimited', 'status': 'trialing'}, now=PAID) == {}
     # A carried epoch from the caller is authoritative and never overwritten.
-    assert users_db._paid_since_patch(stored, {'plan': 'unlimited', 'status': 'active', 'paid_since': 5}, now=PAID) == {
+    assert users_db.paid_since_patch(stored, {'plan': 'unlimited', 'status': 'active', 'paid_since': 5}, now=PAID) == {
         'paid_since': 5
     }
 

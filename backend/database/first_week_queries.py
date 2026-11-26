@@ -8,7 +8,6 @@ conversations.
 
 from typing import Any
 
-from google.cloud import firestore
 from google.cloud.firestore_v1 import FieldFilter
 
 from database._client import get_firestore_client
