@@ -1,6 +1,7 @@
 """Run real composite shells against fake transports; never a production writer."""
 
 from pathlib import Path
+import hashlib
 import json
 import os
 import re
@@ -210,8 +211,6 @@ def test_global_lock_and_closed_default_remain_unchanged():
 
 
 def test_step_census_refuses_an_unclassified_new_step():
-    import hashlib
-
     # Every current writer and recovery/status step has been scoped explicitly.
     # A new step requires updating this census with a target-scope disposition.
     # Added routing composition is local-only, sync-scoped, and exercised by the
@@ -260,7 +259,8 @@ def test_custody_artifact_is_bound_to_the_native_serving_gate_and_contains_no_en
     )
     assert upload['uses'] == 'actions/upload-artifact@v7'
     assert upload['with']['path'] == 'artifacts/cloud-run-selection.json'
-    assert set(record['env']) == {'ADMITTED_SOURCE', 'WORKFLOW_CONTROL', 'CLOUD_RUN_SELECTION'}
+    assert set(record['env']) == {'ADMITTED_SOURCE', 'WORKFLOW_CONTROL', 'CLOUD_RUN_SELECTION', 'SPLIT_BINDING'}
+    assert record['env']['SPLIT_BINDING'] == '${{ inputs.selected_split_binding }}'
     assert record['env']['WORKFLOW_CONTROL'] == '${{ github.workflow_sha }}'
 
 
@@ -509,3 +509,131 @@ def test_real_sync_routing_step_composes_only_local_expectations(tmp_path):
     assert (tmp_path / 'sync-routing.env').read_text().strip() == overlay
     validation = step('Validate backend runtime env after deploy')['run']
     assert '--sync-routing-env-file' in validation
+
+
+@pytest.mark.parametrize(
+    'overrides',
+    [
+        {},
+        {'BREAK_GLASS_LOCK': 'true'},
+        {'SKIP_ELIGIBILITY': 'true'},
+        {'GITHUB_RUN_ATTEMPT': '2'},
+        {'GITHUB_REF': 'refs/heads/feature'},
+        {'CLOUD_RUN_SERVICE': 'all'},
+        {
+            'REQUESTED_BY': 'train-digest-v1:' + 'a' * 40 + ':fixture',
+            'SERVICE': 'backend',
+            'WORKFLOW_CONTROL_SHA': 'a' * 40,
+            'GITHUB_SHA': 'a' * 40,
+        },
+        {'SELECTED_ROLLBACK_REVISION': 'backend-sync-old'},
+        {'SELECTED_SPLIT_BINDING': 'a' * 64},
+        {'SELECTED_SPLIT_PLAN': 'holdback-v1;backend-sync-old;backend-sync-old=100;5;1800'},
+    ],
+)
+def test_holdback_workflow_requires_bound_normal_first_attempt(tmp_path, overrides):
+    workflow = yaml.safe_load((ROOT / '.github/workflows/gcp_backend.yml').read_text())
+    script = workflow['jobs']['validate-production-boundary']['steps'][0]['run']
+    script = script.replace('${{ github.event.inputs.deploy_gateway }}', 'false')
+    output = tmp_path / 'outputs'
+    env = dict(
+        os.environ,
+        DEPLOY_ENVIRONMENT='prod',
+        DEPLOY_TARGETS='cloud-run-only',
+        WORKFLOW_MODE='deploy',
+        CLOUD_RUN_SERVICE='backend-sync',
+        SERVICE_IMAGES='',
+        REQUESTED_BY='selection:' + 'a' * 32,
+        RELEASE_SHA='b' * 40,
+        SKIP_ELIGIBILITY='false',
+        BREAK_GLASS_LOCK='false',
+        DEPLOY_GATEWAY='false',
+        SELECTED_ROLLBACK_REVISION='',
+        SELECTED_SPLIT_PLAN='holdback-v1;backend-sync-old;backend-sync-old=100;5;7200',
+        GITHUB_REF='refs/heads/main',
+        GITHUB_RUN_ATTEMPT='1',
+        GITHUB_OUTPUT=str(output),
+    )
+    env.update(overrides)
+    env['SELECTED_SPLIT_BINDING'] = overrides.get(
+        'SELECTED_SPLIT_BINDING', hashlib.sha256(env['SELECTED_SPLIT_PLAN'].encode()).hexdigest()
+    )
+    result = subprocess.run(['bash', '-c', script], env=env, text=True, capture_output=True, timeout=10)
+    assert (result.returncode == 0) == (not overrides), result.stderr
+    if overrides:
+        assert not output.exists()
+    else:
+        assert 'rollback_revision=backend-sync-old' in output.read_text()
+
+
+@pytest.mark.parametrize('service', SERVICES)
+@pytest.mark.parametrize('exit_code', [0, 1, 75])
+def test_holdback_shift_invokes_only_bound_executor(tmp_path, service, exit_code):
+    output = tmp_path / 'outputs'
+    calls = tmp_path / 'calls'
+    guard = tmp_path / 'cloud_run_split_canary.py'
+    guard.write_text("""import json, os, sys
+with open(os.environ['CALLS'], 'w') as target:
+    json.dump(sys.argv[1:], target)
+candidate = sys.argv[sys.argv.index('--candidate') + 1]
+print(json.dumps({candidate: 80}))
+sys.exit(int(os.environ['EXIT_CODE']))
+""")
+    # Any accidental fallback to the legacy gcloud traffic writer fails the test.
+    gcloud = tmp_path / 'gcloud'
+    gcloud.write_text('#!/bin/sh\nexit 99\n')
+    gcloud.chmod(0o700)
+    plan = f'holdback-v1;{service}-old;{service}-old=100;5;7200'
+    binding = hashlib.sha256(plan.encode()).hexdigest()
+    result = subprocess.run(
+        ['bash', '-c', render(step('Shift Cloud Run traffic to validated revisions')['run'])],
+        env=dict(
+            os.environ,
+            PATH=str(tmp_path) + ':' + os.environ['PATH'],
+            DEPLOY_CONTROL_SCRIPTS=str(tmp_path),
+            SELECTED_CLOUD_RUN_SERVICES=service,
+            SERVICE=service,
+            PLAN=plan,
+            BINDING=binding,
+            PROJECT='based-hardware',
+            REGION='us-central1',
+            BACKEND='backend-new',
+            SYNC='backend-sync-new',
+            BACKFILL='backend-sync-backfill-new',
+            INTEGRATION='backend-integration-new',
+            EXIT_CODE=str(exit_code),
+            CALLS=str(calls),
+            GITHUB_OUTPUT=str(output),
+            GITHUB_STEP_SUMMARY=str(tmp_path / 'summary'),
+        ),
+        text=True,
+        capture_output=True,
+        timeout=10,
+    )
+    assert result.returncode == exit_code, result.stderr
+    assert json.loads(calls.read_text()) == [
+        'promote',
+        '--service',
+        service,
+        '--plan',
+        plan,
+        '--binding',
+        binding,
+        '--candidate',
+        f'{service}-new',
+        '--project',
+        'based-hardware',
+        '--region',
+        'us-central1',
+        '--guard-command',
+        'python3',
+        '-I',
+        str(guard),
+        'workflow-guard',
+    ]
+    if exit_code == 0:
+        assert output.read_text() == 'promoted=true\nserving_percent=80\n'
+    elif exit_code == 75:
+        assert output.read_text() == 'held=true\n'
+    else:
+        assert not output.exists()

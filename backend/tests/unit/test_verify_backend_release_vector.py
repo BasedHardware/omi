@@ -96,6 +96,26 @@ def _cloud_run_document(*, revision: str, image: str, environment: str = 'dev') 
     }
 
 
+def test_holdback_serving_vector_requires_the_candidate_share_and_complete_map():
+    revision = 'backend-sync-new'
+    image = 'gcr.io/based-hardware/backend:abcdef123456'
+    document = _cloud_run_document(revision=revision, image=image, environment='prod')
+    traffic = document['status']['traffic']
+    traffic[0]['percent'] = 80
+    traffic.append({'revisionName': 'backend-sync-other', 'percent': 20})
+
+    def verify(**kwargs):
+        return verifier.evaluate_cloud_run_service(
+            'backend-sync', revision, image, document, expected_environment='prod', **kwargs
+        )
+
+    assert verify(expected_serving_percent=80) == []
+    assert 'does not receive 100% traffic' in verify()[0]
+    assert 'does not receive 95% traffic' in verify(expected_serving_percent=95)[0]
+    traffic[1]['percent'] = 15
+    assert 'does not receive 80% traffic' in verify(expected_serving_percent=80)[0]
+
+
 def _cloud_run_revision_document(*, image: str, ready: str = 'True', reason: str = 'Ready') -> dict:
     return {
         'spec': {'containers': [{'image': image}]},

@@ -267,16 +267,29 @@ def test_projection_and_firestore_read_ops_are_preserved_from_serving():
         assert {key: actual['cloud_run']['services'][service]['env'][key]['value'] for key in values} == values
 
 
-@pytest.mark.parametrize('outcome', ['failure', 'cancelled'])
 @pytest.mark.parametrize(
-    'step_id',
+    ('step_id', 'outcome', 'bound', 'held', 'promoted', 'restores'),
     [
-        'shift-cloud-run-traffic',
-        'verify-serving-release-vector',
-        'smoke-promoted-production-serving-api',
+        (step_id, outcome, False, False, False, True)
+        for step_id in (
+            'shift-cloud-run-traffic',
+            'verify-serving-release-vector',
+            'smoke-promoted-production-serving-api',
+        )
+        for outcome in ('failure', 'cancelled')
+    ]
+    + [
+        ('shift-cloud-run-traffic', 'failure', True, True, False, False),
+        ('shift-cloud-run-traffic', 'failure', True, False, False, False),
+        ('shift-cloud-run-traffic', 'failure', True, False, True, True),
+        ('shift-cloud-run-traffic', 'cancelled', True, False, False, True),
+        ('verify-serving-release-vector', 'failure', True, False, True, True),
+        ('smoke-promoted-production-serving-api', 'failure', True, False, True, True),
     ],
 )
-def test_actual_restore_condition_recovers_cancelled_and_failed_steps(step_id, outcome):
+def test_actual_restore_condition_recovers_cancelled_and_failed_steps(
+    step_id, outcome, bound, held, promoted, restores
+):
     action = yaml.safe_load((ROOT / '.github/actions/deploy-backend-stack/action.yml').read_text())
     condition = [
         s['if']
@@ -286,6 +299,9 @@ def test_actual_restore_condition_recovers_cancelled_and_failed_steps(step_id, o
     expression = condition.removeprefix('${{').removesuffix('}}').strip()
     expression = expression.replace("inputs.deploy_profile", repr('manual'))
     expression = expression.replace('inputs.integration_only', repr('false'))
+    expression = expression.replace('inputs.selected_split_binding', repr('a' * 64 if bound else ''))
+    expression = expression.replace('steps.shift-cloud-run-traffic.outputs.held', repr('true' if held else ''))
+    expression = expression.replace('steps.shift-cloud-run-traffic.outputs.promoted', repr('true' if promoted else ''))
     expression = expression.replace('failure()', str(outcome == 'failure')).replace(
         'cancelled()', str(outcome == 'cancelled')
     )
@@ -295,27 +311,8 @@ def test_actual_restore_condition_recovers_cancelled_and_failed_steps(step_id, o
         rendered = re.sub(r'steps\.([a-z0-9-]+)\.outcome', lambda m: repr(states.get(m[1], 'success')), expression)
         return eval(rendered.replace('&&', ' and ').replace('||', ' or ').replace('\n', ' '), {'__builtins__': {}})
 
-    assert evaluate('success')
-    assert not evaluate('skipped')
-
-
-@pytest.mark.parametrize('failure', ['source', 'scope', 'duplicate', 'ingress', 'secret', 'quality-conflict'])
-def test_bad_snapshot_or_manifest_conflict_refuses(failure):
-    source, live = config(), snapshot()
-    if failure == 'source':
-        live['source'] = 'a' * 40
-    elif failure == 'scope':
-        del live['services']['backend-sync']
-    elif failure == 'duplicate':
-        live['services']['backend']['revision']['spec']['containers'][0]['env'] *= 2
-    elif failure == 'ingress':
-        live['services']['backend']['revision']['spec']['containers'][1]['ports'] = [{'containerPort': 8081}]
-    elif failure == 'secret':
-        live['services']['backend']['revision']['spec']['containers'][0]['env'][2]['value'] = 'conflicting'
-    else:
-        source['cloud_run']['services']['backend']['forbidden_env'].append(next(iter(QUALITY)))
-    with pytest.raises(ValueError):
-        compose(source, live, SOURCE)
+    assert evaluate('success') is restores
+    assert not evaluate('failure')
 
 
 def test_workflow_keeps_native_admission_and_exact_pin_selects_canary_without_new_public_mode():

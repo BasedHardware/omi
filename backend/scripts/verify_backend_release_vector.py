@@ -271,6 +271,7 @@ def evaluate(
     require_serving_traffic: bool = True,
     include_listener: bool = True,
     verify_backfill_zero_traffic: bool = False,
+    expected_serving_percent: int | None = None,
 ) -> list[str]:
     errors: list[str] = []
     for service, expected_revision in expectation.revisions.items():
@@ -286,6 +287,7 @@ def evaluate(
                     document,
                     expected_environment=expectation.environment,
                     require_serving_traffic=require_serving_traffic,
+                    expected_serving_percent=expected_serving_percent,
                     expected_revision_document=documents.get(f'cloud_run_revision/{service}'),
                     require_resolved_candidate_traffic=verify_backfill_zero_traffic
                     and service == 'backend-sync-backfill',
@@ -413,6 +415,7 @@ def evaluate_cloud_run_service(
     require_serving_traffic: bool = True,
     expected_revision_document: Mapping[str, Any] | None = None,
     require_resolved_candidate_traffic: bool = False,
+    expected_serving_percent: int | None = None,
 ) -> list[str]:
     status = _mapping(document.get('status'))
     spec = _mapping(document.get('spec'))
@@ -440,11 +443,22 @@ def evaluate_cloud_run_service(
             errors.append(f'cloud_run/{service}: expected revision is not Ready')
     if image != expected_image:
         errors.append(f'cloud_run/{service}: template image is not {expected_image}')
-    if require_serving_traffic and (not expected_traffic or _mapping(expected_traffic[0]).get('percent') != 100):
-        errors.append(f'cloud_run/{service}: expected revision does not receive 100% traffic')
-    if not require_serving_traffic and require_resolved_candidate_traffic:
+    if require_serving_traffic:
+        if expected_serving_percent is None:
+            if not expected_traffic or _mapping(expected_traffic[0]).get('percent') != 100:
+                errors.append(f'cloud_run/{service}: expected revision does not receive 100% traffic')
+        else:
+            try:
+                percent = _candidate_traffic_percent(traffic, expected_revision, status.get('latestReadyRevisionName'))
+            except ValueError:
+                percent = None
+            if percent != expected_serving_percent:
+                errors.append(
+                    f'cloud_run/{service}: expected revision does not receive {expected_serving_percent}% traffic'
+                )
+    elif require_resolved_candidate_traffic:
         errors.extend(evaluate_candidate_zero_traffic(service, expected_revision, status, spec))
-    elif not require_serving_traffic:
+    else:
         for entry in expected_traffic:
             allocation = _effective_candidate_traffic_percent(_mapping(entry).get('percent'))
             if allocation is None:
@@ -552,13 +566,14 @@ def poll_latest_ready_convergence(
     wait_seconds: float,
     interval_seconds: float,
     include_listener: bool = True,
+    expected_serving_percent: int | None = None,
     collector: Callable[[Mapping[str, Sequence[str]]], dict[str, Mapping[str, Any]]] | None = None,
 ) -> LatestReadyPoll:
     """Wait a bounded window for lagging latestReadyRevisionName pointers to converge.
 
     Callers reach this only when the pointer mismatch is the sole serving error,
     so each lagging service's expected revision is already proven Ready (its own
-    revision document) and serving 100% of traffic. Each round re-reads just the
+    revision document) and serving the expected share of traffic. Each round re-reads just the
     lagging services and re-runs the full serving evaluation: a converged
     pointer passes, and any new non-pointer mismatch aborts the poll
     immediately. When the window expires with pointer-only errors still
@@ -584,7 +599,9 @@ def poll_latest_ready_convergence(
             )
         time.sleep(min(interval_seconds, remaining))
         documents = {**documents, **resolve(wanted)}
-        errors = evaluate(expectation, documents, include_listener=include_listener)
+        errors = evaluate(
+            expectation, documents, include_listener=include_listener, expected_serving_percent=expected_serving_percent
+        )
         lagging_now, others = partition_latest_ready_lag(expectation, errors)
         if not others and not lagging_now:
             return LatestReadyPoll(
@@ -802,6 +819,7 @@ def main() -> int:
         default=DEFAULT_LATEST_READY_POLL_INTERVAL_SECONDS,
         help='serving mode: seconds between latestReadyRevisionName convergence polls',
     )
+    parser.add_argument('--expected-serving-percent', type=int, choices=range(1, 101), metavar='PERCENT')
     parser.add_argument('--evidence-path', type=Path)
     parser.add_argument('--integration-only', action='store_true')
     parser.add_argument('--cloud-run-service', choices=('all', *SELECTABLE), default='all')
@@ -810,6 +828,10 @@ def main() -> int:
     )
     args = parser.parse_args()
     try:
+        if args.expected_serving_percent is not None and (
+            args.candidate or args.integration_only or args.environment != 'prod' or args.cloud_run_service == 'all'
+        ):
+            raise ValueError('a serving share requires a named production promotion')
         if args.cloud_run_service != 'all' and not args.cloud_run_only:
             raise ValueError('selected-service vector requires Cloud Run-only mode')
         if args.integration_only and (not args.cloud_run_only or args.environment != 'prod'):
@@ -855,6 +877,7 @@ def main() -> int:
             require_serving_traffic=require_serving_traffic,
             include_listener=include_listener,
             verify_backfill_zero_traffic=args.backfill_binding_sha256 is not None,
+            expected_serving_percent=args.expected_serving_percent,
         )
         if args.backfill_binding_sha256 is not None:
             errors.extend(
@@ -875,6 +898,7 @@ def main() -> int:
                     wait_seconds=args.latest_ready_wait_seconds,
                     interval_seconds=args.latest_ready_poll_interval_seconds,
                     include_listener=include_listener,
+                    expected_serving_percent=args.expected_serving_percent,
                 )
                 documents = poll.documents
                 errors = evaluate(
@@ -882,6 +906,7 @@ def main() -> int:
                     documents,
                     require_serving_traffic=True,
                     include_listener=include_listener,
+                    expected_serving_percent=args.expected_serving_percent,
                 )
                 latest_ready_poll = {
                     'services': sorted(lagging),
