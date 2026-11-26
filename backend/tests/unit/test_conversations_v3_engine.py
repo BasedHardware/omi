@@ -1,8 +1,11 @@
 """Synthetic recorded-clock contracts; no model calls or customer fixtures."""
 
 from copy import deepcopy
+import base64
 from datetime import datetime, timedelta, timezone
 import json
+import random
+import zlib
 
 import pytest
 
@@ -656,9 +659,6 @@ def test_copy_carries_the_recording_location_and_keeps_its_own():
 
 @pytest.mark.parametrize('cohesion', [False, True])
 def test_transcript_size_cap_replans_failed_projection(monkeypatch, cohesion):
-    import base64
-    import random
-    import zlib
 
     rng = random.Random(2918)
     segments = [

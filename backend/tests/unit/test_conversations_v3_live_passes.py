@@ -7,15 +7,20 @@ cap and preservation paths, not the loader's query plan.
 """
 
 from copy import deepcopy
+import base64
 from datetime import datetime, timedelta, timezone
 import json
+import random
+import zlib
 from types import SimpleNamespace
 
+from google.api_core.exceptions import InvalidArgument
 import pytest
 
 from database import conversations_v3 as store
 from utils.conversations.v3 import policy, service
 from utils.home_feed.projection import reveal_display
+from tests.unit.fixtures.strict_firestore_transaction import StrictFirestoreTransaction
 from tests.unit.test_conversations_v3_claim_growth import strict, owners_import, path, UID  # noqa: F401
 
 T0 = datetime(2026, 11, 18, 10, 0, tzinfo=timezone.utc)
@@ -848,12 +853,6 @@ async def test_one_ownership_index_per_plan(strict, monkeypatch):
 
 @pytest.mark.asyncio
 async def test_reconcile_retries_oversize_transcript_as_continuations(strict, monkeypatch):
-    import base64
-    import random
-    import zlib
-
-    from google.api_core.exceptions import InvalidArgument
-    from tests.unit.fixtures.strict_firestore_transaction import StrictFirestoreTransaction
 
     rng = random.Random(2918)
     segments = speech(100, step=10)
