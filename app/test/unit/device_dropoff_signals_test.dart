@@ -62,6 +62,10 @@ void main() {
       expect(DeviceDropoffSignals.cause(row, battery(ts - 30 * _minute, 4, charging: true)), 'power_off');
       expect(DeviceDropoffSignals.cause(row, battery(ts - 2 * _hour, 4)), 'power_off');
       expect(DeviceDropoffSignals.cause(row, battery(ts - 30 * _minute, 6)), 'power_off');
+      // No charging bit, but the level was rising into the loss: on a charger.
+      expect(DeviceDropoffSignals.cause(row, battery(ts - 5 * _minute, 4), battery(ts - 20 * _minute, 2)), 'power_off');
+      expect(
+          DeviceDropoffSignals.cause(row, battery(ts - 5 * _minute, 4), battery(ts - 20 * _minute, 6)), 'battery_flat');
     });
 
     test('fresh RSSI separates walking away from an abrupt loss at strong signal', () {
@@ -126,8 +130,9 @@ void main() {
     expect(result['gap_saved_reconnect_enabled'], true);
     expect(result['gap_reconnect_suppressed'], false);
     // The iOS log keeps 24 h; it cannot reach back to a gap two days old.
-    expect(result['gap_advert_sightings'], isNull);
-    expect(result['gap_scan_windows'], isNull);
+    expect(result['gap_scan_covered'], false);
+    expect(result.containsKey('gap_advert_sightings'), isFalse);
+    expect(result.containsKey('gap_scan_windows'), isFalse);
   });
 
   test('a gap that ended before day end is closed and drops the reconnect snapshot', () {
@@ -156,6 +161,26 @@ void main() {
     }, day);
     expect(result['long_gaps'], 0);
     expect(result.containsKey('gap_cause'), isFalse);
+  });
+
+  test('an Android attempt stamp without audio on the link is not a reconnect', () {
+    final at = start + 10 * _hour;
+    Map<String, dynamic> snapshot(List<Map<String, dynamic>> packetDays) => {
+          'observed_at': nextDay + _hour,
+          'disconnect_history_v2': [disconnect(at, rssi: -95)],
+          'connected_at': at + 5 * _minute,
+          'audio_packets_received': 0,
+          'audio_packet_days': packetDays,
+        };
+    final pending = DeviceDropoffSignals.rollup(snapshot([]), day);
+    expect(pending['gap_cause'], 'out_of_range');
+    expect(pending['gap_open_at_day_end'], true);
+    final live = DeviceDropoffSignals.rollup(
+        snapshot([
+          {'ts': start, 'received': 10, 'last_at': at + 6 * _minute},
+        ]),
+        day);
+    expect(live['long_gaps'], 0);
   });
 
   test('malformed rows are skipped, not thrown', () {
@@ -199,8 +224,33 @@ void main() {
         {'ts': gapAt + 3000, 'event': 'reconnect_scan_result', 'detail': 'saved_target=true,rssi=-88'},
       ],
     }, day);
+    expect(result['gap_scan_covered'], true);
     expect(result['gap_scan_windows'], 1);
     expect(result['gap_advert_sightings'], 1);
+  });
+
+  test('a full 500-row scan log covers the gap only from its first row', () {
+    final gapAt = start + 20 * _hour;
+    Map<String, dynamic> withLogFrom(int first) => DeviceDropoffSignals.rollup({
+          'observed_at': nextDay + 2 * _hour,
+          'disconnect_history_v2': [disconnect(gapAt, rssi: -60)],
+          'saved_reconnect_enabled': true,
+          'ble_log': [
+            for (var i = 0; i < 500; i++)
+              {
+                'ts': first + i * 1000,
+                'event': i == 0 ? 'reconnect_scan_started' : 'reconnect_scan_result',
+                'detail': 'saved_target=true,rssi=-70',
+              },
+          ],
+        }, day);
+    final late = withLogFrom(gapAt + 1);
+    expect(late['gap_scan_covered'], false);
+    expect(late.containsKey('gap_advert_sightings'), isFalse);
+    final early = withLogFrom(gapAt);
+    expect(early['gap_scan_covered'], true);
+    expect(early['gap_scan_windows'], 1);
+    expect(early['gap_advert_sightings'], 499);
   });
 
   test('connected time without audio is split from disconnected time, only for streaming devices', () {

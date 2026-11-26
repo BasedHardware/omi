@@ -29,10 +29,10 @@ fully disconnected day still carries the cause of the gap the device is in.
 
 | Value | Rule |
 |---|---|
-| `manual` | The user disconnected. |
-| `pairing_lost` | `pairing_lost`, `paired_to_another_phone` or `link_key_mismatch`. |
-| `phone_side` | `bluetooth_off` or `app_closed` (Android only; iOS rows carry neither reason). |
-| `battery_flat` | Last battery sample at most 60 min before the loss was ≤ 5% and not charging. |
+| `manual` | The user disconnected (iOS only: Android writes no row for a user disconnect, so the gap fields keep describing the previous gap). |
+| `pairing_lost` | `pairing_lost`, `paired_to_another_phone` or `link_key_mismatch` (iOS; Android records status 137 as `gatt_error_137`). |
+| `phone_side` | `app_closed` (Android only; iOS rows carry neither reason, and Bluetooth turning off is not written into a row reason on either platform). |
+| `battery_flat` | Last battery sample at most 60 min before the loss was ≤ 5%, not marked charging, and not higher than the sample before it. Most firmware reports no charging bit, so an unknown bit counts as not charging unless the level was rising. |
 | `out_of_range` | RSSI trend `fading`, or an RSSI sample at most 30 s old ≤ −85 dBm. |
 | `power_off` | An RSSI sample at most 30 s old ≥ −75 dBm: an abrupt loss at strong signal (powered off, reset or crashed). |
 | `unknown` | Anything else, including no recent RSSI. |
@@ -53,9 +53,9 @@ fully disconnected day still carries the cause of the gap the device is in.
 | `gap_battery_level`, `gap_battery_age_min`, `gap_battery_charging` | Last battery sample before the loss, its age, and the charging bit (null unless firmware reports it). |
 | `gap_last_rssi`, `gap_rssi_age_s`, `gap_rssi_trend` | RSSI evidence at the loss. |
 | `gap_short_sessions_24h` | Short sessions in the 24 h before the gap: a gap that ends a run of connect-then-drop links. |
-| `gap_fail_to_connect` | Connection attempts inside the gap that reached the device and failed. Zero with the gap open means no attempt reached it. |
+| `gap_fail_to_connect` | Connection attempts inside the gap that failed to complete. This includes attempts that never reached the pendant (Android's direct connect times out when the pendant is absent), so it is not hardware evidence on its own; the query reports it as a separate column. |
 | `gap_saved_reconnect_enabled`, `gap_reconnect_suppressed` | iOS only, only while the gap is still open at the snapshot: whether the app is still trying to reconnect. |
-| `gap_scan_windows`, `gap_advert_sightings` | iOS only: reconnect scans inside the gap and how often they saw this pendant advertising. Null when the 24-hour native log no longer reaches back to the gap start. Android reconnects with a passive OS scan and logs none, so the fields are absent there. |
+| `gap_scan_covered`, `gap_scan_windows`, `gap_advert_sightings` | iOS only: whether the 24-hour native log reaches back to the gap start, and if so the reconnect scans inside the gap and how often they saw this pendant advertising. When `gap_scan_covered` is false the counts are omitted (unknown, not zero). Android reconnects with a passive OS scan and logs none, so all three are absent there. |
 | `charge_inferred_events` | Non-decreasing battery runs that gained at least 5 points, counted on the day they crossed it. A run may span a disconnection (charged off the link). |
 | `battery_min_level`, `battery_max_level` | Day range of battery samples. |
 | `battery_low_seconds` | Time the level sat at or below 5% (samples at most 2 h apart): "stuck at 1% then shuts off", "won't charge" when it recurs without `charge_inferred_events`. |
@@ -70,14 +70,18 @@ user-day. PostHog bills per event, so there is no added event cost.
 ## Separating the two kinds of drop-off
 
 A stop is the first day with `connected_seconds = 0` after at least 5 connected days in the previous 14, with
-the next 2 days also at zero. The stop day's gap fields describe the stop; the 3 days before it show whether
+the next 2 days also at zero; all 3 days must have an event, because a day the app never ran emits nothing. The
+query works per pendant model, so a second paired device cannot mask the stop. The stop day's gap fields describe the stop; the 3 days before it show whether
 audio, battery or resets were already failing.
 
 ```sql
 -- Bucket on properties.day (emission can be up to 7 days late). Days the app never ran emit nothing, so a
--- missing day is not a zero day; restrict to a cohort with person_id IN (...) for population rates.
+-- stop needs an event on each of its 3 days. One row per person and pendant model: a second paired device
+-- (watch, other wearable) must not mask the stopped pendant. Restrict to a cohort with person_id IN (...)
+-- for population rates.
 WITH per_day AS (
   SELECT person_id,
+         toString(properties.device_model) AS model,
          dateDiff('day', toDate('2020-01-01'), toDate(properties.day)) AS d,
          max(toFloat(properties.connected_seconds)) AS conn_s,
          max(toFloat(properties.connected_no_audio_seconds)) AS silent_s,
@@ -96,20 +100,21 @@ WITH per_day AS (
   WHERE event = 'Mobile Device Health Daily'
     AND toInt(properties.schema_version) >= 3
     AND timestamp >= now() - INTERVAL 60 DAY
-  GROUP BY person_id, d
+    AND toString(properties.device_model) IN ('Omi CV 1', 'Omi DevKit 2', 'Omi Device')
+  GROUP BY person_id, model, d
 ),
 per_person AS (
-  SELECT person_id,
+  SELECT person_id, model,
          arraySort(x -> x.1, groupArray((d, conn_s, silent_s, gap_cause, gap_batt, gap_fails, gap_seen, cliffs,
                                          short_n, low_s, erratic, resets, gap_short, gap_batt_age))) AS days
   FROM per_day
-  GROUP BY person_id
+  GROUP BY person_id, model
 ),
 stops AS (
-  SELECT person_id, days,
+  SELECT person_id, model, days,
          arrayFirst(x -> x.2 = 0
              AND arrayCount(y -> y.1 >= x.1 - 14 AND y.1 < x.1 AND y.2 > 0, days) >= 5
-             AND arrayCount(y -> y.1 >= x.1 AND y.1 <= x.1 + 2 AND y.2 > 0, days) = 0
+             AND arrayCount(y -> y.1 >= x.1 AND y.1 <= x.1 + 2 AND y.2 = 0, days) = 3
              AND x.1 + 2 <= dateDiff('day', toDate('2020-01-01'), today()) - 1,
            days) AS stop
   FROM per_person
@@ -127,25 +132,27 @@ classified AS (
   WHERE stop.1 > 0
 )
 SELECT multiIf(
-         stop.4 = 'battery_flat' OR stop.6 > 0 OR stop.7 > 0 OR stop.13 >= 3
+         stop.4 = 'battery_flat' OR stop.7 > 0 OR stop.13 >= 3
            OR (conn_before > 0 AND silent_before > 0.5 * conn_before)
            OR cliffs_before > 0 OR short_before >= 10 OR low_before >= 3600 OR erratic_before > 0
            OR reset_days > 0, 'hardware',
          stop.4 IN ('out_of_range', 'power_off', 'manual') AND stop.5 > 20 AND stop.14 <= 180, 'put_down',
          'unclassified') AS dropoff_kind,
        stop.4 AS gap_cause,
-       count() AS people
+       count() AS stops,
+       countIf(stop.6 > 0) AS with_failed_reconnects
 FROM classified
 GROUP BY dropoff_kind, gap_cause
-ORDER BY dropoff_kind, people DESC
+ORDER BY dropoff_kind, stops DESC
 ```
 
-`hardware` covers a flat battery, failed reconnect attempts, the pendant seen advertising without connecting,
+`hardware` covers a flat battery, the pendant seen advertising without connecting,
 mostly silent connected time, short-session churn (at least 3 in the 24 h before the gap, or 10 in the 3 days
 before the stop), an hour or more stuck at ≤ 5%, an erratic or cliff battery step, or any firmware reset in the
 14 days before (`device_resets_by_reason`, mostly `RESET_LOW_POWER_WAKE`, which may itself mean a flat battery;
 only 3.0.24+ reports it, about 0.1% of daily rows today). `put_down` is a clean loss (out of range,
 powered off or manual) with more than 20% battery in a sample at most 3 hours old. `unclassified` keeps the unknown share visible.
+`with_failed_reconnects` counts stops whose gap had failed connection attempts; read it alongside platform.
 Restrict `per_day` to a cohort (cancellers, a churn study's stoppers) with a `person_id IN (...)` subquery.
 
 ## Known blind spot

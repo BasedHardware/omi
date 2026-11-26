@@ -62,6 +62,12 @@ abstract final class DeviceDropoffSignals {
         if (row['eventType'] == 'fail_to_connect') row['timestamp'] as int
     ];
     final connectedAt = diagnostics['connected_at'] is int ? diagnostics['connected_at'] as int : 0;
+    // Android stamps connected_at when a GATT attempt starts, before it is
+    // established; only a packet on this link proves the link is live.
+    final linkProven = connectedAt > 0 &&
+        (diagnostics['audio_packet_days'] as List? ?? [])
+            .whereType<Map>()
+            .any((point) => point['last_at'] is int && (point['last_at'] as int) >= connectedAt);
     final sessions = <({int start, int end, int? packets})>[
       for (final row in disconnects)
         if (row['connectionDurationMs'] is int && (row['connectionDurationMs'] as int) > 0)
@@ -70,7 +76,7 @@ abstract final class DeviceDropoffSignals {
             end: row['timestamp'] as int,
             packets: row['audioPacketsReceived'] is int ? row['audioPacketsReceived'] as int : null,
           ),
-      if (connectedAt > 0 && connectedAt < observedAt)
+      if (linkProven && connectedAt < observedAt)
         (
           start: connectedAt,
           end: observedAt,
@@ -97,13 +103,9 @@ abstract final class DeviceDropoffSignals {
       return next;
     }
 
-    Map? batteryBefore(int ts) {
-      Map? last;
-      for (final point in battery) {
-        if ((point['ts'] as int) > ts) break;
-        last = point;
-      }
-      return last;
+    Map? batteryBefore(int ts, {int back = 0}) {
+      final before = battery.where((point) => (point['ts'] as int) <= ts).toList();
+      return before.length > back ? before[before.length - 1 - back] : null;
     }
 
     final gaps = <({Map row, int? reconnect, String cause})>[];
@@ -111,7 +113,7 @@ abstract final class DeviceDropoffSignals {
       final ts = row['timestamp'] as int;
       final reconnect = reconnectAt(row);
       if ((reconnect ?? observedAt) - ts < gapMs) continue;
-      gaps.add((row: row, reconnect: reconnect, cause: cause(row, batteryBefore(ts))));
+      gaps.add((row: row, reconnect: reconnect, cause: cause(row, batteryBefore(ts), batteryBefore(ts, back: 1))));
     }
 
     final longGapsByCause = <String, int>{};
@@ -172,7 +174,10 @@ abstract final class DeviceDropoffSignals {
   /// First match wins. `connection_timeout` alone cannot separate causes:
   /// firmware power-off and battery-critical shutdown drop the link without a
   /// terminate, exactly like walking out of range.
-  static String cause(Map row, Map? battery) {
+  /// [prior] is the sample before [battery]. Most firmware reports no
+  /// charging bit, so an unknown bit counts as not charging unless the level
+  /// was rising into the loss.
+  static String cause(Map row, Map? battery, [Map? prior]) {
     final reason = row['reason']?.toString() ?? '';
     if (row['isManual'] == true || reason == 'manual') return 'manual';
     if (_pairingReasons.contains(reason)) return 'pairing_lost';
@@ -184,7 +189,8 @@ abstract final class DeviceDropoffSignals {
         levelAt is int &&
         ts - levelAt <= flatBatteryMaxAgeMs &&
         level <= flatBatteryLevel &&
-        battery?['charging'] != true) {
+        battery?['charging'] != true &&
+        !(prior?['level'] is num && (prior!['level'] as num) < level)) {
       return 'battery_flat';
     }
     if (row['rssiTrend'] == 'fading') return 'out_of_range';
@@ -282,12 +288,14 @@ abstract final class DeviceDropoffSignals {
 
   /// iOS logs reconnect scans for 24 h (500 rows). Android reconnects with a
   /// passive OS scan and logs none, so it reports nothing rather than zero.
-  /// Counts are null when the log no longer reaches back to the gap start.
+  /// Analytics drops null values, so coverage is explicit: `gap_scan_covered`
+  /// false means the log no longer reaches back to the gap start and the
+  /// counts are omitted (unknown), not zero.
   static Map<String, dynamic> _scans(Map<String, dynamic> diagnostics, int from, int to, int observedAt) {
     if (diagnostics['saved_reconnect_enabled'] is! bool) return const {};
     final log = (diagnostics['ble_log'] as List? ?? []).whereType<Map>().where((row) => row['ts'] is int).toList();
     final coveredFrom = log.length >= 500 ? log.first['ts'] as int : observedAt - 24 * 3600 * 1000;
-    if (coveredFrom > from) return {'gap_scan_windows': null, 'gap_advert_sightings': null};
+    if (coveredFrom > from) return {'gap_scan_covered': false};
     var windows = 0;
     var sightings = 0;
     for (final row in log) {
@@ -298,6 +306,6 @@ abstract final class DeviceDropoffSignals {
         sightings++;
       }
     }
-    return {'gap_scan_windows': windows, 'gap_advert_sightings': sightings};
+    return {'gap_scan_covered': true, 'gap_scan_windows': windows, 'gap_advert_sightings': sightings};
   }
 }
