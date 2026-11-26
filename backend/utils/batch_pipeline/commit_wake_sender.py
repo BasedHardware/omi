@@ -9,7 +9,7 @@ they are.
 import logging
 import os
 import threading
-from typing import Callable
+from typing import Any, Callable
 
 from config import reliability_experiments
 
@@ -45,7 +45,7 @@ class CommitWakeSender:
         self._thread = None
         self._start_thread = start_thread
 
-    def __call__(self, entry: dict) -> None:
+    def __call__(self, entry: Any) -> None:
         owner_id = entry.get('owner_id') if isinstance(entry, dict) else None
         if not isinstance(owner_id, str) or not 0 < len(owner_id) <= 128:
             return

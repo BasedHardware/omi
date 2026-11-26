@@ -477,7 +477,9 @@ def durable_status(store, uid: str, job_id: str, *, poll: bool = False) -> dict 
 
 def _status_without_frame_outcomes(store, uid: str, job_id: str, *, poll: bool = False) -> dict | None:
     status = durable_status(store, uid, job_id, poll=poll)
-    result = status.get('result') if status else None
+    if not status:
+        return status
+    result = status.get('result')
     if isinstance(result, dict) and frame_outcomes.FIELD in result:
         return {**status, 'result': {key: value for key, value in result.items() if key != frame_outcomes.FIELD}}
     return status
@@ -1011,7 +1013,15 @@ async def accept_upload(
         items = []
         source_aliases = {}
 
+        # Experiment batch_frame_outcomes: the source frames each unit holds, kept for the status read.
+        frame_runs: dict[str, tuple] = {}
+
         def unit_item(unit, index):
+            item = unit_work_item(unit, index)
+            frame_runs[item.segment_id] = getattr(unit, 'coverage_runs', ())
+            return item
+
+        def unit_work_item(unit, index):
             return replace(
                 seed,
                 segment_id=hashlib.sha256(f'{content_id}:{index}'.encode()).hexdigest(),
@@ -1056,8 +1066,6 @@ async def accept_upload(
             queue, decisions = sample
         # A missing-input repair replays these exact decisions; it never probes again.
         repair_languages: dict[str, dict] = {}
-        # Experiment batch_frame_outcomes: the source frames each unit holds, kept for the status read.
-        frame_runs: dict[str, tuple] = {}
         packing = IntakePacking(upload_arguments, canonical_decode=decode is None)
         phase = 'decode'
         while unit := (
@@ -1066,8 +1074,6 @@ async def accept_upload(
             if len(items) >= 128:
                 raise ValueError('capture bundle exceeds bounded conversation-unit limit')
             item = unit_item(unit, len(items))
-            if experiment('batch_frame_outcomes', uid):
-                frame_runs[item.segment_id] = getattr(unit, 'coverage_runs', ())
             if item.source_reuse_key:
                 from utils.batch_pipeline.source_reuse_intake import stage_alias
 
@@ -1207,7 +1213,7 @@ async def accept_upload(
                 **({'release': release} if release else {}),
                 # Experiment batch_frame_outcomes: that mapping otherwise exists only inside the
                 # encrypted staged audio, which the status route cannot read. Off, nothing is added.
-                **(frame_outcomes.intake_runs(frame_runs) if experiment('batch_frame_outcomes', uid) else {}),
+                **frame_outcomes.intake_fields(uid, frame_runs),
             },
             enqueue=provider_enqueue(route, outbox, wakes) if provider else None,
             adopt=adopt,

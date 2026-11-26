@@ -17,7 +17,7 @@ gains no dependency and imports nothing of the serving role); this module is the
 
 import logging
 
-from utils.batch_pipeline.commit_wake_sender import (  # noqa: F401 -- the experiment's one public surface
+from utils.batch_pipeline.commit_wake_sender import (
     EXPERIMENT,
     FAILURE_LOG_EVERY,
     MAX_OWNERS_PER_CALL,
@@ -26,6 +26,19 @@ from utils.batch_pipeline.commit_wake_sender import (  # noqa: F401 -- the exper
     enabled,
     sender_from_env,
 )
+
+# The experiment's one public surface: the worker half is re-exported beside the serving half.
+__all__ = [
+    'EXPERIMENT',
+    'FAILURE_LOG_EVERY',
+    'MAX_OWNERS_PER_CALL',
+    'MAX_PENDING_OWNERS',
+    'CommitWakeSender',
+    'enabled',
+    'request',
+    'sender_from_env',
+    'wakes',
+]
 
 logger = logging.getLogger(__name__)
 

@@ -24,6 +24,8 @@ from database import conversations_v3_manual_cuts as cuts_db
 from utils.conversations.v3 import triggers
 from utils.conversations.v3.end_sides import ATTACH_KEY
 
+__all__ = ['ATTACH_KEY']  # Re-exported: the batch projection names the key through this module.
+
 logger = logging.getLogger(__name__)
 
 EXPERIMENT = 'end_open_conversation'

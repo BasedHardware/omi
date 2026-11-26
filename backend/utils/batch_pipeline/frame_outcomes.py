@@ -25,6 +25,7 @@ import logging
 
 from google.cloud.firestore_v1.field_path import FieldPath
 
+from config import reliability_experiments
 from utils.batch_pipeline.contracts import MAX_PROJECTION_PARTS
 from utils.batch_pipeline.held_terminal import OPERATOR_INTENTS
 from utils.batch_pipeline.repair_lineage import recorded_lineage
@@ -42,6 +43,11 @@ SETTLED_RECOVERY_STATES = (None, 'recovered')
 MAX_RUNS_BYTES = 256 * 1024
 MAX_PART_SPANS = 1024
 MAX_RANGES = 4096
+
+
+def intake_fields(uid: str, units: dict) -> dict:
+    """What an accepted upload adds to its intake row: the frame runs for an account the flag admits, else nothing."""
+    return intake_runs(units) if reliability_experiments.enabled('batch_frame_outcomes', uid) else {}
 
 
 def intake_runs(units: dict) -> dict:
@@ -197,15 +203,13 @@ def _claimed(record) -> dict:
         if not isinstance(claim, dict):
             continue
         root = claim.get('capture_root')
-        epoch, start, count = (claim.get(key) for key in ('clock_epoch', 'source_frame_start', 'frame_count'))
-        if (
-            isinstance(root, str)
-            and root
-            and all(type(value) is int for value in (epoch, start, count))
-            and epoch >= 0
-            and start >= 0
-            and count > 0
-        ):
+        epoch, start, count = claim.get('clock_epoch'), claim.get('source_frame_start'), claim.get('frame_count')
+        if not isinstance(root, str) or not root:
+            continue
+        # Whole numbers only; a bool is not a frame count.
+        if type(epoch) is not int or type(start) is not int or type(count) is not int:
+            continue
+        if epoch >= 0 and start >= 0 and count > 0:
             spans[root, epoch].append(Span(start, start + count))
     return {key: coverage_union(parts) for key, parts in spans.items()}
 

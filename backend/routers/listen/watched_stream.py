@@ -302,7 +302,7 @@ class WatchedStream:
             start = max(0.0, base + float(segment.get('start') or 0.0))
             end = max(start, base + float(segment.get('end') or 0.0))
             speaker = str(segment.get('speaker') or 'SPEAKER_00')
-            line = self.lines[-1] if self.lines else None
+            line: dict[str, Any] | None = self.lines[-1] if self.lines else None
             if (
                 line is None
                 or line['speaker'] != speaker

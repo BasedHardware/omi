@@ -1172,6 +1172,7 @@ class Projector:
                             projection_item=part,
                             require_lineage_fence=self.require_lineage_fence,
                         )
+                frame_spans: list[int] | None = None
                 if not part_payload['words']:
                     receipt = session.persist_empty()
                 else:

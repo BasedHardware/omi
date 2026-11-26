@@ -138,7 +138,7 @@ def enabled(name: str, uid: str | None = None) -> bool:
     names = selected()
     if name in names or 'all' in names:
         return True
-    if not uid or not isinstance(uid, str) or _resolver is None:
+    if not uid or _resolver is None:
         return False
     try:
         return _resolver(name, uid) is True
@@ -153,7 +153,7 @@ def any_enabled(uid: str | None, *names: str) -> bool:
 
 async def warm(uid: str | None) -> None:
     """Learn the account's rules off the event loop, so the checks that follow do not miss a first read."""
-    if uid and isinstance(uid, str) and _warmer is not None and not ('all' in selected()):
+    if uid and _warmer is not None and 'all' not in selected():
         try:
             await _warmer(uid)
         except Exception:
