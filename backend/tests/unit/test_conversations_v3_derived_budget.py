@@ -666,3 +666,12 @@ def test_previous_bounded_pending_park_gets_one_unlocked_paging_attempt(strict):
     store.mark_bounded_attempt(UID, token, firestore_client=strict)
     backoff, reason = store.backoff_state(UID, firestore_client=strict)
     assert backoff is not None and reason == 'v3_derived_budget'
+
+
+def test_park_with_indexed_unlocked_windows_spends_the_paging_attempt(strict):
+    token = leases.acquire(UID, 'builder', firestore_client=strict)
+    strict.rows[leases.lease_ref(strict, UID, 'builder').path]['unlocked_ids'] = ['owed']
+    # A builder pass that already paged the unlocked windows and still parked gets no early retry.
+    assert store.record_blocked(UID, token, 'v3_derived_budget', firestore_client=strict)
+    backoff, reason = store.backoff_state(UID, firestore_client=strict)
+    assert backoff is not None and reason == 'v3_derived_budget'

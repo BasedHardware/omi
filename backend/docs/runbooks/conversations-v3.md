@@ -265,12 +265,15 @@ closure-budget or document-size park gets an early background attempt. A closure
 starts with eight seeds and can fall back to one. A document-size park starts with one seed.
 The final commit remembers a successful smaller page on the builder lease. Before loading
 the projection, the builder can clear discarded or deleted markers within the oldest 50
-pending rows under that lease. Owner-wide unlocked-window overflows survive even at one
-seed. See the [bounded pending change note](../listen_pusher_pipeline/changes/2026-11-26-v3-bounded-pending.md)
-for the unlocked-window reconciliation follow-up.
-A new failed bounded pass records `v3_bounded_pending_attempted` on the builder lease and
-observes the usual backoff. An operator clears the park by deleting `v3_blocked_count`,
-`v3_blocked_reason`, `v3_backoff_until` and `v3_bounded_pending_attempted` on
+pending rows under that lease. A pass loads owner-wide unlocked windows one page at a time and,
+while windows remain unvisited, wakes itself a minute later with a task named by its lease token.
+A derived-budget park with indexed unlocked windows gets one more early attempt, recorded as
+`v3_unlocked_paging_attempted`. See the [bounded pending](../listen_pusher_pipeline/changes/2026-11-26-v3-bounded-pending.md)
+and [bounded unlocked](../listen_pusher_pipeline/changes/2026-11-26-v3-bounded-unlocked.md) change notes.
+A new failed bounded pass records `v3_bounded_pending_attempted` (and, with unlocked windows,
+`v3_unlocked_paging_attempted`) on the builder lease and observes the usual backoff. An operator
+clears the park by deleting `v3_blocked_count`, `v3_blocked_reason`, `v3_backoff_until`,
+`v3_bounded_pending_attempted` and `v3_unlocked_paging_attempted` on
 `users/{uid}/conversation_v3_leases/builder`.
 
 Each source has a durable `v3_pending` obligation. Tasks use the dedicated `conversations-v3`
