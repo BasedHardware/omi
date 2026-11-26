@@ -16,8 +16,8 @@ the pin trusted. Admission returns `multilingual_profile`.
   the first speech window, then the self gate on every later window. Only an all-supported upload is
   admitted, otherwise it stays on legacy multilingual STT.
 - In the record lane, a new owner goes to legacy, which runs per-file LID.
-- With legacy draining or dark, a sync upload without a batch owner enters batch as `multi`. A record-lane
-  `batch_sync_v1` owner skips admission and keeps the pin; that is open work before legacy drain (SCA-4810).
+- With legacy draining or dark, the upload enters batch as `multi`. Batch inheritance never takes such a
+  user's pin, so an existing record-lane `batch_sync_v1` owner (which skips admission) is classified per unit too.
 
 The profile is read from the user document intake already loads, so there is no new I/O.
 

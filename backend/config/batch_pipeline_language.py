@@ -92,6 +92,14 @@ def profile_speaks_unsupported(user: dict) -> bool:
     return hits >= PROFILE_MIN_SESSIONS
 
 
+def pin_untrusted(user: dict) -> bool:
+    """A multi-language user whose live speech shows a language Parakeet cannot transcribe (switch on).
+
+    For such a user a supported conversation pin is usually the app language, not evidence."""
+    single = (user.get('transcription_preferences') or {}).get('single_language_mode')
+    return not single and multilingual_profile_routing_enabled() and profile_speaks_unsupported(user)
+
+
 def batch_admission_language(user: dict, conversation: dict) -> tuple[str | None, str | None]:
     """Return the declared language or a bounded exclusion reason.
 
@@ -120,7 +128,7 @@ def batch_admission_language(user: dict, conversation: dict) -> tuple[str | None
     if not single or user_language not in known:
         if conversation_language not in parakeet:
             return None, 'unknown_multilingual_conversation'
-        if not single and multilingual_profile_routing_enabled() and profile_speaks_unsupported(user):
+        if pin_untrusted(user):
             return None, MULTILINGUAL_PROFILE
         return conversation_language, None
     return effective or user_language, None

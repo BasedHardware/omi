@@ -453,6 +453,28 @@ async def test_multilingual_profile_without_legacy_enters_batch_as_multi(monkeyp
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize('mode', ['on', 'draining', 'dark'])
+@pytest.mark.parametrize('switch, expected', [(None, 'multi'), ('false', 'en')])
+async def test_existing_batch_owner_of_a_multilingual_profile_never_inherits_the_pin(
+    monkeypatch, mode, switch, expected
+):
+    # A record-lane batch_sync_v1 owner skips admission; its units are still classified, not pinned 'en'.
+    if switch is not None:
+        monkeypatch.setenv('BATCH_MULTILINGUAL_PROFILE_ROUTING_ENABLED', switch)
+    vad = speaking(monkeypatch)
+    response, staged, probe = await upload(
+        monkeypatch,
+        user_language='en',
+        conversation_language='en',
+        mode=mode,
+        owner='batch_sync_v1',
+        profile=MANDARIN_PROFILE,
+    )
+    assert admitted(response, staged) and vad.call_count == 0
+    assert probe.call_args.args[0] == expected
+
+
+@pytest.mark.asyncio
 async def test_multilingual_profile_kill_switch_trusts_the_pin_again(monkeypatch):
     monkeypatch.setenv('BATCH_MULTILINGUAL_PROFILE_ROUTING_ENABLED', 'false')
     vad = speaking(monkeypatch)

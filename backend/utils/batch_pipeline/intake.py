@@ -22,6 +22,7 @@ from config.batch_pipeline_language import (
     admission_language_exclusion_enabled,
     admission_language_sample_enabled,
     batch_admission_language,
+    pin_untrusted,
 )
 from config.batch_pipeline_vendor_overflow import (
     legacy_capacity_fallback_enabled,
@@ -144,6 +145,16 @@ def _batch_admission(user: dict, target: dict) -> tuple[str | None, str | None]:
         return language, reason
     logger.info('event=batch_admission_language outcome=reclassified reason=%s', reason)
     return 'multi', 'unknown_multilingual_conversation'
+
+
+def _inherited_language(target: dict, user: dict) -> str | None:
+    """``inherited_language``, except a multilingual-profile user's pin is never inherited.
+
+    This covers every legacy mode and an existing ``batch_sync_v1`` owner, which skips admission: such units are
+    classified per unit as ``multi``."""
+    if pin_untrusted(user):
+        return None
+    return inherited_language(target.get('language'), user.get('language'))
 
 
 def _sampled_refusal(target: dict, user: dict, evidence, reason: str = 'unknown_multilingual_conversation') -> None:
@@ -839,7 +850,7 @@ async def accept_upload(
         prefs = user.get('transcription_preferences') or {}
         input_language = normalized_stt_language(user.get('language')) if prefs.get('single_language_mode') else 'multi'
         inherit = language_inheritance_enabled()
-        inherited = inherited_language(target.get('language'), user.get('language')) if inherit else None
+        inherited = _inherited_language(target, user) if inherit else None
         if inherited:
             language = inherited
             if language_class(inherited) == 'supported':
