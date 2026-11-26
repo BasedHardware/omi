@@ -60,25 +60,33 @@ def load_real_module(name: str, path: Path):
     return module
 
 
-_REASONS_MODULE = None
+_REAL_OBSERVABILITY_MODULES = {}
+
+
+def _real_observability_module(name: str, marker: str):
+    """Load utils/observability/<name>.py once per process and serve it under the stub package.
+
+    These submodules register Prometheus series at import (reasons: omi_reason_total; the
+    speaker_evidence_erasure counters that utils.metrics imports), and cleanup() drops
+    harness-loaded modules, so a re-exec would duplicate the series. ``marker`` is an
+    attribute only the real module defines, so a stub left in sys.modules is not reused.
+    """
+    qualified = f'utils.observability.{name}'
+    loaded = sys.modules.get(qualified)
+    if loaded is not None and hasattr(loaded, marker):
+        _REAL_OBSERVABILITY_MODULES[name] = loaded
+    module = _REAL_OBSERVABILITY_MODULES.get(name)
+    if module is None:
+        spec = importlib.util.spec_from_file_location(qualified, BACKEND_DIR / 'utils' / 'observability' / f'{name}.py')
+        module = importlib.util.module_from_spec(spec)
+        sys.modules[qualified] = module
+        spec.loader.exec_module(module)
+        _REAL_OBSERVABILITY_MODULES[name] = module
+    return module
 
 
 def _real_reasons_module():
-    """Load utils/observability/reasons.py once per process: it registers omi_reason_total, and
-    cleanup() drops harness-loaded modules, so a re-exec would duplicate the Prometheus series."""
-    global _REASONS_MODULE
-    loaded = sys.modules.get('utils.observability.reasons')
-    if loaded is not None and hasattr(loaded, 'LiveSttReason'):
-        _REASONS_MODULE = loaded
-    if _REASONS_MODULE is None:
-        spec = importlib.util.spec_from_file_location(
-            'utils.observability.reasons', BACKEND_DIR / 'utils' / 'observability' / 'reasons.py'
-        )
-        module = importlib.util.module_from_spec(spec)
-        sys.modules['utils.observability.reasons'] = module
-        spec.loader.exec_module(module)
-        _REASONS_MODULE = module
-    return _REASONS_MODULE
+    return _real_observability_module('reasons', 'LiveSttReason')
 
 
 def cleanup(saved):
@@ -194,8 +202,6 @@ def wire_common_stubs(install) -> SimpleNamespace:
     sanitizer = install('utils.log_sanitizer', ModuleType('utils.log_sanitizer'))
     sanitizer.sanitize_pii = lambda value: value
     observability = install('utils.observability', ModuleType('utils.observability'))
-    # Preserve submodule imports through the stub package (utils.metrics eagerly loads them).
-    observability.__path__ = [str(BACKEND_DIR / 'utils' / 'observability')]
     observability.submit_langsmith_feedback = MagicMock()
     # routers.chat imports utils.observability.fallback as a submodule; keep it
     # stubbed here so suites that only load the router do not require the real package.
@@ -208,6 +214,12 @@ def wire_common_stubs(install) -> SimpleNamespace:
     reasons = _real_reasons_module()
     sys.modules['utils.observability.reasons'] = reasons
     observability.reasons = reasons
+    # routers.chat -> utils.stt.provider_resilience -> utils.metrics imports the
+    # speaker_evidence_erasure counters from utils.observability; the bare stub package has
+    # no __path__, so serve the real module (once per process) the same way.
+    evidence_erasure = _real_observability_module('speaker_evidence_erasure', 'SWEEP_STARTED')
+    sys.modules['utils.observability.speaker_evidence_erasure'] = evidence_erasure
+    observability.speaker_evidence_erasure = evidence_erasure
 
     journey_observability = install('utils.observability.journeys', ModuleType('utils.observability.journeys'))
 
