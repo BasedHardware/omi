@@ -54,7 +54,7 @@ def _chunk_refs(ref, parent):
 
 
 def read_conversation_payload(
-    client, transaction, snapshot, *, read_budget=None, field_paths=None, max_wire_bytes=None
+    client, transaction, snapshot, *, read_budget=None, field_paths=None, max_wire_bytes=None, reserve_chunks=None
 ):
     """Hydrate prepared values from the same authorized transaction snapshot."""
     parent = snapshot.to_dict()
@@ -67,6 +67,8 @@ def read_conversation_payload(
     if read_budget is not None and len(refs) > read_budget.remaining_documents:
         read_budget.mark_exhausted('documents')
         raise ListReadBudgetExhausted('documents')
+    if reserve_chunks is not None:
+        reserve_chunks(len(refs), payload_descriptor(parent[PAYLOAD_FIELD])[1])
     # BatchGet does not guarantee request order.
     chunks = {
         chunk.reference.id: (chunk.to_dict() or {}).get('data')

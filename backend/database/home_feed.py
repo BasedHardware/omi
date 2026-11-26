@@ -22,6 +22,8 @@ from prometheus_client import Counter, Histogram
 from database._client import get_firestore_client, run_transactional
 from database import conversations
 from database.account_deletion_policy import account_deletion_marker_blocks_access
+from database.conversation_payload import read_conversation_payload
+from utils.conversation_payload import PAYLOAD_FIELD, ConversationProjectionTooLarge, InvalidConversationPayload
 from utils.conversations import transcribing_hold
 from utils.conversations.fragment_visibility import SETTLING_FIELDS, is_relevance_discarded
 from utils.conversations.home_titles import SUMMARY_DEBT_FIELDS, display_title
@@ -70,6 +72,8 @@ CONVERSATION_FIELDS = [
     'finished_at',
     'status',
     'structured',
+    PAYLOAD_FIELD,
+    'data_protection_level',
     'user_title',
     'starred',
     'is_locked',
@@ -167,7 +171,7 @@ def _control(user):
     return user.collection('episode_links').document(CONTROL)
 
 
-def _visible(row, *, episode_member=False):
+def _eligible_by_metadata(row, *, episode_member=False):
     if (
         not row
         or row.get('recording')
@@ -186,10 +190,15 @@ def _visible(row, *, episode_member=False):
         return conversations.is_visible_conversation(visibility) and not (
             home_hide_below_floor_rows_enabled() and is_completed_below_floor(row)
         )
-    return conversations.is_visible_conversation(row, presentation=True) and home_step.classify(row) not in {
-        home_step.NOISE,
-        home_step.FAILED,
-    }
+    return conversations.is_visible_conversation(row, presentation=True)
+
+
+def _visible(row, *, episode_member=False):
+    return _eligible_by_metadata(row, episode_member=episode_member) and (
+        bool(row.get('v3_derived'))
+        or episode_member
+        or home_step.classify(row) not in {home_step.NOISE, home_step.FAILED}
+    )
 
 
 def _retained(episode):
@@ -261,9 +270,10 @@ def prepare(uid: str, *, firestore_client: Any = None) -> dict[str, Any]:
 
     At most 50 requested source/receipt candidates, 40 member snapshots, 400 requested document reads
     and 400 derived writes. Stop at a 2 MiB processed-JSON target, allowing a
-    final selected document after a 3 MiB pre-read ceiling. JSON expansion
-    means this is not a wire-byte bound. An 8 MiB protobuf guard bounds the
-    staged Commit. Unconsumed work remains in content-free dirty receipts.
+    final selected document after a 3 MiB pre-read ceiling. Chunk reads
+    reserve their document count and encoded payload size within a 4 MiB
+    combined allowance. An 8 MiB protobuf guard bounds the staged Commit.
+    Unconsumed work remains in content-free dirty receipts or member cursors.
     """
     client = firestore_client if firestore_client is not None else get_firestore_client()
     user = _user(client, uid)
@@ -282,6 +292,37 @@ def prepare(uid: str, *, firestore_client: Any = None) -> dict[str, Any]:
 
         def available(reserve=1):
             return counts['requested'] + reserve <= MAX_PREPARE_READS and counts['bytes'] < hard_bytes - 1024 * 1024
+
+        def reserve_chunks(documents, size):
+            if counts['requested'] + documents > MAX_PREPARE_READS or counts['bytes'] + size > hard_bytes:
+                raise PreparationTooLarge('home_feed_prepare_payload_budget')
+            counts['requested'] += documents
+            counts['reads'] += documents
+            counts['bytes'] += size
+            WORK.labels(kind='requested_read_upper_bound').inc(documents)
+            WORK.labels(kind='payload_chunk_read').inc(documents)
+
+        def load_notes(doc, row, *, episode_member=False):
+            if (
+                PAYLOAD_FIELD not in row
+                or 'structured' in row
+                or row.get('is_locked')
+                or row.get('data_protection_level') == 'private'
+                or row.get('home_content_invalidated')
+                or not _eligible_by_metadata(row, episode_member=episode_member)
+            ):
+                return True
+            try:
+                hydrated = read_conversation_payload(
+                    client, tx, doc, field_paths=['structured'], reserve_chunks=reserve_chunks
+                )
+            except PreparationTooLarge:
+                return False
+            except (InvalidConversationPayload, ConversationProjectionTooLarge) as error:
+                raise PreparationRequired('home_feed_payload_unavailable') from error
+            if 'structured' in hydrated:
+                row['structured'] = hydrated['structured']
+            return True
 
         def get(ref, fields=None, kind='metadata_read'):
             if not available():
@@ -363,7 +404,7 @@ def prepare(uid: str, *, firestore_client: Any = None) -> dict[str, Any]:
                     PREPARE_LIMIT - receipt_limit,
                 )
                 pending.extend(('episodes', doc) for doc in dirty_episodes)
-        rows, episodes_to_build, receipt_updates = {}, {}, {}
+        rows, source_snapshots, episodes_to_build, receipt_updates = {}, {}, {}, {}
         processed = []
         for kind, doc in pending:
             raw = doc.to_dict() or {}
@@ -377,6 +418,7 @@ def prepare(uid: str, *, firestore_client: Any = None) -> dict[str, Any]:
                     row['_home_snapshot_updated_at'] = getattr(source, 'update_time', None)
                     row['created_at'] = utc(row.get('created_at')) or getattr(source, 'create_time', None)
                     rows[cid] = row
+                    source_snapshots[cid] = source
                 if raw.get('episode_id'):
                     episodes_to_build[raw['episode_id']] = None
                     invalidated_episodes.add(raw['episode_id'])
@@ -386,6 +428,7 @@ def prepare(uid: str, *, firestore_client: Any = None) -> dict[str, Any]:
                 row['_home_snapshot_updated_at'] = getattr(doc, 'update_time', None)
                 row['created_at'] = utc(row.get('created_at')) or getattr(doc, 'create_time', None)
                 rows[doc.id] = row
+                source_snapshots[doc.id] = doc
             else:
                 episodes_to_build[doc.id] = doc
             processed.append((kind, doc))
@@ -400,10 +443,15 @@ def prepare(uid: str, *, firestore_client: Any = None) -> dict[str, Any]:
                 continue
             if not available(2):
                 receipt_updates[cid] = True
+                rows.pop(cid)
                 continue
             if get(user.collection('deleted_conversations').document(cid), []).exists:
                 row['_home_deleted'] = True
             link = get(user.collection('episode_links').document(cid), ['episode_id']).to_dict() or {}
+            if not load_notes(source_snapshots[cid], row):
+                receipt_updates[cid] = True
+                rows.pop(cid)
+                continue
             eid = link.get('episode_id') or row.get('episode_id')
             if eid:
                 episodes_to_build[eid] = episodes_to_build.get(eid)
@@ -482,6 +530,8 @@ def prepare(uid: str, *, firestore_client: Any = None) -> dict[str, Any]:
                         raw['_home_deleted'] = True
                     owner = link.get('episode_id') or raw.get('episode_id') or raw.get('home_compat_owner')
                     belongs = owner in {None, eid}
+                    if belongs and not load_notes(member, raw, episode_member=True):
+                        break
                     visible = belongs and _visible(raw, episode_member=True)
                     projection = _conversation_projection(uid, raw)
                     if belongs:
