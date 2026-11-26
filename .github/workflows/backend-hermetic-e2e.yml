@@ -390,9 +390,16 @@ jobs:
   # capture -> Finish -> Home scenarios on a local Firestore emulator and Redis, STT from committed
   # cassettes (--stt replay), LLM answers from the lab's fake gateway; no secrets, no network peers
   # beyond loopback.
-  # Runs on every pull request and merge-queue run and always reports: without a backend change it
-  # succeeds at once with a "skipped" summary. The run directory is uploaded so anyone can download
-  # it and open `python -m testing.pipeline_lab scenario view DIR` locally.
+  # Runs on every pull request and merge-queue run and always reports, failing closed:
+  # - it skips the scenarios only when the scope job succeeded and said exactly applies=false (no change
+  #   under backend/, package.json, package-lock.json or this workflow); the summary and a notice say so
+  #   ("not run", never "passed"). A failed, cancelled or skipped scope job, or an empty or unexpected
+  #   output, runs the full suite and warns.
+  # - a run passes only when every committed scenario (every scenario/scenarios/*.json, found at run
+  #   time, so a new file is covered without editing this job) ran twice and evaluated its checks
+  #   (`scenario summary --require-committed`); a run that executed nothing is a failure.
+  # The run directory is uploaded so anyone can download it and open
+  # `python -m testing.pipeline_lab scenario view DIR` locally.
   pipeline-lab-scenarios:
     name: Pipeline Lab Scenarios
     runs-on: ubuntu-latest
@@ -419,15 +426,20 @@ jobs:
           SCOPE_RESULT: ${{ needs.scope.result }}
           SCOPE_APPLIES: ${{ needs.scope.outputs.applies }}
         run: |
-          if [[ "$SCOPE_RESULT" != 'success' ]]; then
-            echo "Hermetic backend scope failed with result: $SCOPE_RESULT" >&2
-            exit 1
-          fi
-          if [[ "$SCOPE_APPLIES" == 'true' ]]; then
+          # Fail closed: only a successful scope that answered exactly "false" skips the scenarios.
+          if [[ "$SCOPE_RESULT" == 'success' && "$SCOPE_APPLIES" == 'false' ]]; then
+            reason='no change under backend/, package.json, package-lock.json or this workflow'
+            echo "run=false" >> "$GITHUB_OUTPUT"
+            echo "::notice title=Pipeline lab scenarios not run::${reason}; no scenario executed."
+            echo "**Pipeline lab scenarios: not run** (${reason}). No scenario executed; this is not a pass." \
+              >> "$GITHUB_STEP_SUMMARY"
+          elif [[ "$SCOPE_RESULT" == 'success' && "$SCOPE_APPLIES" == 'true' ]]; then
             echo "run=true" >> "$GITHUB_OUTPUT"
           else
-            echo "run=false" >> "$GITHUB_OUTPUT"
-            echo "Pipeline lab scenarios skipped: no backend change." >> "$GITHUB_STEP_SUMMARY"
+            note="Hermetic scope result '${SCOPE_RESULT}', applies '${SCOPE_APPLIES}': running the full suite."
+            echo "run=true" >> "$GITHUB_OUTPUT"
+            echo "::warning title=Pipeline lab scope unknown::${note}"
+            echo "**Pipeline lab scope unknown.** ${note}" >> "$GITHUB_STEP_SUMMARY"
           fi
 
       - name: Checkout code
@@ -505,13 +517,20 @@ jobs:
           code=$?
           set -e
           echo "code=$code" >> "$GITHUB_OUTPUT"
+          coverage=1
           if [[ -f "$RUN_DIR/verdict.json" ]]; then
-            .venv/bin/python -m testing.pipeline_lab scenario summary "$RUN_DIR" >> "$GITHUB_STEP_SUMMARY"
+            # Exit 1 unless every committed scenario ran x2 and evaluated its checks (no silent green).
+            set +e
+            .venv/bin/python -m testing.pipeline_lab scenario summary "$RUN_DIR" --require-committed --repeat 2 \
+              >> "$GITHUB_STEP_SUMMARY"
+            coverage=$?
+            set -e
             echo "Download the pipeline-lab-scenarios artifact and run \`scenario view\` on it." >> "$GITHUB_STEP_SUMMARY"
           else
             echo "**Pipeline lab scenarios: no verdict** (exit $code)" >> "$GITHUB_STEP_SUMMARY"
             cat "$RUNNER_TEMP/pipeline-lab-verdict.json" >> "$GITHUB_STEP_SUMMARY" || true
           fi
+          echo "coverage=$coverage" >> "$GITHUB_OUTPUT"
 
       - name: Upload the scenario run directory
         if: ${{ !cancelled() && steps.applies.outputs.run == 'true' }}
@@ -522,13 +541,32 @@ jobs:
           retention-days: 14
           if-no-files-found: warn
 
+      # Always runs (unless cancelled) and is the job's verdict: a skip passes only when decided above;
+      # a run passes only with exit 0 and full coverage; anything else (setup failed before a verdict, a
+      # missing output) fails.
       - name: Report the scenario verdict
-        if: steps.applies.outputs.run == 'true'
+        if: ${{ !cancelled() }}
         env:
+          RUN: ${{ steps.applies.outputs.run }}
           CODE: ${{ steps.scenarios.outputs.code }}
+          COVERAGE: ${{ steps.scenarios.outputs.coverage }}
         run: |
+          if [[ "$RUN" == 'false' ]]; then
+            echo "Pipeline lab scenarios not run: no change in scope (see the notice)."
+            exit 0
+          fi
+          if [[ "$RUN" != 'true' || -z "$CODE" ]]; then
+            echo "Pipeline lab scenarios gave no verdict (run '$RUN', exit '$CODE'): a step before them failed." >&2
+            echo "**Pipeline lab scenarios: no verdict** (a setup step failed before the scenarios ran)." \
+              >> "$GITHUB_STEP_SUMMARY"
+            exit 1
+          fi
           if [[ "$CODE" != '0' ]]; then
             echo "Pipeline lab scenarios did not pass (exit $CODE); see the job summary and the artifact." >&2
+            exit 1
+          fi
+          if [[ "$COVERAGE" != '0' ]]; then
+            echo "Pipeline lab scenarios did not cover every committed scenario; see the job summary." >&2
             exit 1
           fi
 
