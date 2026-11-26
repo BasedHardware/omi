@@ -256,6 +256,7 @@ def test_tick_clock_is_the_negative_control(tmp_path, product):
 # ---- the CLI day, fake engine, twice -----------------------------------------------------
 
 
+@pytest.mark.slow  # replays a whole synthetic day twice; near the fast-unit CPU limit
 def test_synthetic_day_replayed_twice_gives_identical_semantic_artifacts(tmp_path, monkeypatch, capsys):
     root = tmp_path / 'store'
     monkeypatch.setenv('OMI_PIPELINE_LAB_ROOT', str(root))

@@ -51,6 +51,7 @@ def caches(body):
     return {stage: body['stages'][stage]['report']['cache'] for stage in STAGES}
 
 
+@pytest.mark.slow  # whole lab pipeline runs; over the fast-unit CPU limit on CI runners
 def test_unchanged_rerun_is_all_cache_hits_and_says_so(lab, capsys):
     cold = run(capsys, lab)
     assert caches(cold) == dict.fromkeys(STAGES, 'miss')
@@ -85,6 +86,7 @@ def test_unchanged_rerun_is_all_cache_hits_and_says_so(lab, capsys):
     assert stored['stage_report']['all_cached'] and stored['stages']['tasks']['report']['cache'] == 'hit'
 
 
+@pytest.mark.slow  # whole lab pipeline runs; over the fast-unit CPU limit on CI runners
 def test_text_mode_prints_the_stage_table(lab, capsys):
     argv = ['run', '--day', DAY, '--ref', 'HEAD', '--in-place', '--engine', 'fake', '--llm-upstream', lab['up'].url]
     capsys.readouterr()
@@ -104,6 +106,7 @@ def test_text_mode_prints_the_stage_table(lab, capsys):
     assert capsys.readouterr().err.startswith('stage cache: all 12 stages served from the cache')
 
 
+@pytest.mark.slow  # whole lab pipeline runs; over the fast-unit CPU limit on CI runners
 def test_changed_chain_input_reruns_chain_only(lab, capsys):
     run(capsys, lab)
     raw = lab['root'] / 'corpus' / DAY / 'baseline' / 'raw_conversations.jsonl'
@@ -119,6 +122,7 @@ def test_changed_chain_input_reruns_chain_only(lab, capsys):
     assert notes['llm_calls'] == 3 and notes['llm_upstream'] == 1 and notes['llm_proxy_cache'] == 2
 
 
+@pytest.mark.slow  # whole lab pipeline runs; over the fast-unit CPU limit on CI runners
 def test_changed_stt_selection_reruns_transcribe_and_downstream_not_ingest(lab, capsys):
     run(capsys, lab)
     overlay = lab['tmp'] / 'overlay.json'
@@ -128,6 +132,7 @@ def test_changed_stt_selection_reruns_transcribe_and_downstream_not_ingest(lab, 
     assert caches(after) == {'ingest': 'hit', **{s: 'miss' for s in STAGES[1:]}}
 
 
+@pytest.mark.slow  # whole lab pipeline runs; over the fast-unit CPU limit on CI runners
 def test_from_stage_inside_the_chain_unit_reruns_the_unit_and_serves_upstream(lab, capsys):
     run(capsys, lab)
     again = run(capsys, lab, '--from-stage', 'goals')
@@ -139,12 +144,14 @@ def test_from_stage_inside_the_chain_unit_reruns_the_unit_and_serves_upstream(la
     assert report['llm_calls'] > 0 and report['llm_upstream'] == 0 and report['llm_proxy_cache'] == report['llm_calls']
 
 
+@pytest.mark.slow  # whole lab pipeline runs; over the fast-unit CPU limit on CI runners
 def test_partial_unit_selection_is_not_cached(lab, capsys):
     body = run(capsys, lab, '--stages', 'discard,notes')
     assert {s: body['stages'][s]['report']['cache'] for s in ('discard', 'notes')} == {'discard': 'off', 'notes': 'off'}
     assert any('only partly selected' in w for w in body['warnings'])
 
 
+@pytest.mark.slow  # whole lab pipeline runs; over the fast-unit CPU limit on CI runners
 def test_no_cache_flag_runs_everything(lab, capsys):
     run(capsys, lab)
     body = run(capsys, lab, '--no-cache')
@@ -288,6 +295,7 @@ def test_chain_call_attribution_by_feature_then_tag():
     assert attribute_call({'feature': 'something_new'}) is None  # the executing stage keeps it
 
 
+@pytest.mark.slow  # whole lab pipeline runs; over the fast-unit CPU limit on CI runners
 def test_refresh_mode_reruns_and_failed_chain_results_are_not_stored(lab, capsys):
     from testing.pipeline_lab.chain.plugin import ChainStage
 
