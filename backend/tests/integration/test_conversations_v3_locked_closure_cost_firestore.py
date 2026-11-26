@@ -213,7 +213,7 @@ def outline_entries(group, every):
     )
 
 
-async def one_pass(client, user, *, outline_every, slow_commit=0.0):
+async def one_pass(client, user, *, outline_every, after_batch=None):
     """One reconcile (no inline follow-up pass), with its reads, writes, transactions and phase timings."""
     paths, commits, rollbacks, phases, outline_calls = [], [], [], Counter(), []
     reads_at = {}
@@ -230,9 +230,10 @@ async def one_pass(client, user, *, outline_every, slow_commit=0.0):
     def commit(*args, **kwargs):
         request = kwargs.get('request') or {}
         commits.append(bool(request.get('transaction')))
-        if slow_commit and phases['in_commit']:
-            time.sleep(slow_commit)
-        return original_commit(*args, **kwargs)
+        result = original_commit(*args, **kwargs)
+        if after_batch and phases['in_commit'] and len(request.get('writes') or ()) > 1:
+            after_batch()  # projection batches only; a lease renewal writes one document
+        return result
 
     def rollback(*args, **kwargs):
         rollbacks.append(1)
@@ -441,43 +442,59 @@ async def test_kill_switch_keeps_the_heavy_owner_parked(owner, monkeypatch, swit
     assert user.collection('conversations').document('heavy').get().to_dict()['v3_pending'] is True
 
 
+class _Clock(datetime):
+    """The commit's clock: real time plus an offset the fixture advances after every projection batch."""
+
+    offset = timedelta(0)
+
+    @classmethod
+    def now(cls, tz=None):
+        return datetime.now(tz) + cls.offset
+
+
 @pytest.mark.asyncio
 @pytest.mark.parametrize('renewed', [True, False], ids=['renewed_per_batch', 'control_without_renewal'])
 async def test_a_commit_with_more_batches_than_measured_outlives_its_lease_by_renewing(owner, monkeypatch, renewed):
     """A 6-batch commit takes longer than the lease. Per-batch renewal keeps it, and without renewal the lease is lost.
 
-    The lease is shortened to 5 s at commit, and every commit RPC during the commit is slowed by 1 s.
+    The lease and commit clocks advance 200 s after every projection batch, against the real 240 s lease. Without
+    renewal, the third batch must see the lease as expired. No wall-clock margin is involved, so a slow host or a
+    contention retry cannot change the outcome.
     """
     client, user = owner
     rows, sources = seed(user, tail=3, eligible=False, **SIX_BATCHES)
     real_commit, real_renew = store.commit_projection, leases.renew
+    _Clock.offset = timedelta(0)
 
-    def short_lease_commit(uid, token, *args, **kwargs):
-        monkeypatch.setattr(leases, 'LEASE_SECONDS', 5)
-        real_renew(uid, 'builder', token)
+    def advance():
+        _Clock.offset += timedelta(seconds=200)
+
+    def clocked_commit(uid, token, *args, **kwargs):
+        monkeypatch.setattr(store, 'datetime', _Clock)
+        monkeypatch.setattr(leases, 'datetime', _Clock)
         if not renewed:
             monkeypatch.setattr(leases, 'renew', lambda *a, **k: None)
         try:
             return real_commit(uid, token, *args, **kwargs)
         finally:
-            monkeypatch.setattr(leases, 'LEASE_SECONDS', 240)
+            monkeypatch.setattr(store, 'datetime', datetime)
+            monkeypatch.setattr(leases, 'datetime', datetime)
             monkeypatch.setattr(leases, 'renew', real_renew)
 
-    monkeypatch.setattr(store, 'commit_projection', short_lease_commit)
-    result = await one_pass(client, user, outline_every=0, slow_commit=1.0)
+    monkeypatch.setattr(store, 'commit_projection', clocked_commit)
+    result = await one_pass(client, user, outline_every=0, after_batch=advance)
+    label = f'six_batches_{"renewed" if renewed else "control"}'
     _report(
-        'rows_2276_sources_17',
-        'serving_timing',
-        f'six_batches_{"renewed" if renewed else "control"}',
-        {'closure_rows': rows, 'closure_sources': sources, **result},
+        'rows_2276_sources_17', 'serving_timing', label, {'closure_rows': rows, 'closure_sources': sources, **result}
     )
     heavy = user.collection('conversations').document('heavy').get().to_dict()
     if renewed:
         assert result['result'] == 'committed'
-        assert result['transactions_commit'] > 5 + 5  # six batches plus a renewal before each later one
+        assert result['transactions_commit'] == 6 + 5  # six batches plus a renewal before each later one
         assert heavy['v3_pending'] is False
     else:
-        assert result['result'] == 'raced'  # lease_lost after writing a prefix; pending stays owed
+        assert result['result'] == 'raced'  # lease_lost after a two-batch prefix; pending stays owed
+        assert result['transactions_commit'] == 2
         assert heavy['v3_pending'] is True
 
 
