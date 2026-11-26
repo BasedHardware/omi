@@ -177,15 +177,16 @@ def stored_word_labels(words: list[dict], segments: list[dict]) -> list[Optional
     import difflib
     import re
 
-    pattern = re.compile(r"[a-z0-9]+(?:'[a-z0-9]+)?")
+    # Unicode word characters, casefolded: owner conversations in any script must align.
+    pattern = re.compile(r"\w+(?:'\w+)?")
     stored_tokens, stored_owner = [], []
     for index, segment in enumerate(segments):
-        for token in pattern.findall((segment.get('text') or '').lower()):
+        for token in pattern.findall((segment.get('text') or '').casefold()):
             stored_tokens.append(token)
             stored_owner.append(index)
     word_tokens, word_owner = [], []
     for index, word in enumerate(words):
-        for token in pattern.findall((word.get('text') or '').lower()):
+        for token in pattern.findall((word.get('text') or '').casefold()):
             word_tokens.append(token)
             word_owner.append(index)
     labels: list[Optional[int]] = [None] * len(words)

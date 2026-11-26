@@ -156,3 +156,12 @@ def test_recorded_cassette_carries_the_windowing_in_source_detail(tmp_path, mix)
     from testing.pipeline_lab.cassette.format import Cassette
 
     assert Cassette.from_json(stored).source_detail == detail
+
+
+def test_padded_speech_windows_never_overlap_near_the_packing_limit():
+    from testing.pipeline_lab.cassette.local_parakeet import speech_windows
+
+    spans = [{'start': 0.0, 'end': 29.696}, {'start': 29.824, 'end': 31.008}]
+    windows = speech_windows(b'\0\0' * 16000 * 32, segments=lambda pcm: spans)
+    assert all(a[1] <= b[0] for a, b in zip(windows, windows[1:])), windows
+    assert windows[0][0] == 0.0 and windows[-1][1] >= 31.008

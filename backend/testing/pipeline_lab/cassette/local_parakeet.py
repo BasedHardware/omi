@@ -177,6 +177,11 @@ def speech_windows(
     windows: list[list[float]] = []
     for span in segments(pcm16):
         start, end = max(0.0, span['start'] - pad), min(duration, span['end'] + pad)
+        if windows:
+            # Windows never overlap: a word in shared padding would be transcribed by both and recorded twice.
+            start = max(start, windows[-1][1])
+            if end <= start:
+                continue
         if windows and start - windows[-1][1] <= join_gap and end - windows[-1][0] <= max_seconds:
             windows[-1][1] = end
             continue

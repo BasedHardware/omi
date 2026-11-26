@@ -119,3 +119,11 @@ def test_silver_places_manual_corrections_by_text_not_by_the_stored_clock():
     }
     conversation = Conversation(key='k', path=None, production=production)
     assert silver.manual_overrides(conversation, words, labels) == {'B': 'user'}
+
+
+def test_stored_labels_align_in_non_latin_scripts():
+    words = _words('привет как дела 你好 世界')
+    segments = [{'text': 'Привет как дела', 'is_user': True, 'speaker_id': 0}, {'text': '你好 世界', 'speaker_id': 1}]
+    turns = bench.stored_turns(words, segments)
+    assert [t['is_user'] for t in turns] == [True, False]
+    assert bench.owned_words(words, segments) == {0, 1, 2, 3, 4}
