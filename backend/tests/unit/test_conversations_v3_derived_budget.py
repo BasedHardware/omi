@@ -703,14 +703,16 @@ async def test_reconcile_wakes_unvisited_unlocked_windows_once_per_pass(builder,
     monkeypatch.setenv('CONVERSATIONS_V3_LOCK_SECONDS', '3600')
     recordings['r'].update(recording=True, status='completed', v3_pending=True)
     pages, wakes = [], []
+    omitted = {'fingerprint': 'later-outline', 'entries': [], 'preview_key': '0:later'}
 
     def load(*a, unlocked_page=None, **kw):
         unlocked_page.remaining, unlocked_page.cursor = frozenset({'later'}), 'early'
         pages.append(unlocked_page)
-        return recordings, existing, []
+        return recordings, existing, [omitted]
 
     def commit(*a, unlocked_page=None, **kw):
         assert unlocked_page is pages[0]  # The page's cursor reaches the lease write.
+        assert omitted in a[5]  # The unvisited window's paid outline survives the cache rewrite.
         if outlasts_wake:  # This pass's own wake ran (busy) under the lease.
             late = datetime.now(timezone.utc) + timedelta(minutes=2)
             monkeypatch.setattr(

@@ -288,6 +288,11 @@ async def _load_live_batch(uid, token, parked, unlocked_page=None):
     raise AssertionError('bounded pending batch sizes are empty')
 
 
+def _keeps_unselected_outlines(custom_timing, on_open, page):
+    """A partial pass keeps the cached outlines of groups it did not select, including unvisited unlocked windows."""
+    return bool(custom_timing and on_open) or bool(page is not None and page.remaining)
+
+
 async def _wake_unvisited_unlocked(uid, page, token, scheduled_at=None):
     now = datetime.now(timezone.utc)
     if page is not None and page.remaining and (scheduled_at is None or scheduled_at <= now):
@@ -559,7 +564,7 @@ async def reconcile(
                     preview_fields = {'preview_key': preview_key, 'anchors': outline.preview_anchors(group, entries)}
                 cache.append({'fingerprint': fingerprint, 'entries': entries, **preview_fields})
 
-        if custom_timing and on_open:
+        if _keeps_unselected_outlines(custom_timing, on_open, unlocked_page):
             replaced = {row['fingerprint'] for row in cache}
             replaced_previews = scoped_preview_keys | consumed_previews
             cache = [
