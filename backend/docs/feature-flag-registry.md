@@ -456,6 +456,7 @@ and an explicit empty literal renders as `''`.
 | `CONVERSATIONS_V3_RECONCILE_RETRY_RESPONSE` | Default on; return HTTP 409 for exhausted Firestore contention or expiry and fenced v3 reconcile processing races. | backend | env | open | — | — | — | — | keep | keep | — | Goal: Pipeline |
 | `CONVERSATIONS_V3_SKIP_UNCHANGED_WRITES` | Default on; skip unchanged conversations v3 projection and repeated pending writes using existing Firestore snapshots. | backend | env | open | — | — | — | — | keep | keep | — | Goal: Margin |
 | `CONVERSATIONS_V3_STRETCH_COHESION` | Default on; normalize outline speaker labels and fold short topics within each hard-bounded v3 stretch | backend | env | open | — | — | — | — | keep | keep | — | v3-rollout coordinator |
+| `CONVERSATIONS_V3_TRANSCRIPT_SIZE_CAP` | Default on; split unpublished v3 windows at a deterministic inline transcript size budget. | backend | env | open | — | — | — | — | keep | keep | — | Goal: Pipeline |
 | `CONVERSATION_BATCH_PURGE_COALESCING_ENABLED` | Default on; one resumable owner scan for a sealed group of fresh conversation deletion obligations; false/off/0/no restores legacy per-conversation execution | backend | env | open | — | — | — | — | keep | keep | — | batch-custody / lead2 |
 | `CONVERSATION_KNOWN_SPELLINGS` | Default-on grounded spelling hints from Dream vocabulary and active People for conversation summaries, action items and memories; false disables hints and source reads; bounded to 60 terms and 1500 characters | backend | env | open | — | — | — | — | keep | keep | — | auditfix |
 | `CONVERSATION_LLM_INPUT_DEDUPE_ENABLED` | Reuse notes and L1 for exact successful effective inputs; default on everywhere since 2026-11-01 (prod env entries removed as redundant); explicit false is the kill switch | backend | env | open | — | — | — | — | keep | keep | — | auditfix |
@@ -1326,6 +1327,7 @@ their code default (`fail` tells you which way a missing value resolves).
 - `CONVERSATIONS_V3_STRETCH_COHESION` — Default on; normalize outline speaker labels and fold short topics within each hard-bounded v3 stretch (fail: open)
 - `CONVERSATIONS_V3_TASKS_QUEUE` — Optional dedicated named-task queue; defaults to the conversations-v3 queue (fail: closed)
 - `CONVERSATIONS_V3_TASKS_URL` — Optional dedicated builder origin; otherwise uses the configured sync task origin and identity (fail: closed)
+- `CONVERSATIONS_V3_TRANSCRIPT_SIZE_CAP` — Default on; split unpublished v3 windows at a deterministic inline transcript size budget. (fail: open)
 - `CONVERSATIONS_V3_UID_ALLOWLIST` — Named qualification owners through the rollout-cohort resolver; not the production percentage ramp (fail: closed)
 - `CONVERSATION_BATCH_PURGE_COALESCING_ENABLED` — Default on; one resumable owner scan for a sealed group of fresh conversation deletion obligations; false/off/0/no restores legacy per-conversation execution (fail: open)
 - `CONVERSATION_KNOWN_SPELLINGS` — Default-on grounded spelling hints from Dream vocabulary and active People for conversation summaries, action items and memories; false disables hints and source reads; bounded to 60 terms and 1500 characters (fail: open)

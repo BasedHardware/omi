@@ -1,9 +1,13 @@
-"""Pure boundary and late-speech policy. No switch reads and no IO."""
+"""Boundary and late-speech policy for derived conversations."""
 
+from config.conversations_v3 import transcript_size_cap_enabled
 from utils.conversations.v3.live import FINISH_RECORDING_FIELD, FINISH_WINDOW_FIELD
 from utils.conversations.v3 import policy, visibility
 from utils.conversations.v3.outline import SILENCE, playback_origin, sitdown as is_sitdown
 from utils.conversations.v3.word_floor import text_word_count
+
+import json
+import logging
 
 from collections.abc import Iterator
 from copy import deepcopy
@@ -14,6 +18,15 @@ from itertools import groupby
 from typing import Any
 
 CAP = timedelta(hours=2)
+TRANSCRIPT_BUDGET = 900 * 1024
+logger = logging.getLogger(__name__)
+
+
+def _transcript_bytes(line):
+    # The write codec compresses JSON and may hex-encode and base64-encrypt
+    # it (8/3 expansion). Budget without assuming any compression savings.
+    segment = {**line['segment'], 'start': 0.0, 'end': 0.0}
+    return 3 * (len(json.dumps(segment)) + 64)
 
 
 def word_count(lines):
@@ -29,7 +42,7 @@ def late_rewrite(*, previous_words, new_words, ended_at, now, rewrites):
     )
 
 
-def _capped(lines, sections=(), ownership=None):
+def _capped(lines, sections=(), ownership=None, *, size_cap=False):
     """Cut a stretch over two hours after the longest prefix that ends within two hours of its start; repeat.
 
     Every part but the last locks. A cut that moved with later speech (the old middle cut) or with the
@@ -45,25 +58,39 @@ def _capped(lines, sections=(), ownership=None):
     stretch's lines never cuts it.
     """
     parts, offset = [], 0
-    while max(line['end'] for line in lines[offset:]) - lines[offset]['start'] > CAP:
+    sizes = list(map(_transcript_bytes, lines)) if size_cap else []
+    remaining = sum(sizes)
+    while remaining > TRANSCRIPT_BUDGET or max(line['end'] for line in lines[offset:]) - lines[offset]['start'] > CAP:
         cut = ownership.locked_run_end(lines, offset) if ownership is not None else None
         if cut is not None:
             if cut == len(lines):
                 break  # the locked row owns the rest
             parts.append(lines[offset:cut])
+            if size_cap:
+                remaining -= sum(sizes[offset:cut])
             offset = cut
             continue
         # The longest prefix whose latest end (overlapping turns included) stays within the cap.
         limit = lines[offset]['start'] + CAP
         cut, latest = None, lines[offset]['end']
+        size = sizes[offset] if size_cap else 0
         for i in range(offset + 1, len(lines)):
             if latest > limit:
                 break
             cut = i
+            next_size = sizes[i] if size_cap else 0
+            if size + next_size > TRANSCRIPT_BUDGET:
+                logger.info('event=v3_transcript_size_cap_split')
+                break
+            size += next_size
             latest = max(latest, lines[i]['end'])
+        if cut is None and len(lines) - offset == 1 and latest <= limit:
+            break  # a source segment is atomic
         if cut is None:
             raise ValueError('single_transcript_segment_exceeds_two_hours')
         parts.append(lines[offset:cut])
+        if size_cap:
+            remaining -= sum(sizes[offset:cut])
         offset = cut
     parts.append(lines[offset:])
     return parts
@@ -170,7 +197,7 @@ def _join_sitdown(lines: list, entries: list[dict[str, Any]]) -> list[dict[str, 
 
 
 def _cohesive_groups(
-    groups, outlines, sitdown=False, ownership=None
+    groups, outlines, sitdown=False, ownership=None, *, size_cap=False
 ) -> Iterator[tuple[dict[str, Any], list[dict[str, Any]]]]:
     for group, entries in zip(groups, outlines):
         if not entries:
@@ -183,7 +210,7 @@ def _cohesive_groups(
             for section in entry.get('sections') or []
             if isinstance(section.get('first_line'), int)
         )
-        parts = _capped(group['lines'], cut_points, ownership)
+        parts = _capped(group['lines'], cut_points, ownership, size_cap=size_cap)
         start = 1
         for index, part in enumerate(parts):
             end = start + len(part)
@@ -222,7 +249,10 @@ def windows(groups, outlines, *, cohesion=False, silence_gap=SILENCE, defer_topi
     """``ownership``: an ``Ownership`` over the loaded rows; the two-hour cap reuses locked rows' cuts."""
     result = []
     sitdown = is_sitdown(silence_gap)
-    pairs = _cohesive_groups(groups, outlines, sitdown, ownership) if cohesion else zip(groups, outlines)
+    size_cap = transcript_size_cap_enabled()
+    pairs = (
+        _cohesive_groups(groups, outlines, sitdown, ownership, size_cap=size_cap) if cohesion else zip(groups, outlines)
+    )
     for group, entries in pairs:
         first_result = len(result)
         if len(entries) > 1 and (group.get('manual_end') or group.get('after_manual_end')):
@@ -234,7 +264,7 @@ def windows(groups, outlines, *, cohesion=False, silence_gap=SILENCE, defer_topi
             sections = [
                 s['first_line'] - 1 - begin for s in entry.get('sections', []) if isinstance(s.get('first_line'), int)
             ]
-            capped = _capped(lines, sections, ownership)
+            capped = _capped(lines, sections, ownership, size_cap=size_cap)
             for part_index, part in enumerate(capped):
                 candidate = {
                     **entry,
@@ -263,6 +293,7 @@ def windows(groups, outlines, *, cohesion=False, silence_gap=SILENCE, defer_topi
                     prior
                     and (not (cohesion or group.get('after_window_cap')) or len(result) > first_result)
                     and entry.get('resumes_previous')
+                    and (not size_cap or sum(map(_transcript_bytes, (*prior['lines'], *part))) <= TRANSCRIPT_BUDGET)
                     and not prior.get('manual_end')
                     and prior['kind'] == candidate['kind']
                     and prior.get('people') == candidate.get('people')
