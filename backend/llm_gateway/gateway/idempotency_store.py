@@ -1,6 +1,5 @@
 """Durable claim and encrypted result for one keyed, non-streaming completion."""
 
-from collections.abc import Iterator
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 import hashlib
@@ -21,6 +20,7 @@ from database.account_deletion_marker import account_deletion_document
 from database.account_deletion_policy import account_deletion_blocks_access, normalize_account_deletion_status
 from llm_gateway.gateway.auth import ServiceCaller
 from llm_gateway.gateway.credentials import CredentialContext
+from llm_gateway.idempotency_request import canonical_request
 
 CLAIMS = 'llm_gateway_idempotency_claims'
 RESULTS = 'llm_gateway_idempotency_results'
@@ -43,56 +43,6 @@ class IdempotencyError(Exception):
         self.retry_after = retry_after
 
 
-def _property_orders(schema: object, path: tuple[str | int, ...]) -> Iterator[tuple[tuple[str | int, ...], list[str]]]:
-    if not isinstance(schema, dict):
-        return
-    properties = schema.get('properties')
-    if isinstance(properties, dict):
-        yield path, list(properties)
-
-    # Follow schema-valued keywords only. Objects in examples, enum values
-    # and defaults are ordinary JSON values, even if they contain "properties".
-    for keyword in ('properties', 'patternProperties', '$defs', 'definitions', 'dependentSchemas', 'dependencies'):
-        children = schema.get(keyword)
-        if isinstance(children, dict):
-            for name in sorted(children):
-                yield from _property_orders(children[name], (*path, keyword, name))
-    for keyword in ('allOf', 'anyOf', 'oneOf', 'prefixItems', 'items'):
-        children = schema.get(keyword)
-        if isinstance(children, list):
-            for position, child in enumerate(children):
-                yield from _property_orders(child, (*path, keyword, position))
-    for keyword in (
-        'additionalItems',
-        'additionalProperties',
-        'contains',
-        'contentSchema',
-        'else',
-        'if',
-        'items',
-        'not',
-        'propertyNames',
-        'then',
-        'unevaluatedItems',
-        'unevaluatedProperties',
-    ):
-        yield from _property_orders(schema.get(keyword), (*path, keyword))
-
-
-def _structured_property_orders(body: dict[str, Any]) -> Iterator[tuple[tuple[str | int, ...], list[str]]]:
-    response_format = body.get('response_format')
-    if isinstance(response_format, dict) and response_format.get('type') == 'json_schema':
-        definition = response_format.get('json_schema')
-        if isinstance(definition, dict):
-            yield from _property_orders(definition.get('schema'), ('response_format', 'json_schema', 'schema'))
-    tools = body.get('tools')
-    if isinstance(tools, list):
-        for position, tool in enumerate(tools):
-            function = tool.get('function') if isinstance(tool, dict) else None
-            if isinstance(function, dict):
-                yield from _property_orders(function.get('parameters'), ('tools', position, 'function', 'parameters'))
-
-
 @dataclass(frozen=True)
 class Operation:
     owner: str
@@ -112,16 +62,7 @@ class Operation:
         # The provider keys and request body live only in memory. A keyed digest
         # keeps anyone reading the claim from testing candidate prompt text.
         try:
-            canonical: list[object] = [body, credentials.source.value, credentials.forwarded_provider_keys]
-            property_orders = list(_structured_property_orders(body))
-            if property_orders:
-                canonical.append(property_orders)
-            return json.dumps(
-                canonical,
-                sort_keys=True,
-                separators=(',', ':'),
-                allow_nan=False,
-            ).encode()
+            return canonical_request(body, credentials.source.value, credentials.forwarded_provider_keys)
         except (ValueError, RecursionError) as exc:
             raise IdempotencyError(400, 'idempotency_invalid_body') from exc
 

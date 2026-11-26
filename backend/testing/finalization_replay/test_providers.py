@@ -73,6 +73,47 @@ def test_operation_key_rejects_changed_request_and_preserves_original_replay():
     assert calls == [original]
 
 
+@pytest.mark.parametrize('change', ['credential-source', 'forwarded-key', 'schema-property-order'])
+def test_keyed_replay_conflicts_when_gateway_fingerprint_changes(change):
+    def body(property_names):
+        return {
+            'response_format': {
+                'type': 'json_schema',
+                'json_schema': {'schema': {'properties': {name: {'type': 'string'} for name in property_names}}},
+            },
+        }
+
+    original = body(('first', 'second'))
+    retry = body(('second', 'first')) if change == 'schema-property-order' else original
+    headers = {'Idempotency-Key': 'operation-key'}
+    byok_header = 'X-Omi-Byok-Openai-Key'
+    if change == 'forwarded-key':
+        headers[byok_header] = 'synthetic-original'
+    retry_headers = dict(headers)
+    if change != 'schema-property-order':
+        retry_headers[byok_header] = 'synthetic-retry'
+
+    calls = []
+    with provider_server() as server:
+        server.state = SimpleNamespace(case={})
+        endpoint = f'http://127.0.0.1:{server.server_port}/v1/chat/completions/operations'
+
+        def dispatch(*_args):
+            calls.append(True)
+            return {'content': 'synthetic'}
+
+        server.dispatch = dispatch
+        with urlopen(Request(endpoint, json.dumps(original).encode(), headers), timeout=2) as response:
+            assert response.status == 200
+        with pytest.raises(HTTPError) as error:
+            urlopen(Request(endpoint, json.dumps(retry).encode(), retry_headers), timeout=2)
+        assert error.value.code == 409
+        assert json.load(error.value)['error']['code'] == 'idempotency_conflict'
+        fingerprint, _ = server.operations['operation-key']
+        assert isinstance(fingerprint, bytes) and len(fingerprint) == 32
+    assert calls == [True]
+
+
 def test_wire_usage_uses_content_and_counts_idempotent_completion_once():
     state = SimpleNamespace(
         case={},

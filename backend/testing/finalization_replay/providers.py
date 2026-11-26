@@ -3,13 +3,17 @@
 from contextlib import contextmanager
 from functools import lru_cache
 from hashlib import sha256
+import hmac
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import json
 import re
+from secrets import token_bytes
 import socket
 from threading import Lock, Thread
 from unittest.mock import patch
 from urllib.parse import urlsplit
+
+from llm_gateway.idempotency_request import CredentialSource, canonical_request, parse_forwarded_byok_headers
 
 _IDEMPOTENCY_KEY = re.compile(r'[A-Za-z0-9._:-]{1,128}')
 
@@ -73,6 +77,8 @@ def response(state, feature):
 
 @contextmanager
 def provider_server():
+    fingerprint_secret = token_bytes(32)
+
     class Handler(BaseHTTPRequestHandler):
         def log_message(self, _format, *_args):
             pass
@@ -115,13 +121,18 @@ def provider_server():
                     key = request_key
                     if not key:
                         raise ValueError('missing replay operation identity')
-                    canonical = json.dumps(body, sort_keys=True, separators=(',', ':'), allow_nan=False)
+                    forwarded = parse_forwarded_byok_headers(self.headers)
+                    source = CredentialSource.SERVICE_FORWARDED_BYOK if forwarded else CredentialSource.OMI_MANAGED
+                    # llm_gateway.gateway.idempotency_store::Operation.canonical_request
+                    # includes credential source, forwarded keys and schema property order.
+                    canonical = canonical_request(body, source.value, forwarded)
+                    fingerprint = hmac.digest(fingerprint_secret, canonical, 'sha256')
                     with self.server.operation_lock:
                         if key not in self.server.operations:
                             result = self.server.dispatch('/v1/chat/completions', body, self.headers)
-                            self.server.operations[key] = canonical, result
-                        committed_request, result = self.server.operations[key]
-                    if canonical != committed_request:
+                            self.server.operations[key] = fingerprint, result
+                        committed_fingerprint, result = self.server.operations[key]
+                    if not hmac.compare_digest(fingerprint, committed_fingerprint):
                         self._reply(409, {'error': {'code': 'idempotency_conflict'}})
                         return
                 else:

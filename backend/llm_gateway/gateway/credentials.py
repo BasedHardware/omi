@@ -1,13 +1,15 @@
 from __future__ import annotations
 
-import re
-from enum import Enum
 from typing import Any, Mapping
 
 from pydantic import Field, field_validator
 
 from llm_gateway.gateway.auth import ServiceCaller
 from llm_gateway.gateway.schemas import CredentialMode, CredentialPolicy, FailureClass, StrictBaseModel
+from llm_gateway.idempotency_request import (
+    CredentialSource as CredentialSource,
+    parse_forwarded_byok_headers as parse_forwarded_byok_headers,
+)
 
 BYOK_UNSUPPORTED_PROVIDER_FAILURE = FailureClass.BYOK_UNSUPPORTED_PROVIDER.value
 
@@ -20,12 +22,6 @@ BYOK_DEFAULT_VISIBLE_FAILURE_CLASSES = frozenset(
         BYOK_UNSUPPORTED_PROVIDER_FAILURE,
     }
 )
-
-
-class CredentialSource(str, Enum):
-    OMI_MANAGED = 'omi_managed'
-    SERVICE_FORWARDED_BYOK = 'service_forwarded_byok'
-    INTERNAL_KEY_REFERENCE = 'internal_key_reference'
 
 
 class ProviderKeyPresence(StrictBaseModel):
@@ -92,27 +88,6 @@ def build_byok_credential_context(
         provider_keys=presences,
         forwarded_provider_keys=forwarded_keys,
     )
-
-
-_BYOK_PROVIDER_NAME_RE = re.compile(r'^[a-z][a-z0-9_-]*$')
-
-
-def parse_forwarded_byok_headers(headers: Mapping[str, str]) -> dict[str, str]:
-    """Parse service-forwarded BYOK keys from internal gateway envelope headers."""
-    envelope_prefix = 'x-omi-byok-'
-    envelope_suffix = '-key'
-    forwarded: dict[str, str] = {}
-    for header_name, raw_value in headers.items():
-        normalized_name = header_name.strip().casefold()
-        if not normalized_name.startswith(envelope_prefix) or not normalized_name.endswith(envelope_suffix):
-            continue
-        provider = normalized_name.removeprefix(envelope_prefix).removesuffix(envelope_suffix).strip().lower()
-        if not provider or not _BYOK_PROVIDER_NAME_RE.fullmatch(provider):
-            continue
-        stripped = raw_value.strip()
-        if stripped:
-            forwarded[provider] = stripped
-    return forwarded
 
 
 def build_key_reference_credential_context(
