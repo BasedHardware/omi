@@ -364,13 +364,6 @@ final class QuickActionsIconPatcher: NSObject {
           RayBanMetaHostAPISetup.setUp(binaryMessenger: messenger, api: rayBanApi)
       }
 
-      // Native phone-mic capture (conversation recording) — Pigeon APIs.
-      // Self-healing AVAudioEngine capture; interruption/route recovery is
-      // handled natively, Dart only mirrors the state.
-      do {
-          let messenger = messenger
-      }
-
       // Native capture admission latch. Mute is applied before Dart persists
       // its preference; unmute is released only after the durable canonical
       // preference matches the requested revision.

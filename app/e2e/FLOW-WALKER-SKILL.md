@@ -72,7 +72,8 @@ The pipeline has 6 stages. Always use `--json` for machine-readable output.
 ### 1. Initialize Run
 
 ```bash
-INIT=$(node $(which flow-walker) record init --flow $FLOW --output-dir app/e2e/runs/ --no-video --json)
+FLOW=${1:-app/e2e/flows/device-capture.yaml}
+INIT=$(node $(which flow-walker) record init --flow "$FLOW" --output-dir app/e2e/runs/ --no-video --json)
 RUN_ID=$(echo "$INIT" | jq -r '.id')
 RUN_DIR=$(echo "$INIT" | jq -r '.dir')
 echo "Run: $RUN_ID → $RUN_DIR"
@@ -294,6 +295,7 @@ All snapshots: `app/e2e/flows/*.snapshot.json`
 # Run a flow end-to-end and publish the report
 set -e
 
+FLOW=${1:-app/e2e/flows/device-capture.yaml}
 FLOW_NAME=$(basename "$FLOW" .yaml)
 
 # 1. Init

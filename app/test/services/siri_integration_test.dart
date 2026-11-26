@@ -650,6 +650,7 @@ void main() {
     var listening = false;
     var starts = 0;
     var stops = 0;
+    var connected = true;
     final siri = SiriIntegration.forTest(
       RecordingSiriHost(),
       'owner-device',
@@ -663,16 +664,35 @@ void main() {
           stops++;
         },
         listening: () => listening,
-        deviceConnected: () => true,
+        deviceConnected: () => connected,
       ),
     );
 
     await siri.setListening(true);
     await siri.setListening(true);
     expect(starts, 1);
+    connected = false;
     await siri.setListening(false);
     await siri.setListening(false);
     expect(stops, 1);
+  });
+
+  test('Siri does not report success when the start leaves capture idle', () async {
+    final siri = SiriIntegration.forTest(
+      RecordingSiriHost(),
+      'owner-device',
+      listeningCapture: (
+        start: () async {},
+        stop: () async => fail('capture was already idle'),
+        listening: () => false,
+        deviceConnected: () => true,
+      ),
+    );
+
+    await expectLater(
+      siri.setListening(true),
+      throwsA(isA<PlatformException>().having((error) => error.code, 'code', 'recording_off')),
+    );
   });
 
   test('sign-out ordered after an in-flight native session publication', () async {

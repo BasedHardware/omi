@@ -133,6 +133,11 @@ extension _CaptureUplinkPolicy on CaptureController {
         await _ensureDeviceSocketConnection();
         if (!_committedUplinkAdmitted) continue;
         if (_bleBytesStream == null) await _initiateDeviceAudioStreaming();
+        if (_committedUplinkAdmitted &&
+            recordingState == RecordingState.deviceRecord &&
+            (!_usesNativeIngress || _ingressPort?.supportsIngressHealth == false)) {
+          _markCaptureStarted();
+        }
         _fenceUplinkForSync();
       }
     } catch (error, stack) {

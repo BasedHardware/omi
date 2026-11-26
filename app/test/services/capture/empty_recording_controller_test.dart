@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
@@ -14,6 +16,9 @@ import 'package:omi/utils/analytics/analytics_adapter.dart';
 import 'package:omi/utils/analytics/analytics_manager.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+
+import '../../support/capture/capture_replay_world.dart';
+import '../../support/capture/scripted_device_connection.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -32,6 +37,121 @@ void main() {
   });
 
   tearDown(AnalyticsManager.resetForTesting);
+
+  test('a stop followed by a late conversation produces no empty-recording message', () async {
+    final dir = await Directory.systemTemp.createTemp('empty-recording-stop-');
+    final world = await CaptureReplayWorld.boot(tempDir: dir);
+    final actions = _ExplainingActions();
+    final adapter = _RecordingAdapter();
+    addTearDown(() async {
+      await world.dispose();
+      await dir.delete(recursive: true);
+    });
+    world.controller.updateExternalActions(actions);
+    AnalyticsManager.configure(adapter);
+    await AnalyticsManager.init();
+
+    await _startWearable(world);
+    await world.controller.stopStreamDeviceRecording();
+    await _flush();
+
+    expect(actions.emptyExplanations, 0);
+    expect(_produced(adapter), isEmpty);
+
+    world.controller.onMessageEventReceived(
+      ConversationEvent(memory: _conversation(id: 'late'), messages: const []),
+    );
+    await world.settle();
+    await _flush();
+
+    expect(actions.emptyExplanations, 0);
+    expect(_produced(adapter), isEmpty);
+  });
+
+  test('a 404 after the conversation was finalized produces no message', () async {
+    final dir = await Directory.systemTemp.createTemp('empty-recording-404-');
+    final world = await CaptureReplayWorld.boot(tempDir: dir);
+    final actions = _ExplainingActions();
+    final adapter = _RecordingAdapter();
+    addTearDown(() async {
+      await world.dispose();
+      await dir.delete(recursive: true);
+    });
+    world.controller.updateExternalActions(actions);
+    world.processOutcome = () async => const InProgressProcessOutcome(absence: ProcessAbsence.notFound);
+    AnalyticsManager.configure(adapter);
+    await AnalyticsManager.init();
+
+    await _startWearable(world);
+    world.controller.onMessageEventReceived(
+      ConversationEvent(memory: _conversation(id: 'finalized'), messages: const []),
+    );
+    await world.settle();
+
+    final pending = world.controller.forceProcessingCurrentConversation();
+    await world.settle();
+    await pending;
+    await world.elapse(Duration.zero);
+    await _flush();
+
+    expect(actions.emptyExplanations, 0);
+    expect(_produced(adapter), isEmpty);
+  });
+
+  for (final v3 in [false, true]) {
+    test('manual finish 404 uses the too-short explanation only on legacy Home (v3: $v3)', () async {
+      final dir = await Directory.systemTemp.createTemp('empty-recording-manual-404-');
+      final world = await CaptureReplayWorld.boot(tempDir: dir);
+      final actions = _ExplainingActions()..v3FinishFeedbackEnabled = v3;
+      final adapter = _RecordingAdapter();
+      addTearDown(() async {
+        await world.dispose();
+        await dir.delete(recursive: true);
+      });
+      world.controller.updateExternalActions(actions);
+      world.processOutcome = () async => const InProgressProcessOutcome(absence: ProcessAbsence.notFound);
+      AnalyticsManager.configure(adapter);
+      await AnalyticsManager.init();
+
+      await _startWearable(world);
+      final pending = world.controller.forceProcessingCurrentConversation(manualFinish: true);
+      await world.settle();
+      await pending;
+      await world.elapse(Duration.zero);
+      await _flush();
+
+      expect(actions.emptyExplanations, v3 ? 0 : 1);
+      if (v3) expect(_produced(adapter), isEmpty);
+    });
+  }
+
+  for (final v3 in [false, true]) {
+    test('manual finish empty body shows one explanation and keeps analytics (v3: $v3)', () async {
+      final dir = await Directory.systemTemp.createTemp('empty-recording-manual-empty-');
+      final world = await CaptureReplayWorld.boot(tempDir: dir);
+      final actions = _ExplainingActions()..v3FinishFeedbackEnabled = v3;
+      final adapter = _RecordingAdapter();
+      addTearDown(() async {
+        await world.dispose();
+        await dir.delete(recursive: true);
+      });
+      world.controller.updateExternalActions(actions);
+      world.processOutcome = () async => const InProgressProcessOutcome(absence: ProcessAbsence.emptyBody);
+      AnalyticsManager.configure(adapter);
+      await AnalyticsManager.init();
+
+      await _startWearable(world);
+      final pending = world.controller.forceProcessingCurrentConversation(manualFinish: true);
+      await world.settle();
+      await pending;
+      await world.elapse(Duration.zero);
+      await _flush();
+
+      // On v3 the manual finish's settled feedback owns the copy; the controller must not add a second one.
+      expect(actions.emptyExplanations, v3 ? 0 : 1);
+      expect(_produced(adapter), hasLength(1));
+    });
+  }
 
   test('an Apple Watch session is counted as watch when the process body is empty', () async {
     final actions = _ExplainingActions();
@@ -101,6 +221,17 @@ void main() {
   });
 }
 
+Future<void> _startWearable(CaptureReplayWorld world) async {
+  final connection = world.deviceConnection = ScriptedDeviceConnection();
+  await world.controller.streamDeviceRecording(
+    device: BtDevice(name: 'Pendant', id: 'pendant-1', type: DeviceType.omi, rssi: -40),
+  );
+  await world.settle();
+  expect(world.controller.liveCaptureSource, 'omi');
+  connection.emitAudio();
+  await world.settle();
+}
+
 Future<void> _flush() async {
   await Future<void>.delayed(Duration.zero);
   await Future<void>.delayed(Duration.zero);
@@ -120,7 +251,7 @@ ServerConversation _conversation({required String id, bool discarded = false}) {
     structured: Structured('Kept', ''),
     status: ConversationStatus.completed,
     discarded: discarded,
-    source: discarded ? null : ConversationSource.phone,
+    source: discarded ? null : ConversationSource.omi,
   );
 }
 

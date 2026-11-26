@@ -49,6 +49,9 @@ class _Device extends ChangeNotifier implements DeviceProvider {
   BtDevice? get pairedDevice => paired;
 
   @override
+  BtDevice? get capabilityNormalizedDevice => paired;
+
+  @override
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }
 
@@ -63,6 +66,9 @@ class _Usage extends ChangeNotifier implements UsageProvider {
 class _Capture extends ChangeNotifier implements CaptureProvider {
   @override
   bool get hasNativeBackgroundStreamRoute => true;
+
+  @override
+  BtDevice? get recordingDevice => null;
 
   @override
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
@@ -157,6 +163,28 @@ void main() {
     );
     await tester.pumpAndSettle();
   }
+
+  testWidgets('Transcribe Later can be enabled with a disconnected compatible wearable', (tester) async {
+    final wearable = BtDevice(id: 'pendant-1', name: 'Omi', type: DeviceType.omi, rssi: -40);
+    await pumpSheet(tester, device: _Device(connected: false, paired: wearable));
+    await tester.tap(find.byKey(const ValueKey('settings_group_recording')));
+    await tester.pumpAndSettle();
+
+    final row = tester.widget<OmiSettingsRow>(find.byKey(const ValueKey('settings_row_transcribeLater')));
+    expect(row.onToggle, isNotNull);
+    expect(row.subtitle, contains('Record now'));
+  });
+
+  testWidgets('Transcribe Later explains when the paired wearable is incompatible', (tester) async {
+    final wearable = BtDevice(id: 'watch-1', name: 'Apple Watch', type: DeviceType.appleWatch, rssi: -40);
+    await pumpSheet(tester, device: _Device(paired: wearable));
+    await tester.tap(find.byKey(const ValueKey('settings_group_recording')));
+    await tester.pumpAndSettle();
+
+    final row = tester.widget<OmiSettingsRow>(find.byKey(const ValueKey('settings_row_transcribeLater')));
+    expect(row.onToggle, isNull);
+    expect(row.subtitle, 'Device Not Compatible');
+  });
 
   testWidgets(
       'the sheet is Account, Plan, Referral, the groups, Connect an Agent, Memories, Goals and Feedback, in order, keyed',

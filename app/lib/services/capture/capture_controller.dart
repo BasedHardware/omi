@@ -983,6 +983,9 @@ class CaptureController extends ChangeNotifier
   /// The pendant is paused for an Omi phone call and resumes when the call ends.
   bool get pendantPausedForCall => _capture.readModel.pendantSuspendedForCall;
 
+  /// A recent disconnect can still resume the same recording.
+  bool get isPendantAwaitingReconnect => _reconnectGraceDeadline?.isAfter(_now()) ?? false;
+
   bool get isPendantBatchRecording => _capture.readModel.pendantBatchSession;
 
   static const _phoneRestorePendingKey = 'capturePhoneRestorePending';
@@ -2281,7 +2284,6 @@ class CaptureController extends ChangeNotifier
     _stopInProgressConversationRefresh();
     await _closeBleStream(disableNativeBackground: disableNativeBackground);
     _activeSource = null;
-    updateRecordingState(RecordingState.pause);
     notifyListeners();
   }
 
@@ -3034,13 +3036,18 @@ class CaptureController extends ChangeNotifier
     unawaited(_captureSessionLocation(promptIfDenied: promptLocation));
 
     await _resetStateVariables();
+    // A fresh start must verify its own ingress or explicitly commit a muted start.
+    if (deviceRequested) updateRecordingState(RecordingState.initialising);
     await _resetState();
 
     if (deferForCall && (_omiCallActive || callEpoch != _callCaptureEpoch)) return null;
     if (deviceRequested) _commitMutedStartAsPaused();
+    // The sync fence can rise mid-start. A registered re-drive will verify
+    // transport once the fence drops and ownership commits.
     if (recordingState == RecordingState.deviceRecord || recordingState == RecordingState.pause) {
       if (!_usesNativeIngress || _ingressPort?.supportsIngressHealth == false) _markCaptureStarted();
-    } else if (deviceRequested) {
+    } else if (deviceRequested && !_uplinkReconcileNeeded) {
+      updateRecordingState(RecordingState.stop);
       _recordingTelemetry.failStart(failureClass: 'capture_unavailable');
       return const CaptureStageFailure('capture_unavailable');
     }
@@ -3208,7 +3215,12 @@ class CaptureController extends ChangeNotifier
 
   Future<void> _reconnectSystemAudioBody() async {
     if (recordingState != RecordingState.systemAudioRecord || !_captureSessionIsCurrent(_sessionOwner?.token)) return;
-    await _initiateWebsocket(audioCodec: BleAudioCodec.pcm16, sampleRate: 16000);
+    // System audio uses the legacy mobile PCM source on the server.
+    await _initiateWebsocket(
+      audioCodec: BleAudioCodec.pcm16,
+      sampleRate: 16000,
+      source: ConversationSource.phone.name,
+    );
   }
 
   @visibleForTesting

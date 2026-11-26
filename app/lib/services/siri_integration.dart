@@ -1056,18 +1056,27 @@ class SiriIntegration extends SiriEventsApi {
           final provider = context.read<CaptureProvider>();
           final device = context.read<DeviceProvider>();
           return (
-            start: provider.resumeDeviceRecording,
+            start: () async {
+              if (provider.liveCaptureSource == null) {
+                await provider.streamDeviceRecording(device: device.capabilityNormalizedDevice);
+              }
+              if (provider.isPaused) await provider.resumeDeviceRecording();
+            },
             stop: provider.pauseCapture,
             listening: () =>
-                !provider.isPaused && (provider.liveCaptureSource != null || provider.isPendantBatchRecording),
+                !provider.isPaused &&
+                (provider.liveCaptureSource != null || (!enabled && provider.isPendantAwaitingReconnect)),
             deviceConnected: () => device.isConnected,
           );
         })();
-    if (!capture.deviceConnected()) {
-      throw PlatformException(code: 'device_required', message: 'Connect an Omi device to record conversations.');
-    }
     if (enabled) {
-      if (!capture.listening()) await capture.start();
+      if (!capture.deviceConnected()) {
+        throw PlatformException(code: 'device_required', message: 'Connect an Omi device to record conversations.');
+      }
+      if (!capture.listening()) {
+        await capture.start();
+        if (!capture.listening()) throw PlatformException(code: 'recording_off');
+      }
     } else if (capture.listening()) {
       await capture.stop();
     }

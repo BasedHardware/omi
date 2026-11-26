@@ -16,6 +16,7 @@ import 'package:omi/pages/settings/settings_search_index.dart';
 import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/providers/appearance_provider.dart';
 import 'package:omi/providers/device_provider.dart';
+import 'package:omi/services/capture/capture_controller.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/platform/platform_service.dart';
@@ -177,7 +178,7 @@ class _RecordingGroupPageState extends State<RecordingGroupPage> with _GroupRows
   Future<void> _setTranscribeLater(bool value) async {
     final accepted = await context.read<CaptureProvider>().setBatchMode(value);
     if (!mounted) return;
-    if (!accepted) OmiFeedback.error(context, context.l10n.firstCaptureConnectDescription);
+    if (!accepted) OmiFeedback.error(context, context.l10n.deviceNotCompatible);
     setState(() {});
   }
 
@@ -188,6 +189,11 @@ class _RecordingGroupPageState extends State<RecordingGroupPage> with _GroupRows
     final backgroundEnabled = _prefs.backgroundModeEnabled;
     final canEnableBackground = captureProvider.hasNativeBackgroundStreamRoute;
     final batchStorageFull = _prefs.getBool('batchStorageFull');
+    final knownDevice = captureProvider.recordingDevice ??
+        context.watch<DeviceProvider?>()?.capabilityNormalizedDevice ??
+        _prefs.btDevice;
+    final supportsTranscribeLater =
+        knownDevice.id.isEmpty || CaptureController.supportsTranscribeLater(knownDevice.type);
 
     return _GroupPage(
       pageKey: 'settings_page_recording',
@@ -242,13 +248,11 @@ class _RecordingGroupPageState extends State<RecordingGroupPage> with _GroupRows
               title: l10n.transcribeLaterTitle,
               subtitle: batchStorageFull
                   ? l10n.transcribeLaterStorageFull
-                  : captureProvider.deviceSupportsTranscribeLater
+                  : supportsTranscribeLater
                       ? l10n.transcribeLaterDescription
-                      : l10n.firstCaptureConnectTitle,
+                      : l10n.deviceNotCompatible,
               value: _prefs.batchModeEnabled,
-              onChanged: (_prefs.batchModeEnabled || captureProvider.deviceSupportsTranscribeLater)
-                  ? _setTranscribeLater
-                  : null,
+              onChanged: (_prefs.batchModeEnabled || supportsTranscribeLater) ? _setTranscribeLater : null,
             ),
             if (PlatformService.isAndroid)
               OmiSettingsRow.toggle(

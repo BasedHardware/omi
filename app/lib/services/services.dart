@@ -255,18 +255,12 @@ abstract class IMicRecorderService {
     Function()? onStop,
     Function()? onInitializing,
     Function()? onStalled,
-    // Fired with began=true/false around an audio-session interruption. Only
-    // NativeMicRecorderService emits it — capture resumes natively; Dart just
-    // mirrors the state.
+    // Optional audio-session interruption callback used by recorder implementations that report it.
     Function(bool began)? onInterruption,
   });
 
-  // Transcribe Later capture: audio is opus-encoded and written to WAL-compatible
-  // .bin files natively (no onByteReceived — nothing streams to Dart). onBatchStalled
-  // fires when the native liveness feed (onBatchProgress) goes silent; onError
-  // forwards non-fatal native failures (e.g. batch_storage_full). Requires the native
-  // recorder (`ServiceManager.phoneMic` on iOS/Android); the flutter_sound
-  // implementations throw UnsupportedError.
+  // Legacy recorder interface used by capture fixtures. Production Transcribe
+  // Later writes wearable audio through its device-specific batch route.
   Future<void> startBatch({
     Function()? onStop,
     Function(bool began)? onInterruption,
@@ -276,10 +270,7 @@ abstract class IMicRecorderService {
 
   void stop();
 
-  /// Soft-rearm frame/progress liveness after the app returns to foreground.
-  /// iOS may suspend Dart timers while Stage Manager lets another app steal
-  /// the mic (#4706). Must not immediately escalate — that races native rebuild
-  /// and false-restarts healthy sessions. No-op on flutter_sound stacks.
+  /// Optional recorder liveness probe after the app returns to foreground.
   void probeStallAfterForeground();
 }
 

@@ -283,6 +283,7 @@ def main():
         "OMI_FIREBASE_AUTH_EMULATOR_HOST": args.auth_host,
         "OMI_FIREBASE_AUTH_EMULATOR_PORT": str(args.auth_port),
         "OMI_PHYSICAL_FIXTURE_UID": args.fixture_uid,
+        "OMI_PHYSICAL_CAPTURE_SOURCE": args.capture_source,
         "OMI_PHYSICAL_CAPTURE_SECONDS": str(args.capture_seconds),
     }
     if args.wearable_id:
@@ -360,7 +361,7 @@ def main():
         run(["pod", "install"], ios, output / "pod-install.log")
     receipt = {"app_source": str(app), "git_head": subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=app, text=True).strip(),
                "bundle_id": args.bundle_id, "defines": defines, "excluded_plugins": sorted(EXCLUDED_PLUGINS),
-               "scope": "Physical capture qualification; real Runner/BLE/phone mic; no extensions or shared entitlements",
+               "scope": "Physical capture qualification; real Runner/BLE; no extensions or shared entitlements",
                "source_sha256": {str(p.relative_to(runner)): hashlib.sha256(p.read_bytes()).hexdigest() for p in runner.rglob("*.swift")},
                "dart_input_sha256": input_hashes(app),
                "native_registry_sha256": hashlib.sha256(registry.read_bytes()).hexdigest(),

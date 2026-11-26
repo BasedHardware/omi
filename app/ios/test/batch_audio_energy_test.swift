@@ -8,14 +8,6 @@ final class OmiBleManager {
 final class TestFlutterApi {
     func onBatchRecordingFinalized(fileName: String, completion: (Bool) -> Void) {}
 }
-final class CountingDefaults: UserDefaults {
-    var locationReads = 0
-    override func string(forKey key: String) -> String? {
-        if key == "flutter.phoneBatchGeolocation" { locationReads += 1 }
-        return super.string(forKey: key)
-    }
-}
-
 @main
 struct BatchAudioEnergyTests {
     static func check(_ condition: Bool, file: StaticString = #file, line: UInt = #line) {
@@ -36,6 +28,7 @@ struct BatchAudioEnergyTests {
         try testIngressPolicyDecodeEconomy()
         try testRevisionRetiresQueuedBleWrites()
         try testConfigChanges()
+        try testLocationSnapshot()
         print("PASS: capture policy, revision retirement, single writes, partial failures, config changes, and location lifecycle")
     }
 
@@ -430,5 +423,32 @@ struct BatchAudioEnergyTests {
         writer.queue.sync {}
     }
 
-
+    static func testLocationSnapshot() throws {
+        let dir = try directory()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let writer = OmiBatchAudioWriter()
+        let location = "{\"latitude\":1,\"longitude\":2}"
+        let configKey = "flutter.nativeBleStreamConfig"
+        let previousConfig = UserDefaults.standard.object(forKey: configKey)
+        defer { UserDefaults.standard.set(previousConfig, forKey: configKey) }
+        UserDefaults.standard.set("{\"geolocation\":\(location)}", forKey: configKey)
+        let missing = dir.appendingPathComponent("not-created-yet")
+        let audio = missing.appendingPathComponent("omibatch.bin")
+        let sidecar = URL(fileURLWithPath: audio.path + ".geolocation.json")
+        try writer.queue.sync {
+            precondition(writer.openLocked(dirPath: dir.path, fileName: "omibatch.bin.part", startSec: 1, nowMs: 0))
+            let openedSidecar = dir.appendingPathComponent("omibatch.bin.geolocation.json")
+            let snapshot = try JSONSerialization.jsonObject(with: Data(contentsOf: openedSidecar)) as? [String: Int]
+            precondition(snapshot == ["latitude": 1, "longitude": 2])
+            writer.closeCurrentLocked("test")
+            precondition(!writer.persistRecordingGeolocationSidecar(rawGeolocation: location, audioURL: audio))
+            try FileManager.default.createDirectory(at: missing, withIntermediateDirectories: true)
+            precondition(!writer.persistRecordingGeolocationSidecar(rawGeolocation: nil, audioURL: audio))
+            precondition(writer.persistRecordingGeolocationSidecar(rawGeolocation: location, audioURL: audio))
+            for newerLocation in ["{\"latitude\":9}", "broken", nil] as [String?] {
+                precondition(writer.persistRecordingGeolocationSidecar(rawGeolocation: newerLocation, audioURL: audio))
+            }
+            check(try String(contentsOf: sidecar, encoding: .utf8) == location)
+        }
+    }
 }

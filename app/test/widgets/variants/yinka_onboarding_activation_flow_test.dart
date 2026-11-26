@@ -194,6 +194,7 @@ void main() {
     await pump(tester, hasDevice: false);
     await tester.pump(const Duration(seconds: 4));
     expect(find.text('Connect your Omi'), findsOneWidget);
+    expect(find.text('Connect Device').hitTestable(), findsOneWidget);
     expect(find.text('Tell Omi about your day'), findsNothing);
     await tapKey(tester, 'activation_continue_deviceRequired');
     expect(SharedPreferencesUtil().getBool(ActivationFlow.welcomeCardKey), isTrue);

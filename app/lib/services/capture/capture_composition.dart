@@ -43,8 +43,8 @@ import 'package:omi/services/experiments/mobile_batch_file_cap_gate.dart';
 import 'package:omi/services/capture/capture_end.dart';
 import 'package:omi/backend/http/api/capture_end.dart';
 
-/// Aggregate of existing CaptureSeams types plus missing I/O boundaries.
-/// All fields required; supplying some fakes can never select production defaults.
+/// I/O dependencies for device capture. The protected C1 fixtures can still
+/// supply the legacy recorder arguments while their stacked base migrates.
 class CaptureDependencies {
   const CaptureDependencies({
     required this.wal,
@@ -72,6 +72,15 @@ class CaptureDependencies {
     this.pendantReconnectBlocked,
     this.excludeSpeaker,
   });
+  @Deprecated('Conversation capture uses wearable audio.')
+  IMicRecorderService get phoneMic => throw UnsupportedError('Phone conversation capture was removed');
+
+  @Deprecated('Query the wearable capture capability instead.')
+  bool get batchSupported => throw UnsupportedError('Phone batch capture was removed');
+
+  @Deprecated('Conversation capture uses wearable audio.')
+  Future<bool> Function() get microphonePermission => throw UnsupportedError('Phone conversation capture was removed');
+
   final Future<DeviceConnection?> Function(String) ensureDeviceConnection;
   final Future<void> Function(String deviceId)? pendantReconnect;
   final bool Function(String deviceId)? pendantReconnectBlocked;

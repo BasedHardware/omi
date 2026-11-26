@@ -7,6 +7,7 @@ import 'package:in_app_review/in_app_review.dart';
 
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/l10n/app_localizations.dart';
+import 'package:omi/pages/capture/connect.dart';
 import 'package:omi/pages/onboarding/variants/yinka/activation/activation_capture.dart';
 import 'package:omi/pages/onboarding/variants/yinka/activation/activation_motion.dart';
 import 'package:omi/pages/onboarding/variants/yinka/activation/activation_visuals.dart';
@@ -76,7 +77,6 @@ class _ActivationFlowState extends State<ActivationFlow> {
   ActivationStage _stage = ActivationStage.intro;
   ActivationCapture? _capture;
 
-  /// The connected wearable was not streaming, so this dictation uses the phone microphone.
   String _heard = '';
   ActivationResult? _result;
   bool _finished = false;
@@ -94,6 +94,13 @@ class _ActivationFlowState extends State<ActivationFlow> {
   }
 
   void _afterIntro() => _go(widget.hasDevice ? ActivationStage.dictate : ActivationStage.deviceRequired);
+
+  Future<void> _pairDevice() async {
+    final connected = await Navigator.of(context).push<bool>(omiPageRoute(
+      builder: (routeContext) => ConnectDevicePage(onConnected: () => Navigator.of(routeContext).pop(true)),
+    ));
+    if (connected == true && _stage == ActivationStage.deviceRequired) _go(ActivationStage.dictate);
+  }
 
   void _skipped() {
     SharedPreferencesUtil().saveBool(ActivationFlow.welcomeCardKey, true);
@@ -158,7 +165,20 @@ class _ActivationFlowState extends State<ActivationFlow> {
           key: const ValueKey('deviceRequired'),
           title: l10n.firstCaptureConnectTitle,
           body: Text(l10n.firstCaptureConnectDescription, textAlign: TextAlign.center),
-          bottom: _ContinueButton(stage: 'deviceRequired', label: l10n.continueButton, onPressed: _skipped),
+          bottom: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              OmiButton(label: l10n.connectDevice, expand: true, onPressed: _pairDevice),
+              const SizedBox(height: OmiSpacing.sm),
+              OmiButton(
+                key: const Key('activation_continue_deviceRequired'),
+                label: l10n.continueButton,
+                variant: OmiButtonVariant.secondary,
+                expand: true,
+                onPressed: _skipped,
+              ),
+            ],
+          ),
         ),
       ActivationStage.dictate => _DictationStep(
           key: const ValueKey('dictate'),

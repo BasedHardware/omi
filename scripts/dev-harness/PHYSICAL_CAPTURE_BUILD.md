@@ -7,7 +7,7 @@ is compilation/provenance evidence only. See [status and measured layers](IPHONE
 `physical_capture_build.py` generates a single-target Xcode project outside the
 repository. It builds `integration_test/physical_capture_main.dart` in profile
 mode, using the real Flutter app, CaptureProvider, WAL, and copied Runner native
-BLE and phone microphone modules. Profile mode supports termination and launch
+BLE modules. Profile mode supports termination and launch
 without an attached Flutter debugger.
 
 Compilation disables Xcode signing. The builder then embeds the explicitly
@@ -49,9 +49,10 @@ external output directory, Flutter SDK root, explicit bundle/team/profile/signin
 identity, private fixture API and auth emulator addresses, and a fixture UID
 starting with `omi-physical-fixture-`. No device or signing identifiers belong in
 this document or Git. `--prepare-only` resolves dependencies without compiling.
-`--capture-source phone_mic` is the default. Use `--capture-source wearable` with
-a separate qualification bundle, fixture UID and API port for discovery-based
-BLE qualification. An optional `--wearable-id` also selects the wearable source.
+`--capture-source wearable` is the default. Use a separate qualification bundle,
+fixture UID and API port for each run. An optional `--wearable-id` must match the
+sole discovered wearable. The build receipt records `OMI_PHYSICAL_CAPTURE_SOURCE`
+so the collector can verify the app's boot source even without an explicit ID.
 
 Generated `build-receipt.json` records native and Dart input hashes, commit,
 verified registry exclusions, compile defines, product path and every signed app

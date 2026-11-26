@@ -2410,6 +2410,7 @@ void main() {
       world.controller.updateRecordingDevice(null, reconnectDeviceId: pendant.id);
       await world.controller.pendingSourceSwitch;
       expect(world.deviceConnection!.openAudioSubscriptions, 0);
+      expect(world.controller.isPendantAwaitingReconnect, isTrue);
       // Native can deliver a resubscribed packet before the provider's
       // debounced connect publishes recordingDevice again.
       world.deviceConnection!.emitAudio(value: 6);
@@ -2427,6 +2428,7 @@ void main() {
       await world.controller.streamDeviceRecording(device: pendant);
       await world.settle();
       expect(world.controller.activeRecordingId, original);
+      expect(world.controller.isPendantAwaitingReconnect, isFalse);
       expect(world.socketRecordingIds, everyElement(original));
       expect(world.deviceConnection!.openAudioSubscriptions, 1);
       world.deviceConnection!.emitAudio(value: 9);
@@ -2728,6 +2730,17 @@ void main() {
       await world.settle();
       expect(world.controller.liveCaptureSource, 'omi');
       expect(world.deviceConnection!.openAudioSubscriptions, 1);
+    });
+  });
+
+  test('an unmuted start without BLE ingress leaves capture idle', () async {
+    await withReviewWorld((world) async {
+      await world.controller.streamDeviceRecording(device: pendant);
+      await world.settle();
+
+      expect(world.controller.liveCaptureSource, isNull);
+      expect(world.controller.recordingState, RecordingState.stop);
+      expect(world.controller.activeRecordingId, isNull);
     });
   });
 
