@@ -358,6 +358,8 @@ AREA_TESTS = (
             'tests/unit/test_batch_pipeline_chart.py',
             'tests/unit/test_config_train.py',
             'tests/unit/test_runtime_env_sources.py',
+            # Renders the listen chart for the seal overlap switch; it went stale unselected after #25660.
+            'tests/unit/test_record_seal_cluster_repair_deploy.py',
         ),
     ),
     (
@@ -390,6 +392,14 @@ AREA_TESTS = (
             'tests/unit/test_incluster_guards.py',
             'tests/unit/test_gpu_fleet_retirement.py',
             'tests/unit/test_streaming_gpu_teardown.py',
+        ),
+    ),
+    (
+        ('backend/charts/monitoring/prometheus-adapter/prod_omi_prometheus_adapter.yaml',),
+        (),
+        (
+            'tests/unit/test_batch_pipeline_hpa_retune_replay.py',
+            'tests/unit/test_batch_pipeline_hpa_capacity_replay.py',
         ),
     ),
     (('backend/config/flag_budget.json',), (), FLAG_BUDGET_TESTS),
@@ -521,6 +531,7 @@ AREA_TESTS = (
             'tests/unit/test_monitoring_*.py',
             'tests/unit/test_firestore_unattributed_reads_alert.py',
             'tests/unit/test_timeliness_metrics_are_scraped.py',
+            'tests/unit/test_projection_finish_guard_metrics_are_scraped.py',
             'tests/unit/test_serving_podmonitoring_chart.py',
             'tests/unit/test_firestore_attribution_charts.py',
             'tests/unit/test_backend_secrets_chart.py',
@@ -878,6 +889,7 @@ def tests_for_changed_paths(
             test
             for test in (
                 'tests/unit/test_timeliness_metrics_are_scraped.py',
+                'tests/unit/test_projection_finish_guard_metrics_are_scraped.py',
                 'tests/unit/test_enrichment_llm_cost_metrics_are_scraped.py',
             )
             if test in all_tests
@@ -1023,13 +1035,24 @@ def tests_for_changed_paths(
 def focused_tests_for_changed_paths(changed_paths: list[str], all_tests: list[str]) -> list[str]:
     """Keep known affected contracts even when another path requires broad CI.
 
-    Contracts precede directly changed tests so a bounded local run cannot lose
-    them to a large test-only diff. Each group is stable and deduplicated. This
-    is only pre-push feedback; the ordinary selector retains full-suite fallbacks.
+    Prioritized regressions come first, then other affected contracts, then
+    directly changed tests. Each group is stable and deduplicated. The ordinary
+    CI selector retains its full-suite fallbacks.
     """
     selected, _ = tests_for_changed_paths(changed_paths, all_tests, allow_full_suite=False)
-    changed_tests = {normalize_changed_path(path).removeprefix('backend/') for path in changed_paths}
-    return sorted(set(selected) - changed_tests) + sorted(set(selected) & changed_tests)
+    normalized_paths = {normalize_changed_path(path) for path in changed_paths}
+    changed_tests = {path.removeprefix('backend/') for path in normalized_paths}
+    priority_tests: set[str] = set()
+    if 'backend/utils/other/list_budget.py' in normalized_paths:
+        # CI finds these transitively. Keep them within the pre-push cap even
+        # when the listing change also selects many other affected contracts.
+        priority_tests = {
+            'tests/unit/test_pending_bridge_read_budget.py',
+            'tests/unit/test_retired_list_projection.py',
+        }.intersection(all_tests)
+
+    remaining = set(selected) - priority_tests
+    return sorted(priority_tests) + sorted(remaining - changed_tests) + sorted(remaining & changed_tests)
 
 
 def rotation_slice(test: str, total: int) -> int:

@@ -4,17 +4,27 @@ import math
 import os
 import random
 from collections.abc import Mapping
+from datetime import datetime
 
+from google.api_core.exceptions import Aborted
 from prometheus_client import Counter
 
-from database.monthly_usage_totals import FIELDS as USAGE_FIELDS
+from config.monthly_usage import FIELDS as USAGE_FIELDS, usage_month_epoch
+from utils import executors
 from utils.episodes.metrics import reuse_or_create
+from utils.observability.reasons import MonthlyUsageShadowOutcome, ReasonFamily, reason_label
 
 SHADOW = reuse_or_create(
     Counter,
     'omi_read_cache_shadow_total',
     'Sampled read-cache agreement; episode_members compares keys only and cannot detect content staleness',
     ['cache', 'result'],
+)
+MONTH_SHADOW = reuse_or_create(
+    Counter,
+    'omi_usage_month_total_shadow_total',
+    'Sampled monthly usage comparisons against the hourly Firestore snapshot',
+    ['service', 'epoch', 'path', 'outcome', 'delta_bucket'],
 )
 READ_TIMEOUT_SECONDS = 5.0
 
@@ -64,11 +74,8 @@ def compare_hit(cache, cached, fetch, *, sample=None):
 
         def compare():
             try:
-                from database.fsr_read_cache import fresh_reads
-
                 expected = _canonical(cache, cached)
-                with fresh_reads():
-                    actual = _canonical(cache, fetch(READ_TIMEOUT_SECONDS))
+                actual = _canonical(cache, fetch(READ_TIMEOUT_SECONDS))
                 agrees = (
                     expected == actual
                     if cache == 'episode_members'
@@ -80,11 +87,98 @@ def compare_hit(cache, cached, fetch, *, sample=None):
             except Exception:
                 _record(cache, 'error')
 
-        from utils.executors import ExecutorSaturatedError, read_cache_shadow_executor, submit_with_context
-
-        try:
-            submit_with_context(read_cache_shadow_executor, compare)
-        except ExecutorSaturatedError:
-            _record(cache, 'skipped')
+        _submit(compare, lambda: _record(cache, 'skipped'))
     except Exception:
         _record(cache, 'error')
+
+
+def _submit(compare, skipped):
+    try:
+        executors.submit_with_context(executors.read_cache_shadow_executor, compare)
+    except executors.ExecutorSaturatedError:
+        skipped()
+
+
+def compare_month(path, uid, date, start_date, served, client, read_time, epoch, *, fetch, service_name):
+    """Sample the exact value and cutoff served, without a fresh read on the caller."""
+
+    def record(outcome: MonthlyUsageShadowOutcome, bucket='none'):
+        try:
+            MONTH_SHADOW.labels(
+                service=service_name(),
+                epoch=epoch or 'unknown',
+                path=path,
+                outcome=reason_label(ReasonFamily.MONTHLY_USAGE_SHADOW, outcome, MonthlyUsageShadowOutcome),
+                delta_bucket=bucket,
+            ).inc()
+            if path == 'cache_hit':
+                _record('usage_month', 'skipped' if outcome is MonthlyUsageShadowOutcome.RACE else outcome.value)
+        except Exception:
+            pass
+
+    try:
+        if os.getenv('OMI_USAGE_MONTH_TOTAL_SHADOW_ENABLED', 'true').strip().lower() in {'0', 'false', 'off', 'no'}:
+            return
+        try:
+            rate = float(os.getenv('OMI_USAGE_MONTH_TOTAL_SHADOW_RATE', '0.01'))
+        except ValueError:
+            return
+        if not math.isfinite(rate) or rate <= 0 or random.random() >= min(rate, 1.0):
+            return
+
+        # Only admit a timestamp we can actually use. Report unversioned cache
+        # entries under the configured epoch, without crediting them as coverage.
+        if not isinstance(read_time, datetime) or epoch is None:
+            epoch = usage_month_epoch()
+            record(MonthlyUsageShadowOutcome.SKIPPED)
+            return
+        if path == 'cache_hit' and epoch != usage_month_epoch():
+            # A cache hit may outlive a reader epoch change. It does not qualify
+            # either epoch's cache behavior as equivalent.
+            epoch = usage_month_epoch()
+            record(MonthlyUsageShadowOutcome.RACE)
+            return
+        # Both the caller and Redis may return mutable dictionaries.
+        expected = tuple(served.get(field, 0) for field in USAGE_FIELDS)
+
+        def compare():
+            try:
+                hourly = fetch(
+                    uid, date, start_date, READ_TIMEOUT_SECONDS, firestore_client=client, read_time=read_time
+                )
+                if hourly is None:
+                    record(MonthlyUsageShadowOutcome.SKIPPED)
+                    return
+                actual = _canonical('usage_month', hourly)
+                mismatched = [
+                    abs(before - after)
+                    for field, before, after in zip(USAGE_FIELDS, expected, actual)
+                    if not _same_usage(field, before, after)
+                ]
+                if mismatched:
+                    record(MonthlyUsageShadowOutcome.MISMATCH, _delta_bucket(max(mismatched)))
+                else:
+                    record(MonthlyUsageShadowOutcome.MATCH)
+            except Aborted:
+                record(MonthlyUsageShadowOutcome.RACE)
+            except Exception:
+                record(MonthlyUsageShadowOutcome.ERROR)
+
+        _submit(compare, lambda: record(MonthlyUsageShadowOutcome.SKIPPED))
+    except Exception:
+        record(MonthlyUsageShadowOutcome.ERROR)
+
+
+def _delta_bucket(delta):
+    for bound in (1, 60, 3600):
+        if delta <= bound:
+            return f'le_{bound}'
+    return 'gt_3600'
+
+
+def _same_usage(field, before, after):
+    if type(before) not in (int, float) or not math.isfinite(before):
+        raise ValueError('invalid served usage')
+    if field in {'transcription_seconds', 'speech_seconds'}:
+        return math.isclose(before, after, rel_tol=1e-12, abs_tol=1e-6)
+    return before == after

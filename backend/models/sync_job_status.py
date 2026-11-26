@@ -1,9 +1,17 @@
 """Client-visible sync job response shapes shared by both dispatch protocols."""
 
-from typing import List, Literal, Optional
+from typing import Annotated, List, Literal, Optional
 
 from pydantic import BaseModel, Field
 from utils.sync.lanes import SyncLane
+
+
+class FrameProcessingRange(BaseModel):
+    capture_root: str
+    clock_epoch: int
+    start: int
+    end: int
+    status: Literal['text', 'empty']
 
 
 class SyncLocalFilesResultResponse(BaseModel):
@@ -13,6 +21,7 @@ class SyncLocalFilesResultResponse(BaseModel):
     total_segments: int = 0
     errors: list[str] = Field(default_factory=list)
     held_audio: bool | None = None
+    frame_outcomes_v1: list[FrameProcessingRange] | None = None
 
 
 class SyncJobStartResponse(BaseModel):
@@ -39,6 +48,18 @@ class SyncJobStatusResponse(BaseModel):
     retry_after: int | None = None
     recording_age_seconds: int | None = None
     poll_after_ms: int | None = None
+
+
+class SyncReceiptsWaitRequest(BaseModel):
+    job_ids: list[Annotated[str, Field(min_length=1, max_length=128, pattern=r'^[a-zA-Z0-9_-]+$')]] = Field(
+        min_length=1, max_length=16
+    )
+
+
+class SyncReceiptsWaitResponse(BaseModel):
+    receipts: list[SyncJobStatusResponse]
+    # These handles require the existing, individually paced recovery path.
+    fallback: list[str]
 
 
 class SyncCaptureManifestFile(BaseModel):

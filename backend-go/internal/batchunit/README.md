@@ -52,3 +52,13 @@ Postgres through `internal/queue/queuetest`, in `service_test.go`.
 
 `stored` and `Receipt` are what old rows mean. To change either, add a new `Format`, declare both
 formats in `Declaration` until no job in the old one remains, and decode by `Job.Format`.
+
+## Batch-shadow funding inputs
+
+Intake supplies the custody deadline and audio duration from the existing retention record. The account adapter returns a positive, monotonically increasing generation for every change between exhausted and funded, including grants and effective period boundaries. An unversioned funded account leaves the stored observation intact. An exhausted account without a positive generation returns HTTP 503 before enqueue. BYOK and paid-result recovery are trusted intake dispositions. The speech adapter receives the frozen route and BYOK flag. Recovery calls only `Recover`.
+
+During replay, the driver sends an owner notification by HTTP to `POST /v1/batch/{owner}/entitlement-changed`. The conformance binary obtains the generation, exhaustion and source timestamp with one `GET /accounts/{owner}` against `STUB_URL`. Billing subscription changes, referral-grant changes and UTC usage-period rollover share this invalidation. The repository has no live publisher from those authorities to this endpoint.
+
+Condition holds are enabled by default on the batch-shadow jobd. Every minute it sweeps due custody deadlines and claims up to 100 due owners, reading the account once per owner. Each owner is due hourly. For rollback, set `GO_BATCH_ENTITLEMENT_CONDITION_HOLD=false` and restart shadow jobd. Its maintenance pass returns outstanding units to their ordered lanes with their custody deadlines and refusal generations intact. Workers apply the existing tenant-wide time hold with a five-minute retry until they observe a newer funded generation. Quiesce shadow intake, wait for format-2 work to settle, and revert the change. Old workers only understand format 1.
+
+Until the live producer lands, the hourly owner check is the shadow release path. Measure p99 ≤ 65 min from funding change to durable release on real shadow owners. Once the producer lands, the same readback target becomes p99 ≤ 60 s. Shadow qualification requires a `READBACK:` with the event count, measurement window and p99 from real funding changes.

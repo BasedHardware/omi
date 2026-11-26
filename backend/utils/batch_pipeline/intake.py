@@ -32,12 +32,16 @@ from config.batch_pipeline_coverage_wait import decode_failure_memo_enabled
 from config.batch_pipeline_providers import provider_config
 from config.firestore_read_levers import lever_enabled
 from config.prerecorded_language import language_guard_enabled, language_class
+from config.reliability_experiments import enabled as experiment
+from config.request_clock import context_fields
 from config.stt_cap_dispatch import offline_enforcement_enabled
 from config.stt_provider_policy import normalized_stt_language, PARAKEET_SUPPORTED_LANGUAGES_BY_MODEL
 from database import batch_pipeline_allowance_hold as allowance_hold
+from database import record_wal_duplicate as wal_duplicate
 from database import record_wal_handoff as wal_receipts
 from database.batch_pipeline_intake import admit, cache_completed
 from database.batch_pipeline_privacy import BatchPrivacyBlocked
+from database.privacy_check_metrics import STATUS_SKIP
 from database.batch_pipeline_recovery_fence import RecoveryFence
 from database.batch_pipeline_store import FirestoreStore
 from database.batch_pipeline_shadow_hook import shadow_from_env
@@ -49,8 +53,11 @@ from database.sync_ledger import (
 )
 from utils.batch_pipeline.artifact_policy import artifacts_for
 from utils.batch_pipeline.audio import with_context
+from utils.batch_pipeline import frame_outcomes
 from utils.batch_pipeline.capture_decode import decode_units, is_deterministic_decode_failure
 from utils.batch_pipeline.future_capture_decode import decode_future_units
+from utils.sync import future_capture_request
+from utils.sync.future_capture_request import Outcome as FutureCaptureOutcome
 from utils.sync.receipt_clock import (
     POLICY as FUTURE_CLOCK_POLICY,
     ESTIMATED_POLICY,
@@ -224,6 +231,7 @@ def _deleted_conversation_status(ledger: dict, intake: dict, job_id: str) -> dic
     return {
         'job_id': job_id,
         'status': 'completed',
+        'completed_at': ledger.get('completed_at'),
         'lane': intake['lane'],
         'total_files': intake['total_files'],
         'total_segments': total,
@@ -252,10 +260,10 @@ def _only_deleted_total(tx, uid: str, content_id: str) -> int | None:
     return result['total_segments']
 
 
-def durable_status(store, uid: str, job_id: str) -> dict | None:
+def durable_status(store, uid: str, job_id: str, *, poll: bool = False) -> dict | None:
     if job_id.startswith(wal_receipts.JOB_PREFIX):
         authority_store = getattr(store, 'store', store)
-        return wal_receipts.read_status(authority_store.client, authority_store.namespace, uid, job_id)
+        return wal_receipts.read_status(authority_store.client, authority_store.namespace, uid, job_id, poll=poll)
     from database.batch_pipeline_artifact_missing import artifact_missing, REASON_CODE
     from utils.batch_pipeline.upload_coalescing import member_status
 
@@ -275,32 +283,39 @@ def durable_status(store, uid: str, job_id: str) -> dict | None:
             return {'_coalescing_intake': intake}
         ledger = tx.get('content', f"{uid}/{intake['content_id']}")
         jobs = [tx.get('jobs', segment) for segment in intake['segment_ids']]
-        sources = {
-            value
-            for job in jobs
-            for value in (job.get('conversation_id'), job.get('capture_source_conversation_id'))
-            if value
-        }
-        result_ids = ledger.get('result') or {}
-        sources.update(result_ids.get('new_memories') or [])
-        sources.update(result_ids.get('updated_memories') or [])
-        try:
-            tx.check_privacy(uid, sources, jobs[0].get('privacy_generation') if jobs else None)
-        except BatchPrivacyBlocked as error:
-            # Completed content whose conversation the user deleted is final:
-            # ACK without IDs so the phone stops re-uploading deleted audio.
-            # Unfinished work and every other denial keep the 409.
-            terminal = (
-                _deleted_conversation_status(ledger, intake, job_id)
-                if is_conversation_deleted(error) and not any(artifact_missing(job) for job in jobs)
-                else None
-            )
-            if terminal is None:
-                raise
-            generation = jobs[0].get('privacy_generation') if jobs else None
-            confirm_only_user_deletions(lambda one: tx.check_privacy(uid, one, generation), sources)
-            logger.info('event=batch_intake_status outcome=conversation_deleted_terminal')
-            return terminal
+        # Polling sometimes redrives a job in this transaction, and partial or
+        # complete results may expose conversation IDs. Keep both paths fenced.
+        may_redrive = any(job.get('state') == 'dead' and job.get('merge_pending') for job in jobs)
+        skip = poll and lever_enabled('bpp_status_skip', uid) and not ledger.get('result') and not may_redrive
+        if not skip:
+            sources = {
+                value
+                for job in jobs
+                for value in (job.get('conversation_id'), job.get('capture_source_conversation_id'))
+                if value
+            }
+            result_ids = ledger.get('result') or {}
+            sources.update(result_ids.get('new_memories') or [])
+            sources.update(result_ids.get('updated_memories') or [])
+            try:
+                tx.check_privacy(uid, sources, jobs[0].get('privacy_generation') if jobs else None)
+            except BatchPrivacyBlocked as error:
+                # Completed content whose conversation the user deleted is final:
+                # ACK without IDs so the phone stops re-uploading deleted audio.
+                # Unfinished work and every other denial keep the 409.
+                terminal = (
+                    _deleted_conversation_status(ledger, intake, job_id)
+                    if is_conversation_deleted(error) and not any(artifact_missing(job) for job in jobs)
+                    else None
+                )
+                if terminal is None:
+                    raise
+                generation = jobs[0].get('privacy_generation') if jobs else None
+                confirm_only_user_deletions(lambda one: tx.check_privacy(uid, one, generation), sources)
+                logger.info('event=batch_intake_status outcome=conversation_deleted_terminal')
+                return terminal
+        else:
+            STATUS_SKIP.labels('batch_job').inc()
         result = ledger.get('result')
         from utils.batch_pipeline.input_retention import input_expiring
 
@@ -426,6 +441,12 @@ def durable_status(store, uid: str, job_id: str) -> dict | None:
                 )
             )
         )
+        if status == 'completed' and experiment('batch_frame_outcomes', uid):
+            # Experiment batch_frame_outcomes: the completed result also names which source
+            # frames became text and which were evaluated and are empty. Computed from the
+            # intake and unit rows this read already holds; a held, failed or unattributable
+            # unit gets no verdict, and a copy keeps the ledger's own result untouched.
+            result = frame_outcomes.attach(result, intake, jobs)
         return {
             'job_id': job_id,
             'status': status,
@@ -437,17 +458,34 @@ def durable_status(store, uid: str, job_id: str) -> dict | None:
             'failed_segments': failed,
             'errors': ['batch_worker_quarantined'] if failed else [],
             'result': result if completed and not failed else None,
+            'completed_at': ledger.get('completed_at') if completed else None,
             'poll_after_ms': 0 if completed or failed else 3000,
         }
 
     status = store.run(read)
     if status is not None and '_coalescing_intake' in status:
-        return member_status(store, uid, status['_coalescing_intake'], durable_status)
+        if experiment('batch_frame_outcomes', uid):
+            # Experiment batch_frame_outcomes: a coalesced member stores its target's result as
+            # its own receipt. The target's verdicts span every member, so they stay out of it.
+            return member_status(
+                store, uid, status['_coalescing_intake'], partial(_status_without_frame_outcomes, poll=poll)
+            )
+        return member_status(store, uid, status['_coalescing_intake'], partial(durable_status, poll=poll))
     if spent_redrives:
         # Class 6 counter: same signal as the nightly scan, once per committed poll re-drive.
         from utils.backlog_metrics import record_transition
 
         record_transition('held_redrive_budget_spent', len(spent_redrives))
+    return status
+
+
+def _status_without_frame_outcomes(store, uid: str, job_id: str, *, poll: bool = False) -> dict | None:
+    status = durable_status(store, uid, job_id, poll=poll)
+    if not status:
+        return status
+    result = status.get('result')
+    if isinstance(result, dict) and frame_outcomes.FIELD in result:
+        return {**status, 'result': {key: value for key, value in result.items() if key != frame_outcomes.FIELD}}
     return status
 
 
@@ -647,13 +685,16 @@ async def accept_upload(
             },
         )
         if refused is not None:
+            future_capture_request.mark(FutureCaptureOutcome.PREFLIGHT_REFUSED)
             return refused
         if previous.get('status') == 'owner_cancelled':
             from utils.sync.admission_responses import owner_cancelled_response
 
+            future_capture_request.mark(FutureCaptureOutcome.PRIOR_CUSTODY)
             return owner_cancelled_response(previous.get('job_id'), total_files=len(paths), lane=lane)
         if previous.get('dispatch_protocol') == 'batch_v1':
             status = await run_blocking(db_executor, durable_status, store, uid, previous['job_id'])
+            future_capture_request.mark(FutureCaptureOutcome.PRIOR_CUSTODY)
             return start_response(status) if status else sync_content_in_progress_response(previous['job_id'])
         if previous.get('status') == 'completed':
             completed = await _completed_legacy_upload_response(
@@ -666,6 +707,7 @@ async def accept_upload(
                 lane=lane,
             )
             if completed is not None:
+                future_capture_request.mark(FutureCaptureOutcome.PRIOR_CUSTODY)
                 return completed
         phase = 'ownership_fence'
         mode = await run_blocking(db_executor, legacy_dark.current_mode, uid)
@@ -674,6 +716,7 @@ async def accept_upload(
             if mode is LegacySyncMode.ON:
                 # Existing legacy ownership includes capped/retryable/missing-Redis
                 # recovery. Its original claimant remains the sole authority.
+                future_capture_request.mark(FutureCaptureOutcome.PRIOR_CUSTODY)
                 return None
             # Contract (h) invariant 4: legacy-owned content is acknowledged, never
             # re-admitted; only a row legacy can no longer finish is adopted, by a
@@ -685,12 +728,14 @@ async def accept_upload(
                 previous, mode, owner_job_present=owner_job_present, batch_adopts_stranded=True
             )
             if decision.action is not legacy_dark.FenceAction.ADMIT_BATCH:
+                future_capture_request.mark(FutureCaptureOutcome.PRIOR_CUSTODY)
                 return legacy_dark.fence_response(decision, total_files=len(paths), lane=lane)
             adopt = stranded_adopter(previous, owner_job_present=owner_job_present)
         if not policy.batch_enabled:
             # Main's owner-load filter (ramp narrowing) applies only after durable
             # dispatch ownership checks; accepted batch receipts above always drain.
             if mode is LegacySyncMode.ON:
+                future_capture_request.mark(FutureCaptureOutcome.ROUTE_DECLINED)
                 return None
             # Legacy draining/dark cannot take a narrowed owner back (contract (h)),
             # so the upload stays on batch rather than being refused.
@@ -719,6 +764,7 @@ async def accept_upload(
         # native owner here without adding an ownership-discovery read to dark
         # uploads, or accidentally admitting a second GPU job.
         if target.get('record_lane_owner') == 'batch_live_v1':
+            future_capture_request.mark(FutureCaptureOutcome.PRIOR_CUSTODY)
             phase = 'record_routing'
             if record_router is None:
                 OMI_PIPELINE_RECORD_WAIT_ANSWERS_TOTAL.labels(reason='record_router_missing').inc()
@@ -761,6 +807,7 @@ async def accept_upload(
                 )
                 if evidence is not None:
                     evidence.language_excluded = True
+                future_capture_request.mark(FutureCaptureOutcome.ROUTE_DECLINED)
                 return None
         fresh = seed.priority == Priority.FRESH
         if (
@@ -780,9 +827,11 @@ async def accept_upload(
                 reason='capacity_full',
                 outcome='recovered',
             )
+            future_capture_request.mark(FutureCaptureOutcome.ROUTE_DECLINED)
             return None
         if isinstance(conversation_id, str) and target.get('record_lane_owner') == 'legacy_final_pass_v1':
             if mode is LegacySyncMode.ON:
+                future_capture_request.mark(FutureCaptureOutcome.PRIOR_CUSTODY)
                 return None
             # Legacy can no longer serve this conversation: move its route to batch
             # (the same revision-fenced CAS as every owner transition) and admit
@@ -792,6 +841,7 @@ async def accept_upload(
 
             rehome = await run_blocking(db_executor, final_pass_rehome.upload_rehome, mode, uid, conversation_id)
             if not final_pass_rehome.rehomes_to_batch(rehome):
+                future_capture_request.mark(FutureCaptureOutcome.PRIOR_CUSTODY)
                 return legacy_dark.fence_response(
                     legacy_dark.FenceDecision(
                         legacy_dark.FenceAction.ACK,
@@ -833,6 +883,7 @@ async def accept_upload(
             )
             if evidence is not None:
                 evidence.language_excluded = True
+            future_capture_request.mark(FutureCaptureOutcome.ROUTE_DECLINED)
             return None
         if (
             mode is LegacySyncMode.ON
@@ -849,6 +900,7 @@ async def accept_upload(
             logger.info('event=batch_language_eligibility outcome=legacy reason=known_unsupported_language')
             if evidence is not None:
                 evidence.language_excluded = True
+            future_capture_request.mark(FutureCaptureOutcome.ROUTE_DECLINED)
             return None
         if inherited:
             input_language = inherited
@@ -892,6 +944,7 @@ async def accept_upload(
             record_fallback(
                 component='stt_selection', from_mode='none', to_mode='none', reason='other', outcome='recovered'
             )
+            future_capture_request.mark(FutureCaptureOutcome.ROUTE_DECLINED)
             return None
         record_origin = bool(
             not provider
@@ -953,6 +1006,7 @@ async def accept_upload(
             raise ValueError('serving intake requires a dedicated batch GPU pool')
         deterministic_key, memo_hit = await _cached_decode_refusal(uid, content_id, paths, decode)
         if memo_hit:
+            future_capture_request.mark(FutureCaptureOutcome.DECODE_MEMO_HIT)
             return _sync_unavailable_response()
         # A sampled upload is held whole before staging, so no single unit may exceed the hold bound.
         max_unit_seconds = min(config.max_unit_seconds, SAMPLE_SCAN_SECONDS) if sampled else config.max_unit_seconds
@@ -982,7 +1036,15 @@ async def accept_upload(
         items = []
         source_aliases = {}
 
+        # Experiment batch_frame_outcomes: the source frames each unit holds, kept for the status read.
+        frame_runs: dict[str, tuple] = {}
+
         def unit_item(unit, index):
+            item = unit_work_item(unit, index)
+            frame_runs[item.segment_id] = getattr(unit, 'coverage_runs', ())
+            return item
+
+        def unit_work_item(unit, index):
             return replace(
                 seed,
                 segment_id=hashlib.sha256(f'{content_id}:{index}'.encode()).hexdigest(),
@@ -1022,6 +1084,7 @@ async def accept_upload(
                 iterator, unit_item, store, input_language, uid, target, user, evidence, set_sample_phase
             )
             if sample is None:
+                future_capture_request.mark(FutureCaptureOutcome.ROUTE_DECLINED)
                 return None
             queue, decisions = sample
         # A missing-input repair replays these exact decisions; it never probes again.
@@ -1165,12 +1228,16 @@ async def accept_upload(
                 'raw_capture_paths': list((intake_context or {}).get('raw_capture_paths') or ()),
                 'repair_lineage': lineage_record(intake_context),
                 'repair_languages': repair_languages,
+                **context_fields(intake_context),
                 # Funded period the owner's choice was made in (cap-hold re-entry); projection
                 # attributes usage to it across a month rollover (lane 6, Subscription ruling B).
                 **({'usage_period': usage_period} if usage_period else {}),
                 # An automatic release (trial or conversion) is backfill the owner did not tap for;
                 # its rows carry the source so hard-3 and the 2h alarm can count it apart.
                 **({'release': release} if release else {}),
+                # Experiment batch_frame_outcomes: that mapping otherwise exists only inside the
+                # encrypted staged audio, which the status route cannot read. Off, nothing is added.
+                **frame_outcomes.intake_fields(uid, frame_runs),
             },
             enqueue=provider_enqueue(route, outbox, wakes) if provider else None,
             adopt=adopt,
@@ -1201,40 +1268,58 @@ async def accept_upload(
             return start_response(status) if status else sync_content_in_progress_response(outcome['job_id'])
         return sync_content_in_progress_response(outcome.get('job_id'))
     except BatchPrivacyBlocked:
+        future_capture_request.mark(FutureCaptureOutcome.PREFLIGHT_REFUSED)
         return privacy_blocked_response()
     except Exception as error:
-        if isinstance(error, (FutureCaptureRefused, FutureCaptureRetry)):
-            return JSONResponse(status_code=error.status_code, headers=error.headers, content=error.detail)
-        # A transaction may have committed even when its reply was lost. Keep
-        # the staging outbox for reconciliation; never release/re-route content.
-        deterministic = phase == 'decode' and decode is None and is_deterministic_decode_failure(error)
-        if deterministic and decode_failure_memo_enabled():
-            # These bytes cannot decode however often they are retried. Remember
-            # the proven failure so the next retry answers the same 503 without
-            # decoding or staging again. The response never changes.
-            try:
-                key = deterministic_key or await run_blocking(
-                    sync_executor, _decode_failure_key, uid, content_id, paths
-                )
-                if key:
-                    await run_blocking(db_executor, remember_decode_failure, key)
-                    logger.info('event=batch_intake_decode_memo outcome=stored')
-            except Exception:
-                # A memo is an optimization: never let it replace the 503.
-                logger.info('event=batch_intake_decode_memo outcome=degraded')
-        logger.error(
-            'event=batch_intake outcome=retry exception_type=%s phase=%s deterministic=%s elapsed_ms=%d',
-            type(error).__name__,
-            phase,
-            'yes' if deterministic else 'no',
-            round((time.monotonic() - started) * 1000),
+        return await _upload_failure_response(
+            error, phase, started, decode is None, deterministic_key, uid, content_id, paths
         )
-        return _sync_unavailable_response()
     finally:
         if iterator is not None:
             await run_blocking(sync_executor, iterator.close)
         if sample_directory is not None:
             await run_blocking(sync_executor, shutil.rmtree, sample_directory, True)
+
+
+async def _upload_failure_response(
+    error: Exception,
+    phase: str,
+    started: float,
+    uses_wal_decoder: bool,
+    deterministic_key: str | None,
+    uid: str,
+    content_id: str,
+    paths: list[str],
+) -> JSONResponse:
+    if isinstance(error, (FutureCaptureRefused, FutureCaptureRetry)):
+        return JSONResponse(status_code=error.status_code, headers=error.headers, content=error.detail)
+    # A transaction may have committed even when its reply was lost. Keep
+    # the staging outbox for reconciliation; never release/re-route content.
+    # The sampled path advances the same decoder over the same bytes under
+    # its own phase (`sample_decode`) before anything is staged; its probe
+    # phase classifies already-decoded audio, so a decoder fault can only
+    # surface while the sample itself is being decoded.
+    deterministic = phase in ('decode', 'sample_decode') and uses_wal_decoder and is_deterministic_decode_failure(error)
+    if deterministic and decode_failure_memo_enabled():
+        # These bytes cannot decode however often they are retried. Remember
+        # the proven failure so the next retry answers the same 503 without
+        # decoding or staging again. The response never changes.
+        try:
+            key = deterministic_key or await run_blocking(sync_executor, _decode_failure_key, uid, content_id, paths)
+            if key:
+                await run_blocking(db_executor, remember_decode_failure, key)
+                logger.info('event=batch_intake_decode_memo outcome=stored')
+        except Exception:
+            # A memo is an optimization: never let it replace the 503.
+            logger.info('event=batch_intake_decode_memo outcome=degraded')
+    logger.error(
+        'event=batch_intake outcome=retry exception_type=%s phase=%s deterministic=%s elapsed_ms=%d',
+        type(error).__name__,
+        phase,
+        'yes' if deterministic else 'no',
+        round((time.monotonic() - started) * 1000),
+    )
+    return _sync_unavailable_response()
 
 
 async def _sample_language_units(
@@ -1468,7 +1553,7 @@ def repair_upload_owner_matches(uid: str, content_id: str, job_id: str) -> bool:
 def _wal_receipt_status(uid: str, job_id: str) -> dict | None:
     # WAL receipts are Firestore-owned and independent of ordinary jobstore
     # shadow/index modes, including released clients' headerless status polls.
-    return durable_status(FirestoreStore(f'batch_pipeline_{current_stage()}'), uid, job_id)
+    return durable_status(FirestoreStore(f'batch_pipeline_{current_stage()}'), uid, job_id, poll=True)
 
 
 def get_durable_job_status(job_id: str, uid: str, *, artifact_retry: bool = False) -> dict | None:
@@ -1479,8 +1564,11 @@ def get_durable_job_status(job_id: str, uid: str, *, artifact_retry: bool = Fals
     if job_id.startswith(wal_receipts.JOB_PREFIX):
         status = _wal_receipt_status(uid, job_id)
     else:
+        store = FirestoreStore(f'batch_pipeline_{current_stage()}')
+        witnessed, status = wal_duplicate.terminal_status(store, uid, job_id)
         # A2 seam: durable_status may redrive a dead job (writes jobs/queues/control).
-        status = durable_status(shadow_from_env(FirestoreStore(f'batch_pipeline_{current_stage()}')), uid, job_id)
+        if not witnessed:
+            status = durable_status(shadow_from_env(store), uid, job_id, poll=True)
     if status is None:
         raise HTTPException(status_code=404, detail='Sync job not found')
     if status.get('reason_code') == 'batch_artifact_missing' and not artifact_retry:

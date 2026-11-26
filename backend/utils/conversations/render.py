@@ -13,7 +13,7 @@ from models.client_processing import PROJECTION_FAMILY_FIELDS
 from models.conversation import Conversation
 from models.note_claims import current_note_claims
 from models.transcript_segment import TranscriptSegment, strip_grouping_internal_fields
-from utils.conversations.summary_selection import select_primary_summary
+from utils.conversations.summary_selection import render_sections_markdown, select_primary_summary
 from utils.conversations.owner_attribution import speaker_role_projection
 from models.conversation_photo import ConversationPhoto
 from utils.conversations.transcript_for_llm import owner_safe_transcript_segments
@@ -162,6 +162,54 @@ def _strip_match_scores(conv: Dict[str, Any]) -> Dict[str, Any]:
     return conv
 
 
+def present_generated_note_sections(conversation: dict[str, Any]) -> dict[str, Any]:
+    """Clean stored V3 note citations for detail reads without updating the record."""
+    if conversation.get('v3_derived') is not True or conversation.get('v3_notes_written') is not True:
+        return conversation
+    structured = conversation.get('structured')
+    if not isinstance(structured, dict):
+        return conversation
+    sections = structured.get('sections')
+    if not isinstance(sections, list) or not sections:
+        return conversation
+
+    # Generic renderers are also imported by callers outside the notes pipeline.
+    from utils.llm.meeting_notes_validation import repair_note_citations
+
+    transcript_ids = {
+        segment['id']
+        for segment in conversation.get('transcript_segments') or []
+        if isinstance(segment, dict) and isinstance(segment.get('id'), str) and segment['id']
+    }
+    projected_sections = []
+    changed = False
+    for section in sections:
+        body = section.get('body_markdown') if isinstance(section, dict) else None
+        if not isinstance(body, str):
+            projected_sections.append(section)
+            continue
+        clean, recovered = repair_note_citations(body, transcript_ids, uuid_parentheticals_only=True)
+        if clean == body:
+            projected_sections.append(section)
+            continue
+        changed = True
+        section = {**section, 'body_markdown': clean}
+        if recovered:
+            sources = section.get('source_segment_ids') or []
+            section['source_segment_ids'] = list(dict.fromkeys([*sources, *recovered]))
+        projected_sections.append(section)
+
+    if not changed:
+        return conversation
+
+    projected = {**structured, 'sections': projected_sections}
+    overview = structured.get('overview')
+    if isinstance(overview, str) and overview.strip() == render_sections_markdown(sections):
+        projected['overview'] = render_sections_markdown(projected_sections)
+    logger.info('event=conversation_note_uuid_citation_repaired surface=detail')
+    return {**conversation, 'structured': projected}
+
+
 def redact_legacy_live_recap_sections(conv: Dict[str, Any]) -> None:
     """Hide verifiably generated legacy LIVE sections without changing its owner-editable overview."""
     if (
@@ -238,6 +286,8 @@ def redact_conversation_for_integration(conv: Dict[str, Any]) -> Dict[str, Any]:
     conv.pop('geolocation', None)
     # Server-computed capture badge stays on app views, outside the integration contract.
     conv.pop('capture_coverage', None)
+    # Per-recording allowance/processing evidence is for the authenticated app views.
+    conv.pop('transcription_admission', None)
     # First-party speaker-exclusion state is not part of the public integration
     # contract either; stays on app views (same §capture_coverage precedent).
     conv.pop('excluded_speakers', None)

@@ -561,11 +561,11 @@ class AppLocalizationsNo extends AppLocalizations {
   String get hardwareSection => 'Maskinvare';
 
   @override
-  String get v2Undetected => 'V2 ikke oppdaget';
+  String get v2Undetected => 'Frakoblet synkronisering er ikke tilgjengelig';
 
   @override
   String get v2UndetectedMessage =>
-      'Vi ser at du enten har en V1-enhet eller at enheten din ikke er tilkoblet. SD-kortfunksjonalitet er kun tilgjengelig for V2-enheter.';
+      'Frakoblet synkronisering krever en tilkoblet Omi-enhet med SD-kortlagring. Den nåværende enheten din støtter ikke dette.';
 
   @override
   String get endConversation => 'Avslutt samtale';
@@ -7056,6 +7056,26 @@ class AppLocalizationsNo extends AppLocalizations {
   String get authUnexpectedError => 'Uventet feil under pålogging, vennligst prøv igjen';
 
   @override
+  String get accountSignInMethods => 'Innloggingsmetoder';
+
+  @override
+  String get accountAddSignInMethod => 'Legg til en innloggingsmetode';
+
+  @override
+  String get accountAddSignInMethodDetails =>
+      'Legg til en måte å logge på denne Omi-kontoen. Abonnementet, opptakene og integrasjonene dine blir værende på denne kontoen.';
+
+  @override
+  String get accountSignInConflictTitle => 'Denne innloggingen tilhører en annen konto';
+
+  @override
+  String get accountSignInConflictDetails =>
+      'Du er fortsatt logget på denne kontoen. Hver Omi-konto beholder sitt eget abonnement, sine opptak og sine integrasjoner.';
+
+  @override
+  String get accountSignInMethodAdded => 'Innloggingsmetoden er lagt til';
+
+  @override
   String get authFailedToLinkGoogle => 'Kunne ikke koble til Google, vennligst prøv igjen.';
 
   @override
@@ -9077,16 +9097,6 @@ class AppLocalizationsNo extends AppLocalizations {
 
   @override
   String get syncStatusUploaded => 'Lastet opp · behandles på Omi';
-
-  @override
-  String get deleteFromServerTitle => 'Slette overalt?';
-
-  @override
-  String get deleteFromServerMessage =>
-      'Dette opptaket er lastet opp, men ikke transkribert ennå. Når du sletter det, slettes også kopien på Omis servere permanent, så det blir aldri transkribert. Dette kan ikke angres.';
-
-  @override
-  String get deletedRecordingAlreadyTranscribed => 'Allerede transkribert. Slett samtalen for å fjerne det.';
 
   @override
   String get deleteWhileProcessingTitle => 'Behandles fortsatt';
@@ -14374,6 +14384,9 @@ class AppLocalizationsNo extends AppLocalizations {
   String get processingProgress => 'Behandler ventende opptak…';
 
   @override
+  String get waitingForTranscriptionAllowance => 'Venter på ledig transkripsjonskvote';
+
+  @override
   String get processingDeferred => 'Venter på behandling';
 
   @override
@@ -15327,9 +15340,6 @@ class AppLocalizationsNo extends AppLocalizations {
   String get stopThese => 'Stopp disse';
 
   @override
-  String get meetingActionItemsTitle => 'Handlingspunkter';
-
-  @override
   String get addToTasks => 'Legg til i Oppgaver';
 
   @override
@@ -15734,6 +15744,119 @@ class AppLocalizationsNo extends AppLocalizations {
 
   @override
   String get stillWorkingOnIt => 'Jobber fortsatt med det.';
+
+  @override
+  String get deviceReadyToUse => 'Klar til bruk';
+
+  @override
+  String get firmwareUpdateFirmwareTooOld =>
+      'Fastvaren på enheten din er for gammel for denne oppdateringen. Kontakt kundestøtte for hjelp med å oppdatere enheten.';
+
+  @override
+  String get firmwareUpdateAppRequired =>
+      'Denne fastvareoppdateringen krever en nyere Omi-app. Oppdater appen fra appbutikken din, og se etter oppdateringer på nytt.';
+
+  @override
+  String get quietPayerTitle => 'Ingen opptak på 5 dager';
+
+  @override
+  String get quietPayerMessage => 'Sjekk Omi-en din.';
+
+  @override
+  String get quietPayerCheck => 'Sjekk';
+
+  @override
+  String get playManageSubscription => 'Administrer abonnement';
+
+  @override
+  String get playBilledByGoogle => 'Faktureres via Google Play';
+
+  @override
+  String get playPurchasePending => 'Betalingen venter. Omi Pro starter så snart Google Play bekrefter den.';
+
+  @override
+  String get playPurchaseOtherAccount => 'Dette Google Play-kjøpet tilhører en annen Omi-konto.';
+
+  @override
+  String get playPurchaseNotConfirmed => 'Vi kunne ikke bekrefte kjøpet ennå. Vi prøver igjen automatisk.';
+
+  @override
+  String get playRenewalTerms =>
+      'Fornyes automatisk til prisen som vises, til du sier opp. Administrer eller si opp når som helst i Google Play.';
+
+  @override
+  String get playPaidAppUnavailable => 'Ikke tilgjengelig på Android';
+
+  @override
+  String get pageNotAvailableInApp => 'Denne siden er ikke tilgjengelig i appen.';
+
+  @override
+  String get shopOrderPlacedCheckEmail => 'Bestillingen er sendt. Sjekk e-posten din for bekreftelsen.';
+
+  @override
+  String get prepaidCodeEntry => 'Har du en kode?';
+
+  @override
+  String get prepaidCodeTitle => 'Løs inn en kode';
+
+  @override
+  String get prepaidCodeFieldHint => 'Skriv inn koden din';
+
+  @override
+  String get prepaidCodeRedeem => 'Løs inn';
+
+  @override
+  String get prepaidCodeRedeemed => 'Koden er løst inn';
+
+  @override
+  String prepaidCodeResult(String reason) {
+    String _temp0 = intl.Intl.selectLogic(
+      reason,
+      {
+        'invalid': 'Denne koden er ikke gyldig. Sjekk den og prøv igjen.',
+        'used': 'Denne koden er allerede brukt.',
+        'expired': 'Denne koden har utløpt.',
+        'hasPlan':
+            'Du har allerede et abonnement. Koden din ble ikke brukt. Løs den inn når abonnementet ditt slutter.',
+        'notPrepaid': 'Denne koden kan ikke løses inn her. Bruk den når du velger et abonnement.',
+        'notEligible': 'Denne koden kan ikke brukes på denne kontoen.',
+        'rateLimited': 'For mange forsøk. Prøv igjen senere.',
+        'other': 'Noe gikk galt. Prøv igjen.',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get playStripeBilledOnWeb => 'Faktureres via omi.me. Avslutt her når som helst.';
+
+  @override
+  String get playStripeBilledOnWebShort => 'Faktureres via omi.me.';
+
+  @override
+  String playStripePlanPaused(String plan) {
+    return '$plan-abonnementet ditt er satt på pause.';
+  }
+
+  @override
+  String get firmwareNewestSupportedForDevice => 'Enheten din har allerede den nyeste støttede fastvareversjonen';
+
+  @override
+  String get firmwareSyncRecordingsFirstTitle => 'Synkroniser opptakene dine først';
+
+  @override
+  String get firmwareSyncRecordingsFirstMessage =>
+      'Noen opptak ligger fortsatt på enheten din. La dem fullføre synkroniseringen til telefonen din, og start deretter oppdateringen.';
+
+  @override
+  String get deleteFromServerTitle => 'Slette overalt?';
+
+  @override
+  String get deleteFromServerMessage =>
+      'Dette opptaket er lastet opp, men ikke transkribert ennå. Når du sletter det, slettes også kopien på Omis servere permanent, så det blir aldri transkribert. Dette kan ikke angres.';
+
+  @override
+  String get deletedRecordingAlreadyTranscribed => 'Allerede transkribert. Slett samtalen for å fjerne det.';
 
   @override
   String get deletedRecordingWillBeProcessed =>

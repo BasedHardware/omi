@@ -775,7 +775,9 @@ continue independently of recovery membership. The one-hot gauge
 configuration state; it does not prove which private owner is configured.
 
 For qualification, the deploy lead sets `uid:<test>` through the **private-values
-path**, never a committed manifest, on every API/sync recovery executor. Verify
+path** (on backend-listen: the Secret Manager document `LISTEN_PRIVATE_ENV`,
+see `docs/runbooks/listen-private-env.md`), never a committed manifest, on every
+API/sync recovery executor. Verify
 all serving revisions and scheduler targets carry the restriction **before**
 activating recovery. Staging is data-isolated (`FIRESTORE_DATABASE_ID=staging`
 in `based-hardware-dev`, in-cluster Redis, and the data-plane fence in

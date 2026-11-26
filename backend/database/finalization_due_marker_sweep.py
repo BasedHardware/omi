@@ -15,6 +15,7 @@ from google.cloud import firestore
 from google.cloud.firestore_v1 import FieldFilter
 from prometheus_client import Counter
 
+from models.finalization_owner import python_owns_finalization
 from database._client import get_firestore_client
 from database.conversation_finalization_jobs import (
     FINALIZATION_JOBS_COLLECTION,
@@ -64,6 +65,8 @@ def _restore_missing_due_marker_txn(transaction: Any, job_ref: Any, cutoff: date
     if not getattr(snapshot, 'exists', False):
         return 'skipped'
     job = snapshot.to_dict() or {}
+    if not python_owns_finalization(job):
+        return 'skipped'
     if job.get('status') not in ('queued', 'leased') or job.get('kind') in _DUE_MARKER_SWEEP_EXCLUDED_KINDS:
         return 'skipped'
     if job.get('requires_byok'):

@@ -36,6 +36,43 @@
       "correlation": null
     },
     {
+      "id": "walWriteReceipt",
+      "wire_name": "WAL Write Receipt",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {
+        "result": {
+          "type": "enum",
+          "wire_name": "result",
+          "values": [
+            "replay",
+            "invalid",
+            "deleted_owner",
+            "missing_audio",
+            "content_mismatch",
+            "budget_exhausted",
+            "scan_unavailable",
+            "index_unavailable",
+            "publish_failed"
+          ]
+        },
+        "recovered": {
+          "type": "int",
+          "wire_name": "recovered"
+        },
+        "withheld": {
+          "type": "int",
+          "wire_name": "withheld"
+        }
+      },
+      "consumers": [
+        "wal-write-receipt"
+      ],
+      "correlation": null
+    },
+    {
       "id": "savedPendantReconnectObserved",
       "wire_name": "Saved Pendant Reconnect",
       "status": "active",
@@ -3875,7 +3912,9 @@
             "onboarding",
             "aha_first_summary",
             "free_cap",
-            "on_phone_banner"
+            "on_phone_banner",
+            "held_recording",
+            "held_recording_detail"
           ]
         },
         "currentPlan": {
@@ -3979,7 +4018,9 @@
             "onboarding",
             "aha_first_summary",
             "free_cap",
-            "on_phone_banner"
+            "on_phone_banner",
+            "held_recording",
+            "held_recording_detail"
           ]
         }
       },
@@ -4007,6 +4048,48 @@
             "operator",
             "architect",
             "unknown"
+          ]
+        },
+        "billingInterval": {
+          "type": "enum",
+          "wire_name": "billing_interval",
+          "values": [
+            "month",
+            "year",
+            "unknown"
+          ]
+        }
+      },
+      "consumers": [
+        "subscription-funnel"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "upgradeBillingProvider",
+      "wire_name": "Upgrade Billing Provider",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {
+        "provider": {
+          "type": "enum",
+          "wire_name": "provider",
+          "values": [
+            "stripe",
+            "play"
+          ]
+        },
+        "stage": {
+          "type": "enum",
+          "wire_name": "stage",
+          "values": [
+            "selected",
+            "succeeded",
+            "cancelled",
+            "pending",
+            "failed"
           ]
         },
         "billingInterval": {
@@ -4619,7 +4702,9 @@
             "onboarding",
             "aha_first_summary",
             "free_cap",
-            "on_phone_banner"
+            "on_phone_banner",
+            "held_recording",
+            "held_recording_detail"
           ]
         }
       },
@@ -4833,6 +4918,59 @@
       },
       "consumers": [
         "wal-backlog-health"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "mobileHeldWalBacklog",
+      "wire_name": "Mobile Held WAL Backlog",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {
+        "trigger": {
+          "type": "enum",
+          "wire_name": "trigger",
+          "values": [
+            "startup",
+            "foreground",
+            "hourly"
+          ]
+        },
+        "heldWalCount": {
+          "type": "int",
+          "wire_name": "held_wal_count"
+        },
+        "oldestHeldAgeS": {
+          "type": "int",
+          "wire_name": "oldest_held_age_s"
+        },
+        "holdFlagOn": {
+          "type": "bool",
+          "wire_name": "hold_flag_on"
+        },
+        "holdState": {
+          "type": "enum",
+          "wire_name": "hold_state",
+          "values": [
+            "bg300",
+            "fg_preview300",
+            "fg60",
+            "unknown"
+          ]
+        },
+        "cohort": {
+          "type": "enum",
+          "wire_name": "cohort",
+          "values": [
+            "on",
+            "off"
+          ]
+        }
+      },
+      "consumers": [
+        "mobile-held-wal-backlog"
       ],
       "correlation": null
     },
@@ -5282,6 +5420,32 @@
       "correlation": null
     },
     {
+      "id": "subscriptionQuietRowShown",
+      "wire_name": "Subscription Quiet Row Shown",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {},
+      "consumers": [
+        "subscription-quiet-row"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "subscriptionQuietRowTapped",
+      "wire_name": "Subscription Quiet Row Tapped",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {},
+      "consumers": [
+        "subscription-quiet-row"
+      ],
+      "correlation": null
+    },
+    {
       "id": "mobileDeviceHealthDailyRingRead",
       "wire_name": "Mobile Device Health Daily",
       "status": "active",
@@ -5320,6 +5484,34 @@
       },
       "consumers": [
         "pendant-ring-read-disconnects"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "walStopDrain",
+      "wire_name": "WAL Stop Drain",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {
+        "lateFramesIndexed": {
+          "type": "int",
+          "wire_name": "late_frames_indexed"
+        },
+        "result": {
+          "type": "enum",
+          "wire_name": "result",
+          "values": [
+            "drained",
+            "pending",
+            "failed",
+            "superseded"
+          ]
+        }
+      },
+      "consumers": [
+        "wal-stop-drain"
       ],
       "correlation": null
     },
@@ -5560,6 +5752,62 @@
       },
       "consumers": [
         "orphan-audio-reclaim"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "walCustodyAudit",
+      "wire_name": "WAL Custody Audit",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {
+        "agreeCovered": {
+          "type": "int",
+          "wire_name": "agree_covered"
+        },
+        "agreePending": {
+          "type": "int",
+          "wire_name": "agree_pending"
+        },
+        "disagree": {
+          "type": "int",
+          "wire_name": "disagree"
+        },
+        "unknown": {
+          "type": "int",
+          "wire_name": "unknown"
+        },
+        "released": {
+          "type": "int",
+          "wire_name": "released"
+        }
+      },
+      "consumers": [
+        "wal-custody-audit"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "appForegroundEnded",
+      "wire_name": "App Foreground Ended",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {
+        "foregroundSeconds": {
+          "type": "int",
+          "wire_name": "foreground_seconds"
+        },
+        "capturingSeconds": {
+          "type": "int",
+          "wire_name": "capturing_seconds"
+        }
+      },
+      "consumers": [
+        "app-foreground-time"
       ],
       "correlation": null
     }

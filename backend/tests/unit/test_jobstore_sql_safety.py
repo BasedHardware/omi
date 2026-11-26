@@ -197,17 +197,13 @@ def test_first_pending_in_composes_the_state_fragment():
     assert params == ('batch_pipeline_test_sql', 'ok')
 
 
-@pytest.mark.parametrize('skip_terminal', [False, True])
-def test_pending_page_in_binds_owner_and_a_capped_limit(monkeypatch, skip_terminal):
-    monkeypatch.setattr(postgres_store, 'held_poll_skip_enabled', lambda: skip_terminal)
+def test_pending_page_in_binds_owner_and_a_capped_limit():
     conn = Conn([('k', {})])
     assert store(conn).pending_page_in(conn, HOSTILE, 10_000) == [('k', {})]
     statement, params = conn.statements[0]
     assert HOSTILE not in statement and statement.endswith('LIMIT %s')
-    assert ('state <> ALL(%s)' in statement) == skip_terminal
+    assert 'state <> ALL(%s)' not in statement
     expected = ('batch_pipeline_test_sql', HOSTILE)
-    if skip_terminal:
-        expected += (list(postgres_store.MERGE_POLL_TERMINAL_STATES),)
     assert params == (*expected, 160)
 
 
@@ -244,19 +240,15 @@ def test_projection_page_preserves_seed_and_due_cursor_bindings(due_before, afte
     assert (' >= %s' in statement) == (len(cursor_params) == 1)
 
 
-@pytest.mark.parametrize('skip_terminal', [False, True])
-def test_pending_scans_preserve_terminal_filter_and_bind_owner(monkeypatch, skip_terminal):
-    monkeypatch.setattr(postgres_store, 'held_poll_skip_enabled', lambda: skip_terminal)
+def test_pending_scans_preserve_terminal_heads_and_bind_owner():
     conn = Conn([], [])
     pg = store(conn)
     pg.first_pending_in(conn, HOSTILE)
     pg.fresh_pending(HOSTILE, 100)
     expected = ('batch_pipeline_test_sql', HOSTILE)
-    if skip_terminal:
-        expected += (list(postgres_store.MERGE_POLL_TERMINAL_STATES),)
     for statement, params in conn.statements:
         assert HOSTILE not in statement
-        assert ('state <> ALL(%s)' in statement) == skip_terminal
+        assert 'state <> ALL(%s)' not in statement
         assert statement.count('%s') == len(params)
     assert conn.statements[0][1] == expected
     assert conn.statements[1][1] == (*expected, 32)

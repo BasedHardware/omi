@@ -5,7 +5,7 @@ description: >-
 
 inputs:
   rollback_revision:
-    description: 'Exact retained integration predecessor; explicit integration-only binding must match the serving 200/10 revision'
+    description: 'Exact admitted predecessor for a named deploy or integration canary'
     required: false
     default: 'backend-integration-provfix-off1114'
   post_wrap_guard:
@@ -41,7 +41,7 @@ inputs:
     required: false
     default: '0'
   backend_sync_memory:
-    description: 'backend-sync memory: 6Gi prod right-size (2026-10-24 costcut), 4Gi/5Gi/8Gi trial values; dev callers keep 8Gi'
+    description: 'backend-sync memory input for dev; production uses backend/deploy/ops/prod.yaml'
     required: false
     default: '8Gi'
   firebase_probe_signer_service_account:
@@ -220,6 +220,9 @@ runs:
              "${{ inputs.integration_image }}" =~ ^gcr\.io/based-hardware/(backend|backend-workers)@sha256:[0-9a-f]{64}$ &&
              ("$BOUND_SERVICE_IMAGES" == "integration-canary=${{ inputs.integration_image }},post_wrap_guard=${{ inputs.post_wrap_guard }}" ||
               ("${{ inputs.post_wrap_guard }}" == internal && "$BOUND_SERVICE_IMAGES" == "integration-canary=${{ inputs.integration_image }}")) ]] || exit 1
+        elif [[ "$CLOUD_RUN_SERVICE" != all ]]; then
+          [[ "$ROLLBACK_REVISION" =~ ^${CLOUD_RUN_SERVICE}-[a-z0-9]([a-z0-9-]*[a-z0-9])?$ &&
+             ${#ROLLBACK_REVISION} -le 63 ]] || exit 1
         else
           [[ "$ROLLBACK_REVISION" == backend-integration-provfix-off1114 ]] || exit 1
         fi
@@ -397,6 +400,17 @@ runs:
       shell: bash
       run: python3 -m pip install -q pyyaml
 
+    - name: Resolve production backend memory
+      if: ${{ inputs.runtime_env == 'prod' && inputs.integration_only != 'true' && (inputs.cloud_run_service == 'all' || inputs.cloud_run_service == 'backend' || inputs.cloud_run_service == 'backend-sync') }}
+      id: ops-memory
+      shell: bash
+      run: |
+        set -euo pipefail
+        for service in backend backend-sync; do
+          memory="$(python3 "$DEPLOY_CONTROL_SCRIPTS/ops_train.py" render-memory --env prod --service "$service")"
+          echo "${service//-/_}=$memory" >> "$GITHUB_OUTPUT"
+        done
+
     - name: Bind integration transport evidence and capture retained inverse
       id: integration-transport-prepare
       if: ${{ inputs.integration_only == 'true' }}
@@ -564,7 +578,11 @@ runs:
               ("${{ inputs.deploy_profile }}" == "auto-dev" ||
                "${{ inputs.environment }}" == "prod" ||
                "${{ inputs.environment }}" == "development") ]]; then
-          PREFLIGHT_ARGS+=(--repair-traffic)
+          # Named deploys must refuse drift against their admitted inverse.
+          # Do not rewrite requested traffic before that comparison.
+          if [[ "${{ inputs.cloud_run_service }}" == all ]]; then
+            PREFLIGHT_ARGS+=(--repair-traffic)
+          fi
           if [[ "${{ inputs.deploy_profile }}" == manual ]]; then
             history_args=()
             if [[ "$(git rev-parse --is-shallow-repository)" == true ]]; then
@@ -922,7 +940,6 @@ runs:
         image: ${{ steps.service-images.outputs.backend }}
         no_traffic: true
         # Prod backend sizing is explicit so a fresh service cannot deploy defaults. Dev inherits.
-        # margin-20: 7d application memory p95 <=1.312GiB, max bucket <=1.710GiB; rollback 8Gi.
         flags: >-
           --revision-suffix=${{ steps.image-tag.outputs.revision_suffix }}-base
           ${{ inputs.transcription_candidate_tag != '' && format('--tag={0}', inputs.transcription_candidate_tag) || '' }}
@@ -930,7 +947,8 @@ runs:
           --remove-env-vars=MEMORY_ENABLED_USERS,MEMORY_CANONICAL_PROMOTION_CRON_ENABLED,MEMORY_CANONICAL_PROMOTION_CRON_INTERVAL_HOURS,MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED,BASIC_TIER_MINUTES_LIMIT_PER_MONTH,BASIC_TIER_WORDS_TRANSCRIBED_LIMIT_PER_MONTH,BASIC_TIER_INSIGHTS_GAINED_LIMIT_PER_MONTH,BASIC_TIER_MEMORIES_CREATED_LIMIT_PER_MONTH,CONVERSATION_RELEVANCE_JEV_UID_ALLOWLIST,CONVERSATION_RELEVANCE_JEV_ENABLED,CONVERSATION_RELEVANCE_JEV_SHADOW_PERCENT,CONVERSATION_RELEVANCE_JEV_SHADOW_DAILY_CAP,CONVERSATION_RELEVANCE_KEEP_ALL_PERCENT,CONVERSATION_RELEVANCE_JEV_RESCUE,MEMORY_OWNER_JEV_FLIP_ENABLED,MEMORY_OWNER_JEV_FLIP_PERCENT,MEMORY_OWNER_JEV_SHADOW_PERCENT,MEMORY_OWNER_JEV_SHADOW_DAILY_CAP,CONVERSATION_SMART_MERGE_UID_ALLOWLIST,CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE,DESKTOP_PENDANT_CALL_LINK_MODE,DESKTOP_PENDANT_CALL_LINK_PERCENT,MEETING_NOTES_EPISODE_SELECTION,MEETING_NOTES_EPISODE_JEV_THRESHOLD,MEETING_NOTES_EPISODE_SELECTION_EFFORT,MEETING_NOTES_EPISODE_SELECTION_TIMEOUT_SECONDS,CONVERSATION_CALENDAR_CONTEXT_READ_ENABLED,CONVERSATION_OCR_CONTEXT_ENABLED,MEETING_NOTES_SCREEN_FRAMES_CONTEXT_ENABLED,SCREEN_FRAME_EGRESS_ENABLED,MEMORY_BELIEF_MODEL_ENABLED,FREE_TIER_MEMORY_SUPPRESSION,FREE_TIER_MEMORY_SUPPRESSION_COHORT,KNOWLEDGE_LEDGER_DRAIN_ENABLED,KNOWLEDGE_LEDGER_DRAIN_UID_ALLOWLIST,MEMORY_DAILY_MEMORY_SWEEP_ENABLED,MEMORY_DAILY_MEMORY_SWEEP_KILL_SWITCH,MEMORY_DAILY_MEMORY_SWEEP_MODEL_ENABLED,MEMORY_DAILY_MEMORY_SWEEP_MODEL_NAME,MEMORY_DAILY_MEMORY_SWEEP_MAX_MODEL_CANDIDATES,MEMORY_DAILY_MEMORY_SWEEP_MAX_MODEL_COST_USD,MEMORY_DAILY_MEMORY_SWEEP_COHORT_ENABLED,MEMORY_DAILY_MEMORY_SWEEP_COHORT_FLAG,MEMORY_DAILY_MEMORY_SWEEP_COHORT_NAME,MEMORY_DAILY_MEMORY_SWEEP_COHORT_TIMEOUT_SECONDS,MEMORY_DAILY_MEMORY_SWEEP_TIMEZONE_RECONCILIATION_ENABLED,MEMORY_DAILY_MEMORY_SWEEP_STAGGER_SECONDS,DEEPGRAM_SELF_HOSTED_ENABLED,DEEPGRAM_SELF_HOSTED_URL${{ steps.runtime-env.outputs.backend_remove_env_extra }}
           ${{ steps.runtime-env.outputs.cloud_run_flags }}
           ${{ steps.runtime-env.outputs.backend_identity_flags }}
-          ${{ inputs.runtime_env == 'prod' && '--cpu=2 --memory=4Gi --concurrency=20 --min-instances=3 --max-instances=100' || '' }}
+          ${{ inputs.runtime_env == 'prod' && '--cpu=2 --concurrency=20 --min-instances=3 --max-instances=100' || '' }}
+          ${{ inputs.runtime_env == 'prod' && format('--memory={0}', steps.ops-memory.outputs.backend) || '' }}
         env_vars: |-
           ${{ steps.runtime-env.outputs.backend_env_vars }}
           OMI_BACKEND_RELEASE_SHA=${{ inputs.admitted_sha }}
@@ -1024,8 +1042,8 @@ runs:
           --state "$RUNNER_TEMP/backend-runtime-env-state.json" \
           --routing-env "$RUNNER_TEMP/sync-routing.env"
 
-    - name: Validate backend-sync memory trial
-      if: ${{ (inputs.cloud_run_service == 'all' || inputs.cloud_run_service == 'backend-sync') && (inputs.integration_only != 'true' && (success())) }}
+    - name: Validate dev backend-sync memory trial
+      if: ${{ (inputs.cloud_run_service == 'all' || inputs.cloud_run_service == 'backend-sync') && (inputs.runtime_env != 'prod' && inputs.integration_only != 'true' && success()) }}
       shell: bash
       env:
         SYNC_MEMORY: ${{ inputs.backend_sync_memory }}
@@ -1081,7 +1099,7 @@ runs:
           ${{ steps.runtime-env.outputs.backend_sync_identity_flags }}
           --cpu=2
           --max-instances=${{ steps.live-max-scale.outputs.max_scale }}
-          --memory=${{ inputs.backend_sync_memory }}
+          --memory=${{ inputs.runtime_env == 'prod' && steps.ops-memory.outputs.backend_sync || inputs.backend_sync_memory }}
         env_vars: |-
           ${{ steps.runtime-env.outputs.backend_sync_env_vars }}
           OMI_BACKEND_RELEASE_SHA=${{ inputs.admitted_sha }}
@@ -1529,8 +1547,10 @@ runs:
     - name: Accept no-traffic Cloud Run candidate
       id: verify-cloud-run-candidate
       shell: bash
+      # A legitimate receiver URL change fails closed until this pin changes in a reviewed PR.
       run: |
         python3 "$DEPLOY_CONTROL_SCRIPTS/verify_backend_release_vector.py" \
+          ${{ inputs.runtime_env == 'prod' && inputs.integration_only != 'true' && (inputs.cloud_run_service == 'all' || inputs.cloud_run_service == 'backend-sync-backfill') && '--backfill-binding-sha256 3a180b6e241438dbc43a7292b07de3866e95a35af1bb08210be1d05e80017ceb' || '' }} \
           ${{ inputs.integration_only == 'true' && '--integration-only' || '' }} \
           --candidate \
           --cloud-run-only \
@@ -1659,12 +1679,19 @@ runs:
         ${{ inputs.integration_only != 'true' && (success()) }}
       id: cloud-run-traffic-snapshot
       shell: bash
+      env:
+        CLOUD_RUN_SERVICE: ${{ inputs.cloud_run_service }}
+        ROLLBACK_REVISION: ${{ inputs.rollback_revision }}
       run: |
+        set -euo pipefail
         scope_args=()
         if [[ " $SELECTED_CLOUD_RUN_SERVICES " == *" backend "* ]]; then scope_args+=(--service backend); fi
         if [[ " $SELECTED_CLOUD_RUN_SERVICES " == *" backend-sync "* ]]; then scope_args+=(--service backend-sync); fi
         if [[ " $SELECTED_CLOUD_RUN_SERVICES " == *" backend-sync-backfill "* ]]; then scope_args+=(--service backend-sync-backfill); fi
         if [[ " $SELECTED_CLOUD_RUN_SERVICES " == *" backend-integration "* ]]; then scope_args+=(--service backend-integration); fi
+        if [[ "${{ inputs.deploy_profile }}" == manual && "$CLOUD_RUN_SERVICE" != all ]]; then
+          scope_args+=(--expected-serving-revision "$ROLLBACK_REVISION")
+        fi
         python3 "$DEPLOY_CONTROL_SCRIPTS/cloud_run_traffic_snapshot.py" capture \
           "${scope_args[@]}" \
           --project "${{ inputs.project_id }}" \
@@ -1756,6 +1783,7 @@ runs:
       env:
         PROBE_SECRET_PROJECT: ${{ inputs.project_id }}
         FIREBASE_AUTH_PROJECT_ID: based-hardware
+        SMOKE_CLOUD_RUN_SERVICE: ${{ inputs.cloud_run_service }}
       run: |
         set -euo pipefail
         umask 077
@@ -1766,30 +1794,83 @@ runs:
           --firebase-project "$FIREBASE_AUTH_PROJECT_ID" \
           --token-output "$token_file"
         reservation_status="$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' \
+          --connect-timeout 5 --max-time 10 \
           --request POST https://api.omi.me/v2/desktop/beta/candidates/reserve \
           --header 'Content-Type: application/json' --data '{"tag":"v0.0.0+1-macos"}')"
         # A schema-valid inert tag reaches the authorization wall without reserving a real candidate.
         test "$reservation_status" = 401
-        python3 "$DEPLOY_CONTROL_SCRIPTS/transcription_capability_probe.py" \
-          --candidate-api-url https://api.omi.me \
-          --bearer-token-file "$token_file" --json-only
+        if [[ "$SMOKE_CLOUD_RUN_SERVICE" != backend ]]; then
+          python3 "$DEPLOY_CONTROL_SCRIPTS/transcription_capability_probe.py" \
+            --candidate-api-url https://api.omi.me \
+            --bearer-token-file "$token_file" --json-only
+          exit
+        fi
 
-    - name: Smoke What Matters Now datastore query
-      id: smoke-what-matters-now-datastore-query
-      if: >-
-        ${{ inputs.integration_only != 'true' && (inputs.deploy_profile == 'manual' && inputs.environment == 'development') }}
-      shell: bash
-      env:
-        PROJECT_ID: ${{ inputs.project_id }}
-      run: |
-        set -euo pipefail
-        ADMIN_KEY="$(gcloud secrets versions access latest --secret=ADMIN_KEY --project="$PROJECT_ID")"
-        export ADMIN_KEY
-        trap 'unset ADMIN_KEY' EXIT
-        # api.omi.dev has never resolved (NXDOMAIN), so this smoke could not reach
-        # anything; api.omiapi.com is development's real public API host, matching
-        # the rest of the dev domain family (parakeet/nllb/pusher.omiapi.com).
-        python3 "$DEPLOY_CONTROL_SCRIPTS/smoke_what_matters_now.py" --base-url https://api.omiapi.com
+        # Replace the shell so the runner's cancellation signal reaches the retry delay.
+        exec python3 -I - "$DEPLOY_CONTROL_SCRIPTS" "$token_file" <<'PY'
+        import json
+        from pathlib import Path
+        import signal
+        import subprocess
+        import sys
+        import time
+
+        token_file = Path(sys.argv[2])
+        command = [
+            sys.executable, "-I", str(Path(sys.argv[1]) / "transcription_capability_probe.py"),
+            "--candidate-api-url", "https://api.omi.me",
+            "--bearer-token-file", str(token_file),
+            "--timeout-seconds", "30",
+            "--no-redirects", "--json-only",
+        ]
+
+        def stop(signum, _frame):
+            raise SystemExit(128 + signum)
+
+        try:
+            signal.signal(signal.SIGTERM, stop)
+            deadline = time.monotonic() + 65
+            for attempt in (1, 2):
+                started = time.monotonic()
+                remaining = deadline - started
+                if remaining <= 0:
+                    sys.exit("Transcription smoke exceeded its 65-second deadline")
+                try:
+                    probe = subprocess.run(
+                        command, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True, timeout=remaining,
+                    )
+                except subprocess.TimeoutExpired:
+                    sys.exit(f"Transcription smoke attempt {attempt} exceeded the 65-second deadline")
+                if probe.returncode not in (0, 1):
+                    sys.exit(f"Transcription probe exited with status {probe.returncode}")
+                try:
+                    report = json.loads(probe.stdout)
+                    status = report["status"]
+                    details = report["checks"][0]["details"]
+                except (ValueError, KeyError, IndexError, TypeError):
+                    sys.exit("Transcription probe did not emit its redacted result")
+                print(json.dumps({
+                    **report,
+                    "attempt": attempt,
+                    "elapsed_seconds": round(time.monotonic() - started, 3),
+                }), flush=True)
+                if probe.returncode == 0 and status == "PASS":
+                    sys.exit(0)
+                if (
+                    probe.returncode != 1 or status != "FAIL" or attempt == 2
+                    or details.get("error_kind") != "network_error" or "http_status" in details
+                ):
+                    sys.exit(1)
+                if deadline - time.monotonic() <= 5:
+                    sys.exit("Transcription smoke has no time for its retry")
+                print("Retrying transcription smoke in 5 seconds after a transport failure", flush=True)
+                time.sleep(5)
+        finally:
+            token_file.unlink(missing_ok=True)
+        PY
+
+    # SCA-3681: The manual dev datastore smoke is suspended pending a verified
+    # dev endpoint. api.omiapi.com forwards Beta clients to production.
 
     - name: Restore Cloud Run traffic snapshot after failed promotion
       if: >-
@@ -1809,7 +1890,7 @@ runs:
 
     - name: Restore Cloud Run traffic snapshot after failed promotion
       if: >-
-        ${{ inputs.integration_only != 'true' && (inputs.deploy_profile == 'manual' && (failure() || cancelled()) && steps.cloud-run-traffic-snapshot.outcome == 'success' && (steps.shift-cloud-run-traffic.outcome == 'failure' || steps.shift-cloud-run-traffic.outcome == 'cancelled' || steps.verify-serving-release-vector.outcome == 'failure' || steps.verify-serving-release-vector.outcome == 'cancelled' || steps.smoke-promoted-production-serving-api.outcome == 'failure' || steps.smoke-promoted-production-serving-api.outcome == 'cancelled' || steps.smoke-what-matters-now-datastore-query.outcome == 'failure' || steps.smoke-what-matters-now-datastore-query.outcome == 'cancelled')) }}
+        ${{ inputs.integration_only != 'true' && (inputs.deploy_profile == 'manual' && (failure() || cancelled()) && steps.cloud-run-traffic-snapshot.outcome == 'success' && (steps.shift-cloud-run-traffic.outcome == 'failure' || steps.shift-cloud-run-traffic.outcome == 'cancelled' || steps.verify-serving-release-vector.outcome == 'failure' || steps.verify-serving-release-vector.outcome == 'cancelled' || steps.smoke-promoted-production-serving-api.outcome == 'failure' || steps.smoke-promoted-production-serving-api.outcome == 'cancelled')) }}
       shell: bash
       run: |
         set -euo pipefail

@@ -187,9 +187,17 @@ def test_empty_model_output_retains_debt_and_prior_good_output(enabled):
     assert empty_write['summary_due_at'] is None
 
 
-def test_empty_output_on_a_finalization_owned_row_keeps_the_job_retryable(enabled):
+@pytest.mark.parametrize(
+    'ownership',
+    [
+        {'finalization_job_id': 'job-1'},
+        {'finalization_engine': 'go', 'finalization_owner_epoch': 1},
+        {'finalization_owner_epoch': 1},
+    ],
+)
+def test_empty_output_on_a_finalization_owned_row_keeps_the_job_retryable(enabled, ownership):
     """The repair pass refuses a generation-owned row, so the raise must survive."""
-    row = {**debt(), 'finalization_job_id': 'job-1'}
+    row = {**debt(), **ownership}
     assert delivery.refusal(row) == 'generation_owned'
     with pytest.raises(delivery.SummaryOutputUnavailable):
         delivery.merge_result(row, minimum(), 'u', now=300)
@@ -686,6 +694,30 @@ def test_real_notes_retire_the_minimums_title_marker_so_the_row_is_not_held_as_s
     summarized = {**existing, 'summary_output_present': True, 'summary_completed_at': 300}
     again = _notes(summarized, {'title': 'Again', 'overview': 'New notes'}, 400)
     assert again['structured']['title_provenance'] is DELETE_FIELD
+
+
+@pytest.mark.parametrize('overview', ['', 'We chose what to plant.'])
+def test_historical_title_marker_is_retired_only_when_notes_land(overview):
+    existing = {
+        'processing_tier': 'historical',
+        'structured': {'title': 'Garden planning', 'title_provenance': 'historical_minimum'},
+    }
+    write = {
+        'status': 'completed',
+        'processing_tier': 'historical',
+        'terminal_no_derived_effects': True,
+        'structured': {'title': 'Planning the garden', 'overview': overview},
+    }
+    delivery.prepare(write, 'u', now=200)
+    delivery.merge_result(existing, write, 'u', now=300)
+    stored = _stored_after_merge(existing, write)
+
+    if overview:
+        assert 'title_provenance' not in stored['structured']
+    else:
+        assert stored['structured']['title_provenance'] == 'historical_minimum'
+    assert stored.get('summary_completed_at') == (300 if overview else None)
+    assert stored.get('summary_due_at') is None
 
 
 def test_minimum_empty_and_new_rows_keep_their_title_marker_untouched(enabled):

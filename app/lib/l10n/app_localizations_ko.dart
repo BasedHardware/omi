@@ -551,10 +551,10 @@ class AppLocalizationsKo extends AppLocalizations {
   String get hardwareSection => '하드웨어';
 
   @override
-  String get v2Undetected => 'V2를 감지할 수 없음';
+  String get v2Undetected => '오프라인 동기화를 사용할 수 없음';
 
   @override
-  String get v2UndetectedMessage => 'V1 기기를 사용하고 있거나 기기가 연결되지 않았습니다. SD 카드 기능은 V2 기기에서만 사용할 수 있습니다.';
+  String get v2UndetectedMessage => '오프라인 동기화를 사용하려면 SD 카드 저장소가 있는 연결된 Omi 기기가 필요합니다. 현재 기기는 이를 지원하지 않습니다.';
 
   @override
   String get endConversation => '대화 종료';
@@ -6954,6 +6954,24 @@ class AppLocalizationsKo extends AppLocalizations {
   String get authUnexpectedError => '로그인 중 예기치 않은 오류가 발생했습니다. 다시 시도해 주세요';
 
   @override
+  String get accountSignInMethods => '로그인 방법';
+
+  @override
+  String get accountAddSignInMethod => '로그인 방법 추가';
+
+  @override
+  String get accountAddSignInMethodDetails => '이 Omi 계정에 로그인할 방법을 추가하세요. 요금제, 녹음, 연동은 이 계정에 그대로 유지됩니다.';
+
+  @override
+  String get accountSignInConflictTitle => '이 로그인 방법은 다른 계정에 연결되어 있습니다';
+
+  @override
+  String get accountSignInConflictDetails => '현재 계정에 로그인된 상태입니다. 요금제, 녹음, 연동은 각 Omi 계정에 그대로 유지됩니다.';
+
+  @override
+  String get accountSignInMethodAdded => '로그인 방법이 추가되었습니다';
+
+  @override
   String get authFailedToLinkGoogle => 'Google 연결에 실패했습니다. 다시 시도해 주세요.';
 
   @override
@@ -8950,16 +8968,6 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get syncStatusUploaded => '업로드됨 · Omi에서 처리 중';
-
-  @override
-  String get deleteFromServerTitle => '모든 곳에서 삭제할까요?';
-
-  @override
-  String get deleteFromServerMessage =>
-      '이 녹음은 업로드되었지만 아직 텍스트로 변환되지 않았습니다. 삭제하면 Omi 서버에 있는 사본도 영구적으로 지워지므로 텍스트로 변환되지 않습니다. 이 작업은 되돌릴 수 없습니다.';
-
-  @override
-  String get deletedRecordingAlreadyTranscribed => '이미 텍스트로 변환되었습니다. 제거하려면 해당 대화를 삭제하세요.';
 
   @override
   String get deleteWhileProcessingTitle => '아직 처리 중';
@@ -14169,6 +14177,9 @@ class AppLocalizationsKo extends AppLocalizations {
   String get processingProgress => '대기 중인 녹음을 처리하는 중…';
 
   @override
+  String get waitingForTranscriptionAllowance => '사용 가능한 전사 한도를 기다리는 중';
+
+  @override
   String get processingDeferred => '처리 대기 중';
 
   @override
@@ -15103,9 +15114,6 @@ class AppLocalizationsKo extends AppLocalizations {
   String get stopThese => '이 유형 중지';
 
   @override
-  String get meetingActionItemsTitle => '실행 항목';
-
-  @override
   String get addToTasks => '작업에 추가';
 
   @override
@@ -15508,6 +15516,114 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get stillWorkingOnIt => '아직 처리 중입니다.';
+
+  @override
+  String get deviceReadyToUse => '사용 준비 완료';
+
+  @override
+  String get firmwareUpdateFirmwareTooOld => '기기의 펌웨어가 너무 오래되어 이 업데이트를 설치할 수 없습니다. 기기 업데이트에 도움이 필요하면 지원팀에 문의하세요.';
+
+  @override
+  String get firmwareUpdateAppRequired => '이 펌웨어 업데이트에는 더 최신 버전의 Omi 앱이 필요합니다. 앱 스토어에서 앱을 업데이트한 후 다시 확인하세요.';
+
+  @override
+  String get quietPayerTitle => '5일 동안 녹음이 없어요';
+
+  @override
+  String get quietPayerMessage => 'Omi를 확인해 보세요.';
+
+  @override
+  String get quietPayerCheck => '확인';
+
+  @override
+  String get playManageSubscription => '구독 관리';
+
+  @override
+  String get playBilledByGoogle => 'Google Play에서 청구됩니다';
+
+  @override
+  String get playPurchasePending => '결제가 대기 중입니다. Google Play에서 확인되면 Omi Pro가 시작됩니다.';
+
+  @override
+  String get playPurchaseOtherAccount => '이 Google Play 구매는 다른 Omi 계정에 속해 있습니다.';
+
+  @override
+  String get playPurchaseNotConfirmed => '아직 구매를 확인하지 못했습니다. 자동으로 다시 시도합니다.';
+
+  @override
+  String get playRenewalTerms => '해지할 때까지 표시된 가격으로 자동 갱신됩니다. Google Play에서 언제든지 관리하거나 해지할 수 있습니다.';
+
+  @override
+  String get playPaidAppUnavailable => 'Android에서는 사용할 수 없음';
+
+  @override
+  String get pageNotAvailableInApp => '이 페이지는 앱에서 볼 수 없습니다.';
+
+  @override
+  String get shopOrderPlacedCheckEmail => '주문이 완료되었습니다. 확인 메일을 확인하세요.';
+
+  @override
+  String get prepaidCodeEntry => '코드가 있나요?';
+
+  @override
+  String get prepaidCodeTitle => '코드 사용';
+
+  @override
+  String get prepaidCodeFieldHint => '코드를 입력하세요';
+
+  @override
+  String get prepaidCodeRedeem => '사용';
+
+  @override
+  String get prepaidCodeRedeemed => '코드가 적용되었습니다';
+
+  @override
+  String prepaidCodeResult(String reason) {
+    String _temp0 = intl.Intl.selectLogic(
+      reason,
+      {
+        'invalid': '유효하지 않은 코드입니다. 확인 후 다시 시도하세요.',
+        'used': '이미 사용된 코드입니다.',
+        'expired': '만료된 코드입니다.',
+        'hasPlan': '이미 플랜이 있습니다. 코드는 사용되지 않았습니다. 플랜이 끝난 후에 사용하세요.',
+        'notPrepaid': '이 코드는 여기에서 사용할 수 없습니다. 플랜을 선택할 때 사용하세요.',
+        'notEligible': '이 계정에서는 이 코드를 사용할 수 없습니다.',
+        'rateLimited': '시도 횟수가 너무 많습니다. 나중에 다시 시도하세요.',
+        'other': '문제가 발생했습니다. 다시 시도하세요.',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get playStripeBilledOnWeb => 'omi.me를 통해 청구됩니다. 여기에서 언제든 취소할 수 있습니다.';
+
+  @override
+  String get playStripeBilledOnWebShort => 'omi.me를 통해 청구됩니다.';
+
+  @override
+  String playStripePlanPaused(String plan) {
+    return '$plan 플랜이 일시 중지되었습니다.';
+  }
+
+  @override
+  String get firmwareNewestSupportedForDevice => '기기가 이미 지원되는 최신 펌웨어 버전을 사용하고 있습니다';
+
+  @override
+  String get firmwareSyncRecordingsFirstTitle => '먼저 녹음을 동기화하세요';
+
+  @override
+  String get firmwareSyncRecordingsFirstMessage => '일부 녹음이 아직 기기에 남아 있습니다. 휴대폰으로의 동기화가 완료되면 업데이트를 시작해 주세요.';
+
+  @override
+  String get deleteFromServerTitle => '모든 곳에서 삭제할까요?';
+
+  @override
+  String get deleteFromServerMessage =>
+      '이 녹음은 업로드되었지만 아직 텍스트로 변환되지 않았습니다. 삭제하면 Omi 서버에 있는 사본도 영구적으로 지워지므로 텍스트로 변환되지 않습니다. 이 작업은 되돌릴 수 없습니다.';
+
+  @override
+  String get deletedRecordingAlreadyTranscribed => '이미 텍스트로 변환되었습니다. 제거하려면 해당 대화를 삭제하세요.';
 
   @override
   String get deletedRecordingWillBeProcessed => '이 녹음은 계속 처리됩니다. 대화가 표시되면 삭제할 수 있습니다.';

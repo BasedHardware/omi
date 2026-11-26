@@ -411,6 +411,7 @@ def test_conversation_retry_uses_raw_inventory_after_blob_already_purged(world, 
         evidence.frame_requests_db, 'persist_conversation_frame_deletion_outbox', lambda *args: events.append('outbox')
     )
     monkeypatch.setattr(evidence.frame_requests_db, 'delete_frame_requests_for_conversation', lambda *args: None)
+    monkeypatch.setattr(merge, '_purge_rederive_priors', lambda *args: None)
     monkeypatch.setattr(merge.conversation_tombstones, 'record_deletion', lambda *args: None)
     monkeypatch.setattr(merge, 'record_survivor_deleted', lambda *args: None)
 

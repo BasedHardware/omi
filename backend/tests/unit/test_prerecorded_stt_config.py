@@ -52,7 +52,7 @@ def test_soniox_held_recovery_contract_does_not_enable_general_prerecorded():
     from config.stt_provider_policy import provider_is_enabled, STTServingSurface
 
     assert required_env_for_held_recovery() == ('SONIOX_API_KEY',)
-    assert SONIOX_HELD_RECOVERY_MODEL == 'stt-async-v5'
+    assert SONIOX_HELD_RECOVERY_MODEL == 'stt-async-v6'
     # Admitted on prerecorded only as batch provider-STT failover capacity (slice D); no model token
     # selects it, so general prerecorded selection and its env contract are unchanged.
     assert provider_is_enabled('soniox', STTServingSurface.PRERECORDED)

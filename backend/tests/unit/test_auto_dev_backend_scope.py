@@ -146,10 +146,11 @@ def test_windows_bash_resolution_uses_the_active_git_installation(tmp_path: Path
     assert bash_executable(cwd=ROOT, platform_name='nt', git_exec_path=git_exec_path) == str(git_bash)
 
 
-def test_unrelated_desktop_change_exits_as_a_green_no_op(git_repo: Path) -> None:
-    desktop_sha = _commit(git_repo, 'desktop/macos/README.md')
+@pytest.mark.parametrize('path', ('desktop/macos/README.md', '.github/workflows/backend-emulator-proofs.yml'))
+def test_unrelated_change_exits_as_a_green_no_op(git_repo: Path, path: str) -> None:
+    trigger_sha = _commit(git_repo, path)
 
-    outputs, summary = _run_scope(git_repo, desktop_sha, main_sha=_git(git_repo, 'rev-parse', f'{desktop_sha}^'))
+    outputs, summary = _run_scope(git_repo, trigger_sha, main_sha=_git(git_repo, 'rev-parse', f'{trigger_sha}^'))
 
     assert outputs == {'applies': 'false', 'workerd': 'false'}
     assert 'Green no-op' in summary
@@ -167,10 +168,10 @@ def test_backend_source_or_deploy_input_change_proceeds(git_repo: Path, relative
     assert outputs == {'applies': 'true', 'workerd': 'false'}
 
 
-def test_workerd_change_selects_the_go_worker(git_repo: Path) -> None:
-    sha = _commit(git_repo, 'backend-go/cmd/workerd/main.go')
+def test_workerd_only_change_does_not_deploy_the_backend(git_repo: Path) -> None:
+    workerd_sha = _commit(git_repo, 'backend-go/cmd/workerd/main.go')
 
-    outputs, _summary = _run_scope(git_repo, sha)
+    outputs, _summary = _run_scope(git_repo, workerd_sha)
 
     assert outputs == {'applies': 'false', 'workerd': 'true'}
 

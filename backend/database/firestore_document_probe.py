@@ -57,13 +57,13 @@ from __future__ import annotations
 
 import atexit
 import datetime as dt
-import inspect
 import json
 import logging
 import math
 import os
 import re
 import secrets
+import sys
 import threading
 import time
 from typing import Any, Callable
@@ -77,6 +77,9 @@ from database.privacy_check_metrics import current_read_caller as current_privac
 from utils.observability.firestore_request_reads import trace_request_reads
 
 logger = logging.getLogger(__name__)
+
+# CPython can return the caller directly, without materializing this frame.
+_getframe = getattr(sys, '_getframe')
 
 __all__ = [
     'FIRESTORE_BILLED_READS',
@@ -147,7 +150,7 @@ FIRESTORE_BILLED_READS_BY_ORIGIN = Counter(
 # by-caller counter is no longer naming every product frame.
 FIRESTORE_CALLER_LABEL_OVERFLOW = Counter(
     'omi_firestore_caller_label_overflow_total',
-    'Firestore read caller labels dropped because the bounded caller set is full.',
+    'Firestore caller labels dropped because the bounded caller set is full.',
 )
 
 
@@ -182,7 +185,7 @@ _caller_lock = threading.Lock()
 
 # The in-process bill ledger is deliberately independent of caller attribution.
 # It reuses _record's already-computed amount and never walks the stack.
-def _ledger_service_name() -> str:
+def firestore_metrics_service_name() -> str:
     """Name this process on the bill.
 
     An explicit setting wins. Cloud Run injects ``K_SERVICE`` or
@@ -204,7 +207,7 @@ def _ledger_service_name() -> str:
 
 _LEDGER_ENABLED = os.environ.get('FIRESTORE_READ_LEDGER') == '1'
 _LEDGER_EPOCH = secrets.token_hex(8)
-_LEDGER_SERVICE = _ledger_service_name()
+_LEDGER_SERVICE = firestore_metrics_service_name()
 _LEDGER_LOCK = threading.Lock()
 _ledger_day: str | None = None
 _ledger_counts = {'lookup': 0, 'not_found': 0, 'query': 0}
@@ -370,7 +373,7 @@ _KNOWN_PATTERNS = frozenset(
         'users/memory_outbox',
         'users/memory_historical_overrides',
         'users/memory_state',
-        # Commit-boundary list projection (database/list_projection.py); hot on the write probe.
+        # Historical list projection collections can still be touched by account erasure.
         'users/list_serving_versions',
         'users/conversation_list_rows',
         'users/action_item_list_rows',
@@ -516,11 +519,7 @@ def _is_plumbing_module(module: str) -> bool:
     return module.startswith(_PLUMBING_PREFIXES)
 
 
-# Shared with the write probe, which skips the same SDK and runtime frames.
-is_plumbing_module = _is_plumbing_module
-
-
-def bound_caller(label: str) -> str:
+def bound_caller(label: str, *, extra_overflow: Counter | None = None) -> str:
     """Accept a ``module:function`` label, or ``other`` once the cap is full.
 
     A well-formed label that does not fit increments the overflow counter.
@@ -537,6 +536,8 @@ def bound_caller(label: str) -> str:
                 return label
             if len(_known_callers) >= MAX_CALLERS:
                 FIRESTORE_CALLER_LABEL_OVERFLOW.inc()
+                if extra_overflow is not None:
+                    extra_overflow.inc()
                 return _OTHER
             _known_callers.add(label)
             return label
@@ -544,27 +545,39 @@ def bound_caller(label: str) -> str:
         return _OTHER
 
 
-def call_site() -> str:
+def call_site(
+    *,
+    skip_frame: Callable[[str, str], bool] | None = None,
+    extra_overflow: Counter | None = None,
+    use_privacy_caller: bool = True,
+) -> str:
     """First product frame, as a bounded ``module:function`` label.
 
     Skips this probe, Firestore plumbing wrappers, and runtime frames so the
-    label names the function that asked for the read.
+    label names the function that requested the operation.
     """
+    frame = None
     try:
-        privacy_caller = current_privacy_read_caller()
+        privacy_caller = current_privacy_read_caller() if use_privacy_caller else None
         if privacy_caller is not None:
             return bound_caller(privacy_caller)
-        frame = inspect.currentframe()
-        frame = frame.f_back if frame is not None else None
+        frame = _getframe(1)
         while frame is not None:
             module = frame.f_globals.get('__name__') or ''
             name = frame.f_code.co_name
-            if _is_plumbing_module(module) or not name or name.startswith('<'):
+            if (
+                _is_plumbing_module(module)
+                or not name
+                or name.startswith('<')
+                or (skip_frame is not None and skip_frame(module, name))
+            ):
                 frame = frame.f_back
                 continue
-            return bound_caller(f'{module}:{name}')
+            return bound_caller(f'{module}:{name}', extra_overflow=extra_overflow)
     except Exception:
         return _OTHER
+    finally:
+        del frame
     return _OTHER
 
 
@@ -875,24 +888,28 @@ class _ObservedAsync:
             return
 
 
+def observe_query_stream(query: Any, inner: Any, *, caller: str) -> Any:
+    """Attribute a synchronous query, including a GAPIC query with a read_time."""
+    path = _parent_path(query)
+    offset = _offset_of(query)
+    yielded = 0
+
+    def on_item(snapshot: Any) -> None:
+        nonlocal yielded
+        if _counts_as_document(snapshot):
+            yielded += 1
+            _record(_snapshot_path(snapshot, path), True, kind='query', caller=caller, sdk_object=query)
+
+    def on_finish() -> None:
+        _finish_query(path, caller, yielded, offset, query)
+
+    return _ObservedSync(inner, on_item, on_finish)
+
+
 def _wrap_query_stream(original: Any) -> Any:
     def stream(self: Any, *args: Any, **kwargs: Any) -> Any:
         caller = call_site()
-        path = _parent_path(self)
-        offset = _offset_of(self)
-        inner = original(self, *args, **kwargs)
-        yielded = 0
-
-        def on_item(snapshot: Any) -> None:
-            nonlocal yielded
-            if _counts_as_document(snapshot):
-                yielded += 1
-                _record(_snapshot_path(snapshot, path), True, kind='query', caller=caller, sdk_object=self)
-
-        def on_finish() -> None:
-            _finish_query(path, caller, yielded, offset, self)
-
-        return _ObservedSync(inner, on_item, on_finish)
+        return observe_query_stream(self, original(self, *args, **kwargs), caller=caller)
 
     return stream
 

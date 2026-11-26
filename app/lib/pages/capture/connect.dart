@@ -8,6 +8,7 @@ import 'package:url_launcher/url_launcher.dart';
 import 'package:omi/pages/home/home_navigation.dart';
 import 'package:omi/pages/onboarding/find_device/page.dart';
 import 'package:omi/pages/settings/device_settings.dart';
+import 'package:omi/pages/shop/omi_shop.dart';
 import 'package:omi/providers/onboarding_provider.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/l10n_extensions.dart';
@@ -23,6 +24,11 @@ Future<void> openOmiStore({Future<bool> Function(Uri)? launcher}) async {
   PlatformManager.instance.analytics.getOmiDeviceClicked();
   await (launcher ?? (url) => launchUrl(url, mode: LaunchMode.externalApplication))(_omiStoreUrl);
 }
+
+/// Get Omi from Connect: a browser cannot be held to the device page, so a Google Play-billed Android
+/// reader gets the in-app store limited to it ([openOmiShop]); everyone else keeps the browser.
+Future<void> openOmiStoreFor(BuildContext context) =>
+    omiShopRestrictedToHardware(context) ? openOmiShop(context, source: 'omi_connect_device') : openOmiStore();
 
 class ConnectDevicePage extends StatefulWidget {
   const ConnectDevicePage({super.key, this.onConnected, this.onSkip});
@@ -120,7 +126,7 @@ class _ConnectDevicePageState extends State<ConnectDevicePage> {
                       fontWeight: FontWeight.w600, fontFamily: Theme.of(context).textTheme.labelLarge?.fontFamily),
                   key: const Key('get_omi_device_button'),
                   label: context.l10n.getOmiDevice,
-                  onPressed: openOmiStore,
+                  onPressed: () => openOmiStoreFor(context),
                 ),
                 OmiButton(
                   variant: OmiButtonVariant.tertiary,

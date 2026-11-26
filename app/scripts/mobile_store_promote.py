@@ -378,7 +378,7 @@ def select_play_release(
             if (
                 codes != [build_number]
                 or not isinstance(name, str)
-                or production_release_version(name) != version
+                or production_release_version(name, codes) != version
                 or release.get("status") not in ("completed", "inProgress")
             ):
                 raise PromotionError(f"Play {source_track} build does not match the exact version and code")
@@ -388,8 +388,8 @@ def select_play_release(
     for release in production_releases:
         if not isinstance(release, dict) or not isinstance(release.get("name"), str):
             raise PromotionError("Play public release lacks a marketing version")
-        release_codes(release)
-        live_version = production_release_version(release["name"])
+        codes = release_codes(release)
+        live_version = production_release_version(release["name"], codes)
         if live_version is not None and version_parts(version) < version_parts(live_version):
             raise PromotionError("Android target is older than the live public version")
 
@@ -401,17 +401,28 @@ PRODUCTION_NAME_VERSION_RE = re.compile(
 )
 
 
-def production_release_version(name: str) -> str | None:
+PLAY_DEFAULT_RELEASE_NAME_RE = re.compile(r"\s*([1-9][0-9]*)\s*\(([^()]+)\)\s*")
+
+
+def production_release_version(name: str, version_codes: object = None) -> str | None:
     """Return the X.Y.Z a Play production release name carries, if any.
 
     Play Console labels a production release by its build name and may suffix the
-    version code ("1.0.552 (1246)"). Codemagic internal releases use their
-    versioned tag and build UUID ("v1.0.552+1246-android-cm [UUID]"). Older or
-    hand-named releases may carry no version; only a recognised version
-    participates in the ordering check.
+    version code ("1.0.552 (1246)"). The code-first default ("1605 (1.0.595)")
+    is recognized only when the named code is in versionCodes. Codemagic
+    internal releases use their versioned tag and build UUID
+    ("v1.0.552+1246-android-cm [UUID]"). Older or hand-named releases may
+    carry no version; only a recognised version participates in the ordering check.
     """
     match = PRODUCTION_NAME_VERSION_RE.fullmatch(name)
-    return match.group(1) if match else None
+    if match:
+        return match.group(1)
+    default_name = PLAY_DEFAULT_RELEASE_NAME_RE.fullmatch(name)
+    if default_name and isinstance(version_codes, list):
+        code, version = default_name.groups()
+        if VERSION_RE.fullmatch(version) and any(code == str(value) for value in version_codes):
+            return version
+    return None
 
 
 def play_edit() -> tuple[object, str]:

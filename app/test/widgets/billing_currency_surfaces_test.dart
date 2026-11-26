@@ -59,7 +59,7 @@ class _Usage extends UsageProvider {
 
   final sessions = <(String, int?, String?)>[];
   @override
-  Future<void> fetchSubscription() async {}
+  Future<void> fetchSubscription({bool fresh = false}) async {}
   @override
   Future<void> loadAvailablePlans() async {}
   @override

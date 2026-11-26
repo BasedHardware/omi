@@ -564,11 +564,11 @@ class AppLocalizationsIt extends AppLocalizations {
   String get hardwareSection => 'Hardware';
 
   @override
-  String get v2Undetected => 'V2 non rilevato';
+  String get v2Undetected => 'Sincronizzazione offline non disponibile';
 
   @override
   String get v2UndetectedMessage =>
-      'Vediamo che hai un dispositivo V1 o il tuo dispositivo non è connesso. La funzionalità della scheda SD è disponibile solo per i dispositivi V2.';
+      'La sincronizzazione offline richiede un dispositivo Omi connesso con memoria su scheda SD. Il tuo dispositivo attuale non la supporta.';
 
   @override
   String get endConversation => 'Termina Conversazione';
@@ -7095,6 +7095,26 @@ class AppLocalizationsIt extends AppLocalizations {
   String get authUnexpectedError => 'Errore imprevisto durante l\'accesso, riprova';
 
   @override
+  String get accountSignInMethods => 'Metodi di accesso';
+
+  @override
+  String get accountAddSignInMethod => 'Aggiungi un metodo di accesso';
+
+  @override
+  String get accountAddSignInMethodDetails =>
+      'Aggiungi un modo per accedere a questo account Omi. Il tuo piano, le registrazioni e le integrazioni restano associati a questo account.';
+
+  @override
+  String get accountSignInConflictTitle => 'Questo metodo di accesso è associato a un altro account';
+
+  @override
+  String get accountSignInConflictDetails =>
+      'Sei ancora connesso a questo account. Ogni account Omi conserva il suo piano, le sue registrazioni e le sue integrazioni.';
+
+  @override
+  String get accountSignInMethodAdded => 'Metodo di accesso aggiunto';
+
+  @override
   String get authFailedToLinkGoogle => 'Collegamento con Google non riuscito, riprova.';
 
   @override
@@ -9129,16 +9149,6 @@ class AppLocalizationsIt extends AppLocalizations {
 
   @override
   String get syncStatusUploaded => 'Caricato · elaborazione su Omi';
-
-  @override
-  String get deleteFromServerTitle => 'Eliminare ovunque?';
-
-  @override
-  String get deleteFromServerMessage =>
-      'Questa registrazione è stata caricata ma non è ancora stata trascritta. Eliminarla cancella in modo permanente anche la copia sui server di Omi, quindi non verrà mai trascritta. L\'operazione non può essere annullata.';
-
-  @override
-  String get deletedRecordingAlreadyTranscribed => 'Già trascritta. Elimina la sua conversazione per rimuoverla.';
 
   @override
   String get deleteWhileProcessingTitle => 'Ancora in elaborazione';
@@ -14445,6 +14455,9 @@ class AppLocalizationsIt extends AppLocalizations {
   String get processingProgress => 'Elaborazione delle registrazioni in attesa…';
 
   @override
+  String get waitingForTranscriptionAllowance => 'In attesa di una quota di trascrizione disponibile';
+
+  @override
   String get processingDeferred => 'In attesa di elaborazione';
 
   @override
@@ -15401,9 +15414,6 @@ class AppLocalizationsIt extends AppLocalizations {
   String get stopThese => 'Interrompi questi';
 
   @override
-  String get meetingActionItemsTitle => 'Azioni da svolgere';
-
-  @override
   String get addToTasks => 'Aggiungi alle attività';
 
   @override
@@ -15808,6 +15818,119 @@ class AppLocalizationsIt extends AppLocalizations {
 
   @override
   String get stillWorkingOnIt => 'Ancora al lavoro.';
+
+  @override
+  String get deviceReadyToUse => 'Pronto per l\'uso';
+
+  @override
+  String get firmwareUpdateFirmwareTooOld =>
+      'Il firmware del tuo dispositivo è troppo vecchio per questo aggiornamento. Contatta l\'assistenza per ricevere aiuto con l\'aggiornamento del dispositivo.';
+
+  @override
+  String get firmwareUpdateAppRequired =>
+      'Questo aggiornamento del firmware richiede una versione più recente dell\'app Omi. Aggiorna l\'app dal tuo store di applicazioni, poi controlla di nuovo.';
+
+  @override
+  String get quietPayerTitle => 'Nessuna registrazione da 5 giorni';
+
+  @override
+  String get quietPayerMessage => 'Controlla il tuo Omi.';
+
+  @override
+  String get quietPayerCheck => 'Controlla';
+
+  @override
+  String get playManageSubscription => 'Gestisci abbonamento';
+
+  @override
+  String get playBilledByGoogle => 'Addebitato tramite Google Play';
+
+  @override
+  String get playPurchasePending => 'Il pagamento è in sospeso. Omi Pro inizia appena Google Play lo conferma.';
+
+  @override
+  String get playPurchaseOtherAccount => 'Questo acquisto su Google Play appartiene a un altro account Omi.';
+
+  @override
+  String get playPurchaseNotConfirmed =>
+      'Non è stato ancora possibile confermare l\'acquisto. Riproveremo automaticamente.';
+
+  @override
+  String get playRenewalTerms =>
+      'Si rinnova automaticamente al prezzo indicato finché non disdici. Gestisci o disdici in qualsiasi momento su Google Play.';
+
+  @override
+  String get playPaidAppUnavailable => 'Non disponibile su Android';
+
+  @override
+  String get pageNotAvailableInApp => 'Questa pagina non è disponibile nell\'app.';
+
+  @override
+  String get shopOrderPlacedCheckEmail => 'Ordine effettuato. Controlla l\'email per la conferma.';
+
+  @override
+  String get prepaidCodeEntry => 'Hai un codice?';
+
+  @override
+  String get prepaidCodeTitle => 'Riscatta un codice';
+
+  @override
+  String get prepaidCodeFieldHint => 'Inserisci il tuo codice';
+
+  @override
+  String get prepaidCodeRedeem => 'Riscatta';
+
+  @override
+  String get prepaidCodeRedeemed => 'Codice riscattato';
+
+  @override
+  String prepaidCodeResult(String reason) {
+    String _temp0 = intl.Intl.selectLogic(
+      reason,
+      {
+        'invalid': 'Questo codice non è valido. Controllalo e riprova.',
+        'used': 'Questo codice è già stato usato.',
+        'expired': 'Questo codice è scaduto.',
+        'hasPlan': 'Hai già un piano. Il tuo codice non è stato usato. Riscattalo quando il tuo piano finisce.',
+        'notPrepaid': 'Questo codice non può essere riscattato qui. Usalo quando scegli un piano.',
+        'notEligible': 'Questo codice non può essere usato su questo account.',
+        'rateLimited': 'Troppi tentativi. Riprova più tardi.',
+        'other': 'Qualcosa è andato storto. Riprova.',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get playStripeBilledOnWeb => 'Addebitato tramite omi.me. Annulla qui in qualsiasi momento.';
+
+  @override
+  String get playStripeBilledOnWebShort => 'Addebitato tramite omi.me.';
+
+  @override
+  String playStripePlanPaused(String plan) {
+    return 'Il tuo piano $plan è in pausa.';
+  }
+
+  @override
+  String get firmwareNewestSupportedForDevice => 'Il tuo dispositivo è già sull\'ultima versione firmware supportata';
+
+  @override
+  String get firmwareSyncRecordingsFirstTitle => 'Sincronizza prima le tue registrazioni';
+
+  @override
+  String get firmwareSyncRecordingsFirstMessage =>
+      'Alcune registrazioni sono ancora sul tuo dispositivo. Aspetta che terminino la sincronizzazione con il telefono, poi avvia l\'aggiornamento.';
+
+  @override
+  String get deleteFromServerTitle => 'Eliminare ovunque?';
+
+  @override
+  String get deleteFromServerMessage =>
+      'Questa registrazione è stata caricata ma non è ancora stata trascritta. Eliminarla cancella in modo permanente anche la copia sui server di Omi, quindi non verrà mai trascritta. L\'operazione non può essere annullata.';
+
+  @override
+  String get deletedRecordingAlreadyTranscribed => 'Già trascritta. Elimina la sua conversazione per rimuoverla.';
 
   @override
   String get deletedRecordingWillBeProcessed =>

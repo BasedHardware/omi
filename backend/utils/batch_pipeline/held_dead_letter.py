@@ -23,6 +23,7 @@ from database.batch_pipeline_quarantine_recovery import (
 from database.batch_pipeline_projection import ProjectionStore
 from database.batch_pipeline_projection_release import ProjectionReleaseStore, expired_page_ids
 from utils.batch_pipeline.input_retention import held_input_leg, invalid_staged_clock
+from utils.batch_pipeline.parked_sweep import ParkedSweep
 
 PAGE_SIZE = 32
 INTERVAL_SECONDS = 300
@@ -34,6 +35,7 @@ class HeldDeadLetter:
     def __init__(self, store, *, metrics=None):
         self.store = store
         self.recovery = RecoveryStore(store)
+        self.parked_sweep = ParkedSweep(store)
         self.metrics = metrics
 
     def _record(self, event):
@@ -53,6 +55,10 @@ class HeldDeadLetter:
         # The separate RecoveryStore.requeue_quarantined tool remains usable.
         if not batch_held_dead_letter_enabled():
             return {'expired': 0, 'requeued': 0}
+        try:
+            self.parked_sweep.tick(now)
+        except Exception as error:
+            logger.warning('event=batch_parked_gpu_page_failed exception_type=%s', type(error).__name__)
         state = self.store.run(lambda tx: tx.get('leases', CURSOR_KEY))
         counts = {'expired': 0, 'requeued': 0}
         updated = dict(state)

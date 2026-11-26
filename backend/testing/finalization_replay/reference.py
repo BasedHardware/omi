@@ -3,7 +3,10 @@
 from __future__ import annotations
 
 import asyncio
+from contextlib import nullcontext
 from contextvars import copy_context
+from hashlib import sha256
+from threading import local
 from unittest.mock import patch
 from urllib.parse import urlsplit
 
@@ -15,15 +18,40 @@ async def _finalize(state, intent, claim, trigger):
     job_id = intent['job_id']
     generation = intent['dispatch_generation']
     epoch = claim['lease_epoch']
-    disposition = await finalizer.finalize_persisted_conversation(
-        state.uid,
-        state.cid,
-        finalization_job_id=job_id,
-        dispatch_generation=generation,
-        lease_epoch=epoch,
-        trigger=trigger,
-        final_attempt=state.case.get('final_attempt', False),
+    deleted = False
+    get_conversation = finalizer.conversations_db.get_conversation
+
+    def delete_on_worker_read(uid, cid, **kwargs):
+        nonlocal deleted
+        if (
+            not deleted
+            and (uid, cid) == (state.uid, state.cid)
+            and kwargs.get('read_site') == finalizer.FirestoreReadSite.FINALIZER_JOB_REPLAY
+        ):
+            state.conversation.delete()
+            deleted = True
+        return get_conversation(uid, cid, **kwargs)
+
+    inject_deletion = state.case.get('delete_before_worker_read', False)
+    # Admission and claim have seen the row. Remove it before the worker's
+    # first read, matching the subsequent GET on the Go conformance stub.
+    injection = (
+        patch.object(finalizer.conversations_db, 'get_conversation', delete_on_worker_read)
+        if inject_deletion
+        else nullcontext()
     )
+    with injection:
+        disposition = await finalizer.finalize_persisted_conversation(
+            state.uid,
+            state.cid,
+            finalization_job_id=job_id,
+            dispatch_generation=generation,
+            lease_epoch=epoch,
+            trigger=trigger,
+            final_attempt=state.case.get('final_attempt', False),
+        )
+    if inject_deletion and not deleted:
+        raise RuntimeError('Python replay never reached the injected worker read')
     if disposition.value == 'fenced':
         if not lifecycle.complete_fenced_finalization(job_id, generation, epoch):
             raise RuntimeError('Python fenced acknowledgement refused')
@@ -61,6 +89,25 @@ def _run(state):
     return status
 
 
+def erase_reference(state):
+    from google.cloud.firestore_v1.base_query import FieldFilter
+
+    from database.conversation_finalization_schema import FINALIZATION_JOBS_COLLECTION
+    from database.users import delete_user_data
+
+    # Exercise the Python account wipe's Firestore step. The Go endpoint
+    # likewise erases account documents and additionally owns a SQL queue.
+    if delete_user_data(state.uid).get('status') != 'ok':
+        raise RuntimeError('Python replay erase was refused')
+    jobs = state.client.collection(FINALIZATION_JOBS_COLLECTION).where(filter=FieldFilter('uid', '==', state.uid))
+    return {
+        'user_document_absent': not state.user.get().exists,
+        'conversation_absent': not state.conversation.get().exists,
+        'jobs_for_uid': sum(1 for _ in jobs.stream()),
+        'tenants_for_uid': 0,  # The Python Firestore queue has no tenant table.
+    }
+
+
 def run_reference(state, stack, url):
     from database import redis_db, vector_db
     from models.users import WebhookType
@@ -77,7 +124,9 @@ def run_reference(state, stack, url):
     stack.enter_context(patch.object(app_integrations, 'safe_request_target', pin))
     stack.enter_context(patch.object(webhooks, 'safe_request_targets', lambda target: [pin(target)]))
     # Replace the vendor SDK at its network boundary. Production computes metadata and records.
-    stack.enter_context(patch.object(vector_db, 'index', VectorReceiver(state)))
+    vectors = VectorReceiver(state, vector_db.embeddings)
+    stack.enter_context(patch.object(vector_db, 'index', vectors))
+    stack.enter_context(patch.object(vector_db, 'embeddings', vectors))
 
     futures = []
     submit = processing.submit_with_context
@@ -111,13 +160,32 @@ def run_reference(state, stack, url):
 class VectorReceiver:
     """Record the outgoing vector operation after the real owner routing and shaping."""
 
-    def __init__(self, state):
+    def __init__(self, state, embeddings):
         self.state = state
+        self.embeddings = embeddings
+        self._inputs = local()
+
+    def __getattr__(self, name):
+        return getattr(self.embeddings, name)
+
+    def embed_documents(self, texts, *args, **kwargs):
+        vectors = self.embeddings.embed_documents(texts, *args, **kwargs)
+        self._inputs.pending = (list(texts), vectors)
+        return vectors
 
     def query(self, **_kwargs):
         return {'matches': []}
 
     def upsert(self, *, vectors, namespace, **_kwargs):
+        pending = getattr(self._inputs, 'pending', None)
+        self._inputs.pending = None
+        if namespace == 'ns4' and pending is not None:
+            texts, produced = pending
+            if len(texts) == len(vectors) and [record['values'] for record in vectors] == produced:
+                for record, text in zip(vectors, texts):
+                    self.state.task_embedding_inputs.setdefault(record['id'], []).append(
+                        sha256(text.encode()).hexdigest()
+                    )
         for record in vectors:
             if record['id'] == f'{self.state.uid}-{self.state.cid}':
                 self.state.vector(self.state.cid)

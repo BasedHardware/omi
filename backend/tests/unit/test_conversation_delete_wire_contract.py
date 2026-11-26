@@ -77,6 +77,7 @@ def _delete_client(monkeypatch) -> TestClient:
     monkeypatch.setattr(conversations.conversation_tombstones, 'is_deleted', lambda *args: False)
     monkeypatch.setattr(conversations.conversation_tombstones, 'record_deletion', MagicMock())
     monkeypatch.setattr(conversations, 'destructive_operation_gate', lambda *args, **kwargs: nullcontext())
+    monkeypatch.setattr(conversations, '_legal_hold_defers_delete', lambda uid: False)
     monkeypatch.setattr(conversations.conversations_db, 'get_conversation', lambda *args: {})
     monkeypatch.setattr(conversations.conversations_db, 'get_conversation_raw_snapshot', lambda *args, **kwargs: {})
     monkeypatch.setattr(conversations, 'retraction_can_be_skipped', lambda *args, **kwargs: True)

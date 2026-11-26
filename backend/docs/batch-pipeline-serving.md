@@ -677,7 +677,7 @@ evidence, and provider failures stay held. There are no paid-intent resets.
 **Second multilingual provider — Soniox (ship on).**
 `config.stt_provider_policy.HELD_RECOVERY_SECOND_PROVIDER` names `soniox`.
 An ordinary held unit whose Modulate response is validated empty gets at most
-one Soniox `stt-async-v5` call inside the same `running` recovery intent,
+one Soniox `stt-async-v6` call inside the same `running` recovery intent,
 using the existing sync/operator or async/serving batch adapter. This includes
 short validation holds and oversized units; it no longer requires a long-speech
 handoff. Already-settled padded-empty outcomes do not spend another call.
@@ -1000,6 +1000,22 @@ commit body:
   `fresh_first: true` and logs `event=batch_merge outcome=fresh_first` with the
   head state only.
 
+At a full depth cap, an aged GPU catch-up row may pass after it has waited at
+least six hours from `ready_at` (or `enqueued_at` for legacy rows without a
+ready clock). The default-on `BATCH_PIPELINE_MERGE_AGED_GPU_RELEASE_ENABLED`
+switch gates this exception; setting it to `false` keeps those rows held.
+Provider-route rows and recovered-release rows do not use this path. Each
+owner can release up to 16 aged rows during a 16-minute budget window while its
+projection watermark is unchanged, with a 60-second durable cooldown between
+releases. The budget refills after each window even if projection is stalled,
+so eligible rows continue to make bounded progress. Projection progress resets
+the per-watermark count. The release, cooldown, budget-window start and count
+are written with the result commit. Both aged-release paths also require a
+successful fresh-work check showing no ready fresh row; probe errors keep aged
+rows held. The hold and successful-release age metrics are scoped by worker
+release and namespace; their `age_source` label distinguishes `ready_at` from
+the legacy `enqueued_at` fallback.
+
 The `merge_fresh` job index backs the fresh probe; without it the merge logs
 `outcome=fresh_first_unavailable` and keeps the plain order (no hold, since a
 hold would also hold fresh rows) for five minutes.
@@ -1245,47 +1261,6 @@ Async follow-up discovery keeps its own cursor and uses a persisted/ready
 page by default (its kill switch restores the mixed page). All three pages
 use the same `in` filter on the declared results composite index
 (`projection_state, committed_at, __name__`), so no index changes are needed.
-
-### Finish backoff (dark, default off)
-
-`BATCH_PROJECTION_FINISH_BACKOFF_ENABLED` (default `false`, `true` is the only
-enable) bounds the replay the finish page does for already-projected work. Off,
-the page is exactly the one above and no no-change deferral transaction runs.
-State transitions maintain additive clock fields even with the lever off.
-
-On, a finish walk that changed nothing writes `projection_finish_due_at` and
-`projection_finish_backoff_step` on the row. The page then asks for
-`projection_state in (persisted, ready)` **and** `projection_finish_due_at <=
-now`: a no-change row is retried after 60 s, then 300 s, then 900 s (capped),
-instead of being re-read and re-fenced on every tick. A row that moved state is
-a changed row and is not deferred. The `pending` assignment page is untouched,
-so new work is never delayed.
-
-The range filter must lead the ordering, so that page uses the second declared
-results index `(projection_state, projection_finish_due_at, committed_at,
-__name__)` and its cursor becomes `(due_at, committed_at, key)`. Rows written
-before the lever have no clock and are outside every range filter. A bounded
-operator [backfill](runbooks/projection-finish-backfill.md) stamps missing clocks
-and atomically checkpoints progress in a shared, versioned control document.
-Until that marker is complete, serving processes use the legacy page without
-adding stamp transactions. New replicas trust the same completion marker and
-filter immediately; a negative marker read is cached for 60 seconds.
-
-Every transition into `persisted`/`ready` writes due now and step 0 in the same
-transaction, regardless of this lever or whether the host runs the serving loop.
-Session receipts, part summaries, privacy restore, quarantine release, sibling
-wake, and the ghost-hold repair script all use the shared clock helpers. Other
-state transitions retire the clock. Deploy these writers everywhere before
-finishing the backfill. Rollback of the read lever restores the legacy query;
-clock maintenance continues, so re-enable does not require another survey.
-
-The existing oldest-age and over-SLA guards cannot detect a sub-900 s delay
-introduced by this lever: the oldest-age max is already saturated by a
-multi-week held obligation, and the over-SLA stock is large enough that a few
-hundred units crossing the boundary is inside its noise. The finish-page
-reads-per-completion ratio (`omi_batch_projection_finish_reads_total` over
-`omi_batch_projection_finish_completed_total`) is the guard that can move; see
-`charts/monitoring/batch-projection/alerts.yaml`.
 
 ### Per-owner projection drain (Phase 1)
 

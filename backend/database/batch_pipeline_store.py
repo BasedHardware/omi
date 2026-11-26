@@ -14,7 +14,7 @@ import time
 from typing import Any, Callable, Protocol, TypeVar
 
 from google.cloud import firestore
-from google.api_core.exceptions import AlreadyExists, FailedPrecondition, Aborted, InvalidArgument
+from google.api_core.exceptions import AlreadyExists, FailedPrecondition, Aborted
 
 from config.firestore_read_levers import lever_enabled
 from config import batch_pipeline_packing as batch_packing
@@ -27,8 +27,6 @@ from config.batch_pipeline_protected_share import (
 from config.batch_pipeline import (
     contention_retry_enabled,
     control_candidate_fanout,
-    held_poll_skip_enabled,
-    MERGE_POLL_TERMINAL_STATES,
 )
 from database.batch_pipeline_projection_finish import (
     PROJECTION_FINISH_DUE_FIELD,
@@ -172,7 +170,8 @@ class FirestoreTransaction:
         if address not in self.cache:
             options = {}
             if self.read_budget is not None:
-                options = dict(timeout=self.read_budget.timeout(10), retry=None)
+                deadline = getattr(self.read_budget, 'point', self.read_budget.timeout)
+                options = dict(timeout=deadline(10), retry=None)
             snapshot = self._ref(table, key).get(transaction=self.transaction, **options)
             self.exists[address] = snapshot.exists
             self.cache[address] = (snapshot.to_dict() or {}) if snapshot.exists else {}
@@ -257,6 +256,7 @@ class FirestoreTransaction:
             uid,
             conversation_ids=conversation_ids,
             expected_generation=expected_generation,
+            shared_owner_cache=True,
             **options,
         )
 
@@ -596,7 +596,7 @@ def projection_page(
     after that clock's separately admitted writer/backfill rollout. It cannot
     be combined with ``due_before`` on a shared cursor.
 
-    ``due_before`` adds the dark finish-backoff range filter: only rows whose
+    ``due_before`` adds a finish-clock range filter: only rows whose
     ``projection_finish_due_at`` has passed. That field leads the ordering
     because Firestore serves a range filter on the first ordered field only, so
     the cursor becomes ``(due_at, committed_at, key)`` and a seed
@@ -689,31 +689,18 @@ def projection_successor(client: Any, namespace: str, owner_key: str, previous: 
     return docs[0].id if len(docs) == 1 else None
 
 
-def first_pending(
-    client: Any, namespace: str, owner_key: str, *, transaction: Any = None, skip_terminal: bool = True
-) -> dict | None:
-    docs = pending_page(client, namespace, owner_key, 1, transaction=transaction, skip_terminal=skip_terminal)
+def first_pending(client: Any, namespace: str, owner_key: str, *, transaction: Any = None) -> dict | None:
+    docs = pending_page(client, namespace, owner_key, 1, transaction=transaction)
     return docs[0] if docs else None
 
 
-def pending_page(
-    client: Any, namespace: str, owner_key: str, limit: int, *, transaction: Any = None, skip_terminal: bool = True
-) -> list[dict]:
+def pending_page(client: Any, namespace: str, owner_key: str, limit: int, *, transaction: Any = None) -> list[dict]:
     """The owner's earliest-captured pending rows, at most ``limit`` (capped at 160)."""
     limit = max(1, min(limit, 160))
     query = (
         client.collection(f'{namespace}_jobs').where('owner_key', '==', owner_key).where('merge_pending', '==', True)
     )
-    base = query
-    skip = skip_terminal and held_poll_skip_enabled()
-    if skip:
-        query = query.where('state', 'not-in', list(MERGE_POLL_TERMINAL_STATES))
-    try:
-        docs = list(query.order_by('capture_at').order_by('segment_id').limit(limit).stream(transaction=transaction))
-    except (FailedPrecondition, InvalidArgument):
-        if not skip:
-            raise
-        docs = list(base.order_by('capture_at').order_by('segment_id').limit(limit).stream(transaction=transaction))
+    docs = query.order_by('capture_at').order_by('segment_id').limit(limit).stream(transaction=transaction)
     return [doc.to_dict() for doc in docs]
 
 
@@ -810,7 +797,7 @@ def held_merge_owners(
     marks = query.limit(max(1, min(limit, 100))).stream()
     owners = []
     for mark in marks:
-        job = first_pending(client, namespace, mark.id, skip_terminal=False)
+        job = first_pending(client, namespace, mark.id)
         owners.append((mark.id, job.get('owner_id') if job else None))
     return owners
 
@@ -844,22 +831,10 @@ def fresh_pending(client: Any, namespace: str, owner_key: str, limit: int) -> li
         .where('merge_pending', '==', True)
         .where('fresh_capture', '==', True)
     )
-    base = query
-    skip = held_poll_skip_enabled()
-    if skip:
-        query = query.where('state', 'not-in', list(MERGE_POLL_TERMINAL_STATES))
-    try:
-        return [
-            doc.to_dict()
-            for doc in query.order_by('capture_at').order_by('segment_id').limit(max(1, min(limit, 32))).stream()
-        ]
-    except (FailedPrecondition, InvalidArgument):
-        if not skip:
-            raise
-        return [
-            doc.to_dict()
-            for doc in base.order_by('capture_at').order_by('segment_id').limit(max(1, min(limit, 32))).stream()
-        ]
+    return [
+        doc.to_dict()
+        for doc in query.order_by('capture_at').order_by('segment_id').limit(max(1, min(limit, 32))).stream()
+    ]
 
 
 # A single indexed capture_at range plus LIMIT bounds discovery independently

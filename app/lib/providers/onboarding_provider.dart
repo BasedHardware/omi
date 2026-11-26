@@ -20,6 +20,7 @@ import 'package:omi/pages/onboarding/permissions/onboarding_permission_decision.
 import 'package:omi/services/bridges/ble_bridge.dart';
 import 'package:omi/services/devices.dart';
 import 'package:omi/services/devices/bluetooth_readiness.dart';
+import 'package:omi/services/devices/connectors/device_connection.dart';
 import 'package:omi/services/devices/pairing_failure.dart';
 import 'package:omi/services/notifications.dart';
 import 'package:omi/utils/analytics/registry/events.g.dart';
@@ -372,6 +373,7 @@ class OnboardingProvider extends BaseProvider with MessageNotifierMixin implemen
 
   // Method to handle taps on devices
   Future<void> handleTap({required BtDevice device, required bool isFromOnboarding, VoidCallback? goNext}) async {
+    VoidCallback? finishFirstChargePreparation;
     try {
       if (isClicked) return;
       pairingFailureReason = null;
@@ -393,6 +395,10 @@ class OnboardingProvider extends BaseProvider with MessageNotifierMixin implemen
         }
       }
 
+      final resolvedDeviceType = DeviceConnectionFactory.resolveDeviceType(device);
+      final firstOmiPairing = resolvedDeviceType == DeviceType.omi &&
+          !SharedPreferencesUtil().btDevices.any((saved) => saved.id.toUpperCase() == device.id.toUpperCase());
+      if (firstOmiPairing) finishFirstChargePreparation = deviceProvider?.prepareFirstChargeCheck(device.id);
       final connection = await ServiceManager.instance().device.ensureConnection(device.id, force: true);
       if (connection == null || connection.status != DeviceConnectionState.connected) {
         throw StateError('Device initialization did not complete');
@@ -405,11 +411,13 @@ class OnboardingProvider extends BaseProvider with MessageNotifierMixin implemen
       deviceType = device.type;
       var cDevice = await _getConnectedDevice(deviceId);
       if (cDevice != null) {
-        deviceProvider!.setConnectedDevice(cDevice);
+        unawaited(deviceProvider!.setConnectedDevice(cDevice));
         SharedPreferencesUtil().deviceName = cDevice.name;
         deviceProvider!.setIsConnected(true);
       }
       await deviceProvider?.scanAndConnectToDevice();
+      finishFirstChargePreparation?.call();
+      finishFirstChargePreparation = null;
       var connectedDevice = deviceProvider!.connectedDevice;
       batteryPercentage = deviceProvider!.batteryLevel;
       isConnected = true;
@@ -446,6 +454,8 @@ class OnboardingProvider extends BaseProvider with MessageNotifierMixin implemen
       PlatformManager.instance.analytics.deviceConnectFailed(classifyDeviceConnectError(e));
       notifyError('DEVICE_CONNECT_FAILED');
       notifyListeners();
+    } finally {
+      finishFirstChargePreparation?.call();
     }
 
     notifyListeners();

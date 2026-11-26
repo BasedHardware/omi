@@ -26,13 +26,25 @@ class HomeTabSwitcher extends StatelessWidget {
       padding: const EdgeInsets.fromLTRB(OmiSpacing.md, 0, OmiSpacing.sm, OmiSpacing.xxs),
       child: Row(
         children: [
-          // Conversations live in Home now, so the catalogued Conversations control is the Home tab.
-          KeyedSubtree(
-            key: OmiKeys.homeTabConversations,
-            child: _tab(context, selected, HomeProvider.homeTab, l10n.home, 'Home', OmiKeys.homeTabHome),
+          // At the largest text sizes both words shrink together to fit beside [trailing].
+          Flexible(
+            child: FittedBox(
+              fit: BoxFit.scaleDown,
+              alignment: AlignmentDirectional.centerStart,
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  // Conversations live in Home now, so the catalogued Conversations control is the Home tab.
+                  KeyedSubtree(
+                    key: OmiKeys.homeTabConversations,
+                    child: _tab(context, selected, HomeProvider.homeTab, l10n.home, 'Home', OmiKeys.homeTabHome),
+                  ),
+                  const SizedBox(width: OmiSpacing.sm),
+                  _tab(context, selected, HomeProvider.tasksTab, l10n.tasks, 'Tasks', OmiKeys.homeTabTasks),
+                ],
+              ),
+            ),
           ),
-          const SizedBox(width: OmiSpacing.sm),
-          _tab(context, selected, HomeProvider.tasksTab, l10n.tasks, 'Tasks', OmiKeys.homeTabTasks),
           const Spacer(),
           if (trailing != null) trailing!,
         ],

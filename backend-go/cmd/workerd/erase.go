@@ -174,6 +174,9 @@ type queueOnlyEraser interface {
 }
 
 func openEraseServer(ctx context.Context, cfg config, store *queue.Store, logger *slog.Logger) (*http.Server, func(), error) {
+	if cfg.erase.port == 0 {
+		return nil, func() {}, nil
+	}
 	// CLEANUP-NOTE: use direct assignments once Lane B's erase and marker reader land.
 	eraser, ok := any(store).(queueOnlyEraser)
 	if !ok {

@@ -55,18 +55,22 @@ provider's scan: keeping that dependency would strand overflow once Home becomes
    delete: `LocalWalSyncImpl.discardRecording` (`wal_discard.dart`) drops the live tail and the
    WALs of that one recording session, never another recording's. A WAL of it that is uploading
    is not interrupted; it is never picked for upload again and is deleted once that upload settles.
-   With PostHog `custody_capture_committed_release` explicitly true, exact server `capture_committed`
-   source-frame receipts replace the live transcript heuristic for Omi audio sessions. Live Custom STT
-   uses HTTP transcript submission instead of frame receipts: only a confirmation carrying the
-   captured session mode may use saved transcript coverage for its stamped phone safety copies.
-   Current preferences never supply this authority. Partial/interrupted, held, on-device and
-   unlinked copies remain recoverable, and the transfer coordinator still honors the upload choice.
-   Unknown/false keeps the heuristic.
-   Receipt ranges are journaled durably per owner even in shadow; comparisons emit
-   `event=refactor_shadow lane=L5 check=custody_release outcome=agree|disagree`. The union must cover
-   the entire WAL in its capture root, mono channel, clock epoch and (when supplied) recording session.
-   Gaps, foreign owners, missing ordinals and in-flight/manual/on-device WALs never release.
-   A release marks server-confirmed synced retention; only the existing retention policy deletes bytes.
+   With PostHog `custody_durable_audio_release` explicitly true, the phone releases an Omi
+   safety WAL into synced retention after writer-proved original and manifest receipts cover
+   every source ordinal and the independent per-frame digest audit matches the local bytes.
+   `audio_custody` supplies independent proof. A `capture_committed` range contributes only
+   where explicitly bound to committed original-audio evidence. Legacy transcript-only
+   receipts remain readable. The socket owner, device capture root, mono channel, clock epoch
+   and supplied recording session must match. A server recording rollover can retain the
+   phone session only through an explicit client-session binding on the writer receipt.
+   Custom STT sockets do not negotiate receipt release. Gaps, conflicts and unknown mappings keep
+   the repair path open. Receipt ranges are journaled durably per owner in shadow and serve.
+   In-flight, manual and on-device WALs are excluded. The WAL index must persist synced
+   retention successfully. Only the existing retention policy deletes bytes. The existing
+   saved-transcript confirmation for a captured Live Custom STT session continues to honor
+   the user's upload choice. Unknown/false keeps the existing confirmation behavior.
+   `WAL Custody Audit` records aggregate per-frame audit agreement, disagreement, unknown
+   proof and persisted receipt releases by build.
 3. **Owner before anything.** A WAL's `ownerUid` is set before it is listed, played, uploaded or
    deleted. Watch copies take the owner from their iPhone receipt. Other native files take the
    signed-in uid at intake, the same as every other producer. Once registered, the ledger
@@ -114,6 +118,21 @@ that immutable input instead of running speech recognition again and changing an
 The outbox remains on failure and clears only with the durable conversation result. Flag:
 `clients_from_segments_chunks`; guard: `unit/on_device_runner_test.dart` restart test.
 
+## Exclusive live conversation cuts
+
+A conversation close uses `finalizeAndSnapshotSession` followed by `stampConversationSnapshot`,
+not a later time-range scan. Admission synchronously seals the current frame buffer and reserves
+eligible WAL object identities before queued disk I/O. Reserved memory rows cannot extend with
+subsequent ingress, and unresolved earlier cuts cannot be claimed by a later conversation. Tokens
+are bound to one ledger, owner and account generation; reconstructed rows or another ledger do
+not inherit their authority. Generic lifecycle/checkpoint finalization remains separate.
+
+A stamp establishes lineage, not transcript coverage. Existing coverage/receipt confirmation and
+retention rules still decide whether a copy leaves Pending. Uncertain Process Now results remain
+unlinked and recoverable. `unit/conversation_wal_snapshot_test.dart` covers queue barriers,
+post-cut ingress, same-second cuts, owner changes and durable source coordinates; the capture
+architecture documents the per-conversation close lifecycle.
+
 ## Server contract used
 
 `POST /v2/sync-local-files` with the existing parameters (`conversation_id`,
@@ -121,10 +140,9 @@ The outbox remains on failure and clears only with the durable conversation resu
 headers). The server binds by `recording_session_id`, otherwise to the conversation closest in
 time, otherwise it creates one. No backend change is needed.
 
-`capture_committed` listen events are consumed by `capture_committed_custody.dart`;
-`CaptureCommittedJournal` records each receipt before applying it. `confirmSessionTranscription`
-compares exact receipts with the old coverage decision in shadow. The opt-in is identity-fenced and
-off unless explicitly true. S1 source frame ordinals already in the ledger are sent by
+The authenticated mono Listen socket opts in to `audio_custody`. Both receipt types enter
+`CaptureCommittedJournal` through the WAL buffer queue. The phone audits each proposed release
+against the local length-prefixed frames before applying synced retention. S1 source frame ordinals already in the ledger are sent by
 `captureEvidenceUploadHeader` on both batch and single safety-WAL uploads; legacy/unpositioned
 WALs omit claims rather than deriving them from wall clock. Batch must apply L1 coverage before
 the legacy coverage trim is deleted (plan C, C11).
@@ -308,7 +326,10 @@ exception applies only to complete-census, entirely unreferenced audio with both
 clocks older than 67 days (`orphanReclaimAgeSeconds`), under David’s explicit ruling.
 
 The ledger's explicit foreground resume/15-minute recovery pass runs only after
-startup admission finishes; headless workers skip it. The shared read-only
+startup admission finishes; headless workers skip it. While live audio is arriving
+(a frame in the last minute) the pass runs at most every two hours instead, because
+its census walks every Documents file on the UI isolate (`orphanRecoveryDue`); it
+still runs, and the delay only defers adoption, never audio retention. The shared read-only
 inventory census runs outside the capture queue and includes active, retired,
 foreign, main, backup, temporary and quarantined rows, batch journals, native
 owner receipts, legacy jobs/preferences, ring checkpoint/download refs and

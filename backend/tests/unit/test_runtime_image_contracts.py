@@ -1,3 +1,4 @@
+import gc
 import importlib.util
 import json
 import os
@@ -55,6 +56,9 @@ def checkout_graph_cache(contracts_module):
             contracts_module.first_party_import_closure(contract, contract.entrypoints, _import_trees=trees)
             contracts_module.first_party_import_closure(contract, contract.smoke_entrypoints, _import_trees=trees)
             contracts_module.third_party_dependency_modules(contract, _trees=dependency_trees)
+    # Finish collecting the checkout scan's temporary objects during setup.
+    # Otherwise a later small test can be charged for collecting across both AST caches.
+    gc.collect()
     return cached, trees, dependency_trees
 
 
@@ -291,6 +295,14 @@ def test_shared_import_parse_keeps_lazy_imports_and_each_image_copy_surface(cont
     package.mkdir()
     (package / '__init__.py').write_text('', encoding='utf-8')
     (package / 'child.py').write_text('import json\n', encoding='utf-8')
+    template = replace(
+        _contract(contracts_module, 'pusher'),
+        target=None,
+        build_context=tmp_path,
+        source_root=tmp_path,
+        entrypoint_source_root=tmp_path,
+        entrypoints=('main',),
+    )
     contracts = []
     for name, copies in (
         ('complete', 'COPY added.py ./\nCOPY package/ ./package/\n'),
@@ -299,18 +311,7 @@ def test_shared_import_parse_keeps_lazy_imports_and_each_image_copy_surface(cont
     ):
         dockerfile = tmp_path / name
         dockerfile.write_text('FROM python\nWORKDIR /app\nCOPY main.py ./\n' + copies, encoding='utf-8')
-        contracts.append(
-            replace(
-                _contract(contracts_module, 'pusher'),
-                name=name,
-                dockerfile=dockerfile,
-                target=None,
-                build_context=tmp_path,
-                source_root=tmp_path,
-                entrypoint_source_root=tmp_path,
-                entrypoints=('main',),
-            )
-        )
+        contracts.append(replace(template, name=name, dockerfile=dockerfile))
 
     errors = contracts_module.check_source_closures(contracts)
     assert not any(error.startswith('complete:') for error in errors)

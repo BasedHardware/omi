@@ -32,7 +32,7 @@ class _Usage extends UsageProvider {
   final cancelReasons = <String?>[];
 
   @override
-  Future<void> fetchSubscription() async {}
+  Future<void> fetchSubscription({bool fresh = false}) async {}
 
   @override
   Future<bool> cancelUserSubscription({String? reason, String? reasonDetails}) async {

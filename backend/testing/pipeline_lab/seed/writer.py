@@ -179,8 +179,50 @@ def _delete_ref(client: Any, ref: Any) -> int:
 KEPT_ON_RESET = frozenset({'users', 'batch_pipeline_privacy'})
 
 
+# A scenario run on a shared redis-server owns one database number, held by this lease key in that
+# database (value: the run id). See ``scenario/stack.py`` (``RedisSlots``).
+REDIS_LEASE_KEY = 'pipeline_lab:lease'
+
+
+def redis_db_of(redis_client: Any) -> int:
+    kwargs = getattr(getattr(redis_client, 'connection_pool', None), 'connection_kwargs', None) or {}
+    return int(kwargs.get('db') or 0)
+
+
+def reset_leased_redis_db(redis_client: Any, run_id: str) -> int:
+    """Delete every key in the client's database but the lease, only while ``run_id`` holds it.
+
+    Refuses database 0 (a dev stack's) and a database another run holds: the reset must never reach
+    past this run's namespace.
+    """
+    db = redis_db_of(redis_client)
+    if db == 0:
+        raise SeedTargetRefused('a leased reset never touches Redis database 0')
+    holder = redis_client.get(REDIS_LEASE_KEY)
+    if isinstance(holder, bytes):
+        holder = holder.decode()
+    if holder != run_id:
+        raise SeedTargetRefused(f'Redis database {db} is not leased to this run')
+    deleted, batch = 0, []
+    for key in redis_client.scan_iter(count=1000):
+        if (key.decode() if isinstance(key, bytes) else key) == REDIS_LEASE_KEY:
+            continue
+        batch.append(key)
+        if len(batch) >= 500:
+            deleted += int(redis_client.delete(*batch) or 0)
+            batch = []
+    if batch:
+        deleted += int(redis_client.delete(*batch) or 0)
+    return deleted
+
+
 def reset_lab_state(
-    client: Any, redis_client: Any = None, uid: str = LAB_UID, *, environ: dict[str, str] | None = None
+    client: Any,
+    redis_client: Any = None,
+    uid: str = LAB_UID,
+    *,
+    environ: dict[str, str] | None = None,
+    redis_lease: str | None = None,
 ) -> dict[str, int]:
     """Everything a previous run left for the lab uid, so a re-run starts from the same state. Guarded.
 
@@ -188,6 +230,9 @@ def reset_lab_state(
     - top-level documents owned by the uid: field ``uid == uid`` (finalization jobs, routing), or a
       document id equal to the uid or its sha256 (dream schedule, memory maintenance, privacy memo);
     - Redis keys naming the uid or its sha256 (locks such as ``daily_summary_lock:<date>``, caches).
+
+    With ``redis_lease`` (a run id holding the client's Redis database, see ``reset_leased_redis_db``),
+    the whole database but the lease is cleared instead: on an isolated run, global keys are the run's too.
 
     Global counters and shards are not per user and stay, and so does ``batch_pipeline_privacy``: the
     product's write fence keeps that authority through deletion on purpose. A delete the product
@@ -216,7 +261,9 @@ def reset_lab_state(
                 ref = collection.document(doc_id)
                 if ref.get().exists:
                     delete(ref)
-    if redis_client is not None:
+    if redis_client is not None and redis_lease is not None:
+        counts['redis'] = reset_leased_redis_db(redis_client, redis_lease)
+    elif redis_client is not None:
         for pattern in (f'*{uid}*', f'*{hashed}*'):
             batch = []
             for key in redis_client.scan_iter(match=pattern, count=1000):

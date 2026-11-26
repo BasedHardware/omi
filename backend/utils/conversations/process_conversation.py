@@ -36,6 +36,7 @@ from utils.sync.repeat_work_metrics import conversation_scope, record_final, rec
 
 import database._client as db_client_module
 from database import redis_db
+from database.conversation_effect_fence import ConversationEffectFenced, ConversationEffectSource
 from database.firestore_read_metrics import FirestoreReadSite
 from database.auth import get_user_name
 from utils.conversations.transcript_for_llm import (
@@ -69,6 +70,7 @@ from models.workstream_association import AssociationEvidence
 from models.product_memory import MemoryTier
 from models.calendar_context import CalendarMeetingContext
 from models.client_processing import ClientProcessing
+from models.finalization_owner import FinalizationOwnedElsewhere
 from models.conversation import (
     AppResult,
     Conversation,
@@ -80,6 +82,7 @@ from models.conversation_enums import (
     ConversationStatus,
     ExternalIntegrationConversationSource,
 )
+from config.parked_conversations import parked_terminal_status_enabled
 from config.refactor_modes import serving_for
 from utils.conversations.empty_structure_minimum import (
     apply_empty_structure_minimum,
@@ -307,8 +310,8 @@ from utils.other.storage import (
     precache_conversation_audio,
 )
 
-from utils.conversations.v3 import policy as v3_policy
-from utils.conversations.v3 import service as v3_service
+from utils.conversations.v3 import policy as v3_policy, service as v3_service
+from utils.conversations.v3.word_floor import MIN_HOME_WORDS, MIN_TASK_WORDS, text_word_count
 
 logger = logging.getLogger(__name__)
 
@@ -454,10 +457,10 @@ def _get_structured(
                 recovery_minimum_fallback_observer()
             return minimum, decision.discard
         if v3_policy.flag(conversation, 'v3_derived'):
-            words = sum(len(s.text.split()) for s in conversation.transcript_segments)
-            if not full_v3_notes and (conversation.kind in {'media', 'background'} or words < 20):
+            words = sum(text_word_count(s.text) for s in conversation.transcript_segments)
+            if not full_v3_notes and (conversation.kind in {'media', 'background'} or words < MIN_TASK_WORDS):
                 return conversation.structured, True
-            if words < 300 and not full_v3_notes:
+            if words < MIN_HOME_WORDS and not full_v3_notes:
                 return v3_service.models.short_tasks(uid, conversation), False
             covers = getattr(conversation, 'summary_covers_through', None)
             if (
@@ -854,16 +857,25 @@ def _get_conversation_obj(
         return result
     elif isinstance(conversation, ExternalIntegrationCreateConversation):
         create_conversation = conversation
+        # Carried as a field on the create model; the persisted Conversation
+        # carries it in external_data, the shape every reader already uses.
+        calendar_context = getattr(conversation, 'calendar_meeting_context', None)
+        conversation_dict = conversation.dict()
+        conversation_dict.pop('calendar_meeting_context', None)
         # Use started_at as created_at for external integrations to preserve original timestamp
         created_at = conversation.started_at if conversation.started_at else datetime.now(timezone.utc)
         result = Conversation(
             id=conversation_id or str(uuid.uuid4()),
-            **conversation.dict(),
+            **conversation_dict,
             created_at=created_at,
             structured=structured,
             discarded=discarded,
         )
-        result.external_data = create_conversation.dict()
+        result.external_data = conversation_dict
+        if calendar_context is not None:
+            # The model's hand-built storage shape, not a dump: a storage write
+            # for meeting metadata must not sweep up fields added later.
+            result.external_data['calendar_meeting_context'] = calendar_context.to_storage_dict()
         result.app_id = create_conversation.app_id
         return result
     else:
@@ -1078,6 +1090,7 @@ def update_goal_progress(
     conversation: Conversation,
     *,
     idempotency_key_prefix: Optional[str] = None,
+    effect_source: ConversationEffectSource | None = None,
 ) -> bool:
     """Extract and update goal progress from conversation text."""
     if is_server_minimum(conversation):
@@ -1108,8 +1121,14 @@ def update_goal_progress(
                 text,
                 idempotency_key_prefix=idempotency_key_prefix,
                 account_generation=account_generation,
+                **({"effect_source": effect_source} if effect_source is not None else {}),
             )
         return True
+    except ConversationEffectFenced:
+        logger.info('event=goal_progress outcome=source_fenced uid=%s conversation=%s', uid, conversation.id)
+        if idempotency_key_prefix is None:
+            redis_db.release_conversation_goal_lock(uid, conversation.id)
+        return False
     except Exception as e:
         logger.error(f"[GOAL] Error updating progress: {e}")
         if idempotency_key_prefix is None:
@@ -1169,7 +1188,9 @@ def _sweep_owned_writer_mode(uid: str) -> Optional[str]:
 
 @spelling_context_run
 @conversation_scope
-def extract_memories(uid: str, conversation: Conversation) -> None:
+def extract_memories(
+    uid: str, conversation: Conversation, *, effect_source: ConversationEffectSource | None = None
+) -> None:
     """Extract one conversation's memories through the selected memory system.
 
     Finalization workers and legacy async callers share this admission boundary.
@@ -1180,7 +1201,7 @@ def extract_memories(uid: str, conversation: Conversation) -> None:
     # account's non-compatibility writer delegates formation to the sweep.
     # Otherwise a reused release-probe principal could skip the exact static
     # configuration contract that Pusher qualification is meant to exercise.
-    db_client = getattr(db_client_module, 'db', None)
+    db_client = _memory_extraction_client(effect_source)
     MemoryService(db_client=db_client).ensure_canonical_mutation_ready(uid)
     if serving_for('SPEAKER_EVIDENCE_MODE', uid) and conversation.source != ConversationSource.external_integration:
         owner_segments = confident_owner_segments(conversation.transcript_segments)
@@ -1224,10 +1245,12 @@ def extract_memories(uid: str, conversation: Conversation) -> None:
     )
     try:
         with track_usage(uid, Features.MEMORIES):
+            extraction_kwargs = {}
+            if effect_source is not None:
+                extraction_kwargs["effect_source"] = effect_source
             if parity_capture.enabled:
-                result = _extract_memories_inner(uid, conversation, parity_capture=parity_capture)
-            else:
-                result = _extract_memories_inner(uid, conversation)
+                extraction_kwargs["parity_capture"] = parity_capture
+            result = _extract_memories_inner(uid, conversation, **extraction_kwargs)
         parity_capture.observe(
             "inbound",
             {"type": "memory_extraction_result", "count": result.count, "path": result.path},
@@ -1240,8 +1263,10 @@ def extract_memories(uid: str, conversation: Conversation) -> None:
         )
 
 
-def _extract_memories(uid: str, conversation: Conversation) -> None:
-    extract_memories(uid, conversation)
+def _extract_memories(
+    uid: str, conversation: Conversation, *, effect_source: ConversationEffectSource | None = None
+) -> None:
+    extract_memories(uid, conversation, **({"effect_source": effect_source} if effect_source is not None else {}))
 
 
 def _normalized_l1_subject_label(value: Optional[str]) -> str:
@@ -1635,7 +1660,12 @@ def _rejected_memory_examples_for_l1(uid: str, *, db_client: Any) -> Tuple[str, 
 
 
 def _extract_memories_canonical(
-    uid: str, conversation: Conversation, *, db_client: Any, parity_capture: SurfaceParityCapture | None = None
+    uid: str,
+    conversation: Conversation,
+    *,
+    db_client: Any,
+    parity_capture: SurfaceParityCapture | None = None,
+    effect_source: ConversationEffectSource | None = None,
 ) -> ConversationMemoryExtractionResult:
     """Universal canonical extraction with one atomic source replacement."""
     from config.sync_reprocess import dedupe_enabled
@@ -1969,6 +1999,7 @@ def _extract_memories_canonical(
         uid,
         conversation.id,
         replacement_payloads,
+        **({"effect_source": effect_source} if effect_source is not None else {}),
     )
     # Decision work starts only after durable capture. Failure retains the source
     # and is observable; Dream's paid/allowlist cleanup ramp cannot gate intake.
@@ -1981,6 +2012,7 @@ def _extract_memories_canonical(
             db_client=db_client,
             now=datetime.now(timezone.utc),
             run_id=f'observation-intake:{conversation.id}',
+            **({'effect_source': effect_source} if effect_source is not None else {}),
         )
     if llm_input_dedupe.l1_succeeded(uid, conversation, l1_digest, db_client=db_client):
         record_feature(uid, conversation, 'l1', 'durable')
@@ -2063,13 +2095,29 @@ def _extract_memories_canonical(
     return ConversationMemoryExtractionResult(count=len(parsed_memories), source=source, path=PATH_CANONICAL)
 
 
+def _memory_extraction_client(effect_source: ConversationEffectSource | None) -> Any:
+    if effect_source is not None:
+        return db_client_module.get_data_plane_firestore_client()
+    return getattr(db_client_module, 'db', None)
+
+
 def _extract_memories_inner(
-    uid: str, conversation: Conversation, *, parity_capture: SurfaceParityCapture | None = None
+    uid: str,
+    conversation: Conversation,
+    *,
+    parity_capture: SurfaceParityCapture | None = None,
+    effect_source: ConversationEffectSource | None = None,
 ) -> ConversationMemoryExtractionResult:
-    db_client = getattr(db_client_module, 'db', None)
+    db_client = _memory_extraction_client(effect_source)
     memory_service = MemoryService(db_client=db_client)
     memory_service.ensure_canonical_mutation_ready(uid)
-    return _extract_memories_canonical(uid, conversation, db_client=db_client, parity_capture=parity_capture)
+    return _extract_memories_canonical(
+        uid,
+        conversation,
+        db_client=db_client,
+        parity_capture=parity_capture,
+        **({"effect_source": effect_source} if effect_source is not None else {}),
+    )
 
 
 def _transcript_artifact_ref(conversation: Conversation) -> Dict[str, Any]:
@@ -2428,11 +2476,12 @@ def _store_deferred_conversation(
     conversation = _get_conversation_obj(uid, structured, conversation)
     _attach_client_projection(conversation, client_projection)
     conversation.deferred = True
-    # `processing` (not completed) is the user-facing "awaiting enrichment" state. Unlike the
-    # `deferred` flag it survives the desktop's local conversation cache, so the client shows a
-    # processing indicator and re-fetches on open to trigger enrichment. The lazy enrich sets it
-    # back to `completed`.
-    conversation.status = ConversationStatus.processing
+    # The recording and transcript are ready. The deferred fence stays in place
+    # until the by-id route claims the optional first-open enrichment.
+    if parked_terminal_status_enabled() and not conversation.record_lane_owner and not conversation.recording:
+        conversation.status = ConversationStatus.completed
+    else:
+        conversation.status = ConversationStatus.processing
     # Generic persist: never write ``client_processing``. A later ingest
     # mutation (or a genuine clear) must not be last-writer-loser to this
     # in-memory snapshot. A None ``processing_state`` is likewise never
@@ -2440,7 +2489,12 @@ def _store_deferred_conversation(
     payload = omit_null_processing_state(strip_client_processing(conversation.dict()))
     apply_relevance(conversation, payload, decision)
     if is_initial_creation:
-        persisted = lifecycle_service.create_processing_conversation(uid, payload, idempotent=True)
+        create = (
+            lifecycle_service.create_completed_conversation
+            if conversation.status == ConversationStatus.completed
+            else lifecycle_service.create_processing_conversation
+        )
+        persisted = create(uid, payload, idempotent=True)
     else:
         persisted = lifecycle_service.persist_processed_conversation(uid, payload)
     if not persisted:
@@ -2711,6 +2765,8 @@ def process_conversation(
     ``first_party_only`` requests Omi notes; the derived-effects digest identifies
     the transcript last used for memories, tasks and goal progress.
     """
+    if isinstance(conversation, Conversation) and not conversation.python_finalization_owned:
+        raise FinalizationOwnedElsewhere()
     member_notes.before_notes(uid, conversation, trigger, finalization_fence=finalization_fence)
     generated_conversation_id = str(uuid.uuid4()) if _is_ingress_create(conversation) else None
     bind_generation(uid, generated_conversation_id)
@@ -2726,6 +2782,7 @@ def process_conversation(
     backlog_authorized = trigger is ProcessingTrigger.BACKLOG_CHOICE
     mode = PROCESSING_MODES[trigger]
     force_process, is_reprocess = mode.run_now, mode.reprocess
+    settle_manual_deferral = trigger is ProcessingTrigger.USER_REPROCESS and getattr(conversation, 'deferred', False)
     # Snapshot before this call replaces structured or status. Sync intake's
     # completed status is not an observation; see owner_recognition_already_observed.
     already_observed = owner_recognition_already_observed(
@@ -2870,10 +2927,8 @@ def process_conversation(
         deferred = _store_deferred_conversation(
             uid, conversation, client_projection=client_projection, trigger=trigger, user_kept=user_kept
         )
-        # Flag-off legacy deferral reports False even when the write succeeded.
-        # That is deliberate and pre-existing: the conversation is not terminally
-        # processed (status=processing, deferred=True; first-open will reprocess).
-        # Do not change this onto the flag-off path — it must stay byte-identical.
+        # The original capture job owns no enrichment fanout for this row.
+        # Only a successful first-open claim can start that work.
         report_persistence(False)
         return deferred
     # Custom-STT skips managed-STT credits at listen connect. The LLM work that
@@ -3039,6 +3094,8 @@ def process_conversation(
     conversation.status = ConversationStatus.completed
     content_excluded = exclude_from_derived(uid, conversation, consumer='notes')
     payload = _normal_persist_payload(conversation, clear_terminal_marker=clear_stale_terminal_marker)
+    if settle_manual_deferral:
+        payload['deferred'] = False
     if user_kept and not conversation.discarded:
         # Commit restore authority before derived work can fail. A discarded row being
         # restored stays hidden here: visibility waits for the router's restore, which
@@ -3088,6 +3145,8 @@ def process_conversation(
         persisted = lifecycle_service.create_completed_conversation(uid, payload, idempotent=True)
     else:
         persisted = persist_with_fences(payload)
+    if persisted and settle_manual_deferral:
+        conversation.deferred = False
     if recovery_minimum_fallback or historical or content_excluded or empty_structure_minimum_applied:
         report_persistence(
             persisted,
@@ -3110,14 +3169,6 @@ def process_conversation(
         if derived_effects_disposition_observer is not None:
             derived_effects_disposition_observer(DerivedEffectsDisposition.TERMINAL_NO_DERIVED_EFFECTS)
         if historical_tier:
-            if explicit_app is not None:
-                # An explicitly chosen template is the summary the owner asked for.
-                trigger_conversation_apps(
-                    uid, conversation, True, app_id, explicit_app, app_usage_attribution, language_code, people
-                )
-                conversations_db.update_conversation(
-                    uid, conversation.id, {'apps_results': [r.dict() for r in conversation.apps_results]}
-                )
             complete_explicit(uid, conversation, trigger)
         return conversation
 
@@ -3147,6 +3198,11 @@ def process_conversation(
     # app failures propagate after the bundle; automatic selection is fail-open.
     explicit_selection_failures: list[ExplicitAppSelectionFailedError] = []
     user_reprocess = trigger is ProcessingTrigger.USER_REPROCESS
+    effect_kwargs = {}
+    if trigger in {ProcessingTrigger.SYNC_UPDATE, ProcessingTrigger.BACKLOG_CHOICE}:
+        effect_kwargs['effect_source'] = ConversationEffectSource(
+            conversation.id, conversation.sync_content_revision, conversation.finalization_owner_epoch
+        )
     # User reprocess preserves template results on failure.
 
     def _emit_derived_effects() -> None:
@@ -3263,7 +3319,10 @@ def process_conversation(
                 # Canonical source replacement is universal and intentionally
                 # fail-closed. Do not hide a retryable apply/store failure in an
                 # unobserved future while reporting finalization as successful.
-                _extract_memories(uid, conversation)
+                try:
+                    _extract_memories(uid, conversation, **effect_kwargs)
+                except ConversationEffectFenced as error:
+                    raise SyncConversationPersistenceFenced(str(error)) from error
                 memories_ran = True
             if lazy_effects:
                 pass  # Coalesced memory, vector and task work is durably owned above.
@@ -3283,9 +3342,9 @@ def process_conversation(
             else:
                 submit_with_context(postprocess_executor, _save_action_items, uid, conversation, people, trigger)
             if not (template_only or app_failed):
-                submit_with_context(postprocess_executor, update_goal_progress, uid, conversation)
+                submit_with_context(postprocess_executor, update_goal_progress, uid, conversation, **effect_kwargs)
             # Daily backend-owned AI profile refresh: no-op unless stale, bounded per process.
-            ai_profile_refresh.schedule_refresh(uid)
+            ai_profile_refresh.schedule_refresh(uid, **effect_kwargs)
         # Recovery preserves admitted audio ids instead of rebuilding old chunks.
         capture_audio = not is_recovery_trigger(trigger) and not v3_policy.flag(conversation, 'v3_derived')
         if not is_reprocess and conversation.private_cloud_sync_enabled and capture_audio:

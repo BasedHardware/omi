@@ -100,8 +100,7 @@ def test_arbitrary_class_names_messages_and_invalid_codes_do_not_escape():
     assert transport_failure_fields(error, 1) == ('other', -1, -1, 'other', 'lt_30s')
 
 
-def test_real_provider_websocket_close_is_logged_once_without_private_reason(caplog, monkeypatch):
-    monkeypatch.setattr(soniox, 'resilient_reconnect_enabled', lambda: True)
+def test_real_provider_websocket_close_is_logged_once_without_private_reason(caplog):
     caplog.set_level(logging.WARNING, logger=soniox.__name__)
 
     async def run():
@@ -115,7 +114,7 @@ def test_real_provider_websocket_close_is_logged_once_without_private_reason(cap
                 try:
                     await asyncio.wait_for(socket._recv_task, timeout=3)
                     assert socket.is_connection_dead
-                    assert socket.typed_death_reason == 'connection_lost'
+                    assert socket.typed_death_reason is None
                     assert socket.connection_cause == 'remote_close_error'
                     # A send-loop race must not produce another close diagnostic.
                     socket._mark_dead('second death', transport_error=TimeoutError('private'), operation='send')

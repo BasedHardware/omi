@@ -3,7 +3,9 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 
 import 'package:omi/utils/logger.dart';
+import 'package:omi/utils/reliability_experiments.dart';
 import 'package:omi/services/wals/sync_wake_scope.dart';
+import 'package:omi/services/wals/sync_job_poller.dart';
 import 'package:omi/services/wals/upload_trace.dart';
 import 'package:omi/services/wals/ring_drain_policy.dart';
 
@@ -15,6 +17,7 @@ enum WakeTrigger {
   startup,
   periodic,
   foregrounded,
+  mobileBatchReady,
   connectivityRestored,
   deviceConnected,
   socketReconnected,
@@ -95,6 +98,7 @@ class RecordingTransferCoordinator {
     RecordingTransferPass? onConnectivityRestored,
     Stream<void>? networkChanges,
     bool Function()? hasPendingWork,
+    bool Function()? hasAcceptedJobs,
     RecordingTransferPassTimedOut? onPassTimedOut,
     this.passTimeLimit = defaultPassTimeLimit,
     this.fencedPassTimeLimit = defaultFencedPassTimeLimit,
@@ -113,6 +117,7 @@ class RecordingTransferCoordinator {
         _onTransferFinished = onTransferFinished,
         _onConnectivityRestored = onConnectivityRestored,
         _hasPendingWork = hasPendingWork,
+        _hasAcceptedJobs = hasAcceptedJobs,
         _onPassTimedOut = onPassTimedOut {
     _configured = true;
     _listenToConnectivity(connectivityChanges, initiallyConnected, networkChanges);
@@ -174,6 +179,8 @@ class RecordingTransferCoordinator {
   RecordingTransferKeepAlive? _onTransferFinished;
   RecordingTransferPass? _onConnectivityRestored;
   bool Function()? _hasPendingWork;
+  bool Function()? _hasAcceptedJobs;
+  Timer? _receiptTimer;
   RecordingTransferPassTimedOut? _onPassTimedOut;
 
   StreamSubscription<bool>? _connectivitySubscription;
@@ -184,7 +191,9 @@ class RecordingTransferCoordinator {
   WakeTrigger? _pendingWake;
   WakeTrigger? _wakeBeforeConfigured;
   bool _configured = false;
-  bool _foreground = true;
+  final _foregroundState = ValueNotifier(true);
+  ValueListenable<bool> get foregroundState => _foregroundState;
+  bool get _foreground => _foregroundState.value;
   bool _wasConnected = true;
   int _failureStreak = 0;
   int _cooldownGeneration = 0;
@@ -254,6 +263,7 @@ class RecordingTransferCoordinator {
     RecordingTransferPass? onConnectivityRestored,
     Stream<void>? networkChanges,
     bool Function()? hasPendingWork,
+    bool Function()? hasAcceptedJobs,
     RecordingTransferPassTimedOut? onPassTimedOut,
   }) {
     _reconcile = reconcile;
@@ -267,6 +277,8 @@ class RecordingTransferCoordinator {
     _onTransferFinished = onTransferFinished ?? _onTransferFinished;
     _onConnectivityRestored = onConnectivityRestored ?? _onConnectivityRestored;
     _hasPendingWork = hasPendingWork ?? _hasPendingWork;
+    _receiptTimer?.cancel();
+    _hasAcceptedJobs = hasAcceptedJobs;
     _onPassTimedOut = onPassTimedOut ?? _onPassTimedOut;
     _configured = true;
     _listenToConnectivity(connectivityChanges, initiallyConnected, networkChanges);
@@ -318,10 +330,10 @@ class RecordingTransferCoordinator {
   /// running in the background while the process is alive (bounded by
   /// [_maxBackgroundRetries]); a coalesced extra pass stays foreground-only (#5221).
   void setForeground(bool isForeground) {
-    _foreground = isForeground;
-    if (!isForeground) {
+    if (!isForeground && _pendingWake != WakeTrigger.mobileBatchReady) {
       _pendingWake = null;
     }
+    _foregroundState.value = isForeground;
   }
 
   /// Coalesces concurrent events into a single extra serial pass. Five wakes
@@ -355,13 +367,9 @@ class RecordingTransferCoordinator {
     pass.whenComplete(() {
       if (!identical(_inFlight, pass)) return;
       _inFlight = null;
-      if (!_foreground) {
-        _pendingWake = null;
-        return;
-      }
       final lateWake = _pendingWake;
       _pendingWake = null;
-      if (lateWake != null) {
+      if (lateWake != null && (_foreground || lateWake == WakeTrigger.mobileBatchReady)) {
         unawaited(wake(lateWake));
       }
     }).ignore();
@@ -370,6 +378,7 @@ class RecordingTransferCoordinator {
 
   bool _isBackgroundEligible(WakeTrigger trigger) =>
       trigger == WakeTrigger.periodic ||
+      trigger == WakeTrigger.mobileBatchReady ||
       trigger == WakeTrigger.deviceConnected ||
       trigger == WakeTrigger.connectivityRestored ||
       trigger == WakeTrigger.socketReconnected ||
@@ -383,7 +392,8 @@ class RecordingTransferCoordinator {
   }
 
   int _wakePriority(WakeTrigger trigger) => switch (trigger) {
-        WakeTrigger.userRetry => 3,
+        WakeTrigger.userRetry => 4,
+        WakeTrigger.mobileBatchReady => 3,
         WakeTrigger.periodic ||
         WakeTrigger.deviceConnected ||
         WakeTrigger.connectivityRestored ||
@@ -409,7 +419,9 @@ class RecordingTransferCoordinator {
         if (!_foreground) {
           final pending = _pendingWake;
           if (pending == null || passes >= 2 || !_isBackgroundEligible(pending)) {
-            _pendingWake = null;
+            // A newly due phone batch still needs a pass if it arrived after
+            // the second background drain took its final pending snapshot.
+            if (pending != WakeTrigger.mobileBatchReady) _pendingWake = null;
             break;
           }
         }
@@ -519,6 +531,9 @@ class RecordingTransferCoordinator {
     }
     final backlogWake =
         trigger == WakeTrigger.periodic || trigger == WakeTrigger.deviceConnected || trigger == WakeTrigger.watchdog;
+    // A hold expires on a freshly indexed phone WAL. Keep that wake off the
+    // pendant discovery/download path while its capture may still be live.
+    bool canDrainBacklog() => trigger != WakeTrigger.mobileBatchReady && (_foreground || backlogWake);
     try {
       if (trigger == WakeTrigger.connectivityRestored) {
         await _onConnectivityRestored?.call();
@@ -529,7 +544,7 @@ class RecordingTransferCoordinator {
       // must not stop new recordings from uploading — it is retried instead.
       var reconcileFailed = !await _tryReconcile();
       if (expired()) return;
-      if (_foreground || backlogWake) {
+      if (canDrainBacklog()) {
         await _discover();
       }
       if (expired()) return;
@@ -543,14 +558,35 @@ class RecordingTransferCoordinator {
         return;
       }
 
-      final drain = (_foreground || backlogWake) ? _drain : _drainLiveCapture;
+      final drain = canDrainBacklog() ? _drain : _drainLiveCapture;
       if (drain == null) return;
       final RecordingTransferDrainResult result;
+      // A multipart upload can take minutes. Check already accepted jobs on
+      // their normal budget while this pass owns the transfer lease.
+      Future<void>? readingReceipts;
+      final hasAcceptedJobs = _hasAcceptedJobs;
+      if (hasAcceptedJobs != null && ReliabilityExperiments.enabled('receipt_check_during_drain')) {
+        _receiptTimer = Timer.periodic(SyncJobPoller.minimumInterval, (timer) {
+          if (expired()) {
+            timer.cancel();
+            return;
+          }
+          if (readingReceipts != null || !hasAcceptedJobs()) return;
+          readingReceipts = _tryReconcile().then((ok) {
+            if (!ok) reconcileFailed = true;
+            readingReceipts = null;
+          });
+        });
+      }
       _periodicDrainInFlight = trigger == WakeTrigger.periodic;
       try {
         result = await drain();
       } finally {
         _periodicDrainInFlight = false;
+        _receiptTimer?.cancel();
+        // No await when no receipt check ran: the baseline has no async gap here.
+        final reading = readingReceipts;
+        if (reading != null) await reading;
       }
       if (expired()) return;
       await _refreshPending();
@@ -622,6 +658,7 @@ class RecordingTransferCoordinator {
   }
 
   void dispose() {
+    _receiptTimer?.cancel();
     // Invalidate injected-scheduler callbacks too: those timers are not held
     // in [_cooldownTimer], so cancelling the native timer is not enough.
     _cooldownGeneration++;

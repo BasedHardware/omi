@@ -9,7 +9,7 @@ It renders the day with the recap's own deserializer, char budget and
 renderer — the same *view* of the day, though not a byte-identical shared
 prompt prefix (the recap's system prompt and eligibility filter differ, so
 no prompt-cache prefix is actually shared) — then invokes the usage-tracked
-``open_loop_daily`` model, with one retry on provider timeout, to produce a result that:
+``open_loop_daily`` model, with one fallback attempt on provider timeout, to produce a result that:
 
 1. decides statuses for carried loops, open tasks and today's extractions —
    only loops with signal come back;
@@ -43,6 +43,7 @@ from __future__ import annotations
 import json
 import logging
 from datetime import date, datetime, timezone
+from time import monotonic
 from typing import Any, Callable, Dict, List, Mapping, Optional, Sequence, Tuple
 from zoneinfo import ZoneInfo
 
@@ -58,6 +59,7 @@ from utils.conversations.media_consumers import eligible_conversations
 from utils.conversations.render import conversations_to_string
 from utils.llm.clients import get_llm
 from utils.llm.usage_tracker import Features, track_usage
+from utils.observability.fallback import record_fallback
 from utils.other.daily_summary_budget import DEFAULT_MAX_HISTORY_CHARS, select_conversations_within_budget
 from utils.open_loops.card import build_review_card, llm_polisher
 from utils.open_loops.prompts import OPEN_LOOPS_DAILY_RULES
@@ -71,8 +73,11 @@ SKIPPED_ALREADY_RAN = 'skipped_already_ran'
 SKIPPED_CLAIMED = 'skipped_claimed'
 SKIPPED_NO_SIGNAL = 'skipped_no_signal'
 
-# Leave room for two requests and non-model work in the default 45s dispatcher budget.
-_MODEL_REQUEST_TIMEOUT_SECONDS = 15.0
+# Keep the existing 30s model window inside the default 45s dispatcher budget.
+# Reserve 10s for the faster model when the primary hits its request timeout.
+_MODEL_BUDGET_SECONDS = 30
+_PRIMARY_TIMEOUT_SECONDS = 20
+_FALLBACK_TIMEOUT_CAP_SECONDS = 15
 
 # The model may decide exactly these statuses (the offline-validated set).
 DECIDABLE_STATUSES = frozenset({'opened', 'progressing', 'stale', 'due_soon', 'resolved'})
@@ -495,23 +500,36 @@ def _run_claimed_pass(
     )
 
     model = (
-        llm
-        if llm is not None
-        else get_llm('open_loop_daily', request_timeout=_MODEL_REQUEST_TIMEOUT_SECONDS, max_retries=0)
+        llm if llm is not None else get_llm('open_loop_daily', request_timeout=_PRIMARY_TIMEOUT_SECONDS, max_retries=0)
     )
     messages = [
         {'role': 'system', 'content': OPEN_LOOPS_DAILY_RULES},
         {'role': 'user', 'content': user_content},
     ]
+    used_fallback = False
     with track_usage(uid, Features.OPEN_LOOP_DAILY):
+        started = monotonic()
         try:
             response = model.invoke(messages)
         except APITimeoutError:
+            # Round down to stay within budget and bound the cached client variants.
+            remaining = int(_MODEL_BUDGET_SECONDS - (monotonic() - started))
+            if remaining <= 0:
+                raise
+            if llm is None:
+                # This existing Nano route already handles whole-day renders.
+                # The usage context keeps gateway accounting on OPEN_LOOP_DAILY.
+                model = get_llm(
+                    'daily_summary_simple', request_timeout=min(_FALLBACK_TIMEOUT_CAP_SECONDS, remaining), max_retries=0
+                )
+                used_fallback = True
             response = model.invoke(messages)
     parsed = parse_model_output(response) or {}
     raw_loops = parsed.get('loops')
-    model_loops: List[Any] = list(raw_loops) if isinstance(raw_loops, list) else []
     raw_surface = parsed.get('surface')
+    if used_fallback and not (isinstance(raw_loops, list) and isinstance(raw_surface, list)):
+        raise ValueError('open-loops fallback returned an invalid result')
+    model_loops: List[Any] = list(raw_loops) if isinstance(raw_loops, list) else []
     surface_entries: List[Any] = list(raw_surface) if isinstance(raw_surface, list) else []
     # Defensive output caps: the prompt asks for ≤3 surface entries and a
     # short loop list; a runaway response cannot flood the store or cards.
@@ -570,6 +588,14 @@ def _run_claimed_pass(
         open_loops_db.upsert_loop(uid, loop, firestore_client=firestore_client)
     open_loops_db.set_cards(uid, date_str, cards, firestore_client=firestore_client)
     open_loops_db.mark_daily_pass_ran(uid, date_str, firestore_client=firestore_client)
+    if used_fallback:
+        record_fallback(
+            component='daily_summary',
+            from_mode='open_loops_daily_pass',
+            to_mode='daily_summary_simple',
+            reason='timeout',
+            outcome='recovered',
+        )
     logger.info(
         'open_loops_daily_pass uid=%s date=%s loops_written=%d cards=%d',
         uid,

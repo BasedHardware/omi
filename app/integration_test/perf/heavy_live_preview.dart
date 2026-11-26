@@ -8,6 +8,7 @@ import 'package:omi/backend/schema/episode.dart';
 import 'package:omi/backend/schema/transcript_segment.dart';
 import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/providers/device_provider.dart';
+import 'package:omi/services/devices/connectors/device_connection.dart';
 import 'package:omi/providers/episode_provider.dart';
 import 'package:omi/services/capture/capture_seams.dart';
 import 'package:omi/services/capture/local_segment_store.dart';
@@ -78,6 +79,8 @@ class HeavyLiveCapture extends CaptureProvider {
 
   @override
   bool get localPreviewAdmitted => true;
+  @override
+  bool get liveWordsShown => true;
 }
 
 class _NoBle implements CaptureBleListeners {
@@ -220,7 +223,9 @@ class HeavyConnectedDevice extends ChangeNotifier implements DeviceProvider {
   @override
   int batteryLevel = 80;
   @override
-  bool isDeviceStorageSupport = false;
+  int get settingsBatteryLevel => batteryLevel;
+  @override
+  OfflineStorageCapability get offlineStorageCapability => OfflineStorageCapability.unsupported;
   @override
   bool supportsMultiFileSync = false;
   @override

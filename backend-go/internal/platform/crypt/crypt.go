@@ -328,3 +328,37 @@ func (c Codec) sealed(uid string, raw, nonce []byte, compressed bool) (Transcrip
 	}
 	return Transcript{Segments: payload, Compressed: compressed}, nil
 }
+
+// UpgradeJSON moves retained standard JSON to the canonical enhanced zlib
+// representation. An unreadable blob cannot be omitted during an upgrade.
+func (c Codec) UpgradeJSON(uid string, value any, compressed bool, prefix byte) (string, error) {
+	raw, err := standardJSON(value, compressed)
+	if err != nil {
+		return "", err
+	}
+	raw = bytes.TrimSpace(raw)
+	if len(raw) == 0 || len(raw) > maxTranscript || raw[0] != prefix || !json.Valid(raw) {
+		return "", ErrUnreadable
+	}
+	deflated, err := deflate(raw)
+	if err != nil {
+		return "", err
+	}
+	return c.Seal(uid, []byte(hex.EncodeToString(deflated)))
+}
+
+func standardJSON(value any, compressed bool) ([]byte, error) {
+	switch raw := value.(type) {
+	case []byte:
+		if compressed {
+			return inflate(raw)
+		}
+		return raw, nil
+	case []any, map[string]any:
+		// Legacy standard rows can still contain an uncompressed JSON value.
+		if !compressed {
+			return json.Marshal(raw)
+		}
+	}
+	return nil, ErrUnreadable
+}

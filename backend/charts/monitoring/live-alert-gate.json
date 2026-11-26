@@ -77,6 +77,7 @@
     "omi-modulate-credit-page",
     "omi-firestore-unattributed-reads",
     "omi-firestore-unattributed-reads-blind",
+    "omi-firestore-unattributed-absolute",
     "omi-firestore-batch-reads-audio-hour",
     "omi-firestore-batch-reads-no-output",
     "omi-firestore-billed-reads-step"

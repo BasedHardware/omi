@@ -10,7 +10,7 @@ import pytest
 
 from testing.pipeline_lab import contracts as c
 from testing.pipeline_lab.ledger import SpendLedger
-from testing.pipeline_lab.llm_proxy import tagging, wire
+from testing.pipeline_lab.llm_proxy import server, tagging, wire
 from testing.pipeline_lab.llm_proxy.server import LlmProxy, ProxyConfig
 from testing.pipeline_lab.store import Store
 
@@ -139,7 +139,16 @@ def _post(url, body, headers=None):
 CHAT = {'model': 'omi-auto:notes', 'messages': [{'role': 'user', 'content': 'Summarise a fictional chat.'}]}
 
 
-def test_miss_forwards_records_and_logs_then_hit_serves_from_cache(lab, upstream):
+def test_miss_forwards_records_and_logs_then_hit_serves_from_cache(lab, upstream, monkeypatch):
+    send = server._Handler._send
+    logged_before_send = []
+
+    def check_log_before_send(handler, status, body, content_type='application/json', extra=None):
+        call_id = (extra or {}).get('X-Pipeline-Lab-Call-Id')
+        logged_before_send.append(any(call.id == call_id for call in lab.read_llm_calls('run-1')))
+        send(handler, status, body, content_type, extra)
+
+    monkeypatch.setattr(server._Handler, '_send', check_log_before_send)
     with _proxy(lab, upstream) as proxy:
         headers = {
             'X-Omi-LLM-Feature': 'conversation_notes',
@@ -150,8 +159,11 @@ def test_miss_forwards_records_and_logs_then_hit_serves_from_cache(lab, upstream
         status, response_headers, body = _post(proxy.url + '/v1/chat/completions', CHAT, headers)
         assert status == 200 and json.loads(body) == OPENAI_JSON
         assert response_headers['X-Pipeline-Lab-Cache'] == 'miss'
+        miss_id = response_headers['X-Pipeline-Lab-Call-Id']
         status, response_headers, again = _post(proxy.url + '/v1/chat/completions', CHAT, headers)
         assert again == body and response_headers['X-Pipeline-Lab-Cache'] == 'hit'
+        hit_id = response_headers['X-Pipeline-Lab-Call-Id']
+    assert logged_before_send == [True, True]
     assert len(upstream.requests) == 1
     sent = upstream.requests[0]
     assert sent['path'] == '/v1/chat/completions'
@@ -160,22 +172,25 @@ def test_miss_forwards_records_and_logs_then_hit_serves_from_cache(lab, upstream
     assert lowered['authorization'] == 'Bearer local-fake'
     assert not any(k.startswith('x-pipeline-lab-') for k in lowered)
     calls = lab.read_llm_calls('run-1')
-    assert [call.cache_hit for call in calls] == [False, True]
-    first = calls[0]
-    assert (first.stage, first.conversation_id, first.feature, first.model) == (
+    assert len(calls) == 2
+    by_id = {call.id: call for call in calls}
+    assert set(by_id) == {miss_id, hit_id} and miss_id != hit_id
+    miss, hit = by_id[miss_id], by_id[hit_id]
+    assert not miss.cache_hit and hit.cache_hit
+    assert (miss.stage, miss.conversation_id, miss.feature, miss.model) == (
         'notes',
         'conv-1',
         'conversation_notes',
         'fake-luna',
     )
-    assert (first.tokens_in, first.tokens_out) == (1000, 100)
-    assert first.output == '{"title": "Fictional"}'
-    assert first.prompt == {'messages': CHAT['messages']}
+    assert (miss.tokens_in, miss.tokens_out) == (1000, 100)
+    assert miss.output == '{"title": "Fictional"}'
+    assert miss.prompt == {'messages': CHAT['messages']}
     # 500 fresh + 500 cached at 1/10 on the default 0.10/0.60 table
-    assert first.usd == pytest.approx((500 * 0.10 + 500 * 0.01 + 100 * 0.60) / 1e6)
-    assert calls[1].usd == 0.0
+    assert miss.usd == pytest.approx((500 * 0.10 + 500 * 0.01 + 100 * 0.60) / 1e6)
+    assert hit.usd == 0.0
     ledger = SpendLedger(lab.ledger_path('run-1'), budget_usd=1.0).snapshot()
-    assert ledger['settled_usd'] == pytest.approx(first.usd) and ledger['in_flight_usd'] == 0
+    assert ledger['settled_usd'] == pytest.approx(miss.usd) and ledger['in_flight_usd'] == 0
 
 
 def test_cache_key_ignores_per_process_fields_but_not_prompt_or_feature(lab, upstream):
@@ -328,13 +343,27 @@ def test_unreachable_upstream_releases_or_keeps_reservation(lab, monkeypatch):
 
 def test_session_tag_applies_when_headers_absent(lab, upstream):
     with _proxy(lab, upstream) as proxy:
+        url = proxy.url + '/v1/chat/completions'
         tagging.set_session_tag(proxy.url, 'memories', 'conv-9')
-        _post(proxy.url + '/v1/chat/completions', CHAT)
-        _post(proxy.url + '/v1/chat/completions', {**CHAT, 'n': 2}, {tagging.STAGE_HEADER: 'notes'})
+        _, inherited_headers, _ = _post(url, CHAT)
+        _, explicit_headers, _ = _post(url, {**CHAT, 'n': 2}, {tagging.STAGE_HEADER: 'notes'})
         tagging.set_session_tag(proxy.url, None)
-        _post(proxy.url + '/v1/chat/completions', {**CHAT, 'n': 3})
-    rows = [(call.stage, call.conversation_id) for call in lab.read_llm_calls('run-1')]
-    assert rows == [('memories', 'conv-9'), ('notes', None), (None, None)]
+        _, cleared_headers, _ = _post(url, {**CHAT, 'n': 3})
+
+    call_id_header = 'X-Pipeline-Lab-Call-Id'
+    inherited_id = inherited_headers[call_id_header]
+    explicit_id = explicit_headers[call_id_header]
+    cleared_id = cleared_headers[call_id_header]
+    assert len({inherited_id, explicit_id, cleared_id}) == 3
+
+    # Handlers can append their rows in a different order than the responses.
+    rows = lab.read_llm_calls('run-1')
+    assert len(rows) == 3
+    assert {call.id: (call.stage, call.conversation_id) for call in rows} == {
+        inherited_id: ('memories', 'conv-9'),
+        explicit_id: ('notes', None),
+        cleared_id: (None, None),
+    }
 
 
 def test_httpx_tagging_helper_tags_only_proxy_requests(lab, upstream):
@@ -419,3 +448,40 @@ def test_relayed_header_values_lose_control_characters():
 
     assert _header_value('application/json\r\nSet-Cookie: x=1') == 'application/jsonSet-Cookie: x=1'
     assert _header_value('text/event-stream; charset=utf-8') == 'text/event-stream; charset=utf-8'
+
+
+def test_jev_decision_through_the_fake_upstream_is_cached_on_an_identical_rerun(lab):
+    """``jev_conversation_relevance`` (``/v1/systemone``): the body is the product's state + questions only,
+    so two identical runs key the same; the fake answers 2xx, so the second call is a cache hit."""
+    from testing.pipeline_lab.llm_proxy.fake_upstream import FakeUpstream as ScriptedUpstream
+    from utils.conversations.relevance_jev import QUESTIONS, relevance_state
+    from utils.llm.jev_client import _validated_answers
+
+    body = {
+        'model': 'omi:auto:jev-decisions',
+        'state': relevance_state('call the dentist at noon'),
+        'questions': QUESTIONS,
+    }
+    headers = {'X-Omi-LLM-Feature': 'jev_conversation_relevance'}
+    fake = ScriptedUpstream().start()
+    try:
+        with _proxy(lab, fake) as proxy:
+            first = _post(proxy.url + '/v1/systemone', body, headers)
+            second = _post(proxy.url + '/v1/systemone', body, headers)
+    finally:
+        fake.stop()
+    assert first[0] == 200 and first[1]['X-Pipeline-Lab-Cache'] == 'miss'
+    assert second[1]['X-Pipeline-Lab-Cache'] == 'hit' and second[2] == first[2]
+    answers = _validated_answers(json.loads(first[2]), QUESTIONS)
+    assert answers is not None and answers.noul('worth_keeping') == 1.0  # the fake keeps, like conv_discard
+
+
+def test_fake_upstream_systemone_without_a_jev_body_is_still_unsupported():
+    from testing.pipeline_lab.llm_proxy.fake_upstream import FakeUpstream as ScriptedUpstream
+
+    fake = ScriptedUpstream().start()
+    try:
+        status, _, _ = _post(fake.url + '/v1/systemone', {'step': 'prefilter', 'input': 'x'})
+    finally:
+        fake.stop()
+    assert status == 404

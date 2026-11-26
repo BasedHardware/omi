@@ -82,7 +82,7 @@ def test_credit_refusal_recovers_on_soniox_and_reports_serving_provider(vendors)
 
     assert result == (WORDS, 'en')
     assert provider.served_provider == 'soniox'
-    assert provider.served_model == 'stt-async-v5'
+    assert provider.served_model == 'stt-async-v6'
     assert vendors.modulate.call_count == 1
     assert vendors.soniox.call_count == 1
     assert vendors.soniox.call_args.args == (audio, 2.0)
@@ -227,7 +227,7 @@ def test_prerecorded_dispatch_returns_soniox_metadata_without_changing_words_sha
     )
 
     assert result == WORDS
-    assert (provider, model) == ('soniox', 'stt-async-v5')
+    assert (provider, model) == ('soniox', 'stt-async-v6')
     assert vendors.soniox.call_args.args[1] == 1.0
 
 
@@ -235,12 +235,12 @@ def test_voice_helper_propagates_serving_provider_and_model(monkeypatch):
     monkeypatch.setattr(chat, 'get_prerecorded_service', lambda _language: ('modulate', 'en', 'velma-2'))
     monkeypatch.setattr(chat, 'linear16_pcm_is_silent', lambda *args, **kwargs: False)
     monkeypatch.setattr(chat, 'postprocess_words', lambda words, offset: [SimpleNamespace(text='recovered')])
-    dispatch = Mock(return_value=(WORDS, 'soniox', 'stt-async-v5'))
+    dispatch = Mock(return_value=(WORDS, 'soniox', 'stt-async-v6'))
     monkeypatch.setattr(chat, 'prerecorded_from_bytes', dispatch)
 
     result = chat.transcribe_pcm_bytes(b'\x01\x00' * 16000, 'uid', language='en', return_provider=True)
 
-    assert result == ('recovered', 'en', 'soniox', 'stt-async-v5')
+    assert result == ('recovered', 'en', 'soniox', 'stt-async-v6')
     assert dispatch.call_args.kwargs['return_provider'] is True
 
 
@@ -375,4 +375,4 @@ def test_url_dispatch_reports_served_provider_to_sync_without_changing_tuple_sha
         return_language=True,
         on_provider_served=served,
     ) == (WORDS, 'en')
-    served.assert_called_once_with('soniox', 'stt-async-v5')
+    served.assert_called_once_with('soniox', 'stt-async-v6')

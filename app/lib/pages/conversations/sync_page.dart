@@ -11,9 +11,9 @@ import 'package:omi/pages/conversations/sync_cooldown_copy.dart';
 import 'package:omi/pages/on_device/on_device_queue_banner.dart';
 import 'package:omi/pages/conversations/sync_pending_work.dart' show walAttentionLabel;
 import 'package:omi/providers/connectivity_provider.dart';
+import 'package:omi/providers/device_provider.dart';
 import 'package:omi/providers/sync_provider.dart';
 import 'package:omi/providers/user_provider.dart';
-import 'package:omi/services/services.dart';
 import 'package:omi/services/wals.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/logger.dart';
@@ -49,7 +49,7 @@ class WalListItem extends StatelessWidget {
     final feedbackContext = Scaffold.maybeOf(context)?.context ?? context;
     final l10n = context.l10n;
     final result = await syncProvider.deleteWal(wal);
-    showWalServerDeleteNotice(feedbackContext, result, l10n);
+    if (feedbackContext.mounted) showWalServerDeleteNotice(feedbackContext, result, l10n);
   }
 
   double _calcProgress(Wal wal) {
@@ -445,11 +445,34 @@ class _SyncPageState extends State<SyncPage> {
             confirmLabel: context.l10n.clear,
             destructive: true,
           );
-          if (confirmed && context.mounted) {
+          if (!confirmed || !context.mounted) return;
+          // Ring discovery rebuilds its virtual WAL with a new display timestamp.
+          (WalStorage, bool, String) pendingIdentity(Wal wal) {
+            final ring = wal.storage == WalStorage.sdcard && wal.fileNum == -1;
+            return (wal.storage, ring, ring ? wal.device : wal.id);
+          }
+
+          final targets = provider.pendingDeletableWals.map(pendingIdentity).toSet();
+          if (targets.isEmpty) return;
+          final uid = SharedPreferencesUtil().uid;
+          final hasDeviceRows = targets.any((row) => row.$1 != WalStorage.disk && row.$1 != WalStorage.mem);
+          final firmware = hasDeviceRows ? context.read<DeviceProvider>().currentFirmwareVersion : null;
+          var failed = false;
+          try {
             await provider.deleteAllPendingWals();
-            if (context.mounted) {
-              OmiFeedback.confirm(context, context.l10n.pendingFilesDeleted);
+            if (hasDeviceRows && uid == SharedPreferencesUtil().uid) {
+              await provider.discoverDeviceWals(firmwareVersion: firmware);
             }
+          } catch (error) {
+            failed = true;
+            Logger.debug('Sync clear pending failed: ${error.runtimeType}');
+          }
+          if (!context.mounted || uid != SharedPreferencesUtil().uid) return;
+          final retained = provider.allWals.any((wal) => targets.contains(pendingIdentity(wal)));
+          if (failed || retained) {
+            OmiFeedback.error(context, context.l10n.failedToDeleteSomeItems);
+          } else {
+            OmiFeedback.confirm(context, context.l10n.pendingFilesDeleted);
           }
         },
         onClearAll: () async {

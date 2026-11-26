@@ -1,0 +1,13 @@
+{
+  "id": "wal-stop-drain",
+  "kind": "question",
+  "owner": "dazheng",
+  "events": [
+    "walStopDrain"
+  ],
+  "namespace_property": "$app_namespace",
+  "question": "How many late shutdown frames reached a committed WAL index, and which shutdown drains encountered pending writes or errors?",
+  "zero_policy": "No events is unknown until build identity, consent, ingestion, and a late arrival or failed drain are verified.",
+  "query": "contracts/analytics/consumers/wal-stop-drain.sql",
+  "posthog_query": "SELECT properties['result'], count(), sum(toInt64OrZero(toString(properties['late_frames_indexed']))) FROM events WHERE event = 'WAL Stop Drain' AND properties['$app_namespace'] = '{app_namespace}' AND coalesce(properties['app_build'], properties['build_number']) = '{build_number}' GROUP BY properties['result']"
+}

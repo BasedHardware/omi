@@ -208,6 +208,7 @@ def test_commercial_checkout_uses_raw_period_valid_authority_not_promo(store, mo
     monkeypatch.setattr(users, 'get_user_valid_subscription', valid)
     monkeypatch.setattr(commercial, '_has_active_stripe_subscription', lambda *_: False)
     monkeypatch.setattr(commercial, 'find_active_paid_subscription_for_user', lambda *_: None)
+    monkeypatch.setattr(commercial.play_subscriptions_db, 'get_user_fields', lambda uid: {})
     assert commercial.can_user_make_payment('owner', 'target-price')[0] is True
     assert calls[-1] == {'provision': False, 'include_promotions': False}
     monkeypatch.setattr(commercial, '_has_active_stripe_subscription', lambda *_: True)

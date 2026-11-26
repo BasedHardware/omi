@@ -73,3 +73,22 @@ swiftc -parse-as-library app/ios/Runner/Ble/OmiBleEnergyPolicy.swift \
 This is macOS host evidence; iPhone and Android event-loop latency under a full
 ring is not measured. Keep that limitation separate from the passing correctness
 checks and the bounded storage representation.
+
+## Offline Sync entry
+
+Device Settings and the device-recording links in On the Way and Activity share
+one entry check. A disconnected wearable gets connect guidance. Connected
+devices with an unresolved storage check can retry. A readable storage response
+enables the existing Sync or Auto Sync route. A completed GATT discovery with
+no storage characteristic can identify unsupported hardware.
+
+The device provider shares an in-flight storage check and retires its result on
+disconnect, device replacement, or account reset. Phone-local links still open
+Offline Sync when unrelated device recordings are waiting.
+
+- Verify connect guidance from Settings and device-recording links with a paired
+  CV1 disconnected.
+- Verify unresolved, retry, supported and confirmed unsupported states with
+  connected-device fixtures.
+- Verify phone-local access with pending wearable work and review English and
+  German copy alongside the localization consistency check.

@@ -18,6 +18,7 @@ from database.account_deletion_policy import account_deletion_blocks_access, nor
 from database.batch_account_authority_schema import PRIVACY_COLLECTION as PRIVACY_COLLECTION
 from database.batch_privacy_attempt import SCHEMA_FIELD, TOKEN_FIELD, TOKEN_SCHEMA, current_attempt, token_version
 from database import privacy_check_metrics as metrics
+from database import batch_privacy_owner_cache as shared_cache
 from database import batch_privacy_negative_cache as negative_cache
 from database.privacy_ttl_cache import BoundedTTLCache, disabled as ttl_disabled, enabled as ttl_enabled, is_missing
 
@@ -98,6 +99,31 @@ def matches_live_privacy_version(client: Any, uid: str, generation: int, version
 
 
 @metrics.with_batch_plan
+def read_batch_owner_snapshot(
+    client: Any,
+    transaction: Any,
+    uid: str,
+    *,
+    conversation_ids: Iterable[str],
+    expected_generation: int | None,
+    snapshots: dict,
+    read_budget,
+) -> int:
+    """Read the live privacy decision and its rows inside a bounded read-only snapshot."""
+    metrics.called('batch')
+    with metrics.mode_scope('live'):
+        return _assert_batch_write_allowed_live(
+            client,
+            transaction,
+            uid,
+            conversation_ids=conversation_ids,
+            expected_generation=expected_generation,
+            snapshots=snapshots,
+            read_budget=read_budget,
+        )
+
+
+@metrics.with_batch_plan
 def assert_batch_write_allowed(
     client: Any,
     transaction: Any,
@@ -110,6 +136,7 @@ def assert_batch_write_allowed(
     read_budget=None,
     verified_out: set | None = None,
     live_version_out: list | None = None,
+    shared_owner_cache: bool = False,
 ) -> int:
     """Measure the authorizing decision; shadow always runs after live authority.
 
@@ -126,6 +153,21 @@ def assert_batch_write_allowed(
     live walk that issued its reads without the negative cache.
     """
     metrics.called('batch')
+    shared_eligible = (
+        shared_owner_cache
+        and transaction is not None
+        and snapshots is None
+        and live_version_out is None
+        and lever_percent('privacy_checks_shadow') == 0
+    )
+    shared_shadow = shared_eligible and lever_enabled('bpp_shared_owner_shadow', uid)
+    shared_enforce = (
+        shared_eligible
+        and lever_percent('bpp_shared_owner_shadow') == 0
+        and lever_enabled('bpp_shared_owner_cache', uid)
+    )
+    if (shared_shadow or shared_enforce) and (not shared_cache.available(client) or ttl_disabled()):
+        shared_shadow = shared_enforce = False
     # A generation-memo hit would hide the live lookups needed for shadow proof.
     negative_shadow = lever_enabled('privacy_negative_lookup_cache', uid) and lever_enabled(
         'privacy_checks_shadow', uid
@@ -143,14 +185,16 @@ def assert_batch_write_allowed(
     shadow = lever_enabled('privacy_checks_shadow', uid) and not negative_shadow
     enforce = (
         (
-            lever_enabled('bpp_generation_memo', uid)
+            shared_enforce
+            or lever_enabled('bpp_generation_memo', uid)
             or (lever_enabled('bpp_owner_memo', uid) and lever_enabled('bpp_owner_memo_enforce', uid))
         )
         and not shadow
         and not negative_shadow
+        and not shared_shadow
     )
     # Materialize once when comparing, including one-shot source generators.
-    ids = tuple(conversation_ids) if shadow else conversation_ids
+    ids = tuple(conversation_ids) if shadow or shared_shadow else conversation_ids
     kwargs: dict[str, Any] = dict(
         conversation_ids=ids,
         expected_generation=expected_generation,
@@ -162,6 +206,52 @@ def assert_batch_write_allowed(
         kwargs['live_version_out'] = live_version_out
     if enforce:
         kwargs['allow_token_mint'] = allow_token_mint
+        kwargs['shared_owner_cache'] = shared_enforce
+    if shared_shadow:
+        # Observe against a fresh walk, even if the process memo would hit.
+        # Reuse this snapshot for the walk so each sample pays one token read.
+        owner = privacy_owner_key(uid)
+        started = time.time()
+        candidate = shared_cache.read(client, owner, frozenset(ids), expected_generation, shadow=True)
+        reference = client.collection(PRIVACY_COLLECTION).document(owner)
+        snapshot = metrics.read_snapshot('batch', reference, transaction=transaction, read_budget=read_budget)
+        version = token_version(snapshot)
+        kwargs['privacy_snapshot'] = snapshot
+        kwargs['walk_out'] = shared_walk = {}
+
+        def compare_shared(generation: int | None) -> None:
+            # This comparison and refill are observational and cannot replace
+            # the authoritative allow or refusal, even with malformed metadata.
+            try:
+                shared_cache.compare(candidate, version, generation)
+            except Exception:
+                shared_cache.SHADOW.labels('unavailable').inc()
+                return
+            if version is not None and generation is not None:
+                try:
+                    shared_cache.store(
+                        client,
+                        owner,
+                        frozenset(ids) | shared_walk.get('verified', set()),
+                        version,
+                        generation,
+                        started=started,
+                    )
+                except Exception:
+                    shared_cache.OUTCOMES.labels('set_error').inc()
+
+        try:
+            generation = _assert_batch_write_allowed_live(client, transaction, uid, **kwargs)
+        except BatchPrivacyBlocked as error:
+            metrics.decision('batch', error.reason.value)
+            compare_shared(None)
+            raise
+        except Exception:
+            metrics.decision('batch', 'authority_unavailable')
+            raise
+        metrics.decision('batch')
+        compare_shared(generation)
+        return generation
     # The candidate always gets a throwaway export: a comparison may fill its
     # own copy but can never publish rows or perturb the caller's export. It
     # also decides with the owner path ON (owner_candidate): it must compute
@@ -249,6 +339,7 @@ def _assert_batch_write_allowed_memo(
     verified_out: set | None = None,
     live_version_out: list | None = None,
     owner_candidate: bool = False,
+    shared_owner_cache: bool = False,
 ):
     # Keep the disabled path's live read order and counts unchanged.
     # A served owner decision exports no rows for ids the entry has already
@@ -287,7 +378,7 @@ def _assert_batch_write_allowed_memo(
         attempt is None and transaction is not None and snapshots is None and ttl_enabled('bpp_decision_cache', uid)
     )
     if (
-        (attempt is None and not process_on and not owner_on)
+        (attempt is None and not process_on and not owner_on and not shared_owner_cache)
         or transaction is None
         or (snapshots is not None and not owner_on)
     ):
@@ -315,6 +406,7 @@ def _assert_batch_write_allowed_memo(
         process_on = idset_on and ttl_enabled('bpp_decision_cache', uid)
     started = PROCESS_DECISIONS.clock()
     owner_started = PROCESS_OWNERS.clock()
+    shared_started = time.time() if shared_owner_cache else 0.0
     evidence = metrics.current_evidence()
     try:
         # Every decision reads this token afresh, including repeated checks in one transaction.
@@ -370,11 +462,18 @@ def _assert_batch_write_allowed_memo(
                 evidence=evidence,
                 started=owner_started,
                 verified_out=verified_out,
+                shared_owner=reference.id if shared_owner_cache and generation is None else None,
             )
             if served is not None:
                 return served
             # The owner entry could not certify this call; the id-set memo and
             # the live walk below decide it, and a fresh owner entry is stored.
+        if shared_owner_cache and not owner_on and eligible and generation is None:
+            served = _shared_owner_decision(
+                client, reference.id, ids, expected_generation, version, authority_generation
+            )
+            if served is not None:
+                return served
         if generation is None and eligible and process_on:
             # Process-wide reuse across attempts (lever bpp_decision_cache), at most
             # 60s old, and still certified by THIS transaction's token read: any
@@ -439,6 +538,15 @@ def _assert_batch_write_allowed_memo(
                     key, (version, generation, dict(evidence.markers) if evidence else {}), started=started
                 ):
                     metrics.ttl_result('batch', 'store')
+            if shared_owner_cache:
+                shared_cache.store(
+                    client,
+                    reference.id,
+                    ids | walk_out.get('verified', set()),
+                    version,
+                    generation,
+                    started=shared_started,
+                )
             if owner_on:
                 _owner_store(
                     owner_key,
@@ -479,6 +587,18 @@ def _owner_store(owner_key, version, generation, certified_ids, user_sync_enable
         metrics.ttl_result('batch', 'store')
 
 
+def _shared_owner_decision(client, owner, ids, expected_generation, version, authority_generation) -> int | None:
+    candidate = shared_cache.read(client, owner, ids, expected_generation)
+    if candidate is None:
+        return None
+    if candidate.version != version or candidate.generation != authority_generation:
+        shared_cache.OUTCOMES.labels('invalidated').inc()
+        return None
+    shared_cache.OUTCOMES.labels('certified_hit').inc()
+    metrics.memo_result('batch', 'hit')
+    return candidate.generation
+
+
 def _owner_decision(
     client: Any,
     transaction: Any,
@@ -494,6 +614,7 @@ def _owner_decision(
     evidence,
     started: float,
     verified_out: set | None = None,
+    shared_owner: str | None = None,
 ) -> int | None:
     """Serve one check from the owner-level memo; None when it cannot certify.
 
@@ -521,6 +642,10 @@ def _owner_decision(
                 attempt.owner_put(owner_key, entry)
         else:
             entry = None
+    if shared_owner is not None and (entry is None or not ids <= entry[2]):
+        served = _shared_owner_decision(client, shared_owner, ids, expected_generation, version, authority_generation)
+        if served is not None:
+            return served
     if entry is None:
         if evidence is not None:
             evidence.certification = 'miss'
