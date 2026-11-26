@@ -2,7 +2,6 @@
 Shared utilities for Google OAuth integrations (Calendar, Gmail, etc.).
 """
 
-import asyncio
 import logging
 import os
 from typing import Any, Dict, Optional
@@ -53,36 +52,8 @@ def google_integration_has_scope(integration: Optional[Dict[str, Any]], scope: s
     return scope in (integration.get('granted_scopes') or [])
 
 
-# Transient HTTP status codes that should be retried
-_RETRYABLE_STATUS_CODES = {429, 500, 502, 503, 504}
-
-# Max retries for transient failures
-_MAX_RETRIES = 3
-
-
-class GoogleAPIError(Exception):
-    """Structured exception for Google API failures."""
-
-    def __init__(self, status_code: int, message: str):
-        self.status_code = status_code
-        self.message = message
-        super().__init__(f"Google API error {status_code}: {message}")
-
-    @property
-    def is_auth_error(self) -> bool:
-        return self.status_code == 401 or 'invalid_grant' in self.message.lower()
-
-    @property
-    def is_rate_limit(self) -> bool:
-        return self.status_code == 429
-
-    @property
-    def is_permission_error(self) -> bool:
-        return self.status_code == 403
-
-    @property
-    def is_retryable(self) -> bool:
-        return self.status_code in _RETRYABLE_STATUS_CODES
+from utils.retrieval.google_transport import GoogleAPIError as GoogleAPIError
+from utils.retrieval.google_transport import google_api_request as google_api_request
 
 
 async def _mark_google_integration_reauth_required(
@@ -189,81 +160,3 @@ async def refresh_google_token(
         emit_auth_refresh_failed(telemetry_context, e)
 
     return None
-
-
-async def google_api_request(
-    method: str,
-    url: str,
-    access_token: str,
-    params: Optional[Dict[str, Any]] = None,
-    body: Optional[Dict[str, Any]] = None,
-    allow_204: bool = False,
-) -> Any:
-    """
-    Make a Google API request with automatic retry for transient failures.
-
-    Retries on 429 (rate limit) and 5xx (server errors) with exponential backoff.
-    Raises GoogleAPIError with status_code for structured error handling upstream.
-    Raises httpx.TimeoutException / httpx.ConnectError for network failures.
-    """
-    logger.info(f"🌐 Google API {method.upper()} {url}")
-
-    client = get_auth_client()
-    last_error = None
-
-    for attempt in range(_MAX_RETRIES):
-        try:
-            r = await client.request(
-                method=method,
-                url=url,
-                headers={"Authorization": f"Bearer {access_token}"},
-                json=body,
-                params=params,
-            )
-        except httpx.TimeoutException:
-            logger.warning(f"🌐 Timeout on attempt {attempt + 1}/{_MAX_RETRIES} for {method.upper()} {url}")
-            last_error = httpx.TimeoutException(f"Timeout calling {url}")
-            if attempt < _MAX_RETRIES - 1:
-                await asyncio.sleep(2**attempt)
-            continue
-        except httpx.ConnectError as e:
-            logger.warning(f"🌐 Network error on attempt {attempt + 1}/{_MAX_RETRIES} for {method.upper()} {url}: {e}")
-            last_error = e
-            if attempt < _MAX_RETRIES - 1:
-                await asyncio.sleep(2**attempt)
-            continue
-
-        logger.info(f"🔎 Status {r.status_code}")
-
-        if allow_204 and r.status_code == 204:
-            return None
-
-        if r.status_code == 200:
-            return r.json()
-
-        snippet = sanitize(r.text[:200]) if r.text else "No error body"
-
-        # Retry on transient errors with exponential backoff
-        if r.status_code in _RETRYABLE_STATUS_CODES and attempt < _MAX_RETRIES - 1:
-            delay = 2**attempt
-            if r.status_code == 429:
-                # Respect Retry-After header if present
-                retry_after = r.headers.get('Retry-After')
-                if retry_after and retry_after.isdigit():
-                    delay = max(delay, int(retry_after))
-                logger.warning(f"🌐 Rate limited (429), retrying in {delay}s (attempt {attempt + 1}/{_MAX_RETRIES})")
-            else:
-                logger.warning(
-                    f"🌐 Server error {r.status_code}, retrying in {delay}s (attempt {attempt + 1}/{_MAX_RETRIES})"
-                )
-            await asyncio.sleep(delay)
-            continue
-
-        # Non-retryable error — raise immediately
-        raise GoogleAPIError(r.status_code, snippet)
-
-    # All retries exhausted
-    if last_error:
-        raise last_error
-    # Unreachable with _MAX_RETRIES >= 1, but kept as a safety net
-    raise GoogleAPIError(0, "All retries exhausted with no response")

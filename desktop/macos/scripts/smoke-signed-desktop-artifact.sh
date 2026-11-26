@@ -31,6 +31,7 @@ INSTALL_DIR=""
 KEEP_INSTALL=false
 TIMEOUT_SECONDS=45
 RESULT_JSON=""
+BUNDLED_NODE_VERSION=""
 ZIP_EXTRACT_DIR=""
 DMG_MOUNTPOINT=""
 SMOKE_CHECKS=()
@@ -323,6 +324,7 @@ write_result_json() {
     RESULT_BUILD="$build" \
     RESULT_TEAM_ID="$team_id" \
     RESULT_APP_EXECUTABLE_SHA256="$app_sha" \
+    RESULT_BUNDLED_NODE_VERSION="$BUNDLED_NODE_VERSION" \
     RESULT_NOTIFICATION_CALLBACK_PROOF="$NOTIFICATION_CALLBACK_PROOF" \
     python3 - <<'PY' > "$RESULT_JSON"
 import json
@@ -357,6 +359,7 @@ print(json.dumps({
     "build": os.environ.get("RESULT_BUILD") or None,
     "team_id": os.environ.get("RESULT_TEAM_ID") or None,
     "app_executable_sha256": os.environ.get("RESULT_APP_EXECUTABLE_SHA256") or None,
+    "bundled_node_version": os.environ.get("RESULT_BUNDLED_NODE_VERSION") or None,
     "notification_callback_canary": notification_callback_canary,
     "artifacts": artifacts,
     "checks": [line for line in os.environ.get("CHECKS_JOINED", "").splitlines() if line],
@@ -541,6 +544,16 @@ assert_sparkle_and_artifacts() {
   fi
 }
 
+expected_bundled_node_version() {
+  if [[ -n "${OMI_AGENT_NODE_VERSION:-}" ]]; then
+    printf '%s\n' "$OMI_AGENT_NODE_VERSION"
+    return 0
+  fi
+  local prepare_script="$MACOS_DIR/scripts/prepare-agent-runtime.sh"
+  [[ -f "$prepare_script" ]] || return 1
+  sed -n 's/^NODE_VERSION="\${OMI_AGENT_NODE_VERSION:-\(v[0-9.]*\)}"$/\1/p' "$prepare_script" | head -1
+}
+
 assert_helper_runtime_integrity() {
   "$MACOS_DIR/scripts/audit-desktop-bundle-deps.sh" "$APP_BUNDLE" >/dev/null
 
@@ -554,7 +567,20 @@ assert_helper_runtime_integrity() {
   missing_runtime_payload="$(omi_agent_runtime_payload_missing "$APP_BUNDLE" | tr '\n' ' ')"
   [[ -z "${missing_runtime_payload// /}" ]] \
     || fail "agent runtime payload incomplete: $missing_runtime_payload"
-  [[ -x "$resources/Omi Computer_Omi Computer.bundle/Contents/Resources/node" ]] || fail "bundled node missing"
+  local bundled_node="$resources/Omi Computer_Omi Computer.bundle/Contents/Resources/node"
+  [[ -x "$bundled_node" ]] || fail "bundled node missing"
+  local expected_node_version actual_node_version node_arch
+  expected_node_version="$(expected_bundled_node_version || true)"
+  [[ -n "$expected_node_version" ]] \
+    || fail "could not determine expected bundled Node.js version from prepare-agent-runtime.sh"
+  actual_node_version="$("$bundled_node" --version 2>/dev/null | tr -d '\r\n' || true)"
+  [[ "$actual_node_version" == "$expected_node_version" ]] \
+    || fail "bundled node version mismatch: expected $expected_node_version, got ${actual_node_version:-missing}"
+  BUNDLED_NODE_VERSION="$actual_node_version"
+  for node_arch in arm64 x86_64; do
+    file "$bundled_node" | grep -q "$node_arch" \
+      || fail "bundled node binary is missing $node_arch architecture"
+  done
   local resource_bundle="$resources/Omi Computer_Omi Computer.bundle"
   [[ -x "$resource_bundle/Contents/Resources/ffmpeg" || -x "$resource_bundle/ffmpeg" ]] \
     || fail "bundled ffmpeg missing from SwiftPM resource bundle"

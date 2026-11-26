@@ -1,5 +1,6 @@
 """Behavioral contract for the exclusive conversation lifecycle owner (#9516)."""
 
+import asyncio
 import copy
 import logging
 import threading
@@ -598,6 +599,18 @@ def test_processing_admission_guard_keeps_the_traceback_for_unexpected_failures(
     assert 'processor crashed' in caplog.text
 
 
+def test_processing_admission_guard_rolls_back_cancellation_to_recoverable_state(lifecycle_store, monkeypatch):
+    _quiet_heartbeat(monkeypatch)
+    lifecycle_store.put_conversation('uid', 'conversation', status=ConversationStatus.processing.value, discarded=False)
+
+    with pytest.raises(asyncio.CancelledError):
+        with lifecycle_service.processing_admission_guard('uid', 'conversation'):
+            raise asyncio.CancelledError()
+
+    assert lifecycle_store.conversation('uid', 'conversation')['status'] == ConversationStatus.in_progress.value
+    assert lifecycle_service.admit_processing('uid', 'conversation') is True
+
+
 def test_processing_admission_guard_keeps_the_traceback_for_a_generic_processing_500(monkeypatch, caplog):
     """The boundary's generic 500 is not account state; its traceback stays visible."""
     _quiet_heartbeat(monkeypatch)
@@ -672,6 +685,33 @@ def test_persist_processed_observes_only_on_first_completion(monkeypatch, lifecy
     assert observed == ['conversation']
     assert lifecycle_service.persist_processed_conversation('uid', payload) is True
     assert observed == ['conversation']
+
+
+@pytest.mark.parametrize('initial_creation', [False, True])
+def test_terminal_deferred_intake_observes_shape_only_after_enrichment(monkeypatch, lifecycle_store, initial_creation):
+    observed = []
+    monkeypatch.setattr(
+        lifecycle_service, 'observe_completed_conversation_shape', lambda uid, row: observed.append(row)
+    )
+    payload = {
+        'id': 'conversation',
+        'status': ConversationStatus.completed,
+        'source': 'desktop',
+        'deferred': True,
+        'data_protection_level': 'standard',
+    }
+    if initial_creation:
+        assert lifecycle_service.create_completed_conversation('uid', payload, idempotent=True)
+    else:
+        lifecycle_store.put_conversation('uid', 'conversation', status='processing')
+        assert lifecycle_service.persist_processed_conversation('uid', payload)
+    assert lifecycle_store.conversation('uid', 'conversation')['status'] == 'completed'
+    assert not observed
+
+    lifecycle_store.put_conversation('uid', 'conversation', status='processing', deferred=False)
+    assert lifecycle_service.persist_processed_conversation('uid', {**payload, 'deferred': False})
+    assert len(observed) == 1
+    assert observed[0]['deferred'] is False
 
 
 def test_persist_processed_survives_shape_observer_errors(monkeypatch, lifecycle_store):

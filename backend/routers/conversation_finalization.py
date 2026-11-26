@@ -7,11 +7,13 @@ import logging
 from typing import Any
 
 from fastapi import APIRouter, Depends, Request
+from utils.enrichment.retry_reason import expected_retry_reason
 from fastapi.responses import JSONResponse
 
 from config.conversation_processing_retry import DETERMINISTIC_PROCESSING_FAILURE, PROCESSING_BURST_ATTEMPTS
 from config.listen_finalization import durable_attempt_cap_enabled as _durable_attempt_cap_enabled
 
+from models.finalization_owner import REFUSAL as FINALIZATION_OWNER_REFUSAL, python_owns_finalization
 from database import conversation_finalization_jobs as jobs_db
 from database.account_deletion_marker import account_deletion_blocks_user_work
 from database.sync_jobs import release_job_run_lock, try_acquire_job_run_lock
@@ -29,6 +31,7 @@ from utils.conversations.recovery import RecoveryStructureUnavailableError, reco
 from utils.conversations.finalizer import (
     ConversationFinalizationDisposition,
     ConversationFinalizationError,
+    ServerBatchArchiveNotClosed,
     finalize_persisted_conversation,
 )
 from utils.executors import db_executor, postprocess_executor, run_blocking
@@ -131,11 +134,9 @@ async def run_listen_finalization_job(
         except (ValueError, TypeError):
             return JSONResponse(status_code=400, content={'status': 'invalid_enrichment_task'})
         except Exception as error:
-            # Same mapping as routers.batch_pipeline.enrichment_response: an expected retry (for example a
+            # Same mapping as routers.enrichment.enrichment_response: an expected retry (for example a
             # first summary whose callback is still pending) answers 409; only an unexpected failure is 500.
             # Never 503 (contract (d)): Cloud Tasks system-throttles the whole queue on it.
-            from routers.batch_pipeline import expected_retry_reason
-
             reason = expected_retry_reason(error)
             if reason is None:
                 logger.error(
@@ -165,6 +166,8 @@ async def run_listen_finalization_job(
     # Read the owner and marker before admitting a lease. The transaction in
     # claim_finalization_job repeats this fence to close the race with deletion.
     pending_job = await run_blocking(db_executor, jobs_db.get_finalization_job, job_id)
+    if pending_job is not None and not python_owns_finalization(pending_job):
+        return JSONResponse(status_code=200, content={'status': 'dropped', 'reason': FINALIZATION_OWNER_REFUSAL})
     if pending_job and isinstance(pending_job.get('uid'), str):
         if await run_blocking(db_executor, account_deletion_blocks_user_work, pending_job['uid']):
             return retry_response(RetryReason.PERSISTENCE_FENCED)
@@ -384,10 +387,12 @@ async def run_listen_finalization_job(
         raise
     except Exception as error:
         logger.warning(
-            'listen finalization worker failed stage=handler exception_type=%s job_hash=%s dispatch_generation=%s',
+            'listen finalization worker failed stage=handler exception_type=%s job_hash=%s dispatch_generation=%s '
+            'reason=%s',
             type(error).__name__,
             finalization_diagnostic_id(job_id),
             dispatch_generation,
+            'server_batch_archive_not_closed' if isinstance(error, ServerBatchArchiveNotClosed) else 'worker_failed',
         )
         if claimed_lease_epoch is not None:
             try:

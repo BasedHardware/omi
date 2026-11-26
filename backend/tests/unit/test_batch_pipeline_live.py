@@ -21,7 +21,7 @@ from utils.batch_pipeline.contracts import Priority, ProjectionBinding, WorkItem
 from utils.batch_pipeline.live import record_identity, register_recording
 from utils.batch_pipeline.live_projection import replace_record
 from utils.batch_pipeline.source_audio import MAGIC, materialize, validate_reference
-from utils.conversations import summary_delivery
+from utils.conversations import lifecycle, summary_delivery
 from utils.enrichment.age_gate import expired
 from utils.sync.assignment_errors import SyncAssignmentConflict
 from tests.unit.test_batch_provider_stt import Outbox, Artifacts, Vendor, stage as provider_stage
@@ -93,6 +93,8 @@ async def test_drain_shuffles_selected_page_before_admission(monkeypatch):
     monkeypatch.setenv('RECORD_DRAIN_BATCH', '3')
     monkeypatch.setenv('RECORD_DRAIN_CONCURRENCY', '1')
     monkeypatch.setattr(live.random, 'shuffle', lambda segments: segments.reverse())
+    # Paging/shuffle test: no-op admissions; pacing is covered in test_record_drain_pacing.
+    monkeypatch.setenv('RECORD_DRAIN_IDLE_WITHOUT_PROGRESS', 'off')
     store = MemoryStore()
     for segment in ('first', 'second', 'third'):
         store.rows['jobs', segment] = {
@@ -229,6 +231,8 @@ async def test_record_drain_uses_configured_page_and_reports_full(monkeypatch, c
     from utils.batch_pipeline import live
 
     monkeypatch.setenv('RECORD_DRAIN_BATCH', '2')
+    # Page-size test: no-op admissions; pacing is covered in test_record_drain_pacing.
+    monkeypatch.setenv('RECORD_DRAIN_IDLE_WITHOUT_PROGRESS', 'off')
     store = MemoryStore()
     for i in range(count):
         store.rows['jobs', str(i)] = {'owner_id': f'synthetic-{i}', 'state': 'record_pending', 'available_at': 0}
@@ -283,6 +287,60 @@ async def test_record_drain_defers_only_still_pending_rows(monkeypatch, outcome,
     lease = 1000 + live.record_drain_lease_seconds()
     expected = lease if outcome == 'admitted' else max(2000 if outcome == 'already_deferred' else 0, 1000 + delay)
     assert row['available_at'] == expected
+    if outcome in {'value_error', 'no_admission'}:
+        assert row['record_intake_retry_at'] == expected
+    else:
+        assert 'record_intake_retry_at' not in row  # Never certify another replica's claim.
+
+
+@pytest.mark.asyncio
+async def test_record_claim_invalidates_retry_marker_before_archive_work(monkeypatch):
+    from utils.batch_pipeline import live
+
+    store = MemoryStore()
+    store.rows['jobs', 'synthetic'] = {
+        'owner_id': 'synthetic',
+        'state': 'record_pending',
+        'available_at': 0,
+        'record_intake_retry_at': 1900,
+    }
+    monkeypatch.setattr(live.time, 'time', lambda: 1000)
+    monkeypatch.setenv('RECORD_DRAIN_LEASE_SECONDS', '900')
+
+    async def admission(store, pending):
+        row = store.rows['jobs', 'synthetic']
+        assert row['available_at'] == 1900
+        assert 'record_intake_retry_at' not in row
+        row['state'] = 'ready'
+
+    monkeypatch.setattr(live, 'admit_recording', admission)
+    await live.drain_recordings(store)
+    assert store.rows['jobs', 'synthetic']['state'] == 'ready'
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('previous_marker', [False, True])
+async def test_fresh_repair_rollback_restores_unstamped_retry_rows(monkeypatch, previous_marker):
+    from utils.batch_pipeline import live
+
+    store = MemoryStore()
+    store.rows['jobs', 'synthetic'] = {'owner_id': 'synthetic', 'state': 'record_pending', 'available_at': 0}
+    if previous_marker:
+        store.rows['jobs', 'synthetic']['record_intake_retry_at'] = 900
+    monkeypatch.setattr(live.time, 'time', lambda: 1000)
+    monkeypatch.setenv('RECORD_SEAL_REPAIR_FRESH_ENABLED', 'false')
+
+    async def admission(*args):
+        return None
+
+    monkeypatch.setattr(live, 'admit_recording', admission)
+    await live.drain_recordings(store)
+    assert store.rows['jobs', 'synthetic'] == {
+        'owner_id': 'synthetic',
+        'state': 'record_pending',
+        'available_at': 1060,
+        'record_intake_claimed_at': 1000,
+    }
 
 
 @pytest.mark.asyncio
@@ -447,7 +505,27 @@ def _ledger_documents(monkeypatch, documents):
     """Route ledger writes through the real transition planner over an in-memory store."""
     from database import pipeline_ledger
 
-    def advance(uid, capture_id, stage, *, now=None, firestore_client=None, **fields):
+    class _Ref:
+        def __init__(self, path):
+            self.path = path
+
+        def collection(self, name):
+            return _Ref(f'{self.path}/{name}')
+
+        def document(self, name):
+            return _Ref(f'{self.path}/{name}')
+
+    class _Client:
+        def collection(self, name):
+            return _Ref(name)
+
+    # Admission builds the fence references from the shared client; no test may reach a real one.
+    monkeypatch.setattr('database._client.get_firestore_client', lambda: _Client())
+
+    def advance(uid, capture_id, stage, *, now=None, firestore_client=None, source_ref=None, owner_ref=None, **fields):
+        # Every production ledger writer fences on the account and the source capture.
+        assert owner_ref.path == f'users/{uid}'
+        assert source_ref.path == f'users/{uid}/conversations/{capture_id}'
         plan = pipeline_ledger.plan_advance(documents.get((uid, capture_id)), stage, now=now, **fields)
         if plan.doc is None:
             return False
@@ -699,20 +777,21 @@ def test_projection_stamps_first_summary_debt_on_an_untitled_completed_row():
     assert home_step.classify(listed) == home_step.WRITING_NOTES
 
 
-def test_projection_does_not_stamp_debt_past_the_repair_age_gate():
+def test_projection_past_the_repair_age_gate_stamps_no_debt_and_stays_on_home():
     from utils.conversations import home_step
 
     old = recording(created_at=datetime.fromtimestamp(STAMP_NOW - 4 * 86400, timezone.utc))
     result, new = replace_record(old, incoming(), {'start': 100, 'end': 102})
     assert new
     # Provenance is honest, but no debt means the repair never parks the row
-    # one-way and Home never presents it as Writing notes forever.
+    # one-way and Home never presents it as Writing notes forever. The row has
+    # the projected speech, so Home keeps it as a finished card, never noise.
     assert result['summary_title_provenance'] == 'server_minimum'
     assert 'summary_due_at' not in result
     assert 'summary_first_pending_at' not in result
     assert summary_delivery.refusal(result) is None
     listed = {key: value for key, value in result.items() if key != 'transcript_segments'}
-    assert home_step.classify(listed) == home_step.NOISE
+    assert home_step.classify(listed) == home_step.READY
 
 
 def test_projection_does_not_double_stamp_existing_debt():
@@ -812,7 +891,6 @@ def test_projection_debt_stamp_skips_every_non_empty_summary_block(reason):
         {'summary_completed_at': 90.0},
         {'summary_output_present': True},
         {'summary_due_at': 170.0},
-        {'summary_first_pending_at': 50.0},
         {'structured': {'title': 'Synthetic title'}},
         {'structured': {'overview': 'Synthetic overview'}},
         {'structured': {'sections': [{'body_markdown': 'Synthetic body'}]}},
@@ -1072,6 +1150,8 @@ async def test_native_admission_stages_references_and_drains_after_rollback(
         outbox.wake.assert_called_once()
         assert not any(key[0] in {'queues', 'control'} for key in store.rows)
         vendor = Vendor()
+        # A 1 s unit cannot carry the 2 s speech minimum; this test is about admission, not the skip.
+        monkeypatch.setenv('BATCH_VENDOR_MIN_SPEECH_SECONDS', '0')
         provider = provider_stage(
             store,
             Artifacts(),
@@ -1125,8 +1205,6 @@ async def test_protocol_cutover_defers_without_reading_archive_or_expiring_oblig
 
 @pytest.mark.parametrize('language,admitted', [('en', True), ('vi', False), ('multi', False)])
 def test_capture_reservation_preserves_supported_language_route(monkeypatch, language, admitted):
-    from utils.conversations import lifecycle
-
     monkeypatch.setenv('BATCH_PIPELINE_ENABLED', 'true')
     monkeypatch.setenv('BATCH_PIPELINE_PERCENT', '100')
     monkeypatch.setenv('BATCH_PIPELINE_LIVE_ADMISSION_ENABLED', 'true')
@@ -1211,3 +1289,28 @@ def test_record_replacement_preserves_discard_until_restore_metadata_commits():
         current, incoming, {'start': 100, 'end': 110}, obligations=({'registration_origin': 'restore'},)
     )
     assert replaced['discarded'] is True, 'record replacement cleared discard without a restore metadata commit'
+
+
+def test_late_record_transcript_has_durable_episode_read_recovery_marker(monkeypatch):
+    before = datetime.now(timezone.utc)
+    result, _ = replace_record(recording(), incoming(), {'start': 100, 'end': 102})
+    assert before <= result['episode_transcript_updated_at'] <= datetime.now(timezone.utc)
+    from database.conversations import _prepare_conversation_for_write
+
+    encoded = _prepare_conversation_for_write(result, 'synthetic', 'standard', allow_offload=False)
+    assert encoded['episode_transcript_updated_at'] == result['episode_transcript_updated_at']
+    monkeypatch.setenv('EPISODE_COMPOSE_TRANSCRIPT_READY_ENABLED', 'false')
+    result, _ = replace_record(recording(), incoming(), {'start': 100, 'end': 102})
+    assert 'episode_transcript_updated_at' not in result
+
+
+@pytest.mark.parametrize('whole_native_record', [True, False])
+def test_batch_projection_honors_late_v3_finish_only_with_whole_record(whole_native_record, monkeypatch):
+    monkeypatch.delenv('CONVERSATIONS_V3_BATCH_MANUAL_END', raising=False)
+    original = recording(recording=True, v3_manual_end_requested=True, transcript_segments=[])
+    result, _ = replace_record(
+        original, incoming(), {'start': 100, 'end': 102, 'whole_native_record': whole_native_record}
+    )
+    assert result['v3_manual_end_requested'] is True
+    assert result.get('v3_manual_end', False) == whole_native_record
+    assert result.get('v3_pending', False) == whole_native_record

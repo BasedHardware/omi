@@ -1,4 +1,5 @@
 name: Upgrade Backend Listen Helm Chart
+run-name: ${{ inputs.mode == 'evidence' && format('listen-evidence {0}', inputs.evidence_request_id) || 'Upgrade Backend Listen Helm Chart' }}
 
 on:
   # Auto-apply when chart values or templates change on main, so new secret
@@ -27,14 +28,30 @@ on:
         required: false
         default: ''
         type: string
+      control_sha:
+        description: 'Exact admitted workflow and checkout SHA for a direct production deploy (blank keeps legacy checkout behavior)'
+        required: false
+        default: ''
+        type: string
       mode:
-        description: 'deploy applies the chart; rollback restores an earlier Helm revision'
+        description: 'deploy applies the chart; image-only replaces the primary Listen image; rollback restores an earlier Helm revision; private-env-migrate syncs private references without rolling'
         required: true
         default: 'deploy'
         type: choice
         options:
           - deploy
           - rollback
+          - evidence
+          - image-only
+          - private-env-migrate
+      evidence_request_id:
+        description: 'Single-use Release evidence request ID; evidence mode only'
+        required: false
+        default: ''
+      evidence_request:
+        description: 'Nonsecret Release evidence request or admitted image-only proof'
+        required: false
+        default: ''
       image_tag:
         description: 'Short-SHA image to deploy (blank keeps the running image). Prod requires an ancestor of main.'
         required: false
@@ -129,7 +146,8 @@ jobs:
       contents: 'read'
       id-token: 'write'
 
-    runs-on: ubuntu-latest
+    timeout-minutes: ${{ inputs.mode == 'evidence' && 10 || 360 }}
+    runs-on: ${{ (inputs.mode == 'evidence' || inputs.mode == 'image-only') && 'ubuntu-22.04' || 'ubuntu-latest' }}
     steps:
       - name: Validate Environment Input
         if: github.event_name == 'workflow_dispatch'
@@ -139,13 +157,45 @@ jobs:
             exit 1
           fi
       - name: Checkout
-        uses: actions/checkout@v7
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
         with:
-          ref: ${{ github.event.inputs.environment == 'prod' && 'main' || github.event.inputs.branch }}
+          ref: ${{ inputs.control_sha != '' && github.sha || (inputs.mode == 'evidence' && inputs.expected_sha || (github.event.inputs.environment == 'prod' && 'main' || github.event.inputs.branch)) }}
           fetch-depth: 0
 
+      - name: Verify exact listen control SHA
+        if: ${{ inputs.control_sha != '' }}
+        shell: bash
+        env:
+          CONTROL_SHA: ${{ inputs.control_sha }}
+          DEPLOY_ENV: ${{ inputs.environment }}
+          DEPLOY_MODE: ${{ inputs.mode }}
+        run: |
+          set -euo pipefail
+          if [[ "$GITHUB_EVENT_NAME" != workflow_dispatch || "$DEPLOY_ENV" != prod || "$DEPLOY_MODE" != deploy ||
+                ! "$CONTROL_SHA" =~ ^[0-9a-f]{40}$ || "$CONTROL_SHA" == 0000000000000000000000000000000000000000 ||
+                "$CONTROL_SHA" != "$GITHUB_SHA" || "$CONTROL_SHA" != "$(git rev-parse HEAD)" ]]; then
+            echo "::error title=Listen control mismatch::The production workflow and checkout must match the admitted control SHA."
+            exit 1
+          fi
+      - name: Validate image-only Listen admission
+        if: ${{ inputs.mode != 'evidence' && inputs.mode == 'image-only' }}
+        env:
+          DEPLOY_ENV: ${{ inputs.environment }}
+        run: |
+          set -euo pipefail
+          [[ "$GITHUB_EVENT_NAME" == workflow_dispatch && "$GITHUB_REF" == refs/heads/main &&
+             "$GITHUB_RUN_ATTEMPT" == 1 && "$DEPLOY_ENV" == prod &&
+             "$GITHUB_SHA" == "$(git rev-parse HEAD)" ]]
+          jq -e --arg control "$GITHUB_SHA" '.inputs | .branch == "main" and (.image_tag | test("^[0-9a-f]{7}$"))
+              and (.expected_sha | test("^[0-9a-f]{40}$")) and .break_glass_lock == "false"
+              and .helm_revision == "" and .listen_edge_image_digest == "" and .evidence_request_id == ""
+              and .gateway_feature_mode == "chart-default" and .chat_agent_route == "chart-default"
+              and .allow_direct_model_exception == "chart-default" and .stt_service_models == ""
+              and .translation_service_models == "" and (.control_sha // "") == ""
+              and (.evidence_request | fromjson | .control_sha == $control)' "$GITHUB_EVENT_PATH" >/dev/null
+
       - name: Bind shared record token lease rollout inputs
-        if: ${{ (github.event.inputs.mode || 'deploy') == 'deploy' }}
+        if: ${{ inputs.mode != 'evidence' && ((github.event.inputs.mode || 'deploy') == 'deploy') }}
         shell: bash
         env:
           RECORD_TOKEN_LEASE_MODE: ${{ vars.RECORD_TOKEN_LEASE_MODE || 'off' }}
@@ -215,7 +265,31 @@ jobs:
           echo "IMAGE_TAG=$IMAGE_TAG" >> "$GITHUB_ENV"
           echo "checked_out_sha=$CHECKED_OUT_SHA" >> "$GITHUB_OUTPUT"
 
+      - name: Checkout trusted overlay evidence controls
+        if: ${{ inputs.mode == 'evidence' }}
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+        with:
+          ref: ${{ github.workflow_sha }}
+          path: .github/listen-evidence-control
+          persist-credentials: false
+          sparse-checkout: |
+            .github/scripts
+            .github/workflows/gcp_backend_listen_helm.yml
+
+      - name: Reconstruct evidence runtime before credentials
+        if: ${{ inputs.mode == 'evidence' }}
+        run: |
+          python3 .github/listen-evidence-control/.github/scripts/listen_runtime.py reconstruct --root "$RUNNER_TEMP/listen-runtime"
+          echo "$RUNNER_TEMP/listen-runtime/helm/linux-amd64" >> "$GITHUB_PATH"
+
+      - name: Reconstruct image-only runtime before credentials
+        if: ${{ inputs.mode != 'evidence' && inputs.mode == 'image-only' }}
+        run: |
+          python3 .github/scripts/listen_runtime.py reconstruct --root "$RUNNER_TEMP/listen-runtime"
+          echo "$RUNNER_TEMP/listen-runtime/helm/linux-amd64" >> "$GITHUB_PATH"
+
       - name: Install Helm
+        if: ${{ inputs.mode != 'evidence' && inputs.mode != 'image-only' }}
         uses: azure/setup-helm@v5
 
       # Prod: GitHub WIF as omi-ci-deployer-prod@ (credential-hygiene WS-C, plan v2 Phase E).
@@ -223,7 +297,7 @@ jobs:
       - name: Google Auth (prod WIF)
         id: auth-wif
         if: github.event.inputs.environment == 'prod'
-        uses: google-github-actions/auth@v3
+        uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093 # v3
         with:
           workload_identity_provider: projects/208440318997/locations/global/workloadIdentityPools/omi-gha-deploy-prod/providers/github
           service_account: omi-ci-deployer-prod@based-hardware.iam.gserviceaccount.com
@@ -231,23 +305,50 @@ jobs:
       - name: Google Auth
         id: auth
         if: github.event.inputs.environment != 'prod'
-        uses: google-github-actions/auth@v3
+        uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093 # v3
         with:
           # Development: GitHub WIF as the dev deployer, no JSON key (credential hygiene WS-D).
           workload_identity_provider: projects/1031333818730/locations/global/workloadIdentityPools/omi-gha-deploy-dev/providers/github
           service_account: omi-ci-deployer-dev@based-hardware-dev.iam.gserviceaccount.com
 
       - name: Set up gcloud
-        uses: google-github-actions/setup-gcloud@v3
+        uses: google-github-actions/setup-gcloud@aa5489c8933f4cc7a4f7d45035b3b1440c9c10db # v3
 
       - name: Get GKE credentials
-        uses: google-github-actions/get-gke-credentials@v3
+        uses: google-github-actions/get-gke-credentials@3da1e46a907576cefaa90c484278bb5b259dd395 # v3
         with:
           cluster_name: ${{ vars.GKE_CLUSTER }}
           location: ${{ env.REGION }}
           project_id: ${{ vars.GCP_PROJECT_ID }}
 
+      - name: Produce private-overlay effect receipt without mutation
+        if: ${{ inputs.mode == 'evidence' }}
+        env:
+          EVIDENCE_REQUEST: ${{ inputs.evidence_request }}
+          LISTEN_PRIVATE_VALUES_YAML: ${{ fromJSON(inputs.evidence_request).overlay_state != 'references' && secrets.LISTEN_PRIVATE_VALUES_YAML || '' }}
+        run: |
+          set -euo pipefail
+          umask 077
+          export LD_LIBRARY_PATH="$RUNNER_TEMP/listen-runtime/python/lib"
+          unset LD_PRELOAD PYTHONHOME PYTHONPATH
+          "$RUNNER_TEMP/listen-runtime/python/bin/python3.12" -I -B .github/listen-evidence-control/.github/scripts/listen_overlay_evidence.py job \
+            --root "$GITHUB_WORKSPACE" --output "$RUNNER_TEMP/listen-overlay-receipt.json"
+
+      - name: Upload only the sanitized overlay receipt
+        if: ${{ inputs.mode == 'evidence' && success() }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: listen-overlay-${{ inputs.evidence_request_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/listen-overlay-receipt.json
+          if-no-files-found: error
+          retention-days: 1
+
+      - name: Remove evidence private files
+        if: ${{ inputs.mode == 'evidence' && always() }}
+        run: rm -rf -- "$RUNNER_TEMP/listen-overlay-evidence" "$RUNNER_TEMP/listen-overlay-receipt.json"
+
       - name: Show Helm release history
+        if: ${{ inputs.mode != 'evidence' && inputs.mode != 'private-env-migrate' }}
         run: |
           echo "Rollback targets for ${{ vars.ENV }}-omi-backend-listen:"
           helm -n ${{ vars.ENV }}-omi-backend history ${{ vars.ENV }}-omi-backend-listen --max 20 \
@@ -255,9 +356,11 @@ jobs:
 
       - name: Resolve backend-listen image tag
         id: resolve-listen-image
-        if: ${{ (github.event.inputs.mode || 'deploy') == 'deploy' }}
+        if: ${{ (github.event.inputs.mode || 'deploy') == 'deploy' || inputs.mode == 'image-only' }}
         env:
           REQUESTED_TAG: ${{ github.event.inputs.image_tag }}
+          EXPECTED_SHA: ${{ inputs.expected_sha }}
+          DEPLOY_MODE: ${{ inputs.mode }}
         run: |
           set -euo pipefail
           IMAGE="$(kubectl -n ${{ vars.ENV }}-omi-backend get deploy/${{ vars.ENV }}-omi-backend-listen -o jsonpath='{.spec.template.spec.containers[0].image}' 2>/dev/null || true)"
@@ -298,6 +401,10 @@ jobs:
               exit 1
             fi
           fi
+          if [[ "${DEPLOY_MODE:-deploy}" == image-only && "$(git rev-parse "${REQUESTED_TAG}^{commit}")" != "$EXPECTED_SHA" ]]; then
+            echo "::error::The image tag must resolve to the exact admitted source."
+            exit 1
+          fi
           echo "BACKEND_LISTEN_SOURCE_SHA=$(git rev-parse "${REQUESTED_TAG}^{commit}")" >> "$GITHUB_ENV"
           RESOLVED_TAG=$(git rev-parse --short=7 "${REQUESTED_TAG}^{commit}")
           if ! gcloud container images describe "gcr.io/${{ vars.GCP_PROJECT_ID }}/backend:${RESOLVED_TAG}" >/dev/null 2>&1; then
@@ -319,15 +426,15 @@ jobs:
       # deployable after main moves on. Blank input skips every listen-edge
       # step; nothing else in this workflow changes.
       - name: Login to GCR for the listen-edge image read
-        if: ${{ (github.event.inputs.mode || 'deploy') == 'deploy' && github.event.inputs.listen_edge_image_digest != '' }}
+        if: ${{ inputs.mode != 'evidence' && ((github.event.inputs.mode || 'deploy') == 'deploy' && github.event.inputs.listen_edge_image_digest != '') }}
         run: gcloud auth configure-docker --quiet
 
       - name: Set up Docker Buildx for the listen-edge image read
-        if: ${{ (github.event.inputs.mode || 'deploy') == 'deploy' && github.event.inputs.listen_edge_image_digest != '' }}
+        if: ${{ inputs.mode != 'evidence' && ((github.event.inputs.mode || 'deploy') == 'deploy' && github.event.inputs.listen_edge_image_digest != '') }}
         uses: docker/setup-buildx-action@v4
 
       - name: Admit listen-edge image digest
-        if: ${{ (github.event.inputs.mode || 'deploy') == 'deploy' && github.event.inputs.listen_edge_image_digest != '' }}
+        if: ${{ inputs.mode != 'evidence' && ((github.event.inputs.mode || 'deploy') == 'deploy' && github.event.inputs.listen_edge_image_digest != '') }}
         env:
           LISTEN_EDGE_IMAGE_DIGEST_INPUT: ${{ github.event.inputs.listen_edge_image_digest }}
         run: |
@@ -343,7 +450,7 @@ jobs:
       # privateEnv pattern and hygiene as LISTEN_PRIVATE_VALUES_YAML above:
       # validated before anything is applied, never printed, removed after.
       - name: Materialize private listen-edge values (prod only)
-        if: ${{ (github.event.inputs.mode || 'deploy') == 'deploy' && github.event.inputs.environment == 'prod' && github.event.inputs.listen_edge_image_digest != '' }}
+        if: ${{ inputs.mode != 'evidence' && ((github.event.inputs.mode || 'deploy') == 'deploy' && github.event.inputs.environment == 'prod' && github.event.inputs.listen_edge_image_digest != '') }}
         env:
           LISTEN_EDGE_PRIVATE_VALUES_YAML: ${{ secrets.LISTEN_EDGE_PRIVATE_VALUES_YAML }}
           VALUES_FILE: ./backend/charts/listen-edge/${{ vars.ENV }}_omi_listen_edge_values.yaml
@@ -389,51 +496,64 @@ jobs:
           workload_identity_provider: ${{ github.event.inputs.environment == 'prod' && 'projects/208440318997/locations/global/workloadIdentityPools/omi-gha-deploy-prod/providers/github' || 'projects/1031333818730/locations/global/workloadIdentityPools/omi-gha-deploy-dev/providers/github' }}
           service_account: omi-ci-index-check@based-hardware.iam.gserviceaccount.com
 
-      # Private env values (e.g. a test-account cohort UID) live only in the prod
-      # environment secret LISTEN_PRIVATE_VALUES_YAML and are rendered by Helm in
-      # the same rollout. Validate before any config or chart is applied so a bad
-      # secret fails the job with nothing changed. Empty secret: chart defaults.
-      # Never cat, echo, or set -x around the secret or the file.
-      - name: Materialize private listen values (prod only)
-        if: ${{ (github.event.inputs.mode || 'deploy') == 'deploy' && github.event.inputs.environment == 'prod' }}
-        env:
-          LISTEN_PRIVATE_VALUES_YAML: ${{ secrets.LISTEN_PRIVATE_VALUES_YAML }}
-          VALUES_FILE: ./backend/charts/backend-listen/${{ vars.ENV }}_omi_backend_listen_values.yaml
-          GATEWAY_FEATURE_MODE: ${{ github.event.inputs.gateway_feature_mode }}
-          CHAT_AGENT_ROUTE: ${{ github.event.inputs.chat_agent_route }}
-          ALLOW_DIRECT_MODEL_EXCEPTION: ${{ github.event.inputs.allow_direct_model_exception }}
-          STT_SERVICE_MODELS: ${{ github.event.inputs.stt_service_models }}
-          TRANSLATION_SERVICE_MODELS: ${{ github.event.inputs.translation_service_models }}
+      # One-time move of the retired privateEnv overlay (LISTEN_PRIVATE_VALUES_YAML)
+      # into Secret Manager (backend/docs/runbooks/listen-private-env.md). Rolls
+      # nothing: writes one LISTEN_PRIVATE_ENV version from inside this protected
+      # job, applies the listen ExternalSecret from the backend-secrets chart,
+      # force-syncs it and reports per key only same/changed. No agent or log sees
+      # a value. Delete this mode once the secret is retired.
+      - name: Install private-env parser before secret injection
+        if: ${{ inputs.mode == 'private-env-migrate' }}
         run: |
           set -euo pipefail
-          if [[ -z "${LISTEN_PRIVATE_VALUES_YAML:-}" ]]; then
-            echo "No private listen values configured; chart defaults apply."
-            exit 0
+          if [[ "${{ github.event.inputs.environment }}" != prod ]]; then
+            echo "private-env-migrate is prod only." >&2
+            exit 1
           fi
-          # Install before the secret touches disk so no install hook can see it.
           python3 -m pip install -q pyyaml
+
+      - name: Write private listen values to Secret Manager (no roll)
+        if: ${{ inputs.mode == 'private-env-migrate' }}
+        env:
+          LISTEN_PRIVATE_VALUES_YAML: ${{ secrets.LISTEN_PRIVATE_VALUES_YAML }}
+        run: |
+          set -euo pipefail
           umask 077
-          PRIVATE_VALUES_FILE="$(mktemp "${RUNNER_TEMP}/listen-private-values.XXXXXX")"
-          printf '%s\n' "$LISTEN_PRIVATE_VALUES_YAML" > "$PRIVATE_VALUES_FILE"
-          unset LISTEN_PRIVATE_VALUES_YAML
-          # Recorded before validation so the always() cleanup step removes it
-          # even when validation fails the job.
-          echo "LISTEN_PRIVATE_VALUES_FILE=$PRIVATE_VALUES_FILE" >> "$GITHUB_ENV"
-          # Validates without printing content, rejects names the dispatch
-          # overrides below also set (the helper maps disabled/chart-default the
-          # same way the resolve step does), and registers value masks.
-          python3 .github/scripts/listen_helm_env_overrides.py \
-            --values-file "$VALUES_FILE" \
-            --private-values-file "$PRIVATE_VALUES_FILE" \
-            --output-argv-file /dev/null \
-            --set "OMI_LLM_GATEWAY_FEATURE_MODE=${GATEWAY_FEATURE_MODE:-}" \
-            --set "OMI_LLM_CHAT_AGENT_ROUTE=${CHAT_AGENT_ROUTE:-}" \
-            --set "OMI_LLM_GATEWAY_ALLOW_DIRECT_MODEL_EXCEPTION=${ALLOW_DIRECT_MODEL_EXCEPTION:-}" \
-            --set "STT_SERVICE_MODELS=${STT_SERVICE_MODELS:-}" \
-            --set "TRANSLATION_SERVICE_MODELS=${TRANSLATION_SERVICE_MODELS:-}"
+          python3 .github/scripts/listen_private_env.py migrate \
+            --values-file ./backend/charts/backend-listen/${{ vars.ENV }}_omi_backend_listen_values.yaml \
+            --project "${{ vars.GCP_PROJECT_ID }}" --namespace ${{ vars.ENV }}-omi-backend \
+            --deployment ${{ vars.ENV }}-omi-backend-listen
+
+      - name: Apply the listen private-env ExternalSecret (no roll)
+        if: ${{ inputs.mode == 'private-env-migrate' }}
+        env:
+          ENVIRONMENT: ${{ vars.ENV }}
+          GCP_PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+          GKE_CLUSTER: ${{ vars.GKE_CLUSTER }}
+          REGION: ${{ env.REGION }}
+        run: |
+          set -euo pipefail
+          chart=backend/charts/backend-secrets
+          namespace="${ENVIRONMENT}-omi-backend"
+          helm template "${ENVIRONMENT}-omi-backend-secrets" "$chart" --namespace "$namespace" \
+            -f "$chart/${ENVIRONMENT}_omi_backend_secrets_values.yaml" \
+            --set-string "gke.projectID=${GCP_PROJECT_ID},gke.clusterLocation=${REGION},gke.clusterName=${GKE_CLUSTER}" \
+            --set-string "gsa.name=${ENVIRONMENT}-omi-backend-eso-gsa@${GCP_PROJECT_ID}.iam.gserviceaccount.com" \
+            --show-only templates/listen-private-env.yaml | kubectl -n "$namespace" apply -f -
+
+      - name: Force-sync and verify private listen env against live (no roll)
+        if: ${{ inputs.mode == 'private-env-migrate' }}
+        run: |
+          set -euo pipefail
+          VALUES_FILE=./backend/charts/backend-listen/${{ vars.ENV }}_omi_backend_listen_values.yaml
+          python3 .github/scripts/listen_private_env.py sync --values-file "$VALUES_FILE" \
+            --namespace ${{ vars.ENV }}-omi-backend --external-secret ${{ vars.ENV }}-omi-backend-listen-private-env
+          python3 .github/scripts/listen_private_env.py guard --values-file "$VALUES_FILE" \
+            --namespace ${{ vars.ENV }}-omi-backend --deployment ${{ vars.ENV }}-omi-backend-listen \
+            --external-secret ${{ vars.ENV }}-omi-backend-listen-private-env
 
       - name: Carry forward config this workflow does not own
-        if: ${{ (github.event.inputs.mode || 'deploy') == 'deploy' }}
+        if: ${{ inputs.mode != 'evidence' && ((github.event.inputs.mode || 'deploy') == 'deploy') }}
         run: |
           set -euo pipefail
           # deploy-backend-config.sh requires these in prod, but only the full backend
@@ -453,7 +573,7 @@ jobs:
           done
 
       - name: Apply non-secret backend runtime config
-        if: ${{ (github.event.inputs.mode || 'deploy') == 'deploy' }}
+        if: ${{ inputs.mode != 'evidence' && ((github.event.inputs.mode || 'deploy') == 'deploy') }}
         env:
           LADDER_V1_PLUS_MONTH_PRICE_ID: ${{ vars.LADDER_V1_PLUS_MONTH_PRICE_ID }}
           LADDER_V1_PLUS_YEAR_PRICE_ID: ${{ vars.LADDER_V1_PLUS_YEAR_PRICE_ID }}
@@ -489,13 +609,13 @@ jobs:
           backend/scripts/deploy-backend-config.sh
 
       - name: Ensure dev parity-pack bucket (development only)
-        if: ${{ (github.event.inputs.mode || 'deploy') == 'deploy' && (github.event.inputs.environment || 'development') == 'development' }}
+        if: ${{ inputs.mode != 'evidence' && ((github.event.inputs.mode || 'deploy') == 'deploy' && (github.event.inputs.environment || 'development') == 'development') }}
         run: |
           set -euo pipefail
           python3 backend/scripts/ensure_dev_parity_pack_bucket.py
 
       - name: Resolve optional listen env overrides
-        if: ${{ (github.event.inputs.mode || 'deploy') == 'deploy' }}
+        if: ${{ inputs.mode != 'evidence' && ((github.event.inputs.mode || 'deploy') == 'deploy') }}
         env:
           VALUES_FILE: ./backend/charts/backend-listen/${{ vars.ENV }}_omi_backend_listen_values.yaml
           GATEWAY_FEATURE_MODE: ${{ github.event.inputs.gateway_feature_mode }}
@@ -516,12 +636,6 @@ jobs:
           if [[ "${CHAT_ROUTE_VALUE}" == "chart-default" ]]; then
             CHAT_ROUTE_VALUE=""
           fi
-          # Set only by the prod materialize step: appends -f <file> to the argv
-          # and rejects a private name that a dispatch override also sets.
-          PRIVATE_VALUES_ARGS=()
-          if [[ -n "${LISTEN_PRIVATE_VALUES_FILE:-}" ]]; then
-            PRIVATE_VALUES_ARGS=(--private-values-file "$LISTEN_PRIVATE_VALUES_FILE")
-          fi
           python3 .github/scripts/listen_helm_env_overrides.py \
             --values-file "$VALUES_FILE" \
             --output-argv-file "$ARGV_FILE" \
@@ -529,12 +643,11 @@ jobs:
             --set "OMI_LLM_CHAT_AGENT_ROUTE=${CHAT_ROUTE_VALUE}" \
             --set "OMI_LLM_GATEWAY_ALLOW_DIRECT_MODEL_EXCEPTION=${ALLOW_DIRECT_MODEL_EXCEPTION:-}" \
             --set "STT_SERVICE_MODELS=${STT_SERVICE_MODELS:-}" \
-            --set "TRANSLATION_SERVICE_MODELS=${TRANSLATION_SERVICE_MODELS:-}" \
-            ${PRIVATE_VALUES_ARGS[@]+"${PRIVATE_VALUES_ARGS[@]}"}
+            --set "TRANSLATION_SERVICE_MODELS=${TRANSLATION_SERVICE_MODELS:-}"
           echo "LISTEN_HELM_ENV_OVERRIDES_ARGV=$ARGV_FILE" >> "$GITHUB_ENV"
 
       - name: Helm diff (dry run)
-        if: ${{ (github.event.inputs.mode || 'deploy') == 'deploy' }}
+        if: ${{ inputs.mode != 'evidence' && ((github.event.inputs.mode || 'deploy') == 'deploy') }}
         run: |
           set -euo pipefail
           LISTEN_ENV_OVERRIDES=()
@@ -550,23 +663,16 @@ jobs:
             || echo "No existing release found"
           echo ""
           echo "=== Dry run upgrade ==="
-          # A dry run prints the rendered manifest; withhold it when it renders
-          # private values (errors still reach stderr, masked).
-          DRY_RUN=(helm -n ${{ vars.ENV }}-omi-backend upgrade --install ${{ vars.ENV }}-omi-backend-listen \
-            ./backend/charts/backend-listen \
-            -f ./backend/charts/backend-listen/${{ vars.ENV }}_omi_backend_listen_values.yaml \
-            --set image.repository=gcr.io/${{ vars.GCP_PROJECT_ID }}/backend \
-            --set gcpProjectId=${{ vars.GCP_PROJECT_ID }} \
-            --set runtimeGcpProjectId=${{ vars.RUNTIME_GCP_PROJECT_ID }} \
-            --set-string "image.tag=${BACKEND_LISTEN_IMAGE_TAG}" \
-            ${LISTEN_ENV_OVERRIDES[@]+"${LISTEN_ENV_OVERRIDES[@]}"} \
-            --dry-run)
-          if [[ -n "${LISTEN_PRIVATE_VALUES_FILE:-}" ]]; then
-            "${DRY_RUN[@]}" > /dev/null
-            echo "Dry run succeeded; manifest withheld because it renders private env values."
-          else
-            "${DRY_RUN[@]}"
-          fi
+          # Private values are secretKeyRefs (privateSecretEnv), so the rendered
+          # manifest carries names and references only.
+          ARGV_FILE="$RUNNER_TEMP/listen-deploy.argv"
+          python3 .github/scripts/listen_overlay_evidence.py argv \
+            --overrides-file "$LISTEN_HELM_ENV_OVERRIDES_ARGV" --output "$ARGV_FILE" \
+            --image-tag "$BACKEND_LISTEN_IMAGE_TAG" --environment "${{ vars.ENV }}" \
+            --project "${{ vars.GCP_PROJECT_ID }}" --runtime-project "${{ vars.RUNTIME_GCP_PROJECT_ID }}"
+          mapfile -t DEPLOY_ARGV < "$ARGV_FILE"
+          DRY_RUN=("${DEPLOY_ARGV[@]}" --dry-run=client)
+          "${DRY_RUN[@]}"
 
       # The ExternalSecret resource (which tells external-secrets which GCP
       # Secret Manager keys to sync into the K8s `*-omi-backend-secrets`
@@ -574,7 +680,7 @@ jobs:
       # never reaches K8s, and the deployment's secretKeyRef resolves to an
       # empty value — code reads os.getenv(...) as None.
       - name: Upgrade backend-secrets Helm chart
-        if: ${{ (github.event.inputs.mode || 'deploy') == 'deploy' }}
+        if: ${{ inputs.mode != 'evidence' && ((github.event.inputs.mode || 'deploy') == 'deploy') }}
         env:
           ENVIRONMENT: ${{ vars.ENV }}
           GCP_PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
@@ -584,8 +690,21 @@ jobs:
           python3 -m pip install -q pyyaml
           backend/scripts/deploy-backend-secrets.sh
 
+      # Fails before any listen mutation unless every privateSecretEnv name is in
+      # the synced Kubernetes Secret and, where live still carries a literal
+      # (the first roll after the privateEnv retirement), the values are
+      # identical. Prints names and same/changed only.
+      - name: Prove private listen env is unchanged
+        if: ${{ inputs.mode != 'evidence' && ((github.event.inputs.mode || 'deploy') == 'deploy') }}
+        run: |
+          set -euo pipefail
+          python3 .github/scripts/listen_private_env.py guard \
+            --values-file ./backend/charts/backend-listen/${{ vars.ENV }}_omi_backend_listen_values.yaml \
+            --namespace ${{ vars.ENV }}-omi-backend --deployment ${{ vars.ENV }}-omi-backend-listen \
+            --external-secret ${{ vars.ENV }}-omi-backend-listen-private-env
+
       - name: Upgrade backend-listen Helm chart
-        if: ${{ (github.event.inputs.mode || 'deploy') == 'deploy' }}
+        if: ${{ inputs.mode != 'evidence' && ((github.event.inputs.mode || 'deploy') == 'deploy') }}
         run: |
           set -euo pipefail
           LISTEN_ENV_OVERRIDES=()
@@ -593,17 +712,12 @@ jobs:
             [[ -z "${_tok}" ]] && continue
             LISTEN_ENV_OVERRIDES+=("$_tok")
           done < "${LISTEN_HELM_ENV_OVERRIDES_ARGV}"
-          helm -n ${{ vars.ENV }}-omi-backend upgrade --install ${{ vars.ENV }}-omi-backend-listen \
-            ./backend/charts/backend-listen \
-            -f ./backend/charts/backend-listen/${{ vars.ENV }}_omi_backend_listen_values.yaml \
-            --set image.repository=gcr.io/${{ vars.GCP_PROJECT_ID }}/backend \
-            --set gcpProjectId=${{ vars.GCP_PROJECT_ID }} \
-            --set runtimeGcpProjectId=${{ vars.RUNTIME_GCP_PROJECT_ID }} \
-            --set-string "image.tag=${BACKEND_LISTEN_IMAGE_TAG}" \
-            ${LISTEN_ENV_OVERRIDES[@]+"${LISTEN_ENV_OVERRIDES[@]}"}
+          mapfile -t DEPLOY_ARGV < "$RUNNER_TEMP/listen-deploy.argv"
+          [[ ${#DEPLOY_ARGV[@]} -gt 0 ]] || exit 1
+          "${DEPLOY_ARGV[@]}"
 
       - name: Roll back backend-listen Helm release
-        if: ${{ github.event.inputs.mode == 'rollback' }}
+        if: ${{ inputs.mode != 'evidence' && (github.event.inputs.mode == 'rollback') }}
         env:
           TARGET_REVISION: ${{ github.event.inputs.helm_revision }}
         run: |
@@ -624,7 +738,18 @@ jobs:
           echo "Image after rollback: $AFTER"
           helm -n "$NS" history "$RELEASE" --max 10
 
+      - name: Replace only the admitted Listen image
+        if: ${{ inputs.mode != 'evidence' && inputs.mode == 'image-only' }}
+        env:
+          IMAGE_ONLY_PROOF: ${{ inputs.evidence_request }}
+        run: |
+          set -euo pipefail
+          export LD_LIBRARY_PATH="$RUNNER_TEMP/listen-runtime/python/lib"
+          unset LD_PRELOAD PYTHONHOME PYTHONPATH
+          "$RUNNER_TEMP/listen-runtime/python/bin/python3.12" -I -B .github/scripts/listen_overlay_evidence.py apply-image-only
+
       - name: Verify rollout
+        if: ${{ inputs.mode != 'evidence' && inputs.mode != 'private-env-migrate' }}
         run: |
           # See gcp_backend.yml: 300s cannot cover a full backend-listen roll; a
           # stalled rollout still fails on progressDeadlineSeconds.
@@ -634,10 +759,20 @@ jobs:
           fi
           python3 backend/scripts/deploy_status_report.py --env ${{ vars.ENV }} --include-gke --gke-service backend-listen
 
+      - name: Verify admitted Listen digest on every serving pod
+        if: ${{ inputs.mode != 'evidence' && inputs.mode == 'image-only' }}
+        env:
+          IMAGE_ONLY_PROOF: ${{ inputs.evidence_request }}
+        run: |
+          set -euo pipefail
+          export LD_LIBRARY_PATH="$RUNNER_TEMP/listen-runtime/python/lib"
+          unset LD_PRELOAD PYTHONHOME PYTHONPATH
+          "$RUNNER_TEMP/listen-runtime/python/bin/python3.12" -I -B .github/scripts/listen_overlay_evidence.py verify-image-only
+
       # GKE creates standalone NEGs from the Service annotation but does not
       # attach every newly appearing zone to this manually managed LB backend.
       - name: Reconcile prod listen NEG zones on the LB backend
-        if: ${{ github.event.inputs.environment == 'prod' && (github.event.inputs.mode || 'deploy') == 'deploy' && vars.LISTEN_NEG_RECONCILE_ENABLED != 'false' }}
+        if: ${{ inputs.mode != 'evidence' && (github.event.inputs.environment == 'prod' && (github.event.inputs.mode || 'deploy') == 'deploy' && vars.LISTEN_NEG_RECONCILE_ENABLED != 'false') }}
         env:
           RECONCILE_PROJECT: ${{ vars.GCP_PROJECT_ID }}
           RECONCILE_NAMESPACE: ${{ vars.ENV }}-omi-backend
@@ -659,7 +794,7 @@ jobs:
       # commit main contains is admissible). mode=rollback touches the listen
       # release only.
       - name: Upgrade listen-edge Helm chart
-        if: ${{ (github.event.inputs.mode || 'deploy') == 'deploy' && env.LISTEN_EDGE_IMAGE_DIGEST != '' }}
+        if: ${{ inputs.mode != 'evidence' && ((github.event.inputs.mode || 'deploy') == 'deploy' && env.LISTEN_EDGE_IMAGE_DIGEST != '') }}
         run: |
           set -euo pipefail
           PRIVATE_ARGS=()
@@ -679,22 +814,18 @@ jobs:
           python3 backend/scripts/deploy_status_report.py --env ${{ vars.ENV }} --include-gke --gke-service listen-edge
 
       - name: Show listen-edge pod status
-        if: ${{ always() && env.LISTEN_EDGE_IMAGE_DIGEST != '' }}
+        if: ${{ inputs.mode != 'evidence' && (always() && env.LISTEN_EDGE_IMAGE_DIGEST != '') }}
         run: |
           kubectl -n ${{ vars.ENV }}-omi-backend get pods -l app.kubernetes.io/instance=${{ vars.ENV }}-omi-listen-edge --no-headers
 
       - name: Remove private listen-edge values file
-        if: ${{ always() && env.LISTEN_EDGE_PRIVATE_VALUES_FILE != '' }}
+        if: ${{ inputs.mode != 'evidence' && (always() && env.LISTEN_EDGE_PRIVATE_VALUES_FILE != '') }}
         run: rm -f "$LISTEN_EDGE_PRIVATE_VALUES_FILE"
 
       - name: Show pod status
-        if: always()
+        if: ${{ inputs.mode != 'evidence' && (always()) }}
         run: |
           kubectl -n ${{ vars.ENV }}-omi-backend get pods -l app.kubernetes.io/instance=${{ vars.ENV }}-omi-backend-listen --no-headers
-
-      - name: Remove private listen values file
-        if: ${{ always() && env.LISTEN_PRIVATE_VALUES_FILE != '' }}
-        run: rm -f "$LISTEN_PRIVATE_VALUES_FILE"
 
   deploy-neg-coverage-exporter:
     name: Deploy NEG coverage exporter
@@ -702,7 +833,7 @@ jobs:
     # The tag output is emitted only by the explicit deploy resolver; rollback
     # and kept-tag paths leave it empty. `needs` also requires the listen job
     # (including its readiness gate and rollout verification) to succeed.
-    if: ${{ github.event.inputs.environment == 'prod' && needs.helm-upgrade.outputs.neg_coverage_exporter_image_tag != '' }}
+    if: ${{ inputs.mode == 'deploy' && github.event.inputs.environment == 'prod' && needs.helm-upgrade.outputs.neg_coverage_exporter_image_tag != '' }}
     environment: prod
     permissions:
       contents: 'read'
@@ -710,7 +841,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v7
+        uses: actions/checkout@v7 # v7
         with:
           ref: ${{ needs.helm-upgrade.outputs.checked_out_sha }}
 
@@ -718,22 +849,23 @@ jobs:
         uses: azure/setup-helm@v5
 
       - name: Google Auth (prod WIF)
-        uses: google-github-actions/auth@v3
+        uses: google-github-actions/auth@v3 # v3
         with:
           workload_identity_provider: projects/208440318997/locations/global/workloadIdentityPools/omi-gha-deploy-prod/providers/github
           service_account: omi-ci-deployer-prod@based-hardware.iam.gserviceaccount.com
 
       - name: Set up gcloud
-        uses: google-github-actions/setup-gcloud@v3
+        uses: google-github-actions/setup-gcloud@v3 # v3
 
       - name: Get GKE credentials
-        uses: google-github-actions/get-gke-credentials@v3
+        uses: google-github-actions/get-gke-credentials@v3 # v3
         with:
           cluster_name: ${{ vars.GKE_CLUSTER }}
           location: us-central1
           project_id: ${{ vars.GCP_PROJECT_ID }}
 
       - name: Deploy and verify NEG coverage exporter
+        if: ${{ inputs.mode != 'evidence' }}
         env:
           IMAGE_TAG: ${{ needs.helm-upgrade.outputs.neg_coverage_exporter_image_tag }}
         run: |

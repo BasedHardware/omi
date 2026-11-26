@@ -23,9 +23,13 @@ import tempfile
 import uuid
 import re
 import base64
+from contextlib import aclosing
 from datetime import datetime, timezone
 from typing import List, Optional
 from pathlib import Path
+
+import anyio
+
 from utils.executors import (
     critical_executor,
     db_executor,
@@ -85,6 +89,7 @@ from utils.chat import (
     transcribe_voice_message_segment,
     transcribe_pcm_bytes,
 )
+from utils.voice_answer_delivery import VoiceAnswerDelivery, VoiceAnswerStreamingResponse
 from utils.sync.files import retrieve_file_paths, decode_files_to_wav
 from routers import chat_video
 from utils.stt.streaming import STTService, connect_stt_socket_with_fallback, drain_stt_socket
@@ -497,6 +502,8 @@ def create_voice_message_stream(
         _cleanup_temp_voice_wavs(paths + wav_paths, uid)
         raise _transcription_http_error(failure, error=error) from error
 
+    delivery = VoiceAnswerDelivery()
+
     # process
     async def generate_stream():
         attempt = TranscriptionAttempt(
@@ -509,29 +516,36 @@ def create_voice_message_stream(
         )
         quota_recorded = False
         try:
-            async for chunk in process_voice_message_segment_stream(
-                first_wav, uid, language=resolved_language, platform=x_app_platform
-            ):
-                if chunk.startswith('message: '):
-                    attempt.finish(TranscriptionOutcome.SUCCESS)
-                if not quota_recorded and chunk.startswith('message: '):
-                    payload = chunk.removeprefix('message: ').strip()
-                    try:
-                        message_data = json.loads(base64.b64decode(payload).decode('utf-8'))
-                        await run_blocking(
-                            db_executor,
-                            record_chat_quota_question_best_effort,
-                            uid,
-                            idempotency_key=f"v2_voice_messages:{message_data.get('id') or first_wav}",
-                            source='v2_voice_messages',
-                            message_id=message_data.get('id'),
-                            chat_session_id=message_data.get('chat_session_id'),
-                            platform=x_app_platform,
-                        )
-                        quota_recorded = True
-                    except (binascii.Error, UnicodeDecodeError, ValueError, TypeError, json.JSONDecodeError) as exc:
-                        logger.warning('Failed to record voice chat quota question: %s', exc)
-                yield chunk
+            async with aclosing(
+                process_voice_message_segment_stream(
+                    first_wav,
+                    uid,
+                    language=resolved_language,
+                    platform=x_app_platform,
+                    register_answer=delivery.register,
+                )
+            ) as stream:
+                async for chunk in stream:
+                    if chunk.startswith('message: '):
+                        attempt.finish(TranscriptionOutcome.SUCCESS)
+                    if not quota_recorded and chunk.startswith('message: '):
+                        payload = chunk.removeprefix('message: ').strip()
+                        try:
+                            message_data = json.loads(base64.b64decode(payload).decode('utf-8'))
+                            await run_blocking(
+                                db_executor,
+                                record_chat_quota_question_best_effort,
+                                uid,
+                                idempotency_key=f"v2_voice_messages:{message_data.get('id') or first_wav}",
+                                source='v2_voice_messages',
+                                message_id=message_data.get('id'),
+                                chat_session_id=message_data.get('chat_session_id'),
+                                platform=x_app_platform,
+                            )
+                            quota_recorded = True
+                        except (binascii.Error, UnicodeDecodeError, ValueError, TypeError, json.JSONDecodeError) as exc:
+                            logger.warning('Failed to record voice chat quota question: %s', exc)
+                    yield chunk
             if not attempt.finished:
                 attempt.finish(TranscriptionOutcome.EXPECTED_SILENCE)
                 no_speech = {
@@ -551,11 +565,12 @@ def create_voice_message_stream(
         finally:
             if not attempt.finished:
                 attempt.finish(TranscriptionOutcome.UPSTREAM_ERROR)
-            await run_blocking(storage_executor, _cleanup_temp_voice_wavs, paths + wav_paths, uid)
+            with anyio.CancelScope(shield=True):
+                await run_blocking(storage_executor, _cleanup_temp_voice_wavs, paths + wav_paths, uid)
             paths.clear()
             wav_paths.clear()
 
-    return StreamingResponse(generate_stream(), media_type="text/event-stream")
+    return VoiceAnswerStreamingResponse(generate_stream(), delivery)
 
 
 @router.post(

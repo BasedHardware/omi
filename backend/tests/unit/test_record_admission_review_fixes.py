@@ -8,6 +8,7 @@ from unittest.mock import AsyncMock, Mock
 
 import pytest
 
+
 from config.batch_pipeline import RecordOwnerContention
 from config.policy import BatchUnitPolicy
 from database.batch_pipeline_intake import admit
@@ -18,6 +19,12 @@ from utils.batch_pipeline import live, live_upload, serving
 from utils.batch_pipeline.contracts import ProjectionBinding
 from utils.conversations import finalizer, transcription_shadow as shadow
 from utils.conversations.processing_trigger import ProcessingTrigger
+
+
+@pytest.fixture(autouse=True)
+def strict_coverage_rollback(monkeypatch):
+    """These regressions exercise the strict path retained by the kill switch."""
+    monkeypatch.setenv('RECORD_WAL_HANDOFF_ENABLED', 'false')
 
 
 @pytest.fixture(autouse=True)
@@ -80,7 +87,7 @@ async def test_serving_tick_drains_admitted_recordings_after_admission_rollback(
     reconcile = AsyncMock(side_effect=lambda **kwargs: stop.set())
     service.reconcile_async = reconcile
     await asyncio.wait_for(coro, timeout=1)
-    reconcile.assert_awaited_once_with(recover_quarantine=True, periodic=True)
+    reconcile.assert_awaited_once_with(recover_quarantine=True, periodic=True, run_held_expiry=False)
     assert drain.await_count == 1  # Discovery must retain already-admitted work after rollback.
 
 

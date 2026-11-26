@@ -12,10 +12,15 @@ import struct
 from typing import Callable
 
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+from google.api_core.exceptions import PreconditionFailed
 
+from utils.other.private_sync_get_metrics import Reader, object_get_reader
+from config.refactor_modes import default_on
+from utils.other.gcs_read_reuse import ReadMemo, REPLACEMENT_CALLS, avoided
 from utils.batch_pipeline.audio import audio_unit, with_context
 from utils.batch_pipeline import leaf_timings, record_seal_profile
-from utils.other.raw_audio import decode_capture
+from utils.other.audio_frame_table import FRAME_SCHEMA, gapped_frames
+from utils.other.raw_audio import WAL_FORMAT, decode_capture, decode_capture_frames
 
 MAGIC = b'OMIRECORD1\n'
 MAX_SOURCE_BYTES = 256 * 1024 * 1024
@@ -33,7 +38,15 @@ class InvalidRetainedManifest(ValueError):
     """The stored manifest itself can never materialize; a retry reads the same bytes."""
 
 
-def decode_source(raw: bytes, ref: dict, owner_key: bytes) -> bytes:
+class RetainedPcmDigestChanged(ValueError):
+    """A pinned source's decoded PCM repeatedly disagrees with the manifest digest.
+
+    Raised only after an opted-in confirmation read of the same ref mismatches
+    again, so the disagreement is repeatable rather than one transient read.
+    Carries no reference, URI or bytes."""
+
+
+def decode_source(raw: bytes, ref: dict, owner_key: bytes, *, frames: list[dict] | None = None) -> bytes:
     if not raw or len(raw) > MAX_SOURCE_BYTES:
         raise ValueError('invalid retained audio size')
     metadata = ref.get('metadata') or {}
@@ -56,6 +69,11 @@ def decode_source(raw: bytes, ref: dict, owner_key: bytes) -> bytes:
     if path.startswith('raw-live/'):
         if hashlib.sha256(raw).hexdigest() != metadata.get('sha256'):
             raise ValueError('retained capture checksum mismatch')
+        if frames is not None and metadata.get('format') == WAL_FORMAT:
+            # A gapped pack's retained zero-sample frames are not decodable
+            # packets; walking the writer's own frame table keeps every sample
+            # at its capture position instead of failing on the diagnostic row.
+            return leaf_timings.call('decode', decode_capture_frames, raw, metadata, frames, 16000)
         return leaf_timings.call('decode', decode_capture, raw, metadata, 16000)
     if '.opus' in path:
         # Existing legacy chunk codec, shared with playback. Import is lazy in
@@ -84,6 +102,7 @@ def validate_reference(ref: dict, uid: str, conversation_id: str, allowed_bucket
         raise InvalidRetainedManifest('retained audio reference is outside admitted source')
 
 
+@object_get_reader(Reader.BATCH_SOURCE)
 def read_reference(
     client,
     ref: dict,
@@ -95,6 +114,11 @@ def read_reference(
     source_metadata=False,
     read_budget=None,
     listed_source=None,
+    frames=None,
+    record_source_proof=False,
+    report_payload_bytes=False,
+    retry_stale_metadata=False,
+    memo=None,
 ) -> bytes:
     validate_reference(ref, uid, conversation_id, allowed_buckets)
     generation = int(ref['generation'])
@@ -103,16 +127,20 @@ def read_reference(
         read_budget.begin()
     # Data generation alone does not fence metadata-only updates (sample rate,
     # encryption/checksum metadata). Only a versioned listing can replace the GET.
+    reuse_metadata = default_on('BATCH_SOURCE_VERIFIED_METADATA_REUSE_ENABLED')
     listed = listed_source or {}
     size = listed.get('size')
     metageneration = listed.get('metageneration')
     use_listing = (
-        size is not None
+        reuse_metadata
+        and size is not None
         and (not source_metadata or 'metadata' in listed)
         and type(metageneration) is int
         and metageneration > 0
     )
-    if not use_listing:
+    record_source_proof = record_source_proof and reuse_metadata
+
+    def reload_source():
         record_seal_profile.metadata_reload()
         leaf_timings.call(
             'download_metadata',
@@ -121,38 +149,82 @@ def read_reference(
             timeout=read_budget.timeout(30) if read_budget is not None else 30,
             retry=None,
         )
-        size = blob.size
-        metadata = (blob.metadata or {}) if source_metadata else {}
-    else:
+        return blob.size, getattr(blob, 'metageneration', None), (blob.metadata or {}) if source_metadata else {}
+
+    def download(size, metageneration):
+        if not size or not 0 < size <= MAX_SOURCE_BYTES:
+            raise ValueError('retained audio source exceeds size budget')
+        if read_budget is not None:
+            read_budget.reserve(size)
+        return leaf_timings.call(
+            'download',
+            blob.download_as_bytes,
+            if_generation_match=generation,
+            **({'if_metageneration_match': metageneration} if metageneration else {}),
+            timeout=read_budget.timeout(60) if read_budget is not None else 60,
+            retry=None,
+        )
+
+    if use_listing:
         metadata = listed.get('metadata') or {}
+        try:
+            raw = download(size, metageneration)
+        except PreconditionFailed:
+            # Seal and ACK callers must refuse raced inventory proof. Only a
+            # materializer with an authenticated decoded-PCM digest may retry.
+            if not retry_stale_metadata:
+                raise
+            if read_budget is not None:
+                # A failed precondition returns no object body.
+                read_budget.downloaded_bytes -= size
+            REPLACEMENT_CALLS.labels('source_metadata', 'payload').inc()
+            size, metageneration, metadata = reload_source()
+            raw = download(size, metageneration)
+        else:
+            if listed.get('source_metadata_reuse'):
+                avoided('source_metadata', 'metadata')
+    else:
+        size, metageneration, metadata = reload_source()
+        raw = download(size, metageneration if record_source_proof else None)
     if source_metadata:
         ref['metadata'] = metadata
         if 'sample_rate' not in ref:
             ref['sample_rate'] = int(metadata.get('record_sample_rate', 16000))
-    if not size or not 0 < size <= MAX_SOURCE_BYTES:
-        raise ValueError('retained audio source exceeds size budget')
-    if read_budget is not None:
-        read_budget.reserve(size)
-    raw = leaf_timings.call(
-        'download',
-        blob.download_as_bytes,
-        if_generation_match=generation,
-        **({'if_metageneration_match': metageneration} if use_listing else {}),
-        timeout=read_budget.timeout(60) if read_budget is not None else 60,
-        retry=None,
-    )
+    if record_source_proof and type(metageneration) is int and metageneration > 0:
+        ref['source_size'] = size
+        ref['source_metageneration'] = metageneration
+    if report_payload_bytes:
+        ref['_gcs_payload_bytes'] = len(raw)
     record_seal_profile.received(len(raw))
     if read_budget is not None:
         read_budget.received_bytes += len(raw)
         read_budget.timeout(60)
-    return decode_source(raw, ref, key)
+    if frames is None and ref['path'].startswith('raw-live/') and metadata:
+        # A gapped, unframed omi-wal pack has no declared frame schema, so the
+        # ordinary decoder would try to decode its retained zero-sample
+        # diagnostic rows. Resolve the writer's own frame table and decode
+        # through it. A gapped flac/pcm16 pack encodes the captured PCM
+        # contiguously, so the ordinary decoder already returns its samples.
+        if (
+            metadata.get('format') == WAL_FORMAT
+            and metadata.get('frame_schema') != FRAME_SCHEMA
+            and int(metadata.get('gap_count') or 0) != 0
+        ):
+            frames, _ = gapped_frames(client.bucket(ref['bucket']), blob, uid, metadata=metadata, memo=memo)
+    return decode_source(raw, ref, key, frames=frames)
 
 
 def _well_formed(ref: dict) -> bool:
     return isinstance(ref.get('pcm_sha256'), str) and isinstance(ref.get('path', ''), str)
 
 
-def materialize(body: bytes, item, fetch: Callable[[dict], bytes]) -> bytes:
+def materialize(
+    body: bytes,
+    item,
+    fetch: Callable[[dict], bytes],
+    *,
+    confirm_mismatch: Callable[[dict], bytes] | None = None,
+) -> bytes:
     try:
         manifest = json.loads(body[len(MAGIC) :])
     except ValueError:
@@ -173,17 +245,42 @@ def materialize(body: bytes, item, fetch: Callable[[dict], bytes]) -> bytes:
         raise InvalidRetainedManifest('retained audio manifest binding mismatch')
     pcm = bytearray(round(item.duration_seconds * 16000) * 2)
     previous = 0
-    previous_key, previous_source = None, b''
+    previous_key, previous_memo_key, previous_source = None, None, b''
+    memo = ReadMemo() if default_on('PRIVATE_SYNC_REQUEST_READ_MEMO_ENABLED') else None
     for ref in references:
         source_key = tuple(ref.get(name) for name in ('bucket', 'path', 'generation', 'pcm_sha256'))
         pinned = all(value is not None for value in source_key)
-        if pinned and source_key == previous_key:
+        memo_key = None
+        cached = None
+        if memo is not None and pinned:
+            # Authenticated manifest entries may share bytes but differ in decode
+            # settings. The output digest also binds historical entries with no
+            # stored source metageneration to the verified PCM for this operation.
+            memo_key = json.dumps(
+                [*source_key, ref.get('source_metageneration'), ref.get('sample_rate'), ref.get('metadata')],
+                sort_keys=True,
+            )
+            cached = memo.get(memo_key)
+        if cached is not None:
+            source, encoded_size = cached
+            if source_key != previous_key:
+                avoided('batch_pack_memo', 'payload', payload_bytes=encoded_size)
+        elif pinned and (memo_key == previous_memo_key if memo is not None else source_key == previous_key):
             source = previous_source
         else:
-            source = fetch(ref)
+            loaded = dict(ref)
+            source = fetch(loaded)
             if hashlib.sha256(source).hexdigest() != ref['pcm_sha256']:
-                raise ValueError('retained PCM digest changed')
-            previous_key, previous_source = source_key if pinned else None, source
+                if confirm_mismatch is None:
+                    raise ValueError('retained PCM digest changed')
+                # One bounded re-read of the same pinned ref; a second mismatch
+                # is a repeatable disagreement, not a transient read.
+                source = confirm_mismatch(loaded)
+                if hashlib.sha256(source).hexdigest() != ref['pcm_sha256']:
+                    raise RetainedPcmDigestChanged('retained PCM digest changed')
+            if memo is not None and memo_key is not None:
+                memo.put(memo_key, (source, loaded.get('_gcs_payload_bytes', 0)), len(source) + len(memo_key))
+        previous_key, previous_memo_key, previous_source = source_key if pinned else None, memo_key, source
         start, offset, frames = ref.get('start_frame'), ref.get('offset_frame'), ref.get('frames')
         if any(type(v) is not int for v in (start, offset, frames)) or start < previous or offset < 0 or frames <= 0:
             raise InvalidRetainedManifest('invalid retained audio slice')

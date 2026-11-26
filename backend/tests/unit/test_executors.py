@@ -232,6 +232,7 @@ def test_get_executor_metrics_returns_all_pools():
         'record_language',
         'postprocess',
         'cleanup',
+        'erasure',
         'storage',
         'speaker_tag_verify',
         'cimd',

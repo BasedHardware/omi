@@ -24,6 +24,7 @@ except ImportError:  # pragma: no cover - local unit tests mock Firestore.
 from database._client import data_plane_db as db
 from database.dream_effect_fence import assert_active as assert_dream_effect_active
 from database.required_intake_fence import assert_current as assert_required_intake_sources_current
+from database.conversation_effect_fence import ConversationEffectSource, require_active_account
 from database.account_deletion_policy import account_deletion_blocks_access, normalize_account_deletion_status
 from database.legal_holds import (
     DestructiveGateTakeover,
@@ -482,6 +483,7 @@ def apply_long_term_patch_firestore(
     required_source_item: Optional[MemoryItem] = None,
     ledger_reopen_receipt: Optional[MemoryLedgerReopenReceipt] = None,
     allow_ledger_migration: bool = False,
+    effect_source: ConversationEffectSource | None = None,
     _direct_user_authority: object | None = None,
     db_client: Any = db,
 ) -> ApplyResult:
@@ -506,6 +508,7 @@ def apply_long_term_patch_firestore(
         ledger_reopen_receipt,
         allow_ledger_migration,
         _direct_user_authority is _DIRECT_USER_WRITE_AUTHORITY,
+        effect_source,
     )
 
 
@@ -560,6 +563,7 @@ def replace_conversation_source_firestore(
     writes: List[CanonicalApplyWrite],
     deletion_gate_token: str | None = None,
     require_deletion_gate: bool = True,
+    effect_source: ConversationEffectSource | None = None,
     db_client: Any = db,
 ) -> ConversationSourceReplacementResult:
     """Atomically replace every active item sourced from one conversation.
@@ -586,6 +590,7 @@ def replace_conversation_source_firestore(
         writes,
         deletion_gate_token,
         require_deletion_gate,
+        effect_source,
     )
 
 
@@ -1484,8 +1489,14 @@ def _replace_conversation_source_firestore_transaction(
     writes: List[CanonicalApplyWrite],
     deletion_gate_token: str | None,
     require_deletion_gate: bool,
+    effect_source: ConversationEffectSource | None = None,
 ) -> ConversationSourceReplacementResult:
     collections = MemoryCollections(uid=uid)
+    if effect_source is not None:
+        if effect_source.conversation_id != conversation_id:
+            raise ValueError("replacement effect source must match the conversation")
+        require_active_account(transaction, db_client, uid)
+        effect_source.validate(transaction, db_client, uid)
     if writes or not require_deletion_gate:
         assert_no_destructive_operation_transaction(transaction, db_client, uid=uid)
     else:
@@ -2044,6 +2055,7 @@ def _apply_long_term_patch_firestore_transaction(
     ledger_reopen_receipt: Optional[MemoryLedgerReopenReceipt],
     allow_ledger_migration: bool = False,
     direct_user_authorized: bool = False,
+    effect_source: ConversationEffectSource | None = None,
 ) -> ApplyResult:
     collections = MemoryCollections(uid=uid)
     # Canonical writes and destructive privacy cleanup share the same
@@ -2067,6 +2079,8 @@ def _apply_long_term_patch_firestore_transaction(
     )
     if account_deletion_blocks_access(deletion_status):
         raise MemoryFirestoreApplyError("canonical apply blocked by account deletion fence")
+    if effect_source is not None:
+        effect_source.validate(transaction, db_client, uid)
     review_item = _read_canonical_review_resolution(
         transaction=transaction,
         db_client=db_client,

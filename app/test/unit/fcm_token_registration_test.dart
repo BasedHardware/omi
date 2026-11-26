@@ -18,6 +18,7 @@ void main() {
   late bool accept;
   late List<(String, String, String)> saves;
   late int tokenReads;
+  late List<(PushRegistrationStage, PushRegistrationResult)> diagnostics;
   setUp(() {
     owner = alice;
     apns = 'synthetic-apns';
@@ -26,12 +27,14 @@ void main() {
     accept = true;
     saves = [];
     tokenReads = 0;
+    diagnostics = [];
   });
   FcmTokenRegistration registrar({
     Future<String?> Function()? apnsRead,
     Future<String?> Function()? tokenRead,
-    Future<bool> Function(String, String, AuthSessionSnapshot)? persist,
+    FcmTokenPersistence? persist,
     bool requiresApns = true,
+    void Function(PushRegistrationStage, PushRegistrationResult)? diagnostic,
   }) =>
       FcmTokenRegistration(
         capture: () => owner,
@@ -44,11 +47,12 @@ void main() {
             },
         readTimeZone: () async => zone,
         persist: persist ??
-            (value, timeZone, snapshot) async {
+            (value, timeZone, snapshot, _) async {
               saves.add((value, timeZone, snapshot.ownerUid));
               return accept;
             },
         requiresApns: requiresApns,
+        onDiagnostic: diagnostic ?? (stage, result) => diagnostics.add((stage, result)),
         deadline: const Duration(seconds: 2),
         retryDelays: const [Duration(seconds: 1), Duration(seconds: 2), Duration(seconds: 4), Duration(seconds: 8)],
       );
@@ -72,8 +76,10 @@ void main() {
     addTearDown(service.dispose);
     await service.refresh();
     expect(saves, [('synthetic-fcm', 'Asia/Tokyo', 'alice')]);
+    expect(diagnostics, [(PushRegistrationStage.persistence, PushRegistrationResult.accepted)]);
     await service.refresh();
     expect(saves, hasLength(1), reason: 'repeated lifecycle wakes do not repost an accepted token');
+    expect(diagnostics, hasLength(1), reason: 'cached receipts do not produce repeated diagnostic writes');
     zone = 'America/New_York';
     await service.refresh();
     expect(saves.last.$2, zone);
@@ -101,6 +107,8 @@ void main() {
       clock.flushMicrotasks();
       expect(saves, isEmpty);
       expect(tokenReads, 0);
+      expect(diagnostics.every((event) => event == (PushRegistrationStage.apns, PushRegistrationResult.unavailable)),
+          isTrue);
       apns = 'late-apns';
       clock.elapse(const Duration(seconds: 5));
       clock.flushMicrotasks();
@@ -179,6 +187,8 @@ void main() {
     pending.complete('old-apns');
     await work;
     expect(saves, isEmpty);
+    expect(diagnostics, [(PushRegistrationStage.session, PushRegistrationResult.unavailable)],
+        reason: 'cancelled owner cannot publish a misleading SDK error');
   });
 
   test('a replacement account does not wait for the old SDK request', () async {
@@ -212,7 +222,7 @@ void main() {
 
   test('rotation arriving during a save is persisted after that save', () async {
     final pending = Completer<bool>();
-    final service = registrar(persist: (value, timeZone, snapshot) {
+    final service = registrar(persist: (value, timeZone, snapshot, _) {
       saves.add((value, timeZone, snapshot.ownerUid));
       return saves.length == 1 ? pending.future : Future.value(true);
     });
@@ -263,6 +273,9 @@ void main() {
       clock.elapse(const Duration(minutes: 2));
       clock.flushMicrotasks();
       expect(reads, 5);
+      expect(diagnostics.where((event) => event == (PushRegistrationStage.apns, PushRegistrationResult.timeout)),
+          hasLength(5));
+      expect(diagnostics.last, (PushRegistrationStage.retry, PushRegistrationResult.exhausted));
       expect(saves, isEmpty);
       expect(clock.pendingTimers, isEmpty);
       unawaited(service.refresh());
@@ -271,6 +284,44 @@ void main() {
       service.dispose();
       clock.flushMicrotasks();
       expect(clock.pendingTimers, isEmpty);
+    });
+  });
+  test('missing FCM token is distinguished from missing APNs', () async {
+    token = null;
+    final service = registrar();
+    addTearDown(service.dispose);
+    await service.refresh();
+    expect(saves, isEmpty);
+    expect(diagnostics, [(PushRegistrationStage.token, PushRegistrationResult.unavailable)]);
+  });
+
+  test('diagnostic observer failures cannot prevent persistence or its retry', () {
+    fakeAsync((clock) {
+      accept = false;
+      final service = registrar(diagnostic: (_, __) => throw StateError('diagnostic storage unavailable'));
+      unawaited(service.refresh());
+      clock.flushMicrotasks();
+      expect(saves, hasLength(1));
+      accept = true;
+      clock.elapse(const Duration(seconds: 1));
+      clock.flushMicrotasks();
+      expect(saves, hasLength(2));
+      service.dispose();
+    });
+  });
+
+  test('persistence rejection reports failure then recovery without recording payloads', () {
+    fakeAsync((clock) {
+      accept = false;
+      final service = registrar();
+      unawaited(service.refresh());
+      clock.flushMicrotasks();
+      expect(diagnostics, [(PushRegistrationStage.persistence, PushRegistrationResult.declined)]);
+      accept = true;
+      clock.elapse(const Duration(seconds: 1));
+      clock.flushMicrotasks();
+      expect(diagnostics.last, (PushRegistrationStage.persistence, PushRegistrationResult.accepted));
+      service.dispose();
     });
   });
 }

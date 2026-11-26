@@ -69,6 +69,17 @@ def main(argv: list[str] | None = None) -> int:
             'lost_fire_and_forget_units',
         ):
             print(f'  {key}={sim[key]}')
+        if 'backlog_flood' in sim:
+            flood = sim['backlog_flood']
+            for key in (
+                'fresh_capture_to_projection_p50_seconds',
+                'fresh_capture_to_projection_p90_seconds',
+                'fresh_baseline_p50_seconds',
+                'fresh_baseline_p90_seconds',
+                'backlog_rows_projected_per_minute',
+                'fresh_unprojected_10_to_20_minutes_share',
+            ):
+                print(f'  {key}={flood[key]}')
         for key in (
             'terminal_unrecovered_speech_fraction',
             'quarantine_projection_cohort_count',

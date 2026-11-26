@@ -147,6 +147,19 @@ class Subscription(BaseModel):
     limits: PlanLimits = PlanLimits()
     deprecated: bool = False
     deprecation_message: Optional[str] = None
+    # Billing provider when it is not Stripe ('play'); omitted for Stripe and every legacy row.
+    provider: Optional[Literal['play']] = None
+    # True for a prepaid no-card plan that ends on its own (nothing to renew or resubscribe); omitted otherwise.
+    prepaid: Optional[bool] = None
+
+    @model_serializer(mode='wrap')
+    def serialize_optional_provider(self, handler):
+        data = handler(self)
+        if isinstance(data, dict) and data.get('provider') is None:
+            data.pop('provider', None)
+        if isinstance(data, dict) and data.get('prepaid') is None:
+            data.pop('prepaid', None)
+        return data
 
 
 class PricingOption(BaseModel):
@@ -242,6 +255,18 @@ class ProcessingBacklog(BaseModel):
     exceeds_remaining: bool = False
 
 
+class PaymentIssueMonthlySwitch(BaseModel):
+    """The plan's catalog monthly price, charged today by POST /v1/payments/payment-issue/monthly-switch.
+
+    Amounts are minor units of ``currency``. ``yearly_amount`` is the unpaid yearly charge the switch voids.
+    """
+
+    price_id: str
+    amount: int
+    currency: str
+    yearly_amount: int
+
+
 class PaymentIssue(BaseModel):
     """A paid plan whose renewal charge failed and can still be paid.
 
@@ -252,6 +277,30 @@ class PaymentIssue(BaseModel):
 
     status: Literal['past_due', 'unpaid']
     plan: PlanType
+    # A declined yearly renewal may move to the same plan's monthly price instead
+    # (utils/monthly_switch.py). Omitted when not offered; older clients ignore it.
+    monthly_switch: Optional[PaymentIssueMonthlySwitch] = None
+
+    @model_serializer(mode='wrap')
+    def serialize_optional_monthly_switch(self, handler):
+        data = handler(self)
+        if data.get('monthly_switch') is None:
+            data.pop('monthly_switch', None)
+        return data
+
+
+class PlayBasePlan(BaseModel):
+    id: str
+    interval: Literal['month', 'year']
+
+
+class PlayBillingConfig(BaseModel):
+    """What an Android client needs to sell Omi Pro through Google Play Billing."""
+
+    product_id: str
+    base_plans: List[PlayBasePlan]
+    trial_offer_id: str
+    obfuscated_account_id: str
 
 
 class UserSubscriptionResponse(BaseModel):
@@ -294,10 +343,18 @@ class UserSubscriptionResponse(BaseModel):
     cloud_screen_vectors: Optional[bool] = None
     # A failed renewal the user can still pay. Omitted when there is none; older clients ignore it.
     payment_issue: Optional[PaymentIssue] = None
+    # Set only when this Android build must buy through Google Play; omitted otherwise.
+    play_billing: Optional[PlayBillingConfig] = None
+    # True when this user may redeem a prepaid code with no card; omitted otherwise.
+    prepaid_code_redeem: Optional[bool] = None
 
     @model_serializer(mode='wrap')
     def serialize_optional_held_audio(self, handler):
         data = handler(self)
+        if data.get('prepaid_code_redeem') is None:
+            data.pop('prepaid_code_redeem', None)
+        if data.get('play_billing') is None:
+            data.pop('play_billing', None)
         if data.get('cloud_screen_vectors') is None:
             data.pop('cloud_screen_vectors', None)
         if data.get('held_audio') is None:

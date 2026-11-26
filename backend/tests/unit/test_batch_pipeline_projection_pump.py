@@ -17,12 +17,14 @@ from config.policy import resolve_stage_policy
 from utils.batch_pipeline.metrics import QueueMetrics
 from tests.unit.test_batch_pipeline_scheduler import MemoryStore
 from utils.batch_pipeline import projection_drain, serving
+from database.batch_pipeline_recovery_discovery import RecoveryCaller
 
 
-async def isolated_pump(pump, holds):
-    # These tests control only projection ticks. Coalescing's independent loop
-    # has a separate real-gather supervision test in test_batch_upload_coalescing.
-    holds.close()
+async def isolated_pump(pump, *sidecars):
+    # These tests control only projection ticks. The sidecars have separate
+    # supervision coverage in the upload-coalescing and projection-outbox suites.
+    for sidecar in sidecars:
+        sidecar.close()
     return await pump
 
 
@@ -88,7 +90,9 @@ def test_serving_sweep_gate_preserves_other_reconcile_work(monkeypatch, raw, def
     monkeypatch.setattr(serving, 'owner_chain_projection_enabled', lambda: True)
     assert service.reconcile(periodic=True, owner_id='wake', recovered='unit') == ['followup']
     assert service.projector.sweep.call_count == int(default)
-    service._maintain.assert_called_once_with(recover_quarantine=False)
+    service._maintain.assert_called_once_with(
+        recover_quarantine=False, recovery_caller=RecoveryCaller.SERVING, run_held_expiry=True
+    )
     service._reconcile_owner.assert_called_once_with('wake', 'unit')
     service.drain_owner.assert_called_once_with('held')
     service.metrics.refresh.assert_called_once()
@@ -292,6 +296,7 @@ async def test_pump_logs_failure_and_runs_next_tick(monkeypatch, caplog, failure
 @pytest.mark.parametrize('raw', [None, 'false', '', 'bad', '1'])
 def test_disabled_pump_does_not_start_without_serving(monkeypatch, raw):
     monkeypatch.delenv('BATCH_PIPELINE_SERVING_ENABLED', raising=False)
+    monkeypatch.setenv('BATCH_PROJECTION_OUTBOX', 'on')
     if raw is None:
         monkeypatch.delenv('BATCH_PIPELINE_PROJECTION_PUMP_ENABLED', raising=False)
     else:

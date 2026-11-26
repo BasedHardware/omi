@@ -5,9 +5,12 @@ import re
 from pathlib import Path
 
 import yaml
-
-from tests.unit.test_timeliness_metrics_are_scraped import FRESH_NEWEST, NEWEST
 from prometheus_client import CollectorRegistry
+from prometheus_client.parser import text_string_to_metric_families
+
+from paging.redis_probe.probe import Probe
+from scripts.redis_pager_route import REDIS_PAGER_RECEIVER, REDIS_PAGER_TARGET, REDIS_PAGER_UID
+from tests.unit.test_timeliness_metrics_are_scraped import FRESH_NEWEST, NEWEST
 from utils.lifecycle_metrics import PhaseMetrics
 
 REPO = Path(__file__).resolve().parents[3]
@@ -320,6 +323,25 @@ def test_combined_alert_export_matches_every_split_source_rule():
     assert combined.keys() == split.keys()
     for uid in combined:
         assert combined[uid] == split[uid], uid
+
+
+def test_datasource_backed_alert_queries_carry_a_nonzero_relative_range():
+    """Grafana rejects a datasource query whose relative range is 0s..0s.
+
+    A merged rule shipped ``relativeTimeRange`` ``{from: 0, to: 0}`` on a
+    Prometheus selector node; source lint passed but provisioning failed with
+    ``invalid relative time range [From: 0s, To: 0s]`` (SCA-2055/SCA-2062).
+    Expression nodes keep the 0s window Grafana ignores for them.
+    """
+    for export_name, rules in _all_rule_exports().items():
+        for uid, rule in rules.items():
+            for query in rule["data"]:
+                if query["datasourceUid"] in ("__expr__", "-100"):
+                    continue
+                window = query["relativeTimeRange"]
+                assert window["from"] > window["to"], f"{export_name}:{uid}:{query['refId']}"
+                assert window["from"] > 0, f"{export_name}:{uid}:{query['refId']}"
+                assert window["to"] >= 0, f"{export_name}:{uid}:{query['refId']}"
 
 
 def test_durable_queue_oldest_ready_alert_pages_on_age_absence_or_sustained_unknown():
@@ -1298,6 +1320,8 @@ EXTERNAL_ALERT_METRICS = {
     "container_memory_working_set_bytes": "cAdvisor",
     # prometheus-stackdriver-exporter
     "stackdriver_firestore_instance_firestore_googleapis_com_document_read_count": "prometheus-stackdriver-exporter",
+    # GMP Cloud Monitoring native metric (gmp-cloud-run datasource)
+    "firestore_googleapis_com:document_read_count": "GMP Cloud Monitoring native metric",
     "stackdriver_https_lb_rule_loadbalancing_googleapis_com_https_backend_request_count": "prometheus-stackdriver-exporter",
     "stackdriver_internal_http_lb_rule_loadbalancing_googleapis_com_https_internal_backend_latencies_bucket": (
         "prometheus-stackdriver-exporter"
@@ -1359,6 +1383,7 @@ _PROMQL_KEYWORDS = frozenset(
         "histogram_quantile",
         "topk",
         "bottomk",
+        "quantile",
         "count",
         "max",
         "min",
@@ -1410,6 +1435,15 @@ def _declared_backend_metric_names() -> set[str]:
         ):
             # These helpers construct/reuse registered Gauge objects with fixed names.
             names |= set(re.findall(r"_gauge\(\s*['\"]([a-zA-Z0-9_:]+)['\"]", path.read_text(encoding='utf-8')))
+    # The standalone probe emits text exposition directly. Read a real
+    # populated snapshot so the gate follows its emitted sample names.
+    probe = Probe()
+    probe.sample = (1, 1, 0.0)
+    names.update(
+        sample.name
+        for family in text_string_to_metric_families(probe.metrics().decode("utf-8"))
+        for sample in family.samples
+    )
     return names
 
 
@@ -1844,7 +1878,6 @@ def test_inherited_datasource_targets_join_the_promql_gate():
 
 
 REDIS_CACHE_CONN_WARN = "omi-redis-cache-conn-warn"
-REDIS_CACHE_CONN_PAGE = "omi-redis-cache-conn-page"
 REDIS_CACHE_CONN_WARN_EXPR = (
     'sum(increase(omi_fallback_total{job=~"backend-listen-metrics|pusher-metrics",component="other",'
     'from_mode="cache_write",reason=~"auth_error|connection_error|timeout",outcome="degraded"}[10m])) or vector(0)'
@@ -1861,13 +1894,21 @@ def test_redis_cache_connection_alerts_watch_listen_and_pusher_fail_open():
     """Auth and connection fail-opens are omi_fallback_total, the same signal sibling rules use.
 
     capacity_full stays on its own reason so a maxmemory event does not page this rule.
-    The series did not exist during the 2026-10-08 AuthenticationError incident, so the
-    thresholds are structural: any sustained errors warn, and a ratio above half of
-    listen accepts pages.
+    Sustained errors warn. The pilot pages on either qualifying traffic impact
+    or a fresh failed PING even when there are no listen accepts.
     """
+    selector = f'{{job="omi-redis-serving-probe",target="{REDIS_PAGER_TARGET}"}}'
+    attempt = f'omi_redis_authenticated_ping_last_attempt_seconds{selector}'
+    expected_page_expr = (
+        f'((({REDIS_CACHE_CONN_RATIO_EXPR}) > bool 0.5)\n'
+        f' * ({REDIS_CACHE_CONN_TRAFFIC_EXPR} >= bool 50) == 1)\n'
+        f'or on() max((omi_redis_authenticated_ping_success{selector}\n'
+        f' and ({attempt} >= time() - 90)\n'
+        f' and ({attempt} <= time())) == bool 0)'
+    )
     for export_name, rules in _all_rule_exports().items():
         warn = rules[REDIS_CACHE_CONN_WARN]
-        page = rules[REDIS_CACHE_CONN_PAGE]
+        page = rules[REDIS_PAGER_UID]
         assert warn["ruleGroup"] == "Resilience", export_name
         assert warn["for"] == "10m", export_name
         assert warn["noDataState"] == "OK", export_name
@@ -1881,14 +1922,17 @@ def test_redis_cache_connection_alerts_watch_listen_and_pusher_fail_open():
 
         assert page["ruleGroup"] == "Resilience", export_name
         assert page["for"] == "5m", export_name
-        assert page["noDataState"] == "OK", export_name
+        assert page["noDataState"] == page["execErrState"] == "KeepLast", export_name
         assert page["labels"]["severity"] == "critical", export_name
         assert page["labels"]["impact"] == "user-experience", export_name
-        assert page["data"][0]["model"]["expr"] == REDIS_CACHE_CONN_TRAFFIC_EXPR, export_name
-        assert page["data"][1]["model"]["expr"] == REDIS_CACHE_CONN_RATIO_EXPR, export_name
-        assert page["data"][2]["model"]["expression"] == "$A >= 50 && $B > 0.5", export_name
-        assert page["notification_settings"]["receiver"] == "Omi - Services Alerting (Telegram)", export_name
-        assert "capacity_full" not in page["data"][1]["model"]["expr"], export_name
+        assert page["labels"]["paging_target"] == REDIS_PAGER_TARGET, export_name
+        assert page["data"][0]["model"]["expr"] == expected_page_expr, export_name
+        assert page["data"][1]["model"]["expression"] == "A", export_name
+        assert page["data"][2]["model"]["expression"] == "B", export_name
+        assert page["condition"] == page["data"][2]["refId"] == "C", export_name
+        assert page["data"][2]["model"]["conditions"][0]["evaluator"] == {"params": [0], "type": "gt"}, export_name
+        assert page["notification_settings"]["receiver"] == REDIS_PAGER_RECEIVER, export_name
+        assert "capacity_full" not in page["data"][0]["model"]["expr"], export_name
 
 
 def test_retired_loki_alerts_cannot_reenter_canonical_sources():

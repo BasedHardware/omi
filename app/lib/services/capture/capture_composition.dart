@@ -6,6 +6,10 @@ import 'package:omi/services/wals/mobile_batch_buffer.dart';
 import 'package:omi/services/wals/mobile_batch_vad.dart';
 import 'package:omi/services/wals/mobile_standard_batch.dart';
 import 'package:omi/services/live_preview/live_preview_composition.dart';
+import 'package:omi/services/live_preview/live_preview_controller.dart';
+import 'package:omi/services/live_preview/live_words_coordinator.dart';
+import 'package:omi/services/live_preview/live_words_log.dart';
+import 'package:omi/services/live_preview/vendor_live_words.dart';
 import 'package:omi/services/sockets/listen_client_state.dart';
 import 'package:flutter/widgets.dart';
 
@@ -37,6 +41,11 @@ import 'package:omi/services/wals/wal_interfaces.dart';
 import 'package:omi/utils/analytics/analytics_manager.dart';
 import 'package:omi/utils/audio/foreground.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
+import 'package:omi/services/wals/local_wal_sync.dart';
+import 'package:omi/services/experiments/capture_end_marker.dart';
+import 'package:omi/services/experiments/mobile_batch_file_cap_gate.dart';
+import 'package:omi/services/capture/capture_end.dart';
+import 'package:omi/backend/http/api/capture_end.dart';
 
 /// Aggregate of existing CaptureSeams types plus missing I/O boundaries.
 /// All fields required; supplying some fakes can never select production defaults.
@@ -177,7 +186,11 @@ CaptureProvider composeProductionCaptureProvider({
   unawaited(_installMobileStandardBatch(provider));
   final livePreview = composeLivePreview();
   if (livePreview != null) provider.installLivePreview(livePreview);
-  final lifecycle = AppLifecycleListener(onStateChange: provider.onAppLifecycleChanged);
+  final liveWords = livePreview == null ? null : _composeLiveWords(provider, livePreview);
+  final lifecycle = AppLifecycleListener(onStateChange: (state) {
+    provider.onAppLifecycleChanged(state);
+    liveWords?.onLifecycle(state);
+  });
   provider.lifetime.own(lifecycle.dispose);
   final initialLifecycle = WidgetsBinding.instance.lifecycleState;
   if (initialLifecycle != null && initialLifecycle != AppLifecycleState.resumed) {
@@ -188,6 +201,26 @@ CaptureProvider composeProductionCaptureProvider({
     unawaited(CaptureSystemSurface(provider, LiveActivityBridge()).start());
   }
   return provider;
+}
+
+/// Reliability experiment `vendor_recognizer_on_opened_app`: the vendor stream on the capture audio
+/// taps and the coordinator that decides when it and the phone's recogniser run. Off, the taps only
+/// reach an early return and nothing connects.
+LiveWordsCoordinator _composeLiveWords(CaptureProvider provider, LivePreviewController livePreview) {
+  final vendor = VendorLiveWords(
+    onLines: livePreview.onVendorLines,
+    log: (event, fields) => LiveWordsLog.event('vendor_$event', fields),
+  );
+  void onPendant(List<int> packet) => vendor.onPendantPacket(packet, provider.pendantTapCodec);
+  provider.addDeviceAudioListener(onPendant);
+  provider.addPhoneMicAudioListener(vendor.onPhonePcm);
+  final coordinator = LiveWordsCoordinator(capture: provider, preview: livePreview, vendor: vendor)..start();
+  provider.lifetime.own(() {
+    provider.removeDeviceAudioListener(onPendant);
+    provider.removePhoneMicAudioListener(vendor.onPhonePcm);
+    coordinator.dispose();
+  });
+  return coordinator;
 }
 
 CaptureWedgeMonitor composeCaptureWedgeMonitor() {
@@ -230,18 +263,22 @@ Future<void> _installMobileStandardBatch(CaptureProvider provider) async {
     final directory = await getApplicationDocumentsDirectory();
     final phone = ServiceManager.instance().wal.getSyncs().phone;
     await phone.walReady;
+    final buffer = MobileBatchBuffer(
+        directory: directory,
+        publish: (wal) async {
+          if (wal.ownerUid != SharedPreferencesUtil().uid) throw StateError('Batch owner retired');
+          await phone.addExternalWal(wal, admittedGeneration: phone.sessionGeneration);
+          if (wal.ownerUid != SharedPreferencesUtil().uid ||
+              !await phone.hasDurableWal(wal, admittedGeneration: phone.sessionGeneration)) {
+            throw StateError('Batch WAL index was not committed');
+          }
+          unawaited(RecordingTransferCoordinator.instance.wake(WakeTrigger.periodic));
+        });
+    // Never delays the lane: capture starts on the default cap and the gate's
+    // answer applies from the next frame after it arrives.
+    unawaited(MobileBatchFileCapGate.maxFileSeconds().then((seconds) => buffer.maxFileSeconds = seconds));
     final lane = MobileStandardBatch(
-      buffer: MobileBatchBuffer(
-          directory: directory,
-          publish: (wal) async {
-            if (wal.ownerUid != SharedPreferencesUtil().uid) throw StateError('Batch owner retired');
-            await phone.addExternalWal(wal, admittedGeneration: phone.sessionGeneration);
-            if (wal.ownerUid != SharedPreferencesUtil().uid ||
-                !await phone.hasDurableWal(wal, admittedGeneration: phone.sessionGeneration)) {
-              throw StateError('Batch WAL index was not committed');
-            }
-            unawaited(RecordingTransferCoordinator.instance.wake(WakeTrigger.periodic));
-          }),
+      buffer: buffer,
       loadVad: SileroMobileBatchVad.load,
       freeDiskBytes: () async {
         final mb = await DiskSpace.getFreeDiskSpaceForPath(directory.path);
@@ -251,6 +288,38 @@ Future<void> _installMobileStandardBatch(CaptureProvider provider) async {
       ownerUid: () => SharedPreferencesUtil().uid,
       now: DateTime.now,
     );
+    final reporter = CaptureEndReporter(
+      post: (signal, {required pendingWals, required sentAt}) async => switch (await postSyncCaptureEnd(
+        recordingSessionId: signal.recordingSessionId,
+        endType: signal.type.wire,
+        lastSpeechAt: signal.lastSpeechAt,
+        endDecidedAt: signal.decidedAt,
+        sentAt: sentAt,
+        pendingWals: pendingWals,
+      )) {
+        ApiSuccess(:final data) => data,
+        // Kept by the reporter and retried on the next accepted file.
+        ApiFailure() => false,
+      },
+      // Observation only: the reporter never seals, flushes or publishes.
+      // Audio up to the end that is still being written or published counts
+      // as pending until the capture lifecycle seals it and it is accepted.
+      // Later chunks of trailing silence are not part of the ended recording.
+      pendingWals: (signal) async {
+        if (phone is! LocalWalSyncImpl) throw StateError('Capture-end WAL inventory unavailable');
+        final unregistered = await lane.buffer.pendingJournalCount(signal.recordingSessionId,
+            ownerUid: SharedPreferencesUtil().uid,
+            through: signal.decidedAt,
+            acceptedFileBytes: phone.captureEndAcceptedFileBytes(signal.recordingSessionId));
+        final registered = phone.pendingWalsForRecording(signal.recordingSessionId, through: signal.decidedAt);
+        return unregistered + registered;
+      },
+      disabled: () async => SharedPreferencesUtil().uid.isEmpty || await CaptureEndMarkerPolicy.disabled(),
+      scope: () => (SharedPreferencesUtil().uid, phone.sessionGeneration),
+      observationVersion: () => MobileBatchBuffer.journalRevision,
+    );
+    provider.captureEndReporter = reporter;
+    if (phone is LocalWalSyncImpl) phone.onRecordingUploadAccepted = reporter.uploadAccepted;
     provider.installMobileStandardBatch(lane);
   } catch (_) {
     // Directory/plugin availability cannot interrupt the existing live path.

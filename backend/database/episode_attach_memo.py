@@ -7,6 +7,8 @@ from database._client import get_firestore_client
 from database import transcript_pointer
 from database.transcript_pointer import run_preloaded_transactional
 from database.conversations import decode_transcript_segments_verified
+from database.episode_finalization_fence import EpisodeFinalizationDeleted, require_not_deleted
+from database.firestore_read_metrics import FirestoreReadSite
 from utils.conversations.episode_attach_key import content_key, memo_eligible
 from utils.conversations.fragment_visibility import is_relevance_discarded
 from utils.observability.fallback import record_fallback
@@ -89,6 +91,8 @@ def complete(uid, cid, row, owner, *, firestore_client=None, finalized=False):
 
     @firestore.transactional
     def finish(transaction):
+        if finalized:
+            require_not_deleted(transaction, client, uid, cid, FirestoreReadSite.EPISODE_FINALIZATION_MEMO_FENCE)
         ref = root.collection('episode_links').document(cid)
         link = ref.get(transaction=transaction).to_dict() or {}
         current = root.collection('conversations').document(cid).get(transaction=transaction).to_dict() or {}
@@ -107,6 +111,8 @@ def complete(uid, cid, row, owner, *, firestore_client=None, finalized=False):
 
     try:
         run_preloaded_transactional(client, finish, transient=True)
+    except EpisodeFinalizationDeleted:
+        return
     except transcript_pointer.TranscriptPointerError:
         raise
     except Exception:

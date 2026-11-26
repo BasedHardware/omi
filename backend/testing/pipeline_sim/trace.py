@@ -53,6 +53,9 @@ _DROP_FIELDS = frozenset(
         'previous',
         'shared_gpu_key',
         'projection_binding',
+        # Scheduling metadata is pinned by outbox conformance and replay tests.
+        'projection_outbox_kind',
+        'projection_outbox_reason',
         'policy',  # metadata, not part of the pre-E1 external behavior trace
         'policy_source',
         'policy_parts',
@@ -401,7 +404,14 @@ def _config(name: str, *, seed: int = 7, workload: dict | None = None, **changes
     return replace(SimConfig(name=name, seed=seed, horizon_seconds=2 * 3600.0), workload=spec, **changes)
 
 
-_PROVIDER_BACKLOG_RELEASE = {'BATCH_PIPELINE_PROVIDER_BACKLOG_RELEASE_ENABLED': 'true'}
+# The provider traces admit late uploads as catch-up and pin that path: release on, and the
+# 10-minute bar the traces were recorded with (provider admission now defaults to a day).
+_PROVIDER_BACKLOG_RELEASE = {
+    'BATCH_PIPELINE_PROVIDER_BACKLOG_RELEASE_ENABLED': 'true',
+    # The characterization traces predate the metered lane: they record the unmetered release.
+    'BATCH_PIPELINE_BACKLOG_RELEASE_METER_ENABLED': 'false',
+    'BATCH_PIPELINE_PROVIDER_FRESH_CAPTURE_LAG_SECONDS': '600',
+}
 
 GOLDEN_CONFIGS: dict[str, Callable[[], SimConfig]] = {
     # Speech only, healthy fleet: admitted -> ready -> leased -> committed -> projected.

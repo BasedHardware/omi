@@ -42,6 +42,7 @@ PROD_TRAIN_WORKFLOWS = frozenset(
         '.github/workflows/gcp_diarizer.yml',
         '.github/workflows/gcp_llm_gateway.yml',
         '.github/workflows/gcp_parakeet.yml',
+        '.github/workflows/sync_ledger_fence_cutover.yml',
     }
 )
 ACTIVE_RUN_STATES = ('in_progress', 'queued', 'waiting', 'requested', 'pending')

@@ -68,6 +68,24 @@ def check(packet, root, repository, *, qualification):
         errors.append('incorrect audio denominator')
     if packet['booked_savings_dollars_per_day'] != 0:
         errors.append('unqualified packet must book zero savings')
+    if 'scan_repair' in packet:
+        scans = [
+            {p.attrib['name']: p.attrib['value'] for p in case.iter('property')}
+            for case in cases
+            if 'test_35_contenders_one_scanner_and_fixed_operation_budget' in case.attrib.get('name', '')
+        ]
+        if len(scans) != 1:
+            errors.append('missing strict scan contention rehearsal')
+        else:
+            scan = scans[0]
+            operations = json.loads(scan.get('steady_attempt_operations', '{}'))
+            expected = {'query': 1, 'read_coalesce_quota': 2, 'read_leases': 37, 'attempt_write_coalesce_quota': 1}
+            if any(operations.get(key) != value for key, value in expected.items()):
+                errors.append('strict scan operation budget differs from rehearsal')
+            if scan.get('contenders') != '35' or scan.get('takeover_and_stale_writer_fencing') != 'PASS':
+                errors.append('missing strict scan contender/takeover evidence')
+        if qualification and packet['scan_repair'].get('production_scan_health') != 'PASS':
+            errors.append('NOT_QUALIFIED: stable strict-scan production readback')
     if qualification:
         errors += ['NOT_QUALIFIED: ' + name for name in GATES if packet['gates'].get(name) != 'PASS']
         if packet['rehearsal']['kind'] != 'staging_end_to_end':

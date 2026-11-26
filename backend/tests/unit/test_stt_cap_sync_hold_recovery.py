@@ -215,7 +215,7 @@ def legacy_sync_hold(prod_scope, state, monkeypatch):  # noqa: F811 (imported py
 
 async def test_legacy_sync_recovery_checks_allowance_on_lane_sync_then_dispatches(legacy_sync_hold):
     assert await cap_hold_recovery._recover_row(UID, legacy_sync_hold.snapshot, legacy_sync_hold.row)
-    cap_hold_recovery.sync_allowed.assert_called_with(UID, lane='sync')
+    cap_hold_recovery.sync_allowed.assert_called_with(UID, lane='sync', backfill=False)
     cap_hold_recovery.cap_recovery_pacing.reserve.assert_called_once()
     kwargs = cap_hold_recovery.process_segment.call_args.kwargs
     assert kwargs['cap_recovery'] is True and kwargs['cap_dispatch_lane'] == 'sync'

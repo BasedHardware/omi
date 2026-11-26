@@ -549,7 +549,7 @@ def test_gate_file_contains_every_pusher_finalization_uid(verifier: SimpleNamesp
 def test_live_stt_import_allowlist_matches_committed_rules(verifier: SimpleNamespace) -> None:
     rules = verifier.load_live_stt_import_rules()
     gated = verifier.load_gated_uids(verifier.load_all_committed_rules())
-    assert set(rules) == set(gated) | set(verifier.DATASOURCE_CANARY_UIDS)
+    assert set(rules) == (set(gated) | set(verifier.DATASOURCE_CANARY_UIDS)) - {verifier.REDIS_PAGER_UID}
     assert set(verifier.RULE_UIDS) <= set(rules)
     assert "omi-datasource-gmp" not in rules
     non_live_stt = set(gated) - set(verifier.LIVE_STT_IMPORT_UIDS)
@@ -1203,14 +1203,14 @@ def redis_import_inputs(verifier: SimpleNamespace) -> tuple[dict[str, dict], str
     # setup, not the behavior under test; keep it out of the CPU-guarded call.
     from utils.observability.fallback import bucket_component
 
-    return verifier.load_live_stt_import_rules(), bucket_component("redis_cache")
+    return verifier.load_all_committed_rules(), bucket_component("redis_cache")
 
 
 def test_redis_import_rules_match_emitted_cache_write_labels(
     verifier: SimpleNamespace, redis_import_inputs: tuple[dict[str, dict], str]
 ) -> None:
     rules, redis_bucket = redis_import_inputs
-    for uid in verifier.REDIS_CACHE_IMPORT_UIDS:
+    for uid in (*verifier.REDIS_CACHE_IMPORT_UIDS, verifier.REDIS_PAGER_UID):
         expressions = [item.get("model", {}).get("expr", "") for item in rules[uid]["data"]]
         expression = next(expr for expr in expressions if "omi_fallback_total" in expr)
         assert f'component="{redis_bucket}"' in expression
@@ -1219,8 +1219,8 @@ def test_redis_import_rules_match_emitted_cache_write_labels(
         assert 'auth_error|connection_error|timeout' in expression
 
 
-@pytest.mark.parametrize("uid", ["omi-redis-cache-conn-warn", "omi-redis-cache-conn-page"])
-def test_missing_redis_rule_fails_live_import_scope(verifier: SimpleNamespace, monkeypatch, uid) -> None:
+def test_missing_redis_warning_fails_live_import_scope(verifier: SimpleNamespace, monkeypatch) -> None:
+    uid = "omi-redis-cache-conn-warn"
     rules = verifier.load_live_stt_import_rules()
     monkeypatch.setitem(
         verifier._run_fleet_coverage.__globals__,
@@ -1384,7 +1384,7 @@ def test_development_loader_restores_errors_without_mutating_sources(verifier, m
     monkeypatch.setitem(verifier.load_live_stt_import_rules.__globals__, 'load_all_committed_rules', lambda: canonical)
     development = verifier.load_live_stt_import_rules(production=False)
     gated = verifier.load_gated_uids(canonical)
-    assert set(development) == set(gated) - set(verifier.PRODUCTION_ONLY_IMPORT_UIDS)
+    assert set(development) == set(gated) - {*verifier.PRODUCTION_ONLY_IMPORT_UIDS, verifier.REDIS_PAGER_UID}
     assert set(verifier.RULE_UIDS) <= set(development)
     assert set(verifier.DATASOURCE_CANARY_UIDS).isdisjoint(development)
     assert all(rule['execErrState'] != 'KeepLast' for rule in development.values())
@@ -1405,9 +1405,15 @@ def test_production_native_queries_never_cross_into_development(verifier):
     development = verifier.load_live_stt_import_rules(production=False)
     for uid in verifier.PRODUCTION_ONLY_IMPORT_UIDS:
         assert uid in production and uid not in development
-        model = production[uid]['data'][0]['model']
-        assert model['promQLQuery']['projectName'] == 'based-hardware'
-        assert model['timeSeriesList']['projectName'] == 'based-hardware'
+        node = production[uid]['data'][0]
+        model = node['model']
+        if 'promQLQuery' in model:
+            assert model['promQLQuery']['projectName'] == 'based-hardware'
+            assert model['timeSeriesList']['projectName'] == 'based-hardware'
+        else:
+            # Prometheus-shaped production-only rules read a datasource that only
+            # the production overlay creates (the GMP Cloud Run shadow).
+            assert node['datasourceUid'] == 'gmp-cloud-run'
     # The production filter is a detached transformation, including when used
     # by the read-back gate rather than the importer.
     transformed = verifier._development_rules(production)
@@ -1441,7 +1447,7 @@ def test_nonproduction_import_never_installs_or_reads_production_canaries(verifi
     )
     assert verifier._run_live_stt_import(target, 'dummy-token') == []
     gated = set(verifier.load_gated_uids(verifier.load_all_committed_rules()))
-    assert set(writes) == gated - set(verifier.PRODUCTION_ONLY_IMPORT_UIDS)
+    assert set(writes) == gated - {*verifier.PRODUCTION_ONLY_IMPORT_UIDS, verifier.REDIS_PAGER_UID}
     assert set(verifier.RULE_UIDS) <= set(writes)
     assert all(rule['execErrState'] != 'KeepLast' for rule in writes.values())
     assert all(writes[uid]['execErrState'] == 'Error' for uid in verifier.RULE_UIDS)
@@ -1602,3 +1608,109 @@ def test_attempts_default_to_six_only_for_prepublish(verifier: SimpleNamespace) 
     assert verifier.resolve_attempts(None, mode="pusher", phase="postrollout") == 1
     assert verifier.resolve_attempts(None, mode="fleet", phase=None) == 1
     assert verifier.resolve_attempts(12, mode="pusher", phase="prepublish") == 12
+
+
+@pytest.mark.parametrize(
+    'uid,field,key,value',
+    [
+        ('omi-redis-cache-conn-page', 'labels', 'paging_target', 'other'),
+        ('omi-redis-cache-conn-page', 'notification_settings', 'receiver', 'Omi - Services Alerting (Telegram)'),
+        ('omi-redis-cache-conn-warn', 'notification_settings', 'receiver', 'Omi - Redis phone wake'),
+    ],
+)
+def test_import_source_rejects_wrong_pilot_target_or_receiver(verifier, monkeypatch, uid, field, key, value):
+    committed = verifier.load_all_committed_rules()
+    committed[uid][field][key] = value
+    monkeypatch.setitem(verifier.load_live_stt_import_rules.__globals__, 'load_all_committed_rules', lambda: committed)
+    with pytest.raises(verifier.AlertRouteError, match=uid):
+        verifier.load_live_stt_import_rules()
+
+
+@pytest.mark.parametrize(
+    'fault',
+    [
+        None,
+        'uid',
+        'type',
+        'url',
+        'custom-payload',
+        'unsigned',
+        'no-timestamp',
+        'resolved-disabled',
+        'extra-integration',
+        'shared-publisher',
+        'shared-publisher-alias',
+        'rule-target',
+        'other-rule',
+        'policy',
+    ],
+)
+def test_scoped_redis_readback_validates_only_pilot_rule_and_contact(verifier, monkeypatch, fault):
+    uid = verifier.REDIS_PAGER_UID
+    rule = verifier.load_all_committed_rules()[uid]
+    url = 'https://fixture.run.app/v1/publish/grafana-redis'
+    contact = {
+        'uid': 'omi-redis-phone-wake',
+        'name': 'Omi - Redis phone wake',
+        'type': 'webhook',
+        'disableResolveMessage': False,
+        'settings': {
+            'url': url,
+            'httpMethod': 'POST',
+            'hmacConfig': {
+                'header': 'X-Grafana-Alerting-Signature',
+                'timestampHeader': 'X-Grafana-Alerting-Timestamp',
+                'secret': '[REDACTED]',
+            },
+        },
+    }
+    contacts = [contact, {'name': verifier.TELEGRAM_RECEIVER, 'type': 'telegram'}]
+    if fault == 'uid':
+        contact['uid'] = 'unrelated-contact-uid'
+    elif fault == 'type':
+        contact['type'] = 'telegram'
+    elif fault == 'url':
+        contact['settings']['url'] = 'https://other.run.app/v1/publish/grafana-redis'
+    elif fault == 'custom-payload':
+        contact['settings']['payload'] = {'template': '{}'}
+    elif fault == 'unsigned':
+        contact['settings']['hmacConfig'].pop('secret')
+    elif fault == 'no-timestamp':
+        contact['settings']['hmacConfig'].pop('timestampHeader')
+    elif fault == 'resolved-disabled':
+        contact['disableResolveMessage'] = True
+    elif fault == 'extra-integration':
+        contacts.append(contact | {'type': 'telegram'})
+    elif fault in ('shared-publisher', 'shared-publisher-alias'):
+        duplicate_url = url.replace('fixture.run.app', 'other-fixture.run.app') if fault.endswith('-alias') else url
+        contacts.append(
+            {
+                'uid': 'alias',
+                'name': 'Alternate integration',
+                'type': 'webhook',
+                'settings': {'url': duplicate_url + '?other=1'},
+            }
+        )
+    elif fault == 'rule-target':
+        rule['labels']['paging_target'] = 'unrelated-target'
+    other = {'uid': 'other-rule', 'notification_settings': {'receiver': verifier.TELEGRAM_RECEIVER}}
+    policy = {'receiver': verifier.TELEGRAM_RECEIVER}
+    if fault == 'other-rule':
+        other['notification_settings']['receiver'] = contact['name']
+    if fault == 'policy':
+        policy['routes'] = [{'routes': [{'receiver': contact['name']}]}]
+    paths = []
+
+    def read(_base, path, _token, **_kwargs):
+        paths.append(path)
+        if path == verifier.CONTACT_POINTS_PATH:
+            return contacts
+        if path == verifier.ALERT_RULE_LIST_PATH:
+            return [rule, other]
+        assert path == verifier.POLICIES_PATH
+        return policy
+
+    monkeypatch.setitem(verifier._run_redis_pilot_readback.__globals__, '_request_json', read)
+    errors = verifier._run_redis_pilot_readback('https://monitor.omi.me', 'fixture', url, ('other-fixture.run.app',))
+    assert bool(errors) is (fault is not None)
+    assert len(paths) == (3 if fault in (None, 'rule-target', 'other-rule', 'policy') else 1)

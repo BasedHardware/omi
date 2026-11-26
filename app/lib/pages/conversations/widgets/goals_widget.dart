@@ -229,11 +229,14 @@ class GoalsWidgetState extends State<GoalsWidget> with WidgetsBindingObserver {
     );
   }
 
-  Future<void> _saveGoal(Goal? existingGoal, String title, double current, double target, String? emoji) async {
+  /// Resolves false when the save failed; the sheet then stays open (ux-contract §17.3).
+  Future<bool> _saveGoal(Goal? existingGoal, String title, double current, double target, String? emoji) async {
     final goalsProvider = Provider.of<GoalsProvider>(context, listen: false);
 
     if (existingGoal != null) {
-      await goalsProvider.updateGoal(existingGoal.id, title: title, currentValue: current, targetValue: target);
+      final updated =
+          await goalsProvider.updateGoal(existingGoal.id, title: title, currentValue: current, targetValue: target);
+      if (updated == null) return false;
 
       PlatformManager.instance.analytics.goalUpdated(goalId: existingGoal.id, source: 'home');
       if (emoji != null) {
@@ -257,10 +260,13 @@ class GoalsWidgetState extends State<GoalsWidget> with WidgetsBindingObserver {
           source: 'home',
         );
         if (mounted) setState(() => _goalEmojis[created.id] = smartEmoji);
+      } else {
+        return false;
       }
     }
 
     await _saveEmojis();
+    return true;
   }
 
   /// Immediate with Undo (D5); the emoji is forgotten once the delete commits.
@@ -422,7 +428,7 @@ class GoalsWidgetState extends State<GoalsWidget> with WidgetsBindingObserver {
                                 tickMarkShape: SliderTickMarkShape.noTickMark,
                               ),
                               child: Slider(
-                                value: goal.currentValue.clamp(0.0, goal.targetValue),
+                                value: (_dragValues[goal.id] ?? goal.currentValue).clamp(0.0, goal.targetValue),
                                 min: 0,
                                 max: goal.targetValue,
                                 divisions: goalSliderDivisions(goal.targetValue),
@@ -442,7 +448,7 @@ class GoalsWidgetState extends State<GoalsWidget> with WidgetsBindingObserver {
                         ),
                         const SizedBox(width: 8),
                         Text(
-                          '${_rawNum(goal.currentValue)}/${_rawNum(goal.targetValue)}',
+                          '${_rawNum(_dragValues[goal.id] ?? goal.currentValue)}/${_rawNum(goal.targetValue)}',
                           style: OmiType.footnote.copyWith(color: OmiColors.textSecondary, fontWeight: FontWeight.w500),
                         ),
                       ],
@@ -457,16 +463,41 @@ class GoalsWidgetState extends State<GoalsWidget> with WidgetsBindingObserver {
     );
   }
 
-  // Update UI state only (called during drag) - use provider for immediate feedback
+  /// Where each slider is while the finger is on it (and until its save answers), so the thumb
+  /// follows the finger rather than the saved value.
+  final Map<String, double> _dragValues = {};
+
+  /// Bumps on every drag and save, so only the latest save for a goal settles its slider.
+  final Map<String, int> _progressRevision = {};
+
   void _updateGoalProgressUI(Goal goal, double newValue) {
-    if (newValue == goal.currentValue) return;
+    final previous = _dragValues[goal.id] ?? goal.currentValue;
+    if (newValue == previous) return;
     OmiHaptics.light();
-    // The provider will notify listeners and the UI will update
+    _progressRevision[goal.id] = (_progressRevision[goal.id] ?? 0) + 1;
+    setState(() => _dragValues[goal.id] = newValue);
   }
 
-  // Save to storage and API (called when drag ends)
+  /// Saves where the drag ended. A failed save puts the slider back and says so, with Try Again
+  /// (ux-contract §17.4).
   Future<void> _saveGoalProgress(Goal goal, double newValue) async {
     final goalsProvider = Provider.of<GoalsProvider>(context, listen: false);
-    await goalsProvider.updateGoalProgress(goal.id, newValue);
+    final revision = (_progressRevision[goal.id] ?? 0) + 1;
+    _progressRevision[goal.id] = revision;
+    setState(() => _dragValues[goal.id] = newValue);
+    final saved = await goalsProvider.updateGoalProgress(goal.id, newValue);
+    // A newer drag or save owns the slider now: this answer neither clears it nor offers a retry.
+    if (!mounted || _progressRevision[goal.id] != revision) return;
+    setState(() => _dragValues.remove(goal.id));
+    if (saved == null) {
+      OmiFeedback.error(
+        context,
+        context.l10n.goalSaveFailed,
+        actionLabel: context.l10n.tryAgain,
+        onAction: () {
+          if (mounted) _saveGoalProgress(goal, newValue);
+        },
+      );
+    }
   }
 }

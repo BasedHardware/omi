@@ -80,9 +80,9 @@ production change made by the implementation PR.
 
 Watch `omi_stt_cap_dispatch_decisions_total{path,outcome,reason}`. The closed paths
 are `sync_v1`, `sync_v2`, `sync_segment`, `sync_language_probe`, `sync_empty_retry`,
-`sync_multilingual`, `batch_gpu`, `batch_provider`, `batch_speech_redrive`, and
-`batch_quarantine`. Outcomes are `allowed|held`; reasons are `scope_disabled`,
-`consent_denied`, `allowance_exhausted`, `budget_exhausted`,
+`sync_multilingual`, `batch_gpu`, `batch_intake`, `batch_provider`,
+`batch_speech_redrive`, and `batch_quarantine`. Outcomes are `allowed|held`;
+reasons are `scope_disabled`, `consent_denied`, `allowance_exhausted`, `budget_exhausted`,
 `allowance_unavailable`, `access_denied`, `entitled`, and `byok`. These count
 boundary decisions, not unique uploads, saved dollars or additional usage.
 No owner, session, content or raw error labels are accepted.
@@ -775,7 +775,9 @@ continue independently of recovery membership. The one-hot gauge
 configuration state; it does not prove which private owner is configured.
 
 For qualification, the deploy lead sets `uid:<test>` through the **private-values
-path**, never a committed manifest, on every API/sync recovery executor. Verify
+path** (on backend-listen: the Secret Manager document `LISTEN_PRIVATE_ENV`,
+see `docs/runbooks/listen-private-env.md`), never a committed manifest, on every
+API/sync recovery executor. Verify
 all serving revisions and scheduler targets carry the restriction **before**
 activating recovery. Staging is data-isolated (`FIRESTORE_DATABASE_ID=staging`
 in `based-hardware-dev`, in-cluster Redis, and the data-plane fence in

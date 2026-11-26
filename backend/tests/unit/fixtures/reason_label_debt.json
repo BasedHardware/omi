@@ -1065,14 +1065,6 @@
       "why": "main STT/notes observability via sync 15 (2026-10-21); owner lane 14 to bound"
     },
     {
-      "path": "utils/stt/legacy_replay.py",
-      "function": "reconnect_live_stt_socket",
-      "label": "reason",
-      "shape": "name",
-      "count": 4,
-      "why": "pre-existing; unreviewed"
-    },
-    {
       "path": "utils/stt/live_chain.py",
       "function": "_connect_backoff_event",
       "label": "provider",
@@ -1298,34 +1290,10 @@
     },
     {
       "path": "utils/stt/resilient_stream.py",
-      "function": "ResilientAudio.admit",
-      "label": "provider",
-      "shape": "name",
-      "count": 2,
-      "why": "pre-existing; unreviewed"
-    },
-    {
-      "path": "utils/stt/resilient_stream.py",
-      "function": "ResilientAudio.admit",
-      "label": "reason",
-      "shape": "name",
-      "count": 2,
-      "why": "pre-existing; unreviewed"
-    },
-    {
-      "path": "utils/stt/resilient_stream.py",
       "function": "ResilientAudio.record_replay",
       "label": "provider",
       "shape": "name",
       "count": 1,
-      "why": "pre-existing; unreviewed"
-    },
-    {
-      "path": "utils/stt/resilient_stream.py",
-      "function": "reconnect_live_stt_socket",
-      "label": "reason",
-      "shape": "name",
-      "count": 6,
       "why": "pre-existing; unreviewed"
     },
     {
@@ -1551,6 +1519,14 @@
       "shape": "attribute",
       "count": 1,
       "why": "typed enum fields (Result.outcome / Result.reason are StrEnum members), closed by type; the scanner cannot see types. Remove when the check learns attribute typing."
+    },
+    {
+      "path": "routers/listen/live_words.py",
+      "function": "LiveWordsSession._shutdown",
+      "label": "outcome",
+      "shape": "name",
+      "count": 1,
+      "why": "Flag vendor_recognizer_on_opened_app: the close reason is one of the module's own literal stop reasons (client, idle, replaced, provider and so on), never free text."
     }
   ]
 }

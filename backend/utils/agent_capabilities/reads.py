@@ -1,5 +1,6 @@
 """Owner-scoped decrypted reads; no writes or fixed planner retrieval."""
 
+from utils.conversations.layer import read_product as read_product_conversation
 from datetime import datetime, timezone
 import copy
 import zlib
@@ -87,7 +88,7 @@ def read_record(uid, ref, *, control_cache=None, diagnostics=None, require_avail
         # One full owner-scoped document read, no photo subcollection and no
         # metadata projection. Verify the blob before the tolerant product
         # decoder can silently replace corrupt/wrong-key speech with [].
-        raw = conversations.get_conversation_raw_snapshot(uid, key)
+        raw = read_product_conversation(conversations.get_conversation_raw_snapshot, uid, key)
         if not raw or not conversations.is_visible_conversation(raw):
             if require_available and conversations.is_visible_conversation(raw, include_discarded=True):
                 raise AgentRecordUnavailable('Dream conversation temporarily hidden')
@@ -184,7 +185,9 @@ def preview_record(uid, ref, *, need_speakers=False):
     """Bounded search hydration. Full records stay on `read_record`."""
     collection, separator, key = ref.partition('/')
     if not need_speakers and separator and key and '/' not in key and collection == 'conversations':
-        raw = conversations.get_conversation_raw_snapshot(uid, key, field_paths=list(_CONVERSATION_PREVIEW_FIELDS))
+        raw = read_product_conversation(
+            conversations.get_conversation_raw_snapshot, uid, key, field_paths=list(_CONVERSATION_PREVIEW_FIELDS)
+        )
         if not raw or not conversations.is_visible_conversation(raw) or raw.get('is_locked'):
             return None
         stored = raw.get('structured')

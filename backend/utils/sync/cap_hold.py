@@ -15,6 +15,7 @@ import wave
 from uuid import uuid4
 from typing import Any
 from models.conversation_enums import ConversationSource
+from utils.other.private_sync_get_metrics import Reader, object_get_reader
 from utils.observability.held_content import record_capture
 from utils.observability.stt_cap_dispatch import record_audio, record_allowance_decision, DispatchPath
 from utils.stt_cap_dispatch import funded_allowance
@@ -390,7 +391,11 @@ def hold_segment(uid: str, path: str, metadata: dict[str, Any], *, receipt: dict
         if not created and not _exists(uid, identity):
             record_capture('ack_without_authority')
     return _finish(
-        identity, seconds, funded_allowance(uid, lane=metadata.get('origin', 'sync')).reason, receipt, created
+        identity,
+        seconds,
+        funded_allowance(uid, lane=metadata.get('origin', 'sync')).reason,
+        receipt,
+        created,
     )
 
 
@@ -456,6 +461,7 @@ def _read_single_audio(uid: str, row: dict[str, Any], path: str) -> None:
             raise
 
 
+@object_get_reader(Reader.SYNC_RECOVERY)
 def read_audio(uid: str, row: dict[str, Any], path: str) -> None:
     if row.get('source_slice'):
         return _read_source_slice(uid, row, path)
@@ -530,6 +536,7 @@ def _read_source_slice(uid: str, row: dict[str, Any], path: str) -> None:
         raise ValueError('held source decode changed since frozen plan')
 
 
+@object_get_reader(Reader.SYNC_RECOVERY)
 def metadata(uid: str, row: dict[str, Any]) -> dict[str, Any]:
     if row.get('metadata_path'):
         if not row['metadata_path'].startswith(f'chunks/{uid}/cap-held/'):

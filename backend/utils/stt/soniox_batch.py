@@ -10,6 +10,7 @@ import asyncio
 import math
 import os
 import time
+from collections import deque
 from uuid import UUID
 
 import httpx
@@ -30,6 +31,12 @@ BASE_URL = 'https://api.soniox.com/v1'
 MODEL = SONIOX_HELD_RECOVERY_MODEL
 DEADLINE_SECONDS = 120
 MAX_HTTP_ATTEMPTS = 3
+# A refused transcription DELETE (429, or still processing at the deadline) is
+# retried by later calls. Ids are never persisted, so a leaked transcription is
+# an orphan that counts toward Soniox's 2,000 stored-transcription cap; at the
+# cap every create is refused with 429 (2026-11-13).
+DEFERRED_CLEANUP_PER_CALL = 3
+_DEFERRED_CLEANUP: deque[str] = deque(maxlen=2000)
 
 
 ERROR_KINDS = frozenset(
@@ -69,6 +76,29 @@ def _typed(error: BaseException, submitted: bool) -> SonioxBatchError:
     if isinstance(error, (KeyError, TypeError, ValueError)):
         return SonioxBatchError('invalid_response', submitted=submitted)
     return SonioxBatchError('error', submitted=submitted)
+
+
+def _cleanup_paths(transcription_id, file_id) -> list[str]:
+    paths = [
+        path
+        for path in (
+            f'/transcriptions/{transcription_id}' if transcription_id else None,
+            f'/files/{file_id}' if file_id else None,
+        )
+        if path
+    ]
+    for _ in range(DEFERRED_CLEANUP_PER_CALL):
+        try:
+            paths.append(_DEFERRED_CLEANUP.popleft())
+        except IndexError:
+            break
+    return paths
+
+
+def _cleanup_failed(path: str, status_code: int | None) -> None:
+    logger.warning('event=soniox_batch_cleanup outcome=failed http_status=%s', status_code)
+    if path.startswith('/transcriptions/'):
+        _DEFERRED_CLEANUP.append(path)
 
 
 def request_retry_delay(error, method, path, attempt, remaining):
@@ -297,17 +327,13 @@ def transcribe(
         finally:
             # Remove only this call's temporary vendor resources. Original Omi
             # artifacts stay in custody. Cleanup cannot authorize another POST.
-            for path in (
-                f'/transcriptions/{transcription_id}' if transcription_id else None,
-                f'/files/{file_id}' if file_id else None,
-            ):
-                if path:
-                    try:
-                        response = client.request('DELETE', BASE_URL + path, timeout=5)
-                        if response.status_code not in {200, 204, 404}:
-                            logger.warning('event=soniox_batch_cleanup outcome=failed')
-                    except Exception:
-                        logger.warning('event=soniox_batch_cleanup outcome=failed')
+            for path in _cleanup_paths(transcription_id, file_id):
+                try:
+                    response = client.request('DELETE', BASE_URL + path, timeout=5)
+                    if response.status_code not in {200, 204, 404}:
+                        _cleanup_failed(path, response.status_code)
+                except Exception:
+                    _cleanup_failed(path, None)
 
 
 async def transcribe_async(
@@ -410,18 +436,14 @@ async def transcribe_async(
     except Exception as error:
         raise final_failure(error, submitted) from None
     finally:
-        for path in (
-            f'/transcriptions/{transcription_id}' if transcription_id else None,
-            f'/files/{file_id}' if file_id else None,
-        ):
-            if path:
-                try:
-                    async with asyncio.timeout(5):
-                        async with semaphore:
-                            response = await client.request(
-                                'DELETE', BASE_URL + path, headers=headers, timeout=5, follow_redirects=False
-                            )
-                    if response.status_code not in {200, 204, 404}:
-                        logger.warning('event=soniox_batch_cleanup outcome=failed')
-                except Exception:
-                    logger.warning('event=soniox_batch_cleanup outcome=failed')
+        for path in _cleanup_paths(transcription_id, file_id):
+            try:
+                async with asyncio.timeout(5):
+                    async with semaphore:
+                        response = await client.request(
+                            'DELETE', BASE_URL + path, headers=headers, timeout=5, follow_redirects=False
+                        )
+                if response.status_code not in {200, 204, 404}:
+                    _cleanup_failed(path, response.status_code)
+            except Exception:
+                _cleanup_failed(path, None)

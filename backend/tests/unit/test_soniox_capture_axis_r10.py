@@ -59,7 +59,6 @@ def values():
 
 async def managed(monkeypatch, enabled):
     monkeypatch.setenv('SONIOX_CAPTURE_AXIS_DIAGNOSTICS', str(enabled).lower())
-    monkeypatch.setenv('SONIOX_ELAPSED_AXIS', 'shadow')
     monkeypatch.setenv('SONIOX_IDLE_CLOSE_SECONDS', '0')
     monkeypatch.setenv('SONIOX_API_KEY', 'offline-placeholder')
     monkeypatch.setenv('LIVE_CAPTURE_WINDOW_TRANSLATOR_SENDS', 'true')

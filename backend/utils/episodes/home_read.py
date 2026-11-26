@@ -14,12 +14,14 @@ from typing import Any, get_args
 from google.cloud import firestore
 from google.cloud.firestore_v1 import FieldFilter
 
-from utils.conversations.transcribing_hold import transcription_presentation
+from utils.conversations import transcribing_hold, legacy_empty_wire, empty_capture
 from utils.conversations import home_step as home_step_projection
 from utils.conversations import phase_shadow
 
 from config.episodes import (
     home_hide_below_floor_rows_enabled,
+    home_step_projection_enabled,
+    home_transcription_queue_hold_enabled,
     HOME_IDLE_CLOSES_PER_READ,
     COMPOSER_LOOKUP_SCHEDULES_PER_WINDOW,
     COMPOSER_MAX_SCHEDULED_PER_READ,
@@ -31,7 +33,7 @@ from database import conversations, episodes
 from database._client import get_firestore_client
 from database.firestore_cache_metrics import record_request
 from database.firestore_retry import FIRESTORE_NO_RETRY
-from database.fsr_read_cache import plane_id
+from database.fsr_read_cache import fresh_reader, plane_id
 from database.firestore_read_origin import read_origin
 from utils.read_cache_shadow import compare_hit
 from utils.episodes.timeline import ownership_end
@@ -105,6 +107,8 @@ def wire_episode(episode: dict[str, Any] | None) -> dict[str, Any] | None:
 
 
 MEMBER_FIELDS = [
+    'recording',
+    'home_hidden',
     'structured',
     'user_title',
     'data_protection_level',
@@ -123,10 +127,12 @@ MEMBER_FIELDS = [
     'photos',
     'starred',
     'folder_user_set',
+    'episode_transcript_updated_at',
     'episode_transcription_pending_at',
     'episode_transcription_deadline_at',
     'server_batch_audio_start',
     'server_batch_audio_end',
+    *transcribing_hold.READ_FIELDS,
     *SETTLING_FIELDS,
     *SUMMARY_DEBT_FIELDS,
 ]
@@ -173,7 +179,9 @@ def _read_members(uid: str, rows: list[dict[str, Any]], *, firestore_client: Any
                 pass
             try:
                 compare_hit(
-                    'episode_members', cached[1], lambda timeout: _fetch_members(uid, ids, client, timeout=timeout)
+                    'episode_members',
+                    cached[1],
+                    fresh_reader(lambda timeout: _fetch_members(uid, ids, client, timeout=timeout)),
                 )
             except Exception:
                 pass  # Even broken observation must preserve the cached response.
@@ -431,6 +439,8 @@ def _too_short_for_a_home_row(row: dict[str, Any]) -> bool:
 
     List only: search, a direct link and Show discarded still reach it, and nothing is stored.
     """
+    if empty_capture.applies(row):
+        return True
     if not home_hide_below_floor_rows_enabled():
         return False
     return is_completed_below_floor(row)
@@ -446,7 +456,21 @@ def project_episode(
     if episode is None:
         return None
     by_id = members if members is not None else _read_members(uid, [episode])
+    # Read-only evidence for legacy dangling references; never put it on the wire.
+    episode.pop('_member_absent_ids', None)
+    absent = [cid for cid in episode.get('conversation_ids') or [] if cid not in by_id]
+    if absent:
+        episode['_member_absent_ids'] = absent
+    # Private read observation only; never persisted or included in the wire projection.
+    episode.pop('_member_transcript_updated_at', None)
+    episode.pop('_member_transcript_updates', None)
+    transcript_updates = []
+    transcript_member_updates = {}
+    excluded = set(episode.get('discarded_conversation_ids') or []) | set(
+        episode.get('duplicate_conversation_ids') or []
+    )
     retained: list[dict[str, Any]] = []
+    transcription_states: list[str] = []
     hidden = 0
     now = datetime.now(timezone.utc)
     zone = user_zone_provider(uid)
@@ -473,23 +497,32 @@ def project_episode(
             phase_shadow.observe('episode_member', row, False, episode=episode)
             continue
         phase_shadow.observe('episode_member', row, True, episode=episode)
+        if cid not in excluded and (updated := utc(row.get('episode_transcript_updated_at'))):
+            transcript_updates.append(updated)
+            transcript_member_updates[cid] = updated
         from utils.conversations.home_titles import neutralize_minimum_title
 
         # Classify on the stored read copy, before the presentation rewrite below.
         step = home_step_projection.classify(row)
+        empty_placeholder = empty_capture.applies(row, now=now)
         row = neutralize_minimum_title(row, tz_name_provider=zone)
+        row = legacy_empty_wire.project(row, noise=step == home_step_projection.NOISE)
+        row = empty_capture.project(row, now=now)
         structured: dict[str, Any] = row.get('structured') or {}
         title = structured.get('title') or ''
         status = row.get('status') or 'completed'
         started = row.get('started_at') or row.get('created_at') or episode['started_at']
         finished = row.get('finished_at')
         deadline = utc(row.get('episode_transcription_deadline_at'))
-        if deadline is not None and not row.get('record_projection_revision'):
+        if deadline is not None and not row.get('record_projection_revision') and not empty_placeholder:
+            deadline = transcribing_hold.deadline(row, prefix='episode_transcription')
             overdue = now >= deadline
-            failed = (
-                row.get('finalization_status') == 'dead_letter' or status == 'failed' or row.get('record_upload_failed')
+            title, status = transcribing_hold.transcription_presentation(
+                deadline, failed=transcribing_hold.failed(row), now=now
             )
-            title, status = transcription_presentation(deadline, failed=bool(failed), now=now)
+            transcription_states.append(status)
+            if home_transcription_queue_hold_enabled() and home_step_projection_enabled():
+                step = home_step_projection.FAILED if status == 'failed' else home_step_projection.TRANSCRIBING
             # Audio bounds remain truthful even when finalization never filled its clocks.
             for key, value in (
                 ('start', row.get('server_batch_audio_start')),
@@ -518,6 +551,10 @@ def project_episode(
         episode_metrics.record_home_members(shown=len(retained), hidden=hidden)
     if not retained:
         return None
+    if episode.get('compose_transcript_wait_members') is not None:
+        episode['_member_transcript_updates'] = transcript_member_updates
+    if transcript_updates:
+        episode['_member_transcript_updated_at'] = max(transcript_updates)
     retained.sort(key=lambda member: str(member['started_at']))
     ids = {member['id'] for member in retained}
     wire = wire_episode(episode)
@@ -538,4 +575,8 @@ def project_episode(
             if not item.get('conversation_id') or item.get('conversation_id') in ids
         ],
     )
+    if home_transcription_queue_hold_enabled() and len(transcription_states) == len(retained):
+        # An episode made entirely of pending captures shares their presentation,
+        # including its page title, without persisting an outage-era failure title.
+        wire['title'] = 'Transcribing…' if 'processing' in transcription_states else "Couldn't transcribe"
     return wire

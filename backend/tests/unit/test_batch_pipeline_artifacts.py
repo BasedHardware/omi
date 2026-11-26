@@ -7,7 +7,7 @@ import time
 from types import SimpleNamespace
 
 from cryptography.exceptions import InvalidTag
-from google.api_core.exceptions import NotFound
+from google.api_core.exceptions import NotFound, PreconditionFailed
 import pytest
 
 from utils.batch_pipeline.artifacts import (
@@ -29,6 +29,9 @@ class ObjectClient:
         self.objects = {}
         self.uploads = 0
         self.downloads = 0
+        self.reloads = []
+        self.metageneration = 1
+        self.before_download = lambda: None
         self.after_upload = lambda: None
         self.after_download = lambda: None
         self.reported_size = None
@@ -48,8 +51,11 @@ class ObjectClient:
 
         class Blob:
             def __init__(self):
+                self.name = name
                 self.generation = generation
+                self.metageneration = None
                 self.size = None
+                self.metadata = None
 
             def upload_from_file(self, stream, **kw):
                 body = stream.read()
@@ -64,16 +70,21 @@ class ObjectClient:
                 client.after_upload()
 
             def reload(self, **kw):
+                client.reloads.append(kw)
                 if name not in client.objects:
                     raise NotFound('synthetic absent object')
                 stored_generation, body = client.objects[name]
                 self.generation = stored_generation
+                self.metageneration = client.metageneration
                 if kw.get('if_generation_match', stored_generation) != stored_generation:
                     raise ValueError('generation mismatch')
                 self.size = client.reported_size or len(body)
 
             def download_as_bytes(self, **kw):
                 client.downloads += 1
+                client.before_download()
+                if kw.get('if_metageneration_match', client.metageneration) != client.metageneration:
+                    raise PreconditionFailed('metadata changed')
                 stored_generation, body = client.objects[name]
                 assert stored_generation == kw['if_generation_match']
                 client.after_download()
@@ -380,3 +391,21 @@ def test_manifest_source_reads_share_the_staging_budget(max_objects):
     manifest_size = sum(len(body) for _, body in client.objects.values()) - len(pcm)
     assert budget.received_bytes == budget.downloaded_bytes == manifest_size + (len(pcm) if max_objects == 2 else 0)
     assert checks == [budget] * (3 if max_objects == 2 else 2)
+
+
+@pytest.mark.parametrize('mode', ['on', 'off', 'metadata_race'])
+def test_recovery_metadata_reuse_keeps_generation_and_authorization(monkeypatch, mode):
+    store, client, state = setup()
+    original = item()
+    token = 'a' * 32
+    uri = store.persist_recovery_result(original, {'words': []}, token)
+    if mode == 'off':
+        monkeypatch.setenv('BATCH_ARTIFACT_METADATA_REUSE_ENABLED', 'false')
+    if mode == 'metadata_race':
+        client.before_download = lambda: setattr(client, 'metageneration', 2)
+    assert store.find_recovery_result(original, token) == uri
+    assert len(client.reloads) == (1 if mode == 'on' else 2)
+    assert client.downloads == (2 if mode == 'metadata_race' else 1)
+    client.after_download = lambda: setattr(state, 'context', ProtectionContext('enhanced', 1))
+    with pytest.raises(PermissionError):
+        store.find_recovery_result(original, token)

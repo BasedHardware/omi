@@ -13,6 +13,8 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 import pytest
 
+from routers import knowledge_graph as kg_router
+
 
 def _item(
     id: str,
@@ -492,8 +494,6 @@ def test_knowledge_graph_get_is_deterministic_and_bounded_for_large_fixtures(
 
 
 def test_knowledge_graph_route_exposes_truncation(monkeypatch):
-    import routers.knowledge_graph as kg_router
-
     payload = {
         'nodes': [{'id': 'n1'}],
         'edges': [],
@@ -523,7 +523,5 @@ def test_knowledge_graph_route_exposes_truncation(monkeypatch):
 
 
 def test_knowledge_graph_route_keeps_firebase_auth_dependency():
-    from routers import knowledge_graph as kg_router
-
     route = next(route for route in kg_router.router.routes if route.path == '/v1/knowledge-graph')
     assert [dependency.call for dependency in route.dependant.dependencies] == [kg_router.auth.get_current_user_uid]

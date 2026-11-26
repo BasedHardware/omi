@@ -32,6 +32,10 @@ from utils.stt.streaming import SafeModulateSocket
 
 from tests.unit.fixtures.replay_clock import virtual_clock  # noqa: F401
 
+# SCA-1999: replay still races real event-loop deadlines with its virtual clock.
+# backend-slow-timing-tests.yml runs this file on every main push.
+pytestmark = pytest.mark.slow
+
 
 @pytest.fixture(autouse=True)
 def _stt_failover_recovery_on(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -134,7 +138,7 @@ async def test_full_replay_backpressures_small_real_queue_without_drop(kind):
     transport.gate.clear()
     ring = full_ring()
     expected = b''.join(data for _, data in ring.snapshot())
-    task = asyncio.create_task(replay_chunks(raw, ring.snapshot(), source=ring, provider='parakeet', soniox=None))
+    task = asyncio.create_task(replay_chunks(raw, ring.snapshot(), source=ring, provider='parakeet'))
     try:
         await until(lambda: raw._send_queue.qsize() + raw._send_queue.inflight >= raw._send_queue.maxsize)
         assert not task.done() and not raw.is_connection_dead
@@ -426,7 +430,7 @@ async def test_stalled_default_queue_replay_never_hides_behind_2000_slots(monkey
     raw.replay_send = lambda data, start: raw.send(data)
     ring = full_ring()
     try:
-        rejected = await replay_chunks(raw, ring.snapshot(), source=ring, provider='parakeet', soniox=None)
+        rejected = await replay_chunks(raw, ring.snapshot(), source=ring, provider='parakeet')
         assert rejected is not None
         assert raw._send_queue.maxsize == 2000 and raw._send_queue.high_water == 2
         assert raw.typed_death_reason == 'replay_send_stalled'
@@ -581,6 +585,16 @@ async def test_slow_consumer_full_ring_paced_budget_and_realtime_live_order(monk
     captured = []
 
     async def ingest():
+        # Synthetic capture starts only once the successor's paced prefix has
+        # actually begun. Before the first replay packet is enqueued nothing on
+        # the replay leg pins the virtual clock, so a runner-slowed failover
+        # dial parked off-clock while this free-running loop advanced audio time
+        # past it; the rebased prefix then serialized after the full 21 s of
+        # capture and landed past the 20 s wall the budget asserts below
+        # (SCA-2182: replay_wall 39.974 vs the 21.537 bound on shard 2/8).
+        async with asyncio.timeout(10):
+            while not (raws and raws[-1]._send_queue.enqueued_audio):
+                await asyncio.sleep(0)
         for n in range(70):  # 21s of real-time capture; continues past adoption.
             await virtual_clock.sleep(0.3)
             data = (6000 + n).to_bytes(2, 'little') * 4800

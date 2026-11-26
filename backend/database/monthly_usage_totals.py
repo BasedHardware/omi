@@ -8,20 +8,19 @@ import calendar
 from contextlib import contextmanager
 from datetime import datetime, timezone
 import math
-import os
-import re
 from typing import Any, Callable, Iterator
 
 from google.cloud import firestore
 from google.cloud.firestore_v1 import FieldFilter
 
 from config.firestore_read_levers import lever_enabled
+from config.monthly_usage import FIELDS as FIELDS, usage_month_epoch as usage_month_epoch
 from database._client import get_firestore_client
 from database.firestore_read_origin import read_origin
 from database.legal_holds import DestructiveOperationInProgress, external_write_fence
+from database.monthly_usage_observation import observe_monthly_usage
 from utils.observability.fallback import record_fallback
 
-FIELDS = ('transcription_seconds', 'words_transcribed', 'insights_gained', 'memories_created', 'speech_seconds')
 SCHEMA_VERSION = 1
 
 
@@ -77,12 +76,6 @@ def queue_invalidation(writer: Any, user_ref: Any, date: datetime) -> None:
     writer.set(month_ref(user_ref, date), {'ready': False}, merge=True)
 
 
-def _epoch() -> str:
-    value = os.environ.get('FSR_USAGE_MONTH_TOTAL_EPOCH', 'v1')
-    # Empty/malformed epochs must never accidentally reuse a ready total.
-    return value if re.fullmatch(r'[A-Za-z0-9_-]{1,64}', value) else ''
-
-
 def _numeric_stats(value: Any) -> bool:
     return isinstance(value, dict) and all(
         type(value.get(key, 0)) in (int, float) and math.isfinite(value.get(key, 0)) for key in FIELDS
@@ -122,8 +115,15 @@ def verified_transcription_seconds(data: Any, now: datetime) -> float:
     """Validate a transaction's billing snapshot without a second, racy read."""
     if data is None or isinstance(data, dict) and data.get('ready') is not True:
         raise UsageBaselineNotReady('unverified monthly usage')
-    epoch = _epoch()
-    if not epoch or not isinstance(data, dict) or not _ready(data, epoch, now):
+    epoch = usage_month_epoch()
+    if not epoch or not isinstance(data, dict):
+        raise ValueError('unverified monthly usage')
+    if not _ready(data, epoch, now):
+        other = data.get('epoch')
+        if isinstance(other, str) and other != epoch and _ready(data, other, now):
+            # Ready under another service's epoch: the fenced source scan can
+            # re-prove it under ours, so this is a missing baseline, not corruption.
+            raise UsageBaselineNotReady('monthly usage ready under another epoch')
         raise ValueError('unverified monthly usage')
     value = data['totals'].get('transcription_seconds')
     if type(value) not in (int, float) or not math.isfinite(value) or value < 0:
@@ -138,15 +138,20 @@ def establish_verified_month(uid: str, date: datetime, *, firestore_client: Any 
     malformed sources, missing roots and invalid epochs remain unavailable.
     There is no rollout/cohort gate on this accounting initialization.
     """
-    epoch = _epoch()
+    epoch = usage_month_epoch()
     if not epoch:
         raise ValueError('invalid usage epoch')
     client = firestore_client if firestore_client is not None else get_firestore_client()
     date = date.astimezone(timezone.utc)
-    data = _rebuild(
+    data, read_time = _rebuild(
         client.transaction(), client.collection('users').document(uid), date, epoch, firestore_client=client
-    )
+    ) or (None, None)
     verified_transcription_seconds(data, date)
+    observe_verified_month(uid, date, data, read_time, client)
+
+
+def observe_verified_month(uid: str, date: datetime, data: Any, read_time: Any, firestore_client: Any) -> None:
+    observe_monthly_usage('free_allowance', uid, date, None, data['totals'], firestore_client, read_time, data['epoch'])
 
 
 def _month_rows(user_ref: Any, date: datetime, transaction: Any) -> Any:
@@ -160,7 +165,9 @@ def _month_rows(user_ref: Any, date: datetime, transaction: Any) -> Any:
 
 @firestore.transactional
 @read_origin('job:usage_month_total_rebuild')
-def _rebuild(transaction: Any, user_ref: Any, date: datetime, epoch: str, *, firestore_client: Any) -> dict | None:
+def _rebuild(
+    transaction: Any, user_ref: Any, date: datetime, epoch: str, *, firestore_client: Any
+) -> tuple[dict, datetime | None] | None:
     """Source scan and publication share a snapshot and conflict with ALL writers."""
     # A read now materializes derived user data. Use the existing transaction
     # fence so deletion cannot inventory the subtree before this write lands.
@@ -169,9 +176,11 @@ def _rebuild(transaction: Any, user_ref: Any, date: datetime, epoch: str, *, fir
         if not user_ref.get(transaction=transaction).exists:
             return None
         ref = month_ref(user_ref, date)
-        current = ref.get(transaction=transaction).to_dict() or {}
+        snapshot = ref.get(transaction=transaction)
+        current = snapshot.to_dict() or {}
+        read_time = getattr(snapshot, 'read_time', None)
         if _ready(current, epoch, date):
-            return current
+            return current, read_time
         totals = dict.fromkeys(FIELDS, 0)
         days: dict[str, dict] = {}
         for snap in _month_rows(user_ref, date, transaction):
@@ -205,39 +214,64 @@ def _rebuild(transaction: Any, user_ref: Any, date: datetime, epoch: str, *, fir
         # Replace: a reset may have invalidated stale daily fields, and concurrent
         # increments must conflict/retry rather than merge into an old baseline.
         transaction.set(ref, data)
-        return data
+        return data, read_time
+
+
+def _observe_total(uid, date, start_date, stats, client, read_time, epoch, metadata):
+    if metadata is not None and isinstance(read_time, datetime):
+        metadata.update(read_time=read_time, epoch=epoch)
+    observe_monthly_usage('total_uncached', uid, date, start_date, stats, client, read_time, epoch)
 
 
 @read_origin('job:usage_month_total_read')
 def read_monthly_totals(
-    uid: str, date: datetime, *, firestore_client: Any = None, start_date: datetime | None = None
+    uid: str,
+    date: datetime,
+    *,
+    firestore_client: Any = None,
+    start_date: datetime | None = None,
+    ready_only: bool = False,
+    shadow_metadata: dict | None = None,
 ) -> dict | None:
     """One warm document read, including arbitrary day-cutoff and late updates.
 
     None requests the unchanged hourly query. Redis and reader cohort selection
-    do not participate in accounting or maintenance.
+    do not participate in accounting or maintenance. A speculative intake read
+    uses only an already-verified document and leaves misses to the spend gate.
     """
-    if not lever_enabled('usage_month_total', uid) or not (epoch := _epoch()):
+    if not lever_enabled('usage_month_total', uid) or not (epoch := usage_month_epoch()):
         return None
     try:
         firestore_client = firestore_client if firestore_client is not None else get_firestore_client()
         user_ref = firestore_client.collection('users').document(uid)
-        data = month_ref(user_ref, date).get().to_dict() or {}
+        ref = month_ref(user_ref, date)
+        options = {'timeout': 1, 'retry': None} if ready_only else {}
+        snapshot = ref.get(**options)
+        data = snapshot.to_dict() or {}
+        read_time = getattr(snapshot, 'read_time', None)
         if not _ready(data, epoch, date):
-            data = _rebuild(firestore_client.transaction(), user_ref, date, epoch, firestore_client=firestore_client)
+            if ready_only:
+                return None
+            data, read_time = _rebuild(
+                firestore_client.transaction(), user_ref, date, epoch, firestore_client=firestore_client
+            ) or (None, None)
         if data is not None:
             if start_date is None or (start_date.year, start_date.month) < (date.year, date.month):
-                return {key: data['totals'].get(key, 0) for key in FIELDS}
-            stats = dict.fromkeys(FIELDS, 0)
-            if (start_date.year, start_date.month) == (date.year, date.month):
-                for day, values in data['days'].items():
-                    if int(day) >= start_date.day:
-                        for key in FIELDS:
-                            stats[key] += values.get(key, 0)
+                stats = {key: data['totals'].get(key, 0) for key in FIELDS}
+            else:
+                stats = dict.fromkeys(FIELDS, 0)
+                if (start_date.year, start_date.month) == (date.year, date.month):
+                    for day, values in data['days'].items():
+                        if int(day) >= start_date.day:
+                            for key in FIELDS:
+                                stats[key] += values.get(key, 0)
+            _observe_total(uid, date, start_date, stats, firestore_client, read_time, epoch, shadow_metadata)
             return stats
     except Exception:
         # Do not retain a stale total on transaction/read failure.
         pass
+    if ready_only:
+        return None
     record_fallback(
         component='firestore_read',
         from_mode='monthly_total',

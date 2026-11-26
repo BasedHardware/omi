@@ -1243,6 +1243,15 @@
     "enterYourName": "Enter your name",
     "nameCannotBeEmpty": "Name cannot be empty",
     "nameUpdatedSuccessfully": "Name updated successfully!",
+    "calendarReadSelectionHelp": "Read selected calendars. New events use {calendar}.",
+    "@calendarReadSelectionHelp": {
+        "description": "Explains that read/import choices do not change the primary calendar used for new events",
+        "placeholders": {
+            "calendar": {
+                "type": "String"
+            }
+        }
+    },
     "calendarSettings": "Calendar settings",
     "calendarProviders": "Calendar Providers",
     "macOsCalendar": "macOS Calendar",
@@ -2027,6 +2036,18 @@
     "memoryHistory": "History",
     "@memoryHistory": {
         "description": "Filter option for retained memory history"
+    },
+    "recordingWithYourPhone": "Recording with your phone",
+    "@recordingWithYourPhone": {
+        "description": "Home's recording bar, line 1: this phone is recording a live conversation"
+    },
+    "wrapUp": "Wrap Up",
+    "@wrapUp": {
+        "description": "Button on Home's recording bar: end the phone recording and process it"
+    },
+    "recordingDiscarded": "Recording discarded",
+    "@recordingDiscarded": {
+        "description": "Confirmation after Undo on Home's recording bar: the accidental recording was thrown away"
     },
     "undo": "Undo",
     "@undo": {
@@ -8775,6 +8796,10 @@
     "@authFailedToSignInWithApple": {
         "description": "Error message when Apple sign-in fails"
     },
+    "authAppleSignInFailedUseGoogle": "Sign in with Apple didn't work. Try again or continue with Google.",
+    "@authAppleSignInFailedUseGoogle": {
+        "description": "Shown after Sign in with Apple fails for a reason other than the user cancelling; points to the Google button on the same screen"
+    },
     "authFailedToRetrieveToken": "Failed to retrieve firebase token, please try again.",
     "@authFailedToRetrieveToken": {
         "description": "Error message when retrieving Firebase token fails"
@@ -8786,6 +8811,30 @@
     "authUnexpectedError": "Unexpected error signing in, please try again",
     "@authUnexpectedError": {
         "description": "Error message for unexpected error during sign-in"
+    },
+    "accountSignInMethods": "Sign-in methods",
+    "@accountSignInMethods": {
+        "description": "Heading for the sign-in methods in Account settings."
+    },
+    "accountAddSignInMethod": "Add sign-in method",
+    "@accountAddSignInMethod": {
+        "description": "Confirmation title shown before opening a provider sign-in."
+    },
+    "accountAddSignInMethodDetails": "Add a way to sign in to this Omi account. Your plan, recordings and integrations stay with this account.",
+    "@accountAddSignInMethodDetails": {
+        "description": "Explains what adding a sign-in method to the current account will do."
+    },
+    "accountSignInConflictTitle": "This sign-in belongs to another account",
+    "@accountSignInConflictTitle": {
+        "description": "Title shown when a sign-in method is already bound to a different account."
+    },
+    "accountSignInConflictDetails": "You’re still signed in here. Each Omi account keeps its plan, recordings and integrations.",
+    "@accountSignInConflictDetails": {
+        "description": "Explains a rejected provider link and how to open the separate account."
+    },
+    "accountSignInMethodAdded": "Sign-in method added",
+    "@accountSignInMethodAdded": {
+        "description": "Confirmation after adding a new sign-in method to the current account."
     },
     "authFailedToLinkGoogle": "Failed to link with Google, please try again.",
     "@authFailedToLinkGoogle": {
@@ -10828,7 +10877,7 @@
     "syncInProgress": "Sync in progress",
     "syncStatusUploaded": "Uploaded · processing on Omi",
     "deleteWhileProcessingTitle": "Still Processing",
-    "deleteWhileProcessingMessage": "This recording is uploaded but Omi is still creating the conversation. If you delete it now and processing fails, it can't be recovered. Delete anyway?",
+    "deleteWhileProcessingMessage": "This recording is already uploaded and Omi is processing it. Deleting it here removes the phone's copy. If processing fails, Omi can't retry from this phone.",
     "syncCardAllBackedUp": "All recordings synced",
     "syncCardReadyCount": "{count, plural, =1{1 recording ready to sync} other{{count} recordings ready to sync}}",
     "@syncCardReadyCount": {
@@ -14573,7 +14622,7 @@
     "@diagnosticsLongestGap": {
         "description": "Device Diagnostics row title: the longest time the device took to reconnect"
     },
-    "diagnosticsSincePairingSummary": "Since pairing: {drops} drops, {failed} failed connections.",
+    "diagnosticsSincePairingSummary": "Since pairing: {drops} reconnections, {failed} failed connections.",
     "@diagnosticsSincePairingSummary": {
         "description": "Device Diagnostics footnote under the 7-day summary with lifetime counts",
         "placeholders": {
@@ -16117,6 +16166,10 @@
             }
         }
     },
+    "paywallTrialCodeHint": "Have an Omi Pro code? Add it on the next screen.",
+    "@paywallTrialCodeHint": {
+        "description": "Trial paywall line under the Try button: a prepaid or promo code is entered on the Stripe checkout screen that opens next"
+    },
     "paywallTrialCancelNote": "Cancel anytime. No fees, no penalties.",
     "@paywallTrialCancelNote": {
         "description": "Paywall footnote"
@@ -16199,27 +16252,6 @@
             }
         }
     },
-    "syncCardTranscribingAmount": "Turning {amount} into conversations",
-    "@syncCardTranscribingAmount": {
-        "description": "Offline Sync status card title while the server transcribes uploaded audio; amount is a compact audio length.",
-        "placeholders": {
-            "amount": {
-                "type": "String"
-            }
-        }
-    },
-    "syncCardTranscribedOf": "{done} of {total} done · you can leave this screen",
-    "@syncCardTranscribedOf": {
-        "description": "Offline Sync status card subtitle while the server transcribes: compact audio lengths done and total.",
-        "placeholders": {
-            "done": {
-                "type": "String"
-            },
-            "total": {
-                "type": "String"
-            }
-        }
-    },
     "syncCardReadyAmount": "{amount} ready to sync",
     "@syncCardReadyAmount": {
         "description": "Offline Sync status card title when recordings wait for a manual sync; amount is a compact audio length.",
@@ -16253,9 +16285,9 @@
     "@syncDetailsWaitingOnPhone": {
         "description": "Sync details row label: audio on the phone that has not been uploaded yet."
     },
-    "syncDetailsTranscribing": "Transcribing on Omi",
+    "syncDetailsTranscribing": "Uploaded, awaiting server",
     "@syncDetailsTranscribing": {
-        "description": "Sync details row label: audio uploaded and still being transcribed by Omi."
+        "description": "Sync details stage label for uploaded audio awaiting a confirmed server outcome."
     },
     "syncDetailsAudioFiles": "Audio files",
     "@syncDetailsAudioFiles": {
@@ -16480,7 +16512,7 @@
     },
     "activityAttentionStorageUnknownTitle": "Can't check storage",
     "@activityAttentionStorageUnknownTitle": {
-        "description": "Activity capture attention row title when the free-space probe itself failed (reason disk_space_unknown); the disk may not actually be full."
+        "description": "Title for an unresolved storage check in capture attention or Offline Sync."
     },
     "activityAttentionStorageSubtitle": "Recordings paused",
     "@activityAttentionStorageSubtitle": {
@@ -16878,6 +16910,14 @@
     "summaryBusyBody": "Omi is already working on this conversation. The summary will appear here when it finishes.",
     "@summaryBusyBody": {
         "description": "Body when the conversation is already being processed. Omi is the product name."
+    },
+    "summaryTranscriptionPendingTitle": "Not transcribed yet",
+    "@summaryTranscriptionPendingTitle": {
+        "description": "Status shown in place of a summary when the recording has no transcript yet."
+    },
+    "summaryTranscriptionPendingBody": "The summary will appear once the transcript is ready.",
+    "@summaryTranscriptionPendingBody": {
+        "description": "Shown when a recording has no transcript yet, so its summary cannot be made. Tells the user the summary will come after the transcript."
     },
     "summaryCheckAgain": "Check Again",
     "@summaryCheckAgain": {
@@ -17451,6 +17491,10 @@
     "processingNewestFirst": "We'll process the newest recordings first, up to what fits. The rest will stay waiting.",
     "processingAction": "Process waiting recordings",
     "processingProgress": "Processing your waiting recordings…",
+    "waitingForTranscriptionAllowance": "Waiting for transcription allowance",
+    "@waitingForTranscriptionAllowance": {
+        "description": "Status for a recording whose transcription job is held awaiting allowance. The current monthly plan limit may be unknown or may have reset while the recording still waits."
+    },
     "processingDeferred": "Waiting for processing",
     "processingCount": "{count, plural, =1{1 conversation waiting} other{{count} conversations waiting}}",
     "@processingCount": {
@@ -17637,20 +17681,6 @@
             },
             "total": {
                 "type": "int"
-            }
-        }
-    },
-    "deviceRecently": "Recently",
-    "@deviceRecently": {
-        "description": "Device page section: recent connection events."
-    },
-    "deviceDisconnectedFor": "Disconnected for {duration}",
-    "@deviceDisconnectedFor": {
-        "description": "Device page event: the Omi was disconnected for this long (a compact duration such as 10m).",
-        "placeholders": {
-            "duration": {
-                "type": "String",
-                "example": "24m"
             }
         }
     },
@@ -18660,10 +18690,6 @@
     "@stopThese": {
         "description": "Disable the producer of a For You card"
     },
-    "meetingActionItemsTitle": "Action items",
-    "@meetingActionItemsTitle": {
-        "description": "meetingActionItemsTitle"
-    },
     "addToTasks": "Add to Tasks",
     "@addToTasks": {
         "description": "addToTasks"
@@ -18781,6 +18807,18 @@
     "@paymentDeclinedTitle": {
         "description": "Home row title when the renewal charge for the user's plan failed"
     },
+    "paymentDeclinedMonthlyMessage": "Update it, or get {plan} back for {price} a month",
+    "@paymentDeclinedMonthlyMessage": {
+        "description": "Home row line under 'Your card was declined' when a declined yearly renewal can switch to monthly. it = the card; plan = a product name such as Omi Pro; price = the monthly price, e.g. US$29.99",
+        "placeholders": {
+            "plan": {
+                "type": "String"
+            },
+            "price": {
+                "type": "String"
+            }
+        }
+    },
     "paymentDeclinedMessage": "Update it to get {plan} back",
     "@paymentDeclinedMessage": {
         "description": "Home row line under 'Your card was declined'. it = the card; plan = a product name such as Omi Pro"
@@ -18801,7 +18839,526 @@
             }
         }
     },
+    "firmwareUpdateNotInstalledCv1Message": "The update didn't install. Your pendant still works on its current firmware ({version}). Please contact support rather than retrying the update.",
+    "@firmwareUpdateNotInstalledCv1Message": {
+        "description": "CV1 pendant: firmware update finished transferring but the pendant reconnected on its old version. Retrying is discouraged on affected units, so point to support.",
+        "placeholders": {
+            "version": {
+                "type": "String"
+            }
+        }
+    },
     "firmwareUpdateUnconfirmedMessage": "Couldn't confirm the update. Your pendant hasn't reconnected yet. Keep it nearby and check its firmware version before trying again.",
     "firmwareUpdateUnconfirmedTitle": "Update Not Confirmed",
-    "firmwareVerifyingInstallation": "Confirming installation… This may take up to 3 minutes."
+    "firmwareVerifyingInstallation": "Confirming installation… This may take up to 3 minutes.",
+    "monthlySwitchTitle": "Switch to Monthly",
+    "@monthlySwitchTitle": {
+        "description": "Title of the sheet and the button that move a declined yearly renewal to the same plan billed monthly"
+    },
+    "monthlySwitchPlanValue": "{plan}, {price} a month",
+    "@monthlySwitchPlanValue": {
+        "description": "Value of the Plan row in the switch-to-monthly sheet, e.g. \"Omi Pro, US$29.99 a month\"",
+        "placeholders": {
+            "plan": {
+                "type": "String"
+            },
+            "price": {
+                "type": "String"
+            }
+        }
+    },
+    "monthlySwitchNote": "Replaces the unpaid {yearly} yearly charge. Renews monthly. Cancel anytime.",
+    "@monthlySwitchNote": {
+        "description": "Line under the switch-to-monthly preview. yearly = the declined yearly amount, e.g. US$269.91",
+        "placeholders": {
+            "yearly": {
+                "type": "String"
+            }
+        }
+    },
+    "monthlySwitchDeclined": "Payment declined. Your plan didn't change.",
+    "@monthlySwitchDeclined": {
+        "description": "Switch-to-monthly sheet: the monthly charge was declined; nothing changed"
+    },
+    "monthlySwitchUnavailable": "Switching isn't available right now. Update your card instead.",
+    "@monthlySwitchUnavailable": {
+        "description": "Switch-to-monthly sheet: the server refused the switch for this subscription"
+    },
+    "monthlySwitchDoneTitle": "You're on monthly",
+    "@monthlySwitchDoneTitle": {
+        "description": "Switch-to-monthly sheet title after a successful switch"
+    },
+    "monthlySwitchDoneBody": "{price} paid today. Renews monthly.",
+    "@monthlySwitchDoneBody": {
+        "description": "Switch-to-monthly sheet body after a successful switch. price = the amount charged, e.g. US$29.99",
+        "placeholders": {
+            "price": {
+                "type": "String"
+            }
+        }
+    },
+    "processingDeleteScopeChanged": "Processing changed. Review the list and try again.",
+    "@processingDeleteScopeChanged": {
+        "description": "Deletion was cancelled because recordings left the visible processing scope during confirmation. Review the current list before deleting again."
+    },
+    "syncTooOldExplanation": "This recording is older than Omi's sync window, so Omi can't transcribe it. Download the audio to keep it, then delete it here.",
+    "freeCapTitle": "You've used this month's {minutes} minutes",
+    "@freeCapTitle": {
+        "description": "Title of the sheet shown when a free plan has used all of its monthly cloud transcription minutes",
+        "placeholders": {
+            "minutes": {
+                "type": "int"
+            }
+        }
+    },
+    "freeCapBody": "Omi is still recording. Choose how to keep transcribing.",
+    "@freeCapBody": {
+        "description": "Body of the free-plan cap sheet"
+    },
+    "omiProPlanName": "Omi Pro",
+    "@omiProPlanName": {
+        "description": "Product name of the paid plan; keep the brand name"
+    },
+    "freeCapProUnlimited": "Unlimited cloud transcription",
+    "@freeCapProUnlimited": {
+        "description": "Omi Pro benefit on the cap sheet"
+    },
+    "freeCapProAccuracy": "Best accuracy",
+    "@freeCapProAccuracy": {
+        "description": "Omi Pro benefit on the cap sheet"
+    },
+    "freeCapProWaiting": "Transcribes your waiting recordings",
+    "@freeCapProWaiting": {
+        "description": "Omi Pro benefit: recordings held at the cap get transcribed"
+    },
+    "freeCapPhoneSubtitle": "Free. Stays on until you switch back.",
+    "@freeCapPhoneSubtitle": {
+        "description": "Subtitle of the 'Transcribe on this phone' option at the cap; the choice is permanent until switched back"
+    },
+    "transcribingOnThisPhone": "Transcribing on this phone",
+    "@transcribingOnThisPhone": {
+        "description": "Banner during recording when transcription runs on the phone"
+    },
+    "getPro": "Get Pro",
+    "@getPro": {
+        "description": "Short button label to open the Omi Pro plans; keep 'Pro'"
+    },
+    "unlock": "Unlock",
+    "@unlock": {
+        "description": "Button on a recording held at the cap; opens the plans"
+    },
+    "transcribeWith": "Transcribe with",
+    "@transcribeWith": {
+        "description": "Settings section header above the transcription source choices"
+    },
+    "omiCloud": "Omi cloud",
+    "@omiCloud": {
+        "description": "Transcription source: Omi's cloud service; keep 'Omi'"
+    },
+    "thisPhone": "This phone",
+    "@thisPhone": {
+        "description": "Transcription source: on this phone"
+    },
+    "onDeviceReady": "Ready",
+    "@onDeviceReady": {
+        "description": "Status: this phone can transcribe now"
+    },
+    "cloudMinutesLeft": "{left} of {limit} min left · resets {date}",
+    "@cloudMinutesLeft": {
+        "description": "Cloud transcription minutes left this month and the reset date, e.g. '258 of 300 min left · resets Dec 1'",
+        "placeholders": {
+            "left": {
+                "type": "int"
+            },
+            "limit": {
+                "type": "int"
+            },
+            "date": {
+                "type": "String"
+            }
+        }
+    },
+    "cloudMinutesAvailable": "{minutes} cloud minutes available",
+    "@cloudMinutesAvailable": {
+        "description": "Shown to a free plan on the phone after the monthly reset: cloud minutes available again",
+        "placeholders": {
+            "minutes": {
+                "type": "int"
+            }
+        }
+    },
+    "switchBack": "Switch Back",
+    "@switchBack": {
+        "description": "Button: switch transcription back to Omi's cloud"
+    },
+    "setUpThisPhone": "Set up this phone",
+    "@setUpThisPhone": {
+        "description": "Settings section header: steps before the phone can transcribe"
+    },
+    "speechRecognition": "Speech recognition",
+    "@speechRecognition": {
+        "description": "Row title: the iOS speech recognition permission"
+    },
+    "audioStaysOnPhone": "Audio stays on your phone",
+    "@audioStaysOnPhone": {
+        "description": "Subtitle: on-device transcription keeps audio on the phone"
+    },
+    "onDeviceModelDownloadSize": "{size} MB download",
+    "@onDeviceModelDownloadSize": {
+        "description": "Download size of the on-device speech model in megabytes",
+        "placeholders": {
+            "size": {
+                "type": "int"
+            }
+        }
+    },
+    "downloadNow": "Download Now",
+    "@downloadNow": {
+        "description": "Button: download the speech model now on any network"
+    },
+    "onWifiLater": "On Wi-Fi Later",
+    "@onWifiLater": {
+        "description": "Button: download the speech model later, when on Wi-Fi"
+    },
+    "conversationWritingSummary": "Writing your summary…",
+    "@conversationWritingSummary": {
+        "description": "Shown with a pen over a skeleton while the summary of a conversation in progress is written"
+    },
+    "onTheWayServerWork": "Server-reported work",
+    "@deleteWhileProcessingMessage": {
+        "description": "Delete confirmation for a recording already uploaded whose server job has not finished. Deleting removes the phone copy; the server keeps processing, but if that job fails the app has no local file to re-upload from."
+    },
+    "finishNothingToProcess": "Nothing to process yet.",
+    "@finishNothingToProcess": {
+        "description": "Brief notice after tapping Finish on the live capture page when nothing was heard since the last conversation, so no conversation is made."
+    },
+    "finishStillProcessing": "Still processing. It will appear on Home.",
+    "@finishStillProcessing": {
+        "description": "Shown on the page Finish opens when the conversation has not arrived after a long wait; it will show up on Home by itself."
+    },
+    "finishBackToHome": "Back to Home",
+    "@finishBackToHome": {
+        "description": "Button that leaves the processing page for the Home conversation list."
+    },
+    "conversationSummaryWhenItEnds": "Summary when this conversation ends",
+    "@conversationSummaryWhenItEnds": {
+        "description": "On the detail page of a conversation still in progress (v3): the summary is written once it ends."
+    },
+    "deviceUploadsWaitingOnServer": "Uploads waiting on the server",
+    "@deviceUploadsWaitingOnServer": {
+        "description": "Device Settings row (tappable, opens upload details): some recordings were uploaded but the server has not accepted or processed them yet. Calm status, not an error."
+    },
+    "deviceUploadsWaitingOnServerSubtitle": "Your audio is safe on your device or phone",
+    "@deviceUploadsWaitingOnServerSubtitle": {
+        "description": "Subtitle under 'Uploads waiting on the server' in Device Settings: reassures that the recorded audio is still stored on the Omi device or the phone, so nothing is lost while the server catches up."
+    },
+    "conversationSummaryThrough": "Summary through {time}",
+    "@conversationSummaryThrough": {
+        "description": "Timestamp of the last speech included in the displayed conversation summary. The local time is formatted, e.g. 10:42 AM.",
+        "placeholders": {
+            "time": {
+                "type": "String"
+            }
+        }
+    },
+    "conversationRecentTranscript": "Recent transcript",
+    "@conversationRecentTranscript": {
+        "description": "Heading for the latest spoken lines from the current conversation."
+    },
+    "finishAlreadySaved": "Already saved. It's on Home.",
+    "@finishAlreadySaved": {
+        "description": "Toast after tapping Finish on a live recording when the server had already saved that conversation on its own. 'Home' is the app's conversation list tab."
+    },
+    "finishAudioNotReceived": "Audio's still on its way.",
+    "@finishAudioNotReceived": {
+        "description": "Toast after tapping Finish when the page showed words but the server has none of the audio yet (a wearable device's audio is still on its way). The recording carries on."
+    },
+    "finishFailedOffline": "Didn't go through. Your audio is safe.",
+    "@finishFailedOffline": {
+        "description": "Error toast after tapping Finish on a live recording when the request got no answer (offline, timeout, server error). Shown with a Try Again button; the transcript stays on screen."
+    },
+    "finishFailed": "Didn't go through. Your audio is safe.",
+    "@finishFailed": {
+        "description": "Error toast after tapping Finish on a live recording when something in the app failed. Shown with a Try Again button; the transcript stays on screen."
+    },
+    "micBlockedCannotRecord": "Allow the microphone to record.",
+    "@micBlockedCannotRecord": {
+        "description": "Error toast when the user taps the record button but the microphone permission is blocked. Shown with an Open Settings button."
+    },
+    "couldNotStartRecording": "Couldn't start recording.",
+    "@couldNotStartRecording": {
+        "description": "Error toast when the phone recording failed to start for an unknown reason. Shown with a Try Again button."
+    },
+    "restorePurchasesFailed": "Couldn't check your plan.",
+    "@restorePurchasesFailed": {
+        "description": "Error toast after Restore Purchases when the app could not reach the server to read the plan. Shown with a Try Again button. Must never imply the user is on the free plan."
+    },
+    "firmwareCheckFailed": "Couldn't check for updates.",
+    "@firmwareCheckFailed": {
+        "description": "Error state on the device firmware page when the update check got no answer (offline, server error). Shown with a Try Again button, instead of 'up to date'."
+    },
+    "conversationStillPublic": "It's still shared by link.",
+    "@conversationStillPublic": {
+        "description": "Error toast after sharing a conversation failed or was dismissed and the app could not make it private again. Shown with a Make Private button."
+    },
+    "goalSaveFailed": "Couldn't save your goal.",
+    "@goalSaveFailed": {
+        "description": "Error toast when creating, editing, or moving the progress of a goal failed. Shown with a Try Again button; the goal editor stays open."
+    },
+    "goalDeleteFailed": "Couldn't delete. Goal restored.",
+    "@goalDeleteFailed": {
+        "description": "Error toast when deleting a goal failed on the server and the goal returned to the list. Shown with a Try Again button."
+    },
+    "goalsLoadFailed": "Couldn't load your goals.",
+    "@goalsLoadFailed": {
+        "description": "Error state on the Goals page when goals could not be loaded and none are stored on the phone. Shown with a Try Again button."
+    },
+    "missingTargetEndedRecording": "That recording has ended.",
+    "@missingTargetEndedRecording": {
+        "description": "Toast when a notification or card links to a live recording that has already ended. 'Home' is the conversation list tab."
+    },
+    "missingTargetMemory": "That memory is gone.",
+    "@missingTargetMemory": {
+        "description": "Toast when a link points to a memory that was deleted or is not on this phone."
+    },
+    "missingTargetTask": "That task is gone.",
+    "@missingTargetTask": {
+        "description": "Toast when a link points to a task that was deleted or could not be read."
+    },
+    "missingTargetConversation": "Couldn't open this conversation.",
+    "@missingTargetConversation": {
+        "description": "Error toast when a cited or linked conversation could not be opened (deleted, locked, or offline). Shown with a Try Again button."
+    },
+    "couldNotRefreshConversations": "Couldn't refresh.",
+    "@couldNotRefreshConversations": {
+        "description": "Error toast after pull-to-refresh on the conversation list failed; the rows already shown stay. Shown with a Try Again button."
+    },
+    "connectDeviceForOfflineSync": "Connect your Omi to sync.",
+    "@connectDeviceForOfflineSync": {
+        "description": "Toast when the user taps Offline Sync while their wearable device is disconnected."
+    },
+    "useDifferentAccountMessage": "You'll be signed out, and this phone's Omi settings will be reset.",
+    "@useDifferentAccountMessage": {
+        "description": "Confirmation dialog message before 'Use a Different Account' during onboarding signs the user out and clears local settings."
+    },
+    "rayBanMetaNotFoundAfterSetup": "Glasses not found. Are they on?",
+    "@rayBanMetaNotFoundAfterSetup": {
+        "description": "Error toast when Ray-Ban Meta glasses setup completed but a rescan did not find the glasses. Shown with a Try Again button."
+    },
+    "couldNotMoveTask": "Couldn't move the task.",
+    "@couldNotMoveTask": {
+        "description": "Error toast when dragging a task to another section failed to save. Shown with a Try Again button."
+    },
+    "lockedTasksKept": "{count, plural, =1{Deleted. 1 locked task was kept.} other{Deleted. {count} locked tasks were kept.}}",
+    "@lockedTasksKept": {
+        "description": "Toast after clearing a section of tasks when some tasks are locked (on a paid plan feature) and were intentionally kept. {count} is the number of locked tasks kept.",
+        "placeholders": {
+            "count": {
+                "type": "int"
+            }
+        }
+    },
+    "settingNotSaved": "Couldn't save that change.",
+    "@settingNotSaved": {
+        "description": "Error toast when a settings change failed to save and was put back. Shown with a Try Again button."
+    },
+    "couldNotLoadNotificationSettings": "Couldn't load your settings.",
+    "@couldNotLoadNotificationSettings": {
+        "description": "Error state on the notification settings page when the settings could not be read from the server. Shown with a Try Again button."
+    },
+    "waitForOmiToFinish": "Wait for Omi to finish.",
+    "@waitForOmiToFinish": {
+        "description": "Toast when the user tries to clear the chat or switch chat persona while Omi is still answering."
+    },
+    "voiceNoteTooShort": "Too short. Hold to record.",
+    "@voiceNoteTooShort": {
+        "description": "Toast when a chat voice note was shorter than half a second and was not sent."
+    },
+    "submitAppMissingFields": "Add a name, description, image, category and capability to submit.",
+    "@submitAppMissingFields": {
+        "description": "Hint under the disabled Submit App button explaining what the form still needs."
+    },
+    "appSetupNotFinished": "Setup isn't finished yet.",
+    "@appSetupNotFinished": {
+        "description": "Notice on an app's page when waiting for the user to complete the app's setup in the browser timed out."
+    },
+    "finishNothingKeptTitle": "Nothing to Keep",
+    "@finishNothingKeptTitle": {
+        "description": "Title on the processing page when the server discarded the finished recording (too short or no speech). Title Case."
+    },
+    "submitAppFinishDetails": "Finish the capability and pricing details above to submit.",
+    "@submitAppFinishDetails": {
+        "description": "Small hint under a disabled Submit button on the create-app form, shown when the name, description, image, category and capability are filled in but a capability-specific field (a prompt, a trigger, notification scopes) or the paid plan details are still missing."
+    },
+    "finishNothingNew": "Nothing new yet.",
+    "@finishNothingNew": {
+        "description": "Toast after tapping Finish on a live recording when there is nothing new to save yet."
+    },
+    "takingLongerThanUsual": "Taking longer than usual. We'll have it on Home.",
+    "@takingLongerThanUsual": {
+        "description": "Status on the page that waits for a finished recording's conversation, after a long wait while the app can still reach the server. 'Home' is the app's conversation list."
+    },
+    "couldNotCheckOnIt": "Couldn't check on it. Try again.",
+    "@couldNotCheckOnIt": {
+        "description": "Status on the page that waits for a finished recording's conversation, when the app could not reach the server several times in a row. Shown with a Try Again button."
+    },
+    "upgradeToOpenThisOne": "Upgrade to open this one.",
+    "@upgradeToOpenThisOne": {
+        "description": "Toast when a link opens a conversation that needs a paid plan."
+    },
+    "missingTargetConversationGone": "That conversation was deleted.",
+    "@missingTargetConversationGone": {
+        "description": "Toast when a link opens a conversation that was deleted."
+    },
+    "cantConnectRightNow": "Can't connect right now.",
+    "@cantConnectRightNow": {
+        "description": "Toast when a link could not be opened because the phone is offline. Shown with a Try Again action."
+    },
+    "loadOlderFailed": "Couldn't load older ones. Tap to retry.",
+    "@loadOlderFailed": {
+        "description": "One quiet line at the end of a list when loading older items failed; tapping it retries."
+    },
+    "listeningWithDuration": "Listening · {duration}",
+    "@listeningWithDuration": {
+        "description": "Status line under the title of a conversation that is still being recorded. {duration} is a short length such as '11m'.",
+        "placeholders": {
+            "duration": {
+                "type": "String"
+            }
+        }
+    },
+    "conversationLiveNoEdits": "Wait until it ends to change it.",
+    "@conversationLiveNoEdits": {
+        "description": "Toast when the reader tries to delete, reprocess, share or edit a conversation that is still being recorded."
+    },
+    "finishedSummaryReady": "Summary ready",
+    "@finishedSummaryReady": {
+        "description": "Screen reader announcement when a conversation on Home finishes and its summary is ready."
+    },
+    "writingSummaryStatus": "Writing summary…",
+    "@writingSummaryStatus": {
+        "description": "Status while a finished conversation's summary is being written: under its title on Home, and on the conversation page."
+    },
+    "stillWorkingOnIt": "Still working on it.",
+    "@stillWorkingOnIt": {
+        "description": "Quiet notice on a conversation page when the app stopped checking a conversation that is still being transcribed or summarized. Shown with a Try Again button."
+    },
+    "deviceReadyToUse": "Ready to use",
+    "@deviceReadyToUse": {
+        "description": "Status under the device name after successful Omi pairing. Refers to connection readiness, not to battery level."
+    },
+    "firmwareUpdateFirmwareTooOld": "Your device's firmware is too old for this update. Contact support for help updating your device.",
+    "@firmwareUpdateFirmwareTooOld": {
+        "description": "Firmware update unavailable because the device is below the release minimum firmware version."
+    },
+    "firmwareUpdateAppRequired": "This firmware update needs a newer Omi app. Update the app from your app store, then check again.",
+    "@firmwareUpdateAppRequired": {
+        "description": "Firmware update unavailable because the installed Omi app does not meet the release app version or build requirement."
+    },
+    "quietPayerTitle": "No recordings in 5 days",
+    "@quietPayerTitle": {
+        "description": "Home row title for a paying monthly subscriber whose Omi has recorded nothing for 5 days"
+    },
+    "quietPayerMessage": "Check your Omi.",
+    "@quietPayerMessage": {
+        "description": "Home row line under quietPayerTitle"
+    },
+    "quietPayerCheck": "Check",
+    "@quietPayerCheck": {
+        "description": "Button on the quiet Home row; opens the Omi device page"
+    },
+    "playManageSubscription": "Manage subscription",
+    "@playManageSubscription": {
+        "description": "Google Play Billing (Android): playManageSubscription"
+    },
+    "playBilledByGoogle": "Billed by Google Play",
+    "@playBilledByGoogle": {
+        "description": "Google Play Billing (Android): playBilledByGoogle"
+    },
+    "playPurchasePending": "Your payment is pending. Omi Pro starts as soon as Google Play confirms it.",
+    "@playPurchasePending": {
+        "description": "Google Play Billing (Android): playPurchasePending"
+    },
+    "playPurchaseOtherAccount": "This Google Play purchase belongs to another Omi account.",
+    "@playPurchaseOtherAccount": {
+        "description": "Google Play Billing (Android): playPurchaseOtherAccount"
+    },
+    "playPurchaseNotConfirmed": "We couldn't confirm your purchase yet. We'll try again automatically.",
+    "@playPurchaseNotConfirmed": {
+        "description": "Google Play Billing (Android): playPurchaseNotConfirmed"
+    },
+    "playRenewalTerms": "Renews automatically at the price shown until you cancel. Manage or cancel anytime in Google Play.",
+    "@playRenewalTerms": {
+        "description": "Google Play Billing (Android): auto-renewal and where to cancel, under the Play purchase button"
+    },
+    "playPaidAppUnavailable": "Not available on Android",
+    "@playPaidAppUnavailable": {
+        "description": "Disabled action on a paid Marketplace app for a reader who buys through Google Play: it cannot be bought in the Android app"
+    },
+    "pageNotAvailableInApp": "This page isn't available in the app.",
+    "@pageNotAvailableInApp": {
+        "description": "Shown when an in-app store page links somewhere the app does not open"
+    },
+    "shopOrderPlacedCheckEmail": "Order placed. Check your email for the confirmation.",
+    "@shopOrderPlacedCheckEmail": {
+        "description": "Shown after the in-app store closes once an order is paid"
+    },
+    "prepaidCodeEntry": "Have a code?",
+    "@prepaidCodeEntry": {
+        "description": "Link on the paywall and plans sheet that opens the sheet to redeem a prepaid Omi Pro code"
+    },
+    "prepaidCodeTitle": "Redeem a code",
+    "@prepaidCodeTitle": {
+        "description": "Title of the sheet to redeem a prepaid Omi Pro code"
+    },
+    "prepaidCodeFieldHint": "Enter your code",
+    "@prepaidCodeFieldHint": {
+        "description": "Hint in the code field of the prepaid code sheet"
+    },
+    "prepaidCodeRedeem": "Redeem",
+    "@prepaidCodeRedeem": {
+        "description": "Button that redeems the prepaid code"
+    },
+    "prepaidCodeRedeemed": "Code redeemed",
+    "@prepaidCodeRedeemed": {
+        "description": "Title after a prepaid code was redeemed"
+    },
+    "prepaidCodeResult": "{reason, select, invalid{This code isn't valid. Check it and try again.} used{This code has already been used.} expired{This code has expired.} hasPlan{You already have a plan. Your code was not used. Redeem it after your plan ends.} notPrepaid{This code can't be redeemed here. Use it when you choose a plan.} notEligible{This code can't be used on this account.} rateLimited{Too many tries. Try again later.} other{Something went wrong. Please try again.}}",
+    "@prepaidCodeResult": {
+        "description": "Why a prepaid code was not redeemed. The code is never used when this shows.",
+        "placeholders": {
+            "reason": {
+                "type": "String"
+            }
+        }
+    },
+    "playStripeBilledOnWeb": "Billed through omi.me. Cancel here anytime.",
+    "@playStripeBilledOnWeb": {
+        "description": "Plans & Billing on an Android build that sells through Google Play, under the renewing plan of a reader who pays on omi.me (Stripe). The only action on the sheet is Cancel. Plain text, no link."
+    },
+    "playStripeBilledOnWebShort": "Billed through omi.me.",
+    "@playStripeBilledOnWebShort": {
+        "description": "Plans & Billing on an Android build that sells through Google Play, under a cancel-pending plan billed on omi.me (Stripe), next to Resubscribe. Plain text, no link."
+    },
+    "playStripePlanPaused": "Your {plan} plan is paused.",
+    "@playStripePlanPaused": {
+        "description": "Home row line under 'Your card was declined' on an Android build that sells through Google Play. Neutral: names no place or way to pay. plan = a product name such as Omi Pro.",
+        "placeholders": {
+            "plan": {
+                "type": "String"
+            }
+        }
+    },
+    "firmwareNewestSupportedForDevice": "Your device is already on its newest supported firmware version",
+    "@firmwareNewestSupportedForDevice": {
+        "description": "Calm status line on the firmware update page when this pendant has taken the newest firmware release as far as it can. Shown instead of 'Your device is up to date'. Must not sound like an error."
+    },
+    "firmwareSyncRecordingsFirstTitle": "Sync your recordings first",
+    "@firmwareSyncRecordingsFirstTitle": {
+        "description": "Dialog title shown when the user starts a firmware update while recordings are still stored only on the pendant."
+    },
+    "firmwareSyncRecordingsFirstMessage": "Some recordings are still on your device. Let them finish syncing to your phone, then start the update.",
+    "@firmwareSyncRecordingsFirstMessage": {
+        "description": "Dialog body explaining that recordings must finish syncing from the pendant to the phone before the firmware update can start."
+    }
 }

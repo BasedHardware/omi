@@ -1,6 +1,7 @@
 {
   "schema_version": 1,
   "id": "FC-no-audio-teardown-counted-as-terminal-failure",
+  "family": "retry-classification",
   "violated_contract": "A provider rejection caused by an intentional zero-audio teardown must not be treated as a live-session failure. Counting this expected close as terminal failure triggers unnecessary failover, pollutes terminal SLI metrics, and can feed provider health state despite no user speech being lost.",
   "canonical_prevention": "Track audio actually sent to the provider and classify its no-audio rejection as a clean teardown once finishing has begun. Keep active-session no-audio deaths visible, and test both lifecycle phases plus the end-of-audio behavior for streams that sent audio.",
   "canonical_prevention_artifact": [

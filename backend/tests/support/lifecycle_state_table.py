@@ -92,7 +92,12 @@ FIELD_BUILDERS = {module: builders(sites) for module, sites in FIELD_SITES.items
 def writers(machine, *fields):
     status_modules = {
         'finalization': {'database/conversation_finalization_jobs.py', 'database/conversation_terminal_title.py'},
-        'episode': {'database/episodes.py', 'database/episode_timeline.py', 'utils/episodes/service.py'},
+        'episode': {
+            'database/episodes.py',
+            'database/episode_timeline.py',
+            'database/episode_live_members.py',
+            'utils/episodes/service.py',
+        },
     }.get(
         machine,
         {
@@ -149,12 +154,14 @@ class PatchContract:
 # been audited. AST fingerprints ignore comments/formatting, but force a new
 # source audit when this proof's callees or serialization model change.
 PATCH_CONTRACTS = {
+    # Receipt-clock provenance changes only the existing clock value; the returned
+    # keys remain recorded_start/end, arrival_at and clock, never lifecycle latches.
     'utils.conversations.recorded_time.write_span': PatchContract(
         ('recorded_start', 'recorded_end', 'arrival_at', 'clock'),
         (
             (
                 Writer('utils/conversations/recorded_time.py', 'write_span'),
-                '67652bbdd304ef4e0761e2e20594a50369cef1bc6955f3dce41bfa5d58ca553b',
+                'e99a6a16ddaafe76a22695da366d2d74a35afe08adb316ed2421fcfbc2fbad5a',
             ),
             (
                 Writer('utils/conversations/recorded_time.py', 'span_fields'),
@@ -364,7 +371,20 @@ EPISODE_PHASES = ('live', 'closing', 'closed', 'composed', 'redirected')
 # Derived conversation rows are reader vocabulary, not automatic entry sites.
 # The underlying obligations below each receive the full four-clause verdict.
 STATES = (
-    tuple(
+    (
+        row(
+            'batch',
+            'allowance_held',
+            ('state',),
+            exit=Exit('sweeper', 'utils/batch_pipeline/allowance_hold.py:AllowanceHolds.tick'),
+            metric='omi_batch_allowance_held_units',
+            alert_required=False,
+            deadline_exemption='SCA-2195: allowance policy parking has no recording expiry; owner generation releases it.',
+            entry_writers=(Writer('database/batch_pipeline_allowance_hold.py', 'park'),),
+            note='Current held/allowance_exhausted only; custody retained, outside retry and pending-work sweeps.',
+        ),
+    )
+    + tuple(
         row(
             'conversation_phase',
             name,
@@ -587,6 +607,18 @@ STATES = (
             terminal=True,
             owner='services/conversation_finalization.py',
             note='Publisher samples queued/leased/blocked_byok/dead_letter, not completed stock',
+        ),
+        row(
+            'finalization_receipt',
+            'fenced',
+            ('status',),
+            entry_writers=(Writer(FINALIZATION_MODULE, '_record_meeting_receipt_txn'),),
+            exit=Exit('return', f'{FINALIZATION_MODULE}:_record_meeting_receipt_txn'),
+            terminal=True,
+            owner=FINALIZATION_MODULE,
+            derived=True,
+            note='Ownership refusal ends this receipt attempt without changing the conversation or job. '
+            'A later attempt rechecks both owners before it may record a receipt.',
         ),
         row(
             'summary_debt',

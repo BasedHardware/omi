@@ -59,6 +59,19 @@ def test_memory_transient_then_success(policy, caplog):
     assert 'sensitive' not in caplog.text
 
 
+def test_optional_search_keeps_circuit_admission_without_whole_operation_retry(policy):
+    calls = []
+
+    def read():
+        calls.append(True)
+        unavailable()
+
+    with pytest.raises(HTTPException):
+        policy.call('search', read, single_attempt=True)
+    assert len(calls) == 1
+    assert policy.clock.now == 10.0
+
+
 def test_memory_permanent_failure_still_503_without_retry(policy):
     calls = []
 

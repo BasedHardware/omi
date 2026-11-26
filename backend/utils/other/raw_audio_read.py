@@ -6,15 +6,22 @@ import threading
 import time
 from bisect import bisect_right
 from datetime import datetime
-from google.cloud.exceptions import NotFound
+from google.api_core.exceptions import NotFound, PreconditionFailed
 from database.audio_timeline import chunk_span, span_valid
 
 from utils import encryption
-from utils.other.raw_audio import decode_capture
+from config.refactor_modes import default_on
+from utils.other.gcs_read_reuse import REPLACEMENT_CALLS, ReadMemo, avoided
+from utils.other.private_sync_get_metrics import Reader, object_get_reader
+from utils.other.raw_audio import WAL_FORMAT, decode_capture, decode_capture_frames
 from utils.other.audio_frame_table import (
     FRAME_SCHEMA,
     committed_frames,
     entries,
+    gapped_frames,
+    media_name,
+    remember_gapped_manifest,
+    unframed_frames,
     validate_frames,
     receipt_frames,
     resampled_samples,
@@ -28,7 +35,9 @@ from utils.other.audio_raw_read_metrics import (
     error_result,
     record,
     log_failure,
+    exclude,
 )
+from config.refactor_modes import inventory_manifest_body_cache_enabled, raw_live_gapped_packs_enabled
 
 _index_lock = threading.Lock()
 _indexes: dict[tuple, tuple[float, list]] = {}
@@ -46,13 +55,77 @@ def invalidate_pack_index(bucket, uid: str, conversation_id: str):
         _indexes.pop((getattr(bucket, 'name', ''), uid, conversation_id), None)
 
 
-def list_packs(bucket, uid: str, conversation_id: str, *, fresh=False, deadline=None, timeout=10, max_count=10000):
+def _gapped_unframed(metadata: dict) -> bool:
+    """A pack the writer recorded with gaps but without a declared frame schema."""
+    if metadata.get('frame_schema') == FRAME_SCHEMA:
+        return False
+    try:
+        return int(metadata['gap_count']) != 0
+    except (KeyError, TypeError, ValueError):
+        return False
+
+
+def _custody_manifests(bucket, uid: str, conversation_id: str, *, deadline=None, timeout=10, max_count=10000):
+    """Custody manifests written beside this conversation's unframed packs.
+
+    ``commit_capture`` names the manifest directory exactly like the media
+    directory, so one prefix listing maps every pack to its own manifest
+    without a per-pack list.
+    """
+    prefix = f'audio-outbox/{uid}/{conversation_id}/'
+    owner_prefix = f'audio-outbox/{uid}/'
+    manifests = {}
+    for index, blob in enumerate(bucket.list_blobs(prefix=prefix, timeout=io_timeout(deadline, timeout), retry=None)):
+        if index >= max_count or (deadline is not None and time.monotonic() >= deadline):
+            raise TimeoutError('raw capture manifest index budget exhausted')
+        if (blob.metadata or {}).get('format') != 'audio-custody-manifest-v1':
+            continue
+        # Key by the writer's shared name, exactly as media_name derives it from
+        # the media path, so a single-segment pack name matches too.
+        name = blob.name[len(owner_prefix) :].rsplit('/', 1)[0]
+        manifests[name] = None if name in manifests else blob
+    return manifests
+
+
+def _gap_count_matches(frames: list[dict], gap_count: int) -> bool:
+    """The writer counts a discontinuity and a retained zero-sample frame alike."""
+    return (
+        sum(frame['gap_before'] for frame in frames) + sum(1 for frame in frames if frame['samples'] == 0) == gap_count
+    )
+
+
+@object_get_reader(Reader.PLAYBACK_INVENTORY)
+def list_packs(
+    bucket,
+    uid: str,
+    conversation_id: str,
+    *,
+    fresh=False,
+    deadline=None,
+    timeout=10,
+    max_count=10000,
+    strict=False,
+    reuse_manifest_bodies=False,
+    source_metadata=False,
+    memo: ReadMemo | None = None,
+):
     key = (getattr(bucket, 'name', ''), uid, conversation_id)
     with _index_lock:
         cached = _indexes.get(key)
-        if not fresh and cached and cached[0] > time.monotonic():
+        if not source_metadata and not fresh and not strict and cached and cached[0] > time.monotonic():
             return cached[1]
     packs = []
+    gapped_enabled = raw_live_gapped_packs_enabled()
+    reuse_manifest_bodies = (
+        reuse_manifest_bodies
+        and not fresh
+        and not strict
+        and deadline is None
+        and inventory_manifest_body_cache_enabled()
+    )
+    manifests = None
+    if fresh or strict or deadline is not None:
+        memo = None
     for index, blob in enumerate(
         bucket.list_blobs(
             prefix=f'raw-live/{uid}/{conversation_id}/', timeout=io_timeout(deadline, timeout), retry=None
@@ -65,15 +138,26 @@ def list_packs(bucket, uid: str, conversation_id: str, *, fresh=False, deadline=
             # Legacy pusher clocks cannot position independent raw packs on a
             # capture timeline. Keep them recoverable by immutable receipt;
             # ordinary playback uses the legacy continuous PCM projection.
+            exclude('arrival_clock')
             continue
         try:
             start, end = float(metadata['capture_start']), float(metadata['capture_end'])
             framed = metadata.get('frame_schema') == FRAME_SCHEMA
-            if (not framed and int(metadata['gap_count']) != 0) or end <= start or int(metadata['channels']) != 1:
+            gapped = not framed and int(metadata['gap_count']) != 0
+            if gapped and not gapped_enabled:
+                exclude('disabled')
+                continue
+            if not span_valid(start, end):
+                exclude('bounds')
+                continue
+            if int(metadata['channels']) != 1:
+                exclude('channels')
                 continue
             if metadata['codec'] not in {'opus', 'flac', 'pcm16', 'pcm8'}:
+                exclude('codec')
                 continue
             if metadata.get('source_layout', 'mono') != 'mono':
+                exclude('layout')
                 continue
             source = {
                 'timestamp': start,
@@ -85,21 +169,64 @@ def list_packs(bucket, uid: str, conversation_id: str, *, fresh=False, deadline=
                 'generation': getattr(blob, 'generation', None),
                 'pcm_sha256': metadata.get('pcm_sha256'),
             }
+            if source_metadata:
+                source.update(
+                    metadata=dict(metadata),
+                    metageneration=getattr(blob, 'metageneration', None),
+                    source_metadata_reuse=True,
+                )
             created = getattr(blob, 'time_created', None)
             if isinstance(created, datetime):
                 source['raw_created_at'] = created.timestamp()
             if framed:
-                frames, rate = committed_frames(bucket, blob, uid, deadline=deadline)
+                frames, rate = committed_frames(bucket, blob, uid, deadline=deadline, memo=memo)
                 if sum(frame['gap_before'] for frame in frames) != int(metadata['gap_count']):
                     raise CoverageMismatch('capture gap count differs from frame table')
                 packs.extend(entries(frames, rate, source))
                 if len(packs) > max_count:
                     raise TimeoutError('raw capture index budget exhausted')
+            elif gapped:
+                # The writer kept the exact frame positions in the custody
+                # manifest even though the media metadata omits the frame
+                # schema. Without it the pack's internal gaps are unknowable,
+                # so an unresolvable manifest stays excluded rather than being
+                # decoded as one continuous stream.
+                if manifests is None:
+                    manifests = _custody_manifests(
+                        bucket, uid, conversation_id, deadline=deadline, timeout=timeout, max_count=max_count
+                    )
+                manifest = manifests.get(media_name(blob.name, uid))
+                if manifest is None:
+                    exclude('ambiguous_manifest' if media_name(blob.name, uid) in manifests else 'missing_manifest')
+                    if strict:
+                        raise ValueError('raw capture has no unique custody manifest')
+                    continue
+                frames, rate = unframed_frames(
+                    bucket,
+                    blob,
+                    uid,
+                    manifest.name,
+                    deadline=deadline,
+                    listed_manifest=manifest,
+                    reuse_inventory_body=reuse_manifest_bodies,
+                    memo=memo,
+                )
+                if not _gap_count_matches(frames, int(metadata['gap_count'])):
+                    raise CoverageMismatch('capture gap count differs from frame table')
+                remember_gapped_manifest(memo, bucket, blob, uid, manifest)
+                packs.extend(entries(frames, rate, source, allow_empty=True))
+                if len(packs) > max_count:
+                    raise TimeoutError('raw capture index budget exhausted')
             else:
                 packs.append(source)
         except (KeyError, ValueError, TypeError, NotFound):
+            exclude('invalid')
+            if strict:
+                raise
             continue
     result = sorted(packs, key=lambda item: item['timestamp'])
+    if source_metadata:
+        return result
     with _index_lock:
         if len(_indexes) >= _MAX_INDEXES:
             _indexes.pop(next(iter(_indexes)))
@@ -120,6 +247,8 @@ def raw_chunks_for_listing(
     max_count=None,
     require_archive=False,
     list_raw=list_packs,
+    source_metadata=False,
+    memo=None,
 ):
     """Playback may fall back; independent replay proof requires a fresh complete inventory."""
     if not enabled:
@@ -134,9 +263,10 @@ def raw_chunks_for_listing(
                 deadline=deadline,
                 timeout=timeout or 10,
                 max_count=max_count or 10000,
+                **({'source_metadata': True} if source_metadata else {}),
             )
-            if include_raw
-            else list_raw(bucket, uid, conversation_id)
+            if include_raw or require_archive
+            else list_raw(bucket, uid, conversation_id, **({'memo': memo} if memo is not None else {}))
         )
         raw_chunks = packs if include_raw else uncovered_raw_packs(packs, chunks)
         if max_count is not None and len(chunks) + len(raw_chunks) > max_count:
@@ -162,26 +292,65 @@ def finish_audio_listing(chunks, raw_chunks, source_identity):
     return sorted(chunks, key=lambda item: item['timestamp'])
 
 
-def _read_pack(bucket, path: str, uid: str, download_kwargs=None, sample_rate: int = 16000) -> bytes:
+def _read_pack(
+    bucket, path: str, uid: str, download_kwargs=None, sample_rate: int = 16000, *, frames=None, memo=None
+) -> bytes:
     download_kwargs = {'timeout': 10, 'retry': None, **(download_kwargs or {})}
-    blob = bucket.blob(path)
+    generation = download_kwargs.get('if_generation_match')
+    blob = bucket.blob(path, generation=int(generation)) if generation else bucket.blob(path)
     try:
-        return _decode_pack(bucket, blob, uid, download_kwargs, sample_rate)
+        return _decode_pack(bucket, blob, uid, download_kwargs, sample_rate, frames=frames, memo=memo)
     except Exception as error:
         record(error_result(error), (blob.metadata or {}).get('codec'))
         raise
 
 
-def _decode_pack(bucket, blob, uid: str, download_kwargs, sample_rate: int) -> bytes:
+def _decode_pack(bucket, blob, uid: str, download_kwargs, sample_rate: int, *, frames=None, memo=None) -> bytes:
     deadline = time.monotonic() + download_kwargs.get('timeout', 10)
     blob.reload(**(download_kwargs or {}))
     metadata = blob.metadata or {}
-    if metadata.get('frame_schema') == FRAME_SCHEMA:
-        frames, rate = committed_frames(bucket, blob, uid, deadline=deadline)
+    supplied_frames = frames is not None
+    if supplied_frames:
+        rate = int(metadata['sample_rate'])
+        expected = resampled_samples(validate_frames(frames, rate, allow_empty=True), rate, sample_rate) * 2
+    elif metadata.get('frame_schema') == FRAME_SCHEMA:
+        frames, rate = committed_frames(bucket, blob, uid, deadline=deadline, memo=memo)
         expected = resampled_samples(validate_frames(frames, rate), rate, sample_rate) * 2
+    elif _gapped_unframed(metadata) and raw_live_gapped_packs_enabled():
+        # A gapped pack's decoded length is the sum of its recorded frames, not
+        # its wall span. The manifest is the only truthful source for both.
+        frames, rate = gapped_frames(bucket, blob, uid, deadline=deadline, memo=memo)
+        expected = resampled_samples(sum(int(frame['samples']) for frame in frames), rate, sample_rate) * 2
     else:
         expected = round((float(metadata['capture_end']) - float(metadata['capture_start'])) * sample_rate) * 2
-    raw = blob.download_as_bytes(**{**download_kwargs, 'timeout': io_timeout(deadline)})
+    payload_kwargs = {**download_kwargs, 'timeout': io_timeout(deadline)}
+    memo_key = None
+    if memo is not None and not supplied_frames and default_on('PRIVATE_SYNC_REQUEST_READ_MEMO_ENABLED'):
+        generation = getattr(blob, 'generation', None)
+        metageneration = getattr(blob, 'metageneration', None)
+        digest = metadata.get('sha256')
+        if type(generation) is int and generation > 0 and type(metageneration) is int and metageneration > 0 and digest:
+            # A pack's manifest may change independently of the pack metadata.
+            frame_digest = hashlib.sha256(json.dumps(frames, sort_keys=True).encode()).digest() if frames else None
+            memo_key = (bucket.name, uid, blob.name, generation, metageneration, digest, sample_rate, frame_digest)
+            cached = memo.get(memo_key)
+            if cached is not None:
+                pcm, encoded_size = cached
+                avoided('pack_memo', 'payload', payload_bytes=encoded_size)
+                return pcm
+            payload_kwargs.update(if_generation_match=generation, if_metageneration_match=metageneration)
+    try:
+        raw = blob.download_as_bytes(**payload_kwargs)
+    except PreconditionFailed:
+        if memo_key is None:
+            raise
+        # The optimization added a version fence. Retry the ordinary read once
+        # with fresh metadata and the original caller's generation constraint.
+        REPLACEMENT_CALLS.labels('pack_memo', 'payload').inc()
+        pinned = download_kwargs.get('if_generation_match')
+        fresh_blob = bucket.blob(blob.name, generation=int(pinned)) if pinned else bucket.blob(blob.name)
+        return _decode_pack(bucket, fresh_blob, uid, {**download_kwargs, 'timeout': io_timeout(deadline)}, sample_rate)
+    encoded_size = len(raw)
     if metadata.get('encrypted') == 'true':
         try:
             raw = encryption.decrypt_audio_file(raw, uid)
@@ -190,16 +359,27 @@ def _decode_pack(bucket, blob, uid: str, download_kwargs, sample_rate: int) -> b
     if hashlib.sha256(raw).hexdigest() != metadata.get('sha256'):
         raise ChecksumMismatch('capture checksum mismatch')
     try:
-        pcm = decode_capture(raw, metadata, sample_rate)
+        if frames is not None and metadata.get('format') == WAL_FORMAT:
+            # Only the omi-wal container carries per-packet byte ranges. A
+            # gapped flac/pcm16 pack encodes the captured PCM contiguously, so
+            # the ordinary decoder already returns exactly the recorded samples.
+            pcm = decode_capture_frames(raw, metadata, frames, sample_rate)
+        else:
+            pcm = decode_capture(raw, metadata, sample_rate)
     except Exception as error:
         raise DecodeError('capture decode failed') from error
     if abs(len(pcm) - expected) > 2:
         raise CoverageMismatch('capture sample coverage mismatch')
+    if memo is not None and memo_key is not None:
+        memo.put(memo_key, (pcm, encoded_size), len(pcm))
     return pcm
 
 
-def read_pack(bucket, path: str, uid: str, download_kwargs=None, sample_rate: int = 16000) -> bytes:
-    pcm = _read_pack(bucket, path, uid, download_kwargs, sample_rate)
+@object_get_reader(Reader.PLAYBACK_MEDIA)
+def read_pack(
+    bucket, path: str, uid: str, download_kwargs=None, sample_rate: int = 16000, *, frames=None, memo=None
+) -> bytes:
+    pcm = _read_pack(bucket, path, uid, download_kwargs, sample_rate, frames=frames, memo=memo)
     record('ok')
     return pcm
 
@@ -240,7 +420,7 @@ def verified_pcm_paths(bucket, uid: str, conversation_id: str, chunks, sample_ra
     return verified
 
 
-def pcm_for_span(bucket, uid: str, conversation_id: str, span, *, expected_sha256: str | None = None):
+def pcm_for_span(bucket, uid: str, conversation_id: str, span, *, expected_sha256: str | None = None, memo=None):
     if not span or span['sample_rate'] != 16000 or not expected_sha256:
         # Historical PCM often has no raw identity. This optional lookup is
         # not a raw read attempt until a covering raw candidate is found.
@@ -256,7 +436,7 @@ def pcm_for_span(bucket, uid: str, conversation_id: str, span, *, expected_sha25
     for pack in packs:
         if pack['timestamp'] <= start + 0.0001 and pack['raw_end'] >= start + count / 32000 - 0.0001:
             matched = True
-            pcm = _read_pack(bucket, pack['path'], uid)
+            pcm = _read_pack(bucket, pack['path'], uid, memo=memo)
             offset = (pack.get('raw_offset_samples', 0) + round((start - pack['timestamp']) * 16000)) * 2
             selected = pcm[offset : offset + count]
             if len(selected) == count and hashlib.sha256(selected).hexdigest() == expected_sha256:
@@ -267,18 +447,20 @@ def pcm_for_span(bucket, uid: str, conversation_id: str, span, *, expected_sha25
     return None
 
 
-def pcm_for_projection(bucket, uid: str, metadata: dict, sample_rate: int):
+def pcm_for_projection(bucket, uid: str, metadata: dict, sample_rate: int, *, memo=None):
     """A framed projection points to disjoint spans, never a synthetic wall interval."""
     try:
         receipt = json.loads(metadata['framed_receipt'])
         if sample_rate != receipt['sample_rate']:
             return None
-        receipt_frames(bucket, uid, receipt)
+        receipt_frames(bucket, uid, receipt, memo=memo)
     except Exception as error:
         record(error_result(error))
         raise
     # The shared raw read boundary records decode failures with its loaded codec.
-    pcm = _read_pack(bucket, receipt['path'], uid, {'if_generation_match': int(receipt['generation'])}, sample_rate)
+    pcm = _read_pack(
+        bucket, receipt['path'], uid, {'if_generation_match': int(receipt['generation'])}, sample_rate, memo=memo
+    )
     if hashlib.sha256(pcm).hexdigest() != receipt['pcm_sha256'] or receipt['pcm_sha256'] != metadata.get('pcm_sha256'):
         record('identity_mismatch')
         return None

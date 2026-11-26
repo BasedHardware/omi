@@ -1,0 +1,2 @@
+# Match the Redis version in backend/pylock.toml.
+redis==5.0.8

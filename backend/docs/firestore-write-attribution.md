@@ -26,13 +26,23 @@ patches.
 
 `op` is `create`, `update` (exists or last-update-time precondition: `update()`), `merge` (mask,
 no precondition: `set(merge=True)`), `set` (whole-document replace), `delete`
-or `transform`. A failed Commit counts nothing; BatchWrite counts only writes
+or `transform` on the aggregate counter. The caller and origin counters
+report merge as `set` and transform as `update`. A failed Commit counts nothing.
+BatchWrite counts only writes
 with an OK status. A Commit that fails with DeadlineExceeded or Unavailable
 may still have applied; its writes go to the ambiguous counter. Collection patterns
-reuse the read probe's allowlist; callers have their own cap of 2048. The sync
-Cloud Run services (`backend/deploy/cloud_run_gmp_sync.yaml`) keep the total
-and by-caller counters but not by-origin, to stay under the scrape samples
-limit.
+reuse the read probe's allowlist and callers share its per-process limit of 1536.
+The BulkWriter attribution hooks install when the first writer is constructed.
+BulkWriter captures caller and origin as each operation is queued, including
+operations flushed from another thread or retried by the SDK. Companion writes
+appended by Omi's commit wrappers use the submitting caller and origin when the
+batch has one submitter, and `other`/`unset` in mixed batches.
+
+Listen and pusher include both attribution counters in their fast GMP scrape.
+The worker exports them through its custom metrics registry. Cloud Run sync
+and projection pump permit both families. The probe installs by default.
+`FIRESTORE_WRITE_PROBE_ENABLED=false` skips installation at process startup.
+The legacy `OMI_FIRESTORE_WRITE_PROBE_ENABLED=false` setting also disables it.
 
 A no-op write (Cloud Monitoring `UPDATE_NOOP`) is still billed. Firestore
 returns the document's previous `update_time` for a write that changed nothing,

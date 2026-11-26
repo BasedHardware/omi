@@ -3,6 +3,140 @@ SCA-1800 adds a dark server-side pre-unit hold. Only
 all other values use ordinary per-upload admission for new uploads. No runtime
 value, rollout approval or savings is established by the code change.
 
+## Tiered windows (defaults preserve 60 seconds)
+
+`BATCH_PIPELINE_COALESCING_FREE_WINDOW_SECONDS` and
+`BATCH_PIPELINE_COALESCING_BACKLOG_WINDOW_SECONDS` both default to **60**.
+Only a positively free effective allowance entitlement may use them. Paid,
+trial, exempt and unknown entitlement retain today's 60s/four-member/300s
+packing profile, including for historical uploads. Trial is a reserved closed
+metric label; current Subscription has no distinct trial status and retired
+desktop trial metadata must not be used to infer one. Lookup errors are unknown.
+The classification lookup uses `provision=False`, includes effective promotions,
+and reads no allowance usage. It is additional intake overhead to measure.
+
+The backlog setting applies to existing backfill-lane or non-FRESH-priority
+uploads; it does not unpark, drain, re-drive or promote anything, including R7
+work. No backlog admission rule or scheduler changes here. Values above 900
+clamp to 900; malformed, nonfinite or below-60 values use 60. Both back to 60
+is the class rollback. Already accepted holds keep their first-member deadline;
+new requests can shorten a predecessor on profile change, and the authenticated
+release endpoint remains available. Global OFF retains the existing individual
+drain/committed-merged repair semantics.
+
+A window above 60 requests an extended profile: <=16 members, <=600 source-audio
+seconds AND <=600s outer capture span. Per-member 2MiB/300s, group 20 files/8MiB,
+64 global/two-owner groups and 120s lease remain unchanged. The first member
+pins the profile/deadline. Class/window changes release the predecessor without
+overtaking it. Quota exhaustion returns the exact legacy ordinary per-upload
+fallback (None before custody), never a capacity refusal. Joining an existing
+group spends no new quota. Existing incompatible/predecessor ordering retries
+are distinct from capacity exhaustion.
+
+### Mixed-version gate: explicit complete reader inventory
+
+An old completion writer rejects more than four original members. This change
+therefore **refuses extended creation** until all inventoried readers advertise
+protocol 2. With no proof it still accepts eligible input under the legacy 60s
+profile; it never assumes the elected drainer proves the whole fleet upgraded.
+
+New projection instances and GPU runtimes advertise once under
+`<namespace>_coalesce_capabilities/<OMI_BACKEND_RELEASE_SHA>`:
+`{"protocol":2,"max_members":16}`. An absent/invalid full source SHA cannot
+advertise. Workers must have a source-bound release identity too; do not invent
+one to pass this gate. Readers accept 16-member completion manifests regardless
+of their local window env values, including unset/60 and producer OFF.
+
+The release owner must first inventory **every** revision receiving traffic,
+standby/active drainer and completion writer, and all worker image source SHAs.
+Then, and only then, the owner may publish the following operational readiness
+receipt (no producer publishes or renews it):
+
+```json
+{
+  "inventory_complete": true,
+  "verified_at": 1794902400,
+  "valid_until": 1794903300,
+  "reader_releases": ["0000000000000000000000000000000000000000"]
+}
+```
+
+This is a schema example, **not executable rollout data**. Replace timestamps
+with the verified current inventory's UTC epoch and source SHAs with the actual
+complete fleet; store at `<namespace>_coalesce_capabilities/roster`. The window
+is at most 900s, cannot start in the future, and every required SHA must already
+have a protocol-2/16-member advertisement. An old or unadvertised SHA blocks.
+The owner must reverify the complete live inventory before renewing it; new
+traffic or worker rollout invalidates the old attestation. Ads alone cannot
+discover an old binary, so **an incomplete inventory is not clearance**. No
+runtime inventory, roster write or capability activation occurred in this PR.
+Production data/account documents are not part of the inventory.
+
+### Measurements and first canary
+
+`omi_batch_pipeline_created_units_total{entitlement="paid|trial|free|unknown"}`
+counts non-shadow unit creation only after durable admission, not transaction
+retries or receipt re-ACKs. Unclassified/native adapters report unknown rather
+than guessing. This is a post-commit observation and can undercount a lost reply.
+`omi_batch_pipeline_upload_to_transcript_seconds{entitlement=...,hold_state=...,recovered=...}` retains each
+original sync request-arrival timestamp (before multipart parsing) through a hold, merged admission
+and completion. It observes one sample per first original terminal receipt,
+including server hold, queue and processing time; replays do not refresh the clock or
+observe again. Merged units do not replace N originals with one latency sample.
+Deleted sources and legacy uploads lacking the original clock do not contribute.
+The endpoint is durable server transcript publication, not notes completion or
+proof of a client receiving a response. Check actual client receipt separately;
+watch oldest unfinished/held obligations as well as completed-sample p90.
+
+For the SCA-4372 mobile ramp, read p90 per `hold_state`. The explicit states are
+`none`, `bg300`, `fg_preview300`, and `fg60`. `unknown` includes absent headers
+and unrecognized values. During the backend roll, filter the guard query to
+explicit states. Older revisions lack the label and the new 360-second bucket,
+so their samples would mix bucket layouts in an aggregate. A ramp cohort
+without measurements for its expected state leaves the guard blind. The
+rollback expression per state is
+`p90(omi_batch_pipeline_upload_hold_age_seconds) + p90(omi_batch_pipeline_upload_to_transcript_seconds) > H + 300 s`.
+Use H = 60 s for `fg60` and H = 300 s for `bg300` or `fg_preview300`.
+For both histograms, filter to `recovered="false"` for the guard and chart
+`recovered="true"` separately. During the exporter rollout, wait for both
+histograms to expose the label before using this filter. The phone histogram captures age
+through send, including time spent suspended, on each fresh batch admission.
+The server histogram starts at request arrival. The sum of their p90s is the
+rollout guard and is not a directly measured end-to-end p90.
+
+Sync exports all three families in its default Cloud Run registry. The worker
+private registry and multiprocess forwarding carry unit creation and server
+publication latency. Existing `batch_pipeline_.*` and `omi_.*`
+keep-lists retain the counter and every histogram sample; regression tests
+evaluate every keep/drop rule in the sync, projection pump, and shared Cloud
+Run profiles and verify the actual worker health registry. No keep-list
+widening is needed.
+
+There is still no percentage/cohort gate for this path. Do **not** call the batch
+admission percentage a 10% coalescing cohort. Smallest safe first production
+step after source/compatibility and synthetic qualification: keep FREE=60, set
+BACKLOG=300 on backend-sync producers and every drainer, only for already
+admissible free non-fresh work; R7-parked work remains parked. Start with one
+<=15-minute verified inventory receipt; if it expires, new holds automatically
+fall back to 60. Inventory renewal is an explicit release-owner action after a
+new verification, not a permanently trusted flag. No free-fresh expansion until
+the margin lead accepts that readout or a stable owner-cohort route exists.
+
+Gate: free upload-to-transcript p90 <1800s and unchanged paid/trial latency,
+no missing/duplicate samples or speech, no privacy/erasure/retention regression,
+paired transcript/speaker/notes quality, stable oldest outstanding age and
+recovery rate, and lower total billed reads per unchanged original-source
+audio-hour including entitlement, capability/scan and original-fanout overhead.
+At 300/600s units, real canary measurements must include RSS, peak GPU VRAM,
+full-unit VAD/diarization latency, ASR padded-batch budgets, claim/lease tail,
+provider recovery duration/spend and failed/held originals. Replay tests cover
+CPU/windowing/recovery contracts, not CUDA memory or quality. The margin lead
+expands; done or reverted by **2026-11-24**. Rollback both windows to 60; keep
+compatible readers until extended holds and original receipts are terminal.
+No saving is claimed.
+
+The remainder describes the legacy 60s profile unless the tiered section above says otherwise.
+
 The accepted risk contract is SCA-1756's `cuts-3-design-risks.md`, attachment
 `01a1d0e2-6ecd-7156-92c3-c1e98e546d56`, reviewed and verified 2026-11-12.
 Its product reference `3f98d03e8b95b6cba1b4458b2d467afad444a332` was reconciled
@@ -145,3 +279,52 @@ Then set OFF everywhere, drain individually, and prove zero unexplained residue
 before removing compatible readers. Never roll back to an incompatible binary
 with nonterminal member receipts. Book $0 until the release-owner live readback
 proves reads per unchanged admitted audio-hour down with quality/custody PASS.
+
+## Counts-only production diagnosis
+
+Sync and integration use `deploy/cloud_run_gmp_sync.yaml`, not the shared
+`omi_.*` sidecar profile. Retain the explicitly listed coalescing hold/scan
+metrics and `omi_batch_leader_lease_total` there. The retention test in
+`tests/unit/test_attach_cloud_run_gmp_sidecar.py` covers both the hold outcomes
+and the strict scan's counter, histogram and last-success gauge. A registered
+zero gauge on a non-draining backend instance does not establish scan health.
+
+After the collector configuration is serving, query the emitting service:
+
+```promql
+sum by (service_name,outcome) (increase(omi_batch_upload_coalescing_total[1h]))
+sum by (service_name,outcome) (increase(omi_batch_upload_coalescing_scan_total[1h]))
+max(omi_batch_upload_coalescing_scan_last_success_seconds{service_name="backend-integration"})
+sum by (outcome) (increase(omi_batch_leader_lease_total{role="upload_coalescing_scan",service_name="backend-integration"}[1h]))
+```
+
+An absent outcome counter is unknown until ingestion is qualified. Even after
+that, `accepted` is an observation count, not a unique-source denominator.
+The producer declines when its shared quota heartbeat is absent, older than
+five seconds, or more than five seconds in the future. The GMP scrape interval
+is sixty seconds, so the last-success gauge alone cannot certify that
+five-second admission condition. Positive
+`accepted` and `drained_merged` observations establish execution separately.
+
+There is no coalescing-specific percentage or allowlist. Batch admission's
+`rollout_cohorts/_ramp` percentage is a different control and must not be reduced
+to implement a 5% coalescing canary. A release owner needs an isolated 5% producer
+route, with the remaining producers OFF and all shared drainers ON (OFF drainers
+intentionally convert individually). If that topology cannot be verified, a
+5% isolated canary is not available from the current boolean flag.
+
+For a canary, require attributable hold acceptance and merged draining, healthy
+scan/lease outcomes, conserved source samples, terminal receipts, paired quality
+acceptance, and fewer total batch-family billed reads per unchanged source audio
+hour including scan, artifact and completion-fanout overhead. Measure latency
+from each original upload's arrival through delivered transcript, including the
+hold. Fresh paid and trial p50/p90 and their existing speed targets must not
+worsen against a matched control; adding sixty seconds to an existing target is
+not acceptance. Existing unit/processing clocks start too late and queue-age
+metrics do not substitute for that measurement. Stop on missed latency budgets,
+privacy/custody errors, quality regressions or unexplained read amplification.
+Do not activate without an attributable original-upload latency measurement.
+
+Rollback is `BATCH_PIPELINE_UPLOAD_COALESCING_ENABLED=false` on every producer
+and drainer, retaining the compatible binary until all existing holds drain
+individually and every original receipt is terminal. No saving is claimed.

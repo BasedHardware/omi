@@ -64,7 +64,7 @@ def test_promo_checkout_disables_adaptive_pricing():
     assert params['discounts'] == [{'promotion_code': 'promo_123'}]
     assert params['adaptive_pricing'] == {'enabled': False}
     assert params['currency'] == 'usd'
-    assert params['locale'] == 'auto'
+    assert params['locale'] == stripe_utils.CHECKOUT_LOCALE
     assert params['custom_text']['submit']['message'] == 'All amounts are in USD (US dollars).'
 
 
@@ -83,8 +83,11 @@ def test_promo_free_checkout_disables_adaptive_pricing(trial_period_days, custom
     assert 'discounts' not in params
     assert params['adaptive_pricing'] == {'enabled': False}
     assert params['currency'] == 'usd'
-    assert params['locale'] == 'auto'
-    assert params['custom_text']['submit']['message'] == 'All amounts are in USD (US dollars).'
+    assert params['locale'] == stripe_utils.CHECKOUT_LOCALE
+    message = params['custom_text']['submit']['message']
+    assert message.endswith('All amounts are in USD (US dollars).')
+    # A trial session also states the first charge above the button.
+    assert message.startswith('No charge today.') == bool(trial_period_days)
 
 
 def test_adaptive_pricing_pin_is_unconditional():
@@ -96,6 +99,29 @@ def test_adaptive_pricing_pin_is_unconditional():
     base_end = source.index("if trial_period_days:", base_start)
 
     assert "'adaptive_pricing': {'enabled': False}" in source[base_start:base_end]
+
+
+def test_checkout_locale_is_pinned_to_the_app_currency_string():
+    """The cart must render the same currency string the app shows.
+
+    The app formats every purchase amount as an explicit, locale-independent
+    "US$269.91" (app/lib/utils/billing_price.dart). Stripe renders the same USD
+    amount differently per session locale, verified against live Checkout
+    renders on 2026-11-16:
+
+        locale 'en'    -> "$269.91"
+        locale 'en-GB' -> "US$269.91"   <- matches the app
+        locale 'de'    -> "269,91 $"
+
+    With 'auto' the cart followed the buyer's browser language, so the offer
+    page and the cart disagreed; Google Play rejected Android 1.0.587 (code
+    1560) for "Currency differences with prominent display price". The locale
+    is therefore a pinned constant, and 'auto' must not come back.
+    """
+    assert stripe_utils.CHECKOUT_LOCALE == 'en-GB'
+    source = STRIPE_UTILS_SOURCE.read_text(encoding="utf-8")
+    assert "'locale': 'auto'" not in source
+    assert "'locale': CHECKOUT_LOCALE" in source
 
 
 @pytest.mark.parametrize('currency', ['usd', 'jpy'])

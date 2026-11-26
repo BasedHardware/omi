@@ -24,9 +24,10 @@ from typing import Any, Mapping
 from config.episodes import episodes_enabled_for
 from config.episode_attach import noop_schedule_enabled
 from config.recorded_time import recorded_episodes_enabled
+from models.finalization_owner import python_owns_finalization
 from utils.conversations.fragment_visibility import is_relevance_discarded
 from utils.conversations.processing_trigger import ProcessingTrigger
-from utils.episodes import client_gate
+from utils.episodes import client_gate, intake_worker
 from utils.executors import ExecutorSaturatedError, lifecycle_executor, submit_with_context, submit_with_context_retry
 from utils.observability.fallback import record_fallback
 
@@ -42,6 +43,8 @@ def attach_synced_at_intake(uid: str, conversation_id: str, row: Mapping[str, An
     short process cache: a batch lands many segments, and a faulting Redis must
     cost one read per window, not one per segment.
     """
+    if row and (row.get('recording') or row.get('v3_derived')):
+        return 'disabled'
     if not episodes_enabled_for(uid) or not conversation_id:
         return 'disabled'
     try:
@@ -52,10 +55,16 @@ def attach_synced_at_intake(uid: str, conversation_id: str, row: Mapping[str, An
         normalized = dict(row) if isinstance(row, Mapping) else {}
         raw_source = normalized.get('source')
         normalized['source'] = getattr(raw_source, 'value', raw_source)
-        return attach_synced_intake(uid, conversation_id, normalized)
+        outcome = attach_synced_intake(uid, conversation_id, normalized)
     except Exception as error:
         logger.warning('event=episode_sync_intake_attach outcome=error exception_type=%s', type(error).__name__)
         return 'error'
+    if outcome in {'joined', 'attached', 'recorded', 'attached_unchanged'}:
+        try:
+            intake_worker.notify_workerd(uid, conversation_id, normalized.get('sync_content_revision'))
+        except Exception as error:
+            logger.warning('event=episode_intake_workerd outcome=error exception_type=%s', type(error).__name__)
+    return outcome
 
 
 def skip_unchanged_schedule(uid, conversation_id, row, *, finalized=False, absorbed_from=None):
@@ -79,6 +88,8 @@ def skip_unchanged_schedule(uid, conversation_id, row, *, finalized=False, absor
 def schedule_synced_intake_attach(uid: str, conversation_id: str, row: Mapping[str, Any] | None) -> None:
     """Run on the episode pool; saturation queues admission with bounded producer backpressure."""
     if not episodes_enabled_for(uid) or not conversation_id:
+        return
+    if row and (row.get('recording') or row.get('v3_derived')):
         return
     snapshot = dict(row) if isinstance(row, Mapping) else {}
     try:
@@ -171,5 +182,5 @@ def _after_finalization(uid: str, conversation_id: str, trigger: ProcessingTrigg
     from utils.episodes.service import on_conversation_finalized
 
     row = conversations_db.get_conversation(uid, conversation_id)
-    if row:
+    if row and python_owns_finalization(row):
         on_conversation_finalized(uid, conversation_id, row, trigger=trigger.value)

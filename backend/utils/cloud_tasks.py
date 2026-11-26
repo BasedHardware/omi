@@ -13,8 +13,6 @@ Quarantine recovery is separately fenced by RecoveryStore.start: its task and
 inline fallback adopt the same paid token and cannot both invoke the provider.
 """
 
-from config import audio_archive
-
 import json
 import logging
 import hashlib
@@ -128,13 +126,7 @@ def _oidc_audience() -> str:
     return os.getenv('SYNC_TASKS_OIDC_AUDIENCE') or _handler_url()
 
 
-def _audio_merge_handler_url(uid: str = '') -> str:
-    if audio_archive.admitted(uid, 'SEPARATE_MERGE'):
-        worker = os.getenv('AUDIO_MERGE_WORKER_URL', '').strip()
-        if not worker:
-            logger.warning('separate merge worker missing AUDIO_MERGE_WORKER_URL; retaining legacy handler')
-        else:
-            return worker
+def _audio_merge_handler_url() -> str:
     return os.getenv('AUDIO_MERGE_HANDLER_URL', '')
 
 
@@ -257,11 +249,24 @@ def _conversation_batch_purge_handler_url() -> str:
     return f'{parts.scheme}://{parts.netloc}{CONVERSATION_BATCH_PURGE_PATH}'
 
 
+def conversation_erasure_queues() -> tuple[str, ...]:
+    """Queues that may hold a batch-purge or erasure task, dispatch target first.
+
+    These units run on their own queue (``CONVERSATION_ERASURE_TASKS_QUEUE``) so a
+    cleanup burst cannot queue in front of account wipes. Unset, they stay on
+    ``ACCOUNT_DELETION_TASKS_QUEUE``, where revisions predating the split also
+    sent them; those tasks run there, so that queue is always the second place to look.
+    """
+    dedicated = os.getenv('CONVERSATION_ERASURE_TASKS_QUEUE', '').strip()
+    shared = os.getenv('ACCOUNT_DELETION_TASKS_QUEUE', '').strip()
+    return tuple(dict.fromkeys(queue for queue in (dedicated, shared) if queue))
+
+
 def is_conversation_batch_purge_dispatch_configured() -> bool:
-    """Conversation batch purges ride the account-deletion queue and invoker identity."""
+    """Conversation batch purges use the account-deletion handler host and invoker identity."""
     return bool(
         is_account_deletion_dispatch_enabled()
-        and os.getenv('ACCOUNT_DELETION_TASKS_QUEUE', '').strip()
+        and conversation_erasure_queues()
         and _conversation_batch_purge_handler_url()
         and _invoker_sa()
     )
@@ -277,24 +282,40 @@ def conversation_erasure_task_id(job_id: str, generation: int) -> str:
     return f'conversation-erasure-{job_id}-g{int(generation)}'
 
 
-def enqueue_conversation_batch_purge(job_id: str, generation: int, *, erasure: bool = False) -> None:
+def _conversation_batch_purge_task_name(job_id: str, generation: int, erasure: bool) -> str:
+    return (conversation_erasure_task_id if erasure else conversation_batch_purge_task_id)(job_id, generation)
+
+
+def enqueue_conversation_batch_purge(
+    job_id: str, generation: int, *, erasure: bool = False, queue: Optional[str] = None
+) -> None:
     """Dispatch one generation of a durable purge (or accepted-delete erasure) obligation to backend-sync.
 
     The payload stays opaque. An erasure carries ``kind``; a consumer that predates
     it looks the id up among purge obligations, answers ``missing``, and the
-    erasure is redriven.
+    erasure is redriven. ``queue`` defaults to the first of ``conversation_erasure_queues``.
     """
     payload: dict = {'job_id': job_id, 'generation': int(generation)}
     if erasure:
         payload['kind'] = 'erasure'
     enqueue_named_task(
-        os.getenv('ACCOUNT_DELETION_TASKS_QUEUE', '').strip(),
+        queue or next(iter(conversation_erasure_queues()), ''),
         _conversation_batch_purge_handler_url(),
-        (conversation_erasure_task_id if erasure else conversation_batch_purge_task_id)(job_id, generation),
+        _conversation_batch_purge_task_name(job_id, generation, erasure),
         payload,
         audience=_conversation_batch_purge_handler_url(),
         invoker_sa=_invoker_sa(),
     )
+
+
+def conversation_batch_purge_task_pending(job_id: str, generation: int, *, erasure: bool = False) -> bool:
+    """Whether this generation's task is still in a queue (waiting, delivering, or between retries).
+
+    Only an authoritative NotFound in every queue that may hold it proves it gone;
+    any other probe failure raises.
+    """
+    name = _conversation_batch_purge_task_name(job_id, generation, erasure)
+    return any(named_task_exists(queue, name) for queue in conversation_erasure_queues())
 
 
 def conversation_batch_purge_consumer_ready() -> Optional[bool]:
@@ -399,9 +420,11 @@ def enqueue_named_task(
     audience: Optional[str] = None,
     invoker_sa: Optional[str] = None,
     schedule_at: Optional[int] = None,
-) -> None:
+) -> bool:
     """Enqueue one named HTTP task. Duplicate names are treated as success —
-    Cloud Tasks deduplicates named tasks. Any other failure raises."""
+    Cloud Tasks deduplicates named tasks. Any other failure raises.
+
+    Returns False when the name was refused as a duplicate, True when this call created the task."""
     project = os.getenv('SYNC_TASKS_PROJECT', '')
     location = os.getenv('SYNC_TASKS_LOCATION', '')
     selected_invoker_sa = invoker_sa or _invoker_sa()
@@ -429,6 +452,8 @@ def enqueue_named_task(
         client.create_task(parent=parent, task=task)  # type: ignore[reportUnknownMemberType]  # google.cloud.tasks_v2 partially untyped
     except AlreadyExists:
         logger.info('task %s already enqueued, skipping duplicate', task_id)
+        return False
+    return True
 
 
 def named_task_exists(queue: str, task_id: str) -> bool:
@@ -533,8 +558,14 @@ def enqueue_sync_uid_wake(uid: str, uid_hash: str, deadline: int) -> None:
     if not handler.endswith('/v2/sync-jobs/run'):
         raise RuntimeError('sync task handler URL is not the expected v2 route')
     wake_url = handler.removesuffix('/v2/sync-jobs/run') + '/v2/sync-backfill-sequencer/wake'
+    # A backfill wake must not spend the fresh queue's dispatch budget new recordings need
+    # (2026-11-16 fresh-vs-backlog audit). Same handler; only the delivering queue moves.
+    queue = os.getenv('SYNC_TASKS_QUEUE', '')
+    backfill_queue = os.getenv('SYNC_BACKFILL_TASKS_QUEUE', '').strip()
+    if backfill_queue and is_sync_backfill_routing_enabled():
+        queue = backfill_queue
     enqueue_named_task(
-        os.getenv('SYNC_TASKS_QUEUE', ''),
+        queue,
         wake_url,
         f'sbu-{uid_hash}-{deadline}',
         {'uid': uid},
@@ -560,7 +591,7 @@ def enqueue_audio_merge_job(payload: Dict[str, Any]) -> None:
     and isn't swallowed by the named-task tombstone. 'amc-' cannot collide with
     per-part names (audio_file ids are UUIDv4).
     """
-    handler_url = _audio_merge_handler_url(str(payload.get('uid') or ''))
+    handler_url = _audio_merge_handler_url()
     enqueue_named_task(
         os.getenv('AUDIO_MERGE_TASKS_QUEUE', ''),
         handler_url,
@@ -594,7 +625,7 @@ def enqueue_audio_merge_job_deferred(payload: Dict[str, Any], delay_seconds: int
     gate has cleared. Gate holds last seconds to a few minutes.
     """
     deferral = int(payload['destructive_deferrals'])
-    handler_url = _audio_merge_handler_url(str(payload.get('uid') or ''))
+    handler_url = _audio_merge_handler_url()
     enqueue_named_task(
         os.getenv('AUDIO_MERGE_TASKS_QUEUE', ''),
         handler_url,
@@ -710,12 +741,9 @@ def verify_audio_merge_cloud_tasks_oidc(request: Request) -> int:
 
     Audience is the merge handler URL so an enqueuer whose SYNC_TASKS_*
     audience names a different service (backend-sync-backfill) can still
-    mint a token the merge worker will accept.
+    mint a token the merge handler will accept.
     """
-    audiences = list(filter(None, (_audio_merge_handler_url(), os.getenv('AUDIO_MERGE_WORKER_URL', '').strip())))
-    return verify_configured_cloud_tasks_oidc(
-        request, audience=audiences[0] if len(audiences) == 1 else audiences, invoker_sa=_invoker_sa()
-    )
+    return verify_configured_cloud_tasks_oidc(request, audience=_audio_merge_handler_url(), invoker_sa=_invoker_sa())
 
 
 def verify_account_deletion_cloud_tasks_oidc(request: Request) -> AccountDeletionTaskAuthentication:

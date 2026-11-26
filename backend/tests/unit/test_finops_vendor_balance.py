@@ -8,6 +8,7 @@ import importlib.util
 import io
 import json
 import pathlib
+import re
 import urllib.error
 
 import pytest
@@ -53,6 +54,42 @@ def test_parse_balance_accepts_numeric_amounts_leniently(vb):
     parsed = vb.parse_balance({**BALANCE, "used_balance_usd": 12.5, "available_balance_usd": 0})
     assert parsed["used_usd"] == "12.5"
     assert parsed["available_usd"] == "0"
+
+
+NUMERIC_RE = r"^\d{1,29}(\.\d{1,9})?$"  # what a BigQuery NUMERIC load accepts from JSON text
+
+
+@pytest.mark.parametrize(
+    "raw, expected",
+    [
+        ("10427.6212345678901234", "10427.621234568"),  # more than nine fractional digits rounds
+        ("0.0000000005", "0.000000001"),  # half rounds up, the table's documented policy
+        ("0.0000000004", "0.000000000"),
+        ("1E-12", "0.000000000"),  # exponent notation never reaches the table
+        ("1E+3", "1000"),
+        ("12.5", "12.5"),  # short values keep their digits
+        ("0", "0"),
+        ("99999999999999999999999999999.9999999994", "99999999999999999999999999999.999999999"),
+    ],
+)
+def test_parse_balance_renders_numeric_safe_strings(vb, raw, expected):
+    parsed = vb.parse_balance({**BALANCE, "used_balance_usd": raw, "available_balance_usd": raw})
+    assert parsed["used_usd"] == expected and parsed["available_usd"] == expected
+    assert re.match(NUMERIC_RE, parsed["used_usd"])
+
+
+@pytest.mark.parametrize(
+    "raw",
+    [
+        "100000000000000000000000000000",
+        "1E+40",
+        "99999999999999999999999999999.9999999996",  # rounds up to 10**29, which NUMERIC cannot hold
+    ],
+)
+def test_parse_balance_rejects_values_outside_the_numeric_range(vb, raw):
+    with pytest.raises(vb.BalanceError) as err:
+        vb.parse_balance({**BALANCE, "used_balance_usd": raw})
+    assert err.value.reason == "invalid_response"
 
 
 @pytest.mark.parametrize(
@@ -367,6 +404,42 @@ def test_deltas_decimal_string_inputs(vb):
 # ---------------------------------------------------------------- loader dark path
 
 
+def test_deltas_never_emit_exponent_notation_or_overflow_the_context(vb):
+    # a zero delta quantizes to 0E-9 without the renderer; the readback strings are NUMERIC text
+    zero = vb.daily_deltas([snap("2026-10-20", "100.000000000"), snap("2026-10-21", "100.000000000")])
+    assert re.match(NUMERIC_RE, zero[0]["usd"]) and "E" not in zero[0]["usd"]
+    # a 29-integer-digit value divides and rounds under the default 28-digit context otherwise
+    big = vb.daily_deltas([snap("2026-10-20", "0"), snap("2026-10-22", "99999999999999999999999999999.999999999")])
+    assert len(big) == 2 and all(re.match(NUMERIC_RE, row["usd"]) for row in big)
+    # the subtraction itself must not round at the default 28 digits: a one-day delta
+    # of 99999999999999999999999999999.999999999 stays in range
+    one_day = vb.daily_deltas([snap("2026-10-20", "0"), snap("2026-10-21", "99999999999999999999999999999.999999999")])
+    assert one_day[0]["usd"] == "99999999999999999999999999999.999999999"
+    # a repeating share rounds to nine places
+    third = vb.daily_deltas([snap("2026-10-20", "0"), snap("2026-10-23", "1")])
+    assert [row["usd"] for row in third] == ["0.333333333"] * 3
+
+
+def test_loader_skips_an_out_of_range_artifact_instead_of_failing_the_job(vb, tmp_path, capsys):
+    lb = load("load_bigquery")
+    (tmp_path / "vendor_balance_snapshot.json").write_text(
+        json.dumps(
+            {
+                "status": "ready",
+                "vendor": "soniox",
+                "ts": "2026-10-23T14:30:00Z",
+                "used_usd": "100000000000000000000000000000",
+                "available_usd": "1",
+                "invoice_billing_enabled": False,
+            }
+        )
+    )
+    created = []
+    assert lb.load_vendor_balance(tmp_path, "r1", "t", created.append, lambda *a, **k: 0, lambda *a, **k: "[]") == {}
+    assert created == []
+    assert "skipped: invalid_response" in capsys.readouterr().err
+
+
 def test_loader_dark_paths(vb, tmp_path, monkeypatch):
     lb = load("load_bigquery")
     created, replaced = [], []
@@ -408,6 +481,45 @@ def test_loader_dark_paths(vb, tmp_path, monkeypatch):
     loaded = lb.load_vendor_balance(tmp_path, "r1", "t", ensure_table, load_replace, bq_query)
     assert created == ["vendor_balance_snapshot"]
     assert loaded == {"vendor_balance_snapshot": 1}
+
+
+def test_loader_only_sends_numeric_safe_money_to_bigquery(vb, tmp_path):
+    """Regression for the first real daily run: the vendor's decimals carried more
+    than nine fractional digits and BigQuery rejected used_usd as an invalid NUMERIC.
+    Even an artifact written by an older image must be re-rendered before the load."""
+    lb = load("load_bigquery")
+    (tmp_path / "vendor_balance_snapshot.json").write_text(
+        json.dumps(
+            {
+                "status": "ready",
+                "vendor": "soniox",
+                "ts": "2026-10-23T14:30:00Z",
+                "used_usd": "10571.8812345678901234",
+                "available_usd": "1428.1187654321098766",
+                "invoice_billing_enabled": False,
+            }
+        )
+    )
+    sent = {}
+
+    def load_replace(name, rows, dates, extra_delete=""):
+        sent[name] = rows
+        return len(rows)
+
+    def bq_query(args, stdin=None):
+        return json.dumps(
+            [
+                {"ts": "2026-10-22T14:30:00Z", "used_usd": "10427.620000000"},
+                {"ts": "2026-10-23T14:30:00Z", "used_usd": "10571.881234568"},
+            ]
+        )
+
+    lb.load_vendor_balance(tmp_path, "r1", "t", lambda n: None, load_replace, bq_query)
+    row = sent["vendor_balance_snapshot"][0]
+    assert row["used_usd"] == "10571.881234568" and row["available_usd"] == "1428.118765432"
+    assert re.match(NUMERIC_RE, row["used_usd"]) and re.match(NUMERIC_RE, row["available_usd"])
+    for spend in sent["vendor_balance_spend_daily"]:
+        assert spend["usd"] is None or re.match(NUMERIC_RE, spend["usd"])
 
 
 def test_loader_rejects_tampered_artifacts(vb, tmp_path):

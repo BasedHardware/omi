@@ -261,7 +261,7 @@ def select_route(
 
     ``vendor_eligible`` is false while the owner's legacy sync is on: the provider route only
     exists once legacy is draining or dark (intake), so those owners keep today's routing.
-    ``gpu_saturated`` (intake passes it for fresh units only) enables GPU-capacity overflow.
+    ``gpu_saturated`` (intake passes it for configured priorities) enables GPU-capacity overflow.
     """
     try:
         if not vendor_routing_enabled():

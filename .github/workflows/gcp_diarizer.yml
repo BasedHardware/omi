@@ -36,11 +36,58 @@ on:
         description: 'batch-pipeline-worker only: deploy this already-built gcr.io digest (sha256:...) instead of rebuilding; its omi.release.tree label must equal the source tree'
         required: false
         default: ''
+      preserve_live_worker:
+        description: 'Prod batch-pipeline-worker only: CAS image-only update, preserving the entire live runtime spec; siblings are verified but never rolled'
+        required: false
+        default: false
+        type: boolean
+      worker_live_baseline:
+        description: 'Preserve-live only: admitted JSON from worker_image_only.py inventory (target identity/spec hash and all shared-image consumer bindings)'
+        required: false
+        default: ''
+      worker_rollback_receipt:
+        description: 'Preserve-live rollback only: saved safe receipt; requires its exact prior digest and full merged source SHA at or above f3902ec'
+        required: false
+        default: ''
       break_glass_lock:
         description: 'Break-glass: skip the shared prod-train lock (still serialized per target; the actor is recorded)'
         required: false
         default: false
         type: boolean
+      worker_dry_run:
+        description: 'Preserve-live only, under the shared lock; never writes, builds or pushes. Without a rollback receipt: forward admission plus a no-op prior-image admission (inverse not verified). With worker_rollback_receipt: server dry-run of the real inverse CAS'
+        required: false
+        default: false
+        type: boolean
+      mode:
+        description: 'Use worker-depth-only for a production batch worker depth CAS'
+        type: choice
+        default: standard
+        options:
+          - standard
+          - worker-depth-only
+      depth_operation:
+        description: 'Worker depth mode only: server rehearsal (plan), or rehearse and roll (apply)'
+        type: choice
+        default: plan
+        options:
+          - plan
+          - apply
+      target_depth:
+        description: 'Worker depth mode only: target literal depth (3 or 4)'
+        type: string
+      expected_current_depth:
+        description: 'Worker depth mode only: live literal depth (3 or 4)'
+        type: string
+      expected_worker_digest:
+        description: 'Worker depth mode only: exact serving sha256 digest'
+        type: string
+      expected_worker_uid:
+        description: 'Worker depth mode only: live primary Deployment UID'
+        type: string
+      expected_worker_resource_version:
+        description: 'Worker depth mode only: live primary Deployment resourceVersion'
+        type: string
 
 # Serialize Helm writers per GPU service and environment.
 # B5 (named by David, 2026-10-19 fourth round #9): every prod deploy writer shares the
@@ -72,10 +119,75 @@ jobs:
     timeout-minutes: 75
     steps:
       - name: Validate Environment Input
+        env:
+          PRESERVE_LIVE: ${{ inputs.preserve_live_worker }}
+          LIVE_BASELINE: ${{ inputs.worker_live_baseline }}
+          ROLLBACK_RECEIPT: ${{ inputs.worker_rollback_receipt }}
+          SOURCE_REF: ${{ inputs.branch }}
+          CANDIDATE_DIGEST: ${{ inputs.image_digest }}
+          BREAK_GLASS_LOCK: ${{ inputs.break_glass_lock }}
+          DRY_RUN: ${{ inputs.worker_dry_run }}
+          MODE: ${{ inputs.mode || 'standard' }}
+          DEPTH_OPERATION: ${{ inputs.depth_operation || 'plan' }}
+          TARGET_DEPTH: ${{ inputs.target_depth }}
+          EXPECTED_CURRENT_DEPTH: ${{ inputs.expected_current_depth }}
+          EXPECTED_WORKER_DIGEST: ${{ inputs.expected_worker_digest }}
+          EXPECTED_WORKER_UID: ${{ inputs.expected_worker_uid }}
+          EXPECTED_WORKER_RESOURCE_VERSION: ${{ inputs.expected_worker_resource_version }}
+          RELEASE_VERSION: ${{ inputs.release_version }}
         run: |
           if [[ "${{ github.event.inputs.environment }}" != "development" && "${{ github.event.inputs.environment }}" != "prod" ]]; then
             echo "Invalid environment: ${{ github.event.inputs.environment }}. Must be 'development' or 'prod'."
             exit 1
+          fi
+          if [[ "${MODE:-standard}" == worker-depth-only ]]; then
+            [[ "${{ inputs.environment }}" == prod && "$SERVICE" == batch-pipeline-worker \
+               && "$GITHUB_REF" == refs/heads/main && "$BREAK_GLASS_LOCK" != true ]] || {
+              echo "Worker depth mode requires the main workflow, prod batch-pipeline-worker and the shared lock" >&2
+              exit 1
+            }
+            [[ "$PRESERVE_LIVE" != true && "$DRY_RUN" != true \
+               && -z "$LIVE_BASELINE$ROLLBACK_RECEIPT$CANDIDATE_DIGEST$RELEASE_VERSION" ]] || {
+              echo "Worker depth mode cannot be combined with image deploy inputs" >&2
+              exit 1
+            }
+            [[ "$SOURCE_REF" =~ ^[0-9abcdef]{40}$ && "$DEPTH_OPERATION" =~ ^(plan|apply)$ \
+               && -n "$TARGET_DEPTH" && -n "$EXPECTED_CURRENT_DEPTH" && -n "$EXPECTED_WORKER_DIGEST" \
+               && -n "$EXPECTED_WORKER_UID" && -n "$EXPECTED_WORKER_RESOURCE_VERSION" ]] || {
+              echo "Worker depth mode requires a full reviewed branch SHA, operation and all five CAS inputs" >&2
+              exit 1
+            }
+            exit 0
+          fi
+          [[ "${MODE:-standard}" == standard && "${DEPTH_OPERATION:-plan}" == plan \
+             && -z "$TARGET_DEPTH$EXPECTED_CURRENT_DEPTH$EXPECTED_WORKER_DIGEST$EXPECTED_WORKER_UID$EXPECTED_WORKER_RESOURCE_VERSION" ]] || {
+            echo "Worker depth inputs require worker-depth-only mode" >&2
+            exit 1
+          }
+          if [[ "$PRESERVE_LIVE" == true ]]; then
+            [[ "${{ inputs.environment }}" == prod && "$SERVICE" == batch-pipeline-worker && -n "$LIVE_BASELINE" ]] || {
+              echo "preserve_live_worker requires prod, batch-pipeline-worker and an admitted inventory" >&2
+              exit 1
+            }
+          elif [[ -n "$LIVE_BASELINE" ]]; then
+            echo "worker_live_baseline requires preserve_live_worker" >&2
+            exit 1
+          fi
+          if [[ "$DRY_RUN" == true ]]; then
+            # A dry-run holds the shared prod-train lock and promotes an existing digest (no build or
+            # push). With a rollback receipt it rehearses the real inverse; the rollback checks below apply.
+            [[ "${{ inputs.environment }}" == prod && "$SERVICE" == batch-pipeline-worker && "$PRESERVE_LIVE" == true \
+               && -n "$LIVE_BASELINE" && "$BREAK_GLASS_LOCK" != true \
+               && "$CANDIDATE_DIGEST" =~ ^sha256:[abcdef0-9]{64}$ ]] || {
+              echo "worker_dry_run requires prod preserve-live batch-pipeline-worker, the shared lock and an explicit digest" >&2
+              exit 1
+            }
+          fi
+          if [[ -n "$ROLLBACK_RECEIPT" ]]; then
+            [[ "$PRESERVE_LIVE" == true && "$BREAK_GLASS_LOCK" != true && "$SOURCE_REF" =~ ^[abcdef0-9]{40}$ && "$CANDIDATE_DIGEST" =~ ^sha256:[abcdef0-9]{64}$ ]] || {
+              echo "Rollback requires preserve-live, the shared lock, a full merged source SHA and an explicit prior digest" >&2
+              exit 1
+            }
           fi
 
       # To workaround "no space left on device" issue of GitHub-hosted runner
@@ -93,6 +205,7 @@ jobs:
         env:
           DEPLOY_ENVIRONMENT: ${{ github.event.inputs.environment }}
           DEPLOY_REF: ${{ github.event.inputs.branch }}
+          PRESERVE_LIVE: ${{ inputs.preserve_live_worker }}
         run: |
           set -euo pipefail
           if [[ "$DEPLOY_ENVIRONMENT" == prod ]]; then
@@ -103,6 +216,10 @@ jobs:
               source_sha="$DEPLOY_REF"
             fi
             git merge-base --is-ancestor "$source_sha" origin/main
+            if [[ "$PRESERVE_LIVE" == true ]]; then
+              # Apply the same immutable source floor to forward and reverse image moves.
+              git merge-base --is-ancestor f3902ec5435809d95ac7c15f6be7e9f056564d3d "$source_sha"
+            fi
             git checkout --detach "$source_sha"
           fi
           echo "short_sha=$(git rev-parse --short=7 HEAD)" >> "$GITHUB_OUTPUT"
@@ -119,6 +236,17 @@ jobs:
             .github/actions/firestore-readiness
             backend/scripts
             backend/database
+
+      - name: Checkout immutable worker image-only control
+        if: inputs.preserve_live_worker == true
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.workflow_sha }}
+          path: .github/worker-workflow
+          persist-credentials: false
+          fetch-depth: 1
+          sparse-checkout-cone-mode: false
+          sparse-checkout: /.github/scripts/worker_image_only.py
 
       - name: Verify serving Firestore indexes
         uses: ./.github/firestore-workflow/.github/actions/firestore-readiness
@@ -210,10 +338,11 @@ jobs:
         uses: google-github-actions/setup-gcloud@v3
 
       - run: gcloud auth configure-docker
+        if: inputs.mode != 'worker-depth-only'
 
       - name: Build and Push Docker image
         id: build
-        if: github.event.inputs.image_digest == ''
+        if: inputs.mode != 'worker-depth-only' && github.event.inputs.image_digest == '' && inputs.worker_dry_run != true
         env:
           IMAGE_REPOSITORY: ${{ steps.target.outputs.image_repository }}
           DOCKERFILE: ${{ steps.target.outputs.dockerfile }}
@@ -238,7 +367,9 @@ jobs:
 
       - name: Verify promoted worker digest
         id: promote
-        if: github.event.inputs.image_digest != ''
+        if: inputs.mode != 'worker-depth-only' && github.event.inputs.image_digest != ''
+        # Reachable in worker_dry_run mode, which holds prod-train: bound the registry read.
+        timeout-minutes: 5
         env:
           IMAGE_REPOSITORY: ${{ steps.target.outputs.image_repository }}
           IMAGE_DIGEST: ${{ github.event.inputs.image_digest }}
@@ -267,7 +398,37 @@ jobs:
           location: ${{ env.REGION }}
           project_id: ${{ vars.GCP_PROJECT_ID }}
 
+      - name: Rehearse or apply the production worker depth CAS
+        if: inputs.mode == 'worker-depth-only' && inputs.worker_dry_run != true
+        timeout-minutes: 55
+        env:
+          DEPLOY_ENV: ${{ vars.ENV }}
+          REVIEWED_SOURCE: ${{ steps.vars.outputs.source_sha }}
+          DEPTH_OPERATION: ${{ inputs.depth_operation }}
+          TARGET_DEPTH: ${{ inputs.target_depth }}
+          EXPECTED_CURRENT_DEPTH: ${{ inputs.expected_current_depth }}
+          EXPECTED_WORKER_DIGEST: ${{ inputs.expected_worker_digest }}
+          EXPECTED_WORKER_UID: ${{ inputs.expected_worker_uid }}
+          EXPECTED_WORKER_RESOURCE_VERSION: ${{ inputs.expected_worker_resource_version }}
+        run: |
+          set -euo pipefail
+          [[ "$DEPLOY_ENV" == prod ]] || { echo "Worker depth mode requires the production GKE environment" >&2; exit 1; }
+          # Allow main to advance without changing the reviewed workflow or either control.
+          git diff --exit-code --quiet "$GITHUB_WORKFLOW_SHA" "$REVIEWED_SOURCE" -- \
+            .github/workflows/gcp_diarizer.yml .github/scripts/worker_depth_only.py .github/scripts/worker_image_only.py \
+            backend/scripts/deploy_status_report.py \
+            || { echo "The reviewed worker depth controls differ from the running workflow" >&2; exit 1; }
+          python3 .github/scripts/worker_depth_only.py "$DEPTH_OPERATION" \
+            --source "$REVIEWED_SOURCE" --current "$EXPECTED_CURRENT_DEPTH" --target "$TARGET_DEPTH" \
+            --digest "$EXPECTED_WORKER_DIGEST" --uid "$EXPECTED_WORKER_UID" --version "$EXPECTED_WORKER_RESOURCE_VERSION"
+
+      - name: Verify worker depth apply pod health
+        if: inputs.mode == 'worker-depth-only' && inputs.depth_operation == 'apply' && inputs.worker_dry_run != true
+        timeout-minutes: 3
+        run: timeout 120 python3 backend/scripts/deploy_status_report.py --env prod --include-gke --gke-service batch-pipeline-worker
+
       - name: Deploy Diarizer to GKE cluster using Helm
+        if: inputs.mode != 'worker-depth-only' && inputs.preserve_live_worker != true && inputs.worker_dry_run != true
         env:
           DEPLOY_NAMESPACE: ${{ vars.ENV }}-omi-backend
           TARGET_CHART: ${{ steps.target.outputs.chart }}
@@ -292,17 +453,80 @@ jobs:
               -f "./$TARGET_VALUES" --set-string "image.tag=${{ steps.vars.outputs.short_sha }}"
           fi
 
+      # Uses workflow-owned controls even when the runtime source predates this mode.
+      # Default success() is intentional: never write after a failed source/index/image gate.
+      - name: Dry-run worker image preserving live runtime
+        if: inputs.preserve_live_worker == true && inputs.worker_dry_run == true
+        env:
+          LIVE_BASELINE: ${{ inputs.worker_live_baseline }}
+          ROLLBACK_RECEIPT: ${{ inputs.worker_rollback_receipt }}
+          IMAGE_REPOSITORY: ${{ steps.target.outputs.image_repository }}
+          IMAGE_DIGEST: ${{ steps.promote.outputs.image_digest }}
+          # The helper refuses every API call other than a read or a server dry-run patch while set.
+          WORKER_IMAGE_ONLY_DRY_RUN: "1"
+        run: |
+          set -euo pipefail
+          umask 077
+          echo "$LIVE_BASELINE" > "$RUNNER_TEMP/worker-live-baseline.json"
+          rollback_args=()
+          if [[ -n "$ROLLBACK_RECEIPT" ]]; then
+            echo "$ROLLBACK_RECEIPT" > "$RUNNER_TEMP/worker-rollback-receipt.json"
+            rollback_args=(--rollback-receipt "$RUNNER_TEMP/worker-rollback-receipt.json")
+          fi
+          python3 .github/worker-workflow/.github/scripts/worker_image_only.py dry-run \
+            --baseline "$RUNNER_TEMP/worker-live-baseline.json" \
+            --image "${IMAGE_REPOSITORY}@${IMAGE_DIGEST}" \
+            "${rollback_args[@]}" \
+            --receipt "$RUNNER_TEMP/worker-dry-run-receipt.json" | tee "$RUNNER_TEMP/worker-dry-run.json"
+          {
+            echo '### Worker preserve-live dry-run receipt (no write)'
+            echo '```json'
+            cat "$RUNNER_TEMP/worker-dry-run.json"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Deploy worker image preserving live runtime
+        if: inputs.preserve_live_worker == true && inputs.worker_dry_run != true
+        env:
+          LIVE_BASELINE: ${{ inputs.worker_live_baseline }}
+          ROLLBACK_RECEIPT: ${{ inputs.worker_rollback_receipt }}
+          IMAGE_REPOSITORY: ${{ steps.target.outputs.image_repository }}
+          IMAGE_DIGEST: ${{ steps.build.outputs.image_digest || steps.promote.outputs.image_digest }}
+        run: |
+          set -euo pipefail
+          umask 077
+          echo "$LIVE_BASELINE" > "$RUNNER_TEMP/worker-live-baseline.json"
+          rollback_args=()
+          if [[ -n "$ROLLBACK_RECEIPT" ]]; then
+            echo "$ROLLBACK_RECEIPT" > "$RUNNER_TEMP/worker-rollback-receipt.json"
+            rollback_args=(--rollback-receipt "$RUNNER_TEMP/worker-rollback-receipt.json")
+          fi
+          python3 .github/worker-workflow/.github/scripts/worker_image_only.py deploy \
+            --baseline "$RUNNER_TEMP/worker-live-baseline.json" \
+            --image "${IMAGE_REPOSITORY}@${IMAGE_DIGEST}" \
+            "${rollback_args[@]}" \
+            --receipt "$RUNNER_TEMP/worker-image-receipt.json" | tee "$RUNNER_TEMP/worker-image-diff.json"
+          {
+            echo '### Worker image-only diff and rollback identity'
+            echo '```json'
+            cat "$RUNNER_TEMP/worker-image-diff.json"
+            echo '```'
+            echo 'Shared-image siblings remain on the admitted bindings. Existing repair-flags reapply and release canary gates remain required.'
+          } >> "$GITHUB_STEP_SUMMARY"
+
       # Every call here is bounded so the step always ends with a verdict and the
       # always() summary/notify steps run. batch-pipeline-worker is Recreate with a
       # 1500 s drain, so its wait covers drain plus GPU startup. A lost runner (run
       # 39456573983, 2026-10-20) still ends with no conclusion: re-run the job.
       - name: Verify rollout
+        if: inputs.mode != 'worker-depth-only' && inputs.worker_dry_run != true
         timeout-minutes: 45
         env:
           DEPLOY_NAMESPACE: ${{ vars.ENV }}-omi-backend
           DEPLOY_ENV: ${{ vars.ENV }}
           TARGET_RELEASE: ${{ steps.target.outputs.release_name }}
           EXPECTED_DIGEST: ${{ steps.build.outputs.image_digest || steps.promote.outputs.image_digest }}
+          PRESERVE_LIVE: ${{ inputs.preserve_live_worker }}
         run: |
           rollout_timeout=600s
           if [[ "$SERVICE" == "batch-pipeline-worker" ]]; then
@@ -319,8 +543,12 @@ jobs:
             exit 1
           fi
           if [[ -n "${EXPECTED_DIGEST:-}" ]]; then
+            image_path='{.spec.template.spec.containers[0].image}'
+            if [[ "$PRESERVE_LIVE" == true ]]; then
+              image_path='{.spec.template.spec.containers[?(@.name=="worker")].image}'
+            fi
             deployed_image="$(kubectl -n "$DEPLOY_NAMESPACE" get "deploy/$TARGET_RELEASE" --request-timeout=30s \
-              -o jsonpath='{.spec.template.spec.containers[0].image}')"
+              -o "jsonpath=$image_path")"
             if [[ "$deployed_image" != *"@$EXPECTED_DIGEST" ]]; then
               echo "::error::deploy/$TARGET_RELEASE rolled out $deployed_image, not the expected digest $EXPECTED_DIGEST"
               exit 1
@@ -353,23 +581,29 @@ jobs:
           fi
           timeout 120 python3 backend/scripts/deploy_status_report.py --env "$DEPLOY_ENV" --include-gke --gke-service "$SERVICE"
 
+      - name: Verify preserved worker runtime and sibling bindings
+        if: inputs.preserve_live_worker == true && inputs.worker_dry_run != true
+        run: |
+          python3 .github/worker-workflow/.github/scripts/worker_image_only.py verify \
+            --receipt "$RUNNER_TEMP/worker-image-receipt.json"
+
       - name: Generate deployment summary
-        if: always() && github.event.inputs.environment == 'prod'
+        if: always() && github.event.inputs.environment == 'prod' && inputs.mode != 'worker-depth-only'
         uses: BasedHardware/omi/.github/actions/deployment-summary@979b573718fd74b31edab3530adf2ed6082622dc
         with:
           deployment_tag: ${{ steps.vars.outputs.short_sha || 'unadmitted' }}
           environment: ${{ github.event.inputs.environment }}
-          release_version: ${{ github.event.inputs.release_version }}
+          release_version: ${{ inputs.worker_dry_run == true && 'DRY-RUN (no write)' || github.event.inputs.release_version }}
           status: ${{ job.status }}
           service: ${{ env.SERVICE }}
 
       - name: Notify deployment status on Telegram
-        if: always() && github.event.inputs.environment == 'prod'
+        if: always() && github.event.inputs.environment == 'prod' && inputs.mode != 'worker-depth-only'
         uses: BasedHardware/omi/.github/actions/deployment-notifier@979b573718fd74b31edab3530adf2ed6082622dc
         with:
           deployment_tag: ${{ steps.vars.outputs.short_sha || 'unadmitted' }}
           environment: ${{ github.event.inputs.environment }}
-          release_version: ${{ github.event.inputs.release_version }}
+          release_version: ${{ inputs.worker_dry_run == true && 'DRY-RUN (no write)' || github.event.inputs.release_version }}
           status: ${{ job.status }}
           telegram_bot_token: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           telegram_chat_id: ${{ secrets.TELEGRAM_CHAT_ID }}

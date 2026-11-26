@@ -5,7 +5,10 @@ import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/backend/schema/geolocation.dart';
 import 'package:omi/services/sockets/listen_client_state.dart';
 import 'package:omi/services/wals/mobile_batch_buffer.dart';
+import 'package:omi/services/wals/pendant_ring_custody.dart';
+import 'package:omi/services/wals/batch_ring_proof.dart';
 import 'package:omi/services/wals/mobile_batch_vad.dart';
+import 'package:omi/utils/reliability_experiments.dart';
 
 /// Routing owner for pendant Standard capture. No server capability, model,
 /// disk admission, or demand evidence means the existing streaming path.
@@ -17,14 +20,25 @@ class MobileStandardBatch {
     required this.visibility,
     required this.ownerUid,
     required this.now,
-  });
+    this.onSpeech,
+    PendantRingCustody? custody,
+    bool Function()? sealOnOpen,
+  })  : custody = custody ?? PendantRingCustody.shared,
+        _sealOnOpen = sealOnOpen ?? (() => ReliabilityExperiments.enabled('vendor_recognizer_on_opened_app'));
 
   final MobileBatchBuffer buffer;
+  final PendantRingCustody custody;
   final Future<MobileBatchVad> Function() loadVad;
   final Future<int?> Function() freeDiskBytes;
   final ValueListenable<ListenClientStateSnapshot> visibility;
   final String Function() ownerUid;
   final DateTime Function() now;
+  final bool Function() _sealOnOpen;
+
+  /// Told of every frame the VAD scores as speech, with its capture time and
+  /// recording. Feeds the end-of-recording clock, which the chunk seal below
+  /// never clears.
+  void Function(String? recordingSessionId, DateTime at)? onSpeech;
   MobileBatchVad? _vad;
   bool _serverAllowed = false;
   String? _authorizedUid;
@@ -77,6 +91,15 @@ class MobileStandardBatch {
     }
     buffer.seal();
     return all;
+  }
+
+  /// Reliability experiment `end_open_conversation`: the person ended the conversation. Seal the speech
+  /// file being written, so the audio up to the End is published and uploads in the normal order
+  /// instead of waiting for two seconds without speech or the 60 s cap. Frames after this open the
+  /// next file. Nothing to seal is a no-op.
+  void sealForEnd() {
+    if (_closed || !_bufferReady || buffer.failed) return;
+    buffer.seal();
   }
 
   /// The client stopped honouring a local-preview grant (a per-session gate
@@ -142,6 +165,9 @@ class MobileStandardBatch {
     required bool realtimeConsumer,
     Geolocation? geolocation,
     String? recordingSessionId,
+    String? deviceId,
+    int? packetCounter,
+    int? fragmentIndex,
   }) {
     if (!eligible || realtimeConsumer || !codec.isOpusSupported()) {
       buffer.seal();
@@ -152,14 +178,25 @@ class MobileStandardBatch {
       _lastSpaceCheck = clock;
       unawaited(_checkSpace());
     }
+    final context = batchRingProofEnabled && deviceId != null && packetCounter != null && fragmentIndex != null
+        ? custody.batchLiveContext(deviceId)
+        : null;
     final accepted = buffer.append(payload,
-        uid: ownerUid(), codec: codec, now: clock, geolocation: geolocation, recordingSessionId: recordingSessionId);
+        uid: ownerUid(),
+        codec: codec,
+        now: clock,
+        geolocation: geolocation,
+        recordingSessionId: recordingSessionId,
+        liveContext: context,
+        observeLiveOrdinal:
+            context == null ? null : () => custody.observeBatchFrame(context, packetCounter!, fragmentIndex!));
     if (!accepted) {
       buffer.seal();
       return false;
     }
     // Bound the inference queue. Overload is treated as speech/unknown; its
-    // original frames are already safe, and max chunk latency stays 60s.
+    // original frames are already safe, and max chunk latency stays at the
+    // buffer's file cap (60s by default).
     if (_queued < 32) {
       _queued++;
       final vad = _vad!;
@@ -169,7 +206,10 @@ class MobileStandardBatch {
         try {
           final probability = await vad.probability(payload);
           vadAudioSamples += samples;
-          if (probability >= 0.35) _lastSpeech = clock;
+          if (probability >= 0.35) {
+            _lastSpeech = clock;
+            onSpeech?.call(recordingSessionId, clock);
+          }
           if (_lastSpeech != null && clock.difference(_lastSpeech!) >= const Duration(seconds: 2)) {
             buffer.seal();
             _lastSpeech = null;
@@ -204,7 +244,11 @@ class MobileStandardBatch {
   }
 
   void visibilityChanged() {
-    if (visibility.value.transcriptVisible && !_localPreview) buffer.seal();
+    // Reliability experiment vendor_recognizer_on_opened_app: opening a transcript page seals the phone
+    // file being written in a local-preview session too, so the stored text behind the live words
+    // arrives sooner. Off: a local-preview session leaves the open file to its own rules.
+    final sealPreviewToo = _sealOnOpen();
+    if (visibility.value.transcriptVisible && (!_localPreview || sealPreviewToo)) buffer.seal();
   }
 
   Future<void> close() => _closing ??= _close();

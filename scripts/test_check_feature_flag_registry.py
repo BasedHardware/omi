@@ -859,21 +859,34 @@ class RegistryFixture(unittest.TestCase):
         self.write_flags(rows + [flag("NEW_ENABLED", owner="fresh / auditfix"), flag("ANOTHER_ENABLED", owner="auditfix, fresh")])
         self.assertIn("owner=auditfix would have 6 unramped flags", "\n".join(self.errors()))
 
-    def test_ops_kill_must_default_on_unless_temporarily_allowlisted(self) -> None:
+    def test_unrelated_ops_kill_must_default_on_before_and_after_november_29(self) -> None:
         row = flag(lifecycle="ops_kill", decision="keep", fail="closed")
         row.pop("review_by")
         registry = {"flags": [row], "ignore": [], "retired": []}
-        self.assertIn(
-            "EXAMPLE_ENABLED: ops_kill must default on (off is the kill); use rollout or config_switch",
-            validate_registry(registry, root=self.root),
-        )
-        with mock.patch("feature_flag_registry.OPS_KILL_DEFAULT_OFF_ALLOWLIST", {"EXAMPLE_ENABLED"}):
-            self.assertEqual([], validate_registry(registry, root=self.root, as_of=date(2026, 11, 29)))
-            errors = validate_registry(registry, root=self.root, as_of=date(2026, 11, 30))
-            self.assertIn("ops_kill default-off exception expired 2026-11-29: EXAMPLE_ENABLED", errors)
+        for as_of in (date(2026, 11, 29), date(2026, 11, 30)):
+            self.assertIn(
+                "EXAMPLE_ENABLED: ops_kill must default on (off is the kill); use rollout or config_switch",
+                validate_registry(registry, root=self.root, as_of=as_of),
+            )
         for fail in ("open", "inverted"):
             registry["flags"][0]["fail"] = fail
             self.assertEqual([], validate_registry(registry, root=self.root))
+
+    def test_dec_btr_001_ops_kill_controls_remain_valid_after_november_29(self) -> None:
+        rows = [
+            flag(key, lifecycle="ops_kill", decision="keep", fail="closed")
+            for key in ("PARAKEET_STREAM_ALLOCATION_PERCENT", "PARAKEET_WINDOW_ALLOCATION_PERCENT")
+        ]
+        for row in rows:
+            row.pop("review_by")
+        registry = {"flags": rows, "ignore": [], "retired": []}
+        with mock.patch("feature_flag_registry.ROOT", self.root):
+            self.assertEqual([], validate_registry(registry, root=self.root, as_of=date(2026, 11, 30)))
+            rows[0]["lifecycle"] = "config_switch"
+            self.assertIn(
+                "remove stale ops_kill default-off allowlist entries: PARAKEET_STREAM_ALLOCATION_PERCENT",
+                validate_registry(registry, root=self.root, as_of=date(2026, 11, 30)),
+            )
 
     def test_ops_kill_allowlist_stale_entries_fail_only_at_real_root(self) -> None:
         registry = {"flags": [flag()], "ignore": [], "retired": []}

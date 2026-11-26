@@ -115,6 +115,9 @@ RATE = 16000
 @pytest.fixture
 def env(monkeypatch):
     monkeypatch.setenv('PUSHER_AUDIO_FILE_INCREMENTAL_ENABLED', '0')
+    # Durable closure variants use the real producer/seal transactions but
+    # replace the outer metadata-debt commit IO, just as upload IO below.
+    monkeypatch.setattr(pusher_audio_projection.record_projection_rebuild, 'mark_many', MagicMock())
     monkeypatch.setattr(pusher_audio_projection.conversations_db, 'get_conversation_raw_snapshot', lambda *a, **kw: {})
     # Preserve timeline v2's historical emergency-rollback contract. The
     # default durable path is exercised by test_audio_durable_outbox.py.

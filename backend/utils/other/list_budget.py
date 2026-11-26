@@ -162,6 +162,7 @@ class ListReadBudget:
         route: str = '',
         clock: Callable[[], float] = time.monotonic,
         started_monotonic: Optional[float] = None,
+        strict_documents: bool = False,
     ) -> None:
         self.route = route
         self._deadline = float(deadline_monotonic)
@@ -174,6 +175,7 @@ class ListReadBudget:
         self._exhaustion: Optional[BudgetExhaustionReason] = None
         # Aggregate counters (telemetry only — never user-identifying).
         self.docs_scanned = 0
+        self.strict_documents = strict_documents
 
     @classmethod
     def for_request(
@@ -269,6 +271,11 @@ class ListReadBudget:
         the Firestore client itself raise ``DeadlineExceeded`` a headroom
         before that, which callers map to the truncated outcome.
         """
+        if _strict_document_budget(self):
+            self.check()
+            if self.remaining_documents == 0:
+                self.mark_exhausted('documents')
+                raise ListReadBudgetExhausted('documents')
         remaining = self.remaining_seconds
         if remaining <= LIST_READ_MIN_RPC_SECONDS:
             self._exhaustion = 'deadline'
@@ -315,6 +322,18 @@ def list_read_budget_for_request(
     )
 
 
+def _strict_document_budget(budget: Any) -> bool:
+    return getattr(budget, 'strict_documents', False) is True
+
+
+def _strict_query_window(query: Any, budget: ListReadBudget) -> Any:
+    if not _strict_document_budget(budget):
+        return query
+    existing = getattr(query, '_limit', None)
+    allowed = min(existing, budget.remaining_documents) if isinstance(existing, int) else budget.remaining_documents
+    return query.limit(allowed)
+
+
 def budgeted_stream_list(query: Any, budget: Optional[ListReadBudget]) -> List[Any]:
     """Materialize ``query.stream()`` under the budget.
 
@@ -326,6 +345,7 @@ def budgeted_stream_list(query: Any, budget: Optional[ListReadBudget]) -> List[A
     if budget is None:
         return list(query.stream())
     timeout = budget.rpc_timeout()
+    query = _strict_query_window(query, budget)
     try:
         iterator = query.stream(timeout=timeout, retry=FIRESTORE_NO_RETRY)
     except TypeError:
@@ -348,8 +368,8 @@ def budgeted_stream_list(query: Any, budget: Optional[ListReadBudget]) -> List[A
             close = getattr(iterator, 'close', None)
             if callable(close):
                 close()
-        if docs:
-            budget.charge(len(docs))
+        if docs or _strict_document_budget(budget):
+            budget.charge(max(1, len(docs)) if _strict_document_budget(budget) else len(docs))
         else:
             budget.check()
     except ListReadBudgetExhausted as exc:
@@ -362,16 +382,25 @@ def budgeted_stream_list(query: Any, budget: Optional[ListReadBudget]) -> List[A
     return docs
 
 
-def budgeted_get_all(client: Any, refs: Iterable[Any], budget: Optional[ListReadBudget]) -> List[Any]:
-    """Materialize ``client.get_all(refs)`` under the budget."""
+def budgeted_get_all(
+    client: Any, refs: Iterable[Any], budget: Optional[ListReadBudget], *, field_paths: Optional[List[str]] = None
+) -> List[Any]:
+    """Materialize ``client.get_all(refs)`` under the budget.
+
+    ``field_paths`` (when given) is the read's projection, as on a query's ``select``.
+    """
     ref_list = list(refs)
+    projection = {'field_paths': field_paths} if field_paths else {}
     if budget is None:
-        return list(client.get_all(ref_list))
+        return list(client.get_all(ref_list, **projection))
     timeout = budget.rpc_timeout()
+    if _strict_document_budget(budget) and len(ref_list) > budget.remaining_documents:
+        budget.mark_exhausted('documents')
+        raise ListReadBudgetExhausted('documents')
     try:
-        snapshots = list(client.get_all(ref_list, timeout=timeout, retry=FIRESTORE_NO_RETRY))
+        snapshots = list(client.get_all(ref_list, timeout=timeout, retry=FIRESTORE_NO_RETRY, **projection))
     except TypeError:
-        snapshots = list(client.get_all(ref_list))
+        snapshots = list(client.get_all(ref_list, **projection))
     except _FirestoreDeadlineExceeded as exc:
         budget.mark_exhausted('deadline')
         raise ListReadBudgetExhausted('deadline') from exc
@@ -399,7 +428,7 @@ def budgeted_document_get(reference: Any, budget: Optional[ListReadBudget], *, t
     except _FirestoreDeadlineExceeded as exc:
         budget.mark_exhausted('deadline')
         raise ListReadBudgetExhausted('deadline') from exc
-    if getattr(snapshot, 'exists', False):
+    if _strict_document_budget(budget) or getattr(snapshot, 'exists', False):
         budget.charge(1)
     return snapshot
 
@@ -427,6 +456,7 @@ def budgeted_stream_iter(
         yield from query.stream()
         return
     timeout = budget.rpc_timeout()
+    query = _strict_query_window(query, budget)
     stream_kwargs = {'timeout': timeout, 'retry': FIRESTORE_NO_RETRY}
     if retry is not _STREAM_RETRY_UNSET:
         stream_kwargs['retry'] = retry
@@ -440,16 +470,20 @@ def budgeted_stream_iter(
             # Test fakes predating the budget seam do not accept a timeout kwarg.
             iterator = query.stream()
     iterator = iter(iterator)
+    emitted = False
     try:
         while True:
             try:
                 doc = next(iterator)
             except StopIteration:
+                if not emitted and _strict_document_budget(budget):
+                    budget.charge(1)
                 return
             except _FirestoreDeadlineExceeded as exc:
                 budget.mark_exhausted('deadline')
                 raise ListReadBudgetExhausted('deadline') from exc
             budget.charge(1)
+            emitted = True
             yield doc
     finally:
         close = getattr(iterator, 'close', None)

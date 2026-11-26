@@ -679,6 +679,9 @@ The loader writes two dark-able tables:
 - `omi_finops.vendor_balance_snapshot` — one row per successful pull
   (`date`, `ts`, `vendor`, `used_usd`, `available_usd`,
   `invoice_billing_enabled`), idempotent per (date, vendor).
+  Money is rendered to the NUMERIC contract at the artifact boundary (at most
+  nine fractional digits, rounded half-up; the loader re-renders it too), because
+  the vendor sends longer decimals than BigQuery NUMERIC accepts.
 - `omi_finops.vendor_balance_spend_daily` — the **derived day rate**: each
   interval between consecutive snapshots belongs to the UTC days strictly
   after the previous snapshot's day through the current snapshot's day

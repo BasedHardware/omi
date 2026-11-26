@@ -57,3 +57,68 @@ async def test_synthesize_ai_profile_fails_closed_when_synthesis_returns_none(mo
             uid=UID,
         )
     assert exc.value.status_code == 502
+
+
+def test_get_ai_profile_hands_its_read_to_the_scheduler(monkeypatch):
+    scheduled: list[tuple] = []
+    monkeypatch.setattr(
+        users_router.ai_profile_refresh,
+        'schedule_refresh',
+        lambda uid, profile, known=False: scheduled.append((uid, profile, known)),
+    )
+    stale = {'profile_text': '- fact', 'source': 'client'}
+    monkeypatch.setattr(users_router.users_db, 'get_ai_user_profile', lambda uid: stale)
+
+    assert users_router.get_ai_profile(uid=UID) is stale
+    assert scheduled == [(UID, stale, True)]
+
+
+def test_patch_ai_profile_records_source(monkeypatch):
+    seen: dict = {}
+
+    def fake_update(uid, **kwargs):
+        seen.update(kwargs)
+        return {'profile_text': kwargs['profile_text'], 'source': kwargs['source']}
+
+    monkeypatch.setattr(users_router.users_db, 'update_ai_user_profile', fake_update)
+    response = users_router.update_ai_profile(
+        users_router.UpdateAIUserProfileRequest(profile_text='- edited', source='user_edit'), uid=UID
+    )
+    assert response['source'] == 'user_edit'
+    assert seen['source'] == 'user_edit'
+
+
+def test_delete_ai_profile(monkeypatch):
+    deleted: list[str] = []
+    monkeypatch.setattr(users_router.users_db, 'delete_ai_user_profile', deleted.append)
+    assert users_router.delete_ai_profile(uid=UID).status_code == 204
+    assert deleted == [UID]
+
+
+@pytest.mark.parametrize(
+    'code, status',
+    [
+        ('ai_profile_refresh_unavailable', 503),
+        ('ai_profile_refresh_in_progress', 409),
+        ('ai_profile_insufficient_data', 422),
+        ('ai_profile_synthesis_failed', 502),
+    ],
+)
+async def test_refresh_ai_profile_maps_errors(monkeypatch, code, status):
+    def fail(uid):
+        raise users_router.ai_profile_refresh.RefreshError(code)
+
+    monkeypatch.setattr(users_router, 'generated_compute_configured', lambda: False)
+    monkeypatch.setattr(users_router.ai_profile_refresh, 'refresh_now', fail)
+    with pytest.raises(HTTPException) as exc:
+        await users_router.refresh_ai_profile(uid=UID)
+    assert exc.value.status_code == status
+    assert exc.value.detail == code
+
+
+async def test_refresh_ai_profile_returns_new_profile(monkeypatch):
+    monkeypatch.setattr(users_router, 'generated_compute_configured', lambda: False)
+    monkeypatch.setattr(
+        users_router.ai_profile_refresh, 'refresh_now', lambda uid: {'profile_text': '- new', 'source': 'backend'}
+    )
+    assert (await users_router.refresh_ai_profile(uid=UID))['profile_text'] == '- new'

@@ -14,6 +14,8 @@ HELD_REDRIVE_SECONDS_MIN = 30.0
 HELD_REDRIVE_SECONDS_MAX = 3600.0
 HELD_STALE_GRACE_SECONDS_DEFAULT = 900.0
 HELD_STALE_GRACE_SECONDS_MAX = 86400.0
+MIN_SPEECH_SECONDS_DEFAULT = 2.0
+MIN_SPEECH_SECONDS_MAX = 10.0
 
 
 def failover_enabled() -> bool:
@@ -62,4 +64,21 @@ def held_stale_grace_seconds() -> float:
         HELD_STALE_GRACE_SECONDS_DEFAULT,
         0.0,
         HELD_STALE_GRACE_SECONDS_MAX,
+    )
+
+
+def min_speech_seconds() -> float:
+    """Strict-VAD speech below which a provider-route unit is answered as local silence, unbilled.
+
+    David, 2026-11-13: process recordings economically; skipping very short ones is fine. Units
+    are ~31 s capture spans billed for their full duration, and on 2026-11-13 units with under 2 s
+    of measured speech were 26% of billed provider audio (20% under 1 s). ``0`` restores the
+    earlier rule (only units with no speech spans skip the vendor). Malformed or out-of-range
+    values keep the default.
+    """
+    return _seconds(
+        os.getenv('BATCH_VENDOR_MIN_SPEECH_SECONDS'),
+        MIN_SPEECH_SECONDS_DEFAULT,
+        0.0,
+        MIN_SPEECH_SECONDS_MAX,
     )

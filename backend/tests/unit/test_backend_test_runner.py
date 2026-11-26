@@ -594,14 +594,18 @@ def test_file_budget_bounds_hang_and_preserves_no_timeout_fallback(tmp_path, wit
     selected = tmp_path / 'selected.txt'
     selected.write_text('tests/unit/test_hanging_probe.py\ntests/unit/test_after_probe.py\n')
     fake_python = tmp_path / 'fake-python'
+    # Avoid an extra env/PATH interpreter launch inside the unchanged 100ms probe.
     _write_executable(
         fake_python,
-        '#!/usr/bin/env bash\n'
+        '#!/bin/bash\n'
         'if [[ "${!#}" == tests/unit/test_hanging_probe.py ]]; then\n'
         '  exec sleep 2\n'
         'fi\n'
         'echo after-probe-ran\n',
     )
+    # Complete first-exec verification of the generated script outside the timed
+    # probe. The measured runner must still kill the hang and run the next file.
+    subprocess.run([str(fake_python), '-c', 'probe'], check=True, capture_output=True, timeout=5)
     environment = os.environ | {
         'PYTHON': str(fake_python),
         'BACKEND_UNIT_TEST_FILE_LIST': str(selected),

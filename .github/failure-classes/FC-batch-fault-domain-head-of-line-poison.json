@@ -1,6 +1,7 @@
 {
   "schema_version": 1,
   "id": "FC-batch-fault-domain-head-of-line-poison",
+  "family": "retry-classification",
   "violated_contract": "One malformed, permanently conflicting, or repeatedly unacknowledged item in an ordered batch must not roll back later independent items or remain at the head forever. The pusher finalization discard-as-success outage, daily-summary hour-group abort (#12530), and daily-sweep page-cap stall (#12533) are sibling instances of the same unbounded batch fault domain.",
   "canonical_prevention": "Give every independent item its own transaction and typed outcome, continue after rejection, and move poison to a reasoned terminal state within a bounded rejection or fetch budget. Reconcile already-satisfied stable identities, prioritize user-time-sensitive sources, and page on a durable stalled-queue event rather than relying on process-local queue age.",
   "evidence_prs": [],

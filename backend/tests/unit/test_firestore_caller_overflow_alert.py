@@ -108,6 +108,26 @@ def test_both_read_arms_use_the_managed_datasource():
             assert node['model']['datasource'] == {'type': 'prometheus', 'uid': 'gmp-cloud-run'}
 
 
+def test_selector_node_carries_a_grafana_valid_relative_time_range():
+    """Grafana rejects a datasource-backed query with a 0s..0s window (SCA-2055).
+
+    The selector stays ``vector(1)`` on the local Prometheus datasource and keeps
+    the same 15-minute window as the two read arms, so enabling and disabling
+    it means only swapping the expression to ``vector(0)``.
+    """
+    rule = _rule()
+    nodes = {node['refId']: node for node in rule['data']}
+    selector = nodes['D']
+    assert selector['datasourceUid'] == 'prometheus'
+    assert selector['model']['expr'] == 'vector(1)'
+    assert selector['relativeTimeRange'] == {'from': 900, 'to': 0}
+    for ref_id in ('A', 'B', 'D'):
+        assert nodes[ref_id]['relativeTimeRange'] == {'from': 900, 'to': 0}, ref_id
+    for ref_id in ('C', 'E', 'F'):
+        assert nodes[ref_id]['datasourceUid'] == '__expr__'
+        assert nodes[ref_id]['relativeTimeRange'] == {'from': 0, 'to': 0}, ref_id
+
+
 def test_custom_registry_processes_export_the_overflow_counter():
     # The batch pipeline worker and record-seal worker serve COLLECTORS on a
     # private registry, not the default REGISTRY.

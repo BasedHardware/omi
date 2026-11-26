@@ -12,6 +12,7 @@ import threading
 import time
 
 from prometheus_client import Counter
+from google.api_core.exceptions import NotFound
 
 from utils.batch_pipeline.admission import admitted_as_byok
 from utils.stt_cap_dispatch import sync_allowed, funded_allowance
@@ -28,7 +29,11 @@ from config.batch_pipeline import (
 from database.batch_pipeline_privacy import BatchPrivacyBlocked
 from database.batch_pipeline_policy import load_stage_policy, refresh_disabled_recovery
 from config.policy import kill_switch
-from config.batch_pipeline_empty_asr import safety_net_enabled, terminal_empty_allowed
+from config.batch_pipeline_empty_asr import (
+    language_guarded_empty_close_enabled,
+    safety_net_enabled,
+    terminal_empty_allowed,
+)
 from config.stt_provider_policy import HELD_RECOVERY_SECOND_PROVIDER
 from config.batch_language_recovery import (
     MAX_AUDIO_SECONDS,
@@ -62,7 +67,7 @@ from utils.batch_pipeline.recovery_recognizers import (
     independent_ready,
 )
 from utils.batch_pipeline.recovery_steps import ProviderStep, run_sync, run_async
-from utils.batch_pipeline.source_audio import InvalidRetainedManifest
+from utils.batch_pipeline.source_audio import InvalidRetainedManifest, RetainedPcmDigestChanged
 from utils.batch_pipeline.recovery_disposition import (
     inspect_audio,
     silence_payload,
@@ -76,6 +81,7 @@ from utils.batch_pipeline.recovery_disposition import (
     terminal_empty_payload,
     TWO_PROVIDER_EMPTY_EVIDENCE,
     SECOND_CHANCE_EMPTY_EVIDENCE,
+    LANGUAGE_GUARD_EMPTY_EVIDENCE,
     independent_silence_payload,
     log_result_held,
 )
@@ -217,6 +223,11 @@ class QuarantineRecovery:
             pass
         if outcome in ('words', 'empty'):
             metered(record_accepted, owner_id, provider, item.duration_seconds)
+        # Both recognizers answered and both answers were validated empty.
+        both_empty = {
+            name: {'provider': name, 'outcome': 'empty', 'word_count': 0, 'vad_speech_seconds': measured}
+            for name in ('modulate', provider)
+        }
         if guarded:
             if (
                 outcome == 'empty'
@@ -226,28 +237,37 @@ class QuarantineRecovery:
                 )
             ):
                 return independent_silence_payload(empty.duration, empty.spans)
+            if (
+                language_guarded_empty_close_enabled()
+                and outcome == 'empty'
+                and first_empty
+                and bool(empty.spans)
+                and policy.terminal_empty_disposition
+                and terminal_empty_allowed(empty.spans, recognizer_receipts=both_empty, language_guarded=True)
+            ):
+                # Parakeet never ran on a guarded unit; the evidence names the
+                # language guard and the two recognizers that did answer.
+                return terminal_empty_payload(
+                    empty.duration,
+                    empty.spans,
+                    LANGUAGE_GUARD_EMPTY_EVIDENCE,
+                    recognizer_receipts=both_empty,
+                    language_guarded=True,
+                )
             return payload
         if (
             outcome == 'empty'
             and first_empty
             and bool(empty.spans)
             and policy.terminal_empty_disposition
-            and terminal_empty_allowed(empty.spans)
+            and terminal_empty_allowed(empty.spans, recognizer_receipts=both_empty)
         ):
             evidence = (
                 TWO_PROVIDER_EMPTY_EVIDENCE
                 if (job or {}).get('worker_empty_evidence') == {'padded_retry': 'skipped_long_speech', 'version': 1}
                 else SECOND_CHANCE_EMPTY_EVIDENCE
             )
-            return terminal_empty_payload(
-                empty.duration,
-                empty.spans,
-                evidence,
-                recognizer_receipts={
-                    name: {'provider': name, 'outcome': 'empty', 'word_count': 0, 'vad_speech_seconds': measured}
-                    for name in ('modulate', provider)
-                },
-            )
+            return terminal_empty_payload(empty.duration, empty.spans, evidence, recognizer_receipts=both_empty)
         return payload
 
     def recover(self, segment_id, owner_id):
@@ -281,6 +301,55 @@ class QuarantineRecovery:
                 )
                 return 'reconciled' if changed else 'held'
         return None
+
+    def _fetch_recovery_audio(self, segment_id: str, token: str, item: WorkItem) -> tuple[bytes, str | None]:
+        confirm_digest = kill_switch('BATCH_PIPELINE_RETAINED_DIGEST_HOLD_ENABLED', log=False)
+        try:
+            return (
+                (
+                    self.artifacts.fetch_audio(item, confirm_retained_digest=True)
+                    if confirm_digest
+                    else self.artifacts.fetch_audio(item)
+                ),
+                None,
+            )
+        except NotFound:
+            # Only an authoritative missing object is terminal; outages still retry.
+            if not self.protocol.hold_input_missing(segment_id, token, self.clock(), audio_uri=item.audio_uri):
+                return b'', 'held'
+            record_fallback(
+                component='stt_selection',
+                from_mode='batch',
+                to_mode='none',
+                reason='input_missing',
+                outcome='degraded',
+            )
+            return b'', 'failed_held'
+        except InvalidRetainedManifest:
+            # Deterministic on the stored bytes: hold once instead of a 500 retry loop.
+            if not self.protocol.hold_invalid_manifest(segment_id, token, self.clock(), audio_uri=item.audio_uri):
+                return b'', 'held'
+            logger.info('event=batch_quarantine_recovery outcome=failed_held reason=invalid_retained_manifest')
+            return b'', 'failed_held'
+        except RetainedPcmDigestChanged:
+            if not confirm_digest:
+                # Confirmation is off on this delivery: keep the 500.
+                raise
+            # Two reads of the same pinned ref disagree with the manifest
+            # digest: no retry can satisfy it. Hold once, like a missing
+            # input; nothing is deleted or re-read.
+            if not self.protocol.hold_retained_digest_changed(
+                segment_id, token, self.clock(), audio_uri=item.audio_uri
+            ):
+                return b'', 'held'
+            record_fallback(
+                component='stt_selection',
+                from_mode='batch',
+                to_mode='none',
+                reason='retained_digest_changed',
+                outcome='degraded',
+            )
+            return b'', 'failed_held'
 
     def _recover_steps(self, segment_id, owner_id):
         try:
@@ -359,14 +428,9 @@ class QuarantineRecovery:
                 and not sync_allowed(owner_id, item.duration_seconds, lane='batch', path=DispatchPath.QUARANTINE)
             ):
                 return 'held'
-            try:
-                audio = self.artifacts.fetch_audio(item)
-            except InvalidRetainedManifest:
-                # Deterministic on the stored bytes: hold once instead of a 500 retry loop.
-                if not self.protocol.hold_invalid_manifest(segment_id, token, self.clock(), audio_uri=item.audio_uri):
-                    return 'held'
-                logger.info('event=batch_quarantine_recovery outcome=failed_held reason=invalid_retained_manifest')
-                return 'failed_held'
+            audio, fetch_outcome = self._fetch_recovery_audio(segment_id, token, item)
+            if fetch_outcome is not None:
+                return fetch_outcome
             duration = item.duration_seconds
             # The input-bound worker VAD is acoustic evidence for ordinary
             # empty/ownership failures too. A later zero CPU VAD cannot turn

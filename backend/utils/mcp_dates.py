@@ -69,7 +69,15 @@ def localize_timestamps(value: Any, zone: ZoneInfo) -> Any:
             key: (
                 offset_timestamp(item, zone)
                 if key.endswith('_at')
-                or key in {'timestamp', 'first_seen', 'last_seen', 'first_observed_at', 'last_observed_at'}
+                or key
+                in {
+                    'timestamp',
+                    'first_seen',
+                    'last_seen',
+                    'first_observed_at',
+                    'last_observed_at',
+                    'summary_covers_through',
+                }
                 else localize_timestamps(item, zone)
             )
             for key, item in value.items()

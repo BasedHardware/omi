@@ -14,6 +14,7 @@ from tests.unit.test_batch_pipeline_recovered_release import recovered
 from tests.unit.test_batch_pipeline_owner_chain_projection import BURST, ResultLog, chain, projector_for
 from tests.unit.test_batch_pipeline_scheduler import MemoryStore
 from utils.batch_pipeline import projection, projection_followup
+from database.batch_pipeline_recovery_discovery import RecoveryCaller
 from utils.batch_pipeline.serving import Serving
 
 SWITCH = 'BATCH_PIPELINE_RECOVERY_OWNER_ONLY_ENABLED'
@@ -58,7 +59,9 @@ async def test_recovery_scope_skips_all_global_work_and_kill_switch_restores_it(
         projector.start_followups.assert_awaited_once_with(['recovered'], discover=False)
         projector.start_drains.assert_not_called()
     else:
-        service._maintain.assert_called_once_with(recover_quarantine=False)
+        service._maintain.assert_called_once_with(
+            recover_quarantine=False, recovery_caller=RecoveryCaller.RECONCILE, run_held_expiry=True
+        )
         projector.sweep.assert_called_once()
         service.metrics.refresh.assert_called_once()
         projector.start_followups.assert_awaited_once_with(['recovered'])
@@ -83,7 +86,8 @@ async def test_owner_wake_leaves_process_wide_drain_queue_for_periodic_owner():
     await service.reconcile_async(owner_id=BURST, recovered='recovered', owner_only=True)
 
     assert projector.drains is None
-    assert projector.drain_requests == {'unrelated-owner': None, BURST: None}
+    assert list(projector.drain_requests) == ['unrelated-owner', BURST]
+    assert projector.drain_requests['unrelated-owner'] is None
     projector.start_followups.assert_awaited_once_with(['recovered'], discover=False)
     projector.schedule_index_flush.assert_called_once_with(BURST)
 
@@ -165,7 +169,7 @@ async def test_periodic_restart_finishes_durable_publication_after_request_failu
         projector.start_followups = AsyncMock(side_effect=RuntimeError('synthetic request failure'))
         with pytest.raises(RuntimeError, match='synthetic request failure'):
             await service.reconcile_async(owner_id=BURST, recovered=ids[-1], owner_only=True)
-        assert all(log.results[sid]['projection_state'] == 'persisted' for sid in ids)
+        assert all(log.results[sid]['projection_state'] == 'ready' for sid in ids)
     # A new process has no callbacks, owner wakes, cursors or owed lists.
     restarted = projector_for(log)
     restarted.complete_content = Mock()
@@ -174,7 +178,9 @@ async def test_periodic_restart_finishes_durable_publication_after_request_failu
     periodic._maintain = Mock()
     try:
         await periodic.reconcile_async(periodic=True, recover_quarantine=True)
-        periodic._maintain.assert_called_once_with(recover_quarantine=True)
+        periodic._maintain.assert_called_once_with(
+            recover_quarantine=True, recovery_caller=RecoveryCaller.SERVING, run_held_expiry=True
+        )
         # The first pass can hand the pending chain to the process drain;
         # its walk-owed follow-ups launch on the next independent tick.
         if restarted.drains and restarted.drains.tasks:
@@ -184,16 +190,15 @@ async def test_periodic_restart_finishes_durable_publication_after_request_failu
         while restarted.followups and restarted.followups.tasks:
             await asyncio.gather(*list(restarted.followups.tasks.values()))
         initial_probes = restarted.complete_content.call_count
-        assert initial_probes == (1 if failure == 'before_assignment' else len(ids))
+        assert initial_probes == 1
         await periodic.reconcile_async(periodic=True, recover_quarantine=True)
         while restarted.followups and restarted.followups.tasks:
             await asyncio.gather(*list(restarted.followups.tasks.values()))
         assert all(log.results[sid]['projection_state'] == 'ready' for sid in ids)
         assert log.persist_order == ids
-        # Mocked completion leaves ready receipts discoverable. The first
-        # probe for each unit plus one ready-content probe on the next page
-        # are required; page coalescing is not a process-wide suppression.
-        assert restarted.complete_content.call_count == len(ids) + 1
+        # Already-ready silent receipts coalesce to one content probe per page;
+        # pending units still owe their individual assignment follow-ups.
+        assert restarted.complete_content.call_count == (len(ids) + 1 if failure == 'before_assignment' else 2)
     finally:
         tasks = [
             task for runner in (restarted.drains, restarted.followups) if runner for task in list(runner.tasks.values())

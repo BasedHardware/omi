@@ -206,7 +206,7 @@ def test_live_poll_defers_conflicted_idle_close_without_rewriting_episodes(lane,
 
     monkeypatch.setattr(episodes, 'close_episode', tracked_close)
     live = service.live_episode
-    monkeypatch.setattr(router, '_admitted', lambda *a: True)
+    monkeypatch.setattr(router, '_admitted', lambda *a, **kw: True)
     monkeypatch.setattr(service, 'live_episode', lambda uid: live(uid, collaborators=c))
     monkeypatch.setattr(service, 'last_closed_episode', lambda *a, **kw: None)
     app = FastAPI()
@@ -346,7 +346,7 @@ def test_late_discard_removes_activity_and_all_hidden_episode_is_absent_from_liv
     store.rows[('users', 'u', 'conversations', 'kept')] = row('kept', discarded=True)
     assert visible_episode('u', owner, firestore_client=store) is None
     live = service.live_episode
-    monkeypatch.setattr(router, '_admitted', lambda *a: True)
+    monkeypatch.setattr(router, '_admitted', lambda *a, **kw: True)
     monkeypatch.setattr(service, 'live_episode', lambda uid: live(uid, collaborators=c))
     monkeypatch.setattr(service, 'last_closed_episode', lambda *a, **kw: None)
     app = FastAPI()

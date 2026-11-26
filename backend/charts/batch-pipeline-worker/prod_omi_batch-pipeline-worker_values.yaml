@@ -8,19 +8,26 @@ image:
 serviceAccountName: batch-pipeline-worker
 gcpServiceAccount: batch-pipeline-worker@based-hardware.iam.gserviceaccount.com
 bucket: based-hardware-batch-pipeline-staging
+audioDerivedBucket: null
 dataPlaneProject: based-hardware
 stage: prod
 namespace: batch_pipeline_prod
 secretName: prod-omi-backend-secrets
-# Preserve the 2026-11-06 live 4/8 bounds (David D4, coordinator ask bc18db).
-# replicaCount and autoscaling.minReplicas are one floor setting; change both.
-# Rollback: restore both floors to 6 and maxReplicas to 12 if GPU queue depth
-# or ready_units climbs back past 50k. OD-first placement stays unchanged.
-replicaCount: 4
+# Floor 6 (David, 2026-11-20, superseding D4's floor 4 of 2026-11-06): over the
+# prior 3 days the HPA never asked for fewer than 6 workers, so the floor costs
+# ~0 extra machine-hours at current demand and keeps 6 L4s standing through an
+# L4 stockout (incident SCA-3274). The batch-pipeline-pool node minimum matches
+# it (operator-managed, docs/runbooks/batch-vendor-routing-capacity.md).
+# Ceiling 16 (David, 2026-11-16 16:41Z: backlog 25k ready at 8 pods; applied
+# live 16:50Z and persisted here so a worker Helm upgrade keeps it; node pool
+# max is 18). replicaCount and autoscaling.minReplicas are one floor setting;
+# change both with the matching node pool minimum (see the capacity runbook).
+# Routine tuning rollback keeps floor 6. OD-first placement stays unchanged.
+replicaCount: 6
 autoscaling:
   enabled: true
-  minReplicas: 4
-  maxReplicas: 8
+  minReplicas: 6
+  maxReplicas: 16
   balancedPools:
     enabled: false
 # OD-first placement: the worker pins to the on-demand pool so the guaranteed
@@ -35,6 +42,12 @@ nodeSelector:
 # to 0. Needs batch-pipeline-t4-pool (n1-standard-8 + T4, zones a/b/c/f).
 t4Fallback:
   enabled: true
+  # The fallback has its own live scope and read/backfill policy.
+  preserveLiveEnv:
+    - BATCH_PIPELINE_SHADOW_LANGUAGE_ONLY
+    - FIRESTORE_READ_LEVERS
+    - UNLIMITED_V2_BACKFILL_HOURS_CAP_ENABLED
+    - UNLIMITED_V2_BACKFILL_HOURS_CAP_HOURS
 tolerations:
   - key: omi.ai/batch-pipeline
     operator: Equal
@@ -56,6 +69,23 @@ borrowedNodePools:
   enabled: false
   pools: [parakeet-pool, parakeet-pool-b, parakeet-pool-v2]
 worker:
+  RECORD_FRESH_MERGE_ENABLED: null
+  projectionOutbox: null
+  packingSampleRate: null
+  capDispatchCohort: null
+  # The depth-only roll preserves each GPU Deployment's existing bindings,
+  # including keys absent from its pod template.
+  preserveLiveEnv:
+    - BATCH_PIPELINE_UID_ALLOWLIST
+    - RECORD_SEAL_REPAIR_FRESH_ENABLED
+    - ROLLOUT_POD_TEMPLATE_HASH
+  # Without live state, require a private binding before the pod can start.
+  uidAllowlist:
+    value: null
+    valueFrom:
+      secretKeyRef:
+        name: prod-omi-backend-secrets
+        key: BATCH_PIPELINE_UID_ALLOWLIST_SECRET
   heldDeadLetterEnabled: true
   inputExpiringEnabled: true
   # Two pump processes share each L4 (cl2-gpueff 2026-11-04, data/run-2026-11-04-gpueff
@@ -72,7 +102,12 @@ worker:
   # lanes 124.7 vs x 4 lanes 180 audio-h/GPU-h. One step to 3 first to watch shard-claim contention.
   # Decoded memory stays inside each process's shared 1800 audio-second prepare budget and the
   # 7200 audio-second bound. Kill switch / rollback: pipelineDepth 2.
-  pipelineDepth: 3
+  # Four lanes (2026-11-16, L4 stockout caps the fleet at ~9 pods while ready grows):
+  # 9 pods complete ~880 units/min against ~1,220 leases/min with GPU util ~37% and
+  # chain-busy ~35% of target, so per-pod claim overlap is the lever. Bench 2p x 4
+  # lanes 180 audio-h/GPU-h. 4 is the worker's WORKER_PIPELINE_DEPTH_MAX.
+  # Rollback: pipelineDepth 3 (values-only Helm roll).
+  pipelineDepth: 4
   servingMetricsMinRefreshSeconds: 60
   # Matches the prod backend hosts (deploy contract reader-split invariant):
   # window allocation 100, replica recovery explicitly off, and the
@@ -84,7 +119,8 @@ worker:
   controlCandidateFanout: 16
   admissionParallelCalls: true
   idlePollMaxSeconds: 10
-  firestoreReadLevers: '{}'
+  # Preserve the live worker read levers for the depth-only roll.
+  firestoreReadLevers: '{"action_items_page":100,"action_items_ttl120":100,"backfill_task_reads":100,"bpp_decision_cache":0,"bpp_generation_memo":100,"candidates_page":100,"canonical_statuses_dedupe":100,"conversation_list_cursor":100,"deletion_marker_cache":100,"finjob_candidate_queries":100,"historical_scan_memo":100,"ledger_purge_coalesce":100,"lifecycle_record_pending_head":100,"mcp_conversation_cards_cache":100,"memory_list_index_window":100,"people_scan_dedupe":100,"privacy_checks_shadow":0,"privacy_ttl60":0,"queue_age_sample_budget":100,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":100,"subscription_cache":100,"sync_snapshot_resolve_cache":100,"usage_month_cache":0,"usage_month_total":0,"privacy_negative_lookup_cache":0,"batch_timeliness_leader":100,"bpp_owner_memo_enforce":0}'
   # Preserve the measured profiling-on state across the scaler Helm upgrade.
   stageProfilingEnabled: true
   # #24213 IO 5 did not run in qualification (NO-GO 2026-11-01); hold the prior 3.
@@ -93,6 +129,7 @@ worker:
   # Matches the four Cloud Run roles; paid recovery keeps the 200/h base cap
   # (lead ruling 12:15Z reversing the #23964 zero pin). Rollback: 0.
   shadowPercent: 25
+  shadowLanguageOnly: false
   shadowPaidRecoveryPerHour: 200
   shadowRecoveryApiUrl: "https://backend-integration-hhibjajaja-uc.a.run.app"
   # Strict-VAD shadow at 10% (batchdesign §9 PR-3, 2026-11-01): the shadow cost
@@ -115,10 +152,13 @@ recordSealRepair:
   suspend: false
   mode: apply
   rowSeconds: 270
-  # 48 workers (2026-11-05 #24729) pushed every row past the 270 s cap (budget_exhausted); per-row I/O, not
-  # pod resources, saturates. Back to 16 until the per-row bottleneck is profiled.
-  # 24 workers (#24962) missed the 3-run gate 2026-11-09: sealed/run 126-170 vs >=190, per-row time ~118 s -> ~178 s; reverted.
-  workers: 16
+  # Match live: eight row processes per pod. More processes in one 4-CPU pod regressed.
+  workers: 8
+  shards: 5
+  # CPU-only pool can autoscale from zero; one pod per hostname, no GPU contention.
+  nodePool: api-pool
+  tolerations: []
+  cpuRequest: "3"
   serverFlags:
     K_SERVICE: backend
     BATCH_PIPELINE_ENABLED: 'true'
@@ -134,3 +174,4 @@ recordSealRepair:
 recordSealWorker:
   # Serve /metrics idle; an enabled runtime with the refused policy exits before readiness.
   runtimeEnabled: false
+  preserveLiveFreshEnv: true

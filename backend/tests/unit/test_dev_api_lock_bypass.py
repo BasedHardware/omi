@@ -301,9 +301,12 @@ class TestDevApiConversationLockEnforcement:
 
         from routers.developer import delete_conversation_endpoint
 
-        result = delete_conversation_endpoint(conversation_id='conv-1', uid='test-uid')
+        # Deletion also erases the conversation's WAL handoff objects in GCS.
+        with patch('database.batch_pipeline_purge.purge_record_wal_owner') as wal_purge:
+            result = delete_conversation_endpoint(conversation_id='conv-1', uid='test-uid')
         assert result == {"success": True}
         conversations_db.delete_conversation.assert_called_once_with('test-uid', 'conv-1')
+        wal_purge.assert_any_call('test-uid', 'conv-1')
 
 
 # =============================================================================

@@ -28,7 +28,7 @@ from typing import (
 from uuid import UUID
 
 from fastapi import HTTPException
-from google.cloud.firestore_v1 import FieldFilter
+from google.cloud.firestore_v1 import FieldFilter, transactional
 from pydantic import ValidationError
 
 import database.memories as memories_db
@@ -44,6 +44,11 @@ from utils.memory.index_window import (
 )
 from config import firestore_read_levers
 from database._client import db as default_db_client
+from database.conversation_effect_fence import (
+    ConversationEffectFenced,
+    ConversationEffectSource,
+    require_active_account,
+)
 from database.memory_collections import MemoryCollections
 from database.released_memory_projection import projected_stream_list
 from database.memory_apply_store import EvidenceIdentityConflict, privacy_deletion_receipt_id
@@ -51,6 +56,7 @@ from database.memory_ledger import purge_source_replacement_receipts_for_memorie
 from database.legal_holds import (
     DestructiveGateTakeover,
     assert_destructive_gate_still_ours,
+    assert_no_destructive_operation_transaction,
     DestructiveOperationInProgress,
     LegalHoldAuthorityUnavailable,
     destructive_operation_gate,
@@ -682,6 +688,9 @@ class CanonicalMemoryBackend:
         ledger_kinds: Optional[Collection[str]] = None,
         view: str = 'released',
         as_of: Optional[datetime] = None,
+        vector_only: bool = False,
+        budget: Optional[ListReadBudget] = None,
+        owner_summary: bool = False,
     ) -> List[MemorySearchMatch]:
         search_kwargs: Dict[str, Any] = {
             "limit": limit,
@@ -689,6 +698,10 @@ class CanonicalMemoryBackend:
             "device_scope_request": device_scope_request,
             "item_filter": item_filter,
         }
+        if owner_summary:
+            search_kwargs["owner_summary"] = True
+        if vector_only:
+            search_kwargs.update(vector_only=True, budget=budget)
         if ledger_kinds is not None:
             search_kwargs["ledger_kinds"] = ledger_kinds
         if as_of is not None:
@@ -706,7 +719,7 @@ class CanonicalMemoryBackend:
         for rank, item in enumerate(items):
             if not item.get("memory_id"):
                 continue
-            memory_obj = search_result_to_memorydb(uid, item)
+            memory_obj = search_result_to_memorydb(uid, item, **({'owner_summary': True} if owner_summary else {}))
             if memory_obj.is_locked or memory_obj.user_review is False or memory_obj.invalid_at is not None:
                 continue
             raw_score = item.get("score") or item.get("relevance_score")
@@ -1240,21 +1253,49 @@ class HistoricalMemoryAdapter:
         *,
         limit: int = 5,
         device_scope_request: Optional[DeviceScopeRequest] = None,
+        budget: Optional[ListReadBudget] = None,
+        owner_summary: bool = False,
     ) -> List[MemorySearchMatch]:
         capped = max(1, min(int(limit or 5), 20))
         try:
-            matches = vector_db.find_similar_memories(uid, query, threshold=0.0, limit=min(capped * 3, 60))
+            if budget is not None:
+                budget.check()
+            if budget is not None:
+                matches = vector_db.find_similar_memories(
+                    uid,
+                    query,
+                    threshold=0.0,
+                    limit=min(capped * 3, 60),
+                    timeout_seconds=budget.rpc_timeout(),
+                    owner_summary=owner_summary,
+                )
+            else:
+                matches = vector_db.find_similar_memories(uid, query, threshold=0.0, limit=min(capped * 3, 60))
         except Exception as exc:
             raise HTTPException(status_code=503, detail="Historical memory search unavailable") from exc
+        if budget is not None:
+            budget.check()
         ids, scores = _memory_ids_and_scores(matches or [])
         if not ids:
             return []
         try:
-            rows = memory_store_read(memories_db.get_memories_by_ids, uid, ids, **self._firestore_kwargs())
+            rows = memory_store_read(
+                memories_db.get_memories_by_ids,
+                uid,
+                ids,
+                **self._firestore_kwargs(),
+                **({'budget': budget} if budget is not None else {}),
+            )
         except Exception as exc:
             raise MemoryBackingStoreUnavailable("Historical memory unavailable", stream="historical") from exc
         by_id: Dict[str, HistoricalMemoryRecord] = {}
         for raw in rows:
+            if budget is not None and (
+                any(raw.get(k) for k in ('deleted', 'is_deleted', 'deleted_at'))
+                or raw.get('status') in {'tombstoned', 'deleted', 'purged', 'superseded'}
+                or raw.get('source_state') in {'tombstoned', 'purged'}
+            ):
+                continue
             record = self._adapt(uid, raw)
             if record is None or not self.matches_device(record, device_scope_request):
                 continue
@@ -2617,11 +2658,9 @@ class MemoryService:
             snapshots_by_path[snapshot_path] = snapshot
         return snapshots_by_path
 
-    def _write_historical_override(self, uid: str, memory_id: str, status: MemoryItemStatus) -> None:
-        """Persist one idempotent canonical suppression/ownership record."""
-        client = self.db_client if self.db_client is not None else default_db_client
-        path = f"{MemoryCollections(uid=uid).memory_historical_overrides}/{memory_id}"
-        payload = {
+    @staticmethod
+    def _historical_override_payload(uid: str, memory_id: str, status: MemoryItemStatus) -> dict:
+        return {
             "uid": uid,
             "memory_id": memory_id,
             "public_id": memory_id,
@@ -2629,6 +2668,12 @@ class MemoryService:
             "status": status.value,
             "updated_at": datetime.now(timezone.utc),
         }
+
+    def _write_historical_override(self, uid: str, memory_id: str, status: MemoryItemStatus) -> None:
+        """Persist one idempotent canonical suppression/ownership record."""
+        client = self.db_client if self.db_client is not None else default_db_client
+        path = f"{MemoryCollections(uid=uid).memory_historical_overrides}/{memory_id}"
+        payload = self._historical_override_payload(uid, memory_id, status)
         try:
             ref = client.document(path)
             try:
@@ -2648,6 +2693,7 @@ class MemoryService:
         status: MemoryItemStatus,
         *,
         batch_size: int = 100,
+        effect_source: ConversationEffectSource | None = None,
     ) -> None:
         """Commit bounded idempotent override batches before legacy cleanup."""
         normalized = list(dict.fromkeys(memory_id for memory_id in memory_ids if memory_id))
@@ -2655,6 +2701,9 @@ class MemoryService:
         client = self.db_client if self.db_client is not None else default_db_client
         for start in range(0, len(normalized), bounded_batch_size):
             chunk = normalized[start : start + bounded_batch_size]
+            if effect_source is not None:
+                self._write_fenced_historical_overrides(client, uid, chunk, status, effect_source)
+                continue
             batch_factory = getattr(client, "batch", None)
             if not callable(batch_factory):
                 for memory_id in chunk:
@@ -2664,14 +2713,7 @@ class MemoryService:
                 batch = cast(Any, batch_factory())
                 for memory_id in chunk:
                     path = f"{MemoryCollections(uid=uid).memory_historical_overrides}/{memory_id}"
-                    payload = {
-                        "uid": uid,
-                        "memory_id": memory_id,
-                        "public_id": memory_id,
-                        "origin": "legacy",
-                        "status": status.value,
-                        "updated_at": datetime.now(timezone.utc),
-                    }
+                    payload = self._historical_override_payload(uid, memory_id, status)
                     ref = client.document(path)
                     try:
                         batch.set(ref, payload, merge=True)
@@ -2683,6 +2725,41 @@ class MemoryService:
                 raise
             except Exception as exc:
                 raise HTTPException(status_code=503, detail="Canonical memory suppression unavailable") from exc
+
+    def _write_fenced_historical_overrides(
+        self,
+        client: Any,
+        uid: str,
+        memory_ids: list[str],
+        status: MemoryItemStatus,
+        effect_source: ConversationEffectSource,
+    ) -> None:
+        collection = MemoryCollections(uid=uid).memory_historical_overrides
+
+        @transactional
+        def apply(transaction):
+            require_active_account(transaction, client, uid)
+            effect_source.validate(transaction, client, uid)
+            assert_no_destructive_operation_transaction(transaction, client, uid=uid)
+            for memory_id in memory_ids:
+                transaction.set(
+                    client.document(f"{collection}/{memory_id}"),
+                    self._historical_override_payload(uid, memory_id, status),
+                    merge=True,
+                )
+
+        _revalidate_explicit_deletion(uid, db_client=client)
+        try:
+            apply(client.transaction())
+        except (
+            ConversationEffectFenced,
+            DestructiveGateTakeover,
+            DestructiveOperationInProgress,
+            LegalHoldAuthorityUnavailable,
+        ):
+            raise
+        except Exception as exc:
+            raise HTTPException(status_code=503, detail="Canonical memory suppression unavailable") from exc
 
     def _canonical_read(
         self,
@@ -3424,6 +3501,10 @@ class MemoryService:
         ledger_kinds: Optional[Collection[str]] = None,
         view: str = 'released',
         as_of: Optional[datetime] = None,
+        vector_only: bool = False,
+        budget: Optional[ListReadBudget] = None,
+        single_attempt: bool = False,
+        owner_summary: bool = False,
     ) -> List[MemorySearchMatch]:
         capped = max(1, min(int(limit or 5), 20))
         # Default 3× oversample so dedup/canonical suppression still yields `limit` hits.
@@ -3438,6 +3519,12 @@ class MemoryService:
                 "device_scope_request": device_scope_request,
                 "item_filter": canonical_item_filter,
             }
+            if budget is not None:
+                budget.check()
+            if owner_summary:
+                canonical_kwargs["owner_summary"] = True
+            if vector_only:
+                canonical_kwargs.update(vector_only=True, budget=budget)
             if ledger_kinds is not None:
                 canonical_kwargs["ledger_kinds"] = ledger_kinds
             canonical = self._canonical.search(
@@ -3449,24 +3536,34 @@ class MemoryService:
             raise
         except Exception as exc:
             raise HTTPException(status_code=503, detail="Canonical memory search unavailable") from exc
-        if ledger_kinds is not None:
-            # The ledger agent surface is explicitly canonical-only. Legacy
+        if ledger_kinds is not None or (vector_only and not owner_summary):
+            # The default vector-only ledger surface is canonical-only. Legacy
             # vector/storage search is a separate historical tool and must not
             # be merged here: aside from leaking stamped compatibility rows,
             # its provider outage would make current ledger search unavailable.
+            # Owner-summary search explicitly includes both stores after successful
+            # canonical checks (owner ruling 2026-11-15), never as an error fallback.
             historical: List[MemorySearchMatch] = []
         else:
+            historical_options: Dict[str, Any] = {}
+            if owner_summary and budget is not None:
+                historical_options.update(budget=budget, owner_summary=True)
             historical = self.history.search(
-                uid,
-                query,
-                limit=candidate_cap,
-                device_scope_request=device_scope_request,
+                uid, query, limit=candidate_cap, device_scope_request=device_scope_request, **historical_options
             )
         by_id: Dict[str, MemorySearchMatch] = {}
         for match in canonical:
             by_id[match.memory.id] = match
         historical_ids = [match.memory.id for match in historical if match.memory.id not in by_id]
-        historical_statuses = self.canonical_statuses(uid, historical_ids) if historical_ids else {}
+        historical_statuses = (
+            self.canonical_statuses(
+                uid, historical_ids, **({'budget': budget} if owner_summary and budget is not None else {})
+            )
+            if historical_ids
+            else {}
+        )
+        if budget is not None:
+            budget.check()
         for match in historical:
             if match.memory.id in by_id:
                 continue
@@ -4557,6 +4654,8 @@ class MemoryService:
         uid: str,
         conversation_id: str,
         items: List[Dict[str, Any]],
+        *,
+        effect_source: ConversationEffectSource | None = None,
     ) -> Dict[str, Any]:
         self.ensure_canonical_mutation_ready(uid)
         # This wrapper is the conversation-extraction entry (finalize and
@@ -4569,10 +4668,16 @@ class MemoryService:
             items,
             db_client=self.db_client,
             empty_set_intent="extraction",
+            effect_source=effect_source,
         )
         retracted = list(result.get("retracted_memory_ids") or [])
         if retracted:
-            self._write_historical_overrides(uid, retracted, MemoryItemStatus.tombstoned)
+            if effect_source is None:
+                self._write_historical_overrides(uid, retracted, MemoryItemStatus.tombstoned)
+            else:
+                self._write_historical_overrides(
+                    uid, retracted, MemoryItemStatus.tombstoned, effect_source=effect_source
+                )
         return result
 
     def create_external_memory(

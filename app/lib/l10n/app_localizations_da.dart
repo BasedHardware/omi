@@ -560,11 +560,11 @@ class AppLocalizationsDa extends AppLocalizations {
   String get hardwareSection => 'Hardware';
 
   @override
-  String get v2Undetected => 'V2 ikke opdaget';
+  String get v2Undetected => 'Offlinesynkronisering er ikke tilgængelig';
 
   @override
   String get v2UndetectedMessage =>
-      'Vi kan se, at du enten har en V1-enhed, eller at din enhed ikke er tilsluttet. SD-kort-funktionalitet er kun tilgængelig for V2-enheder.';
+      'Offlinesynkronisering kræver en tilsluttet Omi-enhed med SD-kortlager. Din nuværende enhed understøtter det ikke.';
 
   @override
   String get endConversation => 'Afslut samtale';
@@ -1124,6 +1124,11 @@ class AppLocalizationsDa extends AppLocalizations {
 
   @override
   String get nameUpdatedSuccessfully => 'Navn opdateret!';
+
+  @override
+  String calendarReadSelectionHelp(String calendar) {
+    return 'Læs de valgte kalendere. Nye begivenheder bruger $calendar.';
+  }
 
   @override
   String get calendarSettings => 'Kalenderindstillinger';
@@ -1973,6 +1978,15 @@ class AppLocalizationsDa extends AppLocalizations {
 
   @override
   String get memoryHistory => 'Historik';
+
+  @override
+  String get recordingWithYourPhone => 'Optager med din telefon';
+
+  @override
+  String get wrapUp => 'Afslut';
+
+  @override
+  String get recordingDiscarded => 'Optagelsen er kasseret';
 
   @override
   String get undo => 'Fortryd';
@@ -7016,6 +7030,9 @@ class AppLocalizationsDa extends AppLocalizations {
   String get authFailedToSignInWithApple => 'Kunne ikke logge ind med Apple, prøv venligst igen.';
 
   @override
+  String get authAppleSignInFailedUseGoogle => 'Log ind med Apple virkede ikke. Prøv igen, eller fortsæt med Google.';
+
+  @override
   String get authFailedToRetrieveToken => 'Kunne ikke hente Firebase-token, prøv venligst igen.';
 
   @override
@@ -7023,6 +7040,26 @@ class AppLocalizationsDa extends AppLocalizations {
 
   @override
   String get authUnexpectedError => 'Uventet fejl under login, prøv venligst igen';
+
+  @override
+  String get accountSignInMethods => 'Loginmetoder';
+
+  @override
+  String get accountAddSignInMethod => 'Tilføj loginmetode';
+
+  @override
+  String get accountAddSignInMethodDetails =>
+      'Tilføj en måde at logge ind på denne Omi-konto. Dit abonnement, dine optagelser og dine integrationer bliver på denne konto.';
+
+  @override
+  String get accountSignInConflictTitle => 'Denne loginmetode er knyttet til en anden konto';
+
+  @override
+  String get accountSignInConflictDetails =>
+      'Du er stadig logget ind på denne konto. Hver Omi-konto beholder sit abonnement, sine optagelser og sine integrationer.';
+
+  @override
+  String get accountSignInMethodAdded => 'Loginmetode tilføjet';
 
   @override
   String get authFailedToLinkGoogle => 'Kunne ikke forbinde med Google, prøv venligst igen.';
@@ -9057,7 +9094,7 @@ class AppLocalizationsDa extends AppLocalizations {
 
   @override
   String get deleteWhileProcessingMessage =>
-      'Denne optagelse er uploadet, men Omi opretter stadig samtalen. Hvis du sletter den nu, og behandlingen mislykkes, kan den ikke gendannes. Slet alligevel?';
+      'Denne optagelse er allerede uploadet, og Omi behandler den. Sletning her fjerner telefonens kopi. Hvis behandlingen mislykkes, kan Omi ikke prøve igen fra denne telefon.';
 
   @override
   String get syncCardAllBackedUp => 'Alle optagelser synkroniseret';
@@ -12201,7 +12238,7 @@ class AppLocalizationsDa extends AppLocalizations {
 
   @override
   String diagnosticsSincePairingSummary(int drops, int failed) {
-    return 'Siden parring: $drops afbrydelser, $failed mislykkede forbindelser.';
+    return 'Siden parring: $drops genforbindelser, $failed mislykkede forbindelser.';
   }
 
   @override
@@ -13389,6 +13426,9 @@ class AppLocalizationsDa extends AppLocalizations {
   }
 
   @override
+  String get paywallTrialCodeHint => 'Har du en Omi Pro-kode? Indtast den på næste skærm.';
+
+  @override
   String get paywallTrialCancelNote => 'Opsig når som helst. Ingen gebyrer, ingen straf.';
 
   @override
@@ -13435,16 +13475,6 @@ class AppLocalizationsDa extends AppLocalizations {
   }
 
   @override
-  String syncCardTranscribingAmount(String amount) {
-    return 'Omdanner $amount til samtaler';
-  }
-
-  @override
-  String syncCardTranscribedOf(String done, String total) {
-    return '$done af $total færdig · du kan forlade denne skærm';
-  }
-
-  @override
   String syncCardReadyAmount(String amount) {
     return '$amount klar til synkronisering';
   }
@@ -13468,7 +13498,7 @@ class AppLocalizationsDa extends AppLocalizations {
   String get syncDetailsWaitingOnPhone => 'Venter på denne telefon';
 
   @override
-  String get syncDetailsTranscribing => 'Transskriberer på Omi';
+  String get syncDetailsTranscribing => 'Uploadet, afventer server';
 
   @override
   String get syncDetailsAudioFiles => 'Lydfiler';
@@ -13928,6 +13958,12 @@ class AppLocalizationsDa extends AppLocalizations {
   String get summaryBusyBody => 'Omi arbejder allerede på denne samtale. Opsummeringen vises her, når den er færdig.';
 
   @override
+  String get summaryTranscriptionPendingTitle => 'Ikke transskriberet endnu';
+
+  @override
+  String get summaryTranscriptionPendingBody => 'Opsummeringen vises, når transskriptionen er klar.';
+
+  @override
   String get summaryCheckAgain => 'Tjek igen';
 
   @override
@@ -14333,6 +14369,9 @@ class AppLocalizationsDa extends AppLocalizations {
   String get processingProgress => 'Behandler dine ventende optagelser…';
 
   @override
+  String get waitingForTranscriptionAllowance => 'Venter på ledig transskriptionskvote';
+
+  @override
   String get processingDeferred => 'Venter på behandling';
 
   @override
@@ -14461,14 +14500,6 @@ class AppLocalizationsDa extends AppLocalizations {
   @override
   String deviceCatchingUpProgress(int done, int total) {
     return '$done af $total min';
-  }
-
-  @override
-  String get deviceRecently => 'For nylig';
-
-  @override
-  String deviceDisconnectedFor(String duration) {
-    return 'Afbrudt i $duration';
   }
 
   @override
@@ -15296,9 +15327,6 @@ class AppLocalizationsDa extends AppLocalizations {
   String get stopThese => 'Stop disse';
 
   @override
-  String get meetingActionItemsTitle => 'Handlingspunkter';
-
-  @override
   String get addToTasks => 'Føj til Opgaver';
 
   @override
@@ -15389,6 +15417,11 @@ class AppLocalizationsDa extends AppLocalizations {
   String get paymentDeclinedTitle => 'Dit kort blev afvist';
 
   @override
+  String paymentDeclinedMonthlyMessage(String plan, String price) {
+    return 'Opdater kortet, eller få $plan tilbage for $price om måneden';
+  }
+
+  @override
   String paymentDeclinedMessage(Object plan) {
     return 'Opdater kortet for at få $plan tilbage';
   }
@@ -15405,6 +15438,11 @@ class AppLocalizationsDa extends AppLocalizations {
   }
 
   @override
+  String firmwareUpdateNotInstalledCv1Message(String version) {
+    return 'Opdateringen blev ikke installeret. Dit vedhæng virker stadig på den nuværende firmware ($version). Kontakt support i stedet for at prøve opdateringen igen.';
+  }
+
+  @override
   String get firmwareUpdateUnconfirmedMessage =>
       'Couldn\'t confirm the update. Your pendant hasn\'t reconnected yet. Keep it nearby and check its firmware version before trying again.';
 
@@ -15413,4 +15451,386 @@ class AppLocalizationsDa extends AppLocalizations {
 
   @override
   String get firmwareVerifyingInstallation => 'Confirming installation… This may take up to 3 minutes.';
+
+  @override
+  String get monthlySwitchTitle => 'Skift til månedlig';
+
+  @override
+  String monthlySwitchPlanValue(String plan, String price) {
+    return '$plan, $price om måneden';
+  }
+
+  @override
+  String monthlySwitchNote(String yearly) {
+    return 'Erstatter den ubetalte årlige betaling på $yearly. Fornyes månedligt. Opsig når som helst.';
+  }
+
+  @override
+  String get monthlySwitchDeclined => 'Betalingen blev afvist. Dit abonnement er uændret.';
+
+  @override
+  String get monthlySwitchUnavailable => 'Skiftet er ikke tilgængeligt lige nu. Opdater kortet i stedet.';
+
+  @override
+  String get monthlySwitchDoneTitle => 'Du betaler nu månedligt';
+
+  @override
+  String monthlySwitchDoneBody(String price) {
+    return '$price betalt i dag. Fornyes månedligt.';
+  }
+
+  @override
+  String get processingDeleteScopeChanged => 'Listen under behandling er ændret. Gennemgå den, og prøv igen.';
+
+  @override
+  String get syncTooOldExplanation =>
+      'This recording is older than Omi\'s sync window, so Omi can\'t transcribe it. Download the audio to keep it, then delete it here.';
+
+  @override
+  String freeCapTitle(int minutes) {
+    return 'Du har brugt månedens $minutes minutter';
+  }
+
+  @override
+  String get freeCapBody => 'Omi optager stadig. Vælg, hvordan du vil fortsætte med at transskribere.';
+
+  @override
+  String get omiProPlanName => 'Omi Pro';
+
+  @override
+  String get freeCapProUnlimited => 'Ubegrænset transskription i skyen';
+
+  @override
+  String get freeCapProAccuracy => 'Bedste nøjagtighed';
+
+  @override
+  String get freeCapProWaiting => 'Transskriberer dine ventende optagelser';
+
+  @override
+  String get freeCapPhoneSubtitle => 'Gratis. Forbliver slået til, indtil du skifter tilbage.';
+
+  @override
+  String get transcribingOnThisPhone => 'Transskriberer på denne telefon';
+
+  @override
+  String get getPro => 'Få Pro';
+
+  @override
+  String get unlock => 'Lås op';
+
+  @override
+  String get transcribeWith => 'Transskriber med';
+
+  @override
+  String get omiCloud => 'Omi-sky';
+
+  @override
+  String get thisPhone => 'Denne telefon';
+
+  @override
+  String get onDeviceReady => 'Klar';
+
+  @override
+  String cloudMinutesLeft(int left, int limit, String date) {
+    return '$left af $limit min tilbage · nulstilles $date';
+  }
+
+  @override
+  String cloudMinutesAvailable(int minutes) {
+    return '$minutes skyminutter tilgængelige';
+  }
+
+  @override
+  String get switchBack => 'Skift tilbage';
+
+  @override
+  String get setUpThisPhone => 'Konfigurer denne telefon';
+
+  @override
+  String get speechRecognition => 'Talegenkendelse';
+
+  @override
+  String get audioStaysOnPhone => 'Lyden bliver på din telefon';
+
+  @override
+  String onDeviceModelDownloadSize(int size) {
+    return '$size MB download';
+  }
+
+  @override
+  String get downloadNow => 'Download nu';
+
+  @override
+  String get onWifiLater => 'Senere på Wi-Fi';
+
+  @override
+  String get conversationWritingSummary => 'Skriver dit resumé…';
+
+  @override
+  String get onTheWayServerWork => 'Arbejde rapporteret af serveren';
+
+  @override
+  String get finishNothingToProcess => 'Intet at behandle endnu.';
+
+  @override
+  String get finishStillProcessing => 'Behandles stadig. Den vises på Hjem.';
+
+  @override
+  String get finishBackToHome => 'Tilbage til Hjem';
+
+  @override
+  String get conversationSummaryWhenItEnds => 'Resumé, når denne samtale slutter';
+
+  @override
+  String get deviceUploadsWaitingOnServer => 'Uploads, der venter på serveren';
+
+  @override
+  String get deviceUploadsWaitingOnServerSubtitle => 'Din lyd er i sikkerhed på din enhed eller telefon';
+
+  @override
+  String conversationSummaryThrough(String time) {
+    return 'Opsummering indtil $time';
+  }
+
+  @override
+  String get conversationRecentTranscript => 'Seneste udskrift';
+
+  @override
+  String get finishAlreadySaved => 'Allerede gemt. Den ligger på Hjem.';
+
+  @override
+  String get finishAudioNotReceived => 'Lyd er stadig på vej.';
+
+  @override
+  String get finishFailedOffline => 'Det lykkedes ikke. Din lyd er i sikkerhed.';
+
+  @override
+  String get finishFailed => 'Det lykkedes ikke. Din lyd er i sikkerhed.';
+
+  @override
+  String get micBlockedCannotRecord => 'Giv adgang til mikrofonen for at optage.';
+
+  @override
+  String get couldNotStartRecording => 'Kunne ikke starte optagelsen.';
+
+  @override
+  String get restorePurchasesFailed => 'Kunne ikke tjekke dit abonnement.';
+
+  @override
+  String get firmwareCheckFailed => 'Kunne ikke søge efter opdateringer.';
+
+  @override
+  String get conversationStillPublic => 'Den er stadig delt via link.';
+
+  @override
+  String get goalSaveFailed => 'Kunne ikke gemme dit mål.';
+
+  @override
+  String get goalDeleteFailed => 'Kunne ikke slette. Målet er gendannet.';
+
+  @override
+  String get goalsLoadFailed => 'Kunne ikke indlæse dine mål.';
+
+  @override
+  String get missingTargetEndedRecording => 'Den optagelse er afsluttet.';
+
+  @override
+  String get missingTargetMemory => 'Mindet er væk.';
+
+  @override
+  String get missingTargetTask => 'Opgaven er væk.';
+
+  @override
+  String get missingTargetConversation => 'Kunne ikke åbne denne samtale.';
+
+  @override
+  String get couldNotRefreshConversations => 'Kunne ikke opdatere.';
+
+  @override
+  String get connectDeviceForOfflineSync => 'Tilslut din Omi for at synkronisere.';
+
+  @override
+  String get useDifferentAccountMessage =>
+      'Du bliver logget ud, og Omis indstillinger på denne telefon bliver nulstillet.';
+
+  @override
+  String get rayBanMetaNotFoundAfterSetup => 'Brillerne blev ikke fundet. Er de tændte?';
+
+  @override
+  String get couldNotMoveTask => 'Kunne ikke flytte opgaven.';
+
+  @override
+  String lockedTasksKept(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Slettet. $count låste opgaver blev beholdt.',
+      one: 'Slettet. 1 låst opgave blev beholdt.',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get settingNotSaved => 'Kunne ikke gemme ændringen.';
+
+  @override
+  String get couldNotLoadNotificationSettings => 'Kunne ikke indlæse dine indstillinger.';
+
+  @override
+  String get waitForOmiToFinish => 'Vent til Omi er færdig.';
+
+  @override
+  String get voiceNoteTooShort => 'For kort. Hold nede for at optage.';
+
+  @override
+  String get submitAppMissingFields => 'Tilføj navn, beskrivelse, billede, kategori og funktion for at indsende.';
+
+  @override
+  String get appSetupNotFinished => 'Opsætningen er ikke færdig endnu.';
+
+  @override
+  String get finishNothingKeptTitle => 'Intet at gemme';
+
+  @override
+  String get submitAppFinishDetails => 'Færdiggør detaljerne om funktion og priser ovenfor for at indsende.';
+
+  @override
+  String get finishNothingNew => 'Intet nyt endnu.';
+
+  @override
+  String get takingLongerThanUsual => 'Det tager længere tid end normalt. Vi får den på Hjem.';
+
+  @override
+  String get couldNotCheckOnIt => 'Kunne ikke tjekke status. Prøv igen.';
+
+  @override
+  String get upgradeToOpenThisOne => 'Opgrader for at åbne denne.';
+
+  @override
+  String get missingTargetConversationGone => 'Samtalen er slettet.';
+
+  @override
+  String get cantConnectRightNow => 'Kan ikke oprette forbindelse lige nu.';
+
+  @override
+  String get loadOlderFailed => 'Kunne ikke indlæse ældre. Tryk for at prøve igen.';
+
+  @override
+  String listeningWithDuration(String duration) {
+    return 'Lytter · $duration';
+  }
+
+  @override
+  String get conversationLiveNoEdits => 'Vent til den er slut, før du ændrer den.';
+
+  @override
+  String get finishedSummaryReady => 'Opsummering klar';
+
+  @override
+  String get writingSummaryStatus => 'Skriver opsummering…';
+
+  @override
+  String get stillWorkingOnIt => 'Vi arbejder stadig på det.';
+
+  @override
+  String get deviceReadyToUse => 'Klar til brug';
+
+  @override
+  String get firmwareUpdateFirmwareTooOld =>
+      'Din enheds firmware er for gammel til denne opdatering. Kontakt support for at få hjælp til at opdatere din enhed.';
+
+  @override
+  String get firmwareUpdateAppRequired =>
+      'Denne firmwareopdatering kræver en nyere version af Omi-appen. Opdater appen fra din appbutik, og søg derefter efter opdateringer igen.';
+
+  @override
+  String get quietPayerTitle => 'Ingen optagelser i 5 dage';
+
+  @override
+  String get quietPayerMessage => 'Tjek din Omi.';
+
+  @override
+  String get quietPayerCheck => 'Tjek';
+
+  @override
+  String get playManageSubscription => 'Administrer abonnement';
+
+  @override
+  String get playBilledByGoogle => 'Faktureres via Google Play';
+
+  @override
+  String get playPurchasePending => 'Din betaling afventer. Omi Pro starter, når Google Play bekræfter den.';
+
+  @override
+  String get playPurchaseOtherAccount => 'Dette Google Play-køb tilhører en anden Omi-konto.';
+
+  @override
+  String get playPurchaseNotConfirmed => 'Vi kunne ikke bekræfte købet endnu. Vi prøver igen automatisk.';
+
+  @override
+  String get playRenewalTerms =>
+      'Fornyes automatisk til den viste pris, indtil du opsiger. Administrer eller opsig når som helst i Google Play.';
+
+  @override
+  String get playPaidAppUnavailable => 'Ikke tilgængelig på Android';
+
+  @override
+  String get pageNotAvailableInApp => 'Denne side er ikke tilgængelig i appen.';
+
+  @override
+  String get shopOrderPlacedCheckEmail => 'Ordren er afgivet. Tjek din e-mail for bekræftelsen.';
+
+  @override
+  String get prepaidCodeEntry => 'Har du en kode?';
+
+  @override
+  String get prepaidCodeTitle => 'Indløs en kode';
+
+  @override
+  String get prepaidCodeFieldHint => 'Indtast din kode';
+
+  @override
+  String get prepaidCodeRedeem => 'Indløs';
+
+  @override
+  String get prepaidCodeRedeemed => 'Koden er indløst';
+
+  @override
+  String prepaidCodeResult(String reason) {
+    String _temp0 = intl.Intl.selectLogic(
+      reason,
+      {
+        'invalid': 'Denne kode er ikke gyldig. Tjek den og prøv igen.',
+        'used': 'Denne kode er allerede brugt.',
+        'expired': 'Denne kode er udløbet.',
+        'hasPlan': 'Du har allerede en plan. Din kode blev ikke brugt. Indløs den, når din plan slutter.',
+        'notPrepaid': 'Denne kode kan ikke indløses her. Brug den, når du vælger en plan.',
+        'notEligible': 'Denne kode kan ikke bruges på denne konto.',
+        'rateLimited': 'For mange forsøg. Prøv igen senere.',
+        'other': 'Noget gik galt. Prøv igen.',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get playStripeBilledOnWeb => 'Faktureres via omi.me. Opsig her når som helst.';
+
+  @override
+  String get playStripeBilledOnWebShort => 'Faktureres via omi.me.';
+
+  @override
+  String playStripePlanPaused(String plan) {
+    return 'Dit $plan-abonnement er sat på pause.';
+  }
+
+  @override
+  String get firmwareNewestSupportedForDevice => 'Din enhed kører allerede den nyeste understøttede firmwareversion';
+
+  @override
+  String get firmwareSyncRecordingsFirstTitle => 'Synkroniser dine optagelser først';
+
+  @override
+  String get firmwareSyncRecordingsFirstMessage =>
+      'Nogle optagelser er stadig på din enhed. Lad dem blive færdige med at synkronisere til din telefon, og start derefter opdateringen.';
 }

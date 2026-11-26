@@ -11,9 +11,10 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass
 from math import isfinite
-from typing import Any, Callable, Mapping, Optional
+from typing import Any, Callable, Mapping, Optional, cast
 
 from prometheus_client import REGISTRY, Counter, Histogram
+from prometheus_client.registry import Collector
 
 from models.conversation_enums import ConversationSource, ConversationStatus
 from models.transcript_segment import TranscriptSegment, legacy_conversation_segment_id
@@ -419,6 +420,7 @@ def owner_recognition_already_observed(
     status is intake's, not an observation. A previous ``process_conversation``
     pass stores ``relevance_decision.trigger`` as a processing trigger; intake
     stores ``sync_intake`` or nothing, and promotion deletes a rule discard.
+    Desktop intake can also store completed before first-open enrichment.
     """
     if not is_reprocess:
         return False
@@ -426,7 +428,10 @@ def owner_recognition_already_observed(
         return True
     if trigger is ProcessingTrigger.SYNC_UPDATE:
         return _relevance_trigger(prior_relevance_decision) in _PROCESSED_TRIGGERS
-    return _status_value(conversation) == ConversationStatus.completed.value
+    return (
+        _status_value(conversation) == ConversationStatus.completed.value
+        and _field(conversation, 'deferred') is not True
+    )
 
 
 def emit_finalized_owner_recognition(
@@ -541,3 +546,118 @@ def record_live_speaker_rollover(
             logger.info('live_speaker_rollover carried=%s target=%s reason=%s', carried, target, reason)
     except Exception:
         logger.warning('live_speaker_rollover_record_failed')
+
+
+# Latest committed identity revision observations. Replicas mirror durable
+# shards: queries must max by label before rate/increase, never sum replicas.
+IDENTITY_VALUES = ('owner', 'known_person', 'unknown')
+AVAILABILITY_MEASURES = ('segments', 'segment_seconds', 'words', 'word_seconds', 'word_time_segments')
+
+
+def identity_availability_snapshot(conversation):
+    import hashlib
+    import json
+
+    rows = []
+    amounts: dict[str, float] = {
+        f'{measure}_{identity}': 0 for measure in AVAILABILITY_MEASURES for identity in IDENTITY_VALUES
+    }
+    for segment in _segments(conversation):
+        identity = (
+            'owner' if _field(segment, 'is_user') else 'known_person' if _field(segment, 'person_id') else 'unknown'
+        )
+        duration = _duration(segment)
+        words = len((_field(segment, 'text') or '').split())
+        measured = _field(segment, 'speaker_word_seconds')
+        word_seconds = measured if isinstance(measured, (int, float)) and isfinite(measured) and measured >= 0 else None
+        rows.append(
+            [
+                _field(segment, 'id'),
+                _field(segment, 'start'),
+                _field(segment, 'end'),
+                identity,
+                _field(segment, 'person_id'),
+                words,
+                word_seconds,
+            ]
+        )
+        amounts[f'segments_{identity}'] += 1
+        amounts[f'segment_seconds_{identity}'] += duration
+        amounts[f'words_{identity}'] += words
+        if word_seconds is not None:
+            amounts[f'word_seconds_{identity}'] += word_seconds
+            amounts[f'word_time_segments_{identity}'] += 1
+    digest = hashlib.sha256(json.dumps(rows, separators=(',', ':'), default=str).encode()).hexdigest()
+    return digest, amounts
+
+
+class IdentityAvailability(Collector):
+    def __init__(self):
+        from threading import Lock
+
+        self._lock = Lock()
+        self._shards = {}
+        self._observed_at = None
+
+    def describe(self):
+        from prometheus_client.core import CounterMetricFamily, GaugeMetricFamily
+
+        return [
+            *(
+                CounterMetricFamily(
+                    'omi_owner_recognition_identity_' + measure,
+                    'Current committed identity revision observations; not unique recordings. ' + measure,
+                    labels=['identity'],
+                )
+                for measure in AVAILABILITY_MEASURES
+            ),
+            GaugeMetricFamily('omi_owner_recognition_identity_observed_at_seconds', 'Last complete durable refresh.'),
+        ]
+
+    def publish(self, shards, *, observed_at):
+        from database.owner_identity_availability import SHARDS
+
+        if set(shards) != set(map(str, range(SHARDS))):
+            raise ValueError('identity counter snapshot incomplete')
+        for counts in shards.values():
+            for measure in AVAILABILITY_MEASURES:
+                for identity in IDENTITY_VALUES:
+                    value = counts.get(f'{measure}_{identity}', 0)
+                    if not isinstance(value, (int, float)) or not isfinite(value) or value < 0:
+                        raise ValueError('invalid identity counter')
+        with self._lock:
+            for shard, counts in shards.items():
+                current = self._shards.setdefault(shard, {})
+                for measure in AVAILABILITY_MEASURES:
+                    for identity in IDENTITY_VALUES:
+                        key = f'{measure}_{identity}'
+                        value = counts.get(key, 0)
+                        if not isinstance(value, (int, float)) or not isfinite(value) or value < 0:
+                            raise ValueError('invalid identity counter')
+                        current[key] = max(current.get(key, 0), value)
+            self._observed_at = max(self._observed_at or 0, observed_at)
+
+    def collect(self):
+        with self._lock:
+            if self._observed_at is None:
+                return
+            families = self.describe()
+            for measure, family in zip(AVAILABILITY_MEASURES, families):
+                for identity in IDENTITY_VALUES:
+                    family.add_metric(
+                        [identity], sum(row.get(f'{measure}_{identity}', 0) for row in self._shards.values())
+                    )
+            families[-1].add_metric([], self._observed_at)
+        yield from families
+
+
+def _identity_availability() -> IdentityAvailability:
+    collector = IdentityAvailability()
+    try:
+        REGISTRY.register(collector)
+        return collector
+    except ValueError:
+        return cast(IdentityAvailability, REGISTRY._names_to_collectors['omi_owner_recognition_identity_segments'])  # type: ignore[attr-defined]
+
+
+IDENTITY_AVAILABILITY = _identity_availability()

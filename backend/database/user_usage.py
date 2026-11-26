@@ -11,14 +11,14 @@ from google.cloud.firestore_v1 import FieldFilter
 
 from ._client import db, get_firestore_client
 from . import monthly_usage_totals
+from .firestore_document_probe import call_site
 from .firestore_read_origin import read_origin
 from .firestore_read_metrics import FirestoreReadFamily, FirestoreReadMode, record_firestore_read
-from .firestore_retry import FIRESTORE_NO_RETRY
 from .firestore_index_registry import HOURLY_USAGE_UTC_DAY_QUERY
 from .llm_usage import nest_usage_fields, resolve_usage_plan_id
 from .usage_units import hourly_shadow, normalize_plan_usage
 from models.user_usage import UsageStats
-from utils.read_cache_shadow import ShadowSkipped, compare_hit
+from .monthly_usage_observation import observe_cached_month
 
 logger = logging.getLogger(__name__)
 
@@ -608,6 +608,8 @@ def _s4_month_cache(since=False):
             if since:
                 start_date = args[0] if args else kwargs['start_date']
                 variant = f'{plane_id(db)}:{date.year}-{date.month:02d}:since:{start_date.date().isoformat()}'
+            metadata = {}
+            kwargs['_shadow_metadata'] = metadata
             return cached_read(
                 'usage_month_cache',
                 uid,
@@ -615,10 +617,9 @@ def _s4_month_cache(since=False):
                 lambda: fn(uid, date, *args, **kwargs),
                 seconds=ttl('FSR_USAGE_MONTH_TTL_SECONDS', 60),
                 cacheable=_s4_valid_month_stats,
-                on_hit=lambda value: compare_hit(
-                    'usage_month',
-                    value,
-                    lambda timeout: _fresh_month_stats(uid, date, start_date, timeout),
+                metadata=metadata,
+                on_hit_with_metadata=lambda value, source: observe_cached_month(
+                    uid, date, start_date, value, db, source
                 ),
             )
 
@@ -627,7 +628,7 @@ def _s4_month_cache(since=False):
     return decorate
 
 
-def _fresh_month_stats(uid, date, start_date, timeout, *, firestore_client=None):
+def read_hourly_usage_for_shadow(uid, date, start_date, timeout, *, read_time, stream_snapshot, firestore_client=None):
     # Read the authoritative hourly totals; never rebuild/write a monthly projection.
     client = firestore_client if firestore_client is not None else get_firestore_client()
     query = (
@@ -640,18 +641,22 @@ def _fresh_month_stats(uid, date, start_date, timeout, *, firestore_client=None)
     if start_date is not None:
         start_id = f'{start_date.year}-{start_date.month:02d}-{start_date.day:02d}-00'
         query = query.where(filter=FieldFilter('id', '>=', start_id))
-    with read_origin('job:read_cache_shadow'):
-        stats, count = _aggregate_stats_with_count(query.limit(744).stream(timeout=timeout, retry=FIRESTORE_NO_RETRY))
+    # The extra row distinguishes a complete 31-day month from a truncated scan.
+    limit = 745
+    query = query.limit(limit)
+    with read_origin('job:usage_month_total_shadow'):
+        rows = stream_snapshot(query, read_time, timeout=timeout, caller=call_site())
+        stats, count = _aggregate_stats_with_count(rows)
         record_firestore_read(FirestoreReadFamily.LISTEN_MONTHLY_USAGE, FirestoreReadMode.BOUNDED, count)
-    if count >= 744:
-        raise ShadowSkipped('hourly document limit reached')
-    return stats
+    return stats if count < limit else None
 
 
 @_s4_month_cache()
-def get_monthly_usage_stats(uid: str, date: datetime) -> Dict[str, Any]:
+def get_monthly_usage_stats(uid: str, date: datetime, *, _shadow_metadata: dict | None = None) -> Dict[str, Any]:
     """Aggregates hourly usage stats for a given month from Firestore."""
-    projected = monthly_usage_totals.read_monthly_totals(uid, date, firestore_client=db)
+    projected = monthly_usage_totals.read_monthly_totals(
+        uid, date, firestore_client=db, shadow_metadata=_shadow_metadata
+    )
     if projected is not None:
         return projected
     user_ref = db.collection('users').document(uid)
@@ -665,9 +670,13 @@ def get_monthly_usage_stats(uid: str, date: datetime) -> Dict[str, Any]:
 
 
 @_s4_month_cache(since=True)
-def get_monthly_usage_stats_since(uid: str, date: datetime, start_date: datetime) -> Dict[str, Any]:
+def get_monthly_usage_stats_since(
+    uid: str, date: datetime, start_date: datetime, *, _shadow_metadata: dict | None = None
+) -> Dict[str, Any]:
     """Aggregates hourly usage stats for a given month from Firestore, starting from a specific date."""
-    projected = monthly_usage_totals.read_monthly_totals(uid, date, start_date=start_date, firestore_client=db)
+    projected = monthly_usage_totals.read_monthly_totals(
+        uid, date, start_date=start_date, firestore_client=db, shadow_metadata=_shadow_metadata
+    )
     if projected is not None:
         record_firestore_read(FirestoreReadFamily.LISTEN_MONTHLY_USAGE, FirestoreReadMode.BOUNDED, 1)
         return projected
@@ -689,6 +698,12 @@ def get_monthly_usage_stats_since(uid: str, date: datetime, start_date: datetime
         document_count,
     )
     return stats
+
+
+def get_ready_monthly_usage_stats_since(uid: str, date: datetime, start_date: datetime) -> dict | None:
+    return monthly_usage_totals.read_monthly_totals(
+        uid, date, firestore_client=db, start_date=start_date, ready_only=True
+    )
 
 
 def get_yearly_usage_stats(uid: str, date: datetime) -> Dict[str, Any]:

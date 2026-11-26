@@ -26,9 +26,10 @@ change; discover by UUID.
 | Features `19B10020` | Bitmask `21` |
 | Time sync `19B10030` | Write `31`; read `32` |
 | Storage `30295780-4301-EABD-2904-2849ADFEAE43` | `30295781`, CCC; `30295782`, CCC (same suffix) |
-| Diagnostics `19B10040` | Device telemetry `41`; recovery state `42`; both read-only, no CCC |
+| Diagnostics `19B10040` | Device telemetry `41`; recovery state `42`; loader identity `43`; all read-only, no CCC |
 
-The backlog's 25-byte telemetry remains at `19B10041`, including its coherent
+Append-only telemetry remains at `19B10041` (25-byte base plus the optional
+battery and connection tails described below), including its coherent
 per-connection long-read cache and single-ATT-bearer requirement. A new offset-zero
 read refreshes that snapshot. The safe-mode release also claimed `41` for an
 incompatible 16-byte format. This candidate moves that recovery prefix to
@@ -37,7 +38,7 @@ for 3.0.22 must discover `42` on 3.0.23; never decode `41` as recovery state.
 
 ## SAFE subset
 
-SAFE registers only `19B10040` with recovery characteristic `19B10042`, plus
+SAFE registers only `19B10040` with recovery characteristic `19B10042` and loader identity `19B10043`, plus
 Zephyr's static services (DIS, SMP, configured BAS). Device telemetry `41` and all
 other application services, capture callbacks and workers are absent. A minimal
 connection callback invalidates only the recovery read cache. This avoids normal
@@ -48,7 +49,10 @@ existing audio-service UUID, which alone does not establish capture availability
 
 ## Device telemetry (`19B10041`)
 
-Exactly 25 bytes, version 1, little endian. Normal offset reads are supported.
+Append-only version 1, little endian: 25-byte base, optional battery tail through
+byte 29, and connection tail through byte 37 (38 bytes total). Readers accept the
+base and ignore trailing fields they do not understand. Normal offset reads use a
+per-connection snapshot, refreshed at offset zero; split reads stay coherent.
 
 | Offset | Size | Meaning |
 | --- | --- | --- |
@@ -61,8 +65,38 @@ Exactly 25 bytes, version 1, little endian. Normal offset reads are supported.
 | 13 | 4 | Microphone overrun count |
 | 17 | 4 | BLE TX drop count |
 | 21 | 4 | Storage error count |
+| 25 | 2 | Optional last-off-charger mV; `0xffff` unavailable |
+| 27 | 2 | Optional charge-pin edges; `0xffff` unavailable |
+| 29 | 1 | Optional frozen SOC boolean; `0xff` unavailable |
+| 30 | 2 | Negotiated connection interval, 1.25 ms units; `0xffff` unavailable |
+| 32 | 2 | Negotiated peripheral latency, connection events; `0xffff` unavailable |
+| 34 | 2 | Negotiated supervision timeout, 10 ms units; `0xffff` unavailable |
+| 36 | 1 | TX PHY: 1 = 1M, 2 = 2M, 4 = Coded; `0xff` unavailable |
+| 37 | 1 | RX PHY, same encoding as TX |
 
 Reset cause defaults to `0xffffffff` if unavailable. Counters start at zero.
+The current firmware leaves bytes 25–29 unavailable, preserving their existing
+app meanings. Connection fields come from `bt_conn_get_info` for the reading
+connection, including its initial PHY before any PHY-update callback. They are
+unavailable if the link cannot be queried or is no longer connected. Apps export
+these raw units as `conn_interval`, `conn_latency`, `conn_timeout`, `tx_phy`, and
+`rx_phy`, omitting unavailable values and incomplete connection tails.
+
+The explicit preferred request remains interval 6–12 (7.5–15 ms), latency 0,
+with timeout 600 (6 s). It satisfies the timeout inequality:
+15 ms × (0 + 1) × 3 = 45 ms < 6000 ms and timeout ≤ 6 s
+([Apple QA1931](https://developer.apple.com/library/archive/qa/qa1931/)).
+This does not claim compliance with Apple's separate interval recommendations;
+the existing interval range is unchanged for audio/backlog throughput. Explicit
+requests are limited to three API calls per connection, counting the initial
+request and failures; good intervals do not replenish the budget. Callbacks never
+sleep while re-requesting. A reconnect starts a fresh budget. Zephyr's automatic
+GAP parameter procedure is separate from this explicit budget.
+
+This change rides the **next firmware release**; it does not change the firmware
+version or release an image. Actual granted parameters and weak-signal outcomes
+still require device verification after that release. A 6 s timeout can delay
+detection of a truly lost link relative to 4 s.
 
 ## Recovery state (`19B10042`)
 
@@ -71,7 +105,7 @@ field offsets and meaning; only its format-version byte changes. Version 1
 readers must recognize version 2 before parsing the prefix. New readers accept
 both lengths/versions. Offset reads use a per-connection snapshot, refreshed
 on an offset-zero read and invalidated at disconnect/reconnect. `19B10041`
-remains the unchanged 25-byte version 1 packet.
+retains its version 1 base layout, extended with the optional tails described above.
 
 | Offset | Size | Meaning |
 | --- | --- | --- |
@@ -162,3 +196,34 @@ shutdown, not completed shutdown.
 `06` belong to image characteristics. The app also uses `19B10010`–`12` for
 omiGlass OTA; do not reuse image slots on CV1. Future additions must allocate a
 free UUID here and append attributes after existing members.
+
+## Installed bootloader identity (`19B10043`, candidate)
+
+Read-only characteristic appended to diagnostics service `19B10040` in NORMAL
+and SAFE. Fixed 44-byte value, immutable for the current boot, prepared before
+BLE registration; ATT offsets do not initiate flash reads or reset the device.
+No write command, caller-selected range or raw-memory export exists.
+
+| Offset | Size | Meaning |
+|---|---|---|
+| 0 | 1 | Schema 1 |
+| 1 | 1 | Status: 0 unsupported, 1 measured, 2 unsafe/unreadable, 3 read/hash error, 4 not ready |
+| 2 | 1 | Algorithm 1 = SHA-256 |
+| 3 | 1 | Reserved zero |
+| 4 | 4 | LE start address, exactly zero |
+| 8 | 4 | LE byte length, exactly 65536 |
+| 12 | 32 | Digest of actual installed bytes, all zero unless status 1 |
+
+The nRF5340 APP adapter first requires every covered SPU region to permit reads,
+be locked and disallow writes. Unsupported targets return status 0. No protection
+register is changed. Failure is unknown eligibility, not proof of a bad loader.
+Clients must validate schema, algorithm, reserved byte, range and status before
+using a digest, bind it to the same device, and compare full digests against the
+release policy. This is diagnostic self-report, not cryptographic attestation.
+It identifies devices that can install this firmware; it cannot reach or rescue
+unchanged stock-.21-loader devices blocked from OTA. Application version strings,
+SMP bootloader mode and application slot hashes remain different concepts.
+
+Target build and physical read-permission/hash comparison remain required before
+this candidate is considered jig-ready. Approved-loader hashes and qualification
+policy remain in `../bootloader/cv1-bootloader-policy.json`.

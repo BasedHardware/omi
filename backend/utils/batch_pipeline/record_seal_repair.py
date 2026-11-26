@@ -6,12 +6,16 @@ import hashlib
 import json
 import logging
 import math
+import time
 from typing import Any
 
 from google.cloud import firestore
 from config.record_seal_rules import overlap_trim_enabled, upload_failed_repair_enabled
+from config import record_seal_repair as repair_config
 
 from database._client import run_transactional
+from database.record_audio import observe_record_sealed
+from database import pipeline_ledger
 from database.batch_pipeline_privacy import assert_batch_write_allowed, BatchPrivacyBlocked
 from utils.batch_pipeline.contracts import Priority, WorkItem
 from utils.batch_pipeline.live import retained_record_units
@@ -23,6 +27,9 @@ from config import record_seal_rules as lease
 from utils.batch_pipeline.record_seal_reasons import proof_reason, proof_diagnostics, tail_gap_bucket, TailGapRefusal
 from utils.other.storage import list_audio_chunks
 from utils.batch_pipeline import record_seal_profile
+from utils.batch_pipeline.record_seal_budget import BudgetExhausted, SweepBudget
+
+LEDGER_OBSERVATION_SECONDS = 3
 
 ROW_FIELDS = (
     'record_lane_owner',
@@ -46,9 +53,20 @@ def seal_row_state(row):
 
 
 def _job_state(job):
-    # The pending drainer advances this retry wake every minute. It grants no
-    # seal authority and must not invalidate an otherwise identical approval.
-    return {key: value for key, value in job.items() if key != 'available_at'}
+    # Scheduling metadata grants no seal authority. Recheck its live values in
+    # the commit transaction before waking intake; a claim may race planning.
+    return {key: value for key, value in job.items() if key not in {'available_at', 'record_intake_retry_at'}}
+
+
+def intake_wake_allowed(job, now):
+    available = job.get('available_at', 0)
+    if type(available) not in (int, float) or not math.isfinite(available):
+        return False
+    # A future value with no matching retry marker might be an old binary's
+    # live claim. Preserve it during rolling upgrades too. An already due row
+    # has no unexpired claim to cancel.
+    retry = job.get('record_intake_retry_at')
+    return available <= now or type(retry) in (int, float) and retry == available
 
 
 def plan_digest(value):
@@ -212,6 +230,7 @@ def plan_seals(
     check_budget=lambda: None,
     repair_upload_failed=False,
     repair_closed=False,
+    wake_admission=False,
 ):
     entries = []
     for job_id in sorted(job_ids):
@@ -282,12 +301,13 @@ def plan_seals(
         'producers_stopped': producers_stopped,
         'repair_upload_failed': repair_upload_failed,
         'repair_closed': repair_closed,
+        'wake_admission': wake_admission,
         'overlap_trim_enabled': overlap_trim_enabled(),
     }
     return {**plan, 'plan_sha256': plan_digest(plan)}
 
 
-def apply_seals(store, plan, approved_digest, *, check_budget=lambda: None, outcomes=None):
+def apply_seals(store, plan, approved_digest, *, check_budget=lambda: None, outcomes=None, observation_counts=None):
     body = {key: value for key, value in plan.items() if key != 'plan_sha256'}
     if approved_digest != plan['plan_sha256'] or plan_digest(body) != approved_digest:
         raise ValueError('fresh dry-run plan approval required')
@@ -308,13 +328,16 @@ def apply_seals(store, plan, approved_digest, *, check_budget=lambda: None, outc
         job_ref = store.client.collection(f'{store.namespace}_jobs').document(entry['job_id'])
 
         observation = {}
+        sealed_observation = {}
 
         @firestore.transactional
         def commit(tx):
             observation.clear()  # Only the final transaction attempt may emit.
+            sealed_observation.clear()
             check_budget()
             current_job = job_ref.get(transaction=tx).to_dict() or {}
-            row = ref.get(transaction=tx).to_dict() or {}
+            snapshot = ref.get(transaction=tx)
+            row = snapshot.to_dict() or {}
             if _job_state(current_job) != job or seal_row_state(row) != entry['row']:
                 return 'state_changed'
             refusal = seal_refusal(
@@ -332,17 +355,60 @@ def apply_seals(store, plan, approved_digest, *, check_budget=lambda: None, outc
                 store.client, tx, uid, conversation_ids=(cid,), expected_generation=job['privacy_generation']
             )
             patch: dict[str, Any] = {'record_audio_closed': True}
+            admitted = row.get('record_admitted_at') is None
+            if admitted:
+                patch['record_admitted_at'] = time.time()
+            sealed_observation.update(source_revision=pipeline_ledger.source_revision(snapshot), admitted=admitted)
+            if (
+                not row.get('record_audio_closed')
+                or row.get('record_upload_sessions')
+                or row.get('record_upload_failed')
+            ):
+                patch['record_sealed_at'] = time.time()
             if row.get('record_upload_sessions'):
                 patch['record_upload_sessions'] = {}  # Only the exact proven-dead map.
             if row.get('record_upload_failed'):
                 patch['record_upload_failed'] = False
             check_budget()
             tx.update(ref, patch)
+            enqueued = current_job.get('enqueued_at')
+            if (
+                plan.get('wake_admission')
+                and repair_config.fresh_enabled()
+                and isinstance(enqueued, (int, float))
+                and not isinstance(enqueued, bool)
+                and math.isfinite(enqueued)
+                and 0 <= time.time() - enqueued
+                and intake_wake_allowed(current_job, time.time())
+            ):
+                # The seal and claim-safe wake commit together. Fresh wakes
+                # sort before bulk stock; both cancel a certified retry delay.
+                # Admission still runs its full privacy/custody/artifact checks.
+                wake = 0 if time.time() - enqueued <= repair_config.FRESH_WINDOW_SECONDS else 1
+                tx.update(job_ref, {'available_at': wake, 'record_intake_retry_at': None})
             return 'upload_failed_cleared' if row.get('record_upload_failed') else 'sealed'
 
         try:
             result = run_transactional(store.client, commit, transient=True)
             outcomes[result] += 1
+            if result in {'sealed', 'upload_failed_cleared'}:
+                try:
+                    # The real seal has committed. Optional ledger IO must not
+                    # occupy a row slot for its entire audio-proof budget.
+                    with SweepBudget(LEDGER_OBSERVATION_SECONDS).interrupt_io():
+                        observed = observe_record_sealed(
+                            store.client, uid, cid, ref, refresh_revision=True, **sealed_observation
+                        )
+                    if observed is False and observation_counts is not None:
+                        observation_counts['ledger_misses'] = observation_counts.get('ledger_misses', 0) + 1
+                except (Exception, BudgetExhausted) as error:
+                    # Catch cancellation only after the seal transaction. It is
+                    # a ledger miss, never a failed seal or permission bypass.
+                    pipeline_ledger.observe_seal_failure(
+                        TimeoutError() if isinstance(error, BudgetExhausted) else error
+                    )
+                    if observation_counts is not None:
+                        observation_counts['ledger_misses'] = observation_counts.get('ledger_misses', 0) + 1
             if (
                 result in {'sealed', 'upload_failed_cleared'}
                 and lease.token_lease_serving(uid)

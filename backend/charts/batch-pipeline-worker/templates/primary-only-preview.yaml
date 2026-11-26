@@ -1,0 +1,60 @@
+{{- if (.Values.rollout | default dict).primaryOnlyPreview }}
+{{- if or (not .Values.enabled) (ne .Values.stage "prod") (ne .Release.Namespace "prod-omi-backend") (ne .Release.Name "prod-omi-batch-pipeline-worker") }}
+{{- fail "primary-only preview requires the production batch worker release" }}
+{{- end }}
+{{- if .Release.IsUpgrade }}
+{{- fail "primary-only preview is for helm template; apply only the reviewed primary CAS patch" }}
+{{- end }}
+{{- if not (regexMatch "^sha256:[0-9a-f]{64}$" .Values.image.digest) }}
+{{- fail "primary-only preview requires a qualified image.digest" }}
+{{- end }}
+{{- $depth := toString .Values.worker.pipelineDepth }}
+{{- if not (has $depth (list "3" "4")) }}
+{{- fail "primary-only preview requires worker.pipelineDepth 3 or 4" }}
+{{- end }}
+{{- $primary := .Release.Name }}
+{{- $deployments := dict }}
+{{- range $name, $containerName := dict $primary "worker" (printf "%s-t4" $primary) "worker" "record-seal-worker" "seal" }}
+  {{- $current := lookup "apps/v1" "Deployment" $.Release.Namespace $name }}
+  {{- if not $current }}
+    {{- fail (printf "primary-only preview requires the existing Deployment %s" $name) }}
+  {{- end }}
+  {{- $matches := list }}
+  {{- range $current.spec.template.spec.containers }}
+    {{- if eq .name $containerName }}
+      {{- $matches = append $matches . }}
+    {{- end }}
+  {{- end }}
+  {{- if ne (len $matches) 1 }}
+    {{- fail (printf "primary-only preview requires exactly one target container in %s" $name) }}
+  {{- end }}
+  {{- $container := first $matches }}
+  {{- $binding := dict "name" "BATCH_PIPELINE_UID_ALLOWLIST" "kind" (include "batch-pipeline-worker.allowlistKind" $container.env) }}
+  {{- $entry := dict "liveImage" $container.image "image" $container.image "allowlist" $binding }}
+  {{- if eq $name $primary }}
+    {{- $depthEntries := 0 }}
+    {{- range $container.env }}
+      {{- if eq .name "BATCH_PIPELINE_WORKER_PIPELINE_DEPTH" }}
+        {{- if or .valueFrom (not (has .value (list "3" "4"))) }}
+          {{- fail "primary-only preview requires the live worker depth to be literal 3 or 4" }}
+        {{- end }}
+        {{- $depthEntries = add1 $depthEntries }}
+        {{- $_ := set $entry "liveDepth" .value }}
+      {{- end }}
+    {{- end }}
+    {{- if ne $depthEntries 1 }}
+      {{- fail "primary-only preview requires exactly one worker depth entry" }}
+    {{- end }}
+    {{- $_ := set $entry "image" (printf "%s@%s" (required "image.repository required" $.Values.image.repository) $.Values.image.digest) }}
+    {{- $_ := set $entry "depth" $depth }}
+  {{- end }}
+  {{- $_ := set $deployments $name $entry }}
+{{- end }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ $primary }}-preview
+  namespace: {{ .Release.Namespace }}
+data:
+  comparison.json: {{ $deployments | toJson | quote }}
+{{- end }}

@@ -78,7 +78,16 @@ def decode(body: bytes) -> dict:
     return payload
 
 
-def extract(wav: bytes, turns: list, capture_at: float, extractor, *, execution_deadline: float = float('inf')) -> dict:
+def extract(
+    wav: bytes,
+    turns: list,
+    capture_at: float,
+    extractor,
+    *,
+    execution_deadline: float = float('inf'),
+    exclude_labels: set[str] | None = None,
+    measured_windows: dict | None = None,
+) -> dict:
     """One <=15s clip per local label, exclusively attributed PCM only.
 
     Merge each label's intervals before subtracting every other label. This
@@ -119,12 +128,19 @@ def extract(wav: bytes, turns: list, capture_at: float, extractor, *, execution_
                         raise TimeoutError('voice extraction budget')
                     spans = [p for a, b in spans for p in ((a, min(b, low)), (max(a, high), b)) if p[1] > p[0]]
         clip = bytearray()
+        windows = []
         for start, end in spans:
             remaining = MAX_CLIP_SECONDS * RATE * 2 - len(clip)
-            clip.extend(pcm[start * 2 : min(end * 2, start * 2 + remaining)])
+            stop = min(end, start + remaining // 2)
+            clip.extend(pcm[start * 2 : stop * 2])
+            windows.append((capture_at + start / RATE, capture_at + stop / RATE))
             if len(clip) >= MAX_CLIP_SECONDS * RATE * 2:
                 break
         if len(clip) < RATE:  # 0.5s minimum; the name matcher has its own higher floor.
+            continue
+        if measured_windows is not None:
+            measured_windows[label] = windows
+        if label in (exclude_labels or set()):
             continue
         output = io.BytesIO()
         with wave.open(output, 'wb') as target:

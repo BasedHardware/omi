@@ -24,7 +24,7 @@ from database.jobstore.dual_store import DualStore
 
 SEAMS = [
     ('diarizer.batch_pipeline_runtime', 'main'),
-    ('utils.batch_pipeline.serving', 'serving_for_stage'),
+    ('utils.batch_pipeline.serving', '_serving_for_stage'),
     ('utils.batch_pipeline.live', 'register_recording'),
     ('utils.batch_pipeline.intake', 'accept_upload'),
 ]
@@ -43,6 +43,7 @@ def isolated(monkeypatch):
 
 def _shadow_settings(monkeypatch):
     monkeypatch.setenv('BATCH_JOBSTORE_MODE', 'shadow')
+    monkeypatch.setenv('JOBSTORE_SHADOW_NAMESPACES', 'batch_pipeline_dev,batch_pipeline_prod')
     monkeypatch.setenv('JOBSTORE_PG_HOST', '10.0.0.1')
     monkeypatch.setenv('JOBSTORE_PG_DATABASE', 'jobstore_staging')
     monkeypatch.setenv('JOBSTORE_PG_USER', 'svc@example.iam')
@@ -127,20 +128,41 @@ def test_secondary_writer_stores_are_the_shadow_seam(module_name, function):
         if isinstance(node, ast.Call) and getattr(node.func, 'id', None) == 'FirestoreStore'
     ]
     parents = {child: node for node in ast.walk(tree) for child in ast.iter_child_nodes(node)}
+    if function == 'get_durable_job_status':
+        # Exact WAL replay reads plain Firestore. Only the wrapped store can
+        # reach the legacy status helper that can redrive work.
+        assert len(calls) == 1
+        assignment = parents[calls[0]]
+        assert isinstance(assignment, ast.Assign) and len(assignment.targets) == 1
+        target = assignment.targets[0]
+        assert isinstance(target, ast.Name)
+        uses = [
+            parents[node]
+            for node in ast.walk(tree)
+            if isinstance(node, ast.Name) and node.id == target.id and isinstance(node.ctx, ast.Load)
+        ]
+        consumers = {ast.unparse(call.func): call for call in uses if isinstance(call, ast.Call)}
+        assert len(uses) == len(consumers) == 2
+        assert consumers.keys() == {'wal_duplicate.terminal_status', 'shadow_from_env'}
+        legacy = parents[consumers['shadow_from_env']]
+        assert isinstance(legacy, ast.Call) and ast.unparse(legacy.func) == 'durable_status'
+        return
     assert len(calls) == 1 and getattr(parents[calls[0]].func, 'id', None) == 'shadow_from_env'
 
 
 # -- A5: privacy erasure of the Postgres copy ---------------------------------------------------------------
-def test_purge_hook_is_a_no_op_without_shadow_mode(monkeypatch):
-    monkeypatch.setattr(dual_store, 'purge_owner', lambda *a: pytest.fail('must not reach the job store'))
+def test_purge_hook_reaches_retained_copies_without_shadow_mode(monkeypatch):
+    monkeypatch.setattr(dual_store, 'purge_owner', lambda *a: 0)
     assert hook.purge_owner('batch_pipeline_dev', 'synthetic-uid') == 0
 
 
-def test_purge_hook_skips_the_refused_prod_namespace(monkeypatch):
+def test_purge_hook_does_not_use_write_admission_to_skip_erasure(monkeypatch):
     monkeypatch.setenv('OMI_ENV_STAGE', 'prod')
     _shadow_settings(monkeypatch)
-    monkeypatch.setattr(dual_store, 'shadow_from_env', lambda _p: pytest.fail('prod is refused before any store'))
-    assert hook.purge_owner('batch_pipeline_prod', 'synthetic-uid') == 0
+    calls = []
+    monkeypatch.setattr(dual_store, 'purge_owner', lambda *args: calls.append(args) or 3)
+    assert hook.purge_owner('batch_pipeline_prod', 'synthetic-uid') == 3
+    assert calls == [('batch_pipeline_prod', 'synthetic-uid')]
 
 
 def test_purge_hook_reconciles_through_the_shadow_store_and_raises_its_failures(monkeypatch):

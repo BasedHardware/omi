@@ -3,9 +3,120 @@ import 'dart:async';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:omi/services/wals/recording_transfer_coordinator.dart';
 import 'package:omi/services/wals/sync_wake_scope.dart';
+import 'package:omi/utils/reliability_experiments.dart';
+import 'package:omi/services/wals/pendant_ring_custody.dart' show ringDrainRecoveryEnabled;
 
 void main() {
   group('RecordingTransferCoordinator', () {
+    testWidgets('receipt_check_during_drain off (baseline): accepted jobs are not checked while a drain is in flight',
+        (tester) async {
+      ReliabilityExperiments.overrideForTesting({});
+      addTearDown(() => ReliabilityExperiments.overrideForTesting(null));
+      final upload = Completer<RecordingTransferDrainResult>();
+      var polls = 0, drains = 0, asked = 0;
+      final coordinator = RecordingTransferCoordinator(
+        reconcile: () async => polls++,
+        discover: () async {},
+        refreshPending: () async {},
+        drain: () {
+          drains++;
+          return upload.future;
+        },
+        hasAcceptedJobs: () {
+          asked++;
+          return true;
+        },
+        autoUploadEnabled: () => true,
+      );
+      addTearDown(coordinator.dispose);
+      final pass = coordinator.wake(WakeTrigger.startup);
+      await tester.pump();
+      expect(polls, 1, reason: 'the pass reconciles once before its drain');
+      await tester.pump(const Duration(minutes: 2));
+      expect(polls, 1, reason: 'no status check while the upload is in flight');
+      expect(asked, 0, reason: 'no receipt timer exists');
+      upload.complete(const RecordingTransferDrainResult.skipped());
+      await tester.pump();
+      await pass;
+      await tester.pump(const Duration(minutes: 1));
+      expect(polls, 1);
+      expect(drains, 1);
+    });
+
+    testWidgets(
+        'receipt_check_during_drain on: receipts advance during a stalled drain without overlapping polls or uploads',
+        (tester) async {
+      ReliabilityExperiments.overrideForTesting({'receipt_check_during_drain'});
+      addTearDown(() => ReliabilityExperiments.overrideForTesting(null));
+      final upload = Completer<RecordingTransferDrainResult>();
+      final reading = Completer<void>();
+      var hasJobs = false, polls = 0, drains = 0;
+      final coordinator = RecordingTransferCoordinator(
+        reconcile: () async {
+          polls++;
+          if (polls == 2) await reading.future;
+        },
+        discover: () async {},
+        refreshPending: () async {},
+        drain: () {
+          drains++;
+          return upload.future;
+        },
+        hasAcceptedJobs: () => hasJobs,
+        autoUploadEnabled: () => true,
+      );
+      addTearDown(coordinator.dispose);
+      final pass = coordinator.wake(WakeTrigger.startup);
+      await tester.pump();
+      await tester.pump(const Duration(seconds: 20));
+      expect(polls, 1, reason: 'no accepted jobs yet');
+      hasJobs = true;
+      await tester.pump(const Duration(seconds: 20));
+      expect(polls, 2, reason: 'the upload is still in flight');
+      await tester.pump(const Duration(minutes: 1));
+      expect(polls, 2, reason: 'a slow status GET cannot start another pass');
+      reading.complete();
+      await tester.pump();
+      await tester.pump(const Duration(seconds: 20));
+      expect(polls, 3);
+      expect(drains, 1);
+      upload.complete(const RecordingTransferDrainResult.skipped());
+      await tester.pump();
+      await pass;
+      await tester.pump(const Duration(minutes: 1));
+      expect(polls, 3, reason: 'receipt checks end with the drain');
+    });
+
+    test('continuing device DATA renews ordinary pass deadline; silence still times out', () async {
+      final work = Completer<void>();
+      final deadlines = <void Function()>[];
+      final timedOut = <WakeTrigger>[];
+      final coordinator = RecordingTransferCoordinator(
+        reconcile: () => work.future,
+        discover: () async {},
+        refreshPending: () async {},
+        drain: () async => const RecordingTransferDrainResult.skipped(),
+        autoUploadEnabled: () => true,
+        scheduleTimeout: (_, callback) => deadlines.add(callback),
+        onPassTimedOut: (trigger, _) => timedOut.add(trigger),
+        scheduleCooldown: (_, callback) {},
+      );
+      addTearDown(coordinator.dispose);
+      final pass = coordinator.wake(WakeTrigger.startup);
+      await _settle();
+      for (var i = 0; i < 3; i++) {
+        coordinator.noteDeviceProgress();
+        deadlines[i]();
+        await _settle();
+        expect(timedOut, isEmpty);
+      }
+      expect(deadlines, hasLength(4), reason: 'three hours with DATA have no total pass cap');
+      deadlines.last();
+      await pass;
+      expect(timedOut, [WakeTrigger.startup]);
+      work.complete();
+      await _settle();
+    }, skip: !ringDrainRecoveryEnabled);
     test('connectivity restoration drains without a Bluetooth event (#7373)', () async {
       final harness = _TransferHarness();
       addTearDown(harness.dispose);

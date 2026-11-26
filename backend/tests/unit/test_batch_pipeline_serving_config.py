@@ -18,9 +18,13 @@ from utils.batch_pipeline import projection, serving
     [
         ('BATCH_PIPELINE_SERVING_SWEEP_PAGE_ROWS', config.serving_sweep_page_rows, 100, 50, 200),
         ('BATCH_PIPELINE_SERVING_TICK_SECONDS', config.serving_tick_seconds, 20, 10, 60),
+        ('BATCH_PIPELINE_READY_DISCOVERY_TICK_SECONDS', config.ready_discovery_tick_seconds, 10, 1, 60),
+        ('BATCH_PIPELINE_READY_DISCOVERY_OWNERS_PER_TICK', config.ready_discovery_owners_per_tick, 20, 1, 100),
     ],
 )
-@pytest.mark.parametrize('raw', [None, '', 'bad', '2.5', 'nan', 'inf', '-1', '0', '5', '50', '200', '300', '999'])
+@pytest.mark.parametrize(
+    'raw', [None, '', 'bad', '2.5', 'nan', 'inf', '-1', '0', '5', '50', '200', '300', '999', '1000']
+)
 def test_serving_numeric_bounds(monkeypatch, name, reader, default, minimum, maximum, raw):
     monkeypatch.delenv('BATCH_PIPELINE_SERVING_SWEEP_PAGE_ROWS', raising=False)
     if raw is None:
@@ -81,7 +85,9 @@ def test_sweep_uses_configured_cap_for_assignment_and_finish(monkeypatch, pendin
         monkeypatch.setenv('BATCH_PIPELINE_SERVING_SWEEP_PAGE_ROWS', raw)
     monkeypatch.setattr(projection, 'projection_pending_page_enabled', lambda: pending_page)
     monkeypatch.setattr(projection, 'sweep_owner_chain_enabled', lambda: False)
-    projector = projection.Projector(Mock(), Mock())
+    store = Mock()
+    store.projection_finish_backfill_complete.return_value = False
+    projector = projection.Projector(store, Mock())
     for discovery in (projector.discovery, projector.assignment_discovery, projector.finish_discovery):
         discovery.next = Mock(return_value=[])
     result = projector.sweep() if limit is None else projector.sweep(limit=limit)
@@ -106,6 +112,7 @@ def test_sweep_page_size_reaches_database_query(monkeypatch, raw, expected):
     monkeypatch.setattr(projection, 'sweep_owner_chain_enabled', lambda: False)
     query = ResultQuery({f'r{i:03d}': {'committed_at': i, 'projection_state': 'pending'} for i in range(350)})
     store = Mock()
+    store.projection_finish_backfill_complete.return_value = False
     store.projection_page.side_effect = lambda **kwargs: projection_page(query, 'synthetic', **kwargs)
     projector = projection.Projector(store, Mock())
     projector.store.read = Mock(side_effect=projection.ProjectionBlocked('synthetic'))
@@ -126,7 +133,7 @@ async def test_supervisor_uses_configured_tick(monkeypatch, raw, expected):
         monkeypatch.delenv('BATCH_PIPELINE_SERVING_TICK_SECONDS', raising=False)
     else:
         monkeypatch.setenv('BATCH_PIPELINE_SERVING_TICK_SECONDS', raw)
-    service = SimpleNamespace(store=Mock(), reconcile_async=AsyncMock())
+    service = SimpleNamespace(store=Mock(), reconcile_async=AsyncMock(), sweep_held_dead_letters=Mock())
     monkeypatch.setattr(serving, 'current_stage', lambda: 'dev')
     monkeypatch.setattr(serving, 'serving_for_stage', lambda stage: service)
     monkeypatch.setattr(serving, 'drain_recordings', AsyncMock(return_value=None))
@@ -156,4 +163,4 @@ async def test_supervisor_uses_configured_tick(monkeypatch, raw, expected):
         runtime[0].set()
         await asyncio.gather(runtime[1], return_exceptions=True)
     assert ticks == [expected]
-    service.reconcile_async.assert_awaited_once_with(recover_quarantine=True, periodic=True)
+    service.reconcile_async.assert_awaited_once_with(recover_quarantine=True, periodic=True, run_held_expiry=False)

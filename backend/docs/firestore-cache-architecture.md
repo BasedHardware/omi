@@ -142,6 +142,8 @@ Current invalidation hooks:
 | `set_user_transcription_preferences()` | `user_transcription_prefs` |
 | `set_user_custom_stt_usage()` | `user_transcription_prefs` |
 | `update_ai_user_profile()` | `user_ai_profile` |
+| `write_ai_user_profile()` | `user_ai_profile` |
+| `delete_ai_user_profile()` | `user_ai_profile` |
 
 ## Metrics
 
