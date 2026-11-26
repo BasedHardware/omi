@@ -15,6 +15,17 @@ def enabled() -> bool:
     return os.getenv('CONVERSATION_MERGE_BEFORE_PROCESSING', 'true').strip().lower() not in {'false', '0', 'off', 'no'}
 
 
+def v3_excluded() -> bool:
+    """Default-on kill switch: v3-owned rows never enter the pre-notes absorb.
+
+    Smart merge's donor redirect keeps ``v3_derived`` and moves no claims, unlike
+    v3's own retire (``_retire_patch``); v3 owns its window boundaries. Off
+    restores the absorb (and the v3 drain's ``ConversationAbsorbed`` 500s).
+    """
+    value = os.getenv('CONVERSATION_MERGE_BEFORE_PROCESSING_V3_EXCLUSION', 'true')
+    return value.strip().lower() not in {'false', '0', 'off', 'no'}
+
+
 def already_processed(row: Mapping[str, Any]) -> bool:
     """Metadata-only donor fence; old rows fall back to their stored structure.
 

@@ -49,6 +49,25 @@ def test_ineligible_short_capture_never_loads_merge_worker(world, monkeypatch, w
     boundary.before_notes(UID, conversation, ProcessingTrigger.CAPTURE_END)
 
 
+@pytest.mark.parametrize('owner_flag', ['v3_derived', 'recording'])
+def test_v3_owned_row_never_enters_pre_notes_absorb(world, monkeypatch, owner_flag):
+    # The v3 processing drain runs CAPTURE_END notes on v3_derived rows. A legacy absorb would
+    # raise ConversationAbsorbed out of the reconcile (500) and leave a v3_derived tombstone
+    # whose claims never moved.
+    world.raw('n')[owner_flag] = True
+    monkeypatch.setattr(boundary.importlib, 'import_module', Mock(side_effect=AssertionError('no merge read')))
+    invoke(world)
+    assert 'sync_merged_into' not in world.raw('n')
+
+
+def test_v3_exclusion_kill_switch_restores_absorb(world, monkeypatch):
+    world.raw('n')['v3_derived'] = True
+    monkeypatch.setenv('CONVERSATION_MERGE_BEFORE_PROCESSING_V3_EXCLUSION', 'false')
+    with pytest.raises(ConversationAbsorbed):
+        invoke(world)
+    assert world.raw('n')['sync_merged_into'] == 'p'
+
+
 @pytest.mark.parametrize(
     'trigger', [ProcessingTrigger.CAPTURE_END, ProcessingTrigger.SYNC_UPDATE, ProcessingTrigger.SERVER_RECOVERY]
 )
