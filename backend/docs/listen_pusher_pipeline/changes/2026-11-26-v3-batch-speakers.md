@@ -1,7 +1,10 @@
 # Batch speakers on conversations-v3 rows; final-pass evidence floor; clock-conflicting units
 
-Contract: [batch conversation speakers runbook](../../runbooks/batch-conversation-speakers.md). No flag, no env
-change: every change below is on by default inside the existing batch speaker authority.
+Contract: [batch conversation speakers runbook](../../runbooks/batch-conversation-speakers.md). On by default
+inside the existing batch speaker authority (David, 2026-11-26), with two kill switches read at call time:
+`BATCH_FINAL_PASS_V3_SOURCES_ENABLED` (v3 source receipts) and `BATCH_FINAL_PASS_APPEND_CONFLICTING_UNITS_ENABLED`
+(append clock-conflicting units). The `unknown` status for an unevaluated final-pass voice has no switch: it only
+keeps labels an earlier step already published.
 
 ## What was wrong
 
@@ -38,11 +41,31 @@ speaker diagnosis (`testing/pipeline_lab/speakers/prod_diagnose.py`):
 - Lab scenarios `speaker_owner_and_person_finish` and `speaker_owner_absent` (public LibriSpeech voices, production
   receipts): `scenario compare origin/main --worktree --metric speakers` gives final pass `skipped_merged` ->
   `success`, owner recall 0 -> 1, named accuracy 0 -> 1; replay only, in CI.
-- Owner account, 24 fresh v3 rows, read-only: resolver `resolved` 0 -> 19; final pass refused 24 -> 9 (all clock
-  conflicts, since fixed). Owner recall against silver truth on the words every arm labeled: production 0.000,
-  resolver with the fix 0.757 at owner precision 1.000.
+- Owner account, 24 fresh v3 rows, read-only, with this change: resolver `resolved` 0 -> 19; final pass refused
+  24 -> 0 for `skipped_merged` (3 local CPU-deadline timeouts of the lab's diarizer remain, not a production
+  path). Against silver truth on 19 rows (614 words): owner recall 0.000 -> 0.541 at owner precision 1.000,
+  wrong-name rate 0; published final labels on 11 rows: 0.000 -> 0.541 at precision 1.000.
 - Unit tests in `test_batch_final_pass.py` and `test_batch_final_pass_lifecycle.py` cover each change, the
   sibling-speech mask, a revoked source, the obligation key and a three-unit append.
+
+## Rollout and gates
+
+Both switches default on, so the release train serves every stage below at once; the stages are the gates watched
+after the deploy, in this order, and any failed gate is a rollback by switch. To ship dark instead, set both false
+in `deploy/runtime_env/prod.overlay.yaml` with the deploy and turn them on per stage.
+
+1. Staging: both switches on; one synthetic v3 capture through Finish; `batch_final_pass` outcome counts show
+   `success`/`failed_unassigned_words` where `skipped_merged` was, and no `failed_read_budget` growth.
+2. The consenting owner's account (production): watch the speaker lab's `diagnose` on fresh v3 rows (resolver
+   `resolved` share, final-pass outcomes) and its bench against silver truth (owner precision must stay 1.000,
+   wrong-name rate 0).
+3. Fleet: compare `omi_transcription_final_pass_retry_terminal_total` by outcome and
+   `omi_final_pass_identity_speech_seconds_total` by identity over equal windows before and after; a rise in the
+   `Speaker Identity Confirmed` corrected share or any privacy-fence refusal growth is a rollback
+   (switch false on every processing runtime; published labels persist).
+
+The lab evidence for the switch is the same-ref compare (`scenario compare --arm off --arm on --metric speakers`
+with the two switches false and true): final pass `skipped_merged` -> `success`, owner recall 0 -> 1.
 
 ## Not covered
 

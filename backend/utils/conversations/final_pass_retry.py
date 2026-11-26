@@ -5,7 +5,7 @@ import logging
 import math
 import time
 
-from config.batch_conversation_speakers import batch_unit_scope, final_pass_enabled_for
+from config.batch_conversation_speakers import v3_sources_enabled, batch_unit_scope, final_pass_enabled_for
 from database.batch_final_pass_retry import FinalPassRetries
 from utils.observability.fallback import record_fallback
 from utils.conversations.final_pass_dependencies import transient_cause
@@ -22,7 +22,7 @@ def scope_key(conversation):
     # Immutable unit/segment membership identifies one obligation. Summary writes
     # or duplicate enrichment calls cannot reset its attempt cap.
     membership = sorted((s.id, batch_unit_scope(s)) for s in conversation.transcript_segments if batch_unit_scope(s))
-    if getattr(conversation, 'v3_recording_ids', None):
+    if getattr(conversation, 'v3_recording_ids', None) and v3_sources_enabled():
         # conversations-v3 rows settled as skipped_merged before they could read their source recordings' units
         # get one new obligation, not a permanently closed one.
         return hashlib.sha256(repr((membership, 'v3-source-receipts')).encode()).hexdigest()

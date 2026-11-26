@@ -1589,3 +1589,34 @@ def test_unknown_final_pass_voice_keeps_the_resolvers_owner_label():
     assert conversation.transcript_segments[0].is_user is True
     stage.apply_speaker_resolution(conversation, {'s1': 3}, {}, {3: 'no_match'}, owner_voiceprint_available=True)
     assert conversation.transcript_segments[0].is_user is False
+
+
+def test_v3_sources_kill_switch_restores_the_refusal(monkeypatch):
+    from utils.conversations import final_pass_retry as retry
+
+    monkeypatch.setattr(retry, 'batch_unit_scope', lambda s: s.speaker_id_scope)
+    row = SimpleNamespace(
+        id='mine',
+        v3_recording_ids=['R'],
+        transcript_segments=[SimpleNamespace(id='s1', speaker_id_scope='final:batch:u1')],
+    )
+    on_key = retry.scope_key(row)
+    monkeypatch.setenv('BATCH_FINAL_PASS_V3_SOURCES_ENABLED', 'false')
+    assert batch.receipt_sources(row) == ()
+    assert batch.source_scope(UID, row) is None
+    assert retry.scope_key(row) != on_key  # the legacy key, as before the change
+
+
+def test_append_kill_switch_restores_the_clock_conflict_refusal(monkeypatch):
+    monkeypatch.setenv('BATCH_FINAL_PASS_APPEND_CONFLICTING_UNITS_ENABLED', 'false')
+    item = lambda start: SimpleNamespace(capture_at=1000.0 + start)  # noqa: E731
+    stream = batch.UnitStream(
+        1000.0,
+        6 * 32000,
+        iter(
+            [(item(0), b'\x01\x00' * 5 * 16000, [], lambda: True), (item(2), b'\x02\x00' * 4 * 16000, [], lambda: True)]
+        ),
+        SimpleNamespace(timeout=lambda seconds: None),
+    )
+    with pytest.raises(batch.IncompleteCoverage, match='conflicting capture clocks'):
+        batch._assemble(stream)

@@ -22,6 +22,8 @@ from prometheus_client import Counter
 from datetime import datetime, timezone
 
 from config.batch_conversation_speakers import (
+    append_conflicting_units_enabled,
+    v3_sources_enabled,
     BATCH_CONVERSATION_SCOPE,
     batch_unit_scope,
     final_pass_enabled_for,
@@ -228,6 +230,8 @@ def _assemble(stream):
             with memoryview(pcm) as placed, memoryview(audio) as source:
                 same = placed[position : position + overlap] == source[:overlap]
             if not same:
+                if not append_conflicting_units_enabled():
+                    raise IncompleteCoverage('conflicting capture clocks')
                 position, overlap = max(append_at, used) + APPEND_GAP_BYTES, 0
                 appended += 1
         if position < append_at:
@@ -253,7 +257,10 @@ def _assemble(stream):
 
 
 def receipt_sources(conversation) -> tuple[str, ...]:
-    """Recordings a conversations-v3 row was built from: their projection receipts are this row's."""
+    """Recordings a conversations-v3 row was built from: their projection receipts are this row's (empty when
+    ``BATCH_FINAL_PASS_V3_SOURCES_ENABLED`` is false)."""
+    if not v3_sources_enabled():
+        return ()
     return tuple(sorted({str(rid) for rid in (getattr(conversation, 'v3_recording_ids', None) or []) if rid}))
 
 

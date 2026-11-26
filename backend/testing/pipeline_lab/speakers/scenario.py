@@ -284,6 +284,7 @@ class SpeakerScoring:
     words: list[dict]  # the recording's cassette words, on its audio clock
     audio_start: datetime  # the recording's first sample, as an instant
     label: str  # the recording the truth is on
+    final_pass: list = field(default_factory=list)  # the run's run_batch_final_pass outcomes (shared list)
 
     @classmethod
     def for_scenario(cls, scenario: Any, prepared: Mapping[str, Any]) -> 'SpeakerScoring':
@@ -338,6 +339,9 @@ class SpeakerScoring:
             'words': card['words'],
             'voices': card['predicted_voices'],
             'truth_voices': card['truth_voices'],
+            # The last whole-pass outcome of the run: a scorecard the resolver alone satisfied must not hide a
+            # failing final pass.
+            'final_pass': self.final_pass[-1] if self.final_pass else None,
         }
 
 

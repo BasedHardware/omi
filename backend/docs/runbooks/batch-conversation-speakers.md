@@ -136,7 +136,9 @@ speech and speech the owner deleted, so only the row's own speech reaches the
 diarizer and voice evidence: samples outside its own segments' words (unit clock,
 padded 0.25 s, joined across pauses up to 1 s) are silenced, and batch identity
 turns are clipped to the same stretches. No recurring profile is learned from
-source-recording units. A unit whose capture clock
+source-recording units. Kill switch: `BATCH_FINAL_PASS_V3_SOURCES_ENABLED=false`
+restores the `skipped_merged` refusal; `BATCH_FINAL_PASS_APPEND_CONFLICTING_UNITS_ENABLED=false`
+restores the conflicting-clock refusal. Both default on and are read per call. A unit whose capture clock
 overlaps audio already placed with different samples is appended after the
 timeline (one second of silence first) rather than refusing: labels only need each
 unit's words on its own audio, and they map back by segment id. Identical overlaps

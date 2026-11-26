@@ -94,6 +94,10 @@ def speaker_misses(card: Optional[Mapping[str, Any]], want: Mapping[str, Any]) -
         return ['speakers=none (no scorecard: the conversation holds no truth recording)']
     misses = []
     for key, bound in want.items():
+        if key == 'final_pass':
+            if card.get('final_pass') != bound:
+                misses.append(f'final_pass={card.get("final_pass")!r} (want {bound!r})')
+            continue
         if key == 'voices':
             count, tolerance = bound
             have = card.get('voices')

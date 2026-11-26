@@ -249,6 +249,7 @@ async def run_scenario(
             from testing.pipeline_lab.speakers.scenario import SpeakerScoring
 
             ops.speaker_scoring = SpeakerScoring.for_scenario(scenario, audio or {})
+            ops.speaker_scoring.final_pass = speakers.final_pass
         ops.stt_sources = {row['label']: row['source'] for row in (result.get('audio') or {}).get('recordings', [])}
         clock.set(start)
         reset_lab_state(env.firestore, env.redis, config.uid, redis_lease=redis_lease)

@@ -131,6 +131,9 @@ class LocalModels:
 
     def __init__(self, workdir: Path, python: Optional[str] = None, workers: int = 1):
         self.python = python or os.environ.get(PYTHON_ENV) or os.environ.get(FALLBACK_PYTHON_ENV)
+        # The worker starts on the first miss, possibly after a scenario has cleared this process's environment:
+        # keep the caller's (HF_HOME, HF_HUB_OFFLINE, thread caps) from when the peer was made.
+        self.base_env = dict(os.environ)
         self.workdir = workdir
         self.workers = max(1, workers)
         self.idle: list[subprocess.Popen] = []
@@ -141,7 +144,7 @@ class LocalModels:
     def _start(self) -> subprocess.Popen:
         if not self.python or not Path(self.python).is_file():
             raise RuntimeError(INSTALL)
-        env = {**os.environ, 'OMI_PIPELINE_LAB_SPEAKERS_WORKDIR': str(self.workdir)}
+        env = {**self.base_env, 'OMI_PIPELINE_LAB_SPEAKERS_WORKDIR': str(self.workdir)}
         env.setdefault('HF_HUB_OFFLINE', '1')
         # Each torch process otherwise takes every core: N workers would oversubscribe the machine N-fold.
         threads = str(max(1, (os.cpu_count() or 2) // self.workers))

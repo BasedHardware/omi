@@ -50,7 +50,8 @@
         "voices": [
           2,
           0
-        ]
+        ],
+        "final_pass": "success"
       }
     }
   ],
@@ -64,5 +65,9 @@
       "llm": 7
     },
     "note": "Measured 2026-11-26 on the lab host, --stt replay --speakers replay (180 reads, 60 writes, 1 delete(s), 4 no-op, 1 STT cassette play, 6 LLM; caps about +10%). Gallery enrollment runs before the first event and is not counted; speaker peer calls are loopback cassette plays, not vendor calls. noop_writes=4 is the current count, not a target: 2 are database/conversations_v3_leases.py:72 renew (the lease until at the instant it was claimed, a lab-clock repeat), 2 are database/dream_store.py:126 mark_dirty rewriting dream_due.due_at with the same lab-clock instant from after_write('conversations') hooks (seen only in the speaker scenarios: a finding, reported in the PR)."
+  },
+  "env": {
+    "BATCH_FINAL_PASS_V3_SOURCES_ENABLED": "true",
+    "BATCH_FINAL_PASS_APPEND_CONFLICTING_UNITS_ENABLED": "true"
   }
 }
