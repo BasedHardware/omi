@@ -56,8 +56,8 @@ def test_account_erasure_clears_retired_list_data_even_when_user_root_is_missing
     retirements = []
     monkeypatch.setattr(
         user_data_deletion,
-        'stop_quiet_checks_for_account',
-        lambda uid, **kwargs: retirements.append((uid, kwargs['firestore_client'])),
+        'purge_finalization_jobs',
+        lambda uid, client: retirements.append((uid, client)),
     )
     assert user_data_deletion.purge_user_subtree('owner', client, recursive)['status'] == 'ok'
     assert retirements == [('owner', client)]

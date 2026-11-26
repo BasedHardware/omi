@@ -1480,6 +1480,7 @@ FIELD_SITES = {
         ),
         ('_record_meeting_receipt_txn', 'status', "'fenced'", ('status',)),
         ('_record_meeting_receipt_txn', 'status', "'fenced'", ('status',)),
+        ('_record_meeting_receipt_txn', 'status', "'fenced'", ('status',)),
         ('_record_meeting_receipt_txn', 'status', "'identity_mismatch'", ('status',)),
         ('_record_meeting_receipt_txn', 'status', "'missing'", ('status',)),
         ('_record_meeting_receipt_txn', 'status', "'recorded'", ('job_id', 'status')),
@@ -4246,13 +4247,7 @@ FIELD_SITES = {
     ],
     'utils/memory/memory_service.py': [
         (
-            'MemoryService._write_historical_override',
-            'status',
-            'status.value',
-            ('memory_id', 'origin', 'public_id', 'status', 'uid', 'updated_at'),
-        ),
-        (
-            'MemoryService._write_historical_overrides',
+            'MemoryService._historical_override_payload',
             'status',
             'status.value',
             ('memory_id', 'origin', 'public_id', 'status', 'uid', 'updated_at'),

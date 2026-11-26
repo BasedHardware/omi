@@ -8,7 +8,7 @@ remains the authority for completion. No poll or surviving hold row is needed.
 from datetime import datetime, timedelta, timezone
 
 from config.batch_pipeline_coalescing_protocol import MAX_COMPLETION_MEMBERS
-from config.request_clock import clock_fields
+from config.request_clock import context_fields
 from database.sync_ledger import LEDGER_RETENTION_DAYS, is_valid_completed_sync_content_result, sync_content_ledger_ref
 
 
@@ -59,7 +59,7 @@ def prepare(client, namespace, transaction, binding, ledger):
             if not is_valid_completed_sync_content_result(content.get('result')):
                 raise ValueError('invalid original completion')
             continue  # Do not extend terminal retention on retries or polls.
-        member = {**member, **clock_fields(intake.get('upload_arrived_at'), intake.get('upload_entitlement'))}
+        member = {**member, **context_fields(intake)}
         prepared.append((intake_ref, content_ref, member, binding.job_id))
     return prepared
 
