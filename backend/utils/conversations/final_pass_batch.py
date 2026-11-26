@@ -29,7 +29,7 @@ from config.batch_conversation_speakers import (
     final_pass_enabled_for,
     recurring_enabled_for,
 )
-from database.batch_final_pass import load_reference, ReferenceUnavailable
+from database.batch_final_pass import load_reference, ReferenceUnavailable, source_recording_fence
 from database import recurring_voices
 from utils.observability.recurring_voices import identity_speech
 from utils.speakers.recurring_voices import near_misses
@@ -294,11 +294,9 @@ def source_scope(uid, conversation) -> SourceScope | None:
     sources = receipt_sources(conversation)
     if not sources:
         return None
-    from database import conversations as conversations_db  # lazy: the batch worker image shares this module
-
     intervals, evidence = [], []
     for rid in sources:
-        recording = conversations_db.get_conversation(uid, rid)
+        recording = source_recording_fence(uid, rid)
         if not recording or recording.get('deleted') or recording.get('is_locked'):
             raise ReferenceUnavailable('skipped_merged')
         claims = [c for c in recording.get('claims') or [] if c.get('conversation_id') == conversation.id]

@@ -98,6 +98,9 @@ def handle(request: dict, final_pass: Any, embedding: Any) -> dict:
 
 
 def main() -> int:
+    # CPU only, before torch loads: the production modules pick CUDA when it is visible, and every answer here
+    # is filed as cpu-fp32.
+    os.environ['CUDA_VISIBLE_DEVICES'] = ''
     # Only protocol lines reach the peer: models and libraries print to stdout (pyannote's clustering
     # warnings), so stdout is the error stream for everything else.
     protocol = os.fdopen(os.dup(sys.stdout.fileno()), 'w', buffering=1)

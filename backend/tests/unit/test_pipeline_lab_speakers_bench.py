@@ -127,3 +127,39 @@ def test_stored_labels_align_in_non_latin_scripts():
     turns = bench.stored_turns(words, segments)
     assert [t['is_user'] for t in turns] == [True, False]
     assert bench.owned_words(words, segments) == {0, 1, 2, 3, 4}
+
+
+def test_uncertain_silver_voices_do_not_dilute_identity_rates():
+    words = _words('a b c d e f g h i j')
+    truth = {
+        'turns': [{'start': 0, 'end': 0.45, 'speaker': 'known'}, {'start': 0.45, 'end': 10, 'speaker': 'uncertain'}],
+        'identities': {'known': None, 'uncertain': '?'},
+    }
+    predicted = [{'start': 0, 'end': 10, 'speaker_id': 0, 'speaker_id_scope': 's', 'person_id': 'p1'}]
+    card = score.score_conversation(words, truth, predicted)
+    assert card['words'] == 10 and card['identity_words'] == 1
+    assert card['wrong_name_rate'] == 1.0  # not 0.1: the one judgeable word was wrongly named
+    allunsure = {'turns': [{'start': 0, 'end': 10, 'speaker': 'u'}], 'identities': {'u': '?'}}
+    assert score.score_conversation(words, allunsure, predicted)['wrong_name_rate'] is None
+
+
+def test_v3_export_reads_chunks_under_the_source_recording(monkeypatch):
+    from types import SimpleNamespace
+
+    from testing.pipeline_lab.speakers import owner_export
+    from utils.other import storage
+
+    holders = []
+    monkeypatch.setattr(
+        storage, 'list_audio_chunks', lambda uid, holder: holders.append(holder) or [{'timestamp': 1.0}]
+    )
+    monkeypatch.setattr(storage, 'download_audio_chunks_and_merge', lambda *a, **k: b'\x01\x00' * 160)
+    row = {
+        'id': 'derived',
+        'started_at': '2026-11-26T00:00:00+00:00',
+        'audio_files': [
+            {'id': 'af', 'recording_id': 'rec', 'started_at': '2026-11-26T00:00:00+00:00', 'chunk_timestamps': [1.0]}
+        ],
+    }
+    assert owner_export.conversation_pcm('uid', row) == b'\x01\x00' * 160
+    assert holders == ['rec']

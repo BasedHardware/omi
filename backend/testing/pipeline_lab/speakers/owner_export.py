@@ -104,7 +104,7 @@ def conversation_pcm(uid: str, conversation: dict) -> Optional[bytes]:
     timeline = bytearray()
     for item in sorted(files, key=lambda f: str(f['started_at'])):
         # A v3 conversation's audio files keep their chunks under the source recording's id.
-        holder = str(item.get('conversation_id') or conversation['id'])
+        holder = str(item.get('recording_id') or item.get('conversation_id') or conversation['id'])
         if holder not in listings:
             try:
                 listings[holder] = storage.list_audio_chunks(uid, holder)

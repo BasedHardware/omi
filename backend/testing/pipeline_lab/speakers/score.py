@@ -32,6 +32,7 @@ COUNTS = (
     'enrolled_correct',
     'wrong_name_words',
     'named_words',
+    'identity_words',
 )
 
 
@@ -99,6 +100,7 @@ def score_conversation(words: list[dict], truth: dict, turns: list[dict], scope:
         pairs.append(({'speaker': label}, _voice(turn)))
         if expected == UNKNOWN_IDENTITY:  # silver voice of uncertain identity: attribution only
             continue
+        counts['identity_words'] += 1
         counts['named_words'] += claim is not None
         counts['owner_claimed'] += claim == 'user'
         counts['owner_claimed_correct'] += claim == 'user' and expected == 'user'
@@ -135,8 +137,9 @@ def rates(counts: dict) -> dict:
         'owner_precision': _ratio(counts['owner_claimed_correct'], counts['owner_claimed']),
         'owner_recall': _ratio(counts['owner_truth_found'], counts['owner_truth']),
         'named_accuracy': _ratio(counts['enrolled_correct'], counts['enrolled_words']),
-        'wrong_name_rate': _ratio(counts['wrong_name_words'], counts['words']),
-        'named_coverage': _ratio(counts['named_words'], counts['words']),
+        # Identity rates count only words whose identity truth can judge (silver ``?`` voices are excluded).
+        'wrong_name_rate': _ratio(counts['wrong_name_words'], counts['identity_words']),
+        'named_coverage': _ratio(counts['named_words'], counts['identity_words']),
     }
 
 

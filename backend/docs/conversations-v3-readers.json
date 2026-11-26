@@ -7,6 +7,10 @@
     "policy": "conversations",
     "reason": "After a V3 refinement, repair retirement or undo marker hit, the task transaction checks only deletion and recording fields to allow an active product card with the same ID."
   },
+  "backend/database/batch_final_pass.py:collection": {
+    "policy": "both",
+    "reason": "Reads only the fence fields (claims, deleted spans, deleted, locked) of a v3 row's source recordings, by id and owner-scoped, before speaker inference."
+  },
   "backend/database/batch_pipeline_privacy.py:collection": {
     "policy": "both",
     "reason": "Capture, audio, sync, custody, retention, export, deletion or v3 construction owns recording-layer access; all lookups remain scoped to their owner."
@@ -710,10 +714,6 @@
   "backend/utils/conversations/capture_group_notes_refresh.py:get_conversation_raw_snapshot": {
     "policy": "both",
     "reason": "Capture, audio, sync, custody, retention, export, deletion or v3 construction owns recording-layer access; all lookups remain scoped to their owner."
-  },
-  "backend/utils/conversations/final_pass_batch.py:get_conversation": {
-    "policy": "both",
-    "reason": "Reads a v3 row's source recordings (claims, deleted spans, deleted/locked) to fence their staged units before speaker inference; owner-scoped, no model call on a refusal."
   },
   "backend/utils/conversations/final_pass_retry.py:get_conversation": {
     "policy": "both",

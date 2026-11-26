@@ -5,8 +5,20 @@ from datetime import datetime, timezone
 from typing import NoReturn
 
 from config.policy import ProjectionPolicy
+from database._client import get_firestore_client
 from utils.batch_pipeline.contracts import WorkItem, ProjectionBinding
 from utils.conversations.final_pass_errors import REFERENCE_REASONS
+
+SOURCE_FENCE_FIELDS = ('claims', 'deleted_spans', 'deleted', 'is_locked')
+
+
+def source_recording_fence(uid, recording_id, *, firestore_client=None):
+    """The fields that bound a v3 row's hold on one of its source recordings (claims, deleted spans, deleted,
+    locked), read without decoding the transcript. None when the recording is gone."""
+    client = firestore_client if firestore_client is not None else get_firestore_client()
+    ref = client.collection('users').document(uid).collection('conversations').document(recording_id)
+    snapshot = ref.get(field_paths=list(SOURCE_FENCE_FIELDS))
+    return (snapshot.to_dict() or {}) if snapshot.exists else None
 
 
 class ReferenceUnavailable(ValueError):

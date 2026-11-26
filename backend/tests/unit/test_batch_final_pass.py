@@ -479,9 +479,7 @@ def test_receipt_sources_are_the_rows_own_v3_recordings():
 
 
 def _recordings(monkeypatch, rows):
-    from database import conversations as conversations_db
-
-    monkeypatch.setattr(conversations_db, 'get_conversation', lambda uid, rid: deepcopy(rows.get(rid)))
+    monkeypatch.setattr(batch, 'source_recording_fence', lambda uid, rid: deepcopy(rows.get(rid)))
 
 
 def _at(seconds):
