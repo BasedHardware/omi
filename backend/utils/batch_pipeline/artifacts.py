@@ -134,7 +134,7 @@ class ArtifactStore:
         limit: int,
         *,
         result_key: str | None = None,
-        record_origin: bool = False,
+        record_origin: bool | None = None,
     ) -> str:
         if not body or len(body) > limit:
             raise ValueError('batch artifact exceeds bounded payload size')
@@ -156,7 +156,7 @@ class ArtifactStore:
             f'gs://{self.bucket_name}/{name}',
             kind,
             context,
-            **({'record_origin': True} if record_origin else {}),
+            **({'record_origin': record_origin} if record_origin is not None else {}),
         )
         self._unchanged(item, context)
         if kind == 'voice_evidence':
@@ -339,7 +339,7 @@ class ArtifactStore:
             raise PermissionError('voice evidence expired or unbound')
         return payload
 
-    def stage_audio(self, item: WorkItem, wav: bytes, *, record_origin: bool = False) -> str:
+    def stage_audio(self, item: WorkItem, wav: bytes, *, record_origin: bool | None = None) -> str:
         """Admission calls this before enqueue; audio AAD excludes its own URI."""
         return self._write(item, 'audio', wav, AUDIO_LIMIT, record_origin=record_origin)
 

@@ -114,7 +114,7 @@ def _register_batch_artifact(
     expected_generation: int,
     *,
     item: Any = None,
-    record_origin: bool = False,
+    record_origin: bool | None = None,
 ) -> str:
     """Register BEFORE object upload; rejected late upload must delete its object.
 
@@ -142,8 +142,8 @@ def _register_batch_artifact(
         binding = job.get('projection_binding') or {}
         # Admission persists provenance on the job. Preserve positive proof on
         # older jobs, whose only recording marker was in the projection binding.
-        origin = job.get('record_origin')
-        if record_origin or binding.get('record_origin') or binding.get('native_record'):
+        origin = job.get('record_origin', record_origin)
+        if record_origin is True or binding.get('record_origin') or binding.get('native_record'):
             origin = True
         voice_write = kind == 'voice_evidence'
         projected_ids = []
@@ -593,7 +593,7 @@ def batch_artifact_authorize(store: Any, item: Any, *, snapshots: dict | None = 
 
 
 def batch_artifact_register(
-    store: Any, item: Any, uri: str, kind: str, context: Any, *, record_origin: bool = False
+    store: Any, item: Any, uri: str, kind: str, context: Any, *, record_origin: bool | None = None
 ) -> None:
     """B's register_artifact(item, uri, kind, context) callback (before upload)."""
     register_batch_artifact(
@@ -631,7 +631,7 @@ def register_batch_artifact(
     expected_generation: int,
     *,
     item: Any = None,
-    record_origin: bool = False,
+    record_origin: bool | None = None,
 ) -> str:
     """Scoped entry point (lever bpp_attempt_scope, key = uid); see _register_batch_artifact."""
     from database.batch_privacy_attempt import scoped_privacy_attempt

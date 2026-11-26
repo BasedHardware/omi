@@ -34,9 +34,11 @@ Receipts issued after the event survive. Existing obligations continue when
 either authorization lever is off.
 
 Native recording and partial continuation uploads stamp recording provenance
-when they reserve an artifact before admission. Admission also stores that
-provenance on the job for later uploads. A recording opt-out sweeps an in-flight
-receipt in scope when its provenance is unknown.
+when they reserve an artifact before admission. Sync intake forwards the
+provenance from its admission decision, including when it identifies a
+non-recording upload. Admission also stores provenance on the job for later
+uploads. A recording opt-out sweeps an in-flight receipt in scope when its
+provenance is unknown.
 
 The same conversation reconciler polls at most four due intents per minute.
 Each slice reads at most one page of 100 batch artifact receipts. Readback

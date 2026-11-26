@@ -980,8 +980,12 @@ def test_late_privacy_sweep_recovers_an_inflight_object(plane, monkeypatch, tmp_
     assert sweeps.reconcile_batch_privacy_late_sweeps(firestore_client=client) == {}
 
 
-@pytest.mark.parametrize('legacy', [False, True], ids=['native-provenance', 'missing-provenance'])
-def test_recording_revocation_recovers_crashed_pre_admission_upload(plane, monkeypatch, tmp_path, legacy):
+@pytest.mark.parametrize(
+    'origin,legacy',
+    [(True, False), (True, True), (False, False)],
+    ids=['native-provenance', 'missing-provenance', 'known-non-recording'],
+)
+def test_recording_revocation_recovers_crashed_pre_admission_upload(plane, monkeypatch, tmp_path, origin, legacy):
     client, uid = plane.client, plane.uid
     namespace, bucket = 'batch_pipeline_dev', 'synthetic-late-batch'
     storage = LocalStorageClient(tmp_path / 'crashed-upload')
@@ -993,7 +997,7 @@ def test_recording_revocation_recovers_crashed_pre_admission_upload(plane, monke
     user.update({'private_cloud_sync_enabled': True})
     cid = 'synthetic-recording'
     user.collection('conversations').document(cid).set(
-        {'record_lane_owner': 'batch_live_v1', 'private_cloud_sync_enabled': True}
+        {'private_cloud_sync_enabled': True, **({'record_lane_owner': 'batch_live_v1'} if origin else {})}
     )
     store = FirestoreStore(namespace, firestore_client=client)
     artifacts = create_artifact_store(store, storage, bucket, b'x' * 32)
@@ -1011,7 +1015,7 @@ def test_recording_revocation_recovers_crashed_pre_admission_upload(plane, monke
     def revoke_during_upload(blob, file_obj, *args, **kwargs):
         assert not unit_job.get().exists
         [receipt] = receipt_collection.stream()
-        assert receipt.get('record_origin') is True
+        assert receipt.get('record_origin') is origin
         if legacy:
             receipt.reference.update({'record_origin': firestore.DELETE_FIELD})
         assert not blob.exists()
@@ -1021,7 +1025,7 @@ def test_recording_revocation_recovers_crashed_pre_admission_upload(plane, monke
 
     monkeypatch.setattr(LocalBlob, 'upload_from_file', revoke_during_upload)
     with pytest.raises(UploadProcessExited):
-        artifacts.stage_audio(item, b'synthetic audio', record_origin=True)
+        artifacts.stage_audio(item, b'synthetic audio', record_origin=origin)
 
     [receipt] = receipt_collection.stream()
     assert ('record_origin' in receipt.to_dict()) is not legacy
@@ -1036,7 +1040,8 @@ def test_recording_revocation_recovers_crashed_pre_admission_upload(plane, monke
     # The first page visits the empty prod-named namespace of this emulator.
     assert late_sweeps.reconcile_batch_privacy_late_sweeps(firestore_client=client) == {'progress': 1}
     clock[0] += late_sweeps.PAGE_RETRY
-    assert late_sweeps.reconcile_batch_privacy_late_sweeps(firestore_client=client) == {'waiting_for_upload': 1}
+    expected = 'waiting_for_upload' if origin else 'progress'
+    assert late_sweeps.reconcile_batch_privacy_late_sweeps(firestore_client=client) == {expected: 1}
     assert blob.exists()
 
     clock[0] = receipt.get('write_pending_until') + timedelta(seconds=10)
@@ -1048,7 +1053,8 @@ def test_recording_revocation_recovers_crashed_pre_admission_upload(plane, monke
         clock[0] += late_sweeps.PAGE_RETRY
 
     assert not intent.reference.get().exists
-    assert not receipt.reference.get().exists and not blob.exists()
+    assert receipt.reference.get().exists is (not origin)
+    assert blob.exists() is (not origin)
 
 
 def test_existing_record_job_supplies_artifact_provenance_without_projection_binding(plane, monkeypatch, tmp_path):
