@@ -37,6 +37,7 @@ import 'package:omi/services/capture/optimistic_processing.dart';
 import 'package:omi/services/live_preview/live_preview_controller.dart';
 import 'package:omi/services/wals/wal_interfaces.dart';
 import 'package:omi/utils/enums.dart';
+import 'package:omi/utils/reliability_experiments.dart';
 
 // Nik, 2026-11-18 (TestFlight 1.0.593, pendant, v3): Finish on the live page did nothing and went
 // back to the list; the conversation showed up 4 minutes later. A batch pendant's page shows only
@@ -337,6 +338,81 @@ void main() {
     capture.receivedSegmentIds.add(window('next').transcriptSegments.single.id);
     expect(LiveConversationEndButton.phoneCaptures(window('closed'), capture, currentLiveId: 'live'), isFalse);
     expect(LiveConversationEndButton.phoneCaptures(window('next'), capture, currentLiveId: 'live'), isTrue);
+  });
+
+  group('experiment end_button_by_device', () {
+    const phone = 'ios_06b76a44';
+    final platformDeviceId = LiveConversationEndButton.ownDeviceId;
+    tearDown(() {
+      ReliabilityExperiments.overrideForTesting(null);
+      LiveConversationEndButton.ownDeviceId = platformDeviceId;
+    });
+
+    // Upload mode: the listening session's own recording is empty, so it is never a source.
+    ServerConversation open() => _conversation('live', extra: {
+          'kind': 'conversation',
+          'tile_state': 'live',
+          'status': 'in_progress',
+          'v3_recording_ids': ['uploaded-1', 'uploaded-2'],
+        });
+    _Capture uploading() {
+      final capture = _Capture()
+        ..verifiedLiveServerRecordingId = 'empty-session-recording'
+        ..recordingState = RecordingState.record;
+      addTearDown(capture.dispose);
+      return capture;
+    }
+
+    test('the live read carries the device behind the latest speech', () {
+      expect(_conversation('live', extra: {'tile_state': 'live', 'v3_capture_device_id': phone}).v3?.captureDeviceId,
+          phone);
+      expect(_conversation('live', extra: {'tile_state': 'live'}).v3?.captureDeviceId, isNull);
+      expect(
+          _conversation('live', extra: {'tile_state': 'live', 'v3_capture_device_id': 7}).v3?.captureDeviceId, isNull);
+    });
+
+    test('off: a matching device does not show End', () {
+      LiveConversationEndButton.ownDeviceId = () => phone;
+      expect(
+          LiveConversationEndButton.phoneCaptures(open(), uploading(),
+              currentLiveId: 'live', liveCaptureDeviceId: phone),
+          isFalse);
+    });
+
+    test('on: End shows on the open conversation this install feeds, without a listening source', () {
+      ReliabilityExperiments.overrideForTesting({'end_button_by_device'});
+      LiveConversationEndButton.ownDeviceId = () => phone;
+      bool shows(ServerConversation conversation, CaptureProvider capture, {String? liveId, String? device}) =>
+          LiveConversationEndButton.phoneCaptures(conversation, capture,
+              currentLiveId: liveId, liveCaptureDeviceId: device);
+
+      expect(shows(open(), uploading(), liveId: 'live', device: phone), isTrue);
+      // Not capturing at all (pendant off, no listening session): the device still decides.
+      final idle = _Capture();
+      addTearDown(idle.dispose);
+      expect(shows(open(), idle, liveId: 'live', device: phone), isTrue);
+      // Another install's speech is the latest, the server named no device, or this is not the
+      // account's open conversation: today's rule decides, and it says no here.
+      expect(shows(open(), uploading(), liveId: 'live', device: 'macos_0a1b2c3d'), isFalse);
+      expect(shows(open(), uploading(), liveId: 'live'), isFalse);
+      expect(shows(open(), uploading(), liveId: 'another', device: phone), isFalse);
+    });
+
+    test('on: an install that does not know its own id yet matches nothing', () {
+      ReliabilityExperiments.overrideForTesting({'end_button_by_device'});
+      LiveConversationEndButton.ownDeviceId = () => null;
+      expect(
+          LiveConversationEndButton.phoneCaptures(open(), uploading(),
+              currentLiveId: 'live', liveCaptureDeviceId: phone),
+          isFalse);
+    });
+
+    test('on: today\'s rule still shows End where the device is unknown', () {
+      ReliabilityExperiments.overrideForTesting({'end_button_by_device'});
+      LiveConversationEndButton.ownDeviceId = () => phone;
+      final capture = uploading()..verifiedLiveServerRecordingId = 'uploaded-2';
+      expect(LiveConversationEndButton.phoneCaptures(open(), capture, currentLiveId: 'live'), isTrue);
+    });
   });
 
   testWidgets('Home Wrap Up keeps the owned live window id on retry', (tester) async {
@@ -827,6 +903,23 @@ void main() {
       ];
       expect(FinishedCapturePage.match(rows, 'rec-1')?.id, '714c4186');
       expect(FinishedCapturePage.match(rows, 'rec-3'), isNull);
+    });
+
+    test('matches a derived conversation by source recording ID without audio pieces', () {
+      final row = _conversation('derived', extra: {
+        'v3_recording_ids': ['rec-1'],
+      });
+
+      expect(row.v3!.recordingPieces, isEmpty);
+      expect(FinishedCapturePage.match([row], 'rec-1'), same(row));
+    });
+
+    test('ignores a derived conversation with unrelated source recording IDs', () {
+      final row = _conversation('derived', extra: {
+        'v3_recording_ids': ['rec-2'],
+      });
+
+      expect(FinishedCapturePage.match([row], 'rec-1'), isNull);
     });
 
     test('of several conversations from one recording it opens the newest, the top Home row', () {

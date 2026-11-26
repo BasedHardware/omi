@@ -1,6 +1,16 @@
 """Reviewed payload sites, including values/keys and duplicate sites. Never refresh in a test."""
 
 FIELD_SITES = {
+    # An End answered while its conversation is still open projects processing into the HTTP response
+    # only (flag end_open_conversation). Nothing is stored.
+    'utils/conversations/v3/end_answer.py': [
+        ('ended_conversation', 'status', 'ConversationStatus.processing', ('status',)),
+    ],
+    # A per-frame verdict (text or empty) in an upload's status result (flag batch_frame_outcomes). Not a
+    # lifecycle state: the key is a range's own label.
+    'utils/batch_pipeline/frame_outcomes.py': [
+        ('completed_ranges', 'status', 'status', ('capture_root', 'clock_epoch', 'end', 'start', 'status')),
+    ],
     # Finish projects processing into the HTTP response. Only the v3 builder stores window status.
     'utils/conversations/v3/finish.py': [
         ('_acknowledge', 'status', 'ConversationStatus.completed', ('status',)),
@@ -430,7 +440,20 @@ FIELD_SITES = {
             'enqueue.commit',
             'state',
             "'holding'",
-            ('bytes', 'files', 'first_accept_at', 'id', 'key', 'members', 'release_by', 'scan_at', 'seconds', 'state'),
+            (
+                'bytes',
+                'files',
+                'first_accept_at',
+                'id',
+                'key',
+                'members',
+                'profile',
+                'release_by',
+                'scan_at',
+                'seconds',
+                'state',
+                'window_seconds',
+            ),
         ),
         (
             'enqueue.commit',
@@ -1465,6 +1488,7 @@ FIELD_SITES = {
                 'updated_at',
             ),
         ),
+        ('_record_meeting_receipt_txn', 'status', "'fenced'", ('status',)),
         ('_record_meeting_receipt_txn', 'status', "'fenced'", ('status',)),
         ('_record_meeting_receipt_txn', 'status', "'fenced'", ('status',)),
         ('_record_meeting_receipt_txn', 'status', "'identity_mismatch'", ('status',)),
@@ -3456,6 +3480,10 @@ FIELD_SITES = {
         ('stamp_projection_debt', 'summary_due_at', 'accepted + deadline_seconds()', ('summary_due_at',)),
         ('stamp_projection_debt', 'summary_first_pending_at', 'accepted', ('summary_first_pending_at',)),
     ],
+    # The one settled stamp every completed-status writer splats or applies (not the claim's family).
+    'utils/conversations/terminal_settled.py': [
+        ('settle', 'terminal_family_at', 'now', ('terminal_family_at',)),
+    ],
     'utils/conversations/transcript_for_llm.py': [
         ('render_cluster_transcript', 'status', "'resolved' if resolution_available else 'unavailable'", ('status',))
     ],
@@ -3483,7 +3511,6 @@ FIELD_SITES = {
                 'usage_unknown',
             ),
         ),
-        ('run_pass', 'status', "'not_admitted'", ('levers', 'reason', 'status', 'trigger')),
         ('run_pass', 'status', "'not_admitted'", ('reason', 'status')),
         ('run_pass', 'status', "'not_admitted'", ('reason', 'status')),
         ('run_pass', 'status', "'not_admitted'", ('reason', 'status')),
@@ -4230,13 +4257,7 @@ FIELD_SITES = {
     ],
     'utils/memory/memory_service.py': [
         (
-            'MemoryService._write_historical_override',
-            'status',
-            'status.value',
-            ('memory_id', 'origin', 'public_id', 'status', 'uid', 'updated_at'),
-        ),
-        (
-            'MemoryService._write_historical_overrides',
+            'MemoryService._historical_override_payload',
             'status',
             'status.value',
             ('memory_id', 'origin', 'public_id', 'status', 'uid', 'updated_at'),

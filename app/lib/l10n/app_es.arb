@@ -4765,5 +4765,8 @@
     "prepaidCodeResult": "{reason, select, invalid{Este código no es válido. Revísalo e inténtalo de nuevo.} used{Este código ya se ha usado.} expired{Este código ha caducado.} hasPlan{Ya tienes un plan. Tu código no se ha usado. Canjéalo cuando termine tu plan.} notPrepaid{Este código no se puede canjear aquí. Úsalo cuando elijas un plan.} notEligible{Este código no se puede usar en esta cuenta.} rateLimited{Demasiados intentos. Inténtalo más tarde.} other{Algo salió mal. Inténtalo de nuevo.}}",
     "playStripeBilledOnWeb": "Se factura a través de omi.me. Cancélalo aquí cuando quieras.",
     "playStripeBilledOnWebShort": "Se factura a través de omi.me.",
-    "playStripePlanPaused": "Tu plan {plan} está en pausa."
+    "playStripePlanPaused": "Tu plan {plan} está en pausa.",
+    "firmwareNewestSupportedForDevice": "Tu dispositivo ya está en la versión de firmware compatible más reciente",
+    "firmwareSyncRecordingsFirstTitle": "Sincroniza tus grabaciones primero",
+    "firmwareSyncRecordingsFirstMessage": "Algunas grabaciones siguen en tu dispositivo. Deja que terminen de sincronizarse con tu teléfono y luego inicia la actualización."
 }

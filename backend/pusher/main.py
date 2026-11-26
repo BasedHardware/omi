@@ -22,6 +22,7 @@ from utils.rollout_cohorts import configure_rollout_runtime
 from utils.stt_cap_cohort import refresh_stt_cap_cohort_forever
 from routers import pusher, metrics
 from config.memory_rollout import MemoryRolloutMode, rollout_mode_env_value
+from services.monthly_usage_shadow import install_month_shadow
 from utils.http_client import close_all_clients
 from utils.sync.cap_hold_lifecycle import flush_active
 from utils.executors import drain_background_tasks, log_executor_health, start_background_task
@@ -62,6 +63,7 @@ async def startup_event() -> None:
     start_mutations()
     app.state.pinecone_restore_signal = install_shutdown_drain(drain_mutations)
     _validate_static_capabilities()
+    install_month_shadow()
     start_background_task(refresh_stt_cap_cohort_forever(), name='pusher:stt_cap_cohort_refresh')
     start_background_task(log_executor_health(), name='pusher:executor_health')
 

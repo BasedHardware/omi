@@ -116,9 +116,10 @@ def test_every_raise_site_in_the_walk_callees_has_a_disposition():
 def test_conflict_subtype_sets_are_complete_and_disjoint():
     """The strike rule must classify every bounded subtype — none may fall
     through to the unlabeled retry-forever bucket by accident. The one
-    deliberately unclassified subtype waits on every lane (the bridge seam
-    retries until its source is tombstoned); a change to that set is a
-    contract change this pin makes visible."""
+    deliberately unclassified subtype is ``bridge_source_not_tombstone``: the
+    bridge no longer raises it (a source that cannot redirect at its survivor is
+    terminal and counted, SCA-4336), but the token stays for persisted material,
+    so a change to that set is a contract change this pin makes visible."""
     classified = SYNC_ASSIGNMENT_CONFLICT_STRUCTURAL | SYNC_ASSIGNMENT_CONFLICT_AWAITING_WRITER
     assert not SYNC_ASSIGNMENT_CONFLICT_STRUCTURAL & SYNC_ASSIGNMENT_CONFLICT_AWAITING_WRITER
     assert classified <= SYNC_ASSIGNMENT_CONFLICT_SUBTYPES

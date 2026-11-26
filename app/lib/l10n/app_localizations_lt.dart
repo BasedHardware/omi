@@ -15856,4 +15856,15 @@ class AppLocalizationsLt extends AppLocalizations {
   String playStripePlanPaused(String plan) {
     return 'Jūsų $plan planas pristabdytas.';
   }
+
+  @override
+  String get firmwareNewestSupportedForDevice =>
+      'Jūsų įrenginyje jau yra naujausia palaikoma aparatinės programinės įrangos versija';
+
+  @override
+  String get firmwareSyncRecordingsFirstTitle => 'Pirmiausia sinchronizuokite savo įrašus';
+
+  @override
+  String get firmwareSyncRecordingsFirstMessage =>
+      'Kai kurie įrašai dar yra jūsų įrenginyje. Leiskite jiems užbaigti sinchronizavimą į telefoną, tada pradėkite atnaujinimą.';
 }

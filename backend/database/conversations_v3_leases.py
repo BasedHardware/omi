@@ -7,6 +7,7 @@ import logging
 import threading
 from time import monotonic
 from google.cloud import firestore
+from database.transcript_pointer import run_preloaded_transaction_with_contention_retry
 from database._client import get_firestore_client
 from utils.conversations.v3 import Conflict
 
@@ -37,7 +38,7 @@ def acquire(uid, key, *, promote_llm=False, on_promote=None, now=None, firestore
         tx.set(ref, {**row, 'token': token, 'until': now + timedelta(seconds=LEASE_SECONDS)})
         return token
 
-    return claim(client.transaction())
+    return run_preloaded_transaction_with_contention_retry(client, claim)
 
 
 def release(uid, key, token, *, firestore_client=None):
@@ -50,7 +51,7 @@ def release(uid, key, token, *, firestore_client=None):
         if row.get('token') == token:
             tx.update(ref, {'until': datetime.now(timezone.utc), 'token': None})
 
-    finish(client.transaction())
+    run_preloaded_transaction_with_contention_retry(client, finish)
 
 
 def held(uid, key, *, now=None, firestore_client=None):
@@ -94,7 +95,7 @@ def renew(uid, key, token, *, firestore_client=None):
             raise Conflict('lease_lost')
         tx.update(ref, {'until': now + timedelta(seconds=LEASE_SECONDS)})
 
-    extend(client.transaction())
+    run_preloaded_transaction_with_contention_retry(client, extend)
 
 
 @contextmanager

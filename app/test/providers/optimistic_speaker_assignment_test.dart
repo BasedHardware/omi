@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:omi/backend/http/api/conversations.dart' show ConversationByIdResult;
 import 'package:omi/backend/http/api/speaker_labels.dart';
 import 'package:omi/backend/http/api_result.dart';
 import 'package:omi/backend/schema/conversation.dart';
@@ -14,7 +15,9 @@ class _FailingRefreshProvider extends ConversationDetailProvider {
   final Object sentinel;
 
   @override
-  Future<bool> refreshConversation({bool trackLoad = false}) async => throw sentinel;
+  Future<bool> refreshConversation(
+          {bool trackLoad = false, Future<ConversationByIdResult> Function(String)? read}) async =>
+      throw sentinel;
 }
 
 Future<void> _flushEventQueue() async {

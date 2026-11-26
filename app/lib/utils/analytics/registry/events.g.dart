@@ -3777,3 +3777,13 @@ final class WalCustodyAudit extends RegisteredEvent {
   @override
   Map<String, Object> get properties => {"agree_covered": agreeCovered, "agree_pending": agreePending, "disagree": disagree, "unknown": unknown, "released": released};
 }
+
+final class AppForegroundEnded extends RegisteredEvent {
+  const AppForegroundEnded({required this.foregroundSeconds, required this.capturingSeconds});
+  final int foregroundSeconds;
+  final int capturingSeconds;
+  @override
+  String get wireName => "App Foreground Ended";
+  @override
+  Map<String, Object> get properties => {"foreground_seconds": foregroundSeconds, "capturing_seconds": capturingSeconds};
+}

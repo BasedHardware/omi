@@ -18,12 +18,20 @@ import random
 import threading
 import time
 
+from utils.conversations.v3.live import FINISH_RECORDING_FIELD
 from utils.conversations import phase_shadow
 
 from config.policy import resolve_batch_policy
 from config.audio_archive import derived_audio_bucket
 from config.record_wal_duplicate import SOURCE_FIELD
-from config.record_audio import BARRIER_NOT_CLOSED, require_record_audio_barrier, record_identity
+from config.record_audio import (
+    BARRIER_BLOCKERS,
+    BARRIER_NOT_CLOSED,
+    TOKEN_KINDS,
+    barrier_cause_metrics_enabled,
+    record_identity,
+    require_record_audio_barrier,
+)
 from config.record_partial import UNIT_SECONDS, UNIT_REFERENCES, INVENTORY_POLL_SECONDS
 from config.record_latency import record_seal_wake_preserved_enabled
 from config.record_drain import (
@@ -104,6 +112,18 @@ _RETRY_REASONS = frozenset(
         'work identity must match projection binding',
     }
 )
+
+
+def _observe_barrier_refusal(counter, error) -> None:
+    try:
+        blocker = getattr(error, 'barrier_blocker', None)
+        kind = getattr(error, 'barrier_token_kind', None)
+        counter.labels(
+            blocker if blocker in BARRIER_BLOCKERS else 'unknown',
+            kind if kind in TOKEN_KINDS else 'unknown',
+        ).inc()
+    except Exception:
+        pass  # Observability never changes a drain outcome.
 
 
 def _retry_reason(error: BaseException) -> str:
@@ -258,7 +278,16 @@ def register_recording(
 
 
 def retained_record_units(
-    uid, conversation_id, chunks, client, key, *, diagnostics=None, partial=False, decoded_tail=None
+    uid,
+    conversation_id,
+    chunks,
+    client,
+    key,
+    *,
+    diagnostics=None,
+    partial=False,
+    decoded_tail=None,
+    record_source_proof=False,
 ) -> Generator[tuple[float, float, list[dict[str, Any]]], None, None]:
     """Bounded one-hour units; earlier retained objects own overlapping frames."""
     trim_divergent = overlap_trim_enabled()
@@ -279,7 +308,15 @@ def retained_record_units(
             ref, pcm = dict(decoded_tail['ref']), decoded_tail['pcm']
         else:
             pcm = read_reference(
-                client, ref, uid, conversation_id, allowed, key, source_metadata=True, listed_source=chunk
+                client,
+                ref,
+                uid,
+                conversation_id,
+                allowed,
+                key,
+                source_metadata=True,
+                listed_source=chunk,
+                record_source_proof=record_source_proof,
             )
             if decoded_tail is not None and chunk is chunks[-1]:
                 decoded_tail.update(chunk=chunk, ref=dict(ref), pcm=pcm)
@@ -404,8 +441,9 @@ async def _manual_finish_admitted(
         if not manual_end_marker_enabled():
             return
         single = len(units) == 1
+        recording_finish = bool(current.get(FINISH_RECORDING_FIELD))
         promoted = False
-        if single:
+        if single and not recording_finish:
             # Stored before any detached work, so losing the process cannot lose a single-unit cut.
             promoted = await run_blocking(
                 db_executor, conversations_v3.promote_manual_end, uid, conversation_id, firestore_client=store.client
@@ -413,7 +451,14 @@ async def _manual_finish_admitted(
             v3_metrics.BATCH_MANUAL_END.labels('promoted' if promoted else 'not_promoted').inc()
         # ``current`` is a raw row: its stored transcript is opaque here, so this only screens on
         # clear fields. The pass decides on a decoded row.
-        if fast_finish.mode() == 'off' or not fast_finish.candidate(current) or conversation_id in _FAST_FINISH_STARTED:
+        if fast_finish.mode() == 'off':
+            skipped = 'mode_off'
+        else:
+            skipped = fast_finish.candidate_rejection(current)
+            if skipped is None and conversation_id in _FAST_FINISH_STARTED:
+                skipped = 'already_started'
+        if skipped is not None:
+            fast_finish.SKIPPED.labels(skipped).inc()
             if not single:
                 v3_metrics.BATCH_MANUAL_END.labels('multi_unit_deferred').inc()
             return
@@ -484,7 +529,8 @@ async def _manual_finish_admitted(
                         # promoted single unit already holds its cut, but still gets its own
                         # manual-end wake after the write: the writer's plain wake shares the owner's
                         # per-minute task name and is skipped when a reconcile already ran that minute.
-                        cut=cut if not single or promoted else None,
+                        # Recording-scoped intent is consumed by the native completion transaction.
+                        cut=cut if not recording_finish and (not single or promoted) else None,
                         privacy=privacy,
                         fence=fence,
                     )
@@ -570,7 +616,11 @@ async def admit_recording(store, pending, *, now=None, provider_outbox_factory=N
         privacy_generation=pending['privacy_generation'],
     )
     protection = await run_blocking(db_executor, artifacts.authorize, seed)
-    iterator = retained_record_units(uid, conversation_id, chunks, client, artifacts.key_for_owner(uid))
+    # These read hints belong to the encrypted worker manifest. Keep the
+    # walker output for operator plans and partial continuations stable.
+    iterator = retained_record_units(
+        uid, conversation_id, chunks, client, artifacts.key_for_owner(uid), record_source_proof=True
+    )
     units = []
     try:
         # Advancing the generator downloads retained objects. Keep that leaf
@@ -779,6 +829,7 @@ async def drain_recordings(store, *, provider_outbox_factory=None, metrics=None)
         nonlocal partial_count, privacy_blocked, admitted
         partial_count += bool(pending.get('partial_coordinator'))
         failed = barrier_open = False
+        barrier_error = None
         try:
             if provider_outbox_factory is None:
                 await admit_recording(store, pending)
@@ -794,6 +845,7 @@ async def drain_recordings(store, *, provider_outbox_factory=None, metrics=None)
         except Exception as error:
             failed = True
             barrier_open = isinstance(error, ValueError) and str(error) == BARRIER_NOT_CLOSED
+            barrier_error = error
             if pending.get('partial_coordinator'):
                 record_partial_failure(error, run=pending.get('partial_run'))
             logger.warning(
@@ -870,6 +922,10 @@ async def drain_recordings(store, *, provider_outbox_factory=None, metrics=None)
             admitted += 1
         if expired and metrics is not None:
             metrics.record_dead_letter.inc()
+        if barrier_open and metrics is not None and barrier_cause_metrics_enabled():
+            _observe_barrier_refusal(metrics.record_barrier_refusals, barrier_error)
+            if expired:
+                _observe_barrier_refusal(metrics.record_barrier_aged, barrier_error)
 
     async def worker():
         # next() has no await: each selected row belongs to one local worker.

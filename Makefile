@@ -71,6 +71,13 @@ batch-replay:
 	@test -n "$(REF)" -a -n "$(BASE)" -a -n "$(CORPUS)" -a -n "$(OUTPUT)" || (echo 'Required: REF BASE CORPUS OUTPUT'; exit 2)
 	backend/.venv/bin/python -I backend/testing/batch_replay/gate.py --ref "$(REF)" --base "$(BASE)" --corpus "$(CORPUS)" --output "$(OUTPUT)"
 
+# Diagnostic-only workerd comparison. The committed lane 7 gate remains test.sh/jobd.
+.PHONY: oracle-diag
+ORACLE_DIAG_OUTPUT ?= ../ordinary-sync-diagnostic-$(WORKERD_REF).json
+oracle-diag:
+	@test -n "$(WORKERD_REF)" || { echo 'Required: WORKERD_REF=<full commit SHA>' >&2; exit 2; }
+	cd backend-go && ./scripts/with-postgres.sh ./scripts/with-firestore.sh ./tools/replay/oracle-diag.sh "$(WORKERD_REF)" "$(abspath $(ORACLE_DIAG_OUTPUT))"
+
 # Local stage replay; expected incident stops are successful reproductions.
 CASES ?= backend/testing/replay_harness/fixtures/privacy-transitions-smoke
 

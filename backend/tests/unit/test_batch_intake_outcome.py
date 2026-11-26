@@ -64,16 +64,19 @@ def _counts():
     return {outcome: INTAKE_OUTCOMES.labels(outcome=outcome)._value.get() for outcome in sorted(OUTCOMES)}
 
 
+@pytest.fixture
 def _router():
+    # Import/construct the isolated HTTP harness in setup; the real request and
+    # cleanup remain under the unchanged per-test call CPU guard.
     module, saved, jobs, BytesIO, _, _ = _load_sync_router_for_fast_path()
     return module, saved, BytesIO
 
 
 @pytest.fixture
-def router_harness():
+def router_harness(_router):
     # Cold construction of the stubbed router is setup, not the routing behavior
     # measured by the call-phase CPU guard. Keep the route and assertions timed.
-    module, saved, BytesIO = _router()
+    module, saved, BytesIO = _router
     try:
         yield module, BytesIO
     finally:
@@ -348,10 +351,10 @@ async def test_upload_accepted_by_batch_counts_batch(monkeypatch, router_harness
     module.create_sync_job.assert_not_called()
 
 
-async def test_batch_response_without_fresh_admission_is_not_counted(monkeypatch):
+async def test_batch_response_without_fresh_admission_is_not_counted(monkeypatch, _router):
     """Luna r1 P1: a non-None batch response is not a landing — only an admission is."""
 
-    module, saved, BytesIO = _router()
+    module, saved, BytesIO = _router
     try:
         monkeypatch.setattr(legacy_dark, 'current_mode', lambda uid=None: ON)
         module.resolve_batch_policy = lambda uid: enabled_policy()
@@ -373,12 +376,12 @@ async def test_batch_response_without_fresh_admission_is_not_counted(monkeypatch
         _restore(saved)
 
 
-async def test_rehomed_final_pass_owner_batch_landing_is_not_counted(monkeypatch):
+async def test_rehomed_final_pass_owner_batch_landing_is_not_counted(monkeypatch, _router):
     """Luna r1 P1: a rehomed legacy_final_pass_v1 owner follows a durable owner,
     so its batch landing is an owner transition, not a fresh ramp admission."""
 
     world = _language_world(monkeypatch, owner='legacy_final_pass_v1')
-    module, saved, BytesIO = _router()
+    module, saved, BytesIO = _router
     try:
         monkeypatch.setattr(legacy_dark, 'current_mode', lambda uid=None: LegacySyncMode.DRAINING)
         monkeypatch.setattr(final_pass_rehome, 'upload_rehome', lambda *a, **k: RehomeOutcome.REHOMED)
@@ -402,8 +405,8 @@ async def test_rehomed_final_pass_owner_batch_landing_is_not_counted(monkeypatch
         _restore(saved)
 
 
-async def test_heavy_owner_excluded_upload_counts_heavy_excluded(monkeypatch):
-    module, saved, BytesIO = _router()
+async def test_heavy_owner_excluded_upload_counts_heavy_excluded(monkeypatch, _router):
+    module, saved, BytesIO = _router
     try:
         monkeypatch.setattr(legacy_dark, 'current_mode', lambda uid=None: ON)
         module.resolve_batch_policy = lambda uid: enabled_policy()
@@ -432,9 +435,9 @@ async def test_heavy_owner_excluded_upload_counts_heavy_excluded(monkeypatch):
         _restore(saved)
 
 
-async def test_language_excluded_upload_counts_language_excluded(monkeypatch):
+async def test_language_excluded_upload_counts_language_excluded(monkeypatch, _router):
     world = _language_world(monkeypatch)
-    module, saved, BytesIO = _router()
+    module, saved, BytesIO = _router
     try:
         monkeypatch.setattr(legacy_dark, 'current_mode', lambda uid=None: ON)
         monkeypatch.setattr(legacy_dark, 'read_ledger_row', lambda *a: None)
@@ -457,8 +460,8 @@ async def test_language_excluded_upload_counts_language_excluded(monkeypatch):
         _restore(saved)
 
 
-async def test_not_cohort_upload_counts_not_cohort(monkeypatch):
-    module, saved, BytesIO = _router()
+async def test_not_cohort_upload_counts_not_cohort(monkeypatch, _router):
+    module, saved, BytesIO = _router
     try:
         monkeypatch.setattr(legacy_dark, 'current_mode', lambda uid=None: ON)
         module.resolve_batch_policy = lambda uid: BatchUnitPolicy(batch_enabled=False)
@@ -478,8 +481,8 @@ async def test_not_cohort_upload_counts_not_cohort(monkeypatch):
         _restore(saved)
 
 
-async def test_durable_legacy_owner_landing_is_not_counted(monkeypatch):
-    module, saved, BytesIO = _router()
+async def test_durable_legacy_owner_landing_is_not_counted(monkeypatch, _router):
+    module, saved, BytesIO = _router
     try:
         monkeypatch.setattr(legacy_dark, 'current_mode', lambda uid=None: ON)
         module.resolve_batch_policy = lambda uid: enabled_policy()

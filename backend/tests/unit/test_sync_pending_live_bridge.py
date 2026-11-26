@@ -3,6 +3,7 @@
 from copy import deepcopy
 from datetime import datetime, timedelta, timezone
 import json
+import logging
 from pathlib import Path
 import re
 import threading
@@ -29,7 +30,11 @@ from utils.capture.shadow import SHADOW
 from utils.conversations.recorded_time import conversation_span, segment_span
 from utils.metrics import OMI_SYNC_BRIDGE_CONTAINED_DONOR_SHADOW_TOTAL
 from utils.sync import bridge, bridge_pending
-from utils.sync.assignment_errors import SyncAssignmentConflict, SyncAssignmentConflictReason
+from utils.sync.assignment_errors import (
+    SyncAssignmentConflict,
+    SyncAssignmentConflictReason,
+    SyncAssignmentSuperseded,
+)
 from utils.sync.intake_completion import complete_sync_intake
 from utils.sync.live_overlap import span_contained
 
@@ -124,6 +129,26 @@ def test_live_target_is_bridged_after_capture_finishes(monkeypatch, pending, fin
     assert bridge.finish_sync_bridges('u', 'wal') == 'live'
     _install_listing(monkeypatch, _rows_from_store(store))
     assert [r['id'] for r in db.get_conversations_without_photos('u')] == ['live']
+
+
+def test_pending_bridge_with_a_user_managed_anchor_is_terminal(monkeypatch, caplog, pending):
+    store, row, _, _ = pending
+    store.rows[('users', 'u', 'conversations', 'live')].update(live_row('completed'))
+    monkeypatch.setattr(
+        db,
+        'assign_sync_conversation',
+        lambda *a, **kw: (_ for _ in ()).throw(SyncAssignmentSuperseded('sync anchor is user managed')),
+    )
+
+    with caplog.at_level(logging.DEBUG, logger=bridge.__name__):
+        assert bridge.finish_sync_bridges('u', 'wal') == 'wal'
+
+    assert 'event=sync_bridge outcome=superseded reason=pending_live_anchor' in caplog.text
+    # No row was recreated or redirected: the source stays its own record and
+    # its bounded pending marker keeps its own expiry.
+    source = store.rows[('users', 'u', 'conversations', 'wal')]
+    assert not source.get('deleted') and not source.get('sync_merged_into')
+    assert source[bridge_pending.FIELD] == row[bridge_pending.FIELD]
 
 
 def test_pending_review_intake_enrolls_bridge_even_without_audio(monkeypatch, pending):
