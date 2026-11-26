@@ -37,8 +37,11 @@ transcript (`utils/conversations/v3/fast_finish.py`) calls the provider.
     retry and Soniox credit failover off for these requests; batch keeps both. The vendor language
     probe and the self-hosted gate keep their own timeout parts (connect 2 s; read, write and pool 8 s
     and 6 s), each capped to what is left. Because those parts add up, the whole language resolution
-    also runs on `fast_finish_io` and is abandoned at the deadline (`deadline`); after the privacy
-    check, a probe with under `PROBE_MIN_SECONDS` (3 s) left is skipped and the row's language kept.
+    also runs on `fast_finish_io` and is abandoned at the deadline (`deadline`). A probe with under
+    `PROBE_MIN_SECONDS` (3 s) left is skipped and the row's language kept; the time is checked before
+    the privacy read (so an abandoned resolution makes none) and again after it.
+  - A chunk's first request is sent only with at least `CHUNK_SEND_MIN_SECONDS` (5 s) left; with less
+    it would almost certainly time out, so the pass yields `deadline` without paying for it.
   - Past the deadline the pass cancels queued chunks, waits at most `STOP_GRACE_SECONDS` (2 s) more for
     running ones, writes nothing, releases its slot and yields to batch as `deadline`. A request still
     running then ends on its own timeouts, and its result is dropped.
@@ -66,6 +69,9 @@ transcript (`utils/conversations/v3/fast_finish.py`) calls the provider.
 - **Privacy at dispatch.** Privacy is asked before any audio is read, as before, and again inside every
   chunk job just before its provider request (and before its retry). It is also asked right before the
   language probe posts audio to the vendor or the self-hosted classifier. A refusal stops the pass.
+  The pass's privacy authority is sticky on denial: once any check refuses or errors (the self-hosted
+  shadow gate's included), every later check answers False without asking, so no probe of either
+  kind, chunk request or retry can leave, and the pass ends `privacy_blocked`.
   Cancellation stops queued chunks; a request already dispatched may finish, but its result is never
   written. The write is still fenced inside its transaction.
 - **Retry and language.** A chunk that fails is sent once more if at least 10 s of the deadline is left.

@@ -75,6 +75,9 @@ LONG_PASS_WINDOW = 3
 LONG_MAX_CHUNKS = 9
 # A failed chunk is sent once more only if this much of the deadline is left.
 RETRY_MIN_SECONDS = 10.0
+# A chunk's first request is sent only if this much of the deadline is left: with less it would almost
+# certainly time out, so it is not paid for and the pass yields with ``deadline``.
+CHUNK_SEND_MIN_SECONDS = 5.0
 # Tokens compared at a fixed cut's seam.
 SEAM_TOKENS = 24
 # A stopped pass waits for its running requests at most this long past the deadline, then releases
@@ -646,12 +649,17 @@ def _routed_transcriber(pcm: bytes, language: str | None, deadline: float, priva
     stopped: list[str] = []
 
     def allowed(*, vendor: bool) -> bool:
+        # Time first: a resolution abandoned at the deadline, or one with too little time left for a
+        # useful probe, makes no privacy read and sends nothing (the row's language is kept).
+        if deadline - time.monotonic() < PROBE_MIN_SECONDS:
+            return False
         # Already a bounded leaf (below): the privacy check runs here, not on another bounded call.
+        # The pass's authority is sticky: after any refusal or error, every probe is refused too.
         if not _privacy_allows(privacy):
             stopped.append('privacy_blocked')
             return False
         if deadline - time.monotonic() < PROBE_MIN_SECONDS:
-            return False  # too little time for a useful probe: keep the row's language
+            return False  # the privacy read itself took the time: keep the row's language
         if vendor:
             probe = min(len(pcm) / 2 / SAMPLE_RATE, MAX_PROBE_SECONDS)
             sent.add(probe)
@@ -856,6 +864,27 @@ def _privacy_allows(privacy) -> bool:
         return False
 
 
+class _StickyPrivacy:
+    """A pass's privacy authority, sticky on denial.
+
+    Once any check refuses or errors, every later check of the pass answers False without asking: no
+    language probe of any kind, no chunk request and no retry can leave after a denial, whichever
+    check saw it first and whatever a later check would have answered.
+    """
+
+    def __init__(self, privacy):
+        self._privacy = privacy
+        self.denied = False
+
+    def __call__(self) -> bool:
+        if self.denied:
+            return False
+        allowed = _privacy_allows(self._privacy)
+        if not allowed:
+            self.denied = True
+        return allowed
+
+
 class _Stopped(Exception):
     """A provider stage ended the pass early with a counted outcome."""
 
@@ -941,14 +970,16 @@ def _chunk_job(
     request and no retry.
     """
     CHUNK_QUEUE_SECONDS.observe(time.monotonic() - submitted)
-    pcm = holder.pop() if holder else None
-    if pcm is None:
-        raise _Abandoned()
+    try:
+        # The pass may empty the holder at any moment once it stops.
+        pcm = holder.pop()
+    except IndexError:
+        raise _Abandoned() from None
     seconds = len(pcm) / 2 / SAMPLE_RATE
     for attempt in (1, 2):
         if stop.is_set():
             raise _Abandoned()
-        if time.monotonic() >= deadline:
+        if time.monotonic() >= deadline or (attempt == 1 and deadline - time.monotonic() < CHUNK_SEND_MIN_SECONDS):
             raise _Expired()
         # At actual dispatch: a chunk can wait in the shared pool's queue, and consent may change
         # meanwhile. The round that submitted it was authorized; this request may still not leave.
@@ -1182,6 +1213,8 @@ def _run(
         deadline = time.monotonic() + PASS_DEADLINE_SECONDS
     if not enabled(uid):
         return 'not_enabled'
+    # One denial ends the pass: every later check (probes, chunks, retries) refuses without asking.
+    privacy = _StickyPrivacy(privacy) if privacy is not None else None
     chunked = chunked_enabled()
     # A chunked pass bounds every Firestore call by its deadline: the reads before the chunks (row
     # refresh, funding, privacy) by the deadline itself, the refresh, write and cut after them by

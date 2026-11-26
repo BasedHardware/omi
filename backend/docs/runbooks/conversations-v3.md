@@ -139,7 +139,8 @@ offsets with a 3 s overlap, and sends them to the provider concurrently on the s
 minutes makes a pass long, never its chunk count; a long pass takes its own pass slot, so it never holds
 a short Finish's slot, and a short Finish waits up to 10 s for a slot instead of answering `busy`. Length,
 canary and cap refusals are counted before any slot is taken. Each chunk asks the batch privacy fence
-again when it actually starts, and so does the language probe right before it sends; a chunk is retried
+again when it actually starts, and so does the language probe right before it sends; one refusal or
+error ends the pass (`privacy_blocked`), and every later check refuses without asking; a chunk is retried
 once if time allows. One 45 s deadline from record admission (not the Finish tap) covers slot wait, the
 Firestore reads before chunking, every retained-audio reference read (its storage timeouts capped to what
 is left), both language probes, queueing and provider requests (their connect, pool, write and read

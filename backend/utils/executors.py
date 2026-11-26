@@ -499,12 +499,15 @@ _fast_finish_io_executor_lock = threading.Lock()
 
 
 def get_fast_finish_io_executor() -> MonitoredThreadPoolExecutor:
-    """Leaf Firestore calls of a v3 fast-finish pass, so the pass can stop waiting at its deadline.
+    """Bounded leaf work of a v3 fast-finish pass, so the pass can stop waiting at its deadline.
 
-    The Firestore client cannot bound a transaction commit, so the pass waits for each call only until
-    its bound and then abandons it: a queued call is cancelled, a running one ends on the client's own
-    timeouts. A pass has one call outstanding at a time and at most three passes run, so eight workers
-    leave room for five abandoned calls still running.
+    Runs the pass's Firestore calls (row refresh, funding, privacy, the transcript write and the cut),
+    its language resolution (the vendor probe and the self-hosted gate, with the privacy checks before
+    them) and, fire-and-forget, the long-budget Redis settle after the slot is released. The Firestore
+    client cannot bound a transaction commit and probe timeouts add up per phase, so the pass waits for
+    each call only until its bound and then abandons it: a queued call is cancelled, a running one ends
+    on its own timeouts. A pass has one call outstanding at a time and at most three passes run, so
+    eight workers leave room for abandoned calls and settles still running.
     """
     global _fast_finish_io_executor
     with _fast_finish_io_executor_lock:

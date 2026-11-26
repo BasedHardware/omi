@@ -722,8 +722,10 @@ def test_no_words_is_empty():
 
 
 def test_a_pass_past_its_deadline_yields_to_batch_without_a_write(monkeypatch):
-    # A long pass with this little left normally refuses before reserving; this one exercises cancellation.
+    # A long pass with this little left normally refuses before reserving or sending; this one
+    # exercises cancellation of what was sent.
     monkeypatch.setattr(fast_finish, 'RESERVE_MIN_SECONDS', 0.0)
+    monkeypatch.setattr(fast_finish, 'CHUNK_SEND_MIN_SECONDS', 0.0)
     unit, read = recording(1800)
     provider = Provider(sleep=0.4)
     never = lambda *args: pytest.fail('must not write or cut')
@@ -844,6 +846,7 @@ def test_a_stalled_firestore_refresh_releases_the_slot_within_the_deadline_plus_
 
 
 def test_a_stalled_write_is_abandoned_never_cut_and_refused_if_its_transaction_runs_late(monkeypatch):
+    monkeypatch.setattr(fast_finish, 'CHUNK_SEND_MIN_SECONDS', 0.0)  # a short deadline that still sends
     unit, read = recording(200)
     stall, finished = threading.Event(), threading.Event()
     order, refused = [], []
@@ -1029,8 +1032,8 @@ def test_a_chunk_whose_privacy_answer_comes_after_the_pass_stopped_sends_nothing
             calls.append(next(value for value in values(pcm) if value))
         raise RuntimeError('provider down')
 
-    # Under RETRY_MIN_SECONDS left: the first failure stops the pass, with no retry.
-    outcome, _ = run([unit], read, provider, privacy=privacy, deadline=time.monotonic() + 5)
+    # Under RETRY_MIN_SECONDS but over CHUNK_SEND_MIN_SECONDS left: sent once, no retry.
+    outcome, _ = run([unit], read, provider, privacy=privacy, deadline=time.monotonic() + 7)
     # Only the first dispatched chunk was sent; the others, allowed after the stop, sent and charged nothing.
     assert outcome == 'provider_error' and len(calls) == 1 and len(dispatches) >= 2
 
@@ -1093,8 +1096,9 @@ def test_a_probe_slow_in_every_phase_is_abandoned_at_the_deadline(monkeypatch, v
 
 
 def test_with_too_little_time_left_the_probe_is_skipped_and_the_row_language_kept(monkeypatch):
+    monkeypatch.setattr(fast_finish, 'CHUNK_SEND_MIN_SECONDS', 0.0)  # a short deadline that still sends
     unit, read = recording(200)
-    answers = []
+    answers, asked = [], []
 
     def route(pcm, language, *, before_probe, before_self_probe, **kwargs):
         answers.append((before_probe(), before_self_probe()))
@@ -1105,11 +1109,105 @@ def test_with_too_little_time_left_the_probe_is_skipped_and_the_row_language_kep
     audio = fast_finish.AUDIO_SECONDS.labels('short')._value.get()
     deadline = time.monotonic() + fast_finish.PROBE_MIN_SECONDS - 0.5
     outcome = fast_finish.run(
-        UID, 'cid', row(), [unit], read, write=lambda *a: True, privacy=lambda: True, deadline=deadline
+        UID,
+        'cid',
+        row(),
+        [unit],
+        read,
+        write=lambda *a: True,
+        privacy=lambda: asked.append(1) or True,
+        deadline=deadline,
     )
-    # Both probes skipped (privacy still asked first), the pass went on, and no probe audio was charged.
-    assert answers == [(False, False)] and outcome == 'empty'
+    # Both probes skipped without a privacy read (time is checked first), the pass went on (privacy
+    # asked before the audio and at the chunk's dispatch only), and no probe audio was charged.
+    assert answers == [(False, False)] and outcome == 'empty' and len(asked) == 2
     assert fast_finish.AUDIO_SECONDS.labels('short')._value.get() - audio == pytest.approx(200)
+
+
+def test_a_resolution_abandoned_at_the_deadline_makes_no_privacy_read(monkeypatch):
+    monkeypatch.setattr(fast_finish, 'PROBE_MIN_SECONDS', 0.1)
+    unit, read = recording(200)
+    asked, reached = [], threading.Event()
+
+    def route(pcm, language, *, before_probe, before_self_probe, **kwargs):
+        time.sleep(0.5)  # something slow before the probes: the pass abandons this at its deadline
+        before_probe()
+        reached.set()
+        return (('modulate', 'en', 'velma-2'), 'en')
+
+    monkeypatch.setattr(pre_recorded, 'prerecorded_bytes_route', route)
+    never = lambda *args: pytest.fail('must not transcribe or write')
+    outcome = fast_finish.run(
+        UID,
+        'cid',
+        row(),
+        [unit],
+        read,
+        transcribe_words=None,
+        write=never,
+        privacy=lambda: asked.append(1) or True,
+        deadline=time.monotonic() + 0.3,
+    )
+    assert outcome == 'deadline' and reached.wait(5)
+    assert len(asked) == 1  # the pass's own check before the audio; the abandoned probe asked nothing
+
+
+def _shadow_then_vendor(monkeypatch, probes, sends):
+    """A route that asks the self-hosted (shadow) gate, then the vendor probe, then the gate again."""
+
+    def route(pcm, language, *, before_probe, before_self_probe, **kwargs):
+        for kind, ask in (('self', before_self_probe), ('vendor', before_probe), ('self', before_self_probe)):
+            allowed = ask()
+            probes.append((kind, allowed))
+            if allowed:
+                sends.append(kind)
+        return (('modulate', 'en', 'velma-2'), 'en')
+
+    monkeypatch.setattr(pre_recorded, 'prerecorded_bytes_route', route)
+
+
+@pytest.mark.parametrize('shadow', ['refuses', 'errors'])
+def test_one_denied_probe_check_ends_the_pass_whatever_later_checks_would_say(monkeypatch, shadow):
+    unit, read = recording(1800)  # a long pass, so the budget shows any probe charge
+    probes, sends, asked = [], [], []
+
+    def privacy():
+        asked.append(1)
+        if len(asked) == 2:  # the shadow gate's check: refused, or the authority errors
+            if shadow == 'errors':
+                raise RuntimeError('privacy authority unavailable')
+            return False
+        return True  # every other check would allow
+
+    _shadow_then_vendor(monkeypatch, probes, sends)
+    audio = fast_finish.AUDIO_SECONDS.labels('long')._value.get()
+    never = lambda *args: pytest.fail('must not upload a chunk or write')
+    outcome = fast_finish.run(UID, 'cid', row(), [unit], read, transcribe_words=None, write=never, privacy=privacy)
+    # Asked before the audio and once by the shadow gate; every later check refused without asking.
+    assert outcome == 'privacy_blocked' and len(asked) == 2
+    assert probes == [('self', False), ('vendor', False), ('self', False)] and sends == []
+    assert fast_finish.AUDIO_SECONDS.labels('long')._value.get() == audio and used() == 0
+
+
+def test_a_denial_at_a_chunk_dispatch_also_refuses_every_retry_without_asking():
+    unit, read = recording(200)
+    asked = []
+
+    def privacy():
+        asked.append(1)
+        if len(asked) == 2:
+            raise RuntimeError('privacy authority unavailable')
+        return True
+
+    outcome, _ = run([unit], read, lambda pcm, language: pytest.fail('must not send'), privacy=privacy)
+    assert outcome == 'privacy_blocked' and len(asked) == 2
+
+
+def test_a_chunk_is_not_sent_with_too_little_time_left(monkeypatch):
+    unit, read = recording(200)
+    never = lambda *args: pytest.fail('must not send or write')
+    deadline = time.monotonic() + fast_finish.CHUNK_SEND_MIN_SECONDS - 1
+    assert run([unit], read, never, write=never, deadline=deadline)[0] == 'deadline'
 
 
 def test_the_write_guard_rechecks_the_time_after_the_fence_reads():
