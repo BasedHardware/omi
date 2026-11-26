@@ -20,7 +20,7 @@ from utils.observability.delivery import record_delivery
 from prometheus_client import Counter, Gauge, Histogram
 from models.finalization_owner import python_owns_finalization
 from config.refactor_modes import default_on
-from config.summary_guarantee import deadline_seconds, first_week_enabled, first_week_open
+from config.summary_guarantee import deadline_seconds, first_week_open
 from config.policy import FirstSummaryPolicy
 from utils.conversations.minimum_derived import intentional_short_clip_minimum, waive_short_clip_summary_debt
 from utils.summary_quality import valid_title
