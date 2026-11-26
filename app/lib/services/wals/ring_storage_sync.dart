@@ -154,6 +154,8 @@ class RingStorageSyncImpl implements RingStorageSync {
   BtDevice? _device;
   bool independentDiscovery = false;
   void Function()? onDurableChunk;
+  int _durableChunkCount = 0;
+  int get durableChunkCount => _durableChunkCount;
   DateTime? _lastUploadWake;
   ({int epoch, BleAudioCodec codec})? _discoveryCodec;
   int _discoveryGeneration = 0;
@@ -1133,6 +1135,7 @@ class RingStorageSyncImpl implements RingStorageSync {
             }
             persistenceProgress();
             if (independentDiscovery && stillEpoch() && chunk.isNotEmpty) {
+              _durableChunkCount++;
               final wake = onDurableChunk;
               final now = _clock();
               final last = _lastUploadWake;

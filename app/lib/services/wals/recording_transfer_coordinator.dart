@@ -25,6 +25,7 @@ enum WakeTrigger {
   cooldownElapsed,
   userRetry,
   ringChunkDurable,
+  manualRingUpload,
 
   /// Periodic in-process wake while recordings wait to upload. Wake sources
   /// are all event-driven otherwise, and a missed event stranded rows for hours.
@@ -70,7 +71,7 @@ typedef RecordingTransferPass = Future<void> Function();
 typedef RecordingTransferDrain = Future<RecordingTransferDrainResult> Function();
 typedef RecordingTransferCooldownScheduler = void Function(Duration delay, void Function() callback);
 typedef RecordingTransferTimeoutScheduler = void Function(Duration delay, void Function() callback);
-typedef RecordingTransferKeepAlive = Future<void> Function();
+typedef AcquireTransferLease = Future<Future<void> Function()> Function();
 
 /// The single owner for recording recovery.
 ///
@@ -94,8 +95,7 @@ class RecordingTransferCoordinator {
     RecordingTransferCooldownScheduler? scheduleCooldown,
     RecordingTransferTimeoutScheduler? scheduleTimeout,
     void Function()? onTransferAdmitted,
-    RecordingTransferKeepAlive? onTransferStarted,
-    RecordingTransferKeepAlive? onTransferFinished,
+    AcquireTransferLease? acquireTransferLease,
     RecordingTransferPass? onConnectivityRestored,
     Stream<void>? networkChanges,
     bool Function()? hasPendingWork,
@@ -114,8 +114,7 @@ class RecordingTransferCoordinator {
         _scheduleCooldown = scheduleCooldown,
         _scheduleTimeout = scheduleTimeout,
         _onTransferAdmitted = onTransferAdmitted,
-        _onTransferStarted = onTransferStarted,
-        _onTransferFinished = onTransferFinished,
+        _acquireTransferLease = acquireTransferLease,
         _onConnectivityRestored = onConnectivityRestored,
         _hasPendingWork = hasPendingWork,
         _hasAcceptedJobs = hasAcceptedJobs,
@@ -176,14 +175,21 @@ class RecordingTransferCoordinator {
   RecordingTransferCooldownScheduler? _scheduleCooldown;
   RecordingTransferTimeoutScheduler? _scheduleTimeout;
   void Function()? _onTransferAdmitted;
-  RecordingTransferKeepAlive? _onTransferStarted;
-  RecordingTransferKeepAlive? _onTransferFinished;
+  AcquireTransferLease? _acquireTransferLease;
   RecordingTransferPass? _onConnectivityRestored;
   bool Function()? _hasPendingWork;
   bool Function()? _hasAcceptedJobs;
   Timer? _receiptTimer;
   RecordingTransferPassTimedOut? _onPassTimedOut;
-  void Function({bool manual, String? deviceId, bool fromBle})? onRingWake;
+  void Function({String? deviceId, bool fromBle})? onRingWake;
+  Future<bool> Function()? onManualRingWake;
+  Future<void>? _manualRingSync;
+  int _manualRingGeneration = 0;
+
+  void cancelManualRingSync() {
+    _manualRingGeneration++;
+    _manualRingSync = null;
+  }
 
   /// A storage notification can reach Dart in the background while HTTP is
   /// waiting. Never enqueue this on the upload pass.
@@ -269,8 +275,7 @@ class RecordingTransferCoordinator {
     required Stream<bool> connectivityChanges,
     required bool initiallyConnected,
     void Function()? onTransferAdmitted,
-    RecordingTransferKeepAlive? onTransferStarted,
-    RecordingTransferKeepAlive? onTransferFinished,
+    AcquireTransferLease? acquireTransferLease,
     RecordingTransferPass? onConnectivityRestored,
     Stream<void>? networkChanges,
     bool Function()? hasPendingWork,
@@ -284,8 +289,7 @@ class RecordingTransferCoordinator {
     _drainLiveCapture = drainLiveCapture;
     _autoUploadEnabled = autoUploadEnabled;
     _onTransferAdmitted = onTransferAdmitted ?? _onTransferAdmitted;
-    _onTransferStarted = onTransferStarted ?? _onTransferStarted;
-    _onTransferFinished = onTransferFinished ?? _onTransferFinished;
+    _acquireTransferLease = acquireTransferLease ?? _acquireTransferLease;
     _onConnectivityRestored = onConnectivityRestored ?? _onConnectivityRestored;
     _hasPendingWork = hasPendingWork ?? _hasPendingWork;
     _receiptTimer?.cancel();
@@ -298,7 +302,7 @@ class RecordingTransferCoordinator {
     final queued = _wakeBeforeConfigured;
     _wakeBeforeConfigured = null;
     if (queued != null) {
-      scheduleMicrotask(() => wake(queued));
+      scheduleMicrotask(() => _wakeUpload(queued));
     }
   }
 
@@ -357,10 +361,41 @@ class RecordingTransferCoordinator {
       case WakeTrigger.startup:
         onRingWake?.call();
       case WakeTrigger.userRetry:
-        onRingWake?.call(manual: true);
+        final readRing = onManualRingWake;
+        if (readRing != null) {
+          final active = _manualRingSync;
+          if (active != null) return active;
+          late final Future<void> request;
+          request = _syncManualRing(readRing).whenComplete(() {
+            // A cancelled request can finish after a replacement starts.
+            if (identical(_manualRingSync, request)) _manualRingSync = null;
+          });
+          return _manualRingSync = request;
+        }
       default:
         break;
     }
+    return _wakeUpload(trigger);
+  }
+
+  Future<void> _syncManualRing(Future<bool> Function() readRing) async {
+    final generation = _manualRingGeneration;
+    // Start submitting phone audio immediately. One pass after the ring's
+    // last durable write covers everything missed by that early snapshot.
+    final read = readRing();
+    await Future.wait<void>([read, _wakeUpload(WakeTrigger.userRetry)]);
+    if (!await read) return;
+    while (generation == _manualRingGeneration) {
+      final active = _inFlight ?? _abandonedPass;
+      if (active == null) {
+        await _wakeUpload(WakeTrigger.manualRingUpload);
+        return;
+      }
+      await active;
+    }
+  }
+
+  Future<void> _wakeUpload(WakeTrigger trigger) {
     // Reconnect and periodic background wakes discover device storage and drain
     // backlog inside a sync-only scope. Other eligible background recovery is
     // limited to recent conversation-bound phone WALs. All are bounded in _run.
@@ -391,7 +426,7 @@ class RecordingTransferCoordinator {
       final lateWake = _pendingWake;
       _pendingWake = null;
       if (lateWake != null && (_foreground || lateWake == WakeTrigger.mobileBatchReady)) {
-        unawaited(wake(lateWake));
+        unawaited(_wakeUpload(lateWake));
       }
     }).ignore();
     return pass;
@@ -401,6 +436,7 @@ class RecordingTransferCoordinator {
       trigger == WakeTrigger.periodic ||
       trigger == WakeTrigger.mobileBatchReady ||
       trigger == WakeTrigger.ringChunkDurable ||
+      trigger == WakeTrigger.manualRingUpload ||
       trigger == WakeTrigger.deviceConnected ||
       trigger == WakeTrigger.connectivityRestored ||
       trigger == WakeTrigger.socketReconnected ||
@@ -414,7 +450,7 @@ class RecordingTransferCoordinator {
   }
 
   int _wakePriority(WakeTrigger trigger) => switch (trigger) {
-        WakeTrigger.userRetry => 4,
+        WakeTrigger.userRetry || WakeTrigger.manualRingUpload => 4,
         WakeTrigger.mobileBatchReady => 3,
         WakeTrigger.periodic ||
         WakeTrigger.deviceConnected ||
@@ -427,17 +463,18 @@ class RecordingTransferCoordinator {
       };
 
   Future<void> _run(WakeTrigger firstWake) async {
+    final manualRingGeneration = _manualRingGeneration;
     // Bind the account before native acquisition can yield. Holding an
     // abandoned pass's native lease below is not admission of another account.
     if (!_abandonedPassRunning) _onTransferAdmitted?.call();
-    final started = _onTransferStarted;
-    if (started != null) await started();
+    final acquire = _acquireTransferLease;
+    final release = acquire == null ? null : await acquire();
     try {
       WakeTrigger wake = firstWake;
       var passes = 0;
       do {
         _pendingWake = null;
-        await _runPass(wake);
+        await _runPass(wake, manualRingGeneration);
         passes++;
         if (!_foreground) {
           final pending = _pendingWake;
@@ -451,8 +488,7 @@ class RecordingTransferCoordinator {
         wake = _pendingWake ?? wake;
       } while (_pendingWake != null);
     } finally {
-      final finished = _onTransferFinished;
-      if (finished != null) await finished();
+      if (release != null) await release();
     }
   }
 
@@ -461,14 +497,14 @@ class RecordingTransferCoordinator {
   /// connected, unsubscribed legacy pendant discards its audio.
   static bool fencesLiveCapture(WakeTrigger trigger) => trigger == WakeTrigger.periodic;
 
-  Future<void> _runPass(WakeTrigger trigger) async {
+  Future<void> _runPass(WakeTrigger trigger, int manualRingGeneration) async {
     final fenced = fencesLiveCapture(trigger);
     final limit = fenced ? fencedPassTimeLimit : passTimeLimit;
     // The limit sits inside the scope, so a hung stage cannot hold the capture
     // fence or `_inFlight` (which every later wake joins) past it.
     final generation = ++_passGeneration;
     Future<void>? running;
-    Future<void> body() => _limitedPass(limit, running = _runPassBody(trigger, generation),
+    Future<void> body() => _limitedPass(limit, running = _runPassBody(trigger, generation, manualRingGeneration),
         progressBased: ringDrainRecoveryEnabled && !fenced && onRingWake == null);
     try {
       if (fenced) {
@@ -527,13 +563,12 @@ class RecordingTransferCoordinator {
   }
 
   Future<void> _holdAbandonedPass(Future<void> abandoned) async {
-    final started = _onTransferStarted;
-    if (started != null) await started();
+    final acquire = _acquireTransferLease;
+    final release = acquire == null ? null : await acquire();
     late final Future<void> tracked;
     tracked = abandoned.catchError((Object _) {}).whenComplete(() async {
       if (identical(_abandonedPass, tracked)) _abandonedPass = null;
-      final finished = _onTransferFinished;
-      if (finished != null) await finished();
+      if (release != null) await release();
     });
     _abandonedPass = tracked;
     tracked.ignore();
@@ -544,10 +579,13 @@ class RecordingTransferCoordinator {
   /// cancelled on timeout and every BLE/HTTP await below it is bounded.
   bool get _abandonedPassRunning => _abandonedPass != null;
 
-  Future<void> _runPassBody(WakeTrigger trigger, int generation) async {
+  Future<void> _runPassBody(WakeTrigger trigger, int generation, int manualRingGeneration) async {
     final periodicGeneration = _periodicGeneration;
     bool expired() =>
-        generation != _passGeneration || (trigger == WakeTrigger.periodic && periodicGeneration != _periodicGeneration);
+        generation != _passGeneration ||
+        (trigger == WakeTrigger.periodic && periodicGeneration != _periodicGeneration) ||
+        (trigger == WakeTrigger.manualRingUpload && manualRingGeneration != _manualRingGeneration);
+    if (expired()) return;
     if (_abandonedPassRunning) {
       _scheduleRetry('an abandoned pass has not exited yet');
       return;
@@ -555,6 +593,7 @@ class RecordingTransferCoordinator {
     final backlogWake = trigger == WakeTrigger.periodic ||
         trigger == WakeTrigger.deviceConnected ||
         trigger == WakeTrigger.ringChunkDurable ||
+        trigger == WakeTrigger.manualRingUpload ||
         trigger == WakeTrigger.watchdog;
     // A hold expires on a freshly indexed phone WAL. Keep that wake off the
     // pendant discovery/download path while its capture may still be live.
@@ -577,7 +616,8 @@ class RecordingTransferCoordinator {
       await _refreshPending();
       if (expired()) return;
 
-      final mayUpload = trigger == WakeTrigger.userRetry || _autoUploadEnabled();
+      final mayUpload =
+          trigger == WakeTrigger.userRetry || trigger == WakeTrigger.manualRingUpload || _autoUploadEnabled();
       if (!mayUpload) UploadTrace.instance.noteGate('auto_upload_off');
       if (!mayUpload) {
         if (reconcileFailed) _scheduleRetry('reconcile pass failed');
@@ -684,6 +724,7 @@ class RecordingTransferCoordinator {
   }
 
   void dispose() {
+    cancelManualRingSync();
     _receiptTimer?.cancel();
     // Invalidate injected-scheduler callbacks too: those timers are not held
     // in [_cooldownTimer], so cancelling the native timer is not enough.

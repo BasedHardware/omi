@@ -438,6 +438,7 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
     _walUpdateRefresh = null;
     _sessionGeneration++;
     _admittedWorkGeneration = -1;
+    if (_startBackgroundSync) RecordingTransferCoordinator.instance.cancelManualRingSync();
     _walService.getSyncs().clearUserData();
     // The capture monitor singleton outlives the provider: without this, the
     // previous account's unseen flag and storage/upload counts light the bell
@@ -479,7 +480,9 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
       if (!_isCurrent(generation)) return;
       final syncs = _deviceSyncs;
       if (_startBackgroundSync && syncs != null) {
-        RecordingTransferCoordinator.instance.onRingWake = syncs.wakeRingDrain;
+        RecordingTransferCoordinator.instance
+          ..onRingWake = syncs.wakeRingDrain
+          ..onManualRingWake = syncs.wakeManualRingDrain;
         syncs.enableRingDrain(
           () =>
               !_isDisposed &&
@@ -532,8 +535,7 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
         connectivityChanges: ConnectivityService().onConnectionChange,
         initiallyConnected: ConnectivityService().isConnected,
         onTransferAdmitted: () => _admittedWorkGeneration = _isDisposed ? -1 : _sessionGeneration,
-        onTransferStarted: _keepAlive.acquire,
-        onTransferFinished: _keepAlive.release,
+        acquireTransferLease: _keepAlive.acquireScoped,
         onConnectivityRestored: () async {
           if (_isCurrent(_admittedWorkGeneration)) await phone.resetExhaustedAutoRetries();
         },
@@ -979,9 +981,9 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
     if (!_isCurrent(generation)) return null;
     _admittedWorkGeneration = generation;
     _uploadedWalIdsAtSyncStart = uploadedWals.map((w) => w.id).toSet();
-    await _keepAlive.acquire();
+    final release = await _keepAlive.acquireScoped();
     if (!_isCurrent(generation) || cancelled?.call() == true) {
-      await _keepAlive.release();
+      await release();
       return null;
     }
     final work = _syncWorkToken = lagWork.begin(LagWork.sync);
@@ -1096,7 +1098,7 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
       lagWork.end(work);
       if (_syncWorkToken == work) _syncWorkToken = 0;
       if (_phaseWorkGeneration == generation) _endPhaseWork();
-      await _keepAlive.release();
+      await release();
       // Use the admitted token, never a fresh `_sessionGeneration` read: a
       // finally refresh that recaptured would load this session's WAL list
       // into the account that replaced it, and `_recordNewlyAcceptedUploads`
@@ -1419,6 +1421,7 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
     _endPhaseWork();
     final generation = _sessionGeneration;
     DebugLogManager.logWarning('SyncProvider: user cancelled sync');
+    if (_startBackgroundSync) RecordingTransferCoordinator.instance.cancelManualRingSync();
     // Grab accumulated results before cancelling
     final partialResults = _walService.getSyncs().accumulatedResponse;
     _walService.getSyncs().cancelSync();
@@ -1467,7 +1470,7 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
     _admittedWorkGeneration = generation;
     _updateSyncState(_syncState.toSyncing(), generation);
 
-    await _keepAlive.acquire();
+    final release = await _keepAlive.acquireScoped();
     try {
       await _walService.getSyncs().syncWal(wal: wal, progress: this);
       await _refreshWals(generation);
@@ -1477,7 +1480,7 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
       _updateSyncState(_syncState.toIdle(), generation);
       rethrow;
     } finally {
-      await _keepAlive.release();
+      await release();
     }
   }
 
@@ -1522,7 +1525,10 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
     final syncs = _deviceSyncs;
     if (_startBackgroundSync && syncs != null) {
       syncs.disableRingDrain();
-      RecordingTransferCoordinator.instance.onRingWake = null;
+      RecordingTransferCoordinator.instance
+        ..cancelManualRingSync()
+        ..onRingWake = null
+        ..onManualRingWake = null;
     }
     _isDisposed = true;
     _sessionGeneration++;

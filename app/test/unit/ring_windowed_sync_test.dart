@@ -15,6 +15,7 @@ import 'package:omi/services/wals/pendant_ring_custody.dart';
 import 'package:omi/services/wals/local_wal_sync.dart';
 import 'package:omi/services/wals/recording_transfer_coordinator.dart';
 import 'package:omi/services/wals/sync_rate_limiter.dart';
+import 'package:omi/services/wals/sync_transfer_keep_alive.dart';
 import 'package:omi/services/wals/sync_upload_gate.dart';
 import 'package:omi/services/wals/wal_syncs.dart';
 import 'package:omi/utils/wal_file_manager.dart';
@@ -122,6 +123,7 @@ class _RingModel implements DeviceConnection {
   /// Drop the link after this many records of the next read (then clears).
   int? dropAfterRecords;
   void Function()? beforeRead;
+  Future<void>? readGate;
 
   /// Whether the pendant's clock has been set. When it has not, records carry
   /// no usable time and the phone estimates one.
@@ -163,6 +165,7 @@ class _RingModel implements DeviceConnection {
   @override
   Future<bool> readRingFromSeq(int startSeq, {int? packetCount, bool Function()? canStart}) async {
     beforeRead?.call();
+    if (readGate case final gate?) await gate;
     if (canStart?.call() == false) return false;
     reads.add((startSeq, packetCount));
     final available = writeSeq - startSeq;
@@ -424,6 +427,162 @@ void main() {
       coordinator.dispose();
       SyncRateLimiter.instance.clear();
     }
+  }, skip: !ringDrainRecoveryEnabled);
+
+  test('one manual sync uploads ring audio that becomes durable after its first upload with Auto Sync off', () async {
+    SharedPreferences.setMockInitialValues({'uid': 'ring-test-owner', 'autoSyncOfflineRecordings': false});
+    await SharedPreferencesUtil.init();
+    await WalFileManager.init();
+    SyncRateLimiter.instance.clear();
+    addTearDown(SyncRateLimiter.instance.clear);
+
+    final releaseRead = Completer<void>();
+    addTearDown(() {
+      if (!releaseRead.isCompleted) releaseRead.complete();
+    });
+    final pendant = _RingModel(readSeq: 1000, writeSeq: 1240)..readGate = releaseRead.future;
+    final listener = _Listener();
+    final storage = RingStorageSyncImpl(listener)
+      ..testConnection = pendant
+      ..testCustody = newCustody()
+      ..testWindowRecords = 120;
+    final uploads = <String>[];
+    final phone = LocalWalSyncImpl(
+      listener,
+      freeDiskBytes: () async => 1024 * 1024 * 1024,
+      persistWals: (_) async {},
+      uploadGate: SyncUploadGate(
+        limiter: SyncRateLimiter.instance,
+        fairUseStatusLoader: () async => null,
+        uploader: (files,
+            {onUploadProgress,
+            conversationId,
+            captureEvidence,
+            recordingSessionId,
+            audioStartSeconds,
+            audioEndSeconds,
+            claimLiveCapture = false,
+            geolocation}) async {
+          uploads.addAll(files.map((file) => file.uri.pathSegments.last));
+          return UploadFilesResult.queued('ring-job');
+        },
+      ),
+    );
+    final firstUpload = Completer<void>();
+    final syncs = WalSyncs(listener, phoneSync: phone, ringSync: storage);
+    final coordinator = RecordingTransferCoordinator(
+      reconcile: () async {},
+      discover: () async {},
+      refreshPending: () async {},
+      drain: () async {
+        await syncs.syncAll();
+        if (!firstUpload.isCompleted) firstUpload.complete();
+        return const RecordingTransferDrainResult.skipped();
+      },
+      autoUploadEnabled: () => SharedPreferencesUtil().autoSyncOfflineRecordings,
+    )
+      ..onRingWake = syncs.wakeRingDrain
+      ..onManualRingWake = syncs.wakeManualRingDrain;
+    addTearDown(coordinator.dispose);
+    addTearDown(syncs.disableRingDrain);
+    expect(SharedPreferencesUtil().autoSyncOfflineRecordings, isFalse);
+    syncs.enableRingDrain(() => false, onDurableChunk: coordinator.wakeForRingChunk);
+    syncs.setDevice(pendant.device);
+    await syncs.wakeRingDrain(); // Settle the connection's discovery-only pass.
+
+    var manualCompleted = false;
+    final manual = coordinator.wake(WakeTrigger.userRetry).then((_) => manualCompleted = true);
+    await firstUpload.future;
+    expect(uploads, isEmpty);
+    expect(manualCompleted, isFalse);
+    releaseRead.complete();
+    await manual;
+
+    expect(pendant.readSeq, 1240);
+    final ringFiles = (await phone.getAllWals()).map((wal) => wal.filePath).toSet();
+    expect(ringFiles, isNotEmpty);
+    expect(uploads, unorderedEquals(ringFiles), reason: 'the same manual request submits each newly durable chunk');
+  }, skip: !ringDrainRecoveryEnabled);
+
+  test('cancelled upload releases leave the reconnected Android reader lease active', () async {
+    SharedPreferences.setMockInitialValues({'uid': 'ring-test-owner'});
+    await SharedPreferencesUtil.init();
+    await WalFileManager.init();
+    final nativeCalls = <String>[];
+    final messenger = TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
+    messenger.setMockMethodCallHandler(SyncTransferKeepAlive.channel, (call) async {
+      nativeCalls.add(call.method);
+      return null;
+    });
+    addTearDown(() => messenger.setMockMethodCallHandler(SyncTransferKeepAlive.channel, null));
+    final keepAlive = SyncTransferKeepAlive(isAndroid: () => true);
+    final uploadEntered = Completer<void>();
+    final uploadMayExit = Completer<void>();
+    final readerEntered = Completer<void>();
+    final readerMayExit = Completer<void>();
+    addTearDown(() {
+      if (!uploadMayExit.isCompleted) uploadMayExit.complete();
+      if (!readerMayExit.isCompleted) readerMayExit.complete();
+    });
+
+    final pendant = _RingModel(readSeq: 1000, writeSeq: 1000)
+      ..readGate = readerMayExit.future
+      ..beforeRead = () {
+        if (!readerEntered.isCompleted) readerEntered.complete();
+      };
+    final listener = _Listener();
+    final storage = RingStorageSyncImpl(listener)
+      ..testConnection = pendant
+      ..testCustody = newCustody()
+      ..testWindowRecords = 120;
+    final phone = LocalWalSyncImpl(listener, freeDiskBytes: () async => 1024 * 1024 * 1024, persistWals: (_) async {});
+    final syncs = WalSyncs(listener, phoneSync: phone, ringSync: storage, keepAlive: keepAlive);
+    final coordinator = RecordingTransferCoordinator(
+      reconcile: () async {},
+      discover: () async {},
+      refreshPending: () async {},
+      drain: () async {
+        final release = await keepAlive.acquireScoped();
+        try {
+          uploadEntered.complete();
+          await uploadMayExit.future;
+          return const RecordingTransferDrainResult.skipped();
+        } finally {
+          await release();
+        }
+      },
+      autoUploadEnabled: () => true,
+      acquireTransferLease: keepAlive.acquireScoped,
+    );
+    addTearDown(coordinator.dispose);
+    addTearDown(syncs.disableRingDrain);
+    syncs.enableRingDrain(() => true);
+    syncs.setDevice(pendant.device);
+    await syncs.wakeRingDrain();
+
+    final upload = coordinator.wake(WakeTrigger.startup);
+    await uploadEntered.future;
+    expect(keepAlive.refCount, 2);
+    syncs.cancelSync();
+    await keepAlive.releaseAll();
+    expect(nativeCalls, ['start', 'stop']);
+
+    syncs.setDevice(null);
+    pendant.epoch++;
+    pendant.writeSeq = 1240;
+    syncs.setDevice(pendant.device);
+    final reader = syncs.wakeRingDrain();
+    await readerEntered.future;
+    expect(nativeCalls, ['start', 'stop', 'start']);
+    uploadMayExit.complete();
+    await upload;
+    expect(keepAlive.refCount, 1, reason: 'only the reconnected reader still owns the service');
+    expect(nativeCalls, ['start', 'stop', 'start']);
+
+    readerMayExit.complete();
+    await reader;
+    expect(pendant.readSeq, 1240);
+    expect(nativeCalls, ['start', 'stop', 'start', 'stop']);
   }, skip: !ringDrainRecoveryEnabled);
 
   test('cancellation at radio admission sends no next read window', () async {

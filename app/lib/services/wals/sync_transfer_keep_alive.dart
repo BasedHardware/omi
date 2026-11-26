@@ -59,27 +59,20 @@ class SyncTransferKeepAlive {
     return null;
   }
 
-  Future<void> acquire() async {
-    _refs++;
-    if (_refs != 1) return;
-    await _invokeStart();
-  }
-
-  /// Holds one reference for the independent reader. A forced reset retires
-  /// it even if STOP and uncancellable disk writes settle much later.
+  /// Acquires one lease and returns its idempotent release. Resetting the
+  /// native service retires every earlier lease, including in-flight owners.
   Future<Future<void> Function()> acquireScoped() async {
     final generation = _leaseGeneration;
-    await acquire();
-    return () async {
-      if (generation == _leaseGeneration) await release();
-    };
-  }
+    _refs++;
+    if (_refs == 1) await _invokeStart();
 
-  Future<void> release() async {
-    if (_refs == 0) return;
-    _refs--;
-    if (_refs != 0) return;
-    await _invokeStop();
+    var released = false;
+    return () async {
+      if (released || generation != _leaseGeneration) return;
+      released = true;
+      _refs--;
+      if (_refs == 0) await _invokeStop();
+    };
   }
 
   /// Drop every ref and stop the native service. Used by cancel and dispose so

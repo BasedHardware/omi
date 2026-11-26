@@ -34,6 +34,7 @@ class WalSyncs implements IWalSync {
   RingStorageSyncImpl get ring => _ringSync;
 
   final IWalSyncListener listener;
+  final SyncTransferKeepAlive _keepAlive;
 
   bool _isCancelled = false;
   BtDevice? _device;
@@ -45,7 +46,6 @@ class WalSyncs implements IWalSync {
   int? _ringPassGeneration;
   bool Function()? _shouldDrainRing;
   bool _retryRingAfterSettlement = false;
-  bool _manualRingAfterSettlement = false;
   int _uploadCancellation = 0;
   int get uploadCancellation => _uploadCancellation;
   int get ringCancellation => _ringGeneration;
@@ -72,10 +72,17 @@ class WalSyncs implements IWalSync {
   void _cancelRingDrain() {
     _ringGeneration++;
     _retryRingAfterSettlement = false;
-    _manualRingAfterSettlement = false;
     _ringProbe?.cancel();
     _ringProbe = null;
     ring.cancelSync();
+  }
+
+  /// Reports durable audio produced during this request, including a partial
+  /// read, so the original manual sync can submit it after the last write.
+  Future<bool> wakeManualRingDrain() async {
+    final chunks = ring.durableChunkCount;
+    await wakeRingDrain(manual: true);
+    return ring.durableChunkCount != chunks;
   }
 
   Future<bool> wakeRingDrain({
@@ -92,10 +99,18 @@ class WalSyncs implements IWalSync {
     if (!fromBle && !discoveryOnly) _ringPausedByUser = false;
     final active = _ringPass;
     if (active != null) {
-      // In particular, reconnect can arrive while STOP and writes are settling.
-      if (!fromBle && !discoveryOnly && (manual || _ringPassGeneration != _ringGeneration)) {
+      final generation = _ringGeneration;
+      if (manual) {
+        // The active probe may have been discovery-only. Wait for it to
+        // settle before taking the manual snapshot on the same connection.
+        return active.then((_) async {
+          if (generation != _ringGeneration) return false;
+          return wakeRingDrain(manual: true);
+        });
+      }
+      // Reconnect can arrive while STOP and writes are settling.
+      if (!fromBle && !discoveryOnly && _ringPassGeneration != generation) {
         _retryRingAfterSettlement = true;
-        _manualRingAfterSettlement |= manual;
       }
       return active;
     }
@@ -113,7 +128,7 @@ class WalSyncs implements IWalSync {
       await ring.refreshWalsFromDevice();
       if (!current() || discoveryOnly || !(manual || _shouldDrainRing?.call() == true)) return false;
       if ((await ring.getMissingWals()).isEmpty || !current()) return false;
-      final release = await SyncTransferKeepAlive.instance.acquireScoped();
+      final release = await _keepAlive.acquireScoped();
       try {
         if (!current()) return false;
         DebugLogManager.logInfo('Sync Phase 0: Ring-buffer sync', {'fw': _resolvedFirmware ?? ''});
@@ -130,11 +145,9 @@ class WalSyncs implements IWalSync {
     _ringPass = pass.whenComplete(() {
       _ringPass = null;
       final retry = _retryRingAfterSettlement;
-      final retryManually = _manualRingAfterSettlement;
       _retryRingAfterSettlement = false;
-      _manualRingAfterSettlement = false;
       if (retry) {
-        unawaited(wakeRingDrain(manual: retryManually));
+        unawaited(wakeRingDrain());
       } else if (current() && !_ringPausedByUser && _shouldDrainRing?.call() == true) {
         // Refresh immediately after a completed snapshot. Failed or empty
         // probes back off so a quiet or disk-constrained device stays quiet.
@@ -211,7 +224,8 @@ class WalSyncs implements IWalSync {
     WalCoverageTelemetryEmitter? phoneCoverageTelemetry,
     Future<int?> Function()? phoneFreeDiskBytes,
     Future<void> Function(List<Wal>)? phonePersistWals,
-  }) {
+    SyncTransferKeepAlive? keepAlive,
+  }) : _keepAlive = keepAlive ?? SyncTransferKeepAlive.instance {
     _phoneSync = phoneSync ??
         LocalWalSyncImpl(
           listener,
