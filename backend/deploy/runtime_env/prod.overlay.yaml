@@ -727,7 +727,7 @@ overlay:
           # subscription. Unset queue keeps the fresh binding; 0 hours disables.
           ENRICHMENT_FIRST_WEEK_TASKS_QUEUE: {value: enrichment-first-week, category: reliability}
           FIRST_WEEK_SUMMARY_DEADLINE_HOURS: {value: '168', category: config}
-          FIRST_WEEK_SUMMARY_GUARANTEE_ENABLED: {value: 'true', category: ops_kill}
+          FIRST_WEEK_SUMMARY_GUARANTEE_ENABLED: {value: 'false', category: ops_kill}
           ENRICHMENT_TASKS_HANDLER_URL: {value: 'https://backend-integration-hhibjajaja-uc.a.run.app/v2/enrichment/run', category: reliability}
           ENRICHMENT_TASKS_OIDC_AUDIENCE: {value: 'https://backend-integration-hhibjajaja-uc.a.run.app/v2/enrichment/run', category: service_auth}
 
@@ -1162,7 +1162,7 @@ overlay:
           # subscription. Unset queue keeps the fresh binding; 0 hours disables.
           ENRICHMENT_FIRST_WEEK_TASKS_QUEUE: {value: enrichment-first-week, category: reliability}
           FIRST_WEEK_SUMMARY_DEADLINE_HOURS: {value: '168', category: config}
-          FIRST_WEEK_SUMMARY_GUARANTEE_ENABLED: {value: 'true', category: ops_kill}
+          FIRST_WEEK_SUMMARY_GUARANTEE_ENABLED: {value: 'false', category: ops_kill}
           ENRICHMENT_TASKS_HANDLER_URL: {value: 'https://backend-integration-hhibjajaja-uc.a.run.app/v2/enrichment/run', category: reliability}
           ENRICHMENT_TASKS_OIDC_AUDIENCE: {value: 'https://backend-integration-hhibjajaja-uc.a.run.app/v2/enrichment/run', category: service_auth}
           # Plan C8: provider-STT wakes (BYOK and non-Parakeet units) on the provider-stt queue, served by
@@ -1606,7 +1606,7 @@ overlay:
           # subscription. Unset queue keeps the fresh binding; 0 hours disables.
           ENRICHMENT_FIRST_WEEK_TASKS_QUEUE: {value: enrichment-first-week, category: reliability}
           FIRST_WEEK_SUMMARY_DEADLINE_HOURS: {value: '168', category: config}
-          FIRST_WEEK_SUMMARY_GUARANTEE_ENABLED: {value: 'true', category: ops_kill}
+          FIRST_WEEK_SUMMARY_GUARANTEE_ENABLED: {value: 'false', category: ops_kill}
           ENRICHMENT_TASKS_HANDLER_URL: {value: 'https://backend-integration-hhibjajaja-uc.a.run.app/v2/enrichment/run', category: reliability}
           ENRICHMENT_TASKS_OIDC_AUDIENCE: {value: 'https://backend-integration-hhibjajaja-uc.a.run.app/v2/enrichment/run', category: service_auth}
 
@@ -2031,7 +2031,7 @@ overlay:
           # subscription. Unset queue keeps the fresh binding; 0 hours disables.
           ENRICHMENT_FIRST_WEEK_TASKS_QUEUE: {value: enrichment-first-week, category: reliability}
           FIRST_WEEK_SUMMARY_DEADLINE_HOURS: {value: '168', category: config}
-          FIRST_WEEK_SUMMARY_GUARANTEE_ENABLED: {value: 'true', category: ops_kill}
+          FIRST_WEEK_SUMMARY_GUARANTEE_ENABLED: {value: 'false', category: ops_kill}
           ENRICHMENT_TASKS_HANDLER_URL: {value: 'https://backend-integration-hhibjajaja-uc.a.run.app/v2/enrichment/run', category: reliability}
           ENRICHMENT_TASKS_OIDC_AUDIENCE: {value: 'https://backend-integration-hhibjajaja-uc.a.run.app/v2/enrichment/run', category: service_auth}
           # Plan C8: provider-STT wakes (BYOK and non-Parakeet units) on the provider-stt queue, served by

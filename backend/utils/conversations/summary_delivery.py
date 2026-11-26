@@ -20,7 +20,7 @@ from utils.observability.delivery import record_delivery
 from prometheus_client import Counter, Gauge, Histogram
 from models.finalization_owner import python_owns_finalization
 from config.refactor_modes import default_on
-from config.summary_guarantee import deadline_seconds, first_week_enabled, first_week_open, first_week_window_end
+from config.summary_guarantee import deadline_seconds, first_week_enabled, first_week_open
 from config.policy import FirstSummaryPolicy
 from utils.conversations.minimum_derived import intentional_short_clip_minimum, waive_short_clip_summary_debt
 from utils.summary_quality import valid_title
@@ -198,11 +198,8 @@ FIRST_WEEK_OUTCOME_FIELD = 'first_week_outcome'
 FIRST_WEEK_FIELD = 'first_week_summary'
 
 
-def first_week_deadline(row: Row, accepted: float) -> float:
-    """Seconds of deadline for a row: the stored first-week window end when open."""
-    end = first_week_window_end(row)
-    if end is not None and first_week_enabled():
-        return max(0.0, end - accepted)
+def summary_deadline_seconds(row: Row) -> float:
+    """Keep the existing dispatch and repair deadline, independent of first-week eligibility."""
     policy = row.get('first_summary_policy')
     if policy is not None:
         return FirstSummaryPolicy.from_dict(policy).first_summary_deadline_seconds
@@ -359,7 +356,7 @@ def stamp_projection_debt(write: Row, *, now: float | None = None, allow_existin
     if not first_week and _past_age_gate(accepted, now=current):
         return False
     write['summary_first_pending_at'] = accepted
-    write['summary_due_at'] = accepted + first_week_deadline(write, accepted)
+    write['summary_due_at'] = accepted + summary_deadline_seconds(write)
     write.setdefault('summary_lane', lane(write))
     return True
 

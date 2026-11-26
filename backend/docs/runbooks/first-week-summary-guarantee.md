@@ -14,9 +14,9 @@ first_week_summary = {policy_id, paid_since, window_end_at, interval}
 first_week_outcome = null        # the close-out counting key
 ```
 
-`paid_since` is the commercial first-paid epoch (`subscription.paid_since`), set
-once on the free->paid transition and never moved by a renewal. `current_period_start`
-moves on every renewal, so it is never used for this. A row that predates
+`paid_since` is the commercial first-paid epoch stored at the user document's
+top level beside `subscription`, set once on the free->paid transition and never
+moved by a renewal. `current_period_start` moves on every renewal, so it is never used for this. A row that predates
 `paid_since` has no epoch and is never covered: the guarantee starts with paid
 starts after the deploy. `interval` is `monthly`/`yearly`/`unknown` from the paid
 period length. Referral promotions never stamp a window; the read is the
@@ -52,15 +52,55 @@ conversation once, at its window close, from the 2-minute `first_week_summary_cl
 phase on backend-integration. It has its own lease, scan budget and query, so a
 slow or unindexed page fails only this phase and never the repair phases.
 
+The first-week stamp preserves the existing 60–120 second first-summary dispatch
+and repair deadline. It changes age-gate and lane-demotion eligibility only;
+historical processing rows are excluded. A continuous capture therefore keeps
+its ordinary first-summary dispatch while its first-week obligation remains open.
+The close-out pass processes at most 25 rows and stops starting work after 15 s.
+
+Each outcome transaction also increments one of the bounded durable aggregate
+documents under `maintenance/first_week_summary_outcomes/counts`, keyed by
+`{interval}_{outcome}`. The conversation outcome stamp and aggregate increment
+commit atomically. Use these durable counts for the production readback; the
+Prometheus counter is the live operational signal and can miss the final update
+if a process exits after the Firestore transaction.
+
 - `summarized`: a usable summary was durable by the window end.
 - `attempt_failed`: an attempt landed but produced no usable summary
   (empty-output budget, BYOK block).
 - `no_attempt`: none at the window end.
 
 A summary that lands after the close is not counted retroactively. The counter
-is the mechanism number; `infra/metrics/churn/first_month.py` remains the
-acceptance number. Read at least 14 days after serving (the first complete
+documents are the mechanism number; `infra/metrics/churn/first_month.py` remains
+the acceptance number. Read at least 14 days after serving (the first complete
 cohort closes between +7d and +14d) and name the cohort.
+
+## Read and generation budget before activation
+
+The production overlay keeps `FIRST_WEEK_SUMMARY_GUARANTEE_ENABLED=false` until
+the approved read-only census records the eligible workload. While disabled,
+the added production reads and summary attempts are zero. Before enabling,
+record the census-backed expected extra summaries/day and reads/day, including:
+
+- one conversation scheduling-metadata read per first-week-enabled outbox mark
+  (`finished_at`, `created_at`, `started_at`, the processing tier, and the stored window);
+- the commercial subscription read when an existing conversation stamp is
+  absent: at most one Firestore user read per cache miss, with same-user reads
+  shared for up to 60 seconds when the subscription cache is available (a cold
+  or unavailable cache can make this one read per eligible mark);
+- one existing-user read for each campaign-off subscription update while the
+  feature is enabled, to distinguish a first paid transition from a renewal;
+  this read is skipped while the production flag is false, and the campaign-on
+  writer already reads the user in its transaction;
+- the census-derived eligible conversation count and forced-attempt split owned
+  by the separate child issue.
+
+If the estimate exceeds 10M additional Firestore reads/day, stop for the margin
+owner. Do not turn the production flag on until the numeric estimate and the
+owner's activation decision are recorded. Verify the `enrichment-first-week`
+queue and `first_week_summary_closeout` collection-group index are deployed on
+the target service before the runtime flag is enabled; the source declarations
+are not production-readiness evidence.
 
 ## Rollback
 

@@ -1765,10 +1765,7 @@ def paid_since_patch(
 
 def _stored_subscription_fields(user_ref: Any) -> tuple[Any, Any]:
     """The stored commercial subscription and the durable first-paid epoch, in one read."""
-    try:
-        snapshot = user_ref.get(['subscription', 'paid_since'])
-    except Exception:
-        return None, None
+    snapshot = user_ref.get(['subscription', 'paid_since'])
     if not snapshot.exists:
         return None, None
     data = snapshot.to_dict() or {}
@@ -1792,9 +1789,18 @@ def update_user_subscription(uid: str, subscription_data: dict):
 
             write_commercial_subscription(uid, subscription_data_to_store, client=db)
         else:
-            paid_patch = paid_since_patch(_stored_subscription_payload(user_ref), subscription_data_to_store)
-            subscription_data_to_store.update(paid_patch)
-            user_ref.update({'subscription': subscription_data_to_store})
+            from config.summary_guarantee import first_week_enabled
+
+            if first_week_enabled():
+                stored_subscription, stored_paid_since = _stored_subscription_fields(user_ref)
+                paid_patch = paid_since_patch(
+                    stored_subscription,
+                    subscription_data_to_store,
+                    stored_user_paid_since=stored_paid_since,
+                )
+                user_ref.update({'subscription': subscription_data_to_store, **paid_patch})
+            else:
+                user_ref.update({'subscription': subscription_data_to_store})
     finally:
         invalidate_subscription(uid)
 
@@ -2181,6 +2187,50 @@ def get_existing_user_subscription_and_fields(
     return subscription, extra
 
 
+def get_existing_user_subscription_and_fields_cached(
+    uid: str, fields: tuple[str, ...], *, firestore_client: Any | None = None
+) -> tuple[Optional[Subscription], dict]:
+    """Read the commercial subscription and user fields through the 60 s S4 cache."""
+    client = firestore_client or db
+    variant = f"existing:{plane_id(client)}:{','.join(fields)}"
+
+    def valid(value: Any) -> bool:
+        return (
+            isinstance(value, dict)
+            and isinstance(value.get('fields'), dict)
+            and (value.get('subscription') is None or isinstance(value.get('subscription'), dict))
+        )
+
+    def fetch() -> dict[str, Any]:
+        subscription, extra = get_existing_user_subscription_and_fields(uid, fields, firestore_client=client)
+        return {
+            'subscription': subscription.model_dump() if subscription is not None else None,
+            'fields': extra,
+        }
+
+    payload = memo(
+        uid,
+        ('existing_subscription_fields', variant),
+        lambda: cached_read(
+            'subscription_cache',
+            uid,
+            variant,
+            fetch,
+            seconds=ttl('FSR_SUBSCRIPTION_TTL_SECONDS', 60),
+            cacheable=valid,
+            validate=valid,
+        ),
+    )
+    extra = payload['fields']
+    raw_subscription = payload['subscription']
+    if raw_subscription is None:
+        observe_subscription(uid, None)
+        return None, extra
+    subscription = parse_payload_strict(Subscription, raw_subscription, document_path=f'users/{uid}')
+    observe_subscription(uid, subscription)
+    return subscription, extra
+
+
 def get_user_training_data_opt_in(uid: str) -> Optional[dict]:
     """Get user's training data opt-in status."""
     user_ref = db.collection('users').document(uid)
@@ -2331,7 +2381,7 @@ def first_week_stamp_for(uid: str, created_at: Any, *, interval_from: tuple[Any,
     if not first_week_enabled():
         return None
     try:
-        subscription, fields = get_existing_user_subscription_and_fields(uid, ('paid_since',))
+        subscription, fields = get_existing_user_subscription_and_fields_cached(uid, ('paid_since',))
     except Exception:
         return None
     if subscription is None:

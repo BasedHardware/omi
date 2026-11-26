@@ -111,7 +111,7 @@ def dispatch_binding(
             # A stamped first-week window is its own admission gate; it does not
             # depend on the 30-minute freshness clock. An unset queue keeps the
             # fresh binding this row would get today.
-            queue = first_week_queue() or (fresh_queue() if recent else queue)
+            queue = first_week_queue() or fresh_queue() or queue
         elif recent:
             queue = fresh_queue() or queue
     handler = os.getenv('ENRICHMENT_TASKS_HANDLER_URL', '').strip()

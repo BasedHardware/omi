@@ -37,7 +37,6 @@ from config.summary_guarantee import (
     first_summary_pending,
     first_week_enabled,
     first_week_open,
-    first_week_window_end,
     preserves_admitted,
 )
 from config.policy import FirstSummaryPolicy, resolve_stage_policy
@@ -275,15 +274,27 @@ def valid_effects_binding(row: dict[str, Any]) -> bool:
         return False
 
 
-def _conversation_finished_at(uid: str, conversation_id: str) -> object:
-    """Read scheduling metadata only; a late obligation is not a fresh conversation."""
+def _conversation_scheduling_metadata(uid: str, conversation_id: str) -> dict[str, Any]:
+    """Read only scheduling fields; never use mark time as conversation creation time."""
     snapshot = (
         get_firestore_client()
         .document(f'users/{uid}/conversations/{conversation_id}')
-        .get(field_paths=['finished_at', 'created_at'], timeout=2, retry=None)
+        .get(
+            field_paths=['finished_at', 'created_at', 'started_at', 'first_week_summary', 'processing_tier'],
+            timeout=2,
+            retry=None,
+        )
     )
-    data = snapshot.to_dict() or {}
+    return snapshot.to_dict() or {}
+
+
+def _finished_at_from_metadata(data: dict[str, Any]) -> object:
     return data.get('finished_at') if data.get('finished_at') is not None else data.get('created_at')
+
+
+def _conversation_finished_at(uid: str, conversation_id: str) -> object:
+    """Read the freshness clock; a late obligation is not a fresh conversation."""
+    return _finished_at_from_metadata(_conversation_scheduling_metadata(uid, conversation_id))
 
 
 def conversation_finished_at(uid: str, conversation_id: str) -> object:
@@ -291,7 +302,7 @@ def conversation_finished_at(uid: str, conversation_id: str) -> object:
     return _conversation_finished_at(uid, conversation_id)
 
 
-def _recent_conversation(uid: str, conversation_id: str, now: float) -> bool:
+def _recent_conversation(uid: str, conversation_id: str, now: float, *, metadata: dict[str, Any] | None = None) -> bool:
     if (
         enrichment_config.route() != 'enrichment_queue'
         or not enrichment_config.fresh_queue()
@@ -299,7 +310,12 @@ def _recent_conversation(uid: str, conversation_id: str, now: float) -> bool:
     ):
         return False
     try:
-        return enrichment_config.recently_finished(_conversation_finished_at(uid, conversation_id), now=now)
+        finished_at = (
+            _conversation_finished_at(uid, conversation_id)
+            if metadata is None
+            else _finished_at_from_metadata(metadata)
+        )
+        return enrichment_config.recently_finished(finished_at, now=now)
     except Exception:
         # Metadata failure keeps work on the established queue; no obligation is lost.
         record_fallback(
@@ -430,7 +446,17 @@ def mark(
         raise RuntimeError('sync reprocess projection requires production or a Firestore emulator')
     current = time.time() if now is None else now
     stamps: list[tuple[str, str]] = []
-    first_week = _first_week_for_obligation(uid, current, effects_only=effects_only)
+    first_week = None
+    initial_recent = None
+    if not effects_only and first_week_enabled():
+        try:
+            metadata = _conversation_scheduling_metadata(uid, conversation_id)
+        except Exception:
+            # Avoid a second metadata read from inside the outbox CAS.
+            initial_recent = False
+        else:
+            first_week = _first_week_for_obligation(uid, metadata=metadata)
+            initial_recent = _recent_conversation(uid, conversation_id, current, metadata=metadata)
     update = mark_update(
         uid,
         conversation_id,
@@ -442,6 +468,7 @@ def mark(
         batch=mutate is not None,
         snapshot_summary=snapshot_summary,
         first_week=first_week,
+        initial_recent=initial_recent,
         stamps=stamps,
         sync_hold=sync_hold,
         merge_hold=merge_hold,
@@ -471,6 +498,7 @@ def mark_update(
     new_dispatch: Callable[[], dict[str, str] | None] | None = None,
     snapshot_summary: bool = False,
     first_week: dict[str, Any] | None = None,
+    initial_recent: bool | None = None,
     stamps: list[tuple[str, str]] | None = None,
     sync_hold: bool = False,
     merge_hold: bool = False,
@@ -485,7 +513,7 @@ def mark_update(
     open one that predates snapshots; ``stamps`` collects ``(source, policy_id)`` for telemetry after commit.
     """
     candidate: FirstSummaryPolicy | None = None
-    recent: bool | None = None
+    recent = initial_recent
 
     def update(old: Row | None) -> tuple[Row, tuple[Row, bool]]:
         from utils.enrichment.age_gate import parked
@@ -649,25 +677,27 @@ def expedite_update(now: float) -> Callable[[Row | None], tuple[Row | None, Row 
 
 
 def _deadline_seconds(row: Row) -> int:
-    end = first_week_window_end(row)
-    first = row.get('first_pending_at')
-    if end is not None and first_week_enabled() and isinstance(first, (int, float)) and not isinstance(first, bool):
-        # An open first-week obligation is due no earlier than its stored window
-        # end; today's 60/120 s deadline does not close it (SCA-4790).
-        return max(60, int(end - first))
     snapshot = row.get('first_summary_policy')
     if snapshot is not None:
         return FirstSummaryPolicy.from_dict(snapshot).first_summary_deadline_seconds
     return deadline_seconds()
 
 
-def _first_week_for_obligation(uid: str, current: float, *, effects_only: bool) -> dict[str, Any] | None:
-    if effects_only or not first_week_enabled():
+def _first_week_for_obligation(uid: str, *, metadata: dict[str, Any]) -> dict[str, Any] | None:
+    if not first_week_enabled():
+        return None
+    if metadata.get('processing_tier') == 'historical':
+        return None
+    stored_stamp = metadata.get('first_week_summary')
+    if isinstance(stored_stamp, dict):
+        return dict(stored_stamp)
+    created_at = metadata.get('created_at') or metadata.get('started_at')
+    if created_at is None:
         return None
     from database import users as users_db
 
     try:
-        return users_db.first_week_stamp_for(uid, current)
+        return users_db.first_week_stamp_for(uid, created_at)
     except Exception:
         return None
 
