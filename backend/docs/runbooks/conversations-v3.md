@@ -230,8 +230,9 @@ it may set work aside in `v3_size_quarantine` on the builder lease (all or nothi
   siblings of unrelated rows are not set aside. The early attempt is re-armed, so the next seed runs on the
   following wake.
 - **Skipping.** Seeding is the only thing that skips quarantined ids: closures still load them, so claims
-  are never filtered. The pass chain and the 5-minute sweep don't wake an owner whose only stale pending rows
-  are quarantined. A failed lease read in the sweep counts as not quarantined and wakes the owner,
+  are never filtered. Seeding skips them only on a bounded pass (`CONVERSATIONS_V3_BOUNDED_PENDING` on), and
+  the pass chain and the 5-minute sweep don't wake an owner whose only stale pending rows are quarantined
+  under exactly that condition. A failed lease read in the sweep counts as not quarantined and wakes the owner,
   recorded as `omi_fallback_total{component="conversations_v3",to_mode="unfiltered_wake",outcome="recovered"}`.
 - **Pruning.** With the switch on, each size park first drops held ids that are no longer `v3_pending`
   (landed, deleted or repaired). A failed prune read keeps the list, records
@@ -240,10 +241,16 @@ it may set work aside in `v3_size_quarantine` on the builder lease (all or nothi
   `omi_fallback_total{component="conversations_v3",outcome="exhausted"}` and
   `reconciles_total{outcome="size_quarantine_full"}`. Each new quarantine records `outcome="degraded"` and
   `reconciles_total{outcome="size_quarantined"}`.
-- **Readback.** The lease keeps naming quarantined rows after the park clears. Count owners whose park
-  cleared separately from quarantined ids.
-- **Repair and rollback.** Repair the oversize document; the next size park prunes the id. Set the switch
-  off on live builders to restore head-of-line retries; stored ids are then ignored.
+- **Re-attempt.** Each id is held for 24 hours from when it was set aside (`v3_size_quarantine_at`). After
+  that it is seeded again: the sweep wakes the owner, a repaired recording commits, and one still oversize
+  is set aside again on that attempt with a fresh hold. An id with no timestamp is not held.
+- **Readback.** The lease keeps naming quarantined rows after the park clears. Report three numbers, never
+  added together: owners recovering (park cleared, the backlog outside the quarantine draining), work
+  quarantined (ids, owners holding any, owners whose list is full), and owners parking without attribution
+  (still parked on `document_too_large` with nothing quarantined).
+- **Repair and rollback.** Repair the oversize document, then either wait for the hold to lapse or clear it
+  as in the retry step below. Set the switch off on live builders to restore head-of-line retries; stored
+  ids are then ignored.
 
 See the [size quarantine](../listen_pusher_pipeline/changes/2026-11-26-v3-size-quarantine.md)
 change note.
@@ -337,7 +344,9 @@ A new failed bounded pass records `v3_bounded_pending_attempted` (and, with unlo
 `v3_unlocked_paging_attempted`) on the builder lease and observes the usual backoff. An operator
 clears the park by deleting `v3_blocked_count`, `v3_blocked_reason`, `v3_backoff_until`,
 `v3_bounded_pending_attempted` and `v3_unlocked_paging_attempted` on
-`users/{uid}/conversation_v3_leases/builder`.
+`users/{uid}/conversation_v3_leases/builder`. After repairing a size-quarantined recording, retry it at once
+by also deleting `v3_size_quarantine` and `v3_size_quarantine_at` on that lease (or only the repaired ids
+from both).
 
 Each source has a durable `v3_pending` obligation. Tasks use the dedicated `conversations-v3`
 Cloud Tasks queue and the configured sync origin/OIDC identity unless

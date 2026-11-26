@@ -50,6 +50,7 @@ from config.conversations_v3 import (
     bounded_pending_enabled,
     boundary_seconds,
     size_quarantine_enabled,
+    size_quarantine_filters,
     skip_unchanged_writes_enabled,
     stretch_cohesion_enabled,
 )
@@ -265,6 +266,11 @@ BLOCKED_BACKOFF_MAX = timedelta(hours=1)
 # thing that skips them: closures still load them, so claims are never filtered. They stay v3_pending, and the
 # lease keeps naming them after the park clears, until an operator repairs the oversize document.
 SIZE_QUARANTINE_FIELD = 'v3_size_quarantine'
+# When each held id was set aside. A hold lapses after SIZE_QUARANTINE_HOLD: the id is seeded again, so a
+# repaired recording commits and a still-oversize one is set aside again on that attempt. An id with no
+# timestamp is not held.
+SIZE_QUARANTINE_AT_FIELD = 'v3_size_quarantine_at'
+SIZE_QUARANTINE_HOLD = timedelta(hours=24)
 SIZE_QUARANTINE_MAX = 64
 
 
@@ -305,7 +311,10 @@ def record_blocked(uid, token, reason, *, on_open=False, quarantine=(), firestor
             ),
         }
         stored = list(row.get(SIZE_QUARANTINE_FIELD) or [])
-        held = [rid for rid in stored if rid not in settled]
+        stamps = dict(row.get(SIZE_QUARANTINE_AT_FIELD) or {})
+        live = _held_ids(row, now) if pruning else frozenset(stored)
+        # Lapsed holds leave the list with settled ids: a lapsed id is being re-attempted, not held.
+        held = [rid for rid in stored if rid not in settled and rid in live]
         added = [rid for rid in dict.fromkeys(quarantine) if rid not in held]
         wanted = bool(added and reason == 'document_too_large' and size_quarantine_enabled())
         quarantined = wanted and len(held) + len(added) <= SIZE_QUARANTINE_MAX
@@ -313,8 +322,10 @@ def record_blocked(uid, token, reason, *, on_open=False, quarantine=(), firestor
             held = [*held, *added]
             # The backlog outside the set-aside closure is not blocked: run the next seed without the backoff.
             update['v3_bounded_pending_attempted'] = False
-        if held != stored:
+        if held != stored or quarantined:
+            # A re-quarantined lapsed id starts a fresh hold.
             update[SIZE_QUARANTINE_FIELD] = held
+            update[SIZE_QUARANTINE_AT_FIELD] = {rid: now if rid in added else stamps.get(rid, now) for rid in held}
         tx.update(ref, update)
         return 'quarantined' if quarantined else 'full' if wanted else True
 
@@ -370,13 +381,23 @@ def _settled_quarantine(client, uid, ref):
         return frozenset()
 
 
+def _held_ids(row, now):
+    """The lease's quarantined ids whose hold has not lapsed (SIZE_QUARANTINE_HOLD since they were set aside)."""
+    stamps = row.get(SIZE_QUARANTINE_AT_FIELD) or {}
+    return frozenset(
+        rid
+        for rid in row.get(SIZE_QUARANTINE_FIELD) or ()
+        if isinstance(stamps.get(rid), datetime) and now - stamps[rid] < SIZE_QUARANTINE_HOLD
+    )
+
+
 def size_quarantined(uid, *, firestore_client=None):
-    """Pending recordings set aside for size on the owner's builder lease (empty with the switch off)."""
-    if not size_quarantine_enabled():
+    """Recordings held for size on the owner's builder lease, empty unless live seeding skips them."""
+    if not size_quarantine_filters():
         return frozenset()
     client = firestore_client or get_firestore_client()
     row = leases.lease_ref(client, uid, 'builder').get().to_dict() or {}
-    return frozenset(row.get(SIZE_QUARANTINE_FIELD) or ())
+    return _held_ids(row, datetime.now(timezone.utc))
 
 
 BOUNDED_RETRY_REASONS = frozenset({'v3_derived_budget', 'v3_source_closure_budget', 'document_too_large'})
@@ -524,8 +545,8 @@ def load(
     skip_terminal = not conversation_id and bounded_pending_enabled()
     state = leases.lease_ref(client, uid, 'builder').get().to_dict() or {}
     quarantined = (
-        frozenset(state.get(SIZE_QUARANTINE_FIELD) or ())
-        if unlocked_page is not None and not conversation_id and size_quarantine_enabled()
+        _held_ids(state, datetime.now(timezone.utc))
+        if unlocked_page is not None and not conversation_id and size_quarantine_filters()
         else frozenset()
     )
     if conversation_id:

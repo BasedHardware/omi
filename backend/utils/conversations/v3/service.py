@@ -44,6 +44,7 @@ from config.conversations_v3 import (
     max_window_seconds,
     settle_on_landing_enabled,
     size_quarantine_enabled,
+    size_quarantine_filters,
     stretch_cohesion_enabled,
 )
 from utils.conversations.v3.triggers import enqueue, changed
@@ -1708,7 +1709,7 @@ async def sweep():
     for uid, ids in stale.items():
         # Recordings set aside for size stay pending until repaired; they alone must not wake the owner
         # every sweep (SCA-2918). One lease read per stale owner, against the full stale-pending scan above.
-        if size_quarantine_enabled():
+        if size_quarantine_filters():
             try:
                 held = await run_blocking(db_executor, store.size_quarantined, uid)
             except Exception as error:

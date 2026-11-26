@@ -42,6 +42,12 @@ def lease(owner):
     return owner
 
 
+def hold(*ids, ago=timedelta(0)):
+    """A stored quarantine of ``ids``, set aside ``ago``."""
+    at = datetime.now(timezone.utc) - ago
+    return {store.SIZE_QUARANTINE_FIELD: list(ids), store.SIZE_QUARANTINE_AT_FIELD: {rid: at for rid in ids}}
+
+
 def pending(lease, *ids, value=True):
     for rid in ids:
         lease.rows[C + rid] = {'id': rid, 'recording': True, 'v3_pending': value}
@@ -81,7 +87,7 @@ def test_a_failed_prune_read_keeps_the_list_and_still_records_the_backoff(lease,
     calls = []
     monkeypatch.setattr(store, 'record_fallback', lambda **kw: calls.append(kw))
     pending(lease, 'a', 'b')
-    lease.rows[LEASE][store.SIZE_QUARANTINE_FIELD] = ['a']
+    lease.rows[LEASE].update(hold('a'))
     pending(lease, 'a', value=False)  # Settled, but the prune cannot read it.
 
     def unreadable(*a, **kw):
@@ -110,8 +116,10 @@ def test_a_failed_prune_read_keeps_the_list_and_still_records_the_backoff(lease,
 @pytest.mark.parametrize('enabled', [True, False])
 def test_with_the_switch_off_a_size_park_reads_only_its_lease(lease, monkeypatch, enabled):
     monkeypatch.setenv('CONVERSATIONS_V3_SIZE_QUARANTINE', 'on' if enabled else 'off')
-    pending(lease, 'a', 'b')
-    lease.rows[LEASE][store.SIZE_QUARANTINE_FIELD] = ['a']
+    pending(lease, 'b')
+    pending(lease, 'a', value=False)  # Settled: a prune would drop it.
+    lease.rows[LEASE].update(hold('a'))
+    stored = deepcopy(lease.rows[LEASE][store.SIZE_QUARANTINE_AT_FIELD])
     reads = []
     document_get = StrictFirestoreDocument.get
 
@@ -124,7 +132,38 @@ def test_with_the_switch_off_a_size_park_reads_only_its_lease(lease, monkeypatch
     # Off: the park transaction's own lease read and nothing else, as before the quarantine shipped.
     expected = [('builder', False), ('a', False), ('builder', True)] if enabled else [('builder', True)]
     assert reads == expected
-    assert lease.rows[LEASE][store.SIZE_QUARANTINE_FIELD] == (['a', 'b'] if enabled else ['a'])
+    # Off: no prune read and no quarantine write (the settled id stays as stored); on: pruned and replaced.
+    assert lease.rows[LEASE][store.SIZE_QUARANTINE_FIELD] == (['b'] if enabled else ['a'])
+    assert (lease.rows[LEASE][store.SIZE_QUARANTINE_AT_FIELD] == stored) is not enabled
+
+
+def test_a_lapsed_hold_is_seeded_again_and_set_aside_afresh_if_still_oversize(lease, monkeypatch):
+    calls = []
+    monkeypatch.setattr(store, 'record_fallback', lambda **kw: calls.append(kw['outcome']))
+    pending(lease, 'a', 'b')
+    lease.rows[LEASE].update(hold('b'))
+    lease.rows[LEASE][store.SIZE_QUARANTINE_AT_FIELD]['a'] = datetime.now(timezone.utc) - store.SIZE_QUARANTINE_HOLD
+    lease.rows[LEASE][store.SIZE_QUARANTINE_FIELD].append('a')  # Stored as ['b', 'a']: only the stamp changes.
+    assert store.size_quarantined('u') == {'b'}  # The lapsed id no longer holds the owner back.
+    # The re-attempt fails for size again: the lapsed id is set aside with a fresh hold.
+    assert store.record_blocked('u', 'token', 'document_too_large', quarantine=('a',))
+    stamps = lease.rows[LEASE][store.SIZE_QUARANTINE_AT_FIELD]
+    assert lease.rows[LEASE][store.SIZE_QUARANTINE_FIELD] == ['b', 'a']
+    assert datetime.now(timezone.utc) - stamps['a'] < timedelta(minutes=1)
+    assert store.size_quarantined('u') == {'a', 'b'}
+    assert calls == ['degraded']
+    # An unrelated park drops a lapsed id (it is being re-attempted), keeping the live one.
+    stamps['a'] -= store.SIZE_QUARANTINE_HOLD
+    assert store.record_blocked('u', 'token', 'document_too_large')
+    assert lease.rows[LEASE][store.SIZE_QUARANTINE_FIELD] == ['b']
+    assert set(lease.rows[LEASE][store.SIZE_QUARANTINE_AT_FIELD]) == {'b'}
+
+
+def test_an_unstamped_id_is_not_held():
+    now = datetime.now(timezone.utc)
+    assert store._held_ids({store.SIZE_QUARANTINE_FIELD: ['a']}, now) == frozenset()
+    assert store._held_ids(hold('a', ago=timedelta(hours=23)), now) == {'a'}
+    assert store._held_ids(hold('a', ago=store.SIZE_QUARANTINE_HOLD + timedelta(seconds=1)), now) == frozenset()
 
 
 def test_the_quarantine_is_bounded_all_or_nothing_and_a_full_list_is_reported(lease, monkeypatch):
@@ -148,11 +187,14 @@ def test_the_quarantine_is_bounded_all_or_nothing_and_a_full_list_is_reported(le
     assert store.size_quarantined('u') == frozenset()
 
 
-@pytest.mark.parametrize('enabled', [True, False])
-def test_a_bounded_load_seeds_past_a_quarantined_oldest_recording(monkeypatch, enabled):
+@pytest.mark.parametrize(
+    'enabled,lapsed', [(True, False), (False, False), (True, True)], ids=['held', 'switch-off', 'lapsed']
+)
+def test_a_bounded_load_seeds_past_a_quarantined_oldest_recording(monkeypatch, enabled, lapsed):
     monkeypatch.setenv('CONVERSATIONS_V3_SIZE_QUARANTINE', 'on' if enabled else 'off')
     rows = backlog()
-    rows[LEASE] = {store.SIZE_QUARANTINE_FIELD: ['r0']}
+    rows[LEASE] = hold('r0', ago=store.SIZE_QUARANTINE_HOLD if lapsed else timedelta(0))
+    enabled = enabled and not lapsed  # A lapsed hold is seeded again, as if never set aside.
     page = UnlockedPage()
     recordings, _existing, _cache = store.load(
         'u', pending_limit=1, unlocked_page=page, firestore_client=MemoryQuery(rows)
@@ -165,7 +207,7 @@ def test_a_bounded_load_seeds_past_a_quarantined_oldest_recording(monkeypatch, e
 
 def test_on_open_and_unpaged_loads_ignore_the_quarantine():
     rows = backlog()
-    rows[LEASE] = {store.SIZE_QUARANTINE_FIELD: ['r0']}
+    rows[LEASE] = hold('r0')
     recordings, _existing, _cache = store.load('u', pending_limit=1, firestore_client=MemoryQuery(rows))
     assert list(recordings) == ['r0']
 
@@ -397,12 +439,19 @@ async def test_a_shared_closure_stays_blocked_with_its_claims_while_an_independe
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize('enabled', [True, False])
-async def test_the_sweep_does_not_wake_an_owner_whose_only_stale_work_is_set_aside(owner, monkeypatch, enabled):
+@pytest.mark.parametrize(
+    'quarantine,bounded', [('on', 'on'), ('off', 'on'), ('on', 'off')], ids=['skips', 'switch-off', 'bounded-off']
+)
+async def test_the_sweep_does_not_wake_an_owner_whose_only_stale_work_is_set_aside(
+    owner, monkeypatch, quarantine, bounded
+):
     rows = owner.rows
     rows[C + 'c']['v3_pending'] = False
-    rows[LEASE][store.SIZE_QUARANTINE_FIELD] = ['a', 'b']
-    monkeypatch.setenv('CONVERSATIONS_V3_SIZE_QUARANTINE', 'on' if enabled else 'off')
+    rows[LEASE].update(hold('a', 'b'))
+    monkeypatch.setenv('CONVERSATIONS_V3_SIZE_QUARANTINE', quarantine)
+    # With bounded pending off, load seeds held ids again, so the sweep must keep waking the owner (F6).
+    monkeypatch.setenv('CONVERSATIONS_V3_BOUNDED_PENDING', bounded)
+    enabled = quarantine == bounded == 'on'
     monkeypatch.setattr(service, 'python_owns_finalization', lambda row: True)
     assert await service.sweep() == (0 if enabled else 1)
     assert len(owner.wakes) == (0 if enabled else 1)
@@ -410,6 +459,23 @@ async def test_the_sweep_does_not_wake_an_owner_whose_only_stale_work_is_set_asi
     rows[C + 'c']['v3_pending'] = True
     owner.wakes.clear()
     assert await service.sweep() == 1 and len(owner.wakes) == 1
+
+
+@pytest.mark.asyncio
+async def test_a_repaired_recording_commits_once_its_hold_lapses(owner, monkeypatch):
+    rows = owner.rows
+    monkeypatch.setattr(service, 'python_owns_finalization', lambda row: True)
+    assert await service.reconcile('u') == 'blocked'
+    assert await service.reconcile('u') == 'committed'  # The independent seed.
+    assert await service.sweep() == 0  # Only held work is left.
+    owner.state.oversized = None  # The oversize row is repaired.
+    for rid in ('a', 'b'):
+        rows[LEASE][store.SIZE_QUARANTINE_AT_FIELD][rid] -= store.SIZE_QUARANTINE_HOLD
+    # Once the hold lapses the sweep wakes the owner, the oldest held recording is seeded again, and commits.
+    assert await service.sweep() == 1
+    assert await service.reconcile('u') == 'committed'
+    assert owner.passes[-1] == (['a', 'b'], ['da'])
+    assert rows[C + 'a']['v3_pending'] is False and rows[C + 'b']['v3_pending'] is False
 
 
 def unlocked_window(rows):
@@ -469,7 +535,7 @@ async def test_an_unnamed_size_rejection_parks_even_without_an_open_window(owner
 @pytest.mark.asyncio
 async def test_one_unreadable_lease_does_not_stop_the_sweep(owner, monkeypatch, caplog):
     owner.rows[C + 'c']['v3_pending'] = False
-    owner.rows[LEASE][store.SIZE_QUARANTINE_FIELD] = ['a', 'b']
+    owner.rows[LEASE].update(hold('a', 'b'))
     monkeypatch.setattr(service, 'python_owns_finalization', lambda row: True)
 
     def unreadable(uid, **kw):
@@ -570,7 +636,7 @@ def test_quarantined_successors_cannot_hide_a_healthy_page_continuation():
     for i in range(33):
         rows[C + f'q{i}'] = source(f'q{i}', started_at=after, v3_pending_since=AT + timedelta(hours=1, seconds=i))
     rows[C + 'h'] = source('h', started_at=after + timedelta(seconds=1), v3_pending_since=AT + timedelta(hours=2))
-    rows[LEASE] = {store.SIZE_QUARANTINE_FIELD: [f'q{i}' for i in range(33)]}
+    rows[LEASE] = hold(*[f'q{i}' for i in range(33)])
     recordings, _existing, _cache = store.load(
         'u', pending_limit=1, unlocked_page=UnlockedPage(), firestore_client=MemoryQuery(rows)
     )
