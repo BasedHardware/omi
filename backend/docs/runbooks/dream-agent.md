@@ -125,8 +125,8 @@ metadata is informational and cannot exclude Store users.
 A sweep at :00 and :30 (the :30 tick has the kill switch
 `DREAM_HALF_HOUR_SWEEP_ENABLED`) drains a durable `dream_due` queue. Payoff ordering
 ranks the oldest 1,000 due rows by new material, last yield and heavy size, and owners
-more than 30 days overdue go first. Hunts back off after dry hunts when
-`DREAM_HUNT_BACKOFF_MODE` serves the owner. Product writes enqueue immediately. Independent
+more than 30 days overdue go first. Hunts follow the configured interval for the owner’s size bucket.
+Product writes enqueue immediately. Independent
 discovery scans 20 pages of 499 owners (9,980/hour), committing each page in
 100-owner transactions so a fully eligible page stays inside the 3 s RPC
 deadlines, without overwriting dirty work or waiting for model sessions. Each
@@ -325,27 +325,6 @@ in an isolated operator pod only for an owner listed (as a uid sha256 digest) in
 judges the same projection of their journaled changes, and prints decision-mill
 proposal items to operator stdout (labels directories are never in git). Judge
 scores gate nothing until their agreement with owner labels reaches 0.7.
-
-The state pass (`DREAM_STATE_PASS_MODE`, default off; serve runs as shadow) is a
-weekly whole-corpus review per owner, run after a scheduled pass's effects and
-judge (`DREAM_STATE_PASS_WEEK_DAYS`, stamped as `last_state_pass_at` at finish).
-One planning call sees a byte-stable projection: unprotected people (no voice
-fields), generated tasks, canonical memory facts, and 14 days of conversation
-titles, with slow-moving sections first so the prompt prefix caches across
-weeks. Its people/task cleanup proposals go through ordinary staging and the two
-verifiers and are never applied or offered; at most 2 person merges per pass,
-each citing evidence beyond the name; staging and verification read the full
-records the plan cites, exactly as the loop would. It maintains a ref-grounded profile v2 in
-`users/{uid}.ai_user_profile_v2` (line 1 is always the user-doc name; people
-lines must cite an owner-side record; every new or changed line must pass a
-verifier check that its cited records support it as a fact about the owner),
-plus the planner's notes for next week, that nothing reads yet. A run that does
-not complete leaves the weekly cadence due. It runs on
-reserved capacity only, within `DREAM_STATE_PASS_TOKENS_PER_PASS` (120000),
-`DREAM_STATE_PASS_SECONDS` (480) and `DREAM_STATE_PASS_MAX_PER_SWEEP` (4), and
-reports `levers.state_pass` on `dream_pass` (recall of the loop's applied edits,
-extra verified proposals, tokens, profile counts); sampled shadow proposals are
-judged with stratum `shadow`.
 
 The canary stages a fixed synthetic correction through real tools, calls the
 reserved verifier lane, and checks admission, execution, journal, Undo and report.

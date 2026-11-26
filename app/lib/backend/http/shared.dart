@@ -641,6 +641,7 @@ Future<http.Response> sendUncaughtApiCall({
   required String method,
   Duration? timeout,
   int? retries,
+  bool retryServerErrors = true,
   bool signOutOn401 = true,
   ApiExecutionSeams? execution,
   bool Function()? canSend,
@@ -696,6 +697,7 @@ Future<http.Response> sendUncaughtApiCall({
     },
     timeout: effectiveTimeout,
     retries: effectiveRetries,
+    retryServerErrors: retryServerErrors,
   );
 
   if (requireAuthCheck && response.statusCode == 401) {
@@ -741,6 +743,7 @@ Future<http.Response?> makeApiCall({
   required String method,
   Duration? timeout,
   int? retries,
+  bool retryServerErrors = true,
   bool signOutOn401 = true,
   bool Function()? canSend,
 }) async {
@@ -752,6 +755,7 @@ Future<http.Response?> makeApiCall({
       method: method,
       timeout: timeout,
       retries: retries,
+      retryServerErrors: retryServerErrors,
       signOutOn401: signOutOn401,
       canSend: canSend,
     );
@@ -888,12 +892,18 @@ Future<http.Response> makeMultipartApiCall({
   required String url,
   required List<File> files,
   Map<String, String> headers = const {},
+  Map<String, String> Function()? headersAtSend,
   Map<String, String> fields = const {},
   String fileFieldName = 'files',
   String method = 'POST',
   UploadProgressCallback? onUploadProgress,
   Map<String, File> namedFiles = const {},
 }) async {
+  Future<http.StreamedResponse> send(http.MultipartRequest request) {
+    if (headersAtSend != null) request.headers.addAll(headersAtSend());
+    return _sendMultipartWithProgress(request, onUploadProgress);
+  }
+
   try {
     final bool requireAuthCheck = _isRequiredAuthCheck(url);
     Map<String, String> builtHeaders = await buildHeaders(
@@ -913,7 +923,7 @@ Future<http.Response> makeMultipartApiCall({
       namedFiles: namedFiles,
     );
 
-    var streamedResponse = await _sendMultipartWithProgress(request, onUploadProgress);
+    var streamedResponse = await send(request);
     var response = await _readMultipartBody(streamedResponse);
 
     if (requireAuthCheck && response.statusCode == 401) {
@@ -932,7 +942,7 @@ Future<http.Response> makeMultipartApiCall({
             method: method,
             namedFiles: namedFiles,
           );
-          streamedResponse = await _sendMultipartWithProgress(request, onUploadProgress);
+          streamedResponse = await send(request);
           return _readMultipartBody(streamedResponse);
         },
       );
@@ -1109,6 +1119,17 @@ Stream<String> _streamErrorOrThrow(http.StreamedResponse response) async* {
       }
       return;
     }
+    if (errorResponse.statusCode == 404) {
+      try {
+        final error = jsonDecode(errorResponse.body);
+        if (error is Map && error['detail'] == 'live_recap_unavailable') {
+          throw const ChatStreamException(ChatStreamFailureClass.server,
+              statusCode: 404, detail: 'live_recap_unavailable');
+        }
+      } on FormatException {
+        // Other 404 responses keep the normal streaming failure classification.
+      }
+    }
     throw ChatStreamException(ChatStreamFailureClass.server, statusCode: errorResponse.statusCode);
   } catch (e) {
     throw e is ChatStreamException ? e : _classifyStreamError(e);
@@ -1122,6 +1143,7 @@ Stream<String> makeStreamingApiCall({
   String method = 'POST',
   ApiStreamingSeams? seams,
   Future<void>? cancelSignal,
+  bool Function()? canDispatch,
 }) async* {
   // Setup-deadline abort (same rationale as the multipart variant): the POST
   // must die with the wait, or a retry can submit the chat turn twice. Armed
@@ -1162,7 +1184,14 @@ Stream<String> makeStreamingApiCall({
       return request;
     }
 
-    var streamedResponse = await send(buildRequest()).timeout(ApiClient.streamSetupTimeout);
+    Future<http.StreamedResponse> sendCurrentRequest() {
+      if (canDispatch?.call() == false) {
+        throw const ChatStreamException(ChatStreamFailureClass.notSignedIn);
+      }
+      return send(buildRequest()).timeout(ApiClient.streamSetupTimeout);
+    }
+
+    var streamedResponse = await sendCurrentRequest();
 
     AuthTokenResult? observedRefresh;
     if (requireAuthCheck && streamedResponse.statusCode == 401) {
@@ -1175,7 +1204,7 @@ Stream<String> makeStreamingApiCall({
         onAuthRefresh: (refresh) => observedRefresh = refresh,
         replay: () async {
           builtHeaders = await requestHeaders().timeout(ApiClient.streamSetupTimeout);
-          return send(buildRequest()).timeout(ApiClient.streamSetupTimeout);
+          return sendCurrentRequest();
         },
       ).timeout(ApiClient.streamSetupTimeout);
       if (streamedResponse.statusCode == 401 && observedRefresh is AuthTokenTransientFailure) {

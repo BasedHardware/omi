@@ -66,6 +66,32 @@ def test_real_mode_reports_fingerprints_without_leaking_secrets() -> None:
     assert "sha256:" in rendered
 
 
+def test_production_vendors_are_optional_until_a_profile_requires_them() -> None:
+    """The default stack starts without the speech vendors' keys; a profile's own list decides otherwise."""
+    report = providers.provider_preflight(REPO_ROOT, env=_real_env())
+    assert report.ok
+    for optional in ("MODULATE_API_KEY", "SONIOX_API_KEY", "OPENROUTER_API_KEY"):
+        assert any(optional in warning for warning in report.warnings), optional
+    assert not {"modulate", "soniox", "openrouter"} & set(report.enabled_external_providers)
+
+    required = ("OPENAI_API_KEY", "MODULATE_API_KEY", "SONIOX_API_KEY")
+    env = {"PROVIDER_MODE": "real", "OPENAI_API_KEY": "sk-local-dev-test-key", "MODULATE_API_KEY": "modulate-test-key"}
+    profile = providers.provider_preflight(REPO_ROOT, env=env, required_credentials=required)
+    assert not profile.ok
+    assert [item for item in profile.missing if "API_KEY" in item] == [
+        item for item in profile.missing if "SONIOX" in item
+    ]
+    # With a profile's list, a provider outside it never blocks startup.
+    assert not any("DEEPGRAM_API_KEY" in item or "GEMINI_API_KEY" in item for item in profile.missing)
+    complete = providers.provider_preflight(
+        REPO_ROOT, env={**env, "SONIOX_API_KEY": "soniox-test-key"}, required_credentials=required
+    )
+    assert complete.ok
+    assert {"openai", "modulate", "soniox"} <= set(complete.enabled_external_providers)
+    rendered = "\n".join(providers.status_lines(complete))
+    assert "modulate-test-key" not in rendered and "soniox-test-key" not in rendered
+
+
 def test_endpoint_and_capability_allowlists() -> None:
     broker = providers.ProviderBroker(REPO_ROOT, env=_real_env())
 

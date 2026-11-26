@@ -214,14 +214,18 @@ Never log raw sensitive data. Use `sanitize()` and `sanitize_pii()` from `utils/
 ## Testing
 
 ```bash
-bash test-preflight.sh   # Verify env
-bash test.sh             # Run all tests (CI source of truth)
+bash test.sh tests/unit/test_x.py  # Start here: just these files
+bash test.sh                       # Local default --changed: CI's PR selection
+bash test.sh --all                 # Full suite: CI's job; opt-in locally
+bash test-preflight.sh             # Verify env
 npm run test:listen-lifecycle:emulator  # Real Firestore transaction contention for listen cleanup/content
 ```
 
-**Tests are selector-driven.** `scripts/run-unit-ci.sh` is the full GitHub Actions contract: it selects changed-file tests on PRs, runs preflight and type-checking, then invokes `test.sh`; main CI uses it with `--all`. Local pre-push intentionally keeps its own 40-file cap and runs changed test files when a broad selector exceeds that budget. Do not make the hook call the CI runner: bounded push latency protects the normal development loop. Local `test.sh` runs the selected set from `tests/unit/`, `tests/services/`, and `tests/routers/` via `scripts/select_backend_unit_tests.py`. The `Backend Unit Tests` workflow fans the same selection out to eight shard jobs (weighted LPT slices, union = the full selection), each under a 900 s wall budget; every file keeps its own pytest process because sharing sessions is blocked by `sys.modules` contamination. Tests that need live services (Redis, Firebase, real API keys) go in `tests/integration/`, which is not part of selector auto-discovery; note in the PR how you ran them.
+**Tests are selector-driven.** `scripts/run-unit-ci.sh` is the full GitHub Actions contract: it selects changed-file tests on PRs, runs preflight and type-checking, then invokes `test.sh`; main CI uses it with `--all`. Local pre-push caps runs at 40 files, affected contracts first, and reports deferred coverage. Do not make the hook call the CI runner: bounded push latency protects the normal development loop. The `Backend Unit Tests` workflow fans the same selection out to eight shard jobs (weighted LPT slices, union = the full selection), each under a 900 s wall budget; every file keeps its own pytest process because sharing sessions is blocked by `sys.modules` contamination. Tests that need live services (Redis, Firebase, real API keys) go in `tests/integration/`, which is not part of selector auto-discovery; note in the PR how you ran them.
 
-**Runtime image contracts.** `runtime_images.json` registers each deployed Python image, its Dockerfile, build context, entrypoints, and deployment workflows. Run `make runtime-image-source-closure` to verify final-stage first-party source closure and that every registered deployment workflow smokes its declared Dockerfile; it is the fast pre-push and CI gate. `make runtime-image-smoke SERVICE=pusher` builds one image, checks every reachable third-party module is installed offline, then imports the registered isolated entrypoint. PR CI builds every registry-selected CPU image; deployment workflows build, smoke, then publish. GPU images use the same dependency-presence probe after their deployment build but defer full import until model initialization is lazy. Do not add a hand-maintained image-layout test or workflow mapping; add the service to the registry instead.
+**Runtime image contracts.** `runtime_images.json` owns image, Dockerfile, context, entrypoint and deploy-workflow registration. `make runtime-image-source-closure` gates source closure and workflow Dockerfile smoke coverage locally and in CI. `make runtime-image-smoke SERVICE=pusher` builds one image, checks every reachable third-party module is installed offline, then imports the registered isolated entrypoint. PR CI builds every registry-selected CPU image; deployment workflows build, smoke, then publish. GPU builds use the same dependency probe but defer full import until model initialization is lazy. Do not add a hand-maintained image-layout test or workflow mapping; add the service to the registry instead.
+
+All selector modes require exact `testing/workflow_contracts.json` mappings to discovered tests; wildcards do not count. Use `--check-deployment-contracts`.
 
 **OpenAPI contract runner** — OpenAPI contract checks use `backend/scripts/openapi_runner.sh`, which syncs the pinned `backend/openapi-requirements.txt` runner env and prewarms `tiktoken`; CI and `scripts/pre-push` must use this same path.
 
@@ -245,10 +249,11 @@ Live suites record `NOT_RUN` when credentials/backend are unavailable — never 
 
 Before a PR, exercise the endpoint:
 
-1. **Serve locally**: `./scripts/dev-serve.sh` (per-worktree port) or `uvicorn main:app --port 8080`. No GCP credentials? Use the offline harness — `PROVIDER_MODE=offline make dev-up` from the repo root (fake providers, no external services).
+1. **Serve locally**: `./scripts/dev-serve.sh` (per-worktree port) or `uvicorn main:app --port 8080`. No GCP credentials? Use the offline harness — `PROVIDER_MODE=offline make dev-up` from the repo root (fake providers).
 2. **Authenticate without a client**: set `ADMIN_KEY` in `.env`, then call endpoints as any uid with `Authorization: Bearer <ADMIN_KEY><uid>` (the key concatenated with the uid).
 3. **Hit the changed endpoints** with curl and read the server logs — verify the behavior changed as intended, not just that the route returns 200.
 4. **Record the commands and output** in the PR description (root `AGENTS.md` → Definition of Done).
+5. **Capture, Finish, v3, Home**: run `python -m testing.pipeline_lab affected` and its scenarios (`testing/pipeline_lab/`).
 
 ## Formatting
 
@@ -315,7 +320,7 @@ WS handlers in `transcribe.py` and `pusher.py` manage 5-11 concurrent tasks per 
 3. **Sync `requests` in async is silent poison** — no error raised, just blocks the entire event loop. All connections freeze, health checks fail, HPA can't scale.
 4. **Semaphores are event-loop-bound** — `http_client.py` handles this via `(loop_id, name)` keying. Don't create raw `asyncio.Semaphore` outside that module.
 5. **Webhook timeout = 30s** — partner integrations depend on this window. Don't change `httpx.Timeout(30.0, connect=2.0)`.
-6. **Sync WAL codec is filename-driven** — `decode_files_to_wav` routes on the filename codec token (`utils/sync/files.py`): `_pcm16_`/`_pcm8_` → PCM decoder, otherwise opus. PCM is fully supported; the real gotcha is a mislabeled/missing codec token silently decodes as the wrong codec (garbage audio, still HTTP 200) — name the codec correctly in the filename
+6. **Sync WAL codec is filename-driven** — `decode_files_to_wav` routes on the filename codec token (`utils/sync/files.py`): `_pcm16_`/`_pcm8_` → PCM decoder, otherwise opus. a mislabeled or missing token silently decodes as the wrong codec (garbage audio, still HTTP 200)
 7. **Firestore collection group queries** need explicit indexes — 500 with no useful error
 8. **Mutable WebSocket state races** — snapshot `nonlocal` variables before spawning async work
 9. **Silent fire-and-forget drops** — functions gating on connection state must log when dropping work

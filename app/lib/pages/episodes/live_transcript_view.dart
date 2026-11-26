@@ -17,6 +17,7 @@ import 'package:omi/pages/conversation_capturing/capture_recovery_status.dart';
 import 'package:omi/pages/conversation_capturing/widgets/speaker_suggestion_chip.dart';
 import 'package:omi/pages/conversation_detail/widgets/name_speaker_sheet.dart';
 import 'package:omi/pages/episodes/live_preview_transcript.dart';
+import 'package:omi/pages/on_device/on_phone_banner.dart';
 import 'package:omi/pages/settings/transcription_settings_page.dart';
 import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/providers/connectivity_provider.dart';
@@ -25,6 +26,8 @@ import 'package:omi/providers/people_provider.dart';
 import 'package:omi/providers/usage_provider.dart';
 import 'package:omi/services/live_preview/live_preview_controller.dart';
 import 'package:omi/services/live_preview/live_preview_coverage.dart';
+import 'package:omi/services/live_preview/live_words_hole.dart';
+import 'package:omi/services/live_preview/live_words_log.dart';
 import 'package:omi/services/wals/wal.dart';
 import 'package:omi/ui/components/local_stt_recovery_notice.dart';
 import 'package:omi/ui/ui.dart';
@@ -32,12 +35,14 @@ import 'package:omi/utils/constants.dart';
 import 'package:omi/utils/enums.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/other/temp.dart';
+import 'package:omi/utils/reliability_experiments.dart';
 import 'package:omi/widgets/conversation_photo_image.dart';
 import 'package:omi/widgets/media_viewer_page.dart';
 import 'package:omi/widgets/photos_grid.dart';
 import 'package:omi/widgets/speaker_label.dart';
 import 'package:omi/widgets/speaker_label_badge.dart';
 import 'package:omi/widgets/transcript.dart';
+import 'package:omi/pages/episodes/finish_capture.dart';
 
 /// The live transcript: the capture's recovery and upload banners, then every line as it arrives,
 /// photos in the timeline, speaker naming and Omi's speaker suggestions.
@@ -53,6 +58,7 @@ class LiveTranscriptView extends StatefulWidget {
     this.episode,
     this.onDismissItem,
     this.jumpToLatestBottom = 84,
+    this.held,
   });
 
   final String? topConversationId;
@@ -63,6 +69,10 @@ class LiveTranscriptView extends StatefulWidget {
   /// Distance of the jump-to-latest button from the bottom safe area.
   final double jumpToLatestBottom;
 
+  /// What the page showed when Finish was tapped. Process Now moves the capture's lines aside before
+  /// it answers; until it has (and after a failure) the reader keeps seeing these, read-only.
+  final HeldCapture? held;
+
   @override
   State<LiveTranscriptView> createState() => _LiveTranscriptViewState();
 }
@@ -70,6 +80,40 @@ class LiveTranscriptView extends StatefulWidget {
 class _LiveTranscriptViewState extends State<LiveTranscriptView> {
   final TranscriptScrollStateStore _transcriptScrollStateStore = TranscriptScrollStateStore();
   bool _rejectingSuggestion = false;
+
+  // Reliability experiment vendor_recognizer_on_opened_app, step 4: a local record, numbers only, of
+  // what this page holds (stored lines, live lines, the hole between them) when it opens and every
+  // 10 s while it stays open. Off, nothing is scheduled.
+  Timer? _holeReport;
+
+  @override
+  void initState() {
+    super.initState();
+    if (ReliabilityExperiments.enabled('vendor_recognizer_on_opened_app')) {
+      _holeReport = Timer.periodic(const Duration(seconds: 10), (_) => _reportHole());
+      WidgetsBinding.instance.addPostFrameCallback((_) => _reportHole(opened: true));
+    }
+  }
+
+  @override
+  void dispose() {
+    _holeReport?.cancel();
+    super.dispose();
+  }
+
+  void _reportHole({bool opened = false}) {
+    if (!mounted) return;
+    final provider = context.read<CaptureProvider>();
+    LiveWordsLog.event('listening_page', {
+      'opened': opened,
+      ...LiveWordsHole.measure(
+        stored: provider.segments,
+        origin: provider.liveTranscriptStartedAt,
+        live: provider.livePreview?.lines ?? const [],
+        now: DateTime.now(),
+      ),
+    });
+  }
 
   TranscriptScrollState _scrollStateFor(String sessionId) => _transcriptScrollStateStore.forSession(sessionId);
 
@@ -84,6 +128,31 @@ class _LiveTranscriptViewState extends State<LiveTranscriptView> {
 
   Object? _previewCoverageKey;
   LivePreviewCoverage? _previewCoverage;
+
+  // The flat (no episode, no photos) transcript's membership snapshot, kept while the transcript
+  // is unchanged, on the timeline's key: a fresh copy per capture notify made TranscriptWidget
+  // re-index every line on each one.
+  Object? _flatSegmentsKey;
+  List<TranscriptSegment>? _flatSegments;
+
+  // This session's unsynced WALs and in-flight seconds, read once per capture notify (each read walks
+  // every WAL on the phone, 14k+ on a long-lived install). The behind-line and catch-up rebuild on
+  // every preview notify between capture notifies and reuse this snapshot.
+  ({List<Wal> wals, int inFlight})? _walSnapshot;
+
+  ({List<Wal> wals, int inFlight}) _readWals(CaptureProvider provider) =>
+      _walSnapshot = (wals: provider.unsyncedSessionWals, inFlight: provider.inFlightAudioSeconds);
+
+  ({List<Wal> wals, int inFlight}) _wals(CaptureProvider provider) => _walSnapshot ?? _readWals(provider);
+
+  List<TranscriptSegment> _flatSegmentsFor(CaptureProvider provider) {
+    final key = (provider.segmentsPhotosVersion, provider.segments.length, identityHashCode(provider.segments));
+    if (_flatSegmentsKey != key || _flatSegments == null) {
+      _flatSegmentsKey = key;
+      _flatSegments = List<TranscriptSegment>.of(provider.segments);
+    }
+    return _flatSegments!;
+  }
 
   LivePreviewCoverage _coverageFor(CaptureProvider provider) {
     final key = (
@@ -107,6 +176,7 @@ class _LiveTranscriptViewState extends State<LiveTranscriptView> {
         final usage = context.watch<UsageProvider>();
         final photoChannelActive = _photoChannelActive(deviceProvider.connectedDevice);
         final transcriptionInterrupted = provider.recordingState == RecordingState.interrupted;
+        _readWals(provider);
         final transcriptSessionId =
             provider.activeCaptureSessionId ?? widget.topConversationId ?? 'pending-live-capture';
         final transcriptScrollState = _scrollStateFor(transcriptSessionId);
@@ -122,6 +192,8 @@ class _LiveTranscriptViewState extends State<LiveTranscriptView> {
         return Column(
           children: [
             const CaptureRecoveryStatus(),
+            if (showOnPhoneBanner(transcribingOnPhone: provider.transcribingOnPhone, usage: usage))
+              const OnPhoneTranscriptionBanner(),
             if (provider.localSttFailure case final failure?)
               LocalSttRecoveryNotice(
                 failure: failure,
@@ -134,45 +206,57 @@ class _LiveTranscriptViewState extends State<LiveTranscriptView> {
               child: _showsLivePreview(provider)
                   ? _previewBody(provider, transcriptSessionId, transcriptScrollState,
                       widget.topConversationId ?? provider.topConversationId)
-                  : provider.segments.isEmpty && provider.photos.isEmpty
-                      ? Center(
-                          child: Padding(
-                            padding: const EdgeInsets.fromLTRB(OmiSpacing.xxl, 50, OmiSpacing.xxl, 0),
-                            child: Text(
-                              textAlign: TextAlign.center,
-                              style: OmiType.subhead.copyWith(color: OmiColors.textSecondary),
-                              _liveCaptureEmptyStateText(
-                                provider,
-                                connectivity: connectivity,
-                                usage: usage,
-                                photoChannelActive: photoChannelActive,
-                                transcriptionInterrupted: transcriptionInterrupted,
-                              ),
-                            ),
-                          ),
+                  : provider.segments.isEmpty && provider.photos.isEmpty && widget.held != null
+                      ? getTranscriptWidget(
+                          false,
+                          widget.held!.segments,
+                          widget.held!.photos,
+                          deviceProvider.connectedDevice,
+                          bottomMargin: 0,
+                          transcriptKey: const ValueKey('live-transcript-held'),
+                          followLatest: true,
+                          jumpToLatestButtonBottom: MediaQuery.paddingOf(context).bottom + widget.jumpToLatestBottom,
+                          contentVersion: identityHashCode(widget.held!.segments),
                         )
-                      : provider.photos.isNotEmpty || decorated
-                          ? _buildChronologicalTimeline(
-                              provider,
-                              transcriptSessionId,
-                              transcriptScrollState,
-                              widget.topConversationId ?? provider.topConversationId,
+                      : provider.segments.isEmpty && provider.photos.isEmpty
+                          ? Center(
+                              child: Padding(
+                                padding: const EdgeInsets.fromLTRB(OmiSpacing.xxl, 50, OmiSpacing.xxl, 0),
+                                child: Text(
+                                  textAlign: TextAlign.center,
+                                  style: OmiType.subhead.copyWith(color: OmiColors.textSecondary),
+                                  _liveCaptureEmptyStateText(
+                                    provider,
+                                    connectivity: connectivity,
+                                    usage: usage,
+                                    photoChannelActive: photoChannelActive,
+                                    transcriptionInterrupted: transcriptionInterrupted,
+                                  ),
+                                ),
+                              ),
                             )
-                          : getTranscriptWidget(
-                              false,
-                              List<TranscriptSegment>.of(provider.segments),
-                              provider.photos,
-                              deviceProvider.connectedDevice,
-                              bottomMargin: 0,
-                              taggingSegmentIds: provider.taggingSegmentIds,
-                              transcriptKey: ValueKey('live-transcript-$transcriptSessionId'),
-                              followLatest: true,
-                              scrollState: transcriptScrollState,
-                              jumpToLatestButtonBottom:
-                                  MediaQuery.paddingOf(context).bottom + widget.jumpToLatestBottom,
-                              contentVersion: provider.segmentsPhotosVersion,
-                              editSegment: (segmentId, speakerId) => _nameSpeaker(segmentId, speakerId, provider),
-                            ),
+                          : provider.photos.isNotEmpty || decorated
+                              ? _buildChronologicalTimeline(
+                                  provider,
+                                  transcriptSessionId,
+                                  transcriptScrollState,
+                                  widget.topConversationId ?? provider.topConversationId,
+                                )
+                              : getTranscriptWidget(
+                                  false,
+                                  _flatSegmentsFor(provider),
+                                  provider.photos,
+                                  deviceProvider.connectedDevice,
+                                  bottomMargin: 0,
+                                  taggingSegmentIds: provider.taggingSegmentIds,
+                                  transcriptKey: ValueKey('live-transcript-$transcriptSessionId'),
+                                  followLatest: true,
+                                  scrollState: transcriptScrollState,
+                                  jumpToLatestButtonBottom:
+                                      MediaQuery.paddingOf(context).bottom + widget.jumpToLatestBottom,
+                                  contentVersion: provider.segmentsPhotosVersion,
+                                  editSegment: (segmentId, speakerId) => _nameSpeaker(segmentId, speakerId, provider),
+                                ),
             ),
             if (behind != null && decorated) behind,
           ],
@@ -677,7 +761,7 @@ class _LiveTranscriptViewState extends State<LiveTranscriptView> {
   /// no preview engine, and a photo timeline always keeps today's view.
   bool _showsLivePreview(CaptureProvider provider) {
     final preview = provider.livePreview;
-    if (preview == null || !provider.localPreviewAdmitted || !preview.admitted) return false;
+    if (preview == null || !provider.liveWordsShown || !preview.admitted) return false;
     if (!provider.pendantCaptureVerified || provider.photos.isNotEmpty) return false;
     return provider.segments.isEmpty || preview.phase != LivePreviewPhase.unavailable;
   }
@@ -707,7 +791,9 @@ class _LiveTranscriptViewState extends State<LiveTranscriptView> {
   }) {
     if (!provider.pendantCaptureVerified) return '';
     if (provider.localSttFailure != null) return context.l10n.transcriptionUnavailableRecordingSaved;
-    if (usage.isOutOfCredits) return context.l10n.transcriptionUnavailableRecordingSaved;
+    if (usage.isOutOfCredits && !provider.transcribingOnPhoneAtCap && !provider.transcribingOnPhone) {
+      return context.l10n.transcriptionUnavailableRecordingSaved;
+    }
     if (provider.terminalTranscriptionFailure != null) {
       return context.l10n.transcriptionUnavailableRecordingContinues;
     }
@@ -723,8 +809,7 @@ class _LiveTranscriptViewState extends State<LiveTranscriptView> {
     if (_quietBehindLine(provider) == null) return null;
     final l10n = context.l10n;
     final started = provider.liveTranscriptStartedAt;
-    final seconds =
-        provider.unsyncedSessionWals.fold<int>(0, (sum, w) => sum + w.seconds) + provider.inFlightAudioSeconds;
+    final seconds = _wals(provider).wals.fold<int>(0, (sum, w) => sum + w.seconds) + _wals(provider).inFlight;
     final saved = (seconds / 10).round() * 10;
     return Column(
       key: const Key('live_transcript_catch_up'),
@@ -751,10 +836,13 @@ class _LiveTranscriptViewState extends State<LiveTranscriptView> {
   /// A local-preview session has no uploading pill to watch: one quiet line under the
   /// transcript says how far behind the final transcript is. Failures and retries keep
   /// today's actionable pill above it (its retry is the point of it). Null when the pill applies.
-  Widget? _quietBehindLine(CaptureProvider provider) {
+  Widget? _quietBehindLine(CaptureProvider provider, {List<Wal>? unsynced, int? inFlight}) {
     if (!_showsLivePreview(provider)) return null;
-    final unsyncedWals = provider.unsyncedSessionWals;
-    final totalSeconds = unsyncedWals.fold<int>(0, (sum, w) => sum + w.seconds) + provider.inFlightAudioSeconds;
+    // Each read walks every WAL on the phone (14k+ on a long-lived install); callers that already
+    // hold this build's read pass it in.
+    final unsyncedWals = unsynced ?? _wals(provider).wals;
+    final totalSeconds =
+        unsyncedWals.fold<int>(0, (sum, w) => sum + w.seconds) + (inFlight ?? _wals(provider).inFlight);
     // Uploaded audio has no pending-upload duration, but the server may still
     // be transcribing it. Only uncovered preview text proves we are waiting.
     final waitingWithoutDuration =
@@ -789,12 +877,14 @@ class _LiveTranscriptViewState extends State<LiveTranscriptView> {
   }
 
   Widget _buildUnsyncedWalIndicator(CaptureProvider provider) {
-    final unsyncedWals = provider.unsyncedSessionWals;
-    final inFlightSeconds = provider.inFlightAudioSeconds;
+    final unsyncedWals = _wals(provider).wals;
+    final inFlightSeconds = _wals(provider).inFlight;
     final totalSeconds = unsyncedWals.fold<int>(0, (sum, w) => sum + w.seconds) + inFlightSeconds;
     if (totalSeconds <= 5) return const SizedBox.shrink();
 
-    if (_quietBehindLine(provider) != null) return const SizedBox.shrink();
+    if (_quietBehindLine(provider, unsynced: unsyncedWals, inFlight: inFlightSeconds) != null) {
+      return const SizedBox.shrink();
+    }
     final minutes = totalSeconds ~/ 60;
     final seconds = totalSeconds % 60;
     final label = minutes > 0 ? '${minutes}m ${seconds}s' : '${seconds}s';
@@ -995,10 +1085,37 @@ class LivePreviewDivider extends StatelessWidget {
 /// cover — the recognizer's still-volatile newest words in lighter text. The
 /// preview carries audio timestamps; only full interval coverage replaces a line.
 class LivePreviewTail extends StatefulWidget {
-  const LivePreviewTail({super.key, required this.preview, required this.coverage, this.catchUp});
+  const LivePreviewTail(
+      {super.key,
+      required this.preview,
+      required this.coverage,
+      this.catchUp,
+      this.lines,
+      this.whenEmpty,
+      this.includeBottomInset = true})
+      : showHeading = true,
+        horizontalInset = OmiSpacing.md;
+
+  /// The conversation page's form: the lines continue the transcript, so there is no heading, no
+  /// side inset (the page already insets the transcript) and no bottom inset.
+  const LivePreviewTail.continuingTranscript(
+      {super.key, required this.preview, required this.coverage, this.lines, this.whenEmpty})
+      : catchUp = null,
+        includeBottomInset = false,
+        showHeading = false,
+        horizontalInset = 0;
 
   final LivePreviewController preview;
   final LivePreviewCoverage coverage;
+  final List<LivePreviewLine> Function()? lines;
+  final Widget? whenEmpty;
+  final bool includeBottomInset;
+
+  /// The "Just now, on this phone" heading over the lines.
+  final bool showHeading;
+
+  /// The lines' own side inset; zero where the parent already insets the transcript.
+  final double horizontalInset;
 
   /// What sits between the final transcript and the preview, rebuilt with the preview's ticks.
   final WidgetBuilder? catchUp;
@@ -1018,6 +1135,17 @@ class _LivePreviewTailState extends State<LivePreviewTail> {
     _rows.clear();
   }
 
+  /// Without the heading the first line keeps the heading's gap from the transcript above it.
+  double get _firstLineTop => widget.showHeading ? OmiSpacing.xs : OmiSpacing.md;
+
+  @override
+  void didUpdateWidget(LivePreviewTail oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.showHeading != widget.showHeading || oldWidget.horizontalInset != widget.horizontalInset) {
+      _rows.clear();
+    }
+  }
+
   Widget _line(LivePreviewLine line, bool first) {
     final cached = _rows[line.id];
     if (cached != null && cached.text == line.text && cached.isFinal == line.isFinal && cached.first == first) {
@@ -1025,7 +1153,8 @@ class _LivePreviewTailState extends State<LivePreviewTail> {
     }
     final row = Padding(
       key: ValueKey('live_preview_tail_${line.id}'),
-      padding: EdgeInsets.fromLTRB(OmiSpacing.md, first ? OmiSpacing.xs : 0, OmiSpacing.md, OmiSpacing.sm),
+      padding:
+          EdgeInsets.fromLTRB(widget.horizontalInset, first ? _firstLineTop : 0, widget.horizontalInset, OmiSpacing.sm),
       child: Text(line.text,
           style: OmiType.body
               .copyWith(height: 1.4, color: line.isFinal ? OmiColors.textSecondary : OmiColors.textTertiary)),
@@ -1039,18 +1168,18 @@ class _LivePreviewTailState extends State<LivePreviewTail> {
     return ListenableBuilder(
       listenable: widget.preview,
       builder: (context, _) {
-        final lines = widget.coverage.excludeCovered(widget.preview.lines);
+        final lines = widget.coverage.excludeCovered(widget.lines?.call() ?? widget.preview.lines);
         final ids = lines.map((line) => line.id).toSet();
         _rows.removeWhere((id, _) => !ids.contains(id));
-        if (lines.isEmpty && widget.catchUp == null) return const SizedBox.shrink();
+        if (lines.isEmpty && widget.catchUp == null) return widget.whenEmpty ?? const SizedBox.shrink();
         return Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           mainAxisSize: MainAxisSize.min,
           children: [
             if (widget.catchUp case final catchUp?) catchUp(context),
-            if (lines.isNotEmpty) const LivePreviewDivider(),
+            if (lines.isNotEmpty && widget.showHeading) const LivePreviewDivider(),
             for (var i = 0; i < lines.length; i++) _line(lines[i], i == 0),
-            SizedBox(height: MediaQuery.paddingOf(context).bottom + 84),
+            if (widget.includeBottomInset) SizedBox(height: MediaQuery.paddingOf(context).bottom + 84),
           ],
         );
       },

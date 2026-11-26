@@ -937,12 +937,14 @@ extension APIClient {
   func getConversation(
     id: String,
     includeDiscarded: Bool? = nil,
-    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil,
+    polling: Bool = false
   ) async throws -> ServerConversation {
-    let queryItems =
+    var queryItems =
       includeDiscarded.map {
         [URLQueryItem(name: "include_discarded", value: String($0))]
       } ?? []
+    if polling { queryItems.append(URLQueryItem(name: "status_poll", value: "1")) }
     return try await get(
       "v1/conversations/\(id)",
       queryItems: queryItems,
@@ -972,12 +974,6 @@ extension APIClient {
   /// conversation detail API.
   func getOmiCapture(id: String) async throws -> ServerConversation {
     try await get("v1/conversations/\(id)?source=omi&include_discarded=false")
-  }
-
-  /// Deletes a conversation by ID
-  func deleteConversation(id: String) async throws {
-    try await delete("v1/conversations/\(id)?cascade=true")
-    invalidateConversationsCountCache()
   }
 
   /// Updates the starred status of a conversation

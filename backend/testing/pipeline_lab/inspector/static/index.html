@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<meta name="referrer" content="no-referrer">
+<title>Pipeline lab</title>
+<link rel="icon" href="data:,">
+<link rel="stylesheet" href="/static/app.css">
+</head>
+<body>
+<header class="topbar">
+  <a class="brand" href="#/" title="Pipeline lab">Pipeline lab</a>
+  <label class="run-switch"><span class="sr">Run</span><select id="run-select" aria-label="Run"></select></label>
+  <nav class="topnav">
+    <a id="nav-day" href="#/">Day</a>
+    <a id="nav-verdicts" href="#/verdicts">Verdicts</a>
+  </nav>
+  <span class="spacer"></span>
+  <button id="theme-toggle" class="icon-btn" type="button" title="Theme (light / dark / auto)" aria-label="Theme">◐</button>
+  <button id="help-toggle" class="icon-btn" type="button" title="Keyboard shortcuts (?)" aria-label="Keyboard shortcuts">?</button>
+</header>
+<main id="app" tabindex="-1"><p class="empty">Loading…</p></main>
+
+<dialog id="note-dialog" aria-labelledby="note-title">
+  <form method="dialog" id="note-form">
+    <h2 id="note-title">Verdict</h2>
+    <p class="note-target" id="note-target"></p>
+    <div class="mark-pick" role="radiogroup" aria-label="Mark">
+      <label><input type="radio" name="mark" value="good"> <span>Good</span></label>
+      <label><input type="radio" name="mark" value="bad"> <span>Bad</span></label>
+    </div>
+    <textarea id="note-text" rows="4" maxlength="4000" placeholder="What is right or wrong here? (optional)"></textarea>
+    <div class="dialog-actions">
+      <span class="hint">⌘/Ctrl + Enter to save</span>
+      <button value="cancel" type="submit" class="btn">Cancel</button>
+      <button value="save" type="submit" class="btn primary" id="note-save">Save</button>
+    </div>
+  </form>
+</dialog>
+
+<dialog id="help-dialog" aria-labelledby="help-title">
+  <form method="dialog">
+    <h2 id="help-title">Keyboard</h2>
+    <dl class="keys">
+      <dt><kbd>j</kbd> <kbd>k</kbd></dt><dd>Next / previous conversation</dd>
+      <dt><kbd>Enter</kbd></dt><dd>Open the selected conversation</dd>
+      <dt><kbd>/</kbd></dt><dd>Filter conversations</dd>
+      <dt><kbd>↑</kbd> <kbd>↓</kbd></dt><dd>Move between items in the open tab</dd>
+      <dt><kbd>←</kbd> <kbd>→</kbd></dt><dd>Previous / next tab</dd>
+      <dt><kbd>1</kbd> <kbd>2</kbd></dt><dd>Mark the focused item good / bad</dd>
+      <dt><kbd>n</kbd></dt><dd>Add a note to the focused item</dd>
+      <dt><kbd>Space</kbd></dt><dd>Play / pause audio</dd>
+      <dt><kbd>t</kbd></dt><dd>Transcript: replay → production → diff</dd>
+      <dt><kbd>Esc</kbd></dt><dd>Back to the day</dd>
+      <dt><kbd>v</kbd></dt><dd>Verdicts page</dd>
+    </dl>
+    <div class="dialog-actions"><button class="btn" type="submit">Close</button></div>
+  </form>
+</dialog>
+
+<div id="toast" role="status" aria-live="polite"></div>
+<script src="/static/app.js"></script>
+</body>
+</html>

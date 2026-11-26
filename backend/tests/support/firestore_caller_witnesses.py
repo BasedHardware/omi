@@ -35,6 +35,7 @@ import routers.integration as integration_router
 import routers.search as search_router
 import routers.support as support_router
 import routers.users as users_router
+import utils.ai_profile_refresh as ai_profile_refresh
 import utils.apps as apps_utils
 import utils.conversations.meeting_context_pack as meeting_context_pack
 import utils.imports.limitless as limitless
@@ -201,6 +202,25 @@ def _run_main_list(monkeypatch: pytest.MonkeyPatch, capture: HelperCapture) -> N
                                 rejected_trial(capture, call)
                             else:
                                 trial(capture, call)
+
+    monkeypatch.setattr(conversations_router, 'conversations_v3_enabled', lambda uid: True)
+    monkeypatch.setenv('OMI_HOME_VISIBILITY_INDEX_OWNERS', 'u1')
+    trial(
+        capture,
+        conversations_router.get_conversations,
+        request=SimpleNamespace(headers={'X-Omi-Home-Page-Mode': 'auto'}),
+        response=None,
+        limit=50,
+        offset=0,
+        cursor=None,
+        statuses='processing,completed',
+        sources=None,
+        start_date=None,
+        end_date=None,
+        folder_id=None,
+        starred=None,
+        uid='u1',
+    )
 
 
 def _run_main_count(monkeypatch: pytest.MonkeyPatch, capture: HelperCapture) -> None:
@@ -388,6 +408,10 @@ def _run_prior_meetings(monkeypatch: pytest.MonkeyPatch, capture: HelperCapture)
     )
 
 
+def _run_ai_profile_conversations(monkeypatch: pytest.MonkeyPatch, capture: HelperCapture) -> None:
+    trial(capture, ai_profile_refresh._conversations, 'u1', FROZEN_NOW)
+
+
 def _run_limitless_lookup(monkeypatch: pytest.MonkeyPatch, capture: HelperCapture) -> None:
     trial(capture, limitless.find_legacy_limitless_conversation_id, 'u1', FROZEN_NOW)
 
@@ -557,7 +581,7 @@ WITNESSES: dict[str, CallerWitness] = {
             'routers/conversations.py:get_conversations:database.conversations.get_conversations_without_photos',
             'database.conversations.get_conversations_without_photos',
             'database.conversations.get_conversations_without_photos',
-            ('main-list-single-status', 'main-list-default-or-multi-status'),
+            ('main-list-single-status', 'main-list-default-or-multi-status', 'main-list-indexed-home'),
             1,
             _run_main_list,
         ),
@@ -665,6 +689,14 @@ WITNESSES: dict[str, CallerWitness] = {
             ('persona-update',),
             1,
             _run_persona_update,
+        ),
+        CallerWitness(
+            'utils/ai_profile_refresh.py:_conversations:database.conversations.get_conversations_without_photos',
+            'database.conversations.get_conversations_without_photos',
+            'database.conversations.get_conversations_without_photos',
+            ('ai-profile-recent',),
+            1,
+            _run_ai_profile_conversations,
         ),
         CallerWitness(
             'utils/conversations/meeting_context_pack.py:_gather_prior_meetings:database.conversations.get_conversations_without_photos',

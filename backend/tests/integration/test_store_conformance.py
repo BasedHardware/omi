@@ -15,13 +15,18 @@ Run all three (a missing backend SKIPS locally; ``OMI_REQUIRE_STORE_BACKENDS=all
 from __future__ import annotations
 
 from concurrent.futures import ThreadPoolExecutor
+from types import SimpleNamespace
 
 import pytest
 
 from config.batch_pipeline import scheduler_control_key
 from database.batch_pipeline_privacy import BatchPrivacyBlocked
+from database import batch_pipeline_projection_outbox as projection_outbox
 from testing.store_fixtures import store_backend  # noqa: F401  (the parametrized fixture)
-from utils.batch_pipeline.contracts import Priority, WorkItem
+from utils.batch_pipeline.contracts import Priority, WorkItem, WorkResult
+from utils.batch_pipeline.merge import OrderedMerge
+from utils.batch_pipeline.projection_discovery import ProjectionDiscovery
+from utils.batch_pipeline.projection_outbox import ProjectionOutbox
 from utils.batch_pipeline.scheduler import Scheduler, owner_key as scheduler_owner_key
 
 pytestmark = pytest.mark.integration
@@ -553,6 +558,121 @@ def _projection_rows(h):
     return rows
 
 
+def test_projection_outbox_merge_and_token_conformance(h, monkeypatch):
+    from utils.batch_pipeline import scheduler as scheduler_module
+
+    # This test advances a synthetic domain clock. Host load must not expire the scheduler's setup claim.
+    monkeypatch.setattr(scheduler_module, 'monotonic', lambda: 100.0)
+    queue = Scheduler(h.store)
+    merge = OrderedMerge(h.store, head_wait_seconds=0, catch_up_depth=0)
+    uid = h.uid('o')
+
+    def commit(segment, now):
+        assert queue.enqueue(WorkItem(segment, uid, now, 'gs://synthetic/input', 30, Priority.FRESH), now)
+        (lease,) = queue.pull(now + 1)
+        assert queue.complete(WorkResult(segment, 'gs://synthetic/result'), lease.token, now + 2)
+        return merge.commit_next(uid, now + 3)
+
+    outbox = projection_outbox
+    monkeypatch.setenv('BATCH_PROJECTION_OUTBOX', 'false')
+    assert outbox.KIND_FIELD not in commit('old', 10)
+    monkeypatch.setenv('BATCH_PROJECTION_OUTBOX', 'true')
+    entry = commit('new', 20)
+    assert entry[outbox.DUE_FIELD] == 23 and merge.commit_next(uid, 24) is None
+    assert h.store.projection_outbox_page(22, 10) == []
+    (due,) = h.store.projection_outbox_page(23, 10)
+    key = outbox.Obligation('new', 2)
+    assert due == outbox.DueObligation(key, 23)
+    assert h.store.projection_page_with_outbox() == (['old', 'new'], None, {'new'})
+    assert outbox.claim(h.store, outbox.Obligation('new', 1), lambda: 23) is None
+    token = outbox.claim(h.store, key, lambda: 23)
+    assert token and outbox.claim(h.store, key, lambda: 23) is None
+    assert h.store.projection_outbox_page(23, 10) == []
+    assert outbox.settle(h.store, key, token, lambda: 24, 'incomplete') == 'incomplete'
+    assert h.store.projection_outbox_page(83, 10) == []
+    assert h.store.projection_outbox_page(84, 10) == [outbox.DueObligation(key, 84)]
+    second = outbox.claim(h.store, key, lambda: 84)
+    assert second and second != token
+    assert outbox.settle(h.store, key, token, lambda: 85, 'retry') is None
+    snapshot = h.store.run(lambda tx: tx.get('results', 'new'))
+    assert snapshot['projection_state'] == 'pending' and snapshot[outbox.TOKEN_FIELD] == second
+
+
+@pytest.mark.parametrize('coverage_loss', ['overdue_debt', 'failed_scan'])
+def test_pl668_legacy_projection_recovers_when_outbox_coverage_is_lost(h, monkeypatch, coverage_loss):
+    monkeypatch.setenv('BATCH_PROJECTION_OUTBOX', 'on')
+    monkeypatch.setenv('BATCH_PIPELINE_PROJECTION_PAGINATION_ENABLED', 'true')
+    monkeypatch.setenv('BATCH_PIPELINE_PROJECTION_STRIPING_ENABLED', 'off')
+    put_all(
+        h,
+        [
+            ('jobs', 'covered', job(h, 'covered')),
+            ('jobs', 'unstamped', job(h, 'unstamped')),
+            ('jobs', 'legacy', job(h, 'legacy')),
+            (
+                'results',
+                'covered',
+                {
+                    'segment_id': 'covered',
+                    'projection_state': 'pending',
+                    'committed_at': 48.0,
+                    'log_sequence': 1,
+                    projection_outbox.KIND_FIELD: projection_outbox.KIND,
+                    **projection_outbox.metadata(48.0, None, None),
+                },
+            ),
+            ('results', 'unstamped', {'segment_id': 'unstamped', 'projection_state': 'pending', 'committed_at': 49.0}),
+            (
+                'results',
+                'legacy',
+                {
+                    'segment_id': 'legacy',
+                    'projection_state': 'pending',
+                    'committed_at': 50.0,
+                    'log_sequence': 3,
+                    projection_outbox.KIND_FIELD: projection_outbox.KIND,
+                    **projection_outbox.metadata(None, None, 'legacy'),
+                },
+            ),
+        ],
+    )
+    now = 100.0
+    projector = SimpleNamespace(store=SimpleNamespace(store=h.store))
+    coordinator = ProjectionOutbox(h.store, projector, clock=lambda: now)
+    discovery = ProjectionDiscovery(h.store, outbox_coverage=coordinator.has_coverage)
+    assert not coordinator.has_coverage()
+    assert discovery.next(limit=4) == ['covered', 'unstamped', 'legacy']
+    assert coordinator.scan(10) == [projection_outbox.DueObligation(projection_outbox.Obligation('covered', 1), 48.0)]
+
+    now = 105.0  # The follower refreshes its cached view of the elected scanner.
+    assert discovery.next(limit=1) == []
+    assert discovery.after == (48.0, 'covered')
+    assert discovery.next(limit=1) == ['unstamped']
+    assert discovery.next(limit=1) == ['legacy']
+    assert discovery.next(limit=1) == []
+    assert discovery.after is None
+
+    now = 110.0
+    if coverage_loss == 'overdue_debt':
+        # A successful but lagging scan withdraws coverage before the original witness expires.
+        coordinator.scan(10)
+    else:
+
+        def fail_scan(*_args):
+            raise RuntimeError('synthetic projection scan failure')
+
+        with monkeypatch.context() as fault:
+            fault.setattr(h.store, 'projection_outbox_page', fail_scan)
+            with pytest.raises(RuntimeError, match='synthetic projection scan failure'):
+                coordinator.scan(10)
+        now = 129.0
+        assert coordinator.has_coverage()
+        now = 130.0  # A failed query does not renew the 30-second witness.
+
+    assert not coordinator.has_coverage()
+    assert discovery.next(limit=3) == ['covered', 'unstamped', 'legacy']
+
+
 def test_projection_page_is_a_stable_keyset_scan(h):
     put_all(h, _projection_rows(h))
     ids, cursor = h.store.projection_page(2)
@@ -678,13 +798,10 @@ def test_fresh_pending_returns_the_earliest_fresh_rows_in_any_state(h):
     assert [row['segment_id'] for row in h.store.fresh_pending(key, 10)] == ['b', 'e', 'a']
 
 
-@pytest.mark.parametrize('enabled', [False, True])
-def test_terminal_poll_filter_preserves_nonterminal_heads_and_fresh_wait(h, monkeypatch, enabled):
-    from config.batch_pipeline import MERGE_POLL_TERMINAL_STATES
+def test_merge_poll_preserves_capture_order_and_fresh_wait(h):
     from utils.batch_pipeline.merge import _fresh_pick
 
-    monkeypatch.setenv('BATCH_HELD_POLL_SKIP_ENABLED', str(enabled).lower())
-    terminals = MERGE_POLL_TERMINAL_STATES
+    terminals = ('committed', 'dead', 'quarantined', 'privacy_blocked', 'partial_retired', 'provider_superseded')
     nonterminal = (
         'ready',
         'leased',
@@ -701,7 +818,7 @@ def test_terminal_poll_filter_preserves_nonterminal_heads_and_fresh_wait(h, monk
         put_all(h, [_pending(h, state, capture_at=0.0 if state in terminals else 1.0, fresh_capture=True, state=state)])
     key = owner_key(h.uid('o'))
     rows = h.store.fresh_pending(key, 32)
-    expected = set(nonterminal) | (set() if enabled else set(terminals))
+    expected = set(nonterminal) | set(terminals)
     assert {r['state'] for r in rows} == expected
     assert h.store.run(lambda tx: tx.first_pending(key))['state'] == rows[0]['state']
 
@@ -735,13 +852,12 @@ def test_terminal_poll_filter_preserves_nonterminal_heads_and_fresh_wait(h, monk
     assert _fresh_pick(rows, 311, 300)[1]['segment_ids'] == ['waiting']
 
 
-@pytest.mark.parametrize('enabled', [False, True])
-def test_poll_filter_never_skips_recovery_or_durable_terminal_transitions(h, monkeypatch, enabled):
+def test_merge_poll_preserves_recovery_and_durable_terminal_transitions(h, monkeypatch):
+    monkeypatch.setenv('BATCH_ALLOWANCE_PARK_ENABLED', 'off')  # Legacy retry behavior under rollback.
     from utils.batch_pipeline.contracts import WorkResult
     from utils.batch_pipeline.merge import OrderedMerge
     from utils.batch_pipeline.retry_policy import quarantine_job
 
-    monkeypatch.setenv('BATCH_HELD_POLL_SKIP_ENABLED', str(enabled).lower())
     queue = Scheduler(h.store)
     uid = h.uid('o')
     assert queue.enqueue(WorkItem('recover-me', uid, 1, 'gs://synthetic/input', 30, Priority.FRESH), 100)
@@ -785,12 +901,10 @@ def test_poll_filter_never_skips_recovery_or_durable_terminal_transitions(h, mon
     fenced = h.store.run(lambda tx: tx.get('jobs', 'fenced'))
     assert fenced['state'] == 'privacy_blocked' and fenced['merge_pending'] is True
     pending = h.store.run(lambda tx: tx.first_pending(fenced['owner_key']))
-    assert (pending is None) if enabled else pending['segment_id'] == 'fenced'
+    assert pending['segment_id'] == 'fenced'
 
 
-@pytest.mark.parametrize('enabled', [False, True])
-def test_held_merge_owners_rotates_markers_and_resolves_the_owner_from_pending_work(h, monkeypatch, enabled):
-    monkeypatch.setenv('BATCH_HELD_POLL_SKIP_ENABLED', str(enabled).lower())
+def test_held_merge_owners_rotates_markers_and_resolves_the_owner_from_pending_work(h):
     held = owner_key(h.uid('o'))
     put_all(
         h,
@@ -1093,12 +1207,10 @@ def test_concurrent_schedulers_lease_every_job_exactly_once(h):
     assert sorted(leased) == sorted(expected)
 
 
-@pytest.mark.parametrize('enabled', [False, True])
-def test_ordered_merge_retained_terminal_head_and_later_result(h, monkeypatch, enabled):
+def test_ordered_merge_retained_terminal_head_and_later_result(h):
     from utils.batch_pipeline.contracts import WorkResult
     from utils.batch_pipeline.merge import OrderedMerge
 
-    monkeypatch.setenv('BATCH_HELD_POLL_SKIP_ENABLED', str(enabled).lower())
     uid = h.uid('o')
     queue = Scheduler(h.store)
     for segment, capture in [('terminal', 1), ('later', 2)]:
@@ -1116,26 +1228,14 @@ def test_ordered_merge_retained_terminal_head_and_later_result(h, monkeypatch, e
     merge = OrderedMerge(h.store, head_wait_seconds=0, catch_up_depth=0)
     entry = merge.commit_next(uid, 103)
     assert h.store.run(lambda tx: tx.get('jobs', 'terminal')) == terminal
-    if not enabled:
-        assert entry is None
-        assert h.store.run(lambda tx: tx.get('results', 'later')) == {}
-        return
-    assert entry['segment_id'] == 'later' and entry['previous_segment_id'] is None and entry['log_sequence'] == 1
-    assert h.store.run(lambda tx: queue.redrive_in_transaction(tx, tx.get('jobs', 'terminal'), 104, operator=True))
-    lease = queue.pull(105)[0]
-    assert lease.item.segment_id == 'terminal'
-    assert queue.complete(WorkResult('terminal', 'gs://synthetic/recovered'), lease.token, 106)
-    recovered = merge.commit_next(uid, 107)
-    assert recovered['segment_id'] == 'terminal' and recovered['late_capture'] is True
-    assert recovered['previous_segment_id'] == 'later' and recovered['log_sequence'] == 2
+    assert entry is None
+    assert h.store.run(lambda tx: tx.get('results', 'later')) == {}
 
 
-@pytest.mark.parametrize('enabled', [False, True])
 @pytest.mark.parametrize('head_state', ['dead', 'future_state'])
-def test_head_priority_never_promotes_past_a_terminal_or_unknown_predecessor(h, monkeypatch, enabled, head_state):
+def test_head_priority_never_promotes_past_a_terminal_or_unknown_predecessor(h, head_state):
     from utils.batch_pipeline.scheduler import _prefer_merge_head
 
-    monkeypatch.setenv('BATCH_HELD_POLL_SKIP_ENABLED', str(enabled).lower())
     put_all(
         h,
         [
@@ -1160,20 +1260,18 @@ def test_head_priority_never_promotes_past_a_terminal_or_unknown_predecessor(h, 
 
     assert h.store.run(pick)['segment_id'] == 'selected'
     assert h.store.run(lambda tx: tx.get('jobs', 'head'))['state'] == head_state
-    assert observations == ([('ready_age', 9), ('head_not_found', None)] if enabled and head_state == 'dead' else [])
+    assert observations == []
 
 
-@pytest.mark.parametrize('enabled', [False, True])
 @pytest.mark.parametrize('state', ['missing', None])
-def test_missing_and_null_pending_state_match_firestore_negative_filter(h, monkeypatch, enabled, state):
-    monkeypatch.setenv('BATCH_HELD_POLL_SKIP_ENABLED', str(enabled).lower())
+def test_missing_and_null_pending_state_stays_visible(h, state):
     legacy = job(h, 'legacy', state=state, merge_pending=True, fresh_capture=True, privacy_generation=0)
     if state == 'missing':
         del legacy['state']
     put_all(h, [('jobs', 'legacy', legacy)])
     key = owner_key(h.uid('o'))
-    assert h.store.fresh_pending(key, 32) == ([] if enabled else [legacy])
-    assert h.store.run(lambda tx: tx.first_pending(key)) == (None if enabled else legacy)
+    assert h.store.fresh_pending(key, 32) == [legacy]
+    assert h.store.run(lambda tx: tx.first_pending(key)) == legacy
     assert h.store.run(lambda tx: tx.get('jobs', 'legacy')) == legacy
 
 
@@ -1360,3 +1458,49 @@ def test_ready_owners_skips_an_owner_block_and_ignores_nonpending_or_unready(h):
 
     assert h.store.ready_owners(None, 1, descending=True) == expected[-1:]
     assert h.store.ready_owners(None, 2, ceiling_owner_key=expected[0][0]) == expected[:1]
+
+
+def test_owner_serialization_prevents_a_pending_head_phantom(h):
+    """Admission and merge take the same owner row before querying the head."""
+    need(h, 'sim')
+    import threading
+    from concurrent.futures import TimeoutError as FutureTimeout
+
+    key = owner_key(h.uid('o'))
+    put_all(h, [('owners', key, {'revision': 0})])
+    queried, attempted, release = threading.Event(), threading.Event(), threading.Event()
+
+    def reader():
+        def body(tx):
+            owner = tx.get('owners', key)
+            assert tx.first_pending(key) is None
+            queried.set()
+            assert release.wait(10)
+            assert tx.first_pending(key) is None
+            tx.put('owners', key, {'revision': owner['revision'] + 1})
+
+        h.store.run(body)
+
+    def admitter():
+        def body(tx):
+            attempted.set()
+            owner = tx.get('owners', key)
+            tx.put('owners', key, {'revision': owner['revision'] + 1})
+            tx.put('jobs', 'phantom', job(h, 'phantom', merge_pending=True))
+
+        h.store.run(body)
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        held = pool.submit(reader)
+        try:
+            assert queried.wait(10)
+            inserted = pool.submit(admitter)
+            assert attempted.wait(10)
+            with pytest.raises(FutureTimeout):
+                inserted.result(timeout=0.2)
+        finally:
+            release.set()
+        held.result(timeout=30)
+        inserted.result(timeout=30)
+    assert h.store.run(lambda tx: tx.first_pending(key))['segment_id'] == 'phantom'
+    assert h.store.run(lambda tx: tx.get('owners', key))['revision'] == 2

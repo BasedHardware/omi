@@ -1,6 +1,7 @@
 {
   "schema_version": 1,
   "id": "FC-live-language-prior-discarded",
+  "family": "duplicated-implementation",
   "violated_contract": "A live multilingual STT session must retain the user's declared primary language when a provider can accept it as a nonexclusive hint. Replacing the declaration with a generic auto-detect sentinel for every provider leaves similar languages unconstrained and makes wrong-language output invisible.",
   "canonical_prevention": "Build one session language profile, carry it through selection and failover, and send its expected languages as validated Soniox hints while keeping identification enabled. Count the actual constraint at connect and classify finalized output with bounded language labels, provider language metadata when available, and conservative off-loop text detection otherwise. Keep a rollback flag and a dark routing arm.",
   "canonical_prevention_artifact": [

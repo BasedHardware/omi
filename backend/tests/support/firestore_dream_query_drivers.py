@@ -64,13 +64,6 @@ def entries():
             base={'uid': UID},
             neutrals={'caps': (Caps(), 'seed size and model ceilings; no filter changes')},
         ),
-        DriverEntry('utils.dream_prescan.scan_people', base={'uid': UID}),
-        DriverEntry('utils.dream_prescan._scan_tasks', base={'uid': UID}),
-        DriverEntry('utils.dream_state_pass.tasks_page', base={'uid': UID}),
-        DriverEntry(
-            'utils.dream_state_pass.conversation_index',
-            base={'uid': UID, 'now': datetime(2026, 10, 12, tzinfo=timezone.utc)},
-        ),
         DriverEntry(
             'database.dream_history.history_page',
             base={'uid': UID},
@@ -119,11 +112,10 @@ def entries():
                 'now': (datetime(2026, 10, 9, tzinfo=timezone.utc), 'UTC accounting day only'),
                 'denial_sink': (None, 'count-only denial reason after commit does not alter query shape'),
             },
-            domains={'trigger': ['schedule', 'manual'], 'skip_idle': [False, True]},
+            domains={'trigger': ['schedule', 'manual']},
             setup=admission_state,
             patchers=(producer_mode,),
         ),
-        DriverEntry('database.dream_store.park_if_idle', base={'uid': UID}),
         DriverEntry(
             'database.dream_store.dirty_count',
             base={'uid': UID},
@@ -158,7 +150,6 @@ def entries():
                 'consumed': ([], 'settlement metadata; watermark uses the separately driven dirty_refs builder'),
                 'unavailable': ([], 'settlement metadata; watermark uses the separately driven dirty_refs builder'),
                 'release': (True, 'post-query lease policy'),
-                'park_when_idle': (False, 'chooses delete vs set of the due row; no query shape change'),
             },
             setup=finish_state,
         ),
@@ -185,8 +176,8 @@ registry_extension = SimpleNamespace(
             covered_by=('database.dream_scheduler.candidate_page',),
             reason='Discovery streams only through candidate_page (allowlist mode reads listed user documents by explicit ref instead); its chunked get_all calls read explicit document refs in bounded transactions that only initialize due rows and a cursor. SDK queue races are exercised in test_dream_queue_emulator.',
             expect_observed=False,
-            # Re-reviewed: pending-deletion owners are skipped; query shape is unchanged.
-            body_digest='e882fde2014b8f3246665cf86f29046022bc7bdf190c521351fecf872eb379b0',
+            # The size-based due-time calculation adds no reads.
+            body_digest='181a3b7a0aab77caaa4908b554df6eaac7a6781084d228c2316a5c9a07134839',
         ),
     },
     SKIPS={},

@@ -125,6 +125,23 @@ def test_listen_pusher_stack_gauntlet_has_a_deterministic_hermetic_ci_job() -> N
     assert '${runner_args}' in runner_side, 'runner_args must land on the runner side of &&'
     assert 'runner_args' not in pytest_side, 'runner_args must not leak into the pytest command'
 
+    # The emulator session is owned by the bounded retry supervisor, not by a
+    # bare `firebase emulators:exec` in this script: a port chosen by a probe
+    # that has already closed it can be stolen before Firebase binds it, and
+    # that produced `Trying to connect an http1.x server (HTTP status 400)`.
+    assert 'testing.listen_pusher_stack.emulator_supervisor' in run_sh
+    assert 'emulators:exec' not in run_sh
+    assert '$runner_command' in run_sh and '$lifecycle_command' in run_sh
+    supervisor = (_REPO_ROOT / 'backend' / 'testing' / 'listen_pusher_stack' / 'emulator_supervisor.py').read_text(
+        encoding='utf-8'
+    )
+    assert 'MAX_ATTEMPTS_CEILING = 3' in supervisor
+    assert 'DEFAULT_MAX_TOTAL_SECONDS' in supervisor
+    assert 'emulator_readiness' in supervisor
+    # A gauntlet that reached its own assertions must never be retried.
+    assert "'FAILED backend/'," in supervisor
+    assert "'StackFailure'," in supervisor
+
 
 def test_backend_hermetic_gate_is_always_reported_and_fails_closed() -> None:
     workflow = (_REPO_ROOT / '.github' / 'workflows' / 'backend-hermetic-e2e.yml').read_text(encoding='utf-8')

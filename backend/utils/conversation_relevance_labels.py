@@ -28,6 +28,7 @@ DECISION_TRIGGERS = TERMINAL_PATHS | frozenset(
         'capture_group',
         'server_recovery',
         'silent_backfill',
+        'historical_open',
         'backfill',
         'screen_evidence',
     }

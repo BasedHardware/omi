@@ -13,6 +13,7 @@ from llm_gateway.gateway.config_loader import GatewayConfig
 from llm_gateway.gateway.errors import GatewayError, GatewayErrorCode, INVALID_REQUEST_REJECTION_CODES
 from llm_gateway.gateway.output_budget import OutputBudgetDecision, output_budget_bucket
 from llm_gateway.gateway.schemas import FailureClass, ProviderRejection, RouteServingClass
+from utils.observability.reasons import ConvStructureFlexFallbackReason
 
 logger = logging.getLogger(__name__)
 
@@ -85,6 +86,17 @@ FLEX_FIRST_TOTAL = Counter(
     ['lane_id', 'outcome'],
 )
 
+CONV_STRUCTURE_FLEX_FALLBACK_REASON_TOTAL = Counter(
+    'llm_gateway_conv_structure_flex_fallback_reason_total',
+    'Conversation structure Flex-to-Standard fallbacks by bounded reason',
+    ['reason'],
+)
+
+# Expose zero-count buckets before their first fallback so increase() can see it.
+CONV_STRUCTURE_FLEX_FALLBACK_REASON_TOTAL.labels(reason=ConvStructureFlexFallbackReason.TIMEOUT)
+CONV_STRUCTURE_FLEX_FALLBACK_REASON_TOTAL.labels(reason=ConvStructureFlexFallbackReason.HTTP_429)
+CONV_STRUCTURE_FLEX_FALLBACK_REASON_TOTAL.labels(reason=ConvStructureFlexFallbackReason.OTHER)
+
 STREAM_TTFB_SECONDS = Histogram(
     'llm_gateway_stream_ttfb_seconds',
     'Time to first non-empty stream chunk by bounded API surface, provider, and credential source',
@@ -96,6 +108,16 @@ ACCOUNTING_EVENTS_TOTAL = Counter(
     'llm_gateway_accounting_events_total',
     'LLM gateway accounting-event delivery by bounded provider and accounting state',
     ['api_surface', 'provider', 'payer', 'usage_status', 'cost_status', 'delivery'],
+)
+
+KEYED_PROVIDER_ATTEMPTS_TOTAL = Counter(
+    'llm_gateway_keyed_provider_attempts_total',
+    'Keyed provider attempts before dispatch',
+)
+KEYED_ACCOUNTING_DELIVERY_TOTAL = Counter(
+    'llm_gateway_keyed_accounting_delivery_total',
+    'Accounting event delivery for keyed chat provider attempts',
+    ['delivery'],
 )
 
 # Only newly persisted events contribute. Delivery failures/drops remain visible
@@ -364,6 +386,8 @@ def observe_accounting_event(event: AccountingEvent, *, delivery: str) -> None:
         cost_status=_bounded(event.cost_status.value),
         delivery=delivery_label,
     ).inc()
+    if event.idempotency_scope is not None:
+        KEYED_ACCOUNTING_DELIVERY_TOTAL.labels(delivery_label).inc()
     if delivery_label == 'written':
         observe_accounted_spend(event)
 

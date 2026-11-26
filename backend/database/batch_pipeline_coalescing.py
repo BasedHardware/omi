@@ -5,18 +5,13 @@ released only after every original member is bound to admitted work (or purge).
 Group/member/source writes recheck live authority in their own transaction.
 """
 
-import hashlib
-import json
 from datetime import datetime, timedelta, timezone
 from uuid import uuid4
 
 from config import batch_pipeline_coalescing as config
-
-
-def digest(value):
-    return hashlib.sha256(
-        json.dumps(value, sort_keys=True, separators=(',', ':'), allow_nan=False).encode()
-    ).hexdigest()
+from database.batch_coalescing_capabilities import extended_ready
+from database.batch_pipeline_coalescing_identity import digest
+from database import batch_pipeline_upload_metrics as upload_metrics
 
 
 def authorize(tx, row):
@@ -30,7 +25,11 @@ def enqueue(store, member, key, now):
     retain the existing retryable response; callers never fall through on error.
     """
 
+    observation = [None, 'within_group']
+
     def commit(tx):
+        observation[0] = None  # Firestore may retry; emit only after the winning commit.
+        candidate = dict(member)
         authorize(tx, member)
         prior = tx.get('content', f"{member['owner_id']}/{member['content_id']}")
         if prior:
@@ -48,11 +47,30 @@ def enqueue(store, member, key, now):
                 tx.put('coalesce_groups', group['id'], group)
                 return 'wait'  # Ordering fence + client custody while the drainer recovers.
             return None  # Unknown/stalled drainer: ordinary admission for a new recording.
+        if not join and (
+            quota['groups'] >= config.MAX_GROUPS or quota['owners'].get(owner, 0) >= config.MAX_OWNER_GROUPS
+        ):
+            return None  # Same 60s-path fallback; do not pay capability reads at saturation.
+        # The quota has exactly the old fallback: no custody claim and no refusal.
+        # A member joining an existing group does not consume another quota slot.
+        extended = member.get('hold_seconds', 60) > 60 and member.get('upload_entitlement') == 'free'
+        extended = extended and member['end'] - member['start'] <= config.EXTENDED_MAX_AUDIO_SECONDS
+        if extended and not extended_ready(tx, now):
+            extended = False
+        profile = 'extended_v2' if extended else 'legacy'
+        candidate['hold_seconds'] = member['hold_seconds'] if extended else config.HOLD_SECONDS
         if join and (
-            len(group['members']) >= config.MAX_MEMBERS
+            group.get('profile', 'legacy') != profile
+            or group.get('window_seconds', 60) != candidate['hold_seconds']
+            or len(group['members']) >= (config.EXTENDED_MAX_MEMBERS if extended else config.MAX_MEMBERS)
             or group['bytes'] + member['bytes'] > config.MAX_GROUP_BYTES
             or group['files'] + member['files'] > config.MAX_FILES
-            or group['seconds'] + member['seconds'] > config.MAX_AUDIO_SECONDS
+            or group['seconds'] + member['seconds']
+            > (config.EXTENDED_MAX_AUDIO_SECONDS if extended else config.MAX_AUDIO_SECONDS)
+            or extended
+            and max(member['end'], *(m['end'] for m in group['members']))
+            - min(member['start'], *(m['start'] for m in group['members']))
+            > config.EXTENDED_MAX_AUDIO_SECONDS
             or any(not (member['end'] <= m['start'] or member['start'] >= m['end']) for m in group['members'])
             or set(member['filenames']).intersection(name for m in group['members'] for name in m['filenames'])
         ):
@@ -62,9 +80,11 @@ def enqueue(store, member, key, now):
             group['scan_at'] = now
             tx.put('coalesce_groups', group['id'], group)
             return 'wait'
+        observation[:] = [
+            upload_metrics.inter_upload_gap(candidate, group.get('members', ())),
+            'within_group' if join else 'between_groups',
+        ]
         if not join:
-            if quota['groups'] >= config.MAX_GROUPS or quota['owners'].get(owner, 0) >= config.MAX_OWNER_GROUPS:
-                return None
             group_id = digest([key, member['content_id']])
             group = {k: member[k] for k in ('owner_id', 'owner_key', 'conversation_id', 'privacy_generation')}
             group.update(
@@ -72,8 +92,10 @@ def enqueue(store, member, key, now):
                 key=key,
                 state='holding',
                 first_accept_at=now,
-                release_by=now + member['hold_seconds'],
-                scan_at=now + member['hold_seconds'],
+                profile=profile,
+                window_seconds=candidate['hold_seconds'],
+                release_by=now + candidate['hold_seconds'],
+                scan_at=now + candidate['hold_seconds'],
                 members=[],
                 bytes=0,
                 files=0,
@@ -83,16 +105,16 @@ def enqueue(store, member, key, now):
             quota['owners'][owner] = quota['owners'].get(owner, 0) + 1
             tx.put('coalesce_quota', 'global', quota)
             tx.put('coalesce_heads', key, {**group, 'group_id': group_id, 'members': []})
-        group['members'].append(member)
+        group['members'].append(candidate)
         group['bytes'] += member['bytes']
         group['files'] += member['files']
         group['seconds'] += member['seconds']
         tx.put('coalesce_groups', group['id'], group)
-        tx.put('coalesce_sources', member['item']['segment_id'], {**member, 'group_id': group['id']})
+        tx.put('coalesce_sources', member['item']['segment_id'], {**candidate, 'group_id': group['id']})
         tx.put(
             'intakes',
             member['job_id'],
-            {**member, 'coalesce_group': group['id'], 'segment_ids': [], 'total_files': member['files']},
+            {**candidate, 'coalesce_group': group['id'], 'segment_ids': [], 'total_files': member['files']},
         )
         tx.put(
             'content',
@@ -107,13 +129,17 @@ def enqueue(store, member, key, now):
         )
         return member['job_id']
 
-    return store.run(commit)
+    result = store.run(commit)
+    upload_metrics.observe_gap(member, *observation)
+    return result
 
 
-def claim(store, group_id, now, *, producer_enabled):
+def claim(store, group_id, now, *, producer_enabled, scan=None):
     token = uuid4().hex
 
     def commit(tx):
+        if scan is not None:
+            scan.check(tx)
         row = tx.get('coalesce_groups', group_id)
         if not row or row['state'] == 'done' or row.get('lease_until', 0) > now:
             return None
@@ -237,15 +263,16 @@ def due(client, namespace, now, *, producer_enabled, after=None):
     return [{'id': doc.id, 'scan_at': doc.to_dict()['scan_at']} for doc in query.limit(config.DRAIN_PAGE).stream()]
 
 
-def scan_position(store):
+def scan_position(store, *, scan):
     def read(tx):
+        scan.check(tx)
         quota = tx.get('coalesce_quota', 'global')
         return quota.get('scan_epoch', 0), quota.get('scan_after')
 
     return store.run(read)
 
 
-def advance_scan(store, epoch, after):
+def advance_scan(store, epoch, after, *, scan):
     """Fair scan progress only; never mutate denied custody or grant processing.
 
     Advance even for a failed page. A stale concurrent scanner cannot move the
@@ -254,6 +281,7 @@ def advance_scan(store, epoch, after):
     """
 
     def commit(tx):
+        scan.check(tx)
         quota = tx.get('coalesce_quota', 'global')
         if not quota or quota.get('scan_epoch', 0) != epoch or quota.get('scan_after') == after:
             return
@@ -263,13 +291,14 @@ def advance_scan(store, epoch, after):
     store.run(commit)
 
 
-def note_scan(store, now, *, producer_enabled):
+def note_scan(store, *, producer_enabled, scan):
     def commit(tx):
+        scan.check(tx)
         quota = tx.get('coalesce_quota', 'global')
         if not quota and not producer_enabled:
             return  # Default OFF + no accepted holds: no heartbeat writes.
         quota = quota or {'groups': 0, 'owners': {}}
-        quota['last_scan_at'] = now
+        quota['last_scan_at'] = scan.clock()
         tx.put('coalesce_quota', 'global', quota)
 
     store.run(commit)
@@ -291,7 +320,7 @@ def release_for_open(store, uid, job_id, now):
     return store.run(commit)
 
 
-def checkpoint_completion(store, intake, result, now):
+def checkpoint_completion(store, intake, result, now, *, completed_at=None):
     """Arm replay/metadata TTL only after authoritative group completion."""
 
     def commit(tx):
@@ -306,6 +335,8 @@ def checkpoint_completion(store, intake, result, now):
         expires = datetime.fromtimestamp(now, timezone.utc) + timedelta(days=45)
         current['expires_at'] = expires
         content.update(status='completed', result=result, expires_at=expires)
+        if completed_at is not None:
+            content['completed_at'] = completed_at
         tx.put('intakes', intake['job_id'], current)
         tx.put('content', content_key, content)
 

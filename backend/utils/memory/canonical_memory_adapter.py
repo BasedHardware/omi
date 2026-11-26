@@ -13,7 +13,7 @@ from contextlib import contextmanager
 from contextvars import ContextVar
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import Any, Callable, Collection, Dict, Iterator, List, Optional, Sequence, Tuple, cast
+from typing import Any, Callable, Collection, Dict, Iterator, List, Optional, Sequence, Tuple, TypedDict, cast
 
 from google.cloud import firestore
 from google.cloud.firestore_v1 import FieldFilter
@@ -39,6 +39,7 @@ from utils.memory.canonical_visibility_filter import filter_canonical_default_vi
 from utils.memory.decision_path_telemetry import classify_model_about
 from database.document_ids import document_id_from_seed
 from database.memory_collections import MemoryCollections
+from database.conversation_effect_fence import ConversationEffectSource
 from database.memory_apply_store import (
     CanonicalApplyWrite,
     CanonicalMemoryTombstoneConflict,
@@ -86,6 +87,8 @@ from models.memory_evidence import (
     RedactionStatus,
     SourceState,
 )
+from models.knowledge_ledger_policy import is_prompt_memory_visible
+from types import SimpleNamespace
 from models.memories import Evidence, MemoryDB, MemoryCategory, SubjectAttribution, decide_initial_memory_tier
 from models.memory_apply import (
     ApplyResult,
@@ -309,7 +312,7 @@ def extraction_memory_id(
     )
 
 
-def search_result_to_memorydb(uid: str, item: Dict[str, Any]) -> MemoryDB:
+def search_result_to_memorydb(uid: str, item: Dict[str, Any], *, owner_summary: bool = False) -> MemoryDB:
     updated_at = item.get("date") or item.get("updated_at")
     if isinstance(updated_at, str):
         updated_at = datetime.fromisoformat(updated_at.replace("Z", "+00:00"))
@@ -321,7 +324,7 @@ def search_result_to_memorydb(uid: str, item: Dict[str, Any]) -> MemoryDB:
         id=item["memory_id"],
         uid=uid,
         content=item.get("content") or "",
-        category=MemoryCategory.interesting,
+        category=(item.get("category") or MemoryCategory.interesting) if owner_summary else MemoryCategory.interesting,
         tags=[],
         created_at=updated_at,
         updated_at=updated_at,
@@ -331,6 +334,12 @@ def search_result_to_memorydb(uid: str, item: Dict[str, Any]) -> MemoryDB:
         visibility=item.get("visibility") or "private",
         memory_tier=tier,
         valid_at=updated_at,
+        invalid_at=item.get("invalid_at") if owner_summary else None,
+        subject_attribution=(
+            (item.get("subject_attribution") or SubjectAttribution.unknown)
+            if owner_summary
+            else SubjectAttribution.unknown
+        ),
         ledger_schema_version=item.get("ledger_schema_version"),
         kind=item.get("kind"),
         subject_scope=item.get("subject_scope"),
@@ -342,7 +351,11 @@ def search_result_to_memorydb(uid: str, item: Dict[str, Any]) -> MemoryDB:
 
 
 def memory_item_to_memorydb(item: MemoryItem) -> MemoryDB:
-    """Map authoritative memory memory_items row to legacy MemoryDB response shape."""
+    """Map the released chat view; owner-summary search preserves attribution separately.
+
+    Owner ruling 2026-11-15 permits all account-owned background, without changing
+    this compatibility view or canonical self-profile slot admission.
+    """
     conversation_id = None
     evidence_payload: List[Payload] = []
     promotion = item.promotion or {}
@@ -684,6 +697,8 @@ def _hydrate_bounded_ledger_search_items(
     now: datetime,
     device_scope: str,
     client_device_id: Optional[str],
+    budget: Optional[ListReadBudget] = None,
+    owner_summary: bool = False,
 ) -> BoundedLedgerSearchHydration:
     """Hydrate provider candidates plus a bounded canonical lineage closure.
 
@@ -705,7 +720,8 @@ def _hydrate_bounded_ledger_search_items(
         )
 
     hydrated_by_id: Dict[str, MemoryItem] = {}
-    frontier = fetch_authoritative_product_memory_items_by_ids(uid, requested_ids, db_client=db_client)
+    read_options = {'budget': budget} if budget is not None else {}
+    frontier = fetch_authoritative_product_memory_items_by_ids(uid, requested_ids, db_client=db_client, **read_options)
     for item in frontier:
         hydrated_by_id[item.memory_id] = item
 
@@ -721,12 +737,31 @@ def _hydrate_bounded_ledger_search_items(
         if not next_ids:
             break
         seen_ids.update(next_ids)
-        frontier = fetch_authoritative_product_memory_items_by_ids(uid, next_ids, db_client=db_client)
+        frontier = fetch_authoritative_product_memory_items_by_ids(uid, next_ids, db_client=db_client, **read_options)
         for item in frontier:
             hydrated_by_id[item.memory_id] = item
 
     all_items = list(hydrated_by_id.values())
-    visible_items = filter_canonical_default_visible_items(all_items, policy=policy, now=now)
+    if owner_summary:
+        # Owner ruling 2026-11-15: tier, sensitivity and attribution are context,
+        # not restrictions inside the owner's own summary. Authority stays here.
+        visible_items = [
+            item
+            for item in all_items
+            if item.uid == uid
+            and item.status.value not in {'tombstoned', 'superseded'}
+            and item.source_state.value not in {'tombstoned', 'purged'}
+            and not (item.promotion or {}).get('chat_deleted')
+            and is_prompt_memory_visible(
+                SimpleNamespace(
+                    is_locked=bool((item.promotion or {}).get('is_locked')),
+                    user_review=(item.promotion or {}).get('user_review'),
+                    invalid_at=item.valid_to,
+                )
+            )
+        ]
+    else:
+        visible_items = filter_canonical_default_visible_items(all_items, policy=policy, now=now)
     scoped_items = filter_items_by_device_scope(
         visible_items,
         device_scope=device_scope if device_scope in ("current", "all", "explicit") else "all",
@@ -1018,6 +1053,11 @@ def read_canonical_scan_page(
     return slots, exhausted
 
 
+class _VectorBudgetOptions(TypedDict, total=False):
+    timeout_seconds: float
+    owner_summary: bool
+
+
 def search_canonical_memories(
     uid: str,
     query: str,
@@ -1030,6 +1070,9 @@ def search_canonical_memories(
     ledger_kinds: Optional[Collection[str]] = None,
     view: str = 'released',
     as_of: Optional[datetime] = None,
+    vector_only: bool = False,
+    budget: Optional[ListReadBudget] = None,
+    owner_summary: bool = False,
 ) -> List[Dict[str, Any]]:
     """Hybrid search over default-visible Short-term and Long-term memories."""
     assessment_now = datetime.now(timezone.utc)
@@ -1071,7 +1114,11 @@ def search_canonical_memories(
         require_typesense_projection_ready,
     )
 
-    if ledger_kinds is None:
+    if budget is not None:
+        budget.check()
+    if vector_only:
+        keyword_ids = []
+    elif ledger_kinds is None:
         keyword_ids = keyword_search_memory_ids(uid, normalized_query, limit=fetch_limit, db_client=client)
     else:
         require_typesense_projection_ready(uid)
@@ -1088,14 +1135,18 @@ def search_canonical_memories(
         vector_query_fn = query_memory_vector_candidates
     else:
         vector_query_fn = vector_query
+    vector_options: _VectorBudgetOptions = {'timeout_seconds': budget.rpc_timeout()} if budget is not None else {}
+    if owner_summary:
+        vector_options['owner_summary'] = True
     if ledger_kinds is None:
-        vector_result = vector_query_fn(uid, normalized_query, limit=fetch_limit)
+        vector_result = vector_query_fn(uid, normalized_query, limit=fetch_limit, **vector_options)
     else:
         vector_result = vector_query_fn(
             uid,
             normalized_query,
             limit=fetch_limit,
             ledger_kinds=sorted(ledger_kinds),
+            **vector_options,
         )
     vector_ids = [hit.memory_id for hit in vector_result.hits if hit.memory_id]
     merged_ids = merge_memory_search_ids(keyword_ids, vector_ids)
@@ -1111,6 +1162,8 @@ def search_canonical_memories(
         now=temporal_clock,
         device_scope=device_scope,
         client_device_id=client_device_id,
+        budget=budget,
+        owner_summary=owner_summary,
     )
     lineage_items_by_id = hydration.lineage_items_by_id
     survivor_items_by_id = hydration.survivor_items_by_id
@@ -1172,6 +1225,19 @@ def search_canonical_memories(
                 "curation_weight": item.curation_weight,
                 "intent_backed": item.intent_backed,
                 "write_reason": item.write_reason.value if item.write_reason else None,
+                **(
+                    {
+                        "category": (item.promotion or {}).get('category') or 'interesting',
+                        "kind": item.kind.value if 'kind' in item.model_fields_set else None,
+                        "subject_scope": item.subject_scope.value if 'subject_scope' in item.model_fields_set else None,
+                        "subject_attribution": ((item.promotion or {}).get('source_attribution') or {}).get(
+                            'subject_attribution'
+                        ),
+                        "invalid_at": item.valid_to,
+                    }
+                    if owner_summary
+                    else {}
+                ),
             }
         )
     return results
@@ -2352,6 +2418,7 @@ def replace_conversation_sourced_memories(
     conflict_backoff_seconds: Sequence[float] = _REPLACEMENT_CONFLICT_BACKOFF_SECONDS,
     empty_set_intent: str = "retraction",
     claim_destructive_gate: bool = True,
+    effect_source: ConversationEffectSource | None = None,
 ) -> Dict[str, Any]:
     """Atomically replace one conversation's complete canonical memory set.
 
@@ -2561,6 +2628,7 @@ def replace_conversation_sourced_memories(
                     else None
                 ),
                 require_deletion_gate=bool(not items and claim_destructive_gate),
+                effect_source=effect_source,
                 db_client=client,
             )
             break

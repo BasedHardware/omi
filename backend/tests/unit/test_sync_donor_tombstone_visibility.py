@@ -69,6 +69,10 @@ class _ListingQuery:
     def start_after(self, snapshot: _ListingDoc) -> '_ListingQuery':
         return self._copy(start_after_id=snapshot.id)
 
+    def select(self, _field_paths: Any) -> '_ListingQuery':
+        # A field projection only narrows what Firestore returns; full rows answer the same predicates.
+        return self._copy()
+
     def count(self) -> SimpleNamespace:
         n = len(self._matching())
         return SimpleNamespace(get=lambda: [[SimpleNamespace(value=n)]])

@@ -34,6 +34,7 @@ PATH = ('users', 'uid-at', 'conversations', 'record')
 
 @pytest.fixture
 def records(env, monkeypatch):
+    monkeypatch.setenv('OMI_ENV_STAGE', 'prod')
     registry = barrier_module._ProcessRecordTokens()
     monkeypatch.setattr(barrier_module, '_process_record_tokens', lambda: registry)
     client = StrictFirestore()
@@ -61,7 +62,15 @@ async def test_reconnect_finalize_without_audio_seals_persisted_batch_owner(reco
     assert not env  # Nothing flushed in this session.
     assert records.rows[PATH]['record_audio_closed'] is True
     assert records.rows[PATH]['opaque_content'] == 'preserved'
-    assert all(not tx.sets and not tx.creates for tx in records.transactions)
+    # The in-flight ledger may join the seal transaction; the conversation row
+    # itself must still be updated, never replaced or recreated. Every
+    # non-conversation set/create must target the sibling ledger collection.
+    assert all(
+        not any(path == PATH for path, _ in tx.sets) and not any(path == PATH for path, _ in tx.creates)
+        for tx in records.transactions
+    )
+    non_path_writes = [path for tx in records.transactions for path, _ in (*tx.sets, *tx.creates) if path != PATH]
+    assert all(path[:3] == ('users', 'uid-at', 'pipeline_ledger') for path in non_path_writes)
 
 
 @pytest.mark.parametrize('owner', [None, 'legacy_final_pass_v1'])
@@ -103,6 +112,23 @@ def test_failure_invalidates_prior_seal_and_is_sticky(records):
     assert mark_record_upload_failed('uid-at', 'record', firestore_client=records)
     assert seal_record_audio('uid-at', 'record', firestore_client=records) == 'upload_failed'
     assert records.rows[PATH]['record_upload_failed'] and not records.rows[PATH]['record_audio_closed']
+
+
+def test_reconnect_reseal_admits_once_per_capture(records, monkeypatch):
+    admits = []
+    monkeypatch.setattr(record_audio_db.pipeline_ledger, 'observe_admission', lambda: admits.append(1))
+    assert seal_record_audio('uid-at', 'record', firestore_client=records) is None
+    assert set_record_upload_pending('uid-at', 'record', 'token', True, firestore_client=records)
+    assert set_record_upload_pending('uid-at', 'record', 'token', False, firestore_client=records)
+    assert seal_record_audio('uid-at', 'record', firestore_client=records) is None
+    assert len(admits) == 1
+    assert records.rows[PATH]['record_admitted_at'] is not None
+
+
+def test_mark_record_upload_failed_persists_the_firing_clock(records, monkeypatch):
+    monkeypatch.setattr(record_audio_db.time, 'time', lambda: 1234.5)
+    assert mark_record_upload_failed('uid-at', 'record', firestore_client=records)
+    assert records.rows[PATH]['record_upload_failed_at'] == 1234.5
 
 
 def test_missing_row_never_recreated(records):
@@ -559,6 +585,7 @@ async def test_producer_pending_legacy_close_stops_at_existing_retry_budget_with
 
 
 async def test_producer_pending_durable_close_preserves_existing_capped_backoff(records, monkeypatch):
+    monkeypatch.setenv('PUSHER_RECORD_SEAL_PENDING_RETRY_BOUND_ENABLED', 'false')
     clock = [100.0]
     monkeypatch.setattr(barrier_module, 'time', SimpleNamespace(monotonic=lambda: clock[0]))
     monkeypatch.setattr(barrier_module.random, 'uniform', lambda low, high: high)
@@ -574,6 +601,49 @@ async def test_producer_pending_durable_close_preserves_existing_capped_backoff(
     assert not records.rows[PATH].get('record_audio_closed')
 
 
+async def test_producer_pending_releases_retained_capacity_without_sealing_other_producer(records, monkeypatch):
+    from utils import pusher_record_finish as finish_module
+
+    monkeypatch.delenv('PUSHER_RECORD_SEAL_PENDING_RETRY_BOUND_ENABLED', raising=False)
+    monkeypatch.setattr(finish_module, 'MAX_CLOSED_RECORD_DRAINS', 1)
+    monkeypatch.setattr(finish_module, '_closed_record_drains', set())
+    clock = [100.0]
+    monkeypatch.setattr(barrier_module, 'time', SimpleNamespace(monotonic=lambda: clock[0]))
+    monkeypatch.setattr(barrier_module.random, 'uniform', lambda low, high: high)
+    barrier = PusherRecordBarrier('uid-at')
+    barrier.keep_close_pending = True
+    await barrier.begin_recording('record')
+    set_record_upload_pending('uid-at', 'record', 'other', True, firestore_client=records)
+    start = asyncio.Event()
+    release_fresh = asyncio.Event()
+
+    async def old_drain():
+        await start.wait()
+        for _ in range(barrier_module.PRODUCER_PENDING_RETRY_BUDGET):
+            if await barrier.finish_recording('record'):
+                return
+            clock[0] = barrier.close_retry_at['record']
+        pytest.fail('seal-only retries retained the old drain indefinitely')
+
+    old = asyncio.create_task(old_drain())
+    fresh = asyncio.create_task(release_fresh.wait())
+    try:
+        assert finish_module.retain_closed_record_drain(old)
+        assert not finish_module.retain_closed_record_drain(fresh)
+        start.set()
+        await asyncio.wait_for(old, 5)
+        await asyncio.sleep(0)  # Run the retained-owner completion callbacks.
+        assert finish_module.retain_closed_record_drain(fresh)
+        assert records.rows[PATH]['record_upload_sessions'] == {'other': True}
+        assert records.rows[PATH]['record_audio_closed'] is False
+        assert not barrier.upload_sessions and not barrier.pending_clears
+        assert not barrier.close_failures and not barrier.close_retry_at and not barrier.producer_pending_attempts
+    finally:
+        start.set()
+        release_fresh.set()
+        await asyncio.gather(old, fresh, return_exceptions=True)
+
+
 def test_first_refusal_clock_is_stable_and_success_clears_atomically(records, monkeypatch):
     row = records.rows[PATH]
     row.update(status='in_progress', record_upload_sessions={'old': True})
@@ -586,8 +656,21 @@ def test_first_refusal_clock_is_stable_and_success_clears_atomically(records, mo
     assert set_record_upload_pending('uid-at', 'record', 'old', False, firestore_client=records)
     assert seal_record_audio('uid-at', 'record', firestore_client=records) is None
     assert row['record_audio_closed'] and row['record_seal_refused_at'] is None
-    assert [payload for _, payload in records.transactions[-1].updates] == [
-        {'record_audio_closed': True, 'record_seal_refused_at': None}
+    # The ledger writes in its own transaction after the seal commits, so find
+    # the seal transaction rather than assuming it is the last one.
+    seal_updates = [
+        payload
+        for transaction in records.transactions
+        for _, payload in transaction.updates
+        if payload.get('record_audio_closed') is True
+    ]
+    assert seal_updates == [
+        {
+            'record_audio_closed': True,
+            'record_seal_refused_at': None,
+            'record_admitted_at': 200,
+            'record_sealed_at': 200,
+        }
     ]
 
 
@@ -624,3 +707,57 @@ def test_partial_audio_does_not_clear_refusal_clock(records):
     assert records.rows[PATH]['record_seal_refused_at'] == 100
     assert not records.rows[PATH].get('record_audio_closed')
     assert not records.transactions[-1].updates
+
+
+async def test_close_only_seals_empty_record_while_socket_continues_without_finalization(records, monkeypatch):
+    monkeypatch.setenv("AUDIO_DURABLE_OUTBOX_ENABLED", "true")
+    monkeypatch.setenv("PUSHER_PROJECTION_DEBT_DURABLE_ENABLED", "false")
+    closed = asyncio.Event()
+    original = record_audio_db.seal_record_audio
+
+    loop = asyncio.get_running_loop()
+
+    def signal_seal(*args, **kwargs):
+        result = original(*args, **kwargs)
+        if result is None:
+            loop.call_soon_threadsafe(closed.set)
+        return result
+
+    monkeypatch.setattr(record_audio_db, 'seal_record_audio', signal_seal)
+    controls = [
+        struct.pack('<I', 104)
+        + json.dumps(
+            dict(conversation_id='record', record_close_only=True, request_id='test', phase=phase, watermark=0)
+        ).encode()
+        for phase in ('prepare', 'commit')
+    ]
+
+    class StillOpen(FakeWebSocket):
+        async def receive_bytes(self):
+            if not self.frames:
+                await asyncio.wait_for(closed.wait(), 5)
+            return await super().receive_bytes()
+
+    await pusher._websocket_util_trigger(
+        StillOpen([_conversation('record'), *controls]), 'uid-at', RATE, record_close_protocol=3
+    )
+    assert records.rows[PATH]['record_audio_closed'] is True
+    pusher.process_conversation_task.assert_not_called()
+
+
+@pytest.mark.parametrize('enabled', ['true', 'false'])
+async def test_close_capability_requires_opt_in_and_kill_switch(records, monkeypatch, enabled):
+    monkeypatch.setenv('AUDIO_DURABLE_OUTBOX_ENABLED', 'true')
+    from utils.pusher_protocol import PUSHER_RECORD_CLOSE_ACK_OPCODE
+
+    monkeypatch.setenv('PUSHER_RECORD_CLOSE_NOTIFY_ENABLED', enabled)
+    monkeypatch.setenv('PUSHER_RECORD_CLOSE_NOTIFY_ENABLED_SERVE_PERCENT', '100')
+    ws = FakeWebSocket([])
+    ws.sent = []
+
+    async def send(data):
+        ws.sent.append(data)
+
+    ws.send_bytes = send
+    await pusher._websocket_util_trigger(ws, 'uid-at', RATE, record_close_protocol=3)
+    assert any(struct.unpack('<I', f[:4])[0] == PUSHER_RECORD_CLOSE_ACK_OPCODE for f in ws.sent) is (enabled == 'true')

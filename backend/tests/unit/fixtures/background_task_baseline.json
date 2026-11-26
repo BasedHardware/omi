@@ -1,6 +1,13 @@
 {
   "entries": [
     {
+      "path": "utils/ai_profile_refresh.py",
+      "function": "schedule_refresh",
+      "kind": "submit_with_context",
+      "count": 1,
+      "why": "AI profile refresh (2026-11-16), at most MAX_CONCURRENT_AUTOMATIC per process: a daily, idempotent rewrite of a derived summary; losing it at SIGKILL only leaves the profile stale until the next trigger once its hourly cooldown expires"
+    },
+    {
       "path": "utils/sync/worker_runtime.py",
       "function": "Runtime.execute",
       "kind": "start_background_task",
@@ -64,6 +71,13 @@
       "why": "lease-renewal heartbeat for the awaited wipe worker; stopped in finally"
     },
     {
+      "path": "utils/batch_pipeline/packing_counterfactual.py",
+      "function": "PackingMetrics.observe",
+      "kind": "submit_with_context",
+      "count": 1,
+      "why": "Optional packing telemetry after a successful lease commit. The process admits at most one metadata-only observer with a bounded read and no retries. SIGKILL can lose a diagnostic sample. Job state, custody, billing, recovery and the returned lease have no dependency on the observer."
+    },
+    {
       "path": "utils/batch_pipeline/projection.py",
       "function": "Projector._start_candidate",
       "kind": "executor.submit",
@@ -111,6 +125,13 @@
       "kind": "executor.submit",
       "count": 1,
       "why": "reviewed safe: read-only successor-link scout; nothing is written, and a lost scout only means the walk reads its own successor"
+    },
+    {
+      "path": "utils/batch_pipeline/projection_prefetch.py",
+      "function": "NativeAudioPrefetch.context",
+      "kind": "executor.submit",
+      "count": 1,
+      "why": "Read-only staging and source verification. The owner turn keeps the future across step deadlines, and close cancels queued reads. Process loss leaves the durable result and assignment obligation pending for replay. An unfinished read cannot publish a receipt, change custody, or authorize cleanup."
     },
     {
       "path": "utils/batch_pipeline/serving.py",
@@ -405,6 +426,34 @@
       "kind": "submit_with_context",
       "count": 1,
       "why": "pre-existing; unreviewed"
+    },
+    {
+      "path": "utils/conversations/v3/context.py",
+      "function": "outline_sources",
+      "kind": "submit_with_context",
+      "count": 1,
+      "why": "Read-only, deadline-bounded context load for the v3 outline prompt (profile, people, earlier titles). The caller waits on it up to the outline deadline and falls back to no context; it writes nothing, so losing it at SIGKILL only drops optional prompt context from a request that is itself lost."
+    },
+    {
+      "path": "utils/conversations/v3/renewal.py",
+      "function": "leased_work",
+      "kind": "start_background_task",
+      "count": 2,
+      "why": "Joined worker and lease keeper, not detached work: leased_work awaits (shielded) the worker and then the keeper before returning, so both live exactly as long as the request. At SIGKILL the v3 builder lease expires and the named Cloud Tasks reconcile plus the sweeper redrive the user; no partial write is committed without the lease token."
+    },
+    {
+      "path": "utils/batch_pipeline/live.py",
+      "function": "_manual_finish_admitted",
+      "kind": "start_background_task",
+      "count": 1,
+      "why": "Manual-finish first transcript (SCA-3024), at most one per recording and two at a time per process, only for owners admitted by CONVERSATIONS_V3_FAST_FINISH: a best-effort early provider transcript started after record admission has committed. Losing it at SIGKILL loses only the early transcript; the admitted batch job still owns and delivers the canonical one, a single-unit recording's manual-end cut is stored before the task starts, and a multi-unit cut is stored only after the transcript write."
+    },
+    {
+      "path": "utils/batch_pipeline/commit_wake_sender.py",
+      "function": "CommitWakeSender.__call__",
+      "kind": "threading.Thread",
+      "count": 1,
+      "why": "Flag commit_wake: one daemon thread per worker posts owner ids to the serving backend. The wake is a hint held in memory; a wake lost at SIGKILL leaves the committed row where the serving sweep finds it, as without the flag."
     }
   ]
 }

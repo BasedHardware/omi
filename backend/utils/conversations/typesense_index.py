@@ -103,6 +103,7 @@ _INDEXED_FIRESTORE_FIELDS = (
     "created_at",
     "discarded",
     "deleted",
+    "recording",
     "dream_duplicate_of",
     "started_at",
     "finished_at",
@@ -267,6 +268,8 @@ def build_conversation_index_document(uid: str, conversation_data: Dict[str, Any
     declares ever leave this function. ``transcript_segments``, speaker fields,
     photos, and app results cannot be indexed because they are never read.
     """
+    if conversation_data.get('recording'):
+        return None
     conversation_id = str(conversation_data.get("id") or "").strip()
     created_at = _epoch_seconds(conversation_data.get("created_at"))
     if not conversation_id or created_at is None:
@@ -380,7 +383,7 @@ def _sync_conversation_index_after_write(
         # this sync); converge the index to absence instead of upserting stale
         # content — the race the extension's delete trigger otherwise covered.
         return delete_conversation_index_doc(uid, conversation_id)
-    if data.get("deleted") or data.get("dream_duplicate_of"):
+    if data.get("recording") or data.get("deleted") or data.get("dream_duplicate_of"):
         # Redirect tombstones must not stay searchable, including after a later
         # discarded=True write that would otherwise upsert them again.
         return delete_conversation_index_doc(uid, conversation_id)

@@ -1,0 +1,19 @@
+{
+  "version": 1,
+  "images": [
+    {
+      "file": "001-mobile-ios-too-old-recording.png",
+      "platform": "mobile-ios",
+      "description": "Offline Sync too-old recording row with the new copy that names no day count",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "002-mobile-ios-too-old-larger-text.png",
+      "platform": "mobile-ios",
+      "description": "Same row at 1.5x text scale",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    }
+  ]
+}

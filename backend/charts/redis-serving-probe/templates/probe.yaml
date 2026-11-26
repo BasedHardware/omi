@@ -1,0 +1,152 @@
+{{- if ne .Release.Namespace "prod-omi-backend" }}
+{{- fail "Redis serving probe placement requires namespace prod-omi-backend" }}
+{{- end }}
+{{- if not (regexMatch "^[^@]+@sha256:[a-f0-9]{64}$" .Values.image) }}
+{{- fail "image must pin the reviewed probe image digest" }}
+{{- end }}
+{{- /* Matches REDIS_DB_PORT in prod_omi_pusher_values.yaml. */ -}}
+{{- $port := 13151 }}
+{{- if or (empty .Values.redisAddresses) (empty .Values.dnsResolverAddresses) }}
+{{- fail "Redis and DNS egress require nonempty lists of reviewed addresses" }}
+{{- end }}
+{{- define "redis-serving-probe.hostCIDR" -}}
+{{- if contains ":" . -}}{{ . }}/128{{- else -}}{{ . }}/32{{- end -}}
+{{- end -}}
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: omi-redis-serving-probe
+automountServiceAccountToken: false
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: omi-redis-serving-probe
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: omi-redis-serving-probe
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: omi-redis-serving-probe
+    spec:
+      serviceAccountName: omi-redis-serving-probe
+      automountServiceAccountToken: false
+      terminationGracePeriodSeconds: 5
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        runAsGroup: 65532
+        fsGroup: 65532
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: probe
+          image: {{ .Values.image | quote }}
+          ports:
+            - name: metrics
+              containerPort: 9090
+          livenessProbe:
+            httpGet:
+              path: /healthz/live
+              port: metrics
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 1
+            failureThreshold: 2
+          env:
+            - name: REDIS_DB_HOST
+              valueFrom:
+                configMapKeyRef:
+                  name: prod-omi-backend-config
+                  key: REDIS_DB_HOST
+            - name: REDIS_DB_PORT
+              value: {{ $port | quote }}
+            - name: REDIS_PROBE_USERNAME
+              value: omi-redis-serving-probe
+            - name: REDIS_PROBE_PASSWORD_FILE
+              value: /run/redis-probe/password
+          volumeMounts:
+            - name: credential
+              mountPath: /run/redis-probe
+              readOnly: true
+          resources:
+            requests:
+              cpu: 20m
+              memory: 32Mi
+            limits:
+              memory: 64Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: [ALL]
+      volumes:
+        - name: credential
+          secret:
+            secretName: omi-redis-serving-probe-auth
+            defaultMode: 0440
+            items:
+              - key: password
+                path: password
+---
+apiVersion: monitoring.coreos.com/v1
+kind: PodMonitor
+metadata:
+  name: omi-redis-serving-probe
+  labels:
+    release: prod-omi-kube-prometheus-stack
+spec:
+  jobLabel: app.kubernetes.io/name
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: omi-redis-serving-probe
+  podMetricsEndpoints:
+    - port: metrics
+      path: /metrics
+      interval: 15s
+      scrapeTimeout: 5s
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: omi-redis-serving-probe
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: omi-redis-serving-probe
+  policyTypes: [Ingress, Egress]
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: prod-omi-monitoring
+          podSelector:
+            matchLabels:
+              operator.prometheus.io/name: prod-omi-kube-prometheus-s-prometheus
+      ports:
+        - port: 9090
+          protocol: TCP
+  egress:
+    - to:
+        {{- range .Values.redisAddresses }}
+        - ipBlock:
+            cidr: {{ include "redis-serving-probe.hostCIDR" . | quote }}
+        {{- end }}
+      ports:
+        - port: {{ $port }}
+          protocol: TCP
+    - to:
+        {{- range .Values.dnsResolverAddresses }}
+        - ipBlock:
+            cidr: {{ include "redis-serving-probe.hostCIDR" . | quote }}
+        {{- end }}
+      ports:
+        - port: 53
+          protocol: UDP
+        - port: 53
+          protocol: TCP

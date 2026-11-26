@@ -1,7 +1,7 @@
 """Hermetic held-custody deletion: real cleanup code, injected storage/DB boundaries."""
 
 from types import SimpleNamespace
-from unittest.mock import Mock
+from unittest.mock import MagicMock, Mock
 
 import pytest
 from google.api_core.exceptions import NotFound
@@ -125,6 +125,9 @@ def test_account_storage_purge_covers_held_orphans_and_preserves_neighbour(monke
 
 @pytest.mark.parametrize('root_exists', [False, True])
 def test_account_wipe_enumerates_custody_and_choice_subcollections_even_without_root(monkeypatch, root_exists):
+    # This mock checks subcollection enumeration and the legacy root delete.
+    # The real SDK root-delete transaction is covered by the writer emulator.
+    monkeypatch.setenv('BATCH_ACCOUNT_PRIVACY_WRITER_ENABLED', 'false')
     names = ['stt_cap_holds', 'stt_cap_hold_summary', 'processing_backlog', 'budget_choice']
     subcollections = [SimpleNamespace(id=name) for name in names]
     user = Mock()
@@ -133,15 +136,15 @@ def test_account_wipe_enumerates_custody_and_choice_subcollections_even_without_
     client = Mock()
     client.collection.return_value.document.return_value = user
     monkeypatch.setattr(batch_pipeline_purge, 'purge_batch_owner', lambda uid: None)
-    monkeypatch.setattr(user_data_deletion, 'get_data_plane_firestore_client', lambda: Mock())
+    monkeypatch.setattr(user_data_deletion, 'get_data_plane_firestore_client', lambda: MagicMock())
     monkeypatch.setattr(user_data_deletion, 'search_apps_db', lambda _uid, my_apps: [])
     monkeypatch.setattr(user_data_deletion, 'delete_generic_cache', lambda _key: None)
     recursive = Mock()
     retirements = []
     monkeypatch.setattr(
         user_data_deletion,
-        'stop_quiet_checks_for_account',
-        lambda uid, **kwargs: retirements.append((uid, kwargs['firestore_client'])),
+        'purge_finalization_jobs',
+        lambda uid, client: retirements.append((uid, client)),
     )
     assert user_data_deletion.purge_user_subtree('synthetic', client, recursive)['status'] == 'ok'
     assert retirements == [('synthetic', client)]

@@ -42,12 +42,18 @@ from google.cloud.exceptions import NotFound
 from google.api_core.exceptions import InvalidArgument
 
 from database.privacy_check_metrics import with_session_census
-from database import users as users_db
+from database import users as users_db, conversations as conversations_db
 from database.legal_holds import DestructiveOperationInProgress
 from utils.conversations.speaker_identity_retry import schedule_completed_identity_retries
 from utils.pusher_finalization import FINALIZATION_RESULT_PROTOCOL_LEGACY, process_conversation_task
+from config.pusher_record import close_notify_enabled, close_fast_path_enabled
+from config.batch_pipeline_projection_rebuild import enabled as projection_debt_enabled
+from utils.pusher_protocol import record_close_ack_frame
+from utils.pusher_record_close import VERSION as RECORD_CLOSE_VERSION, PusherCloseState, result_frame
 from utils.pusher_protocol import (
+    AudioBackpressure,
     BUFFERED_AUDIO_MAX_BYTES,
+    OPTIONAL_AUDIO_MAX_BYTES,
     MAX_SAMPLE_RATE,
     MIN_SAMPLE_RATE,
     PRIVATE_CLOUD_QUEUE_MAX_SIZE,
@@ -59,10 +65,12 @@ from utils.pusher_protocol import (
     SpeakerSampleRequest,
     TranscriptQueueItem,
     append_bounded,
+    append_optional,
     audio_timeline_ack_frame,
     audio_custody_ack_frame,
     bound_private_pending,
-    extend_bounded,
+    extend_optional,
+    optional_flush_bytes,
     frame_header,
     json_object,
     pusher_session_outcome,
@@ -187,7 +195,7 @@ PROJECTION_RETRY_BUDGET = 2
 
 
 def _projection_raising_frame(exc: BaseException) -> str:
-    """Innermost raising frame name, for RCA attribution of projection failures.
+    """Innermost raising frame name, for RCA attribution of storage failures.
 
     Only the code object's name is ever returned — the exception message and
     args can carry user-identifying object paths and must not reach logs.
@@ -444,11 +452,19 @@ async def _websocket_util_trigger(
     client_kind: str = 'unknown',
     audio_timeline: Optional[int] = None,
     audio_custody: Optional[int] = None,
+    record_close_protocol: Optional[int] = None,
 ) -> None:
     observation = SocketObservation()
     try:
         await _run_websocket_util_trigger(
-            websocket, uid, sample_rate, client_kind, audio_timeline, audio_custody, observation=observation
+            websocket,
+            uid,
+            sample_rate,
+            client_kind,
+            audio_timeline,
+            audio_custody,
+            observation=observation,
+            record_close_protocol=record_close_protocol,
         )
     except asyncio.CancelledError:
         observation.reason = 'cancelled'
@@ -469,6 +485,7 @@ async def _run_websocket_util_trigger(
     audio_custody: Optional[int],
     *,
     observation: SocketObservation,
+    record_close_protocol: Optional[int] = None,
 ) -> None:
     logger.info(f'_websocket_util_trigger {uid}')
     resolved_client_kind = bounded_client_kind(client_kind)
@@ -502,6 +519,14 @@ async def _run_websocket_util_trigger(
         except Exception as e:
             logger.error(f'Failed to send audio timeline ack: {e} {uid}')
             return
+
+    close_protocol = (
+        PusherCloseState(True)
+        if close_notify_enabled(uid) and record_close_protocol == RECORD_CLOSE_VERSION and audio_outbox_enabled()
+        else None
+    )
+    if close_protocol is not None:
+        await websocket.send_bytes(record_close_ack_frame())
 
     # Defense-in-depth: during drain the LB should already have removed us from
     # the NEG, but reject straggler NEW connections.  We accept the handshake
@@ -552,6 +577,8 @@ async def _run_websocket_util_trigger(
     private_cloud_queue: deque[PrivateCloudChunk] = deque(maxlen=PRIVATE_CLOUD_QUEUE_MAX_SIZE)
     audio_bytes_event = asyncio.Event()  # Signals when items are added for instant wake
     audio_budget = ByteBudget(BUFFERED_AUDIO_MAX_BYTES)
+    # Apps/webhook audio never shares the custody budget (see append_optional).
+    optional_audio_budget = ByteBudget(OPTIONAL_AUDIO_MAX_BYTES)
     durable_audio = audio_outbox_enabled()
     log_closed_record_drain_cap()
     record_futures = ExecutorFutureTracker(storage_executor, record_barrier_executor)
@@ -569,8 +596,15 @@ async def _run_websocket_util_trigger(
     custody_root = uuid.uuid4().hex
     custody_sequence = 0
 
-    audio_projection = PusherAudioProjection(uid)
     deleted_conversations: set[str] = set()
+
+    def playback_refreshed(conv_id, applied):
+        if applied is False:
+            deleted_conversations.add(conv_id)
+        elif applied:
+            schedule_completed_identity_retries(uid, {conv_id})
+
+    audio_projection = PusherAudioProjection(uid, on_refresh=playback_refreshed)
 
     async def process_durable_private_cloud_queue() -> None:
         # Pending conversations hold only receipts. Hydrate at most one bounded
@@ -588,6 +622,17 @@ async def _run_websocket_util_trigger(
                 return
 
             try:
+                if close_fast_path_enabled():
+                    owner = await run_blocking(
+                        db_executor,
+                        conversations_db.get_conversation_raw_snapshot,
+                        uid,
+                        conv_id,
+                        field_paths=['deleted'],
+                    )
+                    if owner is None or owner.get('deleted'):
+                        deleted_conversations.add(conv_id)
+                        return
                 chunks: List[Dict[str, Any]] = []
                 with observe_work('drain_readback'):
                     for ref in refs:
@@ -619,14 +664,19 @@ async def _run_websocket_util_trigger(
                 OMI_AUDIO_TIMELINE_CHUNKS_WRITTEN_TOTAL.labels(
                     reason='with_spans' if audio_timeline_v2 else 'without_spans'
                 ).inc()
-                with observe_work('drain_refresh'):
-                    applied = await run_blocking(
-                        storage_executor,
-                        audio_projection.refresh,
-                        conv_id,
-                        uploaded_paths,
-                        force=not websocket_active or conv_id in record_close_requests,
-                    )
+                closing = not websocket_active or conv_id in record_close_requests
+                if close_fast_path_enabled() and projection_debt_enabled():
+                    await audio_projection.defer_close_refresh(conv_id, uploaded_paths, closing=closing)
+                    applied = None  # The verified PCM and encoded upload already completed.
+                else:
+                    with observe_work('drain_refresh'):
+                        applied = await run_blocking(
+                            storage_executor,
+                            audio_projection.refresh,
+                            conv_id,
+                            uploaded_paths,
+                            force=closing,
+                        )
                 if applied:
                     schedule_person_voice_learning_retry(uid, conv_id)
                     if len(identity_refreshed) < 128:
@@ -755,6 +805,43 @@ async def _run_websocket_util_trigger(
             )
             logger.warning('Durable audio projection deferred after retries; archive receipt retained')
 
+        async def finish_ready_records(exclude: Optional[str] = None) -> None:
+            for conv_id in list(record_close_requests):
+                if conv_id == exclude:
+                    continue  # The just-dequeued reference is not buffered yet.
+                if close_protocol is not None and close_protocol.blocks(conv_id, websocket_active):
+                    continue  # A transport send/rollover is not a committed close boundary.
+                if websocket_active and any(window.conversation_id == conv_id for window in refused_windows):
+                    continue  # Uncommitted PCM is still owned by this socket.
+                if (
+                    conv_id not in pending_refs
+                    and not durable_queue.has_conversation(conv_id)
+                    and close_fast_path_enabled()
+                    and projection_debt_enabled()
+                ):
+                    await audio_projection.defer_close_refresh(conv_id)
+                if (
+                    conv_id == inline_finish_conversation
+                    and conv_id not in pending_refs
+                    and not durable_queue.has_conversation(conv_id)
+                ):
+                    # Wake even on projection failure so the receiver can
+                    # observe its sticky failure without waiting out the budget.
+                    if not await audio_projection.finish_pending(conv_id, deleted_conversations, identity_refreshed):
+                        continue
+                    inline_projection_drained.set()
+                    await inline_finish_done.wait()
+                    if conv_id not in record_close_requests:
+                        continue
+                if conv_id in pending_refs or durable_queue.has_conversation(conv_id):
+                    continue
+                if not await audio_projection.finish_pending(conv_id, deleted_conversations, identity_refreshed):
+                    continue
+                if conv_id not in record_barrier.failed_recordings and not record_barrier.record_upload_failed:
+                    if not await record_barrier.finish_recording(conv_id):
+                        continue
+                retire_record_close(conv_id)
+
         while (
             websocket_active
             or not durable_queue.empty()
@@ -772,9 +859,15 @@ async def _run_websocket_util_trigger(
             durable_queue.promote_pending()
             # A continuously replenished later recording must not prevent the
             # close scan. Process a bounded snapshot before flushing/finishing.
+            previous_conv = None
             for _ in range(durable_queue.qsize()):
                 ref = durable_queue.get_nowait()
                 conv_id = ref.conversation_id
+                if close_fast_path_enabled() and previous_conv is not None and previous_conv != conv_id:
+                    if previous_conv in record_close_requests:
+                        await flush_refs(previous_conv)
+                    await finish_ready_records(exclude=conv_id)
+                previous_conv = conv_id
                 if conv_id is not None:
                     refs = pending_refs.get(conv_id, [])
                     if refs:
@@ -802,30 +895,9 @@ async def _run_websocket_util_trigger(
                     or sum(r.samples / r.sample_rate for r in refs) >= PRIVATE_CLOUD_CHUNK_DURATION
                 ):
                     await flush_refs(conv_id)
-            for conv_id in list(record_close_requests):
-                if websocket_active and any(window.conversation_id == conv_id for window in refused_windows):
-                    continue  # Uncommitted PCM is still owned by this socket.
-                if (
-                    conv_id == inline_finish_conversation
-                    and conv_id not in pending_refs
-                    and not durable_queue.has_conversation(conv_id)
-                ):
-                    # Wake even on projection failure so the receiver can
-                    # observe its sticky failure without waiting out the budget.
-                    if not await audio_projection.finish_pending(conv_id, deleted_conversations, identity_refreshed):
-                        continue
-                    inline_projection_drained.set()
-                    await inline_finish_done.wait()
-                    if conv_id not in record_close_requests:
-                        continue
-                if conv_id in pending_refs or durable_queue.has_conversation(conv_id):
-                    continue
-                if not await audio_projection.finish_pending(conv_id, deleted_conversations, identity_refreshed):
-                    continue
-                if conv_id not in record_barrier.failed_recordings and not record_barrier.record_upload_failed:
-                    if not await record_barrier.finish_recording(conv_id):
-                        continue
-                retire_record_close(conv_id)
+                    if close_fast_path_enabled():
+                        await finish_ready_records()
+            await finish_ready_records()
         for conv_id in list(audio_projection.close_debt):
             for _ in range(PROJECTION_RETRY_BUDGET + 1):
                 if await audio_projection.finish_pending(conv_id, deleted_conversations, identity_refreshed):
@@ -868,6 +940,8 @@ async def _run_websocket_util_trigger(
     def retire_record_close(conv_id: str) -> None:
         record_close_requests.discard(conv_id)
         record_barrier.retire_close(conv_id)
+        if close_protocol is not None:
+            close_protocol.retire(conv_id)
 
     async def process_private_cloud_queue() -> None:
         """Background task that batches private cloud sync uploads by conversation_id.
@@ -1298,10 +1372,18 @@ async def _run_websocket_util_trigger(
                 except Exception as e:
                     logger.error(f"Error processing audio bytes: {e} {uid}")
                 finally:
-                    audio_budget.release(len(item['data']))
+                    optional_audio_budget.release(len(item['data']))
 
     # The conversation this session last streamed, for the episode moment flush at teardown.
     episode_session: Dict[str, Optional[str]] = {'conversation_id': None}
+
+    async def enqueue_audio_bytes(item: AudioBytesQueueItem) -> None:
+        # Optional app/webhook audio is best-effort. A slow or dead consumer must
+        # never stall the receive loop or close the capture socket: evict the
+        # oldest optional item instead (counted as an audio_bytes queue drop).
+        if append_optional(audio_bytes_queue, item, 'audio_bytes', optional_audio_budget):
+            logger.warning(f"audio_bytes_queue full; dropped oldest optional audio {uid}")
+        audio_bytes_event.set()
 
     async def receive_tasks() -> None:
         nonlocal websocket_active
@@ -1326,16 +1408,52 @@ async def _run_websocket_util_trigger(
         private_cloud_window_opened_at: Optional[float] = None
         durable_tail_has_receipt = False
         durable_commit_unresolved = False
+        # The socket's one terminal disposition for a durable window whose
+        # commit outcome is unknown. Set together with the fence; later flushes
+        # and the teardown tail observe it instead of attempting storage again.
+        durable_commit_disposition: Optional[str] = None
         pcm_admission_cancelled = False
         # Audio-timeline v2 continuity for this socket: the projected end of
         # the last accepted run and its conversation. None until first audio
         # or after a conversation switch (which flushes the run).
         audio_timeline_last_end: Optional[float] = None
 
+        def settle_durable_commit_unresolved(exc: BaseException, *, stage: str) -> None:
+            """Close the producer fence with exactly one recorded disposition.
+
+            An unknown storage outcome is never rerun, so the retained window
+            stays unacknowledged for client WAL replay and its producer token
+            stays held. The fence and its disposition are set once: every later
+            flush or tail on this socket observes them instead of raising, so a
+            single failed or unknown commit produces one record, not one per
+            tail. Telemetry faults never change the socket outcome.
+
+            Failure-counter ownership stays with the storage helper, which
+            records the dispatch failure before re-raising; this settlement
+            adds only the pre-durability loss signal, so one disposition can
+            never increment the same failure series twice.
+            """
+            nonlocal durable_commit_unresolved, durable_commit_disposition
+            durable_commit_unresolved = True
+            if durable_commit_disposition is not None:
+                return
+            durable_commit_disposition = 'unresolved'
+            try:
+                record_would_drop(stage)
+            except Exception:
+                pass  # Telemetry never changes the socket outcome.
+            logger.warning(
+                'event=durable_custody_commit_disposition disposition=%s stage=%s exception_type=%s raised_by=%s %s',
+                durable_commit_disposition,
+                stage,
+                type(exc).__name__,
+                _projection_raising_frame(exc),
+                uid,
+            )
+
         async def commit_durable_window(window: RetainedPcmWindow, *, tail: bool = False) -> Optional[AudioReceipt]:
             """Commit the buffered window as one custody pair (see _commit_durable_audio_window)."""
             nonlocal durable_tail_has_receipt
-            nonlocal durable_commit_unresolved
             durable_tail_has_receipt = False
             late_append = False
 
@@ -1371,11 +1489,13 @@ async def _run_websocket_util_trigger(
                     framed=framed_audio,
                     tail=tail,
                 )
-            except BaseException:
+            except BaseException as exc:
                 # A failed/cancelled dispatch can have committed remotely. The
-                # shutdown tail must never rerun that unknown storage operation.
+                # shutdown tail must never rerun that unknown storage operation:
+                # close the fence with one disposition and let the socket end
+                # once instead of raising again on every later tail.
                 if not durable_tail_has_receipt:
-                    durable_commit_unresolved = True
+                    settle_durable_commit_unresolved(exc, stage='window_tail' if tail else 'commit')
                 raise
 
         async def _queue_private_cloud_chunk(*, skip_if_silent: bool = False, tail: bool = False) -> None:
@@ -1390,7 +1510,11 @@ async def _run_websocket_util_trigger(
                     return
             if durable_audio:
                 if durable_commit_unresolved:
-                    raise RuntimeError('custody commit unresolved; producer fence retained')
+                    # The outcome is unknown and its one disposition is already
+                    # recorded. Later flushes and the teardown tail must never
+                    # rerun that storage operation or raise: the retained window
+                    # and its producer token stay fenced for client WAL replay.
+                    return
                 if private_cloud_sync_enabled and private_cloud_sync_buffer:
                     # Move the originals, without copying or releasing their
                     # per-socket byte charge. A refused conversation/size/gap
@@ -1512,7 +1636,10 @@ async def _run_websocket_util_trigger(
                 # Cancelling admission leaves the unacknowledged window for
                 # WAL replay. Never start storage (or ACK a departed peer) in
                 # this cancellation cleanup, which must not wait on GCS retries.
-                if not pcm_admission_cancelled:
+                # A settled unknown outcome is equally untouchable: its one
+                # disposition already holds the fence, so retrying here would
+                # rerun storage and turn one failure into a raise per tail.
+                if not pcm_admission_cancelled and not durable_commit_unresolved:
                     await _queue_private_cloud_chunk(tail=True)
                     tail_committed = durable_audio and not refused_windows
             except ProjectionQueueWaitTimeout:
@@ -1523,16 +1650,18 @@ async def _run_websocket_util_trigger(
             except WebSocketDisconnect as exc:
                 websocket_close_code = exc.code or 1006
                 tail_committed = durable_tail_has_receipt
-            except Exception:
+            except Exception as exc:
                 if durable_audio:
-                    record_failure('window_tail')
-                    record_would_drop('window_tail')
+                    # The failing dispatch records the socket's one terminal
+                    # disposition; any other fault records it here. Neither log
+                    # line carries a traceback, so a fenced socket ends as one
+                    # recorded outcome instead of an unhandled exception per tail.
+                    settle_durable_commit_unresolved(exc, stage='window_tail')
                     # Fail closed to the producer: the unacknowledged tail must
                     # be replayable, so signal the same error close the
                     # mid-session commit failure path uses.
                     websocket_close_code = 1011
                     observation.reason = 'application_error'
-                    logger.exception(f'Durable audio window tail commit failed at shutdown {uid}')
                     if current_conversation_id:
                         # The immutable commit may have landed before ACK or
                         # queue delivery failed. Keep the producer token, but
@@ -1554,9 +1683,28 @@ async def _run_websocket_util_trigger(
                         record_barrier.hold_recording(current_conversation_id)
             if private_cloud_sync_enabled and current_conversation_id and len(record_close_requests) < 128:
                 record_close_requests.add(current_conversation_id)
+            uncommitted_closes = (
+                close_protocol.requests.keys() - close_protocol.committed - close_protocol.aborted
+                if close_protocol is not None
+                else set()
+            )
+            if uncommitted_closes:
+                logger.warning('event=record_close_uncommitted_disconnect records=%d', len(uncommitted_closes))
+                record_fallback(
+                    component='pusher',
+                    from_mode='record_close_v2',
+                    to_mode='proof_based_repair',
+                    reason='client_disconnect',
+                    outcome='degraded',
+                    log=logger,
+                )
+            for cid in uncommitted_closes:
+                record_barrier.hold_recording(cid)
+                record_close_requests.discard(cid)
             if (
                 tail_committed
                 and current_conversation_id in record_close_requests
+                and (close_protocol is None or current_conversation_id in close_protocol.committed)
                 and current_conversation_id not in record_barrier.failed_recordings
                 and not record_barrier.record_upload_failed
                 and os.getenv('RECORD_BARRIER_INLINE_FINISH', 'true').strip().lower() != 'false'
@@ -1680,6 +1828,57 @@ async def _run_websocket_util_trigger(
                 ):
                     raise ValueError('dispatch_generation must be an integer')
                 if conversation_id:
+                    close_only = res.get('record_close_only') is True
+                    if close_only:
+                        request_id, phase, watermark = res.get('request_id'), res.get('phase'), res.get('watermark')
+                        if (
+                            not isinstance(request_id, str)
+                            or not 0 < len(request_id) <= 64
+                            or phase not in {'prepare', 'commit', 'abort'}
+                            or type(watermark) is not int
+                            or not 0 <= watermark < 2**63
+                        ):
+                            raise ValueError('invalid close-v2 control')
+                        status, base = 'unsupported', 0
+                        if close_protocol is not None and close_notify_enabled(uid) and private_cloud_sync_enabled:
+                            if phase == 'prepare':
+                                status, base = close_protocol.prepare(
+                                    conversation_id, request_id, record_close_requests
+                                )
+                                if status == 'prepared':
+                                    await record_barrier.begin_recording(conversation_id)
+                                    if conversation_id not in record_barrier.registered_sessions:
+                                        status = 'producer_unavailable'
+                            elif phase == 'abort':
+                                # Only a new listener with the advertised capability
+                                # can supply its original archive + ordered relay proof.
+                                status = (
+                                    close_protocol.abort(conversation_id, request_id, watermark, accept=False)
+                                    if res.get('source_tail_durable') is True
+                                    else 'tail_not_durable'
+                                )
+                                base = watermark
+                                if status == 'aborted':
+                                    if current_conversation_id == conversation_id:
+                                        await _queue_private_cloud_chunk()
+                                        _reset_private_cloud_buffer()
+                                    # Preserve the fence across pusher custody I/O,
+                                    # just as commit does; ordinary queued closure
+                                    # may run as soon as the atomic abort wins.
+                                    status = close_protocol.abort(conversation_id, request_id, watermark)
+                            else:
+                                status = close_protocol.commit(conversation_id, request_id, watermark, accept=False)
+                                base = watermark
+                                if status == 'accepted':
+                                    if current_conversation_id == conversation_id:
+                                        await _queue_private_cloud_chunk()
+                                        _reset_private_cloud_buffer()
+                                    # The reservation must block existing rollover
+                                    # close requests until custody handoff completes.
+                                    close_protocol.commit(conversation_id, request_id, watermark)
+                                    record_close_requests.add(conversation_id)
+                        await websocket.send_bytes(result_frame(conversation_id, request_id, phase, status, base))
+                        return  # Only commit requests closure; never dispatch a finalizer.
                     if private_cloud_sync_enabled:
                         await _queue_private_cloud_chunk()
                         _reset_private_cloud_buffer()
@@ -1716,6 +1915,8 @@ async def _run_websocket_util_trigger(
                 # Parse: header(4) | timestamp(8 bytes double) | audio_data
                 buffer_start_timestamp = struct.unpack("d", data[4:12])[0]
                 audio_data = data[12:]
+                if close_protocol is not None:
+                    close_protocol.audio(current_conversation_id, len(audio_data))
                 run_gap_before = False
 
                 if audio_timeline_v2:
@@ -1792,9 +1993,13 @@ async def _run_websocket_util_trigger(
                 # Only accumulate audio buffers if there's a consumer (app trigger or webhook)
                 # Without this guard, buffers grow ~16KB/s indefinitely for users with no audio apps
                 if has_audio_apps_enabled:
-                    extend_bounded(trigger_audiobuffer, audio_data, 'audio_app_buffer', audio_budget)
+                    extend_optional(
+                        trigger_audiobuffer, audio_data, 'audio_app_buffer', optional_audio_budget, audio_bytes_queue
+                    )
                 if audio_bytes_webhook_delay_seconds is not None:
-                    extend_bounded(audiobuffer, audio_data, 'audio_webhook_buffer', audio_budget)
+                    extend_optional(
+                        audiobuffer, audio_data, 'audio_webhook_buffer', optional_audio_budget, audio_bytes_queue
+                    )
 
                 # Private cloud sync - queue chunks for background processing.
                 # Durable custody buffers the accepted stream the same way
@@ -1847,41 +2052,31 @@ async def _run_websocket_util_trigger(
                         _reset_private_cloud_buffer()
 
                 # Queue audio bytes triggers for batched processing
-                if (
-                    has_audio_apps_enabled
-                    and len(trigger_audiobuffer) > sample_rate * audio_bytes_trigger_delay_seconds * 2
+                if has_audio_apps_enabled and len(trigger_audiobuffer) >= optional_flush_bytes(
+                    sample_rate, audio_bytes_trigger_delay_seconds
                 ):
                     if len(audio_bytes_queue) >= AUDIO_BYTES_QUEUE_WARN_SIZE:
                         logger.warning(f"Warning: audio_bytes_queue size {len(audio_bytes_queue)} {uid}")
-                    append_bounded(
-                        audio_bytes_queue,
+                    await enqueue_audio_bytes(
                         {
                             'type': 'app',
                             'sample_rate': sample_rate,
                             'data': trigger_audiobuffer.copy(),
                         },
-                        'audio_bytes',
-                        byte_budget=audio_budget,
-                        size_of=lambda item: len(item['data']),
                     )
                     audio_bytes_event.set()  # Wake consumer immediately
                     trigger_audiobuffer = bytearray()
-                if (
-                    audio_bytes_webhook_delay_seconds is not None
-                    and len(audiobuffer) > sample_rate * audio_bytes_webhook_delay_seconds * 2
+                if audio_bytes_webhook_delay_seconds is not None and len(audiobuffer) >= optional_flush_bytes(
+                    sample_rate, audio_bytes_webhook_delay_seconds
                 ):
                     if len(audio_bytes_queue) >= AUDIO_BYTES_QUEUE_WARN_SIZE:
                         logger.warning(f"Warning: audio_bytes_queue size {len(audio_bytes_queue)} {uid}")
-                    append_bounded(
-                        audio_bytes_queue,
+                    await enqueue_audio_bytes(
                         {
                             'type': 'webhook',
                             'sample_rate': sample_rate,
                             'data': audiobuffer.copy(),
                         },
-                        'audio_bytes',
-                        byte_budget=audio_budget,
-                        size_of=lambda item: len(item['data']),
                     )
                     audio_bytes_event.set()  # Wake consumer immediately
                     audiobuffer = bytearray()
@@ -1918,14 +2113,28 @@ async def _run_websocket_util_trigger(
             logger.info("WebSocket disconnected")
         except Exception as e:
             observation.reason = 'application_error'
-            logger.error(f'Could not process audio: error {e}')
+            stage = e.stage if isinstance(e, AudioBackpressure) else 'other'
+            logger.error(
+                'event=pusher_receive_failed exception_type=%s stage=%s',
+                type(e).__name__,
+                stage if stage in {'pusher_queue', 'pusher_budget', 'pusher_pending'} else 'other',
+            )
             websocket_close_code = 1011
             application_failed = True
         finally:
+            if application_failed and websocket.client_state == WebSocketState.CONNECTED:
+                # Stop transport acceptance immediately. Draining storage/apps
+                # can take 30 seconds; leaving the socket open during that time
+                # let listen successfully send audio nobody would consume.
+                try:
+                    await websocket.close(code=websocket_close_code)
+                except Exception:
+                    pass  # Storage/producer fences still drain below.
             await finish_receive()
 
     bg_main_tasks: List[asyncio.Task[Any]] = []
     receive_task: asyncio.Task[Any] | None = None
+    record_worker: asyncio.Task[Any] | None = None
     record_drain_observed = False
 
     async def drain_socket_tasks() -> None:
@@ -1968,6 +2177,7 @@ async def _run_websocket_util_trigger(
                 create_named_task(process_audio_bytes_queue(), name=f"ws:{uid}:audio_bytes"),
             ]
 
+        record_worker = bg_main_tasks[1]
         exit_result = await supervise_tasks(
             receive_task=receive_task,
             bg_tasks=bg_main_tasks,
@@ -2022,6 +2232,20 @@ async def _run_websocket_util_trigger(
         await drain_tasks(all_to_cancel, timeout=5.0, label="pusher_cleanup", cancel=True)
         await audio_projection.persist_pending()
 
+        if (
+            close_protocol is not None
+            and close_notify_enabled(uid)
+            and receive_task is not None
+            and receive_task.done()
+            and record_worker is not None
+            and all(task.done() for task in bg_main_tasks if task is not record_worker)
+        ):
+            prepared = close_protocol.requests.keys() - close_protocol.committed - close_protocol.aborted
+            if prepared:
+                # Actual socket/receive exit is required. A live handshake deadline
+                # has no authority to stop a source or attest its producer token.
+                abandon_evicted_record_drain(record_worker, record_barrier, record_futures, prepared=prepared)
+
         if application_failed and observation.reason == 'peer':
             observation.reason = 'application_error'
         PUSHER_ACTIVE_WS_CONNECTIONS.dec()
@@ -2046,5 +2270,8 @@ async def websocket_endpoint_trigger(
     client_kind: str = 'unknown',
     audio_timeline: Optional[int] = None,
     audio_custody: Optional[int] = None,
+    record_close_protocol: Optional[int] = None,
 ) -> None:
-    await _websocket_util_trigger(websocket, uid, sample_rate, client_kind, audio_timeline, audio_custody)
+    await _websocket_util_trigger(
+        websocket, uid, sample_rate, client_kind, audio_timeline, audio_custody, record_close_protocol
+    )

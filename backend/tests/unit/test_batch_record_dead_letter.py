@@ -115,7 +115,11 @@ async def test_flag_off_preserves_ordinary_defer_without_stamps_or_flips(drain, 
         row['record_dead_letter_deadline_at'] = deadline
     before = deepcopy(row)
     await live.drain_recordings(drain)
-    assert drain.rows['jobs', 'record'] == {**before, 'available_at': NOW + 60}
+    assert drain.rows['jobs', 'record'] == {
+        **before,
+        'available_at': NOW + 60,
+        'record_intake_claimed_at': NOW,
+    }
 
 
 @pytest.mark.asyncio
@@ -283,6 +287,7 @@ async def test_defer_expiry_cannot_bypass_commit_privacy_fence(monkeypatch):
     assert client.rows[('batch_pipeline_dev_jobs', 'record')] == {
         **job,
         'available_at': NOW + live.record_drain_lease_seconds(),
+        'record_intake_claimed_at': NOW,
     }
     counter.inc.assert_not_called()
     assert fence.call_count == 2

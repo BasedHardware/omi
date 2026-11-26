@@ -17,11 +17,13 @@ from prometheus_client import Counter, Gauge
 from database import record_audio as record_audio_db
 from database import record_token_lease_metrics as lease_metrics
 from config import record_seal_rules as lease
+from config.pusher_record import seal_pending_retry_bound_enabled
 from utils.executors import ExecutorSaturatedError, record_barrier_executor, run_blocking, track_executor_future
 from utils.observability.fallback import record_fallback
 
 logger = logging.getLogger(__name__)
 CLOSE_RETRY_BUDGET = 3
+PRODUCER_PENDING_RETRY_BUDGET = 6
 CLOSE_RETRY_MAX_SECONDS = 60.0
 CLOSE_RETRY_MAX_IN_FLIGHT = 4
 CLOSE_METADATA_DEADLINE_SECONDS = 30.0
@@ -222,6 +224,7 @@ class PusherRecordBarrier:
         self.pending_clears: set[tuple[str, str]] = set()
         self.close_failures: dict[str, int] = {}
         self.close_retry_at: dict[str, float] = {}
+        self.producer_pending_attempts: dict[str, int] = {}
         self.keep_close_pending = False
         self.lease_renewed_at: dict[str, float] = {}
         self.lease_locks: dict[str, asyncio.Lock] = {}
@@ -289,6 +292,7 @@ class PusherRecordBarrier:
         """Forget scheduling state only; never change durable custody proof."""
         self.close_failures.pop(conversation_id, None)
         self.close_retry_at.pop(conversation_id, None)
+        self.producer_pending_attempts.pop(conversation_id, None)
         # Failed recordings remain fenced by failed_recordings/global failure;
         # they no longer need a second entry in begin's checked-set budget.
         self.checked_conversations.discard(conversation_id)
@@ -415,7 +419,7 @@ class PusherRecordBarrier:
             lease_metrics.ACTIVE.dec()
 
     async def finish_recording(self, conversation_id: str) -> bool:
-        """Return whether settled (or the legacy bounded retry budget exhausted).
+        """Return whether this local drain is settled or its seal retry budget exhausted.
 
         Durable drain owners set keep_close_pending so transient metadata
         failure never retires their only retry while this process is alive.
@@ -466,9 +470,33 @@ class PusherRecordBarrier:
                 _SEAL_REFUSAL_COUNTERS[refused].inc()
                 logger.info('event=record_seal_refused reason=%s', refused)
                 if refused == 'producer_pending':
-                    # Another producer still owes audio. Reuse the existing
-                    # close budget/backoff; never certify its tail by retiring
-                    # this retry on the first refused seal.
+                    # Our token clears have completed, but another producer
+                    # still owes audio. Do not retain a finished audio worker
+                    # forever: a pod's 64 retained slots otherwise fill with
+                    # seal-only retries and evict fresh audio drains. Leave the
+                    # other producer's persisted fence and repair debt intact.
+                    attempts = min(
+                        self.producer_pending_attempts.get(conversation_id, 0) + 1, PRODUCER_PENDING_RETRY_BUDGET
+                    )
+                    self.producer_pending_attempts[conversation_id] = attempts
+                    if (
+                        self.keep_close_pending
+                        and seal_pending_retry_bound_enabled()
+                        and attempts >= PRODUCER_PENDING_RETRY_BUDGET
+                        and conversation_id not in self.upload_sessions
+                        and not any(cid == conversation_id for cid, _ in self.pending_clears)
+                    ):
+                        logger.info('event=record_seal_deferred reason=producer_pending')
+                        record_fallback(
+                            component='pusher',
+                            from_mode='record_barrier',
+                            to_mode='raw_audio',
+                            reason='other',
+                            outcome='degraded',
+                            log=logger,
+                        )
+                        self.retire_close(conversation_id)
+                        return True  # Local scheduling completion, never a successful seal.
                     return self._retry_close(conversation_id)
                 # upload_failed is sticky and requires full-proof repair.
                 # deleted/not_batch_owner have no seal obligation here.
@@ -480,10 +508,12 @@ class PusherRecordBarrier:
         self.retire_close(conversation_id)
         return True
 
-    def forget_evicted_tokens(self) -> None:
+    def forget_evicted_tokens(self, recordings: set[str] | None = None) -> None:
         # A reconnect must never recover a token selected for abandonment, even
         # while admission is refused. This is a hint removal, not durable proof.
         for cid, token in self.evicted_tokens():
+            if recordings is not None and cid not in recordings:
+                continue
             _process_record_tokens().forget(self.uid, cid, token)
 
     def evicted_tokens(self) -> set[tuple[str, str]]:
@@ -493,11 +523,13 @@ class PusherRecordBarrier:
         # executor settlement is no authority to attest that producer stopped.
         return set(self.upload_sessions.items())
 
-    async def abandon_recordings(self) -> None:
+    async def abandon_recordings(self, recordings: set[str] | None = None) -> None:
         """Called only after the worker AND its executor futures have settled."""
         self.keep_close_pending = True
-        self.forget_evicted_tokens()
+        self.forget_evicted_tokens(recordings)
         for cid, token in self.evicted_tokens():
+            if recordings is not None and cid not in recordings:
+                continue
             attempts = 0
             while True:
                 try:

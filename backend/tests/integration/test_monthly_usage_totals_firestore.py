@@ -8,6 +8,7 @@ import importlib.util
 from pathlib import Path
 import threading
 from types import SimpleNamespace
+from unittest.mock import Mock
 from uuid import uuid4
 
 from google.auth.credentials import AnonymousCredentials
@@ -15,11 +16,15 @@ from google.api_core.exceptions import Aborted
 from google.cloud import firestore
 import pytest
 
-from database import legal_holds, monthly_usage_totals as totals, user_usage
+from database import free_allowance_leases as ledger, legal_holds, monthly_usage_observation
+from database import monthly_usage_totals as totals, user_usage
 from database.batch_pipeline_projection import ProjectionStore
+from database.firestore_document_probe import firestore_metrics_service_name
 from database.hourly_usage_updates import prepare_hourly_usage_updates
 from database.sync_ledger import BATCH_PARTIAL_STATUS
 from scripts.admin.reset_transcription_usage import ResetPlan, apply_reset
+from services.monthly_usage_shadow import install_month_shadow
+from utils import executors, read_cache_shadow as shadow
 
 pytestmark = pytest.mark.integration
 NOW = datetime(2026, 10, 23, 15, tzinfo=timezone.utc)
@@ -448,3 +453,79 @@ def test_deletion_inventory_cannot_miss_a_racing_cold_seed(lane, monkeypatch):
         assert seed.result(timeout=20)['transcription_seconds'] == 9
         erased.result(timeout=20)
     assert not totals.month_ref(user, NOW).get().exists, 'derived usage survived the wipe inventory'
+
+
+@pytest.fixture
+def shadow_jobs(monkeypatch):
+    monkeypatch.setattr(monthly_usage_observation, '_observer', None)
+    install_month_shadow()
+    pending, metric = [], Mock()
+    monkeypatch.setattr(executors, 'submit_with_context', lambda pool, fn: pending.append(fn))
+    monkeypatch.setattr(shadow, 'MONTH_SHADOW', metric)
+    monkeypatch.setenv('OMI_USAGE_MONTH_TOTAL_SHADOW_ENABLED', 'true')
+    monkeypatch.setenv('OMI_USAGE_MONTH_TOTAL_SHADOW_RATE', '1')
+    return pending, metric
+
+
+def test_shadow_observes_served_snapshot_after_atomic_hourly_write(lane, shadow_jobs):
+    client, uid, _ = lane
+    pending, metric = shadow_jobs
+    earlier = NOW.replace(day=1)
+    user_usage.update_hourly_usage(uid, earlier, {'transcription_seconds': 11}, firestore_client=client)
+    user_usage.update_hourly_usage(uid, NOW, {'transcription_seconds': 7}, firestore_client=client)
+    totals.establish_verified_month(uid, NOW, firestore_client=client)
+    partial = user_usage.get_monthly_usage_stats_since(uid, NOW, NOW)
+    assert partial['transcription_seconds'] == 7
+    assert ledger.chargeable_seconds(uid, NOW, firestore_client=client) == 18
+
+    user_usage.update_hourly_usage(uid, NOW, {'transcription_seconds': 5}, firestore_client=client)
+    assert len(pending) == 3
+    for compare in pending:
+        compare()
+    assert [(c.kwargs['path'], c.kwargs['outcome']) for c in metric.labels.call_args_list] == [
+        ('free_allowance', 'match'),
+        ('total_uncached', 'match'),
+        ('free_allowance', 'match'),
+    ]
+
+
+@pytest.mark.parametrize('retry', [False, True])
+def test_shadow_observes_ready_reservation_once_after_commit(lane, shadow_jobs, monkeypatch, retry):
+    client, uid, _ = lane
+    pending, metric = shadow_jobs
+    user_usage.update_hourly_usage(uid, NOW, {'transcription_seconds': 18}, firestore_client=client)
+    totals.establish_verified_month(uid, NOW, firestore_client=client)
+    pending.clear()  # Establishment has its own observation.
+
+    transaction = client.transaction(max_attempts=3)
+    original_commit = transaction._commit
+    attempts = []
+
+    def commit():
+        assert not pending, 'shadow submitted before the transaction committed'
+        attempts.append(1)
+        if retry and len(attempts) == 1:
+            transaction._rollback()
+            raise Aborted('synthetic first-attempt abort')
+        return original_commit()
+
+    monkeypatch.setattr(transaction, '_commit', commit)
+    with monkeypatch.context() as patch:
+        patch.setattr(client, 'transaction', lambda **kwargs: transaction)
+        result = ledger.reserve(uid, 'operation', 10, 100, now=NOW, firestore_client=client)
+
+    assert result.reason == 'reserved'
+    assert result.remaining == 72
+    assert result.lease is not None and result.lease.seconds == 10
+    assert len(attempts) == (2 if retry else 1)
+    assert len(pending) == 1
+    metric.labels.assert_not_called()
+    user_usage.update_hourly_usage(uid, NOW, {'transcription_seconds': 5}, firestore_client=client)
+    pending.pop()()
+    metric.labels.assert_called_once_with(
+        service=firestore_metrics_service_name(),
+        epoch=totals.usage_month_epoch(),
+        path='free_allowance',
+        outcome='match',
+        delta_bucket='none',
+    )

@@ -336,6 +336,28 @@ func progressCount(_ sink: RecordingSink) -> Int {
     sink.deliveries.filter { $0.kind == .progress }.count
 }
 
+// Observe from the stimulus boundary: a preserved deadline may fire while
+// the running state is being delivered. Taking a baseline after that delivery
+// discards the very beat this assertion is meant to require (SCA-2046).
+func resumeBatchAndObserveProgress(
+    _ world: ReplayWorld,
+    afterSignal: () -> Void = {},
+    observe: () -> Void
+) -> Int {
+    let resumedAt = world.sink.deliveries.count
+    let beforeResume = progressCount(world.sink)
+    world.monitorBox.monitor!.fire(.interruptionEnded(shouldResume: true))
+    afterSignal()
+    waitUntil({
+        world.sink.deliveries.dropFirst(resumedAt).contains { $0.kind == .state && $0.state == "running" }
+    }, "batch pacing resumed")
+    observe()
+    let observed = progressCount(world.sink)
+    precondition(observed > beforeResume,
+        "recovery must emit its pending fast beat within ~1s, not wait out the healthy cadence")
+    return observed
+}
+
 func startBatch(_ controller: PhoneMicController, _ sessionId: Int64) -> Result<Void, Error> {
     let box = ResultBox()
     controller.start(mode: .batch, sessionId: sessionId) { box.result = $0 }
@@ -485,6 +507,10 @@ func replayDeviceTrace(_ path: String) {
 @main
 struct Harness {
     static func main() {
+        #if PHONE_MIC_MANUAL_PROGRESS_TIMER
+        replayRecoveryHeartbeat(deliverDuringResume: CommandLine.arguments.contains("--immediate-beat"))
+        return
+        #endif
         if CommandLine.arguments.count == 3 && CommandLine.arguments[1] == "--device-trace" {
             replayDeviceTrace(CommandLine.arguments[2])
             return
@@ -674,7 +700,7 @@ struct Harness {
             let started = progressCount(world.sink)
             drainMain(seconds: 1.5)
             precondition(progressCount(world.sink) == started,
-                "healthy batch heartbeat must stay on the 5s cadence (ticked within 1.5s)")
+                "healthy batch heartbeat must stay on the 4s cadence (ticked within 1.5s)")
 
             writers.writer?.storageFull = true
             let engine = world.engineBox.engines[0]
@@ -692,20 +718,11 @@ struct Harness {
             precondition(progressCount(world.sink) > beforeInterrupt,
                 "interruption must snap the heartbeat back to 1s")
 
-            let resumedAt = world.sink.deliveries.count
-            world.monitorBox.monitor!.fire(.interruptionEnded(shouldResume: true))
-            waitUntil({
-                world.sink.deliveries.dropFirst(resumedAt).contains { $0.kind == .state && $0.state == "running" }
-            }, "batch pacing resumed")
-            drainMain(seconds: 0.05)
-            let afterResume = progressCount(world.sink)
             // Recovery reaching .running must preserve the pending fast first
-            // beat: emitting it ~1s later keeps the beat gap under the Dart 10s
-            // stall deadline instead of silently retargeting to the slow cadence.
-            drainMain(seconds: 2.0)
-            precondition(progressCount(world.sink) > afterResume,
-                "recovery must emit its pending fast beat within ~1s, not wait out the healthy cadence")
-            let fastBeatCount = progressCount(world.sink)
+            // beat, including one delivered before the running-state wait ends.
+            let fastBeatCount = resumeBatchAndObserveProgress(world) {
+                drainMain(seconds: 2.0)
+            }
             // After that fast beat the repeating cadence is the slow one.
             drainMain(seconds: 2.0)
             precondition(progressCount(world.sink) == fastBeatCount,

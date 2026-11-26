@@ -26,7 +26,9 @@ import 'package:omi/utils/sync/offline_sync_amounts.dart';
 import 'package:omi/utils/sync_confirmation.dart';
 import 'synced_conversations_page.dart';
 import 'wal_item_detail/wal_item_detail_page.dart';
+import 'widgets/too_old_recording_help.dart';
 import 'package:omi/pages/conversations/widgets/status_action_pill.dart';
+import 'package:omi/pages/conversations/wal_delete_confirmation.dart';
 
 /// The Manage Storage clear actions, each paired with the storage re-read.
 ///
@@ -139,7 +141,7 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
                     _buildStorageSettings(userProvider, syncProvider),
                     if (hasAnyRecording) ...[
                       const SizedBox(height: 32),
-                      _buildFilterChips(walSeconds(toSync.where(walIsSyncable))),
+                      _buildFilterChips(walSeconds(syncProvider.derivedWals.pendingWork)),
                       const SizedBox(height: 4),
                     ],
                   ]),
@@ -163,11 +165,11 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
   Widget _buildOverallStatusCard(SyncProvider p, SyncState s) {
     final l = context.l10n;
     String dur(int seconds) => OmiDuration.compact(seconds, l);
-    final step = _runTracker.update(s, p.allWals);
-    final uploaded = p.uploadedWals.length;
+    final step = _runTracker.update(s, p.allWals, pendingWork: p.derivedWals.pendingWork);
+    final uploaded = p.derivedWals.pendingWork.where((w) => w.status == WalStatus.uploaded).length;
     final sorted = p.displaySortedWals;
     final attentionWals = sorted.where((w) => _needsAttention(w.syncDisplayState)).toList();
-    final readyWals = sorted
+    final readyWals = p.derivedWals.pendingWork
         .where(
           (w) =>
               w.syncDisplayState == WalSyncDisplayState.waiting || w.syncDisplayState == WalSyncDisplayState.retrying,
@@ -216,10 +218,11 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
     } else if (isActive || uploaded > 0) {
       // Uploads finished; the server is turning them into conversations.
       final job = p.offlineServerProcessingSeconds;
-      title = job.totalSeconds > 0 ? l.syncCardTranscribingAmount(dur(job.totalSeconds)) : l.syncCardProcessing;
-      subtitle = job.tracked && job.totalSeconds > 0
-          ? l.syncCardTranscribedOf(dur(job.doneSeconds), dur(job.totalSeconds))
-          : l.syncProcessingBackgroundHint;
+      final amounts = SyncPipelineAmounts.fromPending(p.derivedWals.pendingWork);
+      title = amounts.processingSeconds > 0
+          ? '${l.syncDetailsTranscribing} · ${dur(amounts.processingSeconds)}'
+          : l.syncCardProcessing;
+      subtitle = l.syncProcessingBackgroundHint;
       barStep = SyncStep.transcribe;
       barFraction = job.tracked && job.doneSeconds > 0 ? job.doneSeconds / job.totalSeconds : null;
       if (isActive) action = statusActionPill(l.cancel, Colors.redAccent, () => _confirmCancel(context, p));
@@ -242,6 +245,11 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
           ? l.syncCardReadyAmount(dur(seconds))
           : l.syncCardReadyCount(groupRecordingBlocks(readyWals).length);
       action = statusActionPill(l.sync, OmiColors.accent, startSync);
+    } else if (p.derivedWals.stalledUploadsAt().isNotEmpty) {
+      title = l.deviceUploadsWaitingOnServer;
+      titleColor = OmiColors.active == OmiPalette.light ? OmiColors.textPrimary : Colors.grey.shade400;
+      action = statusActionPill(l.syncDetailsTitle, OmiColors.accent,
+          () => showSyncDetailsSheet(context, onHowSyncingWorks: () => _showInfoSheet(context)));
     } else {
       // All synced, or nothing recorded yet: the same calm baseline, so the card never pops in/out.
       title = l.syncCardAllBackedUp;
@@ -565,11 +573,12 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
                 ? DismissDirection.none
                 : DismissDirection.endToStart,
             confirmDismiss: (direction) async {
-              final uploading = block.wals.any((w) => w.syncDisplayState == WalSyncDisplayState.uploaded);
+              final copy =
+                  walDeleteConfirmation(context.l10n, block.wals, notUploadedMessage: context.l10n.thisCannotBeUndone);
               final confirmed = await showOmiConfirm(
                 context,
-                title: uploading ? context.l10n.deleteWhileProcessingTitle : context.l10n.deleteRecording,
-                message: uploading ? context.l10n.deleteWhileProcessingMessage : context.l10n.thisCannotBeUndone,
+                title: copy.title,
+                message: copy.message,
                 confirmLabel: context.l10n.delete,
                 destructive: true,
               );
@@ -599,28 +608,38 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
       onTap: () => _showBlockFiles(block),
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-        child: Row(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    _blockTitle(block, showDay: false),
-                    style: _rowTitleStyle(synced: state == WalSyncDisplayState.synced),
-                  ),
-                  const SizedBox(height: 3),
-                  Text(
-                    label,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: _rowSubtitleStyle(color),
-                  ),
-                ],
+            Row(children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      _blockTitle(block, showDay: false),
+                      style: _rowTitleStyle(synced: state == WalSyncDisplayState.synced),
+                    ),
+                    const SizedBox(height: 3),
+                    Text(
+                      label,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: _rowSubtitleStyle(color),
+                    ),
+                  ],
+                ),
               ),
-            ),
-            const SizedBox(width: 10),
-            _blockTrailing(block, state),
+              const SizedBox(width: 10),
+              if (state != WalSyncDisplayState.outsideRecoveryWindow) _blockTrailing(block, state),
+            ]),
+            if (state == WalSyncDisplayState.outsideRecoveryWindow) ...[
+              const SizedBox(height: 8),
+              TooOldRecordingHelp(
+                onDownload: () => _shareRecording(context.read<SyncProvider>(), block.wals),
+                onDelete: () => _confirmDeleteWals(block.wals),
+              ),
+            ],
           ],
         ),
       ),
@@ -768,36 +787,46 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
       },
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-        child: Row(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    '${showDay ? '$dateStr \u00b7 ' : ''}$timeStr${duration != null ? ' \u00b7 $duration' : ''}',
-                    style: _rowTitleStyle(synced: isSynced),
-                  ),
-                  const SizedBox(height: 3),
-                  Text(
-                    label,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: _rowSubtitleStyle(color),
-                  ),
-                  if (_rowDownloadFraction(wal) != null) ...[
-                    const SizedBox(height: 8),
-                    DeviceDownloadMeter(
-                      fraction: _rowDownloadFraction(wal)!,
-                      showReadout: false,
-                      barHeight: 4,
+            Row(children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      '${showDay ? '$dateStr \u00b7 ' : ''}$timeStr${duration != null ? ' \u00b7 $duration' : ''}',
+                      style: _rowTitleStyle(synced: isSynced),
                     ),
+                    const SizedBox(height: 3),
+                    Text(
+                      label,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: _rowSubtitleStyle(color),
+                    ),
+                    if (_rowDownloadFraction(wal) != null) ...[
+                      const SizedBox(height: 8),
+                      DeviceDownloadMeter(
+                        fraction: _rowDownloadFraction(wal)!,
+                        showReadout: false,
+                        barHeight: 4,
+                      ),
+                    ],
                   ],
-                ],
+                ),
               ),
-            ),
-            const SizedBox(width: 10),
-            _rowTrailing(wal, state),
+              const SizedBox(width: 10),
+              if (state != WalSyncDisplayState.outsideRecoveryWindow) _rowTrailing(wal, state),
+            ]),
+            if (state == WalSyncDisplayState.outsideRecoveryWindow) ...[
+              const SizedBox(height: 8),
+              TooOldRecordingHelp(
+                onDownload: () => _shareRecording(context.read<SyncProvider>(), [wal]),
+                onDelete: () => _confirmDeleteWal(wal),
+              ),
+            ],
           ],
         ),
       ),
@@ -805,6 +834,9 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
   }
 
   (Color, String) _rowLabel(Wal wal) {
+    if (wal.status == WalStatus.uploaded && !wal.countsAsPendingWork()) {
+      return (OmiColors.textSecondary, context.l10n.syncDetailsTranscribing);
+    }
     final state = wal.syncDisplayState;
     var (color, _, label) = _rowVisual(state, rejectionReason: wal.uploadRejectionReason);
     // On-device WALs surface their transfer state instead of "Waiting to sync".
@@ -933,7 +965,7 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
       case WalSyncDisplayState.syncing:
         return (Colors.grey.shade300, FontAwesomeIcons.arrowsRotate, context.l10n.syncStatusBackingUp);
       case WalSyncDisplayState.uploaded:
-        return (Colors.grey.shade400, FontAwesomeIcons.cloud, context.l10n.syncStatusUploaded);
+        return (Colors.grey.shade400, FontAwesomeIcons.cloud, context.l10n.syncDetailsTranscribing);
       case WalSyncDisplayState.waiting:
         return (Colors.grey.shade500, FontAwesomeIcons.cloudArrowUp, context.l10n.syncStatusWaiting);
       case WalSyncDisplayState.retrying:

@@ -11,6 +11,8 @@ from typing import Any, Optional
 
 import stripe
 
+from config import prepaid_code_redeem
+
 logger = logging.getLogger(__name__)
 
 COUPON_ID = 'omi-retention-50off-3mo'
@@ -66,6 +68,10 @@ def evaluate(sub: Any, customer: Any) -> RetentionOffer:
     """Pure eligibility check over a retrieved Stripe subscription (with price) and its customer."""
     if sub is None:
         return _ineligible('no_subscription')
+    # A prepaid no-card plan ends on its own; accepting would clear cancel_at and renew it unpaid.
+    # A "once" code leaves no discount after its first invoice, so the discount check alone misses it.
+    if _get(_get(sub, 'metadata') or {}, prepaid_code_redeem.SUBSCRIPTION_MARKER) == '1':
+        return _ineligible('prepaid')
     if _get(sub, 'status') not in _ELIGIBLE_STATUSES:
         return _ineligible('status')
     if _get(_get(sub, 'metadata') or {}, APPLIED_METADATA_KEY):

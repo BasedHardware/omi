@@ -442,7 +442,7 @@ def test_real_process_segment_two_independent_job_responses(independent_job_pipe
     # Responses can name pre-bridge IDs; durable redirects converge to one row.
     assert len(conversations(store)) == 1
 
-    pipeline.conversations_db.get_conversation = lambda *a: {
+    pipeline.conversations_db.get_conversation = lambda *a, **_kwargs: {
         'status': 'completed',
         'sync_relevance': 'review',
         'transcript_segments': chunk('a', 1000, 'Mm-hmm')['transcript_segments'],
@@ -453,7 +453,7 @@ def test_real_process_segment_two_independent_job_responses(independent_job_pipe
 
     # Everything the rules cannot settle is assessed as a sync update, with
     # the stored restore marker the wire model does not carry.
-    pipeline.conversations_db.get_conversation = lambda *a: {
+    pipeline.conversations_db.get_conversation = lambda *a, **_kwargs: {
         'sync_relevance': 'keep',
         'sync_relevance_user_kept': True,
         'transcript_segments': chunk('a', 1000, 'Oh')['transcript_segments'],

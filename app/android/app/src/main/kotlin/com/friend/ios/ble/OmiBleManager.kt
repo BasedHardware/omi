@@ -36,6 +36,7 @@ import java.util.concurrent.ConcurrentLinkedQueue
 class OmiBleManager private constructor(private val application: Application) {
 
     internal val savedReconnect = BleSavedReconnect()
+    internal val ringReadDiagnostics = RingReadDiagnostics()
 
     companion object {
         private const val TAG = "OmiBle"
@@ -492,10 +493,14 @@ class OmiBleManager private constructor(private val application: Application) {
 
         val key = "$addr:$serviceUuid:$characteristicUuid".lowercase()
         if (writeType == BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT) {
-            writeCompletions[key] = completion
+            writeCompletions[key] = { result ->
+                if (result.isFailure) ringReadDiagnostics.rejected(addr, gatt, characteristicUuid, data)
+                completion(result)
+            }
         }
 
         enqueueCommand {
+            ringReadDiagnostics.requested(addr, gatt, characteristicUuid, data)
             @Suppress("deprecation")
             val success = if (Build.VERSION.SDK_INT >= 33) {
                 val result = gatt.writeCharacteristic(characteristic, data, writeType)
@@ -510,6 +515,7 @@ class OmiBleManager private constructor(private val application: Application) {
             }
             if (!success) {
                 Log.e(TAG, "writeCharacteristic failed for $key")
+                ringReadDiagnostics.rejected(addr, gatt, characteristicUuid, data)
                 writeCompletions.remove(key)?.invoke(Result.failure(Exception("Write request rejected")))
                 completeCommand()
             } else if (writeType == BluetoothGattCharacteristic.WRITE_TYPE_NO_RESPONSE) {
@@ -835,6 +841,7 @@ class OmiBleManager private constructor(private val application: Application) {
                     Log.i(TAG, "Connected to $address, discovering services")
                     connectedGatts[address] = gatt
                     lastAudioNotification.begin(address, gatt)
+                    ringReadDiagnostics.connected(address, gatt)
 
                     // Discover services
                     enqueueCommand {
@@ -929,6 +936,7 @@ class OmiBleManager private constructor(private val application: Application) {
                 persistBatteryReading(address, value[0].toInt() and 0xFF)
             }
 
+            ringReadDiagnostics.received(address, gatt, charUuid, value, SystemClock.elapsedRealtime())
             characteristicValueListener?.onCharacteristicValue(address, serviceUuid, charUuid, value.copyOf())
             if (isFlutterAlive) {
                 mainHandler.post {

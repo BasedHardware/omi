@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import json
+import base64
+import google_crc32c
 import fcntl
 import uuid
 from dataclasses import dataclass
@@ -13,7 +15,9 @@ import threading
 from pathlib import Path, PurePosixPath
 from typing import Any, Callable, Iterable
 from urllib.parse import quote
+from config.record_wal_storage import private_archive_bucket
 from utils.other.owned_paths import owned_scratch_path
+from utils.other.private_sync_get_metrics import instrument_storage_session
 
 from google.cloud import storage
 from google.cloud.exceptions import NotFound
@@ -90,6 +94,13 @@ class LocalBlob:
         return self.path.stat().st_size if self.path.is_file() else None
 
     @property
+    def crc32c(self) -> str | None:
+        if not self.path.is_file():
+            return None
+        checksum = google_crc32c.value(self.path.read_bytes())
+        return base64.b64encode(checksum.to_bytes(4, 'big')).decode()
+
+    @property
     def public_url(self) -> str:
         return self.generate_signed_url()
 
@@ -107,6 +118,17 @@ class LocalBlob:
         source = owned_scratch_path(filename, include_harness=True)
         self.path.parent.mkdir(parents=True, exist_ok=True)
         shutil.copyfile(source, self.path)
+
+    def upload_from_file(self, file_obj, *args, **kwargs) -> None:
+        # Same create-only/generation contract as upload_from_string.
+        self.upload_from_string(file_obj.read(), *args, **kwargs)
+
+    @property
+    def metageneration(self) -> int | None:
+        # GCS bumps this on every metadata change; the adapter's metadata file is the only one.
+        if not self.path.is_file():
+            return None
+        return self._metadata_path.stat().st_mtime_ns if self._metadata_path.is_file() else 1
 
     def download_to_filename(self, filename: str, *_args, **_kwargs) -> None:
         if not self.exists():
@@ -210,8 +232,30 @@ class LocalBucket:
             blob.reload()
         return blobs
 
-    def copy_blob(self, blob: LocalBlob, destination_bucket: 'LocalBucket', new_name: str) -> LocalBlob:
+    def get_blob(self, name: str, *_args, **_kwargs) -> LocalBlob | None:
+        blob = self.blob(name)
+        return blob if blob.exists() else None
+
+    def copy_blob(
+        self,
+        blob: LocalBlob,
+        destination_bucket: 'LocalBucket',
+        new_name: str,
+        *_args,
+        if_generation_match: int | None = None,
+        **_kwargs,
+    ) -> LocalBlob:
         destination = destination_bucket.blob(new_name)
+        # Model GCS's conditional copy, which the sync bridge relies on to stay
+        # idempotent: generation 0 is create-only, any other value must match
+        # the destination's current generation.
+        if if_generation_match is not None:
+            current = destination.generation
+            if int(if_generation_match) == 0:
+                if current is not None:
+                    raise PreconditionFailed('local storage create-only object exists')
+            elif current != int(if_generation_match):
+                raise PreconditionFailed('local storage generation mismatch')
         destination.path.parent.mkdir(parents=True, exist_ok=True)
         shutil.copyfile(blob.path, destination.path)
         return destination
@@ -352,10 +396,21 @@ def create_storage_client():
     if os.environ.get('SERVICE_ACCOUNT_JSON'):
         service_account_info = json.loads(os.environ['SERVICE_ACCOUNT_JSON'])
         credentials = service_account.Credentials.from_service_account_info(service_account_info)  # type: ignore[reportUnknownMemberType]  # google.oauth2 partial stubs
-        return _size_http_pool(storage.Client(credentials=credentials))
+        return _configure_storage_transport(storage.Client(credentials=credentials))
     project = storage_client_project()
     client = storage.Client(project=project) if project else storage.Client()
-    return _size_http_pool(client)
+    return _configure_storage_transport(client)
+
+
+def _configure_storage_transport(client):
+    _size_http_pool(client)
+    try:
+        instrument_storage_session(client._http, private_archive_bucket())
+    except Exception as error:
+        logging.getLogger(__name__).warning(
+            'event=private_sync_get_metrics outcome=unavailable exception_type=%s', type(error).__name__
+        )
+    return client
 
 
 def gcs_http_pool_maxsize() -> int:

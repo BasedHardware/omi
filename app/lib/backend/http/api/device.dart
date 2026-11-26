@@ -5,6 +5,7 @@ import 'package:crypto/crypto.dart';
 import 'package:omi/backend/http/shared.dart';
 import 'package:omi/backend/schema/gen/device_speech_wire.g.dart' as wire;
 import 'package:omi/env/env.dart';
+import 'package:omi/utils/bootloader_fingerprint.dart';
 
 Uri latestFirmwareVersionUri({
   required String deviceModelNumber,
@@ -12,9 +13,12 @@ Uri latestFirmwareVersionUri({
   required String hardwareRevision,
   required String manufacturerName,
   String? serialNumber,
+  String? bootloaderSha256,
 }) {
   return Uri.parse('${Env.apiBaseUrl}v2/firmware/latest').replace(queryParameters: {
     'device_model': deviceModelNumber,
+    // Measured installed-loader digest from the pendant itself; omitted when unknown.
+    if (isBootloaderSha256(bootloaderSha256)) 'bootloader_sha256': bootloaderSha256!,
     'firmware_revision': firmwareRevision,
     'hardware_revision': hardwareRevision,
     'manufacturer_name': manufacturerName,
@@ -24,12 +28,15 @@ Uri latestFirmwareVersionUri({
   });
 }
 
-Future<Map> getLatestFirmwareVersion({
+/// The newest firmware for this device, or null when the request failed (offline, a server error):
+/// a failed check is never "up to date" (ux-contract §17.2).
+Future<Map?> getLatestFirmwareVersion({
   required String deviceModelNumber,
   required String firmwareRevision,
   required String hardwareRevision,
   required String manufacturerName,
   String? serialNumber,
+  String? bootloaderSha256,
 }) async {
   var res = await makeApiCall(
     url: latestFirmwareVersionUri(
@@ -38,6 +45,7 @@ Future<Map> getLatestFirmwareVersion({
       hardwareRevision: hardwareRevision,
       manufacturerName: manufacturerName,
       serialNumber: serialNumber,
+      bootloaderSha256: bootloaderSha256,
     ).toString(),
     headers: {},
     body: '',
@@ -45,22 +53,30 @@ Future<Map> getLatestFirmwareVersion({
   );
 
   if (res == null || res.statusCode != 200) {
-    return {};
+    return null;
   }
 
   return wire.GeneratedFirmwareVersionResponse.fromJson(jsonDecode(res.body) as Map<String, dynamic>).toJson();
 }
 
-Future<Map> getStableFirmwareVersion({required String deviceModelNumber}) async {
+Uri stableFirmwareVersionUri({required String deviceModelNumber, String? bootloaderSha256}) {
+  return Uri.parse('${Env.apiBaseUrl}v2/firmware/stable').replace(queryParameters: {
+    'device_model': deviceModelNumber,
+    if (isBootloaderSha256(bootloaderSha256)) 'bootloader_sha256': bootloaderSha256!,
+  });
+}
+
+/// The stable firmware for this model, or null when the request failed.
+Future<Map?> getStableFirmwareVersion({required String deviceModelNumber, String? bootloaderSha256}) async {
   var res = await makeApiCall(
-    url: "${Env.apiBaseUrl}v2/firmware/stable?device_model=$deviceModelNumber",
+    url: stableFirmwareVersionUri(deviceModelNumber: deviceModelNumber, bootloaderSha256: bootloaderSha256).toString(),
     headers: {},
     body: '',
     method: 'GET',
   );
 
   if (res == null || res.statusCode != 200) {
-    return {};
+    return null;
   }
 
   return wire.GeneratedFirmwareVersionResponse.fromJson(jsonDecode(res.body) as Map<String, dynamic>).toJson();

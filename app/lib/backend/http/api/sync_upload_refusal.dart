@@ -69,7 +69,9 @@ ApiResult<SyncUploadRefusalBody> decodeSyncUploadRefusal(http.Response response)
 
 /// A 5xx that holds one recording, never the account: the server still waits
 /// for that conversation's registered record before it can prove coverage.
-bool isRecordingScopedSyncWaitReasonCode(String? reasonCode) => reasonCode == 'record_capture_pending';
+const recordCapturePending = 'record_capture_pending';
+
+bool isRecordingScopedSyncWaitReasonCode(String? reasonCode) => reasonCode == recordCapturePending;
 
 /// The closed recording-scoped wait code from a 5xx upload body, else null.
 String? syncUploadServerWaitReasonCode(http.Response response) {

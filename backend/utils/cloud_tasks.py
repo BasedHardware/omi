@@ -13,8 +13,6 @@ Quarantine recovery is separately fenced by RecoveryStore.start: its task and
 inline fallback adopt the same paid token and cannot both invoke the provider.
 """
 
-from config import audio_archive
-
 import json
 import logging
 import hashlib
@@ -128,13 +126,7 @@ def _oidc_audience() -> str:
     return os.getenv('SYNC_TASKS_OIDC_AUDIENCE') or _handler_url()
 
 
-def _audio_merge_handler_url(uid: str = '') -> str:
-    if audio_archive.admitted(uid, 'SEPARATE_MERGE'):
-        worker = os.getenv('AUDIO_MERGE_WORKER_URL', '').strip()
-        if not worker:
-            logger.warning('separate merge worker missing AUDIO_MERGE_WORKER_URL; retaining legacy handler')
-        else:
-            return worker
+def _audio_merge_handler_url() -> str:
     return os.getenv('AUDIO_MERGE_HANDLER_URL', '')
 
 
@@ -428,9 +420,11 @@ def enqueue_named_task(
     audience: Optional[str] = None,
     invoker_sa: Optional[str] = None,
     schedule_at: Optional[int] = None,
-) -> None:
+) -> bool:
     """Enqueue one named HTTP task. Duplicate names are treated as success —
-    Cloud Tasks deduplicates named tasks. Any other failure raises."""
+    Cloud Tasks deduplicates named tasks. Any other failure raises.
+
+    Returns False when the name was refused as a duplicate, True when this call created the task."""
     project = os.getenv('SYNC_TASKS_PROJECT', '')
     location = os.getenv('SYNC_TASKS_LOCATION', '')
     selected_invoker_sa = invoker_sa or _invoker_sa()
@@ -458,6 +452,8 @@ def enqueue_named_task(
         client.create_task(parent=parent, task=task)  # type: ignore[reportUnknownMemberType]  # google.cloud.tasks_v2 partially untyped
     except AlreadyExists:
         logger.info('task %s already enqueued, skipping duplicate', task_id)
+        return False
+    return True
 
 
 def named_task_exists(queue: str, task_id: str) -> bool:
@@ -562,8 +558,14 @@ def enqueue_sync_uid_wake(uid: str, uid_hash: str, deadline: int) -> None:
     if not handler.endswith('/v2/sync-jobs/run'):
         raise RuntimeError('sync task handler URL is not the expected v2 route')
     wake_url = handler.removesuffix('/v2/sync-jobs/run') + '/v2/sync-backfill-sequencer/wake'
+    # A backfill wake must not spend the fresh queue's dispatch budget new recordings need
+    # (2026-11-16 fresh-vs-backlog audit). Same handler; only the delivering queue moves.
+    queue = os.getenv('SYNC_TASKS_QUEUE', '')
+    backfill_queue = os.getenv('SYNC_BACKFILL_TASKS_QUEUE', '').strip()
+    if backfill_queue and is_sync_backfill_routing_enabled():
+        queue = backfill_queue
     enqueue_named_task(
-        os.getenv('SYNC_TASKS_QUEUE', ''),
+        queue,
         wake_url,
         f'sbu-{uid_hash}-{deadline}',
         {'uid': uid},
@@ -589,7 +591,7 @@ def enqueue_audio_merge_job(payload: Dict[str, Any]) -> None:
     and isn't swallowed by the named-task tombstone. 'amc-' cannot collide with
     per-part names (audio_file ids are UUIDv4).
     """
-    handler_url = _audio_merge_handler_url(str(payload.get('uid') or ''))
+    handler_url = _audio_merge_handler_url()
     enqueue_named_task(
         os.getenv('AUDIO_MERGE_TASKS_QUEUE', ''),
         handler_url,
@@ -623,7 +625,7 @@ def enqueue_audio_merge_job_deferred(payload: Dict[str, Any], delay_seconds: int
     gate has cleared. Gate holds last seconds to a few minutes.
     """
     deferral = int(payload['destructive_deferrals'])
-    handler_url = _audio_merge_handler_url(str(payload.get('uid') or ''))
+    handler_url = _audio_merge_handler_url()
     enqueue_named_task(
         os.getenv('AUDIO_MERGE_TASKS_QUEUE', ''),
         handler_url,
@@ -739,12 +741,9 @@ def verify_audio_merge_cloud_tasks_oidc(request: Request) -> int:
 
     Audience is the merge handler URL so an enqueuer whose SYNC_TASKS_*
     audience names a different service (backend-sync-backfill) can still
-    mint a token the merge worker will accept.
+    mint a token the merge handler will accept.
     """
-    audiences = list(filter(None, (_audio_merge_handler_url(), os.getenv('AUDIO_MERGE_WORKER_URL', '').strip())))
-    return verify_configured_cloud_tasks_oidc(
-        request, audience=audiences[0] if len(audiences) == 1 else audiences, invoker_sa=_invoker_sa()
-    )
+    return verify_configured_cloud_tasks_oidc(request, audience=_audio_merge_handler_url(), invoker_sa=_invoker_sa())
 
 
 def verify_account_deletion_cloud_tasks_oidc(request: Request) -> AccountDeletionTaskAuthentication:

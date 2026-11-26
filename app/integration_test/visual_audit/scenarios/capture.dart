@@ -48,6 +48,8 @@ class AuditCaptureProvider extends ChangeNotifier implements CaptureProvider {
   LivePreviewController? get livePreview => null;
   @override
   bool get localPreviewAdmitted => false;
+  @override
+  bool get liveWordsShown => false;
 
   AuditCaptureProvider(this.live);
   final AuditLive live;
@@ -55,11 +57,15 @@ class AuditCaptureProvider extends ChangeNotifier implements CaptureProvider {
   LocalSttFailure? get localSttFailure => null;
 
   @override
+  String? get activeRecordingId => null;
+  @override
   bool get pendantCaptureVerified => true;
   @override
   bool get pendantCaptureActionRequired => false;
   @override
   bool get pendantReconnectInFlight => false;
+  @override
+  bool get transcribingOnPhone => false;
 
   /// The outage variant: the pendant streams but the server said transcription cannot run.
   bool get _outage => live == AuditLive.pendantOutage;

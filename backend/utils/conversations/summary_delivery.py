@@ -18,10 +18,12 @@ from utils.conversations import phase_shadow
 from utils.observability.delivery import record_delivery
 
 from prometheus_client import Counter, Gauge, Histogram
+from models.finalization_owner import python_owns_finalization
 from config.refactor_modes import default_on
 from config.summary_guarantee import deadline_seconds
 from config.policy import FirstSummaryPolicy
 from utils.conversations.minimum_derived import intentional_short_clip_minimum, waive_short_clip_summary_debt
+from utils.summary_quality import valid_title
 
 Row = dict[str, Any]
 PROJECTION_DEBT_ENV = 'SUMMARY_PROJECTION_DEBT_ENABLED'
@@ -45,11 +47,27 @@ CLOSED_LATENCY = Histogram(
     ['lane'],
     buckets=(30, 60, 120, 180, 300, 600, 1800, 3600, 14400),
 )
+PROCESSED_LATENCY = Histogram(
+    'omi_conversation_processed_seconds',
+    'First usable summary durable, once per conversation, from last speech or from the later of last speech and sync',
+    ['lane', 'basis'],
+    buckets=(30, 60, 120, 300, 600, 1800, 3600, 14400, 43200, 86400),
+)
+SETTLED_UNSUMMARIZED = Counter(
+    'omi_conversation_settled_unsummarized_total',
+    'Conversations that settled without a summary; with the processed histogram count, the denominator',
+    ['lane', 'reason'],
+)
 DEBT = Gauge('omi_summary_debt_overdue', 'Overdue summary debt in the bounded repair window')
 OLDEST = Gauge('omi_summary_debt_oldest_age_seconds', 'Oldest overdue summary debt observed by repair')
 SAMPLED_AT = Gauge('omi_summary_debt_sample_timestamp_seconds', "Timestamp of this replica's bounded debt sample")
 EXPIRED_SEEN = Gauge('omi_summary_debt_expired_seen', 'Rows skipped as expired in the last claimed repair tick')
 REPAIR = Counter('omi_summary_debt_repair_total', 'Summary debt repair tick outcomes', ['outcome'])
+REPAIR_DISCOVERY = Counter(
+    'omi_summary_debt_repair_discovery_total',
+    'Summary debt repair discovery and redrive observations',
+    ['phase', 'outcome'],
+)
 NEAR_EXPIRY_ADMITTED = Gauge(
     'omi_summary_debt_near_expiry_admitted', 'Successful urgent redrives in the last claimed repair tick'
 )
@@ -144,6 +162,10 @@ def prepare(data: Row, uid: str, *, now: float | None = None) -> None:
     data['summary_output_present'] = present(structured)
     if field(structured, 'title_provenance') == 'server_minimum' and not present(structured):
         data['summary_title_provenance'] = 'server_minimum'
+        if data.get('processing_tier') == 'historical':
+            # T1+: only the owner's open generates; an empty open-time run owes nothing automatic.
+            data['summary_due_at'] = None
+            return
         if intentional_short_clip_minimum(data):
             data['summary_due_at'] = None
             return
@@ -166,9 +188,9 @@ def prepare(data: Row, uid: str, *, now: float | None = None) -> None:
         data.setdefault('summary_lane', lane(data))
 
 
-def projection_debt_enabled() -> bool:
+def projection_debt_enabled(*, environ: Mapping[str, str] | None = None) -> bool:
     """Default on; false restores the pre-fix behavior for batch projections."""
-    return default_on(PROJECTION_DEBT_ENV)
+    return default_on(PROJECTION_DEBT_ENV, environ=environ)
 
 
 def _past_age_gate(created_at: Any, *, now: float) -> bool:
@@ -210,16 +232,19 @@ def _past_age_gate(created_at: Any, *, now: float) -> bool:
     )
 
 
-def stamp_projection_debt(write: Row, *, now: float | None = None) -> bool:
+def stamp_projection_debt(write: Row, *, now: float | None = None, allow_existing_title: bool = False) -> bool:
     """Stamp first-summary debt when a batch projection lands a transcript on an untitled row.
 
     A batch row that completes with no title never passes through the
     server-minimum intake path, so it carries no debt: Home hides it and the
     repair refuses it as ``unknown_provenance``. The projection is the only
     write that sees the transcript land, so it stamps the same obligation the
-    intake minimum would have. Rows that already carry debt or a summary,
+    intake minimum would have. Rows that already carry armed debt or a summary,
     curated rows, discards, below-floor clips, blocked rows and local-only rows
     are untouched.
+
+    The bounded Home repair can allow an existing generated title after
+    checking the stored card and confirming its summary body is missing.
 
     The stamp records the row-level ``summary_title_provenance`` only. It does
     not write ``structured.title_provenance``: ``is_server_minimum`` gates
@@ -227,10 +252,15 @@ def stamp_projection_debt(write: Row, *, now: float | None = None) -> bool:
     suppress those effects on a later reprocess. Home reads the row-level
     provenance together with the debt clock.
 
+    Processing acceptance can leave a pending timestamp without a due time.
+    Keep its valid non-future clock when arming it. Batch-live rows retaining a
+    finalization id require transactionally verified, generation-bound custody.
+
     A row whose ``created_at`` is already past the repair age gate gets the
     provenance but no debt. That is an honest non-debt disposition: the repair
-    never sees it, so it cannot park it one-way, and Home hides it instead of
-    presenting "Writing notes" forever.
+    never sees it, so it cannot park it one-way. Home never presents it as
+    "Writing notes" forever: it keeps the row, which carries the projected
+    speech, as a finished card unless a summary block makes it noise.
     """
     if not projection_debt_enabled():
         return False
@@ -246,7 +276,7 @@ def stamp_projection_debt(write: Row, *, now: float | None = None) -> bool:
         return False
     if write.get('summary_completed_at') or write.get('summary_output_present'):
         return False
-    if write.get('summary_due_at') is not None or write.get('summary_first_pending_at') is not None:
+    if write.get('summary_due_at') is not None:
         return False
     blocked = write.get('summary_blocked_reason')
     if blocked is not None:
@@ -259,7 +289,7 @@ def stamp_projection_debt(write: Row, *, now: float | None = None) -> bool:
     elif not isinstance(structured, dict):
         # Preserve non-dict structured data; only a dict can carry provenance.
         return False
-    if str(structured.get('title') or '').strip() or present(structured):
+    if present(structured) or (not allow_existing_title and valid_title(structured.get('title'))):
         return False
     current = time.time() if now is None else now
     # Evaluate the exact eligibility the repair will use, with the provenance
@@ -274,13 +304,57 @@ def stamp_projection_debt(write: Row, *, now: float | None = None) -> bool:
     write['summary_title_provenance'] = 'server_minimum'
     if _past_age_gate(write.get('created_at'), now=current):
         return False
-    write['summary_first_pending_at'] = current
-    write['summary_due_at'] = current + deadline_seconds()
+    accepted = write.get('summary_first_pending_at')
+    if (
+        not isinstance(accepted, (float, int))
+        or isinstance(accepted, bool)
+        or not math.isfinite(accepted)
+        or accepted <= 0
+        or accepted > current
+    ):
+        accepted = current
+    if _past_age_gate(accepted, now=current):
+        return False
+    write['summary_first_pending_at'] = accepted
+    write['summary_due_at'] = accepted + deadline_seconds()
     write.setdefault('summary_lane', lane(write))
     return True
 
 
+def projection_owns_finalization(row: Row) -> bool:
+    """A transaction verified this exact finalizer's successful terminal handoff."""
+    proof = row.get('summary_projection_finalization')
+    revision = row.get('finalization_revision')
+    return bool(
+        projection_debt_enabled()
+        and row.get('record_lane_owner') == 'batch_live_v1'
+        and row.get('record_projection_revision')
+        and isinstance(proof, dict)
+        and isinstance(row.get('finalization_job_id'), str)
+        and '/' not in row['finalization_job_id']
+        and proof.get('job_id') == row.get('finalization_job_id')
+        and row.get('finalization_job_id')
+        and type(revision) is int
+        and revision > 0
+        and proof.get('revision') == revision
+    )
+
+
+def retryable_finalization_owns(row: Row) -> bool:
+    """A finalization job owns this row's summary debt and the repair pass refuses it.
+
+    Repair discovery and redrive skip foreign ownership markers and job rows
+    without a verified batch-projection handoff. An empty attempt must leave
+    delivery with that owner.
+    """
+    return not python_owns_finalization(row) or (
+        bool(row.get('finalization_job_id')) and not projection_owns_finalization(row)
+    )
+
+
 def _refusal(row: Row) -> str | None:
+    if not python_owns_finalization(row):
+        return 'generation_owned'
     if row.get('status') != 'completed' or row.get('deleted') or row.get('discarded'):
         return 'lifecycle'
     if row.get('deferred') or row.get('is_locked') or row.get('processing_state') == 'local_pending':
@@ -299,7 +373,12 @@ def _refusal(row: Row) -> str | None:
         return row['summary_blocked_reason']
     if row.get('summary_title_provenance') != 'server_minimum':
         return 'unknown_provenance'
-    if row.get('finalization_job_id') or row.get('finalization_status') == 'blocked_byok':
+    job_id = row.get('finalization_job_id')
+    if job_id is not None and (not isinstance(job_id, str) or '/' in job_id):
+        return 'generation_owned'
+    if row.get('finalization_status') == 'blocked_byok' or (
+        row.get('finalization_job_id') and not projection_owns_finalization(row)
+    ):
         return 'generation_owned'
     return None
 
@@ -361,6 +440,46 @@ def creation_result(write: Row, uid: str) -> Row | None:
     return merge_result({}, write, uid)
 
 
+def retires_title_marker(existing: Row, write: Row) -> bool:
+    """Whether this processing write's notes must delete the stored stand-in's title marker.
+
+    ``merge_result`` deletes it on such a write: the processing write merges
+    maps and keeps every leaf it omits, so the stand-in's
+    ``structured.title_provenance`` would outlive the real notes, and Home and
+    the settling-fragment filter would keep treating the summarized row as a
+    provisional minimum. A write that states its own marker keeps it.
+    """
+    structured = write.get('structured')
+    return bool(
+        write.get('summary_output_present')
+        and isinstance(structured, dict)
+        and 'title_provenance' not in structured
+        and field(existing.get('structured'), 'title_provenance') is not None
+    )
+
+
+def _retire_title_marker(existing: Row, write: Row) -> None:
+    if retires_title_marker(existing, write):
+        # Sync tests load this module with google.cloud stubbed.
+        from google.cloud.firestore import DELETE_FIELD
+
+        write['structured']['title_provenance'] = DELETE_FIELD
+
+
+def _merge_historical(existing: Row, write: Row, current: float) -> None:
+    """A historical row owes no automatic summary; its open-time summary is a delivered one."""
+    write['summary_due_at'] = None
+    if write.get('summary_output_present'):
+        _retire_title_marker(existing, write)
+        write['summary_completed_at'] = existing.get('summary_completed_at') or current
+        write['summary_title_provenance'] = 'generated'
+        write['summary_blocked_reason'] = None
+        write['summary_processing_lease_until'] = 0
+    elif not existing.get('summary_output_present'):
+        write['summary_blocked_reason'] = 'historical_on_open'
+    return None
+
+
 def merge_result(existing: Row, write: Row, uid: str, *, now: float | None = None) -> Row | None:
     """Inside the existing revision-fenced transaction, before its write."""
     if 'summary_output_present' not in write:
@@ -378,6 +497,11 @@ def merge_result(existing: Row, write: Row, uid: str, *, now: float | None = Non
     ):
         waive_short_clip_summary_debt(write, PROCESS_CONTEXT.get())
         return None
+    if write.get('terminal_no_derived_effects') and 'historical' in (
+        write.get('processing_tier'),
+        existing.get('processing_tier'),
+    ):
+        return _merge_historical(existing, write, current)
     if (
         write.get('terminal_no_derived_effects')
         or write.get('deferred')
@@ -389,7 +513,9 @@ def merge_result(existing: Row, write: Row, uid: str, *, now: float | None = Non
         write['summary_due_at'] = None
         write['summary_blocked_reason'] = 'local_only'
         if existing.get('summary_blocked_reason') != 'local_only':
-            return dict(lane=lane(existing), reason='local_only', present=False, latency=None)
+            return dict(
+                lane=lane(existing), reason='local_only', present=False, latency=None, unsummarized='local_only'
+            )
         return None
     accepted = existing.get('summary_first_pending_at', ACCEPT_CONTEXT.get())
     if existing.get('summary_discard_receipted') and ACCEPT_CONTEXT.get() is not None:
@@ -400,6 +526,7 @@ def merge_result(existing: Row, write: Row, uid: str, *, now: float | None = Non
         write['summary_first_pending_at'] = accepted
     rich = bool(write.get('summary_output_present'))
     discarded = bool(write.get('discarded'))
+    _retire_title_marker(existing, write)
     # The fence guards an open first-summary obligation only. Rows outside the
     # server-minimum protocol, already-enriched rows, and rows whose empty
     # budget is exhausted have no caller that catches this exception — the
@@ -412,7 +539,25 @@ def merge_result(existing: Row, write: Row, uid: str, *, now: float | None = Non
         and existing.get('summary_blocked_reason') not in EMPTY_BLOCKED_REASONS
     )
     if not rich and not discarded and obligation_open:
-        raise SummaryOutputUnavailable('kept first-summary output is empty')
+        if PROCESS_CONTEXT.get() is not None:
+            # A consumer owns this write and records the bounded empty-output
+            # strike (``record_empty_failure``) before releasing the lease.
+            raise SummaryOutputUnavailable('kept first-summary output is empty')
+        if retryable_finalization_owns(existing):
+            # The finalization job is the only repair owner: the repair pass
+            # refuses this row as ``generation_owned``. Committing the empty
+            # attempt would let the finalizer complete its job and leave the
+            # armed debt with no owner, so keep the raise and the job retryable.
+            raise SummaryOutputUnavailable('kept first-summary output is empty')
+        # No consumer and no retryable job owns this write: a request path
+        # (from-segments) or a direct sync persist. Raising here aborts the
+        # completed write and surfaces as a 500, so commit the empty attempt
+        # with the debt still armed. The repair pass re-wakes the row and the
+        # consumer's empty budget bounds the retries; an empty structured is
+        # never a delivery.
+        if write.get('summary_due_at') is None:
+            write['summary_due_at'] = current + deadline_seconds()
+        return dict(lane=lane(existing), reason='empty_output', present=False, latency=None)
     if existing.get('summary_completed_at') or existing.get('summary_output_present'):
         write['summary_due_at'] = None
         # An enriched row already holds a usable summary. The old fence refused
@@ -454,17 +599,45 @@ def merge_result(existing: Row, write: Row, uid: str, *, now: float | None = Non
         if rich:
             write['summary_title_provenance'] = 'generated'
         finished = write.get('finished_at', existing.get('finished_at'))
+        arrival = write.get('arrival_at', existing.get('arrival_at'))
+        # Rows admitted without summary metadata still carry the server receive time.
+        server_accepted = accepted if accepted is not None else _timestamp(arrival)
         closed_latency = None
-        if accepted is not None and isinstance(finished, datetime) and finished.timestamp() <= current:
-            closed_latency = max(0, current - max(accepted, finished.timestamp()))
+        if server_accepted is not None and isinstance(finished, datetime) and finished.timestamp() <= current:
+            closed_latency = max(0, current - max(server_accepted, finished.timestamp()))
         return dict(
             lane=lane(existing),
             reason=('discarded' if discarded else 'summary') if accepted is not None else 'accept_unknown',
             present=rich,
             latency=max(0, current - accepted) if accepted is not None else None,
             closed_latency=closed_latency,
+            # v3 rows publish a preview first; their notes commit owns the observation.
+            processed=(
+                processed_latencies(finished, arrival, current) if rich and not existing.get('v3_derived') else None
+            ),
+            unsummarized=None if rich else 'discarded',
         )
     return None
+
+
+def _timestamp(value: Any) -> float | None:
+    return value.timestamp() if isinstance(value, datetime) else None
+
+
+def processed_latencies(finished: Any, arrival: Any, now: float) -> dict[str, float] | None:
+    """Seconds from last speech, and from the later of last speech and server receipt (sync)."""
+    end = _timestamp(finished)
+    if end is None or end > now:
+        return None
+    received = _timestamp(arrival)
+    synced = end if received is None else max(end, received)
+    return {'finished': max(0.0, now - end), 'end_or_sync': max(0.0, now - synced)}
+
+
+def observe_processed(lane_value: str, latencies: Mapping[str, float] | None) -> None:
+    """Call once per conversation, after the commit that made its first usable summary durable."""
+    for basis, seconds in (latencies or {}).items():
+        PROCESSED_LATENCY.labels(lane_value, basis).observe(seconds)
 
 
 def lane(row: Row) -> str:
@@ -491,6 +664,10 @@ def emit(receipt: Row | None) -> None:
         LATENCY.labels(receipt['lane']).observe(receipt['latency'])
     if receipt['present'] and receipt.get('closed_latency') is not None:
         CLOSED_LATENCY.labels(receipt['lane']).observe(receipt['closed_latency'])
+    if receipt['present']:
+        observe_processed(receipt['lane'], receipt.get('processed'))
+    elif receipt.get('unsummarized'):
+        SETTLED_UNSUMMARIZED.labels(receipt['lane'], receipt['unsummarized']).inc()
 
 
 def emit_result(

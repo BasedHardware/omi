@@ -2665,11 +2665,13 @@ final class DesktopAutomationActionRegistry {
         return ["error": "missing 'id'"]
       }
       if let appState = await MainActor.run(body: { AppState.current }) {
-        guard await appState.deleteConversation(id) else {
-          throw APIError.invalidResponse
+        let outcome = await appState.deleteConversation(id)
+        guard outcome.succeeded else {
+          return ["error": outcome.message]
         }
       } else {
-        try await APIClient.shared.deleteConversation(id: id)
+        let outcome = try await APIClient.shared.deleteConversation(id: id)
+        guard outcome.succeeded else { return ["error": outcome.message] }
         NotificationCenter.default.post(
           name: .conversationDeleted,
           object: nil,
@@ -3097,7 +3099,7 @@ final class DesktopAutomationActionRegistry {
         switch error {
         case .noBrowserFound:
           classification = "no_browser"
-        case .notSignedIn:
+        case .notSignedIn, .savedSelectionNeedsGrant:
           classification = "not_signed_in"
         case .sessionExpired:
           classification = "session_expired"

@@ -1,6 +1,7 @@
 {
   "schema_version": 1,
   "id": "FC-orthogonal-fixture-enters-platform-boundary",
+  "family": "test-fidelity",
   "violated_contract": "A hermetic fixture for behavior inside a platform-specific security or deadline boundary must not execute that unrelated boundary; otherwise supported hosts that intentionally reject the primitive fail before the fixture reaches its assertion.",
   "canonical_prevention": "Isolate the platform-specific primitive behind a suite-wide test seam for orthogonal cases, and keep the real boundary contract in a dedicated platform-gated test so newly added behavior cases inherit portability automatically.",
   "canonical_prevention_artifact": [

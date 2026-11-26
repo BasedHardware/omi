@@ -17,6 +17,7 @@ final class LimitlessFlashDrainEngine {
     static let shared = LimitlessFlashDrainEngine()
 
     private static let limitlessServiceUuid = "632de001-604c-446b-a80f-7963e950f3fb"
+    private static let limitlessRxCharUuid = "632de003-604c-446b-a80f-7963e950f3fb"
     private static let limitlessTxCharUuid = "632de002-604c-446b-a80f-7963e950f3fb"
 
     private let cycleMs = 90_000
@@ -55,6 +56,16 @@ final class LimitlessFlashDrainEngine {
     private var stallCheckTimer: DispatchSourceTimer?
 
     private init() {}
+
+    /// A fresh Limitless link does not enable live streaming by itself. Only
+    /// admit the saved Transcribe Later route: audio stays in flash until the
+    /// native drain has subscribed, written the pages and fsynced before ACK.
+    func canDrainAfterRelaunch(_ peripheralUuid: String, defaults: UserDefaults = .standard) -> Bool {
+        guard let config = loadConfig(from: defaults) else { return false }
+        return config.deviceId == peripheralUuid.lowercased()
+            && config.serviceUuid == Self.limitlessServiceUuid
+            && config.characteristicUuid == Self.limitlessRxCharUuid
+    }
 
     /// Call on the main queue where the manager fires onDeviceReady. Subscribes the
     /// configured RX characteristic natively so drain works even when Dart never
@@ -343,8 +354,7 @@ final class LimitlessFlashDrainEngine {
 
     // MARK: - Config
 
-    private func loadConfig() -> Config? {
-        let d = UserDefaults.standard
+    private func loadConfig(from d: UserDefaults = .standard) -> Config? {
         guard d.bool(forKey: "flutter.batchModeEnabled") else { return nil }
         guard let raw = d.string(forKey: "flutter.nativeBleStreamConfig"), !raw.isEmpty,
             let data = raw.data(using: .utf8),

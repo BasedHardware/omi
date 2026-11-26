@@ -34,6 +34,11 @@ See `sdks/device/STT.md`.
 `ready` (for example 1013 `capacity_full` or `service_not_ready`), `appendPcm` and `stop` throw an
 `SttStreamClosedException` carrying the close code and reason, so callers can retry or switch engines.
 
+For Whisper, await `stop()` before closing the transcript consumer. It calls the
+transcript handler for accepted batches and the buffered tail in input order.
+Repeated calls await the same drain, including any failure while transcribing
+the tail.
+
 ## Tests
 
 Run `flutter test` in this directory. The STT tests drive the transcribers through an in-memory WebSocket

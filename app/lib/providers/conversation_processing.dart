@@ -4,7 +4,9 @@ part of 'conversation_provider.dart';
 extension _ConversationProcessingLifecycle on ConversationProvider {
   void _addProcessingConversation(ServerConversation conversation, {bool freshProcessingAttempt = false}) {
     if (SharedPreferencesUtil().isConversationDeleteConfirmed(_processingTargetId(conversation))) return;
-    if (conversation.homeStep == 'failed') _failedHomeProcessingIds.add(conversation.id);
+    if (conversation.homeStep == 'failed' && !conversation.isAdmittedForTranscription) {
+      _failedHomeProcessingIds.add(conversation.id);
+    }
     if (_hasFailedHomeProcessing(conversation)) {
       removeProcessingConversation(conversation.id);
       if (conversation.homeStep == 'failed' && _matchesActiveConversationFilters(conversation)) {
@@ -43,7 +45,7 @@ extension _ConversationProcessingLifecycle on ConversationProvider {
   // can omit home_step while still carrying the stored processing status.
   void _recordHomeProcessingPage(Iterable<ServerConversation> rows, Map<String, int> revisionsAtStart) {
     for (final row in rows) {
-      if (row.homeStep == 'failed') {
+      if (row.homeStep == 'failed' && !row.isAdmittedForTranscription) {
         _failedHomeProcessingIds.add(row.id);
       } else if (_processingStateRevisionById[row.id] == revisionsAtStart[row.id]) {
         // A fresh list response also restores legacy behavior when the server
@@ -54,21 +56,36 @@ extension _ConversationProcessingLifecycle on ConversationProvider {
   }
 
   bool _hasFailedHomeProcessing(ServerConversation row) =>
-      row.homeStep == 'failed' || _failedHomeProcessingIds.contains(_processingTargetId(row));
+      !row.isAdmittedForTranscription &&
+      (row.homeStep == 'failed' || _failedHomeProcessingIds.contains(_processingTargetId(row)));
 
+  // Reliability experiment early_title_icon: an ended conversation whose title and emoji the server has
+  // already fixed is a Home row while its summary is still being written, not a processing row.
   bool _isHomeListRow(ServerConversation row) =>
-      row.status == ConversationStatus.completed || _hasFailedHomeProcessing(row);
+      row.status == ConversationStatus.completed ||
+      row.isTranscriptionAllowanceHeld ||
+      _hasFailedHomeProcessing(row) ||
+      titledBeforeSummary(row);
 
   bool _isActiveProcessingRow(ServerConversation row) =>
-      _isActiveProcessingStatus(row.status) && !_hasFailedHomeProcessing(row);
+      _isActiveProcessingStatus(row.status) &&
+      !row.isTranscriptionAllowanceHeld &&
+      !_hasFailedHomeProcessing(row) &&
+      !titledBeforeSummary(row);
 
-  ServerConversation _withHomeProcessingProjection(ServerConversation row) =>
-      _isActiveProcessingStatus(row.status) && row.homeStep != 'failed' && _failedHomeProcessingIds.contains(row.id)
-          ? row.withHomeStep('failed')
-          : row;
+  ServerConversation _withHomeProcessingProjection(ServerConversation row) => !row.isAdmittedForTranscription &&
+          _isActiveProcessingStatus(row.status) &&
+          row.homeStep != 'failed' &&
+          _failedHomeProcessingIds.contains(row.id)
+      ? row.withHomeStep('failed')
+      : row;
 
   /// Reprocess results explicitly replace the old presentation; ordinary edits retain it.
   ServerConversation _homeReplacement(ServerConversation row, bool preserveHomeStep) {
+    if (row.isAdmittedForTranscription) {
+      _failedHomeProcessingIds.remove(row.id);
+      return row.homeStep == 'transcribing' ? row : row.withHomeStep('transcribing');
+    }
     if (!preserveHomeStep && row.homeStep != 'failed') _failedHomeProcessingIds.remove(row.id);
     return preserveHomeStep ? _retainingHomeStep(row) : _restoreHomeProcessingProjection(row);
   }
@@ -91,7 +108,7 @@ extension _ConversationProcessingLifecycle on ConversationProvider {
   }
 
   ServerConversation _restoreHomeProcessingProjection(ServerConversation row) {
-    if (row.homeStep == 'failed') _failedHomeProcessingIds.add(row.id);
+    if (row.homeStep == 'failed' && !row.isAdmittedForTranscription) _failedHomeProcessingIds.add(row.id);
     return _withHomeProcessingProjection(row);
   }
 
@@ -206,12 +223,13 @@ extension _ConversationProcessingLifecycle on ConversationProvider {
     Set<String> pageConversationIds,
     Map<String, int> processingRevisionsAtStart,
     Map<String, ServerConversation> processingRowsAtStart,
-    Map<String, ServerConversation> pageRowsById,
-  ) {
+    Map<String, ServerConversation> pageRowsById, {
+    Set<String> heldIdsAtStart = const {},
+  }) {
     _recordHomeProcessingPage(pageRowsById.values, processingRevisionsAtStart);
     for (final result in lifecycleResults.values) {
-      if (result.ok && result.item?.homeStep == 'failed') {
-        final row = result.item!;
+      final row = result.item;
+      if (result.ok && row != null && row.homeStep == 'failed' && !row.isAdmittedForTranscription) {
         _failedHomeProcessingIds.add(row.id);
       }
     }
@@ -294,10 +312,11 @@ extension _ConversationProcessingLifecycle on ConversationProvider {
       // Previously tracked IDs are owned by the live-list loop above. If a
       // websocket completion removed one while lifecycle GETs were in flight,
       // a stale detail response must not revive it here. This loop only admits
-      // newly discovered active rows from the authoritative list page.
+      // newly discovered active rows from the page or an Activity hold probe.
       if (_processingStateRevisionById[conversation.id] != processingRevisionsAtStart[conversation.id] ||
           processingIdsAtStart.contains(conversation.id) ||
-          !pageConversationIds.contains(conversation.id) ||
+          !(pageConversationIds.contains(conversation.id) ||
+              (heldIdsAtStart.contains(conversation.id) && conversation.isAdmittedForTranscription)) ||
           !_matchesActiveConversationFilters(conversation)) {
         continue;
       }

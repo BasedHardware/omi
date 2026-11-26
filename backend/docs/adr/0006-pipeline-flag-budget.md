@@ -19,7 +19,10 @@ combinations had ever run together.
   (`os.getenv`, `os.environ`) under the batch pipeline, transcription routing,
   sync and policy packages (scope listed in the JSON) and compares them with
   `config/flag_budget.json`.
-- The budget is today's count: **170 names**. A new name fails CI unless:
+- The reviewed `budget` is the number of seeded and replacement slots, not the
+  total inventory size. Derive the inventory size from `len(names)`; owned
+  exceptions and registered helper switches also belong to that inventory.
+  Do not maintain a separate count field. A new name fails CI unless:
   - another name leaves the surface in the same change, the new entry says
     `{"replaces": "<OLD>"}`, and the old name's `retired` entry records
     `"replaced_by": "<NEW>"` (the budget holds); or
@@ -28,7 +31,7 @@ combinations had ever run together.
 - Removing a name moves it to the append-only `retired` ledger
   (`{"on": date, "replaced_by": null}`) and lowers `budget` in the same change.
   A slot given up that way cannot be reclaimed by a later `replaces`.
-  `budget` can never exceed the seeded 170.
+  `budget` can never exceed `SEED_BUDGET` in the test (165).
 - Literal names in positional and `key=` keyword form are both counted
   (`config/policy/guard.py:env_reads`).
 - A helper-backed default-on kill switch outside the scoped env surface may be

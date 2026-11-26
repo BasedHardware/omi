@@ -38,7 +38,7 @@ CHAT_FIRST_E2E_ACTION ?= prepare
 CHAT_FIRST_E2E_CASE ?= enabled
 CHAT_FIRST_E2E_SECONDS ?= 86400
 
-.PHONY: setup setup-main setup-hooks setup-backend lane-backend lane-bootstrap preflight backend-ratchet-preflight runtime-image-source-closure runtime-image-smoke dev-check dev-up dev-status dev-summary dev-reset dev-down dev-logs mobile-session mobile-verify dev dev-desktop dev-init dev-verify list-memory-scenarios seed-memory-scenario reset-memory-scenario desktop-run-local chat-first-e2e-fixture run-canonical-maintenance
+.PHONY: setup setup-main setup-hooks setup-backend lane-backend lane-bootstrap preflight backend-ratchet-preflight runtime-image-source-closure runtime-image-smoke dev-check dev-up dev-status dev-summary dev-reset dev-down dev-restart dev-logs dev-parity mobile-session mobile-verify dev dev-desktop dev-init dev-verify list-memory-scenarios seed-memory-scenario reset-memory-scenario desktop-run-local chat-first-e2e-fixture run-canonical-maintenance
 
 # Baseline setup is deliberately limited to prerequisites that the default
 # pre-push gate may require; app and desktop runtime environments stay opt-in.
@@ -70,6 +70,13 @@ preflight:
 batch-replay:
 	@test -n "$(REF)" -a -n "$(BASE)" -a -n "$(CORPUS)" -a -n "$(OUTPUT)" || (echo 'Required: REF BASE CORPUS OUTPUT'; exit 2)
 	backend/.venv/bin/python -I backend/testing/batch_replay/gate.py --ref "$(REF)" --base "$(BASE)" --corpus "$(CORPUS)" --output "$(OUTPUT)"
+
+# Diagnostic-only workerd comparison. The committed lane 7 gate remains test.sh/jobd.
+.PHONY: oracle-diag
+ORACLE_DIAG_OUTPUT ?= ../ordinary-sync-diagnostic-$(WORKERD_REF).json
+oracle-diag:
+	@test -n "$(WORKERD_REF)" || { echo 'Required: WORKERD_REF=<full commit SHA>' >&2; exit 2; }
+	cd backend-go && ./scripts/with-postgres.sh ./scripts/with-firestore.sh ./tools/replay/oracle-diag.sh "$(WORKERD_REF)" "$(abspath $(ORACLE_DIAG_OUTPUT))"
 
 # Local stage replay; expected incident stops are successful reproductions.
 CASES ?= backend/testing/replay_harness/fixtures/privacy-transitions-smoke
@@ -139,8 +146,16 @@ dev-reset:
 dev-down:
 	$(BASH) scripts/dev-harness/dev-down.sh
 
+# Restart the application services only; the emulators and Redis keep running, so local data stays.
+dev-restart:
+	$(BASH) scripts/dev-harness/dev-restart.sh
+
 dev-logs:
 	$(BASH) scripts/dev-harness/dev-logs.sh
+
+# Prod-parity profile (scripts/dev-harness/PROD_PARITY.md): report, snapshot, drift.
+dev-parity:
+	$(BASH) scripts/dev-harness/dev-parity.sh $(ARGS)
 
 
 mobile-session:
@@ -149,6 +164,11 @@ mobile-session:
 
 mobile-verify:
 	$(BASH) scripts/dev-harness/mobile-verify.sh $(ARGS)
+
+# Pipeline lab CLI (backend/testing/pipeline_lab); wrap heavy commands in omi-heavy.
+.PHONY: pipeline-lab
+pipeline-lab:
+	cd backend && .venv/bin/python -m testing.pipeline_lab $(ARGS)
 
 list-memory-scenarios:
 	$(PYTHON_RUNNER) scripts/dev-harness/list-memory-scenarios.py

@@ -13,6 +13,7 @@ from google.api_core.exceptions import (
 )
 
 from utils.other import storage
+from utils.other.private_sync_get_metrics import Reader, object_get_reader
 from utils.other.raw_audio_read import select_raw_pcm
 
 MAX_SPEAKER_DOWNLOADS = 32
@@ -88,6 +89,7 @@ class AudioChunkReadSession:
                 self._chunks = []
         return self._chunks
 
+    @object_get_reader(Reader.SPEAKER_EVIDENCE)
     def fetch(self, path: str) -> Optional[bytes]:
         from google.cloud.storage.retry import DEFAULT_RETRY
 

@@ -1,0 +1,1 @@
+{"change": "Device Settings no longer lists brief Bluetooth disconnects, which are routine and lose no audio. Recordings the server has not processed yet now read \"Uploads waiting on the server\", and your audio stays safe on your device or phone."}

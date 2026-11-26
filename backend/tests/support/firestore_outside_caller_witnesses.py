@@ -94,7 +94,7 @@ def _run_expired_sync_status(monkeypatch: pytest.MonkeyPatch, capture: HelperCap
 
 
 def _run_episode_home(monkeypatch: pytest.MonkeyPatch, capture: HelperCapture) -> None:
-    monkeypatch.setattr(episodes_router, '_admitted', lambda uid, channel: True)
+    monkeypatch.setattr(episodes_router, '_admitted', lambda uid, channel, **kw: True)
     trial(
         capture,
         episodes_router.list_episodes,
@@ -119,7 +119,7 @@ WITNESSES: dict[str, CallerWitness] = {
             _run_episode_home,
         ),
         CallerWitness(
-            'routers/sync.py:get_sync_job_status:utils.sync.completed_status.get_completed_legacy_status',
+            'routers/sync.py:_read_sync_job_status:utils.sync.completed_status.get_completed_legacy_status',
             'utils.sync.completed_status.get_completed_legacy_status',
             'utils.sync.completed_status.get_completed_legacy_status',
             ('expired-legacy-handle',),

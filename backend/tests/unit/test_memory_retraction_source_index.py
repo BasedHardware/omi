@@ -345,8 +345,8 @@ def test_account_wipe_drops_a_late_index_document(monkeypatch):
     retirements = []
     monkeypatch.setattr(
         user_data_deletion,
-        'stop_quiet_checks_for_account',
-        lambda uid, **kwargs: retirements.append((uid, kwargs['firestore_client'])),
+        'purge_finalization_jobs',
+        lambda uid, client: retirements.append((uid, client)),
     )
     user_data_deletion.purge_user_subtree(UID, client, lambda *a, **k: None)
     assert retirements == [(UID, client)]
@@ -358,49 +358,65 @@ def test_account_wipe_drops_a_late_index_document(monkeypatch):
 def test_account_wipe_erases_head_recreated_after_state_collection(monkeypatch, root_exists):
     from database import batch_pipeline_purge, user_data_deletion
 
+    # The fake records the erasure order. The default-on root deletion
+    # transaction is exercised by the real Firestore writer suite.
+    monkeypatch.setenv('BATCH_ACCOUNT_PRIVACY_WRITER_ENABLED', 'false')
     monkeypatch.setattr(batch_pipeline_purge, 'purge_batch_owner', lambda uid: None)
     monkeypatch.setattr(user_data_deletion, 'search_apps_db', lambda uid, *, my_apps: [])
     monkeypatch.setattr(user_data_deletion, 'get_data_plane_firestore_client', lambda: MagicMock())
-    head = user_data_deletion.RELEASED_MEMORY_CHANGE_HEAD
-    list_heads = tuple(user_data_deletion.ROW_COLLECTIONS)
-    rows = {head: {'token': 'before'}, **{family: {'version': 'before'} for family in list_heads}}
+    memory_head = ('memory_state', user_data_deletion.RELEASED_MEMORY_CHANGE_HEAD)
+    list_heads = (('list_serving_versions', 'conversations'), ('list_serving_versions', 'action_items'))
+    rows = {memory_head, *list_heads}
     events = []
+
+    def delete_document(collection, document):
+        path = (collection, document)
+        events.append(path)
+        rows.discard(path)
+
     user_ref = SimpleNamespace(
         get=lambda: SimpleNamespace(exists=root_exists),
         collections=lambda: [
             SimpleNamespace(id='memory_state'),
-            SimpleNamespace(id=user_data_deletion.STATE_COLLECTION),
+            SimpleNamespace(id='list_serving_versions'),
             SimpleNamespace(id='memories'),
             SimpleNamespace(id='conversations'),
         ],
         collection=lambda name: SimpleNamespace(
-            document=lambda doc: SimpleNamespace(delete=lambda: rows.pop(doc, None))
+            document=lambda doc: SimpleNamespace(delete=lambda: delete_document(name, doc))
         ),
         delete=lambda: events.append('root'),
     )
 
     def erase(sub, **kwargs):
         events.append(sub.id)
-        if sub.id in {'memory_state', user_data_deletion.STATE_COLLECTION}:
-            rows.clear()
+        if sub.id in {'memory_state', 'list_serving_versions'}:
+            rows.difference_update({path for path in rows if path[0] == sub.id})
         elif sub.id == 'memories':
-            rows[head] = {'token': 'source-delete-commit'}
-        else:
-            rows.update({family: {'version': 'source-delete-commit'} for family in list_heads})
+            rows.add(memory_head)
+        elif sub.id == 'conversations':
+            rows.update(list_heads)
 
     client = SimpleNamespace(collection=lambda name: SimpleNamespace(document=lambda uid: user_ref))
     retirements = []
     monkeypatch.setattr(
         user_data_deletion,
-        'stop_quiet_checks_for_account',
-        lambda uid, **kwargs: retirements.append((uid, kwargs['firestore_client'])),
+        'purge_finalization_jobs',
+        lambda uid, client: retirements.append((uid, client)),
     )
     assert user_data_deletion.purge_user_subtree(UID, client, erase)['status'] == 'ok'
     assert retirements == [(UID, client)]
-    assert rows == {}
-    assert events == ['memory_state', user_data_deletion.STATE_COLLECTION, 'memories', 'conversations'] + (
-        ['root'] if root_exists else []
-    )
+    assert not rows
+    assert events == [
+        'memory_state',
+        'list_serving_versions',
+        'memories',
+        'conversations',
+        ('memory_state', msi.DOC),
+        memory_head,
+        *list_heads,
+        ('people_meta', 'generation'),
+    ] + (['root'] if root_exists else [])
 
 
 def test_scan_inside_a_memo_scope_reads_fresh_pages(world, monkeypatch):

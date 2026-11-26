@@ -134,7 +134,7 @@ async def test_full_replay_backpressures_small_real_queue_without_drop(kind):
     transport.gate.clear()
     ring = full_ring()
     expected = b''.join(data for _, data in ring.snapshot())
-    task = asyncio.create_task(replay_chunks(raw, ring.snapshot(), source=ring, provider='parakeet', soniox=None))
+    task = asyncio.create_task(replay_chunks(raw, ring.snapshot(), source=ring, provider='parakeet'))
     try:
         await until(lambda: raw._send_queue.qsize() + raw._send_queue.inflight >= raw._send_queue.maxsize)
         assert not task.done() and not raw.is_connection_dead
@@ -426,7 +426,7 @@ async def test_stalled_default_queue_replay_never_hides_behind_2000_slots(monkey
     raw.replay_send = lambda data, start: raw.send(data)
     ring = full_ring()
     try:
-        rejected = await replay_chunks(raw, ring.snapshot(), source=ring, provider='parakeet', soniox=None)
+        rejected = await replay_chunks(raw, ring.snapshot(), source=ring, provider='parakeet')
         assert rejected is not None
         assert raw._send_queue.maxsize == 2000 and raw._send_queue.high_water == 2
         assert raw.typed_death_reason == 'replay_send_stalled'

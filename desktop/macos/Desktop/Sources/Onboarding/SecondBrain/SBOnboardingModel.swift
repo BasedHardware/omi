@@ -850,7 +850,6 @@ final class SBOnboardingModel: ObservableObject {
     finishOnboardingHandoff(clearOnboardingChatFlag: true)
 
     Task {
-      await AgentVMService.shared.startPipeline()
       await GoalGenerationService.shared.generateNow()
     }
     applyLaunchAtLoginSelection()

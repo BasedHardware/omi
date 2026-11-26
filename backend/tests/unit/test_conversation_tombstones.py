@@ -7,17 +7,20 @@ collaborators rather than importing network clients or asserting source strings.
 import ast
 import asyncio
 from contextlib import ExitStack, nullcontext
+from itertools import islice
 from pathlib import Path
 from types import SimpleNamespace, MethodType
 from unittest.mock import MagicMock, AsyncMock
 
-from fastapi import HTTPException
+from fastapi import HTTPException, Response
 import pytest
 
 from database import conversation_tombstones as tombstones
 from database import user_data_deletion
+from database.account_deletion_operational_holds import StoragePrefixPurgeBlocked, StoragePrefixPurgeError
 from google.api_core.exceptions import AlreadyExists
 from testing.import_isolation import stub_modules, AutoMockModule
+from utils.log_sanitizer import sanitize
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -72,15 +75,52 @@ class Ref:
         names = {p[len(prefix) :].split('/')[0] for p in self.store.rows if p.startswith(prefix)}
         return [self.collection(n) for n in names]
 
+    def where(self, *, filter):
+        assert filter.field_path == 'uid'
+        assert filter.op_string == '=='
+        return FinalizationJobsQuery(self, filter.value)
+
+    def list_documents(self):
+        # Firestore lists child references even when only their subcollections survive.
+        prefix = self.path + '/'
+        document_ids = {path[len(prefix) :].split('/', 1)[0] for path in self.store.rows if path.startswith(prefix)}
+        return [self.document(document_id) for document_id in sorted(document_ids)]
+
+
+class FinalizationJobsQuery:
+    def __init__(self, collection, uid):
+        self.collection = collection
+        self.uid = uid
+
+    def select(self, fields):
+        assert fields == []
+        return self
+
+    def limit(self, size):
+        self.size = size
+        return self
+
+    def stream(self):
+        matches = (
+            ref
+            for ref in self.collection.list_documents()
+            if self.collection.store.rows.get(ref.path, {}).get('uid') == self.uid
+        )
+        for ref in islice(matches, self.size):
+            yield SimpleNamespace(reference=ref)
+
 
 def function(path, name, namespace):
     if path == 'routers/conversations.py' and name == 'delete_conversation':
+        namespace['Response'] = Response
         namespace['nullcontext'] = nullcontext
         namespace['ExitStack'] = ExitStack
         namespace.setdefault('accepts_conversation_deletes', lambda: False)
         namespace.setdefault('destructive_operation_gate', lambda *args, **kwargs: nullcontext())
         namespace.setdefault('CONVERSATION_DELETE_GATE_WAIT_SECONDS', 0.0)
         namespace.setdefault('deferred_batch_purges', lambda uid: nullcontext())
+        namespace.setdefault('_legal_hold_defers_delete', lambda uid: False)
+        function(path, '_delete_privacy_audio_after_response', namespace)
         function(path, '_delete_conversation_under_gate', namespace)
     node = next(
         n
@@ -146,7 +186,7 @@ def test_non_cascade_delete_purges_prompt_evidence_after_intent_without_purging_
     delete = function('routers/conversations.py', 'delete_conversation', namespace)
     # The handler returns no body: the route is 204 No Content, the contract the
     # released mobile client gates on (test_conversation_delete_wire_contract.py).
-    assert delete('c', MagicMock(), False, None, 'u') is None
+    assert delete('c', MagicMock(), False, None, 'u').status_code == 204
     assert calls == [('prompt', True), ('parent', True)]
     audio.assert_not_called()
 
@@ -199,12 +239,47 @@ def test_user_delete_records_intent_before_retraction_and_cleanup(store, failure
         assert 'users/u/conversations/c' in store.rows
     else:
         tasks = MagicMock()
-        assert delete('c', tasks, True, None, 'u') is None
+        assert delete('c', tasks, True, None, 'u').status_code == 204
         tasks.add_task.assert_called_once_with(
-            namespace['delete_privacy_conversation_audio'], 'u', 'c', source_ids=['donor']
+            namespace['_delete_privacy_audio_after_response'], 'u', 'c', source_ids=['donor']
         )
         assert 'users/u/conversations/c' not in store.rows
     assert tombstones.is_deleted('u', 'c')
+
+
+@pytest.mark.parametrize(
+    ('error', 'outcome', 'reason'),
+    [
+        (
+            StoragePrefixPurgeError('owner storage list failed in sync: insufficientPermissions'),
+            'failed',
+            'insufficientPermissions',
+        ),
+        (
+            StoragePrefixPurgeBlocked({('sync', 'chunks/u/c/clip', 1): 'objectUnderActiveHold'}),
+            'blocked',
+            'objectUnderActiveHold',
+        ),
+    ],
+)
+def test_background_audio_purge_reports_provider_outcome_once(error, outcome, reason):
+    purge = MagicMock(side_effect=error)
+    logger = MagicMock()
+    namespace = {
+        'delete_privacy_conversation_audio': purge,
+        'logger': logger,
+        'sanitize': sanitize,
+    }
+    background_purge = function('routers/conversations.py', '_delete_privacy_audio_after_response', namespace)
+
+    background_purge('u', 'c', source_ids=['donor'])
+
+    purge.assert_called_once_with('u', 'c', source_ids=['donor'])
+    logger.error.assert_called_once()
+    assert logger.error.call_args.args[3] == outcome
+    assert reason in logger.error.call_args.args[4]
+    logger.warning.assert_not_called()
+    logger.exception.assert_not_called()
 
 
 def test_account_wipe_enumerates_tombstones_even_without_root(store, monkeypatch):
@@ -213,9 +288,12 @@ def test_account_wipe_enumerates_tombstones_even_without_root(store, monkeypatch
     data_plane.rows['rollout_cohorts/u'] = {'cohorts': {'dev': {'batch-pipeline': True}}}
     monkeypatch.setattr(user_data_deletion, 'search_apps_db', lambda _uid, my_apps: [])
     monkeypatch.setattr(user_data_deletion, 'get_data_plane_firestore_client', lambda: data_plane)
-    # Global quiet-job pagination is covered by the real Firestore emulator.
-    quiet_cleanup = MagicMock()
-    monkeypatch.setattr(user_data_deletion, 'stop_quiet_checks_for_account', quiet_cleanup)
+    job_path = 'conversation_finalization_jobs'
+    store.rows[f'{job_path}/ordinary'] = {'uid': 'u', 'conversation_id': 'c', 'status': 'pending'}
+    store.rows[f'{job_path}/quiet'] = {'uid': 'u', 'kind': 'listen_quiet_check'}
+    store.rows[f'{job_path}/merge'] = {'uid': 'u', 'kind': 'conversation_merge'}
+    other_job = f'{job_path}/other'
+    store.rows[other_job] = {'uid': 'other', 'conversation_id': 'c'}
 
     def purge(ref, **kwargs):
         for path in list(store.rows):
@@ -227,15 +305,58 @@ def test_account_wipe_enumerates_tombstones_even_without_root(store, monkeypatch
         'delete_user_data',
         {
             'db': store,
+            'account_authority_writer_enabled': lambda: True,
+            'get_data_plane_firestore_client': lambda: store,
             'logger': MagicMock(),
             'delete_collection_recursive': purge,
         },
     )
-    wipe('u')
-    quiet_cleanup.assert_called_once_with('u', firestore_client=store)
+    assert wipe('u')['status'] == 'ok'
     assert data_plane.rows == {}
-    assert store.rows == {}
+    assert store.rows == {other_job: {'uid': 'other', 'conversation_id': 'c'}}
     assert not tombstones.is_deleted('u', 'c')
+
+
+def test_account_job_purge_logs_only_counts_and_revision_after_multiple_batches(store, monkeypatch, caplog):
+    monkeypatch.setenv('K_REVISION', 'backend-test')
+    caplog.set_level('INFO', logger=user_data_deletion.__name__)
+    collection = store.collection('conversation_finalization_jobs')
+    for index in range(451):
+        collection.document(f'job-{index:03}').create({'uid': 'u'})
+
+    user_data_deletion.purge_finalization_jobs('u', store)
+
+    assert caplog.messages == ['account_erasure_finalization_jobs_purged deleted=451 remaining=0 revision=backend-test']
+
+
+def test_account_job_purge_retries_after_a_later_batch_failure(store, monkeypatch, caplog):
+    monkeypatch.setenv('K_REVISION', 'backend-test')
+    caplog.set_level('INFO', logger=user_data_deletion.__name__)
+    collection = store.collection('conversation_finalization_jobs')
+    for index in range(451):
+        collection.document(f'job-{index:03}').create({'uid': 'u'})
+
+    failing_batch = Batch()
+
+    def fail():
+        raise RuntimeError('synthetic batch failure')
+
+    monkeypatch.setattr(failing_batch, 'commit', fail)
+    batches = iter((Batch(), failing_batch))
+    with monkeypatch.context() as patch:
+        patch.setattr(store, 'batch', lambda: next(batches))
+        with pytest.raises(RuntimeError, match='synthetic batch failure'):
+            user_data_deletion.purge_finalization_jobs('u', store)
+
+    assert [ref.id for ref in collection.list_documents()] == ['job-450']
+    assert caplog.messages == []
+    user_data_deletion.purge_finalization_jobs('u', store)
+    assert collection.list_documents() == []
+    user_data_deletion.purge_finalization_jobs('u', store)
+    assert caplog.messages == [
+        'account_erasure_finalization_jobs_purged deleted=1 remaining=0 revision=backend-test',
+        'account_erasure_finalization_jobs_purged deleted=0 remaining=0 revision=backend-test',
+    ]
 
 
 def test_live_client_chosen_deleted_id_is_closed_before_bootstrap_and_registration(store):

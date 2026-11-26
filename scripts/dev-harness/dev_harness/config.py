@@ -16,6 +16,8 @@ AUTH_PORT = 9099
 BACKEND_PORT = 8000
 LLM_GATEWAY_PORT = 9080
 DESKTOP_BACKEND_PORT = 10201
+# Realtime pusher. Only the prod-parity profile starts one (dev_harness.parity_stack).
+PUSHER_PORT = 8090
 REDIS_PORT = 6380
 TYPESENSE_PORT = 8108
 # The official container listens on its internal default unless an explicit
@@ -50,6 +52,7 @@ PORT_OVERRIDE_ENVS = {
     "redis": "OMI_HARNESS_REDIS_PORT",
     "typesense": "OMI_HARNESS_TYPESENSE_PORT",
     "llm_gateway": "OMI_HARNESS_LLM_GATEWAY_PORT",
+    "pusher": "OMI_HARNESS_PUSHER_PORT",
 }
 PROVIDER_MODES = providers.PROVIDER_MODES
 CORE_PROVIDER_ENV = (
@@ -57,8 +60,14 @@ CORE_PROVIDER_ENV = (
     "DEEPGRAM_API_KEY",
     "GEMINI_API_KEY",
     "ANTHROPIC_API_KEY",
+    # Production's speech-to-text vendors and second LLM route (prod-parity profile).
+    "MODULATE_API_KEY",
+    "SONIOX_API_KEY",
+    "OPENROUTER_API_KEY",
 )
-SECRETS_FILE_ALLOWED_KEYS = frozenset({"PROVIDER_MODE", *CORE_PROVIDER_ENV})
+# The batch speech worker's model access token (prod-parity profile); never forwarded to other services.
+MODEL_ACCESS_TOKEN_ENV = "HUGGINGFACE_TOKEN"
+SECRETS_FILE_ALLOWED_KEYS = frozenset({"PROVIDER_MODE", MODEL_ACCESS_TOKEN_ENV, *CORE_PROVIDER_ENV})
 
 
 @dataclass(frozen=True)
@@ -88,6 +97,7 @@ class HarnessConfig:
     # used for URLs the backend hands out, such as local-storage file links.
     dev_advertise_host: str = "127.0.0.1"
     llm_gateway_port: int = LLM_GATEWAY_PORT
+    pusher_port: int = PUSHER_PORT
 
     @property
     def firestore_host(self) -> str:
@@ -125,6 +135,10 @@ class HarnessConfig:
     @property
     def llm_gateway_url(self) -> str:
         return f"http://127.0.0.1:{self.llm_gateway_port}"
+
+    @property
+    def pusher_url(self) -> str:
+        return f"http://127.0.0.1:{self.pusher_port}"
 
     @property
     def llm_gateway_service_token(self) -> str:
@@ -221,6 +235,7 @@ def harness_ports_from_env(env: Mapping[str, str] | None = None) -> dict[str, in
         "redis": REDIS_PORT,
         "typesense": TYPESENSE_PORT,
         "llm_gateway": LLM_GATEWAY_PORT,
+        "pusher": PUSHER_PORT,
     }
     ports = {name: _port_from_env(source, name, default, offset) for name, default in defaults.items()}
     duplicates = sorted(port for port in set(ports.values()) if list(ports.values()).count(port) > 1)
@@ -325,6 +340,7 @@ def load_config(repo_root: Path, env: Mapping[str, str] | None = None, *, create
         redis_port=ports["redis"],
         typesense_port=ports["typesense"],
         llm_gateway_port=ports["llm_gateway"],
+        pusher_port=ports["pusher"],
         dev_bind_host=dev_bind_host,
         dev_advertise_host=dev_advertise_host,
     )
@@ -343,6 +359,7 @@ def load_config(repo_root: Path, env: Mapping[str, str] | None = None, *, create
             redis_port=cfg.redis_port,
             typesense_port=cfg.typesense_port,
             llm_gateway_port=cfg.llm_gateway_port,
+            pusher_port=cfg.pusher_port,
             dev_bind_host=cfg.dev_bind_host,
             dev_advertise_host=cfg.dev_advertise_host,
         )

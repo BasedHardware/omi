@@ -9,7 +9,7 @@ Capture timestamps are client assertions, so a well-formed device header alone n
 
 A signed fresh manifest covers at most 20 files. Mobile detects a conversation with more than 20 pending fresh WALs before requesting a manifest and routes the whole conversation through backfill in three-file batches. It never claims one immutable fresh content set and strands the remainder behind a conflicting manifest.
 
-Historical recovery defaults are a 30-day lookback and thirty globally concurrent Cloud Tasks dispatches capped at thirty per second. The processed-speech daily accounting caps remain available, but `SYNC_BACKFILL_ADMISSION_LIMITS=false` leaves them unenforced at upload admission. `SYNC_BACKFILL_INFLIGHT_LIMIT` and its unused admission primitive are retired after C6: no Redis per-UID admission slot is acquired. Token-fenced release remains for slots left by older revisions. `SYNC_BACKFILL_UID_SEQUENCER=on` in dev/prod is the phase-two setting (2026-09-28); `off` is the kill switch, under which eligible uploads still receive 202 and newly accepted jobs dispatch directly through Cloud Tasks as after #19352. The new admission path writes a bounded per-UID direct-job marker before enqueue, and the new worker refreshes it when direct work starts. A later config PR turns the sequencer on after the phase-one drain gate. On mode persists each accepted job in Firestore and dispatches at most one worker job per UID. Queue concurrency is controlled by the shared `.github/actions/sync-backfill-lifecycle` composite.
+Historical recovery defaults are a 30-day lookback (prod sets `SYNC_BACKFILL_MAX_AGE_SECONDS=5184000`, 60 days, because the lookback is checked once at upload admission and backlogs that older app builds or slow drains cannot clear within 30 days get a terminal 422 on the phone; staging lifecycle ages count from upload, not capture) and thirty globally concurrent Cloud Tasks dispatches capped at thirty per second. The processed-speech daily accounting caps remain available, but `SYNC_BACKFILL_ADMISSION_LIMITS=false` leaves them unenforced at upload admission. `SYNC_BACKFILL_INFLIGHT_LIMIT` and its unused admission primitive are retired after C6: no Redis per-UID admission slot is acquired. Token-fenced release remains for slots left by older revisions. `SYNC_BACKFILL_UID_SEQUENCER=on` in dev/prod is the phase-two setting (2026-09-28); `off` is the kill switch, under which eligible uploads still receive 202 and newly accepted jobs dispatch directly through Cloud Tasks as after #19352. The new admission path writes a bounded per-UID direct-job marker before enqueue, and the new worker refreshes it when direct work starts. A later config PR turns the sequencer on after the phase-one drain gate. On mode persists each accepted job in Firestore and dispatches at most one worker job per UID. Queue concurrency is controlled by the shared `.github/actions/sync-backfill-lifecycle` composite.
 
 Production deploys require `SYNC_BACKFILL_ALERT_NOTIFICATION_CHANNELS` as a comma-separated list of Cloud Monitoring notification-channel resource names. The workflow provisions log-based metrics and routed alert policies at 70% and 90%, then verifies each policy has a notification channel before traffic shifts.
 
@@ -313,11 +313,21 @@ redirecting at it (a multi-hop chain inside one lineage). When a chunk later lan
 on a smart-merge survivor and matches that row, the one-hop flatten re-points
 every hop of such a chain at the survivor in the same transaction. The finalize
 bridge accepts a chain that stays inside the survivor's lineage and ends at it.
-A chain that leaves the lineage, cycles, or crosses a non-tombstone still
-conflicts. `event=sync_ancestry_flatten outcome=rejected reason=...` and
-`event=sync_bridge outcome=source_rejected kind=...` name what was left. Kill
-switch: `CONVERSATION_SMART_MERGE_FLATTEN_CHAIN_REPAIR=off` restores the strict
-one-hop check (`ancestry_flatten_rejected` / `bridge_source_not_tombstone`).
+A chain that leaves the lineage, cycles, or crosses a non-tombstone is left alone.
+`event=sync_ancestry_flatten outcome=rejected reason=...` names what the flatten
+declined. A source that the bridge can no longer redirect at its survivor —
+missing, hard-deleted, no longer a tombstone, or a chain that left the lineage —
+is terminal: the bridge logs `event=sync_bridge outcome=source_terminal kind=...`,
+counts `omi_sync_bridge_terminal_total{outcome}`, leaves both rows untouched, and
+still settles the sources that resolve. It does not raise, so one stale ancestry
+entry can no longer fail an enrichment resume. A later append re-reads the entry,
+so a source that does become a tombstone is cleaned up then. Kill
+switch: `SYNC_FINALIZE_TARGET_RECOVERY_ENABLED=off` restores the strict
+`event=sync_bridge outcome=source_rejected` / `bridge_source_not_tombstone`
+failure for every bridge caller. Separately,
+`CONVERSATION_SMART_MERGE_FLATTEN_CHAIN_REPAIR=off` restores the strict one-hop
+check and leaves same-lineage chains to the same terminal path
+(`ancestry_flatten_rejected`).
 
 ## Run ownership and recovery
 

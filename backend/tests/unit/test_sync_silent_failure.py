@@ -12,6 +12,9 @@ silent returns or thread crashes, and the endpoint always returned 200.
 import os
 import re
 import threading
+from importlib import import_module
+from types import ModuleType
+from unittest.mock import AsyncMock, MagicMock, patch
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -20,6 +23,9 @@ from pydantic import BaseModel
 
 from models import conversation_continuity  # noqa: F401 - retain pure policy across the legacy models package stub
 from models.transcript_segment import SpeakerIdentityStatus
+from database import _client as firestore_client
+from tests.support.isolated_prometheus import isolated_prometheus
+from testing.import_isolation import stub_modules
 from utils.capture import coverage  # noqa: F401 - retain lazy ledger authority before database stubs
 from utils.stt import transcript_admission  # noqa: F401 - retain pure admission contract before enum/package stubs
 from utils.speakers import context  # noqa: F401 - retain speaker metric owner before package stubs
@@ -248,19 +254,16 @@ class TestDeepgramRetryBehavior:
 class TestDeepgramRetryBehavioral:
     """Behavioral tests that execute deepgram_prerecorded with mocked DG client.
 
-    Uses setup_class/teardown_class to install stubs for deepgram + related deps,
+    Uses a class-scoped fixture to install stubs for deepgram and related dependencies,
     then imports the real function under test.
     """
 
-    _saved_modules = {}
     _deepgram_prerecorded = None
     _mock_client = None
 
+    @pytest.fixture(scope="class", autouse=True)
     @classmethod
-    def setup_class(cls):
-        from unittest.mock import MagicMock
-        from types import ModuleType
-
+    def isolated_imports(cls):
         stubs = [
             'deepgram',
             'models',
@@ -268,37 +271,22 @@ class TestDeepgramRetryBehavioral:
             'utils.other.endpoints',
             'utils.stt.speaker_embedding',
         ]
-        cls._saved_modules = {name: sys.modules.get(name) for name in stubs}
-        cls._saved_modules['utils.stt.pre_recorded'] = sys.modules.get('utils.stt.pre_recorded')
+        fakes = {name: ModuleType(name) for name in stubs}
+        fakes['utils.stt.pre_recorded'] = None
+        fakes['deepgram'].DeepgramClient = MagicMock()
+        fakes['deepgram'].DeepgramClientOptions = MagicMock()
+        fakes['models.transcript_segment'].TranscriptSegment = MagicMock()
+        fakes['models.transcript_segment'].SpeakerIdentityStatus = SpeakerIdentityStatus
+        fakes['utils.other.endpoints'].timeit = lambda f: f
+        fakes['utils.stt.speaker_embedding'].SPEAKER_MATCH_THRESHOLD = 0.45
+        fakes['utils.stt.speaker_embedding'].compare_embeddings = MagicMock(return_value=1.0)
+        fakes['utils.stt.speaker_embedding'].extract_embedding_from_bytes = MagicMock()
+        fakes['utils.stt.speaker_embedding'].speaker_embedding_configured = lambda: True
 
-        for mod_name in stubs:
-            sys.modules[mod_name] = ModuleType(mod_name)
-
-        sys.modules['deepgram'].DeepgramClient = MagicMock()
-        sys.modules['deepgram'].DeepgramClientOptions = MagicMock()
-        sys.modules['models.transcript_segment'].TranscriptSegment = MagicMock()
-        sys.modules['models.transcript_segment'].SpeakerIdentityStatus = SpeakerIdentityStatus
-        sys.modules['utils.other.endpoints'].timeit = lambda f: f
-        sys.modules['utils.stt.speaker_embedding'].SPEAKER_MATCH_THRESHOLD = 0.45
-        sys.modules['utils.stt.speaker_embedding'].compare_embeddings = MagicMock(return_value=1.0)
-        sys.modules['utils.stt.speaker_embedding'].extract_embedding_from_bytes = MagicMock()
-        sys.modules['utils.stt.speaker_embedding'].speaker_embedding_configured = lambda: True
-
-        # Force re-import so it picks up stubs
-        sys.modules.pop('utils.stt.pre_recorded', None)
-        from utils.stt.pre_recorded import deepgram_prerecorded
-
-        cls._deepgram_prerecorded = staticmethod(deepgram_prerecorded)
-
-    @classmethod
-    def teardown_class(cls):
-        sys.modules.pop('utils.stt.pre_recorded', None)
-        for name, orig in cls._saved_modules.items():
-            if orig is None:
-                sys.modules.pop(name, None)
-            else:
-                sys.modules[name] = orig
-        cls._saved_modules.clear()
+        with isolated_prometheus(), stub_modules(fakes):
+            pre_recorded = import_module('utils.stt.pre_recorded')
+            cls._deepgram_prerecorded = staticmethod(pre_recorded.deepgram_prerecorded)
+            yield
 
     def test_retry_exhaustion_raises_runtime_error(self):
         """deepgram_prerecorded must raise RuntimeError when all retries fail."""
@@ -668,8 +656,6 @@ class TestMergeSurvivorAudio:
         # Avoid importing the real utils.other.storage (slow) in a timing-guarded
         # unit test; stub it via sys.modules so store_partial_merge_survivor_audio's
         # local import resolves instantly.
-        import sys
-
         mock_upload = MagicMock()
         mock_storage = ModuleType('utils.other.storage')
         mock_storage.upload_audio_chunk = mock_upload
@@ -677,7 +663,7 @@ class TestMergeSurvivorAudio:
 
         with (
             patch.object(merge_audio, '_wav_bytes_to_pcm16_16k', return_value=pcm),
-            patch.dict(sys.modules, {'utils.other.storage': mock_storage}),
+            stub_modules({'utils.other.storage': mock_storage}),
         ):
             merge_audio.store_partial_merge_survivor_audio(
                 uid='uid',
@@ -701,10 +687,6 @@ class TestMergeSurvivorAudio:
 # 7. Behavioral test — real process_segment with mocked dependencies
 # ---------------------------------------------------------------------------
 
-import sys
-from types import ModuleType
-from unittest.mock import AsyncMock, MagicMock, patch
-
 _STUB_MODULES = [
     'models',
     'models.conversation',
@@ -712,7 +694,6 @@ _STUB_MODULES = [
     'models.geolocation',
     'models.sync_audio',
     'models.transcript_segment',
-    'database._client',
     'database.redis_db',
     'database.auth',
     'database.fair_use',
@@ -756,184 +737,162 @@ _STUB_MODULES = [
 class TestProcessSegmentReal:
     """Tests that call the real process_segment function with mocked deps.
 
-    Uses setup_class/teardown_class to install and remove sys.modules stubs
-    so other test files in the same pytest process are not contaminated.
+    The class fixture restores the import state when these tests finish.
     """
 
-    _saved_modules = {}
     _process_segment = None
 
+    @pytest.fixture(scope="class", autouse=True)
     @classmethod
-    def setup_class(cls):
+    def isolated_imports(cls):
         from utils import manual_speaker_assignments as actual_manual_assignments
         from utils.stt import speaker_identity as actual_speaker_identity
 
-        # Save originals
-        cls._saved_modules = {name: sys.modules.get(name) for name in _STUB_MODULES}
-        # Also save pipeline if already imported
-        cls._saved_modules['utils.sync.pipeline'] = sys.modules.get('utils.sync.pipeline')
-        cls._saved_modules['utils.sync'] = sys.modules.get('utils.sync')
-        cls._saved_modules['utils.manual_speaker_assignments'] = sys.modules.get('utils.manual_speaker_assignments')
-        cls._saved_modules['utils.stt.speaker_identity'] = sys.modules.get('utils.stt.speaker_identity')
-
-        # Install stubs
-        for mod_name in _STUB_MODULES:
-            sys.modules[mod_name] = ModuleType(mod_name)
-        sys.modules['models'].__path__ = [os.path.join(os.path.dirname(__file__), '..', '..', 'models')]
+        fakes = {name: ModuleType(name) for name in _STUB_MODULES}
+        fakes['models'].__path__ = [os.path.join(os.path.dirname(__file__), '..', '..', 'models')]
         # Keep receipt policy + allocator real: assignment.py imports them at
         # module scope, and the stubbed models.transcript_segment is not a package
         # that can load the policy's real TranscriptSegment binding.
-        sys.modules['utils.manual_speaker_assignments'] = actual_manual_assignments
-        sys.modules['utils.stt.speaker_identity'] = actual_speaker_identity
+        fakes['utils.manual_speaker_assignments'] = actual_manual_assignments
+        fakes['utils.stt.speaker_identity'] = actual_speaker_identity
 
         class _Geolocation:
             def model_dump(self):
                 return {}
 
-        sys.modules['models.geolocation'].Geolocation = _Geolocation
+        fakes['models.geolocation'].Geolocation = _Geolocation
 
-        sys.modules['database.redis_db'].r = MagicMock()
-        sys.modules['database._client'].db = MagicMock()
-        sys.modules['database._client'].get_firestore_client = MagicMock(
+        fakes['database.redis_db'].r = MagicMock()
+        # Flag-off segment processing must never claim first-summary ownership.
+        unexpected_client = MagicMock(
             side_effect=AssertionError('flag-off segment processing must not claim a first-summary owner')
         )
-        # Held-result custody imports the real privacy fence. Both client views
-        # must remain the same no-IO fake, including the deletion marker plane.
-        sys.modules['database._client'].get_data_plane_firestore_client = sys.modules[
-            'database._client'
-        ].get_firestore_client
+        unexpected_transaction = MagicMock(
+            side_effect=AssertionError('flag-off segment processing must not run a summary transaction')
+        )
         # Segment error handling is isolated from enrollment/voiceprint loading.
-        sys.modules['utils.stt.owner_profile'].load_owner_embedding = MagicMock(return_value=None)
-        sys.modules['utils.stt.owner_profile'].validated_embedding = MagicMock(return_value=None)
-        # The pipeline classifies persistence errors with these predicates; no
-        # test here raises a Firestore error, so the stub answers "not one".
-        sys.modules['database._client'].is_document_size_limit_error = lambda error: False
-        sys.modules['database._client'].is_expired_transaction_error = lambda error: False
-        sys.modules['database._client'].FIRESTORE_DOCUMENT_KINDS = frozenset({'none'})
-        sys.modules['database._client'].firestore_document_kind = lambda error: 'none'
-        sys.modules['database._client'].firestore_error_document_path = lambda error: None
-        sys.modules['database.auth'].get_user_name = MagicMock(return_value='User')
-        sys.modules['utils.speaker_learning_jobs'].schedule_person_voice_learning_retries = MagicMock()
-        _mock_conv_db = sys.modules['database.conversations']
+        fakes['utils.stt.owner_profile'].load_owner_embedding = MagicMock(return_value=None)
+        fakes['utils.stt.owner_profile'].validated_embedding = MagicMock(return_value=None)
+        fakes['database.auth'].get_user_name = MagicMock(return_value='User')
+        fakes['utils.speaker_learning_jobs'].schedule_person_voice_learning_retries = MagicMock()
+        _mock_conv_db = fakes['database.conversations']
         _mock_conv_db.get_closest_conversation_to_timestamps = MagicMock()
         _mock_conv_db.update_conversation_segments = MagicMock()
         _mock_conv_db.update_conversation = MagicMock()
         _mock_conv_db.get_conversation = MagicMock()
-        sys.modules['opuslib'].Decoder = MagicMock()
-        sys.modules['pydub'].AudioSegment = MagicMock()
-        sys.modules['utils.other.endpoints'].get_current_user_uid = MagicMock()
-        sys.modules['utils.other.storage'].get_syncing_file_temporal_signed_url = MagicMock(return_value='https://fake')
-        sys.modules['utils.other.storage'].schedule_syncing_temporal_file_deletion = MagicMock()
-        sys.modules['utils.other.storage'].get_playback_artifact_signed_url = MagicMock(return_value=None)
-        sys.modules['utils.other.storage'].get_playback_failure_retry_epoch = MagicMock(return_value=None)
-        sys.modules['utils.other.storage'].download_legacy_merged_wav = MagicMock(return_value=None)
-        sys.modules['utils.other.storage'].download_playback_artifact = MagicMock(return_value=None)
-        sys.modules['utils.other.storage'].upload_playback_artifact = MagicMock()
-        sys.modules['utils.other.storage'].precache_conversation_audio = MagicMock()
-        sys.modules['utils.other.storage'].mark_playback_unavailable = MagicMock()
-        sys.modules['utils.other.storage'].is_playback_unavailable = MagicMock(return_value=False)
-        sys.modules['utils.other.storage'].enqueue_conversation_audio_merge = MagicMock()
-        sys.modules['utils.other.storage'].link_archive_captures = MagicMock()
-        sys.modules['utils.other.storage'].delete_syncing_temporal_file = MagicMock()
-        sys.modules['utils.other.storage'].download_audio_chunks_and_merge = MagicMock()
-        sys.modules['utils.other.storage'].get_or_create_merged_audio = MagicMock()
-        sys.modules['utils.other.storage'].get_merged_audio_signed_url = MagicMock()
-        sys.modules['utils.other.storage'].upload_audio_chunk = MagicMock()
-        sys.modules['utils.other.storage'].precache_conversation_audio = MagicMock()
-        sys.modules['utils.other.storage'].is_playback_unavailable = MagicMock(return_value=False)
-        sys.modules['utils.other.storage'].mark_playback_unavailable = MagicMock()
-        sys.modules['utils.other.storage']._PRECACHE_FILE_SEM = MagicMock()
-        sys.modules['utils.other.storage'].upload_syncing_temporal_file = MagicMock()
-        sys.modules['utils.other.storage'].download_syncing_temporal_file = MagicMock(return_value=True)
-        sys.modules['utils.other.storage'].compute_audio_files_fingerprint = MagicMock(return_value='fp')
-        sys.modules['utils.other.storage'].list_audio_chunks = MagicMock(return_value=[])
-        sys.modules['utils.other.storage'].enqueue_conversation_artifact_build = MagicMock()
-        sys.modules['utils.other.storage'].get_conversation_playback_signed_url = MagicMock(return_value=None)
-        sys.modules['utils.other.storage'].upload_conversation_playback_artifact = MagicMock()
-        sys.modules['utils.other.storage'].mark_conversation_playback_unavailable = MagicMock()
-        sys.modules['utils.other.storage'].get_conversation_playback_unavailable_fingerprint = MagicMock(
-            return_value=None
-        )
-        sys.modules['utils.cloud_tasks'].enqueue_sync_job = MagicMock()
-        sys.modules['utils.cloud_tasks'].get_sync_tasks_max_attempts = MagicMock(return_value=5)
-        sys.modules['utils.cloud_tasks'].is_cloud_tasks_dispatch_enabled = MagicMock(return_value=False)
-        sys.modules['utils.cloud_tasks'].is_audio_merge_dispatch_enabled = MagicMock(return_value=False)
-        sys.modules['utils.cloud_tasks'].enqueue_audio_merge_job = MagicMock()
-        sys.modules['utils.cloud_tasks'].enqueue_audio_merge_job_deferred = MagicMock()
-        sys.modules['utils.cloud_tasks'].verify_audio_merge_cloud_tasks_oidc = MagicMock()
-        sys.modules['utils.cloud_tasks'].verify_cloud_tasks_oidc = MagicMock()
-        sys.modules['database.sync_ledger'].add_processed_sync_segment_id = MagicMock(return_value=True)
-        sys.modules['database.sync_dead_letters'].record_dead_letter_pending = MagicMock()
-        sys.modules['database.sync_dead_letters'].confirm_dead_letter = MagicMock()
-        sys.modules['database.sync_dead_letters'].dead_letter_failure_code = MagicMock(return_value='unknown')
-        sys.modules['database.sync_ledger'].bind_sync_content_run_token = MagicMock()
-        sys.modules['database.sync_ledger'].checkpoint_sync_content_partial_result = MagicMock()
-        sys.modules['database.sync_ledger'].checkpoint_and_mark_sync_segment = MagicMock(return_value='marked')
-        sys.modules['database.sync_ledger'].SEGMENT_ALREADY_PROCESSED = 'already_processed'
-        sys.modules['database.sync_ledger'].SEGMENT_FOREIGN_OWNER = 'foreign_owner'
-        sys.modules['database.sync_ledger'].get_processed_sync_segment_ids = MagicMock(return_value=set())
-        sys.modules['database.sync_ledger'].get_sync_content_partial_result = MagicMock(return_value=None)
-        sys.modules['database.sync_ledger'].is_valid_completed_sync_content_result = MagicMock(return_value=True)
-        sys.modules['database.sync_ledger'].mark_sync_content_completed = MagicMock()
-        sys.modules['database.sync_ledger'].release_sync_content_claim_after_job_retired = MagicMock()
-        sys.modules['database.sync_ledger'].release_sync_content_claim = MagicMock()
-        sys.modules['database.sync_ledger'].try_mark_sync_content_metered = MagicMock(return_value=True)
-        sys.modules['database.sync_ledger'].try_mark_sync_content_side_effect = MagicMock(return_value=True)
-        sys.modules['utils.sync.content_id'].compute_sync_segment_id = MagicMock(return_value='segment-id')
-        sys.modules['utils.log_sanitizer'].sanitize = lambda value: value
-        sys.modules['utils.encryption'].encrypt = MagicMock()
-        sys.modules['utils.encryption'].decrypt = MagicMock(
+        fakes['opuslib'].Decoder = MagicMock()
+        fakes['pydub'].AudioSegment = MagicMock()
+        fakes['utils.other.endpoints'].get_current_user_uid = MagicMock()
+        fakes['utils.other.storage'].get_syncing_file_temporal_signed_url = MagicMock(return_value='https://fake')
+        fakes['utils.other.storage'].schedule_syncing_temporal_file_deletion = MagicMock()
+        fakes['utils.other.storage'].get_playback_artifact_signed_url = MagicMock(return_value=None)
+        fakes['utils.other.storage'].get_playback_failure_retry_epoch = MagicMock(return_value=None)
+        fakes['utils.other.storage'].download_legacy_merged_wav = MagicMock(return_value=None)
+        fakes['utils.other.storage'].download_playback_artifact = MagicMock(return_value=None)
+        fakes['utils.other.storage'].upload_playback_artifact = MagicMock()
+        fakes['utils.other.storage'].precache_conversation_audio = MagicMock()
+        fakes['utils.other.storage'].mark_playback_unavailable = MagicMock()
+        fakes['utils.other.storage'].is_playback_unavailable = MagicMock(return_value=False)
+        fakes['utils.other.storage'].enqueue_conversation_audio_merge = MagicMock()
+        fakes['utils.other.storage'].link_archive_captures = MagicMock()
+        fakes['utils.other.storage'].delete_syncing_temporal_file = MagicMock()
+        fakes['utils.other.storage'].download_audio_chunks_and_merge = MagicMock()
+        fakes['utils.other.storage'].get_or_create_merged_audio = MagicMock()
+        fakes['utils.other.storage'].get_merged_audio_signed_url = MagicMock()
+        fakes['utils.other.storage'].upload_audio_chunk = MagicMock()
+        fakes['utils.other.storage'].precache_conversation_audio = MagicMock()
+        fakes['utils.other.storage'].is_playback_unavailable = MagicMock(return_value=False)
+        fakes['utils.other.storage'].mark_playback_unavailable = MagicMock()
+        fakes['utils.other.storage']._PRECACHE_FILE_SEM = MagicMock()
+        fakes['utils.other.storage'].upload_syncing_temporal_file = MagicMock()
+        fakes['utils.other.storage'].download_syncing_temporal_file = MagicMock(return_value=True)
+        fakes['utils.other.storage'].compute_audio_files_fingerprint = MagicMock(return_value='fp')
+        fakes['utils.other.storage'].list_audio_chunks = MagicMock(return_value=[])
+        fakes['utils.other.storage'].enqueue_conversation_artifact_build = MagicMock()
+        fakes['utils.other.storage'].get_conversation_playback_signed_url = MagicMock(return_value=None)
+        fakes['utils.other.storage'].upload_conversation_playback_artifact = MagicMock()
+        fakes['utils.other.storage'].mark_conversation_playback_unavailable = MagicMock()
+        fakes['utils.other.storage'].get_conversation_playback_unavailable_fingerprint = MagicMock(return_value=None)
+        fakes['utils.cloud_tasks'].enqueue_sync_job = MagicMock()
+        fakes['utils.cloud_tasks'].get_sync_tasks_max_attempts = MagicMock(return_value=5)
+        fakes['utils.cloud_tasks'].is_cloud_tasks_dispatch_enabled = MagicMock(return_value=False)
+        fakes['utils.cloud_tasks'].is_audio_merge_dispatch_enabled = MagicMock(return_value=False)
+        fakes['utils.cloud_tasks'].enqueue_audio_merge_job = MagicMock()
+        fakes['utils.cloud_tasks'].enqueue_audio_merge_job_deferred = MagicMock()
+        fakes['utils.cloud_tasks'].verify_audio_merge_cloud_tasks_oidc = MagicMock()
+        fakes['utils.cloud_tasks'].verify_cloud_tasks_oidc = MagicMock()
+        fakes['database.sync_ledger'].add_processed_sync_segment_id = MagicMock(return_value=True)
+        fakes['database.sync_dead_letters'].record_dead_letter_pending = MagicMock()
+        fakes['database.sync_dead_letters'].confirm_dead_letter = MagicMock()
+        fakes['database.sync_dead_letters'].dead_letter_failure_code = MagicMock(return_value='unknown')
+        fakes['database.sync_ledger'].bind_sync_content_run_token = MagicMock()
+        fakes['database.sync_ledger'].checkpoint_sync_content_partial_result = MagicMock()
+        fakes['database.sync_ledger'].checkpoint_and_mark_sync_segment = MagicMock(return_value='marked')
+        fakes['database.sync_ledger'].SEGMENT_ALREADY_PROCESSED = 'already_processed'
+        fakes['database.sync_ledger'].SEGMENT_FOREIGN_OWNER = 'foreign_owner'
+        fakes['database.sync_ledger'].get_processed_sync_segment_ids = MagicMock(return_value=set())
+        fakes['database.sync_ledger'].get_sync_content_partial_result = MagicMock(return_value=None)
+        fakes['database.sync_ledger'].is_valid_completed_sync_content_result = MagicMock(return_value=True)
+        fakes['database.sync_ledger'].mark_sync_content_completed = MagicMock()
+        fakes['database.sync_ledger'].release_sync_content_claim_after_job_retired = MagicMock()
+        fakes['database.sync_ledger'].release_sync_content_claim = MagicMock()
+        fakes['database.sync_ledger'].try_mark_sync_content_metered = MagicMock(return_value=True)
+        fakes['database.sync_ledger'].try_mark_sync_content_side_effect = MagicMock(return_value=True)
+        fakes['utils.sync.content_id'].compute_sync_segment_id = MagicMock(return_value='segment-id')
+        fakes['utils.log_sanitizer'].sanitize = lambda value: value
+        fakes['utils.encryption'].encrypt = MagicMock()
+        fakes['utils.encryption'].decrypt = MagicMock(
             side_effect=AssertionError('flag-off processing must not read held provider results')
         )
-        sys.modules['utils.stt.pre_recorded'].held_single_attempt = MagicMock(
+        fakes['utils.stt.pre_recorded'].held_single_attempt = MagicMock(
             side_effect=AssertionError('flag-off processing must not enter held provider dispatch')
         )
-        sys.modules['utils.stt.pre_recorded'].deepgram_prerecorded = MagicMock()
-        sys.modules['utils.stt.pre_recorded'].prerecorded = MagicMock()
-        sys.modules['utils.stt.pre_recorded'].modulate_prerecorded_from_bytes = MagicMock(
+        fakes['utils.stt.pre_recorded'].deepgram_prerecorded = MagicMock()
+        fakes['utils.stt.pre_recorded'].prerecorded = MagicMock()
+        fakes['utils.stt.pre_recorded'].modulate_prerecorded_from_bytes = MagicMock(
             side_effect=AssertionError('flag-off processing must not dispatch multilingual recovery')
         )
-        sys.modules['utils.sync.empty_recovery_intent'].dispatch_once = MagicMock(
+        fakes['utils.sync.empty_recovery_intent'].dispatch_once = MagicMock(
             side_effect=AssertionError('flag-off processing must not claim recovery')
         )
-        sys.modules['utils.stt.pre_recorded'].postprocess_words = MagicMock()
-        sys.modules['utils.stt.pre_recorded'].get_prerecorded_service = MagicMock(
+        fakes['utils.stt.pre_recorded'].postprocess_words = MagicMock()
+        fakes['utils.stt.pre_recorded'].get_prerecorded_service = MagicMock(
             return_value=('deepgram', 'multi', 'nova-3')
         )
-        sys.modules['utils.stt.vad'].vad_is_empty = MagicMock()
-        sys.modules['utils.speaker_assignment'].process_speaker_assigned_segments = MagicMock()
-        sys.modules['utils.speaker_identification'].detect_speaker_from_text = MagicMock(return_value=None)
-        sys.modules['utils.speaker_identification'].extract_speaker_samples = AsyncMock()
-        sys.modules['utils.stt.speaker_embedding'].extract_embedding_from_bytes = MagicMock()
-        sys.modules['utils.stt.speaker_embedding'].compare_embeddings = MagicMock(return_value=1.0)
-        sys.modules['utils.stt.speaker_embedding'].speaker_embedding_configured = lambda: True
-        sys.modules['utils.stt.speaker_embedding'].SPEAKER_MATCH_THRESHOLD = 0.45
-        sys.modules['utils.fair_use'].FAIR_USE_ENABLED = False
-        sys.modules['utils.fair_use'].FAIR_USE_RESTRICT_DAILY_DG_MS = 0
-        sys.modules['utils.fair_use'].record_speech_ms = MagicMock()
-        sys.modules['utils.fair_use'].get_rolling_speech_ms = MagicMock()
-        sys.modules['utils.fair_use'].check_soft_caps = MagicMock()
-        sys.modules['utils.fair_use'].is_hard_restricted = MagicMock(return_value=False)
-        sys.modules['utils.fair_use'].get_hard_restriction_status = MagicMock(return_value=(False, None))
-        sys.modules['python_multipart'].__version__ = '0.0.99'
-        sys.modules['python_multipart.multipart'].parse_options_header = MagicMock(return_value={})
-        sys.modules['utils.fair_use'].trigger_classifier_if_needed = MagicMock()
-        sys.modules['utils.fair_use'].is_dg_budget_exhausted = MagicMock(return_value=False)
-        sys.modules['utils.fair_use'].get_enforcement_stage = MagicMock(return_value='off')
-        sys.modules['utils.fair_use'].record_dg_usage_ms = MagicMock()
-        sys.modules['utils.subscription'].resolve_transcription_allowance = MagicMock(
+        fakes['utils.stt.vad'].vad_is_empty = MagicMock()
+        fakes['utils.speaker_assignment'].process_speaker_assigned_segments = MagicMock()
+        fakes['utils.speaker_identification'].detect_speaker_from_text = MagicMock(return_value=None)
+        fakes['utils.speaker_identification'].extract_speaker_samples = AsyncMock()
+        fakes['utils.stt.speaker_embedding'].extract_embedding_from_bytes = MagicMock()
+        fakes['utils.stt.speaker_embedding'].compare_embeddings = MagicMock(return_value=1.0)
+        fakes['utils.stt.speaker_embedding'].speaker_embedding_configured = lambda: True
+        fakes['utils.stt.speaker_embedding'].SPEAKER_MATCH_THRESHOLD = 0.45
+        fakes['utils.fair_use'].FAIR_USE_ENABLED = False
+        fakes['utils.fair_use'].FAIR_USE_RESTRICT_DAILY_DG_MS = 0
+        fakes['utils.fair_use'].record_speech_ms = MagicMock()
+        fakes['utils.fair_use'].get_rolling_speech_ms = MagicMock()
+        fakes['utils.fair_use'].check_soft_caps = MagicMock()
+        fakes['utils.fair_use'].is_hard_restricted = MagicMock(return_value=False)
+        fakes['utils.fair_use'].get_hard_restriction_status = MagicMock(return_value=(False, None))
+        fakes['python_multipart'].__version__ = '0.0.99'
+        fakes['python_multipart.multipart'].parse_options_header = MagicMock(return_value={})
+        fakes['utils.fair_use'].trigger_classifier_if_needed = MagicMock()
+        fakes['utils.fair_use'].is_dg_budget_exhausted = MagicMock(return_value=False)
+        fakes['utils.fair_use'].get_enforcement_stage = MagicMock(return_value='off')
+        fakes['utils.fair_use'].record_dg_usage_ms = MagicMock()
+        fakes['utils.subscription'].resolve_transcription_allowance = MagicMock(
             return_value=MagicMock(managed=True, reason='plan_within_allowance')
         )
-        subscription_stub = sys.modules['utils.subscription']
+        subscription_stub = fakes['utils.subscription']
 
         def has_transcription_credits(uid, source=None):
             return subscription_stub.resolve_transcription_allowance(uid, source).managed
 
         subscription_stub.has_transcription_credits = MagicMock(side_effect=has_transcription_credits)
-        sys.modules['utils.subscription'].TRANSCRIPTION_ALLOWANCE_TRANSIENT_REASONS = frozenset(
+        fakes['utils.subscription'].TRANSCRIPTION_ALLOWANCE_TRANSIENT_REASONS = frozenset(
             {'allowance_unavailable', 'usage_invalid'}
         )
-        sys.modules['utils.conversations.process_conversation'].process_conversation = MagicMock()
+        fakes['utils.conversations.process_conversation'].process_conversation = MagicMock()
 
         class _ConversationSource:
             omi = 'omi'
@@ -960,24 +919,22 @@ class TestProcessSegmentReal:
             def dict(self):
                 return dict(self.__dict__)
 
-        sys.modules['models.conversation'].ConversationSource = _ConversationSource
-        sys.modules['models.conversation_enums'].ConversationSource = _ConversationSource
-        sys.modules['models.conversation'].CreateConversation = _CreateConversation
-        sys.modules['models.conversation'].Conversation = _Conversation
-        sys.modules['models.transcript_segment'].TranscriptSegment = _TranscriptSegment
-        sys.modules['models.transcript_segment'].SpeakerIdentityStatus = SpeakerIdentityStatus
+        fakes['models.conversation'].ConversationSource = _ConversationSource
+        fakes['models.conversation_enums'].ConversationSource = _ConversationSource
+        fakes['models.conversation'].CreateConversation = _CreateConversation
+        fakes['models.conversation'].Conversation = _Conversation
+        fakes['models.transcript_segment'].TranscriptSegment = _TranscriptSegment
+        fakes['models.transcript_segment'].SpeakerIdentityStatus = SpeakerIdentityStatus
 
         # The deterministic §1.7 minimum is pure and cheap: run the REAL module
         # against minimal enum/model stand-ins so intake exercises the true
         # title logic instead of a mock.
-        import importlib.util as _il
-
         class _CategoryEnum(str, __import__('enum').Enum):
             other = 'other'
 
         # Both stubs must exist BEFORE exec'ing deterministic_minimum, whose
         # module body imports CategoryEnum and Structured at import time.
-        sys.modules['models.conversation_enums'].CategoryEnum = _CategoryEnum
+        fakes['models.conversation_enums'].CategoryEnum = _CategoryEnum
 
         from pydantic import BaseModel as _BaseModel
 
@@ -991,29 +948,10 @@ class TestProcessSegmentReal:
 
         _structured_mod = ModuleType('models.structured')
         _structured_mod.Structured = _Structured
-        sys.modules['models.structured'] = _structured_mod
-        cls._saved_modules['models.structured'] = None
-
-        for _fake_name, _real_name in [
-            ('utils.sync.merge_dedupe', 'utils/sync/merge_dedupe.py'),
-            ('utils.sync.merge_audio', 'utils/sync/merge_audio.py'),
-            ('utils.sync.assignment', 'utils/sync/assignment.py'),
-            ('utils.conversations.deterministic_minimum', 'utils/conversations/deterministic_minimum.py'),
-        ]:
-            _spec = _il.spec_from_file_location(
-                _fake_name, os.path.join(os.path.dirname(__file__), '..', '..', *_real_name.split('/'))
-            )
-            _mod = _il.module_from_spec(_spec)
-            sys.modules[_fake_name] = _mod
-            _spec.loader.exec_module(_mod)
-
-        _dmin = sys.modules['utils.conversations.deterministic_minimum']
-        _dmin.Structured = _Structured
-        _dmin.CategoryEnum = _CategoryEnum
-
+        fakes['models.structured'] = _structured_mod
         # Lifecycle intake stub: process_segment's local import resolves to this
         # module; every test below patches ingest_sync_conversation per call.
-        _lifecycle = sys.modules['utils.conversations.lifecycle']
+        _lifecycle = fakes['utils.conversations.lifecycle']
 
         def _ingest_sync_conversation(uid, incoming, *, candidate_id=None, target_id=None):
             assert not incoming['transcript_segments'], 'speech intake must be patched per test'
@@ -1027,36 +965,38 @@ class TestProcessSegmentReal:
         class _AudioUrlsResponse(BaseModel):
             pass
 
-        sys.modules['models.sync_audio'].AudioPrecacheResponse = _AudioPrecacheResponse
-        sys.modules['models.sync_audio'].AudioUrlsResponse = _AudioUrlsResponse
+        fakes['models.sync_audio'].AudioPrecacheResponse = _AudioPrecacheResponse
+        fakes['models.sync_audio'].AudioUrlsResponse = _AudioUrlsResponse
 
         sync_pkg = ModuleType('utils.sync')
         sync_pkg.__path__ = [os.path.join(os.path.dirname(__file__), '..', '..', 'utils', 'sync')]
-        sys.modules['utils.sync'] = sync_pkg
-        sys.modules.pop('utils.sync.pipeline', None)
-        sys.modules.pop('utils.sync.ledger_completion', None)
+        # Put the package first so the scoped stubs bind to its attributes.
+        fakes = {'utils.sync': sync_pkg, **fakes}
+        for name in (
+            'utils.sync.merge_dedupe',
+            'utils.sync.merge_audio',
+            'utils.sync.assignment',
+            'utils.conversations.deterministic_minimum',
+            'utils.sync.pipeline',
+            'utils.sync.ledger_completion',
+        ):
+            fakes[name] = None
 
-        sys.modules['utils.sync.bridge'].finish_sync_segment = lambda *a, **kw: None
-
-        # Import under stubs
-        from utils.sync.pipeline import process_segment
-
-        cls._process_segment = staticmethod(process_segment)
-        sys.modules['utils.sync.pipeline'].get_wav_duration = lambda path: 60
-        sys.modules['utils.sync.pipeline'].get_timestamp_from_path = lambda path: float(Path(path).stem)
-        sys.modules['utils.sync.bridge'].finish_sync_bridges = lambda uid, cid: cid
-
-    @classmethod
-    def teardown_class(cls):
-        sys.modules.pop('utils.sync.pipeline', None)
-        sys.modules.pop('utils.sync.ledger_completion', None)
-        # Restore original modules
-        for name, orig in cls._saved_modules.items():
-            if orig is None:
-                sys.modules.pop(name, None)
-            else:
-                sys.modules[name] = orig
-        cls._saved_modules.clear()
+        fakes['utils.sync.bridge'].finish_sync_segment = lambda *a, **kw: None
+        fakes['utils.sync.bridge'].finish_sync_bridges = lambda uid, cid: cid
+        with pytest.MonkeyPatch.context() as patch, isolated_prometheus(), stub_modules(fakes):
+            client = MagicMock()
+            patch.setattr(firestore_client, '_customer_firestore_client', client)
+            patch.setattr(firestore_client, 'db', client)
+            patch.setattr(firestore_client, 'data_plane_db', client)
+            patch.setattr(firestore_client, 'get_firestore_client', unexpected_client)
+            patch.setattr(firestore_client, 'get_data_plane_firestore_client', unexpected_client)
+            patch.setattr(firestore_client, 'run_transactional', unexpected_transaction)
+            pipeline = import_module('utils.sync.pipeline')
+            cls._process_segment = staticmethod(pipeline.process_segment)
+            pipeline.get_wav_duration = lambda path: 60
+            pipeline.get_timestamp_from_path = lambda path: float(Path(path).stem)
+            yield
 
     def _import_process_segment(self):
         return self._process_segment
@@ -1554,8 +1494,6 @@ _CHAT_STUB_MODULES = [
     'models.notification_message',
     'models.app',
     'models.transcript_segment',
-    'database',
-    'database._client',
     'database.chat',
     'database.notifications',
     'database.users',
@@ -1583,117 +1521,96 @@ _CHAT_STUB_MODULES = [
 class TestVoiceMessageRuntimeErrorHandling:
     """Voice message helpers preserve typed provider failures for their routers."""
 
-    _saved_modules = {}
     _transcribe_fn = None
     _process_fn = None
     _process_stream_fn = None
 
+    @pytest.fixture(scope="class", autouse=True)
     @classmethod
-    def setup_class(cls):
-        cls._saved_modules = {name: sys.modules.get(name) for name in _CHAT_STUB_MODULES}
-        cls._saved_modules['utils.chat'] = sys.modules.get('utils.chat')
-
-        for mod_name in _CHAT_STUB_MODULES:
-            sys.modules[mod_name] = ModuleType(mod_name)
-
-        sys.modules['deepgram'].DeepgramClient = MagicMock()
-        sys.modules['deepgram'].DeepgramClientOptions = MagicMock()
-        sys.modules['utils.other.endpoints'].timeit = lambda f: f
-        sys.modules['utils.other.storage'].get_syncing_file_temporal_signed_url = MagicMock(return_value='https://fake')
-        sys.modules['utils.other.storage'].schedule_syncing_temporal_file_deletion = MagicMock()
-        sys.modules['utils.other.storage'].get_playback_artifact_signed_url = MagicMock(return_value=None)
-        sys.modules['utils.other.storage'].get_playback_failure_retry_epoch = MagicMock(return_value=None)
-        sys.modules['utils.other.storage'].download_legacy_merged_wav = MagicMock(return_value=None)
-        sys.modules['utils.other.storage'].download_playback_artifact = MagicMock(return_value=None)
-        sys.modules['utils.other.storage'].upload_playback_artifact = MagicMock()
-        sys.modules['utils.other.storage'].upload_audio_chunk = MagicMock()
-        sys.modules['utils.other.storage'].precache_conversation_audio = MagicMock()
-        sys.modules['utils.other.storage'].mark_playback_unavailable = MagicMock()
-        sys.modules['utils.other.storage'].is_playback_unavailable = MagicMock(return_value=False)
-        sys.modules['utils.other.storage'].enqueue_conversation_audio_merge = MagicMock()
-        sys.modules['utils.other.storage'].link_archive_captures = MagicMock()
-        sys.modules['utils.other.storage'].delete_syncing_temporal_file = MagicMock()
-        sys.modules['utils.other.storage'].upload_audio_chunk = MagicMock()
-        sys.modules['utils.other.storage'].precache_conversation_audio = MagicMock()
-        sys.modules['utils.other.storage'].is_playback_unavailable = MagicMock(return_value=False)
-        sys.modules['utils.other.storage'].mark_playback_unavailable = MagicMock()
-        sys.modules['utils.notifications'].send_notification = MagicMock()
-        sys.modules['utils.notifications'].send_notification_async = AsyncMock()
-        sys.modules['utils.notifications'].send_client_displayed_notification = MagicMock()
-        sys.modules['utils.notifications'].send_client_displayed_notification_async = AsyncMock()
-        sys.modules['utils.retrieval.graph'].execute_graph_chat = MagicMock()
-        sys.modules['utils.retrieval.graph'].execute_graph_chat_stream = MagicMock()
-        sys.modules['utils.log_sanitizer'].sanitize = lambda v: v
-        sys.modules['database._client'].db = MagicMock()
-        sys.modules['database.redis_db'].r = MagicMock()
-        sys.modules['database.chat'].add_message = MagicMock()
-        sys.modules['database.chat'].get_messages = MagicMock(return_value=[])
-        sys.modules['database.chat'].get_chat_session = MagicMock(return_value=None)
-        sys.modules['database.notifications'].get_token_only = MagicMock(return_value=None)
-        sys.modules['database.users'].get_user_store_recording_permission = MagicMock(return_value=False)
-        sys.modules['database.users'].get_user_transcription_preferences = MagicMock(return_value={})
-        sys.modules['database.apps'].record_app_usage = MagicMock()
-        sys.modules['utils.apps'].get_available_app_by_id = MagicMock(return_value=None)
-        sys.modules['utils.conversation_helpers'].extract_memory_ids = MagicMock(return_value=[])
-        sys.modules['utils.conversations.factory'].deserialize_conversation = MagicMock(return_value=None)
-        sys.modules['utils.llm.chat'].initial_chat_message = MagicMock()
-        sys.modules['utils.llm.persona'].initial_persona_chat_message = MagicMock()
+    def isolated_imports(cls):
+        fakes = {name: ModuleType(name) for name in _CHAT_STUB_MODULES}
+        fakes['utils.chat'] = None
+        fakes['deepgram'].DeepgramClient = MagicMock()
+        fakes['deepgram'].DeepgramClientOptions = MagicMock()
+        fakes['utils.other.endpoints'].timeit = lambda f: f
+        fakes['utils.other.storage'].get_syncing_file_temporal_signed_url = MagicMock(return_value='https://fake')
+        fakes['utils.other.storage'].schedule_syncing_temporal_file_deletion = MagicMock()
+        fakes['utils.other.storage'].get_playback_artifact_signed_url = MagicMock(return_value=None)
+        fakes['utils.other.storage'].get_playback_failure_retry_epoch = MagicMock(return_value=None)
+        fakes['utils.other.storage'].download_legacy_merged_wav = MagicMock(return_value=None)
+        fakes['utils.other.storage'].download_playback_artifact = MagicMock(return_value=None)
+        fakes['utils.other.storage'].upload_playback_artifact = MagicMock()
+        fakes['utils.other.storage'].upload_audio_chunk = MagicMock()
+        fakes['utils.other.storage'].precache_conversation_audio = MagicMock()
+        fakes['utils.other.storage'].mark_playback_unavailable = MagicMock()
+        fakes['utils.other.storage'].is_playback_unavailable = MagicMock(return_value=False)
+        fakes['utils.other.storage'].enqueue_conversation_audio_merge = MagicMock()
+        fakes['utils.other.storage'].link_archive_captures = MagicMock()
+        fakes['utils.other.storage'].delete_syncing_temporal_file = MagicMock()
+        fakes['utils.other.storage'].upload_audio_chunk = MagicMock()
+        fakes['utils.other.storage'].precache_conversation_audio = MagicMock()
+        fakes['utils.other.storage'].is_playback_unavailable = MagicMock(return_value=False)
+        fakes['utils.other.storage'].mark_playback_unavailable = MagicMock()
+        fakes['utils.notifications'].send_notification = MagicMock()
+        fakes['utils.notifications'].send_notification_async = AsyncMock()
+        fakes['utils.notifications'].send_client_displayed_notification = MagicMock()
+        fakes['utils.notifications'].send_client_displayed_notification_async = AsyncMock()
+        fakes['utils.retrieval.graph'].execute_graph_chat = MagicMock()
+        fakes['utils.retrieval.graph'].execute_graph_chat_stream = MagicMock()
+        fakes['utils.log_sanitizer'].sanitize = lambda v: v
+        fakes['database.redis_db'].r = MagicMock()
+        fakes['database.chat'].add_message = MagicMock()
+        fakes['database.chat'].get_messages = MagicMock(return_value=[])
+        fakes['database.chat'].get_chat_session = MagicMock(return_value=None)
+        fakes['database.notifications'].get_token_only = MagicMock(return_value=None)
+        fakes['database.users'].get_user_store_recording_permission = MagicMock(return_value=False)
+        fakes['database.users'].get_user_transcription_preferences = MagicMock(return_value={})
+        fakes['database.apps'].record_app_usage = MagicMock()
+        fakes['utils.apps'].get_available_app_by_id = MagicMock(return_value=None)
+        fakes['utils.conversation_helpers'].extract_memory_ids = MagicMock(return_value=[])
+        fakes['utils.conversations.factory'].deserialize_conversation = MagicMock(return_value=None)
+        fakes['utils.llm.chat'].initial_chat_message = MagicMock()
+        fakes['utils.llm.persona'].initial_persona_chat_message = MagicMock()
 
         # Model stubs
-        sys.modules['models.chat'].ChatSession = MagicMock()
-        sys.modules['models.chat'].Message = MagicMock()
-        sys.modules['models.chat'].ResponseMessage = MagicMock()
-        sys.modules['models.chat'].MessageConversation = MagicMock()
-        sys.modules['models.conversation'].Conversation = MagicMock()
-        sys.modules['models.notification_message'].NotificationMessage = MagicMock()
-        sys.modules['models.app'].App = MagicMock()
-        sys.modules['models.app'].UsageHistoryType = MagicMock()
-        sys.modules['models.transcript_segment'].TranscriptSegment = MagicMock()
-        sys.modules['models.transcript_segment'].SpeakerIdentityStatus = SpeakerIdentityStatus
+        fakes['models.chat'].ChatSession = MagicMock()
+        fakes['models.chat'].Message = MagicMock()
+        fakes['models.chat'].ResponseMessage = MagicMock()
+        fakes['models.chat'].MessageConversation = MagicMock()
+        fakes['models.conversation'].Conversation = MagicMock()
+        fakes['models.notification_message'].NotificationMessage = MagicMock()
+        fakes['models.app'].App = MagicMock()
+        fakes['models.app'].UsageHistoryType = MagicMock()
+        fakes['models.transcript_segment'].TranscriptSegment = MagicMock()
+        fakes['models.transcript_segment'].SpeakerIdentityStatus = SpeakerIdentityStatus
 
         # STT stubs
-        sys.modules['utils.stt.pre_recorded'].PrerecordedSTTConfigurationError = type(
+        fakes['utils.stt.pre_recorded'].PrerecordedSTTConfigurationError = type(
             'PrerecordedSTTConfigurationError', (RuntimeError,), {}
         )
-        sys.modules['utils.stt.pre_recorded'].prerecorded = MagicMock()
-        sys.modules['utils.stt.pre_recorded'].prerecorded_from_bytes = MagicMock()
-        sys.modules['utils.stt.pre_recorded'].postprocess_words = MagicMock()
-        sys.modules['utils.stt.pre_recorded'].get_deepgram_model_for_language = MagicMock(return_value=('en', 'nova-3'))
-        sys.modules['utils.stt.pre_recorded'].get_prerecorded_service = MagicMock(
-            return_value=('deepgram', 'en', 'nova-3')
-        )
-        sys.modules['utils.stt.vad'].VADAudioDecodeError = type('VADAudioDecodeError', (RuntimeError,), {})
-        sys.modules['utils.stt.vad'].VADProcessingError = type('VADProcessingError', (RuntimeError,), {})
-        sys.modules['utils.stt.vad'].linear16_pcm_is_silent = MagicMock(return_value=False)
-        sys.modules['utils.stt.vad'].vad_is_empty_strict = MagicMock(return_value=False)
+        fakes['utils.stt.pre_recorded'].prerecorded = MagicMock()
+        fakes['utils.stt.pre_recorded'].prerecorded_from_bytes = MagicMock()
+        fakes['utils.stt.pre_recorded'].postprocess_words = MagicMock()
+        fakes['utils.stt.pre_recorded'].get_deepgram_model_for_language = MagicMock(return_value=('en', 'nova-3'))
+        fakes['utils.stt.pre_recorded'].get_prerecorded_service = MagicMock(return_value=('deepgram', 'en', 'nova-3'))
+        fakes['utils.stt.vad'].VADAudioDecodeError = type('VADAudioDecodeError', (RuntimeError,), {})
+        fakes['utils.stt.vad'].VADProcessingError = type('VADProcessingError', (RuntimeError,), {})
+        fakes['utils.stt.vad'].linear16_pcm_is_silent = MagicMock(return_value=False)
+        fakes['utils.stt.vad'].vad_is_empty_strict = MagicMock(return_value=False)
 
         # Usage tracker stub
-        sys.modules['utils.llm.usage_tracker'].track_usage = MagicMock()
-        sys.modules['utils.llm.usage_tracker'].set_usage_context = MagicMock()
-        sys.modules['utils.llm.usage_tracker'].reset_usage_context = MagicMock()
-        sys.modules['utils.llm.usage_tracker'].Features = MagicMock()
+        fakes['utils.llm.usage_tracker'].track_usage = MagicMock()
+        fakes['utils.llm.usage_tracker'].set_usage_context = MagicMock()
+        fakes['utils.llm.usage_tracker'].reset_usage_context = MagicMock()
+        fakes['utils.llm.usage_tracker'].Features = MagicMock()
 
-        # Force re-import
-        sys.modules.pop('utils.chat', None)
-        from utils.chat import (
-            transcribe_voice_message_segment,
-            process_voice_message_segment,
-            process_voice_message_segment_stream,
-        )
-
-        cls._transcribe_fn = staticmethod(transcribe_voice_message_segment)
-        cls._process_fn = staticmethod(process_voice_message_segment)
-        cls._process_stream_fn = staticmethod(process_voice_message_segment_stream)
-
-    @classmethod
-    def teardown_class(cls):
-        sys.modules.pop('utils.chat', None)
-        for name, orig in cls._saved_modules.items():
-            if orig is None:
-                sys.modules.pop(name, None)
-            else:
-                sys.modules[name] = orig
-        cls._saved_modules.clear()
+        with pytest.MonkeyPatch.context() as patch, isolated_prometheus(), stub_modules(fakes):
+            patch.setattr(firestore_client, '_firestore_client', MagicMock())
+            chat = import_module('utils.chat')
+            cls._transcribe_fn = staticmethod(chat.transcribe_voice_message_segment)
+            cls._process_fn = staticmethod(chat.process_voice_message_segment)
+            cls._process_stream_fn = staticmethod(chat.process_voice_message_segment_stream)
+            yield
 
     def test_transcribe_voice_message_propagates_typed_failure(self):
         """Provider errors cannot be reclassified as an empty successful result."""
@@ -1724,6 +1641,8 @@ class TestVoiceMessageRuntimeErrorHandling:
 
         from utils.stt.outcomes import TranscriptionFailure
 
+        register_answer = MagicMock()
+
         async def run():
             async def _run_inline(_executor, fn, *args, **kwargs):
                 return fn(*args, **kwargs)
@@ -1732,11 +1651,14 @@ class TestVoiceMessageRuntimeErrorHandling:
                 'utils.chat.prerecorded',
                 side_effect=RuntimeError('Deepgram transcription failed after 2 attempts: timeout'),
             ):
-                async for _chunk in self._process_stream_fn('/tmp/test.wav', 'uid', language='en'):
+                async for _chunk in self._process_stream_fn(
+                    '/tmp/test.wav', 'uid', language='en', register_answer=register_answer
+                ):
                     pass
 
         with pytest.raises(TranscriptionFailure):
             asyncio.run(run())
+        register_answer.assert_not_called()
 
 
 class TestVoiceMessageRuntimeErrorTeardown:

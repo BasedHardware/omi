@@ -1,0 +1,12 @@
+{
+  "version": 1,
+  "images": [
+    {
+      "file": "001-mobile-ios-v3-listening-above-processing.png",
+      "platform": "mobile-ios",
+      "description": "v3 Home shows the new untitled server live conversation (Listening) first under Today, followed by the manual-finish Processing row. Rendered from ConversationsPage with synthetic state in an iOS-sized Flutter widget test.",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    }
+  ]
+}

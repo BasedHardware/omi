@@ -1,9 +1,8 @@
-"""Backend-owned synthesis of the desktop AI user profile.
+"""Backend-owned synthesis of the AI user profile.
 
-Desktop clients used to carry both prompt stages themselves and run them through
-Anthropic Haiku chat completions. The prompts, the model, the two-stage flow and the
-character cap now live here, behind ``get_llm('memories')``, so Mac and Windows produce
-the same document from the same routing.
+``utils.ai_profile_refresh`` selects the sources, runs this synthesis and owns the
+stored ``users/{uid}.ai_user_profile``; clients only read and edit it. The return-only
+``/v1/users/ai-profile/synthesize`` route still calls this for released desktop builds.
 
 Inspired by the ContextAgent paper (arXiv:2505.14668): a once-daily, LLM-synthesized
 "what we know about this user" document injected as grounding context into other AI
@@ -86,6 +85,7 @@ MERGE RULES:
 - Remove outdated information (completed tasks, past deadlines, old routines)
 - Keep stable facts (name, role, company, key relationships, tech stack)
 - Accumulate knowledge: if past profiles mention people, projects, or patterns not in today's data, keep them if they seem ongoing
+- A past profile marked "edited by the user" holds the user's own corrections: keep its statements unless the NEW profile clearly shows they are no longer true, and never reintroduce a fact the user removed
 - Do NOT hallucinate — only include facts present in the provided profiles
 - Do NOT add commentary about changes or evolution over time
 
@@ -140,8 +140,13 @@ def _stage1_user_prompt(sources: ProfileSources) -> str:
     return f"{_STAGE1_USER_PREAMBLE}\n\n" + "\n\n".join(sections)
 
 
-def _stage2_user_prompt(fresh_profile: str, past_profiles: List[str]) -> str:
-    past_section = "\n\n".join(f"--- Profile {i + 1} ---\n{text}" for i, text in enumerate(past_profiles))
+def _stage2_user_prompt(fresh_profile: str, past_profiles: List[str], *, latest_past_user_edited: bool = False) -> str:
+    def header(i: int) -> str:
+        if latest_past_user_edited and i == len(past_profiles) - 1:
+            return f"--- Profile {i + 1} (edited by the user) ---"
+        return f"--- Profile {i + 1} ---"
+
+    past_section = "\n\n".join(f"{header(i)}\n{text}" for i, text in enumerate(past_profiles))
     return (
         f"{_STAGE2_USER_PREAMBLE}\n\n"
         "=== NEW PROFILE (generated today from latest data) ===\n"
@@ -168,11 +173,14 @@ def synthesize_ai_user_profile(
     sources: ProfileSources,
     *,
     past_profiles: Optional[List[str]] = None,
+    latest_past_user_edited: bool = False,
 ) -> Optional[ProfileSynthesis]:
     """Two-stage AI user profile synthesis through get_llm('memories') (OpenRouter Luna).
 
     Stage 1 synthesizes today's profile from the raw source lines; stage 2 consolidates it
-    with up to five past profiles (oldest first) so knowledge accumulates. Returns ``None``
+    with up to five past profiles (oldest first) so knowledge accumulates. With
+    ``latest_past_user_edited`` the newest past profile is the user's own edit and is
+    merged as a correction. Returns ``None``
     when the model call fails or returns nothing, so callers keep the previous profile
     rather than storing an empty one.
     """
@@ -189,7 +197,11 @@ def synthesize_ai_user_profile(
             logger.error("AI user profile stage 1 returned empty content for uid=%s", uid)
             return None
         if past:
-            consolidated = _invoke(uid, _STAGE2_SYSTEM_PROMPT, _stage2_user_prompt(profile_text, past))
+            consolidated = _invoke(
+                uid,
+                _STAGE2_SYSTEM_PROMPT,
+                _stage2_user_prompt(profile_text, past, latest_past_user_edited=latest_past_user_edited),
+            )
             if consolidated:
                 profile_text = consolidated
             else:

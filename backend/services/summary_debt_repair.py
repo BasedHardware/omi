@@ -10,6 +10,7 @@ from __future__ import annotations
 import time
 import uuid
 import logging
+from collections import Counter
 from typing import Any, Callable, cast
 
 from google.cloud import firestore
@@ -29,7 +30,8 @@ from database.summary_debt_queries import due_conversations
 from database.batch_pipeline_privacy import assert_batch_write_allowed, BatchPrivacyBlocked
 from utils.conversations import summary_delivery as delivery
 from utils.sync import reprocess
-from utils.enrichment.age_gate import max_age_seconds
+from utils.enrichment.age_gate import expired, max_age_seconds
+from utils.observability.reasons import ReasonFamily, SummaryRepairDiscoveryOutcome as DiscoveryOutcome, reason_label
 
 Row = dict[str, Any]
 _scan_clock = time.monotonic
@@ -70,6 +72,9 @@ def redrive(client: Any, uid: str, conversation_id: str, *, now: float) -> bool:
             from utils.enrichment.age_gate import expired, parked, park_row
 
             if old and parked(old):
+                return {}, True
+            if old and reprocess.V3_CUSTODY_DEFER_REASON in (old.get('deferred_reason'), old.get('held_reason')):
+                # The outbox owns the custody backoff and retains the terminal receipt.
                 return {}, True
             if old and (old.get('lease_until', 0) > now or old.get('summary_seen')):
                 return {}, True
@@ -157,9 +162,11 @@ def tick(*, now: float | None = None, client: Any = None) -> dict[str, int]:
         progress = {'newest': cursor if cursor.get('pending') is None else None}
     attempts = 0
     owner_attempts: dict[str, int] = {}
+    phase_counts: dict[str, Counter[DiscoveryOutcome]] = {}
     overdue = 0
     oldest = 0.0
-    for phase in ('near_expiry', 'newest'):
+    phases = ('near_expiry', 'newest') if window else ('newest',)
+    for phase in phases:
         if (
             attempts >= REPAIR_ADMISSION_LIMIT
             or counts['scanned'] >= REPAIR_SCAN_LIMIT
@@ -170,12 +177,17 @@ def tick(*, now: float | None = None, client: Any = None) -> dict[str, int]:
         last = None
         interrupted = False
         exhausted = False
+        observed = phase_counts[phase] = Counter()
+        # Look ahead for skips without reading a full scan budget when the
+        # remaining attempts could all be used on a short prefix.
+        page_target = 2 * max(8, REPAIR_ADMISSION_LIMIT - attempts)
         while (
             attempts < REPAIR_ADMISSION_LIMIT
             and counts['scanned'] < REPAIR_SCAN_LIMIT
             and _scan_clock() < scan_deadline
         ):
-            limit = min(REPAIR_QUERY_PAGE_LIMIT, REPAIR_SCAN_LIMIT - counts['scanned'])
+            limit = min(page_target, REPAIR_QUERY_PAGE_LIMIT, REPAIR_SCAN_LIMIT - counts['scanned'])
+            observed[DiscoveryOutcome.QUERIES] += 1
             try:
                 page = due_conversations(now=current, phase=phase, limit=limit, after=walk, firestore_client=client)
             except FailedPrecondition:
@@ -185,10 +197,12 @@ def tick(*, now: float | None = None, client: Any = None) -> dict[str, int]:
                 # progress and publishes this tick's counts. No alternate query.
                 logger.warning('event=summary_debt_repair_newest_index_unavailable outcome=error')
                 counts['errors'] += 1
+                observed[DiscoveryOutcome.QUERY_ERROR] += 1
                 break
             # Count every returned document, including a fetched tail left for
             # next tick. No later RPC starts once attempts/time are exhausted.
             counts['scanned'] += len(page)
+            observed[DiscoveryOutcome.FETCHED] += len(page)
             exhausted = len(page) < limit
             for snapshot in page:
                 if attempts >= REPAIR_ADMISSION_LIMIT or _scan_clock() >= scan_deadline:
@@ -196,20 +210,24 @@ def tick(*, now: float | None = None, client: Any = None) -> dict[str, int]:
                     break
                 previous = last
                 last = snapshot
+                observed[DiscoveryOutcome.EXAMINED] += 1
                 row: Row = snapshot.to_dict() or {}
                 if delivery.refusal(row):
+                    observed[DiscoveryOutcome.ROW_REFUSED] += 1
                     continue
                 parts = snapshot.reference.path.split('/')
                 if (len(parts) != 4) or (parts[0] != 'users') or (parts[2] != 'conversations'):
+                    observed[DiscoveryOutcome.INVALID_PATH] += 1
                     continue
                 if account_deletion_blocks_user_work(parts[1]):
+                    observed[DiscoveryOutcome.ACCOUNT_DELETION_BLOCKED] += 1
                     continue
-                from utils.enrichment.age_gate import expired
 
                 if expired(
                     {'first_pending_at': row.get('summary_first_pending_at')}, row.get('created_at'), now=current
                 ):
                     counts['expired_seen'] += 1
+                    observed[DiscoveryOutcome.EXPIRED] += 1
                     continue
                 overdue += 1
                 oldest = max(oldest, current - row['summary_due_at'])
@@ -217,21 +235,25 @@ def tick(*, now: float | None = None, client: Any = None) -> dict[str, int]:
                     # Discovery progress is independent of admission. Keep the
                     # conversation's durable due debt for a later pass/wrap;
                     # pinning this cursor here can hide every later owner.
+                    observed[DiscoveryOutcome.OWNER_DEFERRED] += 1
                     continue
                 if _scan_clock() >= scan_deadline:
                     last = previous
                     interrupted = True
                     break
                 attempts += 1
+                observed[DiscoveryOutcome.ATTEMPTED] += 1
                 owner_attempts[parts[1]] = owner_attempts.get(parts[1], 0) + 1
                 try:
                     admitted = int(redrive(client, parts[1], parts[3], now=current))
+                    observed[DiscoveryOutcome.ADMITTED if admitted else DiscoveryOutcome.NOT_ADMITTED] += 1
                     counts['admitted'] += admitted
                     if phase == 'near_expiry':
                         counts['near_expiry_admitted'] += admitted
                 except Exception:
                     # Existing sweep owns retry. Do not print document contents/errors.
                     counts['errors'] += 1
+                    observed[DiscoveryOutcome.REDRIVE_ERROR] += 1
             # Every examined row advances discovery, including owner deferrals.
             # Fetched rows left unexamined by admission/time limits do not.
             # Use the last examined row, never a previous phase's page tail
@@ -247,6 +269,9 @@ def tick(*, now: float | None = None, client: Any = None) -> dict[str, int]:
                 }
             if exhausted or attempts >= REPAIR_ADMISSION_LIMIT or _scan_clock() >= scan_deadline:
                 break
+            # A full examined page left capacity, so use larger chunks to
+            # advance through refusals and owner deferrals.
+            page_target *= 4
         if last is not None and (interrupted or not exhausted):
             progress[phase] = walk
         elif exhausted and not interrupted:
@@ -282,4 +307,11 @@ def tick(*, now: float | None = None, client: Any = None) -> dict[str, int]:
     delivery.REPAIR.labels(outcome='error').inc(counts['errors'])
     delivery.REPAIR.labels(outcome='expired_seen').inc(counts['expired_seen'])
     delivery.REPAIR.labels(outcome='near_expiry_admitted').inc(counts['near_expiry_admitted'])
+    for phase, observed in phase_counts.items():
+        observed[DiscoveryOutcome.UNEXAMINED] = observed[DiscoveryOutcome.FETCHED] - observed[DiscoveryOutcome.EXAMINED]
+        for outcome, value in observed.items():
+            delivery.REPAIR_DISCOVERY.labels(
+                phase=phase,
+                outcome=reason_label(ReasonFamily.SUMMARY_REPAIR_DISCOVERY, outcome, DiscoveryOutcome),
+            ).inc(value)
     return counts

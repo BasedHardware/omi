@@ -510,7 +510,7 @@ async def _handoff_paced(uid: str, snapshot: Any, row: dict) -> bool:
 
 
 async def finish_handoff(uid: str, snapshot: Any, row: dict[str, Any] | None = None) -> bool:
-    """Erase a handed-off hold's audio once its batch content is durably completed.
+    """Release the reservation and erase the audio once batch content is durably completed.
 
     Until then this hold is the only copy outside the staged batch object, which the batch
     bucket may expire by age. Unprojected or unreadable: keep the audio and let a later sweep
@@ -529,6 +529,8 @@ async def finish_handoff(uid: str, snapshot: Any, row: dict[str, Any] | None = N
         return False
     if not projected:
         return False
+    # Release before erasure so a failed write leaves the hand-off discoverable for retry.
+    await run_blocking(db_executor, cap_hold_reservations.release_projected, uid, snapshot.id, job_id)
     await run_blocking(storage_executor, _erase, uid, snapshot, current)
     return True
 

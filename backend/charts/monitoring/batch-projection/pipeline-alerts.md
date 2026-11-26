@@ -14,7 +14,7 @@ recover through the false threshold. Unfilled vanished held-leg series resolve a
 
 | UID | Signal | Strict threshold | Pending |
 | --- | --- | --- | --- |
-| `omi-pipeline-upload-503-storm` | backend-sync POST `/v2/sync-local-files`, status 503, responseSize 266 | >100 entries in each trailing minute | 10m |
+| `omi-pipeline-upload-503-storm` | backend-sync POST `/v2/sync-local-files`, status 503 (any body size) | >100 entries in each trailing minute | 10m |
 | `omi-pipeline-firestore-contention` | `FirestoreContentionExhausted` log entries, fleet sum | >20 entries in each trailing minute | 10m |
 | `omi-pipeline-projection-drain-stall` | completed owner_drain turns: claim_busy turns / all turns OR advanced rows / wall second, trailing 5m | >50% OR <10/s, while fresh pending projection debt exists | 15m |
 | `omi-pipeline-held-row-age` | oldest all-epoch held row, independently by leg | >21600 seconds (6h) | 10m |
@@ -26,9 +26,11 @@ recover through the false threshold. Unfilled vanished held-leg series resolve a
 An operator must provision them separately before importing rules. This PR neither provisions nor verifies them.
 
 The upload filter uses platform request logs, the upload route (with optional query string/trailing slash),
-method POST, status 503 and exactly 266 response bytes. The size is a custody-wait **proxy**, not captured response
-body proof; 259-byte `sync_batch_unavailable` responses and polling requests are excluded. `out-t8.md` gives the
-size-class attribution but does not contain a literal full filter or an explicit contention service list. We
+method POST and status 503, whatever the response body size. It used to pin exactly 266 response bytes as a
+custody-wait **proxy**; that byte class stopped occurring when the wait body moved to 271 bytes (and the
+`sync_batch_unavailable` answer to 259), so the rule read zero while most of the service answered 503 and its
+`noDataState: OK` kept it green. Route plus status on the unsampled request log is the predicate now; polling
+requests stay out of scope. `out-t8.md` gives the size-class attribution but does not contain a literal full filter or an explicit contention service list. We
 scope contention to backend-sync, backend-sync-backfill and backend-integration. The paired owner-drain
 metrics cover those serving services plus backend-projection-pump, preserving the claim_busy numerator and
 turn denominator scope and the existing metric names/queries. This filter extension requires a separately

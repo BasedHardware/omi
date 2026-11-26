@@ -27,6 +27,7 @@ import logging
 import os
 import time
 import uuid
+from config.reliability_experiments import enabled as experiment
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from enum import Enum
@@ -465,6 +466,7 @@ _TERMINAL_RESULT_FIELDS = frozenset(
         'errors',
         'repeat_failure_key',
         'repeat_failure_fingerprint',
+        'frame_outcomes_v1',
     )
 )
 
@@ -488,10 +490,38 @@ def _compact_terminal_job(job: Dict[str, Any]) -> None:
         job['result'] = compact if compact or not result else {'new_memories': []}
 
 
+def receipt_channel(uid: str) -> str:
+    return _key(f'sync_receipt_ready:{uid}')
+
+
+RECEIPT_NOTE_TTL_SECONDS = 3600
+
+
+def receipt_note_key(uid: str, job_id: str) -> str:
+    return _key(f'sync_receipt_done:{uid}:{job_id}')
+
+
+def leave_receipt_note(uid: str, job_id: str) -> None:
+    """Experiment receipt_finished_note: record that this job finished, before its wake is published.
+
+    A waiter that subscribes after the wake finds the note; one that subscribed before gets the wake.
+    Either way it can skip the durable read for every job that has neither. Off, nothing is written.
+    """
+    if experiment('receipt_finished_note', uid):
+        r.set(receipt_note_key(uid, job_id), '1', ex=RECEIPT_NOTE_TTL_SECONDS)
+
+
 def _cleanup_terminal_segments(job_id: str, job: Optional[Dict[str, Any]]) -> None:
     """Only a winning terminal CAS authorizes removal of retry checkpoints."""
     if job is None or job.get('status') not in TERMINAL_STATUSES:
         return
+    if experiment('receipt_long_poll', job.get('uid')):
+        try:
+            leave_receipt_note(job['uid'], job_id)
+            r.publish(receipt_channel(job['uid']), job_id)
+        except Exception as error:
+            # The terminal CAS is authoritative. A waiter also rechecks on expiry.
+            logger.warning('sync receipt wake unavailable exception_type=%s', type(error).__name__)
     try:
         r.delete(_key(f'{PROCESSED_SEGMENTS_KEY_PREFIX}{job_id}'))
     except Exception as error:
@@ -1159,7 +1189,7 @@ def get_sync_job_run_lock_epoch(token: str) -> int:
     return epoch if epoch > 0 else 0
 
 
-def try_acquire_job_run_lock(job_id: str) -> Optional[str]:
+def try_acquire_job_run_lock(job_id: str, lease_seconds: int = RUN_LOCK_TTL_SECONDS) -> Optional[str]:
     """Acquire a generic compare-delete run lock, or return ``None`` if held.
 
     Audio merge and account-deletion tasks share this primitive but do not have
@@ -1167,7 +1197,7 @@ def try_acquire_job_run_lock(job_id: str) -> Optional[str]:
     durable lease epoch.
     """
     token = str(uuid.uuid4())
-    acquired = r.set(_key(f'{RUN_LOCK_KEY_PREFIX}{job_id}'), token, nx=True, ex=RUN_LOCK_TTL_SECONDS)
+    acquired = r.set(_key(f'{RUN_LOCK_KEY_PREFIX}{job_id}'), token, nx=True, ex=lease_seconds)
     return token if acquired else None
 
 
@@ -1231,7 +1261,7 @@ return 0
 """
 
 
-def renew_job_run_lock(job_id: str, token: str) -> bool:
+def renew_job_run_lock(job_id: str, token: str, lease_seconds: int = RUN_LOCK_TTL_SECONDS) -> bool:
     """Renew a run lease only when *token* still owns it.
 
     Redis errors deliberately propagate: a caller must distinguish an
@@ -1244,7 +1274,7 @@ def renew_job_run_lock(job_id: str, token: str) -> bool:
             1,
             _key(f'{RUN_LOCK_KEY_PREFIX}{job_id}'),
             token,
-            RUN_LOCK_TTL_SECONDS,
+            lease_seconds,
         )
     )
 

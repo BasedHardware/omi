@@ -7,13 +7,14 @@ BACKEND_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 cd "$BACKEND_DIR"
 
 usage() {
-  echo "usage: $0 [--all | --changed-files <repo-relative-path-list>] [--shard <total>/<index>]" >&2
+  echo "usage: $0 [--all | --changed-files <repo-relative-path-list> [--rotation <k>/<n>]] [--shard <total>/<index>]" >&2
   exit 2
 }
 
 mode=""
 changed_files_arg=""
 shard_spec=""
+rotation_spec=""
 while [ "$#" -gt 0 ]; do
   case "$1" in
     --all)
@@ -31,6 +32,11 @@ while [ "$#" -gt 0 ]; do
       shard_spec="$2"
       shift
       ;;
+    --rotation)
+      [ "$#" -ge 2 ] && [[ "$2" =~ ^[0-9]+/[0-9]+$ ]] || usage
+      rotation_spec="$2"
+      shift
+      ;;
     *)
       usage
       ;;
@@ -38,6 +44,8 @@ while [ "$#" -gt 0 ]; do
   shift
 done
 [ -n "$mode" ] || usage
+# A rotating full-suite slice only widens a changed-files selection.
+[ -z "$rotation_spec" ] || [ "$mode" = "--changed-files" ] || usage
 
 # Sharding: the suite's cost is per-file pytest process startup (measured
 # 2026-09-10, run 34430370667: 1126 files, one session each, 19m18s of a
@@ -87,6 +95,9 @@ if [ "$mode" = "--all" ]; then
   selector_args+=(--all)
 else
   selector_args+=(--changed-files "$changed_files_arg")
+  if [ -n "$rotation_spec" ]; then
+    selector_args+=(--rotation "$rotation_spec")
+  fi
 fi
 "$PYTHON_BIN" scripts/select_backend_unit_tests.py "${selector_args[@]}"
 
@@ -96,7 +107,7 @@ shard_note=""
 # changed-files run whose paths do not affect the typed boundary typechecks
 # nowhere and must not hand shard 1's capacity to its siblings).
 will_typecheck=1
-if [ "$mode" != "--all" ] && ! "$SCRIPT_DIR/needs-typecheck.sh" "$changed_files_arg"; then
+if [ "$mode" != "--all" ] && [ "${BACKEND_UNIT_FORCE_TYPECHECK:-0}" != "1" ] && ! "$SCRIPT_DIR/needs-typecheck.sh" "$changed_files_arg"; then
   will_typecheck=0
 fi
 if [ "$shard_total" -ge 2 ]; then
@@ -177,12 +188,41 @@ if [ "$selected_count" -eq 0 ]; then
 fi
 
 echo "Selected $selected_count backend unit test file(s)${shard_note}: $reason"
-BACKEND_UNIT_TEST_FILE_LIST="$selected_tests" \
-BACKEND_FAST_UNIT_WARN_SECONDS="0.1" \
-BACKEND_FAST_UNIT_FAIL_SECONDS="1.0" \
-BACKEND_PYTEST_FILE_ISOLATION="1" \
-BACKEND_PYTEST_MARK_EXPR="not integration and not slow" \
-BACKEND_PYTEST_XDIST="auto" \
-BACKEND_PYTEST_WORKERS="${BACKEND_PYTEST_WORKERS:-auto}" \
-PYTHON="$PYTHON_BIN" \
-bash test.sh
+export BACKEND_FAST_UNIT_WARN_SECONDS="0.1"
+export BACKEND_FAST_UNIT_FAIL_SECONDS="1.0"
+export BACKEND_PYTEST_FILE_ISOLATION="1"
+export BACKEND_PYTEST_MARK_EXPR="not integration and not slow"
+export BACKEND_PYTEST_XDIST="auto"
+export BACKEND_PYTEST_WORKERS="${BACKEND_PYTEST_WORKERS:-auto}"
+export PYTHON="$PYTHON_BIN"
+
+timing_dir="$(mktemp -d "${TMPDIR:-/tmp}/omi-backend-unit-timing.XXXXXX")"
+trap 'rm -f "$selected_tests" "$selection_reason"; rm -rf "$timing_dir"' EXIT
+status=0
+# Pytest queues timing overruns and preserves the ordinary suite result.
+BACKEND_UNIT_TIMING_RECHECK_DIR="$timing_dir" BACKEND_UNIT_TIMING_RESULT="" \
+  BACKEND_UNIT_TEST_FILE_LIST="$selected_tests" bash test.sh || status=$?
+
+# Wait until all shard workers have exited before measuring each node on its own.
+for timing_report in "$timing_dir"/*.tsv; do
+  [ -f "$timing_report" ] || continue
+  while IFS=$'\t' read -r cpu1 nodeid; do
+    echo "Confirming backend unit timing overrun: $nodeid (${cpu1}s CPU)"
+    result="$timing_dir/recheck"
+    rm -f "$result"
+    if BACKEND_UNIT_TIMING_RECHECK_DIR="" BACKEND_UNIT_TIMING_RESULT="$result" \
+       BACKEND_UNIT_TEST_FILE_LIST="" BACKEND_PYTEST_PARALLEL_SESSION=0 BACKEND_PYTEST_WORKERS=1 \
+       bash test.sh "$nodeid"; then
+      if [ -s "$result" ] && IFS=$'\t' read -r cpu2 rechecked_node < "$result" && [ "$rechecked_node" = "$nodeid" ]; then
+        echo "::warning title=Backend unit timing overrun cleared::$nodeid measured ${cpu1}s CPU initially and ${cpu2}s in isolation"
+        printf 'FLAKE-LEDGER timing-guard %s %s %s\n' "$nodeid" "$cpu1" "$cpu2"
+      else
+        echo "::error title=Backend unit timing recheck missing::$nodeid did not produce a passing measurement"
+        status=1
+      fi
+    else
+      status=1
+    fi
+  done < "$timing_report"
+done
+exit "$status"

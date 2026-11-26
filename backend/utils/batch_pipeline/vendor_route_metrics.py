@@ -11,6 +11,8 @@ from typing import Any
 
 from prometheus_client import Counter, Gauge
 
+from config.batch_pipeline import Priority
+
 from utils.batch_pipeline import vendor_route_contracts as contracts
 from utils.observability.reasons import (
     ReasonFamily,
@@ -26,10 +28,14 @@ from utils.observability.reasons import (
 ROUTE_DECISIONS = Counter(contracts.METRIC_ROUTE_DECISIONS, 'Batch vendor route selections', ['route', 'reason'])
 TABLE_LOADS = Counter(contracts.METRIC_TABLE_LOADS, 'Route table resolutions by ladder rung', ['outcome'])
 GPU_OVERFLOW_ACTIVE = Gauge(
-    contracts.METRIC_GPU_OVERFLOW_ACTIVE, '1 while this process reads the GPU ring as past its fresh-backlog SLO'
+    contracts.METRIC_GPU_OVERFLOW_ACTIVE,
+    '1 while this process reads a priority of the GPU ring as past its backlog SLO',
+    ['priority'],
 )
 GPU_BACKLOG_AGE = Gauge(
-    contracts.METRIC_GPU_BACKLOG_AGE, 'Oldest admissible fresh GPU-ring unit age at the last overflow sample'
+    contracts.METRIC_GPU_BACKLOG_AGE,
+    'Oldest admissible GPU-ring unit age for a priority at the last overflow sample',
+    ['priority'],
 )
 ATTEMPTS = Counter(contracts.METRIC_ATTEMPTS, 'Settled batch vendor attempts', ['provider', 'outcome'])
 ATTEMPT_AUDIO = Counter(
@@ -132,10 +138,11 @@ def table_load(outcome: VendorRouteTableOutcome | str) -> None:
         pass
 
 
-def gpu_overflow(active: bool, backlog_age_seconds: float) -> None:
+def gpu_overflow(active: bool, backlog_age_seconds: float, priority: int = Priority.FRESH) -> None:
     try:
-        GPU_OVERFLOW_ACTIVE.set(1 if active else 0)
-        GPU_BACKLOG_AGE.set(max(0.0, backlog_age_seconds))
+        label = Priority(priority).name.lower()  # exactly fresh, recent, deep; reject unknown priorities
+        GPU_OVERFLOW_ACTIVE.labels(priority=label).set(1 if active else 0)
+        GPU_BACKLOG_AGE.labels(priority=label).set(max(0.0, backlog_age_seconds))
     except Exception:
         pass
 

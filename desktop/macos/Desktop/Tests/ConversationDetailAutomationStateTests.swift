@@ -175,6 +175,21 @@ final class ConversationDetailAutomationStateTests: XCTestCase {
     XCTAssertTrue(ConversationsPage.shouldReplaceSelectedConversation(processing, with: completed))
   }
 
+  func testDetailTaskRestartCannotClaimAgainInTheSamePresentation() {
+    let processing = ConversationDetailRequestToken(conversation: Self.conversation(status: .processing))
+    let completed = ConversationDetailRequestToken(conversation: Self.conversation(status: .completed))
+    XCTAssertNotEqual(processing, completed)
+    var admission = ConversationDetailOpenAdmission()
+
+    XCTAssertFalse(admission.isReadOnly(for: processing.conversationID))
+    XCTAssertTrue(admission.isReadOnly(for: completed.conversationID))
+    XCTAssertTrue(admission.isReadOnly(for: processing.conversationID))
+    XCTAssertFalse(admission.isReadOnly(for: "different-conversation"))
+
+    admission = ConversationDetailOpenAdmission()
+    XCTAssertFalse(admission.isReadOnly(for: completed.conversationID))
+  }
+
   func testRestoringAMatchedSearchHitRefreshesTheQuery() {
     // #23695: restoring a discarded conversation can reprocess its summary,
     // which can be the only thing that matched the active query. Patching the

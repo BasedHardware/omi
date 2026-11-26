@@ -96,6 +96,9 @@ def calendar_tools() -> Iterator[ModuleType]:
         "langchain_core.tools": _module("langchain_core.tools", tool=_passthrough_tool),
         "langchain_core.runnables": _module("langchain_core.runnables", RunnableConfig=dict),
         "database.users": AutoMockModule("database.users"),
+        "database.google_calendar_preferences": _module(
+            "database.google_calendar_preferences", get_selections=lambda _uid: {}
+        ),
         "database.notifications": _module("database.notifications", get_user_time_zone=lambda _uid: "UTC"),
         "models.calendar_mutation": AutoMockModule("models.calendar_mutation"),
         "utils.executors": _module("utils.executors", db_executor=object(), run_blocking=_run_blocking),
@@ -109,6 +112,9 @@ def calendar_tools() -> Iterator[ModuleType]:
     stubs["utils.retrieval.tools.google_utils"].GoogleAPIError = _GoogleAPIError
 
     with stub_modules(stubs):
+        load_module_fresh(
+            "utils.retrieval.google_calendar_selection", str(TOOLS_DIR.parent / "google_calendar_selection.py")
+        )
         load_module_fresh("utils.retrieval.tools.calendar_render", str(TOOLS_DIR / "calendar_render.py"))
         # The real date parsing and max_results capping the tool relies on.
         load_module_fresh("utils.retrieval.tools.integration_base", str(TOOLS_DIR / "integration_base.py"))

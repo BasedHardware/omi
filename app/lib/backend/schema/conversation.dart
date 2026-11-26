@@ -8,6 +8,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import 'package:omi/backend/schema/capture_group.dart';
 import 'package:omi/backend/schema/conversation_speakers.dart';
+import 'package:omi/backend/schema/conversation_v3.dart';
 import 'package:omi/backend/schema/gen/conversation_wire.g.dart' as wire;
 import 'package:omi/backend/schema/geolocation.dart';
 import 'package:omi/utils/audio/audio_timeline_mapper.dart';
@@ -429,8 +430,21 @@ class ServerConversation {
   /// 'writing_notes' or 'failed'. Null on finished rows and from older servers.
   final String? homeStep;
 
+  /// Server-authored read projection: 'overdue' when the transcription wait ran out with no failure
+  /// receipt, so the audio is kept and still waiting. Null on every other row and from older servers.
+  final String? transcriptionWait;
+
+  /// Server-authored admission for this recording. Older servers omit it.
+  final String? transcriptionAdmission;
+
+  bool get isTranscriptionAllowanceHeld => transcriptionAdmission == 'allowance_held';
+  bool get isAdmittedForTranscription => transcriptionAdmission == 'processing';
+
   /// Authoritative episode membership, including before the episode list arrives.
   final String? episodeId;
+
+  /// Recordings-and-conversations (v3) fields; null from older servers and one-to-one conversations.
+  final ConversationV3Fields? v3;
 
   /// Coverage projected from the server capture receipt; absent on legacy rows.
   final String? captureCoverage;
@@ -485,7 +499,10 @@ class ServerConversation {
     this.captureCoverage,
     this.excludedSpeakers,
     this.homeStep,
+    this.transcriptionWait,
+    this.transcriptionAdmission,
     this.episodeId,
+    this.v3,
   });
 
   /// List rows omit transcript_segments ("unknown/not loaded, not an empty transcript"), while the
@@ -540,7 +557,10 @@ class ServerConversation {
         processingDeferred: processingDeferred,
         captureCoverage: captureCoverage,
         homeStep: homeStep ?? this.homeStep,
+        transcriptionWait: transcriptionWait,
+        transcriptionAdmission: transcriptionAdmission,
         episodeId: episodeId,
+        v3: v3,
       )..isNew = isNew;
 
   factory ServerConversation.fromJson(Map<String, dynamic> json) {
@@ -583,9 +603,13 @@ class ServerConversation {
       matchSnippets: snippets,
       processingDeferred: json['processing_deferred'] == true,
       homeStep: json['home_step'] is String ? json['home_step'] as String : null,
+      transcriptionWait: json['transcription_wait'] is String ? json['transcription_wait'] as String : null,
+      transcriptionAdmission:
+          json['transcription_admission'] is String ? json['transcription_admission'] as String : null,
       onDeviceProvenance:
           json['on_device_provenance'] is Map ? Map<String, dynamic>.from(json['on_device_provenance']) : null,
       clientProcessing: json['client_processing'] is Map ? Map<String, dynamic>.from(json['client_processing']) : null,
+      v3: ConversationV3Fields.fromJson(json),
     );
   }
 
@@ -601,6 +625,9 @@ class ServerConversation {
     Map<String, dynamic>? onDeviceProvenance,
     Map<String, dynamic>? clientProcessing,
     String? homeStep,
+    String? transcriptionWait,
+    String? transcriptionAdmission,
+    ConversationV3Fields? v3,
   }) {
     final snippets = matchSnippets ?? const <TranscriptMatchSnippet>[];
     return ServerConversation(
@@ -650,7 +677,10 @@ class ServerConversation {
       captureCoverage: generated.captureCoverage,
       excludedSpeakers: generated.excludedSpeakers,
       homeStep: homeStep,
+      transcriptionWait: transcriptionWait,
+      transcriptionAdmission: transcriptionAdmission,
       episodeId: generated.episodeId,
+      v3: v3,
     );
   }
 
@@ -694,6 +724,7 @@ class ServerConversation {
       if (episodeId != null) 'episode_id': episodeId,
       if (captureCoverage != null) 'capture_coverage': captureCoverage,
       if (excludedSpeakers != null) 'excluded_speakers': excludedSpeakers,
+      ...?v3?.toJson(),
     };
   }
 
@@ -845,6 +876,7 @@ class ServerConversation {
 }
 
 class SyncLocalFilesResponse {
+  final List<wire.GeneratedFrameProcessingRange>? frameOutcomes;
   List<String> newConversationIds = [];
   List<String> updatedConversationIds = [];
   int failedSegments;
@@ -864,6 +896,7 @@ class SyncLocalFilesResponse {
   String? localUploadPermanentError;
 
   SyncLocalFilesResponse({
+    this.frameOutcomes,
     required this.newConversationIds,
     required this.updatedConversationIds,
     this.failedSegments = 0,
@@ -882,6 +915,7 @@ class SyncLocalFilesResponse {
 
   factory SyncLocalFilesResponse.fromGenerated(wire.GeneratedSyncLocalFilesResultResponse generated) {
     return SyncLocalFilesResponse(
+      frameOutcomes: generated.frameOutcomesV1,
       newConversationIds: generated.newMemories ?? [],
       updatedConversationIds: generated.updatedMemories ?? [],
       failedSegments: generated.failedSegments,

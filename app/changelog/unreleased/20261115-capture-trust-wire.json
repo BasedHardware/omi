@@ -1,0 +1,4 @@
+{
+  "kind": "none",
+  "reason": "Regenerate the additive optional capture_time_trust wire metadata from the backend API. No mobile UI, upload behavior or release feature change."
+}

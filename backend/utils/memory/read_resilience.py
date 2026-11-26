@@ -19,6 +19,7 @@ from typing import Any, Callable, Literal
 from fastapi import HTTPException
 from google.api_core import exceptions as google_errors
 
+from config.summary_context import mark_failure
 from utils.other.list_budget import ListReadBudgetExhausted
 
 logger = logging.getLogger(__name__)
@@ -193,7 +194,7 @@ class MemoryReadResilience:
         self._probe = False
         self._generation = 0
 
-    def call(self, operation: str, fn: Callable[[], Any], *, budget: Any = None) -> Any:
+    def call(self, operation: str, fn: Callable[[], Any], *, budget: Any = None, single_attempt: bool = False) -> Any:
         started = self.clock()
         with self._lock:
             generation = self._generation
@@ -203,14 +204,23 @@ class MemoryReadResilience:
                 self._probe = True
         if denied:
             self._log(operation, 'circuit_open', 0, started, MemoryReadCircuitOpen())
-            raise MemoryReadCircuitOpen()
+            error = MemoryReadCircuitOpen()
+            if single_attempt:
+                mark_failure(error, 'budget')
+            raise error
         # Budget normally travels serially through the router; also preserve
         # one state if internal callers fan out with the same request budget.
         with _request_state_lock:
-            state = getattr(budget, '_memory_read_attempts', None) if budget is not None else None
+            # A summary's distinct single-attempt queries are not retries of
+            # one list read. Keep circuit/process admission, but let their
+            # shared context deadline govern each new logical operation.
+            state = (
+                getattr(budget, '_memory_read_attempts', None) if budget is not None and not single_attempt else None
+            )
             if not isinstance(state, MemoryReadAttempts):
-                state = MemoryReadAttempts(started + 1.0)
-                if budget is not None:
+                remaining = budget.remaining_seconds if single_attempt and budget is not None else 1.0
+                state = MemoryReadAttempts(started + remaining)
+                if budget is not None and not single_attempt:
                     budget._memory_read_attempts = state
         attempts = 0
         transient = False
@@ -242,6 +252,8 @@ class MemoryReadResilience:
                             allowance.release()
                 if not admitted:
                     self._log(operation, 'admission_denied', attempts, started, state.error)
+                    if single_attempt:
+                        mark_failure(state.error, 'budget')
                     raise state.error
                 attempts += 1
                 evidence.succeeded = False
@@ -257,7 +269,13 @@ class MemoryReadResilience:
                     delay = self.jitter(0.025, 0.075)
                     # A retry needs headroom, request attempts, a global token,
                     # and a still-closed circuit. Check again after backoff.
-                    if transient and state.used < 2 and not probing and self._headroom(state, budget) > delay + 0.05:
+                    if (
+                        not single_attempt
+                        and transient
+                        and state.used < 2
+                        and not probing
+                        and self._headroom(state, budget) > delay + 0.05
+                    ):
                         self.sleep(delay)
                         continue
                     if transient or (isinstance(exc, HTTPException) and exc.status_code == 503):
@@ -323,6 +341,7 @@ def resilient_memory_read(method: Callable[..., Any]) -> Callable[..., Any]:
             method.__name__,
             lambda: method(*args, **kwargs),
             budget=kwargs.get('request_budget') or kwargs.get('budget'),
+            single_attempt=kwargs.get('single_attempt', False),
         )
 
     return wrapped

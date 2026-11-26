@@ -31,6 +31,7 @@ from uuid import uuid4
 
 from google.cloud import firestore
 
+from database.privacy_check_metrics import PURGE_COMPLETED
 from database._client import get_firestore_client
 from database import rpc_deadline
 from database import legal_holds
@@ -63,6 +64,7 @@ UNIT_YIELD_SECONDS = 0.6
 GATE_KIND = 'explicit_memory_deletion'
 # An accepted delete's erasure lost the account gate to a same-account erasure: retry soon.
 BUSY_RETRY_SECONDS = 30
+ARTIFACT_RETRY_SECONDS = 240
 
 
 class RunSuperseded(Exception):
@@ -107,7 +109,18 @@ def accept_fields(
 def arm_fields(uid: str, conversation_id: str, now: datetime | None = None) -> dict[str, Any]:
     """Fields a delete writes (merge) next to its tombstone; generation/attempts/progress survive re-arms."""
     current = now or _now()
-    return {'uid': uid, 'conversation_id': conversation_id, 'due_at': current, 'armed_at': current}
+    return {
+        'uid': uid,
+        'conversation_id': conversation_id,
+        'due_at': current,
+        'armed_at': current,
+        'arm_revision': uuid4().hex,
+    }
+
+
+def _arm(row: dict[str, Any]) -> dict[str, Any]:
+    # armed_at also detects re-arms from producers predating arm_revision.
+    return {'armed_at': row.get('armed_at'), 'arm_revision': row.get('arm_revision')}
 
 
 def _in_transaction(client: Any, body: Callable[[Any], Any]) -> Any:
@@ -148,7 +161,7 @@ def segment_records(
     return [snapshot.to_dict() or {} for snapshot in query.stream()]
 
 
-def _segment_ref(client: Any, job: str, namespace: str, segment_id: str) -> Any:
+def segment_ref(client: Any, job: str, namespace: str, segment_id: str) -> Any:
     digest = hashlib.sha256(f'{namespace}\x00{segment_id}'.encode()).hexdigest()[:40]
     return client.collection(COLLECTION).document(job).collection(SEGMENTS).document(digest)
 
@@ -246,6 +259,15 @@ def begin_run(
             return 'in_progress', row, None
         lease_until = current + timedelta(seconds=LEASE_SECONDS)
         due = row.get('due_at')
+        progress_fields = {}
+        if collection == COLLECTION:
+            arm = _arm(row)
+            # An unversioned legacy cursor cannot prove which arm it covered.
+            # Rewind discovery once; segment journals remain owed and untouched.
+            if row.get('progress_arm') != arm:
+                row['progress'] = {}
+            row['progress_arm'] = arm
+            progress_fields = {'progress': row.get('progress') or {}, 'progress_arm': arm}
         transaction.update(
             ref,
             {
@@ -253,6 +275,7 @@ def begin_run(
                 'lease_generation': generation,
                 'lease_until': lease_until,
                 'due_at': lease_until if due is None or due < lease_until else due,
+                **progress_fields,
             },
         )
         return 'run', row, token
@@ -271,8 +294,8 @@ def finish_run(
     collection: str = COLLECTION,
 ) -> bool:
     """Record the owning run's outcome; only ``completed`` removes the obligation. False if not owner."""
-    if outcome not in {'completed', 'held', 'failed', 'checkpointed', 'busy'}:
-        raise ValueError('outcome must be completed, held, failed, checkpointed or busy')
+    if outcome not in {'completed', 'held', 'failed', 'checkpointed', 'busy', 'artifact_pending'}:
+        raise ValueError('invalid purge outcome')
     client = firestore_client if firestore_client is not None else get_firestore_client()
     current = now or _now()
     ref = client.collection(collection).document(job)
@@ -284,6 +307,23 @@ def finish_run(
         row = snapshot.to_dict() or {}
         if int(row.get('generation') or 0) != generation or row.get('run_token') != token:
             return False
+        if collection == COLLECTION and row.get('progress_arm') != _arm(row):
+            # The owner still owes the new arm. Never let an obsolete run
+            # complete it or publish a cursor beyond newly added rows.
+            transaction.update(
+                ref,
+                {
+                    'progress': {},
+                    'progress_arm': _arm(row),
+                    'run_token': None,
+                    'lease_generation': None,
+                    'lease_until': None,
+                    'due_at': current,
+                    'attempts': 0,
+                    'last_outcome': 'rearmed',
+                },
+            )
+            return False
         if outcome == 'completed':
             transaction.delete(ref)
             return True
@@ -292,11 +332,9 @@ def finish_run(
             # Progress was made: hand off at once and restart the lost-task backoff.
             transaction.update(ref, {**release, 'due_at': current, 'attempts': 0})
             return False
-        if outcome == 'busy':
-            # A same-account erasure held the gate, so that account is progressing: retry soon.
-            transaction.update(
-                ref, {**release, 'due_at': current + timedelta(seconds=BUSY_RETRY_SECONDS), 'attempts': 0}
-            )
+        if outcome in {'busy', 'artifact_pending'}:
+            wait = BUSY_RETRY_SECONDS if outcome == 'busy' else ARTIFACT_RETRY_SECONDS
+            transaction.update(ref, {**release, 'due_at': current + timedelta(seconds=wait), 'attempts': 0})
             return False
         wait = HOLD_RECHECK_SECONDS if outcome == 'held' else REDRIVE_SECONDS
         transaction.update(ref, {**release, 'due_at': current + timedelta(seconds=wait)})
@@ -337,6 +375,8 @@ class RunProgress:
         row = (snapshot.to_dict() or {}) if snapshot.exists else {}
         if int(row.get('generation') or 0) != self.generation or row.get('run_token') != self.token:
             raise RunSuperseded()
+        if row.get('progress_arm') != _arm(row):
+            raise RunSuperseded()
 
     @staticmethod
     def _renewal() -> dict[str, Any]:
@@ -350,7 +390,7 @@ class RunProgress:
             self._owned(transaction)
             for segment_id in segment_ids:
                 transaction.set(
-                    _segment_ref(self.client, self.job, namespace, segment_id),
+                    segment_ref(self.client, self.job, namespace, segment_id),
                     {'namespace': namespace, 'segment_id': segment_id},
                 )
             transaction.update(self._ref(), {**self._renewal(), 'progress': position})
@@ -373,7 +413,7 @@ class RunProgress:
         def body(transaction):
             self._owned(transaction)
             for segment_id in done:
-                transaction.delete(_segment_ref(self.client, self.job, namespace, segment_id))
+                transaction.delete(segment_ref(self.client, self.job, namespace, segment_id))
             transaction.update(self._ref(), self._renewal())
 
         _in_transaction(self.client, body)
@@ -424,7 +464,7 @@ def _drop_segment_records(client: Any, job: str) -> None:
                 break
             batch = client.batch()
             for record in records:
-                batch.delete(_segment_ref(client, job, namespace, str(record.get('segment_id'))))
+                batch.delete(segment_ref(client, job, namespace, str(record.get('segment_id'))))
             batch.commit()
 
 
@@ -438,7 +478,7 @@ def run_job(
     budget_seconds: float = RUN_BUDGET_SECONDS,
 ) -> str:
     """Execute (or resume) one dispatched generation. Raises on a retryable failure."""
-    from database.batch_pipeline_conversation_purge import PurgeCheckpointed, purge_conversation
+    from database.batch_pipeline_conversation_purge import ArtifactUploadPending, PurgeCheckpointed, purge_conversation
 
     # The run's budget and its absolute RPC deadline start at entry: admission is debited too.
     started = clock()
@@ -478,23 +518,42 @@ def run_job(
             if _owes_segments(client, job):
                 raise RuntimeError('batch purge finished with segment erasure still recorded')
         except RunSuperseded:
+            finish('checkpointed')  # re-arms rewind and redrive; another owner remains untouched
             return 'superseded'
         except LegalHoldActive:
             finish('held')
             return 'held'
+        except ArtifactUploadPending:
+            finish('artifact_pending')
+            return 'artifact_pending'
         except PurgeCheckpointed:
             finish('checkpointed')
             return 'checkpointed'
-        except BaseException:
-            try:
-                finish('failed')
-            except Exception:
-                pass  # The lease expires; the original failure is what the queue must see.
+        except Exception as error:
+            # Units acquire before erasing, so a unit that lost its gate wait erased nothing; progress is saved.
+            if lost_gate_to_peer(error, uid):
+                logger.info('conversation batch purge waiting for the account gate job=%s', job)
+                finish('busy')
+                return 'busy'
+            _finish_failed(finish)
             raise
-        return 'purged' if finish('completed') else 'superseded'
+        except BaseException:
+            _finish_failed(finish)
+            raise
+        if not finish('completed'):
+            return 'superseded'
+        PURGE_COMPLETED.labels('conversation_job').inc()
+        return 'purged'
 
 
-def _lost_gate_to_peer(error: BaseException, uid: str) -> bool:
+def _finish_failed(finish: Callable[[str], bool]) -> None:
+    try:
+        finish('failed')
+    except Exception:
+        pass  # The lease expires; the original failure is what the queue must see.
+
+
+def lost_gate_to_peer(error: BaseException, uid: str) -> bool:
     if type(error).__name__ == 'HTTPException' and getattr(error, 'status_code', None) == 409:
         return True  # the cascade's nested gate mapped a same-account peer to account_gate_busy
     try:
@@ -537,7 +596,7 @@ def run_erasure_job(
         except LegalHoldActive:
             raise
         except Exception as error:
-            if not _lost_gate_to_peer(error, uid):
+            if not lost_gate_to_peer(error, uid):
                 raise
             logger.info('conversation erasure waiting for the account gate job=%s', job)
             finish('busy')

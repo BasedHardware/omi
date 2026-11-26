@@ -1,12 +1,18 @@
 """Transactional replacement of a finalized provisional record, preserving annotations."""
 
 from copy import deepcopy
+from datetime import datetime, timezone
+
+from config.episodes import episodes_enabled, episode_compose_transcript_ready_enabled
 import math
 
 from config.record_audio import restore_pending
+from config.server_batch import manual_end_marker_enabled
+from utils.batch_pipeline import empty_transcription
 from utils.conversations.final_pass_remap import remap_final_record
 from utils.conversations.fragment_visibility import is_automatic_discard
 from utils.conversations.summary_delivery import stamp_projection_debt
+from utils.conversations.v3.live import FINISH_RECORDING_FIELD
 from utils.manual_speaker_assignments import (
     apply_manual_assignments,
     manual_assignment_decision,
@@ -134,6 +140,24 @@ def replace_record(
         has_content=bool(segments),
         sync_live_target=True,
     )
+    # A no-pointer Finish can arrive after the admission worker read its snapshot.
+    # The single-unit transcript commit can honor a window-targeted request.
+    # Recording-only requests wait for the native whole-record ledger commit.
+    if (
+        new
+        and span.get('whole_native_record')
+        and current.get('recording')
+        and current.get('v3_manual_end_requested')
+        and not current.get(FINISH_RECORDING_FIELD)
+        and not current.get('v3_manual_end')
+        and manual_end_marker_enabled()
+    ):
+        result.update(
+            v3_manual_end=True,
+            v3_pending=True,
+            v3_pending_since=current.get('v3_pending_since') or datetime.now(timezone.utc),
+        )
+    empty_transcription.stamp(current, result, span)
     if new and is_automatic_discard(current) and not restore_pending(current, *obligations):
         # Later speech supersedes an ordinary automatic verdict. A pending
         # explicit restore keeps its discard until the metadata commit wins.
@@ -143,6 +167,9 @@ def replace_record(
     if finish is not None and (result.get('finished_at') is None or finish > result['finished_at']):
         result['finished_at'] = finish
     if new:
+        if episodes_enabled() and episode_compose_transcript_ready_enabled():
+            # Same commit as the speech: reads recover if this process dies before signaling.
+            result['episode_transcript_updated_at'] = datetime.now(timezone.utc)
         # A batch row that completes with no title never passes through the
         # server-minimum intake path, so the projection is the only write that
         # can stamp the first-summary debt Home and the repair read.

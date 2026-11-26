@@ -303,11 +303,28 @@ record_barrier_executor = MonitoredThreadPoolExecutor(
     wait_on_saturation=True,
     thread_name_prefix="record-barrier",
 )
+gateway_idempotency_executor = MonitoredThreadPoolExecutor(
+    name="gateway_idempotency", max_workers=8, max_queue_size=8, thread_name_prefix="gateway-idempotency"
+)
+GATEWAY_SETTLEMENT_WORKERS = 8
+gateway_settlement_executor = MonitoredThreadPoolExecutor(
+    name="gateway_settlement",
+    max_workers=GATEWAY_SETTLEMENT_WORKERS,
+    max_queue_size=0,
+    thread_name_prefix="gateway-settlement",
+)
 llm_executor = MonitoredThreadPoolExecutor(name="llm", max_workers=6, thread_name_prefix="llm")
 # Batch policy HTTP leaves only; coordinators stay in async Pump code.
 admission_executor = MonitoredThreadPoolExecutor(name="admission", max_workers=4, thread_name_prefix="admission")
 stripe_executor = MonitoredThreadPoolExecutor(name="stripe", max_workers=4, thread_name_prefix="stripe")
 sync_executor = MonitoredThreadPoolExecutor(name="sync", max_workers=16, thread_name_prefix="sync")
+# The from-segments route bounds its auth dependency by the request deadline. A
+# stalled identity/Firestore call cannot be interrupted, so the wait is
+# abandoned at the deadline; this pool holds those abandoned calls apart from
+# the critical pool that gates every other request.
+auth_deadline_executor = MonitoredThreadPoolExecutor(
+    name="auth_deadline", max_workers=16, max_queue_size=64, thread_name_prefix="auth-deadline"
+)
 # Optional per-window LID must not hold the shared sync coordination pool.
 # Bound outstanding calls; run_blocking awaits capacity without blocking a loop.
 record_language_executor = MonitoredThreadPoolExecutor(
@@ -329,6 +346,22 @@ cleanup_executor = MonitoredThreadPoolExecutor(name="cleanup", max_workers=4, th
 # front of account wipes on cleanup's four workers.
 erasure_executor = MonitoredThreadPoolExecutor(name="erasure", max_workers=20, thread_name_prefix="erasure")
 storage_executor = MonitoredThreadPoolExecutor(name="storage", max_workers=128, thread_name_prefix="storage")
+# Optional playback discovery cannot consume mandatory custody/readback workers.
+# Its process coordinator admits at most two calls; this pool has no queue.
+playback_metadata_executor = MonitoredThreadPoolExecutor(
+    name="playback_metadata",
+    max_workers=2,
+    max_queue_size=0,
+    wait_on_saturation=True,
+    thread_name_prefix="playback-metadata",
+)
+playback_debt_executor = MonitoredThreadPoolExecutor(
+    name="playback_debt",
+    max_workers=2,
+    max_queue_size=32,
+    wait_on_saturation=True,
+    thread_name_prefix="playback-debt",
+)
 # Prompt-list verification may outlive its caller while a provider finishes.
 # Keep both the clip cut and inline STT away from shared feature pools.
 speaker_tag_verify_executor = MonitoredThreadPoolExecutor(
@@ -360,15 +393,20 @@ _ALL_EXECUTORS = [
     free_allowance_executor,
     read_cache_shadow_executor,
     record_barrier_executor,
+    gateway_idempotency_executor,
+    gateway_settlement_executor,
     llm_executor,
     stripe_executor,
     admission_executor,
     sync_executor,
+    auth_deadline_executor,
     record_language_executor,
     postprocess_executor,
     cleanup_executor,
     erasure_executor,
     storage_executor,
+    playback_metadata_executor,
+    playback_debt_executor,
     speaker_tag_verify_executor,
     cimd_executor,
     open_loops_executor,
@@ -566,6 +604,22 @@ def _byok_detail_code(error: BaseException) -> str | None:
     return None
 
 
+def _transient_provider_failure_class(error: BaseException) -> str | None:
+    """Return the bounded provider/transport class for a background-task failure.
+
+    Lazy import: executors sits below the provider SDKs in the import graph, and
+    the GPU worker runtime image must not pull them in at module load. A
+    transient provider fault is a retryable dependency failure, not an Omi-side
+    crash, so the done callback logs its class at WARNING instead of the
+    provider message at ERROR (which Cloud Error Reporting would group).
+    """
+    try:
+        from utils.conversations.processing_retry import retryable_provider_failure_class
+    except Exception:
+        return None
+    return retryable_provider_failure_class(error)
+
+
 def _log_background_failure(name: str, future: "Future[Any]") -> None:
     if future.cancelled():
         return
@@ -702,12 +756,20 @@ async def log_executor_health(
 _background_tasks: set[asyncio.Task[Any]] = set()
 
 
-def start_background_task(coro: Coroutine[Any, Any, Any], *, name: str) -> asyncio.Task[Any]:
+def start_background_task(
+    coro: Coroutine[Any, Any, Any], *, name: str, bounded_provider_failure: bool = False
+) -> asyncio.Task[Any]:
     """Schedule *coro* as a tracked background task with exception logging.
 
     Use this instead of bare ``asyncio.create_task()`` for production
     fire-and-forget work.  Bare ``create_task`` silently drops exceptions
     and can be garbage-collected if the caller doesn't keep a reference.
+
+    ``bounded_provider_failure`` opts this task into the retryable-provider
+    contract: a transient provider/transport fault is logged as one bounded
+    WARNING with its class instead of the provider body at ERROR. Only tasks
+    whose caller owns a queue retry or replay may opt in; every other task
+    keeps the loud ERROR so Error Reporting still sees it.
     """
     from database.firestore_read_origin import background_task_read_origin
 
@@ -723,6 +785,20 @@ def start_background_task(coro: Coroutine[Any, Any, Any], *, name: str) -> async
             return
         exc = t.exception()
         if exc:
+            if bounded_provider_failure:
+                # A transient provider/transport fault on a task whose caller
+                # owns a queue retry is a retryable dependency failure, not an
+                # Omi-side crash: log its bounded class at WARNING so Error
+                # Reporting does not group it and the provider body never
+                # reaches logs. The caller still receives the exception.
+                failure_class = _transient_provider_failure_class(exc)
+                if failure_class is not None:
+                    logger.warning(
+                        'background_task transient provider failure: %s failure_class=%s',
+                        t.get_name(),
+                        failure_class,
+                    )
+                    return
             logger.error('background_task failed: %s — %s: %s', t.get_name(), type(exc).__name__, exc)
 
     task.add_done_callback(_done)

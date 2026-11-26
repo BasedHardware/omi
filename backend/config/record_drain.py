@@ -1,6 +1,32 @@
 """Process capacity for record admission; never part of a job's policy snapshot."""
 
 import os
+from datetime import datetime
+import math
+
+from config.batch_pipeline import Priority, FRESH_CAPTURE_LAG_SECONDS
+
+
+def record_intake_age_priority_enabled() -> bool:
+    return os.getenv('RECORD_INTAKE_AGE_PRIORITY_ENABLED', 'true').strip().lower() not in {'false', 'off', '0'}
+
+
+def capture_age_priority(age: float) -> Priority:
+    """FRESH within the fresh bar, RECENT within a week, else DEEP. Unknown ages never fill the fresh ring."""
+    if not math.isfinite(age) or age < 0:
+        return Priority.RECENT
+    if age <= FRESH_CAPTURE_LAG_SECONDS:
+        return Priority.FRESH
+    return Priority.RECENT if age <= 604800 else Priority.DEEP
+
+
+def record_intake_priority(finished_at, now: float) -> Priority:
+    """Use the recording's end, so a long recording just ended stays fresh."""
+    if not record_intake_age_priority_enabled():
+        return Priority.FRESH
+    if not isinstance(finished_at, datetime) or finished_at.tzinfo is None:
+        return Priority.RECENT  # Unknown clocks must not fill the fresh ring.
+    return capture_age_priority(now - finished_at.timestamp())
 
 
 def _drain_setting(name: str, default: int, maximum: int) -> int:

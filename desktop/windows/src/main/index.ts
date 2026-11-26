@@ -118,7 +118,6 @@ import {
 import { onSessionReset } from './assistants/core/session'
 import { removeFromIndex as removeTaskFromEmbeddingIndex } from './tasks/taskEmbeddingService'
 import { createGlowWindow, registerGlowIpc, destroyGlow } from './glow/glowWindow'
-import { maybeGenerateOnStartup as maybeGenerateAiProfileOnStartup } from './assistants/aiUserProfile/service'
 import { setTokenRefresher } from './assistants/core/session'
 import { makeRendererTokenRefresher } from './assistants/core/tokenPull'
 import { registerFocusAssistant } from './assistants/focus/register'
@@ -1221,15 +1220,11 @@ app.whenReady().then(async () => {
         // auto-capture via the capture window. No-op off-Windows; 'off' mode keeps
         // the machine latched silent.
         { name: 'meetingMonitor', run: () => startMeetingMonitor({ getCaptureWc }) },
-        // Track 3 (AI user profile): run the >24h startup check + start the daily
-        // timer. No-ops until the renderer has pushed a session (Firebase token lives
-        // renderer-side) and is gated on the aiProfileEnabled setting.
-        { name: 'aiUserProfile', run: () => maybeGenerateAiProfileOnStartup() },
         // Track 3 (Focus assistant): register it with the coordinator, which brings
         // up the shared screen-analysis loop (gated on screenAnalysisEnabled). The
         // loop only polls frames once an assistant is registered, so this is the call
         // that turns the proactive stack on. The glow window above is pre-created; the
-        // renderer relays a session that Focus (and the AI profile) read.
+        // renderer relays a session that Focus (and the AI profile reader) use.
         { name: 'focusAssistant', run: () => registerFocusAssistant() },
         // Track 3 (Memory assistant): Mac's interval-based single-shot memory
         // extractor. A coordinator peer to Focus/Insight (same shared loop); no glow,

@@ -120,7 +120,7 @@ def _snapshot_payload(snapshot: Any, *, label: str) -> dict[str, Any] | None:
     return payload
 
 
-def _validated_hold(snapshot: Any) -> dict[str, Any] | None:
+def validate_legal_hold_snapshot(snapshot: Any) -> dict[str, Any] | None:
     payload = _snapshot_payload(snapshot, label="legal-hold authority")
     if payload is None:
         return None
@@ -189,7 +189,7 @@ def _gate_owned_by_this_context(gate: dict[str, Any] | None, uid: str) -> bool:
 
 
 def _assert_hold_inactive(snapshot: Any) -> None:
-    hold = _validated_hold(snapshot)
+    hold = validate_legal_hold_snapshot(snapshot)
     if hold is not None and hold["active"] is True:
         raise LegalHoldActive("destructive deletion is blocked by an active legal hold")
 
@@ -209,6 +209,32 @@ def assert_account_deletion_permitted(uid: str, *, firestore_client: Any | None 
         raise LegalHoldAuthorityUnavailable("legal-hold authority unavailable") from exc
 
 
+# Optional audit fields an operator path records on the hold and on its event
+# history. ``legal_hold.v1`` documents without them stay valid: the fence reads
+# only ``schema_version``, ``issuer`` and ``active``.
+LEGAL_HOLD_EVENTS_SUBCOLLECTION = "events"
+_HOLD_AUDIT_FIELDS = frozenset({"ticket", "reason", "actor", "agent", "review_by"})
+
+
+def _hold_audit_fields(audit: dict[str, Any] | None) -> dict[str, Any]:
+    if not audit:
+        return {}
+    unknown = set(audit) - _HOLD_AUDIT_FIELDS
+    if unknown:
+        raise LegalHoldAuthorityUnavailable(f"legal-hold audit fields are unsupported: {sorted(unknown)}")
+    clean: dict[str, Any] = {}
+    for key, value in audit.items():
+        if value is None:
+            continue
+        if key == "review_by":
+            if not isinstance(value, datetime) or value.tzinfo is None or value.utcoffset() is None:
+                raise LegalHoldAuthorityUnavailable("legal-hold review_by must be a timezone-aware datetime")
+        elif not isinstance(value, str) or not value.strip() or len(value) > 500:
+            raise LegalHoldAuthorityUnavailable(f"legal-hold {key} must be a non-empty string")
+        clean[key] = value
+    return clean
+
+
 @transactional
 def _place_legal_hold_transaction(
     transaction: Any,
@@ -217,6 +243,8 @@ def _place_legal_hold_transaction(
     issuer: str,
     active: bool,
     now: datetime,
+    audit: dict[str, Any] | None = None,
+    event_id: str | None = None,
 ) -> None:
     hold_ref = _document(client, f"{LEGAL_HOLDS_COLLECTION}/{uid}")
     gate_ref = _document(client, f"{LEGAL_HOLD_DELETION_GATES_COLLECTION}/{uid}")
@@ -225,16 +253,27 @@ def _place_legal_hold_transaction(
     account = _snapshot_payload(account_ref.get(transaction=transaction), label="account deletion authority")
     if active and (_gate_blocks(gate, now) or (account is not None and account.get("wipe_status") == "running")):
         raise DestructiveOperationInProgress("legal hold cannot overtake deletion already in progress")
-    transaction.set(
-        hold_ref,
-        {
-            "schema_version": LEGAL_HOLD_SCHEMA_VERSION,
-            "issuer": issuer,
-            "active": active,
-            "updated_at": now,
-        },
-        merge=True,
-    )
+    payload: dict[str, Any] = {
+        "schema_version": LEGAL_HOLD_SCHEMA_VERSION,
+        "issuer": issuer,
+        "active": active,
+        "updated_at": now,
+    }
+    if audit:
+        if active:
+            payload.update({"ticket": audit.get("ticket"), "reason": audit.get("reason")})
+            payload.update({"placed_by": audit.get("actor"), "placed_at": now})
+            payload["review_by"] = audit.get("review_by")
+        else:
+            payload.update({"released_by": audit.get("actor"), "released_at": now})
+            payload["release_reason"] = audit.get("reason")
+    transaction.set(hold_ref, payload, merge=True)
+    if audit and event_id:
+        event_path = f"{LEGAL_HOLDS_COLLECTION}/{uid}/{LEGAL_HOLD_EVENTS_SUBCOLLECTION}/{event_id}"
+        transaction.set(
+            _document(client, event_path),
+            {"action": "place" if active else "release", "issuer": issuer, "at": now, **audit},
+        )
 
 
 @cache_writer('legal_hold_fence_cache')
@@ -245,16 +284,52 @@ def place_legal_hold(
     active: bool = True,
     firestore_client: Any | None = None,
     now: datetime | None = None,
+    audit: dict[str, Any] | None = None,
 ) -> None:
-    """Server/admin-only legal-hold writer coordinated with destructive work."""
+    """Server/admin-only legal-hold writer coordinated with destructive work.
+
+    ``audit`` (operator paths) records who placed or released the hold, for
+    which ticket and why, on the hold document and as an append-only
+    ``legal_holds/{uid}/events/{id}`` entry in the same transaction.
+    """
 
     if not uid or issuer not in _AUTHORIZED_ISSUERS:
         raise LegalHoldAuthorityUnavailable("legal-hold placement authority is invalid")
     current = now or datetime.now(timezone.utc)
     if current.tzinfo is None or current.utcoffset() is None:
         raise LegalHoldAuthorityUnavailable("legal-hold placement timestamp must be timezone-aware")
+    clean_audit = _hold_audit_fields(audit)
+    event_id = f"{current.strftime('%Y%m%dT%H%M%S%fZ')}-{uuid4().hex[:8]}" if clean_audit else None
     client = account_deletion_firestore_client(firestore_client=firestore_client)
-    _place_legal_hold_transaction(client.transaction(), client, uid, issuer, active, current)
+    _place_legal_hold_transaction(
+        client.transaction(), client, uid, issuer, active, current, clean_audit or None, event_id
+    )
+
+
+def read_legal_hold(uid: str, *, firestore_client: Any | None = None) -> dict[str, Any] | None:
+    """The validated hold document for ``uid``, or None when no hold was ever written."""
+
+    if not uid:
+        raise LegalHoldAuthorityUnavailable("legal-hold lookup requires a uid")
+    client = account_deletion_firestore_client(firestore_client=firestore_client)
+    return validate_legal_hold_snapshot(_document(client, f"{LEGAL_HOLDS_COLLECTION}/{uid}").get())
+
+
+def list_legal_holds(
+    *, active_only: bool = True, limit: int = 500, firestore_client: Any | None = None
+) -> list[dict[str, Any]]:
+    """Hold documents with their uid, for operator review (bounded by ``limit``)."""
+
+    # The collection holds a handful of documents; a bounded scan keeps this an
+    # operator-only read with no serving query or index to register.
+    client = account_deletion_firestore_client(firestore_client=firestore_client)
+    holds: list[dict[str, Any]] = []
+    for snapshot in client.collection(LEGAL_HOLDS_COLLECTION).limit(limit).stream():
+        payload = snapshot.to_dict() or {}
+        if active_only and payload.get("active") is not True:
+            continue
+        holds.append({"uid": snapshot.id, **payload})
+    return holds
 
 
 @transactional
@@ -352,6 +427,8 @@ def _finish_destructive_operation_transaction(
             logger.info("destructive operation finish already recorded")
             return
         raise LegalHoldAuthorityUnavailable("destructive operation gate is already terminal")
+    if kind == "account_deletion" and gate.get("remote_inflight"):
+        raise LegalHoldAuthorityUnavailable("account deletion remote outcome is unresolved")
     transaction.set(gate_ref, {**gate, "state": outcome, "finished_at": now})
 
 
@@ -1031,4 +1108,7 @@ __all__ = [
     "gate_busy_with_peer",
     "same_kind_gate_running",
     "place_legal_hold",
+    "read_legal_hold",
+    "validate_legal_hold_snapshot",
+    "list_legal_holds",
 ]

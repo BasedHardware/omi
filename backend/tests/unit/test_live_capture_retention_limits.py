@@ -5,7 +5,6 @@ from pathlib import Path
 import pytest
 import yaml
 
-from config.audio_timeline import live_capture_window_merge_preservation_enabled
 from utils.audio_timeline import CaptureTimeline, SendMap
 
 FLAG = 'LIVE_CAPTURE_WINDOW_RETENTION'
@@ -33,22 +32,16 @@ UNION_ON_SCOPES = {('prod', 'backend-listen'), ('prod', 'pusher')}
 
 def test_composed_and_helm_declarations_pin_rollout_state(declarations):
     manifest, charts = declarations
-    off_flags = ('LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION',)
     union = 'LIVE_CAPTURE_WINDOW_MERGE_UNION'
     for env_name, env in manifest['environments'].items():
         services = {**env['gke'], **env['cloud_run']['services']}
         for name, service in services.items():
             declared = service.get('env', {})
-            for flag in off_flags:
-                if flag in declared:
-                    assert declared[flag] == {'category': 'rollout', 'value': 'false'}
             if union in declared:
                 expected = 'true' if (env_name, name) in UNION_ON_SCOPES else 'false'
                 assert declared[union] == {'category': 'rollout', 'value': expected}
     assert charts
     for path, values in charts.items():
-        for flag in off_flags:
-            assert [v for v in values if v.get('name') == flag] == [{'name': flag, 'value': 'false'}]
         expected = 'true' if path.name.startswith('prod_') else 'false'
         assert [v for v in values if v.get('name') == union] == [{'name': union, 'value': expected}]
 
@@ -67,13 +60,3 @@ def test_bounds_still_evict_and_refuse_old_positions(monkeypatch, enabled):
     assert sends.span_count == sends._max_spans
     assert sends.map_interval(0, 50) is None
     assert sends.map_interval(150, 250) is None  # gap is still unobserved
-
-
-@pytest.mark.parametrize('value', [None, '', 'false', '0', 'garbage', 'true', '1', 'yes', 'on'])
-def test_merge_preservation_default_off_parser(monkeypatch, value):
-    flag = 'LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION'
-    if value is None:
-        monkeypatch.delenv(flag, raising=False)
-    else:
-        monkeypatch.setenv(flag, value)
-    assert live_capture_window_merge_preservation_enabled() == (value in ('true', '1', 'yes', 'on'))

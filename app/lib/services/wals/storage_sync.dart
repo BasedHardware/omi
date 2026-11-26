@@ -11,6 +11,7 @@ import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/services/devices/connectors/device_connection.dart';
 import 'package:omi/services/services.dart';
 import 'package:omi/services/wals/wal.dart';
+import 'package:omi/services/wals/device_capture_clock.dart';
 import 'package:omi/services/wals/wal_interfaces.dart';
 
 /// Offline storage sync for new multi-file firmware protocol (CMD_LIST_FILES 0x10,
@@ -43,7 +44,21 @@ class StorageSyncImpl implements StorageSync {
   @override
   double get currentSpeedKBps => _currentSpeedKBps;
 
-  StorageSyncImpl(this.listener);
+  final Timer Function(Duration, void Function()) _transferTimer;
+  final DateTime Function() _clock;
+  // Restores the 5s any-packet first-data deadline and disables audio idle.
+  // Incomplete transfers still throw; custody and cleanup are never rolled back.
+  static const _audioLivenessOff = bool.fromEnvironment('OMI_STORAGE_AUDIO_LIVENESS_OFF');
+  // LittleFS 3.0.17–.19 can spend 500ms queueing + 15s reading, then retry
+  // BLE -ENOMEM without a time bound. There is no progress heartbeat. Use a
+  // conservative 60s DATA gap, not the ring protocol's 15s value.
+  // Firmware evidence: app/docs/offline-storage-liveness.md.
+  static const _audioIdleTimeout = Duration(seconds: 60);
+  static const _firstAudioTimeout = _audioLivenessOff ? Duration(seconds: 5) : _audioIdleTimeout;
+
+  StorageSyncImpl(this.listener, {Timer Function(Duration, void Function())? transferTimer, DateTime Function()? clock})
+      : _transferTimer = transferTimer ?? ((delay, callback) => Timer(delay, callback)),
+        _clock = clock ?? DateTime.now;
 
   @visibleForTesting
   set testWals(List<Wal> wals) => _wals = wals;
@@ -435,7 +450,8 @@ class StorageSyncImpl implements StorageSync {
         if (!complete) {
           Logger.debug('StorageSync: File ${wal.fileNum} incomplete, stopping download phase');
           listener.onWalUpdated();
-          break;
+          if (_isCancelled) break;
+          throw Exception('Device transfer incomplete; recording kept on device');
         }
 
         wal.status = WalStatus.synced;
@@ -454,11 +470,12 @@ class StorageSyncImpl implements StorageSync {
     } catch (e) {
       Logger.debug('StorageSync: Error during sync: $e');
       DebugLogManager.logError(e, null, 'StorageSync failed', {'device': _device?.id});
+      if (!_isCancelled) rethrow;
     } finally {
       _isSyncing = false;
     }
 
-    progress?.onWalSyncedProgress(1.0, speedKBps: _currentSpeedKBps);
+    if (!_isCancelled) progress?.onWalSyncedProgress(1.0, speedKBps: _currentSpeedKBps);
     return resp;
   }
 
@@ -584,7 +601,21 @@ class StorageSyncImpl implements StorageSync {
     bool hasError = false;
     bool hasParseGap = false;
     Timer? timeoutTimer;
+    Timer? audioIdleTimer;
     int packetCount = 0;
+
+    void audioReceived() {
+      firstDataReceived = true;
+      timeoutTimer?.cancel();
+      if (_audioLivenessOff) return;
+      audioIdleTimer?.cancel();
+      audioIdleTimer = _transferTimer(_audioIdleTimeout, () {
+        if (completer.isCompleted) return;
+        hasError = true;
+        Logger.debug('StorageSync: No audio data for file ${wal.fileNum} within ${_audioIdleTimeout.inSeconds}s');
+        completer.complete(false);
+      });
+    }
 
     // Throttle progress updates to every 200ms (per PR #5905)
     DateTime lastProgressUpdate = DateTime.now();
@@ -605,11 +636,7 @@ class StorageSyncImpl implements StorageSync {
 
         packetCount++;
 
-        if (!firstDataReceived) {
-          firstDataReceived = true;
-          timeoutTimer?.cancel();
-          Logger.debug('StorageSync: First data received for file ${wal.fileNum} (${value.length} bytes)');
-        }
+        if (_audioLivenessOff && !firstDataReceived) audioReceived();
 
         // Single byte = status/end signal (matching existing sdcard_wal_sync pattern)
         if (value.length == 1) {
@@ -645,6 +672,7 @@ class StorageSyncImpl implements StorageSync {
         }
 
         int packetAudioBytes = 0;
+        final framesBeforePacket = bytesData.length;
 
         // Data packet: [timestamp:4 BE][audio_data:440] per notification.
         // Firmware writes 440-byte blocks with packed [size:1][frame:size]... and zero padding.
@@ -673,6 +701,10 @@ class StorageSyncImpl implements StorageSync {
           packetAudioBytes = audioLen;
           offset += audioLen;
         }
+
+        // A control ACK, timestamp-only packet, padding or undecodable payload
+        // proves no audio progress. Only parsed DATA starts/renews liveness.
+        if (bytesData.length > framesBeforePacket) audioReceived();
 
         // Update speed and fire throttled progress
         if (packetAudioBytes > 0) {
@@ -722,23 +754,22 @@ class StorageSyncImpl implements StorageSync {
       }
     });
 
-    timeoutTimer = Timer(const Duration(seconds: 5), () {
+    timeoutTimer = _transferTimer(_firstAudioTimeout, () {
       if (!firstDataReceived && !completer.isCompleted) {
         hasError = true;
-        Logger.debug('StorageSync: No data received for file ${wal.fileNum} within 5s');
-        completer.completeError(TimeoutException('No data from device'));
+        Logger.debug(
+          'StorageSync: No audio data for file ${wal.fileNum} within ${_firstAudioTimeout.inSeconds}s',
+        );
+        completer.complete(false);
       }
     });
 
-    // Send CMD_READ_FILE: writeToStorage(fileIndex, command=0x11, offset=0)
-    await connection.writeToStorage(wal.fileNum, 0x11, offset);
-
-    Logger.debug(
-      'StorageSync: Waiting for file ${wal.fileNum} transfer (expecting ${wal.storageTotalBytes} bytes from offset $offset)...',
-    );
-
     bool endReached = false;
     try {
+      // Send CMD_READ_FILE: writeToStorage(fileIndex, command=0x11, offset=0).
+      // Command rejection/throws must settle the subscription and deadlines too.
+      final sent = await connection.writeToStorage(wal.fileNum, 0x11, offset);
+      if (!sent) throw StateError('Device read command refused');
       endReached = await completer.future.timeout(const Duration(minutes: 10));
     } on TimeoutException {
       Logger.debug(
@@ -747,7 +778,7 @@ class StorageSyncImpl implements StorageSync {
     } catch (e) {
       Logger.debug('StorageSync: File ${wal.fileNum} ERROR: $e. offset=$offset/${wal.storageTotalBytes}');
     } finally {
-      if (_isCancelled || !endReached) {
+      if (_isCancelled || !endReached || hasError) {
         try {
           await connection.stopStorageSync();
           Logger.debug('StorageSync: STOP sent on the source connection');
@@ -759,6 +790,7 @@ class StorageSyncImpl implements StorageSync {
       _storageStream = null;
       if (identical(_activeTransfer, completer)) _activeTransfer = null;
       timeoutTimer.cancel();
+      audioIdleTimer?.cancel();
       if (!endReached || hasError) wal.deviceDownloadFraction = null;
     }
 
@@ -777,10 +809,14 @@ class StorageSyncImpl implements StorageSync {
     var chunkSize = sdcardChunkSizeSecs * wal.codec.getFramesPerSecond();
     int totalFrames = bytesData.length;
     int accurateDuration = totalFrames ~/ wal.codec.getFramesPerSecond();
-    int timerStart =
-        wal.timerStart > 0 ? wal.timerStart : DateTime.now().millisecondsSinceEpoch ~/ 1000 - accurateDuration;
-    // A file without a device timestamp gets an estimated start: one run per file.
-    final clockRun = wal.timerStart > 0 ? null : (wal.clockRun ?? Wal.newClockRun());
+    final captureClock = deviceFileCaptureClock(
+      deviceSeconds: wal.timerStart,
+      durationSeconds: accurateDuration,
+      nowSeconds: _clock().millisecondsSinceEpoch ~/ 1000,
+      existingRun: wal.clockRun,
+    );
+    int timerStart = captureClock.start;
+    final clockRun = captureClock.run;
     int bytesLeft = 0;
 
     try {

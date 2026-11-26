@@ -13,6 +13,10 @@ test:
 	$(BUILD_DIR)/test_watchdog
 	$(CC) $(CFLAGS) test_battery_guard.c -o $(BUILD_DIR)/test_battery_guard
 	$(BUILD_DIR)/test_battery_guard
+	$(CC) $(CFLAGS) test_boot_identity.c ../omi/src/boot_identity.c -o $(BUILD_DIR)/test_boot_identity
+	$(BUILD_DIR)/test_boot_identity
+	$(CC) $(CPPFLAGS) $(CFLAGS) test_boot_identity_unsupported.c ../omi/src/boot_identity.c ../omi/src/boot_identity_zephyr.c -o $(BUILD_DIR)/test_boot_identity_unsupported
+	$(BUILD_DIR)/test_boot_identity_unsupported
 	python3 ../omi/sim/test_power_model.py
 	$(CC) $(CFLAGS) -iquote ../omi/src/lib/core ../omi/src/lib/core/audio_packet_logic.c ../omi/tests/host/audio_packet_logic_test.c -o $(BUILD_DIR)/test_audio_packet_logic
 	$(BUILD_DIR)/test_audio_packet_logic
@@ -20,6 +24,7 @@ test:
 	$(BUILD_DIR)/test_boot_telemetry
 	$(CC) $(CFLAGS) -I../omi/src ../omi/tests/diagnostics_packet_test.c ../omi/src/diagnostics_packet.c -o $(BUILD_DIR)/test_diagnostics_packet
 	$(BUILD_DIR)/test_diagnostics_packet
+	TMPDIR=$(BUILD_DIR) python3 ../omi/tests/run_host_regressions.py
 	python3 check_ota_slot_geometry.py
 	python3 test_build_guard.py
 	python3 test_rc_integration.py

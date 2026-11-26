@@ -1,7 +1,7 @@
 part of 'local_wal_sync.dart';
 
 extension _WalJobCompletion on LocalWalSyncImpl {
-  Future<SyncLocalFilesResponse> _reconcileUploadedWals() async {
+  Future<SyncLocalFilesResponse> _reconcileUploadedWals({Map<String, SyncJobFetch>? receipts}) async {
     final generation = _sessionGeneration;
     final resp = SyncLocalFilesResponse(newConversationIds: [], updatedConversationIds: []);
 
@@ -47,19 +47,42 @@ extension _WalJobCompletion on LocalWalSyncImpl {
     const maxConcurrent = 1;
     // Fresh uploads and old handles alternate; a dead backlog cannot starve them.
     final uploadedAt = {for (final e in byJob.entries) e.key: e.value.map((w) => w.uploadedAt).reduce(max)};
-    final entries =
-        _jobPoller.dueForPass(byJob.keys, uploadedAtSeconds: uploadedAt).map((id) => MapEntry(id, byJob[id]!)).toList();
+    // Off, no waiter exists and `receipts` is never passed: every job is polled.
+    final longPoll = ReliabilityExperiments.enabled('receipt_long_poll');
+    final waited = longPoll ? receipts : null;
+    // Experiment receipt_finished_note: the server's wait reads a job only once it knows the job
+    // finished, so a lost note, a failure or a job that never finishes would never be heard of.
+    // A job the wait covers is therefore also polled here once it is a minute old, at most once a
+    // minute. Off: a job the wait covers is never polled here.
+    final backstop = longPoll && ReliabilityExperiments.enabled('receipt_finished_note');
+    bool polledHere(String id) =>
+        _receiptWaiter?.handles(id) != true ||
+        (backstop && nowSecs - (uploadedAt[id] ?? 0) >= ReceiptWaiter.backstop.inSeconds);
+    final ids = waited != null
+        ? waited.keys.where(byJob.containsKey)
+        : _jobPoller.dueForPass(
+            longPoll ? byJob.keys.where(polledHere) : byJob.keys,
+            uploadedAtSeconds: uploadedAt,
+          );
+    final entries = ids.map((id) => MapEntry(id, byJob[id]!)).toList();
 
     for (var i = 0; i < entries.length; i += maxConcurrent) {
       final slice = entries.sublist(i, min(i + maxConcurrent, entries.length));
       if (SyncRateLimiter.instance.isLimited || !_isCurrent(generation)) break;
-      final fetched = await Future.wait(slice.map((e) async => (e.value, await _jobStatusFetcher(e.key))));
+      final fetched =
+          await Future.wait(slice.map((e) async => (e.key, e.value, waited?[e.key] ?? await _jobStatusFetcher(e.key))));
       if (!_isCurrent(generation)) return resp;
 
-      for (final (members, fetch) in fetched) {
+      for (final (watchedId, members, fetch) in fetched) {
         if (!fetch.pollAdmitted) continue;
         polledJobs++;
-        final jobId = members.first.jobId;
+        if (backstop && waited == null && _receiptWaiter?.handles(watchedId) == true) {
+          // Keeps a longer server hint: defer only ever moves a deadline later.
+          _jobPoller.defer(watchedId, ReceiptWaiter.backstop.inMilliseconds);
+        }
+        // Baseline reads the handle from the first member after the fetch.
+        final jobId = longPoll ? watchedId : members.first.jobId;
+        if (longPoll && !members.any((w) => _stillUploadedUnder(w, jobId))) continue;
         final memberWalIds = members.map((w) => w.id).toList();
         switch (fetch.outcome) {
           case SyncJobFetchOutcome.throttled:

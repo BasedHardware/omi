@@ -12,6 +12,7 @@ import re
 from typing import Any, Iterable, Optional
 
 PROFILE_CHARACTER_BUDGET = 2_400
+LEDGER_SCHEMA_VERSION = "knowledge_ledger.v1"
 PLAYBOOK_INDEX_CHARACTER_BUDGET = 800
 PLAYBOOK_HANDLE_CHARACTER_LIMIT = 360
 PROFILE_LINE_CHARACTER_LIMIT = 360
@@ -101,6 +102,31 @@ def canonicalize_ledger_slot(value: Optional[str], *, strict: bool = True) -> Op
     if canonical is None and strict:
         raise ValueError(f"unsupported knowledge ledger slot: {normalized}")
     return canonical
+
+
+def is_prompt_memory_visible(memory: Any) -> bool:
+    """Rejected, locked, and invalidated rows stay out of prompt intake."""
+    return not memory.is_locked and memory.user_review is not False and memory.invalid_at is None
+
+
+def is_prompt_memory_eligible(memory: Any) -> bool:
+    """Chat's shared admission policy, without database or vector dependencies.
+
+    Legacy rows retain chat's compatibility intake. Canonical ledger documents,
+    triggers, third-party facts and unconfirmed inferences never become self-facts.
+    The persisted kind and scope values also accept their string-backed enums.
+    """
+    if not is_prompt_memory_visible(memory):
+        return False
+    if memory.ledger_schema_version != LEDGER_SCHEMA_VERSION:
+        return True
+    return bool(
+        memory.kind == "fact"
+        and memory.subject_scope == "primary_user"
+        and memory.intent_backed
+        and canonicalize_ledger_slot(memory.slot, strict=False)
+        and memory.content.strip()
+    )
 
 
 def ledger_authority_rank(reason: Any) -> int:
