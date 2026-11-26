@@ -679,6 +679,37 @@ async def test_seed_lanes_that_overflow_together_each_advance_on_successive_pass
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize('overflowing', ['pending', 'unlocked'])
+@pytest.mark.parametrize('minute', [0, 1])
+async def test_an_empty_seed_lane_does_not_clear_the_other_lanes_overflow(monkeypatch, overflowing, minute):
+    rp_claims = [claim(f'p{i}', AT + timedelta(seconds=i), 1) for i in range(3)]
+    rows = {C + f'p{i}': derived(f'p{i}', AT + timedelta(seconds=i), 1, ['rp']) for i in range(3)}
+    if overflowing == 'pending':
+        rows[C + 'rp'] = source(
+            'rp', started_at=AT, finished_at=AT + timedelta(seconds=3), v3_pending_since=AT, claims=rp_claims
+        )
+    else:
+        rows[C + 'p0']['v3_unlocked'] = True
+        rows['/users/u/conversation_v3_leases/builder'] = {'unlocked_ids': ['p0']}
+        rows[C + 'rp'] = source(
+            'rp', started_at=AT, finished_at=AT + timedelta(seconds=3), v3_pending=False, claims=rp_claims
+        )
+    client = MemoryQuery(rows)
+    monkeypatch.setattr(store, 'DERIVED_LIMIT', 2)
+
+    async def run_fixture(_, fn, *args, **kwargs):
+        if fn in (store.mark_bounded_attempt, store.clear_terminal_pending, leases.renew):
+            return None
+        return fn(*args, firestore_client=client, **kwargs)
+
+    clock = AT.replace(minute=minute)
+    monkeypatch.setattr(service, 'run_blocking', run_fixture)
+    monkeypatch.setattr(service, 'datetime', type('Clock', (datetime,), {'now': staticmethod(lambda tz=None: clock)}))
+    with pytest.raises(Conflict, match='v3_derived_budget'):  # Parks instead of an empty successful pass.
+        await service._load_live_batch('u', 'token', None, store.UnlockedPage())
+
+
+@pytest.mark.asyncio
 async def test_unvisited_unlocked_wake_is_independent_of_pending_seeds(monkeypatch):
     calls = []
 

@@ -34,6 +34,7 @@ class Conflict(RuntimeError):
 class UnlockedPage:
     remaining: frozenset[str] = frozenset()
     cursor: str | None = None
+    seeds: tuple[int, int] = (0, 0)  # (pending, unlocked) seeds this load read
 
 
 def preview_wakes(rows, recordings) -> dict[str, datetime]:

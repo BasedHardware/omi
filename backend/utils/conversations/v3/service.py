@@ -271,6 +271,7 @@ async def _load_live_batch(uid, token, parked, unlocked_page=None):
         # time, leading with the other lane on alternate minutes so neither starves the other.
         lanes = [{'pending_limit': 1, 'unlocked_limit': 0}, {'pending_limit': 0, 'unlocked_limit': 1}]
         attempts += lanes[::-1] if datetime.now(timezone.utc).minute % 2 else lanes
+    overflow = None
     for index, options in enumerate(attempts):
         try:
             extra = {'unlocked_page': unlocked_page} if unlocked_page is not None else {}
@@ -278,14 +279,27 @@ async def _load_live_batch(uid, token, parked, unlocked_page=None):
         except Conflict as error:
             if index == len(attempts) - 1 or str(error) not in budget_reasons:
                 raise
+            overflow = error
             await run_blocking(db_executor, leases.renew, uid, 'builder', token)
         else:
+            if _lane_without_seed(options, unlocked_page):
+                # A lane with nothing of its own to load is not progress: the overflow still stands and
+                # an empty commit would clear the park. Try the other lane, or park on the overflow.
+                if index == len(attempts) - 1:
+                    raise overflow or Conflict('v3_derived_budget')
+                continue
             size = options.get('pending_limit', 32)
             if size < 32:
                 lane = f" unlocked_limit={options['unlocked_limit']}" if 'unlocked_limit' in options else ''
                 logger.info('event=v3_bounded_pending pending_limit=%d%s', size, lane)
             return (*result, max(size, 1))
     raise AssertionError('bounded pending batch sizes are empty')
+
+
+def _lane_without_seed(options, page):
+    if 'unlocked_limit' not in options or page is None:
+        return False
+    return not page.seeds[0 if options['pending_limit'] else 1]
 
 
 def _keeps_unselected_outlines(custom_timing, on_open, page):

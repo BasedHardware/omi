@@ -459,6 +459,7 @@ def load(
     cache = json.loads(decrypt(state['outline_cache'], uid)) if state.get('outline_cache') else []
     if unlocked_page is not None:
         unlocked_page.remaining, unlocked_page.cursor = frozenset(), None
+        unlocked_page.seeds = (sum(doc.id in recordings or doc.id in unreadable for doc in pending), 0)
     ordered_unlocked = []
     if not recordings and not state.get('open_id') and not state.get('unlocked_ids') and not opened:
         return unreadable, {}, cache
@@ -487,6 +488,8 @@ def load(
     if not conversation_id:
         limit = min(8, pending_limit) if unlocked_limit is None else unlocked_limit
         ordered_unlocked = _select_unlocked(state, existing, limit, unlocked_page)
+        if unlocked_page is not None:
+            unlocked_page.seeds = (unlocked_page.seeds[0], len(ordered_unlocked))
         for start in range(0, len(ordered_unlocked), CLAIM_READ_CHUNK):
             ids = ordered_unlocked[start : start + CLAIM_READ_CHUNK]
             for snapshot in client.get_all([coll.document(cid) for cid in ids]):
