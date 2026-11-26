@@ -637,7 +637,7 @@ def plan_events(scenario: Scenario) -> list[ScenarioEvent]:
 
     for rec in scenario.recordings:
         if rec.lane == 'sync':
-            add(float(rec.arrives_at or rec.audio[1]), 'sync', rec.label)
+            add(float(rec.audio[1] if rec.arrives_at is None else rec.arrives_at), 'sync', rec.label)
             continue
         add(rec.audio[0], 'capture_start', rec.label)
         add(rec.sealed, 'seal', rec.label)

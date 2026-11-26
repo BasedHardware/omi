@@ -205,6 +205,15 @@ def test_finish_alias_needs_a_finish():
 # ---- plan ------------------------------------------------------------------------------------------
 
 
+def test_sync_arrival_at_zero_is_kept_not_replaced_by_the_audio_end():
+    sync = [
+        {'id': 'F', 'origin': 'O', 'audio': [-5, -1], 'arrives_at': 0, 'speech': [{'at': -5, 'end': -1, 'text': 'Hi.'}]}
+    ]
+    parsed = scenario(sync=sync)
+    arrivals = [parsed.offset(e.instant) for e in plan_events(parsed) if e.kind == 'sync' and e.ref == 'F']
+    assert arrivals == [0]  # was -1: a falsy 0 fell back to the audio end
+
+
 def test_plan_orders_events_and_places_the_provisional_transcript_after_the_tap():
     parsed = scenario()
     plan = [(parsed.offset(e.instant), e.kind, e.ref) for e in plan_events(parsed)]

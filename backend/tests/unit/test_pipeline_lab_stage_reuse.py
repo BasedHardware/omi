@@ -321,3 +321,18 @@ def test_discard_summary_carries_the_v3_driver_status(tmp_path):
     assert out['v3']['driver_status'] == 'partial'
     assert out['v3']['driver_failed'] == 2
     assert out['v3']['driver'] == {'arrival': {'error': 2}}
+
+
+def test_harness_identity_changes_with_lab_code_and_ignores_bytecode(tmp_path, monkeypatch):
+    from testing.pipeline_lab import orchestrator, worktrees
+
+    pkg = tmp_path / 'pipeline_lab'
+    (pkg / 'scenario').mkdir(parents=True)
+    (pkg / 'scenario' / 'ops.py').write_text('A = 1\n')
+    monkeypatch.setattr(worktrees, 'harness_package_dir', lambda: pkg)
+    first = orchestrator.harness_identity()
+    (pkg / '__pycache__').mkdir()
+    (pkg / '__pycache__' / 'ops.cpython-311.pyc').write_bytes(b'bytecode')
+    assert orchestrator.harness_identity() == first  # bytecode is not the harness
+    (pkg / 'scenario' / 'ops.py').write_text('A = 2\n')
+    assert orchestrator.harness_identity() != first  # a changed stand-in or driver must miss the cache

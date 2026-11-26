@@ -295,7 +295,7 @@ class ScenarioOps(ProductV3Ops):
 
     async def _on_sync(self, uid: str, rec: Recording) -> dict[str, Any]:
         self._stand_in(STAND_IN_SYNC, rec)
-        row = self._row(rec, created=rec.arrives_at or rec.audio[1], status='completed')
+        row = self._row(rec, created=rec.audio[1] if rec.arrives_at is None else rec.arrives_at, status='completed')
         recording = await asyncio.to_thread(self._seed, uid, row)
         await asyncio.to_thread(
             self._ref(uid, rec).update, {'record_projection_revision': PROJECTION_REVISION, 'has_content': True}

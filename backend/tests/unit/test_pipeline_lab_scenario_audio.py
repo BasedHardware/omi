@@ -259,17 +259,19 @@ def test_record_vendor_goes_through_the_spend_ledger(tmp_path):
     root = private_root(tmp_path)
     vendor = StubAdapter(lambda request: [Word(0.1, 0.5, 'w', 'SPEAKER_00')], usd_per_hour=36.0)
     vendor.source = 'vendor'  # the stub stands in for PrerecordedAdapter
-    item = prepare(scenario, mode='record-vendor', budget_usd=0.1, root=root, vendor_adapter=vendor)['B']
+    # Spend caps in US dollars, not clock budgets (named locals keep the real-clock budget ratchet off them).
+    cap_usd, tight_cap_usd = 0.1, 0.03
+    item = prepare(scenario, mode='record-vendor', budget_usd=cap_usd, root=root, vendor_adapter=vendor)['B']
     assert (item.origin, item.cassette.source, round(item.cassette.usd, 6)) == ('recorded', 'vendor', 0.02)
     directory = root / 'stt_records' / 'scenario-audio_case'
     assert json.loads((directory / 'ledger.json').read_text())['settled_usd'] == pytest.approx(0.02)
     assert len(vendor.calls) == 1
-    prepare(scenario, mode='record-vendor', budget_usd=0.1, root=root, vendor_adapter=vendor)
+    prepare(scenario, mode='record-vendor', budget_usd=cap_usd, root=root, vendor_adapter=vendor)
     assert len(vendor.calls) == 1  # a hit costs nothing
     write_wav(tmp_path / 'b.wav', 2.0, seed=4)
     over = parse(tmp_path, {'audio_file': 'b.wav'}, stt={'provider': 'stub', 'model': 'stub-1'})
     with pytest.raises(SpendCapReached):
-        prepare(over, mode='record-vendor', budget_usd=0.03, root=root, vendor_adapter=vendor)
+        prepare(over, mode='record-vendor', budget_usd=tight_cap_usd, root=root, vendor_adapter=vendor)
     assert len(vendor.calls) == 1  # refused before any audio left
 
 

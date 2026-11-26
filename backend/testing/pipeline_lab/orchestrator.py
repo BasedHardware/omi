@@ -336,6 +336,24 @@ def _code_state(worktree: Optional[worktrees.Worktree], in_place_repo: Optional[
         return None
 
 
+def harness_identity() -> str:
+    """sha256 over the executing lab package (sources and static files, no bytecode).
+
+    A pinned ref runs this checkout's lab copied in by ``worktrees.vendor_lab``, so the product arm's code
+    key alone would serve artifacts an older harness produced; every stage key carries this too.
+    """
+    import hashlib
+
+    root = worktrees.harness_package_dir()
+    digest = hashlib.sha256()
+    for path in sorted(root.rglob('*')):
+        if not path.is_file() or '__pycache__' in path.parts or path.suffix == '.pyc':
+            continue
+        digest.update(path.relative_to(root).as_posix().encode() + b'\0')
+        digest.update(hashlib.sha256(path.read_bytes()).digest())
+    return digest.hexdigest()
+
+
 def run_pipeline_kind(store: Store, overlay: Mapping[str, Any], day_id: str) -> str:
     """``classic`` or ``v3``, as the chain stages will select it (``v3/select.py``); part of every stage key."""
     from testing.pipeline_lab.v3.corpus import day_has_v3
@@ -444,6 +462,7 @@ def run_pipeline(
     reports: dict[str, dict[str, Any]] = {}
     code = _code_state(worktree, in_place_repo, run)
     key_tree = code.tree_key() if code is not None else tree
+    harness = harness_identity()
     exit_code, error = EXIT_OK, None
     walked = False
     try:
@@ -498,6 +517,7 @@ def run_pipeline(
                 inputs = _stage_inputs(day, upstream)
                 inputs.update({f'artifacts:{name}': digest for name, digest in artifact_digests.items()})
                 inputs['pipeline'] = pipeline  # a classic entry is never served to a v3 run, or back
+                inputs['harness'] = harness  # the lab code that executes, not only the product arm's
                 if len(members) > 1:
                     inputs['unit'] = ','.join(group)
                 for driver in drivers:
