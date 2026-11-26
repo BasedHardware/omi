@@ -104,6 +104,10 @@ def segment_dicts(rec: Recording, origin: float) -> list[dict[str, Any]]:
 
     out = []
     for index, line in enumerate(rec.lines):
+        if line.product is not None:
+            # The batch projection's own segment (speakers scenarios): ids and speaker scopes as projected.
+            out.append({**line.product, 'start': round(line.start - origin, 3), 'end': round(line.end - origin, 3)})
+            continue
         segment = TranscriptSegment(
             id=f'{rec.doc_id}-{index}',
             text=line.text,
@@ -137,6 +141,9 @@ class ScenarioOps(ProductV3Ops):
         self.finish_taps: list[dict[str, Any]] = []  # one row per Finish tap (checks.finish_tap_row)
         self.transcribe_calls = 0  # fast-finish STT provider calls (budget vendor_calls.stt)
         self.seeded: set[str] = set()  # handles of ``seed`` history rows: not the run's conversations
+        # speakers/scenario.SpeakerScoring: adds a numbers-only ``speakers`` scorecard to each conversation row
+        # that holds the truth's recording (a ``speakers`` expect field reads it).
+        self.speaker_scoring: Any = None
 
     # ---- seams installed for the run ----------------------------------------------------------
 
@@ -457,7 +464,10 @@ class ScenarioOps(ProductV3Ops):
             if str(row.get('id') or '')[:8] in self.seeded:
                 continue
             words = sum(text_word_count(str(s.get('text') or '')) for s in row.get('transcript_segments') or [])
-            rows.append(conversation_row(row, self.scenario.label_of, words))
+            summary = conversation_row(row, self.scenario.label_of, words)
+            if self.speaker_scoring is not None and self.speaker_scoring.label in summary['recordings']:
+                summary['speakers'] = self.speaker_scoring.card(row)
+            rows.append(summary)
         rows.sort(key=lambda r: str(r.get('started_at') or ''))
         return self.home.annotate_rows(rows) if self.home is not None else rows
 

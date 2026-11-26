@@ -1,0 +1,70 @@
+{
+ "kind": "synthetic",
+ "turns": [
+  {
+   "start": 0.357,
+   "end": 2.857,
+   "speaker": "owner"
+  },
+  {
+   "start": 3.144,
+   "end": 5.644,
+   "speaker": "person-a"
+  },
+  {
+   "start": 5.96,
+   "end": 8.46,
+   "speaker": "stranger-m"
+  },
+  {
+   "start": 8.665,
+   "end": 11.165,
+   "speaker": "person-a"
+  },
+  {
+   "start": 11.609,
+   "end": 14.109,
+   "speaker": "owner"
+  },
+  {
+   "start": 14.515,
+   "end": 17.015,
+   "speaker": "stranger-m"
+  },
+  {
+   "start": 17.443,
+   "end": 19.943,
+   "speaker": "owner"
+  },
+  {
+   "start": 20.419,
+   "end": 22.919,
+   "speaker": "person-a"
+  },
+  {
+   "start": 23.254,
+   "end": 25.754,
+   "speaker": "stranger-m"
+  },
+  {
+   "start": 26.151,
+   "end": 28.651,
+   "speaker": "person-a"
+  },
+  {
+   "start": 28.947,
+   "end": 31.447,
+   "speaker": "owner"
+  },
+  {
+   "start": 31.714,
+   "end": 34.214,
+   "speaker": "stranger-m"
+  }
+ ],
+ "identities": {
+  "owner": "user",
+  "person-a": "person-a",
+  "stranger-m": null
+ }
+}
