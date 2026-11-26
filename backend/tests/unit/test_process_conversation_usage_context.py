@@ -768,7 +768,7 @@ def test_deferred_desktop_filler_is_discarded_by_the_free_rules(monkeypatch):
     created = MagicMock(return_value=True)
     monkeypatch.setattr(process_conversation, 'build_deferred_structured', lambda *args: MagicMock())
     monkeypatch.setattr(process_conversation, '_get_conversation_obj', lambda *args, **kwargs: deferred_conversation)
-    monkeypatch.setattr(process_conversation, '_calendar_overlap_retains_conversation', lambda *args: False)
+    monkeypatch.setattr(process_conversation, 'calendar_overlap_retains_conversation', lambda *args: False)
     monkeypatch.setattr(process_conversation.lifecycle_service, 'create_completed_conversation', created)
 
     process_conversation._store_deferred_conversation('uid', new_request)

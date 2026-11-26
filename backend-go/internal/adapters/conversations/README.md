@@ -27,6 +27,18 @@ For a refused terminal transition, `ApplyFinalization` preserves `status`,
 refusal leaves the document and Home receipts untouched. Invalid status values
 return `ErrStatus` without writing.
 
+Ordinary sync also materializes absent Python defaults in that same transaction.
+`sync_field_mask.json` records the default values from `_normal_persist_payload`
+and the fields that need source data, independent writers, or conditional handling.
+The Python contract test checks every key and the exact defaults against that
+builder. Go takes existing values from the checked snapshot and stages defaults
+only for absent keys that the finalization patch does not already own.
+The serving notes plan also carries recorded time and content units from the
+Python source helpers. Go writes them under the same conversation revision.
+The same update records first summary delivery, deterministic minimum debt
+waivers, and discard receipts. The Python terminal-family policy controls the
+success stamp. A summary refresh keeps the existing first-delivery timestamp.
+
 The wire fixture comes from the Python transcript encryption/compression helpers,
 the processing-result field mask and Firestore emulator snapshots. Regenerate it
 with `scripts/with-firestore.sh ../backend/.venv/bin/python internal/adapters/conversations/testdata/generate.py`

@@ -488,26 +488,8 @@ def get_conversation_notes(
     return _get_shaped_conversation_notes(prefix, uid=uid, open_loop_out=open_loop_out, **kwargs)
 
 
-@observe_notes
-def _get_shaped_conversation_notes(
-    prefix: ConversationPromptPrefix,
-    *,
-    uid: Optional[str] = None,
-    open_loop_out: Optional[dict[str, Any]] = None,
-    **kwargs: Any,
-) -> Structured:
-    frames = kwargs.get('screen_frames') or ()
-    # Never reuse the old prefix metadata: it may already have bound a roster.
-    context = prefix.shaped_context or ('FULL TRANSCRIPT\n' + prefix.context.split('FULL TRANSCRIPT\n', 1)[-1])
-    words = _word_count(context)
-    rich_mode = kwargs.get('rich_context_enabled', False)
-    # Approved-frame volume, not attached images: reads can fail or hit the budget
-    # cap, and the escalation gate must still see the screen-heavy meeting.
-    screen_count = max(kwargs.get('screen_frame_count') or 0, len(frames))
-    escalated, escalation_reason = _shaped_notes_tier(words, screen_count)
-    _record_shaped_notes_tier(escalated, escalation_reason, words, screen_count)
-    if not prefix.has_usable_content and not frames:
-        return Structured()
+def _shaped_notes_evidence(prefix, uid, context, words, rich_mode, frames, kwargs):
+    """Assemble the serving packet before selecting agentic or one-shot transport."""
     mount = notes_mount()
     from utils.llm.action_item_v2 import instructions_for
 
@@ -558,6 +540,68 @@ def _get_shaped_conversation_notes(
         mount = replace(mount, instructions=mount.instructions + '\n\n' + PACKET_RULES + '\n\n' + OUTPUT_RULES)
     if frames:
         evidence.append(screen_frames_message(frames))
+    return mount, evidence, packet, legacy_packet
+
+
+def _one_shot_notes_mount(uid, mount, evidence, packet, legacy_packet, rich_mode, kwargs):
+    """Finalize the same serving instructions and parser for one provider turn."""
+    one_shot_packet = packet if serving_for('NOTES_PACKET_V2_MODE', uid) else legacy_packet
+    one_shot_packet['screen_speaker_bindings'] = screen_speaker_bindings(kwargs['notes_identity'])
+    evidence[0]['content'] = json.dumps(one_shot_packet, ensure_ascii=False, default=str)
+    extraction_parser = PydanticOutputParser(pydantic_object=_notes_output_schema(uid))
+    format_instructions = extraction_parser.get_format_instructions()
+    static_instructions = mount.instructions + '\n\n' + format_instructions
+    if not rich_mode and not serving_for('NOTES_PACKET_V2_MODE', uid):
+        static_instructions = general_title_static_instructions(mount.instructions, format_instructions)
+    mount = Mount(
+        instructions=static_instructions,
+        budget=mount.budget,
+    )
+    return mount, extraction_parser
+
+
+def one_shot_notes_messages(prefix: ConversationPromptPrefix, uid: str, **inputs: Any) -> list[dict[str, str]] | None:
+    """Render the serving text-only notes turn without constructing a provider client."""
+    from utils.llm.notes_agent_policy import plan_notes_agent
+
+    if route_for_uid(uid) != 'new' or not prefix.has_usable_content:
+        return None
+    context = prefix.shaped_context or ('FULL TRANSCRIPT\n' + prefix.context.split('FULL TRANSCRIPT\n', 1)[-1])
+    words = _word_count(context)
+    escalated, _ = _shaped_notes_tier(words, 0)
+    if escalated or plan_notes_agent(uid=uid, conversation_id=prefix.conversation_id, words=words).run:
+        return None
+    mount, evidence, packet, legacy_packet = _shaped_notes_evidence(prefix, uid, context, words, False, (), inputs)
+    mount, _ = _one_shot_notes_mount(uid, mount, evidence, packet, legacy_packet, False, inputs)
+    return [
+        {'role': 'system', 'text': mount.prefix()},
+        {'role': 'user', 'text': evidence[0]['content']},
+    ]
+
+
+@observe_notes
+def _get_shaped_conversation_notes(
+    prefix: ConversationPromptPrefix,
+    *,
+    uid: Optional[str] = None,
+    open_loop_out: Optional[dict[str, Any]] = None,
+    **kwargs: Any,
+) -> Structured:
+    frames = kwargs.get('screen_frames') or ()
+    # Never reuse the old prefix metadata: it may already have bound a roster.
+    context = prefix.shaped_context or ('FULL TRANSCRIPT\n' + prefix.context.split('FULL TRANSCRIPT\n', 1)[-1])
+    words = _word_count(context)
+    rich_mode = kwargs.get('rich_context_enabled', False)
+    # Approved-frame volume, not attached images: reads can fail or hit the budget
+    # cap, and the escalation gate must still see the screen-heavy meeting.
+    screen_count = max(kwargs.get('screen_frame_count') or 0, len(frames))
+    escalated, escalation_reason = _shaped_notes_tier(words, screen_count)
+    _record_shaped_notes_tier(escalated, escalation_reason, words, screen_count)
+    if not prefix.has_usable_content and not frames:
+        return Structured()
+    mount, evidence, packet, legacy_packet = _shaped_notes_evidence(
+        prefix, uid, context, words, rich_mode, frames, kwargs
+    )
     # The notes lane can be Anthropic (main default); it rejects both
     # response_format and prompt_cache_breakpoint. The shaped notes mount never
     # carries a cache breakpoint; parser-based extraction needs no provider
@@ -596,18 +640,7 @@ def _get_shaped_conversation_notes(
         # fallback now would hold the request past the client's own deadline, so
         # answer the retryable 503 instead of buying a second stalled call.
         raise RequestDeadlineExceeded('notes fallback started after the request budget was spent')
-    one_shot_packet = packet if serving_for('NOTES_PACKET_V2_MODE', uid) else legacy_packet
-    one_shot_packet['screen_speaker_bindings'] = screen_speaker_bindings(kwargs['notes_identity'])
-    evidence[0]['content'] = json.dumps(one_shot_packet, ensure_ascii=False, default=str)
-    extraction_parser = PydanticOutputParser(pydantic_object=_notes_output_schema(uid))
-    format_instructions = extraction_parser.get_format_instructions()
-    static_instructions = mount.instructions + '\n\n' + format_instructions
-    if not rich_mode and not serving_for('NOTES_PACKET_V2_MODE', uid):
-        static_instructions = general_title_static_instructions(mount.instructions, format_instructions)
-    mount = Mount(
-        instructions=static_instructions,
-        budget=mount.budget,
-    )
+    mount, extraction_parser = _one_shot_notes_mount(uid, mount, evidence, packet, legacy_packet, rich_mode, kwargs)
 
     async def invoke():
         async with isolated_notes_model(model) as isolated_model:

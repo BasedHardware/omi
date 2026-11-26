@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import json
 import os
+import threading
 from copy import deepcopy
 from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
@@ -1204,8 +1205,16 @@ def test_settling_and_skipped_trigger_metrics_have_no_user_labels():
 
 def test_settle_retry_task_cancels_and_clears_its_queue(monkeypatch):
     async def run():
+        loop_thread = threading.get_ident()
+        loop = asyncio.get_running_loop()
+        scheduled = loop.create_future()
+
+        def schedule_due():
+            loop.call_soon_threadsafe(scheduled.set_result, threading.get_ident())
+
+        monkeypatch.setattr(composer, '_schedule_due', schedule_due)
         task = asyncio.create_task(composer.retry_settled_composes())
-        await asyncio.sleep(0)
+        assert await asyncio.wait_for(scheduled, timeout=2) != loop_thread
         composer._deferred[(UID, 'ep1')] = (float('inf'), None)
         task.cancel()
         with pytest.raises(asyncio.CancelledError):

@@ -46,7 +46,11 @@ func (p *fakePorts) Admit(_ context.Context, a queue.Admitting, req AdmissionReq
 	return p.intent, nil
 }
 
-func (p *fakePorts) CheckLive(ctx context.Context, g queue.Guarded, intent Intent) error {
+func (p *fakePorts) CheckNotesRecovery(ctx context.Context, g queue.Guarded, intent Intent) error {
+	return p.CheckLive(ctx, g, intent, 0)
+}
+
+func (p *fakePorts) CheckLive(ctx context.Context, g queue.Guarded, intent Intent, _ int64) error {
 	_, err := p.Load(ctx, g, intent.Ref)
 	return err
 }
@@ -141,8 +145,8 @@ func (p *fakePorts) Recover(_ context.Context, g queue.Guarded, step string) (st
 	return "", ErrCompletionAbsent
 }
 
-func (p *fakePorts) Begin(_ context.Context, g queue.Guarded, _ Claim) error {
-	return g.Err()
+func (p *fakePorts) Begin(_ context.Context, g queue.Guarded, _ Claim) (bool, error) {
+	return true, g.Err()
 }
 
 func (p *fakePorts) ClaimFanout(_ context.Context, g queue.Guarded, claim Claim) (Fanout, error) {
@@ -157,18 +161,18 @@ func (p *fakePorts) ClaimFanout(_ context.Context, g queue.Guarded, claim Claim)
 	return Fanout{State: FanoutAcquired, Key: "fixture-revision-fanout", Conversation: p.conversation}, g.Err()
 }
 
-func (p *fakePorts) CompleteFanout(_ context.Context, g queue.Guarded, _ Claim, dropped bool) error {
+func (p *fakePorts) CompleteFanout(_ context.Context, g queue.Guarded, _ Claim, dropped bool) (TerminalState, error) {
 	if err := g.Err(); err != nil {
-		return err
+		return TerminalPending, err
 	}
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	p.fanoutCommitted = true
 	p.dropDelivery = dropped
 	if p.loseFanoutResponse {
-		return errors.New("lost fanout response")
+		return TerminalPending, errors.New("lost fanout response")
 	}
-	return nil
+	return TerminalPending, nil
 }
 
 func (p *fakePorts) ReconcileCompletion(_ context.Context, g queue.Guarded, _ Claim) (TerminalState, error) {

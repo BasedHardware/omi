@@ -351,7 +351,7 @@ def test_recovery_guard_replaces_only_a_placeholder_title(pc, monkeypatch, title
     monkeypatch.setattr(pc, 'conversation_transcripts_for_llm', lambda *a: (transcript, transcript, {}))
     monkeypatch.setattr(pc, 'should_discard_conversation', lambda *a, **kw: False)
     monkeypatch.setattr(pc, 'adjacent_conversation', lambda *a: None)
-    monkeypatch.setattr(pc, '_calendar_overlap_retains_conversation', lambda *a: False)
+    monkeypatch.setattr(pc, 'calendar_overlap_retains_conversation', lambda *a: False)
     monkeypatch.setattr(pc, 'rich_notes_inputs', lambda *a, **kw: (None, None, None, None, 0))
     monkeypatch.setattr(pc, 'conversation_known_spellings', lambda *_: [])
     monkeypatch.setattr(pc, 'before_notes', lambda *a, **kw: None)

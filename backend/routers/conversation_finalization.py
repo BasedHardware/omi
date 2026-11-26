@@ -17,6 +17,7 @@ from models.finalization_owner import REFUSAL as FINALIZATION_OWNER_REFUSAL, pyt
 from database import conversation_finalization_jobs as jobs_db
 from database.account_deletion_marker import account_deletion_blocks_user_work
 from database.sync_jobs import release_job_run_lock, try_acquire_job_run_lock
+from routers import sync_finalization_reference
 from services.conversation_finalization import (
     final_attempt_failed,
     get_listen_finalization_tasks_max_attempts_for_worker,
@@ -48,6 +49,7 @@ from utils.workers.retry import retry_response
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
+router.include_router(sync_finalization_reference.router)
 
 
 def _parse_task_payload(payload: Any) -> tuple[str, int] | None:

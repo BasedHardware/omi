@@ -145,6 +145,16 @@ class StrictFirestoreDocument:
                     'finalization_engine',
                     'finalization_owner_epoch',
                 ],
+                [
+                    'deleted',
+                    'discarded',
+                    'sync_merged_into',
+                    'sync_content_revision',
+                    'finalization_engine',
+                    'finalization_owner_epoch',
+                    'finalization_job_id',
+                    'finalization_revision',
+                ],
                 ['external_data', 'created_at', 'deleted', 'sync_merged_from', 'status'],
                 [
                     'discarded',

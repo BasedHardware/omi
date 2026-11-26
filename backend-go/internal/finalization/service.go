@@ -23,6 +23,7 @@ type Service struct {
 	Meeting       MeetingEvidence
 	Batch         BatchCustody
 	Gateway       Gateway
+	NotesPrompt   NotesPrompt
 	Effects       Effects
 	Targets       IntegrationTargets
 	Integrations  Integrations
@@ -94,10 +95,7 @@ func (s *Service) Work(ctx context.Context, run *queue.Run) queue.Outcome {
 		return queue.Fail(CauseInvalid)
 	}
 	claim := Claim{Intent: in, Epoch: run.Job().Token, BudgetRequeues: run.Job().BudgetRequeues, LiveBYOK: run.Secret() != ""}
-	if beginErr := s.begin(ctx, run, claim); beginErr != nil {
-		return s.workError(ctx, run, claim, beginErr)
-	}
-	state, err := s.completion(ctx, run, claim)
+	state, snapshot, err := s.beginWork(ctx, run, claim)
 	if err != nil {
 		return s.workError(ctx, run, claim, err)
 	}
@@ -108,9 +106,11 @@ func (s *Service) Work(ctx context.Context, run *queue.Run) queue.Outcome {
 	if err != nil {
 		return s.workError(ctx, run, claim, err)
 	}
-	snapshot, err := s.load(ctx, run, claim)
-	if err != nil {
-		return s.workError(ctx, run, claim, err)
+	if snapshot.JobID == "" {
+		snapshot, err = s.load(ctx, run, claim)
+		if err != nil {
+			return s.workError(ctx, run, claim, err)
+		}
 	}
 	finished, err := s.prepareBatch(ctx, run, claim, snapshot)
 	if err != nil {
@@ -122,11 +122,16 @@ func (s *Service) Work(ctx context.Context, run *queue.Run) queue.Outcome {
 	if startErr := s.startEpisode(ctx, run, claim, snapshot); startErr != nil {
 		return s.workError(ctx, run, claim, startErr)
 	}
-	if processErr := s.process(ctx, run, claim, snapshot, pending); processErr != nil {
+	var claimed Fanout
+	if processErr := s.process(ctx, run, claim, snapshot, pending, &claimed); processErr != nil {
 		return s.workError(ctx, run, claim, processErr)
 	}
-	if fanoutErr := s.fanout(ctx, run, claim); fanoutErr != nil {
+	state, fanoutErr := s.fanout(ctx, run, claim, claimed)
+	if fanoutErr != nil {
 		return s.workError(ctx, run, claim, fanoutErr)
+	}
+	if outcome := completionOutcome(state); outcome != nil {
+		return outcome
 	}
 	state, err = s.completion(ctx, run, claim)
 	if err != nil {
@@ -156,10 +161,47 @@ type guardedRun interface {
 	Guard(context.Context, func(context.Context, queue.Guarded) error) error
 }
 
-func (s *Service) begin(ctx context.Context, run guardedRun, claim Claim) error {
-	return run.Guard(ctx, func(ctx context.Context, g queue.Guarded) error {
-		return s.Lifecycle.Begin(ctx, g, claim)
+type syncBeginDocuments interface {
+	BeginSync(context.Context, queue.Guarded, Claim) (Conversation, bool, error)
+}
+
+func (s *Service) beginWork(ctx context.Context, run guardedRun, claim Claim) (TerminalState, Conversation, error) {
+	source, available := s.Documents.(syncBeginDocuments)
+	if !available || !s.usesServingNotes(claim) {
+		state, err := s.begin(ctx, run, claim)
+		return state, Conversation{}, err
+	}
+	var snapshot Conversation
+	var reconcile bool
+	err := run.Guard(ctx, func(ctx context.Context, g queue.Guarded) error {
+		var err error
+		snapshot, reconcile, err = source.BeginSync(ctx, g, claim)
+		return err
 	})
+	if err != nil {
+		return TerminalPending, Conversation{}, err
+	}
+	if reconcile {
+		state, err := s.completion(ctx, run, claim)
+		return state, Conversation{}, err
+	}
+	return TerminalPending, snapshot, validateSource(claim, snapshot)
+}
+
+func (s *Service) begin(ctx context.Context, run guardedRun, claim Claim) (TerminalState, error) {
+	var reconcile bool
+	err := run.Guard(ctx, func(ctx context.Context, g queue.Guarded) error {
+		var err error
+		reconcile, err = s.Lifecycle.Begin(ctx, g, claim)
+		return err
+	})
+	if err != nil {
+		return TerminalPending, err
+	}
+	if reconcile || claim.Reconcile {
+		return s.completion(ctx, run, claim)
+	}
+	return TerminalPending, nil
 }
 
 func (s *Service) completion(ctx context.Context, run guardedRun, claim Claim) (TerminalState, error) {
@@ -204,11 +246,10 @@ func (s *Service) Exhausted(ctx context.Context, run *queue.Reconcile) queue.Res
 		return queue.Park()
 	}
 	claim := Claim{Intent: in, Epoch: run.Job().Token, BudgetRequeues: run.Job().BudgetRequeues, LiveBYOK: run.Secret() != "", Reconcile: true}
-	beginErr := s.begin(ctx, run, claim)
-	if beginErr != nil && !errors.Is(beginErr, ErrStale) {
-		return queue.LaterOnError(beginErr, CauseStore)
+	state, err := s.begin(ctx, run, claim)
+	if errors.Is(err, ErrStale) {
+		state, err = s.completion(ctx, run, claim)
 	}
-	state, err := s.completion(ctx, run, claim)
 	if err == nil && state == TerminalPending && !run.WillBudgetRequeue() {
 		err = run.Guard(ctx, func(ctx context.Context, g queue.Guarded) error {
 			var closeErr error

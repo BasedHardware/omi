@@ -1291,6 +1291,36 @@ def get_finalization_status(uid: str, conversation_id: str) -> dict[str, Any] | 
     job = jobs_db.get_finalization_job(job_id)
     if not job or job.get('uid') != uid or job.get('conversation_id') != conversation_id:
         return None
+    fallback = False
+    if conversation.get('finalization_engine') == 'go':
+        from utils.conversations import workerd_finalization_status
+
+        epoch = conversation.get('finalization_owner_epoch')
+        revision = conversation.get('finalization_revision')
+        if (
+            type(epoch) is not int
+            or epoch <= 0
+            or type(revision) is not int
+            or revision <= 0
+            or job.get('finalization_engine') != 'go'
+            or job.get('finalization_owner_epoch') != epoch
+            or job.get('finalization_revision') != revision
+            or job.get('processing_trigger') != 'sync_update'
+        ):
+            return None
+        try:
+            projection = workerd_finalization_status.read_status(uid, conversation_id, job_id, revision)
+        except workerd_finalization_status.StatusUnavailable:
+            projection = None
+        if projection is not None:
+            job = {
+                **job,
+                'status': projection['status'],
+                'attempt_count': projection['attempt_count'],
+                'terminal_outcome': projection['terminal_outcome'],
+            }
+        else:
+            fallback = True
 
     status = str(job.get('status') or 'unknown')
     terminal_outcome = str(job.get('terminal_outcome') or 'unknown')
@@ -1305,7 +1335,7 @@ def get_finalization_status(uid: str, conversation_id: str) -> dict[str, Any] | 
         'terminal': status in jobs_db.TERMINAL_JOB_STATUSES,
         # A queued job may be safely replayed by the reconciler; a leased job
         # is actively owned until its fenced lease expires.
-        'retryable': status == 'queued',
+        'retryable': fallback or status == 'queued',
         'attempt_count': int(job.get('attempt_count') or 0),
         'task_retry_count': int(job.get('task_retry_count') or 0),
         'meeting_treatment_eligible': bool(job.get('meeting_treatment_eligible', False)),

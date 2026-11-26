@@ -178,7 +178,7 @@ def test_a_two_second_clip_never_reaches_a_model_title_or_the_relevance_tiers(mo
         processing, 'should_discard_conversation', lambda *_args, **_kwargs: pytest.fail('paid discard')
     )
     monkeypatch.setattr(
-        processing, '_calendar_overlap_retains_conversation', lambda *_args, **_kwargs: pytest.fail('calendar read')
+        processing, 'calendar_overlap_retains_conversation', lambda *_args, **_kwargs: pytest.fail('calendar read')
     )
     conversation = SimpleNamespace(
         transcript_segments=_segments(15, start=0.0, end=2.0),
@@ -213,7 +213,7 @@ def _structure(monkeypatch, conversation, *, trigger=None, calendar=False):
     monkeypatch.setenv(packet.FLAG, 'serve')
     monkeypatch.setattr(processing.notification_db, 'get_user_time_zone', lambda *_args: 'UTC')
     monkeypatch.setattr(processing, 'get_conversation_notes', lambda *_args, **_kwargs: pytest.fail('paid notes'))
-    monkeypatch.setattr(processing, '_calendar_overlap_retains_conversation', lambda *_args, **_kwargs: calendar)
+    monkeypatch.setattr(processing, 'calendar_overlap_retains_conversation', lambda *_args, **_kwargs: calendar)
     decisions: list[Any] = []
     structured, discarded = processing._get_structured(
         'synthetic-account',

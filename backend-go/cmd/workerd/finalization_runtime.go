@@ -46,13 +46,14 @@ func workerdHandlers(family *finalization.Service) map[string]queue.Handler {
 }
 
 type finalizationRuntime struct {
-	family  *finalization.Service
-	docs    *docstore.Store
-	scan    *finalizationdocs.SummaryScan
-	quiet   *finalizationdocs.QuietScan
-	retract *httpx.Client
-	sender  *integrations.Sender
-	gateway llmgateway.Replayable
+	family    *finalization.Service
+	docs      *docstore.Store
+	scan      *finalizationdocs.SummaryScan
+	quiet     *finalizationdocs.QuietScan
+	retract   *httpx.Client
+	reference *httpx.Client
+	sender    *integrations.Sender
+	gateway   llmgateway.Replayable
 }
 
 func openFinalizationRuntime(ctx, startup context.Context, cfg config, q *queue.Store) (finalizationRuntime, error) {
@@ -65,7 +66,9 @@ func openFinalizationRuntime(ctx, startup context.Context, cfg config, q *queue.
 		return finalizationRuntime{}, errors.New("could not open finalization document store")
 	}
 	clk := clock.System{}
-	store := finalizationdocs.Store{Docs: docs, Clock: clk, Codec: crypt.New(cfg.encryptionSecret)}
+	store := finalizationdocs.Store{
+		Docs: docs, Clock: clk, Codec: crypt.New(cfg.encryptionSecret), SyncOnly: cfg.referenceOrigin != "",
+	}
 	runtime := finalizationRuntime{docs: docs, family: &finalization.Service{Queue: q}}
 	if bindErr := runtime.bindMaintenanceAdapters(ctx, startup, cfg, &store); bindErr != nil {
 		return finalizationRuntime{}, errors.Join(bindErr, runtime.close())
@@ -83,6 +86,9 @@ func openFinalizationRuntime(ctx, startup context.Context, cfg config, q *queue.
 		return finalizationRuntime{}, errors.Join(wireErr, runtime.close())
 	}
 	if wireErr := runtime.bindFinalizationGateway(cfg.gateway, clk); wireErr != nil {
+		return finalizationRuntime{}, errors.Join(wireErr, runtime.close())
+	}
+	if wireErr := runtime.bindFinalizationReference(ctx, cfg, clk); wireErr != nil {
 		return finalizationRuntime{}, errors.Join(wireErr, runtime.close())
 	}
 	if cfg.summaryRepair {
@@ -163,6 +169,9 @@ func (m *finalizationRuntime) bindIntegrationDelivery(clk clock.Clock) error {
 }
 
 func (m *finalizationRuntime) close() error {
+	if m.reference != nil {
+		m.reference.Close()
+	}
 	if m.gateway != nil {
 		m.gateway.Close()
 	}

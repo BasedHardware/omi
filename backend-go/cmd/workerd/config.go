@@ -37,6 +37,7 @@ type config struct {
 	privateArchive, derivedArchive             string
 	objectBucket, objectKMSKey                 string
 	retractionOrigin, retractionAudience       string
+	referenceOrigin, referenceAudience         string
 	episodeIntakeAudience, episodeIntakeCaller string
 }
 
@@ -94,7 +95,10 @@ func (c *config) readWorkerConfig(lookup lookupEnv) error {
 	if err := c.readFinalizationGateway(lookup); err != nil {
 		return err
 	}
-	return c.readFinalizationAdapters(lookup)
+	if err := c.readFinalizationAdapters(lookup); err != nil {
+		return err
+	}
+	return c.readFinalizationReference(lookup)
 }
 
 func (c *config) readFinalizationAdapters(lookup lookupEnv) error {

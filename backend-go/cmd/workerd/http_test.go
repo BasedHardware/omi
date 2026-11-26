@@ -52,9 +52,11 @@ func TestHealthMuxRoutesEpisodeIntakeOnlyWhenEnabled(t *testing.T) {
 	disabled := healthHandler(nil, nil, runtime.episodeIntakeHandler(config{}))
 	assertStatus(t, disabled, http.MethodPost, episodeIntakePath, http.StatusNotFound)
 
-	enabled := healthHandler(nil, nil, http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+	private := http.NewServeMux()
+	private.HandleFunc("POST "+episodeIntakePath, func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusNoContent)
-	}))
+	})
+	enabled := healthHandler(nil, nil, private)
 	assertStatus(t, enabled, http.MethodGet, episodeIntakePath, http.StatusMethodNotAllowed)
 	assertStatus(t, enabled, http.MethodPost, episodeIntakePath, http.StatusNoContent)
 }

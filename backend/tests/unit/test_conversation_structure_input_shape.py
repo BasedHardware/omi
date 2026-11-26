@@ -179,7 +179,7 @@ def test_empty_capture_is_rule_discarded_before_the_notes_model(stack, processin
     )
     monkeypatch.setattr(transcript_for_llm, 'get_user_name', lambda *_args, **_kwargs: 'User')
     monkeypatch.setattr(processing, 'decide_relevance', decide_relevance)
-    monkeypatch.setattr(processing, '_calendar_overlap_retains_conversation', lambda *_args: False)
+    monkeypatch.setattr(processing, 'calendar_overlap_retains_conversation', lambda *_args: False)
     notes = Mock(side_effect=AssertionError('empty capture reached the notes model'))
     monkeypatch.setattr(processing, 'get_conversation_notes', notes)
     decisions = []
@@ -206,7 +206,7 @@ def test_restored_blank_capture_keeps_deterministic_title_without_a_model_call(s
     monkeypatch.setattr(transcript_for_llm, 'get_user_name', lambda *_args, **_kwargs: 'User')
     monkeypatch.setattr(processing, 'decide_relevance', decide_relevance)
     monkeypatch.setattr(processing, 'relevance_arm', lambda *_args: 'nano')
-    monkeypatch.setattr(processing, '_calendar_overlap_retains_conversation', lambda *_args: False)
+    monkeypatch.setattr(processing, 'calendar_overlap_retains_conversation', lambda *_args: False)
     get_llm = Mock(side_effect=AssertionError('content-free capture reached the notes model'))
     monkeypatch.setattr(notes_module, 'get_llm', get_llm)
 
