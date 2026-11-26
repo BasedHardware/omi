@@ -21,6 +21,8 @@ lanes:
   omi:auto:file-chat-documents: explicit
   omi:auto:memory-l2: explicit
   omi:auto:memory-l2-flex: explicit
+  # The opt-in outline prefix sends its own explicit breakpoint and cache options.
+  omi:auto:conversation-v3-outline: implicit
   omi:auto:conv-structure: explicit
   omi:auto:conv-app-result: explicit
   omi:auto:memory-l1: explicit

@@ -62,7 +62,8 @@ ADVANCE = 'advance'
 WAIT = 'wait'
 
 # Every bounded conflict subtype plus the unlabeled fallback. Subtypes outside
-# both strike sets (bridge_source_not_tombstone today) wait on every lane.
+# both strike sets (bridge_source_not_tombstone, whose bridge raise site is
+# retired — a dead source is terminal and counted) wait on every lane.
 POISON_CONFLICT_SUBTYPES = frozenset(SYNC_ASSIGNMENT_CONFLICT_SUBTYPES) | {'other'}
 # Committed-payload contract violations that must take the held disposition.
 POISON_PAYLOAD_KINDS = frozenset(

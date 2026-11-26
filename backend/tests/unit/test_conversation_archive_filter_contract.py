@@ -9,6 +9,7 @@ from unittest.mock import MagicMock
 import pytest
 
 from testing.import_isolation import AutoMockModule, load_module_fresh, stub_modules
+from utils.other import request_deadline as request_deadline_real
 
 _BACKEND = Path(__file__).resolve().parents[2]
 
@@ -158,6 +159,7 @@ def conversations_db():
     # Load the pure policy/registry before the fixture closes the utils import path.
     import config.dream_agent  # noqa: F401
     from utils.conversations import summary_delivery, lifecycle_clocks, home_titles, transcribing_hold, llm_input_dedupe
+    from utils.conversations import terminal_settled
     from utils import summary_quality
     from models import structured
     from database import sync_live_overlap, transcript_pointer
@@ -256,6 +258,7 @@ def conversations_db():
         "utils.conversations.summary_delivery": summary_delivery,
         "utils.conversations.transcribing_hold": transcribing_hold,
         "utils.conversations.lifecycle_clocks": lifecycle_clocks,
+        "utils.conversations.terminal_settled": terminal_settled,
         "utils.conversations.home_titles": home_titles,
         "utils.llm": utils_llm,
         "utils.llm.model_constants": utils_llm_model_constants,
@@ -276,6 +279,7 @@ def conversations_db():
         "utils.other.hume": AutoMockModule("utils.other.hume"),
         "utils.other.list_budget": list_budget_real,
         "utils.other.portability_read": portability_read_real,
+        "utils.other.request_deadline": request_deadline_real,
         "utils.other.storage": AutoMockModule("utils.other.storage"),
     }
 

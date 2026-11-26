@@ -10,7 +10,7 @@ covers it and runs in the `failure-class-cli-tests` manifest lane.
 | --- | --- | --- |
 | `schema_version` | yes | Always `1`. |
 | `id` | yes | `FC-<lower-kebab-slug>`; must match the filename. |
-| `family` | yes (optional only while the registry migrates in PRs under 300 files) | One key of `.github/failure-class-families.json`: the contract family the class belongs to. Unknown keys fail validation (`unknown_failure_class_family`). |
+| `family` | yes | One key of `.github/failure-class-families.json`: the contract family the class belongs to. Unknown keys fail validation (`unknown_failure_class_family`). |
 | `violated_contract` | yes | The contract an instance of this class breaks. |
 | `canonical_prevention` | yes | Prose: the shape of the fix that removes the class. |
 | `canonical_prevention_artifact` | no | Repository-relative paths to the **reusable guard surface** — a checker, shared fixture, or behavioral contract test. Every listed path must exist; a rename that orphans one fails validation. |

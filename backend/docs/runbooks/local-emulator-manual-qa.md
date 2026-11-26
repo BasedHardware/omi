@@ -47,6 +47,10 @@ make dev-down      # stop harness processes
 
 For perf testing with a release Rust binary: `OMI_DESKTOP_BACKEND_RELEASE=1 make dev`
 
+To run the backend with production's service split and settings (batch transcription, task queues, scheduled
+sweeps) for an end-to-end check with a real phone and pendant: `OMI_HARNESS_PROFILE=prod-parity make dev-up`, see
+[`scripts/dev-harness/PROD_PARITY.md`](../../../scripts/dev-harness/PROD_PARITY.md).
+
 ---
 
 <details>

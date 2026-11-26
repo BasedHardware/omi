@@ -63,6 +63,15 @@ STALE_OWNER_TTL_SECONDS = 600.0
 _HEAD_STATES = frozenset({'ready', 'leased', 'retry', 'record_pending', 'privacy_blocked'})
 _FRESH_FIRST_HEAD_STATES = _HEAD_STATES | {'result_ready'}
 _RELEASE_HEAD_STATES = _FRESH_FIRST_HEAD_STATES | {'held'}
+# Aged GPU results may cross the depth cap one at a time per owner.
+GPU_DEPTH_HOLD_AGE_SECONDS = 6 * 3600
+GPU_AGED_RELEASE_INTERVAL_SECONDS = 60
+# Refill the per-watermark release budget after one full cooldown-sized window.
+GPU_AGED_RELEASES_PER_PROJECTION_WATERMARK_MAX = 16
+GPU_AGED_RELEASE_BUDGET_WINDOW_SECONDS = (
+    GPU_AGED_RELEASE_INTERVAL_SECONDS * GPU_AGED_RELEASES_PER_PROJECTION_WATERMARK_MAX
+)
+GPU_AGED_RELEASE_SWITCH = 'BATCH_PIPELINE_MERGE_AGED_GPU_RELEASE_ENABLED'
 _WAIT_BUCKETS = (60, 120, 300, 600, 1800)
 
 
@@ -467,10 +476,11 @@ class OrderedMerge:
         fresh_first: dict = {}
         released: dict = {}
         held: dict = {}
+        aged_gpu: dict = {}
         head: dict = {}
         # Retry rows read at the owner's strict or fresh head (see _promote_stale_heads).
         stale: dict[str, dict] = {}
-        gate = {'determined': True}
+        gate = {'determined': True, 'fresh_check_clear': False}
         backlog: dict = {}
         metered = kill_switch('BATCH_PIPELINE_BACKLOG_RELEASE_METER_ENABLED', log=False)
 
@@ -482,6 +492,7 @@ class OrderedMerge:
             exact: str | None = None,
             tx_fresh: bool = False,
             skip_wait: bool = False,
+            allow_aged_gpu: bool = False,
         ):
             blocked.clear()  # Firestore may retry this callback.
             backlog.clear()
@@ -490,8 +501,10 @@ class OrderedMerge:
             fresh_first.clear()
             released.clear()
             held.clear()
+            aged_gpu.clear()
             head.clear()
             gate['determined'] = True  # Reset on every transaction retry.
+            gate['fresh_check_clear'] = False
             owner = tx.get('owners', key)
             # Terminal quarantine atomically removes merge_pending; it never
             # enters this success log or the projection predecessor chain.
@@ -516,6 +529,7 @@ class OrderedMerge:
                 try:
                     first = tx.fresh_first_pending(key)
                     fresh = tx.fresh_first_ready_pending(key)
+                    gate['fresh_check_clear'] = fresh is None
                 except Aborted:
                     # Contention belongs to the transaction's own retry (or to the caller when
                     # retries are off), never to the gate's read fallback.
@@ -675,11 +689,55 @@ class OrderedMerge:
                     backlog['refusal'] = 'projection'
                     return None
                 backlog['token'] = token
+            aged_gpu_release = False
             if over_cap and not fresh_first and not released.get('recovered') and _catch_up(candidate):
                 # Keep the owner's unprojected log short so a fresh row lands
                 # near the projection head.
-                held['catch_up'] = True
-                return None
+                route = (candidate.get('stt_route') or {}).get('stt_route')
+                if route in (None, 'parakeet'):
+                    since = _ready_since(candidate)
+                    age_source = 'ready_at' if since is not None else 'enqueued_at'
+                    if since is None:
+                        since = candidate.get('enqueued_at')
+                    if since is not None:
+                        held['gpu_age'] = max(0.0, now - since)
+                        held['gpu_age_source'] = age_source
+                        projection_watermark = owner.get('projection_watermark')
+                        prior_release_watermark_present = 'aged_gpu_release_projection_watermark' in owner
+                        same_projection_watermark = (
+                            prior_release_watermark_present
+                            and projection_watermark == owner.get('aged_gpu_release_projection_watermark')
+                        )
+                        # Before the count was added, a matching marker represented one release.
+                        releases_at_watermark = (
+                            owner.get('aged_gpu_release_count_at_projection_watermark', 1)
+                            if same_projection_watermark
+                            else 0
+                        )
+                        budget_window_started_at = owner.get('aged_gpu_release_budget_window_started_at')
+                        if same_projection_watermark and budget_window_started_at is None:
+                            # Existing owner records predate the refill clock. Anchor their current
+                            # budget window to the last durable cooldown so they cannot stay capped.
+                            budget_window_started_at = (
+                                owner.get('next_aged_gpu_release_at', now) - GPU_AGED_RELEASE_INTERVAL_SECONDS
+                            )
+                        if not same_projection_watermark:
+                            budget_window_started_at = now
+                        elif now - budget_window_started_at >= GPU_AGED_RELEASE_BUDGET_WINDOW_SECONDS:
+                            releases_at_watermark = 0
+                            budget_window_started_at = now
+                        held['gpu_release_count'] = releases_at_watermark + 1
+                        held['gpu_release_budget_window_started_at'] = budget_window_started_at
+                        held['gpu_release_eligible'] = (
+                            held['gpu_age'] >= GPU_DEPTH_HOLD_AGE_SECONDS
+                            and kill_switch(GPU_AGED_RELEASE_SWITCH, log=False)
+                            and now >= owner.get('next_aged_gpu_release_at', 0)
+                            and releases_at_watermark < GPU_AGED_RELEASES_PER_PROJECTION_WATERMARK_MAX
+                        )
+                        aged_gpu_release = allow_aged_gpu and held['gpu_release_eligible']
+                if not aged_gpu_release:
+                    held['catch_up'] = True
+                    return None
             job = tx.get('jobs', candidate['segment_id'])
             markers = merge_markers(job)
             if markers is None:
@@ -723,9 +781,17 @@ class OrderedMerge:
             if backlog.get('token') is not None:
                 entry['backlog_release'] = True
                 tx.put('backlog_release', 'gate', backlog['token'])
+            if aged_gpu_release:
+                entry['aged_gpu_release'] = True
             tx.put('results', job['segment_id'], entry)
             job.update(state='committed', merge_pending=False)
             tx.put('jobs', job['segment_id'], job)
+            if aged_gpu_release:
+                owner['next_aged_gpu_release_at'] = now + GPU_AGED_RELEASE_INTERVAL_SECONDS
+                owner['aged_gpu_release_projection_watermark'] = owner.get('projection_watermark')
+                owner['aged_gpu_release_count_at_projection_watermark'] = held['gpu_release_count']
+                owner['aged_gpu_release_budget_window_started_at'] = held['gpu_release_budget_window_started_at']
+                aged_gpu.update(age=held['gpu_age'], age_source=held['gpu_age_source'])
             owner.pop('record_sibling_cursor', None)
             owner.update(
                 watermark=watermark if late else position,
@@ -742,6 +808,10 @@ class OrderedMerge:
         except BatchPrivacyBlocked as error:
             entry, fenced = None, error
         strict_blocked, strict_catch_up = dict(blocked), bool(held.get('catch_up'))
+        strict_gpu_age = held.get('gpu_age')
+        strict_gpu_age_source = held.get('gpu_age_source')
+        strict_gpu_eligible = held.get('gpu_release_eligible', False)
+        fresh_probe_succeeded = gate['fresh_check_clear']
         # A held backlog row at or behind the head needs the fresh probe even when the depth
         # hold is switched off: a ready head is refused, and behind an unready one the head
         # wait would pick a held row and commit nothing.
@@ -767,6 +837,9 @@ class OrderedMerge:
         ):
             try:
                 entry = self.store.run(lambda tx: commit(tx, tx_fresh=True))
+                # The strict transaction ran before this fresh-work transaction, so
+                # carry its conclusive empty result into both aged-release paths.
+                fresh_probe_succeeded = gate['fresh_check_clear']
                 probe = not gate['determined']
             except _FreshGateReadError as failure:
                 if isinstance(failure.error, FailedPrecondition):
@@ -803,6 +876,7 @@ class OrderedMerge:
             # A catch-up row heads the owner. Probe for a ready fresh row
             # outside the strict transaction (no transactional query lock);
             # only a ready one opens a second, re-verifying transaction.
+            probe_completed = False
             try:
                 if sibling_probe:
                     # Existing ready-head query/index, widened only for a blocked group.
@@ -847,6 +921,7 @@ class OrderedMerge:
                         self.store.run(remember)
                 else:
                     pending = self.store.fresh_pending(key, FRESH_PROBE_ROWS)
+                probe_completed = True
             except FailedPrecondition:
                 # Without the fresh query a catch-up hold would also hold fresh
                 # rows: take the plain order now and retry the query later. A probe made only
@@ -879,6 +954,11 @@ class OrderedMerge:
                 )
                 pending = []
             fresh, skipped = _fresh_pick(pending, now, wait)
+            fresh_probe_succeeded = (
+                probe_completed
+                and len(pending) < FRESH_PROBE_ROWS
+                and not any(row.get('state') == 'result_ready' for row in pending)
+            )
             if len(pending) >= FRESH_PROBE_ROWS and not any(row.get('state') == 'result_ready' for row in pending):
                 # The probe sees one page. A full page with no ready row may hide ready rows
                 # behind it; nothing commits for this owner through the pick until one clears.
@@ -912,6 +992,13 @@ class OrderedMerge:
                     release.pop(0)
                     entry = None
                     released.clear()
+        if entry is None and strict_gpu_eligible and fresh_probe_succeeded:
+            # Give fresh work and recovery their usual first opportunity. Recheck the
+            # capture-order head and the owner's durable cooldown in the commit transaction.
+            try:
+                entry = self.store.run(lambda tx: commit(tx, allow_aged_gpu=True))
+            except BatchPrivacyBlocked:
+                return None
         if entry is None and strict_blocked and wait > 0:
             # The strict transaction issues no head-wait query. Probe outside
             # it so a blocked owner takes no extra transactional query lock;
@@ -950,13 +1037,19 @@ class OrderedMerge:
             if skip_wait and not (strict_blocked.get('starved') and merge_stale_head_skip(owner_id)):
                 return None
             try:
-                entry = self.store.run(lambda tx: commit(tx, waiter, skip_wait=skip_wait))
+                entry = self.store.run(
+                    lambda tx: commit(tx, waiter, skip_wait=skip_wait, allow_aged_gpu=fresh_probe_succeeded)
+                )
             except BatchPrivacyBlocked:
                 # An owner-wide fence (often the reason the head is blocked)
                 # also refuses the successor; strict order commits nothing here.
                 return None
             except HeadWaitUnavailable:
                 return self._head_wait_unavailable()
+            if entry is None and self.metrics and 'gpu_age' in held:
+                self.metrics.gpu_depth_held_age.labels(*self.metrics.scope, held['gpu_age_source']).observe(
+                    held['gpu_age']
+                )
             if skip_wait and entry is None:
                 return None  # A refused skip keeps the ordinary wait: no hold or fallback fires early.
             if held and not held.get('backlog'):
@@ -992,6 +1085,8 @@ class OrderedMerge:
                         self.commit_source,
                         type(failure.error).__name__,
                     )
+        if entry is None and self.metrics and strict_gpu_age is not None:
+            self.metrics.gpu_depth_held_age.labels(*self.metrics.scope, strict_gpu_age_source).observe(strict_gpu_age)
         if backlog.get('refusal'):
             backlog_release.REFUSED.labels(backlog['refusal']).inc()
         if entry and entry.get('backlog_release'):
@@ -1005,6 +1100,11 @@ class OrderedMerge:
             record_correctness('committed', source=self.commit_source)
             if self.metrics:
                 self.metrics.record('committed')
+                if aged_gpu:
+                    self.metrics.gpu_aged_releases.labels(*self.metrics.scope).inc()
+                    self.metrics.gpu_aged_release_age.labels(*self.metrics.scope, aged_gpu['age_source']).observe(
+                        aged_gpu['age']
+                    )
             if fresh_first:
                 head_state = (
                     fresh_first['head_state'] if fresh_first['head_state'] in _FRESH_FIRST_HEAD_STATES else 'other'

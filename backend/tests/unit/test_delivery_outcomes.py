@@ -141,7 +141,7 @@ def test_actual_sync_missing_and_deleted_terminal_sites(observed, monkeypatch):
     from utils.sync import pipeline
 
     for row, outcome in ((None, 'deferred'), ({'deleted': True}, 'no_op')):
-        monkeypatch.setattr(pipeline.conversations_db, 'get_conversation', lambda *args: row)
+        monkeypatch.setattr(pipeline.conversations_db, 'get_conversation', lambda *args, **_kwargs: row)
         pipeline._reprocess_conversation_after_update('synthetic', 'synthetic', 'en')
         assert observed[-1] == ('sync', outcome)
 

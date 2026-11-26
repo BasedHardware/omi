@@ -7,6 +7,7 @@ Read the guide for the area you are changing. `CLAUDE.md` points here.
 | Working on | Read |
 |---|---|
 | Backend | `backend/AGENTS.md` |
+| Backend capture, Finish, conversations v3, Home | `backend/testing/pipeline_lab/README.md`; run `python -m testing.pipeline_lab affected` |
 | Flutter app | `app/AGENTS.md` |
 | macOS desktop | `desktop/macos/AGENTS.md` |
 | Windows/Linux desktop | `desktop/windows/AGENTS.md` |

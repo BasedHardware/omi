@@ -22,12 +22,19 @@ var timedSteps = map[string]struct{}{
 	"load": {}, "transcript": {}, "discard": {}, "notes": {}, "persist": {}, "claim": {}, "memories": {},
 	"vector": {}, "integrations": {}, "complete": {}, "speech": {},
 }
-var bounds = [...]float64{0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10, 30, 60, 120, 300}
+var stepBounds = []float64{0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10, 30, 60, 120, 300}
+
+var entitlementReleaseBounds = []float64{1, 5, 15, 30, 60, 120, 300, 600, 1200, 1800, 2700, 3600, 3900, 5400, 7200}
 
 type histogram struct {
-	bins  [len(bounds) + 1]uint64
-	sum   float64
-	count uint64
+	bounds []float64
+	bins   []uint64
+	sum    float64
+	count  uint64
+}
+
+func newHistogram(bounds []float64) histogram {
+	return histogram{bounds: bounds, bins: make([]uint64, len(bounds)+1)}
 }
 
 type metrics struct {
@@ -54,6 +61,7 @@ func kitCauses() map[queue.Cause]bool {
 func (m *metrics) declare(causes []queue.Cause) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
+	m.histograms["jobd_entitlement_release_seconds"] = newHistogram(entitlementReleaseBounds)
 	kit := kitCauses()
 	m.offContract = make(map[queue.Cause]bool, len(causes))
 	for _, c := range causes {
@@ -62,14 +70,16 @@ func (m *metrics) declare(causes []queue.Cause) {
 	for _, k := range kinds() {
 		for _, c := range causes {
 			for _, o := range queue.Terminals() {
-				m.counters[outcomeKey(k.Name, o, c)] = 0
+				if o != queue.TerminalExpiredUnfunded {
+					m.counters[outcomeKey(k.Name, o, c)] = 0
+				}
 			}
 			m.counters[retryKey(k.Name, c)] = 0
 			m.counters[yieldKey(k.Name, c)] = 0
 		}
 		for _, s := range k.Steps {
 			if _, timed := timedSteps[s]; timed {
-				m.histograms[stepKey(k.Name, s)] = histogram{}
+				m.histograms[stepKey(k.Name, s)] = newHistogram(stepBounds)
 			}
 		}
 	}
@@ -126,8 +136,13 @@ func (m *metrics) BudgetRequeue(c queue.Cause)                       { m.inc(bud
 func (m *metrics) Vendor(v wire.Vendor, r wire.Result)               { m.inc(vendorKey(v, r)) }
 func (m *metrics) Dedupe(f wire.Feature, hit bool)                   { m.inc(dedupeKey(f, hit)) }
 
-func (m *metrics) Step(k, s string, d time.Duration) {
-	key := stepKey(k, s)
+func (m *metrics) EntitlementReleased(d time.Duration) {
+	m.observe("jobd_entitlement_release_seconds", d)
+}
+
+func (m *metrics) Step(k, s string, d time.Duration) { m.observe(stepKey(k, s), d) }
+
+func (m *metrics) observe(key string, d time.Duration) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	h, ok := m.histograms[key]
@@ -135,7 +150,7 @@ func (m *metrics) Step(k, s string, d time.Duration) {
 		return
 	}
 	value := d.Seconds()
-	idx, _ := slices.BinarySearch(bounds[:], value)
+	idx, _ := slices.BinarySearch(h.bounds, value)
 	h.bins[idx]++
 	h.count++
 	h.sum += value
@@ -143,7 +158,7 @@ func (m *metrics) Step(k, s string, d time.Duration) {
 }
 
 func (a *api) prometheus(w http.ResponseWriter, r *http.Request) {
-	counts, oldest, err := a.store.Stats(r.Context())
+	stats, err := a.store.Stats(r.Context())
 	if err != nil {
 		unavailable(w)
 		return
@@ -151,9 +166,11 @@ func (a *api) prometheus(w http.ResponseWriter, r *http.Request) {
 	var b strings.Builder
 	b.WriteString("# TYPE jobd_jobs gauge\n")
 	for _, s := range queue.States() {
-		fmt.Fprintf(&b, "jobd_jobs{state=%q} %d\n", wireState(s), counts[s])
+		fmt.Fprintf(&b, "jobd_jobs{state=%q} %d\n", wireState(s), stats.Counts[s])
 	}
-	fmt.Fprintf(&b, "# TYPE jobd_oldest_nonterminal_age_seconds gauge\njobd_oldest_nonterminal_age_seconds %g\n", oldest)
+	fmt.Fprintf(&b, "# TYPE jobd_oldest_nonterminal_age_seconds gauge\njobd_oldest_nonterminal_age_seconds %g\n", stats.OldestSeconds)
+	wait := stats.WaitingOnCustomer
+	fmt.Fprintf(&b, "jobd_waiting_on_customer_owners %d\njobd_waiting_on_customer_units %d\njobd_waiting_on_customer_audio_seconds %g\njobd_expired_unfunded_total %d\n", wait.Owners, wait.Units, wait.AudioSeconds, wait.ExpiredUnfunded)
 	a.metrics.write(&b)
 	w.Header().Set("Content-Type", "text/plain; version=0.0.4; charset=utf-8")
 	if _, err := fmt.Fprint(w, b.String()); err != nil {
@@ -197,7 +214,7 @@ func (m *metrics) write(b *strings.Builder) {
 		}
 		fmt.Fprintf(b, "%s %d\n", k, m.counters[k])
 	}
-	b.WriteString("# TYPE jobd_step_seconds histogram\n")
+	b.WriteString("# TYPE jobd_entitlement_release_seconds histogram\n# TYPE jobd_step_seconds histogram\n")
 	keys = keys[:0]
 	for k := range m.histograms {
 		keys = append(keys, k)
@@ -205,15 +222,24 @@ func (m *metrics) write(b *strings.Builder) {
 	sort.Strings(keys)
 	for _, k := range keys {
 		h := m.histograms[k]
+		name, labels := "jobd_step_seconds", k
+		if k == "jobd_entitlement_release_seconds" {
+			name, labels = k, ""
+		}
+		bucketLabels := labels
+		if labels != "" {
+			bucketLabels += ","
+			labels = "{" + labels + "}"
+		}
 		var sum uint64
 		for i, bin := range h.bins {
-			sum += bin
 			le := "+Inf"
-			if i < len(bounds) {
-				le = strconv.FormatFloat(bounds[i], 'g', -1, 64)
+			if i < len(h.bounds) {
+				le = strconv.FormatFloat(h.bounds[i], 'g', -1, 64)
 			}
-			fmt.Fprintf(b, "jobd_step_seconds_bucket{%s,le=%q} %d\n", k, le, sum)
+			sum += bin
+			fmt.Fprintf(b, "%s_bucket{%sle=%q} %d\n", name, bucketLabels, le, sum)
 		}
-		fmt.Fprintf(b, "jobd_step_seconds_sum{%s} %g\njobd_step_seconds_count{%s} %d\n", k, h.sum, k, h.count)
+		fmt.Fprintf(b, "%s_sum%s %g\n%s_count%s %d\n", name, labels, h.sum, name, labels, h.count)
 	}
 }

@@ -142,6 +142,14 @@ pump no longer competes for any of them.
 | 4. Switch the serving sweep off: `BATCH_PIPELINE_SERVING_PROJECTION_SWEEP=off` on `backend-integration` through the config train | Release owner (go-ahead on the release issue); lead2 reviews custody | Follow-up `completed` per hour sustained at or above baseline with the pump alone. No rise in `attempts_exhausted` or pending owners. | Serving sweep back on first |
 | 5. Right-size CPU, memory and N | SCA-3120 owner reads back | As step 3 | Revert the size change |
 
+**Outcome, 2026-11-22 (SCA-3318).** Step 4 was attempted on 2026-11-22: the integration sweep-off tripped the
+pump floor twice (completions 34k/h -> 20k/h; the pump gained only about +500/h at 85-100% CPU with 32 drain
+slots against integration's ~450) and live traffic was rolled back at 02:07Z. The steady state is now **pump dark
+(`BATCH_PIPELINE_PROJECTION_PUMP_ENABLED=false`), integration sweep `'true'`** (#26017). Do not repeat step 4 on this
+design: the sweep's compute is the projection work, so a small pump cannot carry it. Rollback of the dark state:
+set only the pump flag back to `'true'`; never set integration's sweep `'off'` while the pump is dark. The service
+keeps 4 always-allocated instances while dark so the pinned enabled revision stays a traffic inverse.
+
 Rollback order at any step: serving sweep back on first, then the pump flag off, then delete the service.
 Deleting the service also needs `backend-projection-pump` removed from the read reconcile's required
 set first (`firestore_read_reconcile.py`), or every later day scores incomplete. A first create stays

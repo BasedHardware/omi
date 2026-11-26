@@ -26,7 +26,22 @@ from utils.batch_pipeline.intake import durable_status
 from utils.batch_pipeline.merge import OrderedMerge
 from utils.batch_pipeline.metrics import QueueMetrics
 from utils.batch_pipeline.pump import Pump
+from utils.batch_pipeline.retry_policy import quarantine_job
 from utils.batch_pipeline.scheduler import Scheduler, owner_key
+
+
+def test_quarantine_rejects_conflicting_evidence_before_transaction_access():
+    tx = Mock()
+    with pytest.raises(ValueError, match='mutually exclusive'):
+        quarantine_job(
+            tx,
+            {},
+            1,
+            'worker_failed',
+            lease_expired=True,
+            worker_failure={'stage': 'vad_windows', 'reason': 'unsupported_language'},
+        )
+    assert tx.mock_calls == []
 
 
 @pytest.mark.parametrize('value,expected', [('1', 1), ('8', 8), ('20', 20), ('0', 5), ('21', 5), ('bad', 5)])
@@ -296,6 +311,13 @@ def test_quarantine_transaction_reads_before_writes_and_telemetry_cannot_escape(
     assert queue.fail('bad', lease.token, 1, worker_failure={'stage': 'vad_windows', 'reason': 'unsupported_language'})
     quarantined = client.rows[('batch_pipeline_dev_jobs', 'bad')]
     assert quarantined['state'] == 'quarantined' and quarantined['worker_failure']['reason'] == 'unsupported_language'
+    assert quarantined['quarantine_diagnostic'] == {
+        'exception_class': 'worker_validation',
+        'stage': 'vad_windows',
+        'worker_reason': 'unsupported_language',
+        'provider_error': 'unknown',
+        'artifact_kind': 'unknown',
+    }
     assert quarantined['audio_uri'] == 'gs://synthetic/bad'
     assert not queue.fail('bad', lease.token, 2)
 

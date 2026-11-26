@@ -120,7 +120,7 @@ def _snapshot_payload(snapshot: Any, *, label: str) -> dict[str, Any] | None:
     return payload
 
 
-def _validated_hold(snapshot: Any) -> dict[str, Any] | None:
+def validate_legal_hold_snapshot(snapshot: Any) -> dict[str, Any] | None:
     payload = _snapshot_payload(snapshot, label="legal-hold authority")
     if payload is None:
         return None
@@ -189,7 +189,7 @@ def _gate_owned_by_this_context(gate: dict[str, Any] | None, uid: str) -> bool:
 
 
 def _assert_hold_inactive(snapshot: Any) -> None:
-    hold = _validated_hold(snapshot)
+    hold = validate_legal_hold_snapshot(snapshot)
     if hold is not None and hold["active"] is True:
         raise LegalHoldActive("destructive deletion is blocked by an active legal hold")
 
@@ -312,7 +312,7 @@ def read_legal_hold(uid: str, *, firestore_client: Any | None = None) -> dict[st
     if not uid:
         raise LegalHoldAuthorityUnavailable("legal-hold lookup requires a uid")
     client = account_deletion_firestore_client(firestore_client=firestore_client)
-    return _validated_hold(_document(client, f"{LEGAL_HOLDS_COLLECTION}/{uid}").get())
+    return validate_legal_hold_snapshot(_document(client, f"{LEGAL_HOLDS_COLLECTION}/{uid}").get())
 
 
 def list_legal_holds(
@@ -1109,5 +1109,6 @@ __all__ = [
     "same_kind_gate_running",
     "place_legal_hold",
     "read_legal_hold",
+    "validate_legal_hold_snapshot",
     "list_legal_holds",
 ]

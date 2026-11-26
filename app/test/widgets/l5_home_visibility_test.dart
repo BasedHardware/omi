@@ -196,11 +196,13 @@ void main() {
       final dayToggle = find.byKey(ValueKey('collapse_day_${DateUtils.dateOnly(now).toIso8601String()}'));
       await tester.tap(dayToggle);
       await tester.pump();
+      await tester.pump(const Duration(milliseconds: 250));
       expect(find.byKey(const Key('home_live_episode_row')), findsOneWidget);
       expect(find.byKey(const ValueKey('processing_wrapping')), findsOneWidget);
       expect(find.text('Phone call'), findsNothing);
       await tester.tap(dayToggle);
       await tester.pump();
+      await tester.pump(const Duration(milliseconds: 250));
       expect(find.text('Phone call'), findsOneWidget);
       expect(tester.takeException(), isNull);
       const output = String.fromEnvironment('L5_RENDER_OUTPUT');

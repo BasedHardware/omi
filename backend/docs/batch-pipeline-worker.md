@@ -348,15 +348,16 @@ The pump takes its GPU slot before starting the timer, so `pipelineDepth=2` does
 not double-count slot wait. Production must keep stage profiling enabled.
 
 The reverted 40/0.6 retune (#24481, reverted by #24493 before cluster apply)
-starved 35 minutes in the existing 24h replay. The replacement preserves every
-existing replay assertion: current 3h fixture mean/max 4.34/5 with zero hot
-minutes, older measured 24h mean/max 6.37/15 with zero starvation and backlog
-dominance. The current-volume step model has worst wait 3.35 minutes and catches
-up in 10 minutes. These are fixture/model results, not production throughput or
+starved 35 minutes in the existing 24h replay. At the historical 4/16 bounds,
+the replacement had 3h fixture mean/max 4.34/5 with zero hot minutes and 24h
+mean/max 6.37/15 with zero starvation and backlog dominance. The historical
+current-volume step model had a worst wait of 3.35 minutes and caught up in
+10 minutes. At the production 6/16 bounds, the 3h fixture has mean/max 6.0/6
+with zero hot minutes. These are fixture/model results, not production throughput or
 p95 qualification. The [search frontier](batch-pipeline-hpa-frontier.md) records
 the grid, rejected candidates, model limitations, and reproducible command.
 
-The synthetic 3.7x full-volume sensitivity model has mean/max 11.46/16 and six
+The historical 4/16 synthetic 3.7x full-volume sensitivity model has mean/max 11.46/16 and six
 hot minutes; peak 5m demand needs 18 workers at the 0.85 hot threshold. Full
 volume is unqualified under the unchanged 16-pod ceiling. Apply only at current
 volume, watch one shed cycle plus 24h, and decide capacity before streaming

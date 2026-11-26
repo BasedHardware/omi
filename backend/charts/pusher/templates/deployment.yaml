@@ -64,17 +64,19 @@ spec:
           {{- end }}
           image: "{{ if $digest }}{{ $repository }}@{{ $digest }}{{ else }}{{ $repository }}:{{ required "image.tag is required when image.digest is absent" .Values.image.tag }}{{ end }}"
           imagePullPolicy: {{ .Values.image.pullPolicy }}
+          {{- $v3StartupEnv := .Values.conversationsV3StartupEnv | default dict }}
           {{- $runtimeConfigMapName := required "runtimeConfigMapName is required" .Values.runtimeConfigMapName }}
           envFrom:
             - configMapRef:
                 name: {{ $runtimeConfigMapName | quote }}
-          {{- with .Values.env }}
+          {{- if or .Values.env $v3StartupEnv }}
           env:
             # Immutable rollout exporter identity, including supervised GPU children.
             - name: ROLLOUT_POD_TEMPLATE_HASH
               valueFrom:
                 fieldRef: {apiVersion: v1, fieldPath: "metadata.labels['pod-template-hash']"}
-            {{- range . }}
+            {{- range .Values.env }}
+            {{- if not (hasKey $v3StartupEnv .name) }}
             {{- $entry := deepCopy . }}
             {{- $valueFrom := get $entry "valueFrom" }}
             {{- if and (kindIs "map" $valueFrom) (hasKey $valueFrom "configMapKeyRef") }}
@@ -84,6 +86,10 @@ spec:
             {{- end }}
             {{- end }}
             {{- toYaml (list $entry) | nindent 12 }}
+            {{- end }}
+            {{- end }}
+            {{- if $v3StartupEnv }}
+            {{- include "pusher.conversationsV3StartupEnv" . | nindent 12 }}
             {{- end }}
           {{- end }}
           ports:

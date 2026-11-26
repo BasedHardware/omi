@@ -1,4 +1,5 @@
 # Delivery outcomes also remain in the shared omi_.* keep-list.
+# SCA-4372: the shared omi_.* keep-list includes the phone upload_hold_age_seconds histogram.
 # People scan eligibility/reuse remains covered by the shared omi_.* keep-list.
 # Quiet-check arm/empty-exit counters predate the omi_ prefix and are the
 # quiet-exit rollout readout; keep them explicitly (see the sync profile too).

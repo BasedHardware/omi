@@ -27,12 +27,11 @@ which ramp against their own percent (`AUDIO_ARCHIVE_STOP_PCM_PERCENT`,
 | `AUDIO_ARCHIVE_REGIONAL_CACHE_ENABLED` + `AUDIO_ARCHIVE_REGIONAL_CACHE_PERCENT` (default off/0) | Route merged/playback caches, sync renditions and new intake staging to `BUCKET_AUDIO_DERIVED`. Canonical raw stays multi-region. Ramps against its own percent (not `AUDIO_ARCHIVE_PERCENT`, which COALESCE pins at 100, or the enable flag would be an instant 100% cutover). |
 | `AUDIO_ARCHIVE_REGIONAL_CHUNKS_PERCENT` (default 0; pusher only; also needs `AUDIO_ARCHIVE_REGIONAL_CACHE_ENABLED`) | Route new pusher PCM chunk batches (`chunks/…batch.*`) to `BUCKET_AUDIO_DERIVED`. These are renditions of the canonical raw-live packs, which stay multi-region. Readers list and resolve both buckets; the merge copies inside the chunk's own bucket, deletes sweep both, and the v2 collision check covers both. Before admitting anyone: the derived bucket has no lifecycle `Delete` rule and has soft delete, and the batch worker has `audioDerivedBucket` set with read IAM on that bucket. Otherwise retained-audio references to it are refused. Roll back the percent to 0 and keep `BUCKET_AUDIO_DERIVED` configured. |
 | COALESCE (always on; `AUDIO_ARCHIVE_COALESCE_ENABLED` retired 2026-11-09) | Share concurrent identical file rebuild results, including failures; released admission permits retry. Existing fingerprint-named Cloud Tasks and distributed conversation leases still cover cross-instance rebuilds. |
-| `AUDIO_ARCHIVE_SEPARATE_MERGE_ENABLED` | Route admitted merge tasks to `AUDIO_MERGE_WORKER_URL` (full `/v2/audio-merge-jobs/run` URL). Non-admitted tasks retain `AUDIO_MERGE_HANDLER_URL`. |
 
 Stored-format decode support is permanent, with raw playback gated by READ.
 After phase C, rollback STOP_PCM first and retain READ for owners with raw-only
 historical audio until PCM has been regenerated and verified. Never disable
-READ for that cohort prematurely. Regional rendition reads survive write rollback. Keep destination bucket/worker URL configuration while
+READ for that cohort prematurely. Regional rendition reads survive write rollback. Keep destination bucket configuration while
 old objects/tasks exist. Stage C cannot remove already-written PCM and does not
 assume an hour of volatile raw is durable. Stage C queues supervised 60-second part commits within each hour without blocking
 the receive/STT loop. Pusher retires PCM only if the commit finishes before its
@@ -80,15 +79,6 @@ Do not change canonical lifecycle/retention policy. Existing legacy staging's
 seven-day soft-delete residue cannot be purged early; deletion verification must
 report it separately rather than claiming physical erasure.
 
-Merge and STT already have distinct Cloud Tasks job classes (`audio-merge`,
-`sync-jobs`) and distributed job leases. An independently sized merge service
-may reuse the same GitHub-built immutable backend image and customer-data
-identity, with authenticated Cloud Run ingress, the merge queue's existing
-invoker SA and its endpoint-specific OIDC audience. Configure
-`AUDIO_MERGE_WORKER_URL` on enqueue and consumer services, then test a single
-named task before the cohort ramp. Do not enable a worker without runtime-image,
-identity, index-readiness and route qualification.
-
 First deploy this SHA at the memory limit declared for `backend-sync` in
 `backend/deploy/ops/prod.yaml` through GitHub Actions. For a
 separate memory trial, the lead creates a tagged **no-traffic** revision at
@@ -113,7 +103,6 @@ Do not multiply the sampled 90% merge HTTP-time share by the full bill.
 | --- | --- |
 | 8→6 GiB | About **$13/day** net at unchanged billed seconds; unqualified at batch peaks. |
 | Rebuild coalescing | `$173.12 × duplicate billable fraction removed`; fraction unmeasured, conservative booked value **$0/day**. Counter measures calls, not billed seconds. |
-| Separate merge job class/worker | Direct separation alone **$0/day**; ideal combined CPU packing to 60% models **$38–58/day** across this and coalescing, not additive per-lever savings. |
 | GPU callbacks | **$0/day implemented/credited**. Current Parakeet `/v1/transcribe` and `/v2/transcribe` return inline results and have no durable submission/result callback contract. Async HTTP alone still bills Cloud Run waits. A durable idempotent GPU job/result store and authenticated callback are prerequisite; do not acknowledge sync completion before that result is checkpointed. |
 
 GCS measured baseline: replication **$54.89/day**, Class A **$65.82/day**
@@ -143,7 +132,7 @@ same 7-day baseline. These counters are operation evidence, not billing dollars.
 
 Conversation deletion also purges linked originals (including a shared multi-conversation upload),
 raw-live packs, chunks, merged and playback objects in both buckets and all generations.
-Missing regional/worker destinations log and retain the existing bucket/handler.
+Missing regional destinations log and retain the existing bucket/handler.
 Consent-off mobile uploads are accepted without cloud archival.
 
 ## Coexistence with verified owner packs (#21544)

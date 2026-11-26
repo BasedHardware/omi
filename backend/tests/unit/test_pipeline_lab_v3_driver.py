@@ -107,6 +107,34 @@ def test_plan_with_partials_feeds_them_before_the_finished_capture():
     assert 'partial' not in summary['instant_sources']
 
 
+def test_replay_counts_unspaced_speech_in_partial_and_final_arrivals():
+    row = live_rec('a', T0, segments=[(0, 2), (120, 125)])
+    row['transcript_segments'][0]['text'] = '日本語の録音'
+    row['transcript_segments'][1]['text'] = 'mixed內容'
+
+    arrivals = plan_arrivals([row], partial_step=timedelta(seconds=60)).arrivals
+
+    assert [arrival.words for arrival in arrivals] == [6, 9, 9]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(('characters', 'visible'), [(149, False), (150, True)])
+async def test_fake_replay_and_fate_use_script_aware_count(monkeypatch, characters, visible):
+    from testing.pipeline_lab.v3 import fake
+    from testing.pipeline_lab.v3.run import recording_fate
+
+    monkeypatch.setattr(fake, 'ask', lambda *a, **kw: {'kind': 'conversation'})
+    clock = fake._Clock(T0 + timedelta(minutes=10))
+    ops = fake.FakeV3Ops(tasks=LoopbackTasks(clock.now), clock=clock, proxy_url='http://unused.invalid')
+    row = rec('r', T0, transcript_segments=[{'text': '話' * characters, 'start': 0, 'end': 2}])
+    await ops.arrive('u', plan_arrivals([row]).arrivals[0])
+
+    assert await ops.reconcile('u') == 'committed'
+    derived = list(ops.conversations.values())
+    assert derived[0]['home_hidden'] is not visible
+    assert recording_fate([row], derived)['rows'][0]['words'] == characters
+
+
 def test_pre_v3_row_keeps_capture_facts_only():
     row = rec(
         'r',

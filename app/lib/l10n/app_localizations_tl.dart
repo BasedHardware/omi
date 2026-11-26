@@ -563,11 +563,11 @@ class AppLocalizationsTl extends AppLocalizations {
   String get hardwareSection => 'Hardware';
 
   @override
-  String get v2Undetected => 'V2 ay hindi na-detect';
+  String get v2Undetected => 'Hindi Available ang Offline Sync';
 
   @override
   String get v2UndetectedMessage =>
-      'Nakita namin na mayroon kang V1 device o ang iyong device ay hindi konektado. Ang SD Card functionality ay available lamang para sa V2 devices.';
+      'Kailangan ng Offline Sync ng nakakonektang Omi device na may SD card storage. Hindi ito sinusuportahan ng iyong kasalukuyang device.';
 
   @override
   String get endConversation => 'Tapusin ang Pag-uusap';
@@ -4979,6 +4979,9 @@ class AppLocalizationsTl extends AppLocalizations {
   String get showMore => 'magpakita ng higit pa ↓';
 
   @override
+  String get loadMoreConversations => 'Load More';
+
+  @override
   String get showLess => 'magpakita ng mas kaunti ↑';
 
   @override
@@ -7118,6 +7121,26 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String get authUnexpectedError => 'Unexpected error sa pag-sign in, mangyaring subukan ulit';
+
+  @override
+  String get accountSignInMethods => 'Mga paraan ng pag-sign in';
+
+  @override
+  String get accountAddSignInMethod => 'Magdagdag ng paraan ng pag-sign in';
+
+  @override
+  String get accountAddSignInMethodDetails =>
+      'Magdagdag ng paraan para mag-sign in sa Omi account na ito. Mananatili rito ang iyong plan, mga recording, at integration.';
+
+  @override
+  String get accountSignInConflictTitle => 'Sa ibang account nakaugnay ang paraang ito';
+
+  @override
+  String get accountSignInConflictDetails =>
+      'Naka-sign in ka pa rin sa account na ito. Nananatili sa bawat Omi account ang sarili nitong plan, mga recording, at integration.';
+
+  @override
+  String get accountSignInMethodAdded => 'Naidagdag ang paraan ng pag-sign in';
 
   @override
   String get authFailedToLinkGoogle => 'Nabigo ang pag-link gamit ang Google, mangyaring subukan ulit.';
@@ -14474,6 +14497,9 @@ class AppLocalizationsTl extends AppLocalizations {
   String get processingProgress => 'Pinoproseso ang iyong naghihintay na mga recording…';
 
   @override
+  String get waitingForTranscriptionAllowance => 'Naghihintay ng magagamit na quota sa transkripsiyon';
+
+  @override
   String get processingDeferred => 'Naghihintay ng pagproseso';
 
   @override
@@ -15435,9 +15461,6 @@ class AppLocalizationsTl extends AppLocalizations {
   String get stopThese => 'Itigil Ang Mga Ito';
 
   @override
-  String get meetingActionItemsTitle => 'Mga hakbang';
-
-  @override
   String get addToTasks => 'Idagdag sa Mga Gawain';
 
   @override
@@ -15844,4 +15867,109 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String get stillWorkingOnIt => 'Pinagtatrabahuhan pa rin ito.';
+
+  @override
+  String get deviceReadyToUse => 'Handa nang gamitin';
+
+  @override
+  String get firmwareUpdateFirmwareTooOld =>
+      'Napakaluma na ng firmware ng iyong device para sa update na ito. Makipag-ugnayan sa support para sa tulong sa pag-update ng iyong device.';
+
+  @override
+  String get firmwareUpdateAppRequired =>
+      'Kailangan ng firmware update na ito ng mas bagong Omi app. I-update ang app mula sa iyong app store, pagkatapos ay tingnan muli.';
+
+  @override
+  String get quietPayerTitle => 'Walang recording sa loob ng 5 araw';
+
+  @override
+  String get quietPayerMessage => 'Tingnan ang iyong Omi.';
+
+  @override
+  String get quietPayerCheck => 'Tingnan';
+
+  @override
+  String get playManageSubscription => 'Pamahalaan ang subscription';
+
+  @override
+  String get playBilledByGoogle => 'Sinisingil ng Google Play';
+
+  @override
+  String get playPurchasePending =>
+      'Nakabinbin ang bayad mo. Magsisimula ang Omi Pro kapag kinumpirma ito ng Google Play.';
+
+  @override
+  String get playPurchaseOtherAccount => 'Ang pagbiling ito sa Google Play ay pag-aari ng ibang Omi account.';
+
+  @override
+  String get playPurchaseNotConfirmed =>
+      'Hindi pa namin makumpirma ang iyong pagbili. Susubukan naming muli nang awtomatiko.';
+
+  @override
+  String get playRenewalTerms =>
+      'Awtomatikong nire-renew sa ipinakitang presyo hanggang kanselahin mo. Pamahalaan o kanselahin anumang oras sa Google Play.';
+
+  @override
+  String get playPaidAppUnavailable => 'Hindi available sa Android';
+
+  @override
+  String get pageNotAvailableInApp => 'Hindi available ang page na ito sa app.';
+
+  @override
+  String get shopOrderPlacedCheckEmail => 'Naipadala na ang order. Tingnan ang email mo para sa kumpirmasyon.';
+
+  @override
+  String get prepaidCodeEntry => 'May code ka?';
+
+  @override
+  String get prepaidCodeTitle => 'I-redeem ang code';
+
+  @override
+  String get prepaidCodeFieldHint => 'Ilagay ang iyong code';
+
+  @override
+  String get prepaidCodeRedeem => 'I-redeem';
+
+  @override
+  String get prepaidCodeRedeemed => 'Na-redeem ang code';
+
+  @override
+  String prepaidCodeResult(String reason) {
+    String _temp0 = intl.Intl.selectLogic(
+      reason,
+      {
+        'invalid': 'Hindi valid ang code na ito. Suriin ito at subukang muli.',
+        'used': 'Nagamit na ang code na ito.',
+        'expired': 'Nag-expire na ang code na ito.',
+        'hasPlan': 'May plan ka na. Hindi nagamit ang iyong code. I-redeem ito pagkatapos matapos ang iyong plan.',
+        'notPrepaid': 'Hindi ma-redeem dito ang code na ito. Gamitin ito kapag pumili ka ng plan.',
+        'notEligible': 'Hindi magagamit ang code na ito sa account na ito.',
+        'rateLimited': 'Masyadong maraming pagsubok. Subukang muli mamaya.',
+        'other': 'May nangyaring mali. Pakisubukang muli.',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get playStripeBilledOnWeb => 'Sinisingil sa pamamagitan ng omi.me. Kanselahin dito anumang oras.';
+
+  @override
+  String get playStripeBilledOnWebShort => 'Sinisingil sa pamamagitan ng omi.me.';
+
+  @override
+  String playStripePlanPaused(String plan) {
+    return 'Naka-pause ang iyong $plan plan.';
+  }
+
+  @override
+  String get firmwareNewestSupportedForDevice =>
+      'Ang iyong device ay nasa pinakabagong firmware version na kayang suportahan nito';
+
+  @override
+  String get firmwareSyncRecordingsFirstTitle => 'I-sync muna ang iyong mga recording';
+
+  @override
+  String get firmwareSyncRecordingsFirstMessage =>
+      'May mga recording pa na nasa iyong device. Hayaang matapos munang i-sync ang mga ito sa iyong phone, pagkatapos ay simulan ang pag-update.';
 }

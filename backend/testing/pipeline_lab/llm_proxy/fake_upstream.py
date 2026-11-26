@@ -9,9 +9,19 @@ Answers, deterministically from the request body:
   asks for structure (``response_format.json_schema``, ``tools``/``functions``, or a
   LangChain "conforms to the JSON schema below" block in the prompt) the reply is the
   smallest instance of that schema, with strings seeded from the last user message so
-  different conversations get different titles. Otherwise a short text reply.
+  different conversations get different titles. Otherwise a short text reply. Random
+  UUIDs (version 4) in that message are renamed ``uuid4#1``, ``uuid4#2``, ... in first-seen
+  order before seeding, the rule ``determinism.py`` applies to run artifacts: a prompt that
+  cites random ids the product minted (transcript segment ids, for one) gets the same answer
+  on every repeat.
 - ``POST /v1/messages`` (Anthropic shape), the same rules, ``tool_use`` when tools are given.
 - ``POST /v1/embeddings``: unit vectors from a hash of each input (``dimensions`` or 3072).
+- ``POST /v1/systemone`` with a Jev decision body (``state`` and ``questions``, ``utils/llm/jev_client.py``):
+  every ``noul`` question answers 1.0 (true) and every ``choice`` question puts all its probability on its
+  first option. The one Jev lane today asks ``worth_keeping``, so the fake keeps, as the chat fake answers
+  ``discard: false``. A 2xx answer is what lets the proxy cache the call; before this route the fake
+  answered 404, the proxy caches only 2xx, so ``jev_conversation_relevance`` missed on every identical
+  re-run. Other ``/v1/systemone`` bodies (gateway prefilter steps) still get 404.
 
 Usage counts are reported so the proxy prices the call. ``FakeUpstream(...).start()`` runs
 it on a loopback thread; ``python -m testing.pipeline_lab.llm_proxy.fake_upstream --port N``
@@ -50,6 +60,14 @@ def _schema_block(text: str) -> str | None:
 
 
 _WORD = re.compile(r"[A-Za-z][A-Za-z'-]+")
+# The same pattern as ``determinism._UUID4``: the ids the repeat comparison renames.
+_UUID4 = re.compile(r'\b[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\b')
+
+
+def _stable_ids(text: str) -> str:
+    """``text`` with every random UUID renamed ``uuid4#n`` in first-seen order (the same id, the same name)."""
+    names: dict[str, str] = {}
+    return _UUID4.sub(lambda match: names.setdefault(match.group(0), f'uuid4#{len(names) + 1}'), text)
 
 
 def _words(text: str) -> list[str]:
@@ -64,7 +82,7 @@ def _seed_text(messages: list[Any]) -> str:
         if isinstance(content, list):
             content = ' '.join(str(part.get('text') or '') for part in content if isinstance(part, dict))
         if content:
-            return str(content)
+            return _stable_ids(str(content))
     return 'synthetic conversation'
 
 
@@ -247,8 +265,26 @@ class _Handler(BaseHTTPRequestHandler):
             self._chat(body)
         elif path.endswith('/messages'):
             self._anthropic(body)
+        elif path.endswith('/systemone') and isinstance(body.get('questions'), dict) and 'state' in body:
+            self._jev(body)
         else:
             self._send(404, {'error': 'fake upstream: unsupported path'})
+
+    def _jev(self, body: dict[str, Any]) -> None:
+        answers: dict[str, Any] = {}
+        for name, question in body['questions'].items():
+            kind = question.get('type') if isinstance(question, dict) else None
+            if kind == 'choice':
+                options = question.get('options') or question.get('choices') or []
+                options = list(options.keys() if isinstance(options, dict) else options)
+                answers[name] = {'probabilities': {str(o): (1.0 if i == 0 else 0.0) for i, o in enumerate(options)}}
+            else:
+                answers[name] = {'noul': 1.0}
+        prompt_tokens = _tokens(str(body.get('state') or '')) + _tokens(json.dumps(body['questions']))
+        self._send(
+            200,
+            {'answers': answers, 'usage': {'prompt_tokens': prompt_tokens, 'completion_tokens': len(answers)}},
+        )
 
     def _embeddings(self, body: dict[str, Any]) -> None:
         inputs = body.get('input')

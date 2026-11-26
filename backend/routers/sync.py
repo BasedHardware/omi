@@ -11,10 +11,12 @@ from database import sync_redrive
 from database.sync_snapshot_resolve_cache import sync_snapshot_resolve_job
 from database.legal_holds import DestructiveOperationInProgress
 from utils import backfill_hours_cap
-from utils.sync import minimal_redrive, redrive_policy, playback_build
+from utils.sync import future_capture_request, minimal_redrive, redrive_policy, playback_build
+from utils.sync.future_capture_request import Outcome as FutureCaptureOutcome
 from utils.other.playback_identity import PlaybackSourceChanged
 from utils.capture.coverage_endpoint import router as coverage_router
 from utils.observability.sync_phases import sync_attempt, set_sync_metrics_lane
+from utils.observability.sync_upload import observe_hold_age
 import asyncio
 import json
 import logging
@@ -27,6 +29,9 @@ from dataclasses import replace
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
+from utils.sync.detached_tasks import consume_detached_outcome as _consume_detached_outcome
+from config.request_clock import bounded_hold_state, started_at
+from utils.batch_pipeline import upload_entitlement
 from fastapi import APIRouter, UploadFile, File, Depends, HTTPException, Query, Request, Response, Header
 from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel
@@ -34,6 +39,7 @@ from pydantic import BaseModel
 from config.summary_guarantee import repair_enabled as summary_repair_enabled
 from services import summary_debt_repair
 from config.policy import resolve_batch_policy
+from config.reliability_experiments import enabled as experiment, warm as warm_experiments
 from config.policy.ramp import audio_span
 from database.batch_ramp import ramp_admission_policy
 from database.batch_pipeline_privacy import BatchPrivacyBlocked
@@ -54,6 +60,8 @@ from utils.batch_pipeline.intake_outcome import (
 )
 from models.sync_job_status import (
     SyncJobStartResponse,
+    SyncReceiptsWaitRequest,
+    SyncReceiptsWaitResponse,
     SyncJobStatusResponse,
     SyncCaptureManifestRequest,
     SyncCaptureManifestResponse,
@@ -61,7 +69,7 @@ from models.sync_job_status import (
     SyncCaptureEndResponse,
     SyncUploadHoldReleaseResponse,
 )
-from routers.batch_pipeline import enrichment_response
+from routers.enrichment import enrichment_response
 from database import conversations as conversations_db
 from database import record_audio as record_audio_db
 from config import record_seal_rules as record_lease
@@ -73,7 +81,7 @@ from database import fair_use as fair_use_db
 from database import sync_dead_letters, sync_backfill_sequencer
 from database import users as users_db
 from database.memories import historical_scan_memo_scope
-from database.firestore_transaction_retry import transaction_retry_deadline_scope
+from database.firestore_transaction_retry import is_transaction_retry_failure, transaction_retry_deadline_scope
 from database.person_aliases import people_scan_attempt
 from database.firestore_read_metrics import FirestoreReadSite
 from database.firestore_read_origin import read_origin
@@ -112,6 +120,7 @@ from routers.listen.contracts import persisted_started_seconds
 from config.stt_cap_dispatch import offline_admission_enabled as cap_dispatch_enabled
 from utils.sync.cap_hold import hold_capture_if_exhausted
 from utils.sync.admission_responses import sync_content_in_progress_response, sync_finalization_retrying
+from utils.sync.assignment_errors import SyncAssignmentSuperseded
 from utils.analytics import record_sync_v1_usage as record_usage
 from utils.other import endpoints as auth
 from utils.account_cutover.access import should_skip_background_account_mutation
@@ -172,7 +181,8 @@ from utils.metrics import (
     OMI_SYNC_QUEUE_WAIT_SECONDS,
     OMI_SYNC_RECORDING_AGE_SECONDS,
 )
-from utils.sync.poll_limit import SYNC_POLL_WINDOW_SECONDS, admit_sync_job_poll, with_poll_hint
+from utils.sync.poll_limit import SYNC_POLL_WINDOW_SECONDS, admit_sync_job_poll, sync_job_poll_response
+from utils.sync.poll_metrics import record_sync_job_poll_request
 from utils.sync.retired_handle_ack import acknowledge_retired_handle
 from config.repeat_work import playback_on_demand
 from contextlib import nullcontext
@@ -266,12 +276,19 @@ from utils.sync.backfill import (
     reserve_backfill_speech,
     retry_after_next_utc_day,
 )
-from utils.batch_pipeline.live_upload import RecordUploadRoute, memoized_record_wait, registered_record_response
+from utils.batch_pipeline.live_upload import (
+    RecordUploadRoute,
+    has_conversation_wait_hint,
+    memoized_record_wait,
+    registered_record_response,
+)
 from utils.sync.content_id import compute_sync_content_id
 from utils.sync.failure_reason import stamped_failure_kwargs
 from utils.sync.capture_manifest import (
     claim_conversation_manifest,
     issue_capture_manifest,
+    issue_retry_handle,
+    valid_retry_handle,
     manifest_claims_match_paths,
     verify_capture_manifest,
 )
@@ -355,6 +372,7 @@ async def create_sync_capture_manifest(
     x_app_platform: Optional[str] = Header(None, alias='X-App-Platform'),
     x_device_id_hash: Optional[str] = Header(None, alias='X-Device-Id-Hash'),
     x_app_version: Optional[str] = Header(None, alias='X-App-Version'),
+    retry_handle: Optional[str] = Header(None, alias='X-Omi-Wal-Retry', include_in_schema=False),
 ):
     device = resolve_client_device(
         x_app_platform=x_app_platform,
@@ -399,7 +417,43 @@ async def create_sync_capture_manifest(
         app_build=sanitize_app_build(x_app_version),
         uid=uid,
     )
+    # This service may differ from backend-sync. Invite a probe only while a
+    # memo exists. All manifest effects above still happen on their normal route.
+    if valid_retry_handle(retry_handle, uid, device.client_device_id, payload.conversation_id, claims):
+        try:
+            if await has_conversation_wait_hint(uid, payload.conversation_id):
+                return JSONResponse(content={'manifest': manifest}, headers={'X-Omi-Wal-Retry': 'check'})
+        except Exception:
+            pass
     return SyncCaptureManifestResponse(manifest=manifest)
+
+
+@router.put(
+    '/v2/sync-local-files',
+    status_code=204,
+    response_class=Response,
+    responses={503: {'description': 'Only a typed record_capture_pending response defers the multipart upload'}},
+)
+async def check_sync_retry(
+    payload: SyncCaptureManifestRequest,
+    uid: str = Depends(auth.get_current_user_uid),
+    x_app_platform: Optional[str] = Header(None, alias='X-App-Platform'),
+    x_device_id_hash: Optional[str] = Header(None, alias='X-Device-Id-Hash'),
+    retry_handle: Optional[str] = Header(None, alias='X-Omi-Wal-Retry'),
+):
+    """Check a live wait after manifest admission. A 204 directs the client to upload."""
+    device = resolve_client_device(x_app_platform=x_app_platform, x_device_id_hash=x_device_id_hash)
+    claims = [item.model_dump() for item in payload.files]
+    if valid_retry_handle(retry_handle, uid, device.client_device_id, payload.conversation_id, claims):
+        try:
+            wait = await memoized_record_wait(uid, payload.conversation_id)
+        except Exception:
+            wait = None
+        if wait is not None and valid_retry_handle(
+            retry_handle, uid, device.client_device_id, payload.conversation_id, claims
+        ):
+            return wait
+    return Response(status_code=204)
 
 
 def _store_capture_end(uid: str, recording_session_id: str, marker: dict) -> str:
@@ -707,6 +761,7 @@ def _backfill_day_cap_defers(uid: str, lane: SyncLane, repair_identity: Optional
 )
 @max_part_size(SYNC_AUDIO_MAX_PART_SIZE)
 @custody_lease.custody_upload
+@future_capture_request.observe_upload
 async def sync_local_files_v2(
     files: List[UploadFile] = File(...),
     uid: str = Depends(auth.get_current_user_uid),
@@ -734,7 +789,11 @@ async def sync_local_files_v2(
     x_omi_firmware_version: Optional[str] = Header(None, alias='X-Omi-Firmware-Version'),
     x_omi_device_model: Optional[str] = Header(None, alias='X-Omi-Device-Model'),
     x_omi_conversation_geolocation: Optional[str] = Header(None, alias='X-Omi-Conversation-Geolocation'),
+    x_omi_wal_retry: Optional[str] = Header(None, alias='X-Omi-Wal-Retry', include_in_schema=False),
     x_omi_upload_trace: Optional[str] = Header(None, alias='X-Omi-Upload-Trace', include_in_schema=False),
+    x_omi_upload_hold: Optional[str] = Header(None, alias='X-Omi-Upload-Hold', include_in_schema=False),
+    x_omi_upload_recovered: Optional[str] = Header(None, alias='X-Omi-Upload-Recovered', include_in_schema=False),
+    x_omi_upload_hold_age_ms: Optional[str] = Header(None, alias='X-Omi-Upload-Hold-Age-Ms', include_in_schema=False),
 ):
     """
     Async version of sync-local-files. Saves raw files and returns 202
@@ -747,6 +806,9 @@ async def sync_local_files_v2(
     supplied_conversation_id = conversation_id  # Authenticate original custody proof before ignoring a stale target.
     repair_identity = repair_job_id if isinstance(repair_job_id, str) else None
     capture_received_at = time.time()
+    upload_arrived_at = started_at.get()
+    if upload_arrived_at is None:
+        upload_arrived_at = capture_received_at  # Direct/internal adapter without HTTP middleware.
     # Measurement only: how long the oldest file waited on the phone, and why.
     capture_end.observe_trace(
         x_omi_upload_trace if isinstance(x_omi_upload_trace, str) else None, received_at=capture_received_at
@@ -763,8 +825,11 @@ async def sync_local_files_v2(
                 },
             )
         return JSONResponse(status_code=200, content={'new_memories': [], 'updated_memories': []})
+    clamp_enabled = future_capture_clamp_enabled()
+    if clamp_enabled:
+        future_capture_request.classify_upload((file.filename or '' for file in files), capture_received_at)
     try:
-        recovery_hint = future_capture_clamp_enabled() and any(
+        recovery_hint = clamp_enabled and any(
             is_implausible_future_capture_time(get_timestamp_from_path(file.filename or ''), now=capture_received_at)
             or (
                 capture_clock_run_from_path(file.filename or '')
@@ -781,6 +846,7 @@ async def sync_local_files_v2(
                 db_executor, recovery_source_conversation, uid, supplied_conversation_id
             )
         except BatchPrivacyBlocked as error:
+            future_capture_request.mark(FutureCaptureOutcome.PREFLIGHT_REFUSED)
             return (
                 JSONResponse(status_code=200, content=deleted_conversation_result(0))
                 if is_conversation_deleted(error)
@@ -790,6 +856,7 @@ async def sync_local_files_v2(
     if repair_identity is None and (recent_wait := await memoized_record_wait(uid, conversation_id)) is not None:
         # The same conversation-level custody wait answered moments ago: repeat
         # it before saving, archiving or decoding these bytes (audio retained).
+        future_capture_request.mark(FutureCaptureOutcome.PRIOR_CUSTODY)
         return recent_wait
     if isinstance(recording_session_id, str):
         recording_session_id = recording_session_id.strip() or None
@@ -798,6 +865,7 @@ async def sync_local_files_v2(
     sync_app_build = sanitize_app_build(x_app_version)
     ledger_fence_mode = await run_blocking(db_executor, get_sync_ledger_fence_mode)
     if ledger_fence_mode is SyncLedgerFenceMode.STANDBY:
+        future_capture_request.mark(FutureCaptureOutcome.PREFLIGHT_REFUSED)
         # The one-time hard-revision-retirement cutover intentionally blocks
         # before app-managed raw-file persistence or a content claim. Clients
         # retain their WAL/audio and retry after the services become active.
@@ -883,7 +951,11 @@ async def sync_local_files_v2(
     except Exception:
         pass
     if lane_decision.lane is SyncLane.BACKFILL:
-        await run_blocking(sync_executor, validate_backfill_uploads, files)
+        try:
+            await run_blocking(sync_executor, validate_backfill_uploads, files)
+        except HTTPException:
+            future_capture_request.mark(FutureCaptureOutcome.PREFLIGHT_REFUSED)
+            raise
     logger.info(
         'sync_lane_admission uid=%s device_hash=%s platform=%s app_version=%s lane=%s trust=%s age_seconds=%s reason=%s',
         uid,
@@ -896,6 +968,7 @@ async def sync_local_files_v2(
         lane_decision.reason,
     )
     if lane_decision.lane == SyncLane.BACKFILL and os.getenv('SYNC_BACKFILL_ENABLED', 'true').lower() != 'true':
+        future_capture_request.mark(FutureCaptureOutcome.PREFLIGHT_REFUSED)
         return JSONResponse(
             status_code=503,
             headers={'Retry-After': '3600', 'X-Omi-Rate-Limit-Reason': 'backfill_capacity'},
@@ -912,6 +985,7 @@ async def sync_local_files_v2(
         pass
 
     if not lane_decision.automatic_recovery_allowed and repair_identity is None:
+        future_capture_request.mark(FutureCaptureOutcome.PREFLIGHT_REFUSED)
         return JSONResponse(
             status_code=422,
             content={
@@ -921,6 +995,7 @@ async def sync_local_files_v2(
             },
         )
     if fresh_refused:
+        future_capture_request.mark(FutureCaptureOutcome.PREFLIGHT_REFUSED)
         return await _fair_use_restriction_response(
             uid=uid,
             retry_after=retry_after,
@@ -959,6 +1034,7 @@ async def sync_local_files_v2(
         if await run_blocking(
             critical_executor, _backfill_day_cap_defers, uid, lane_decision.lane, repair_identity, allowance
         ):
+            future_capture_request.mark(FutureCaptureOutcome.PREFLIGHT_REFUSED)
             logger.info('sync_upload_refused uid=%s status=503 reason=backfill_day_cap', uid)
             return JSONResponse(
                 status_code=503,
@@ -999,6 +1075,7 @@ async def sync_local_files_v2(
         try:
             paths = await run_blocking(sync_executor, _retrieve_file_paths_v2, files, uid, job_id, probe_future=True)
         except SyncCaptureTimeRejected:
+            future_capture_request.mark(FutureCaptureOutcome.PREFLIGHT_REFUSED)
             logger.info('sync_upload_refused uid=%s status=400 reason=invalid_capture_time', uid)
             # Typed 400 for implausible capture times (beyond the shared
             # future-skew tolerance or before 2024). Released clients only see
@@ -1026,12 +1103,18 @@ async def sync_local_files_v2(
                 now=datetime.fromtimestamp(capture_received_at, timezone.utc),
             )
             if path not in retained_capture_offsets and rejection is not None:
+                future_capture_request.mark(FutureCaptureOutcome.PREFLIGHT_REFUSED)
                 _record_capture_time_admission(rejection, ahead_seconds=max(0, stamp - capture_received_at))
                 raise FutureCaptureRefused()
         retained_capture = bool(retained_capture_offsets)
         if retained_capture:
-            await run_blocking(sync_executor, validate_backfill_paths, paths)
+            try:
+                await run_blocking(sync_executor, validate_backfill_paths, paths)
+            except BackfillInputLimitExceeded:
+                future_capture_request.mark(FutureCaptureOutcome.PREFLIGHT_REFUSED)
+                raise
             if os.getenv('SYNC_BACKFILL_ENABLED', 'true').lower() != 'true':
+                future_capture_request.mark(FutureCaptureOutcome.PREFLIGHT_REFUSED)
                 raise HTTPException(503, detail='Historical recovery is paused; retain local audio')
             lane_decision = replace(
                 lane_decision,
@@ -1056,6 +1139,7 @@ async def sync_local_files_v2(
                     db_executor, recovery_source_conversation, uid, supplied_conversation_id
                 )
             except BatchPrivacyBlocked as error:
+                future_capture_request.mark(FutureCaptureOutcome.PREFLIGHT_REFUSED)
                 return (
                     JSONResponse(status_code=200, content=deleted_conversation_result(0))
                     if is_conversation_deleted(error)
@@ -1080,6 +1164,7 @@ async def sync_local_files_v2(
                 any(capture_clock_run_from_path(path) for path in future_paths)
                 and not client_device_context.client_device_id
             ):
+                future_capture_request.mark(FutureCaptureOutcome.IDENTITY_REQUIRED)
                 return JSONResponse(
                     status_code=503,
                     headers={'Retry-After': '30'},
@@ -1127,6 +1212,7 @@ async def sync_local_files_v2(
             if backfill_slot_acquired:
                 await run_blocking(db_executor, release_backfill_slot, uid, job_id)
                 backfill_slot_acquired = False
+            future_capture_request.mark(FutureCaptureOutcome.PREFLIGHT_REFUSED)
             return JSONResponse(
                 status_code=422,
                 content={
@@ -1142,6 +1228,7 @@ async def sync_local_files_v2(
             # Already accepted bytes may outlive the new-upload lookback. Only
             # the exact original owner may cross that boundary; a changed or
             # foreign bundle cannot write an archive or enter fresh admission.
+            future_capture_request.mark(FutureCaptureOutcome.PREFLIGHT_REFUSED)
             return JSONResponse(
                 status_code=409,
                 content={'code': 'sync_repair_bundle_changed', 'detail': 'Retain the original complete local upload'},
@@ -1203,12 +1290,33 @@ async def sync_local_files_v2(
                 ),
                 policy=batch_policy,
                 before_coverage=archive_originals,
+                capture_claims=capture_claims,
                 loaded_conversation=record_snapshot if record_snapshot.get('record_lane_owner') else None,
                 # A legacy_final_pass_v1 owner is re-homed once legacy is dark.
                 legacy_mode=legacy_mode,
                 evidence=intake_evidence,
             )
         if isinstance(record_response, JSONResponse):
+            # Only this branch has both checked the signed manifest against
+            # staged bytes and identified the exact conversation memo writer.
+            # An early memo hit has not verified the bytes. A coverage wait can
+            # still require archive, lease, settlement and partial-wake work.
+            if (
+                x_omi_wal_retry == '1'
+                and conversation_id
+                and getattr(record_response, 'retry_conversation', None) == conversation_id
+                and has_server_capture_proof
+                and client_device_context.client_device_id
+                and manifest_claims
+                and filenames == upload_filenames
+                and len(set(filenames)) == len(filenames)
+                and not any(capture_clock_run_from_path(path) for path in paths)
+                and all(get_timestamp_from_path(path) <= capture_received_at for path in paths)
+            ):
+                record_response.headers['X-Omi-Wal-Retry'] = issue_retry_handle(
+                    uid, client_device_context.client_device_id, conversation_id, manifest_claims
+                )
+            future_capture_request.mark(FutureCaptureOutcome.PRIOR_CUSTODY)
             return record_response
 
         await archive_originals()
@@ -1226,6 +1334,7 @@ async def sync_local_files_v2(
             # nor rollback may start a legacy twin or release this batch claim.
             sequencer_registration_started = True
             batch_attempted = True
+            upload_recovered = x_omi_upload_recovered == '1'
             batch_response = await accept_batch_upload(
                 uid=uid,
                 job_id=job_id,
@@ -1241,6 +1350,14 @@ async def sync_local_files_v2(
                 client_platform=client_device_context.platform,
                 byok_enabled=byok_enabled,
                 intake_context={
+                    'upload_arrived_at': upload_arrived_at,
+                    'upload_entitlement': await run_blocking(db_executor, upload_entitlement.classify, uid),
+                    **(
+                        {'upload_hold_state': bounded_hold_state(x_omi_upload_hold)}
+                        if isinstance(x_omi_upload_hold, str)
+                        else {}
+                    ),
+                    **({'upload_recovered': True} if upload_recovered else {}),
                     **({'capture_source_conversation_id': recovery_source_id} if recovery_source_id else {}),
                     **({'capture_clock_policy': capture_clock_policy} if capture_clock_policy is not None else {}),
                     **(
@@ -1286,10 +1403,13 @@ async def sync_local_files_v2(
                 # owner is a follow-on, not a batch landing).
                 if intake_evidence.batch_accepted and not intake_evidence.final_pass_owner_followed:
                     record_upload_outcome('batch')
+                    observe_hold_age(x_omi_upload_hold_age_ms, x_omi_upload_hold, upload_recovered)
                 return batch_response
             sequencer_registration_started = False
 
         if future_capture:
+            if not batch_attempted:
+                future_capture_request.mark(FutureCaptureOutcome.ROUTE_DECLINED)
             # A cohort/language/capacity decline retains the phone's files;
             # this policy can never fall through to a legacy reader.
             raise FutureCaptureRefused()
@@ -1853,6 +1973,7 @@ async def sync_local_files_v2(
         )
     except HTTPException as error:
         if error.status_code == 400:
+            future_capture_request.mark(FutureCaptureOutcome.PREFLIGHT_REFUSED)
             reason = error.detail.get('code', 'server_refused') if isinstance(error.detail, dict) else 'server_refused'
             logger.info('sync_upload_refused uid=%s status=400 reason=%s', uid, reason)
             return JSONResponse(status_code=400, content={'code': reason, 'detail': 'Invalid sync file format'})
@@ -1914,6 +2035,7 @@ def get_sync_job_status(
 ):
     """Poll for the status of an async sync job."""
     OMI_SYNC_JOB_POLL_REQUESTS_TOTAL.inc()
+    record_sync_job_poll_request(uid)
     if not admit_sync_job_poll(uid):
         OMI_SYNC_JOB_POLL_THROTTLED_TOTAL.inc()
         raise HTTPException(
@@ -1921,6 +2043,10 @@ def get_sync_job_status(
             detail='Sync job polling too frequent; retry later',
             headers={'Retry-After': str(SYNC_POLL_WINDOW_SECONDS)},
         )
+    return _read_sync_job_status(job_id, uid, surface_open, x_omi_custody_repair_protocol)
+
+
+def _read_sync_job_status(job_id: str, uid: str, surface_open: bool, x_omi_custody_repair_protocol: Optional[str]):
     try:
         durable = (
             get_durable_job_status(job_id, uid, artifact_retry=True)
@@ -1929,8 +2055,12 @@ def get_sync_job_status(
         )
     except BatchPrivacyBlocked:
         return privacy_blocked_response()
+    except Exception as error:
+        if not is_transaction_retry_failure(error):
+            raise
+        raise sync_finalization_retrying() from error
     if durable is not None:
-        return with_poll_hint(durable, surface_open=surface_open)
+        return sync_job_poll_response(durable, uid, surface_open)
     job = get_sync_job(job_id)
     if job and job['uid'] != uid:
         raise HTTPException(status_code=403, detail="Not authorized to view this sync job")
@@ -1950,11 +2080,11 @@ def get_sync_job_status(
             reason='unavailable',
             outcome='recovered',
         )
-        return with_poll_hint(completed, surface_open=surface_open)
+        return sync_job_poll_response(completed, uid, surface_open)
     if not job:
         retired = acknowledge_retired_handle(job_id, uid)  # custody-held expiry-retired handles
         if retired is not None:
-            return with_poll_hint(retired, surface_open=surface_open)
+            return sync_job_poll_response(retired, uid, surface_open)
         raise HTTPException(status_code=404, detail="Sync job not found or expired")
 
     # A stale state can only be finalized by the holder of the same run lease
@@ -2090,6 +2220,7 @@ def get_sync_job_status(
         'processed_segments': job.get('processed_segments', 0),
         'successful_segments': job.get('successful_segments', 0),
         'failed_segments': job.get('failed_segments', 0),
+        'completed_at': job.get('completed_at'),
         'lane': job.get('lane', SyncLane.FRESH.value),
         'reason_code': job.get('reason_code'),
         'retry_after': job.get('retry_after'),
@@ -2102,7 +2233,114 @@ def get_sync_job_status(
         if job.get('error'):
             resp['error'] = job['error']
 
-    return with_poll_hint(resp, surface_open=surface_open)
+    return sync_job_poll_response(resp, uid, surface_open)
+
+
+# Bounds the account-deletion recheck so a hung marker read cannot outlive the client's request.
+RECEIPT_DELETION_CHECK_TIMEOUT_SECONDS = 3
+
+
+@router.post(
+    '/v2/sync-local-files/receipts/wait',
+    response_model=SyncReceiptsWaitResponse,
+    response_model_exclude_none=True,
+    include_in_schema=False,
+)
+async def wait_for_sync_receipts(
+    body: SyncReceiptsWaitRequest, request: Request, uid: str = Depends(auth.get_current_user_uid)
+):
+    # Experiment receipt_long_poll. For an account it is off for, the path answers as an unknown route does.
+    await warm_experiments(uid)
+    if not experiment('receipt_long_poll', uid):
+        raise HTTPException(status_code=404, detail='Not Found')
+    if not await run_blocking(db_executor, admit_sync_job_poll, uid):
+        raise HTTPException(
+            status_code=429,
+            detail='Receipt requests too frequent',
+            headers={'Retry-After': str(SYNC_POLL_WINDOW_SECONDS)},
+        )
+    result = await _wait_for_sync_receipts(body, request, uid)
+    if not result['receipts'] and not result['fallback']:
+        return result
+    # The auth fence ran before a wait of up to ~23s. Deletion can become pending meanwhile, and a
+    # completed Redis job carries its raw result with no deletion check of its own. One uncached
+    # marker read gates every answer that names a job; an unreadable marker answers no job.
+    try:
+        blocked = await asyncio.wait_for(
+            run_blocking(db_executor, account_deletion_blocks_user_work, uid, fresh=True),
+            RECEIPT_DELETION_CHECK_TIMEOUT_SECONDS,
+        )
+    except Exception as error:
+        logger.error('event=sync_receipts_wait outcome=deletion_check_failed exception_type=%s', type(error).__name__)
+        raise HTTPException(status_code=503, detail='Receipt waiter unavailable')
+    if blocked:
+        logger.info('event=sync_receipts_wait outcome=account_pending_deletion')
+        return JSONResponse(status_code=503, content={'status': 'account_pending_deletion'})
+    return result
+
+
+async def _wait_for_sync_receipts(body: SyncReceiptsWaitRequest, request: Request, uid: str) -> dict:
+    from database.redis_db import get_async_redis_client
+    from database.sync_jobs import receipt_channel, receipt_note_key, TERMINAL_STATUSES
+
+    jobs = set(body.job_ids)
+    # Experiment receipt_finished_note: job state is read only for a job that a note or a wake
+    # says finished. Off, every start, wake and expiry reads every listed job.
+    noted = experiment('receipt_finished_note', uid)
+
+    def snapshot(named=None):
+        receipts, fallback = [], []
+        for job_id in jobs if named is None else named:
+            try:
+                status = _read_sync_job_status(job_id, uid, False, None)
+            except HTTPException as error:
+                if error.status_code not in (403, 404, 503):
+                    raise
+                fallback.append(job_id)
+                continue
+            if not isinstance(status, dict) or status.get('reason_code') in (
+                'batch_unit_held',
+                'batch_artifact_missing',
+                'source_alignment_pending',
+            ):
+                fallback.append(job_id)
+            elif status.get('status') in TERMINAL_STATUSES:
+                receipts.append(status)
+            elif named is not None:
+                # Named as finished but not final: the paced status polls own this handle.
+                fallback.append(job_id)
+        return {'receipts': receipts, 'fallback': fallback}
+
+    channel = await run_blocking(db_executor, receipt_channel, uid)
+    redis = await get_async_redis_client()
+    async with redis.pubsub() as sub:
+        await sub.subscribe(channel)
+        # Wait for Redis to acknowledge subscription before reading job state.
+        message = await sub.get_message(timeout=3)
+        if not message or message['type'] != 'subscribe':
+            raise HTTPException(status_code=503, detail='Receipt waiter unavailable')
+        if noted:
+            # A job that finished before the subscription left a note; a later one publishes a wake.
+            listed = sorted(jobs)
+            keys = await run_blocking(db_executor, lambda: [receipt_note_key(uid, job_id) for job_id in listed])
+            notes = await redis.mget(keys)
+            finished = [job_id for job_id, note in zip(listed, notes) if note]
+            result = (
+                await run_blocking(db_executor, snapshot, finished) if finished else {'receipts': [], 'fallback': []}
+            )
+        else:
+            result = await run_blocking(db_executor, snapshot)
+        deadline = time.monotonic() + 20
+        while not result['receipts'] and not result['fallback']:
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                return result if noted else await run_blocking(db_executor, snapshot)
+            if await request.is_disconnected():
+                return result
+            message = await sub.get_message(ignore_subscribe_messages=True, timeout=min(1, remaining))
+            if message and message['data'] in jobs:
+                result = await run_blocking(db_executor, snapshot, [message['data']] if noted else None)
+        return result
 
 
 async def _maintain_uid_sequencer_lease(
@@ -2607,17 +2845,6 @@ def _budget_deferral_fallback(reason: str, outcome: str) -> JSONResponse:
         outcome=outcome,
     )
     return JSONResponse(status_code=409, content={'status': 'locked'})
-
-
-def _consume_detached_outcome(task: asyncio.Future) -> None:
-    """Retrieve a detached task's eventual outcome once it settles, so a late
-    failure of work its handler has stopped waiting on cannot resurface as an
-    unretrieved-exception warning."""
-    if not task.done():
-        task.add_done_callback(_consume_detached_outcome)
-        return
-    if not task.cancelled():
-        task.exception()
 
 
 def _is_uncertain_enqueue_error(error: BaseException) -> bool:
@@ -3483,7 +3710,9 @@ async def _run_sync_job_attempt(request: Request, task_retry_count: int, attempt
                 )
         except BackfillStoragePressure:
             raise
-        except SyncConversationPersistenceFenced:
+        except (SyncConversationPersistenceFenced, SyncAssignmentSuperseded):
+            # Both mean another generation or the user owns this conversation.
+            # Acknowledge the delivery terminally: retrying cannot change it.
             latest_job = await run_blocking(db_executor, get_sync_job, job_id) or job
             await finalize_sync_job_superseded(
                 job_id=job_id,

@@ -27,6 +27,16 @@ Keep rollout at zero until effective-deadline/fallback results and gateway effor
 parity are accepted. Provider read timeouts are not strict wall-clock cancellation;
 process termination and requests abandoned by clients remain inherited risks.
 
+One route caps the notes step per request instead of raising it: the synchronous
+`POST /v1/conversations/from-segments` ingest sets a request deadline
+(`utils/other/request_deadline.py`, 25s) so a failing notes step answers the
+retryable 503 inside the client's own 30s HTTP pool deadline. The cap is a
+request-scoped ceiling on `notes_mount()` and the agentic budget, not a smaller
+default: every other caller keeps `NOTES_LOOP_DEADLINE_SECONDS` and
+`notes_agent_policy.DEADLINE_SECONDS` unchanged. A notes call that would have
+succeeded past the cap now returns the retryable 503 instead of a late 200; the
+conversation is rolled back by the admission guard and the client retries.
+
 Direct DEV requests using a 115s socket deadline returned complete deterministic
 tiered notes as late as 136.40s, with zero endpoint timeout/fallback errors.
 This is a quiet-read timeout, NOT a total wall-clock deadline; it does not

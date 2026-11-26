@@ -16,11 +16,13 @@ import 'package:omi/services/wals/wal_backlog_telemetry.dart';
 import 'package:omi/utils/analytics/registry/events.g.dart';
 import 'package:omi/services/wals/recording_transfer_coordinator.dart';
 import 'package:omi/services/wals/sync_job_poller.dart';
+import 'package:omi/services/wals/sync_reconciler.dart';
 import 'package:omi/services/wals/sync_rate_limiter.dart';
 import 'package:omi/services/wals/sync_upload_gate.dart';
 import 'package:omi/services/wals/wal.dart';
 import 'package:omi/services/wals/wal_interfaces.dart';
 import 'package:omi/utils/wal_file_manager.dart';
+import 'package:omi/utils/reliability_experiments.dart';
 import 'package:omi/pages/conversations/sync_cooldown_copy.dart';
 import 'package:omi/l10n/app_localizations_en.dart';
 
@@ -125,6 +127,180 @@ void main() {
     expect(calls, 3);
     expect(maxActive, 1);
     expect(sync.testWals.single.status, WalStatus.synced);
+  });
+
+  group('status_fetch_failure_isolated', () {
+    tearDown(() => ReliabilityExperiments.overrideForTesting(null));
+    late List<String> calls;
+    LocalWalSyncImpl stalledFirstJob() {
+      calls = <String>[];
+      return LocalWalSyncImpl(_Listener(),
+          now: () => now,
+          persistWals: (_) async {},
+          jobStatusFetcher: (id) async {
+            calls.add(id);
+            if (id == 'job-0') throw TimeoutException('stalled status GET');
+            return SyncJobFetch(SyncJobFetchOutcome.ok,
+                SyncJobStatusResponse(jobId: id, status: id == 'job-1' ? 'processing' : 'completed'));
+          })
+        ..testWals = [for (var i = 0; i < 3; i++) pending(i)];
+    }
+
+    test('on: a timed-out GET and a still-processing job do not hide a completed sibling', () async {
+      ReliabilityExperiments.overrideForTesting({'status_fetch_failure_isolated'});
+      final sync = stalledFirstJob();
+      await sync.reconcileUploadedWals();
+      expect(calls, ['job-0', 'job-1', 'job-2']);
+      expect(sync.testWals.map((w) => w.status), [WalStatus.uploaded, WalStatus.uploaded, WalStatus.synced]);
+    });
+
+    test('off (baseline): a timed-out GET ends the pass before its siblings are read', () async {
+      ReliabilityExperiments.overrideForTesting({});
+      final sync = stalledFirstJob();
+      await expectLater(sync.reconcileUploadedWals(), throwsA(isA<TimeoutException>()));
+      expect(calls, ['job-0']);
+      expect(sync.testWals.map((w) => w.status), [WalStatus.uploaded, WalStatus.uploaded, WalStatus.uploaded]);
+    });
+  });
+
+  group('receipt_finished_note: paced status polls for jobs the wait covers', () {
+    tearDown(() => ReliabilityExperiments.overrideForTesting(null));
+
+    for (final on in [false, true]) {
+      test(
+          on
+              ? 'on: a waiting job is polled once it is a minute old, then at most once a minute'
+              : 'off (baseline): a job the wait covers is never polled', () async {
+        ReliabilityExperiments.overrideForTesting({'receipt_long_poll', if (on) 'receipt_finished_note'});
+        final calls = <String>[];
+        final sync = LocalWalSyncImpl(_Listener(),
+            now: () => now,
+            persistWals: (_) async {},
+            receiptWaitFetcher: (ids, abort) => abort.then((_) => const SyncReceiptBatch({}, {})),
+            jobStatusFetcher: (id) async {
+              calls.add(id);
+              return SyncJobFetch(SyncJobFetchOutcome.ok, SyncJobStatusResponse(jobId: id, status: 'processing'));
+            });
+        final seconds = now.millisecondsSinceEpoch ~/ 1000;
+        sync.testWals = [pending(0)..uploadedAt = seconds - 30, pending(1)..uploadedAt = seconds - 120];
+        sync.startReceiptWait((_) async {});
+        await sync.reconcileUploadedWals();
+        expect(calls, on ? ['job-1'] : isEmpty);
+        // Thirty seconds on: the newer job turns a minute old; the older one was polled 30 s ago.
+        now = now.add(const Duration(seconds: 30));
+        await sync.reconcileUploadedWals();
+        expect(calls, on ? ['job-1', 'job-0'] : isEmpty);
+        now = now.add(const Duration(seconds: 30));
+        await sync.reconcileUploadedWals();
+        expect(calls, on ? ['job-1', 'job-0', 'job-1'] : isEmpty);
+        sync.stopReceiptWait();
+        await Future<void>.delayed(Duration.zero);
+      });
+    }
+
+    test('a longer server hint outlasts the one-minute floor', () async {
+      ReliabilityExperiments.overrideForTesting({'receipt_long_poll', 'receipt_finished_note'});
+      final calls = <String>[];
+      final sync = LocalWalSyncImpl(_Listener(),
+          now: () => now,
+          persistWals: (_) async {},
+          receiptWaitFetcher: (ids, abort) => abort.then((_) => const SyncReceiptBatch({}, {})),
+          jobStatusFetcher: (id) async {
+            calls.add(id);
+            return SyncJobFetch(
+                SyncJobFetchOutcome.ok, SyncJobStatusResponse(jobId: id, status: 'processing', pollAfterMs: 300000));
+          });
+      sync.testWals = [pending(0)..uploadedAt = now.millisecondsSinceEpoch ~/ 1000 - 120];
+      sync.startReceiptWait((_) async {});
+      await sync.reconcileUploadedWals();
+      now = now.add(const Duration(seconds: 120));
+      await sync.reconcileUploadedWals();
+      expect(calls, ['job-0']);
+      now = now.add(const Duration(seconds: 180));
+      await sync.reconcileUploadedWals();
+      expect(calls, ['job-0', 'job-0']);
+      sync.stopReceiptWait();
+      await Future<void>.delayed(Duration.zero);
+    });
+
+    test('the foreground pass timer stops growing at one minute only with both experiments', () {
+      ReliabilityExperiments.overrideForTesting({'receipt_long_poll'});
+      expect([for (var i = 0; i < 7; i++) SyncReconciler.idleDelaySeconds(i)], [20, 20, 30, 45, 60, 120, 120]);
+      ReliabilityExperiments.overrideForTesting({'receipt_finished_note'});
+      expect(SyncReconciler.idleDelaySeconds(6), 120);
+      ReliabilityExperiments.overrideForTesting({'receipt_long_poll', 'receipt_finished_note'});
+      expect([for (var i = 0; i < 7; i++) SyncReconciler.idleDelaySeconds(i)], [20, 20, 30, 45, 60, 60, 60]);
+    });
+  });
+
+  group('receipt_long_poll on the GET polling path', () {
+    tearDown(() => ReliabilityExperiments.overrideForTesting(null));
+
+    for (final on in [false, true]) {
+      test(
+          on
+              ? 'on: a result is not applied to a file that moved to another job during the GET'
+              : 'off (baseline): a result is applied under the handle the first file holds after the GET', () async {
+        ReliabilityExperiments.overrideForTesting(on ? {'receipt_long_poll'} : {});
+        late final LocalWalSyncImpl sync;
+        sync = LocalWalSyncImpl(_Listener(),
+            now: () => now,
+            persistWals: (_) async {},
+            jobStatusFetcher: (id) async {
+              sync.testWals.single.jobId = 'job-reclaimed';
+              return SyncJobFetch(SyncJobFetchOutcome.ok, SyncJobStatusResponse(jobId: id, status: 'completed'));
+            });
+        sync.testWals = [pending(0)];
+        await sync.reconcileUploadedWals();
+        expect(sync.testWals.single.status, on ? WalStatus.uploaded : WalStatus.synced);
+        expect(sync.testWals.single.jobId, on ? 'job-reclaimed' : isNull);
+      });
+    }
+
+    for (final on in [false, true]) {
+      test(
+          on
+              ? 'on: SyncReconciler.dispose detaches the phone store'
+              : 'off (baseline): SyncReconciler.dispose only cancels its timer; a later poke still reconciles',
+          () async {
+        ReliabilityExperiments.overrideForTesting(on ? {'receipt_long_poll'} : {});
+        addTearDown(() => RecordingTransferCoordinator.instance.setForeground(true));
+        final calls = <String>[];
+        final sync = LocalWalSyncImpl(_Listener(),
+            now: () => now,
+            persistWals: (_) async {},
+            jobStatusFetcher: (id) async {
+              calls.add(id);
+              return SyncJobFetch(SyncJobFetchOutcome.ok, SyncJobStatusResponse(jobId: id, status: 'completed'));
+            });
+        sync.testWals = [pending(0)];
+        final reconciler = SyncReconciler.instance;
+        // Backgrounded: attach opens no receipt wait and a pass arms no timer.
+        reconciler.onBackground();
+        reconciler.attach(sync, (_) async {});
+        reconciler.dispose();
+        await reconciler.poke();
+        expect(calls, on ? isEmpty : ['job-0']);
+      });
+    }
+
+    test('off (baseline): startReceiptWait creates no waiter, so every accepted job stays on GET polling', () async {
+      ReliabilityExperiments.overrideForTesting({});
+      final calls = <String>[];
+      final sync = LocalWalSyncImpl(_Listener(),
+          now: () => now,
+          persistWals: (_) async {},
+          jobStatusFetcher: (id) async {
+            calls.add(id);
+            return SyncJobFetch(SyncJobFetchOutcome.ok, SyncJobStatusResponse(jobId: id, status: 'processing'));
+          });
+      sync.testWals = [pending(0), pending(1)];
+      sync.startReceiptWait((_) async {});
+      await sync.reconcileUploadedWals();
+      sync.stopReceiptWait();
+      expect(calls, ['job-0', 'job-1']);
+      await expectLater(waitForSyncReceipts(['job-0'], Completer<void>().future), throwsStateError);
+    });
   });
 
   test('first polls are immediate unless an upload explicitly supplies a poll deadline', () async {

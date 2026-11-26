@@ -1,0 +1,7 @@
+{
+  "version": "0.12.582",
+  "date": "2026-11-24",
+  "changes": [
+    "Fixed conversation details getting stuck on processing after opening a saved recording"
+  ]
+}

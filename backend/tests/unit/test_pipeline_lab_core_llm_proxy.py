@@ -10,7 +10,7 @@ import pytest
 
 from testing.pipeline_lab import contracts as c
 from testing.pipeline_lab.ledger import SpendLedger
-from testing.pipeline_lab.llm_proxy import tagging, wire
+from testing.pipeline_lab.llm_proxy import server, tagging, wire
 from testing.pipeline_lab.llm_proxy.server import LlmProxy, ProxyConfig
 from testing.pipeline_lab.store import Store
 
@@ -139,7 +139,16 @@ def _post(url, body, headers=None):
 CHAT = {'model': 'omi-auto:notes', 'messages': [{'role': 'user', 'content': 'Summarise a fictional chat.'}]}
 
 
-def test_miss_forwards_records_and_logs_then_hit_serves_from_cache(lab, upstream):
+def test_miss_forwards_records_and_logs_then_hit_serves_from_cache(lab, upstream, monkeypatch):
+    send = server._Handler._send
+    logged_before_send = []
+
+    def check_log_before_send(handler, status, body, content_type='application/json', extra=None):
+        call_id = (extra or {}).get('X-Pipeline-Lab-Call-Id')
+        logged_before_send.append(any(call.id == call_id for call in lab.read_llm_calls('run-1')))
+        send(handler, status, body, content_type, extra)
+
+    monkeypatch.setattr(server._Handler, '_send', check_log_before_send)
     with _proxy(lab, upstream) as proxy:
         headers = {
             'X-Omi-LLM-Feature': 'conversation_notes',
@@ -154,6 +163,7 @@ def test_miss_forwards_records_and_logs_then_hit_serves_from_cache(lab, upstream
         status, response_headers, again = _post(proxy.url + '/v1/chat/completions', CHAT, headers)
         assert again == body and response_headers['X-Pipeline-Lab-Cache'] == 'hit'
         hit_id = response_headers['X-Pipeline-Lab-Call-Id']
+    assert logged_before_send == [True, True]
     assert len(upstream.requests) == 1
     sent = upstream.requests[0]
     assert sent['path'] == '/v1/chat/completions'
@@ -163,7 +173,6 @@ def test_miss_forwards_records_and_logs_then_hit_serves_from_cache(lab, upstream
     assert not any(k.startswith('x-pipeline-lab-') for k in lowered)
     calls = lab.read_llm_calls('run-1')
     assert len(calls) == 2
-    # Handlers can append their log rows in a different order from the HTTP responses.
     by_id = {call.id: call for call in calls}
     assert set(by_id) == {miss_id, hit_id} and miss_id != hit_id
     miss, hit = by_id[miss_id], by_id[hit_id]
@@ -439,3 +448,40 @@ def test_relayed_header_values_lose_control_characters():
 
     assert _header_value('application/json\r\nSet-Cookie: x=1') == 'application/jsonSet-Cookie: x=1'
     assert _header_value('text/event-stream; charset=utf-8') == 'text/event-stream; charset=utf-8'
+
+
+def test_jev_decision_through_the_fake_upstream_is_cached_on_an_identical_rerun(lab):
+    """``jev_conversation_relevance`` (``/v1/systemone``): the body is the product's state + questions only,
+    so two identical runs key the same; the fake answers 2xx, so the second call is a cache hit."""
+    from testing.pipeline_lab.llm_proxy.fake_upstream import FakeUpstream as ScriptedUpstream
+    from utils.conversations.relevance_jev import QUESTIONS, relevance_state
+    from utils.llm.jev_client import _validated_answers
+
+    body = {
+        'model': 'omi:auto:jev-decisions',
+        'state': relevance_state('call the dentist at noon'),
+        'questions': QUESTIONS,
+    }
+    headers = {'X-Omi-LLM-Feature': 'jev_conversation_relevance'}
+    fake = ScriptedUpstream().start()
+    try:
+        with _proxy(lab, fake) as proxy:
+            first = _post(proxy.url + '/v1/systemone', body, headers)
+            second = _post(proxy.url + '/v1/systemone', body, headers)
+    finally:
+        fake.stop()
+    assert first[0] == 200 and first[1]['X-Pipeline-Lab-Cache'] == 'miss'
+    assert second[1]['X-Pipeline-Lab-Cache'] == 'hit' and second[2] == first[2]
+    answers = _validated_answers(json.loads(first[2]), QUESTIONS)
+    assert answers is not None and answers.noul('worth_keeping') == 1.0  # the fake keeps, like conv_discard
+
+
+def test_fake_upstream_systemone_without_a_jev_body_is_still_unsupported():
+    from testing.pipeline_lab.llm_proxy.fake_upstream import FakeUpstream as ScriptedUpstream
+
+    fake = ScriptedUpstream().start()
+    try:
+        status, _, _ = _post(fake.url + '/v1/systemone', {'step': 'prefilter', 'input': 'x'})
+    finally:
+        fake.stop()
+    assert status == 404

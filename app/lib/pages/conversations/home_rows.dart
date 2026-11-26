@@ -111,6 +111,7 @@ bool shownOnV3Home(ServerConversation c) =>
 /// conversation can be `completed` with a failed tile. Without one, failed status and the server's
 /// failed Home projection decide. A failed conversation belongs to Activity, not Home.
 bool isFailedConversation(ServerConversation c) {
+  if (c.isAdmittedForTranscription) return false;
   final tile = c.v3?.tileState;
   if (tile != null) return tile == ConversationTileState.failed;
   return c.status == ConversationStatus.failed || homeStepOf(c) == HomeStep.failed;
@@ -526,8 +527,10 @@ DateTime _latestMemberStart(List<ServerConversation> members) =>
 /// row's status, an empty capture, or a stand-in title. A [HomeStep.failed] result is
 /// terminal and must never be folded into a processing run.
 HomeStep? homeStepOf(ServerConversation c) {
-  if (c.homeStep == 'failed') return HomeStep.failed;
+  if (c.homeStep == 'failed' && !c.isAdmittedForTranscription) return HomeStep.failed;
   if (c.isLocked || c.discarded || c.deleted || c.clientProcessing != null || c.processingDeferred) return null;
+  if (c.isTranscriptionAllowanceHeld) return null;
+  if (c.isAdmittedForTranscription) return HomeStep.transcribing;
   switch (c.homeStep) {
     case 'transcribing':
       return HomeStep.transcribing;

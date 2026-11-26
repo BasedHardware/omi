@@ -108,6 +108,25 @@ void main() {
     });
 
     for (final shareRawAudio in [false, true]) {
+      test('Custom Live direct send follows Omi raw-audio consent ($shareRawAudio)', () async {
+        final primary = _FakeSocket();
+        final secondary = _FakeSocket();
+        final socket = CompositeTranscriptionSocket(
+          primarySocket: primary,
+          secondarySocket: secondary,
+          sttProvider: SttProvider.customLive.name,
+          forwardRawAudioToSecondary: shareRawAudio,
+        );
+        addTearDown(socket.stop);
+
+        expect(await socket.connect(), isTrue);
+        final audio = <int>[1, 2, 3];
+        socket.send(audio);
+
+        expect(primary.sent, [same(audio)]);
+        expect(secondary.sent, shareRawAudio ? [same(audio)] : isEmpty);
+      });
+
       test('Custom Live evidence follows Omi raw-audio consent ($shareRawAudio)', () async {
         final primary = _FakeSocket();
         final secondary = _FakeSocket();
@@ -143,6 +162,26 @@ void main() {
         expect(service.binaryAudioBytesSent, audio.length);
       });
     }
+
+    test('preserves evidence and audio order on the Omi record connection for polling STT', () async {
+      final primary = _FakeSocket();
+      final secondary = _FakeSocket();
+      final socket = CompositeTranscriptionSocket(
+        primarySocket: primary,
+        secondarySocket: secondary,
+        sttProvider: SttProvider.custom.name,
+      );
+      addTearDown(socket.stop);
+      expect(await socket.connect(), isTrue);
+
+      final first = Uint8List.fromList([1, 2, 3]);
+      final second = Uint8List.fromList([4, 5, 6]);
+      socket.sendEvidenceAudioFrame('first evidence', first);
+      socket.sendEvidenceAudioFrame('second evidence', second);
+
+      expect(primary.sent, [same(first), same(second)]);
+      expect(secondary.sent, ['first evidence', same(first), 'second evidence', same(second)]);
+    });
 
     test('keeps forwarding input frames by default', () async {
       final primary = _FakeSocket();

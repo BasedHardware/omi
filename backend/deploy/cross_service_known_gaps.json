@@ -34,10 +34,6 @@
       "why": "Dispatch mode is set only on the running service (gcloud keeps undeclared env across deploys); declare it in the manifest to make this hop verifiable."
     },
     {
-      "key": "no-uid-literals|prod|helm/batch-pipeline-worker/BATCH_PIPELINE_MERGE_STALE_HEAD_UID_ALLOWLIST|uids=1",
-      "why": "Reviewed exception, owner's order 2026-11-18: the GPU pump is the other merge writer and carries the same canary uid as backend-integration (#25673; that one is bound on the service at deploy time, not in git). Delete when the worker chart drops mergeStaleHeadUidAllowlist, the skip ramps fleet-wide, or at its 2026-12-18 review."
-    },
-    {
       "key": "no-uid-literals|prod|cloud_run/backend/OMI_REFERRAL_CAMPAIGN_PREVIEW_UIDS|uids=3",
       "why": "Reviewed exception, Nik's order 2026-11-05: his own three accounts preview the read-only referral campaign on TestFlight against prod. Delete with the key once the TestFlight-channel preview gate ships."
     },
@@ -73,10 +69,15 @@
       "key": "no-uid-literals|prod|gke/pusher/TRANSCRIPTION_SHADOW_UID_ALLOWLIST|uids=1",
       "why": "Cohort UIDs predate this suite; moving cohorts to Firestore is in flight (#22075). Ratchet: no new keys."
     },
-    {"key": "reader-split|prod|helm/batch-pipeline-worker/BATCH_PIPELINE_FOLLOWUP_CLAIMED_SIBLING_SKIP_ENABLED", "why": "Reviewed 2026-11-21 (SCA-3544): only ProjectionFollowups reads it, constructed by Projector.start_followups and ProjectionOutbox on the Cloud Run serving/pump loops; diarizer/ never constructs a Projector or outbox, so the worker never executes it. Cloud Run pins false until David activates #25920."},
+    {"key": "reader-split|prod|helm/batch-pipeline-worker/BATCH_PIPELINE_FOLLOWUP_CLAIMED_SIBLING_SKIP_ENABLED", "why": "Reviewed 2026-11-21 (SCA-3544): only ProjectionFollowups reads it, constructed by Projector.start_followups and ProjectionOutbox on the Cloud Run serving/pump loops; diarizer/ never constructs a Projector or outbox, so the worker never executes it. Activated 'true' on every Cloud Run role on 2026-11-22 (David, SCA-3544); backend and backend-integration now pin an explicit 'false' (integration rolled back 16:16Z, closed by Shipping), backend-sync keeps 'true'."},
+    {"key": "reader-split|prod|helm/batch-pipeline-worker/BATCH_PIPELINE_SERVING_PROJECTION_SWEEP", "why": "Reviewed 2026-11-22 (SCA-3318): only the Cloud Run serving loops read it; the helm GPU worker never executes this path. backend-integration owns the recurring sweep with an explicit 'true' after the step-3 sweep-off was rolled back, and the projection pump is dark. Only the literal 'off' disables it."},
     {
       "key": "reader-split|prod|helm/batch-pipeline-worker/BATCH_PIPELINE_ASYNC_PROJECTION_ENABLED",
       "why": "Reviewed 2026-10-18: the worker imports projection only transitively (Pump/Scheduler never call Projection); the flag is not executed there."
+    },
+    {
+      "key": "reader-split|prod|helm/batch-pipeline-worker/BATCH_PIPELINE_PACKING_SAMPLE_RATE",
+      "why": "SCA-3548: preserve the live GPU worker's unset sampling rate on the depth-only roll. Cloud Run's sampling policy remains independent."
     },
     {
       "key": "task-target-retry-semantics|code|account-deletion/routers/users.py:run_account_deletion_wipe/500",
@@ -137,6 +138,14 @@
     {
       "key": "reader-split|prod|helm/batch-pipeline-worker/BATCH_PIPELINE_SERVING_TICK_SECONDS",
       "why": "Margin-40 PR25539 panel F4 requires integration-only cadence, 2026-11-17: this cadence belongs only to the integration projection sweep/supervisor. The worker entrypoint runs Pump/Scheduler, not Projection.sweep or Serving.supervise; the import-closure inventory over-approximates execution. Retain the excluded worker defaults. The deploy-contract test pins this exact integration/worker distinction; no general reader-split exemption."
+    },
+    {
+      "key": "reader-split|prod|helm/batch-pipeline-worker/BATCH_PIPELINE_PROJECTION_FOLLOWUP_SLOTS",
+      "why": "SCA-3120/SCA-4454, David 2026-11-26: the stepped-down follow-up slot count belongs only to the in-process projection follow-up sweep that Serving.supervise runs on Cloud Run. The worker entrypoint runs Pump/Scheduler, not the follow-up sweep; the import-closure inventory over-approximates this reader. Keep the worker on the code default."
+    },
+    {
+      "key": "reader-split|prod|helm/batch-pipeline-worker/BATCH_PIPELINE_PROJECTION_PHASE_SAMPLE_ENABLED",
+      "why": "SCA-3664/3888: successful projection phase timing sampling is enabled on backend-integration only. The GPU worker does not execute the Cloud Run projection phase emitter; the import-closure inventory over-approximates this reader. Keep the worker unset so the control remains Integration-scoped."
     }
   ]
 }

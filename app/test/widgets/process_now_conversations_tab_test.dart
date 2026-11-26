@@ -82,7 +82,7 @@ class _TrackingCaptureProvider extends CaptureProvider {
   var forceProcessingCalls = 0;
 
   @override
-  Future<void> forceProcessingCurrentConversation() async {
+  Future<void> forceProcessingCurrentConversation({bool manualFinish = false, String? liveConversationId}) async {
     forceProcessingCalls++;
   }
 }

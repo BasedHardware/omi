@@ -14,21 +14,23 @@ import (
 )
 
 type queueMetrics struct {
-	outcomes *prometheus.CounterVec
-	retries  *prometheus.CounterVec
-	yields   *prometheus.CounterVec
-	requeues *prometheus.CounterVec
-	steps    *prometheus.HistogramVec
-	declared map[string][]string
-	causes   map[queue.Cause]bool
+	releaseLag prometheus.Histogram
+	outcomes   *prometheus.CounterVec
+	retries    *prometheus.CounterVec
+	yields     *prometheus.CounterVec
+	requeues   *prometheus.CounterVec
+	steps      *prometheus.HistogramVec
+	declared   map[string][]string
+	causes     map[queue.Cause]bool
 }
 
 func newQueueMetrics(registry *prometheus.Registry, kinds []queue.Kind, gateCause queue.Cause) *queueMetrics {
 	m := &queueMetrics{
-		outcomes: counter("outcomes", "Terminal queue outcomes.", "kind", "outcome", "cause"),
-		retries:  counter("retries", "Failed attempts scheduled for retry.", "kind", "cause"),
-		yields:   counter("yields", "Deferrals that refunded an attempt.", "kind", "cause"),
-		requeues: counter("budget_requeues", "Automatic requeues after attempt exhaustion.", "cause"),
+		releaseLag: prometheus.NewHistogram(prometheus.HistogramOpts{Name: "omi_queue_entitlement_release_seconds", Help: "Seconds from funding change to committed release of eligible work.", Buckets: []float64{1, 5, 15, 30, 60, 120, 300, 3600}}),
+		outcomes:   counter("outcomes", "Terminal queue outcomes.", "kind", "outcome", "cause"),
+		retries:    counter("retries", "Failed attempts scheduled for retry.", "kind", "cause"),
+		yields:     counter("yields", "Deferrals that refunded an attempt.", "kind", "cause"),
+		requeues:   counter("budget_requeues", "Automatic requeues after attempt exhaustion.", "cause"),
 		steps: prometheus.NewHistogramVec(prometheus.HistogramOpts{
 			Namespace: "omi", Subsystem: "queue", Name: "step_duration_seconds",
 			Help: "Time spent in a declared queue step.", Buckets: prometheus.DefBuckets,
@@ -37,7 +39,7 @@ func newQueueMetrics(registry *prometheus.Registry, kinds []queue.Kind, gateCaus
 		causes:   make(map[queue.Cause]bool),
 	}
 	for _, cause := range []queue.Cause{
-		queue.CauseNone, queue.CauseLeaseExpired, queue.CauseHandlerPanic,
+		queue.CauseAllowanceExhausted, queue.CauseNone, queue.CauseLeaseExpired, queue.CauseHandlerPanic,
 		queue.CauseReconcileExhausted, queue.CauseUnknown, gateCause,
 	} {
 		m.causes[cause] = true
@@ -48,7 +50,7 @@ func newQueueMetrics(registry *prometheus.Registry, kinds []queue.Kind, gateCaus
 			m.causes[cause] = true
 		}
 	}
-	registry.MustRegister(m.outcomes, m.retries, m.yields, m.requeues, m.steps)
+	registry.MustRegister(m.outcomes, m.retries, m.yields, m.requeues, m.steps, m.releaseLag)
 	return m
 }
 
@@ -73,6 +75,8 @@ func (m *queueMetrics) causeLabel(cause queue.Cause) string {
 	}
 	return unknown
 }
+
+func (m *queueMetrics) EntitlementReleased(d time.Duration) { m.releaseLag.Observe(d.Seconds()) }
 
 func (m *queueMetrics) Outcome(kind string, outcome queue.Terminal, cause queue.Cause) {
 	label := unknown
@@ -138,4 +142,38 @@ func metricsHandler(registry *prometheus.Registry) *http.ServeMux {
 	mux := http.NewServeMux()
 	mux.Handle("GET /metrics", promhttp.HandlerFor(registry, promhttp.HandlerOpts{MaxRequestsInFlight: 2}))
 	return mux
+}
+
+type customerWaitCollector struct {
+	store                           *queue.Store
+	owners, units, seconds, expired *prometheus.Desc
+}
+
+func newCustomerWaitCollector(store *queue.Store) customerWaitCollector {
+	return customerWaitCollector{store: store,
+		owners:  prometheus.NewDesc("omi_queue_waiting_on_customer_owners", "Owners waiting on funding.", nil, nil),
+		units:   prometheus.NewDesc("omi_queue_waiting_on_customer_units", "Units waiting on funding.", nil, nil),
+		seconds: prometheus.NewDesc("omi_queue_waiting_on_customer_audio_seconds", "Audio seconds waiting on funding.", nil, nil),
+		expired: prometheus.NewDesc("omi_queue_expired_unfunded_total", "Units settled after custody expired while unfunded.", nil, nil)}
+}
+
+func (c customerWaitCollector) Describe(ch chan<- *prometheus.Desc) {
+	ch <- c.owners
+	ch <- c.units
+	ch <- c.seconds
+	ch <- c.expired
+}
+
+func (c customerWaitCollector) Collect(ch chan<- prometheus.Metric) {
+	ctx, cancel := context.WithTimeout(context.Background(), probeTimeout)
+	defer cancel()
+	w, err := c.store.WaitingOnCustomer(ctx)
+	if err != nil {
+		ch <- prometheus.NewInvalidMetric(c.units, errors.New("customer wait query failed"))
+		return
+	}
+	ch <- prometheus.MustNewConstMetric(c.owners, prometheus.GaugeValue, float64(w.Owners))
+	ch <- prometheus.MustNewConstMetric(c.units, prometheus.GaugeValue, float64(w.Units))
+	ch <- prometheus.MustNewConstMetric(c.seconds, prometheus.GaugeValue, w.AudioSeconds)
+	ch <- prometheus.MustNewConstMetric(c.expired, prometheus.CounterValue, float64(w.ExpiredUnfunded))
 }

@@ -22,6 +22,12 @@ START = '2026-01-02T10:00:00Z'
 
 
 @pytest.fixture(autouse=True)
+def _private_lab_root(tmp_path, monkeypatch):
+    """The sync lane's work files default to the lab root; keep them in this test's directory."""
+    monkeypatch.setenv('OMI_PIPELINE_LAB_ROOT', str(tmp_path / 'default-lab-root'))
+
+
+@pytest.fixture(autouse=True)
 def _batch_env(monkeypatch):
     monkeypatch.setenv('BATCH_PIPELINE_EMPTY_ASR_SAFETY_NET_ENABLED', 'false')
     monkeypatch.setenv('BATCH_PIPELINE_SHORT_SPEECH_SINGLE_ENABLED', 'false')

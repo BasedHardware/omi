@@ -2,9 +2,7 @@
 
 Patched: ``time.time``, ``time.time_ns``, ``datetime.datetime.now/utcnow/today`` and
 ``datetime.date.today``, in the ``time``/``datetime`` modules and in every loaded
-module that bound those names (``from datetime import datetime``). Not patched:
-``time.monotonic``/``perf_counter`` and the asyncio loop clock, so timeouts,
-leases measured on monotonic time and executor waits stay real.
+module that bound those names (``from datetime import datetime``).
 
 Scope: ``time.time``/``time_ns`` are patched process-wide (plain functions, no type
 identity involved). The ``datetime``/``date`` *classes* are swapped only inside product
@@ -13,10 +11,29 @@ module references (``import datetime`` -> a proxy module whose ``datetime``/``da
 the lab types). Libraries such as pydantic, protobuf and the Firestore client keep the
 real classes, so building a schema or encoding a timestamp mid-run is unaffected.
 
-By default the clock *ticks*: after :meth:`LabClock.set` it reads the target
-instant plus the real time elapsed since. A strictly frozen clock would hang any
-product loop that waits for ``time.time()`` to pass a deadline. Pass
-``tick=False`` for a fully frozen clock in tests.
+Two modes (:data:`CLOCK_MODES`):
+
+- ``sim`` (``tick=False``): the wall clock reads exactly the last :meth:`LabClock.set` instant.
+  It moves only when the driver moves it (to the next event, task or sweep), never because
+  real seconds passed, so the same inputs give the same stamps. A day replay in this mode
+  also passes ``product_monotonic=True`` to :func:`installed_clock` (below).
+- ``tick`` (``tick=True``, the historical default): after :meth:`LabClock.set` the clock
+  reads the target instant plus the real time elapsed since. Each pass is then stamped at
+  arrival plus its real latency, which is what made day replays bistable.
+
+``product_monotonic=True`` also gives *product* code (callers in
+:data:`MONOTONIC_PRODUCT_PACKAGES`) a monotonic clock that follows the replay:
+``time.monotonic``/``monotonic_ns`` and ``asyncio`` loop ``time()``. It reads the virtual
+instant of the last ``set``, so a deadline, lease or circuit-breaker cooldown armed at 09:00 has
+expired by an 11:00 event, as in production, whatever the replay's real speed, and a lease
+checked exactly at its expiry decides the same way every run. Product polls and I/O budgets
+(``while ... monotonic() < deadline: sleep``, ``finalizer.py``, ``speaker_identity_retry.py``)
+would spin forever on a frozen clock, so once an event has run for
+:data:`MONOTONIC_GRACE_SECONDS` of real time the product's monotonic clock starts advancing in
+real time from there; :attr:`LabClock.late_monotonic_reads` counts reads past that point (each is
+a place where real time reached a product decision). Every other caller (``asyncio`` internals,
+``threading``, gRPC, the lab's barrier and drivers) keeps the real monotonic clock.
+``time.perf_counter`` is never patched (product code uses it for metrics only).
 
 The clock is process-global. Chain stages that need different instants therefore
 run one at a time (the driver is serial on the ordered path).
@@ -38,6 +55,12 @@ _REAL_DATETIME = _dt.datetime
 _REAL_DATE = _dt.date
 _REAL_TIME = _time.time
 _REAL_TIME_NS = _time.time_ns
+_REAL_MONOTONIC = _time.monotonic
+_REAL_MONOTONIC_NS = _time.monotonic_ns
+
+CLOCK_MODES = ('sim', 'tick')
+# Real seconds an event may run before the product's monotonic clock starts to move (liveness).
+MONOTONIC_GRACE_SECONDS = 30.0
 
 _ACTIVE: 'LabClock | None' = None
 
@@ -57,14 +80,41 @@ PRODUCT_PACKAGES = (
     'testing',
 )
 
+# Callers that get the replay's monotonic clock under ``product_monotonic``: product code only.
+# ``testing`` is left out on purpose: the lab's barrier, drivers and timings measure real time.
+MONOTONIC_PRODUCT_PACKAGES = tuple(p for p in PRODUCT_PACKAGES if p != 'testing')
+_MONOTONIC_ROOTS = frozenset(MONOTONIC_PRODUCT_PACKAGES)
+
 
 class LabClock:
-    def __init__(self, start: _dt.datetime | None = None, *, tick: bool = True):
+    def __init__(
+        self,
+        start: _dt.datetime | None = None,
+        *,
+        tick: bool = True,
+        monotonic_grace: float = MONOTONIC_GRACE_SECONDS,
+    ):
         self.tick = tick
+        self.monotonic_grace = 0.0 if tick else monotonic_grace
+        self.late_monotonic_reads = 0
         self._lock = threading.Lock()
         self._target = 0.0
         self._anchor = 0.0
+        self._mono_anchor = 0.0
+        self._origin: float | None = None
+        self._mono_origin = _REAL_MONOTONIC()
+        self._mono_last = 0.0
         self.set(start or _REAL_DATETIME.now(_dt.timezone.utc))
+
+    @classmethod
+    def for_mode(cls, start: _dt.datetime | None, mode: str, **kwargs: float) -> 'LabClock':
+        if mode not in CLOCK_MODES:
+            raise ValueError(f'unknown clock mode {mode!r}; expected one of {CLOCK_MODES}')
+        return cls(start, tick=mode == 'tick', **kwargs)
+
+    @property
+    def mode(self) -> str:
+        return 'tick' if self.tick else 'sim'
 
     def set(self, instant: _dt.datetime) -> None:
         if instant.tzinfo is None:
@@ -72,6 +122,9 @@ class LabClock:
         with self._lock:
             self._target = instant.timestamp()
             self._anchor = _REAL_TIME()
+            self._mono_anchor = _REAL_MONOTONIC()
+            if self._origin is None:
+                self._origin = self._target
 
     def advance(self, seconds: float) -> None:
         with self._lock:
@@ -85,6 +138,22 @@ class LabClock:
 
     def now(self) -> _dt.datetime:
         return _REAL_DATETIME.fromtimestamp(self.timestamp(), tz=_dt.timezone.utc)
+
+    def monotonic(self) -> float:
+        """The product's monotonic clock: the virtual instant of the last ``set``, plus the real time
+        the current event has run beyond ``monotonic_grace`` (zero for a ticking clock).
+
+        Never decreases, even if the driver sets an earlier instant.
+        """
+        with self._lock:
+            late = (_REAL_MONOTONIC() - self._mono_anchor) - self.monotonic_grace
+            if late > 0 and not self.tick:
+                self.late_monotonic_reads += 1
+            value = self._mono_origin + (self._target - (self._origin or 0.0)) + max(0.0, late)
+            if value < self._mono_last:
+                value = self._mono_last
+            self._mono_last = value
+            return value
 
 
 def _clock() -> LabClock | None:
@@ -265,9 +334,63 @@ def _time_now_ns() -> int:
     return int(clock.timestamp() * 1_000_000_000)
 
 
+def _product_caller(depth: int = 2) -> bool:
+    try:
+        name = sys._getframe(depth).f_globals.get('__name__') or ''
+    except ValueError:
+        return False
+    return name.split('.', 1)[0] in _MONOTONIC_ROOTS
+
+
+def _monotonic_now() -> float:
+    clock = _clock()
+    if clock is None or not _product_caller():
+        return _REAL_MONOTONIC()
+    return clock.monotonic()
+
+
+def _monotonic_now_ns() -> int:
+    clock = _clock()
+    if clock is None or not _product_caller():
+        return _REAL_MONOTONIC_NS()
+    return int(clock.monotonic() * 1_000_000_000)
+
+
+def _loop_time(self) -> float:  # replaces asyncio.BaseEventLoop.time
+    clock = _clock()
+    if clock is None or not _product_caller():
+        return _REAL_MONOTONIC()
+    return clock.monotonic()
+
+
+def _install_product_monotonic(stack: ExitStack) -> None:
+    import asyncio.base_events as base_events
+
+    _time.monotonic = _monotonic_now
+    _time.monotonic_ns = _monotonic_now_ns
+    original_loop_time = base_events.BaseEventLoop.time
+    base_events.BaseEventLoop.time = _loop_time  # type: ignore[method-assign]
+
+    def restore() -> None:
+        _time.monotonic = _REAL_MONOTONIC
+        _time.monotonic_ns = _REAL_MONOTONIC_NS
+        base_events.BaseEventLoop.time = original_loop_time  # type: ignore[method-assign]
+
+    stack.callback(restore)
+    # ``from time import monotonic`` inside product modules. Everyone else's bound names
+    # (``threading``'s ``_time``, ``asyncio``) keep the real function.
+    replace_everywhere(stack, _REAL_MONOTONIC, _monotonic_now, only_prefixes=MONOTONIC_PRODUCT_PACKAGES)
+    replace_everywhere(stack, _REAL_MONOTONIC_NS, _monotonic_now_ns, only_prefixes=MONOTONIC_PRODUCT_PACKAGES)
+
+
 @contextmanager
-def installed_clock(clock: LabClock, *, scope: tuple[str, ...] | None = PRODUCT_PACKAGES) -> Iterator[LabClock]:
-    """Install ``clock`` for the block. ``scope=None`` swaps datetime in every module."""
+def installed_clock(
+    clock: LabClock, *, scope: tuple[str, ...] | None = PRODUCT_PACKAGES, product_monotonic: bool = False
+) -> Iterator[LabClock]:
+    """Install ``clock`` for the block. ``scope=None`` swaps datetime in every module.
+
+    ``product_monotonic`` also gives product callers the replay's monotonic and loop clock.
+    """
     global _ACTIVE
     if _ACTIVE is not None and _ACTIVE is not clock:
         raise RuntimeError('another lab clock is already installed')
@@ -302,6 +425,8 @@ def installed_clock(clock: LabClock, *, scope: tuple[str, ...] | None = PRODUCT_
             replace_everywhere(stack, _dt, _datetime_module_proxy(), only_prefixes=scope)
         replace_everywhere(stack, _REAL_DATETIME, LabDatetime, only_prefixes=scope)
         replace_everywhere(stack, _REAL_DATE, LabDate, only_prefixes=scope)
+        if product_monotonic:
+            _install_product_monotonic(stack)
         yield clock
 
 
@@ -319,4 +444,13 @@ def real_now() -> _dt.datetime:
     return _REAL_DATETIME.fromtimestamp(_REAL_TIME(), tz=_dt.timezone.utc)
 
 
-__all__ = ['LabClock', 'LabDatetime', 'LabDate', 'installed_clock', 'real_now', '_real']
+__all__ = [
+    'CLOCK_MODES',
+    'MONOTONIC_GRACE_SECONDS',
+    'LabClock',
+    'LabDatetime',
+    'LabDate',
+    'installed_clock',
+    'real_now',
+    '_real',
+]

@@ -261,9 +261,7 @@ class ListenSessionRuntime:
         if not self.state.active:
             return False
         try:
-            await self.request.websocket.send_json(
-                event.model_dump(mode='json') if isinstance(event, CaptureCommittedEvent) else event.to_json()
-            )
+            await self.request.websocket.send_json(event.to_json())
             return True
         except WebSocketDisconnect:
             self.state.active = False

@@ -13,6 +13,7 @@ from typing import Any
 from google.cloud import firestore
 from prometheus_client import Counter
 
+from database.account_deletion_policy import account_deletion_marker_blocks_access
 from database.quiet_check_retirement import (
     quiet_check_id,
     stop_quiet_check as stop_quiet_check,
@@ -92,6 +93,11 @@ def arm_quiet_check(
             return None
         if any(
             row.get(key) for key in ('deleted', 'discarded', 'sync_merged_into', 'is_locked', 'finalization_job_id')
+        ):
+            return None
+        marker = client.collection('account_deletions').document(uid).get(transaction=transaction)
+        if account_deletion_marker_blocks_access(
+            marker_exists=marker.exists, raw_status=(marker.to_dict() or {}).get('wipe_status')
         ):
             return None
         deadline = quiet_deadline(row, timeout, uid=uid)
@@ -220,6 +226,15 @@ def _evaluate_quiet_check(
         empty = refusal == 'no_content' and serving_for('LIFECYCLE_V2_MODE', job['uid'])
         enabled_empty_exit = quiet_empty_exit_enabled() and refusal == 'no_content'
         ready = lease_expiry is not None and not active and deadline is not None and deadline <= now
+        end_due = listen_reconnect.end_due(row, now)
+        # Quiet checks can publish the close barrier for a drained producer
+        # after its lease and grace expire. Keep that wake armed until then.
+        awaiting_archive = (
+            refusal == jobs_db.SERVER_BATCH_ARCHIVE_UNREADY
+            and lease_expiry is not None
+            and deadline is not None
+            and (not ready or (end_due and not row.get('server_batch_audio_closed')))
+        )
         # Only an exact owned, closed, token-free empty archive may widen base
         # admission. No storage read occurs for any other shape or while live.
         empty_exit = bool(
@@ -237,7 +252,9 @@ def _evaluate_quiet_check(
                 ).inc()
             except Exception:
                 pass  # Telemetry cannot alter admission.
-        if refusal is not None and not (refusal == 'no_content' and (active or empty or empty_exit)):
+        if refusal is not None and not (
+            awaiting_archive or (refusal == 'no_content' and (active or empty or empty_exit))
+        ):
             transaction.update(
                 job_ref, {'status': 'quiet_done', 'reconcile_after_at': firestore.DELETE_FIELD, 'updated_at': _now()}
             )
@@ -270,7 +287,6 @@ def _evaluate_quiet_check(
                 job_ref, {'status': 'quiet_done', 'reconcile_after_at': firestore.DELETE_FIELD, 'updated_at': _now()}
             )
             return {'status': 'done'}
-        ready = lease_expiry is not None and not active and deadline <= now
         # Short, bounded retry for a lost admission; live sessions get a minute
         # probe so an expired lease becomes due without waiting for a reconnect.
         due = max(now + timedelta(seconds=60), deadline, lease_expiry if lease_expiry is not None and active else now)
@@ -280,7 +296,7 @@ def _evaluate_quiet_check(
             'reconcile_after_at': due,
             'updated_at': now,
         }
-        if ready and owned(row) and listen_reconnect.end_due(row, now):
+        if ready and owned(row) and end_due:
             patch: dict[str, Any] = {'server_batch_audio_closed': True}
             if not listen_reconnect.enabled():
                 patch[listen_reconnect.FIELD] = {**listen_reconnect.producer(row), 'phase': 'ended', 'deadline_at': now}
@@ -293,7 +309,7 @@ def _evaluate_quiet_check(
             'recording_session_id': (row.get('external_data') or {}).get('recording_session_id'),
             'recovery_cutoff': (
                 now
-                if listen_reconnect.end_due(row, now)
+                if end_due
                 else now - timedelta(seconds=continuation_timeout(row, quiet_timeout(job.get('quiet_timeout_seconds'))))
             ),
         }

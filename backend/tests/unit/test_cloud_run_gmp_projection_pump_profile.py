@@ -41,6 +41,8 @@ def test_pump_keep_list_scrapes_each_pump_family(name):
 # sync profile byte for byte: that made every lane editing the sync keep-list fail here.
 RAMP_FAMILIES = (
     'omi_firestore_billed_reads_by_origin_total',
+    'omi_firestore_billed_writes_by_caller_total',
+    'omi_firestore_billed_writes_by_origin_total',
     'omi_firestore_billed_reads_by_caller_total',
     'omi_fsr_leader_lease_total',
     'omi_batch_leader_lease_total',

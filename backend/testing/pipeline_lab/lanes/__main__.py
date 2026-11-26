@@ -2,8 +2,8 @@
 plugin; this module also runs on its own (and is what the ``transcribe`` stage runs in the arm):
 
     python -m testing.pipeline_lab.lanes timeline --day DAY [--vad]
-    python -m testing.pipeline_lab.lanes record-stt --day DAY --adapter prerecorded|parakeet_batch \
-        [--provider P] --model M [--language L] --budget-usd 1.0 [--sync-exact]   # the only billable command
+    python -m testing.pipeline_lab.lanes record-stt --day DAY --adapter prerecorded|parakeet_batch|local \
+        [--provider P] --model M [--language L] --budget-usd 1.0 [--sync-exact] [--windows vad|fixed]
     python -m testing.pipeline_lab.lanes replay --day DAY --run RUN --provider P --model M \
         [--sync-mode span|exact] [--streaming-via sync|record|none]
 
@@ -14,6 +14,8 @@ mode for both lanes, RULINGS 13); ``--sync-exact`` records per VAD file for sync
 instead. Spend goes through core's persistent ledger under ``$ROOT/stt_records/<id>/`` with
 the vendor log beside it, so the cap holds across invocations of the same record id.
 Streaming captures replay through the sync driver as a labelled stand-in until M3 (RULINGS 14).
+``--adapter local`` records with the local model (``cassette/local.py``, free, nothing leaves the machine);
+local Parakeet transcribes VAD-packed speech spans unless ``--windows fixed``.
 """
 
 from __future__ import annotations
@@ -37,7 +39,15 @@ def _record(args: argparse.Namespace) -> dict:
     record_id = safe_segment(args.record_id or f'{args.day}-{args.adapter}', 'record id')
     directory = private_subdir(root / 'stt_records' / record_id)
     options = {'window_seconds': args.window_seconds} if args.adapter == 'parakeet_batch' else {}
-    adapter = make_adapter(args.adapter, provider=args.provider, model=args.model, **options)
+    if args.adapter == 'local':
+        from testing.pipeline_lab.cassette.local import LocalAdapter, local_recorder
+
+        local = local_recorder(args.windows)
+        if not local.installed:
+            local.recognize(b'', None)  # raises LocalRecorderNotInstalled with the install hint
+        adapter = LocalAdapter(local)
+    else:
+        adapter = make_adapter(args.adapter, provider=args.provider, model=args.model, **options)
     ledger = SpendLedger(directory / 'ledger.json', budget_usd=args.budget_usd)
     recorder = Recorder(adapter, ledger, vendor_log=directory / 'vendor_log.jsonl', root=root)
     summary = record_day_cassettes(
@@ -74,7 +84,12 @@ def main(argv=None) -> int:
         p.add_argument('--language', default=None)
         p.add_argument('--vocabulary', default='', help='comma-separated, in production order')
         if name == 'record-stt':
-            p.add_argument('--adapter', choices=('prerecorded', 'parakeet_batch', 'stub'), default='prerecorded')
+            p.add_argument(
+                '--adapter', choices=('prerecorded', 'parakeet_batch', 'stub', 'local'), default='prerecorded'
+            )
+            p.add_argument(
+                '--windows', choices=('vad', 'fixed'), default='vad', help='--adapter local: VAD spans or 30 s windows'
+            )
             p.add_argument('--budget-usd', type=float, required=True)
             p.add_argument('--record-id', help='ledger + vendor log id (default <day>-<adapter>)')
             p.add_argument('--sync-exact', action='store_true', help='per-VAD-file cassettes for sync captures')
@@ -95,7 +110,10 @@ def main(argv=None) -> int:
     if args.command == 'record-stt':
         if args.adapter == 'prerecorded' and not (args.provider and args.model):
             parser.error('--provider and --model are required for the prerecorded adapter')
-        print(json.dumps(_record(args)))
+        from testing.pipeline_lab.store import ensure_private_dir, lab_root, private_tempdir
+
+        with private_tempdir(ensure_private_dir(lab_root())):
+            print(json.dumps(_record(args)))
         return 0
 
     # Replay plays recorded cassettes only: no vendor or cloud credential may reach the product code it runs.
@@ -112,14 +130,17 @@ def main(argv=None) -> int:
         parser.error('--provider and --model name the cassettes to play')
     vocabulary = tuple(v for v in args.vocabulary.split(',') if v)
     root = ensure_private_dir(lab_root())
-    results = replay_day(
-        safe_segment(args.day, 'day id'),
-        safe_segment(args.run, 'run id'),
-        STTSelection(args.provider, args.model, args.language, vocabulary),
-        sync_mode=args.sync_mode,
-        streaming_via=None if args.streaming_via == 'none' else args.streaming_via,
-        root=root,
-    )
+    from testing.pipeline_lab.store import private_tempdir
+
+    with private_tempdir(root):  # the product STT code's own temp files stay inside the lab root
+        results = replay_day(
+            safe_segment(args.day, 'day id'),
+            safe_segment(args.run, 'run id'),
+            STTSelection(args.provider, args.model, args.language, vocabulary),
+            sync_mode=args.sync_mode,
+            streaming_via=None if args.streaming_via == 'none' else args.streaming_via,
+            root=root,
+        )
     counts: dict[str, int] = {}
     errors: dict[str, int] = {}
     for r in results:

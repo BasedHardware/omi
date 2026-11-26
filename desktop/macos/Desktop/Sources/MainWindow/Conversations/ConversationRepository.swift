@@ -79,7 +79,7 @@ struct ConversationRepositorySnapshot: Equatable {
 protocol ConversationRemoteDataSource: Sendable {
   func list(query: ConversationListQuery, offset: Int, limit: Int) async throws -> [ServerConversation]
   func count(query: ConversationListQuery) async throws -> Int
-  func detail(id: String) async throws -> ServerConversation
+  func detail(id: String, polling: Bool) async throws -> ServerConversation
   func search(text: String, includeDiscarded: Bool) async throws -> [ServerConversation]
   func restore(id: String) async throws -> ServerConversation
   func setStarred(id: String, starred: Bool) async throws -> ServerConversation
@@ -144,8 +144,8 @@ struct LiveConversationRemoteDataSource: ConversationRemoteDataSource {
     )
   }
 
-  func detail(id: String) async throws -> ServerConversation {
-    try await APIClient.shared.getConversation(id: id, includeDiscarded: true)
+  func detail(id: String, polling: Bool) async throws -> ServerConversation {
+    try await APIClient.shared.getConversation(id: id, includeDiscarded: true, polling: polling)
   }
 
   func search(text: String, includeDiscarded: Bool) async throws -> [ServerConversation] {
@@ -508,21 +508,23 @@ final class ConversationRepository {
   func detail(
     id: String,
     seed: ServerConversation,
+    polling: Bool = false,
     onCached: ((ServerConversation) -> Void)? = nil
   ) async throws -> ServerConversation {
-    try await detail(id: id, fallback: seed, onCached: onCached)
+    try await detail(id: id, fallback: seed, polling: polling, onCached: onCached)
   }
 
   /// A detail known only by id — another device's recording of an event, which
   /// the loaded list may not hold. Same cache-then-revalidate path, but with no
   /// seed to fall back on a failed fetch with nothing cached throws.
   func detail(id: String) async throws -> ServerConversation {
-    try await detail(id: id, fallback: nil, onCached: nil)
+    try await detail(id: id, fallback: nil, polling: false, onCached: nil)
   }
 
   private func detail(
     id: String,
     fallback seed: ServerConversation?,
+    polling: Bool,
     onCached: ((ServerConversation) -> Void)?
   ) async throws -> ServerConversation {
     let session = cacheWriteScope.capture()
@@ -536,7 +538,7 @@ final class ConversationRepository {
     }
 
     do {
-      let received = try await remote.detail(id: id)
+      let received = try await remote.detail(id: id, polling: polling)
       try ensureCurrentSession(session)
       let server = ConversationReconciliationPolicy.retainingHomeFailure(
         server: applyingConfirmedRestore(received),

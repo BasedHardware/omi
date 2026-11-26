@@ -263,9 +263,15 @@ metadata fields.
 `omi_closed_to_summary_seconds` supplements the existing acceptance histogram
 using the later of acceptance and `finished_at` (last speech). This excludes
 open-speech overlap while retaining silence-close and provider/queue delay.
-Missing acceptance/finish or a finish in the future produces no sample. It
+When acceptance metadata is missing, `arrival_at` (server receipt) stands in for
+acceptance. Missing finish, or a finish in the future, produces no sample. It
 does not reconstruct a historical close timestamp or prove fleet-wide SLO
 coverage before all processing hosts run the instrumentation.
+
+For "share processed within N seconds", use
+`omi_conversation_processed_seconds{basis="finished"|"end_or_sync"}`. It is observed
+once per conversation in both the legacy and v3 lanes. Its denominator adds
+`omi_conversation_settled_unsummarized_total`.
 
 ## Original qualification sequence (historical)
 

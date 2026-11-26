@@ -119,6 +119,8 @@ void main() {
     expect(find.byType(ProcessingConversationRow), findsOneWidget);
     expect(find.byType(RecordingListItem), findsNWidgets(2));
 
+    final yesterdayRow = find.text('Yesterday conversation');
+    final expandedY = tester.getTopLeft(yesterdayRow).dy;
     await tester.tap(find.byKey(dayKey));
     await tester.pump();
     expect(find.byTooltip('Expand'), findsOneWidget);
@@ -126,6 +128,14 @@ void main() {
     expect(collapsedToggle.label, contains('Today'));
     expect(collapsedToggle.label, contains('Expand'));
     expect(collapsedToggle.flagsCollection.isExpanded, ui.Tristate.isFalse);
+    expect(tester.getTopLeft(yesterdayRow).dy, expandedY);
+    await tester.pump(const Duration(milliseconds: 125));
+    final halfwayY = tester.getTopLeft(yesterdayRow).dy;
+    expect(halfwayY, lessThan(expandedY));
+    expect(find.text('Today conversation'), findsOneWidget);
+    await tester.pump(const Duration(milliseconds: 125));
+    final collapsedY = tester.getTopLeft(yesterdayRow).dy;
+    expect(collapsedY, lessThan(halfwayY));
     expect(find.text('Today conversation'), findsNothing);
     expect(find.text('Yesterday conversation'), findsOneWidget);
     expect(find.byType(ConversationListItem), findsOneWidget);
@@ -135,8 +145,22 @@ void main() {
 
     await tester.tap(find.byKey(dayKey));
     await tester.pump();
+    expect(tester.getTopLeft(yesterdayRow).dy, collapsedY);
+    await tester.pump(const Duration(milliseconds: 125));
+    expect(tester.getTopLeft(yesterdayRow).dy, greaterThan(collapsedY));
+    expect(tester.getTopLeft(yesterdayRow).dy, lessThan(expandedY));
+    await tester.pump(const Duration(milliseconds: 125));
+    expect(tester.getTopLeft(yesterdayRow).dy, expandedY);
     expect(find.text('Today conversation'), findsOneWidget);
     expect(find.text('Yesterday conversation'), findsOneWidget);
+
+    tester.platformDispatcher.accessibilityFeaturesTestValue = const FakeAccessibilityFeatures(disableAnimations: true);
+    addTearDown(tester.platformDispatcher.clearAccessibilityFeaturesTestValue);
+    await tester.pump();
+    await tester.tap(find.byKey(dayKey));
+    await tester.pump();
+    expect(find.text('Today conversation'), findsNothing);
+    expect(tester.getTopLeft(yesterdayRow).dy, collapsedY);
     semantics.dispose();
     await tester.pumpWidget(const SizedBox.shrink());
   });
@@ -228,8 +252,9 @@ void main() {
 
     await tester.tap(find.byKey(ValueKey('collapse_day_${today.toIso8601String()}')));
     await tester.pump();
+    await tester.pump(const Duration(milliseconds: 250));
     expect(requests, 0);
-    expect(find.text('show more ↓'), findsOneWidget);
+    expect(find.text('Load More'), findsOneWidget);
     expect(find.byKey(const Key('conversations_show_more')), findsOneWidget);
     expect(find.byType(OmiButton), findsOneWidget);
     expect(tester.getSize(find.byType(OmiButton)).height, greaterThanOrEqualTo(48));
@@ -277,6 +302,7 @@ void main() {
 
     await tester.tap(find.byKey(ValueKey('collapse_day_${today.toIso8601String()}')));
     await tester.pump();
+    await tester.pump(const Duration(milliseconds: 250));
     for (var i = 0; i < 6; i++) {
       await tester.drag(find.byType(Scrollable).first, const Offset(0, -3000));
       await tester.pump();
@@ -343,16 +369,17 @@ void main() {
 
     await tester.tap(find.byKey(ValueKey('collapse_day_${today.toIso8601String()}')));
     await tester.pump();
+    await tester.pump(const Duration(milliseconds: 250));
     expect(find.text('new'), findsNothing);
     expect(find.text('old'), findsOneWidget);
-    expect(find.text('show more ↓'), findsOneWidget);
+    expect(find.text('Load More'), findsOneWidget);
     expect(find.byKey(const Key('conversations_show_more_cards')), findsOneWidget);
 
     await tester.tap(find.byKey(const Key('conversations_show_more_cards')));
     await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 50)));
     await tester.pump();
     expect(cursors, [null, 'next']);
-    expect(find.text('show more ↓'), findsNothing);
+    expect(find.text('Load More'), findsNothing);
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
@@ -407,6 +434,7 @@ void main() {
 
     await tester.tap(find.byKey(ValueKey('collapse_day_${today.toIso8601String()}')));
     await tester.pump();
+    await tester.pump(const Duration(milliseconds: 250));
     await tester.tap(find.byKey(const Key('conversations_show_more')));
     await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 50)));
     await tester.pump();
