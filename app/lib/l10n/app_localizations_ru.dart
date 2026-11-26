@@ -15884,4 +15884,15 @@ class AppLocalizationsRu extends AppLocalizations {
   String playStripePlanPaused(String plan) {
     return 'Ваш план $plan приостановлен.';
   }
+
+  @override
+  String get firmwareNewestSupportedForDevice =>
+      'На вашем устройстве уже установлена последняя поддерживаемая версия прошивки';
+
+  @override
+  String get firmwareSyncRecordingsFirstTitle => 'Сначала синхронизируйте записи';
+
+  @override
+  String get firmwareSyncRecordingsFirstMessage =>
+      'Некоторые записи всё ещё находятся на устройстве. Дождитесь завершения их синхронизации с телефоном, а затем начните обновление.';
 }

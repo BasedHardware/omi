@@ -14,6 +14,7 @@ from utils.sync.worker_privacy_metrics import WorkerPrivacyMetrics
 
 CHILD = """
 from database import privacy_check_metrics as metrics, privacy_ttl_cache as ttl_cache
+from database import batch_privacy_owner_cache as shared_cache
 from prometheus_client import Counter
 from types import SimpleNamespace
 import sys
@@ -34,6 +35,8 @@ metrics.owner_shadow_error('attempt', TimeoutError('synthetic-private-detail'))
 metrics.compare('batch', 'account_deleted', 'allow')
 metrics.memo_result('batch', 'hit')
 metrics.negative_lookup('conversations', 'shadow', 'mismatch')
+shared_cache.OUTCOMES.labels('covered').inc()
+shared_cache.SHADOW.labels('match').inc()
 Counter('unrelated_total', 'Not privacy').inc()
 print('ready', flush=True)
 sys.stdin.read()
@@ -115,7 +118,11 @@ async def test_child_counters_survive_reaping_without_double_count_or_file_growt
                 ]
                 == attempt
             )
+            assert before[('omi_batch_pipeline_privacy_owner_cache_total', (('outcome', 'covered'),))] == attempt
+            assert before[('omi_batch_pipeline_privacy_owner_shadow_total', (('outcome', 'match'),))] == attempt
             assert {name for name, _ in before} == {
+                'omi_batch_pipeline_privacy_owner_cache_total',
+                'omi_batch_pipeline_privacy_owner_shadow_total',
                 'privacy_checks_total',
                 'privacy_check_calls_total',
                 'privacy_check_reads_total',

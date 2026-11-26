@@ -25,10 +25,19 @@ import httpx  # noqa: E402
 import openai  # noqa: E402
 import pytest  # noqa: E402
 from fastapi import HTTPException, Request  # noqa: E402
+from google.api_core.exceptions import Aborted, InvalidArgument  # noqa: E402
 
+from database.conversations_v3_fence import ProcessingPersistenceFenced  # noqa: E402
+from database.firestore_transaction_retry import FirestoreContentionExhausted  # noqa: E402
 from routers import conversations_v3_tasks as route  # noqa: E402
 from utils.conversations.processing_metrics import RETRYABLE_PROCESSING_RESPONSES_TOTAL  # noqa: E402
-from utils.conversations.v3 import backfill, request_log_trace_id, service  # noqa: E402
+from utils.conversations.v3 import (  # noqa: E402
+    Conflict,
+    backfill,
+    metrics,
+    request_log_trace_id,
+    service,
+)
 from utils.executors import start_background_task  # noqa: E402
 from utils.llm.gateway_error_contract import (  # noqa: E402
     RETRYABLE_CONVERSATION_PROCESSING_ERROR_CODE,
@@ -254,3 +263,71 @@ async def test_opted_in_background_task_keeps_a_non_provider_failure_loud(caplog
     assert any(
         record.levelno == logging.ERROR and 'background_task failed' in record.getMessage() for record in caplog.records
     )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    'kind,reason',
+    [
+        ('transaction_contention', 'dependency_warming'),
+        ('transaction_expired', 'dependency_warming'),
+        ('transaction_retry_deadline', 'dependency_warming'),
+        ('processing_source_changed', 'persistence_fenced'),
+        ('v3_processing_not_completed', 'persistence_fenced'),
+    ],
+)
+async def test_reconcile_counts_expected_task_retries(monkeypatch, reconcile_request, kind, reason):
+    if kind.startswith('transaction_'):
+        error = FirestoreContentionExhausted(
+            'retry budget exhausted',
+            reason='deadline_exhausted' if kind == 'transaction_retry_deadline' else 'attempts_exhausted',
+        )
+        error.__cause__ = (
+            Aborted('cross-transaction contention')
+            if kind != 'transaction_expired'
+            else InvalidArgument('The referenced transaction has expired or is no longer valid')
+        )
+    else:
+        error = Conflict(kind) if kind == 'processing_source_changed' else ProcessingPersistenceFenced(kind)
+    monkeypatch.setattr(service, 'reconcile', AsyncMock(side_effect=error))
+    count = metrics.RACES.labels(kind)
+    before = count._value.get()
+    body = route.ReconcileRequest(uid='u')
+
+    response = await route.reconcile(body, reconcile_request, _retry=1)
+    assert response.status_code == 409
+    assert response.body == b'{"status":"retry","reason":"' + reason.encode() + b'"}'
+    assert count._value.get() == before + 1
+
+    monkeypatch.setenv('CONVERSATIONS_V3_RECONCILE_RETRY_RESPONSE', 'off')
+    with pytest.raises(type(error)):
+        await route.reconcile(body, reconcile_request, _retry=1)
+    assert count._value.get() == before + 1
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('handled', [False, True])
+async def test_summary_lease_release_preserves_only_propagating_failure(monkeypatch, reconcile_request, handled):
+    row = {'id': 'c'}
+    failure = service.FinalizationOwnedElsewhere() if handled else ValueError('unexpected processing failure')
+
+    async def run(_executor, func, *_args):
+        if func is service.pending_processing:
+            return [row]
+        if func is service.leases.acquire:
+            return 'token'
+        assert func is service.leases.release
+        raise FirestoreContentionExhausted('release contention')
+
+    monkeypatch.setattr(service, 'run_blocking', run)
+    monkeypatch.setattr(service, '_process_leased', AsyncMock(side_effect=failure))
+    monkeypatch.setattr(service, 'reconcile', service.drain_processing)
+
+    if handled:
+        response = await route.reconcile(route.ReconcileRequest(uid='u'), reconcile_request, _retry=0)
+        assert response.status_code == 409
+        assert response.body == b'{"status":"retry","reason":"dependency_warming"}'
+    else:
+        with pytest.raises(ValueError) as raised:
+            await route.reconcile(route.ReconcileRequest(uid='u'), reconcile_request, _retry=0)
+        assert raised.value is failure

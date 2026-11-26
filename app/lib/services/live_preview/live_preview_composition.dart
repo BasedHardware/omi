@@ -13,6 +13,7 @@ import 'package:omi/services/live_preview/live_preview_engine.dart';
 import 'package:omi/services/live_preview/live_preview_notes.dart';
 import 'package:omi/services/freemium_transcription_service.dart';
 import 'package:omi/services/live_preview/live_preview_telemetry.dart';
+import 'package:omi/services/live_preview/live_words_log.dart';
 import 'package:omi/services/live_preview/whisper_window_preview_engine.dart';
 import 'package:omi/services/sockets/on_device_whisper_provider.dart';
 
@@ -38,6 +39,7 @@ LivePreviewController? composeLivePreview() {
     decodeOpus: (Uint8List opus) => (decoder ??= SimpleOpusDecoder(sampleRate: 16000, channels: 1)).decode(input: opus),
     conversationGap: () => UplinkSilenceTimer.fromPreference(SharedPreferencesUtil().conversationSilenceDuration),
     requestAllowed: LivePreviewGate.requestAllowed,
+    liveWordsLog: LiveWordsLog.event,
   );
   if (android) {
     unawaited(DeviceInfoPlugin()

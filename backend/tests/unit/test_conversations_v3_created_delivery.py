@@ -13,7 +13,8 @@ import yaml
 from database import conversations_v3 as store, conversations_v3_leases as leases
 from database import conversations_v3_processing as writers
 from utils.app_integrations import ExternalIntegrationFanoutError
-from utils.conversations.v3 import created, processing, service
+from utils.conversations.v3 import created, outline, planner, processing, service
+from utils.conversations.v3.live import FINISH_RECORDING_FIELD, FINISH_WINDOW_FIELD
 from tests.unit.test_conversations_v3_review import AT, builder, source  # noqa: F401
 from tests.unit.test_conversations_v3_transactions import strict  # noqa: F401
 
@@ -480,8 +481,6 @@ async def test_the_builder_drain_delivers_settled_notes(strict, delivery, monkey
 
 
 def test_no_pointer_finish_counts_only_the_accepted_windows_first_settlement(strict, monkeypatch):
-    from utils.conversations.v3.live import FINISH_WINDOW_FIELD
-
     counter = Mock()
     monkeypatch.setattr(writers.metrics, 'FINISH_NO_POINTER', counter)
     strict.rows[C] = derived(
@@ -490,5 +489,27 @@ def test_no_pointer_finish_counts_only_the_accepted_windows_first_settlement(str
     settle(strict, notes=False)
     strict.rows[C]['v3_process_pending'] = True
     settle(strict, notes=False)
+    counter.labels.assert_called_once_with('settled')
+    counter.labels.return_value.inc.assert_called_once_with()
+
+
+def test_recording_finish_counts_first_settlement_of_its_derived_window(strict, monkeypatch):
+    counter = Mock()
+    monkeypatch.setattr(writers.metrics, 'FINISH_NO_POINTER', counter)
+    recording = source(v3_manual_end=True, **{FINISH_RECORDING_FIELD: True})
+    groups = outline.stretches([recording], AT + timedelta(seconds=20))
+    [window] = planner.windows(groups, [[{'first_line': 1, 'kind': 'conversation', 'title': 'Plan', 'line': ''}]])
+    row = planner.build('synthetic', window, {'r': recording})
+    cid = row['id']
+    assert row[FINISH_WINDOW_FIELD] == cid and row['manual_end'] and row['status'] == 'processing'
+    counter.labels.assert_not_called()
+
+    path = (*C[:-1], cid)
+    # The service arms processing and the notes writer then completes the row.
+    strict.rows[path] = {**row, 'status': 'completed', 'v3_process_pending': True}
+    token = leases.acquire('synthetic', f'summary-{cid}', firestore_client=strict)
+    for _ in range(2):
+        writers.settle_processing('synthetic', cid, token, 1, AT, notes=False, firestore_client=strict)
+        strict.rows[path]['v3_process_pending'] = True
     counter.labels.assert_called_once_with('settled')
     counter.labels.return_value.inc.assert_called_once_with()

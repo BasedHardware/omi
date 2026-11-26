@@ -226,6 +226,20 @@ class QueueMetrics:
             'Committed record barrier aged dead letters; custody retained',
             registry=registry,
         )
+        # Cause counters (RECORD_BARRIER_CAUSE_METRICS). Attempts repeat per
+        # row; aged counts committed record_barrier_aged transitions once.
+        self.record_barrier_refusals = Counter(
+            'omi_batch_record_barrier_refusals_total',
+            'Record admission barrier refusal attempts by first failing clause',
+            ['blocker', 'token_kind'],
+            registry=registry,
+        )
+        self.record_barrier_aged = Counter(
+            'omi_batch_record_barrier_aged_total',
+            'Committed record_barrier_aged transitions by first failing clause',
+            ['blocker', 'token_kind'],
+            registry=registry,
+        )
         self.record_dead_letter_stock = Gauge(
             'omi_batch_record_dead_letter_units',
             'Retained record_barrier_aged job stock',

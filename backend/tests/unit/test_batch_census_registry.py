@@ -49,7 +49,7 @@ def test_postgres_batch_selector_contract():
     from config.batch_census_selectors import SQL_EXCEPTIONS
     from database.jobstore.outbox_pg import PostgresOutbox
     from database.jobstore.postgres_store import PostgresStore, PostgresTransaction
-    from database.outbox import OutboxKind
+    from database.outbox import Claim, OutboxKind
 
     connection = RecordingConnection()
     store = PostgresStore('batch_pipeline_test_census', pool=RecordingPool(connection), customer_client=None)
@@ -87,6 +87,16 @@ def test_postgres_batch_selector_contract():
         outbox._enqueue: [((connection, segment, owner, {}, now, None, 'max', now), {})],
         outbox.claim: [((10, 60), {'now': now})],
         outbox.claim_key: [(('1', 'synthetic-token', 60), {'now': now})],
+        outbox.defer: [
+            (
+                (
+                    Claim(OutboxKind.PROVIDER_STT, '1', 'synthetic-token', '', 1, now + 60, owner, {}, None),
+                    now + 60,
+                    'r',
+                ),
+                {'now': now},
+            )
+        ],
         outbox.wake: [(('1', 'synthetic-token'), {})],
         outbox.sweep: [((), {'now': now})],
     }

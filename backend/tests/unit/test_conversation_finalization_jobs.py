@@ -6,7 +6,7 @@ from database import conversation_processing_recovery as processing_recovery
 
 from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
-from unittest.mock import Mock
+from unittest.mock import ANY, Mock
 
 import pytest
 from google.api_core.exceptions import Aborted
@@ -176,6 +176,46 @@ def test_rest_intent_persists_its_force_mode_and_calendar_context_atomically():
     ]
 
 
+def test_ordinary_admission_refuses_account_deletion_without_projection_writes():
+    transaction = _Transaction()
+    intent = jobs._create_or_get_finalization_intent_txn(
+        transaction,
+        _conversation(),
+        _Collection({}),
+        'uid-1',
+        'conversation-1',
+        False,
+        _admit_finalization,
+        _now(),
+        account_deletion_ref=_Ref('uid-1', {'wipe_status': 'wipe_failed'}),
+        extra_updates={'title': 'late'},
+    )
+
+    assert intent['status'] == 'refused_account_deleting'
+    assert transaction.sets == transaction.updates == []
+
+
+def test_meeting_receipt_cannot_create_job_after_account_deletion():
+    transaction = _Transaction()
+    receipt = jobs._record_meeting_receipt_txn(
+        transaction,
+        _conversation(),
+        _Collection({}),
+        'uid-1',
+        'conversation-1',
+        None,
+        True,
+        'eligible',
+        120,
+        110,
+        _now(),
+        account_deletion_ref=_Ref('uid-1', {'wipe_status': 'wiped'}),
+    )
+
+    assert receipt == {'status': 'fenced'}
+    assert transaction.sets == transaction.updates == []
+
+
 def test_create_or_get_intent_retries_read_contention_with_a_fresh_transaction(monkeypatch):
     """Concurrent REST finalizers must recover a read-time Firestore abort."""
 
@@ -193,6 +233,8 @@ def test_create_or_get_intent_retries_read_contention_with_a_fresh_transaction(m
         def collection(self, name: str):
             if name == jobs.FINALIZATION_JOBS_COLLECTION:
                 return jobs_collection
+            if name == 'account_deletions':
+                return _Collection({})
             if name == 'users':
                 return SimpleNamespace(document=lambda _uid: SimpleNamespace(collection=lambda _collection_name: None))
             assert name == jobs.FINALIZATION_PROJECTION_COLLECTION
@@ -1125,6 +1167,7 @@ def test_final_attempt_atomically_closes_its_bound_processing_conversation():
             conversation_ref,
             {
                 'status': 'completed',
+                'terminal_family_at': ANY,
                 'discarded': False,
                 'finalization_status': 'dead_letter',
                 'relevance_decision': {
@@ -1933,6 +1976,7 @@ def test_complete_orphan_gives_an_untitled_row_its_deterministic_title():
             orphan,
             {
                 'status': 'completed',
+                'terminal_family_at': ANY,
                 'structured': {'title': 'Call the plumber tomorrow.', 'overview': '', 'category': 'other'},
                 'discarded': False,
                 'relevance_decision': {
@@ -2355,6 +2399,7 @@ def test_terminalize_exhausted_requeued_job_closes_the_parked_row_and_its_conver
         conversation_ref,
         {
             'status': 'completed',
+            'terminal_family_at': ANY,
             'discarded': False,
             'finalization_status': 'dead_letter',
             # The discard-detection audit stamps an explicit policy keep on

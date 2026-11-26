@@ -4208,6 +4208,19 @@ def test_record_close_notify_bound_on_all_listener_hosts(environment):
             _assert_record_close_listener_bindings(missing)
 
 
+@pytest.fixture(scope='module')
+def listener_close_runtime_yaml():
+    validator = load_validator()
+    parsed = {validator.DEFAULT_MANIFEST: validator._load_yaml(validator.DEFAULT_MANIFEST)}
+
+    def load(path):
+        if path not in parsed:
+            parsed[path] = validator._load_yaml(path)
+        return copy.deepcopy(parsed[path])
+
+    return load
+
+
 @pytest.mark.parametrize(
     'key,value',
     [
@@ -4217,8 +4230,13 @@ def test_record_close_notify_bound_on_all_listener_hosts(environment):
         ('PUSHER_RECORD_CLOSE_NOTIFY_ENABLED_SERVE_UID_SHA256S', ''),
     ],
 )
-def test_cloud_run_runtime_rejects_missing_listener_close_binding(tmp_path, key, value):
+def test_cloud_run_runtime_rejects_missing_listener_close_binding(
+    tmp_path, monkeypatch, listener_close_runtime_yaml, key, value
+):
     validator = load_validator()
+    # Each case mutates the rendered JSON. Reuse the parsed YAML inputs to
+    # exercise all missing bindings without repeatedly parsing the fleet manifest.
+    monkeypatch.setattr(manifest_validation, '_load_yaml', listener_close_runtime_yaml)
     payload = with_cloud_run_oauth_secrets(_MISSING_GATEWAY_CLOUD_RUN_STATE)
     payload = payload.replace(json.dumps({'name': key, 'value': value}) + ',', '')
     path = tmp_path / 'missing-close-switch.json'

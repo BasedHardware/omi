@@ -59,11 +59,19 @@ extension _ConversationProcessingLifecycle on ConversationProvider {
       !row.isAdmittedForTranscription &&
       (row.homeStep == 'failed' || _failedHomeProcessingIds.contains(_processingTargetId(row)));
 
+  // Reliability experiment early_title_icon: an ended conversation whose title and emoji the server has
+  // already fixed is a Home row while its summary is still being written, not a processing row.
   bool _isHomeListRow(ServerConversation row) =>
-      row.status == ConversationStatus.completed || row.isTranscriptionAllowanceHeld || _hasFailedHomeProcessing(row);
+      row.status == ConversationStatus.completed ||
+      row.isTranscriptionAllowanceHeld ||
+      _hasFailedHomeProcessing(row) ||
+      titledBeforeSummary(row);
 
   bool _isActiveProcessingRow(ServerConversation row) =>
-      _isActiveProcessingStatus(row.status) && !row.isTranscriptionAllowanceHeld && !_hasFailedHomeProcessing(row);
+      _isActiveProcessingStatus(row.status) &&
+      !row.isTranscriptionAllowanceHeld &&
+      !_hasFailedHomeProcessing(row) &&
+      !titledBeforeSummary(row);
 
   ServerConversation _withHomeProcessingProjection(ServerConversation row) => !row.isAdmittedForTranscription &&
           _isActiveProcessingStatus(row.status) &&

@@ -654,6 +654,7 @@ overlay:
             version: latest
         env:
           CONVERSATIONS_V3_LIVE_TITLE: {value: 'on', category: ops_kill}
+          CONVERSATIONS_V3_FAST_FINISH: {value: 'on', category: ops_kill}
           CONVERSATION_PARKED_TERMINAL_STATUS_ENABLED:
             value: 'off'
             category: rollout
@@ -1519,7 +1520,7 @@ overlay:
         - SYNC_REPROCESS_COALESCE_ENABLED
         - REPEAT_WORK_REVISION_ENABLED
         env:
-          CONVERSATIONS_V3_LIVE_TITLE: {value: 'off', category: ops_kill}
+          CONVERSATIONS_V3_LIVE_TITLE: {value: 'on', category: ops_kill}
           CONVERSATION_PARKED_TERMINAL_STATUS_ENABLED:
             value: 'off'
             category: rollout
@@ -1913,6 +1914,8 @@ overlay:
         - REPEAT_WORK_REVISION_ENABLED
         - HOSTED_DIARIZATION_API_URL
         env:
+          CONVERSATIONS_V3_LIVE_TITLE: {value: 'off', category: ops_kill}
+          CONVERSATIONS_V3_FAST_FINISH: {value: 'on', category: ops_kill}
           CONVERSATION_PARKED_TERMINAL_STATUS_ENABLED:
             value: 'off'
             category: rollout
@@ -1923,6 +1926,7 @@ overlay:
           # Margin-40 O1 inverse: full deploys must retain the admitted 200/10/class16 cadence.
           BATCH_PIPELINE_SERVING_SWEEP_PAGE_ROWS: {value: '200', category: rollout}
           BATCH_PIPELINE_SERVING_TICK_SECONDS: {value: '10', category: rollout}
+          BATCH_PIPELINE_PROJECTION_FOLLOWUP_SLOTS: {value: '3', category: rollout}
           BATCH_PROJECTION_FINISH_CLASSIFY_PAGE_LIMIT: {value: '16', category: rollout}
           # SCA-2283: retain the behavior of the serving pre-flag image until custody admission.
           BATCH_ACCOUNT_PRIVACY_WRITER_ENABLED: {value: 'false', category: ops_kill}
@@ -2249,6 +2253,9 @@ overlay:
         - BATCH_PIPELINE_PROJECTION_PHASE_SAMPLE_PERCENT
         - BATCH_POLICY_KILL_SWITCH_LOG_ON_CHANGE_ENABLED
         env:
+          CONVERSATIONS_V3_LIVE_TITLE: {value: 'on', category: ops_kill}
+          # The pump derives from integration; keep its own fast finish at the code default (cohort).
+          CONVERSATIONS_V3_FAST_FINISH: {value: 'cohort', category: ops_kill}
           CONVERSATION_PARKED_TERMINAL_STATUS_ENABLED:
             value: 'off'
             category: rollout

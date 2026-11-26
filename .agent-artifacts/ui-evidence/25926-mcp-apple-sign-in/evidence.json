@@ -1,0 +1,33 @@
+{
+  "version": 1,
+  "images": [
+    {
+      "file": "001-web-windows-sign-in.png",
+      "platform": "web",
+      "description": "A Windows browser profile shows Google, Apple, and email sign-in on the MCP consent page.",
+      "captured_by": "agent",
+      "source": "playwright-e2e"
+    },
+    {
+      "file": "002-web-windows-apple-consent.png",
+      "platform": "web",
+      "description": "The selected synthetic Apple identity and permissions are visible before Allow access is selected.",
+      "captured_by": "agent",
+      "source": "playwright-e2e"
+    },
+    {
+      "file": "003-web-compact-apple-sign-in.png",
+      "platform": "web",
+      "description": "All sign-in methods remain readable at a 390-pixel viewport with an iPhone browser profile.",
+      "captured_by": "agent",
+      "source": "playwright-e2e"
+    },
+    {
+      "file": "004-web-windows-dark-sign-in.png",
+      "platform": "web",
+      "description": "The Apple icon and label are readable in dark mode on a Windows browser profile.",
+      "captured_by": "agent",
+      "source": "playwright-e2e"
+    }
+  ]
+}

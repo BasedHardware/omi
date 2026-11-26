@@ -131,12 +131,21 @@ class StrictFirestoreDocument:
             supported_field_paths = [field for field in field_paths if field != 'recording']
             if supported_field_paths not in (
                 ['deleted'],
+                ['created_at', 'summary_blocked_reason'],
                 ["is_locked"],
                 ["folder_id"],
                 ["language"],
                 ["private_cloud_sync_enabled"],
                 ['uses_custom_stt', 'private_cloud_sync_enabled', 'data_protection_level'],
                 ['discarded', 'deleted', 'sync_merged_into'],
+                [
+                    'deleted',
+                    'discarded',
+                    'sync_merged_into',
+                    'sync_content_revision',
+                    'finalization_engine',
+                    'finalization_owner_epoch',
+                ],
                 ['external_data', 'created_at', 'deleted', 'sync_merged_from', 'status'],
                 [
                     'discarded',
@@ -409,11 +418,14 @@ class StrictFirestoreTransaction:
         payload = deepcopy(data)
         self.sets.append((ref.path, payload))
         if merge:
-            if ref.path[0] in ('app_review_config', 'legal_holds') and len(ref.path) == 2:
+            if (ref.path[0] in ('app_review_config', 'legal_holds') and len(ref.path) == 2) or (
+                len(ref.path) == 4 and ref.path[0] == 'users' and ref.path[2] == 'memory_historical_overrides'
+            ):
                 # App-review persists a complete top-level config snapshot with
                 # merge=True, preserving fields owned by other writers. A legal
                 # hold merges flat top-level fields the same way (place keeps
-                # release fields, release keeps placement fields).
+                # release fields, release keeps placement fields). Historical
+                # memory overrides preserve fields owned by other writers.
                 prior = deepcopy(self._database.rows.get(ref.path) or {})
                 prior.update(payload)
                 self._database.rows[ref.path] = prior
@@ -425,9 +437,7 @@ class StrictFirestoreTransaction:
                 prior['generation'] = (value if type(value) in (int, float) else 0) + data['generation'].value
                 self._database.rows[ref.path] = prior
             else:
-                raise UnsupportedFirestoreOperationError(
-                    'merge set is supported only for app-review config and People generation'
-                )
+                raise UnsupportedFirestoreOperationError('unsupported merge set path for the strict Firestore fixture')
         else:
             self._database.rows[ref.path] = payload
 
