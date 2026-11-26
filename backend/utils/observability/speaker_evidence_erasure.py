@@ -22,3 +22,40 @@ SWEEP_DISABLED = _ERASURE.labels(_REVISION, 'disabled')
 REMAINING = Counter(
     'omi_speaker_evidence_remaining_total', 'Evidence child references observed after a sweep.', ['revision']
 ).labels(_REVISION)
+
+
+_VERIFICATION = Counter(
+    'omi_speaker_evidence_verification_total',
+    'Synthetic verification outcomes.',
+    ['revision', 'outcome'],
+)
+_VERIFICATION_OUTCOMES = {
+    outcome: _VERIFICATION.labels(_REVISION, outcome)
+    for outcome in (
+        'writer_waiting',
+        'writer_released',
+        'writer_refused_marker_present',
+        'writer_committed_marker_absent',
+        'writer_committed_marker_present',
+        'writer_failed',
+        'writer_timed_out',
+        'task_enqueued',
+        'task_deferred',
+        'task_admitted',
+        'task_admitted_retry',
+        'task_completed_checked_zero_remaining',
+        'task_completed_after_writer_refusal',
+    )
+}
+
+
+def verification(outcome: str) -> None:
+    _VERIFICATION_OUTCOMES[outcome].inc()
+
+
+def has_executor_revision() -> bool:
+    return _REVISION != 'unknown'
+
+
+def revision() -> str:
+    return _REVISION

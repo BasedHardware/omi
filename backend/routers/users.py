@@ -146,11 +146,16 @@ from database import user_usage as user_usage_db
 from utils import stripe as stripe_utils
 from utils.cloud_tasks import (
     AccountDeletionTaskAuthentication,
+    account_deletion_queue_path,
     get_account_deletion_tasks_max_attempts,
     verify_account_deletion_cloud_tasks_oidc,
     verify_conversation_batch_purge_cloud_tasks_oidc,
 )
-from database import batch_pipeline_conversation_purge_scans, conversation_batch_purge_jobs
+from database import (
+    batch_pipeline_conversation_purge_scans,
+    conversation_batch_purge_jobs,
+    speaker_evidence_verification as evidence_verification,
+)
 from utils.executors import db_executor, erasure_executor, llm_executor, run_blocking
 from utils.http_client import UnsafeWebhookURLError, safe_request_target
 from utils.log_sanitizer import sanitize
@@ -363,6 +368,22 @@ async def run_account_deletion_wipe(
             status_code=200, content={'status': 'dropped', 'reason': resolution_outcome or 'invalid_job'}
         )
 
+    receipt = None
+    if verification_token := payload.get(evidence_verification.TASK_FIELD):
+        defer, receipt = await run_blocking(
+            db_executor,
+            evidence_verification.admit_task,
+            uid,
+            wipe_job_id,
+            verification_token,
+            account_deletion_queue_path(),
+            request.headers.get('x-cloudtasks-queuename', ''),
+            request.headers.get('x-cloudtasks-taskname', ''),
+            task_authentication.retry_count,
+        )
+        if defer:
+            return JSONResponse(status_code=503, content={'status': 'retry'})
+
     lock_key = f'account-deletion:{uid}'
     needs_erase = resolution.get('erase_armed') is True or go_queue_erase_required()
     lease = (ERASE_LEASE_SECONDS,) if needs_erase else ()
@@ -391,8 +412,13 @@ async def run_account_deletion_wipe(
         max_attempts = get_account_deletion_tasks_max_attempts()
         terminal = task_authentication.retry_count >= max_attempts - 1
         erase_args = (wipe_job_id,) if needs_erase else ()
-        ok = await run_deletion_wipe_with_lease(uid, task_authentication.retry_count, terminal, lock_token, *erase_args)
+        with evidence_verification.observe_sweep(receipt):
+            ok = await run_deletion_wipe_with_lease(
+                uid, task_authentication.retry_count, terminal, lock_token, *erase_args
+            )
         if ok:
+            if receipt is not None:
+                await run_blocking(db_executor, evidence_verification.complete_task, receipt)
             return JSONResponse(status_code=200, content={'status': 'done'})
 
         if terminal:
