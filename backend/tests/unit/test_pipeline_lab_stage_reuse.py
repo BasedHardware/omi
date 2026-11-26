@@ -346,12 +346,16 @@ def test_harness_identity_changes_with_lab_code_and_ignores_bytecode(tmp_path, m
     assert orchestrator.harness_identity() != first  # a changed stand-in or driver must miss the cache
 
 
-def test_transcribe_with_failed_replays_is_not_stored():
-    from testing.pipeline_lab.lanes.plugin import TranscribeStage
+def test_transcribe_with_transient_replay_failures_is_not_stored():
+    from testing.pipeline_lab.lanes.plugin import TranscribeStage, _deterministic_failure
 
     stage = TranscribeStage()
-    assert stage.cache_ok({'transcribe': {'outcomes': {'replayed': 3}}}) is None
-    assert stage.cache_ok({'transcribe': {'source': 'stored'}}) is None  # nothing replayed, nothing failed
-    assert (
-        stage.cache_ok({'transcribe': {'outcomes': {'replayed': 2, 'failed': 1}}}) == '1 conversations failed to replay'
+    assert stage.cache_ok({'transcribe': {'outcomes': {'transcript': 3}, 'failed_transient': 0}}) is None
+    assert stage.cache_ok({'transcribe': {'source': 'stored'}}) is None  # nothing replayed
+    # a cassette miss is keyed by the cassette inventory: stored; a worker or VAD error is not
+    assert stage.cache_ok({'transcribe': {'outcomes': {'failed': 1}, 'failed_transient': 0}}) is None
+    assert stage.cache_ok({'transcribe': {'outcomes': {'failed': 2}, 'failed_transient': 1}}) == (
+        '1 conversations failed to replay'
     )
+    assert _deterministic_failure('cassette_miss') and _deterministic_failure('lane_not_replayed:streaming')
+    assert not _deterministic_failure('vad_failed') and not _deterministic_failure(None)

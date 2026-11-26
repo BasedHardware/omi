@@ -58,6 +58,14 @@ def _day_inputs(ctx: Any) -> dict[str, str]:
     }
 
 
+# Replay failures fully determined by the stage key's inputs (audio, cassette inventory, STT selection).
+_DETERMINISTIC_ERRORS = ('no_audio', 'cassette_miss')
+
+
+def _deterministic_failure(error: Any) -> bool:
+    return isinstance(error, str) and (error in _DETERMINISTIC_ERRORS or error.startswith('lane_not_replayed:'))
+
+
 class _Stage:
     cacheable = True
     scoped_code = True  # key on the files this stage runs, not the whole backend tree
@@ -118,10 +126,11 @@ class TranscribeStage(_Stage):
         ctx.run_extra['stt'] = output.get('stt_label') or 'stored production transcripts'
 
     def cache_ok(self, outputs: Mapping[str, Mapping[str, Any]]) -> Optional[str]:
-        """Why this result must not be stored, or None. A conversation whose replay failed (a transient worker
-        or VAD error, a missing cassette) kept its stored transcript; storing that would keep serving it after
-        the cause is gone, so the next identical run replays again. The run's warnings keep the diagnostics."""
-        failed = int(((outputs.get('transcribe') or {}).get('outcomes') or {}).get('failed') or 0)
+        """Why this result must not be stored, or None. A conversation whose replay failed for a reason the key
+        does not cover (a worker or VAD error) kept its stored transcript; storing that would keep serving it after
+        the cause is gone. Deterministic failures (no audio, a cassette miss, a lane not replayed) are keyed by the
+        audio, cassette inventory and STT selection, so they are stored. The run's warnings keep the diagnostics."""
+        failed = int((outputs.get('transcribe') or {}).get('failed_transient') or 0)
         return f'{failed} conversations failed to replay' if failed else None
 
     def run(self, ctx: Any) -> StageResult:
@@ -163,8 +172,11 @@ class TranscribeStage(_Stage):
             raise RuntimeError(f'transcribe replay exited {code}')
         index = read_json(ctx.run_dir / 'ingest' / 'index.json') or {}
         outcomes: dict[str, int] = {}
+        transient = 0
         for row in index.get('conversations') or []:
             outcomes[row.get('outcome')] = outcomes.get(row.get('outcome'), 0) + 1
+            if row.get('outcome') == 'failed' and not _deterministic_failure(row.get('error')):
+                transient += 1
         ctx.run_extra['stt'] = stt_label(stt)
         warnings = []
         if outcomes.get('failed'):
@@ -172,7 +184,13 @@ class TranscribeStage(_Stage):
                 f'{outcomes["failed"]} conversations kept their stored transcript (no cassette or no audio)'
             )
         return StageResult(
-            output={'source': 'cassette', 'stt': stt, 'stt_label': stt_label(stt), 'outcomes': outcomes},
+            output={
+                'source': 'cassette',
+                'stt': stt,
+                'stt_label': stt_label(stt),
+                'outcomes': outcomes,
+                'failed_transient': transient,
+            },
             warnings=warnings,
         )
 
