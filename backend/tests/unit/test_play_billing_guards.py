@@ -312,6 +312,48 @@ def test_play_recovery_next_to_stripe_keeps_both_and_records_it_once(conflict, c
     assert _row(conflict.env).stripe_subscription_id == 'sub_card'
 
 
+@pytest.mark.parametrize('caller', ['notification', 'verify'])
+@pytest.mark.parametrize('listing', ['failed', 'paid_id', 'no_stripe_row'])
+def test_stripe_conflict_settlement(conflict, caplog, monkeypatch, caller, listing):
+    monkeypatch.setattr(play_billing.time, 'time', lambda: NOW)
+    env = conflict.env
+    if listing == 'failed':
+
+        def unavailable(**kwargs):
+            raise RuntimeError('Stripe unavailable')
+
+        monkeypatch.setattr(play_billing.stripe.Subscription, 'list', unavailable)
+    elif listing == 'no_stripe_row':
+        env.users.rows.pop(UID)
+        env.stripe_subs.clear()
+
+    key = play_db.token_key(TOKEN)
+    has_conflict = listing != 'no_stripe_row'
+    previous_acks = list(env.publisher.acks)
+    if caller == 'notification':
+        assert _notify(1) == ('stripe_conflict' if has_conflict else 'active')
+    else:
+        result = play_billing.verify_and_bind(UID, TOKEN, config.product_id())
+        assert result.status == ('inactive' if has_conflict else 'active')
+        assert (result.subscription is None) == has_conflict
+
+    purchase = env.store.docs[key]
+    assert env.publisher.acks == previous_acks
+    if has_conflict:
+        assert purchase[play_billing.CONFLICT_FIELD] == NOW
+        assert purchase[play_billing.CONFLICT_NOTIFIED_FIELD] == NOW
+        assert [n.source for n in conflict.notices] == ['play_billing_double_billing']
+        assert len(_double_charge_lines(caplog)) == 1
+        assert _row(env).stripe_subscription_id == 'sub_card'
+        assert env.users.writes == []
+    else:
+        assert play_billing.CONFLICT_FIELD not in purchase
+        assert not conflict.notices
+        assert not _double_charge_lines(caplog)
+        assert _row(env).provider == 'play'
+    assert purchase.get(play_billing.CONFLICT_UNVERIFIED_FIELD) == (NOW if listing == 'failed' else None)
+
+
 @pytest.mark.parametrize('failure', [RuntimeError('fcm down'), 'failed'])
 def test_a_failed_notice_is_sent_on_the_next_observation(conflict, failure):
     if failure == 'failed':
@@ -336,19 +378,31 @@ def test_a_stale_play_snapshot_never_clears_the_conflict_stamp(conflict):
     assert conflict.env.store.docs[key][play_billing.CONFLICT_FIELD] == stamp
 
 
-@pytest.mark.parametrize('kind', ['one_time_org', 'stale_canceled_stripe', 'incomplete_stripe'])
+@pytest.mark.parametrize(
+    'kind',
+    ['one_time_org', 'one_time_listing_failed', 'prepaid_listing_failed', 'stale_canceled_stripe', 'incomplete_stripe'],
+)
 def test_no_double_charge_is_reported_without_a_paid_recurring_stripe_subscription(
     subscribed, caplog, monkeypatch, kind
 ):
-    if kind == 'one_time_org':
+    if kind in ('one_time_org', 'one_time_listing_failed'):
         subscribed.users.rows[UID] = Subscription(
             plan=PlanType.unlimited_v2, current_period_end=NOW + DAY, stripe_subscription_id='pi_org_payment'
         ).model_dump()
+    elif kind == 'prepaid_listing_failed':
+        subscribed.users.rows[UID] = {**_stripe_row(), 'prepaid': True}
     elif kind == 'stale_canceled_stripe':
         subscribed.users.rows[UID] = _stripe_row()
         _stripe_list(subscribed, [{'id': 'sub_card', 'status': 'canceled', 'metadata': {'uid': UID}}])
     else:
         _stripe_list(subscribed, [{'id': 'sub_new', 'status': 'incomplete', 'metadata': {'uid': UID}}])
+    if kind.endswith('_listing_failed'):
+        _stripe_list(subscribed, [])
+
+        def unavailable(**kwargs):
+            raise RuntimeError('Stripe unavailable')
+
+        monkeypatch.setattr(play_billing.stripe.Subscription, 'list', unavailable)
     subscribed.publisher.resources[TOKEN]['acknowledgementState'] = 'ACKNOWLEDGEMENT_STATE_ACKNOWLEDGED'
     monkeypatch.setattr(play_billing, '_publisher', NoCancelPublisher(subscribed.publisher))
     monkeypatch.setattr(play_billing, 'dispatch_notification', lambda intent: pytest.fail('no notice'))

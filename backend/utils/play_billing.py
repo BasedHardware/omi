@@ -227,12 +227,16 @@ def _revoke(uid: str, token_hash: str) -> bool:
     return True
 
 
-def _holds_live_paid_row(uid: str, *, exclude_play: bool = False) -> bool:
+def _holds_live_paid_row(uid: str, *, exclude_play: bool = False, require_billable_stripe: bool = False) -> bool:
     stored = users_db.get_user_valid_subscription(uid, include_promotions=False)
     return bool(
         stored is not None
         and is_paid_plan(stored.plan)
         and not (exclude_play and stored.provider == 'play')
+        and (
+            not require_billable_stripe
+            or (not stored.prepaid and (stored.stripe_subscription_id or '').startswith('sub_'))
+        )
         and stored.current_period_end
         and stored.current_period_end > int(time.time())
     )
@@ -309,22 +313,24 @@ def _clear_pending(uid: str, token_hash: str) -> None:
 
 
 CONFLICT_FIELD = 'stripe_conflict_at'
+CONFLICT_UNVERIFIED_FIELD = 'stripe_conflict_listing_failed_at'
 CONFLICT_NOTIFIED_FIELD = 'stripe_conflict_notified_at'
 CONFLICT_NOTICE_CLAIM_FIELD = 'stripe_conflict_notice_claimed_at'
 NOTICE_CLAIM_SECONDS = 600
 DOUBLE_CHARGE_LOG = 'play_billing_double_charge uid=%s purchase=%s state=%s'
 
 
-def _paid_stripe_subscription_ids(uid: str, prepaid: Optional[list] = None) -> list[str]:
-    """Recurring Stripe subscriptions (``sub_``) Stripe itself reports active or trialing for ``uid``.
+def _paid_stripe_subscription_ids(uid: str) -> tuple[list[str], list[str], bool]:
+    """Return active or trialing Stripe IDs, their prepaid codes, and whether listing failed.
 
     Stricter than ``_live_stripe_subscription``: a stored row, a one-time ``pi_`` grant, an ended
     subscription or an ``incomplete`` one is never reported as a double charge.
     """
     customer_id = users_db.get_stripe_customer_id(uid)
     if not customer_id:
-        return []
-    ids, prepaid = [], ([] if prepaid is None else prepaid)
+        return [], [], False
+    ids = []
+    prepaid = []
     try:
         for sub in stripe.Subscription.list(customer=customer_id, status='all', limit=100).auto_paging_iter():
             data = sub.to_dict()
@@ -337,7 +343,8 @@ def _paid_stripe_subscription_ids(uid: str, prepaid: Optional[list] = None) -> l
                     prepaid.append(str(metadata.get('redeemed_promotion_code_id')))
     except Exception as error:
         logger.warning('play_billing stripe conflict check unavailable: %s', type(error).__name__)
-    return ids
+        return ids, prepaid, True
+    return ids, prepaid, False
 
 
 def _record_stripe_conflict(uid: str, token_hash: str, state: PlayState) -> None:
@@ -347,18 +354,22 @@ def _record_stripe_conflict(uid: str, token_hash: str, state: PlayState) -> None
     and tells the user once; a failed notice is sent again on the next observation.
     Runbook: backend/docs/runbooks/play-billing-double-charge.md.
     """
-    prepaid_codes: list = []
-    stripe_ids = _paid_stripe_subscription_ids(uid, prepaid_codes)
+    stripe_ids, prepaid_codes, listing_failed = _paid_stripe_subscription_ids(uid)
     if prepaid_codes and len(prepaid_codes) == len(stripe_ids):
         # Only prepaid code subscriptions: they charge nothing, so no double charge and no user notice.
         logger.error(prepaid_code_config.PLAY_OVERLAP_LOG, uid, token_hash[:12], prepaid_codes[0])
         return
-    if not stripe_ids:
+    unverified = (
+        not stripe_ids and listing_failed and _holds_live_paid_row(uid, exclude_play=True, require_billable_stripe=True)
+    )
+    if not stripe_ids and not unverified:
         logger.warning('play_billing Stripe overlap not confirmed as a paid subscription uid=%s', uid)
         return
     logger.error(DOUBLE_CHARGE_LOG, uid, token_hash[:12], state.state)
     now = int(time.time())
     play_db.mark_once(token_hash, CONFLICT_FIELD, now)
+    if unverified:
+        play_db.mark_once(token_hash, CONFLICT_UNVERIFIED_FIELD, now)
     if (play_db.get_purchase(token_hash) or {}).get(CONFLICT_NOTIFIED_FIELD):
         return
     # One sender at a time: claim the notice atomically; an abandoned claim expires and is retried.
