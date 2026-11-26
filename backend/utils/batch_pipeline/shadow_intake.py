@@ -173,11 +173,11 @@ async def stage_upload(
         if target.get('record_lane_owner') == 'batch_live_v1' or user.get('stt_byok_enabled'):
             await run_blocking(db_executor, repository.finish, first[0], 'dropped')
             return
-        language = target.get('language') or user.get('language') or ''
+        # Mirror serving intake: a multilingual-profile user's pin is neither the declaration nor inherited.
+        language = 'multi' if pin_untrusted(user) else target.get('language') or user.get('language') or ''
         prefs = user.get('transcription_preferences') or {}
         input_language = normalized_stt_language(user.get('language')) if prefs.get('single_language_mode') else 'multi'
         inherit = language_inheritance_enabled()
-        # Mirror serving intake: a multilingual-profile user's supported pin is not inherited.
         inherited = inherited_language(target.get('language'), user.get('language')) if inherit else None
         if inherited and pin_untrusted(user):
             inherited = None

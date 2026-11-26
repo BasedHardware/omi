@@ -415,6 +415,12 @@ def _prepare_routed(
         engines = sorted({r for _, _, r in route.pieces}) if route.route == routing.MIXED else [route.route]
         found = {}
         for engine in engines:
+            if engine != route.route and not mapping.get(engine):
+                misses.append(
+                    f'recording {rec.label}: a mixed legacy upload needs {routing.CASSETTES_ENV} to map {engine} '
+                    f'({route.reason}); the scenario pin would replay the other engine for its files'
+                )
+                break
             pin = {**dict(scenario.stt), **routing.cassette_pin(route, mapping, engine)}
             if not pin.get('provider') or not pin.get('model'):
                 misses.append(

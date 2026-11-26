@@ -503,6 +503,16 @@ async def test_inheritance_off_batch_owner_of_a_multilingual_profile_routes_as_m
 
 
 @pytest.mark.asyncio
+async def test_admission_exclusion_kill_switch_restores_the_pinned_input_for_a_profile(monkeypatch):
+    monkeypatch.setenv('BATCH_ADMISSION_LANGUAGE_EXCLUSION_ENABLED', 'false')
+    vad = speaking(monkeypatch)
+    response, staged, probe = await upload(
+        monkeypatch, user_language='en', conversation_language='en', mode='on', profile=MANDARIN_PROFILE
+    )
+    assert admitted(response, staged) and vad.call_count == 0 and probe.call_args.args[0] == 'en'
+
+
+@pytest.mark.asyncio
 async def test_multilingual_profile_with_sampling_off_stays_on_legacy(monkeypatch):
     monkeypatch.setenv('BATCH_ADMISSION_LANGUAGE_SAMPLE_ENABLED', 'false')
     excluded = Mock()

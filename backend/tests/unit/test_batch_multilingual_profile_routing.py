@@ -56,7 +56,9 @@ def multi_user(sessions):
         ([{'und': 30}, {'und': 30}], False),  # an unknown language is not evidence
         ([{'und': 80, 'zh': 15}, {'und': 80, 'zh': 15}], True),  # nor does it dilute the share
         ([{'und': 10, 'en': 80, 'zh': 15}, {'en': 80, 'zh': 15}], False),
-        ([{'sr': 30}, {'sr': 30}], False),  # canonical 'sr' also stands for Parakeet's 'hr'
+        # canonical 'sr' stands for Serbian, Croatian and Bosnian: ambiguous, so it is checked on audio
+        ([{'sr': 30}, {'sr': 30}], True),
+        ([{'sr': 30}, {'bs': 30}], True),
         ([{'hi': 30}, {'ko': 30}], True),
     ],
 )

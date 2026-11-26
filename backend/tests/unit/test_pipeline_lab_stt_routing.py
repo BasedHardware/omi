@@ -336,3 +336,37 @@ def test_an_ambient_switch_never_stands_in_for_the_arm(monkeypatch, speech):
     import os
 
     assert os.environ['BATCH_MULTILINGUAL_PROFILE_ROUTING_ENABLED'] == 'false'
+
+
+def test_a_sent_probe_that_failed_stays_charged(tmp_path, monkeypatch):
+    from testing.pipeline_lab.ledger import SpendLedger
+
+    ledger = SpendLedger(tmp_path / 'ledger.json', budget_usd=1.0)
+    cache = LidCache(tmp_path, record=True, secret_file='unused', ledger=ledger)
+
+    def timeout(body):
+        raise routing.ProbeFailed('timeout')
+
+    monkeypatch.setattr(cache, '_detect', timeout)
+    with pytest.raises(RoutingError):
+        cache.decision(PCM)
+    assert ledger.snapshot()['settled_usd'] > 0
+
+    def unsent(body):
+        raise routing.ProbeFailed('no_key')
+
+    before = ledger.snapshot()['settled_usd']
+    monkeypatch.setattr(cache, '_detect', unsent)
+    with pytest.raises(RoutingError):
+        cache.decision(PCM)
+    assert ledger.snapshot()['settled_usd'] == before and ledger.snapshot()['in_flight_usd'] == 0
+
+
+def test_a_single_language_legacy_upload_is_selected_without_a_probe():
+    probe = lid('en')
+    user = {'language': 'ja', 'transcription_preferences': {'single_language_mode': True}}
+    with routing.patched_environ(LEGACY):
+        route = decide(user, {'language': 'ja'}, bytes(32000 * 4), lid=probe, legacy_file_seconds=2)
+        selected = routing._service('ja')
+    assert route.reason == 'legacy:known_unsupported_language' and probe.calls == []
+    assert (route.provider, route.model, route.lid_probes) == (*selected[:2], 0)

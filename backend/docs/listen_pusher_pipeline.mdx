@@ -7415,8 +7415,8 @@ A supported conversation pin is not capability proof for a multi-language user
 (`single_language_mode` false) whose own live speech shows a language Parakeet
 cannot transcribe: at least 2 of the rolling `users/{uid}.live_stt_language_sessions`
 rows with 10 or more segments in batch-unsupported codes, making up 20% or more of the session's
-classified segments (`und` counts in neither; a
-canonical code with a Parakeet alias, such as `sr`, counts as supported). Such an
+classified segments (`und` counts in neither; an ambiguous canonical code such
+as `sr`, which also stands for Croatian, counts as unsupported and is checked on audio). Such an
 upload returns `multilingual_profile` (`BATCH_MULTILINGUAL_PROFILE_ROUTING_ENABLED`,
 default on; `BATCH_ADMISSION_LANGUAGE_EXCLUSION_ENABLED=false` also restores the former
 behavior). With legacy ON, sync intake samples it exactly like

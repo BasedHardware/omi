@@ -5,7 +5,6 @@ import os
 from config.prerecorded_language import language_class
 from config.refactor_switches import default_on
 from config.stt_provider_policy import (
-    LANGUAGE_EQUIVALENCE,
     MODULATE_SUPPORTED_LANGUAGES,
     PARAKEET_MODEL_BY_SURFACE,
     PARAKEET_SUPPORTED_LANGUAGES_BY_MODEL,
@@ -59,24 +58,15 @@ def _parakeet_batch_languages() -> frozenset[str]:
     return PARAKEET_SUPPORTED_LANGUAGES_BY_MODEL[PARAKEET_MODEL_BY_SURFACE[STTServingSurface.PRERECORDED]] - {'multi'}
 
 
-def _unsupported_code(code: str) -> bool:
-    """A profile code that is batch-unsupported by the codebase's own boundary (``language_class``).
-
-    Unknown codes ('und') are not evidence. Live profiles store canonical codes ('sr' for 'hr'/'bs', 'hi' for
-    'ur'), so a code with a Parakeet-supported alias is supported speech, not a reason to leave Parakeet.
-    """
-    if language_class(code) != 'unsupported':
-        return False
-    parakeet = _parakeet_batch_languages()
-    return not any(alias in parakeet for alias, canonical in LANGUAGE_EQUIVALENCE.items() if canonical == code)
-
-
 def _profile_class(code: str) -> str:
-    """'unsupported', 'unknown' or 'supported' for one profile code (a Parakeet alias counts as supported)."""
+    """'unsupported', 'unknown' or 'supported' for one profile code, by the codebase's own ``language_class``.
+
+    Unknown codes ('und') are not evidence. Live profiles store canonical codes, and a canonical code can stand
+    for languages on both sides ('sr' is Serbian, Croatian or Bosnian; only Croatian is Parakeet's). Such a code
+    counts as unsupported: the cost is a sampled check for a Croatian speaker, never Serbian sent to Parakeet.
+    """
     cls = language_class(code)
-    if cls == 'unsupported' and _unsupported_code(code):
-        return 'unsupported'
-    return 'unknown' if cls == 'unknown' else 'supported'
+    return cls if cls in ('unsupported', 'unknown') else 'supported'
 
 
 def profile_speaks_unsupported(user: dict) -> bool:

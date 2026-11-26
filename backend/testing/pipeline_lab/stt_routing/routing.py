@@ -17,7 +17,7 @@ product's own decisions, under the arm's env, and its words come from the casset
 | Engine for a legacy upload | per file (``resolve_file``): guard off -> ``multi``; on -> vendor LID, then ``get_prerecorded_service`` | yes; files simulated as fixed pieces; the self gate's confident skip is not modelled (vendor answer used) |
 | Capacity fallback (GPU ring saturated) | not run: the batch lane is assumed unsaturated | simulated |
 | Legacy mode | assumed ``on`` (today's production) | simulated |
-| Admission exclusion off | the pinned language straight to Parakeet; the worker's per-window unsupported refusal is not modelled | simulated |
+| Admission exclusion off | the pinned language to Parakeet; production's resolve_route sends an unsupported pin to the provider instead, and the worker's per-window refusal is not modelled | simulated |
 
 Inputs are private: ``$OMI_PIPELINE_LAB_STT_ROUTING_INPUTS`` names a JSON file outside Git,
 ``{"user": {...}, "conversations": {"<label>": {...}}, "default_conversation": {...}}``: the owner's user
@@ -54,6 +54,7 @@ ROUTING_SWITCHES = (
     'STT_PRERECORDED_LANGUAGE_GUARD_ENABLED',
     'STT_PRERECORDED_MODEL',
     'STT_GPU_FLEET_OFF',  # get_prerecorded_service -> provider_is_enabled reads it at call time
+    'STT_PRERECORDED_SHORT_LID_GUARD_ENABLED',  # LanguageDecision.parakeet_safe's confidence floor
 )
 LAB_ENV_KEYS = (
     ROUTING_ENV,
@@ -71,6 +72,18 @@ MIXED = 'mixed'  # a legacy upload whose files went to different engines
 
 class RoutingError(RuntimeError):
     """Routing cannot decide a recording's engine; the message is the scenario's error (no transcript text)."""
+
+
+class ProbeFailed(RoutingError):
+    """A vendor LID probe did not return an accepted answer; ``outcome`` is batch_language's closed outcome."""
+
+    def __init__(self, outcome: str):
+        super().__init__(f'LID probe failed: {outcome}')
+        self.outcome = outcome
+
+
+# Outcomes where no request reached the vendor: nothing can have been billed, so the reservation is released.
+UNSENT_OUTCOMES = frozenset({'no_key', 'unsupported_format', 'skipped', 'breaker_open', 'no outcome'})
 
 
 @dataclass(frozen=True)
@@ -199,6 +212,13 @@ class LidCache:
             reservation = self.ledger.reserve(usd, purpose='stt_routing:lid_probe')
             try:
                 row = self._detect(body)
+            except ProbeFailed as error:
+                # A sent request whose answer failed may still be billed: keep it against the cap.
+                if error.outcome in UNSENT_OUTCOMES:
+                    self.ledger.release(reservation)
+                else:
+                    self.ledger.settle(reservation, usd)
+                raise
             except BaseException:
                 self.ledger.release(reservation)
                 raise
@@ -227,7 +247,7 @@ class LidCache:
             else:
                 os.environ['MODULATE_API_KEY'] = previous
         if not outcomes or outcomes[0] != 'accepted':
-            raise RoutingError(f'LID probe failed: {outcomes[0] if outcomes else "no outcome"}')
+            raise ProbeFailed(outcomes[0] if outcomes else 'no outcome')
         return {'language': decision.language, 'confidence': decision.confidence, 'evidence': decision.evidence}
 
 
@@ -378,13 +398,17 @@ def _sample(pcm16: bytes, *, lid: Callable[[bytes], Any], self_lid: Optional[Cal
     return True, None, first, classified
 
 
-def _legacy(pcm16: bytes, reason: str, *, lid: Callable[[bytes], Any], file_seconds: float) -> 'Route':
+def _legacy(
+    pcm16: bytes, reason: str, *, lid: Callable[[bytes], Any], file_seconds: float, language: str = 'multi'
+) -> 'Route':
     """Legacy sync: ``multi`` through ``resolve_file`` for each uploaded file (simulated as fixed pieces).
 
-    With the prerecorded language guard off, ``resolve_file`` selects for ``multi`` without a probe."""
-    from config.prerecorded_language import language_guard_enabled
+    ``language`` is legacy sync's request language (the single-mode preference, else ``multi``). Like
+    ``resolve_file``, a file is probed only with the prerecorded guard on and an unknown request language;
+    otherwise the selector answers for ``language`` directly."""
+    from config.prerecorded_language import language_class, language_guard_enabled
 
-    guarded = language_guard_enabled()
+    guarded = language_guard_enabled() and language_class(language) == 'unknown'
     probes = 0
     step = max(1, int(file_seconds * 16000)) * 2
     pieces = []
@@ -398,7 +422,7 @@ def _legacy(pcm16: bytes, reason: str, *, lid: Callable[[bytes], Any], file_seco
         decision = lid(chunk) if guarded else None
         probes += int(guarded)
         safe = decision is not None and decision.parakeet_safe
-        service, model, sent = _service(decision.language) if safe else _service('multi')
+        service, model, sent = _service(decision.language) if safe else _service(language)
         route = _route_of(service)
         engines.append((route, service, model, sent))
         pieces.append((offset / 32000, (offset + len(chunk)) / 32000, route))
@@ -409,7 +433,7 @@ def _legacy(pcm16: bytes, reason: str, *, lid: Callable[[bytes], Any], file_seco
         # The first file's engine and language: deterministic across runs, unlike a set's order.
         route, service, model, sent = engines[0]
         return Route(route, f'legacy:{reason}', service, model, sent, lid_probes=probes, pieces=tuple(pieces))
-    service, model, sent = _service('multi')
+    service, model, sent = _service(language)
     return Route(MIXED, f'legacy:{reason}', service, model, sent, lid_probes=probes, pieces=tuple(pieces))
 
 
@@ -454,10 +478,21 @@ def decide(
         if admitted:
             service, model, sent = _batch(first.language)
             return Route(PARAKEET, 'sampled:admitted', service, model, sent, **lid_fields)
-        legacy = _legacy(pcm16, f'sampled_{refusal}', lid=lid, file_seconds=legacy_file_seconds)
+        legacy = _legacy(
+            pcm16, f'sampled_{refusal}', lid=lid, file_seconds=legacy_file_seconds, language=_legacy_language(user)
+        )
         lid_fields['lid_probes'] += legacy.lid_probes or 0
         return Route(**{**asdict(legacy), **lid_fields, 'pieces': legacy.pieces})
-    return _legacy(pcm16, reason, lid=lid, file_seconds=legacy_file_seconds)
+    return _legacy(pcm16, reason, lid=lid, file_seconds=legacy_file_seconds, language=_legacy_language(user))
+
+
+def _legacy_language(user: Mapping[str, Any]) -> str:
+    """Legacy sync's request language (utils/sync/pipeline.py): the single-mode preference, else ``multi``."""
+    from config.stt_provider_policy import normalized_stt_language
+
+    single = (user.get('transcription_preferences') or {}).get('single_language_mode')
+    language = user.get('language')
+    return normalized_stt_language(language) if single and isinstance(language, str) and language else 'multi'
 
 
 def cassette_pin(route: Route, mapping: Mapping[str, Mapping[str, str]], which: Optional[str] = None) -> dict[str, str]:

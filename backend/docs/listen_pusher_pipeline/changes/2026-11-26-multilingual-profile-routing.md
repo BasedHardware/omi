@@ -32,8 +32,10 @@ the pin again (`BATCH_ADMISSION_LANGUAGE_EXCLUSION_ENABLED=false` restores it to
 `STT_LEARNED_LANGUAGE_PROFILE` staying on: the live session projection is written only while it is. Stored rows
 persist without expiry, so turning learning off freezes each user's last profile. Pair that with
 `BATCH_MULTILINGUAL_PROFILE_ROUTING_ENABLED=false`. (backend-sync does not carry the listen setting, so this rule
-cannot read it.) Shadow intake mirrors serving: it does not inherit a flagged user's pin either. Readback: `outcome=reclassified` log count, and the multilingual intake route share for
-profiled users, after backend-sync serves it.
+cannot read it.) Shadow intake mirrors serving: it does not inherit a flagged user's pin either. Readback: sync intake's `outcome=reclassified` lines count admission decisions (an upload that then returns
+early for a prior owner, capacity fallback or a retry is still counted once per attempt). The record lane logs
+the same decision as `outcome=excluded reason=multilingual_profile`. Count both, plus the multilingual intake
+route share for profiled users, after backend-sync serves it.
 
 **Not changed.** The multilingual engine choice (Soniox did best on code-switching in the lab), word
 joining in Velma output, and live STT language labelling (Mandarin labelled `ja`) are follow-ups.
