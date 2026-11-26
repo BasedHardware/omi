@@ -64,6 +64,17 @@ on:
         required: false
         default: false
         type: boolean
+      pusher_image_only:
+        description: 'Protected production Pusher image-only operation (requires Release evidence)'
+        required: false
+        default: 'disabled'
+        type: choice
+        options:
+          - disabled
+          - preview
+          - canary
+          - promote
+          - rollback
 
 # The LLM Gateway path reapplies shared backend-secrets; standalone pusher only
 # mutates its own GKE release and therefore keeps a separate environment lock.
@@ -85,6 +96,7 @@ env:
 
 jobs:
   deploy:
+    if: inputs.pusher_image_only == '' || inputs.pusher_image_only == 'disabled'
     environment: ${{ github.event.inputs.environment == 'prod' && 'prod' || 'development' }}
     permissions:
       actions: 'read'
@@ -1040,3 +1052,118 @@ jobs:
           status: ${{ job.status }}
           telegram_bot_token: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           telegram_chat_id: ${{ secrets.TELEGRAM_CHAT_ID }}
+
+  pusher-image-only:
+    if: inputs.pusher_image_only != '' && inputs.pusher_image_only != 'disabled'
+    environment: prod
+    permissions:
+      actions: read
+      contents: read
+      id-token: write
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    steps:
+      - name: Validate protected image-only dispatch
+        env:
+          MODE: ${{ inputs.pusher_image_only }}
+          TARGET_ENV: ${{ inputs.environment }}
+          TARGET_SERVICE: ${{ env.SERVICE }}
+          SOURCE_SHA: ${{ inputs.branch }}
+          REQUESTED_DIGEST: ${{ inputs.pusher_image_digest }}
+          QUALIFICATION_RUN_ID: ${{ inputs.pusher_dev_qualification_run_id }}
+          ROLE_DIGEST: ${{ inputs.pusher_role_image_digest }}
+          SKIP_CAPACITY: ${{ inputs.skip_live_capacity_gate }}
+          SKIP_LOCK: ${{ inputs.break_glass_lock }}
+          BREAK_GLASS_CONFIRM: ${{ inputs.break_glass_confirm }}
+          BREAK_GLASS_REASON: ${{ inputs.break_glass_reason }}
+        run: |
+          set -euo pipefail
+          case "$MODE" in preview|canary|promote|rollback) ;; *) exit 1 ;; esac
+          if [[ "$GITHUB_REPOSITORY" != BasedHardware/omi || "$GITHUB_REF" != refs/heads/main ||
+                "$GITHUB_SHA" != "$GITHUB_WORKFLOW_SHA" || "$GITHUB_RUN_ATTEMPT" != 1 ||
+                "$TARGET_ENV" != prod || "$TARGET_SERVICE" != pusher ||
+                "$SKIP_CAPACITY" == true || "$SKIP_LOCK" == true ||
+                -n "$ROLE_DIGEST" || -n "$BREAK_GLASS_CONFIRM" || -n "$BREAK_GLASS_REASON" ||
+                ! "$SOURCE_SHA" =~ ^[0-9a-f]{40}$ || "$SOURCE_SHA" == 0000000000000000000000000000000000000000 ||
+                ! "$REQUESTED_DIGEST" =~ ^sha256:[0-9a-f]{64}$ || ! "$QUALIFICATION_RUN_ID" =~ ^[1-9][0-9]*$ ]]; then
+            echo "Image-only operations require a first-attempt main dispatch to prod Pusher, exact source and digest, and no break-glass options." >&2
+            exit 1
+          fi
+
+      - name: Check out immutable workflow controls
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.workflow_sha }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Checkout immutable Firestore gate controls
+        if: inputs.pusher_image_only != 'rollback'
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.workflow_sha }}
+          path: .github/firestore-workflow
+          persist-credentials: false
+          fetch-depth: 1
+          sparse-checkout: |
+            .github/actions/firestore-readiness
+            backend/scripts
+            backend/database
+
+      - name: Verify serving Firestore indexes for the pinned image source
+        if: inputs.pusher_image_only != 'rollback'
+        uses: ./.github/firestore-workflow/.github/actions/firestore-readiness
+        with:
+          source_sha: ${{ inputs.branch }}
+          project_id: ${{ vars.RUNTIME_GCP_PROJECT_ID }}
+          workload_identity_provider: projects/208440318997/locations/global/workloadIdentityPools/omi-gha-deploy-prod/providers/github
+          service_account: omi-ci-index-check@based-hardware.iam.gserviceaccount.com
+
+      - name: Google Auth (prod WIF)
+        uses: google-github-actions/auth@v3
+        with:
+          workload_identity_provider: projects/208440318997/locations/global/workloadIdentityPools/omi-gha-deploy-prod/providers/github
+          service_account: omi-ci-deployer-prod@based-hardware.iam.gserviceaccount.com
+
+      - name: Set up gcloud
+        uses: google-github-actions/setup-gcloud@v3
+
+      - name: Install image-only verifier dependencies
+        run: python3 -m pip install -q pyyaml
+
+      - name: Verify production Pusher runtime capability admission
+        if: inputs.pusher_image_only != 'rollback'
+        run: python3 backend/scripts/validate-backend-runtime-env.py --env prod
+
+      - name: Get production GKE credentials
+        uses: google-github-actions/get-gke-credentials@v3
+        with:
+          cluster_name: ${{ vars.GKE_CLUSTER }}
+          location: ${{ env.REGION }}
+          project_id: based-hardware
+
+      - name: Verify evidence and execute the selected image-only operation
+        env:
+          GH_TOKEN: ${{ github.token }}
+          IMAGE_ONLY_MODE: ${{ inputs.pusher_image_only }}
+          SOURCE_SHA: ${{ inputs.branch }}
+          REQUESTED_DIGEST: ${{ inputs.pusher_image_digest }}
+          QUALIFICATION_RUN_ID: ${{ inputs.pusher_dev_qualification_run_id }}
+          PUSHER_IMAGE_ONLY_PACKET: ${{ secrets.PUSHER_IMAGE_ONLY_PACKET }}
+          PUSHER_IMAGE_ONLY_ISOLATED_KUBECONFIG: ${{ secrets.PUSHER_IMAGE_ONLY_ISOLATED_KUBECONFIG }}
+        run: |
+          set -euo pipefail
+          umask 077
+          mkdir "$RUNNER_TEMP/pusher-image-only"
+          export LIVE_CONTEXT
+          LIVE_CONTEXT="$(kubectl config current-context)"
+          python3 .github/scripts/pusher_image_only.py | tee "$RUNNER_TEMP/pusher-image-only/receipt.json"
+
+      - name: Upload redacted image-only receipt
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: pusher-image-only-receipt
+          path: ${{ runner.temp }}/pusher-image-only/receipt.json
+          if-no-files-found: ignore
+          retention-days: 90

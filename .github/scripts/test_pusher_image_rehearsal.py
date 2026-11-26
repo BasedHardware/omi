@@ -395,12 +395,16 @@ class RehearsalTest(unittest.TestCase):
                 return "backend/pusher\nbackend/charts/pusher\n"
             if reason == "qualification_workflow_unavailable":
                 return "18"
+            if reason == "qualification_artifact_unavailable":
+                path = Path(args[args.index("--dir") + 1])
+                path.mkdir()
+                (path / "pusher-dev-deployment-receipt.json").write_text('{"receipt": "qualified"}', encoding="utf-8")
             if reason == "registry_digest_unavailable":
                 return args[4].split("@")[1]
             return ""
 
         with patch.object(helper, "run", side_effect=command):
-            helper.check_provenance(self.proof)
+            self.assertEqual(helper.check_provenance(self.proof), {"receipt": "qualified"})
 
         commands = {reason: args for args, reason in seen}
         self.assertIn(f"head_sha={source}", commands["release_eligibility_unavailable"][2])

@@ -42,8 +42,8 @@ def require(condition, reason):
         raise Refused(reason)
 
 
-def run(args, reason, *, stdin=None):
-    result = subprocess.run(args, input=stdin, cwd=ROOT, capture_output=True, text=True, check=False, timeout=120)
+def run(args, reason, *, stdin=None, timeout=120):
+    result = subprocess.run(args, input=stdin, cwd=ROOT, capture_output=True, text=True, check=False, timeout=timeout)
     require(result.returncode == 0, reason)
     return result.stdout
 
@@ -190,6 +190,9 @@ class Cluster:
 
     def transition(self, obj, expected, desired, *, dry_run=True, allow_same=False):
         require(dry_run or self.isolated, "production_write_refused")
+        return self._submit_image_patch(obj, expected, desired, dry_run=dry_run, allow_same=allow_same)
+
+    def _submit_image_patch(self, obj, expected, desired, *, dry_run, allow_same=False):
         patch = guarded_patch(obj, expected, desired, allow_same=allow_same)
         mode = "--dry-run=server" if dry_run else "--dry-run=none"
         admitted = self.call(
@@ -203,7 +206,7 @@ class Cluster:
             mode,
             "-o",
             "json",
-            reason="server_dry_run_rejected" if dry_run else "isolated_patch_failed_reconcile_before_retry",
+            reason="server_dry_run_rejected" if dry_run else self.patch_failure_reason,
             stdin=json.dumps(patch),
         )
         require(
@@ -211,6 +214,8 @@ class Cluster:
             "admission_changed_more_than_image",
         )
         return admitted
+
+    patch_failure_reason = "isolated_patch_failed_reconcile_before_retry"
 
 
 def config_references(value):
@@ -394,6 +399,7 @@ def check_provenance(proof):
             ],
             "development_qualification_failed",
         )
+        qualification_receipt = read_json(artifacts / "pusher-dev-deployment-receipt.json")
 
     for image in (f"{dev_repository}@{digest}", candidate, proof["prior_image"]):
         remote_digest = run(
@@ -401,6 +407,7 @@ def check_provenance(proof):
             "registry_digest_unavailable",
         ).strip()
         require(remote_digest == image.split("@")[1], "registry_digest_mismatch")
+    return qualification_receipt
 
 
 def read_admission(cluster, reviewed_resources):
@@ -531,6 +538,20 @@ class Rehearsal:
 
     def verify_inverse(self, rehearsal, result):
         result["stage"] = "observe_live_candidate"
+        self.check_receipt(rehearsal, result)
+        live, prior, policies = self.observe(self.candidate, self.prior, post_move=True)
+        result["observed_candidate"] = version(live)
+        require(version(live)[1] != rehearsal["live_baseline"][1], "live_candidate_not_persisted")
+        self.check_rehearsed_state(rehearsal, prior, policies)
+        result["stage"] = "server_dry_run_exact_live_inverse"
+        reverse = self.live.transition(live, self.candidate, self.prior)
+        require(
+            comparable(reverse) == post_move_baseline(prior, live, self.prior), "live_inverse_differs_from_rehearsal"
+        )
+        self.recheck(live, prior, policies, post_move=True)
+        return live, prior, policies
+
+    def check_receipt(self, rehearsal, result):
         require(
             rehearsal["status"] == "PASS"
             and rehearsal["mode"] == "rehearse"
@@ -548,24 +569,26 @@ class Rehearsal:
             and rehearsal["live_baseline"] == self.proof["live_deployment"],
             "rehearsal_receipt_mismatch",
         )
-        live, prior, policies = self.observe(self.candidate, self.prior, post_move=True)
-        result["observed_candidate"] = version(live)
-        require(version(live)[1] != rehearsal["live_baseline"][1], "live_candidate_not_persisted")
+
+    def check_rehearsed_state(self, rehearsal, prior, policies):
         require(
             version(prior) == rehearsal["isolated_restored"] and policies == rehearsal["admission_versions"],
             "rehearsed_baseline_or_policy_changed",
         )
-        result["stage"] = "server_dry_run_exact_live_inverse"
-        reverse = self.live.transition(live, self.candidate, self.prior)
-        require(
-            comparable(reverse) == post_move_baseline(prior, live, self.prior), "live_inverse_differs_from_rehearsal"
-        )
-        self.recheck(live, prior, policies, post_move=True)
 
 
 def read_json(path):
     with path.open(encoding="utf-8") as handle:
         return json.load(handle)
+
+
+def proof_receipt_fields(proof):
+    # The proof carries identities and evidence IDs, never runtime values.
+    return {
+        "proof_id": proof["id"],
+        "proof_sha256": hashlib.sha256(json.dumps(proof, sort_keys=True).encode()).hexdigest(),
+        **{key: proof[key] for key in ("prior_image", "candidate_image", "source_sha", "qualification_run_id")},
+    }
 
 
 def main():
@@ -589,21 +612,7 @@ def main():
             Cluster(args.isolated_kubeconfig, args.isolated_context, isolated=True),
             proof,
         )
-        # Bind the Release evidence packet, which carries identities and evidence IDs, never runtime values.
-        proof_sha = hashlib.sha256(json.dumps(proof, sort_keys=True).encode()).hexdigest()
-        result.update(
-            proof_id=proof["id"],
-            proof_sha256=proof_sha,
-            **{
-                key: proof[key]
-                for key in (
-                    "prior_image",
-                    "candidate_image",
-                    "source_sha",
-                    "qualification_run_id",
-                )
-            },
-        )
+        result.update(proof_receipt_fields(proof))
         if args.mode == "rehearse":
             result["stage"] = "verify_provenance"
             check_provenance(proof)
