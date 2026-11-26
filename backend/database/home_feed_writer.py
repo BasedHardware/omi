@@ -12,6 +12,7 @@ import inspect
 from functools import wraps
 from database.batch_account_authority_schema import USER_POLICY_FIELDS
 from google.cloud.firestore_v1.types import Document, DocumentMask, Value, Write
+from utils.conversation_payload import PAYLOAD_FIELD
 
 _ERASING_ROOTS: ContextVar[frozenset[str]] = ContextVar("home_feed_erasing_roots", default=frozenset())
 
@@ -164,7 +165,8 @@ def augment_home_writes(writes):
             )
             roots = {p.split('.', 1)[0].strip('`') for p in paths} | set(write.update.fields)
             values = {'home_source_version': Value(string_value=uuid4().hex)}
-            if {'transcript_segments', 'user_corrections'}.intersection(roots):
+            logical_invalidation = PAYLOAD_FIELD in roots and 'home_content_invalidated' in write.update.fields
+            if {'transcript_segments', 'user_corrections'}.intersection(roots) and not logical_invalidation:
                 values['home_content_invalidated'] = Value(boolean_value='structured' not in roots)
         if values:
             transformed = {t.field_path for t in write.update_transforms}

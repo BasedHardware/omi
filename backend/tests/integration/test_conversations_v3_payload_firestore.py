@@ -22,7 +22,9 @@ from database import conversations_v3_backfill_runs as runs, conversations_v3_re
 from database import conversations_v3_processing as writers
 from database.conversation_payload import PAYLOAD_CHUNKS, stage_conversation_payload
 from database.conversation_recorded_time import IntegrationAccountDeleting
+from database.summary_processing import claim_from_snapshot
 from utils.conversations import lifecycle
+from utils.conversations.summary_delivery import PROCESS_CONTEXT
 from utils.conversations.v3 import triggers
 from utils.conversation_payload import PAYLOAD_FIELD
 from utils import conversation_payload as payload_codec
@@ -140,6 +142,85 @@ def test_integration_create_overflow_lifecycle_and_readback(row, monkeypatch):
     # The account eraser descends through this recursive deletion primitive.
     conversations.delete_collection_recursive(ref.parent, client=client)
     assert not ref.get().exists
+    assert not list(ref.collection(PAYLOAD_CHUNKS).list_documents())
+
+
+def test_enrichment_claim_spills_near_limit_row_and_keeps_notes_readable(row, monkeypatch):
+    client, uid, ref = row
+    marker = client.collection('account_deletions').document(uid)
+    monkeypatch.setattr(conversations, 'db', client)
+    monkeypatch.setattr(conversations, 'invalidate_people_stats_cache', lambda *_: None)
+    monkeypatch.setattr(conversations, '_sync_conversation_search_index', lambda *_: None)
+    monkeypatch.setattr(conversations.transcript_pointer.config, 'write_admitted', lambda *_: False)
+    monkeypatch.delenv('OMI_INTEGRATION_CONVERSATION_PAYLOAD_WRITES', raising=False)
+    text = Random(2520).randbytes(340_000).hex()
+    prepared = conversations.encode_conversation_for_write(
+        uid,
+        {
+            'id': ref.id,
+            'source': 'omi',
+            'status': 'completed',
+            'started_at': AT,
+            'created_at': AT,
+            'finished_at': AT,
+            'sync_content_revision': 3,
+            'data_protection_level': 'enhanced',
+            'transcript_segments': [{'start': 0.0, 'end': 10.0, 'text': text, 'speaker': 'SPEAKER_0'}],
+            'structured': {'title': 'Synthetic title', 'category': 'work'},
+        },
+    )
+    prepared.update(home_source_version='x' * 32, home_content_invalidated=False, synthetic_metadata=b'')
+    padding = FIRESTORE_MAX_DOCUMENT_BYTES - 35 - estimate_firestore_document_bytes(prepared, ref.path)
+    assert padding > 0
+    prepared['synthetic_metadata'] = b'x' * padding
+    ref.create(prepared)
+
+    def load():
+        return conversations.get_conversation(uid, ref.id, include_transcript_decode_status=True)
+
+    before = load()
+    context = {'owner': uuid4().hex, 'lease_until': time.time() + 120}
+    token = PROCESS_CONTEXT.set(context)
+    try:
+        with pytest.raises(InvalidArgument):
+            claim_from_snapshot(client, uid, ref.id, before)
+        assert not context.get('claimed')
+        assert not list(ref.collection(PAYLOAD_CHUNKS).list_documents())
+
+        monkeypatch.setenv('OMI_INTEGRATION_CONVERSATION_PAYLOAD_WRITES', 'on')
+        marker.create({'wipe_status': 'pending_deletion'})
+        assert not claim_from_snapshot(client, uid, ref.id, before)
+        marker.delete()
+        assert claim_from_snapshot(client, uid, ref.id, before)
+        assert context.get('claimed')
+        parent = ref.get().to_dict()
+        assert PAYLOAD_FIELD in parent
+        assert parent['structured']['category'] == 'work'
+        assert parent['home_content_invalidated'] is False
+        assert parent['synthetic_metadata'] == prepared['synthetic_metadata']
+        assert not claim_from_snapshot(client, uid, ref.id, before)
+
+        monkeypatch.delenv('OMI_INTEGRATION_CONVERSATION_PAYLOAD_WRITES')
+        assert lifecycle.persist_processed_conversation(
+            uid,
+            {
+                'id': ref.id,
+                'status': 'completed',
+                'sync_content_revision': 3,
+                'data_protection_level': 'enhanced',
+                'structured': {'title': 'Synthetic title', 'overview': 'Enriched synthetic notes', 'category': 'work'},
+            },
+        )
+        after = load()
+        assert after['structured']['overview'] == 'Enriched synthetic notes'
+        if after['transcript_segments'] != before['transcript_segments']:
+            pytest.fail('enrichment claim or notes publication changed the transcript')
+    finally:
+        PROCESS_CONTEXT.reset(token)
+        marker.delete()
+
+    conversations.delete_collection_recursive(ref.parent, client=client)
+    assert load() is None
     assert not list(ref.collection(PAYLOAD_CHUNKS).list_documents())
 
 

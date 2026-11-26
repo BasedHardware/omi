@@ -31,11 +31,12 @@ PAYLOAD_CHUNKS = 'conversation_payload_chunks'
 MAX_ATOMIC_CHUNKS = 8
 
 
+def integration_payload_promotion_enabled():
+    return os.getenv('OMI_INTEGRATION_CONVERSATION_PAYLOAD_WRITES') == 'on'
+
+
 def integration_payload_writes_enabled(row):
-    return (
-        row.get('source') == ConversationSource.external_integration
-        and os.getenv('OMI_INTEGRATION_CONVERSATION_PAYLOAD_WRITES') == 'on'
-    )
+    return row.get('source') == ConversationSource.external_integration and integration_payload_promotion_enabled()
 
 
 def v3_payload_writes_enabled():
@@ -185,6 +186,12 @@ def stage_conversation_payload_patch(transaction, snapshot, hydrated, patch, *, 
     inline_patch.update({key: write.parent[key] for key in spilled & write.parent.keys()})
     inline_patch.update({key: firestore.DELETE_FIELD for key in (moved | deletes) & previous.keys()})
     inline_patch[PAYLOAD_FIELD] = write.parent.get(PAYLOAD_FIELD, firestore.DELETE_FIELD)
+    inputs = {'transcript_segments', 'user_corrections'}
+    if inputs & patch.keys():
+        inline_patch['home_content_invalidated'] = 'structured' not in patch
+    elif inputs & inline_patch.keys():
+        # Removing a physical field during spill can leave the logical input unchanged.
+        inline_patch['home_content_invalidated'] = bool(previous.get('home_content_invalidated'))
     cost = _stage_replacement_chunks(transaction, ref, previous, old_refs, write)
     transaction.update(ref, inline_patch)
     return cost
