@@ -8,6 +8,7 @@ import json
 import logging
 import os
 import time
+from bisect import bisect_right
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from typing import Any
@@ -52,7 +53,7 @@ from config.conversations_v3 import (
     stretch_cohesion_enabled,
 )
 from utils.conversations import terminal_settled
-from utils.conversations.v3 import Conflict, metrics, policy, preview_wakes, request_log_trace_id
+from utils.conversations.v3 import Conflict, UnlockedPage, metrics, policy, preview_wakes, request_log_trace_id
 from utils.open_loops.extraction import OPEN_LOOP_EXTRACTIONS_COMPRESSED_FIELD, OPEN_LOOP_EXTRACTIONS_FIELD
 
 logger = logging.getLogger(__name__)
@@ -280,6 +281,10 @@ def record_blocked(uid, token, reason, *, on_open=False, firestore_client=None):
                 'v3_blocked_count': count,
                 'v3_blocked_reason': reason,
                 'v3_backoff_until': now + delay,
+                'v3_unlocked_paging_attempted': (
+                    bool(row.get('v3_unlocked_paging_attempted'))
+                    or (not on_open and bounded_pending_enabled() and bool(row.get('unlocked_ids')))
+                ),
                 'v3_bounded_pending_attempted': (
                     bool(row.get('v3_bounded_pending_attempted')) if on_open else bounded_pending_enabled()
                 ),
@@ -304,8 +309,11 @@ def mark_bounded_attempt(uid, token, *, firestore_client=None):
     @firestore.transactional
     def mark(tx):
         row = ref.get(transaction=tx).to_dict() or {}
-        if row.get('token') == token and not row.get('v3_bounded_pending_attempted'):
-            tx.update(ref, {'v3_bounded_pending_attempted': True})
+        if row.get('token') == token and _early_bounded_retry(row, row.get('v3_blocked_reason')):
+            updates = {'v3_bounded_pending_attempted': True}
+            if row.get('unlocked_ids'):
+                updates['v3_unlocked_paging_attempted'] = True
+            tx.update(ref, updates)
 
     run_preloaded_transaction_with_contention_retry(client, mark)
 
@@ -314,12 +322,18 @@ def backoff_until(uid, *, firestore_client=None):
     return backoff_state(uid, firestore_client=firestore_client)[0]
 
 
+def _early_bounded_retry(row, reason):
+    return not row.get('v3_bounded_pending_attempted') or (
+        reason == 'v3_derived_budget' and row.get('unlocked_ids') and not row.get('v3_unlocked_paging_attempted')
+    )
+
+
 def backoff_state(uid, *, firestore_client=None):
     """(v3_backoff_until, v3_blocked_reason) from the owner's builder lease doc."""
     client = firestore_client or get_firestore_client()
     row = leases.lease_ref(client, uid, 'builder').get().to_dict() or {}
     reason = row.get('v3_blocked_reason')
-    if bounded_pending_enabled() and reason in BOUNDED_RETRY_REASONS and not row.get('v3_bounded_pending_attempted'):
+    if bounded_pending_enabled() and reason in BOUNDED_RETRY_REASONS and _early_bounded_retry(row, reason):
         return None, reason
     return row.get('v3_backoff_until'), reason
 
@@ -380,7 +394,21 @@ def _is_discarded_or_deleted(row):
     return row.get('recording') and (row.get('discarded') or row.get('deleted'))
 
 
-def load(uid, *, conversation_id=None, pending_limit=32, firestore_client=None):
+def _select_unlocked(state, existing, pending_limit, page):
+    ids = sorted(set(state.get('unlocked_ids') or ()) - existing.keys())
+    if page is None:
+        if len(ids) > DERIVED_LIMIT:
+            raise Conflict('v3_derived_budget')
+        return ids
+    # Rotate even when a visited preview stays unlocked, so it cannot hide later obligations.
+    offset = bisect_right(ids, state.get('v3_unlocked_cursor') or '')
+    ordered = ids[offset:] + ids[:offset]
+    return ordered[: min(8, pending_limit, DERIVED_LIMIT)]
+
+
+def load(
+    uid, *, conversation_id=None, pending_limit=32, unlocked_page: UnlockedPage | None = None, firestore_client=None
+):
     client = firestore_client or get_firestore_client()
     if account_deletion_blocks_user_work(uid):
         raise Conflict('account_deletion')
@@ -422,6 +450,9 @@ def load(uid, *, conversation_id=None, pending_limit=32, firestore_client=None):
                 latest['_v3_page_continues'] = True
     state = leases.lease_ref(client, uid, 'builder').get().to_dict() or {}
     cache = json.loads(decrypt(state['outline_cache'], uid)) if state.get('outline_cache') else []
+    if unlocked_page is not None:
+        unlocked_page.remaining, unlocked_page.cursor = frozenset(), None
+    ordered_unlocked = []
     if not recordings and not state.get('open_id') and not state.get('unlocked_ids') and not opened:
         return unreadable, {}, cache
     existing = {}
@@ -447,10 +478,7 @@ def load(uid, *, conversation_id=None, pending_limit=32, firestore_client=None):
             raise Conflict('v3_derived_budget')
 
     if not conversation_id:
-        unlocked_ids = set(state.get('unlocked_ids') or ()) - existing.keys()
-        if len(unlocked_ids) > DERIVED_LIMIT:
-            raise Conflict('v3_derived_budget')
-        ordered_unlocked = sorted(unlocked_ids)
+        ordered_unlocked = _select_unlocked(state, existing, pending_limit, unlocked_page)
         for start in range(0, len(ordered_unlocked), CLAIM_READ_CHUNK):
             ids = ordered_unlocked[start : start + CLAIM_READ_CHUNK]
             for snapshot in client.get_all([coll.document(cid) for cid in ids]):
@@ -565,6 +593,11 @@ def load(uid, *, conversation_id=None, pending_limit=32, firestore_client=None):
             raise Conflict('recording_decode_unavailable')
     _mark_successor_pending(coll, recordings)
     attach_finish_predecessors(coll, recordings, existing)
+    if unlocked_page is not None:
+        unlocked_page.remaining = frozenset(
+            set(state.get('unlocked_ids') or ()) - existing.keys() - set(ordered_unlocked)
+        )
+        unlocked_page.cursor = ordered_unlocked[-1] if unlocked_page.remaining else None
     return {**recordings, **unreadable}, existing, cache
 
 
@@ -794,6 +827,23 @@ def _projection_snapshots(client, coll, tx, ids, *, batch_reads):
             yield cid, snapshots[cid]
 
 
+def _unlocked_lease_update(lease, batch_rows, planned, page, key, clear_pending, final):
+    indexed = set(lease.get('unlocked_ids') or ())
+    unlocked = {row['id'] for row in batch_rows if row.get('v3_unlocked') and not row.get('deleted')}
+    update = {}
+    if key == 'builder' and clear_pending and final:
+        # A partial pass can retire visited obligations only. Intermediate batches may already
+        # have updated the index for newly written previews, which are also in the full plan.
+        remaining = indexed & page.remaining if page is not None else set()
+        if indexed or planned:
+            update['unlocked_ids'] = sorted(planned | remaining)
+        if page is not None and lease.get('v3_unlocked_cursor') != page.cursor:
+            update['v3_unlocked_cursor'] = page.cursor
+    elif indexed or unlocked:
+        update['unlocked_ids'] = sorted((indexed - {row['id'] for row in batch_rows}) | unlocked)
+    return update
+
+
 def commit_projection(
     uid,
     token,
@@ -808,6 +858,7 @@ def commit_projection(
     retire=None,
     key='builder',
     bounded_pending_limit=None,
+    unlocked_page=None,
     firestore_client=None,
 ):
     """Commit derived rows and source claims; returns the ids of source recordings that kept moving.
@@ -1129,15 +1180,9 @@ def commit_projection(
             remembered_limit = bounded_pending_limit if bounded_pending_limit < 32 else None
             if lease.get('v3_bounded_pending_limit') != remembered_limit:
                 lease_update['v3_bounded_pending_limit'] = remembered_limit
-        unlocked = {r['id'] for r in batch_rows if r.get('v3_unlocked') and not r.get('deleted')}
-        if unlocked or lease.get('unlocked_ids'):
-            previous_unlocked = set(lease.get('unlocked_ids') or ()) - {r['id'] for r in batch_rows}
-            if key == 'builder' and clear_pending and final:
-                # A full pass plans every eligible indexed preview. Missing,
-                # settled or ineligible sources no longer owe a timer.
-                lease_update['unlocked_ids'] = sorted(planned_unlocked)
-            else:
-                lease_update['unlocked_ids'] = sorted(previous_unlocked | unlocked)
+        lease_update.update(
+            _unlocked_lease_update(lease, batch_rows, planned_unlocked, unlocked_page, key, clear_pending, final)
+        )
         if skip_unchanged and write_equality.or_write(
             write_equality.same_outline_cache, uid, lease.get('outline_cache'), encrypted_cache
         ):

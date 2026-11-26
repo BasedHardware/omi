@@ -128,6 +128,9 @@ def entries():
             'database.conversations_v3.load',
             base={'uid': SHAPE_UID},
             domains={'conversation_id': [None, 'source'], 'pending_limit': [32, 8, 1]},
+            neutrals={
+                'unlocked_page': (None, 'bounds indexed point reads; source and neighbor query shapes are unchanged')
+            },
             setup=_pending_source,
             patchers=(_decode,),
         ),

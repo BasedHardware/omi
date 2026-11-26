@@ -52,6 +52,7 @@ from models.conversation_enums import ConversationStatus
 from models.finalization_owner import FinalizationOwnedElsewhere, python_owns_finalization
 from utils.conversations.v3 import (
     Conflict,
+    UnlockedPage,
     outline,
     planner,
     models,
@@ -252,7 +253,7 @@ async def _release_reconcile_lease(uid, key, token, *, primary_failed):
         )
 
 
-async def _load_live_batch(uid, token, parked):
+async def _load_live_batch(uid, token, parked, unlocked_page=None):
     """Reduce pending seeds without clipping any selected source's ownership closure."""
     if parked in store.BOUNDED_RETRY_REASONS:
         # Spend a legacy park's one early attempt under this lease before any paid work.
@@ -266,7 +267,10 @@ async def _load_live_batch(uid, token, parked):
         sizes = (8, 1)
     for size in sizes:
         try:
-            result = await run_blocking(db_executor, store.load, uid, **({'pending_limit': size} if size < 32 else {}))
+            options: dict[str, Any] = {'pending_limit': size} if size < 32 else {}
+            if unlocked_page is not None:
+                options['unlocked_page'] = unlocked_page
+            result = await run_blocking(db_executor, store.load, uid, **options)
         except Conflict as error:
             if size == sizes[-1] or str(error) not in budget_reasons:
                 raise
@@ -276,6 +280,16 @@ async def _load_live_batch(uid, token, parked):
                 logger.info('event=v3_bounded_pending pending_limit=%d', size)
             return (*result, size)
     raise AssertionError('bounded pending batch sizes are empty')
+
+
+async def _wake_unvisited_unlocked(uid, page, scheduled_at=None):
+    now = datetime.now(timezone.utc)
+    if page is not None and page.remaining and (scheduled_at is None or scheduled_at <= now):
+        # An omitted window may already be due. Its next scan cannot depend on
+        # the selected groups' deadlines or on the presence of pending recordings.
+        scheduled_at = now + timedelta(minutes=1)
+        await run_blocking(db_executor, enqueue, uid, at=scheduled_at)
+    return scheduled_at
 
 
 def _measure_reconcile_writes(run):
@@ -350,6 +364,8 @@ async def reconcile(
         return 'busy'
     primary_failed = False
     bounded_pending_limit = None
+    unlocked_page = None
+    unlocked_wake = None
     try:
         # The reliability experiments below are read on this event loop, which answers from what was last
         # learned for the account. Learn it on a worker thread first, so a pass never misses a switch.
@@ -381,7 +397,10 @@ async def reconcile(
                 rederive=rederive,
             )
         elif not on_open and bounded_pending_enabled():
-            recordings, existing, cached, bounded_pending_limit = await _load_live_batch(uid, token, parked)
+            unlocked_page = UnlockedPage()
+            recordings, existing, cached, bounded_pending_limit = await _load_live_batch(
+                uid, token, parked, unlocked_page
+            )
         else:
             recordings, existing, cached = await run_blocking(
                 db_executor,
@@ -818,6 +837,7 @@ async def reconcile(
                 stale = sorted({*existing, *(entry['id'] for entry in priors)})
                 await run_blocking(db_executor, rederive_store.drop_stale_priors, uid, run_id, stale)
                 await run_blocking(db_executor, backfill_runs.save_priors, uid, run_id, priors)
+            unlocked_wake = await _wake_unvisited_unlocked(uid, unlocked_page)
             await run_blocking(db_executor, leases.renew, uid, key, token)
             moved = await run_blocking(
                 db_executor,
@@ -834,6 +854,7 @@ async def reconcile(
                 retire=retire,
                 key=key,
                 bounded_pending_limit=bounded_pending_limit,
+                unlocked_page=unlocked_page,
             )
         except Exception:
             if live:
@@ -946,6 +967,7 @@ async def reconcile(
             with suspend_committed_write_count():
                 await _drain_blocked(uid, blocked)
         return 'blocked'
+    await _wake_unvisited_unlocked(uid, unlocked_page, unlocked_wake)
     if on_open:
         await run_blocking(db_executor, enqueue, uid, at=datetime.now(timezone.utc) + timedelta(minutes=1))
         return 'committed'
@@ -1198,6 +1220,7 @@ def _commit(
     retire=None,
     key='builder',
     bounded_pending_limit=None,
+    unlocked_page=None,
 ):
     from google.api_core.exceptions import InvalidArgument
 
@@ -1217,6 +1240,7 @@ def _commit(
             retire=retire,
             key=key,
             **({'bounded_pending_limit': bounded_pending_limit} if bounded_pending_limit is not None else {}),
+            **({'unlocked_page': unlocked_page} if unlocked_page is not None else {}),
         )
     except InvalidArgument as error:
         # A document over Firestore's 1 MiB limit, or a commit request over its payload limit, fails the

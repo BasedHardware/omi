@@ -567,3 +567,91 @@ def test_multi_batch_replacement_of_claiming_windows_refuses_before_any_batch_co
     assert strict.rows[path('r')]['claims'] == claims
     assert not removed
     assert {k: v for k, v in strict.rows.items() if k in before} == before
+
+
+@pytest.mark.parametrize('overflow', ['count', 'bytes'])
+@pytest.mark.parametrize('pending_limit', [32, 8, 1])
+def test_unlocked_index_overflow_reproduces_at_every_pending_seed_size(monkeypatch, overflow, pending_limit):
+    rows = {C + f'd{i}': derived(f'd{i}', AT, 10, [], v3_unlocked=True) for i in range(9)}
+    rows['/users/u/conversation_v3_leases/builder'] = {'unlocked_ids': [f'd{i}' for i in range(9)]}
+    if overflow == 'count':
+        monkeypatch.setattr(store, 'DERIVED_LIMIT', 8)
+    else:
+        monkeypatch.setattr(store, 'DERIVED_BYTES', store._encoded_bytes(rows[C + 'd0']['transcript_segments']) * 8)
+    with pytest.raises(Conflict, match='v3_derived_budget'):
+        store.load('u', firestore_client=MemoryQuery(rows), pending_limit=pending_limit)
+
+
+@pytest.mark.parametrize('overflow', ['count', 'bytes'])
+def test_paged_unlocked_load_closes_claims_and_rotates_past_an_unlocked_preview(strict, monkeypatch, overflow):
+    lease_path = '/users/u/conversation_v3_leases/builder'
+    rows = {lease_path: {'unlocked_ids': ['a', 'b', 'c']}}
+    for index, cid in enumerate('abc'):
+        start = AT + timedelta(hours=index * 3)
+        rid = f'r{cid}'
+        rows[C + cid] = derived(cid, start, 10, [rid], v3_unlocked=True)
+        rows[C + rid] = source(
+            rid,
+            started_at=start,
+            finished_at=start + timedelta(seconds=10),
+            v3_pending=False,
+            claims=[claim(cid, start, 10)],
+        )
+    # A claimant outside the source's time margin must still enter the closure.
+    rows[C + 'd'] = derived('d', AT - timedelta(hours=3), 10, ['ra'])
+    rows[C + 'ra']['claims'].append(claim('d', AT - timedelta(hours=3), 10))
+    if overflow == 'count':
+        monkeypatch.setattr(store, 'DERIVED_LIMIT', 2)
+    else:
+        monkeypatch.setattr(store, 'DERIVED_BYTES', store._encoded_bytes(rows[C + 'a']['transcript_segments']) * 2)
+
+    page = store.UnlockedPage()
+    recordings, existing, _ = store.load('u', firestore_client=MemoryQuery(rows), pending_limit=1, unlocked_page=page)
+    assert set(recordings) == {'ra'}
+    assert set(existing) == {'a', 'd'}
+    assert page.remaining == {'b', 'c'}
+
+    # The selected preview remains unlocked. The final transaction must preserve
+    # even an omitted ID with no loaded source and advance past the selected ID.
+    strict.rows.update({path(row['id']): row.copy() for key, row in rows.items() if key.startswith(C)})
+    token = leases.acquire(UID, 'builder', firestore_client=strict)
+    held = leases.lease_ref(strict, UID, 'builder')
+    strict.rows[held.path]['unlocked_ids'] = ['a', 'b', 'c']
+    store.commit_projection(
+        UID, token, recordings, existing, [existing['a']], [], unlocked_page=page, firestore_client=strict
+    )
+    state = held.get().to_dict()
+    assert state['unlocked_ids'] == ['a', 'b', 'c']
+    assert state['v3_unlocked_cursor'] == 'a'
+    rows[lease_path] = state
+    recordings, existing, _ = store.load('u', firestore_client=MemoryQuery(rows), pending_limit=1, unlocked_page=page)
+    assert set(recordings) == {'rb'}
+    assert set(existing) == {'b'}
+    assert page.remaining == {'a', 'c'}
+
+
+@pytest.mark.asyncio
+async def test_unvisited_unlocked_wake_is_independent_of_pending_seeds(monkeypatch):
+    calls = []
+
+    async def run_fixture(_, fn, uid, *, at):
+        assert fn is service.enqueue
+        calls.append((uid, at))
+
+    monkeypatch.setattr(service, 'run_blocking', run_fixture)
+    await service._wake_unvisited_unlocked('u', store.UnlockedPage())
+    assert not calls
+    await service._wake_unvisited_unlocked('u', store.UnlockedPage(frozenset({'later'})))
+    assert len(calls) == 1
+    assert calls[0][0] == 'u' and calls[0][1] > AT
+
+
+def test_previous_bounded_pending_park_gets_one_unlocked_paging_attempt(strict):
+    token = leases.acquire(UID, 'builder', firestore_client=strict)
+    held = leases.lease_ref(strict, UID, 'builder')
+    assert store.record_blocked(UID, token, 'v3_derived_budget', firestore_client=strict)
+    strict.rows[held.path]['unlocked_ids'] = ['owed']
+    assert store.backoff_state(UID, firestore_client=strict) == (None, 'v3_derived_budget')
+    store.mark_bounded_attempt(UID, token, firestore_client=strict)
+    backoff, reason = store.backoff_state(UID, firestore_client=strict)
+    assert backoff is not None and reason == 'v3_derived_budget'
