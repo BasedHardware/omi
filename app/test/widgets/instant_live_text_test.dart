@@ -32,6 +32,8 @@ import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:omi/utils/reliability_experiments.dart';
 import 'package:omi/widgets/conversation_bottom_bar.dart';
 
+import '../support/surface_render.dart';
+
 // Reliability experiment instant_live_text. A phone that sends its speech as files waits 40 s to two
 // minutes for the server to show the next conversation after an End, and its own recogniser's text was
 // hidden for that whole time: Home held the Listening row back, and the open conversation's "Live on
@@ -135,6 +137,8 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
   final platformDeviceId = LiveConversationEndButton.ownDeviceId;
 
+  setUpAll(loadSurfaceRenderFonts);
+
   setUp(() async {
     SharedPreferences.setMockInitialValues({'has_first_conversation': true, 'uid': 'owner-1'});
     await SharedPreferencesUtil.init();
@@ -234,7 +238,8 @@ void main() {
 
   group('the open conversation\'s Live on this phone lines', () {
     Future<void> open(WidgetTester tester, {required String? liveDevice, String liveId = 'open'}) async {
-      tester.view.physicalSize = const Size(800, 1600);
+      // A phone-sized view only when a review picture is asked for; the default keeps the test's metrics.
+      tester.view.physicalSize = surfaceRenderOutput.isEmpty ? const Size(800, 1600) : const Size(402, 874);
       tester.view.devicePixelRatio = 1.0;
       addTearDown(tester.view.resetPhysicalSize);
       addTearDown(tester.view.resetDevicePixelRatio);
@@ -313,6 +318,7 @@ void main() {
       expect(find.textContaining('Server words', findRichText: true), findsWidgets);
       expect(tail, findsOneWidget);
       expect(find.text('the phone heard this just now'), findsOneWidget);
+      await writeSurfaceRender(tester, 'open-conversation-live-words');
       // They continue the transcript: no heading over them, and they start at the page's own inset.
       expect(find.byKey(const Key('live_preview_divider')), findsNothing);
       expect(tester.getTopLeft(find.text('the phone heard this just now')).dx, 16.0);
