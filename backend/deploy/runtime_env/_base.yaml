@@ -38,8 +38,6 @@ environment_shared:
         UNLIMITED_V2_BACKFILL_HOURS_CAP_ENABLED: {value: 'false', category: rollout}
         UNLIMITED_V2_BACKFILL_HOURS_CAP_HOURS: {value: '24', category: rollout}
         PLAYBACK_ON_DEMAND_ENABLED: {value: 'false', category: rollout}
-        SYNC_POLL_BACKOFF_ENABLED: {value: 'false', category: rollout}
-        SYNC_POLL_BACKOFF_PERCENT: {value: '0', category: rollout}
         SYNC_RECORD_COVERAGE_WAIT_MEMO: {value: 'true', category: ops_kill}
         SYNC_RECORD_WAIT_MEMO_FIRST: {value: 'true', category: ops_kill}
         SYNC_RECORD_DECODE_FAILURE_MEMO: {value: 'true', category: ops_kill}
@@ -580,8 +578,6 @@ environment_shared:
         BATCH_LIVE_STT_RETIRE_PERCENT: {value: '0', category: rollout}
         BATCH_PIPELINE_LIVE_ADMISSION_ENABLED: {value: 'false', category: rollout}
         PLAYBACK_ON_DEMAND_ENABLED: {value: 'false', category: rollout}
-        SYNC_POLL_BACKOFF_ENABLED: {value: 'false', category: rollout}
-        SYNC_POLL_BACKOFF_PERCENT: {value: '0', category: rollout}
         SYNC_RECORD_COVERAGE_WAIT_MEMO: {value: 'true', category: ops_kill}
         SYNC_RECORD_WAIT_MEMO_FIRST: {value: 'true', category: ops_kill}
         SYNC_RECORD_DECODE_FAILURE_MEMO: {value: 'true', category: ops_kill}
@@ -980,7 +976,6 @@ environment_shared:
             env_var: LADDER_V1_ARCHITECT_YEAR_PRICE_ID
             provisional: true
           PLAYBACK_ON_DEMAND_ENABLED: {value: 'false', category: rollout}
-          SYNC_POLL_BACKOFF_ENABLED: {value: 'false', category: rollout}
           SYNC_RECORD_COVERAGE_WAIT_MEMO: {value: 'true', category: ops_kill}
           SYNC_RECORD_WAIT_MEMO_FIRST: {value: 'true', category: ops_kill}
           SYNC_RECORD_DECODE_FAILURE_MEMO: {value: 'true', category: ops_kill}
@@ -1386,8 +1381,6 @@ environment_shared:
           UNLIMITED_V2_BACKFILL_HOURS_CAP_ENABLED: {value: 'false', category: rollout}
           UNLIMITED_V2_BACKFILL_HOURS_CAP_HOURS: {value: '24', category: rollout}
           PLAYBACK_ON_DEMAND_ENABLED: {value: 'false', category: rollout}
-          SYNC_POLL_BACKOFF_ENABLED: {value: 'false', category: rollout}
-          SYNC_POLL_BACKOFF_PERCENT: {value: '0', category: rollout}
           SYNC_RECORD_COVERAGE_WAIT_MEMO: {value: 'true', category: ops_kill}
           SYNC_RECORD_WAIT_MEMO_FIRST: {value: 'true', category: ops_kill}
           SYNC_RECORD_DECODE_FAILURE_MEMO: {value: 'true', category: ops_kill}
@@ -1767,8 +1760,6 @@ environment_shared:
           SYNC_BACKFILL_OWNER_CONCURRENCY: {value: '2', category: reliability}
           SYNC_BACKFILL_OWNER_CONCURRENCY_THRESHOLD: {value: '8', category: reliability}
           PLAYBACK_ON_DEMAND_ENABLED: {value: 'false', category: rollout}
-          SYNC_POLL_BACKOFF_ENABLED: {value: 'false', category: rollout}
-          SYNC_POLL_BACKOFF_PERCENT: {value: '0', category: rollout}
           SYNC_RECORD_COVERAGE_WAIT_MEMO: {value: 'true', category: ops_kill}
           SYNC_RECORD_WAIT_MEMO_FIRST: {value: 'true', category: ops_kill}
           SYNC_RECORD_DECODE_FAILURE_MEMO: {value: 'true', category: ops_kill}
@@ -2124,8 +2115,6 @@ environment_shared:
           UNLIMITED_V2_BACKFILL_HOURS_CAP_ENABLED: {value: 'false', category: rollout}
           UNLIMITED_V2_BACKFILL_HOURS_CAP_HOURS: {value: '24', category: rollout}
           PLAYBACK_ON_DEMAND_ENABLED: {value: 'false', category: rollout}
-          SYNC_POLL_BACKOFF_ENABLED: {value: 'false', category: rollout}
-          SYNC_POLL_BACKOFF_PERCENT: {value: '0', category: rollout}
           SYNC_RECORD_COVERAGE_WAIT_MEMO: {value: 'true', category: ops_kill}
           SYNC_RECORD_WAIT_MEMO_FIRST: {value: 'true', category: ops_kill}
           SYNC_RECORD_DECODE_FAILURE_MEMO: {value: 'true', category: ops_kill}
