@@ -45,12 +45,29 @@ def test_soniox_scope_is_prod_gated_and_skips_every_dashboard_write():
     assert 'backend/scripts/provision_monitoring_alerts.py' not in push_paths
 
 
-def test_soniox_restore_uses_the_source_bound_apply_artifact():
+def test_soniox_preimage_is_uploaded_before_versioned_apply_and_restore_uses_it():
     workflow = load_workflow()
     steps = workflow['jobs']['provision']['steps']
+    prepare = step_by_name(steps, 'Capture the Soniox alert preimage')
+    apply = step_by_name(steps, 'Apply only the Soniox daily-hours alert')
+    preserve = step_by_name(steps, 'Preserve pre-apply Soniox alert state for rollback')
     download = step_by_name(steps, 'Download the selected Soniox apply snapshot')
     restore = step_by_name(steps, 'Restore or remove only the Soniox daily-hours alert')
-    preserve = step_by_name(steps, 'Preserve pre-apply Soniox alert state for rollback')
+
+    assert (
+        prepare['if']
+        == apply['if']
+        == (
+            "github.event_name == 'workflow_dispatch' && matrix.environment == 'prod' "
+            "&& inputs.alert_scope == 'soniox-alert' && inputs.alert_operation == 'apply'"
+        )
+    )
+    assert '--prepare-soniox-alert' in prepare['run']
+    assert '--apply-soniox-alert' in apply['run']
+    assert steps.index(prepare) < steps.index(preserve) < steps.index(apply)
+    assert preserve['if'] == prepare['if']
+    assert preserve['with']['name'] == 'grafana-soniox-alert-backup-${{ github.run_id }}'
+    assert preserve['with']['if-no-files-found'] == 'error'
 
     assert download['with']['run-id'] == '${{ inputs.source_run_id }}'
     assert download['with']['name'] == 'grafana-soniox-alert-backup-${{ inputs.source_run_id }}'
@@ -60,8 +77,6 @@ def test_soniox_restore_uses_the_source_bound_apply_artifact():
     assert '--expected-source-sha "$SOURCE_SHA"' in restore['run']
     assert '--expected-source-run-id "$SOURCE_RUN_ID"' in restore['run']
     assert '--confirm-soniox-alert-restore' in restore['run']
-    assert preserve['with']['name'] == 'grafana-soniox-alert-backup-${{ github.run_id }}'
-    assert preserve['with']['if-no-files-found'] == 'error'
 
 
 def test_soniox_scope_requires_prod_main_and_valid_restore_coordinates():

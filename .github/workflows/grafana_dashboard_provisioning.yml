@@ -186,7 +186,7 @@ jobs:
           set -euo pipefail
           python3 backend/scripts/provision_monitoring_alerts.py \
             --apply --backup-file "$RUNNER_TEMP/grafana-alert-backup.json"
-      - name: Apply only the Soniox daily-hours alert
+      - name: Capture the Soniox alert preimage
         if: github.event_name == 'workflow_dispatch' && matrix.environment == 'prod' && inputs.alert_scope == 'soniox-alert' && inputs.alert_operation == 'apply'
         env:
           MONITOR_GRAFANA_TOKEN: ${{ secrets.MONITOR_GRAFANA_TOKEN }}
@@ -197,7 +197,29 @@ jobs:
           umask 077
           python3 backend/scripts/provision_monitoring_alerts.py \
             --soniox-alert-only \
-            --apply \
+            --prepare-soniox-alert \
+            --source-sha "$SOURCE_SHA" \
+            --source-run-id "$SOURCE_RUN_ID" \
+            --backup-file "$RUNNER_TEMP/grafana-alert-backup.json"
+      - name: Preserve pre-apply Soniox alert state for rollback
+        if: github.event_name == 'workflow_dispatch' && matrix.environment == 'prod' && inputs.alert_scope == 'soniox-alert' && inputs.alert_operation == 'apply'
+        uses: actions/upload-artifact@v7
+        with:
+          name: grafana-soniox-alert-backup-${{ github.run_id }}
+          path: ${{ runner.temp }}/grafana-alert-backup.json
+          if-no-files-found: error
+          retention-days: 15
+      - name: Apply only the Soniox daily-hours alert
+        if: github.event_name == 'workflow_dispatch' && matrix.environment == 'prod' && inputs.alert_scope == 'soniox-alert' && inputs.alert_operation == 'apply'
+        env:
+          MONITOR_GRAFANA_TOKEN: ${{ secrets.MONITOR_GRAFANA_TOKEN }}
+          SOURCE_SHA: ${{ github.sha }}
+          SOURCE_RUN_ID: ${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          python3 backend/scripts/provision_monitoring_alerts.py \
+            --soniox-alert-only \
+            --apply-soniox-alert \
             --source-sha "$SOURCE_SHA" \
             --source-run-id "$SOURCE_RUN_ID" \
             --backup-file "$RUNNER_TEMP/grafana-alert-backup.json"
@@ -238,14 +260,6 @@ jobs:
           name: grafana-alert-backup-${{ github.run_id }}
           path: ${{ runner.temp }}/grafana-alert-backup.json
           if-no-files-found: ignore
-          retention-days: 15
-      - name: Preserve pre-apply Soniox alert state for rollback
-        if: always() && matrix.environment == 'prod' && inputs.alert_scope == 'soniox-alert' && inputs.alert_operation == 'apply'
-        uses: actions/upload-artifact@v7
-        with:
-          name: grafana-soniox-alert-backup-${{ github.run_id }}
-          path: ${{ runner.temp }}/grafana-alert-backup.json
-          if-no-files-found: error
           retention-days: 15
 
   # Auto-apply for prod Ops dashboard JSON (David approved 2026-11-09). Every

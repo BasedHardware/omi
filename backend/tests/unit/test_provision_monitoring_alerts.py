@@ -37,16 +37,60 @@ class FakeGrafana:
         self.writes = []
         self.ignore_writes = False
         self.contacts = [{'name': 'Omi - Services Alerting (Telegram)', 'type': 'telegram'}]
+        self.app_resources = {}
+        self.before_app_write = None
 
     def rules(self):
         return copy.deepcopy(self.live)
 
+    def app_alert_rules(self):
+        return copy.deepcopy(list(self.app_resources.values()))
+
+    def app_alert_rule(self, uid):
+        return copy.deepcopy(self.app_resources.get(uid))
+
     def request(self, path, body=None, method='GET', *, editable=False):
+        app_path = self.__dict__.get(
+            'app_api_path', '/apis/rules.alerting.grafana.app/v1beta1/namespaces/default/alertrules'
+        )
+        if path.startswith(app_path):
+            self.writes.append((method, path, copy.deepcopy(body), editable))
+            uid = path.rsplit('/', 1)[-1]
+            if method == 'POST':
+                if uid in self.app_resources:
+                    raise ValueError('Grafana POST: HTTP 409')
+                created = copy.deepcopy(body)
+                created['metadata']['resourceVersion'] = '1'
+                self.app_resources[created['metadata']['name']] = created
+                return created
+            if method == 'PUT':
+                if self.before_app_write is not None:
+                    callback, self.before_app_write = self.before_app_write, None
+                    callback()
+                live = self.app_resources.get(uid)
+                expected = body.get('metadata', {}).get('resourceVersion')
+                if live is None or live['metadata']['resourceVersion'] != expected:
+                    raise ValueError('Grafana PUT: HTTP 409')
+                updated = copy.deepcopy(body)
+                updated['metadata']['resourceVersion'] = str(int(expected) + 1)
+                self.app_resources[uid] = updated
+                return updated
+            if method == 'DELETE':
+                live = self.app_resources.get(uid)
+                expected = body.get('preconditions', {}).get('resourceVersion')
+                if live is None or live['metadata']['resourceVersion'] != expected:
+                    raise ValueError('Grafana DELETE: HTTP 409')
+                self.app_resources.pop(uid)
+                return None
+            raise AssertionError(f'unexpected App Platform method {method}')
         if path.endswith('contact-points'):
             return self.contacts
         if method == 'GET':
-            assert path == '/api/folders/folder'
-            return {'uid': 'folder'}
+            if path.startswith('/api/folders/'):
+                return {'uid': path.rsplit('/', 1)[-1]}
+            if '/rule-groups/' in path:
+                return {'interval': '1m'}
+            raise AssertionError(f'unexpected read {path}')
         self.writes.append((method, path, body, editable))
         if not self.ignore_writes:
             if method == 'DELETE':
@@ -92,9 +136,49 @@ def test_noop_does_not_write_and_preserves_extra_live_rules(provisioner, tmp_pat
     assert api.writes == []
 
 
-def test_soniox_only_scope_writes_one_uid_and_captures_its_inverse(provisioner, tmp_path, monkeypatch):
+def _soniox_rule(uid):
+    return {
+        **rule(uid),
+        'condition': 'B',
+        'data': [
+            {
+                'refId': 'A',
+                'queryType': '',
+                'datasourceUid': 'gmp-cloud-run',
+                'relativeTimeRange': {'from': 900, 'to': 0},
+                'model': {'expr': 'up', 'refId': 'A'},
+            },
+            {
+                'refId': 'B',
+                'datasourceUid': '__expr__',
+                'relativeTimeRange': {'from': 0, 'to': 0},
+                'model': {'expression': 'A > 1', 'refId': 'B'},
+            },
+        ],
+        'for': '5m',
+        'noDataState': 'OK',
+        'execErrState': 'KeepLast',
+        'isPaused': False,
+        'notification_settings': {'receiver': 'Omi - Services Alerting (Telegram)'},
+    }
+
+
+def _app_resource(uid, title, resource_version='1'):
+    return {
+        'apiVersion': 'rules.alerting.grafana.app/v1beta1',
+        'kind': 'AlertRule',
+        'metadata': {
+            'name': uid,
+            'resourceVersion': resource_version,
+            'annotations': {'grafana.app/folder': 'folder', 'grafana.com/provenance': 'api'},
+        },
+        'spec': {'title': title, 'trigger': {'interval': '1m'}, 'expressions': {}},
+    }
+
+
+def test_soniox_preimage_is_durable_before_cas_apply_and_only_target_changes(provisioner, tmp_path, monkeypatch):
     uid = provisioner.SONIOX_DAILY_HOURS_UID
-    soniox = {**rule(uid), 'execErrState': 'KeepLast'}
+    soniox = _soniox_rule(uid)
     canaries = {
         canary_uid: {
             **rule(canary_uid),
@@ -108,14 +192,15 @@ def test_soniox_only_scope_writes_one_uid_and_captures_its_inverse(provisioner, 
     scoped = provisioner.select_rules(desired, soniox_alert_only=True)
     assert set(scoped) == {uid}
 
-    prior = {**rule(uid), 'title': 'captured prior definition'}
+    prior = _app_resource(uid, 'captured prior definition')
     api = FakeGrafana(
         {
-            uid: prior,
-            'unrelated': {**rule('unrelated'), 'title': 'leave unchanged'},
-            **canaries,
+            uid: {**rule(uid), 'provenance': 'api'},
+            'unrelated': {**rule('unrelated'), 'title': 'leave unchanged', 'provenance': 'api'},
+            **{key: {**value, 'provenance': 'api'} for key, value in canaries.items()},
         }
     )
+    api.app_resources[uid] = prior
     probed = []
     monkeypatch.setitem(
         provisioner.reconcile.__globals__,
@@ -125,27 +210,61 @@ def test_soniox_only_scope_writes_one_uid_and_captures_its_inverse(provisioner, 
     backup = tmp_path / 'soniox-backup.json'
     source_sha = 'a' * 40
     source_run_id = '46045070289'
-    assert (
-        provisioner.reconcile(
-            api,
-            scoped,
-            backup=backup,
-            source_sha=source_sha,
-            source_run_id=source_run_id,
-            soniox_alert_only=True,
-            canary_rules=desired,
-        )
-        == []
+    provisioner.prepare_soniox_alert(
+        api,
+        scoped,
+        desired,
+        backup,
+        source_sha=source_sha,
+        source_run_id=source_run_id,
     )
 
-    assert [write[1] for write in api.writes] == [provisioner.API + '/' + uid]
-    assert probed == [set(provisioner.CANARY_UIDS)]
+    # The prepare step is read-only; the workflow uploads this file before the
+    # second command is allowed to apply the new rule.
+    assert api.writes == []
     snapshot = json.loads(backup.read_text())
+    assert snapshot['schema_version'] == 2
     assert snapshot['source_sha'] == source_sha
     assert snapshot['source_run_id'] == source_run_id
-    assert [saved['uid'] for saved in snapshot['rules']] == [uid]
-    assert snapshot['soniox_alert_rollback'] == {'uid': uid, 'desired': provisioner.definition(desired[uid])}
+    assert snapshot['soniox_alert_rollback']['previous_resource'] == prior
+    assert snapshot['soniox_alert_rollback']['desired_resource']['metadata']['resourceVersion'] == '1'
+    assert backup.stat().st_mode & 0o777 == 0o600
+
+    provisioner.apply_soniox_snapshot(api, snapshot, soniox)
+
+    assert probed == [set(provisioner.CANARY_UIDS)]
+    assert len(api.writes) == 1
+    assert api.writes[0][0] == 'PUT'
+    assert api.writes[0][1].endswith('/' + uid)
+    assert api.writes[0][2]['metadata']['resourceVersion'] == '1'
+    assert api.app_resources[uid]['metadata']['resourceVersion'] == '2'
     assert api.live['unrelated']['title'] == 'leave unchanged'
+
+
+def test_soniox_apply_conflicts_if_an_edit_lands_after_the_last_read(provisioner, tmp_path):
+    uid = provisioner.SONIOX_DAILY_HOURS_UID
+    desired = _soniox_rule(uid)
+    previous = _app_resource(uid, 'captured before edit', '7')
+    snapshot = {
+        'soniox_alert_rollback': {
+            'uid': uid,
+            'desired': provisioner.definition(desired),
+            'previous_resource': previous,
+            'desired_resource': provisioner._app_alert_resource(desired, '1m', previous),
+        }
+    }
+    api = FakeGrafana({uid: {**rule(uid), 'provenance': 'api'}})
+    api.app_resources[uid] = copy.deepcopy(previous)
+
+    def concurrent_edit():
+        api.app_resources[uid]['spec']['title'] = 'concurrent edit'
+        api.app_resources[uid]['metadata']['resourceVersion'] = '8'
+
+    api.before_app_write = concurrent_edit
+    with pytest.raises(ValueError, match='HTTP 409'):
+        provisioner.apply_soniox_snapshot(api, snapshot, desired)
+    assert api.app_resources[uid]['spec']['title'] == 'concurrent edit'
+    assert api.app_resources[uid]['metadata']['resourceVersion'] == '8'
 
 
 def test_soniox_only_read_check_ignores_unrelated_live_rules(provisioner):

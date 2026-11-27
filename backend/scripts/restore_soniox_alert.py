@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import copy
 import json
 import os
 import re
@@ -15,28 +16,13 @@ if __package__ in (None, ''):
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from scripts.provision_monitoring_alerts import (  # noqa: E402
-    API,
+    APP_ALERT_RULES_API,
     SONIOX_DAILY_HOURS_UID,
     Grafana,
-    comparable,
-    definition,
+    _app_rule_semantics,
 )
 
 MAX_BACKUP_BYTES = 16_000_000
-
-
-def _rule_map(value: object, field: str) -> dict[str, dict]:
-    if not isinstance(value, list):
-        raise ValueError(f'{field} must be a list')
-    result = {}
-    for rule in value:
-        if not isinstance(rule, dict):
-            raise ValueError(f'{field} contains a non-object rule')
-        uid = rule.get('uid')
-        if not isinstance(uid, str) or not uid or uid in result:
-            raise ValueError(f'{field} contains a missing or duplicate UID')
-        result[uid] = rule
-    return result
 
 
 def load_snapshot(path: Path, expected_source_sha: str, expected_source_run_id: str) -> dict:
@@ -47,7 +33,7 @@ def load_snapshot(path: Path, expected_source_sha: str, expected_source_run_id: 
     if path.stat().st_size > MAX_BACKUP_BYTES:
         raise ValueError('backup exceeds size limit')
     backup = json.loads(path.read_text())
-    if not isinstance(backup, dict) or backup.get('schema_version') != 1:
+    if not isinstance(backup, dict) or backup.get('schema_version') != 2:
         raise ValueError('unsupported alert backup schema')
     if backup.get('source_sha') != expected_source_sha or str(backup.get('source_run_id')) != expected_source_run_id:
         raise ValueError('backup does not match the selected source run')
@@ -56,10 +42,27 @@ def load_snapshot(path: Path, expected_source_sha: str, expected_source_run_id: 
     if not isinstance(rollback, dict) or rollback.get('uid') != SONIOX_DAILY_HOURS_UID:
         raise ValueError('backup does not contain the Soniox alert inverse')
     desired = rollback.get('desired')
+    desired_resource = rollback.get('desired_resource')
     if not isinstance(desired, dict) or desired.get('uid') != SONIOX_DAILY_HOURS_UID:
         raise ValueError('backup contains an invalid Soniox desired definition')
-
-    previous = _rule_map(backup.get('rules'), 'rules').get(SONIOX_DAILY_HOURS_UID)
+    desired_metadata = desired_resource.get('metadata') if isinstance(desired_resource, dict) else None
+    if (
+        not isinstance(desired_resource, dict)
+        or desired_resource.get('kind') != 'AlertRule'
+        or not isinstance(desired_metadata, dict)
+        or desired_metadata.get('name') != SONIOX_DAILY_HOURS_UID
+    ):
+        raise ValueError('backup contains an invalid versioned Soniox definition')
+    previous = rollback.get('previous_resource')
+    previous_metadata = previous.get('metadata') if isinstance(previous, dict) else None
+    if previous is not None and (
+        not isinstance(previous, dict)
+        or previous.get('kind') != 'AlertRule'
+        or not isinstance(previous_metadata, dict)
+        or previous_metadata.get('name') != SONIOX_DAILY_HOURS_UID
+        or not previous_metadata.get('resourceVersion')
+    ):
+        raise ValueError('backup contains an invalid versioned Soniox preimage')
     created_uids = backup.get('created_uids')
     if (
         not isinstance(created_uids, list)
@@ -68,20 +71,25 @@ def load_snapshot(path: Path, expected_source_sha: str, expected_source_run_id: 
     ):
         raise ValueError('backup contains an invalid created UID list')
     was_created = SONIOX_DAILY_HOURS_UID in created_uids
-    if (previous is None) == (not was_created):
+    if was_created != (previous is None):
         raise ValueError('backup must show either the prior Soniox rule or that this run created it')
-    return {'desired': desired, 'previous': previous, 'was_created': was_created}
+    return {
+        'desired': desired,
+        'desired_resource': desired_resource,
+        'previous_resource': previous,
+        'was_created': was_created,
+    }
 
 
 def inverse_plan(api: Grafana, snapshot: dict) -> tuple[str, dict | None, dict | None]:
     uid = SONIOX_DAILY_HOURS_UID
-    previous, desired = snapshot['previous'], snapshot['desired']
-    live = api.rules().get(uid)
-    if previous is not None and live is not None and comparable(live) == comparable(previous):
+    previous, desired = snapshot['previous_resource'], snapshot['desired_resource']
+    live = api.app_alert_rule(uid)
+    if previous is not None and live is not None and _app_rule_semantics(live) == _app_rule_semantics(previous):
         return 'already-restored', live, previous
     if previous is None and live is None:
         return 'already-restored', live, previous
-    if live is None or comparable(live) != comparable(desired):
+    if live is None or _app_rule_semantics(live) != _app_rule_semantics(desired):
         raise ValueError(
             'live Soniox rule differs from both the applied and captured definitions; refusing to overwrite'
         )
@@ -95,18 +103,36 @@ def restore_soniox_alert(api: Grafana, snapshot: dict, *, apply: bool) -> str:
     if not apply:
         return f'Would {action} only {SONIOX_DAILY_HOURS_UID}'
 
-    path = API + '/' + quote(SONIOX_DAILY_HOURS_UID, safe='')
+    path = APP_ALERT_RULES_API + '/' + quote(SONIOX_DAILY_HOURS_UID, safe='')
     if action == 'restore':
-        api.request(path, definition(previous), 'PUT', editable=live.get('provenance', '') == '')
+        restored = copy.deepcopy(previous)
+        metadata = restored['metadata']
+        live_metadata = live['metadata']
+        restored_metadata = {'name': SONIOX_DAILY_HOURS_UID, 'resourceVersion': live_metadata['resourceVersion']}
+        annotations = copy.deepcopy(metadata.get('annotations', {}))
+        for key in ('grafana.app/createdBy', 'grafana.app/updatedBy', 'grafana.app/updatedTimestamp'):
+            annotations.pop(key, None)
+        if annotations:
+            restored_metadata['annotations'] = annotations
+        labels = metadata.get('labels')
+        if isinstance(labels, dict) and labels:
+            restored_metadata['labels'] = copy.deepcopy(labels)
+        restored['metadata'] = restored_metadata
+        restored.pop('status', None)
+        api.request(path, restored, 'PUT')
     else:
-        api.request(path, method='DELETE', editable=live.get('provenance', '') == '')
+        api.request(
+            path,
+            {'preconditions': {'resourceVersion': live['metadata']['resourceVersion']}},
+            'DELETE',
+        )
 
-    verified = api.rules().get(SONIOX_DAILY_HOURS_UID)
+    verified = api.app_alert_rule(SONIOX_DAILY_HOURS_UID)
     if previous is None:
         if verified is not None:
             raise ValueError('Soniox rule remains after rollback delete')
-    elif verified is None or comparable(verified) != comparable(previous):
-        raise ValueError('Soniox rule read-back differs from the captured pre-apply definition')
+    elif verified is None or _app_rule_semantics(verified) != _app_rule_semantics(previous):
+        raise ValueError('Soniox rule read-back differs from the captured versioned preimage')
     return f'Rolled back only {SONIOX_DAILY_HOURS_UID} and verified read-back'
 
 

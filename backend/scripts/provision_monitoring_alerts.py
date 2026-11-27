@@ -57,6 +57,7 @@ FIELDS = (
 )
 API = '/api/v1/provisioning/alert-rules'
 SONIOX_DAILY_HOURS_UID = 'omi-batch-soniox-daily-hours'
+APP_ALERT_RULES_API = '/apis/rules.alerting.grafana.app/v1beta1/namespaces/default/alertrules'
 CANARY_UIDS = ('omi-datasource-prometheus', 'omi-datasource-cloud-monitoring', 'omi-datasource-gmp')
 EXPRESSION_DATASOURCES = ('__expr__', '-100')
 
@@ -194,7 +195,15 @@ class Grafana:
             raise ValueError('alert sources are production-specific: expected https://monitor.omi.me')
         self.base, self.token = base.rstrip('/'), token
 
-    def request(self, path: str, body: dict | None = None, method: str = 'GET', *, editable: bool = False):
+    def request(
+        self,
+        path: str,
+        body: dict | None = None,
+        method: str = 'GET',
+        *,
+        editable: bool = False,
+        allow_not_found: bool = False,
+    ):
         headers = {
             'Authorization': 'Bearer ' + self.token,
             'Accept': 'application/json',
@@ -212,6 +221,8 @@ class Grafana:
             with urllib.request.build_opener(NoRedirect()).open(request, timeout=30) as response:
                 data = response.read(8_000_001)
         except urllib.error.HTTPError as exc:
+            if allow_not_found and exc.code == 404:
+                return None
             raise ValueError(f'Grafana {method} {path}: HTTP {exc.code}') from None
         except OSError:
             raise ValueError(f'Grafana {method} {path}: connection failed') from None
@@ -225,6 +236,32 @@ class Grafana:
     def rules(self) -> dict[str, dict]:
         payload = self.request(API)
         return {} if payload == [] else index_rules(payload)
+
+    def app_alert_rules(self) -> list[dict]:
+        payload = self.request(APP_ALERT_RULES_API + '?limit=1')
+        if not isinstance(payload, dict) or not isinstance(payload.get('items'), list):
+            raise ValueError('Grafana App Platform alert-rule API returned an invalid list')
+        return payload['items']
+
+    def app_alert_rule(self, uid: str) -> dict | None:
+        resource = self.request(
+            APP_ALERT_RULES_API + '/' + urllib.parse.quote(uid, safe=''),
+            allow_not_found=True,
+        )
+        if resource is None:
+            return None
+        metadata = resource.get('metadata') if isinstance(resource, dict) else None
+        if (
+            not isinstance(resource, dict)
+            or resource.get('kind') != 'AlertRule'
+            or not isinstance(metadata, dict)
+            or metadata.get('name') != uid
+            or not isinstance(metadata.get('resourceVersion'), str)
+            or not metadata['resourceVersion']
+            or not isinstance(resource.get('spec'), dict)
+        ):
+            raise ValueError(f'{uid}: Grafana App Platform returned an invalid alert resource')
+        return resource
 
 
 def drift(desired: dict[str, dict], live: dict[str, dict]) -> list[str]:
@@ -304,6 +341,294 @@ def probe_datasources(api: Grafana, rules: dict[str, dict]) -> list[str]:
     return failures
 
 
+def _app_rule_semantics(resource: dict) -> dict:
+    """Drop only server-maintained metadata before comparing App Platform objects."""
+    result = copy.deepcopy(resource)
+    result.pop('status', None)
+    metadata = result.get('metadata')
+    if not isinstance(metadata, dict):
+        return result
+    for key in ('namespace', 'uid', 'resourceVersion', 'generation', 'creationTimestamp', 'managedFields'):
+        metadata.pop(key, None)
+    annotations = metadata.get('annotations')
+    if isinstance(annotations, dict):
+        for key in ('grafana.app/createdBy', 'grafana.app/updatedBy', 'grafana.app/updatedTimestamp'):
+            annotations.pop(key, None)
+    return result
+
+
+def _rule_group_interval(api: Grafana, rule: dict) -> str:
+    path = (
+        '/api/v1/provisioning/folder/'
+        + urllib.parse.quote(rule['folderUID'], safe='')
+        + '/rule-groups/'
+        + urllib.parse.quote(rule['ruleGroup'], safe='')
+    )
+    group = api.request(path)
+    interval = group.get('interval') if isinstance(group, dict) else None
+    if isinstance(interval, int) and not isinstance(interval, bool) and interval > 0:
+        return f'{interval}s'
+    if isinstance(interval, str) and interval.strip():
+        return interval.strip()
+    raise ValueError(f'{rule["ruleGroup"]}: could not read the Grafana rule-group interval')
+
+
+def _app_alert_resource(
+    rule: dict,
+    interval: str,
+    existing: dict | None = None,
+    *,
+    provenance: str = 'api',
+) -> dict:
+    metadata = {'name': rule['uid']}
+    annotations = {}
+    labels = {}
+    if existing is not None:
+        current_metadata = existing.get('metadata', {})
+        annotations = copy.deepcopy(current_metadata.get('annotations', {}))
+        labels = copy.deepcopy(current_metadata.get('labels', {}))
+        if not isinstance(annotations, dict) or not isinstance(labels, dict):
+            raise ValueError(f'{rule["uid"]}: malformed Grafana resource metadata')
+        for key in ('grafana.app/createdBy', 'grafana.app/updatedBy', 'grafana.app/updatedTimestamp'):
+            annotations.pop(key, None)
+        metadata['resourceVersion'] = current_metadata['resourceVersion']
+    annotations['grafana.app/folder'] = rule['folderUID']
+    if provenance == 'api':
+        annotations['grafana.com/provenance'] = 'api'
+    elif provenance == '':
+        annotations.pop('grafana.com/provenance', None)
+    else:
+        raise ValueError(f'{rule["uid"]}: rule belongs to another provisioner')
+    metadata['annotations'] = annotations
+    if labels:
+        metadata['labels'] = labels
+
+    expressions = {}
+    for query in rule.get('data') or []:
+        ref_id = query.get('refId')
+        if not isinstance(ref_id, str) or not ref_id or ref_id in expressions:
+            raise ValueError(f'{rule["uid"]}: invalid or duplicate expression reference')
+        expression = {}
+        if 'queryType' in query:
+            expression['queryType'] = query['queryType']
+        if 'datasourceUid' in query:
+            expression['datasourceUID'] = query['datasourceUid']
+        relative_range = query.get('relativeTimeRange')
+        if isinstance(relative_range, dict):
+            converted = {}
+            for side in ('from', 'to'):
+                value = relative_range.get(side)
+                if isinstance(value, int) and not isinstance(value, bool):
+                    converted[side] = f'{value}s'
+                elif isinstance(value, str) and value:
+                    converted[side] = value
+                else:
+                    raise ValueError(f'{rule["uid"]}: invalid expression time range')
+            expression['relativeTimeRange'] = converted
+        model = query.get('model')
+        if not isinstance(model, dict):
+            raise ValueError(f'{rule["uid"]}: expression model is missing')
+        expression['model'] = copy.deepcopy(model)
+        if ref_id == rule.get('condition'):
+            expression['source'] = True
+        expressions[ref_id] = expression
+    if not expressions or rule.get('condition') not in expressions:
+        raise ValueError(f'{rule["uid"]}: alert condition does not identify an expression')
+
+    spec = {
+        'title': rule['title'],
+        'trigger': {'interval': interval},
+        'expressions': expressions,
+    }
+    for source, target in (
+        ('for', 'for'),
+        ('keep_firing_for', 'keepFiringFor'),
+        ('noDataState', 'noDataState'),
+        ('execErrState', 'execErrState'),
+        ('isPaused', 'paused'),
+        ('labels', 'labels'),
+        ('annotations', 'annotations'),
+    ):
+        if source in rule and rule[source] is not None:
+            spec[target] = copy.deepcopy(rule[source])
+    notification = rule.get('notification_settings')
+    if isinstance(notification, dict):
+        settings = {'type': 'SimplifiedRouting'}
+        for source, target in (
+            ('receiver', 'receiver'),
+            ('group_by', 'groupBy'),
+            ('group_wait', 'groupWait'),
+            ('group_interval', 'groupInterval'),
+            ('repeat_interval', 'repeatInterval'),
+            ('mute_time_intervals', 'muteTimeIntervals'),
+            ('active_time_intervals', 'activeTimeIntervals'),
+        ):
+            if source in notification:
+                settings[target] = copy.deepcopy(notification[source])
+        spec['notificationSettings'] = settings
+
+    return {
+        'apiVersion': 'rules.alerting.grafana.app/v1beta1',
+        'kind': 'AlertRule',
+        'metadata': metadata,
+        'spec': spec,
+    }
+
+
+def _write_soniox_snapshot(path: Path, snapshot: dict) -> None:
+    fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+    with os.fdopen(fd, 'w') as handle:
+        json.dump(snapshot, handle, indent=2)
+        handle.flush()
+        os.fsync(handle.fileno())
+
+
+def prepare_soniox_alert(
+    api: Grafana,
+    desired: dict,
+    canary_rules: dict[str, dict],
+    backup: Path,
+    *,
+    source_sha: str,
+    source_run_id: str,
+) -> None:
+    """Read and persist the preimage. This mode performs no Grafana writes."""
+    if not re.fullmatch(r'[0-9a-f]{40}', source_sha) or not re.fullmatch(r'[1-9][0-9]*', source_run_id):
+        raise ValueError('Soniox preparation requires a full source SHA and positive workflow run ID')
+    uid = SONIOX_DAILY_HOURS_UID
+    rule = desired.get(uid)
+    if not isinstance(rule, dict):
+        raise ValueError(f'{uid}: committed alert is missing')
+
+    # Check the versioned API before saving a rollback artifact. Release must
+    # separately confirm unified alert-rule storage: legacy storage can ignore
+    # resourceVersion even when this API endpoint is present.
+    api.app_alert_rules()
+    legacy_live = api.rules()
+    previous = api.app_alert_rule(uid)
+    if (uid in legacy_live) != (previous is not None):
+        raise ValueError(f'{uid}: legacy and versioned Grafana APIs disagree; refusing to prepare')
+    if previous is not None:
+        previous_annotations = previous['metadata'].get('annotations', {})
+        if previous_annotations.get('grafana.app/folder') != rule['folderUID']:
+            raise ValueError(f'{uid}: existing rule is in a different folder')
+        trigger = previous.get('spec', {}).get('trigger')
+        interval = trigger.get('interval') if isinstance(trigger, dict) else None
+        if not isinstance(interval, str) or not interval:
+            raise ValueError(f'{uid}: existing rule has no evaluation interval')
+    else:
+        interval = _rule_group_interval(api, rule)
+
+    group = (rule['folderUID'], rule['ruleGroup'])
+    group_provenance = None
+    for live_rule in legacy_live.values():
+        if (live_rule.get('folderUID'), live_rule.get('ruleGroup')) != group:
+            continue
+        current_provenance = live_rule.get('provenance', '')
+        if current_provenance not in ('', 'api'):
+            raise ValueError(f'{uid}: rule group belongs to another provisioner')
+        if group_provenance is not None and current_provenance != group_provenance:
+            raise ValueError(f'{uid}: live rule group has mixed provenance')
+        group_provenance = current_provenance
+    target_provenance = group_provenance if group_provenance is not None else 'api'
+
+    # Reuse the same receiver, folder, provenance, and canary gates as the
+    # existing provisioner before producing an artifact for a production run.
+    contacts = api.request(CONTACT_POINTS_PATH)
+    if not isinstance(contacts, list) or not any(
+        point.get('name') == RECEIVER
+        and point.get('type') == 'telegram'
+        and point.get('disableResolveMessage') is not True
+        for point in contacts
+        if isinstance(point, dict)
+    ):
+        raise ValueError('Telegram receiver is missing or resolve notifications disabled')
+    api.request('/api/folders/' + urllib.parse.quote(rule['folderUID'], safe=''))
+    if rule.get('execErrState') == 'KeepLast':
+        canaries = {key: canary_rules[key] for key in CANARY_UIDS if key in canary_rules}
+        if len(canaries) != len(CANARY_UIDS):
+            raise ValueError('KeepLast requires every committed datasource canary')
+        for canary in canaries.values():
+            if (
+                canary.get('isPaused') is not False
+                or canary.get('execErrState') != 'Alerting'
+                or canary.get('noDataState') != 'Alerting'
+            ):
+                raise ValueError('datasource canaries must be active and page on errors and no data')
+        failures = probe_datasources(api, canaries)
+        if failures:
+            raise ValueError('\n'.join(failures))
+
+    desired_resource = _app_alert_resource(rule, interval, previous, provenance=target_provenance)
+    _write_soniox_snapshot(
+        backup,
+        {
+            'schema_version': 2,
+            'source_sha': source_sha,
+            'source_run_id': source_run_id,
+            'rules': [legacy_live[uid]] if uid in legacy_live else [],
+            'created_uids': [] if previous is not None else [uid],
+            'soniox_alert_rollback': {
+                'uid': uid,
+                'desired': definition(rule),
+                'previous_resource': previous,
+                'desired_resource': desired_resource,
+            },
+        },
+    )
+
+
+def apply_soniox_snapshot(api: Grafana, snapshot: dict, expected_desired: dict) -> None:
+    rollback = snapshot['soniox_alert_rollback']
+    uid = rollback['uid']
+    if definition(expected_desired) != rollback['desired']:
+        raise ValueError('committed Soniox definition differs from the uploaded pre-apply snapshot')
+    previous = rollback['previous_resource']
+    desired = copy.deepcopy(rollback['desired_resource'])
+    current = api.app_alert_rule(uid)
+    path = APP_ALERT_RULES_API + '/' + urllib.parse.quote(uid, safe='')
+    if previous is None:
+        if current is not None:
+            raise ValueError('live Soniox rule changed since the pre-apply snapshot; refusing to create')
+        api.request(APP_ALERT_RULES_API, desired, 'POST')
+    else:
+        captured_version = previous['metadata']['resourceVersion']
+        if (
+            current is None
+            or current['metadata']['resourceVersion'] != captured_version
+            or _app_rule_semantics(current) != _app_rule_semantics(previous)
+        ):
+            raise ValueError('live Soniox rule changed since the pre-apply snapshot; refusing to update')
+        desired['metadata']['resourceVersion'] = captured_version
+        api.request(path, desired, 'PUT')
+
+    applied = api.app_alert_rule(uid)
+    if applied is None or _app_rule_semantics(applied) != _app_rule_semantics(rollback['desired_resource']):
+        raise ValueError('Soniox alert read-back differs from the requested versioned resource')
+
+
+def load_soniox_snapshot(path: Path, expected_sha: str, expected_run_id: str) -> dict:
+    if not re.fullmatch(r'[0-9a-f]{40}', expected_sha) or not re.fullmatch(r'[1-9][0-9]*', expected_run_id):
+        raise ValueError('expected Soniox snapshot coordinates are invalid')
+    if path.stat().st_size > 16_000_000:
+        raise ValueError('Soniox snapshot exceeds size limit')
+    snapshot = json.loads(path.read_text())
+    rollback = snapshot.get('soniox_alert_rollback') if isinstance(snapshot, dict) else None
+    if (
+        not isinstance(snapshot, dict)
+        or snapshot.get('schema_version') != 2
+        or snapshot.get('source_sha') != expected_sha
+        or str(snapshot.get('source_run_id')) != expected_run_id
+        or not isinstance(rollback, dict)
+        or rollback.get('uid') != SONIOX_DAILY_HOURS_UID
+        or not isinstance(rollback.get('desired'), dict)
+        or not isinstance(rollback.get('desired_resource'), dict)
+        or (rollback.get('previous_resource') is not None and not isinstance(rollback.get('previous_resource'), dict))
+    ):
+        raise ValueError('Soniox snapshot does not match this source run or supported schema')
+    return snapshot
+
+
 def reconcile(
     api: Grafana,
     desired: dict[str, dict],
@@ -314,6 +639,8 @@ def reconcile(
     soniox_alert_only: bool = False,
     canary_rules: dict[str, dict] | None = None,
 ) -> list[str]:
+    if soniox_alert_only and backup is not None:
+        raise ValueError('Soniox writes require prepare, artifact upload, and versioned apply steps')
     live = api.rules()
     # The Redis phone cutover has its own approval and readback scope.
     bulk_desired = {uid: rule for uid, rule in desired.items() if uid != REDIS_PAGER_UID}
@@ -452,6 +779,8 @@ def main() -> int:
     parser.add_argument('--grafana-url', default='https://monitor.omi.me')
     parser.add_argument('--token-env', default='MONITOR_GRAFANA_TOKEN')
     parser.add_argument('--apply', action='store_true')
+    parser.add_argument('--prepare-soniox-alert', action='store_true')
+    parser.add_argument('--apply-soniox-alert', action='store_true')
     parser.add_argument('--backup-file', type=Path)
     parser.add_argument('--source-sha', default=os.environ.get('GITHUB_SHA', ''))
     parser.add_argument('--source-run-id', default=os.environ.get('GITHUB_RUN_ID', ''))
@@ -467,6 +796,19 @@ def main() -> int:
     parser.add_argument('--redis-pilot-alias-host', action='append', default=[], help='reviewed relay ingress alias')
     args = parser.parse_args()
     try:
+        if args.prepare_soniox_alert and args.apply_soniox_alert:
+            raise ValueError('prepare and apply Soniox alert modes are separate steps')
+        soniox_stage = args.prepare_soniox_alert or args.apply_soniox_alert
+        if soniox_stage and (
+            not args.soniox_alert_only
+            or args.backup_file is None
+            or args.apply
+            or args.probe_datasources
+            or args.lint
+            or args.regenerate
+            or args.redis_pilot_url is not None
+        ):
+            raise ValueError('Soniox prepare/apply requires its scoped mode and --backup-file only')
         if args.redis_pilot_alias_host and args.redis_pilot_url is None:
             raise ValueError('--redis-pilot-alias-host requires --redis-pilot-url')
         if args.redis_pilot_url is not None and (
@@ -486,6 +828,26 @@ def main() -> int:
             return 0
         all_rules = load_rules(args.rules)
         rules = select_rules(all_rules, soniox_alert_only=args.soniox_alert_only)
+        if soniox_stage:
+            token = os.environ.get(args.token_env, '').strip()
+            if not token:
+                raise ValueError(f'{args.token_env} is empty')
+            api = Grafana(args.grafana_url, token)
+            if args.prepare_soniox_alert:
+                prepare_soniox_alert(
+                    api,
+                    rules,
+                    all_rules,
+                    args.backup_file,
+                    source_sha=args.source_sha,
+                    source_run_id=args.source_run_id,
+                )
+                print('Prepared the version-bound Soniox alert preimage; no Grafana write occurred')
+            else:
+                snapshot = load_soniox_snapshot(args.backup_file, args.source_sha, args.source_run_id)
+                apply_soniox_snapshot(api, snapshot, rules[SONIOX_DAILY_HOURS_UID])
+                print('Applied and verified the Soniox alert with its captured resource version')
+            return 0
         if (
             args.soniox_alert_only
             and args.apply
@@ -500,6 +862,8 @@ def main() -> int:
         if args.lint:
             print(f'Validated {len(rules)} combined/split production alert definitions')
             return 0
+        if args.soniox_alert_only and args.apply:
+            raise ValueError('Soniox alert writes require --prepare-soniox-alert then --apply-soniox-alert')
         if args.apply != (args.backup_file is not None):
             raise ValueError('--apply requires --backup-file; backup is forbidden for read-only checks')
         token = os.environ.get(args.token_env, '').strip()
