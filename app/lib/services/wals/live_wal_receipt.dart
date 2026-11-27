@@ -366,9 +366,9 @@ class LiveWalReceipt {
   /// Delete only pending receipt audio that has no live or durable index
   /// reference. The caller holds the index writer lock during validation.
   static Future<LiveWalReceiptPurgeResult> purgeUnindexed(
-    File primary,
-    File backup, {
+    File primary, {
     required Set<String> owners,
+    required Set<String> indexedNames,
     required Set<String> reservedNames,
     required bool Function(String) mayDelete,
     required List<File> entries,
@@ -379,7 +379,6 @@ class LiveWalReceipt {
     var removed = 0;
     var scanComplete = true;
     try {
-      Set<String>? indexedNames;
       for (final entry in entries) {
         final name = _receiptBasename(entry.path);
         if (name == null || reservedNames.contains(name.toLowerCase()) || protectedNames.contains(name.toLowerCase())) {
@@ -392,12 +391,6 @@ class LiveWalReceipt {
           continue;
         }
         if (record == null || !owners.contains(record.binding.owner) || !mayDelete(name)) continue;
-        try {
-          indexedNames ??= await _indexedBasenames(primary, backup);
-        } catch (_) {
-          scanComplete = false;
-          break;
-        }
         if (indexedNames.contains(name.toLowerCase())) continue;
         try {
           final audio = File(path.join(documents.path, name));

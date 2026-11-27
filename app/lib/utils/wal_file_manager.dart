@@ -77,6 +77,18 @@ class WalFileManager {
     });
     if (primary == null || backup == null) return (removed: 0, referenceScanIncomplete: true);
 
+    LiveWalPurgeSnapshot? referenceSnapshot;
+    await _saveLock.withResource(() async {
+      try {
+        referenceSnapshot = await LiveWalReceipt.capturePurgeSnapshot(primary!, backup!, _indexRevision);
+      } catch (_) {
+        referenceSnapshot = null;
+      }
+    });
+    if (referenceSnapshot == null || referenceSnapshot!.documentsPath != primary!.parent.path) {
+      return (removed: 0, referenceScanIncomplete: true);
+    }
+
     var removed = 0;
     var referenceScanIncomplete = false;
     try {
@@ -85,15 +97,33 @@ class WalFileManager {
           referenceScanIncomplete = true;
           break;
         }
-        final result = await _saveLock.withResource(() => LiveWalReceipt.purgeUnindexed(
-              primary!,
-              backup!,
-              owners: owners,
-              reservedNames: reservedNames,
-              mayDelete: mayDelete,
-              entries: page,
-              protectedNames: protectedNames,
-            ));
+        final result = await _saveLock.withResource(() async {
+          final snapshot = referenceSnapshot!;
+          if (snapshot.refreshFailed) return (removed: 0, referenceScanIncomplete: true);
+          if (snapshot.revision != _indexRevision) {
+            try {
+              final refreshed = await LiveWalReceipt.capturePurgeSnapshot(primary!, backup!, _indexRevision);
+              if (refreshed.revision != _indexRevision || refreshed.documentsPath != snapshot.documentsPath) {
+                throw const FileSystemException('WAL purge reference refresh changed identity');
+              }
+              snapshot
+                ..basenames = refreshed.basenames
+                ..revision = refreshed.revision;
+            } catch (_) {
+              snapshot.refreshFailed = true;
+              return (removed: 0, referenceScanIncomplete: true);
+            }
+          }
+          return LiveWalReceipt.purgeUnindexed(
+            primary!,
+            owners: owners,
+            indexedNames: snapshot.basenames,
+            reservedNames: reservedNames,
+            mayDelete: mayDelete,
+            entries: page,
+            protectedNames: protectedNames,
+          );
+        });
         removed += result.removed;
         referenceScanIncomplete = referenceScanIncomplete || result.referenceScanIncomplete;
         if (result.referenceScanIncomplete) break;

@@ -330,8 +330,9 @@ before indexing a receiptless fallback. If that barrier fails, the WAL stays in
 memory. Native directory sync runs off the UI thread. Deleted-account receipt
 cleanup snapshots persisted index/quarantine references before any load-time
 index rewrite, then starts after WAL readiness. It reads at most 128 receipt
-entries per batch and releases the index-writer lock between batches; incomplete
-reference checks retain the audio and are reported.
+entries per batch and releases the index-writer lock between batches. Pages reuse
+one index-reference snapshot, refreshing it under the lock only after an index
+revision change; incomplete reference checks retain the audio and are reported.
 Unreadable, invalid, changed or unresolved index, journal, preference or consent
 sources prevent adoption. Wrong-typed or quarantined
 legacy preference inputs also make the census incomplete; recovery and support
