@@ -9,13 +9,13 @@ import json
 import logging
 import secrets
 import time
-from contextlib import contextmanager
+from contextlib import contextmanager, nullcontext
 from contextvars import ContextVar
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any, Callable, Collection, Dict, Iterator, List, Optional, Sequence, Tuple, TypedDict, cast
 
-from google.api_core.exceptions import DeadlineExceeded
+from google.api_core.exceptions import RetryError
 from google.cloud import firestore
 from google.cloud.firestore_v1 import FieldFilter
 
@@ -103,7 +103,12 @@ from models.memory_apply import (
     require_writer_admitted,
 )
 from models.memory_contracts import DurablePatchDecision, LifecycleState, deterministic_contract_id
-from models.memory_operations import MemoryLedgerReopenReceipt, MemoryOperation, MemoryOperationType
+from models.memory_operations import (
+    MemoryLedgerReopenReceipt,
+    MemoryOperation,
+    MemoryOperationStatus,
+    MemoryOperationType,
+)
 from models.memory_source_replacement import ConversationSourceReplacementReceipt
 from models.product_memory import (
     undecided_visible,
@@ -128,7 +133,8 @@ from utils.memory.required_promotion import (
     REQUIRED_PROMOTION_STATUS_PENDING,
 )
 from utils.memory.required_intake import after_capture as process_required_after_capture
-from utils.memory.memory_system import CanonicalApplyStateUnavailable, ensure_canonical_apply_control_state
+from utils.memory.memory_system import ensure_canonical_apply_control_state
+from utils.memory.read_resilience import transient_store_error
 from utils.retrieval.hybrid import rrf_rerank
 from utils.memory.canonical_vector_sync import delete_canonical_memory_vector
 from utils.memory.product_memory_read_service import (
@@ -157,6 +163,8 @@ def _usable_evidence(evidence: Any) -> bool:
 _ALLOWED_MEMORY_VISIBILITIES = {"private", "public", "shared"}
 _VISIBILITY_MUTATION_BUDGET_SECONDS = 8.0
 _VISIBILITY_MUTATION_MAX_ATTEMPTS = 5
+_VISIBILITY_RECEIPT_SECONDS = 1.0
+_visibility_deadline: ContextVar[float | None] = ContextVar("visibility_mutation_deadline", default=None)
 Payload = Dict[str, Any]
 SortKey = tuple[int, datetime | int]
 UserMutationPatchBuilder = Callable[[MemoryItem, datetime], Optional[Tuple[Payload, Payload]]]
@@ -238,6 +246,81 @@ class CanonicalVisibilityRetryError(RuntimeError):
 
 class CanonicalVisibilityTimeout(CanonicalVisibilityRetryError):
     """Firestore did not confirm the visibility update before its deadline."""
+
+
+def _visibility_store_unavailable(error: Exception) -> bool:
+    return (
+        isinstance(error, (rpc_deadline.RpcDeadlineExceeded, RetryError))
+        or isinstance(error.__cause__, (rpc_deadline.RpcDeadlineExceeded, RetryError))
+        or transient_store_error(error)
+    )
+
+
+@contextmanager
+def visibility_mutation_budget(db_client: Any = None) -> Iterator[float]:
+    """Share the deadline across historical materialization and canonical apply."""
+    active = _visibility_deadline.get()
+    if active is not None:
+        yield active
+        return
+
+    client = db_client if db_client is not None else default_db_client
+    rpc_deadline.bind_firestore_client(client)
+    with rpc_deadline.rpc_deadline(time.monotonic() + _VISIBILITY_MUTATION_BUDGET_SECONDS):
+        deadline = rpc_deadline.current()
+        assert deadline is not None
+        token = _visibility_deadline.set(deadline)
+        try:
+            yield deadline
+        except CanonicalVisibilityRetryError:
+            raise
+        except Exception as exc:
+            if not _visibility_store_unavailable(exc):
+                raise
+            raise CanonicalVisibilityTimeout("Canonical visibility storage temporarily unavailable") from exc
+        finally:
+            _visibility_deadline.reset(token)
+
+
+def _visibility_retry_wait(attempt: int, deadline: float) -> bool:
+    if attempt >= _VISIBILITY_MUTATION_MAX_ATTEMPTS:
+        return False
+    delay = equal_jitter_delay(attempt)
+    if time.monotonic() + delay >= deadline:
+        return False
+    time.sleep(delay)
+    return True
+
+
+def _visibility_contention_exhausted(phase: str, attempt: int, reason: str) -> CanonicalVisibilityRetryError:
+    logger.warning("memory_visibility_contention_exhausted phase=%s attempts=%d reason=%s", phase, attempt, reason)
+    return CanonicalVisibilityRetryError("Canonical visibility update is busy")
+
+
+def _confirm_visibility_commit(
+    uid: str, memory_id: str, operation: MemoryOperation, *, db_client: Any
+) -> MemoryItem | None:
+    """Resolve an uncertain Commit using the specific operation's atomic receipt."""
+    path = f"{MemoryCollections(uid=uid).memory_operations}/{operation.operation_id}"
+    try:
+        with rpc_deadline.rpc_deadline(time.monotonic() + _VISIBILITY_RECEIPT_SECONDS):
+            snapshot = db_client.document(path).get()
+            if not getattr(snapshot, "exists", False):
+                return None
+            receipt = MemoryOperation.model_validate(_snapshot_payload(snapshot))
+            if (
+                receipt.status != MemoryOperationStatus.committed
+                or receipt.uid != uid
+                or receipt.operation_id != operation.operation_id
+                or receipt.logical_payload_digest != operation.logical_payload_digest
+                or memory_id not in receipt.committed_memory_item_ids
+            ):
+                return None
+            return _read_canonical_memory_item(uid, memory_id, db_client=db_client)
+    except Exception as exc:
+        if isinstance(exc, ValueError) or _visibility_store_unavailable(exc):
+            return None
+        raise
 
 
 class ConversationReplacementConflictError(RuntimeError):
@@ -1824,28 +1907,31 @@ def write_canonical_extraction_memory(
     if data.get("ledger_schema_version") is not None and _ledger_authority is not _LEDGER_WRITE_AUTHORITY:
         raise ValueError("knowledge ledger writes require the dedicated ledger authority")
     client = db_client if db_client is not None else default_db_client
-    control = _ensure_control_state(uid, db_client=client)
     direct_user_authorized = _direct_user_authority is _DIRECT_USER_LEDGER_WRITE_AUTHORITY
-    if direct_user_authorized:
-        writer_class = MemoryWriterClass.user
-    else:
-        writer_class = (
+    visibility_deadline = _visibility_deadline.get() if direct_user_authorized else None
+    writer_class = (
+        MemoryWriterClass.user
+        if direct_user_authorized
+        else (
             MemoryWriterClass.ledger
             if data.get("ledger_schema_version") == _LEDGER_SCHEMA_VERSION
             else MemoryWriterClass.compatibility
         )
-    require_writer_admitted(control, writer_class)
-    write, memory_id = _canonical_extraction_apply_write(
-        uid,
-        data,
-        control=control,
-        evidence_items=evidence_items,
     )
+
+    def plan() -> tuple[CanonicalApplyWrite, str]:
+        control = _ensure_control_state(uid, db_client=client)
+        require_writer_admitted(control, writer_class)
+        return _canonical_extraction_apply_write(uid, data, control=control, evidence_items=evidence_items)
+
+    write, memory_id = plan()
     result = None
-    for _attempt in range(3):
-        apply_patch = (
-            apply_direct_user_long_term_patch_firestore if direct_user_authorized else apply_long_term_patch_firestore
-        )
+    apply_patch = (
+        apply_direct_user_long_term_patch_firestore if direct_user_authorized else apply_long_term_patch_firestore
+    )
+    max_attempts = _VISIBILITY_MUTATION_MAX_ATTEMPTS if visibility_deadline is not None else 3
+    for attempt in range(1, max_attempts + 1):
+        abort = None
         try:
             result = apply_patch(
                 uid=uid,
@@ -1858,11 +1944,22 @@ def write_canonical_extraction_memory(
                 ledger_reopen_receipt=ledger_reopen_receipt,
                 allow_ledger_migration=False,
                 db_client=client,
+                single_transaction_attempt=visibility_deadline is not None,
             )
         except DestructiveOperationInProgress as exc:
             raise account_gate_busy_http_exception() from exc
-        if result.status != ApplyStatus.retryable_head_mismatch:
-            break
+        except Exception as exc:
+            if visibility_deadline is None or not is_transaction_retry_failure(exc):
+                raise
+            abort = exc
+        else:
+            if result.status != ApplyStatus.retryable_head_mismatch:
+                break
+        if visibility_deadline is not None:
+            if not _visibility_retry_wait(attempt, visibility_deadline):
+                reason = "firestore_abort" if abort is not None else "head_mismatch"
+                raise _visibility_contention_exhausted("materialize", attempt, reason) from abort
+            write, memory_id = plan()
     assert result is not None
     if result.status not in {ApplyStatus.committed, ApplyStatus.idempotent_skip}:
         duplicate_row = _resolve_duplicate_add_row(
@@ -2690,11 +2787,15 @@ def _apply_canonical_user_mutation(
     retry_deadline: float | None = None,
 ) -> Tuple[MemoryItem, MemoryItem]:
     """Apply one ordinary user mutation through the canonical transaction boundary."""
+    write_deadline = retry_deadline - _VISIBILITY_RECEIPT_SECONDS if retry_deadline is not None else None
     max_attempts = _VISIBILITY_MUTATION_MAX_ATTEMPTS if retry_deadline is not None else 3
     last_abort: Exception | None = None
+    attempts_started = 0
+    final_reason = "deadline"
     for attempt in range(1, max_attempts + 1):
-        if retry_deadline is not None and time.monotonic() >= retry_deadline:
+        if write_deadline is not None and time.monotonic() >= write_deadline:
             break
+        attempts_started = attempt
         item = _read_canonical_memory_item(uid, memory_id, db_client=db_client)
         if item is None:
             raise ValueError(f"canonical memory not found: {memory_id}")
@@ -2781,22 +2882,32 @@ def _apply_canonical_user_mutation(
             # The adapter owns replay so each attempt gets a fresh plan and transaction.
             source_fence["single_transaction_attempt"] = True
         try:
-            result = apply_patch(
-                uid=uid,
-                operation_id=operation.operation_id,
-                patch_payload=patch_payload,
-                proposed_operation=operation,
-                review_resolution=review_resolution,
-                allow_ledger_migration=allow_ledger_migration,
-                db_client=db_client,
-                **source_fence,
-            )
+            with rpc_deadline.rpc_deadline(write_deadline) if write_deadline is not None else nullcontext():
+                result = apply_patch(
+                    uid=uid,
+                    operation_id=operation.operation_id,
+                    patch_payload=patch_payload,
+                    proposed_operation=operation,
+                    review_resolution=review_resolution,
+                    allow_ledger_migration=allow_ledger_migration,
+                    db_client=db_client,
+                    **source_fence,
+                )
         except DestructiveOperationInProgress as exc:
             raise account_gate_busy_http_exception() from exc
         except Exception as exc:
-            if retry_deadline is None or not is_transaction_retry_failure(exc):
+            if write_deadline is None:
                 raise
-            last_abort = exc
+            if is_transaction_retry_failure(exc):
+                last_abort = exc
+                final_reason = "firestore_abort"
+            elif _visibility_store_unavailable(exc):
+                confirmed = _confirm_visibility_commit(uid, memory_id, operation, db_client=db_client)
+                if confirmed is not None:
+                    return item, confirmed
+                raise
+            else:
+                raise
         else:
             if result.status in {ApplyStatus.committed, ApplyStatus.idempotent_skip}:
                 updated = (
@@ -2812,15 +2923,13 @@ def _apply_canonical_user_mutation(
             ):
                 raise RuntimeError(f"canonical user mutation failed: {result.status} ({result.reason})")
             last_abort = None
+            final_reason = "head_or_item_mismatch"
 
-        if retry_deadline is not None and attempt < max_attempts:
-            delay = equal_jitter_delay(attempt)
-            if time.monotonic() + delay >= retry_deadline:
-                break
-            time.sleep(delay)
+        if write_deadline is not None and not _visibility_retry_wait(attempt, write_deadline):
+            break
 
-    if retry_deadline is not None:
-        raise CanonicalVisibilityRetryError("Canonical visibility update is busy") from last_abort
+    if write_deadline is not None:
+        raise _visibility_contention_exhausted("apply", attempts_started, final_reason) from last_abort
     raise RuntimeError("canonical user mutation conflicted repeatedly")
 
 
@@ -3043,24 +3152,15 @@ def update_canonical_memory_visibility(
     def build_patch(_item: MemoryItem, _now: datetime) -> Tuple[Payload, Payload]:
         return {"target_visibility": visibility}, {}
 
-    client = rpc_deadline.bind_firestore_client(client)
-    try:
-        with rpc_deadline.rpc_deadline(time.monotonic() + _VISIBILITY_MUTATION_BUDGET_SECONDS):
-            _, updated = _apply_canonical_user_mutation(
-                uid,
-                memory_id,
-                mutation_kind="visibility",
-                build_patch=build_patch,
-                db_client=client,
-                retry_deadline=rpc_deadline.current(),
-            )
-    except (rpc_deadline.RpcDeadlineExceeded, DeadlineExceeded) as exc:
-        # A sent Commit may have succeeded despite an RPC timeout. Never replay it here.
-        raise CanonicalVisibilityTimeout("Canonical visibility update timed out") from exc
-    except CanonicalApplyStateUnavailable as exc:
-        if not isinstance(exc.__cause__, (rpc_deadline.RpcDeadlineExceeded, DeadlineExceeded)):
-            raise
-        raise CanonicalVisibilityTimeout("Canonical visibility planning timed out") from exc
+    with visibility_mutation_budget(client) as deadline:
+        _, updated = _apply_canonical_user_mutation(
+            uid,
+            memory_id,
+            mutation_kind="visibility",
+            build_patch=build_patch,
+            db_client=client,
+            retry_deadline=deadline,
+        )
     return updated
 
 

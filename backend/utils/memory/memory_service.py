@@ -97,6 +97,9 @@ from utils.memory.canonical_memory_adapter import (
     CanonicalBatchMutationLimitError,
     CanonicalMemoryNotFoundError,
     CanonicalScanCursor,
+    CanonicalVisibilityRetryError,
+    CanonicalVisibilityTimeout,
+    visibility_mutation_budget,
     canonical_memory_lineage_ids,
     delete_default_canonical_memories,
     delete_all_canonical_memories,
@@ -323,6 +326,14 @@ def _legacy_memorydb(value: MemoryDB | Dict[str, Any]) -> MemoryDB:
     payload = memory_api_payload(value, MemoryApiExposure.LEGACY)
     memory = MemoryDB.model_validate(payload)
     return memory.model_copy(update={"memory_tier": None})
+
+
+def visibility_retry_http_exception(error: CanonicalVisibilityRetryError) -> HTTPException:
+    return HTTPException(
+        status_code=503 if isinstance(error, CanonicalVisibilityTimeout) else 409,
+        detail="Memory visibility update temporarily unavailable",
+        headers={"Retry-After": "1"},
+    )
 
 
 def fetch_memory_dict(uid: str, memory_id: str, *, db_client: Any) -> MemoryPayload:
@@ -4174,8 +4185,9 @@ class MemoryService:
 
     def update_visibility(self, uid: str, memory_id: str, visibility: str) -> None:
         self.ensure_canonical_mutation_ready(uid)
-        materialized = self._ensure_canonical_target(uid, memory_id)
-        self._canonical.update_visibility(uid, memory_id, visibility)
+        with visibility_mutation_budget(self.db_client):
+            materialized = self._ensure_canonical_target(uid, memory_id)
+            self._canonical.update_visibility(uid, memory_id, visibility)
         if materialized:
             HistoricalMemoryAdapter.cleanup(uid, memory_id, db_client=self.db_client)
         self._invalidate_prompt_cache(uid)

@@ -486,7 +486,7 @@ def apply_long_term_patch_firestore(
     allow_ledger_migration: bool = False,
     effect_source: ConversationEffectSource | None = None,
     _direct_user_authority: object | None = None,
-    _single_transaction_attempt: bool = False,
+    single_transaction_attempt: bool = False,
     db_client: Any = db,
 ) -> ApplyResult:
     """Apply a memory Long-term patch through the Firestore transaction boundary.
@@ -498,7 +498,7 @@ def apply_long_term_patch_firestore(
     require_canonical_intake_enabled()
     transaction = (
         transaction_with_safe_rollback(db_client.transaction(max_attempts=1))
-        if _single_transaction_attempt
+        if single_transaction_attempt
         else db_client.transaction()
     )
     return _apply_long_term_patch_firestore_transaction(
@@ -550,7 +550,7 @@ def apply_direct_user_long_term_patch_firestore(
         required_source_item=required_source_item,
         ledger_reopen_receipt=ledger_reopen_receipt,
         _direct_user_authority=_DIRECT_USER_WRITE_AUTHORITY,
-        _single_transaction_attempt=single_transaction_attempt,
+        single_transaction_attempt=single_transaction_attempt,
         db_client=db_client,
     )
 

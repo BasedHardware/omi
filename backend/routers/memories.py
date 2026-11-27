@@ -27,13 +27,14 @@ from database import review_queue
 from models.memories import MemoryDB, Memory, MemoryCategory
 from models.memory_imports import MemoryImportBatchRequest, MemoryImportBatchResponse
 from utils.apps import update_personas_async
-from utils.memory.canonical_memory_adapter import CanonicalVisibilityRetryError, CanonicalVisibilityTimeout
+from utils.memory.canonical_memory_adapter import CanonicalVisibilityRetryError
 from utils.memory.memory_service import (
     MEMORY_LIST_SCAN_BUDGET_DETAIL,
     MemoryBackingStoreUnavailable,
     MemoryPayload,
     MemoryService,
     fetch_memory_dict,
+    visibility_retry_http_exception,
 )
 from utils.observability.fallback import record_fallback
 from utils.product_metrics import record_product_event
@@ -1194,7 +1195,21 @@ def edit_memory(
     return {'status': 'ok'}
 
 
-@router.patch('/v3/memories/{memory_id}/visibility', tags=['memories'], response_model=MemoryMutationResponse)
+@router.patch(
+    '/v3/memories/{memory_id}/visibility',
+    tags=['memories'],
+    response_model=MemoryMutationResponse,
+    responses={
+        409: {
+            'description': 'Visibility write contention exhausted its retry budget',
+            'headers': {'Retry-After': {'schema': {'type': 'integer'}}},
+        },
+        503: {
+            'description': 'Visibility write temporarily unavailable',
+            'headers': {'Retry-After': {'schema': {'type': 'integer'}}},
+        },
+    },
+)
 def update_memory_visibility(
     memory_id: str,
     request: Optional[MemoryValueRequest] = Body(default=None),
@@ -1218,11 +1233,7 @@ def update_memory_visibility(
     try:
         MemoryService(db_client=db_client).update_visibility(uid, memory_id, mutation_value)
     except CanonicalVisibilityRetryError as exc:
-        raise HTTPException(
-            status_code=503 if isinstance(exc, CanonicalVisibilityTimeout) else 409,
-            detail="Memory visibility update temporarily unavailable",
-            headers={"Retry-After": "1"},
-        ) from exc
+        raise visibility_retry_http_exception(exc) from exc
     submit_with_context(postprocess_executor, update_personas_async, uid)
     record_product_event('memory_updated', request=http_request, op='visibility')
     return {'status': 'ok'}
