@@ -190,9 +190,15 @@ utterances by text, allowing a clipped word on either side) and keeps only what 
 (default 25, `long_canary` outside it) and `CONVERSATIONS_V3_FAST_FINISH_LONG_DAILY_SECONDS` (default
 7200 per UTC day across the fleet, of audio actually sent, retries, overlaps and the vendor probe
 included, in the Redis key `v3_fast_finish:long_audio_seconds:<UTC day>`; `long_cap` past it, and also
-whenever Redis errors or takes over 1 s). A long pass reserves the most it can send (every chunk twice
-plus a 30 s probe clip), so retries cannot push the day past the cap, and settles in the background to
-what it sent; while passes run the key reads high. Read today's total with `GET` on that key. Set `CONVERSATIONS_V3_FAST_FINISH_CHUNKED=off` on
+whenever Redis errors or takes over 1 s). A long pass reserves every chunk once plus a 30 s probe clip
+at admission, and each chunk retry reserves its own seconds on the same key just before it sends; a
+retry that does not fit (or meets a Redis error, a 1 s Redis stall or under 3 s of the deadline) is not
+sent, and the pass yields to batch as `retry_cap`. No audio is sent unreserved, so the day cannot pass
+the cap. The pass settles in the background to what it sent (unsent chunks and reserved but unsent
+retries refunded); while passes run the key reads high. At 7200 about three 30-minute passes fit a day
+(two while every retry was reserved up front); raising the cap is David's spend decision. Ramp
+`CONVERSATIONS_V3_FAST_FINISH_LONG_PERCENT` 25 → 100 only after the first 24 h readback of long-pass
+latency (first card within 60 s) and long audio seconds. Read today's total with `GET` on that key. Set `CONVERSATIONS_V3_FAST_FINISH_CHUNKED=off` on
 `backend-integration` to restore one serial request per unit and the 20-minute bound. Read
 `omi_conversations_v3_fast_finish_total{outcome}`, `omi_conversations_v3_fast_finish_seconds{stage}`,
 `omi_conversations_v3_fast_finish_chunks`, `omi_conversations_v3_fast_finish_chunk_seconds`,
@@ -377,6 +383,94 @@ A derived-budget park recorded before paging shipped, with indexed unlocked wind
 `v3_unlocked_paging_attempted` yet, gets one more early attempt that sets it; a new park sets it
 when it is recorded and waits out the usual backoff. See the [bounded pending](../listen_pusher_pipeline/changes/2026-11-26-v3-bounded-pending.md)
 and [bounded unlocked](../listen_pusher_pipeline/changes/2026-11-26-v3-bounded-unlocked.md) change notes.
+A one-seed closure still over the derived budget (one long recording owning hundreds of locked
+one-line windows) parks with `v3_bounded_pending_attempted` already set. The allowance ships with
+`CONVERSATIONS_V3_LOCKED_CLOSURE_OWNERS` unbound on every loader: the code default is empty, so nobody is
+admitted. Owner tags never go in Git (this repository is public), so the list reaches the loaders only
+through Secret Manager.
+
+**Before the first owner (once, its own change).** This step needs an operator with Secret Manager and
+IAM rights in `based-hardware`; Release's `ro-prod` identity cannot verify or create secrets or grants.
+1. The operator creates the secret `CONVERSATIONS_V3_LOCKED_CLOSURE_OWNERS` with version 1 payload `none`
+   (it admits nobody) and grants `roles/secretmanager.secretAccessor` on that secret to
+   `backend-runtime@based-hardware.iam.gserviceaccount.com`. They post the secret metadata and the grant on
+   SCA-2918, never the value.
+2. Only then, a small PR binds it on the four loaders in `deploy/runtime_env/prod.overlay.yaml`
+   (`secrets:` entry `CONVERSATIONS_V3_LOCKED_CLOSURE_OWNERS`, `secret` of the same name; the pump inherits
+   it from integration), adds `v3-locked-closure-owners` to the activation manifest over the same four
+   runtimes, and adds the binding to the approved secret-binding baseline. A binding to a secret that does
+   not exist stops the next revision of all four services from starting, so this PR merges only after
+   step 1's receipt.
+3. Roll the four loaders. Record the secret version their serving revisions read: equal `latest`
+   references cannot show they loaded the same version.
+
+**To admit an owner.**
+1. Take the owner's `owner=` tag from the `v3 reconcile blocked reason=v3_derived_budget` log line.
+2. The operator adds a new version of the secret whose payload is the full comma-separated tag list.
+   Never put a tag in Git or in an env edit.
+3. Roll a new revision of every runtime that runs `store.load()`: `backend` and `backend-integration`
+   (the on-open builder), and `backend-sync` and `backend-sync-backfill` (builder tasks; the task handler
+   can target either). `pusher` and `backend-listen` only mark pending and enqueue; they never load a
+   closure. A loader still on an old revision keeps parking the owner until it rolls.
+4. Clear the park as below.
+
+The next pass loads the locked claimants within the allowance and commits in at most
+`CONVERSATIONS_V3_LOCKED_MAX_BATCHES` batches. That is about 6.5k to 30k reads per pass. A pass whose
+commit would need more batches writes nothing, uploads no transcript to the object lake (the cap is decided
+before preparation can offload), and retries down the same ladder a load-time overflow
+uses, pending and unlocked seeds alike: 32 pending + 8 unlocked, then 8 + 8, then 1 + 1, then one seed of
+either kind. The step comes from the seeds the pass read, so it re-enters at most three times, and it parks
+only at one seed. Only builder passes get the allowance: derive and re-derive keep their partition bounds,
+so a heavy derive is planned as its own run.
+
+**Per-owner daily budget.** While pending remains, a pending-seeded request can run up to 3 inline passes,
+and the owner is woken again each minute, so the budget counts attempts. Every builder load of a listed
+owner charges one attempt to `v3_locked_day` / `v3_locked_passes` on the builder lease, in its own
+transaction under the held lease, before the load reads anything. That covers a capped attempt and each
+smaller-page retry, a commit interrupted after a committed prefix, a smaller page that fits the origin
+bound, and a parked pass. `CONVERSATIONS_V3_LOCKED_DAILY_PASSES` (default 20) is the day's budget. A
+spent day, a lease that is not held, or a charge that cannot be written loads with the origin bound, so
+the owner parks as before.
+
+The ceiling is attempts x the most one attempt can read:
+- the charge: 1 read and 1 write, at most three tries;
+- the load: at most about 5.9k reads. It admits at most 6 x (449 - sources) rows (2,694 with no sources), what
+  six batches can commit, and fetches at most twice that many derived documents plus one sentinel (5,389),
+  repeats included:
+  a row that a claim read and a time query both return, or that spans several interval queries, counts each
+  time. Add up to 400 sources and the seeds;
+- the commit: up to about 24k reads, and each batch runs its body at most three times, whatever restarts it
+  (main's contention retry, or a cold transcript pointer). The commit loads each batch's pointers from the lake
+  before its transaction, so pointers never replay the body; a fourth run parks before it reads. So up to about
+  72k (3 x 24k);
+- the pointer preload: at most 32 lake object reads per batch (192 per attempt), and no Firestore reads;
+- renewals: a few reads.
+
+That is about 78k reads per attempt, and 20 x 78k, about **1.6M reads per listed owner per day**, as a
+ceiling. Measured attempts read 6.5k to 22k, so a typical day is well under it. A listed owner can spend its 20
+attempts early in the UTC day and then runs at the origin bound, parking as before, until 00:00Z resets the
+day: in the readback, a `v3_locked_passes` of 20 with pending still owed is that case, not a regression. Parked retries after the
+budget is spent run at the origin bound, as for any parked owner today. Admit owners one at a time first. A
+step expected to exceed 10M reads a day (more than about six listed owners) needs the Firestore cost owner
+(SCA-2173).
+
+The row clamp is an upper bound from sources and the lease only: removals, absorption redirects (up to 16 writes),
+retire, retired and settle writes, and the byte and pointer splits on prepared rows are not known at load
+time. A closure that needs more batches for those reasons still parks at the commit's batch cap
+(`LockedBatchCap`, before any transaction), which stays the backstop.
+Each attempt is charged to the pass's own builder lease token: a stale pass, whose token no longer holds the
+lease, charges nothing and loads with the origin bound.
+
+Kill switches: an empty list, or `CONVERSATIONS_V3_LOCKED_DERIVED_ALLOWANCE`, `_DERIVED_BYTES`, `_MAX_BATCHES` or
+`_DAILY_PASSES` (each `CONVERSATIONS_V3_LOCKED_*`) set to `0`, restores the origin bound for every owner; a
+negative or unparseable value keeps the default.
+
+An owner that still parks needs the fragment repair (SCA-2918). To undo, add a secret version without the tag (or `none`) and roll the four loaders.
+`CONVERSATIONS_V3_COMMIT_LEASE_RENEWAL=off` stops the lease renewal before each later projection batch.
+A renewal that fails mid-commit leaves the batches already written: a committed prefix, as any multi-batch
+commit can today. Pending stays owed, and the next pass completes the closure.
+See the [locked-closure allowance change note](../listen_pusher_pipeline/changes/2026-11-26-v3-locked-closure-allowance.md).
+
 A new failed bounded pass records `v3_bounded_pending_attempted` (and, with unlocked windows,
 `v3_unlocked_paging_attempted`) on the builder lease and observes the usual backoff. An operator
 clears the park by deleting `v3_blocked_count`, `v3_blocked_reason`, `v3_backoff_until`,
