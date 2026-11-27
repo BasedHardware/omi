@@ -4096,6 +4096,8 @@ async def test_ramp_read_failure_preserves_recent_unbound_upload_lane(monkeypatc
     module.verify_capture_manifest = MagicMock(return_value=None)
     module.has_byok_keys = MagicMock(return_value=byok)
     module.start_background_task = MagicMock(side_effect=lambda coro, **kwargs: coro.close())
+    # Outside on, batch is offered first (SCA-2965); here it declines so the fence answers.
+    module.accept_batch_upload = AsyncMock(return_value=None)
     try:
         upload = UploadFile(filename='recent.bin', file=BytesIO(b'\x01\x00\x00\x00\x42'), size=5)
         response = await module.sync_local_files_v2(files=[upload], uid='test-uid')

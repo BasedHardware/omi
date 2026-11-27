@@ -1352,7 +1352,11 @@ async def sync_local_files_v2(
             batch_policy = replace(candidate_policy, batch_enabled=True)
 
         if record_response is RecordUploadRoute.BATCH or (
-            record_response is not RecordUploadRoute.LEGACY and candidate_policy.batch_enabled
+            record_response is not RecordUploadRoute.LEGACY
+            # With legacy admission closed, batch is the only lane: an upload whose
+            # batch policy reads off (a cold-start percent of 0) is offered to batch
+            # intake, which admits it in draining/dark, instead of a 409 loop (SCA-2965).
+            and (candidate_policy.batch_enabled or not legacy_allowed)
         ):
             # Route ownership is durable before any acceptance; neither errors
             # nor rollback may start a legacy twin or release this batch claim.
