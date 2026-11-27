@@ -1426,6 +1426,122 @@ async def test_queued_processing_skips_foreign_candidate_before_lease(monkeypatc
     created_delivery.assert_awaited_once_with('synthetic')
 
 
+@pytest.mark.parametrize(
+    'change',
+    [
+        {'record_upload_revision': 8, 'record_audio_closed': False},
+        {'record_sealed_at': AT.timestamp() + 1},
+        {'record_upload_sessions': {'producer': True}},
+        {'record_audio_partial': {'generation': 1}},
+    ],
+)
+def test_native_notes_recheck_source_custody_during_the_write(strict, change, monkeypatch):
+    from database import conversations_v3_fence as fence
+    from tests.unit.test_conversations_v3_engine import native_ready_fields
+    from utils.conversations.v3 import policy
+
+    source = {'id': 'r', 'recording': True, 'started_at': AT - timedelta(seconds=20), **native_ready_fields(AT)}
+    strict.rows[R] = source
+    binding = policy.native_manual_binding(source)
+    assert binding
+    path = ('users', 'synthetic', 'conversations', 'native-derived')
+    derived = {
+        'id': path[-1],
+        'v3_derived': True,
+        'v3_recording_ids': ['r'],
+        'manual_end': True,
+        'v3_native_manual_binding': binding,
+        'sync_content_revision': 3,
+        'status': 'processing',
+        'transcript_segments': [{'text': 'Synthetic notes input'}],
+    }
+    strict.rows[path] = derived
+    from utils.conversations.v3 import triggers
+
+    wakes = []
+
+    def wake(uid, source_id, revision, *, rearm):
+        assert strict.rows[R]['v3_pending'] is True
+        wakes.append((uid, source_id, revision, rearm))
+
+    monkeypatch.setattr(triggers, 'wake_native_manual_ready', wake)
+    token = leases.acquire('synthetic', 'summary-' + path[-1], firestore_client=strict)
+    assert writers.begin_processing('synthetic', derived, token, firestore_client=strict)
+    with fence.writer('synthetic', path[-1], token, native_binding=binding):
+        assert fence.permits(strict.transaction(), strict, 'synthetic', path[-1], strict.rows[path])
+        # The builder has not updated the derived row; only the raw custody facts moved.
+        strict.rows[R].update(change)
+        with pytest.raises(store.Conflict, match='summary_source_changed'):
+            writers.store_summary(
+                'synthetic', path[-1], token, 1, {'overview': 'Stale content'}, AT, firestore_client=strict
+            )
+        assert strict.rows[R]['v3_pending'] is True  # The refusal is raised after the rearm transaction commits.
+        pending_since = strict.rows[R]['v3_pending_since']
+        assert not fence.permits(strict.transaction(), strict, 'synthetic', path[-1], strict.rows[path])
+        assert not writers.begin_processing('synthetic', derived, token, firestore_client=strict)
+        assert strict.rows[R]['v3_pending_since'] == pending_since
+        with pytest.raises(store.Conflict, match='processing_source_changed'):
+            writers.settle_processing('synthetic', path[-1], token, 3, AT, notes=True, firestore_client=strict)
+    assert not strict.rows[path].get('structured')
+    assert not strict.rows[path].get('v3_notes_written')
+    assert wakes == [('synthetic', 'r', 7, True)]
+
+
+@pytest.mark.parametrize('change', [{'deleted': True}, {'is_locked': True}, {'recording': False}])
+def test_stale_native_proof_does_not_rearm_an_ineligible_source(strict, change):
+    from database import conversations_v3_fence as fence
+    from tests.unit.test_conversations_v3_engine import native_ready_fields
+    from utils.conversations.v3 import policy
+
+    source = {'id': 'r', 'recording': True, 'started_at': AT - timedelta(seconds=20), **native_ready_fields(AT)}
+    binding = policy.native_manual_binding(source)
+    strict.rows[R] = {**source, **change}
+    tx = strict.transaction()
+    assert not fence.permits_native_source(
+        tx, strict, 'synthetic', {'v3_recording_ids': ['r'], 'v3_native_manual_binding': binding}
+    )
+    assert not tx.has_written
+    assert 'v3_pending' not in strict.rows[R]
+
+
+@pytest.mark.parametrize('change', [{'deleted': True}, {'is_locked': True}, {'recording': False}])
+def test_stale_native_ineligible_source_settles_pending_tile(strict, change, monkeypatch):
+    from tests.unit.test_conversations_v3_engine import native_ready_fields
+    from utils.conversations.v3 import policy, triggers
+
+    source = {'id': 'r', 'recording': True, 'started_at': AT - timedelta(seconds=20), **native_ready_fields(AT)}
+    strict.rows[R] = source
+    path = ('users', 'synthetic', 'conversations', 'native-derived')
+    derived = {
+        'id': path[-1],
+        'v3_derived': True,
+        'v3_recording_ids': ['r'],
+        'v3_native_manual_binding': policy.native_manual_binding(source),
+        'manual_end': True,
+        'status': 'in_progress',
+        'sync_content_revision': 3,
+        'transcript_segments': [{'text': 'Synthetic notes input'}],
+    }
+    strict.rows[path] = derived
+    token = leases.acquire('synthetic', 'summary-' + path[-1], firestore_client=strict)
+    assert writers.begin_processing('synthetic', derived, token, firestore_client=strict)
+    strict.rows[R].update(change)
+    source_before = dict(strict.rows[R])
+    monkeypatch.setattr(triggers, 'wake_native_manual_ready', lambda *a, **kw: pytest.fail('unexpected task'))
+    with pytest.raises(store.Conflict, match='summary_source_changed'):
+        writers.store_summary(
+            'synthetic', path[-1], token, 1, {'overview': 'Stale content'}, AT, firestore_client=strict
+        )
+    settled = strict.rows[path]
+    assert strict.rows[R] == source_before
+    assert settled['status'] == 'completed'
+    assert settled['tile_state'] == 'failed'
+    assert settled['v3_process_pending'] is False
+    assert settled['sync_content_revision'] == 4
+    assert not settled.get('v3_native_manual_binding')
+    assert not settled.get('structured')
+
+
 def test_open_takes_preemptible_outline_lease_and_old_provider_cannot_publish(strict):
     uid, key, fingerprint = 'synthetic', 'builder', 'synthetic-revision'
     token = leases.acquire(uid, key, firestore_client=strict)
