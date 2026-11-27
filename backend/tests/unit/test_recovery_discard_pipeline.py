@@ -21,7 +21,7 @@ from tests.unit.fixtures.strict_firestore_transaction import (
     StrictFirestoreTransaction,
 )
 from utils import encryption
-from utils.conversations import finalizer, lifecycle
+from utils.conversations import finalizer, lifecycle, transcribing_hold
 from utils.conversations.recovery import raw_transcript_bytes
 from utils.conversations.terminal_relevance import valid_decision
 
@@ -192,12 +192,13 @@ async def test_decoded_rule_discard_completes_and_verifies_without_rewriting_blo
     # Rollback must retain the existing explicit-discard and encrypted-blob contract.
     monkeypatch.setenv('NOTES_SHORT_CLIP_FLOOR', 'off')
     transcript = [{'text': text, 'start': 0, 'end': 1, 'speaker': 'SPEAKER_00', 'is_user': False}] if text else []
-    blob = _seed(pipeline, level=level, transcript=transcript)
+    blob = _seed(pipeline, level=level, transcript=transcript, finalization_status='queued')
     response, counters = await _run_and_verify(pipeline)
     row, job = pipeline.store.rows[CONVERSATION_PATH], pipeline.store.rows[JOB_PATH]
     assert response == {'status': 'done'}
     assert row['status'] == job['status'] == 'completed'
     assert row['discarded'] is True
+    assert row['finalization_status'] == 'completed'
     assert row['relevance_decision']['trigger'] == 'server_recovery'
     assert row['relevance_decision']['verdict'] == 'discard'
     assert row['transcript_segments'] == blob
@@ -452,6 +453,7 @@ async def test_server_batch_stub_hands_off_to_batch_and_verifies(pipeline, monke
         server_batch_audio_received=True,
         server_batch_audio_start=start,
         server_batch_audio_end=start + 120,
+        finalization_status='queued',
     )
     response, counters = await _run_and_verify(pipeline)
     row, job = pipeline.store.rows[CONVERSATION_PATH], pipeline.store.rows[JOB_PATH]
@@ -459,7 +461,10 @@ async def test_server_batch_stub_hands_off_to_batch_and_verifies(pipeline, monke
     assert response == {'status': 'done'}
     assert row['status'] == job['status'] == 'completed'
     assert job['finalization_outcome'] == 'server_batch_capture'
+    assert row['finalization_status'] == 'completed'
     assert row['discarded'] is False and row['home_transcription_pending_at'] == NOW
+    wire = transcribing_hold.project({**row, 'structured': {}, 'transcript_segments': []}, now=NOW)
+    assert wire['status'] == 'processing' and wire['structured']['title'] == 'Transcribing…'
     register.assert_called_once()
     assert counters == {'verified': 1, 'refused': 0, 'errors': 0, 'skipped': 0}
     pipeline.paid_notes.assert_not_called()

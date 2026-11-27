@@ -189,9 +189,12 @@ re-enters at most three times and parks only at one seed.
 Every builder load of a listed owner charges one in `v3_locked_day` and `v3_locked_passes` on the builder
 lease, under the held lease and before it reads, whatever the pass does next. A spent day, or a charge
 that cannot be written, loads with the origin bound. Ceiling: 20 attempts x about 78k reads (a load of at most
-5,389 fetched derived documents plus 400 sources and the seeds, plus a commit whose batches each run their body
-at most three times: contention retries and transcript-pointer replays alike, with each batch's pointers loaded
-from the lake before its transaction), about 1.6M reads per listed owner per day.
+5,389 fetched derived documents plus 400 sources and the seeds, an on-open load reading at most 400 seed ids,
+each once, plus a commit whose batches each run their body at most three times: contention retries and
+transcript-pointer replays alike, with each batch's pointers loaded from the lake before its transaction, for any
+listed owner's commit with pointer rows, inside the origin bound too), about 1.6M Firestore reads per listed owner per day. Lake object reads are
+separate: about one GET per decoded pointer row in the load (about 5.8k) plus at most 192 for the commit's preload,
+so about 0.12M per owner per day, and none while rows stay inline (prod admits no lake writes today).
 
 An empty list, or `CONVERSATIONS_V3_LOCKED_DERIVED_ALLOWANCE`, `CONVERSATIONS_V3_LOCKED_DERIVED_BYTES`,
 `CONVERSATIONS_V3_LOCKED_MAX_BATCHES` or `CONVERSATIONS_V3_LOCKED_DAILY_PASSES` set to `0`, restores the origin
@@ -7981,9 +7984,13 @@ Setting the repair flag to false stops only that scan.
 A lease-admitted finalizer processes its own completed server minimum before
 finishing its job, using the same summary gate and existing retry/fanout fences.
 It still skips a completed row that already contains a summary or is excluded
-by the repair safety policy. `finalization_status=queued` on a conversation is
-an admission projection, not current job state: inspect its durable job and
-actual output presence before diagnosing missing summaries.
+by the repair safety policy. The server-batch capture handoff settles the
+conversation's `finalization_status` with its bound job in the same transaction.
+Home still shows transcription in progress using the independent wait stamp.
+An authoritative discard also settles a queued conversation projection without
+changing the job receipt or retained audio. A later verified speech or full
+silence projection can settle a historical queued capture handoff. Inspect its
+durable job and actual output before diagnosing missing summaries.
 
 The 120-second budget is dispatch, not model completion.
 With the same master flag on, both sync and finalization enrichment adapters

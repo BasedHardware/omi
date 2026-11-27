@@ -1947,6 +1947,9 @@ def persist_processing_result_with_lifecycle(
                     'completed_status_regression',
                 )
 
+        else:
+            _settle_discarded_finalization_projection(existing, write_data)
+
         _offload_processing_transcript(uid, write_data, existing)
         stamp_native_visibility(existing, write_data)
         summary_receipt = summary_delivery.merge_result(existing, write_data, uid)
@@ -3526,6 +3529,22 @@ def _conversation_claim_matches(current, expected_status, expected_fields=None, 
     )
 
 
+def _settle_discarded_finalization_projection(current: Mapping[str, Any], updates: dict) -> None:
+    if (
+        updates.get('status') == ConversationStatus.completed
+        and updates.get('discarded', current.get('discarded')) is True
+        and current.get('finalization_status') in ('queued', 'leased')
+        and updates.get('finalization_status', current.get('finalization_status')) in ('queued', 'leased')
+        and (job_id := current.get('finalization_job_id'))
+        and updates.get('finalization_job_id', job_id) == job_id
+        and updates.get('finalization_revision', current.get('finalization_revision'))
+        == current.get('finalization_revision')
+    ):
+        # A confirmed discard settles the row's capture projection. A separate
+        # worker still owns the bound job and decides its immutable receipt.
+        updates['finalization_status'] = 'completed'
+
+
 def claim_conversation_status_in_txn(
     current: Mapping[str, Any],
     *,
@@ -3558,6 +3577,7 @@ def claim_conversation_status_in_txn(
                 raise ValueError('terminal family requires its claim timestamp')
             updates['terminal_family'] = terminal_family
             updates['terminal_family_at'] = terminal_family_at
+        _settle_discarded_finalization_projection(current, updates)
     return updates
 
 
