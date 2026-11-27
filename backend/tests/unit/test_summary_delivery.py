@@ -652,10 +652,10 @@ def test_emitted_continuation_cursor_keeps_rollback_shapes(rotating_repair, monk
 def _stored_after_merge(existing, write):
     """Apply the processing write's leaf mask the way Firestore stores it."""
     from google.cloud.firestore import DELETE_FIELD
-    from database.conversations import _processing_result_update_fields
+    from database.conversation_processing_result import update_fields
 
     stored = deepcopy(existing)
-    for path, value in _processing_result_update_fields(write).items():
+    for path, value in update_fields(write).items():
         *parents, leaf = path.split('.')
         node = stored
         for name in parents:

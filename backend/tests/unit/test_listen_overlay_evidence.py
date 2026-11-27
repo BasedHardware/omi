@@ -67,7 +67,6 @@ def test_image_only_reference_render_and_server_dry_run(rollback, fault):
     primary.update(name='backend-listen', image=old)
     primary['env'] += [
         {'name': 'SYNC_FUTURE_CAPTURE_CLAMP_ENABLED', 'value': 'false'},
-        {'name': 'SYNC_POLL_BACKOFF_ENABLED', 'value': 'false'},
     ]
     if fault == 'reconnect':
         primary['env'].append({'name': 'LISTEN_BATCH_RECONNECT_ENABLED', 'value': 'true'})

@@ -134,6 +134,11 @@ worker:
   shadowPercent: 0
   shadowPaidRecoveryPerHour: 200
   shadowRecoveryApiUrl: ""
+  # Omi flag store the worker reads per-owner rules from (reliability experiment
+  # commit_wake, docs/runbooks/omi-flags.md). An empty project leaves the store
+  # unconfigured: every rule reads off and the worker sends no commit wake.
+  flagStoreProject: ""
+  flagStoreDatabase: ""
   # CPU strict-VAD shadow sampling percent; 0 disables the shadow, 100
   # restores full sampling (the silence qualification reads this evidence).
   strictVadShadowPercent: 10

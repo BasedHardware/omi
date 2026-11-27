@@ -277,6 +277,10 @@
       "owner": "cl2-gpueff",
       "review_by": "2026-12-05"
     },
+    "BATCH_PIPELINE_PROJECTION_FOLLOWUP_DISCOVERY_INTERVAL_SECONDS": {
+      "owner": "compute-headroom",
+      "review_by": "2026-12-10"
+    },
     "BATCH_PIPELINE_PROJECTION_FOLLOWUP_SLOTS": {
       "owner": "cl2-gpueff",
       "review_by": "2026-12-05"

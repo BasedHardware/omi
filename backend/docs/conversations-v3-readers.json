@@ -119,6 +119,10 @@
     "policy": "conversations",
     "reason": "Owner-scoped bounded title projection excludes recordings, hidden, deleted, locked and absorbed rows before decoding."
   },
+  "backend/database/conversations_v3_fence.py:collection": {
+    "policy": "storage",
+    "reason": "The native manual summary writer checks the exact source recording and its sealed upload revision inside the owner-scoped notes transaction."
+  },
   "backend/database/conversations_v3_live.py:collection": {
     "policy": "conversations",
     "reason": "Owner-scoped live-tile read through the v3 window index, projected to the route's fields; the caller serves only an open v3 window that is not a recording, hidden, deleted or discarded."

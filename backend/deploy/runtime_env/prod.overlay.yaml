@@ -138,8 +138,6 @@ overlay:
         SERVER_BATCH_UNSUPPORTED_LANGUAGES: {value: 'af,ar,az,be,bn,bs,ca,cy,eu,fa,gl,gu,he,hi,id,kk,kn,ko,mk,ml,mr,ms,no,pa,sq,sr,sw,ta,te,th,tl,tr,ur,vi,zh', category: ops_kill}
         STT_NON_EN_MULTI_PREFER_HINTABLE_PERCENT: {value: '0', category: rollout}
         PLAYBACK_ON_DEMAND_ENABLED: {value: 'true', category: rollout}
-        SYNC_POLL_BACKOFF_ENABLED: {value: 'true', category: rollout}
-        SYNC_POLL_BACKOFF_PERCENT: {value: '5', category: rollout}
         # Replay uses the existing singleton loop; live admission stays inline.
         LISTEN_FINALIZATION_REPLAY_ENABLED:
           value: 'true'
@@ -387,8 +385,6 @@ overlay:
         # artifacts on open/play/download only. Kill switch: set false.
         STT_GPU_FLEET_OFF: {value: 'true', category: ops_kill}
         PLAYBACK_ON_DEMAND_ENABLED: {value: 'true', category: rollout}
-        SYNC_POLL_BACKOFF_ENABLED: {value: 'true', category: rollout}
-        SYNC_POLL_BACKOFF_PERCENT: {value: '5', category: rollout}
         OMI_FLAGS_FIRESTORE_PROJECT: {value: based-hardware, category: service_discovery}
         OMI_FLAGS_FIRESTORE_DATABASE: {value: omi-flags, category: service_discovery}
         OMI_FLAGS_SOURCE: {value: dual, category: rollout}
@@ -732,8 +728,6 @@ overlay:
           # artifacts on open/play/download only. Kill switch: set false.
           PLAYBACK_ON_DEMAND_ENABLED: {value: 'true', category: rollout}
           # SCA-3504: client job-status GETs are served by backend. Rollback sets enabled to false.
-          SYNC_POLL_BACKOFF_ENABLED: {value: 'true', category: rollout}
-          SYNC_POLL_BACKOFF_PERCENT: {value: '5', category: rollout}
           # Read-only referral campaign preview for Nik's three accounts (#24560). Claims, attribution and
           # grants stay off until OMI_REFERRAL_CAMPAIGN_ENABLED. Rollback: drop this key.
           OMI_REFERRAL_CAMPAIGN_PREVIEW_UIDS:
@@ -1166,8 +1160,6 @@ overlay:
           # Graduation of the David-approved on-demand playback (DEC-BTR-004): build playback
           # artifacts on open/play/download only. Kill switch: set false.
           PLAYBACK_ON_DEMAND_ENABLED: {value: 'true', category: rollout}
-          SYNC_POLL_BACKOFF_ENABLED: {value: 'true', category: rollout}
-          SYNC_POLL_BACKOFF_PERCENT: {value: '5', category: rollout}
           OMI_FLAGS_FIRESTORE_PROJECT: {value: based-hardware, category: service_discovery}
           OMI_FLAGS_FIRESTORE_DATABASE: {value: omi-flags, category: service_discovery}
           OMI_FLAGS_SOURCE: {value: dual, category: rollout}
@@ -1600,8 +1592,6 @@ overlay:
           # Graduation of the David-approved on-demand playback (DEC-BTR-004): build playback
           # artifacts on open/play/download only. Kill switch: set false.
           PLAYBACK_ON_DEMAND_ENABLED: {value: 'true', category: rollout}
-          SYNC_POLL_BACKOFF_ENABLED: {value: 'false', category: rollout}
-          SYNC_POLL_BACKOFF_PERCENT: {value: '0', category: rollout}
           # O4 excluded consumer: preserve decision cache 0, owner enforcement 0,
           # shadow 10, negative/TTL60 caches 0 (Release 2026-11-17 reconciliation).
           # This does not admit backfill enforcement when the shared kill switch clears.
@@ -1933,7 +1923,7 @@ overlay:
           # Margin-40 O1 inverse: full deploys must retain the admitted 200/10/class16 cadence.
           BATCH_PIPELINE_SERVING_SWEEP_PAGE_ROWS: {value: '200', category: rollout}
           BATCH_PIPELINE_SERVING_TICK_SECONDS: {value: '10', category: rollout}
-          BATCH_PIPELINE_PROJECTION_FOLLOWUP_SLOTS: {value: '3', category: rollout}
+          BATCH_PIPELINE_PROJECTION_FOLLOWUP_SLOTS: {value: '4', category: rollout}
           BATCH_PROJECTION_FINISH_CLASSIFY_PAGE_LIMIT: {value: '16', category: rollout}
           # SCA-2283: retain the behavior of the serving pre-flag image until custody admission.
           BATCH_ACCOUNT_PRIVACY_WRITER_ENABLED: {value: 'false', category: ops_kill}
@@ -2031,8 +2021,6 @@ overlay:
           # Graduation of the David-approved on-demand playback (DEC-BTR-004): build playback
           # artifacts on open/play/download only. Kill switch: set false.
           PLAYBACK_ON_DEMAND_ENABLED: {value: 'true', category: rollout}
-          SYNC_POLL_BACKOFF_ENABLED: {value: 'true', category: rollout}
-          SYNC_POLL_BACKOFF_PERCENT: {value: '5', category: rollout}
           # Margin-40 O2b stage 2, 2026-11-17: API owner-memo enforcement 100,
           # shadow 0; decision/negative/TTL60 caches 0. Preserve all other map entries.
           # Runtime inverse: enforce 0 + shadow 10 via the existing Release route,
