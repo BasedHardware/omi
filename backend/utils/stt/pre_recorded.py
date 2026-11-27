@@ -800,7 +800,8 @@ def modulate_prerecorded_from_bytes_with_soniox(
         and soniox_multilingual.applies(language)
     )
     served = soniox_multilingual.transcribe(audio_bytes, language=language, diarize=diarize) if soniox_first else None
-    if served is not None:
+    soniox_failed = served is soniox_multilingual.FAILED  # Soniox had this audio; never a second submission
+    if served is not None and not soniox_failed:
         if provider_served is not None:
             provider_served(SONIOX_PROVIDER)
         return served if return_language else served[0]
@@ -819,7 +820,7 @@ def modulate_prerecorded_from_bytes_with_soniox(
         # Held-piece and prompt-verification coordinators own their paid attempts.
         if (
             reason is None
-            or soniox_first
+            or soniox_failed
             or _modulate_prior_failure.get()
             or not soniox_failover_enabled()
             or attempts >= 2

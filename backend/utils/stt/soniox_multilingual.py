@@ -17,7 +17,8 @@ import hashlib
 import logging
 import os
 import threading
-from collections import deque
+import time
+from collections import OrderedDict
 from typing import Any, Optional
 
 from config.prerecorded_vendor import soniox_multilingual_enabled
@@ -49,9 +50,32 @@ MAX_SECONDS = 300.0
 # the create rate and the transcriptions held against Soniox's 2,000 stored-transcription cap (soniox_batch).
 MAX_IN_FLIGHT = 8
 _IN_FLIGHT = threading.BoundedSemaphore(MAX_IN_FLIGHT)
-# Audio Soniox already had (answered, empty or failed): legacy sync's bounded empty retry calls again with
-# attempts=0, and that retry must run Velma, never Soniox a second time.
-_TRIED: deque[str] = deque(maxlen=512)
+# Audio Soniox already had (answered, empty or failed) in the last TRIED_SECONDS: legacy sync's bounded empty
+# retry calls again with attempts=0 moments later, and that retry must run Velma, never Soniox a second time.
+# The memo expires, so a later redelivery of the same bytes gets Soniox again.
+TRIED_SECONDS = 600.0
+_TRIED: 'OrderedDict[str, float]' = OrderedDict()
+_TRIED_LOCK = threading.Lock()
+# transcribe() result when Soniox was attempted and failed: the caller runs Velma, and must not hand the same audio
+# to Soniox again through the Modulate credit-refusal hop.
+FAILED = object()
+
+
+def _seen_recently(digest: str) -> bool:
+    now = time.monotonic()
+    with _TRIED_LOCK:
+        while _TRIED and next(iter(_TRIED.values())) < now - TRIED_SECONDS:
+            _TRIED.popitem(last=False)
+        return digest in _TRIED
+
+
+def _remember(digest: str) -> None:
+    with _TRIED_LOCK:
+        _TRIED[digest] = time.monotonic()
+        _TRIED.move_to_end(digest)
+        while len(_TRIED) > 2048:
+            _TRIED.popitem(last=False)
+
 
 _REASON_BY_KIND = {
     'credit_refusal': 'provider_budget_exhausted',
@@ -75,16 +99,17 @@ def applies(language: Optional[str]) -> bool:
     )
 
 
-def transcribe(audio_bytes: bytes, *, language: Optional[str], diarize: bool) -> Optional[tuple[list[Any], str]]:
-    """Soniox's (words, detected language), or None when the caller should run Velma as before."""
+def transcribe(audio_bytes: bytes, *, language: Optional[str], diarize: bool) -> Any:
+    """Soniox's (words, detected language); ``FAILED`` when Soniox was attempted and failed (run Velma, no second
+    Soniox submission); or None when Soniox was not attempted (run Velma exactly as before)."""
     duration = wav_duration_seconds(audio_bytes)
     digest = hashlib.sha256(audio_bytes).hexdigest()
-    if not 0 < duration <= MAX_SECONDS or digest in _TRIED:
+    if not 0 < duration <= MAX_SECONDS or _seen_recently(digest):
         return None
     if not _IN_FLIGHT.acquire(blocking=False):
         logger.info('event=prerecorded_soniox_multilingual outcome=skipped reason=in_flight_cap')
         return None
-    _TRIED.append(digest)
+    _remember(digest)
     try:
         words, detected = soniox_transcribe(
             audio_bytes,
@@ -108,7 +133,7 @@ def transcribe(audio_bytes: bytes, *, language: Optional[str], diarize: bool) ->
             log=logger,
         )
         logger.warning('event=prerecorded_soniox_multilingual outcome=fallback kind=%s', kind)
-        return None
+        return FAILED
     finally:
         _IN_FLIGHT.release()
     record_vendor_burn(ENDPOINT_STT, 'ok', duration, provider=SONIOX_PROVIDER)

@@ -248,9 +248,9 @@ def test_a_failed_soniox_first_attempt_is_never_followed_by_a_second_soniox_subm
     with parakeet_caller('sync_fresh'), pytest.raises(TranscriptionFailure):
         stt.modulate_prerecorded_from_bytes_with_soniox(wav_bytes(), language='multi')
 
-    # The credit-refusal failover hop would raise AssertionError('failover hop') if it fired.
     assert vendors.soniox.call_count == 1
     assert vendors.velma.call_count == 1
+    stt.soniox_transcribe.assert_not_called()  # the credit-refusal hop never re-sent the audio to Soniox
 
 
 def test_a_full_process_sends_the_file_to_velma_without_waiting(vendors, monkeypatch):
@@ -335,3 +335,59 @@ def test_after_a_failed_soniox_attempt_the_empty_retry_runs_velma_only(vendors):
     assert vendors.soniox.call_count == 1
     assert vendors.velma.call_count == 2
     assert provider.served_provider == 'modulate'
+
+
+def test_a_skipped_soniox_first_attempt_keeps_the_credit_refusal_hop(vendors, monkeypatch):
+    import threading
+
+    from config.prerecorded_stt import TranscriptionOutcome
+    from utils.stt.outcomes import TranscriptionFailure
+
+    monkeypatch.setattr(soniox_multilingual, '_IN_FLIGHT', threading.BoundedSemaphore(1))
+    soniox_multilingual._IN_FLIGHT.acquire()  # Soniox-first is skipped (full process), never attempted
+    hop = Mock(return_value=(SONIOX_WORDS, 'zh'))
+    monkeypatch.setattr(stt, 'soniox_transcribe', hop)
+    monkeypatch.setattr(stt, 'record_fallback', Mock())
+    monkeypatch.setattr(stt, 'record_vendor_burn', Mock())
+    vendors.velma.side_effect = TranscriptionFailure(
+        TranscriptionOutcome.PROVIDER_BUDGET_EXHAUSTED, provider='modulate', retryable=False
+    )
+    try:
+        with parakeet_caller('sync_fresh'):
+            result = stt.modulate_prerecorded_from_bytes_with_soniox(wav_bytes(), language='multi')
+    finally:
+        soniox_multilingual._IN_FLIGHT.release()
+
+    assert result == SONIOX_WORDS
+    vendors.soniox.assert_not_called()
+    assert hop.call_count == 1
+
+
+def test_the_attempt_memo_expires(vendors, monkeypatch):
+    monkeypatch.setattr(soniox_multilingual, 'TRIED_SECONDS', -1.0)
+    vendors.soniox.side_effect = SonioxBatchError('timeout', submitted=True)
+
+    sync_call('multi')
+    vendors.soniox.side_effect = None
+    provider, _ = sync_call('multi')
+
+    assert provider.served_provider == 'soniox'
+    assert vendors.soniox.call_count == 2
+
+
+def test_production_sync_context_reaches_the_executor_thread(vendors):
+    import asyncio
+
+    from utils.executors import run_blocking, sync_executor
+    from utils.observability.sync_phases import sync_attempt
+
+    provider = stt.ModulatePrerecordedProvider()
+
+    @sync_attempt
+    async def attempt(sync_lane='fresh'):
+        return await run_blocking(sync_executor, provider.transcribe_bytes, wav_bytes(), language='multi')
+
+    result = asyncio.run(attempt())
+
+    assert result == SONIOX_WORDS
+    assert provider.served_provider == 'soniox'
