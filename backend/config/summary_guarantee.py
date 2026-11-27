@@ -1,6 +1,5 @@
 """Universal first-summary deadlines with independent repair and preservation controls."""
 
-from config.refactor_modes import default_on
 from config.refactor_switches import default_off as rollout_default_off
 
 from contextvars import ContextVar
@@ -96,8 +95,10 @@ FIRST_WEEK_DEFAULT_HOURS = 168
 
 
 def first_week_enabled(*, environ: Mapping[str, str] | None = None) -> bool:
-    """Kill switch, default on. Off restores the previous deadline and lane priority."""
-    return default_on(FIRST_WEEK_ENABLED_ENV, environ=environ)
+    """Opt-in guarantee; default off until activation gates are complete."""
+    values = os.environ if environ is None else environ
+    legacy_enabled = values.get(FIRST_WEEK_ENABLED_ENV, 'false').strip().lower() == 'true'
+    return rollout_default_off(FIRST_WEEK_ENABLED_ENV, legacy_enabled, environ=environ)
 
 
 def first_week_window_seconds(*, environ: Mapping[str, str] | None = None) -> int:

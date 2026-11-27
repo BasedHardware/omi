@@ -30,6 +30,11 @@ PAID = 1_790_000_000
 HOUR = 3600
 
 
+@pytest.fixture(autouse=True)
+def _enable_feature_for_behavior_tests(monkeypatch):
+    monkeypatch.setenv(guarantee.FIRST_WEEK_ENABLED_ENV, 'true')
+
+
 def _clear(monkeypatch):
     for name in (
         guarantee.FIRST_WEEK_ENABLED_ENV,
@@ -45,6 +50,9 @@ def _clear(monkeypatch):
         'ENRICHMENT_MAX_AGE_HOURS',
     ):
         monkeypatch.delenv(name, raising=False)
+    # These tests exercise the enabled behavior explicitly; the public default
+    # remains covered separately below.
+    monkeypatch.setenv(guarantee.FIRST_WEEK_ENABLED_ENV, 'true')
 
 
 # --- the window stamp ------------------------------------------------------
@@ -82,6 +90,12 @@ def test_kill_switch_off_and_zero_hours_disable_the_stamp(monkeypatch):
     monkeypatch.setenv(guarantee.FIRST_WEEK_ENABLED_ENV, 'true')
     monkeypatch.setenv(guarantee.FIRST_WEEK_WINDOW_ENV, '0')
     assert guarantee.first_week_stamp(PAID, PAID + HOUR) is None
+
+
+def test_feature_flag_defaults_off_but_explicit_true_enables():
+    assert guarantee.first_week_enabled(environ={}) is False
+    assert guarantee.first_week_enabled(environ={guarantee.FIRST_WEEK_ENABLED_ENV: 'true'}) is True
+    assert guarantee.first_week_stamp(PAID, PAID + HOUR, environ={}) is None
 
 
 def test_window_is_stored_not_recomputed_from_age(monkeypatch):

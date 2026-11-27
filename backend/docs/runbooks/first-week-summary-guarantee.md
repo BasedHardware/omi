@@ -1,10 +1,10 @@
 # First-week summary guarantee
 
-SCA-4790. A conversation created by a new paid subscription inside the first
-`FIRST_WEEK_SUMMARY_DEADLINE_HOURS` (default `168` = 7 days, `0` disables) keeps
-its first-summary obligation open until that stored window ends. It is not
-closed by the 72 h historical age gate, by the repair scan's 72 h bound, or by
-the 30-minute fresh-lane demotion.
+SCA-4790. When enabled, a conversation created by a new paid subscription
+inside the first `FIRST_WEEK_SUMMARY_DEADLINE_HOURS` (default `168` = 7 days,
+`0` disables) keeps its first-summary obligation open until that stored window
+ends. It is not closed by the 72 h historical age gate, by the repair scan's
+72 h bound, or by the 30-minute fresh-lane demotion.
 
 The window is a stored record, not a wall-clock rule. At intake the conversation
 gets
@@ -33,7 +33,7 @@ never stamp a window; the read is the commercial subscription.
 
 | Key | Default | Meaning |
 | --- | --- | --- |
-| `FIRST_WEEK_SUMMARY_GUARANTEE_ENABLED` | on | One kill switch: deadline, lane and counter |
+| `FIRST_WEEK_SUMMARY_GUARANTEE_ENABLED` | off | Explicit opt-in for the deadline, lane and counter |
 | `FIRST_WEEK_SUMMARY_DEADLINE_HOURS` | `168` | Stored window length; `0` disables stamping |
 | `ENRICHMENT_FIRST_WEEK_TASKS_QUEUE` | `enrichment-first-week` | Reserved lane; empty falls back to `enrichment-fresh` |
 
@@ -95,10 +95,10 @@ activation-bounded cohort.
 
 ## Read and generation budget before activation
 
-The production overlay and production `batch-pipeline-worker` chart keep
+The code default, production overlay, and `batch-pipeline-worker` chart keep
 `FIRST_WEEK_SUMMARY_GUARANTEE_ENABLED=false` until the approved read-only census
-records the eligible workload. The chart sets the flag on the GPU deployment and
-its record-seal worker, sweeper, and repair jobs. While disabled, the added
+records the eligible workload. The chart binds the flag off on the GPU
+deployment and its record-seal worker, sweeper, and repair jobs. While disabled, the added
 production reads and summary attempts are zero. Before enabling, record the
 census-backed expected extra summaries/day and reads/day, including:
 

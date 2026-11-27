@@ -409,6 +409,10 @@ def test_helper_kill_switch_budget_entries_match_the_live_registry():
             assert flag['ramp']['cohorts'][-1] == 'fleet only after clean owner and small-cohort windows'
             assert 'stranded live-producer tokens' in flag['ramp']['clean_metric']
             assert 'quality lead' in flag['ramp']['expander']
+        elif name == 'FIRST_WEEK_SUMMARY_GUARANTEE_ENABLED':
+            assert flag['lifecycle'] == 'config_switch'
+            assert flag['fail'] == 'closed'
+            assert flag['summary'].startswith('Code default off')
         else:
             assert flag['lifecycle'] == 'ops_kill'
             assert flag['fail'] == 'open'
