@@ -32,7 +32,7 @@ projection pump disabled, checks that cleanup and enrichment still run, and
 proves the serving supervisor acquires `serving_maintenance` and ticks held
 expiry. Lease election coverage also passes.
 
-- [PR #26511](https://github.com/Git-on-my-level/omi/pull/26511)
-- M1 Studio, Python 3.14.7:
+- [PR #26511](https://github.com/BasedHardware/omi/pull/26511)
+- M1 Studio, Python 3.11.15:
   `omi-heavy run -- bash -c 'cd backend && BACKEND_PYTEST_WORKERS=1 bash test.sh tests/unit/test_batch_pipeline_serving.py tests/unit/test_batch_pipeline_leader.py'`
 - Result: 71 serving tests and 16 lease tests passed.
