@@ -729,6 +729,7 @@ and an explicit empty literal renders as `''`.
 | `ANDROID_BILLING` | stripe (default) or play: how new Android Omi Pro purchases start; play also needs ANDROID_PLAY_BILLING_MIN_BUILD | backend | env | closed | — | — | {value: stripe, category: rollout} | — | keep | keep | — | billing |
 | `ANDROID_PLAY_BILLING_COHORT` | uid:<uid>,pct:<n> or all: users on Google Play Billing while ANDROID_BILLING stays stripe (internal-track test accounts); malformed admits none | backend | env | closed | — | — | {value: '', category: rollout} | — | keep | keep | — | billing |
 | `ANDROID_PLAY_BILLING_MIN_BUILD` | First Android version code with Google Play Billing; unset means no build is told to use Play | backend | env | closed | — | — | {value: '1617', category: rollout} | — | keep | keep | — | billing |
+| `APP_ICON_GENERATION_ENABLED` | Default off; controls mobile app icon generation after the provider retired the only priced image model. | backend | env | closed | — | — | — | — | keep | keep | — | SCA-4895 |
 | `AUDIO_CLEANUP_HOLD_ENABLED` | Default on: routine legacy staging and batch artifact cleanup preserve configured incident capture windows; only false disables the window hold. Durable success gates still apply; privacy erasure bypasses the hold | backend | env | closed | — | — | — | — | keep | keep | — | auditfix |
 | `AUDIO_CLEANUP_HOLD_WINDOWS` | Inclusive capture preservation windows, comma-separated timezone-qualified start..end pairs; defaults to 2026-10-22T13:36:30Z..2026-10-24T07:16:00Z. Empty/malformed configuration holds cleanup | backend | env | closed | — | — | — | — | keep | keep | — | auditfix |
 | `AUDIO_MERGE_DISPATCH_MODE` | Select audio-merge dispatch lane | backend | env | closed | — | — | — | — | keep | keep | — | unowned |
@@ -1173,6 +1174,7 @@ their code default (`fail` tells you which way a missing value resolves).
 - `ACTION_ITEM_VALIDITY_MODE_SERVE_UID_SHA256S` — Optional task validity serving uid digests; default empty (fail: closed)
 - `ADMIN_KEY_AUTH_ENABLED` — Allow administrator-key authentication (fail: open)
 - `AI_PROFILE_BACKEND_REFRESH_ENABLED` — Default on; the backend regenerates users/{uid}.ai_user_profile at most once per owner per ~20h after a processed conversation or a stale GET, for owners admitted to generated compute (fail: open)
+- `APP_ICON_GENERATION_ENABLED` — Default off; controls mobile app icon generation after the provider retired the only priced image model. (fail: closed)
 - `AUDIO_CLEANUP_HOLD_ENABLED` — Default on: routine legacy staging and batch artifact cleanup preserve configured incident capture windows; only false disables the window hold. Durable success gates still apply; privacy erasure bypasses the hold (fail: closed)
 - `AUDIO_CLEANUP_HOLD_WINDOWS` — Inclusive capture preservation windows, comma-separated timezone-qualified start..end pairs; defaults to 2026-10-22T13:36:30Z..2026-10-24T07:16:00Z. Empty/malformed configuration holds cleanup (fail: closed)
 - `AUDIO_CUSTODY_FRAMED_PERCENT` — Default 0; framed custody windows and byte-exact PCM projections; independent of AUDIO_ARCHIVE_PERCENT; invalid values refuse admission (fail: closed)

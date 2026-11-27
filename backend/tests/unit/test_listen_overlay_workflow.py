@@ -15,6 +15,7 @@ EXPECTED = [
     'Bind shared record token lease rollout inputs',
     'Admit checked-out production source and image identity',
     'Checkout trusted overlay evidence controls',
+    'Verify staged evidence scripts before Python',
     'Reconstruct evidence runtime before credentials',
     'Reconstruct image-only runtime before credentials',
     'Install Helm',
@@ -84,6 +85,7 @@ FORWARD_SOURCE = 'Bind the forward Listen digest source for the index gate'
 
 EVIDENCE = {
     'Checkout trusted overlay evidence controls',
+    'Verify staged evidence scripts before Python',
     'Reconstruct evidence runtime before credentials',
     'Produce private-overlay effect receipt without mutation',
     'Upload only the sanitized overlay receipt',
