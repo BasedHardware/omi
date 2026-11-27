@@ -2319,11 +2319,11 @@ def _ingest_conversation_from_segments(
 def _replay_from_segments(
     uid: str, existing_conversation: dict, request: CreateConversationFromTranscriptRequest
 ) -> ConversationResponse:
+    existing_conversation = _bind_late_client_projection(uid, existing_conversation, request)
     if existing_conversation.get('status') == ConversationStatus.processing:
         # Clients can acknowledge uploads by HTTP status alone. Keep them retrying
         # until the admitted worker has persisted the completed conversation.
         raise retryable_processing_response('from_segments_processing_in_flight')
-    existing_conversation = _bind_late_client_projection(uid, existing_conversation, request)
     existing_conversation = _apply_late_from_segments_context(uid, existing_conversation, request)
     receipt = record_finalized_meeting_receipt(uid, existing_conversation)
     if receipt is not None:

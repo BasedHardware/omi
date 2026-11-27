@@ -41,6 +41,8 @@ from unittest.mock import MagicMock
 
 
 import pytest
+from fastapi import FastAPI, HTTPException
+from fastapi.testclient import TestClient
 
 os.environ.setdefault('ENCRYPTION_SECRET', 'omi_ZwB2ZNqB2HHpMK6wStk7sTpavJiPTFg7gXUHnc4tFABPU6pZ2c2DKgehtfgi4RZv')
 
@@ -292,7 +294,8 @@ def _add_developer_fakes(fakes: dict[str, ModuleType]) -> None:
         return mod
 
     add('dependencies', AutoMockModule('dependencies'))
-    add('utils.other.endpoints', AutoMockModule('utils.other.endpoints'))
+    endpoints = add('utils.other.endpoints', AutoMockModule('utils.other.endpoints'))
+    endpoints.with_rate_limit = lambda dependency, _policy: dependency
     search = add('utils.conversations.search', AutoMockModule('utils.conversations.search'))
     search.ConversationSearchUnavailableError = type('ConversationSearchUnavailableError', (Exception,), {})
     add('utils.conversations.mcp_transcript_search', AutoMockModule('utils.conversations.mcp_transcript_search'))
@@ -1049,7 +1052,10 @@ def _race_store_harness(monkeypatch, stack, *, first_projection: Any, retry_titl
         retry = dev.CreateConversationFromTranscriptRequest.model_validate(
             _from_segments_raw_payload(_projection_dict(title=retry_title), client_session_id=session)
         )
-        store['b_response'] = dev._create_conversation_from_segments(_UID, retry)
+        with pytest.raises(HTTPException) as in_flight:
+            dev._create_conversation_from_segments(_UID, retry)
+        assert in_flight.value.status_code == 503
+        assert (in_flight.value.headers or {}).get('Retry-After') == '2'
         return True
 
     def fake_persist(_uid: str, payload: dict[str, Any], **_kwargs: Any) -> bool:
@@ -1072,7 +1078,22 @@ def _race_store_harness(monkeypatch, stack, *, first_projection: Any, retry_titl
     return store
 
 
-def test_late_projection_survives_older_processor_persist(monkeypatch, stack) -> None:
+@pytest.fixture
+def projection_replay_client(monkeypatch, stack):
+    _, dev = stack
+
+    async def run_inline(_executor, function, *args, **kwargs):
+        return function(*args, **kwargs)
+
+    monkeypatch.setattr(dev, 'run_blocking', run_inline)
+    app = FastAPI()
+    app.include_router(dev.router)
+    app.dependency_overrides[dev.get_current_user_uid] = lambda: _UID
+    with TestClient(app) as client:
+        yield client
+
+
+def test_late_projection_survives_older_processor_persist(monkeypatch, stack, projection_replay_client) -> None:
     pc, dev = stack
     _authorize(monkeypatch, pc, _basic_decision())
     store = _race_store_harness(monkeypatch, stack, first_projection=None, retry_title=PROJECTION_TITLE)
@@ -1080,11 +1101,19 @@ def test_late_projection_survives_older_processor_persist(monkeypatch, stack) ->
     response_a = dev._create_conversation_from_segments(_UID, store['first'])
 
     assert response_a.id == store['conv_id']
+    assert response_a.status == 'completed'
     assert store.get('b_ran') is True
-    assert store['b_response'].id == store['conv_id']
     assert store['update'].keys() == {'client_processing'}
     assert store['doc']['client_processing']['structure']['title'] == PROJECTION_TITLE
     assert _nested(store['doc'], 'structured', 'title') == _SEGMENT_TEXT
+
+    replay = projection_replay_client.post(
+        '/v1/conversations/from-segments', json=store['first'].model_dump(mode='json')
+    )
+
+    assert replay.status_code == 200, replay.text
+    assert replay.json()['id'] == store['conv_id']
+    assert replay.json()['status'] == 'completed'
     store['spies']['get_structured'].assert_not_called()
 
 
@@ -1098,8 +1127,8 @@ def test_stale_in_memory_projection_does_not_overwrite_later_ingest_write(monkey
     response_a = dev._create_conversation_from_segments(_UID, store['first'])
 
     assert response_a.id == store['conv_id']
+    assert response_a.status == 'completed'
     assert store.get('b_ran') is True
-    assert store['b_response'].id == store['conv_id']
     assert store['update'].keys() == {'client_processing'}
     assert store['doc']['client_processing']['structure']['title'] == PROJECTION_TITLE
     assert store['doc']['client_processing']['structure']['title'] != PROJECTION_TITLE_A
@@ -1116,8 +1145,8 @@ def test_basic_stale_projection_does_not_overwrite_later_ingest_write(monkeypatc
     response_a = dev._create_conversation_from_segments(_UID, store['first'])
 
     assert response_a.id == store['conv_id']
+    assert response_a.status == 'completed'
     assert store.get('b_ran') is True
-    assert store['b_response'].id == store['conv_id']
     assert store['update'].keys() == {'client_processing'}
     assert store['doc']['client_processing']['structure']['title'] == PROJECTION_TITLE
     assert store['doc']['client_processing']['structure']['title'] != PROJECTION_TITLE_A
