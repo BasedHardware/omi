@@ -13,9 +13,14 @@ import pusher_canary_inverse as inverse
 BASELINE = "gcr.io/based-hardware/pusher@sha256:" + "a" * 64
 CANDIDATE = "gcr.io/based-hardware/pusher@sha256:" + "b" * 64
 SOURCE = "3" * 40
+WORKFLOW_SHA = "a" * 40
+CANARY = "prod-omi-pusher-canary-42"
+CANARY_CONFIG = "prod-omi-backend-config-canary-42"
+LIVE_CONFIG = "prod-omi-backend-config"
 
 
-def canary_deployment(image=CANDIDATE, name="prod-omi-pusher-canary-42"):
+def deployment(image, name, config_map):
+    """Helm-rendered shape: release-named labels and the runtime ConfigMap reference."""
     return {
         "apiVersion": "apps/v1",
         "kind": "Deployment",
@@ -23,19 +28,32 @@ def canary_deployment(image=CANDIDATE, name="prod-omi-pusher-canary-42"):
         "spec": {
             "replicas": 1,
             "template": {
+                "metadata": {"labels": {"app.kubernetes.io/name": "pusher", "app.kubernetes.io/instance": name}},
                 "spec": {
+                    "serviceAccountName": "prod-omi-pusher",
                     "containers": [
                         {"name": "sidecar", "image": "gcr.io/based-hardware/sidecar@sha256:" + "c" * 64},
-                        {"name": "pusher", "image": image},
-                    ]
-                }
+                        {
+                            "name": "pusher",
+                            "image": image,
+                            "envFrom": [{"configMapRef": {"name": config_map}}],
+                            "env": [{"name": "X", "valueFrom": {"configMapKeyRef": {"name": config_map, "key": "X"}}}],
+                            "terminationMessagePolicy": "File",
+                        },
+                    ],
+                    "dnsPolicy": "ClusterFirst",
+                },
             },
         },
     }
 
 
+def canary_deployment(image=CANDIDATE, name=CANARY):
+    return deployment(image, name, CANARY_CONFIG)
+
+
 def live_deployment(image=BASELINE):
-    obj = canary_deployment(image=image, name="prod-omi-pusher")
+    obj = deployment(image, "prod-omi-pusher", LIVE_CONFIG)
     obj["metadata"]["uid"] = "live-uid"
     return obj
 
@@ -78,16 +96,22 @@ class InverseTest(unittest.TestCase):
                 assign(changed, op["path"], op["value"])
         return changed
 
-    def record(self, mode="canary_only"):
+    def record(self, **overrides):
+        arguments = {"workflow_sha": WORKFLOW_SHA, "canary_config_map": CANARY_CONFIG, "live_config_map": LIVE_CONFIG} | overrides
         with patch.object(inverse, "kubectl_json", side_effect=self.kubectl):
             return inverse.record(
-                "prod-omi-backend", "prod-omi-pusher-canary-42", CANDIDATE, BASELINE, 42, SOURCE, mode, "prod-omi-pusher"
+                "prod-omi-backend", CANARY, CANDIDATE, BASELINE, 42, SOURCE, "prod-omi-pusher", **arguments
             )
 
     def test_records_guarded_candidate_to_baseline_server_dry_run(self):
         receipt = self.record()
         self.assertEqual(receipt["status"], "PASS")
         self.assertEqual(receipt["mode"], "canary_only")
+        self.assertEqual(receipt["workflow_sha"], WORKFLOW_SHA)
+        self.assertEqual(
+            receipt["live_deployment"],
+            {"name": "prod-omi-pusher", "uid": "live-uid", "template_sha256": inverse.template_sha256(self.baseline)},
+        )
         self.assertEqual(receipt["dry_run"], "server")
         self.assertEqual(receipt["candidate_image"], CANDIDATE)
         self.assertEqual(receipt["baseline_image"], BASELINE)
@@ -105,13 +129,12 @@ class InverseTest(unittest.TestCase):
         parity = receipt["template_parity"]
         self.assertEqual(parity["live_deployment"], "prod-omi-pusher")
         self.assertEqual(parity["canary_deployment"], "prod-omi-pusher-canary-42")
-        self.assertEqual(parity["excluded"], ["containers[*].image"])
+        self.assertEqual(parity["excluded"], list(inverse.PARITY_EXCLUDED))
+        self.assertEqual(parity["normalized"], ["release_name", "runtime_config_map"])
         self.assertEqual(set(parity["classes"]), set(inverse.PARITY_CLASSES))
         self.assertTrue(all(value in {"equal", "differs"} for value in parity["classes"].values()))
-        # The only deliberate difference is the image.
-        self.assertEqual(parity["classes"]["container_names"], "equal")
-        self.assertEqual(parity["classes"]["container_env"], "equal")
-        self.assertEqual(parity["classes"]["service_account"], "equal")
+        # The image and the canary's release/ConfigMap names are the only differences.
+        self.assertEqual(set(parity["classes"].values()), {"equal"})
         self.assertNotIn(CANDIDATE, json.dumps(parity))
         self.assertNotIn(BASELINE, json.dumps(parity))
 
@@ -121,11 +144,41 @@ class InverseTest(unittest.TestCase):
         self.assertEqual(receipt["template_parity"]["classes"]["container_env"], "differs")
         self.assertEqual(receipt["template_parity"]["classes"]["container_resources"], "equal")
 
+    def test_template_parity_catches_unlisted_fields(self):
+        cases = (
+            ("hostNetwork", lambda spec: spec.update(hostNetwork=True)),
+            ("dnsPolicy", lambda spec: spec.update(dnsPolicy="Default")),
+            ("container workingDir", lambda spec: spec["containers"][1].update(workingDir="/tmp")),
+            ("terminationMessagePolicy", lambda spec: spec["containers"][1].update(terminationMessagePolicy="FallbackToLogsOnError")),
+        )
+        for name, mutate in cases:
+            with self.subTest(field=name):
+                self.baseline = live_deployment()
+                mutate(self.baseline["spec"]["template"]["spec"])
+                classes = self.record()["template_parity"]["classes"]
+                self.assertEqual(classes["other_template_fields"], "differs")
+                self.assertEqual({key for key, value in classes.items() if value == "differs"}, {"other_template_fields"})
+                self.assertNotIn("FallbackToLogsOnError", json.dumps(classes))
+
+    def test_template_parity_only_maps_the_canary_names(self):
+        # Without the ConfigMap mapping, the isolated ConfigMap reference is a real difference.
+        classes = self.record(canary_config_map=None, live_config_map=None)["template_parity"]["classes"]
+        self.assertEqual(classes["container_envFrom"], "differs")
+        self.assertEqual(classes["dependency_references"], "differs")
+        # A live reference to some other ConfigMap is never mapped away.
+        self.baseline["spec"]["template"]["spec"]["containers"][1]["envFrom"] = [{"configMapRef": {"name": "other-config"}}]
+        classes = self.record()["template_parity"]["classes"]
+        self.assertEqual(classes["container_envFrom"], "differs")
+        self.assertEqual(classes["dependency_references"], "differs")
+
+    def test_template_parity_ignores_a_rollout_restart_stamp(self):
+        self.baseline["spec"]["template"]["metadata"]["annotations"] = {inverse.RESTARTED_AT: "2026-11-27T00:00:00Z"}
+        self.assertEqual(self.record()["template_parity"]["classes"]["pod_annotations"], "equal")
+        self.baseline["spec"]["template"]["metadata"]["annotations"]["other"] = "x"
+        self.assertEqual(self.record()["template_parity"]["classes"]["pod_annotations"], "differs")
+
     def test_patch_preconditions_are_uid_resource_version_container_and_old_digest(self):
-        with patch.object(inverse, "kubectl_json", side_effect=self.kubectl):
-            inverse.record(
-                "prod-omi-backend", "prod-omi-pusher-canary-42", CANDIDATE, BASELINE, 42, SOURCE, "canary_only", "prod-omi-pusher"
-            )
+        self.record()
         ops = inverse.guarded_patch(self.canary, "prod-omi-pusher-canary-42", CANDIDATE, BASELINE)
         self.assertEqual(
             [(op["op"], op["path"]) for op in ops],
@@ -140,9 +193,9 @@ class InverseTest(unittest.TestCase):
         self.assertEqual(ops[3]["value"], CANDIDATE)
         self.assertEqual(ops[4]["value"], BASELINE)
 
-    def test_refuses_an_unknown_mode(self):
-        with self.assertRaisesRegex(inverse.Refused, "invalid_canary_mode"):
-            self.record(mode="promote")
+    def test_refuses_without_the_producing_workflow_revision(self):
+        with self.assertRaisesRegex(inverse.Refused, "invalid_canary_identity"):
+            self.record(workflow_sha="main")
 
     def test_refuses_when_the_canary_does_not_hold_the_candidate(self):
         self.canary = canary_deployment(image=BASELINE)
@@ -161,7 +214,7 @@ class InverseTest(unittest.TestCase):
         with patch.object(inverse, "kubectl_json", side_effect=changed):
             with self.assertRaisesRegex(inverse.Refused, "canary_inverse_changed_more_than_image"):
                 inverse.record(
-                    "prod-omi-backend", "prod-omi-pusher-canary-42", CANDIDATE, BASELINE, 42, SOURCE, "canary_only", "prod-omi-pusher"
+                    "prod-omi-backend", CANARY, CANDIDATE, BASELINE, 42, SOURCE, "prod-omi-pusher", workflow_sha=WORKFLOW_SHA
                 )
 
     def test_main_writes_a_refused_receipt_and_fails_closed(self):
@@ -184,6 +237,8 @@ class InverseTest(unittest.TestCase):
                     "42",
                     "--source-sha",
                     SOURCE,
+                    "--workflow-sha",
+                    WORKFLOW_SHA,
                     "--output",
                     str(output),
                 ]
@@ -212,6 +267,8 @@ class InverseTest(unittest.TestCase):
                     "42",
                     "--source-sha",
                     SOURCE,
+                    "--workflow-sha",
+                    WORKFLOW_SHA,
                     "--output",
                     str(output),
                 ]

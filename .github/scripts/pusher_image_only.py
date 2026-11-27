@@ -6,10 +6,11 @@ route (GKE Warden's webhooks live in the managed control plane), so every probe
 here is a `kubectl --dry-run=server` call against the live namespace. The single
 live write is unchanged: the guarded JSON Patch of the Pusher container image.
 
-Evidence is a non-secret dispatch input (`PUSHER_IMAGE_ONLY_EVIDENCE`). Nothing
-in it is trusted: every referenced run is fetched from the GitHub API and its
-receipt is read from that run's artifact. The dispatching run id is bound from
-`GITHUB_RUN_ID`, never from the packet.
+Evidence is a non-secret dispatch input (`PUSHER_IMAGE_ONLY_EVIDENCE`) of run
+ids only. Nothing in it is trusted: every referenced run is fetched from the
+GitHub API, its prod-environment approvals are read from the run's `approvals`
+endpoint, and its receipt is read from that run's artifact. The dispatching run
+id is bound from `GITHUB_RUN_ID`, never from the packet.
 """
 
 from __future__ import annotations
@@ -25,7 +26,6 @@ from pathlib import Path
 from pusher_image_rehearsal import (
     IMAGE,
     NAMESPACE,
-    PROOF_ID,
     REPO,
     ROOT,
     SHA,
@@ -45,8 +45,8 @@ from pusher_image_rehearsal import (
 
 sys.path.insert(0, str(ROOT / "backend/scripts"))
 sys.path.insert(0, str(ROOT / ".github/scripts"))
-from pusher_canary_inverse import PARITY_CLASSES
-from pusher_release_receipt import ReceiptError, validate_live_identity
+from pusher_canary_inverse import PARITY_CLASSES, PARITY_EXCLUDED, PARITY_NORMALIZED, template_sha256
+from pusher_release_receipt import ReceiptError, config_fingerprint, validate_live_identity
 from verify_pusher_live_deployment_gate import GateError, capacity_evidence
 from verify_pusher_promotion_evidence import _validate_canary, canonical_sha256
 
@@ -58,8 +58,28 @@ REQUIRED_FIXES = (
 ROLLOUT_TIMEOUT = 9600
 RECEIPT_ARTIFACT = "pusher-image-only-receipt"
 CANARY_ARTIFACT = "pusher-prod-canary-evidence"
+INVERSE_ARTIFACT = "pusher-prod-canary-inverse-receipt"
 PROMOTION_WORKFLOW = "gcp_backend_pusher.yml"
 QUALIFICATION_WORKFLOW = "gcp_backend_pusher_auto_deploy.yml"
+# The producer event of each workflow. The automatic development qualifier runs on
+# a push to main; the protected promotion workflow is dispatched. Only the
+# protected runs must be first attempts (the job refuses reruns itself); the
+# qualifier keeps the same rule as verify_pusher_promotion_evidence.py.
+WORKFLOW_EVENTS = {PROMOTION_WORKFLOW: "workflow_dispatch", QUALIFICATION_WORKFLOW: "push"}
+FIRST_ATTEMPT_ONLY = frozenset({PROMOTION_WORKFLOW})
+# A referenced preview or canary run is accepted only from a main revision whose
+# evidence producers and verifiers are byte-identical to this run's revision.
+CONTROL_PATHS = (
+    ".github/workflows/gcp_backend_pusher.yml",
+    ".github/scripts/pusher_image_only.py",
+    ".github/scripts/pusher_canary_inverse.py",
+    ".github/scripts/pusher_image_rehearsal.py",
+    "backend/scripts/pusher_release_receipt.py",
+    "backend/scripts/pusher_prod_canary.py",
+    "backend/scripts/pusher_semantic_probe.py",
+    "backend/scripts/verify_pusher_promotion_evidence.py",
+)
+APPROVAL_ENVIRONMENT = "prod"
 PACKET_FIELDS = frozenset(
     {
         "schema",
@@ -68,17 +88,24 @@ PACKET_FIELDS = frozenset(
         "prior_image",
         "candidate_image",
         "qualification_run_id",
-        "release_approval",
     }
 )
+BINDING_FIELDS = ("source_sha", "prior_image", "candidate_image", "qualification_run_id")
 MODES = {"preview", "canary", "promote", "rollback"}
-# Condition 1: a refused post-move inverse is a HOLD, never an auto-reverse loop.
-# The same admission chain would most likely refuse the reverse patch as well, so
-# the operator restores the prior object under Release custody instead.
+# Condition 1: a refused post-move inverse gets exactly one guarded reverse patch.
+# If that fails, or its serving cannot be proven, the job HOLDs with no further
+# patch and the operator restores under Release custody. The instructions branch
+# on the observed image because `rollout undo` after a committed reverse would
+# move back to the candidate.
 MANUAL_RESTORE_PATH = (
-    "Release prod-operator: restore the prior Pusher ReplicaSet or Deployment template in "
-    f"{NAMESPACE} (kubectl rollout undo deployment/{TARGET} or an equivalent template restore), "
-    "verify the pinned baseline digest is serving, then dispatch a fresh approved operation."
+    f"Release prod-operator: read the pusher container image of deployment/{TARGET} in {NAMESPACE}. "
+    f"If it is the candidate, run kubectl -n {NAMESPACE} rollout undo deployment/{TARGET} "
+    "(runbook pusher-image-preservation-proposal.md, Manual recovery after REFUSED_INVERSE); "
+    "if it already reads the pinned baseline, do not patch. "
+    f"Then kubectl -n {NAMESPACE} rollout status deployment/{TARGET} --timeout={ROLLOUT_TIMEOUT}s and read back: "
+    f"the pusher image and every ready pod imageID equal {BASELINE}, and "
+    "deploy_status_report.py --env prod --include-gke --gke-service pusher exits 0. "
+    "If the restore is refused or the readback differs, leave traffic as it is and escalate to Release."
 )
 # Same gate and arguments as the ordinary Pusher deploy success path (.github/AGENTS.md).
 STATUS_REPORT = (
@@ -94,7 +121,11 @@ STATUS_REPORT_TIMEOUT = 300
 
 
 class Hold(Exception):
-    """The live write happened and the inverse was refused; no further patch is safe."""
+    """The inverse was refused and the one reverse attempt failed; no further patch is safe."""
+
+
+class Reversed(Exception):
+    """The inverse was refused; the one guarded reverse restored and verified the baseline."""
 
 
 def pusher_container(obj, name):
@@ -267,68 +298,57 @@ def summary(snapshot):
 
 
 def evidence_binding(packet):
-    """Receipt fields that tie every run to the exact candidate and source."""
-    return {
-        "proof_id": packet["release_approval"],
-        "proof_sha256": canonical_sha256(
-            {key: packet[key] for key in ("source_sha", "prior_image", "candidate_image", "qualification_run_id")}
-        ),
-        "prior_image": packet["prior_image"],
-        "candidate_image": packet["candidate_image"],
-        "source_sha": packet["source_sha"],
-        "qualification_run_id": packet["qualification_run_id"],
-    }
+    """Receipt fields that tie every run to the exact candidate and source.
+
+    The preview emits exactly these fields and promote compares exactly these
+    fields, so one schema serves producer and consumer.
+    """
+    fields = {key: packet[key] for key in BINDING_FIELDS}
+    return {"binding_sha256": canonical_sha256(fields), **fields}
 
 
 def validate_packet(packet, mode, workflow_sha, run_id):
-    """Condition 4: the packet carries ids only, and its shape is exact for the mode."""
-    required = PACKET_FIELDS | ({"reviewed_preview"} if mode in {"canary", "promote"} else set())
-    required |= {"canary"} if mode in {"canary", "promote"} else set()
+    """Condition 4: the packet carries run ids only, and its shape is exact for the mode.
+
+    Review and approval are not packet fields: they are resolved from the GitHub
+    API for every referenced run and for this run.
+    """
+    required = PACKET_FIELDS | ({"reviewed_preview", "canary"} if mode in {"canary", "promote"} else set())
     require(
         isinstance(packet, dict)
         and packet.get("schema") == 2
         and packet.get("mode") == mode
         and mode in MODES
         and set(packet) == required
-        and "run_id" not in packet
         and SHA.fullmatch(packet.get("source_sha") or "")
         and packet["source_sha"] != "0" * 40
         and packet["prior_image"] == BASELINE
         and IMAGE.fullmatch(packet.get("candidate_image") or "")
         and packet["candidate_image"].split("@")[1] != BASELINE.split("@")[1]
         and type(packet.get("qualification_run_id")) is int
-        and packet["qualification_run_id"] > 0
-        and PROOF_ID.fullmatch(packet.get("release_approval") or ""),
+        and packet["qualification_run_id"] > 0,
         "protected_evidence_mismatch",
     )
     if mode in {"canary", "promote"}:
-        review = packet["reviewed_preview"]
-        require(
-            isinstance(review, dict)
-            and set(review) == {"run_id", "review_id"}
-            and type(review["run_id"]) is int
-            and review["run_id"] > 0
-            and review["run_id"] != run_id
-            and PROOF_ID.fullmatch(review["review_id"]),
-            "reviewed_forward_preview_missing",
-        )
-        canary = packet["canary"]
-        require(
-            isinstance(canary, dict)
-            and set(canary) == {"run_id", "workflow_sha", "preservation_review"}
-            and type(canary["run_id"]) is int
-            and canary["run_id"] > 0
-            and canary["run_id"] != run_id
-            and SHA.fullmatch(canary["workflow_sha"]),
-            "canary_evidence_missing",
-        )
+        for key, reason in (("reviewed_preview", "reviewed_forward_preview_missing"), ("canary", "canary_evidence_missing")):
+            reference = packet[key]
+            require(
+                isinstance(reference, dict)
+                and set(reference) == {"run_id"}
+                and type(reference["run_id"]) is int
+                and reference["run_id"] > 0
+                and reference["run_id"] != run_id,
+                reason,
+            )
+        require(packet["reviewed_preview"]["run_id"] != packet["canary"]["run_id"], "protected_evidence_mismatch")
     dispatch = workflow_run_metadata(run_id, PROMOTION_WORKFLOW, expected_sha=workflow_sha, require_success=False)
     require(dispatch["status"] == "in_progress", "protected_run_unqualified")
 
 
-def workflow_run_metadata(run_id, workflow_file, *, expected_sha, require_success=True):
-    """Fetch one referenced run and prove it is this repo, this workflow and this source."""
+def workflow_run_metadata(run_id, workflow_file, *, expected_sha=None, require_success=True):
+    """Fetch one referenced run and prove it is this repo, this workflow, its producer event and source."""
     require(type(run_id) is int and run_id > 0, "invalid_evidence_run_id")
+    require(workflow_file in WORKFLOW_EVENTS, "evidence_workflow_unknown")
     repo = f"repos/{REPO}"
     workflow_id = int(
         run(
@@ -337,19 +357,55 @@ def workflow_run_metadata(run_id, workflow_file, *, expected_sha, require_succes
         )
     )
     metadata = json.loads(run(["gh", "api", f"{repo}/actions/runs/{run_id}"], "evidence_run_unavailable"))
+    attempt = metadata["run_attempt"]
     require(
         metadata["id"] == run_id
         and metadata["workflow_id"] == workflow_id
-        and metadata["event"] == "workflow_dispatch"
+        and metadata["path"] == f".github/workflows/{workflow_file}"
+        and metadata["event"] == WORKFLOW_EVENTS[workflow_file]
         and metadata["head_branch"] == "main"
-        and metadata["head_sha"] == expected_sha
-        and metadata["run_attempt"] == 1
+        and SHA.fullmatch(metadata["head_sha"] or "")
+        and (expected_sha is None or metadata["head_sha"] == expected_sha)
+        and type(attempt) is int
+        and (attempt == 1 if workflow_file in FIRST_ATTEMPT_ONLY else attempt >= 1)
         and metadata["head_repository"]["full_name"] == REPO,
         "evidence_run_unqualified",
     )
     if require_success:
         require(metadata["status"] == "completed" and metadata["conclusion"] == "success", "evidence_run_not_successful")
     return metadata
+
+
+def accepted_workflow_revision(revision, workflow_sha):
+    """A referenced run's workflow revision is accepted only if its evidence code equals ours."""
+    require(SHA.fullmatch(revision or "") and SHA.fullmatch(workflow_sha or ""), "evidence_workflow_revision_invalid")
+    if revision == workflow_sha:
+        return
+    git = ["git", "-C", str(ROOT)]
+    run([*git, "merge-base", "--is-ancestor", revision, workflow_sha], "evidence_workflow_revision_not_on_main")
+    run([*git, "diff", "--quiet", revision, workflow_sha, "--", *CONTROL_PATHS], "evidence_workflow_revision_changed")
+
+
+def run_approvals(run_id):
+    """Approver logins of the run's prod-environment deployment review, from the GitHub API.
+
+    `GET /repos/{owner}/{repo}/actions/runs/{run_id}/approvals` needs `actions: read`
+    for GITHUB_TOKEN. Any rejected prod review, or no approved one, refuses.
+    """
+    require(type(run_id) is int and run_id > 0, "invalid_evidence_run_id")
+    approvals = json.loads(
+        run(["gh", "api", f"repos/{REPO}/actions/runs/{run_id}/approvals"], "environment_approvals_unavailable")
+    )
+    require(isinstance(approvals, list), "environment_approvals_unavailable")
+    prod = [
+        approval
+        for approval in approvals
+        if any(environment.get("name") == APPROVAL_ENVIRONMENT for environment in approval.get("environments") or [])
+    ]
+    require(bool(prod) and all(approval.get("state") == "approved" for approval in prod), "prod_environment_approval_missing")
+    logins = sorted({approval["user"]["login"] for approval in prod})
+    require(all(isinstance(login, str) and login for login in logins), "prod_environment_approval_missing")
+    return logins
 
 
 def download_receipt(run_id):
@@ -367,18 +423,23 @@ def download_receipt(run_id):
 def download_canary(run_id):
     """Fetch the canonical canary evidence and its inverse receipt from the named run."""
     require(type(run_id) is int and run_id > 0, "invalid_canary_run")
-    names = {
-        "evidence": "pusher-prod-canary-evidence.json",
-        "deployment_receipt": "pusher-prod-canary-deployment-receipt.json",
-        "semantic_receipt": "pusher-prod-canary-semantic-probe.json",
-        "inverse_receipt": "pusher-prod-canary-inverse-receipt.json",
+    artifacts = {
+        CANARY_ARTIFACT: {
+            "evidence": "pusher-prod-canary-evidence.json",
+            "deployment_receipt": "pusher-prod-canary-deployment-receipt.json",
+            "semantic_receipt": "pusher-prod-canary-semantic-probe.json",
+        },
+        INVERSE_ARTIFACT: {"inverse_receipt": "pusher-prod-canary-inverse-receipt.json"},
     }
-    with tempfile.TemporaryDirectory(prefix="pusher-canary-evidence-") as tmp:
-        run(
-            ["gh", "run", "download", str(run_id), "--repo", REPO, "-n", CANARY_ARTIFACT, "--dir", tmp],
-            "canary_artifact_unavailable",
-        )
-        return {key: read_json(Path(tmp) / name) for key, name in names.items()}
+    result = {}
+    for artifact, names in artifacts.items():
+        with tempfile.TemporaryDirectory(prefix="pusher-canary-evidence-") as tmp:
+            run(
+                ["gh", "run", "download", str(run_id), "--repo", REPO, "-n", artifact, "--dir", tmp],
+                "canary_artifact_unavailable",
+            )
+            result.update({key: read_json(Path(tmp) / name) for key, name in names.items()})
+    return result
 
 
 def check_qualification(packet):
@@ -388,31 +449,36 @@ def check_qualification(packet):
 
 
 def check_reviewed_preview(packet, result):
-    review = packet["reviewed_preview"]
-    workflow_run_metadata(review["run_id"], PROMOTION_WORKFLOW, expected_sha=result["workflow_sha"])
-    preview = download_receipt(review["run_id"])
+    """The preview run is fetched, its prod approval resolved, then its own receipt compared."""
+    run_id = packet["reviewed_preview"]["run_id"]
+    metadata = workflow_run_metadata(run_id, PROMOTION_WORKFLOW)
+    accepted_workflow_revision(metadata["head_sha"], result["workflow_sha"])
+    approvers = run_approvals(run_id)
+    preview = download_receipt(run_id)
     require(
-        preview["mode"] == "preview"
+        preview["schema"] == 2
+        and preview["mode"] == "preview"
         and preview["stage"] == "complete"
         and preview["status"] == "PASS"
-        and preview["run_id"] == review["run_id"]
+        and preview["run_id"] == run_id
+        and preview["workflow_sha"] == metadata["head_sha"]
         and preview["forward_server_dry_run"] == "PASS"
         and preview["live_baseline_server_dry_run"] == "PASS"
-        and preview["release_approval"] == packet["release_approval"]
-        and all(
-            preview[key] == result[key] for key in ("workflow_sha", "proof_sha256", "candidate_image", "source_sha")
-        ),
+        and all(preview[key] == result[key] for key in ("binding_sha256", *BINDING_FIELDS)),
         "reviewed_forward_preview_missing",
     )
+    result.setdefault("approvals", {})["preview"] = approvers
+    result.update(reviewed_preview_run_id=run_id, reviewed_preview_workflow_sha=metadata["head_sha"])
     return preview
 
 
 def check_canary(packet, result, qualification_receipt):
-    """Condition 4: fetch the canary run, then bind its evidence and inverse receipt."""
-    canary = packet["canary"]
-    run_id = canary["run_id"]
-    workflow_sha = canary["workflow_sha"]
-    metadata = workflow_run_metadata(run_id, PROMOTION_WORKFLOW, expected_sha=workflow_sha)
+    """Condition 4: fetch the canary run, resolve its approval, then bind its evidence and inverse."""
+    run_id = packet["canary"]["run_id"]
+    metadata = workflow_run_metadata(run_id, PROMOTION_WORKFLOW)
+    workflow_sha = metadata["head_sha"]
+    accepted_workflow_revision(workflow_sha, result["workflow_sha"])
+    approvers = run_approvals(run_id)
     artifacts = download_canary(run_id)
     deployment = artifacts["deployment_receipt"]
     require(
@@ -436,48 +502,49 @@ def check_canary(packet, result, qualification_receipt):
         ),
         "canonical_canary_refused",
     )
-    check_canary_inverse(artifacts["inverse_receipt"], packet, deployment)
-    evidence_hash = canonical_sha256(artifacts["evidence"])
-    review = canary["preservation_review"]
-    require(
-        isinstance(review, dict)
-        and set(review) == {"id", "proof_sha256", "evidence_sha256", "baseline"}
-        and PROOF_ID.fullmatch(review["id"])
-        and review["proof_sha256"] == result["proof_sha256"]
-        and review["evidence_sha256"] == evidence_hash
-        and review["baseline"] == packet["prior_image"],
-        "preserved_canary_review_missing",
-    )
+    check_canary_inverse(artifacts["inverse_receipt"], packet, deployment, workflow_sha)
+    result.setdefault("approvals", {})["canary"] = approvers
     result.update(
         canary_run_id=run_id,
-        canary_evidence_sha256=evidence_hash,
+        canary_workflow_sha=workflow_sha,
+        canary_evidence_sha256=canonical_sha256(artifacts["evidence"]),
         canary_inverse_receipt="PASS",
-        reviewed_preview=dict(packet["reviewed_preview"]),
     )
+    return artifacts
 
 
-def check_canary_inverse(inverse, packet, deployment):
+def check_canary_inverse(inverse, packet, deployment, workflow_sha):
     """Condition 2: the candidate→baseline dry-run ran on the isolated canary object."""
     live_identity = deployment["live_identity"]
+    run_id = packet["canary"]["run_id"]
+    parity = inverse.get("template_parity") if isinstance(inverse, dict) else None
+    live = inverse.get("live_deployment") if isinstance(inverse, dict) else None
     require(
         isinstance(inverse, dict)
         and inverse.get("schema") == 1
         and inverse.get("status") == "PASS"
-        and inverse.get("run_id") == packet["canary"]["run_id"]
+        and inverse.get("run_id") == run_id
+        and inverse.get("workflow_sha") == workflow_sha
         and inverse.get("source_sha") == packet["source_sha"]
         and inverse.get("candidate_image") == packet["candidate_image"]
         and inverse.get("baseline_image") == packet["prior_image"]
         and inverse.get("mode") == "canary_only"
         and inverse.get("dry_run") == "server"
-        and isinstance(inverse.get("template_parity"), dict)
-        and inverse["template_parity"].get("live_deployment") == TARGET
-        and inverse["template_parity"].get("canary_deployment") == canary_target(packet["canary"]["run_id"])
-        and inverse["template_parity"].get("excluded") == ["containers[*].image"]
-        and isinstance(inverse["template_parity"].get("classes"), dict)
-        and set(inverse["template_parity"]["classes"]) == set(PARITY_CLASSES)
-        and all(value in {"equal", "differs"} for value in inverse["template_parity"]["classes"].values())
+        and isinstance(parity, dict)
+        and parity.get("live_deployment") == TARGET
+        and parity.get("canary_deployment") == canary_target(run_id)
+        and parity.get("excluded") == list(PARITY_EXCLUDED)
+        and parity.get("normalized") == list(PARITY_NORMALIZED)
+        and isinstance(parity.get("classes"), dict)
+        and set(parity["classes"]) == set(PARITY_CLASSES)
+        and all(value in {"equal", "differs"} for value in parity["classes"].values())
+        and isinstance(live, dict)
+        and set(live) == {"name", "uid", "template_sha256"}
+        and live["name"] == TARGET
+        and isinstance(live["uid"], str)
+        and live["uid"]
         and inverse.get("deployment", {}).get("namespace") == NAMESPACE
-        and inverse.get("deployment", {}).get("name") == canary_target(packet["canary"]["run_id"])
+        and inverse.get("deployment", {}).get("name") == canary_target(run_id)
         and inverse.get("deployment", {}).get("image") == packet["candidate_image"]
         and inverse.get("deployment", {}).get("uid") == live_identity.get("deployment_uid")
         and inverse.get("preconditions")
@@ -490,6 +557,39 @@ def check_canary_inverse(inverse, packet, deployment):
         and inverse.get("admitted_image") == packet["prior_image"],
         "canary_inverse_receipt_refused",
     )
+
+
+def check_effective_environment(live, artifacts, result):
+    """Finding 5: the canary's startup inputs must equal what the live Pusher will start with.
+
+    The canary ran against a freshly rendered isolated ConfigMap and a freshly
+    rendered template; an image-only promote keeps the live ConfigMap and template.
+    Reuses the canary-to-production ConfigMap hash of the regular Helm path
+    (verify_pusher_promotion_evidence.py) and the canary's redacted template
+    parity, and requires the live template to be the one that parity measured.
+    Only `equal`/`differs` per input class is recorded.
+    """
+    deployment = live.deployment()
+    inverse = artifacts["inverse_receipt"]
+    config_map = live.get("configmap", SHARED[1], namespace=NAMESPACE)
+    classes = {
+        "runtime_config_map": (
+            "equal"
+            if config_fingerprint(config_map, expected_name=SHARED[1]) == artifacts["deployment_receipt"]["config_sha256"]
+            else "differs"
+        ),
+        "pod_template": (
+            "equal" if all(value == "equal" for value in inverse["template_parity"]["classes"].values()) else "differs"
+        ),
+        "live_template_since_canary": (
+            "equal"
+            if inverse["live_deployment"]
+            == {"name": TARGET, "uid": version(deployment)[0], "template_sha256": template_sha256(deployment)}
+            else "differs"
+        ),
+    }
+    result["effective_environment"] = classes
+    require(all(value == "equal" for value in classes.values()), "effective_environment_differs")
 
 
 def canary_target(run_id):
@@ -644,24 +744,27 @@ def execute(mode, packet, live, result, *, writer=None):
     qualification_receipt = check_qualification(packet)
     if mode in {"canary", "promote"}:
         result["stage"] = "verify_canary_evidence"
-        check_canary(packet, result, qualification_receipt)
+        artifacts = check_canary(packet, result, qualification_receipt)
 
     result["stage"] = "observe_baseline"
     before = state(live)
     require(before["image"] == BASELINE, "observed_image_changed")
     result.update(summary(before))
-    if mode == "promote":
+    if mode in {"canary", "promote"}:
+        result["stage"] = "verify_reviewed_preview"
         preview = check_reviewed_preview(packet, result)
         require(before["deployment"] == preview["live_baseline"], "reviewed_baseline_changed")
+        result["stage"] = "compare_effective_environment"
+        check_effective_environment(live, artifacts, result)
 
     baseline = live.deployment()
     result["stage"] = "server_dry_run_forward"
     admitted = live.probe(baseline, TARGET, BASELINE, candidate)
     result["forward_server_dry_run"] = "PASS"
     result["stage"] = "server_dry_run_baseline_self"
-    # Primary rollback evidence: the baseline object, re-submitted against today's
-    # admission. Warden evaluates the object, so the oldObject difference between
-    # this dry-run and a real restore does not change the verdict.
+    # Current-state rollback evidence: today's admission accepts the baseline
+    # object. Warden evaluates the object, so the oldObject difference between
+    # this dry-run and a real restore does not change the verdict (scoped ruling).
     live.probe(baseline, TARGET, BASELINE, BASELINE, allow_same=True)
     result["live_baseline_server_dry_run"] = "PASS"
     result["rollback_evidence"] = "baseline_self_server_dry_run"
@@ -685,18 +788,8 @@ def execute(mode, packet, live, result, *, writer=None):
     try:
         live.probe(after, TARGET, candidate, BASELINE)
     except Refused as error:
-        # Condition 1: hold. An immediate reverse patch is the same transition and
-        # would most likely be refused too, so traffic stays as it is and Release
-        # performs the manual restore under custody.
-        result.update(
-            stage="hold_refused_inverse",
-            reason="REFUSED_INVERSE",
-            inverse_refusal=str(error),
-            manual_restore_path=MANUAL_RESTORE_PATH,
-            serving_image_observed=image_of(live.deployment(), TARGET),
-        )
-        deploy_status_report(strict=False)
-        raise Hold("REFUSED_INVERSE") from None
+        result.update(live_inverse_server_dry_run="REFUSED", inverse_refusal=str(error))
+        reverse_once(live, writer, before, candidate, result)
     result["live_inverse_server_dry_run"] = "PASS"
 
     result["stage"] = "verify_serving"
@@ -708,6 +801,63 @@ def execute(mode, packet, live, result, *, writer=None):
         serving_generation=identity["generation"],
         ready_replicas=identity["ready_replicas"],
     )
+
+
+def hold(live, result, hold_stage):
+    """End in REFUSED_INVERSE HOLD. Nothing after this point may patch."""
+    try:
+        observed = image_of(live.deployment(), TARGET)
+    except Exception:  # The hold must be reported even if the read fails.
+        observed = "unread"
+    result.update(
+        stage="hold_refused_inverse",
+        hold_stage=hold_stage,
+        reason="REFUSED_INVERSE",
+        manual_restore_path=MANUAL_RESTORE_PATH,
+        serving_image_observed=observed,
+    )
+    deploy_status_report(strict=False)
+    raise Hold("REFUSED_INVERSE")
+
+
+def reverse_once(live, writer, before, candidate, result):
+    """Condition 1: after a refused post-move inverse, exactly one guarded reverse patch.
+
+    Fresh preconditions: the Deployment is re-read, so the patch tests the same UID,
+    the current resourceVersion, the pusher container and the candidate image. On
+    success the baseline rollout and readiness are verified and the run reports
+    REVERSED (still a failed promote). Any failure of the patch or of that
+    verification is a HOLD with no further patch.
+    """
+    result["stage"] = "reverse_after_refused_inverse"
+    try:
+        fresh = live.deployment()
+        require(
+            version(fresh)[0] == before["deployment"][0] and image_of(fresh, TARGET) == candidate,
+            "reverse_preconditions_changed",
+        )
+        result["reverse_patch_attempted"] = True
+        reversed_obj = writer.patch_image(fresh, TARGET, candidate, BASELINE)
+        result["reverse_patch_observed"] = version(reversed_obj)
+    except Exception as error:  # Any outcome but a confirmed reverse is uncertain: hold.
+        result["reverse_refusal"] = str(error) if isinstance(error, Refused) else "reverse_patch_unconfirmed"
+        hold(live, result, "reverse_patch_failed")
+    try:
+        result["stage"] = "verify_reverse_serving"
+        identity = verify_serving(live, before, reversed_obj, BASELINE, result)
+    except Exception as error:
+        result["reverse_refusal"] = str(error) if isinstance(error, Refused) else "reverse_serving_unproven"
+        hold(live, result, "reverse_serving_unverified")
+    result.update(
+        stage="reversed_after_refused_inverse",
+        reason="REFUSED_INVERSE_REVERSED",
+        deploy_status_report="PASS",
+        serving_image=BASELINE,
+        serving_deployment_uid=identity["deployment_uid"],
+        serving_generation=identity["generation"],
+        ready_replicas=identity["ready_replicas"],
+    )
+    raise Reversed("REFUSED_INVERSE_REVERSED")
 
 
 def rollback(packet, live, writer, result):
@@ -748,6 +898,10 @@ def main():
         packet = json.loads(os.environ["PUSHER_IMAGE_ONLY_EVIDENCE"])
         result.update(mode=mode, workflow_sha=workflow_sha, run_id=run_id)
         validate_packet(packet, mode, workflow_sha, run_id)
+        # The approval of this run comes from the GitHub API, never the packet.
+        # Agents and humans share one GitHub account, so this proves a prod
+        # environment approval happened, not who in particular approved it.
+        result["approvals"] = {"current": run_approvals(run_id)}
         require(
             packet["source_sha"] == os.environ["SOURCE_SHA"]
             and packet["candidate_image"].split("@")[1] == os.environ["REQUESTED_DIGEST"]
@@ -763,6 +917,8 @@ def main():
         result.update(status="PASS", stage="complete")
     except Hold as error:
         result.update(status="HOLD", reason=str(error))
+    except Reversed as error:
+        result.update(status="REVERSED", reason=str(error))
     except Refused as error:
         result["reason"] = str(error)
     except (ReceiptError, GateError):
