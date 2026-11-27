@@ -35,7 +35,7 @@ from models.conversation_enums import ConversationSource, ConversationStatus
 from models.structured import Structured
 from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore, StrictFirestoreDocument
 from utils.batch_pipeline.live_projection import replace_record
-from utils.conversations.v3 import finish as v3_finish, live as v3_live, triggers
+from utils.conversations.v3 import finish as v3_finish, live as v3_live, metrics as v3_metrics, triggers
 from utils.conversations.v3.live import FINISH_FIELDS, FINISH_RECORDING_FIELD, FINISH_STAMP_FIELD, FINISH_WINDOW_FIELD
 from tests.unit.test_batch_pipeline_projection import native_finish_completion
 from utils.conversations import finalizer
@@ -1570,6 +1570,17 @@ def _writes(db):
     return sum(len(tx.updates) for tx in db.transactions)
 
 
+def _newer_capture_fallback(reason='other'):
+    """The one shared fallback a live-window Finish records when its newer-capture targeting degrades."""
+    return dict(
+        component='conversation_finalization',
+        from_mode='newer_capture',
+        to_mode='window_tail',
+        reason=reason,
+        outcome='degraded',
+    )
+
+
 @pytest.mark.parametrize('lane', ['live', 'batch'])
 @pytest.mark.parametrize('body', [{}, {'live_conversation_id': 'window'}])
 def test_live_window_finish_moves_to_a_newer_capture_whose_speech_landed(newer_capture_route, lane, body):
@@ -1765,7 +1776,7 @@ def test_live_window_finish_cuts_the_newest_of_two_newer_captures(newer_capture_
         fallback.assert_not_called()
 
 
-@pytest.mark.parametrize('case', ['tie', 'full_scan'])
+@pytest.mark.parametrize('case', ['tie', 'full_scan', 'finished_capture_locked', 'declined'])
 def test_live_window_finish_records_degraded_targeting_once_across_transaction_retries(
     newer_capture_route, case, monkeypatch
 ):
@@ -1774,19 +1785,32 @@ def test_live_window_finish_records_degraded_targeting_once_across_transaction_r
     store = v3_finish.conversations_v3_live
     fallback = Mock()
     monkeypatch.setattr(store, 'record_fallback', fallback)
+    declined = Mock()
+    monkeypatch.setattr(store.v3_metrics, 'FINISH_NEWER_DECLINED', declined)
     b = db.rows[_B]
     if case == 'tie':
         db.rows['users', _UID, 'conversations', 'capture-c'] = {
             **b,
             'external_data': {'recording_session_id': 'phone-session-c'},
         }
-    else:
+    elif case == 'full_scan':
         for n in range(8):
             db.rows['users', _UID, 'conversations', f'rotated-{n}'] = {
                 **b,
                 'status': 'in_progress',
                 'external_data': {'recording_session_id': f'rotated-{n}'},
             }
+    elif case == 'finished_capture_locked':
+        # An earlier tap cut B; B was locked before this retry, so the retry cuts the tail instead.
+        assert client.post('/v1/conversations', json={}).json()['conversation']['id'] == 'capture-b'
+        fallback.assert_not_called()
+        b['is_locked'] = True
+        counter.reset_mock()
+    else:
+        # B is selected, but its ledger has no segment binding, so it declines the cut (batch_unavailable).
+        _batch_speech_landed(b)
+        _ledger(db, 'capture-b', status='completed')
+    writes = _writes(db)
     # The first attempt loses on contention after the scan and before any write, as Firestore's commit would.
     cut_tail, attempts = store._finish_window_tail, []
 
@@ -1811,16 +1835,16 @@ def test_live_window_finish_records_degraded_targeting_once_across_transaction_r
     response = client.post('/v1/conversations', json={})
 
     assert response.status_code == 200 and response.json()['conversation']['id'] == 'window'
-    assert attempts == [1, 2] and _writes(db) == 1
-    assert db.rows[paths['latest']]['v3_manual_end'] is True and 'v3_manual_end' not in b
+    assert attempts == [1, 2] and _writes(db) == writes + 1
+    assert db.rows[paths['latest']]['v3_manual_end'] is True
+    assert case == 'finished_capture_locked' or 'v3_manual_end' not in b
     counter.labels.assert_called_once_with('cut')
-    fallback.assert_called_once_with(
-        component='conversation_finalization',
-        from_mode='newer_capture',
-        to_mode='window_tail',
-        reason='other',
-        outcome='degraded',
-    )
+    fallback.assert_called_once_with(**_newer_capture_fallback('unavailable' if case == 'declined' else 'other'))
+    if case == 'declined':
+        declined.labels.assert_called_once_with('batch_unavailable')
+        declined.labels.return_value.inc.assert_called_once_with()
+    else:
+        declined.labels.assert_not_called()
 
 
 def _ledger(db, cid, **fields):
@@ -1908,13 +1932,18 @@ def test_live_window_finish_retry_never_cuts_the_tail_as_well(newer_capture_rout
 @pytest.mark.parametrize(
     'change', ['locked', 'private', 'audio_partial', 'upload_failed', 'deleted', 'ledger_unavailable']
 )
-def test_live_window_finish_retry_cuts_the_tail_when_the_finished_capture_cannot_answer(newer_capture_route, change):
+def test_live_window_finish_retry_cuts_the_tail_when_the_finished_capture_cannot_answer(
+    newer_capture_route, change, monkeypatch
+):
     """A 404 reads as "already closed" to the app (settleManualFinish), so the window tail is cut instead."""
     client, db, paths, enqueued, counter = newer_capture_route
+    fallback = Mock()
+    monkeypatch.setattr(v3_finish.conversations_v3_live, 'record_fallback', fallback)
     b = db.rows[_B]
     if change == 'ledger_unavailable':
         _batch_speech_landed(b)
     assert client.post('/v1/conversations', json={}).json()['conversation']['id'] == 'capture-b'
+    fallback.assert_not_called()  # the first tap's redirect is the ordinary path
     if change == 'private':
         b['data_protection_level'] = 'private'
     elif change == 'ledger_unavailable':
@@ -1936,10 +1965,18 @@ def test_live_window_finish_retry_cuts_the_tail_when_the_finished_capture_cannot
     assert db.rows[paths['latest']]['v3_manual_end'] is True
     assert db.rows[_B] == b_before
     counter.labels.assert_called_once_with('cut')
+    # A blocked capture is skipped (degraded, reason other); an unavailable ledger declines the selected capture.
+    fallback.assert_called_once_with(
+        **_newer_capture_fallback('unavailable' if change == 'ledger_unavailable' else 'other')
+    )
 
 
-def test_live_window_finish_retry_cuts_the_tail_once_the_finished_capture_resolved_empty(newer_capture_route):
+def test_live_window_finish_retry_cuts_the_tail_once_the_finished_capture_resolved_empty(
+    newer_capture_route, monkeypatch
+):
     client, db, paths, enqueued, counter = newer_capture_route
+    fallback = Mock()
+    monkeypatch.setattr(v3_finish.conversations_v3_live, 'record_fallback', fallback)
     b = db.rows[_B]
     _batch_speech_landed(b)
     assert client.post('/v1/conversations', json={}).json()['conversation']['id'] == 'capture-b'
@@ -1952,6 +1989,8 @@ def test_live_window_finish_retry_cuts_the_tail_once_the_finished_capture_resolv
     assert response.status_code == 200 and response.json()['conversation']['id'] == 'window'
     assert db.rows[paths['latest']]['v3_manual_end'] is True and 'v3_manual_end' not in b
     counter.labels.assert_called_once_with('cut')
+    # B held only silence, so the window's speech is the last speech again: the ordinary path, no fallback.
+    fallback.assert_not_called()
 
 
 def test_live_window_finish_ignores_an_unmarked_capture_older_than_an_active_finish(newer_capture_route):
@@ -2238,6 +2277,8 @@ def test_live_window_finish_counts_a_declined_newer_capture_and_still_cuts_the_t
     client, db, paths, enqueued, counter = newer_capture_route
     declined = Mock()
     monkeypatch.setattr(v3_finish.conversations_v3_live.v3_metrics, 'FINISH_NEWER_DECLINED', declined)
+    fallback = Mock()
+    monkeypatch.setattr(v3_finish.conversations_v3_live, 'record_fallback', fallback)
     b = db.rows[_B]
     if reason == 'already_empty':
         # The whole record completed as silence before the projection cleared has_content.
@@ -2269,6 +2310,16 @@ def test_live_window_finish_counts_a_declined_newer_capture_and_still_cuts_the_t
     counter.labels.assert_called_once_with('cut')
     declined.labels.assert_called_once_with(reason)
     declined.labels.return_value.inc.assert_called_once_with()
+    # One shared fallback per declined cut, by its decline; a capture that held only silence is no degradation.
+    fallback_reason = {
+        'batch_unavailable': 'unavailable',
+        'batch_disabled': 'dispatch_disabled',
+        'recording_ineligible': 'policy',
+    }.get(reason)
+    if fallback_reason is None:
+        fallback.assert_not_called()
+    else:
+        fallback.assert_called_once_with(**_newer_capture_fallback(fallback_reason))
 
 
 @pytest.mark.parametrize('case', ['none', 'older_than_window', 'silent'])
@@ -2276,6 +2327,8 @@ def test_live_window_finish_without_a_newer_candidate_counts_no_decline(newer_ca
     client, db, paths, enqueued, counter = newer_capture_route
     declined = Mock()
     monkeypatch.setattr(v3_finish.conversations_v3_live.v3_metrics, 'FINISH_NEWER_DECLINED', declined)
+    fallback = Mock()
+    monkeypatch.setattr(v3_finish.conversations_v3_live, 'record_fallback', fallback)
     b = db.rows[_B]
     if case == 'none':
         del db.rows[_B]
@@ -2290,17 +2343,16 @@ def test_live_window_finish_without_a_newer_candidate_counts_no_decline(newer_ca
     assert db.rows[paths['latest']]['v3_manual_end'] is True
     counter.labels.assert_called_once_with('cut')
     declined.labels.assert_not_called()
+    fallback.assert_not_called()
 
 
 def test_newer_capture_finish_labels_are_reachable_or_absent():
     """Every pre-initialised newer_* outcome is one request_finish can return; declines are counted apart."""
-    from utils.conversations.v3 import metrics
-
-    labels = {s.labels['outcome'] for f in metrics.FINISH_NO_POINTER.collect() for s in f.samples}
+    labels = {s.labels['outcome'] for f in v3_metrics.FINISH_NO_POINTER.collect() for s in f.samples}
     assert not labels & {'newer_already_empty', 'newer_batch_unavailable', 'newer_batch_disabled'}
-    declined = {s.labels['reason'] for f in metrics.FINISH_NEWER_DECLINED.collect() for s in f.samples}
-    assert declined == set(metrics.FINISH_NEWER_DECLINED_REASONS)
-    paths = {s.labels['path'] for f in metrics.FINISH_TO_VISIBLE.collect() for s in f.samples}
+    declined = {s.labels['reason'] for f in v3_metrics.FINISH_NEWER_DECLINED.collect() for s in f.samples}
+    assert declined == set(v3_metrics.FINISH_NEWER_DECLINED_REASONS)
+    paths = {s.labels['path'] for f in v3_metrics.FINISH_TO_VISIBLE.collect() for s in f.samples}
     assert paths == {'tail', 'newer', 'newer_dual'}
 
 

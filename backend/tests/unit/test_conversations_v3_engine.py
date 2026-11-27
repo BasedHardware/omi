@@ -10,6 +10,7 @@ import zlib
 import pytest
 
 from utils.conversations.v3 import outline, planner
+from utils.conversations.v3.live import FINISH_RECORDING_FIELD, FINISH_STAMP_FIELD, FINISH_WINDOW_FIELD
 
 NOW = datetime(2026, 11, 16, 12, tzinfo=timezone.utc)
 
@@ -812,8 +813,6 @@ def test_transcript_size_cap_replans_failed_projection(monkeypatch, cohesion):
 
 def test_finish_stamp_follows_the_cut_to_its_card_once():
     """Dual-card Finish: A's window carries A's stamp; B's own card, from an unstamped request, carries none."""
-    from utils.conversations.v3.live import FINISH_RECORDING_FIELD, FINISH_STAMP_FIELD, FINISH_WINDOW_FIELD
-
     stamp = {'at': NOW, 'path': 'newer_dual'}
     a = recording('a', finished_at=NOW + timedelta(seconds=10), v3_manual_end=True, **{FINISH_WINDOW_FIELD: 'window'})
     a[FINISH_STAMP_FIELD] = stamp

@@ -340,7 +340,8 @@ def request_finish(
                 return 'newer_' + outcome, newer_id, response_row
             # The newer capture was selected but declines the cut (already empty, batch unavailable or disabled,
             # or ineligible): _finish_capture wrote nothing, so the tail is cut and answers. The decline is
-            # counted apart (FINISH_NEWER_DECLINED) once the transaction commits.
+            # counted apart (FINISH_NEWER_DECLINED) and, unless the capture held only silence, recorded as
+            # degraded targeting once the transaction commits.
             declined.append(outcome)
         outcome, recording_id = _finish_window_tail(
             client, tx, uid, collection, window, window_id, cid, row, now, state=tail_state, stamp_path='tail'
@@ -348,11 +349,15 @@ def request_finish(
         return outcome, recording_id, None
 
     result = commit(client.transaction())
-    if degraded:
-        _record_newer_capture_fallback()
     if declined:
         reason = declined[0] if declined[0] in v3_metrics.FINISH_NEWER_DECLINED_REASONS else 'recording_ineligible'
         v3_metrics.safe_metric(lambda: v3_metrics.FINISH_NEWER_DECLINED.labels(reason).inc())
+    # A committed attempt either skipped the capture (degraded) or selected it and was declined, never both,
+    # so one Finish records at most one fallback.
+    if degraded:
+        _record_newer_capture_fallback()
+    elif declined and declined[0] in _DECLINE_FALLBACK_REASONS:
+        _record_newer_capture_fallback(_DECLINE_FALLBACK_REASONS[declined[0]])
     return result
 
 
@@ -519,8 +524,8 @@ def _newer_capture(docs, window: Mapping[str, Any], now: datetime, *, degraded: 
     speech is the last speech again. ``docs`` is the newest-first recent-source scan.
 
     Returns ``(retry, cid, row)`` or None. A marked capture that can no longer take a Finish (private,
-    locked, deleted, ...) is None too, so the tail is cut rather than answering a 404. A tie or a full
-    scan appends to ``degraded``; the caller records that once the transaction commits.
+    locked, deleted, ...) is None too, so the tail is cut rather than answering a 404. That, a tie or a
+    full scan appends to ``degraded``; the caller records that once the transaction commits.
     """
     members = set(window.get('v3_recording_ids') or ())
     newer = []
@@ -569,18 +574,30 @@ def _newer_capture(docs, window: Mapping[str, Any], now: datetime, *, degraded: 
         return None
     cid, row = min(((cid, row) for cid, row in marked if row['finished_at'] == last_mark), key=lambda item: item[0])
     if row.get('data_protection_level') == 'private' or any(row.get(key) for key in _FINISH_BLOCKERS):
-        # It can no longer take a Finish. A 404 would read as "already closed" to the app; cut the tail.
+        # It can no longer take a Finish. A 404 would read as "already closed" to the app; cut the tail, and
+        # record the degraded targeting through shared fallback telemetry once the transaction commits.
         logger.info('v3 Finish found its earlier capture no longer finishable; cutting the window tail')
+        degraded.append(True)
         return None
     return True, cid, row
 
 
-def _record_newer_capture_fallback() -> None:
+# A selected newer capture that declines the cut leaves the window tail to answer: degraded targeting, by the
+# shared fallback reason for its decline. ``already_empty`` is absent: a capture that held only silence is not
+# the person's last speech, so the tail is the right answer and only FINISH_NEWER_DECLINED counts it.
+_DECLINE_FALLBACK_REASONS = {
+    'batch_unavailable': 'unavailable',
+    'batch_disabled': 'dispatch_disabled',
+    'recording_ineligible': 'policy',
+}
+
+
+def _record_newer_capture_fallback(reason: str = 'other') -> None:
     record_fallback(
         component='conversation_finalization',
         from_mode='newer_capture',
         to_mode='window_tail',
-        reason='other',
+        reason=reason,
         outcome='degraded',
     )
 
