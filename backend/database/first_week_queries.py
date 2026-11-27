@@ -27,3 +27,24 @@ def due_first_week_conversations(*, now: float, limit: int = PAGE_LIMIT, firesto
         .limit(max(1, min(PAGE_LIMIT, limit)))
     )
     return list(query.stream(timeout=20, retry=None))
+
+
+def approaching_first_week_conversations(
+    *, now: float, until: float, limit: int = PAGE_LIMIT, firestore_client: Any = None
+) -> list[Any]:
+    """An uncounted first-week conversation whose window closes inside the reserve.
+
+    Same sparse composite index as the close-out page: ``first_week_outcome``
+    equality then the stored window end as a bounded range. It never scans an
+    unstamped conversation and never reads a conversation body.
+    """
+    client = firestore_client if firestore_client is not None else get_firestore_client()
+    query = (
+        client.collection_group('conversations')
+        .where(filter=FieldFilter(OUTCOME_FIELD, '==', None))
+        .where(filter=FieldFilter(WINDOW_END_PATH, '>', now))
+        .where(filter=FieldFilter(WINDOW_END_PATH, '<=', until))
+        .order_by(WINDOW_END_PATH)
+        .limit(max(1, min(PAGE_LIMIT, limit)))
+    )
+    return list(query.stream(timeout=20, retry=None))
