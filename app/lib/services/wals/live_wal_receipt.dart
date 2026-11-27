@@ -387,25 +387,37 @@ class LiveWalReceipt {
     }
   }
 
-  static Future<String?> _readRetirementCursor(Directory pending) async {
+  static Future<({String? after, bool wrapping})> _readRetirementCursor(Directory pending) async {
     try {
-      final cursor = (await File(path.join(pending.path, _retirementCursorName)).readAsString()).trim();
-      return _safeName(cursor) && isManagedBasename(cursor) ? cursor : null;
+      final raw = (await File(path.join(pending.path, _retirementCursorName)).readAsString()).trim();
+      if (raw.startsWith('{')) {
+        final decoded = jsonDecode(raw);
+        if (decoded is Map && decoded['version'] == 1 && decoded['wrapping'] is bool) {
+          final after = decoded['after'];
+          if (after != null && (after is! String || !_safeName(after) || !isManagedBasename(after))) {
+            return (after: null, wrapping: false);
+          }
+          return (after: after as String?, wrapping: decoded['wrapping'] as bool);
+        }
+      }
+      // Older builds persisted the cursor as a plain basename.
+      return _safeName(raw) && isManagedBasename(raw) ? (after: raw, wrapping: false) : (after: null, wrapping: false);
     } catch (_) {
-      return null;
+      return (after: null, wrapping: false);
     }
   }
 
-  static Future<bool> _writeRetirementCursor(Directory pending, String? cursor) async {
+  static Future<bool> _writeRetirementCursor(Directory pending,
+      {required String? after, required bool wrapping}) async {
     final file = File(path.join(pending.path, _retirementCursorName));
     try {
-      if (cursor == null) {
+      if (after == null && !wrapping) {
         if (await file.exists()) await file.delete();
         return true;
       }
-      if (!_safeName(cursor) || !isManagedBasename(cursor)) return false;
+      if (after != null && (!_safeName(after) || !isManagedBasename(after))) return false;
       final temporary = File('${file.path}.tmp');
-      await temporary.writeAsString(cursor, flush: true);
+      await temporary.writeAsString(jsonEncode({'version': 1, 'after': after, 'wrapping': wrapping}), flush: true);
       await temporary.rename(file.path);
       return true;
     } catch (_) {
@@ -417,6 +429,8 @@ class LiveWalReceipt {
   /// Run after both restart index generations have durably committed the
   /// matching record. One bounded page is processed per call. The cursor is
   /// durable so repeated calls and app launches eventually visit the full set.
+  /// Completing a cursor range starts one persisted wrap pass, so receipts
+  /// that became eligible behind the cursor are revisited after a restart.
   static Future<bool> retireCommitted(File primaryFile, File backupFile) async {
     try {
       final pending = directory(backupFile.parent);
@@ -429,7 +443,8 @@ class LiveWalReceipt {
       final backup = await _readIndexBindings(backupFile);
       if (main.isEmpty || backup.isEmpty) return false;
 
-      final after = await _readRetirementCursor(pending);
+      final cursor = await _readRetirementCursor(pending);
+      final after = cursor.after;
       final candidates = SplayTreeMap<String, ({File file, String name})>();
       await for (final entry in pending.list(followLinks: false)) {
         final name = _receiptBasename(entry.path);
@@ -441,7 +456,12 @@ class LiveWalReceipt {
       final hasMore = candidates.length > _maxEntries;
       final page = candidates.entries.take(_maxEntries).toList();
       if (page.isEmpty) {
-        await _writeRetirementCursor(pending, null);
+        if (cursor.wrapping) {
+          await _writeRetirementCursor(pending, after: null, wrapping: false);
+          return false;
+        }
+        if (after != null) return _writeRetirementCursor(pending, after: null, wrapping: true);
+        await _writeRetirementCursor(pending, after: null, wrapping: false);
         return false;
       }
       var backupFlushed = false;
@@ -463,8 +483,16 @@ class LiveWalReceipt {
           await entry.delete();
         } catch (_) {/* Keep uncertain receipts for a later retry. */}
       }
-      final cursorSaved = await _writeRetirementCursor(pending, hasMore ? page.last.key : null);
-      return hasMore && cursorSaved;
+      if (hasMore) {
+        return _writeRetirementCursor(pending, after: page.last.key, wrapping: cursor.wrapping);
+      }
+      if (cursor.wrapping) {
+        await _writeRetirementCursor(pending, after: null, wrapping: false);
+        return false;
+      }
+      if (after != null) return _writeRetirementCursor(pending, after: null, wrapping: true);
+      await _writeRetirementCursor(pending, after: null, wrapping: false);
+      return false;
     } catch (_) {/* Receipt maintenance never invalidates an index commit. */}
     return false;
   }
