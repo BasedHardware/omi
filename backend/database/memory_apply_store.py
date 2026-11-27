@@ -22,6 +22,7 @@ except ImportError:  # pragma: no cover - local unit tests mock Firestore.
     _firestore_transactional = None
 
 from database._client import data_plane_db as db
+from database.firestore_transaction_retry import transaction_with_safe_rollback
 from database.dream_effect_fence import assert_active as assert_dream_effect_active
 from database.required_intake_fence import assert_current as assert_required_intake_sources_current
 from database.conversation_effect_fence import ConversationEffectSource, require_active_account
@@ -485,6 +486,7 @@ def apply_long_term_patch_firestore(
     allow_ledger_migration: bool = False,
     effect_source: ConversationEffectSource | None = None,
     _direct_user_authority: object | None = None,
+    _single_transaction_attempt: bool = False,
     db_client: Any = db,
 ) -> ApplyResult:
     """Apply a memory Long-term patch through the Firestore transaction boundary.
@@ -494,7 +496,11 @@ def apply_long_term_patch_firestore(
     snapshots for control state, operation state, or evidence/source state.
     """
     require_canonical_intake_enabled()
-    transaction = db_client.transaction()
+    transaction = (
+        transaction_with_safe_rollback(db_client.transaction(max_attempts=1))
+        if _single_transaction_attempt
+        else db_client.transaction()
+    )
     return _apply_long_term_patch_firestore_transaction(
         transaction,
         db_client,
@@ -523,6 +529,7 @@ def apply_direct_user_long_term_patch_firestore(
     required_source_item: Optional[MemoryItem] = None,
     ledger_reopen_receipt: Optional[MemoryLedgerReopenReceipt] = None,
     allow_ledger_migration: bool = False,
+    single_transaction_attempt: bool = False,
     db_client: Any = db,
 ) -> ApplyResult:
     """Apply a mutation admitted only through the trusted user-facing adapter.
@@ -543,6 +550,7 @@ def apply_direct_user_long_term_patch_firestore(
         required_source_item=required_source_item,
         ledger_reopen_receipt=ledger_reopen_receipt,
         _direct_user_authority=_DIRECT_USER_WRITE_AUTHORITY,
+        _single_transaction_attempt=single_transaction_attempt,
         db_client=db_client,
     )
 

@@ -378,7 +378,7 @@ class _FakeDb:
         self.docs = dict(docs or {})
         self.transaction_obj = _FakeTransaction(self)
 
-    def transaction(self):
+    def transaction(self, *, max_attempts=5):
         return self.transaction_obj
 
     def document(self, path):

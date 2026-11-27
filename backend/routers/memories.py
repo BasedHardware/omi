@@ -27,6 +27,7 @@ from database import review_queue
 from models.memories import MemoryDB, Memory, MemoryCategory
 from models.memory_imports import MemoryImportBatchRequest, MemoryImportBatchResponse
 from utils.apps import update_personas_async
+from utils.memory.canonical_memory_adapter import CanonicalVisibilityRetryError, CanonicalVisibilityTimeout
 from utils.memory.memory_service import (
     MEMORY_LIST_SCAN_BUDGET_DETAIL,
     MemoryBackingStoreUnavailable,
@@ -1214,7 +1215,14 @@ def update_memory_visibility(
         raise HTTPException(status_code=400, detail='Invalid visibility value')
     db_client = getattr(db_client_module, 'db', None)
     _validate_mutable_memory(uid, memory_id, db_client=db_client)
-    MemoryService(db_client=db_client).update_visibility(uid, memory_id, mutation_value)
+    try:
+        MemoryService(db_client=db_client).update_visibility(uid, memory_id, mutation_value)
+    except CanonicalVisibilityRetryError as exc:
+        raise HTTPException(
+            status_code=503 if isinstance(exc, CanonicalVisibilityTimeout) else 409,
+            detail="Memory visibility update temporarily unavailable",
+            headers={"Retry-After": "1"},
+        ) from exc
     submit_with_context(postprocess_executor, update_personas_async, uid)
     record_product_event('memory_updated', request=http_request, op='visibility')
     return {'status': 'ok'}

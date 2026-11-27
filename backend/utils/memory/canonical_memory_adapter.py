@@ -15,12 +15,15 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any, Callable, Collection, Dict, Iterator, List, Optional, Sequence, Tuple, TypedDict, cast
 
+from google.api_core.exceptions import DeadlineExceeded
 from google.cloud import firestore
 from google.cloud.firestore_v1 import FieldFilter
 
 from config import firestore_read_levers
 from database._client import db as default_db_client
 from database import knowledge_graph as kg_db
+from database import rpc_deadline
+from database.firestore_transaction_retry import equal_jitter_delay, is_transaction_retry_failure
 from database.released_memory_projection import projected_stream_list
 from database.firestore_index_registry import (
     UNIVERSAL_CANONICAL_LIST_SCAN_QUERY,
@@ -125,7 +128,7 @@ from utils.memory.required_promotion import (
     REQUIRED_PROMOTION_STATUS_PENDING,
 )
 from utils.memory.required_intake import after_capture as process_required_after_capture
-from utils.memory.memory_system import ensure_canonical_apply_control_state
+from utils.memory.memory_system import CanonicalApplyStateUnavailable, ensure_canonical_apply_control_state
 from utils.retrieval.hybrid import rrf_rerank
 from utils.memory.canonical_vector_sync import delete_canonical_memory_vector
 from utils.memory.product_memory_read_service import (
@@ -152,6 +155,8 @@ def _usable_evidence(evidence: Any) -> bool:
 # a user-scoped opaque projection id so one account can never overwrite another.
 
 _ALLOWED_MEMORY_VISIBILITIES = {"private", "public", "shared"}
+_VISIBILITY_MUTATION_BUDGET_SECONDS = 8.0
+_VISIBILITY_MUTATION_MAX_ATTEMPTS = 5
 Payload = Dict[str, Any]
 SortKey = tuple[int, datetime | int]
 UserMutationPatchBuilder = Callable[[MemoryItem, datetime], Optional[Tuple[Payload, Payload]]]
@@ -225,6 +230,14 @@ class CanonicalBatchMutationLimitError(ValueError):
 
 class CanonicalMemoryNotFoundError(ValueError):
     """Raised when an item is absent or already tombstoned during an atomic batch read."""
+
+
+class CanonicalVisibilityRetryError(RuntimeError):
+    """The visibility mutation exhausted its bounded conflict retries."""
+
+
+class CanonicalVisibilityTimeout(CanonicalVisibilityRetryError):
+    """Firestore did not confirm the visibility update before its deadline."""
 
 
 class ConversationReplacementConflictError(RuntimeError):
@@ -2674,9 +2687,14 @@ def _apply_canonical_user_mutation(
     required_source_item: Optional[MemoryItem] = None,
     automated: bool = False,
     db_client: Any,
+    retry_deadline: float | None = None,
 ) -> Tuple[MemoryItem, MemoryItem]:
     """Apply one ordinary user mutation through the canonical transaction boundary."""
-    for _attempt in range(3):
+    max_attempts = _VISIBILITY_MUTATION_MAX_ATTEMPTS if retry_deadline is not None else 3
+    last_abort: Exception | None = None
+    for attempt in range(1, max_attempts + 1):
+        if retry_deadline is not None and time.monotonic() >= retry_deadline:
+            break
         item = _read_canonical_memory_item(uid, memory_id, db_client=db_client)
         if item is None:
             raise ValueError(f"canonical memory not found: {memory_id}")
@@ -2759,6 +2777,9 @@ def _apply_canonical_user_mutation(
         source_fence: Dict[str, Any] = (
             {"required_source_item": required_source_item} if required_source_item is not None else {}
         )
+        if retry_deadline is not None:
+            # The adapter owns replay so each attempt gets a fresh plan and transaction.
+            source_fence["single_transaction_attempt"] = True
         try:
             result = apply_patch(
                 uid=uid,
@@ -2772,20 +2793,34 @@ def _apply_canonical_user_mutation(
             )
         except DestructiveOperationInProgress as exc:
             raise account_gate_busy_http_exception() from exc
-        if result.status in {ApplyStatus.committed, ApplyStatus.idempotent_skip}:
-            updated = (
-                result.memory_items[0]
-                if result.memory_items
-                else _read_canonical_memory_item(uid, memory_id, db_client=db_client)
-            )
-            if updated is None:
-                raise RuntimeError("canonical user mutation committed without an active memory item")
-            return item, updated
-        if result.status == ApplyStatus.retryable_head_mismatch or (
-            result.status == ApplyStatus.invalid_patch and "expected_" in (result.reason or "")
-        ):
-            continue
-        raise RuntimeError(f"canonical user mutation failed: {result.status} ({result.reason})")
+        except Exception as exc:
+            if retry_deadline is None or not is_transaction_retry_failure(exc):
+                raise
+            last_abort = exc
+        else:
+            if result.status in {ApplyStatus.committed, ApplyStatus.idempotent_skip}:
+                updated = (
+                    result.memory_items[0]
+                    if result.memory_items
+                    else _read_canonical_memory_item(uid, memory_id, db_client=db_client)
+                )
+                if updated is None:
+                    raise RuntimeError("canonical user mutation committed without an active memory item")
+                return item, updated
+            if result.status != ApplyStatus.retryable_head_mismatch and not (
+                result.status == ApplyStatus.invalid_patch and "expected_" in (result.reason or "")
+            ):
+                raise RuntimeError(f"canonical user mutation failed: {result.status} ({result.reason})")
+            last_abort = None
+
+        if retry_deadline is not None and attempt < max_attempts:
+            delay = equal_jitter_delay(attempt)
+            if time.monotonic() + delay >= retry_deadline:
+                break
+            time.sleep(delay)
+
+    if retry_deadline is not None:
+        raise CanonicalVisibilityRetryError("Canonical visibility update is busy") from last_abort
     raise RuntimeError("canonical user mutation conflicted repeatedly")
 
 
@@ -3008,13 +3043,24 @@ def update_canonical_memory_visibility(
     def build_patch(_item: MemoryItem, _now: datetime) -> Tuple[Payload, Payload]:
         return {"target_visibility": visibility}, {}
 
-    _, updated = _apply_canonical_user_mutation(
-        uid,
-        memory_id,
-        mutation_kind="visibility",
-        build_patch=build_patch,
-        db_client=client,
-    )
+    client = rpc_deadline.bind_firestore_client(client)
+    try:
+        with rpc_deadline.rpc_deadline(time.monotonic() + _VISIBILITY_MUTATION_BUDGET_SECONDS):
+            _, updated = _apply_canonical_user_mutation(
+                uid,
+                memory_id,
+                mutation_kind="visibility",
+                build_patch=build_patch,
+                db_client=client,
+                retry_deadline=rpc_deadline.current(),
+            )
+    except (rpc_deadline.RpcDeadlineExceeded, DeadlineExceeded) as exc:
+        # A sent Commit may have succeeded despite an RPC timeout. Never replay it here.
+        raise CanonicalVisibilityTimeout("Canonical visibility update timed out") from exc
+    except CanonicalApplyStateUnavailable as exc:
+        if not isinstance(exc.__cause__, (rpc_deadline.RpcDeadlineExceeded, DeadlineExceeded)):
+            raise
+        raise CanonicalVisibilityTimeout("Canonical visibility planning timed out") from exc
     return updated
 
 

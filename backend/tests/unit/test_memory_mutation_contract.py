@@ -187,6 +187,27 @@ def test_visibility_accepts_canonical_json_body(client, monkeypatch):
     assert client.memory_calls == [('visibility', 'test-user', 'memory-1', 'public')]
 
 
+@pytest.mark.parametrize(
+    ("error_type", "status"),
+    [(memories.CanonicalVisibilityRetryError, 409), (memories.CanonicalVisibilityTimeout, 503)],
+)
+def test_visibility_retry_hint_without_side_effects(client, monkeypatch, error_type, status):
+    def exhausted(*_args):
+        raise error_type("busy")
+
+    def unexpected(*_args, **_kwargs):
+        pytest.fail("visibility side effect ran without a committed mutation")
+
+    monkeypatch.setattr(memories.MemoryService, 'update_visibility', exhausted)
+    monkeypatch.setattr(memories, 'submit_with_context', unexpected)
+    monkeypatch.setattr(memories, 'record_product_event', unexpected)
+
+    response = client.patch('/v3/memories/memory-1/visibility', json={'value': 'public'})
+
+    assert response.status_code == status
+    assert response.headers['Retry-After'] == '1'
+
+
 def test_visibility_retains_legacy_query_parameter(client, monkeypatch):
     response = client.patch('/v3/memories/memory-1/visibility', params={'value': 'private'})
 
