@@ -16,11 +16,13 @@
 #   workerd-rollback    helm rollback prod workerd to workerd_helm_revision.
 #   repair-traffic-only  Restore Cloud Run traffic to the serving revisions.
 #   recover-pump-cap    SCA-3318 one-time service-level cap correction on the dark pump.
+#   recover-split       Restore the admitted inverse from a failed bound promotion receipt.
 
 name: Deploy Backend to Cloud RUN
 
 run-name: >-
-  ${{ inputs.selected_split_binding && format('Holdback {0}/{1} sha={2} by {3} plan={4}',
+  ${{ inputs.mode == 'recover-split' && format('Recover split from run {0}/1 by {1}', inputs.split_recovery_run_id, inputs.requested_by) ||
+    inputs.selected_split_binding && format('Holdback {0}/{1} sha={2} by {3} plan={4}',
     inputs.environment, inputs.cloud_run_service, inputs.release_sha, inputs.requested_by, inputs.selected_split_binding) ||
     inputs.selected_rollback_revision && format('Select {0}/{1}/{2} sha={3} lock={4} img={5} elig={6} by {7} inverse={8}',
     inputs.environment, inputs.mode, inputs.cloud_run_service, inputs.release_sha,
@@ -79,6 +81,7 @@ on:
           - repair-traffic-only
           - operator-qualify-publish
           - recover-pump-cap
+          - recover-split
       deploy_targets:
         description: 'Deploy all backend surfaces or Cloud Run only'
         required: true
@@ -104,6 +107,11 @@ on:
         type: string
       selected_split_binding:
         description: 'SHA-256 of selected_split_plan.'
+        required: false
+        default: ''
+        type: string
+      split_recovery_run_id:
+        description: 'recover-split only. Run ID of the terminal failed or cancelled production hold-back deployment (attempt 1).'
         required: false
         default: ''
         type: string
@@ -1531,6 +1539,66 @@ jobs:
           project_id: ${{ vars.GCP_PROJECT_ID }}
           region: ${{ env.REGION }}
           release_version: ${{ github.event.inputs.release_version }}
+
+  recover-bound-split:
+    if: >-
+      github.event_name == 'workflow_dispatch' &&
+      github.repository == 'BasedHardware/omi' &&
+      github.ref == 'refs/heads/main' &&
+      github.run_attempt == 1 &&
+      inputs.mode == 'recover-split' &&
+      inputs.environment == 'prod' &&
+      inputs.deploy_targets == 'cloud-run-only' &&
+      !inputs.break_glass_lock &&
+      !inputs.skip_eligibility_proof
+    environment: prod
+    permissions:
+      actions: read
+      contents: read
+      id-token: write
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - name: Checkout immutable recovery controls
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.workflow_sha }}
+          persist-credentials: false
+      - name: Fetch the original attempt and its completed promotion receipt
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ORIGINAL_RUN: ${{ inputs.split_recovery_run_id }}
+        run: |
+          set -euo pipefail
+          [[ "$ORIGINAL_RUN" =~ ^[1-9][0-9]{0,18}$ ]]
+          original="repos/$GITHUB_REPOSITORY/actions/runs/$ORIGINAL_RUN/attempts/1"
+          evidence="$(mktemp -d "$RUNNER_TEMP/split-recovery.XXXXXX")"
+          gh api "$original" > "$evidence/run.json"
+          jq -e '.path == ".github/workflows/gcp_backend.yml" and .head_branch == "main" and
+            .head_repository.full_name == "BasedHardware/omi" and .event == "workflow_dispatch" and
+            .status == "completed" and (.display_title | startswith("Holdback prod/"))' "$evidence/run.json" >/dev/null
+          deploy_conclusion="$(gh api --paginate "$original/jobs" --jq '.jobs[] | select(.name == "deploy") | .conclusion')"
+          case "$deploy_conclusion" in failure|cancelled|timed_out) ;; *) exit 1 ;; esac
+          gh run download "$ORIGINAL_RUN" --repo "$GITHUB_REPOSITORY" \
+            --name "backend-holdback-promotion-$ORIGINAL_RUN-1" --dir "$evidence/artifact"
+          test -s "$evidence/artifact/backend-holdback-promotion.json"
+          printf 'SPLIT_RECOVERY_EVIDENCE=%s\n' "$evidence" >> "$GITHUB_ENV"
+      - name: Authenticate existing production workflow identity
+        uses: google-github-actions/auth@v3
+        with:
+          workload_identity_provider: projects/208440318997/locations/global/workloadIdentityPools/omi-gha-deploy-prod/providers/github
+          service_account: omi-ci-deployer-prod@based-hardware.iam.gserviceaccount.com
+      - name: Set up existing gcloud client
+        uses: google-github-actions/setup-gcloud@v3
+      - name: Restore only the admitted inverse while ownership still matches
+        env:
+          ORIGINAL_RUN: ${{ inputs.split_recovery_run_id }}
+          PROJECT: ${{ vars.GCP_PROJECT_ID }}
+        run: |
+          python3 backend/scripts/cloud_run_split_canary.py recover-run \
+            --project "$PROJECT" --region "$REGION" --run-id "$ORIGINAL_RUN" \
+            --run-metadata "$SPLIT_RECOVERY_EVIDENCE/run.json" \
+            --promotion-receipt "$SPLIT_RECOVERY_EVIDENCE/artifact/backend-holdback-promotion.json"
 
   recover-projection-pump-cap:
     needs: validate-production-boundary

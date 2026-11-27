@@ -1805,6 +1805,8 @@ runs:
         BINDING: ${{ inputs.selected_split_binding }}
         PROJECT: ${{ inputs.project_id }}
         REGION: ${{ inputs.region }}
+        ADMITTED_SOURCE: ${{ inputs.admitted_sha }}
+        WORKFLOW_CONTROL: ${{ github.workflow_sha }}
         BACKEND: ${{ steps.capture-backend-revision.outputs.revision }}
         SYNC: ${{ steps.capture-backend-sync-revision.outputs.revision }}
         BACKFILL: ${{ steps.sync-backfill.outputs.revision }}
@@ -1836,6 +1838,8 @@ runs:
           result="$(python3 "$DEPLOY_CONTROL_SCRIPTS/cloud_run_split_canary.py" promote \
             --service "$SERVICE" --plan "$PLAN" --binding "$BINDING" \
             --candidate "$candidate" --project "$PROJECT" --region "$REGION" \
+            --source "$ADMITTED_SOURCE" --control "$WORKFLOW_CONTROL" \
+            --run-id "$GITHUB_RUN_ID" --run-attempt "$GITHUB_RUN_ATTEMPT" \
             --promotion-receipt "$RUNNER_TEMP/backend-holdback-promotion.json" \
             --guard-command python3 -I "$DEPLOY_CONTROL_SCRIPTS/cloud_run_split_canary.py" workflow-guard)" || {
               rc=$?
@@ -1868,8 +1872,18 @@ runs:
         fi
         fi
 
+    - name: Persist completed bound promotion receipt
+      id: persist-bound-promotion-receipt
+      if: ${{ always() && inputs.selected_split_binding != '' && steps.shift-cloud-run-traffic.outputs.promoted == 'true' }}
+      uses: actions/upload-artifact@v7
+      with:
+        name: backend-holdback-promotion-${{ github.run_id }}-${{ github.run_attempt }}
+        path: ${{ runner.temp }}/backend-holdback-promotion.json
+        if-no-files-found: error
+
     - name: Verify serving backend release vector
       id: verify-serving-release-vector
+      if: ${{ success() && !cancelled() && (inputs.selected_split_binding == '' || steps.persist-bound-promotion-receipt.outcome == 'success') }}
       shell: bash
       env:
         SERVING_PERCENT: ${{ steps.shift-cloud-run-traffic.outputs.serving_percent }}
@@ -1901,7 +1915,7 @@ runs:
 
     - name: Smoke promoted production serving API
       id: smoke-promoted-production-serving-api
-      if: ${{ (inputs.cloud_run_service == 'all' || inputs.cloud_run_service == 'backend') && (inputs.deploy_profile == 'manual' && inputs.environment == 'prod') }}
+      if: ${{ success() && !cancelled() && (inputs.cloud_run_service == 'all' || inputs.cloud_run_service == 'backend') && (inputs.deploy_profile == 'manual' && inputs.environment == 'prod') }}
       shell: bash
       env:
         PROBE_SECRET_PROJECT: ${{ inputs.project_id }}
@@ -1997,10 +2011,16 @@ runs:
 
     - name: Restore admitted inverse after a failed bound acceptance gate
       if: >-
-        ${{ failure() && inputs.selected_split_binding != '' &&
+        ${{ (failure() || cancelled()) && inputs.selected_split_binding != '' &&
             steps.shift-cloud-run-traffic.outputs.promoted == 'true' &&
-            (steps.verify-serving-release-vector.outcome == 'failure' ||
-             steps.smoke-promoted-production-serving-api.outcome == 'failure') }}
+            steps.shift-cloud-run-traffic.outputs.held != 'true' &&
+            (steps.persist-bound-promotion-receipt.outcome != 'success' ||
+             steps.verify-serving-release-vector.outcome == 'failure' ||
+             steps.verify-serving-release-vector.outcome == 'cancelled' ||
+             steps.smoke-promoted-production-serving-api.outcome == 'failure' ||
+             steps.smoke-promoted-production-serving-api.outcome == 'cancelled' ||
+             (cancelled() && (steps.verify-serving-release-vector.outcome != 'success' ||
+              (inputs.cloud_run_service == 'backend' && steps.smoke-promoted-production-serving-api.outcome != 'success')))) }}
       shell: bash
       env:
         SERVICE: ${{ inputs.cloud_run_service }}

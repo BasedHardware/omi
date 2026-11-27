@@ -199,8 +199,10 @@ def restore_completed(service, wire, transport, receipt):
         or candidate in plan['inverse']
     ):
         raise ValueError('rollback_receipt_mismatch')
-    current = transport.read()
     expected = allocations(plan, candidate)
+    if receipt['final_map'] != expected:
+        raise ValueError('rollback_receipt_map_mismatch')
+    current = transport.read()
     if (
         not current.converged
         or current.uid != receipt['uid']
@@ -211,6 +213,38 @@ def restore_completed(service, wire, transport, receipt):
     ):
         raise RuntimeError('rollback_traffic_ownership_lost')
     transport.replace(current, plan['inverse'])
+
+
+def recovery_plan(receipt, run, run_id):
+    """Bind downloaded evidence to the failed or cancelled production attempt."""
+    service, wire = receipt['service'], receipt['plan']
+    binding, source, control = (receipt[key] for key in ('binding', 'source', 'control'))
+    if (
+        receipt['schema'] != 1
+        or receipt['run_id'] != run_id
+        or receipt['run_attempt'] != 1
+        or run['id'] != run_id
+        or run['run_attempt'] != 1
+        or run['head_repository']['full_name'] != 'BasedHardware/omi'
+        or run['path'] != '.github/workflows/gcp_backend.yml'
+        or run['head_branch'] != 'main'
+        or run['event'] != 'workflow_dispatch'
+        or run['status'] != 'completed'
+        or run['conclusion'] not in ('failure', 'cancelled', 'timed_out')
+        or not re.fullmatch(r'[0-9a-f]{40}', source)
+        or not re.fullmatch(r'[0-9a-f]{40}', control)
+        or run['head_sha'] != control
+        or not re.fullmatch(
+            rf'Holdback prod/{re.escape(service)} sha={source} by selection:[0-9a-f]{{32}} plan={re.escape(binding)}',
+            run['display_title'],
+        )
+        or binding != hashlib.sha256(wire.encode()).hexdigest()
+    ):
+        raise ValueError('rollback_run_binding_mismatch')
+    plan = decode_plan(service, wire)
+    if receipt['inverse'] != plan['inverse']:
+        raise ValueError('rollback_receipt_inverse_mismatch')
+    return service, wire
 
 
 def promote(service, wire, candidate, transport, guard, *, sleep=time.sleep, now=None, on_promoted=None):
@@ -411,12 +445,30 @@ def main(argv=None):
             command.add_argument('--promotion-receipt', type=Path, required=True)
         if mode == 'promote':
             command.add_argument('--candidate', required=True)
+            command.add_argument('--source', required=True)
+            command.add_argument('--control', required=True)
+            command.add_argument('--run-id', type=int, required=True)
+            command.add_argument('--run-attempt', type=int, required=True)
             command.add_argument('--guard-command', nargs=argparse.REMAINDER)
+    recovery = commands.add_parser('recover-run')
+    recovery.add_argument('--project', required=True)
+    recovery.add_argument('--region', required=True)
+    recovery.add_argument('--run-id', type=int, required=True)
+    recovery.add_argument('--run-metadata', type=Path, required=True)
+    recovery.add_argument('--promotion-receipt', type=Path, required=True)
     args = parser.parse_args(argv)
     try:
+        if args.mode == 'recover-run':
+            receipt = json.loads(args.promotion_receipt.read_text())
+            run = json.loads(args.run_metadata.read_text())
+            service, wire = recovery_plan(receipt, run, args.run_id)
+            transport = CloudRunTraffic(args.project, args.region, service, gcloud_json)
+            restore_completed(service, wire, transport, receipt)
+            print('HOLDBACK_RESTORED exact admitted inverse')
+            return 0
         if hashlib.sha256(args.plan.encode()).hexdigest() != args.binding:
             raise ValueError('holdback_binding_mismatch')
-        decode_plan(args.service, args.plan)
+        plan = decode_plan(args.service, args.plan)
         if args.mode == 'validate-plan':
             return 0
         transport = CloudRunTraffic(args.project, args.region, args.service, gcloud_json)
@@ -425,14 +477,30 @@ def main(argv=None):
             print('HOLDBACK_RESTORED exact admitted inverse')
             return 0
 
+        if (
+            not all(re.fullmatch(r'[0-9a-f]{40}', sha) for sha in (args.source, args.control))
+            or args.run_id <= 0
+            or args.run_attempt != 1
+        ):
+            raise ValueError('invalid_promotion_run_identity')
+
         def record(state):
             receipt = dict(
+                schema=1,
+                service=args.service,
+                plan=args.plan,
+                inverse=plan['inverse'],
+                source=args.source,
+                control=args.control,
+                run_id=args.run_id,
+                run_attempt=args.run_attempt,
                 target=transport.name,
                 binding=args.binding,
                 candidate=args.candidate,
                 uid=state.uid,
                 etag=state.etag,
                 tags=state.tags,
+                final_map=state.observed,
             )
             with args.promotion_receipt.open('x') as output:
                 json.dump(receipt, output)

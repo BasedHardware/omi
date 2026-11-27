@@ -229,6 +229,10 @@ def test_step_census_refuses_an_unclassified_new_step():
         'Verify the split candidate preserves the admitted donor configuration',
     ):
         assert step(name)['if'].startswith("${{ inputs.cloud_run_service == 'backend' &&")
+    # Only a completed bound promotion publishes a receipt for its selected service.
+    receipt = step('Persist completed bound promotion receipt')
+    assert "inputs.selected_split_binding != ''" in receipt['if']
+    assert "steps.shift-cloud-run-traffic.outputs.promoted == 'true'" in receipt['if']
     memory = step('Resolve production backend memory')
     assert memory['if'] == (
         "${{ inputs.runtime_env == 'prod' && inputs.integration_only != 'true' && "
@@ -237,7 +241,7 @@ def test_step_census_refuses_an_unclassified_new_step():
     )
     assert (
         hashlib.sha256(json.dumps([s['name'] for s in STEPS]).encode()).hexdigest()
-        == "377093f224060350d23d22033331f277faaadb4527a25f691410ef734d605446"
+        == "7df1aedf4b09b55f07b21fe4e16e2766692e2848a7be6ec19aa29fb602d3ed18"
     )
 
 

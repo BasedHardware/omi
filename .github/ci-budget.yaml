@@ -1305,6 +1305,24 @@
       },
       "runs_on": "ubuntu-latest"
     },
+    "gcp_backend.yml/recover-bound-split": {
+      "budget_p50_minutes": 5,
+      "display_name": "recover-bound-split",
+      "expected_runs_class": "non-pr",
+      "expected_runs_per_day": 0,
+      "if": "github.event_name == 'workflow_dispatch' && github.repository == 'BasedHardware/omi' && github.ref == 'refs/heads/main' && github.run_attempt == 1 && inputs.mode == 'recover-split' && inputs.environment == 'prod' && inputs.deploy_targets == 'cloud-run-only' && !inputs.break_glass_lock && !inputs.skip_eligibility_proof",
+      "matrix": {},
+      "matrix_size": 1,
+      "needs": [],
+      "owner": "Release",
+      "rationale": "SCA-5006 manual production recovery only. Five-minute planning estimate for receipt validation, one conditional Cloud Run traffic update, and convergence readback.",
+      "reusable": null,
+      "runner": "linux",
+      "runner_counts": {
+        "linux": 1
+      },
+      "runs_on": "ubuntu-latest"
+    },
     "gcp_backend.yml/recover-projection-pump-cap": {
       "budget_p50_minutes": 10,
       "display_name": "recover-projection-pump-cap",
@@ -5165,7 +5183,8 @@
                 "workerd-rollback",
                 "repair-traffic-only",
                 "operator-qualify-publish",
-                "recover-pump-cap"
+                "recover-pump-cap",
+                "recover-split"
               ],
               "required": "true",
               "type": "choice"
@@ -5232,6 +5251,12 @@
               "description": "Break-glass: deploy without a Release Eligibility proof (still requires a merged main SHA)",
               "required": "false",
               "type": "boolean"
+            },
+            "split_recovery_run_id": {
+              "default": "",
+              "description": "recover-split only. Run ID of the terminal failed or cancelled production hold-back deployment (attempt 1).",
+              "required": "false",
+              "type": "string"
             },
             "workerd_digest": {
               "default": "",
