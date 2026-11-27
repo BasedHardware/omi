@@ -12320,9 +12320,12 @@
     "firmwareNewestSupportedForDevice": "Vaša naprava že uporablja najnovejšo podprto različico firmwareja",
     "firmwareSyncRecordingsFirstTitle": "Najprej sinhronizirajte posnetke",
     "firmwareSyncRecordingsFirstMessage": "Nekateri posnetki so še na vaši napravi. Počakajte, da se dokonča sinhroniziranje s telefonom, nato pa začnite posodobitev.",
-    "homeLockedTitle": "{count, plural, =1{1 pogovor čaka} other{{count} pogovorov čaka}}",
+    "homeLockedTitle": "{count, plural, =1{1 čakajoči posnetek} other{Čakajoči posnetki: {count}}}",
     "homeLockedSubtitle": "Varno shranjeno · odklenite za branje",
     "homeLockedSubtitleNoPlans": "Varno shranjeno, dokler se vaša omejitev ne obnovi",
     "homeTakingLonger": "Traja dlje kot običajno",
-    "homeFinishingOpensWhenReady": "Odpre se takoj, ko bo pripravljen"
+    "homeFinishingOpensWhenReady": "Odpre se takoj, ko bo pripravljen",
+    "quietPayerTitle": "Ni posnetkov že 5 dni",
+    "quietPayerMessage": "Preverite svoj Omi.",
+    "quietPayerCheck": "Preveri"
 }

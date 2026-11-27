@@ -17,6 +17,7 @@ import 'package:omi/l10n/app_localizations.dart';
 import 'package:omi/pages/activity/activity_bell_button.dart';
 import 'package:omi/pages/activity/past_processing_section.dart';
 import 'package:omi/pages/conversation_detail/conversation_live_guard.dart';
+import 'package:omi/pages/conversations/home/home_model.dart' show listedOnHome;
 import 'package:omi/pages/conversations/home_rows.dart';
 import 'package:omi/pages/conversations/widgets/conversation_list_item.dart';
 import 'package:omi/pages/conversations/widgets/conversation_state_tile.dart';
@@ -131,7 +132,7 @@ void main() {
     PlatformManager.initializeForLocalHarness();
   });
 
-  group('X5: a failed conversation leaves Home for Activity without lighting the bell', () {
+  group('X5: a failed conversation stays on Home, is listed in Activity, and does not light the bell', () {
     test('one predicate reads the tile state first, then the legacy fields', () {
       expect(isFailedConversation(_decoded('failed')), isTrue, reason: 'status completed, tile failed');
       expect(isFailedConversation(_decoded('done', status: 'failed')), isFalse, reason: 'the tile wins');
@@ -145,13 +146,13 @@ void main() {
       ('transcribing', true, false),
       ('writing', true, false),
       ('done', true, false),
-      ('failed', false, true),
+      ('failed', true, true),
     ];
 
     test('Home and Activity, per tile state', () {
       for (final (tile, home, activity) in table) {
         final c = _decoded(tile);
-        expect(shownOnV3Home(c), home, reason: '$tile on Home');
+        expect(listedOnHome(c), home, reason: '$tile on Home');
         expect(failedActivityConversations(pending: const [], conversations: [c], v3Only: true).isNotEmpty, activity,
             reason: '$tile in Activity');
       }

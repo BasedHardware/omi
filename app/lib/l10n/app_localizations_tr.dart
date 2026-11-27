@@ -15833,8 +15833,8 @@ class AppLocalizationsTr extends AppLocalizations {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: '$count konuşma bekliyor',
-      one: '1 konuşma bekliyor',
+      other: '$count kayıt bekliyor',
+      one: '1 kayıt bekliyor',
     );
     return '$_temp0';
   }
@@ -15850,4 +15850,13 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get homeFinishingOpensWhenReady => 'Hazır olur olmaz açılır';
+
+  @override
+  String get quietPayerTitle => '5 gündür kayıt yok';
+
+  @override
+  String get quietPayerMessage => 'Omi\'ni kontrol et.';
+
+  @override
+  String get quietPayerCheck => 'Kontrol Et';
 }

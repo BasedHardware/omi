@@ -15824,8 +15824,8 @@ class AppLocalizationsVi extends AppLocalizations {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: '$count cuộc trò chuyện đang chờ',
-      one: '1 cuộc trò chuyện đang chờ',
+      other: '$count bản ghi âm đang chờ',
+      one: '1 bản ghi âm đang chờ',
     );
     return '$_temp0';
   }
@@ -15841,4 +15841,13 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get homeFinishingOpensWhenReady => 'Sẽ mở ngay khi sẵn sàng';
+
+  @override
+  String get quietPayerTitle => 'Không có bản ghi nào trong 5 ngày';
+
+  @override
+  String get quietPayerMessage => 'Hãy kiểm tra Omi của bạn.';
+
+  @override
+  String get quietPayerCheck => 'Kiểm tra';
 }

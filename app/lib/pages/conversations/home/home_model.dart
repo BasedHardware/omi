@@ -15,7 +15,7 @@ import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/conversation_v3.dart';
 import 'package:omi/models/local_recording.dart';
 import 'package:omi/models/subscription.dart';
-import 'package:omi/pages/conversations/home_rows.dart' show HomeStep, homeStepOf;
+import 'package:omi/pages/conversations/home_rows.dart' show HomeStep, homeStepOf, isFailedConversation;
 
 /// How long an in-progress state may run before its row says it is taking longer than usual.
 /// Server work has no client timeout; the row only stops claiming that all is well.
@@ -190,13 +190,10 @@ DateTime _startOf(ServerConversation c) => c.startedAt ?? c.createdAt;
 /// Whether the server lists [c] on Home. Failed rows stay: they carry their own Retry.
 bool listedOnHome(ServerConversation c) => c.v3?.homeHidden != true && c.v3?.recording != true;
 
-/// Whether the server's conversation in progress can stand for the live row.
+/// Whether the server's conversation in progress can stand for the live row. A failed one (v3- or
+/// legacy-shaped, [isFailedConversation]) cannot.
 bool usableLiveConversation(ServerConversation? c) =>
-    c != null &&
-    !c.discarded &&
-    !c.deleted &&
-    c.v3?.homeHidden != true &&
-    c.v3?.tileState != ConversationTileState.failed;
+    c != null && !c.discarded && !c.deleted && c.v3?.homeHidden != true && !isFailedConversation(c);
 
 /// The live row's capture, or null when nothing is capturing (or End just hid it).
 HomeLiveKind? homeLiveKind({
@@ -252,9 +249,12 @@ HomeModel buildHome(HomeInputs i) {
   final lockedByDay = <DateTime, List<ServerConversation>>{};
   var index = 0;
   final seen = <String>{};
-  // A conversation in progress that cannot stand for the live row (it failed) is still a conversation:
-  // it keeps its place in the list, even before the list read brings it.
-  final strandedLive = i.defaultView && i.live != null && liveId == null ? i.live : null;
+  // A conversation in progress that cannot stand for the live row because it failed is still a
+  // conversation: it keeps its place in the list, even before the list read brings it. A deleted or
+  // discarded one is not listed.
+  final live = i.live;
+  final strandedLive =
+      i.defaultView && live != null && liveId == null && !live.deleted && !live.discarded ? live : null;
   for (final c in [...i.listed, if (strandedLive != null) strandedLive]) {
     final at = index++;
     if (!seen.add(c.id) || c.id == liveId || i.hiddenIds.contains(c.id) || !listedOnHome(c)) continue;
@@ -275,16 +275,26 @@ HomeModel buildHome(HomeInputs i) {
       final started = DateTime.fromMillisecondsSinceEpoch(h.startedAt * 1000);
       (heldByDay[homeDay(started)] ??= []).add(h);
     }
-    // Held recordings the server counted but did not list belong with the newest listed day.
+    // Held recordings the server counted but did not list belong with the newest day that holds
+    // any, or the newest locked day, or Today when nothing else is locked.
+    final lockedDays = {...lockedByDay.keys, ...heldByDay.keys}.toList()..sort((a, b) => b.compareTo(a));
     final heldDays = heldByDay.keys.toList()..sort((a, b) => b.compareTo(a));
-    final moreDay = heldDays.isEmpty ? null : heldDays.first;
-    for (final day in {...lockedByDay.keys, ...heldByDay.keys}) {
+    final moreDay = i.heldMore <= 0
+        ? null
+        : heldDays.isNotEmpty
+            ? heldDays.first
+            : lockedDays.isNotEmpty
+                ? lockedDays.first
+                : today;
+    for (final day in {...lockedDays, if (moreDay != null) moreDay}) {
       final conversations = lockedByDay[day] ?? const <ServerConversation>[];
       final held = heldByDay[day] ?? const <HeldAudioRecording>[];
-      final newest = [
+      final starts = [
         for (final c in conversations) _startOf(c),
         for (final h in held) DateTime.fromMillisecondsSinceEpoch(h.startedAt * 1000),
-      ].reduce((a, b) => a.isAfter(b) ? a : b);
+      ];
+      // A row holding only unlisted recordings sits at the top of its day.
+      final newest = starts.isEmpty ? i.now : starts.reduce((a, b) => a.isAfter(b) ? a : b);
       add(day, newest,
           HomeLockedRow(day: day, conversations: conversations, held: held, more: day == moreDay ? i.heldMore : 0));
     }

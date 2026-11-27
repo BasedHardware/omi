@@ -15814,8 +15814,8 @@ class AppLocalizationsEt extends AppLocalizations {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: '$count vestlust ootab',
-      one: '1 vestlus ootab',
+      other: '$count salvestist ootab',
+      one: '1 salvestis ootab',
     );
     return '$_temp0';
   }
@@ -15831,4 +15831,13 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get homeFinishingOpensWhenReady => 'Avaneb niipea, kui see on valmis';
+
+  @override
+  String get quietPayerTitle => '5 päeva pole salvestisi';
+
+  @override
+  String get quietPayerMessage => 'Kontrolli oma Omit.';
+
+  @override
+  String get quietPayerCheck => 'Kontrolli';
 }

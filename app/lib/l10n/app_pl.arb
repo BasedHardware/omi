@@ -4798,9 +4798,12 @@
     "firmwareNewestSupportedForDevice": "Twoje urządzenie ma już najnowszą obsługiwaną wersję oprogramowania układowego",
     "firmwareSyncRecordingsFirstTitle": "Najpierw zsynchronizuj nagrania",
     "firmwareSyncRecordingsFirstMessage": "Niektóre nagrania wciąż znajdują się na urządzeniu. Poczekaj, aż zostaną zsynchronizowane z telefonem, a następnie rozpocznij aktualizację.",
-    "homeLockedTitle": "{count, plural, =1{1 rozmowa czeka} other{{count} rozmów czeka}}",
+    "homeLockedTitle": "{count, plural, =1{1 oczekujące nagranie} other{Oczekujące nagrania: {count}}}",
     "homeLockedSubtitle": "Bezpiecznie przechowywane · odblokuj, aby przeczytać",
     "homeLockedSubtitleNoPlans": "Bezpiecznie przechowywane do odnowienia limitu",
     "homeTakingLonger": "Trwa to dłużej niż zwykle",
-    "homeFinishingOpensWhenReady": "Otworzy się, gdy tylko będzie gotowa"
+    "homeFinishingOpensWhenReady": "Otworzy się, gdy tylko będzie gotowa",
+    "quietPayerTitle": "Brak nagrań od 5 dni",
+    "quietPayerMessage": "Sprawdź swoje Omi.",
+    "quietPayerCheck": "Sprawdź"
 }

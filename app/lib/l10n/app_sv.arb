@@ -4763,9 +4763,12 @@
     "firmwareNewestSupportedForDevice": "Din enhet har redan den senaste firmwareversionen som stöds",
     "firmwareSyncRecordingsFirstTitle": "Synkronisera dina inspelningar först",
     "firmwareSyncRecordingsFirstMessage": "Vissa inspelningar finns fortfarande på din enhet. Låt dem slutföra synkroniseringen till telefonen och starta sedan uppdateringen.",
-    "homeLockedTitle": "{count, plural, =1{1 konversation väntar} other{{count} konversationer väntar}}",
+    "homeLockedTitle": "{count, plural, =1{1 inspelning väntar} other{{count} inspelningar väntar}}",
     "homeLockedSubtitle": "Sparas säkert · lås upp för att läsa",
     "homeLockedSubtitleNoPlans": "Sparas säkert tills din gräns nollställs",
     "homeTakingLonger": "Tar längre tid än vanligt",
-    "homeFinishingOpensWhenReady": "Öppnas så snart den är klar"
+    "homeFinishingOpensWhenReady": "Öppnas så snart den är klar",
+    "quietPayerTitle": "Inga inspelningar på 5 dagar",
+    "quietPayerMessage": "Kolla din Omi.",
+    "quietPayerCheck": "Kolla"
 }

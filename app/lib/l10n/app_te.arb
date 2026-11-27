@@ -12320,9 +12320,12 @@
     "firmwareNewestSupportedForDevice": "మీ డివైస్ ఇప్పటికే మద్దతు ఉన్న అత్యంత కొత్త ఫర్మ్‌వేర్ వెర్షన్‌లో ఉంది",
     "firmwareSyncRecordingsFirstTitle": "ముందుగా మీ రికార్డింగ్‌లను సమకాలీకరించండి",
     "firmwareSyncRecordingsFirstMessage": "కొన్ని రికార్డింగ్‌లు ఇంకా మీ డివైస్‌లో ఉన్నాయి. అవి మీ ఫోన్‌కు పూర్తిగా సమకాలీకరించనివ్వండి, తర్వాత నవీకరణను ప్రారంభించండి.",
-    "homeLockedTitle": "{count, plural, =1{1 సంభాషణ వేచి ఉంది} other{{count} సంభాషణలు వేచి ఉన్నాయి}}",
+    "homeLockedTitle": "{count, plural, =1{1 రికార్డింగ్ వేచి ఉంది} other{{count} రికార్డింగ్‌లు వేచి ఉన్నాయి}}",
     "homeLockedSubtitle": "సురక్షితంగా ఉంచబడింది · చదవడానికి అన్‌లాక్ చేయండి",
     "homeLockedSubtitleNoPlans": "మీ కేటాయింపు రీసెట్ అయ్యే వరకు సురక్షితంగా ఉంచబడుతుంది",
     "homeTakingLonger": "సాధారణం కంటే ఎక్కువ సమయం పడుతోంది",
-    "homeFinishingOpensWhenReady": "సిద్ధమవగానే తెరుచుకుంటుంది"
+    "homeFinishingOpensWhenReady": "సిద్ధమవగానే తెరుచుకుంటుంది",
+    "quietPayerTitle": "5 రోజులుగా రికార్డింగ్‌లు లేవు",
+    "quietPayerMessage": "మీ Omiని తనిఖీ చేయండి.",
+    "quietPayerCheck": "తనిఖీ"
 }

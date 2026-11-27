@@ -4763,9 +4763,12 @@
     "firmwareNewestSupportedForDevice": "Peranti anda sudah menggunakan versi firmware terbaharu yang disokong",
     "firmwareSyncRecordingsFirstTitle": "Segerakkan rakaman anda terlebih dahulu",
     "firmwareSyncRecordingsFirstMessage": "Sebahagian rakaman masih berada pada peranti anda. Biarkan ia selesai disegerakkan ke telefon anda, kemudian mulakan kemas kini.",
-    "homeLockedTitle": "{count, plural, =1{1 perbualan menunggu} other{{count} perbualan menunggu}}",
+    "homeLockedTitle": "{count, plural, =1{1 rakaman menunggu} other{{count} rakaman menunggu}}",
     "homeLockedSubtitle": "Disimpan dengan selamat · buka kunci untuk baca",
     "homeLockedSubtitleNoPlans": "Disimpan dengan selamat sehingga had anda ditetapkan semula",
     "homeTakingLonger": "Mengambil masa lebih lama daripada biasa",
-    "homeFinishingOpensWhenReady": "Akan dibuka sebaik sahaja siap"
+    "homeFinishingOpensWhenReady": "Akan dibuka sebaik sahaja siap",
+    "quietPayerTitle": "Tiada rakaman dalam 5 hari",
+    "quietPayerMessage": "Semak Omi anda.",
+    "quietPayerCheck": "Semak"
 }

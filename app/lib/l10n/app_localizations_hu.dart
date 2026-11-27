@@ -15880,8 +15880,8 @@ class AppLocalizationsHu extends AppLocalizations {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: '$count beszélgetés várakozik',
-      one: '1 beszélgetés várakozik',
+      other: '$count felvétel várakozik',
+      one: '1 felvétel várakozik',
     );
     return '$_temp0';
   }
@@ -15897,4 +15897,13 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get homeFinishingOpensWhenReady => 'Megnyílik, amint elkészül';
+
+  @override
+  String get quietPayerTitle => '5 napja nincs felvétel';
+
+  @override
+  String get quietPayerMessage => 'Nézd meg az Omidat.';
+
+  @override
+  String get quietPayerCheck => 'Megnézem';
 }

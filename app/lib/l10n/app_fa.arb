@@ -12320,9 +12320,12 @@
     "firmwareNewestSupportedForDevice": "دستگاه شما در حال حاضر روی جدیدترین نسخه فریم‌ور پشتیبانی‌شده قرار دارد",
     "firmwareSyncRecordingsFirstTitle": "ابتدا ضبط‌های خود را همگام‌سازی کنید",
     "firmwareSyncRecordingsFirstMessage": "برخی ضبط‌ها هنوز روی دستگاه شما هستند. اجازه دهید همگام‌سازی آن‌ها به گوشی شما کامل شود، سپس بروزرسانی را شروع کنید.",
-    "homeLockedTitle": "{count, plural, =1{1 گفتگو در انتظار است} other{{count} گفتگو در انتظار است}}",
+    "homeLockedTitle": "{count, plural, =1{1 ضبط در انتظار} other{{count} ضبط در انتظار}}",
     "homeLockedSubtitle": "ایمن نگهداری شده · برای خواندن باز کنید",
     "homeLockedSubtitleNoPlans": "ایمن نگهداری شده تا زمان تمدید سهمیه شما",
     "homeTakingLonger": "بیشتر از معمول طول می‌کشد",
-    "homeFinishingOpensWhenReady": "به محض آماده شدن باز می‌شود"
+    "homeFinishingOpensWhenReady": "به محض آماده شدن باز می‌شود",
+    "quietPayerTitle": "۵ روز است که ضبطی نیست",
+    "quietPayerMessage": "Omi خود را بررسی کنید.",
+    "quietPayerCheck": "بررسی"
 }

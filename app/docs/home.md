@@ -17,7 +17,8 @@ recordings saved on this phone, held audio and pending deletes. The page turns e
 | Locked | `HomeLockedRowView` | A day's conversations and held audio over the plan's limit, as one row with their count and Unlock. |
 
 One prompt sits above the list at most: payment, then firmware, then voice profile,
-then Review (`HomePromptSlot`).
+then Review (`HomePromptSlot`). When none of those applies, the slot may hold the
+quiet-payer row ("No recordings in 5 days", `QuietPayerRow`), which decides for itself.
 
 ## Rules
 
@@ -31,7 +32,10 @@ then Review (`HomePromptSlot`).
   search, filter or selection. Showing short or discarded conversations widens the list;
   it is not a filter.
 - Every row is a `HomeRowShell`: one card, one 36 pt tile, title, one subtitle line in one
-  style, and an optional trailing action (`HomeRowAction`). No row carries a chevron.
+  style, and an optional trailing action (`HomeRowAction`). No row carries a chevron. The
+  one exception is Transcribe Later's live card, which keeps its Pause, New recording and
+  Stop controls (`ConversationCaptureWidget`). Search and discarded views add a snippet
+  line under a conversation.
 - Every row deletes with one swipe (`HomeSwipeDelete`): a conversation confirms and offers
   Undo; a recording on this phone confirms and cannot be undone, and cannot be swiped while
   the server is working on it.
@@ -44,6 +48,10 @@ The compact card feed (`/v1/home/feed`), the episode projection and the legacy l
 fallback are gone from the client; it no longer reads the feed endpoint. Background-recap
 hiding and the offline-sync "adding from your Omi" label only ran with episodes on, and
 v3 suppresses episodes, so neither had run since v3 reached every account.
+
+The opt-in Daily Recaps row on Home and its Developer Settings toggle are gone; recaps are
+on Activity (`ActivityPage`). `HomeDailyRecaps` stays only because Activity and the frozen
+visual-audit compat suites import it.
 
 Coverage: `test/unit/home_model_test.dart` (the model), `test/pages/conversations/home_v3_test.dart`
 (the page, including the `Home rows render` evidence group, written when

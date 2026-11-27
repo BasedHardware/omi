@@ -15901,8 +15901,8 @@ class AppLocalizationsIt extends AppLocalizations {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: '$count conversazioni in attesa',
-      one: '1 conversazione in attesa',
+      other: '$count registrazioni in attesa',
+      one: '1 registrazione in attesa',
     );
     return '$_temp0';
   }
@@ -15918,4 +15918,13 @@ class AppLocalizationsIt extends AppLocalizations {
 
   @override
   String get homeFinishingOpensWhenReady => 'Si aprirà appena sarà pronta';
+
+  @override
+  String get quietPayerTitle => 'Nessuna registrazione da 5 giorni';
+
+  @override
+  String get quietPayerMessage => 'Controlla il tuo Omi.';
+
+  @override
+  String get quietPayerCheck => 'Controlla';
 }

@@ -47,6 +47,11 @@ class LocalRecording {
   /// When the server accepted the upload; null until then.
   final DateTime? uploadedAt;
 
+  /// Whether sending it again can change a [LocalRecordingState.failed] outcome. False for a terminal
+  /// refusal (too large, outside the recovery window, unsupported audio, on-device only):
+  /// [walRetryCanHelp].
+  final bool retryCanHelp;
+
   const LocalRecording({
     required this.fileName,
     required this.filePath,
@@ -59,6 +64,7 @@ class LocalRecording {
     this.geolocation,
     this.jobId,
     this.uploadedAt,
+    this.retryCanHelp = true,
   });
 
   factory LocalRecording.fromWal(Wal wal, {required String filePath, required int sizeBytes}) => LocalRecording(
@@ -71,6 +77,7 @@ class LocalRecording {
         seconds: wal.seconds,
         geolocation: wal.geolocation,
         jobId: wal.jobId,
+        retryCanHelp: walRetryCanHelp(wal),
         uploadedAt: wal.status == WalStatus.uploaded && wal.uploadedAt > 0
             ? DateTime.fromMillisecondsSinceEpoch(wal.uploadedAt * 1000)
             : null,

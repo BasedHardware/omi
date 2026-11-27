@@ -4798,9 +4798,12 @@
     "firmwareNewestSupportedForDevice": "Votre appareil utilise déjà la dernière version de firmware prise en charge",
     "firmwareSyncRecordingsFirstTitle": "Synchronisez d'abord vos enregistrements",
     "firmwareSyncRecordingsFirstMessage": "Certains enregistrements sont encore sur votre appareil. Laissez-les terminer leur synchronisation vers votre téléphone, puis lancez la mise à jour.",
-    "homeLockedTitle": "{count, plural, =1{1 conversation en attente} other{{count} conversations en attente}}",
+    "homeLockedTitle": "{count, plural, =1{1 enregistrement en attente} other{{count} enregistrements en attente}}",
     "homeLockedSubtitle": "Conservée en sécurité · déverrouiller pour lire",
     "homeLockedSubtitleNoPlans": "Conservée en sécurité jusqu'à la réinitialisation de votre quota",
     "homeTakingLonger": "Prend plus de temps que d'habitude",
-    "homeFinishingOpensWhenReady": "S'ouvre dès qu'elle est prête"
+    "homeFinishingOpensWhenReady": "S'ouvre dès qu'elle est prête",
+    "quietPayerTitle": "Aucun enregistrement depuis 5 jours",
+    "quietPayerMessage": "Vérifiez votre Omi.",
+    "quietPayerCheck": "Vérifier"
 }

@@ -12320,9 +12320,12 @@
     "firmwareNewestSupportedForDevice": "آپ کا ڈیوائس پہلے ہی سپورٹ شدہ تازہ ترین فرم ویئر ورژن پر ہے",
     "firmwareSyncRecordingsFirstTitle": "پہلے اپنی ریکارڈنگز سنک کریں",
     "firmwareSyncRecordingsFirstMessage": "کچھ ریکارڈنگز ابھی آپ کے ڈیوائس پر ہیں۔ انہیں فون پر سنک ہونے دیں، پھر اپڈیٹ شروع کریں۔",
-    "homeLockedTitle": "{count, plural, =1{1 بات چیت منتظر ہے} other{{count} بات چیتیں منتظر ہیں}}",
+    "homeLockedTitle": "{count, plural, =1{1 ریکارڈنگ انتظار میں ہے} other{{count} ریکارڈنگز انتظار میں ہیں}}",
     "homeLockedSubtitle": "محفوظ رکھی گئی · پڑھنے کے لیے ان لاک کریں",
     "homeLockedSubtitleNoPlans": "آپ کے کوٹے کے ری سیٹ ہونے تک محفوظ رکھی گئی",
     "homeTakingLonger": "عام طور سے زیادہ وقت لگ رہا ہے",
-    "homeFinishingOpensWhenReady": "تیار ہوتے ہی کھل جائے گی"
+    "homeFinishingOpensWhenReady": "تیار ہوتے ہی کھل جائے گی",
+    "quietPayerTitle": "5 دن سے کوئی ریکارڈنگ نہیں",
+    "quietPayerMessage": "اپنا Omi چیک کریں۔",
+    "quietPayerCheck": "چیک کریں"
 }

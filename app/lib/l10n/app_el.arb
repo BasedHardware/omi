@@ -4763,9 +4763,12 @@
     "firmwareNewestSupportedForDevice": "Η συσκευή σας έχει ήδη την πιο πρόσφατη υποστηριζόμενη έκδοση υλικολογισμικού",
     "firmwareSyncRecordingsFirstTitle": "Συγχρονίστε πρώτα τις ηχογραφήσεις σας",
     "firmwareSyncRecordingsFirstMessage": "Μερικές ηχογραφήσεις βρίσκονται ακόμη στη συσκευή σας. Περιμένετε να ολοκληρωθεί ο συγχρονισμός τους στο τηλέφωνό σας και, στη συνέχεια, ξεκινήστε την ενημέρωση.",
-    "homeLockedTitle": "{count, plural, =1{1 συνομιλία σε αναμονή} other{{count} συνομιλίες σε αναμονή}}",
+    "homeLockedTitle": "{count, plural, =1{1 ηχογράφηση σε αναμονή} other{{count} ηχογραφήσεις σε αναμονή}}",
     "homeLockedSubtitle": "Ασφαλώς αποθηκευμένη · ξεκλειδώστε για ανάγνωση",
     "homeLockedSubtitleNoPlans": "Ασφαλώς αποθηκευμένη μέχρι να ανανεωθεί το όριό σας",
     "homeTakingLonger": "Αργεί περισσότερο από το συνηθισμένο",
-    "homeFinishingOpensWhenReady": "Ανοίγει μόλις είναι έτοιμη"
+    "homeFinishingOpensWhenReady": "Ανοίγει μόλις είναι έτοιμη",
+    "quietPayerTitle": "Καμία ηχογράφηση εδώ και 5 ημέρες",
+    "quietPayerMessage": "Έλεγξε το Omi σου.",
+    "quietPayerCheck": "Έλεγχος"
 }

@@ -4805,9 +4805,12 @@
     "firmwareNewestSupportedForDevice": "Din enhed kører allerede den nyeste understøttede firmwareversion",
     "firmwareSyncRecordingsFirstTitle": "Synkroniser dine optagelser først",
     "firmwareSyncRecordingsFirstMessage": "Nogle optagelser er stadig på din enhed. Lad dem blive færdige med at synkronisere til din telefon, og start derefter opdateringen.",
-    "homeLockedTitle": "{count, plural, =1{1 samtale venter} other{{count} samtaler venter}}",
+    "homeLockedTitle": "{count, plural, =1{1 optagelse venter} other{{count} optagelser venter}}",
     "homeLockedSubtitle": "Gemt sikkert · lås op for at læse",
     "homeLockedSubtitleNoPlans": "Gemt sikkert, indtil din grænse nulstilles",
     "homeTakingLonger": "Tager længere tid end sædvanligt",
-    "homeFinishingOpensWhenReady": "Åbner, så snart den er klar"
+    "homeFinishingOpensWhenReady": "Åbner, så snart den er klar",
+    "quietPayerTitle": "Ingen optagelser i 5 dage",
+    "quietPayerMessage": "Tjek din Omi.",
+    "quietPayerCheck": "Tjek"
 }

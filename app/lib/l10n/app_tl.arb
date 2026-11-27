@@ -12320,9 +12320,12 @@
     "firmwareNewestSupportedForDevice": "Ang iyong device ay nasa pinakabagong firmware version na kayang suportahan nito",
     "firmwareSyncRecordingsFirstTitle": "I-sync muna ang iyong mga recording",
     "firmwareSyncRecordingsFirstMessage": "May mga recording pa na nasa iyong device. Hayaang matapos munang i-sync ang mga ito sa iyong phone, pagkatapos ay simulan ang pag-update.",
-    "homeLockedTitle": "{count, plural, =1{1 pag-uusap ang naghihintay} other{{count} na pag-uusap ang naghihintay}}",
+    "homeLockedTitle": "{count, plural, =1{1 recording na naghihintay} other{{count} na recording na naghihintay}}",
     "homeLockedSubtitle": "Ligtas na nakaimbak · i-unlock para basahin",
     "homeLockedSubtitleNoPlans": "Ligtas na nakatago hanggang sa mag-reset ang iyong allowance",
     "homeTakingLonger": "Mas matagal kaysa karaniwan",
-    "homeFinishingOpensWhenReady": "Bubuksan agad kapag handa na"
+    "homeFinishingOpensWhenReady": "Bubuksan agad kapag handa na",
+    "quietPayerTitle": "Walang recording sa loob ng 5 araw",
+    "quietPayerMessage": "Tingnan ang iyong Omi.",
+    "quietPayerCheck": "Tingnan"
 }

@@ -4763,9 +4763,12 @@
     "firmwareNewestSupportedForDevice": "Thiết bị của bạn đã dùng phiên bản firmware mới nhất được hỗ trợ",
     "firmwareSyncRecordingsFirstTitle": "Hãy đồng bộ bản ghi âm của bạn trước",
     "firmwareSyncRecordingsFirstMessage": "Một số bản ghi âm vẫn còn trên thiết bị của bạn. Hãy đợi chúng đồng bộ xong lên điện thoại, sau đó bắt đầu cập nhật.",
-    "homeLockedTitle": "{count, plural, =1{1 cuộc trò chuyện đang chờ} other{{count} cuộc trò chuyện đang chờ}}",
+    "homeLockedTitle": "{count, plural, =1{1 bản ghi âm đang chờ} other{{count} bản ghi âm đang chờ}}",
     "homeLockedSubtitle": "Được lưu an toàn · Mở khóa để đọc",
     "homeLockedSubtitleNoPlans": "Được lưu an toàn cho đến khi hạn mức của bạn được đặt lại",
     "homeTakingLonger": "Mất lâu hơn bình thường",
-    "homeFinishingOpensWhenReady": "Sẽ mở ngay khi sẵn sàng"
+    "homeFinishingOpensWhenReady": "Sẽ mở ngay khi sẵn sàng",
+    "quietPayerTitle": "Không có bản ghi nào trong 5 ngày",
+    "quietPayerMessage": "Hãy kiểm tra Omi của bạn.",
+    "quietPayerCheck": "Kiểm tra"
 }

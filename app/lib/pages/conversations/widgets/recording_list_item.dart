@@ -17,7 +17,7 @@ import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 
 /// A recording held on this phone for the reader, in the Home row shape every other row uses: its
-/// time and length, its state, and play (or Retry when sending failed). Tapping opens the recording
+/// time and length, its state, and play (or Retry when sending failed and sending again can help). Tapping opens the recording
 /// sheet (transcribe, share, delete). Swiping deletes it after a confirm; the file may be the only
 /// copy, so there is no Undo, and a recording the server is still working on cannot be swiped.
 class RecordingListItem extends StatefulWidget {
@@ -80,6 +80,8 @@ class _RecordingListItemState extends State<RecordingListItem> {
         final title = '${OmiDateFormat.of(context).time(recording.startedAt)} · '
             '${OmiDuration.compact(recording.seconds, l10n)}';
         final failed = recording.state == LocalRecordingState.failed;
+        // A terminal refusal keeps its failure mark but offers play, not a Retry bound to fail.
+        final canRetry = failed && recording.retryCanHelp;
         final busy =
             recording.state == LocalRecordingState.uploading || recording.state == LocalRecordingState.processing;
         final status = Text(
@@ -116,7 +118,7 @@ class _RecordingListItemState extends State<RecordingListItem> {
             subtitleWidget: _OnDeviceStatus(recording: recording, fallback: status),
             onTap: () => showRecordingDetailSheet(context, recording),
             actionTrailing: true,
-            trailing: failed
+            trailing: canRetry
                 ? HomeRowAction(
                     key: ValueKey('rec_retry_${recording.id}'),
                     label: l10n.retry,

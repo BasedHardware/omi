@@ -15887,8 +15887,8 @@ class AppLocalizationsMk extends AppLocalizations {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: '$count разговори чекаат',
-      one: '1 разговор чека',
+      other: '$count записи чекаат',
+      one: '1 запис чека',
     );
     return '$_temp0';
   }
@@ -15904,4 +15904,13 @@ class AppLocalizationsMk extends AppLocalizations {
 
   @override
   String get homeFinishingOpensWhenReady => 'Ќе се отвори штом ќе биде подготвено';
+
+  @override
+  String get quietPayerTitle => 'Нема снимки 5 дена';
+
+  @override
+  String get quietPayerMessage => 'Проверете го вашиот Omi.';
+
+  @override
+  String get quietPayerCheck => 'Провери';
 }

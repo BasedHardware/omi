@@ -15595,8 +15595,8 @@ class AppLocalizationsKo extends AppLocalizations {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: '대화 $count개 대기 중',
-      one: '대화 1개 대기 중',
+      other: '녹음 $count개 대기 중',
+      one: '녹음 1개 대기 중',
     );
     return '$_temp0';
   }
@@ -15612,4 +15612,13 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get homeFinishingOpensWhenReady => '준비되는 대로 열립니다';
+
+  @override
+  String get quietPayerTitle => '5일 동안 녹음이 없어요';
+
+  @override
+  String get quietPayerMessage => 'Omi를 확인해 보세요.';
+
+  @override
+  String get quietPayerCheck => '확인';
 }

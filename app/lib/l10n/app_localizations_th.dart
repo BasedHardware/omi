@@ -15748,8 +15748,8 @@ class AppLocalizationsTh extends AppLocalizations {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: 'มี $count บทสนทนารออยู่',
-      one: 'มี 1 บทสนทนารออยู่',
+      other: 'มีการบันทึก $count รายการรออยู่',
+      one: 'มีการบันทึก 1 รายการรออยู่',
     );
     return '$_temp0';
   }
@@ -15765,4 +15765,13 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get homeFinishingOpensWhenReady => 'จะเปิดทันทีที่พร้อม';
+
+  @override
+  String get quietPayerTitle => 'ไม่มีการบันทึกมา 5 วัน';
+
+  @override
+  String get quietPayerMessage => 'ตรวจสอบ Omi ของคุณ';
+
+  @override
+  String get quietPayerCheck => 'ตรวจสอบ';
 }

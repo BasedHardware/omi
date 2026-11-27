@@ -12320,9 +12320,12 @@
     "firmwareNewestSupportedForDevice": "Ваша прылада ўжо працуе на найноўшай падтрыманай версіі прашыўкі",
     "firmwareSyncRecordingsFirstTitle": "Спачатку сінхранізуйце свае запісы",
     "firmwareSyncRecordingsFirstMessage": "Некаторыя запісы ўсё яшчэ на вашай прыладзе. Дайце ім завяршыць сінхранізацыю на тэлефон, а потым пачніце абнаўленне.",
-    "homeLockedTitle": "{count, plural, =1{1 размова чакае} other{{count} размоў чакае}}",
+    "homeLockedTitle": "{count, plural, =1{1 запіс чакае} other{{count} запісаў чакаюць}}",
     "homeLockedSubtitle": "Надзейна захавана · разблакуйце, каб прачытаць",
     "homeLockedSubtitleNoPlans": "Надзейна захавана, пакуль не абновіцца ваш ліміт",
     "homeTakingLonger": "Займае больш часу, чым звычайна",
-    "homeFinishingOpensWhenReady": "Адкрыецца, як толькі будзе гатовая"
+    "homeFinishingOpensWhenReady": "Адкрыецца, як толькі будзе гатовая",
+    "quietPayerTitle": "Няма запісаў 5 дзён",
+    "quietPayerMessage": "Праверце свой Omi.",
+    "quietPayerCheck": "Праверыць"
 }

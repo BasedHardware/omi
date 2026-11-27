@@ -4763,9 +4763,12 @@
     "firmwareNewestSupportedForDevice": "您的设备已处于所支持的最新固件版本",
     "firmwareSyncRecordingsFirstTitle": "请先同步录音",
     "firmwareSyncRecordingsFirstMessage": "部分录音仍存储在您的设备上。请等待它们同步到手机完成后，再开始更新。",
-    "homeLockedTitle": "{count, plural, =1{1 个对话正在等待} other{{count} 个对话正在等待}}",
+    "homeLockedTitle": "{count, plural, =1{1 条录音等待中} other{{count} 条录音等待中}}",
     "homeLockedSubtitle": "已妥善保存 · 解锁后可阅读",
     "homeLockedSubtitleNoPlans": "已妥善保存，直到您的额度重置",
     "homeTakingLonger": "耗时比平时更长",
-    "homeFinishingOpensWhenReady": "准备好后会立即打开"
+    "homeFinishingOpensWhenReady": "准备好后会立即打开",
+    "quietPayerTitle": "5 天没有录音",
+    "quietPayerMessage": "请检查你的 Omi。",
+    "quietPayerCheck": "检查"
 }

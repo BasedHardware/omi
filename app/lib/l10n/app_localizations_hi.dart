@@ -15804,8 +15804,8 @@ class AppLocalizationsHi extends AppLocalizations {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: '$count बातचीत बाकी हैं',
-      one: '1 बातचीत बाकी है',
+      other: '$count रिकॉर्डिंग प्रतीक्षा पर हैं',
+      one: '1 रिकॉर्डिंग प्रतीक्षा पर है',
     );
     return '$_temp0';
   }
@@ -15821,4 +15821,13 @@ class AppLocalizationsHi extends AppLocalizations {
 
   @override
   String get homeFinishingOpensWhenReady => 'तैयार होते ही खुल जाएगी';
+
+  @override
+  String get quietPayerTitle => '5 दिनों से कोई रिकॉर्डिंग नहीं';
+
+  @override
+  String get quietPayerMessage => 'अपना Omi जांचें।';
+
+  @override
+  String get quietPayerCheck => 'जांचें';
 }

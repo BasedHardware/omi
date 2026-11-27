@@ -4763,9 +4763,12 @@
     "firmwareNewestSupportedForDevice": "อุปกรณ์ของคุณใช้เฟิร์มแวร์เวอร์ชันล่าสุดที่รองรับอยู่แล้ว",
     "firmwareSyncRecordingsFirstTitle": "ซิงค์ไฟล์บันทึกเสียงของคุณก่อน",
     "firmwareSyncRecordingsFirstMessage": "ไฟล์บันทึกเสียงบางส่วนยังอยู่ในอุปกรณ์ของคุณ รอให้ซิงค์ไปยังโทรศัพท์เสร็จก่อน แล้วจึงเริ่มการอัปเดต",
-    "homeLockedTitle": "{count, plural, =1{มี 1 บทสนทนารออยู่} other{มี {count} บทสนทนารออยู่}}",
+    "homeLockedTitle": "{count, plural, =1{มีการบันทึก 1 รายการรออยู่} other{มีการบันทึก {count} รายการรออยู่}}",
     "homeLockedSubtitle": "เก็บไว้อย่างปลอดภัย · ปลดล็อกเพื่ออ่าน",
     "homeLockedSubtitleNoPlans": "เก็บไว้อย่างปลอดภัยจนกว่าโควตาของคุณจะรีเซ็ต",
     "homeTakingLonger": "ใช้เวลานานกว่าปกติ",
-    "homeFinishingOpensWhenReady": "จะเปิดทันทีที่พร้อม"
+    "homeFinishingOpensWhenReady": "จะเปิดทันทีที่พร้อม",
+    "quietPayerTitle": "ไม่มีการบันทึกมา 5 วัน",
+    "quietPayerMessage": "ตรวจสอบ Omi ของคุณ",
+    "quietPayerCheck": "ตรวจสอบ"
 }

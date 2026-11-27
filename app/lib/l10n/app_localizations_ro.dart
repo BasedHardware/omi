@@ -15887,8 +15887,8 @@ class AppLocalizationsRo extends AppLocalizations {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: '$count conversații în așteptare',
-      one: '1 conversație în așteptare',
+      other: '$count înregistrări în așteptare',
+      one: '1 înregistrare în așteptare',
     );
     return '$_temp0';
   }
@@ -15904,4 +15904,13 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get homeFinishingOpensWhenReady => 'Se deschide imediat ce este gata';
+
+  @override
+  String get quietPayerTitle => 'Nicio înregistrare de 5 zile';
+
+  @override
+  String get quietPayerMessage => 'Verifică-ți Omi.';
+
+  @override
+  String get quietPayerCheck => 'Verifică';
 }

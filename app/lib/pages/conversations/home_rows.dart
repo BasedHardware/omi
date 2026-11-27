@@ -101,15 +101,11 @@ class HomeEpisodeLayout {
   }
 }
 
-/// Whether a listed conversation is a row on v3 Home: not hidden by the server, not a recording
-/// document, and not failed (a failed one is on Activity, X5).
-bool shownOnV3Home(ServerConversation c) =>
-    c.v3?.homeHidden != true && c.v3?.recording != true && !isFailedConversation(c);
-
 /// The one answer to "did this conversation fail?" (X5), for Home, Activity, the bell and the
 /// conversation page. A v3 conversation's tile state wins: the server sets it for Home, and a v3
 /// conversation can be `completed` with a failed tile. Without one, failed status and the server's
-/// failed Home projection decide. A failed conversation belongs to Activity, not Home.
+/// failed Home projection decide. A failed conversation stays on Home with its Retry and is listed
+/// on Activity too (SCA-5226).
 bool isFailedConversation(ServerConversation c) {
   if (c.isAdmittedForTranscription) return false;
   final tile = c.v3?.tileState;

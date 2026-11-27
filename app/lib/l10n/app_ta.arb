@@ -12320,9 +12320,12 @@
     "firmwareNewestSupportedForDevice": "உங்கள் சாதனம் ஏற்கனவே ஆதரிக்கப்படும் மிகச் சமீபத்திய ஃபார்ம்வேர் பதிப்பில் உள்ளது",
     "firmwareSyncRecordingsFirstTitle": "முதலில் உங்கள் பதிவுகளை ஒத்திசைக்கவும்",
     "firmwareSyncRecordingsFirstMessage": "சில பதிவுகள் இன்னும் உங்கள் சாதனத்தில் உள்ளன. அவை உங்கள் தொலைபேசிக்கு ஒத்திசைவை முடிக்க அனுமதித்து, பிறகு புதுப்பிப்பைத் தொடங்கவும்.",
-    "homeLockedTitle": "{count, plural, =1{1 உரையாடல் காத்திருக்கிறது} other{{count} உரையாடல்கள் காத்திருக்கின்றன}}",
+    "homeLockedTitle": "{count, plural, =1{1 பதிவு காத்திருக்கிறது} other{{count} பதிவுகள் காத்திருக்கின்றன}}",
     "homeLockedSubtitle": "பாதுகாப்பாகச் சேமிக்கப்பட்டது · படிக்கத் திறக்கவும்",
     "homeLockedSubtitleNoPlans": "உங்கள் வரம்பு புதுப்பிக்கப்படும் வரை பாதுகாப்பாகச் சேமிக்கப்பட்டிருக்கும்",
     "homeTakingLonger": "வழக்கத்திற்கு மாறாக அதிக நேரம் எடுக்கிறது",
-    "homeFinishingOpensWhenReady": "தயாரானதும் உடனே திறக்கும்"
+    "homeFinishingOpensWhenReady": "தயாரானதும் உடனே திறக்கும்",
+    "quietPayerTitle": "5 நாட்களாக பதிவுகள் இல்லை",
+    "quietPayerMessage": "உங்கள் Omi-ஐ சரிபார்க்கவும்.",
+    "quietPayerCheck": "சரிபார்"
 }

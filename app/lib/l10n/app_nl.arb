@@ -4763,9 +4763,12 @@
     "firmwareNewestSupportedForDevice": "Je apparaat heeft al de nieuwste ondersteunde firmwareversie",
     "firmwareSyncRecordingsFirstTitle": "Synchroniseer eerst je opnames",
     "firmwareSyncRecordingsFirstMessage": "Sommige opnames staan nog op je apparaat. Laat ze eerst volledig synchroniseren naar je telefoon en start daarna de update.",
-    "homeLockedTitle": "{count, plural, =1{1 gesprek wacht} other{{count} gesprekken wachten}}",
+    "homeLockedTitle": "{count, plural, =1{1 opname wacht} other{{count} opnames wachten}}",
     "homeLockedSubtitle": "Veilig bewaard · ontgrendel om te lezen",
     "homeLockedSubtitleNoPlans": "Veilig bewaard tot je limiet opnieuw wordt ingesteld",
     "homeTakingLonger": "Duurt langer dan gebruikelijk",
-    "homeFinishingOpensWhenReady": "Wordt geopend zodra het klaar is"
+    "homeFinishingOpensWhenReady": "Wordt geopend zodra het klaar is",
+    "quietPayerTitle": "Al 5 dagen geen opnames",
+    "quietPayerMessage": "Controleer je Omi.",
+    "quietPayerCheck": "Controleren"
 }

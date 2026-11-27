@@ -4763,9 +4763,12 @@
     "firmwareNewestSupportedForDevice": "Вашето устройство вече работи с най-новата поддържана версия на фърмуера",
     "firmwareSyncRecordingsFirstTitle": "Първо синхронизирайте записите си",
     "firmwareSyncRecordingsFirstMessage": "Някои записи все още са на устройството. Оставете ги да приключат със синхронизирането към телефона, след което започнете актуализацията.",
-    "homeLockedTitle": "{count, plural, =1{1 разговор в очакване} other{{count} разговора в очакване}}",
+    "homeLockedTitle": "{count, plural, =1{1 запис в очакване} other{{count} записа в очакване}}",
     "homeLockedSubtitle": "Запазено безопасно · отключете, за да прочетете",
     "homeLockedSubtitleNoPlans": "Запазено безопасно, докато лимитът ви се възстанови",
     "homeTakingLonger": "Отнема повече време от обичайното",
-    "homeFinishingOpensWhenReady": "Отваря се веднага щом е готов"
+    "homeFinishingOpensWhenReady": "Отваря се веднага щом е готов",
+    "quietPayerTitle": "Няма записи от 5 дни",
+    "quietPayerMessage": "Проверете своя Omi.",
+    "quietPayerCheck": "Провери"
 }

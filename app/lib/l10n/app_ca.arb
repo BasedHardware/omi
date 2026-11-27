@@ -4763,9 +4763,12 @@
     "firmwareNewestSupportedForDevice": "El vostre dispositiu ja té la versió més recent de firmware compatible",
     "firmwareSyncRecordingsFirstTitle": "Primer sincronitzeu els enregistraments",
     "firmwareSyncRecordingsFirstMessage": "Alguns enregistraments encara són al vostre dispositiu. Deixeu que acabin de sincronitzar-se al telèfon i, després, inicieu l'actualització.",
-    "homeLockedTitle": "{count, plural, =1{1 conversa en espera} other{{count} converses en espera}}",
+    "homeLockedTitle": "{count, plural, =1{1 enregistrament en espera} other{{count} enregistraments en espera}}",
     "homeLockedSubtitle": "Desada amb seguretat · desbloquegeu per llegir",
     "homeLockedSubtitleNoPlans": "Desada amb seguretat fins que es restableixi el vostre límit",
     "homeTakingLonger": "Està trigant més del normal",
-    "homeFinishingOpensWhenReady": "S'obrirà tan bon punt estigui a punt"
+    "homeFinishingOpensWhenReady": "S'obrirà tan bon punt estigui a punt",
+    "quietPayerTitle": "Cap gravació en 5 dies",
+    "quietPayerMessage": "Comprova el teu Omi.",
+    "quietPayerCheck": "Comprova"
 }

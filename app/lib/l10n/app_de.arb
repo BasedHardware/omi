@@ -4763,9 +4763,12 @@
     "firmwareNewestSupportedForDevice": "Ihr Gerät verwendet bereits die neueste unterstützte Firmware-Version",
     "firmwareSyncRecordingsFirstTitle": "Synchronisieren Sie zuerst Ihre Aufnahmen",
     "firmwareSyncRecordingsFirstMessage": "Einige Aufnahmen sind noch auf Ihrem Gerät. Warten Sie, bis sie vollständig mit Ihrem Telefon synchronisiert wurden, und starten Sie dann die Aktualisierung.",
-    "homeLockedTitle": "{count, plural, =1{1 Unterhaltung wartet} other{{count} Unterhaltungen warten}}",
+    "homeLockedTitle": "{count, plural, =1{1 Aufnahme wartet} other{{count} Aufnahmen warten}}",
     "homeLockedSubtitle": "Sicher aufbewahrt · zum Lesen freischalten",
     "homeLockedSubtitleNoPlans": "Sicher aufbewahrt, bis sich Ihr Limit zurücksetzt",
     "homeTakingLonger": "Dauert länger als gewöhnlich",
-    "homeFinishingOpensWhenReady": "Öffnet sich, sobald sie bereit ist"
+    "homeFinishingOpensWhenReady": "Öffnet sich, sobald sie bereit ist",
+    "quietPayerTitle": "Seit 5 Tagen keine Aufnahmen",
+    "quietPayerMessage": "Prüfe dein Omi.",
+    "quietPayerCheck": "Prüfen"
 }

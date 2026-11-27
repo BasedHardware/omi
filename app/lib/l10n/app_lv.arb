@@ -4763,9 +4763,12 @@
     "firmwareNewestSupportedForDevice": "Jūsu ierīcē jau ir jaunākā atbalstītā aparatprogrammatūras versija",
     "firmwareSyncRecordingsFirstTitle": "Vispirms sinhronizējiet savus ierakstus",
     "firmwareSyncRecordingsFirstMessage": "Daži ieraksti vēl atrodas jūsu ierīcē. Ļaujiet tiem pabeigt sinhronizēšanu ar tālruni, pēc tam sāciet atjaunināšanu.",
-    "homeLockedTitle": "{count, plural, =1{1 saruna gaida} other{{count} sarunas gaida}}",
+    "homeLockedTitle": "{count, plural, =1{1 ieraksts gaida} other{{count} ieraksti gaida}}",
     "homeLockedSubtitle": "Uzglabātas drošībā · atbloķēt lasīšanai",
     "homeLockedSubtitleNoPlans": "Uzglabātas drošībā, līdz tiek atjaunots jūsu limits",
     "homeTakingLonger": "Aizņem vairāk laika nekā parasti",
-    "homeFinishingOpensWhenReady": "Tiks atvērta, tiklīdz būs gatava"
+    "homeFinishingOpensWhenReady": "Tiks atvērta, tiklīdz būs gatava",
+    "quietPayerTitle": "5 dienas nav ierakstu",
+    "quietPayerMessage": "Pārbaudiet savu Omi.",
+    "quietPayerCheck": "Pārbaudīt"
 }

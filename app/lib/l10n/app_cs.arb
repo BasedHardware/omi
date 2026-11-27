@@ -4763,9 +4763,12 @@
     "firmwareNewestSupportedForDevice": "Vaše zařízení už používá nejnovější podporovanou verzi firmwaru",
     "firmwareSyncRecordingsFirstTitle": "Nejprve synchronizujte své nahrávky",
     "firmwareSyncRecordingsFirstMessage": "Některé nahrávky jsou stále ve vašem zařízení. Počkejte, až se synchronizují do telefonu, a potom spusťte aktualizaci.",
-    "homeLockedTitle": "{count, plural, =1{1 konverzace čeká} other{{count} konverzací čeká}}",
+    "homeLockedTitle": "{count, plural, =1{1 nahrávka čeká} other{{count} nahrávek čeká}}",
     "homeLockedSubtitle": "Bezpečně uloženo · odemkněte pro čtení",
     "homeLockedSubtitleNoPlans": "Bezpečně uloženo, dokud se váš limit neobnoví",
     "homeTakingLonger": "Trvá to déle než obvykle",
-    "homeFinishingOpensWhenReady": "Otevře se, jakmile bude připravena"
+    "homeFinishingOpensWhenReady": "Otevře se, jakmile bude připravena",
+    "quietPayerTitle": "Žádné nahrávky za 5 dní",
+    "quietPayerMessage": "Zkontrolujte svůj Omi.",
+    "quietPayerCheck": "Zkontrolovat"
 }

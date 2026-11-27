@@ -690,8 +690,12 @@ class _ConversationsPageState extends State<ConversationsPage>
     final listedNow = convoProvider.groupedConversations.values.expand((rows) => rows).toList();
     // Conversations this phone knows are processing but the list has not caught up with yet (and every
     // processing row a legacy-shaped server answer keeps out of the list). The model drops duplicates.
+    // Finishing up… stands for this phone's optimistic placeholder; with that switched off
+    // (OMI_V3_FINISH_FEEDBACK_OFF) the placeholder is the only sign the capture is being processed.
+    final finishFeedback = v3?.finishFeedbackEnabled == true;
     final processing = defaultView
-        ? convoProvider.processingConversations.where((c) => c.id != OptimisticProcessingPlaceholder.id)
+        ? convoProvider.processingConversations
+            .where((c) => !finishFeedback || c.id != OptimisticProcessingPlaceholder.id)
         : const <ServerConversation>[];
     final terminalFinish = manualFinish == null ? null : v3!.finishTerminalMatch(convoProvider.conversations);
     final finishHandedOff = manualFinish != null && v3!.finishHasSuccessor(listedNow.where(listedOnHome));

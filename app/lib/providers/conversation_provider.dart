@@ -1737,7 +1737,6 @@ class ConversationProvider extends ChangeNotifier {
   }
 
   void updateConversation(ServerConversation conversation, {int? index, bool preserveHomeStep = true}) {
-    if (conversation.isLocked || conversation.deleted || conversation.isMergedDonor) {}
     conversation = _homeReplacement(conversation, preserveHomeStep);
     // Observe the row actually applied: it keeps a retained 'failed' Home step.
     TranscriptionPendingConversations.observe(conversation);

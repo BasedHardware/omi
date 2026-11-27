@@ -195,7 +195,7 @@ void main() {
     usage = _Usage(true);
     final routes = _Routes();
     await pumpRow(tester, observer: routes, body: HomeLockedRowView(row: lockedDay(3, held: 2)));
-    expect(find.text('5 conversations waiting'), findsOneWidget);
+    expect(find.text('5 recordings waiting'), findsOneWidget);
     expect(find.text('Kept safe · unlock to read'), findsOneWidget);
     // No titles leak from behind the lock.
     expect(find.textContaining(_title), findsNothing);
@@ -211,11 +211,11 @@ void main() {
     usage = _Usage(false);
     final routes = _Routes();
     await pumpRow(tester, observer: routes, body: HomeLockedRowView(row: lockedDay(1)));
-    expect(find.text('1 conversation waiting'), findsOneWidget);
+    expect(find.text('1 recording waiting'), findsOneWidget);
     expect(find.text('Kept safe until your allowance resets'), findsOneWidget);
     expect(find.text('Unlock'), findsNothing);
     final before = routes.pushed.length;
-    await tester.tap(find.text('1 conversation waiting'));
+    await tester.tap(find.text('1 recording waiting'));
     await tester.pumpAndSettle();
     expect(routes.pushed.length, before);
     expect(tester.takeException(), isNull);

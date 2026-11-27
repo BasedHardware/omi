@@ -4798,9 +4798,12 @@
     "firmwareNewestSupportedForDevice": "Perangkat Anda sudah menggunakan versi firmware terbaru yang didukung",
     "firmwareSyncRecordingsFirstTitle": "Sinkronkan rekaman Anda terlebih dahulu",
     "firmwareSyncRecordingsFirstMessage": "Beberapa rekaman masih berada di perangkat Anda. Biarkan rekaman tersebut selesai disinkronkan ke ponsel Anda, lalu mulai pembaruan.",
-    "homeLockedTitle": "{count, plural, =1{1 percakapan menunggu} other{{count} percakapan menunggu}}",
+    "homeLockedTitle": "{count, plural, =1{1 rekaman menunggu} other{{count} rekaman menunggu}}",
     "homeLockedSubtitle": "Tersimpan aman · buka kunci untuk membaca",
     "homeLockedSubtitleNoPlans": "Tersimpan aman hingga kuota Anda direset",
     "homeTakingLonger": "Memakan waktu lebih lama dari biasanya",
-    "homeFinishingOpensWhenReady": "Terbuka begitu siap"
+    "homeFinishingOpensWhenReady": "Terbuka begitu siap",
+    "quietPayerTitle": "Tidak ada rekaman dalam 5 hari",
+    "quietPayerMessage": "Periksa Omi Anda.",
+    "quietPayerCheck": "Periksa"
 }

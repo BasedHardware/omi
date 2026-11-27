@@ -41,6 +41,7 @@ import 'package:omi/pages/conversation_detail/widgets/summary_tab.dart';
 import 'package:omi/pages/conversations/widgets/live_conversation_end_button.dart';
 import 'package:omi/pages/conversations/conversations_page.dart';
 import 'package:omi/pages/conversations/widgets/conversation_list_item.dart';
+import 'package:omi/pages/conversations/widgets/recording_list_item.dart';
 import 'package:omi/pages/conversations/widgets/processing_capture.dart';
 import 'package:omi/pages/conversation_detail/widgets.dart' show ConversationTitleField;
 import 'package:omi/pages/conversations/widgets/date_list_item.dart';
@@ -906,6 +907,29 @@ void main() {
       await _dispose(tester, home);
     });
   });
+
+  for (final (name, widen) in <(String, void Function(ConversationProvider))>[
+    ('Show short', (c) => c.showShortConversations = true),
+    ('Show discarded', (c) => c.showDiscardedConversations = true),
+  ]) {
+    testWidgets('v3: $name widens the list and keeps the live row and saved recordings; a filter hides them',
+        (tester) async {
+      await withClock(Clock.fixed(_now), () async {
+        final saved = _saved('s-widen', _now.subtract(const Duration(minutes: 30)), 60, LocalRecordingState.pending);
+        final home =
+            await _pumpHome(tester, v3: true, recordings: [saved], prepare: (home) => widen(home.conversations));
+        expect(home.conversations.showsDefaultHome, isFalse, reason: 'the list is widened');
+        expect(_rowIds(tester).first, 'live-1', reason: 'widening is not a filter: the live row still leads');
+        expect(find.byType(RecordingListItem), findsOneWidget);
+        home.conversations.toggleStarredFilter();
+        await tester.pump();
+        await tester.pump();
+        expect(find.byKey(const ValueKey('live-1')), findsNothing, reason: 'a filter shows only conversations');
+        expect(find.byType(RecordingListItem), findsNothing);
+        await _dispose(tester, home);
+      });
+    });
+  }
 
   testWidgets('v3: a live window that started before midnight still leads Today', (tester) async {
     await withClock(Clock.fixed(_now), () async {
@@ -2785,7 +2809,7 @@ void main() {
           final home = await pumpGallery(tester, brightness);
           expect(_rowIds(tester).first, 'live-1', reason: 'the live row leads Today');
           expect(find.text('Taking longer than usual'), findsOneWidget);
-          expect(find.text('2 conversations waiting'), findsOneWidget);
+          expect(find.text('2 recordings waiting'), findsOneWidget);
           expect(find.byKey(const ValueKey('rec_retry_s-failed')), findsOneWidget);
           // One row height for every kind, with or without an action (SCA-5226 UI sweep).
           final cards = [

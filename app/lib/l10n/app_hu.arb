@@ -4859,9 +4859,12 @@
     "firmwareNewestSupportedForDevice": "Az eszközödön már a legújabb támogatott firmware-verzió fut",
     "firmwareSyncRecordingsFirstTitle": "Először szinkronizáld a felvételeidet",
     "firmwareSyncRecordingsFirstMessage": "Néhány felvétel még az eszközödön van. Várd meg, amíg a telefonodra szinkronizálásuk befejeződik, majd indítsd el a frissítést.",
-    "homeLockedTitle": "{count, plural, =1{1 beszélgetés várakozik} other{{count} beszélgetés várakozik}}",
+    "homeLockedTitle": "{count, plural, =1{1 felvétel várakozik} other{{count} felvétel várakozik}}",
     "homeLockedSubtitle": "Biztonságban tárolva · olvasáshoz oldd fel",
     "homeLockedSubtitleNoPlans": "Biztonságban tárolva, amíg a kereted vissza nem áll",
     "homeTakingLonger": "Szokásosnál tovább tart",
-    "homeFinishingOpensWhenReady": "Megnyílik, amint elkészül"
+    "homeFinishingOpensWhenReady": "Megnyílik, amint elkészül",
+    "quietPayerTitle": "5 napja nincs felvétel",
+    "quietPayerMessage": "Nézd meg az Omidat.",
+    "quietPayerCheck": "Megnézem"
 }

@@ -27765,10 +27765,10 @@ abstract class AppLocalizations {
   /// **'Some recordings are still on your device. Let them finish syncing to your phone, then start the update.'**
   String get firmwareSyncRecordingsFirstMessage;
 
-  /// Title of the one Home row that stands for everything over the plan's limit on a day (locked conversations and held recordings). {count} is how many.
+  /// Title of the one Home row that stands for everything over the plan's limit on a day: locked conversations and held recordings together, so the noun is 'recording' for both. {count} is how many.
   ///
   /// In en, this message translates to:
-  /// **'{count, plural, =1{1 conversation waiting} other{{count} conversations waiting}}'**
+  /// **'{count, plural, =1{1 recording waiting} other{{count} recordings waiting}}'**
   String homeLockedTitle(int count);
 
   /// Second line of the Home row for conversations over the plan's limit; the row has an Unlock button that opens the plans.
@@ -27794,6 +27794,24 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Opens as soon as it\'s ready'**
   String get homeFinishingOpensWhenReady;
+
+  /// Home row title for a paying monthly subscriber whose Omi has recorded nothing for 5 days
+  ///
+  /// In en, this message translates to:
+  /// **'No recordings in 5 days'**
+  String get quietPayerTitle;
+
+  /// Home row line under quietPayerTitle
+  ///
+  /// In en, this message translates to:
+  /// **'Check your Omi.'**
+  String get quietPayerMessage;
+
+  /// Button on the quiet Home row; opens the Omi device page
+  ///
+  /// In en, this message translates to:
+  /// **'Check'**
+  String get quietPayerCheck;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

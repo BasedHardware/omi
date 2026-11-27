@@ -15838,8 +15838,8 @@ class AppLocalizationsId extends AppLocalizations {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: '$count percakapan menunggu',
-      one: '1 percakapan menunggu',
+      other: '$count rekaman menunggu',
+      one: '1 rekaman menunggu',
     );
     return '$_temp0';
   }
@@ -15855,4 +15855,13 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get homeFinishingOpensWhenReady => 'Terbuka begitu siap';
+
+  @override
+  String get quietPayerTitle => 'Tidak ada rekaman dalam 5 hari';
+
+  @override
+  String get quietPayerMessage => 'Periksa Omi Anda.';
+
+  @override
+  String get quietPayerCheck => 'Periksa';
 }

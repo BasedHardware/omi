@@ -15589,8 +15589,8 @@ class AppLocalizationsJa extends AppLocalizations {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: '$count件の会話が待機中',
-      one: '1件の会話が待機中',
+      other: '$count件の録音が待機中',
+      one: '1件の録音が待機中',
     );
     return '$_temp0';
   }
@@ -15606,4 +15606,13 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get homeFinishingOpensWhenReady => '準備ができ次第開きます';
+
+  @override
+  String get quietPayerTitle => '5日間録音がありません';
+
+  @override
+  String get quietPayerMessage => 'Omiを確認してください。';
+
+  @override
+  String get quietPayerCheck => '確認';
 }

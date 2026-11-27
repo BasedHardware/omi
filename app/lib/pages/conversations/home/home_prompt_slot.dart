@@ -1,5 +1,6 @@
 // Home's one prompt slot (SCA-5226): at most one card above the list, chosen by a pure order
-// (payment, then firmware, then voice profile, then Review), so prompts never stack on Home.
+// (payment, then firmware, then voice profile, then Review), so prompts never stack on Home. When
+// none of those wants the slot, the quiet-payer row may take it; it decides for itself.
 
 import 'package:flutter/material.dart';
 
@@ -7,6 +8,7 @@ import 'package:provider/provider.dart';
 
 import 'package:omi/pages/capture/widgets/widgets.dart';
 import 'package:omi/pages/home/widgets/payment_issue_row.dart';
+import 'package:omi/pages/home/widgets/quiet_payer_row.dart';
 import 'package:omi/pages/review/widgets/review_entry_card.dart';
 import 'package:omi/providers/device_provider.dart';
 import 'package:omi/providers/home_provider.dart';
@@ -31,7 +33,10 @@ HomePrompt? homePrompt({
 }
 
 /// One slot above Home's list holding at most one prompt, chosen by [homePrompt]. The others wait
-/// their turn instead of stacking. Review questions are still fetched while another prompt shows,
+/// their turn instead of stacking. With none of them, the slot holds [QuietPayerRow], which shows
+/// only for a paying monthly reader whose Omi is offline and has recorded nothing for 5 days (it
+/// reads the plan asynchronously, so it cannot be one of the pure answers; firmware and voice
+/// profile need a connected Omi, so they never compete with it). Review questions are still fetched while another prompt shows,
 /// so they appear as soon as the slot frees up.
 class HomePromptSlot extends StatefulWidget {
   const HomePromptSlot({super.key});
@@ -96,7 +101,7 @@ class _HomePromptSlotState extends State<HomePromptSlot> with WidgetsBindingObse
       HomePrompt.firmware => const UpdateFirmwareCardWidget(),
       HomePrompt.voiceProfile => const SpeechProfileCardWidget(),
       HomePrompt.review => const ReviewEntryCard(),
-      null => const SizedBox.shrink(),
+      null => const QuietPayerRow(),
     };
   }
 }

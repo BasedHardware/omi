@@ -138,6 +138,34 @@ void main() {
     expect(locked.count, 5);
   });
 
+  test('held recordings the server counted but did not list still get a locked row', () {
+    final onLockedDay = buildHome(HomeInputs(
+      now: now,
+      listed: [convo('l', yesterday, locked: true)],
+      heldMore: 3,
+    ));
+    expect((onLockedDay.rows.single as HomeLockedRow).count, 4);
+    final alone = buildHome(HomeInputs(now: now, listed: [convo('a', yesterday)], heldMore: 2));
+    expect(alone.days.first.date, today);
+    expect((alone.rows.first as HomeLockedRow).count, 2);
+  });
+
+  test('a failed live conversation keeps its place, whether v3- or legacy-shaped; a deleted one leaves', () {
+    final at = today.add(const Duration(hours: 9));
+    final legacyFailed = convo('lf', at, status: ConversationStatus.failed);
+    final model = buildHome(HomeInputs(
+      now: now,
+      listed: [convo('later', today.add(const Duration(hours: 13)))],
+      live: legacyFailed,
+      streaming: true,
+    ));
+    expect(keys(model), ['live', 'later', 'lf']);
+    expect((model.rows.first as HomeLiveRow).kind, HomeLiveKind.capture);
+    final deleted =
+        ServerConversation(id: 'del', createdAt: at, startedAt: at, structured: Structured('', ''), deleted: true);
+    expect(keys(buildHome(HomeInputs(now: now, listed: const [], live: deleted))), isEmpty);
+  });
+
   test('a filtered view lists only conversations, locked ones in place', () {
     final model = buildHome(HomeInputs(
       now: now,

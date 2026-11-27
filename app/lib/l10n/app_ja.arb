@@ -4763,9 +4763,12 @@
     "firmwareNewestSupportedForDevice": "お使いのデバイスは、すでにサポートされている最新のファームウェアバージョンで動作しています",
     "firmwareSyncRecordingsFirstTitle": "まず録音を同期してください",
     "firmwareSyncRecordingsFirstMessage": "一部の録音はまだデバイスに残っています。スマートフォンへの同期が完了してから、更新を開始してください。",
-    "homeLockedTitle": "{count, plural, =1{1件の会話が待機中} other{{count}件の会話が待機中}}",
+    "homeLockedTitle": "{count, plural, =1{1件の録音が待機中} other{{count}件の録音が待機中}}",
     "homeLockedSubtitle": "安全に保管中 · ロック解除して読む",
     "homeLockedSubtitleNoPlans": "利用枠がリセットされるまで安全に保管されます",
     "homeTakingLonger": "通常より時間がかかっています",
-    "homeFinishingOpensWhenReady": "準備ができ次第開きます"
+    "homeFinishingOpensWhenReady": "準備ができ次第開きます",
+    "quietPayerTitle": "5日間録音がありません",
+    "quietPayerMessage": "Omiを確認してください。",
+    "quietPayerCheck": "確認"
 }

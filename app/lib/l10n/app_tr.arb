@@ -4798,9 +4798,12 @@
     "firmwareNewestSupportedForDevice": "Cihazınız zaten desteklenen en yeni firmware sürümünü kullanıyor",
     "firmwareSyncRecordingsFirstTitle": "Önce kayıtlarınızı senkronize edin",
     "firmwareSyncRecordingsFirstMessage": "Bazı kayıtlar hâlâ cihazınızda. Telefonunuza senkronize edilmelerini bekleyin, ardından güncellemeyi başlatın.",
-    "homeLockedTitle": "{count, plural, =1{1 konuşma bekliyor} other{{count} konuşma bekliyor}}",
+    "homeLockedTitle": "{count, plural, =1{1 kayıt bekliyor} other{{count} kayıt bekliyor}}",
     "homeLockedSubtitle": "Güvenle saklandı · okumak için kilidini açın",
     "homeLockedSubtitleNoPlans": "Kotanız yenilenene kadar güvenle saklandı",
     "homeTakingLonger": "Normalden daha uzun sürüyor",
-    "homeFinishingOpensWhenReady": "Hazır olur olmaz açılır"
+    "homeFinishingOpensWhenReady": "Hazır olur olmaz açılır",
+    "quietPayerTitle": "5 gündür kayıt yok",
+    "quietPayerMessage": "Omi'ni kontrol et.",
+    "quietPayerCheck": "Kontrol Et"
 }

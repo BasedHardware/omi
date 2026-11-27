@@ -15565,8 +15565,8 @@ class AppLocalizationsZh extends AppLocalizations {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: '$count 个对话正在等待',
-      one: '1 个对话正在等待',
+      other: '$count 条录音等待中',
+      one: '1 条录音等待中',
     );
     return '$_temp0';
   }
@@ -15582,4 +15582,13 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get homeFinishingOpensWhenReady => '准备好后会立即打开';
+
+  @override
+  String get quietPayerTitle => '5 天没有录音';
+
+  @override
+  String get quietPayerMessage => '请检查你的 Omi。';
+
+  @override
+  String get quietPayerCheck => '检查';
 }
