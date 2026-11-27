@@ -3,6 +3,7 @@
 from io import BytesIO
 import math
 import os
+import time
 from types import SimpleNamespace
 from unittest.mock import Mock
 import wave
@@ -11,11 +12,13 @@ import pytest
 from prometheus_client import REGISTRY
 
 from database.batch_pipeline_privacy import BatchPrivacyBlocked
+from utils import executors, stt_cap_dispatch
 from utils.batch_pipeline.language_probe_authorization import ServingLanguageProbeGuard
 from utils.executors import ExecutorSaturatedError
 from utils.stt import batch_language, declared_language_audit as audit
 from utils.stt.batch_language import LanguageDecision
 from utils.stt.language_gate import SelfVerdict
+from utils.stt.prerecorded_deadline import verification_deadline, verification_stt_deadline
 
 
 def wav_bytes(seconds=40, *, voiced=True, sample_rate=16000):
@@ -316,8 +319,6 @@ def test_voiced_seconds_measures_voiced_audio():
 
 
 def test_an_unfunded_owner_is_skipped_without_admission_telemetry(lab, monkeypatch):
-    from utils import stt_cap_dispatch
-
     lab.funded = False
     record_audio, record_decision = Mock(), Mock()
     monkeypatch.setattr(stt_cap_dispatch, 'record_audio', record_audio)
@@ -351,11 +352,6 @@ def test_an_owner_with_their_own_stt_is_never_sampled(lab):
 
 
 def test_the_real_pool_runs_the_sample_without_the_callers_deadline(lab, monkeypatch):
-    import time
-
-    from utils import executors
-    from utils.stt.prerecorded_deadline import verification_deadline, verification_stt_deadline
-
     seen = []
 
     def self_detect(probe, *, surface):
@@ -435,8 +431,6 @@ class _Response:
     ],
 )
 def test_the_audit_vendor_call_never_touches_the_routing_breaker_or_health(monkeypatch, reply, expected):
-    from utils.stt import vendor_guard
-
     posted = []
 
     class Client:
