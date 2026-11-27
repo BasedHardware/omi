@@ -16,7 +16,11 @@ from testing.pipeline_lab.scenario.stack import SCENARIO_DIR
 from testing.pipeline_lab.speakers.scenario import LabUnit, ScenarioSpeakers, SpeakerScoring
 
 LIBRI = '../../speakers/fixtures/public-libri'
-SPEAKER_SCENARIOS = ('speaker_owner_and_person_finish', 'speaker_owner_absent')
+SPEAKER_SCENARIOS = (
+    'speaker_owner_and_person_finish',
+    'speaker_owner_absent',
+    'speaker_partial_final_pass_keeps_voices',
+)
 
 
 def _raw(**speakers):
@@ -88,6 +92,7 @@ def test_speakers_needs_a_batch_audio_recording():
         ({'voices': True}, 'voices'),
         ({'owner_words_max': -1}, 'whole number'),
         ({'loudness_min': 0.5}, 'unknown keys'),
+        ({'resolution': 'maybe'}, 'speaker_resolution status'),
         ({}, 'an object of'),
     ],
 )
@@ -152,6 +157,15 @@ def test_speakers_expect_passes_within_bounds_and_names_each_miss():
     assert not missing.ok and 'no scorecard' in missing.detail
 
 
+def test_speakers_expect_resolution_is_the_stored_status():
+    resolved = checks.evaluate(_check({'resolution': 'resolved'}), [_row({**CARD, 'resolution': 'resolved'})], 'B')
+    assert resolved.ok, resolved.detail
+    unavailable = checks.evaluate(
+        _check({'resolution': 'resolved'}), [_row({**CARD, 'resolution': 'unavailable'})], 'B'
+    )
+    assert not unavailable.ok and "resolution='unavailable' (want 'resolved')" in unavailable.detail
+
+
 def test_verdict_actual_carries_the_scorecard_numbers_only_when_checked():
     with_card = checks.actual_of(_check({'attribution_min': 0.9}), [_row(CARD)], 'B')
     assert with_card['conversation']['speakers'] == CARD
@@ -182,6 +196,9 @@ def test_scorecard_moves_segment_clocks_onto_the_audio_clock():
     assert card['attribution'] == 1.0 and card['named_accuracy'] == 1.0 and card['owner_recall'] == 1.0
     as_text = scoring.card({'started_at': started.isoformat().replace('+00:00', 'Z'), 'transcript_segments': segments})
     assert as_text == card  # a stored row read back with an ISO string clock scores the same
+    assert card['resolution'] is None
+    stored = {'started_at': started, 'transcript_segments': segments, 'speaker_resolution': {'status': 'resolved'}}
+    assert scoring.card(stored)['resolution'] == 'resolved'
     unshifted = scoring.card({'started_at': t0, 'transcript_segments': segments})
     assert unshifted['attribution'] < 1.0  # without the shift the turns sit a second early
     assert scoring.card({'transcript_segments': segments}) is None
@@ -304,7 +321,11 @@ def test_compare_metric_reports_each_speaker_scenarios_scorecard(tmp_path):
             'spk',
             {
                 'speakers': {'final_pass': ['success']},
-                'conversations': [{'speakers': {**CARD, 'words': 10}}, {'speakers': CARD}, {'recordings': ['C']}],
+                'conversations': [
+                    {'speakers': {**CARD, 'words': 10}},
+                    {'speakers': {**CARD, 'resolution': 'resolved'}},
+                    {'recordings': ['C']},
+                ],
             },
         ),
         ('plain', {'conversations': [{'recordings': ['B']}]}),
@@ -314,5 +335,6 @@ def test_compare_metric_reports_each_speaker_scenarios_scorecard(tmp_path):
     values = speaker_metrics(tmp_path)
     assert values['spk.attribution'] == 0.95 and values['spk.words'] == 100  # the card with the most words
     assert values['spk.final_pass'] == 'success'
+    assert values['spk.resolution'] == 'resolved'
     assert 'spk.owner_precision' not in values  # null: nothing to measure
     assert not any(key.startswith('plain.') for key in values)

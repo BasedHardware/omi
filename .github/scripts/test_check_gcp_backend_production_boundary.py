@@ -3,6 +3,8 @@
 
 from __future__ import annotations
 
+import copy
+import hashlib
 import importlib.util
 from itertools import takewhile
 import json
@@ -16,11 +18,40 @@ import tempfile
 import textwrap
 import time
 import unittest
+from unittest.mock import MagicMock, patch
 
 ROOT = Path(__file__).resolve().parents[2]
 if str(ROOT / ".github" / "scripts") not in sys.path:
     sys.path.insert(0, str(ROOT / ".github" / "scripts"))
 from workflow_composite_contract import backend_deploy_contract_text
+import app_icon_containment_probe as icon_probe
+
+ICON_SOURCE = "a" * 40
+ICON_REVISION = "backend-aaaaaaa-123-1"
+ICON_INCUMBENT = "backend-bbbbbbb-123-1"
+ICON_TAG = "icon-" + hashlib.sha256(ICON_REVISION.encode()).hexdigest()[:24]
+BACKEND_HOST = "backend-prod-uc.a.run.app"
+ICON_HOST = f"{ICON_TAG}---{BACKEND_HOST}"
+
+
+def icon_candidate_documents():
+    revision = {
+        "metadata": {"name": ICON_REVISION, "labels": {"serving.knative.dev/service": "backend"}},
+        "spec": {"containers": [{"env": [{"name": "OMI_BACKEND_RELEASE_SHA", "value": ICON_SOURCE}]}]},
+        "status": {"conditions": [{"type": "Ready", "status": "True"}]},
+    }
+    traffic = [
+        {"revisionName": ICON_INCUMBENT, "percent": 100},
+        {"revisionName": ICON_REVISION, "tag": ICON_TAG},
+    ]
+    service = {
+        "metadata": {"name": "backend", "generation": 5, "resourceVersion": "101"},
+        "spec": {"traffic": traffic},
+        "status": {"observedGeneration": 5, "url": f"https://{BACKEND_HOST}", "traffic": copy.deepcopy(traffic)},
+    }
+    service["status"]["traffic"][1]["url"] = f"https://{ICON_HOST}"
+    return revision, service
+
 
 UPDATES_SOURCE = (ROOT / "backend/routers/updates.py").read_text(encoding="utf-8")
 
@@ -32,6 +63,133 @@ SPEC.loader.exec_module(CHECKER)
 
 
 class GcpBackendProductionBoundaryTests(unittest.TestCase):
+    def test_app_icon_probe_sends_one_request_and_only_accepts_typed_424(self) -> None:
+        cases = (
+            (424, b'{"detail":{"code":"icon_generation_disabled"}}', "icon_generation_disabled"),
+            (424, b'{"detail":{"code":"untrusted detail"}}', "unexpected_response"),
+            (424, b'["unexpected JSON shape"]', "unexpected_response"),
+            (424, b"x" * 4097, "unexpected_response"),
+            (307, b"redirect", "unexpected_status"),
+            (200, b"image response", "unexpected_status"),
+            (500, b"upstream body", "unexpected_status"),
+        )
+        with tempfile.TemporaryDirectory() as directory:
+            token_file = Path(directory) / "token"
+            token_file.write_text("test-token", encoding="ascii")
+            for status, body, outcome in cases:
+                with self.subTest(status=status, outcome=outcome):
+                    with patch("app_icon_containment_probe.http.client.HTTPSConnection") as https:
+                        connection = https.return_value
+                        response = MagicMock(status=status)
+                        response.read.return_value = body
+                        connection.getresponse.return_value.__enter__.return_value = response
+
+                        self.assertEqual(icon_probe.probe(token_file, ICON_HOST), (status, outcome))
+                        https.assert_called_once_with(ICON_HOST, timeout=15)
+                        connection.request.assert_called_once()
+                        self.assertEqual(connection.request.call_args.args, ("POST", "/v1/app/generate-icon"))
+                        self.assertEqual(
+                            connection.request.call_args.kwargs["headers"]["Authorization"], "Bearer test-token"
+                        )
+                        connection.close.assert_called_once()
+                        if status != 424:
+                            response.read.assert_not_called()
+
+    def test_app_icon_probe_does_not_retry_transport_failure(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            token_file = Path(directory) / "token"
+            token_file.write_text("test-token", encoding="ascii")
+            with patch("app_icon_containment_probe.http.client.HTTPSConnection") as https:
+                connection = https.return_value
+                connection.getresponse.side_effect = TimeoutError("untrusted transport detail")
+
+                self.assertEqual(icon_probe.probe(token_file, ICON_HOST), (None, "response_unavailable"))
+                connection.request.assert_called_once()
+                connection.getresponse.assert_called_once()
+                connection.close.assert_called_once()
+
+    def test_app_icon_probe_requires_admitted_revision_and_converged_tag_before_sending(self) -> None:
+        for case in ("source", "service", "missing_tag", "wrong_target", "shared_url", "foreign_url",
+                     "unknown_generation", "public_traffic", "desired_tag", "duplicate_tag", "latest_target"):
+            with self.subTest(case=case):
+                revision, service = icon_candidate_documents()
+                target = service["status"]["traffic"][1]
+                if case == "source":
+                    revision["spec"]["containers"][0]["env"][0]["value"] = "b" * 40
+                elif case == "service":
+                    revision["metadata"]["labels"]["serving.knative.dev/service"] = "backend-integration"
+                elif case == "missing_tag":
+                    service["status"]["traffic"].pop()
+                elif case == "wrong_target":
+                    target["revisionName"] = ICON_INCUMBENT
+                elif case == "shared_url":
+                    target["url"] = f"https://{BACKEND_HOST}"
+                elif case == "foreign_url":
+                    target["url"] = f"https://{ICON_HOST}@example.invalid"
+                elif case == "unknown_generation":
+                    service["status"].pop("observedGeneration")
+                elif case == "public_traffic":
+                    service["status"]["traffic"][0]["percent"] = 90
+                    target["percent"] = 10
+                elif case == "desired_tag":
+                    service["spec"]["traffic"][1]["revisionName"] = ICON_INCUMBENT
+                elif case == "duplicate_tag":
+                    service["status"]["traffic"].append(copy.deepcopy(target))
+                elif case == "latest_target":
+                    target["latestRevision"] = True
+
+                with (
+                    patch.object(icon_probe, "describe", side_effect=[revision, service]),
+                    patch.object(icon_probe.subprocess, "run") as mint,
+                    patch.object(icon_probe, "probe") as request,
+                ):
+                    self.assertEqual(
+                        icon_probe.run_probe(Path("token"), ICON_REVISION, ICON_SOURCE),
+                        (None, "candidate_identity_unverified"),
+                    )
+                    mint.assert_not_called()
+                    request.assert_not_called()
+
+    def test_app_icon_probe_credits_typed_424_only_with_unchanged_candidate_binding(self) -> None:
+        for case in ("stable", "missing", "retargeted", "resource_version_changed"):
+            with self.subTest(case=case):
+                revision, service = icon_candidate_documents()
+                operator_readback = copy.deepcopy(service)
+                if case == "missing":
+                    operator_readback["status"]["traffic"].pop()
+                elif case == "retargeted":
+                    operator_readback["status"]["traffic"][1]["revisionName"] = ICON_INCUMBENT
+                elif case == "resource_version_changed":
+                    operator_readback["metadata"]["resourceVersion"] = "102"
+
+                token = Path("token")
+                with (
+                    patch.object(icon_probe, "describe", side_effect=[revision, service, operator_readback]) as read,
+                    patch.object(icon_probe.subprocess, "run") as mint,
+                    patch.object(icon_probe, "probe", return_value=(424, "icon_generation_disabled")) as request,
+                ):
+                    outcome = "icon_generation_disabled" if case == "stable" else "candidate_identity_unverified"
+                    self.assertEqual(icon_probe.run_probe(token, ICON_REVISION, ICON_SOURCE), (424, outcome))
+                    self.assertEqual([call.args[:2] for call in read.call_args_list], [
+                        ("revisions", ICON_REVISION), ("services", "backend"), ("services", "backend"),
+                    ])
+                    mint.assert_called_once()
+                    self.assertEqual(mint.call_args.args[0][-6:], [
+                        "--secret-project", "based-hardware", "--firebase-project", "based-hardware",
+                        "--token-output", str(token),
+                    ])
+                    request.assert_called_once_with(token, ICON_HOST)
+
+    def test_app_icon_probe_refuses_unbound_dispatch(self) -> None:
+        with patch.object(icon_probe, "describe") as read:
+            self.assertEqual(
+                icon_probe.run_probe(Path("token"), "", ICON_SOURCE), (None, "candidate_input_invalid")
+            )
+            self.assertEqual(
+                icon_probe.run_probe(Path("token"), ICON_REVISION, ""), (None, "candidate_input_invalid")
+            )
+            read.assert_not_called()
+
     def test_all_service_production_smoke_requires_completed_http_401(self) -> None:
         composite = (ROOT / CHECKER.DEPLOY_BACKEND_STACK_ACTION).read_text(encoding="utf-8")
         smoke = composite.split(f"- name: {CHECKER.PROD_SMOKE}\n", 1)[1].split("\n    - name: ", 1)[0]

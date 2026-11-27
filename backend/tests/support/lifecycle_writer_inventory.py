@@ -17,6 +17,8 @@ FIELD_SITES = {
         ('_acknowledge', 'status', 'ConversationStatus.processing', ('status',)),
     ],
     'database/batch_summary_debt.py': [
+        # A new batch projection can settle a historical, proved handoff.
+        ('arm_projection_summary', 'finalization_status', "'completed'", ('finalization_status',)),
         ('arm_projection_summary', 'summary_due_at', "candidate['summary_due_at']", ('summary_due_at',)),
         (
             'arm_projection_summary',
@@ -1257,15 +1259,39 @@ FIELD_SITES = {
         ),
         (
             '_complete_server_batch_capture_txn',
+            'finalization_status',
+            "'completed'",
+            (
+                'finalization_status',
+                'home_transcription_deadline_at',
+                'home_transcription_pending_at',
+                'relevance_decision',
+                'status',
+            ),
+        ),
+        (
+            '_complete_server_batch_capture_txn',
             'home_transcription_deadline_at',
             'now + timedelta(seconds=home_transcription_deadline_seconds())',
-            ('home_transcription_deadline_at', 'home_transcription_pending_at', 'relevance_decision', 'status'),
+            (
+                'finalization_status',
+                'home_transcription_deadline_at',
+                'home_transcription_pending_at',
+                'relevance_decision',
+                'status',
+            ),
         ),
         (
             '_complete_server_batch_capture_txn',
             'home_transcription_pending_at',
             'now',
-            ('home_transcription_deadline_at', 'home_transcription_pending_at', 'relevance_decision', 'status'),
+            (
+                'finalization_status',
+                'home_transcription_deadline_at',
+                'home_transcription_pending_at',
+                'relevance_decision',
+                'status',
+            ),
         ),
         # Zero-preview server-batch transaction: job terminal, conversation
         # terminal/relevance update, and the relevance input snapshot.
@@ -1292,7 +1318,13 @@ FIELD_SITES = {
             '_complete_server_batch_capture_txn',
             'status',
             "'completed'",
-            ('home_transcription_deadline_at', 'home_transcription_pending_at', 'relevance_decision', 'status'),
+            (
+                'finalization_status',
+                'home_transcription_deadline_at',
+                'home_transcription_pending_at',
+                'relevance_decision',
+                'status',
+            ),
         ),
         ('_complete_server_batch_capture_txn', 'status', "'completed'", ('status',)),
         (
@@ -1828,6 +1860,8 @@ FIELD_SITES = {
         ('recover_deferred_processing_failure_txn', 'status', "'completed'", ('deferred', 'status')),
     ],
     'database/conversations.py': [
+        # A confirmed discard settles only the conversation's projection.
+        ('_settle_discarded_finalization_projection', 'finalization_status', "'completed'", ('finalization_status',)),
         ('claim_conversation_status._claim', 'status', 'claimed_status.value', ('status',)),
         ('claim_conversation_status_in_txn', 'status', 'claimed_status', ('status',)),
         ('claim_conversation_status_in_txn', 'terminal_family', 'terminal_family', ('terminal_family',)),
@@ -3483,12 +3517,12 @@ FIELD_SITES = {
         ('waive_short_clip_summary_debt', 'summary_due_at', 'None', ('summary_due_at',))
     ],
     'utils/conversations/process_conversation.py': [
+        ('_process_conversation_steps', 'status', 'ConversationStatus.completed', ('status',)),
+        ('_process_conversation_steps', 'status', 'ConversationStatus.completed', ('status',)),
+        ('_process_conversation_steps', 'status', 'ConversationStatus.completed', ('status',)),
         ('_store_budget_waiting', 'status', 'ConversationStatus.completed', ('status',)),
         ('_store_deferred_conversation', 'status', 'ConversationStatus.completed', ('status',)),
         ('_store_deferred_conversation', 'status', 'ConversationStatus.processing', ('status',)),
-        ('process_conversation', 'status', 'ConversationStatus.completed', ('status',)),
-        ('process_conversation', 'status', 'ConversationStatus.completed', ('status',)),
-        ('process_conversation', 'status', 'ConversationStatus.completed', ('status',)),
         ('process_user_expression_measurement_callback', 'status', 'task_status', ('status',)),
     ],
     'utils/conversations/summary_delivery.py': [
@@ -4958,7 +4992,7 @@ KNOWN_TERMINAL_WRITERS = {
         ('utils/conversations/lifecycle.py', 'transition'): 'owner',
         ('utils/conversations/process_conversation.py', '_store_budget_waiting'): 'unclassified',
         ('utils/conversations/process_conversation.py', '_store_deferred_conversation'): 'owner',
-        ('utils/conversations/process_conversation.py', 'process_conversation'): 'unclassified',
+        ('utils/conversations/process_conversation.py', '_process_conversation_steps'): 'unclassified',
         ('scripts/staging/replay.py', 'StagingFirestoreSeeder.seed_capture'): 'unclassified',
         ('utils/dream_canary.py', 'seed'): 'unclassified',
         ('utils/imports/limitless.py', 'process_limitless_import'): 'unclassified',

@@ -308,7 +308,7 @@ async def test_guard_ticks_while_maintenance_is_stalled(guard, monkeypatch):
 async def test_guard_supervisor_recovers_after_resolution_failure(monkeypatch):
     stop = asyncio.Event()
     refresh = Mock()
-    resolve = Mock(side_effect=[RuntimeError('synthetic'), SimpleNamespace(refresh_fresh_guard=refresh)])
+    resolve = Mock(side_effect=[RuntimeError('synthetic'), SimpleNamespace(refresh_serving_fresh_guard=refresh)])
 
     async def inline_db(executor, fn, *args):
         return fn(*args)

@@ -1,0 +1,17 @@
+{
+  "schema_version": 1,
+  "id": "FC-partial-pass-renumbers-beside-prior-voices",
+  "family": "identity-qualifier",
+  "violated_contract": "A later speaker pass that updates only part of a conversation writes into the same conversation-wide id space the earlier pass already numbered. Allocating fresh ids for the segments it updates, beside the earlier ids it leaves in place, gives one voice two numbers, and downgrading the whole conversation to unavailable then hides every number (16 of 24 fresh owner v3 rows on 2026-11-26, after the resolver had resolved 19).",
+  "canonical_prevention": "Map the partial pass's voices onto the earlier pass's voices by shared words, one to one in both directions, and reuse those ids; keep the earlier status only when every id then holds one scope and one identity, and fall back to the old behaviour on any ambiguity. Prove it with a lab scenario whose final pass ends partial and a resolution expect key.",
+  "canonical_prevention_artifact": [
+    "backend/tests/unit/test_batch_final_pass.py",
+    "backend/testing/pipeline_lab/scenario/scenarios/speaker_partial_final_pass_keeps_voices.json"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "backend/utils/conversations/final_pass_batch.py",
+    "backend/utils/conversations/speaker_resolution.py"
+  ],
+  "status": "open"
+}

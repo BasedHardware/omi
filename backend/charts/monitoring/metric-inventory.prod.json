@@ -2415,7 +2415,8 @@
     "omi_batch_pipeline_census_state_observed_at_seconds",
     "omi_batch_pipeline_census_snapshot_timestamp_seconds",
     "omi_batch_pipeline_census_registered_stocks",
-    "omi_batch_pipeline_census_sample_failures_total"
+    "omi_batch_pipeline_census_sample_failures_total",
+    "omi_batch_pipeline_vendor_attempt_audio_seconds_total"
   ],
   "legacy_debt": {
     "bfobs1syncenq01": {

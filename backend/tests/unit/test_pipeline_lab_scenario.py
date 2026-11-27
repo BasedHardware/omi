@@ -74,7 +74,7 @@ def test_committed_scenarios_are_valid_and_named_after_their_file():
 
 # Committed scenarios that reproduce an open product bug, and the checks it fails. Its fix PR deletes the
 # scenario's expected_failure and its row here.
-KNOWN_BUGS = {'finish_after_second_close': ['finish_response_names_b', 'b_fast_finished']}
+KNOWN_BUGS: dict[str, list[str]] = {}
 
 
 def test_incident_scenarios_are_plain_passes_since_the_finish_fix():

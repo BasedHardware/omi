@@ -97,9 +97,10 @@ async def upload(
                 snapshots['conversations'] = {conversation_id: row}
         return ProtectionContext('standard', 0)
 
-    def stage(work, body):
+    def stage(work, body, *, record_origin):
         assert work.timing_store == 'sync'
         staged.append(work)
+        probe.staged_record_origin = record_origin
         probe.staged_context = read_context(body)
         if stop_after_staging:
             raise RuntimeError('stop after synthetic staging')
@@ -140,12 +141,18 @@ def admitted(response, staged) -> bool:
 
 
 @pytest.mark.asyncio
-async def test_batch_sync_v1_record_origin_wal_admits_sync_timing(monkeypatch):
-    response, staged, _ = await upload(
-        monkeypatch, user_language='en', conversation_language='en', owner='batch_sync_v1', record_origin=True
+@pytest.mark.parametrize('record_origin', [False, True])
+async def test_sync_wal_admits_timing_and_stages_route_provenance(monkeypatch, record_origin):
+    response, staged, probe = await upload(
+        monkeypatch,
+        user_language='en',
+        conversation_language='en',
+        owner='batch_sync_v1' if record_origin else None,
+        record_origin=record_origin,
     )
     assert admitted(response, staged)
     assert staged[0].timing_store == 'sync'
+    assert probe.staged_record_origin is record_origin
 
 
 @pytest.mark.asyncio

@@ -889,7 +889,7 @@ environments:
             source: environment
           CONVERSATIONS_V3_STAGE:
             source: literal
-            value: beta
+            value: all
           CONVERSATIONS_V3_FIRST_APP_BUILD:
             source: literal
             value: ''
@@ -1423,7 +1423,7 @@ environments:
             HOSTED_PUSHER_API_URL:
               value: http://pusher.omiapi.com
               category: service_discovery
-            CONVERSATIONS_V3_STAGE: {value: beta, category: rollout}
+            CONVERSATIONS_V3_STAGE: {value: all, category: rollout}
             CONVERSATIONS_V3_FIRST_APP_BUILD:
               value: ''
               category: config
@@ -1844,7 +1844,7 @@ environments:
             OMI_PARITY_PACK_EXPORT_INTERVAL_SECONDS:
               value: '3600'
               category: replay_capture
-            CONVERSATIONS_V3_STAGE: {value: beta, category: rollout}
+            CONVERSATIONS_V3_STAGE: {value: all, category: rollout}
             CONVERSATIONS_V3_FIRST_APP_BUILD:
               value: ''
               category: config
@@ -2249,7 +2249,7 @@ environments:
               category: replay_capture
             CONVERSATION_RELEVANCE_JEV_PERCENT:
               value: '0'
-            CONVERSATIONS_V3_STAGE: {value: beta, category: rollout}
+            CONVERSATIONS_V3_STAGE: {value: all, category: rollout}
             CONVERSATIONS_V3_FIRST_APP_BUILD:
               value: ''
               category: config
@@ -2628,7 +2628,7 @@ environments:
               category: replay_capture
             CONVERSATION_RELEVANCE_JEV_PERCENT:
               value: '0'
-            CONVERSATIONS_V3_STAGE: {value: beta, category: rollout}
+            CONVERSATIONS_V3_STAGE: {value: all, category: rollout}
             CONVERSATIONS_V3_FIRST_APP_BUILD:
               value: ''
               category: config
@@ -2709,7 +2709,7 @@ environments:
               value: based-hardware
             GOOGLE_CLOUD_PROJECT:
               value: based-hardware
-            CONVERSATIONS_V3_STAGE: {value: beta, category: rollout}
+            CONVERSATIONS_V3_STAGE: {value: all, category: rollout}
             CONVERSATIONS_V3_FIRST_APP_BUILD:
               value: ''
               category: config
@@ -2786,7 +2786,7 @@ environments:
               value: based-hardware
             GOOGLE_CLOUD_PROJECT:
               value: based-hardware
-            CONVERSATIONS_V3_STAGE: {value: beta, category: rollout}
+            CONVERSATIONS_V3_STAGE: {value: all, category: rollout}
             CONVERSATIONS_V3_FIRST_APP_BUILD:
               value: ''
               category: config
@@ -2832,7 +2832,7 @@ environments:
               value: based-hardware
             GOOGLE_CLOUD_PROJECT:
               value: based-hardware
-            CONVERSATIONS_V3_STAGE: {value: beta, category: rollout}
+            CONVERSATIONS_V3_STAGE: {value: all, category: rollout}
             CONVERSATIONS_V3_FIRST_APP_BUILD:
               value: ''
               category: config
@@ -2891,7 +2891,7 @@ environments:
               value: based-hardware
             BASE_API_URL:
               value: https://api.omiapi.com
-            CONVERSATIONS_V3_STAGE: {value: beta, category: rollout}
+            CONVERSATIONS_V3_STAGE: {value: all, category: rollout}
             CONVERSATIONS_V3_FIRST_APP_BUILD:
               value: ''
               category: config
@@ -3936,7 +3936,7 @@ environments:
             value: 'on'
           CONVERSATIONS_V3_STAGE:
             source: literal
-            value: beta
+            value: all
           CONVERSATIONS_V3_FIRST_APP_BUILD:
             source: literal
             value: ''
@@ -4431,6 +4431,18 @@ environments:
             BATCH_PIPELINE_PROJECTION_PAGINATION_ENABLED: {value: 'true', category: rollout}
             BATCH_PIPELINE_ASYNC_PROJECTION_ENABLED: {value: 'true', category: rollout}
             BATCH_PIPELINE_RECOVERY_MODE: {value: 'off', category: rollout}
+            CONVERSATIONS_V3_LOCKED_DERIVED_ALLOWANCE:
+              value: '2048'
+              category: config
+            CONVERSATIONS_V3_LOCKED_DERIVED_BYTES:
+              value: '8388608'
+              category: config
+            CONVERSATIONS_V3_LOCKED_MAX_BATCHES:
+              value: '6'
+              category: config
+            CONVERSATIONS_V3_LOCKED_DAILY_PASSES:
+              value: '20'
+              category: config
             CONVERSATIONS_V3_LIVE_TITLE:
               value: 'on'
               category: ops_kill
@@ -4695,7 +4707,7 @@ environments:
             CONVERSATIONS_V3:
               value: 'on'
               category: ops_kill
-            CONVERSATIONS_V3_STAGE: {value: beta, category: rollout}
+            CONVERSATIONS_V3_STAGE: {value: all, category: rollout}
             CONVERSATIONS_V3_FIRST_APP_BUILD:
               value: ''
               category: config
@@ -5026,6 +5038,18 @@ environments:
             BATCH_PIPELINE_PROJECTION_PAGINATION_ENABLED: {value: 'true', category: rollout}
             BATCH_PIPELINE_ASYNC_PROJECTION_ENABLED: {value: 'true', category: rollout}
             BATCH_PIPELINE_RECOVERY_MODE: {value: 'off', category: rollout}
+            CONVERSATIONS_V3_LOCKED_DERIVED_ALLOWANCE:
+              value: '2048'
+              category: config
+            CONVERSATIONS_V3_LOCKED_DERIVED_BYTES:
+              value: '8388608'
+              category: config
+            CONVERSATIONS_V3_LOCKED_MAX_BATCHES:
+              value: '6'
+              category: config
+            CONVERSATIONS_V3_LOCKED_DAILY_PASSES:
+              value: '20'
+              category: config
             CONVERSATION_PARKED_TERMINAL_STATUS_ENABLED: {value: 'off', category: rollout}
             CONVERSATIONS_V3_BACKFILL:
               value: 'on'
@@ -5117,7 +5141,7 @@ environments:
             BATCH_FINAL_PASS_ENABLED:
               value: 'true'
               category: ops_kill
-            BATCH_VENDOR_ROUTE_TABLE: {value: '{"schema_version":1,"table_version":"en-overflow-1116","selection":"ordered","gpu_floor_percent":0.0,"routes":{"gpu":{"price_usd_per_audio_hour":null,"daily_audio_hours_cap":null,"monthly_budget_usd":null,"failover_only":false,"speaker_turns":"discard"},"modulate":{"price_usd_per_audio_hour":0.06,"daily_audio_hours_cap":5000.0,"monthly_budget_usd":null,"failover_only":false,"speaker_turns":"discard"},"soniox":{"price_usd_per_audio_hour":null,"daily_audio_hours_cap":1000.0,"monthly_budget_usd":null,"failover_only":true,"speaker_turns":"discard"}},"rows":[{"language_class":"en","options":[{"route":"gpu","quality_tier":"accepted","quality_source":"legacy_parity"},{"route":"modulate","quality_tier":"accepted","quality_source":"legacy_parity"},{"route":"soniox","quality_tier":"accepted","quality_source":"staging_drill"}]},{"language_class":"gpu_supported","options":[{"route":"gpu","quality_tier":"accepted","quality_source":"legacy_parity"}]},{"language_class":"gpu_unsupported","options":[{"route":"modulate","quality_tier":"accepted","quality_source":"legacy_parity"},{"route":"soniox","quality_tier":"accepted","quality_source":"staging_drill"}]},{"language_class":"*","options":[{"route":"gpu","quality_tier":"accepted","quality_source":"legacy_parity"}]}]}',
+            BATCH_VENDOR_ROUTE_TABLE: {value: '{"schema_version":1,"table_version":"soniox-unsupported-1127","selection":"ordered","gpu_floor_percent":0.0,"routes":{"gpu":{"price_usd_per_audio_hour":null,"daily_audio_hours_cap":null,"monthly_budget_usd":null,"failover_only":false,"speaker_turns":"discard"},"modulate":{"price_usd_per_audio_hour":0.06,"daily_audio_hours_cap":5000.0,"monthly_budget_usd":null,"failover_only":false,"speaker_turns":"discard"},"soniox":{"price_usd_per_audio_hour":0.12,"daily_audio_hours_cap":null,"monthly_budget_usd":null,"failover_only":false,"speaker_turns":"discard"}},"rows":[{"language_class":"en","options":[{"route":"gpu","quality_tier":"accepted","quality_source":"legacy_parity"},{"route":"modulate","quality_tier":"accepted","quality_source":"legacy_parity"},{"route":"soniox","quality_tier":"accepted","quality_source":"staging_drill"}]},{"language_class":"gpu_supported","options":[{"route":"gpu","quality_tier":"accepted","quality_source":"legacy_parity"}]},{"language_class":"gpu_unsupported","options":[{"route":"soniox","quality_tier":"accepted","quality_source":"public_eval_1127"},{"route":"modulate","quality_tier":"accepted","quality_source":"legacy_parity"}]},{"language_class":"*","options":[{"route":"gpu","quality_tier":"accepted","quality_source":"legacy_parity"}]}]}',
               category: rollout}
             BATCH_VENDOR_OVERFLOW_PRIORITIES:
               value: fresh,recent
@@ -5273,7 +5297,7 @@ environments:
             CONVERSATIONS_V3:
               value: 'on'
               category: ops_kill
-            CONVERSATIONS_V3_STAGE: {value: beta, category: rollout}
+            CONVERSATIONS_V3_STAGE: {value: all, category: rollout}
             CONVERSATIONS_V3_FIRST_APP_BUILD:
               value: ''
               category: config
@@ -5591,6 +5615,18 @@ environments:
             BATCH_PIPELINE_PROJECTION_PAGINATION_ENABLED: {value: 'true', category: rollout}
             BATCH_PIPELINE_ASYNC_PROJECTION_ENABLED: {value: 'true', category: rollout}
             BATCH_PIPELINE_RECOVERY_MODE: {value: 'off', category: rollout}
+            CONVERSATIONS_V3_LOCKED_DERIVED_ALLOWANCE:
+              value: '2048'
+              category: config
+            CONVERSATIONS_V3_LOCKED_DERIVED_BYTES:
+              value: '8388608'
+              category: config
+            CONVERSATIONS_V3_LOCKED_MAX_BATCHES:
+              value: '6'
+              category: config
+            CONVERSATIONS_V3_LOCKED_DAILY_PASSES:
+              value: '20'
+              category: config
             CONVERSATIONS_V3_LIVE_TITLE:
               value: 'on'
               category: ops_kill
@@ -5685,7 +5721,7 @@ environments:
             BATCH_FINAL_PASS_ENABLED:
               value: 'true'
               category: ops_kill
-            BATCH_VENDOR_ROUTE_TABLE: {value: '{"schema_version":1,"table_version":"en-overflow-1116","selection":"ordered","gpu_floor_percent":0.0,"routes":{"gpu":{"price_usd_per_audio_hour":null,"daily_audio_hours_cap":null,"monthly_budget_usd":null,"failover_only":false,"speaker_turns":"discard"},"modulate":{"price_usd_per_audio_hour":0.06,"daily_audio_hours_cap":5000.0,"monthly_budget_usd":null,"failover_only":false,"speaker_turns":"discard"},"soniox":{"price_usd_per_audio_hour":null,"daily_audio_hours_cap":1000.0,"monthly_budget_usd":null,"failover_only":true,"speaker_turns":"discard"}},"rows":[{"language_class":"en","options":[{"route":"gpu","quality_tier":"accepted","quality_source":"legacy_parity"},{"route":"modulate","quality_tier":"accepted","quality_source":"legacy_parity"},{"route":"soniox","quality_tier":"accepted","quality_source":"staging_drill"}]},{"language_class":"gpu_supported","options":[{"route":"gpu","quality_tier":"accepted","quality_source":"legacy_parity"}]},{"language_class":"gpu_unsupported","options":[{"route":"modulate","quality_tier":"accepted","quality_source":"legacy_parity"},{"route":"soniox","quality_tier":"accepted","quality_source":"staging_drill"}]},{"language_class":"*","options":[{"route":"gpu","quality_tier":"accepted","quality_source":"legacy_parity"}]}]}',
+            BATCH_VENDOR_ROUTE_TABLE: {value: '{"schema_version":1,"table_version":"soniox-unsupported-1127","selection":"ordered","gpu_floor_percent":0.0,"routes":{"gpu":{"price_usd_per_audio_hour":null,"daily_audio_hours_cap":null,"monthly_budget_usd":null,"failover_only":false,"speaker_turns":"discard"},"modulate":{"price_usd_per_audio_hour":0.06,"daily_audio_hours_cap":5000.0,"monthly_budget_usd":null,"failover_only":false,"speaker_turns":"discard"},"soniox":{"price_usd_per_audio_hour":0.12,"daily_audio_hours_cap":null,"monthly_budget_usd":null,"failover_only":false,"speaker_turns":"discard"}},"rows":[{"language_class":"en","options":[{"route":"gpu","quality_tier":"accepted","quality_source":"legacy_parity"},{"route":"modulate","quality_tier":"accepted","quality_source":"legacy_parity"},{"route":"soniox","quality_tier":"accepted","quality_source":"staging_drill"}]},{"language_class":"gpu_supported","options":[{"route":"gpu","quality_tier":"accepted","quality_source":"legacy_parity"}]},{"language_class":"gpu_unsupported","options":[{"route":"soniox","quality_tier":"accepted","quality_source":"public_eval_1127"},{"route":"modulate","quality_tier":"accepted","quality_source":"legacy_parity"}]},{"language_class":"*","options":[{"route":"gpu","quality_tier":"accepted","quality_source":"legacy_parity"}]}]}',
               category: rollout}
             BATCH_VENDOR_OVERFLOW_PRIORITIES:
               value: fresh,recent
@@ -5819,7 +5855,7 @@ environments:
             CONVERSATIONS_V3:
               value: 'on'
               category: ops_kill
-            CONVERSATIONS_V3_STAGE: {value: beta, category: rollout}
+            CONVERSATIONS_V3_STAGE: {value: all, category: rollout}
             CONVERSATIONS_V3_FIRST_APP_BUILD:
               value: ''
               category: config
@@ -6100,6 +6136,18 @@ environments:
             BATCH_PIPELINE_PROJECTION_PAGINATION_ENABLED: {value: 'true', category: rollout}
             BATCH_PIPELINE_ASYNC_PROJECTION_ENABLED: {value: 'true', category: rollout}
             BATCH_PIPELINE_RECOVERY_MODE: {value: 'on', category: rollout}
+            CONVERSATIONS_V3_LOCKED_DERIVED_ALLOWANCE:
+              value: '2048'
+              category: config
+            CONVERSATIONS_V3_LOCKED_DERIVED_BYTES:
+              value: '8388608'
+              category: config
+            CONVERSATIONS_V3_LOCKED_MAX_BATCHES:
+              value: '6'
+              category: config
+            CONVERSATIONS_V3_LOCKED_DAILY_PASSES:
+              value: '20'
+              category: config
             CONVERSATIONS_V3_LIVE_TITLE:
               value: 'off'
               category: ops_kill
@@ -6214,7 +6262,7 @@ environments:
             BATCH_FINAL_PASS_ENABLED:
               value: 'false'
               category: ops_kill
-            BATCH_VENDOR_ROUTE_TABLE: {value: '{"schema_version":1,"table_version":"en-overflow-1116","selection":"ordered","gpu_floor_percent":0.0,"routes":{"gpu":{"price_usd_per_audio_hour":null,"daily_audio_hours_cap":null,"monthly_budget_usd":null,"failover_only":false,"speaker_turns":"discard"},"modulate":{"price_usd_per_audio_hour":0.06,"daily_audio_hours_cap":5000.0,"monthly_budget_usd":null,"failover_only":false,"speaker_turns":"discard"},"soniox":{"price_usd_per_audio_hour":null,"daily_audio_hours_cap":1000.0,"monthly_budget_usd":null,"failover_only":true,"speaker_turns":"discard"}},"rows":[{"language_class":"en","options":[{"route":"gpu","quality_tier":"accepted","quality_source":"legacy_parity"},{"route":"modulate","quality_tier":"accepted","quality_source":"legacy_parity"},{"route":"soniox","quality_tier":"accepted","quality_source":"staging_drill"}]},{"language_class":"gpu_supported","options":[{"route":"gpu","quality_tier":"accepted","quality_source":"legacy_parity"}]},{"language_class":"gpu_unsupported","options":[{"route":"modulate","quality_tier":"accepted","quality_source":"legacy_parity"},{"route":"soniox","quality_tier":"accepted","quality_source":"staging_drill"}]},{"language_class":"*","options":[{"route":"gpu","quality_tier":"accepted","quality_source":"legacy_parity"}]}]}',
+            BATCH_VENDOR_ROUTE_TABLE: {value: '{"schema_version":1,"table_version":"soniox-unsupported-1127","selection":"ordered","gpu_floor_percent":0.0,"routes":{"gpu":{"price_usd_per_audio_hour":null,"daily_audio_hours_cap":null,"monthly_budget_usd":null,"failover_only":false,"speaker_turns":"discard"},"modulate":{"price_usd_per_audio_hour":0.06,"daily_audio_hours_cap":5000.0,"monthly_budget_usd":null,"failover_only":false,"speaker_turns":"discard"},"soniox":{"price_usd_per_audio_hour":0.12,"daily_audio_hours_cap":null,"monthly_budget_usd":null,"failover_only":false,"speaker_turns":"discard"}},"rows":[{"language_class":"en","options":[{"route":"gpu","quality_tier":"accepted","quality_source":"legacy_parity"},{"route":"modulate","quality_tier":"accepted","quality_source":"legacy_parity"},{"route":"soniox","quality_tier":"accepted","quality_source":"staging_drill"}]},{"language_class":"gpu_supported","options":[{"route":"gpu","quality_tier":"accepted","quality_source":"legacy_parity"}]},{"language_class":"gpu_unsupported","options":[{"route":"soniox","quality_tier":"accepted","quality_source":"public_eval_1127"},{"route":"modulate","quality_tier":"accepted","quality_source":"legacy_parity"}]},{"language_class":"*","options":[{"route":"gpu","quality_tier":"accepted","quality_source":"legacy_parity"}]}]}',
               category: rollout}
             BATCH_VENDOR_OVERFLOW_PRIORITIES:
               value: fresh,recent
@@ -6334,7 +6382,7 @@ environments:
             CONVERSATIONS_V3:
               value: 'on'
               category: ops_kill
-            CONVERSATIONS_V3_STAGE: {value: beta, category: rollout}
+            CONVERSATIONS_V3_STAGE: {value: all, category: rollout}
             CONVERSATIONS_V3_FIRST_APP_BUILD:
               value: ''
               category: config
@@ -6614,6 +6662,18 @@ environments:
             BATCH_PIPELINE_PROJECTION_PAGINATION_ENABLED: {value: 'true', category: rollout}
             BATCH_PIPELINE_ASYNC_PROJECTION_ENABLED: {value: 'true', category: rollout}
             BATCH_PIPELINE_RECOVERY_MODE: {value: 'on', category: rollout}
+            CONVERSATIONS_V3_LOCKED_DERIVED_ALLOWANCE:
+              value: '2048'
+              category: config
+            CONVERSATIONS_V3_LOCKED_DERIVED_BYTES:
+              value: '8388608'
+              category: config
+            CONVERSATIONS_V3_LOCKED_MAX_BATCHES:
+              value: '6'
+              category: config
+            CONVERSATIONS_V3_LOCKED_DAILY_PASSES:
+              value: '20'
+              category: config
             CONVERSATIONS_V3_LIVE_TITLE:
               value: 'on'
               category: ops_kill
@@ -6728,7 +6788,7 @@ environments:
             BATCH_FINAL_PASS_ENABLED:
               value: 'false'
               category: ops_kill
-            BATCH_VENDOR_ROUTE_TABLE: {value: '{"schema_version":1,"table_version":"en-overflow-1116","selection":"ordered","gpu_floor_percent":0.0,"routes":{"gpu":{"price_usd_per_audio_hour":null,"daily_audio_hours_cap":null,"monthly_budget_usd":null,"failover_only":false,"speaker_turns":"discard"},"modulate":{"price_usd_per_audio_hour":0.06,"daily_audio_hours_cap":5000.0,"monthly_budget_usd":null,"failover_only":false,"speaker_turns":"discard"},"soniox":{"price_usd_per_audio_hour":null,"daily_audio_hours_cap":1000.0,"monthly_budget_usd":null,"failover_only":true,"speaker_turns":"discard"}},"rows":[{"language_class":"en","options":[{"route":"gpu","quality_tier":"accepted","quality_source":"legacy_parity"},{"route":"modulate","quality_tier":"accepted","quality_source":"legacy_parity"},{"route":"soniox","quality_tier":"accepted","quality_source":"staging_drill"}]},{"language_class":"gpu_supported","options":[{"route":"gpu","quality_tier":"accepted","quality_source":"legacy_parity"}]},{"language_class":"gpu_unsupported","options":[{"route":"modulate","quality_tier":"accepted","quality_source":"legacy_parity"},{"route":"soniox","quality_tier":"accepted","quality_source":"staging_drill"}]},{"language_class":"*","options":[{"route":"gpu","quality_tier":"accepted","quality_source":"legacy_parity"}]}]}',
+            BATCH_VENDOR_ROUTE_TABLE: {value: '{"schema_version":1,"table_version":"soniox-unsupported-1127","selection":"ordered","gpu_floor_percent":0.0,"routes":{"gpu":{"price_usd_per_audio_hour":null,"daily_audio_hours_cap":null,"monthly_budget_usd":null,"failover_only":false,"speaker_turns":"discard"},"modulate":{"price_usd_per_audio_hour":0.06,"daily_audio_hours_cap":5000.0,"monthly_budget_usd":null,"failover_only":false,"speaker_turns":"discard"},"soniox":{"price_usd_per_audio_hour":0.12,"daily_audio_hours_cap":null,"monthly_budget_usd":null,"failover_only":false,"speaker_turns":"discard"}},"rows":[{"language_class":"en","options":[{"route":"gpu","quality_tier":"accepted","quality_source":"legacy_parity"},{"route":"modulate","quality_tier":"accepted","quality_source":"legacy_parity"},{"route":"soniox","quality_tier":"accepted","quality_source":"staging_drill"}]},{"language_class":"gpu_supported","options":[{"route":"gpu","quality_tier":"accepted","quality_source":"legacy_parity"}]},{"language_class":"gpu_unsupported","options":[{"route":"soniox","quality_tier":"accepted","quality_source":"public_eval_1127"},{"route":"modulate","quality_tier":"accepted","quality_source":"legacy_parity"}]},{"language_class":"*","options":[{"route":"gpu","quality_tier":"accepted","quality_source":"legacy_parity"}]}]}',
               category: rollout}
             BATCH_VENDOR_OVERFLOW_PRIORITIES:
               value: fresh,recent
@@ -6845,7 +6905,7 @@ environments:
             CONVERSATIONS_V3:
               value: 'on'
               category: ops_kill
-            CONVERSATIONS_V3_STAGE: {value: beta, category: rollout}
+            CONVERSATIONS_V3_STAGE: {value: all, category: rollout}
             CONVERSATIONS_V3_FIRST_APP_BUILD:
               value: ''
               category: config
@@ -6933,7 +6993,7 @@ environments:
             CONVERSATIONS_V3:
               value: 'on'
               category: ops_kill
-            CONVERSATIONS_V3_STAGE: {value: beta, category: rollout}
+            CONVERSATIONS_V3_STAGE: {value: all, category: rollout}
             CONVERSATIONS_V3_FIRST_APP_BUILD:
               value: ''
               category: config
@@ -7010,7 +7070,7 @@ environments:
             CONVERSATIONS_V3:
               value: 'on'
               category: ops_kill
-            CONVERSATIONS_V3_STAGE: {value: beta, category: rollout}
+            CONVERSATIONS_V3_STAGE: {value: all, category: rollout}
             CONVERSATIONS_V3_FIRST_APP_BUILD:
               value: ''
               category: config
@@ -7060,7 +7120,7 @@ environments:
             CONVERSATIONS_V3:
               value: 'on'
               category: ops_kill
-            CONVERSATIONS_V3_STAGE: {value: beta, category: rollout}
+            CONVERSATIONS_V3_STAGE: {value: all, category: rollout}
             CONVERSATIONS_V3_FIRST_APP_BUILD:
               value: ''
               category: config
@@ -7121,7 +7181,7 @@ environments:
             CONVERSATIONS_V3:
               value: 'on'
               category: ops_kill
-            CONVERSATIONS_V3_STAGE: {value: beta, category: rollout}
+            CONVERSATIONS_V3_STAGE: {value: all, category: rollout}
             CONVERSATIONS_V3_FIRST_APP_BUILD:
               value: ''
               category: config

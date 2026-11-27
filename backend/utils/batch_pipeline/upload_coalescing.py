@@ -159,7 +159,7 @@ def _pack(paths, arguments):
 
 
 async def offer(store, artifacts, seed, *, arguments, context, language, policy, now=None):
-    """Called only after ordinary route/privacy selection, before unit staging."""
+    """Hold a non-recording sync upload after route and privacy selection."""
     if not config.enabled():
         return None
     now = time.time() if now is None else now
@@ -197,7 +197,7 @@ async def offer(store, artifacts, seed, *, arguments, context, language, policy,
         duration_seconds=seconds,
         privacy_generation=context.generation,
     )
-    uri = await run_blocking(storage_executor, artifacts.stage_audio, item, body)
+    uri = await run_blocking(storage_executor, artifacts.stage_audio, item, body, record_origin=False)
     member = {
         'owner_id': arguments['uid'],
         'owner_key': owner_key(arguments['uid']),

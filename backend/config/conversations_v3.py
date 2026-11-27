@@ -70,6 +70,11 @@ def bounded_pending_enabled() -> bool:
     return default_on('CONVERSATIONS_V3_BOUNDED_PENDING')
 
 
+def commit_lease_renewal_enabled() -> bool:
+    """Default on: a multi-batch projection commit renews the pass's lease before each later batch."""
+    return default_on('CONVERSATIONS_V3_COMMIT_LEASE_RENEWAL')
+
+
 def transcript_size_cap_enabled() -> bool:
     return default_on('CONVERSATIONS_V3_TRANSCRIPT_SIZE_CAP')
 
@@ -88,6 +93,12 @@ def size_quarantine_filters() -> bool:
 
 def finish_no_pointer_enabled() -> bool:
     return os.getenv('CONVERSATIONS_V3_FINISH_NO_POINTER', 'on').strip().lower() not in {'off', 'false', '0', 'no'}
+
+
+def finish_newer_capture_enabled() -> bool:
+    """Default on. A live-window Finish cuts a capture that sealed after the window's last speech and
+    no window holds yet. Off cuts the window tail as before and skips the recent-capture read."""
+    return os.getenv('CONVERSATIONS_V3_FINISH_NEWER_CAPTURE', 'on').strip().lower() not in {'off', 'false', '0', 'no'}
 
 
 def live_recap_enabled(uid: str) -> bool:

@@ -5,6 +5,7 @@ Provides shared executors with strict separation (bulkhead pattern):
   small session/code cache reads. Must never starve — gates every request.
 - quiet_replay_executor: bounded quiet-check replay leaves, separate from the DB coordinator.
 - db_executor: Firestore CRUD and Redis data mutations. High volume, moderate latency.
+- conversation_list_executor: deadline-bounded conversation list scans and row preparation.
 - record_barrier_executor: pusher recording custody transactions, isolated from
   integrations and webhook DB work even during Firestore retries.
 - context_executor: optional context reads and fresh mount fences, four workers,
@@ -284,6 +285,14 @@ critical_executor = MonitoredThreadPoolExecutor(
 db_executor = MonitoredThreadPoolExecutor(
     name="db", max_workers=int(os.getenv('PUSHER_DB_EXECUTOR_WORKERS', '32')), thread_name_prefix="db"
 )
+# List row decoding can outlive the HTTP request and cannot be cancelled once
+# it enters a synchronous Firestore or correction-overlay call. Keep those
+# abandoned reads away from the DB pool used to finalize their successful prefix.
+conversation_list_executor = MonitoredThreadPoolExecutor(
+    name="conversation_list",
+    max_workers=int(os.getenv('CONVERSATION_LIST_EXECUTOR_WORKERS', '32')),
+    thread_name_prefix='conversation-list',
+)
 # Optional read-cache checks cannot queue behind, or consume, serving DB workers.
 # Shadow allowance IO cannot occupy the serving DB pool or grow an unbounded queue.
 free_allowance_executor = MonitoredThreadPoolExecutor(
@@ -332,6 +341,15 @@ declared_language_audit_executor = MonitoredThreadPoolExecutor(
     max_queue_size=4,
     thread_name_prefix="declared-language-audit",
     wait_on_saturation=True,  # submit still raises immediately; a full pool is an expected skip, not a warning.
+)
+# The HTTP waiter can leave while an admitted segment upload finishes. Keep
+# those workers bounded and isolated from completed retries on the DB pool.
+from_segments_executor = MonitoredThreadPoolExecutor(
+    name="from_segments",
+    max_workers=8,
+    max_queue_size=4,
+    wait_on_saturation=True,
+    thread_name_prefix="from-segments",
 )
 # Optional per-window LID must not hold the shared sync coordination pool.
 # Bound outstanding calls; run_blocking awaits capacity without blocking a loop.
@@ -398,6 +416,7 @@ _ALL_EXECUTORS = [
     quiet_replay_executor,
     critical_executor,
     db_executor,
+    conversation_list_executor,
     free_allowance_executor,
     read_cache_shadow_executor,
     record_barrier_executor,
@@ -408,6 +427,7 @@ _ALL_EXECUTORS = [
     admission_executor,
     sync_executor,
     auth_deadline_executor,
+    from_segments_executor,
     record_language_executor,
     declared_language_audit_executor,
     postprocess_executor,

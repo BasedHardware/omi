@@ -725,3 +725,28 @@ def test_the_commit_attaches_what_it_wrote_to_a_size_rejection(monkeypatch):
         service._commit('u', 'token', recordings, existing, planned, [])
     assert caught.value.size_commit == (recordings, existing, planned)
     assert service.size_error_document(caught.value.__cause__) == 'da'
+
+
+@pytest.mark.asyncio
+async def test_a_batch_capped_listed_owner_steps_down_to_one_seed_and_its_size_rejection_still_quarantines(
+    owner, monkeypatch
+):
+    # The two ladders compose (#26443 with #26441): a locked-closure batch cap retries with fewer seeds, and the
+    # one-seed pass it reaches is the pass whose size rejection sets the seed's closure aside.
+    rows = owner.rows
+    rows[LEASE].update(v3_blocked_reason=None, v3_blocked_count=0, v3_backoff_until=None)
+    monkeypatch.setenv('CONVERSATIONS_V3_LOCKED_CLOSURE_OWNERS', '*')
+    sized, capped = service._commit, []
+
+    def commit(uid, token, recordings, existing, planned, cache, **kw):
+        if kw.get('bounded_pending_limit') != 1:
+            capped.append(sorted(recordings))
+            raise store.LockedBatchCap('v3_derived_budget')  # before any transaction
+        return sized(uid, token, recordings, existing, planned, cache, **kw)
+
+    monkeypatch.setattr(service, '_commit', commit)
+    assert await service.reconcile('u') == 'blocked'
+    assert capped == [['a', 'b', 'c']]  # the full page, capped: no park, no quarantine
+    assert owner.passes == [(['a', 'b'], ['da'])]  # the one-seed retry, rejected for size
+    assert rows[LEASE][store.SIZE_QUARANTINE_FIELD] == ['a', 'b']
+    assert rows[LEASE]['v3_blocked_reason'] == 'document_too_large'

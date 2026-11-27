@@ -4,8 +4,12 @@ import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/gen/phone_mic_pigeon.g.dart';
+import 'package:omi/services/capture/capture_end.dart';
+import 'package:omi/services/sockets/listen_client_state.dart';
 import 'package:omi/services/sockets/pure_socket.dart';
 import 'package:omi/services/sockets/transcription_service.dart';
+import 'package:omi/services/wals/mobile_batch_buffer.dart';
+import 'package:omi/services/wals/mobile_standard_batch.dart';
 
 import '../../support/capture/capture_replay_world.dart';
 import '../../support/capture/scripted_device_connection.dart';
@@ -101,6 +105,34 @@ void main() {
       expectUserStopThenClose(socket);
     });
 
+    test('session roll and capture-end signal both release the active recording before reporting', () async {
+      await connectPendant();
+      final controller = world.controller;
+      final recording = controller.activeRecordingId;
+      expect(recording, isNotNull);
+      final lane = MobileStandardBatch(
+        buffer: MobileBatchBuffer(directory: directory, publish: (_) async {}),
+        loadVad: () async => throw StateError('this test supplies the VAD speech event'),
+        freeDiskBytes: () async => 1 << 40,
+        visibility: ListenClientState.instance,
+        ownerUid: () => 'synthetic-owner',
+        now: world.clock.now,
+      );
+      controller.installMobileStandardBatch(lane);
+      lane.onSpeech!(recording, world.clock.now());
+      final events = <(String, String)>[];
+      controller.onMobileBatchCaptureEnded = (id) => events.add(('release', id));
+      controller.captureEndReporter = _RecordingEndReporter((signal) {
+        expect(signal.type, CaptureEndType.userInitiated);
+        events.add(('report', signal.recordingSessionId));
+      });
+
+      await controller.stopStreamDeviceRecording();
+
+      expect(events, [('release', recording), ('release', recording), ('report', recording)]);
+      controller.onMobileBatchCaptureEnded = null;
+    });
+
     test('a BLE disconnect closes the socket without a user_stop', () async {
       await connectPendant();
       final socket = world.socket!;
@@ -135,6 +167,19 @@ void main() {
       expect(socket.closeCalls, 1);
     });
   });
+}
+
+class _RecordingEndReporter extends CaptureEndReporter {
+  _RecordingEndReporter(this.onReport)
+      : super(
+            post: (_, {required pendingWals, required sentAt}) async => true,
+            pendingWals: (_) => 0,
+            disabled: () async => false);
+
+  final void Function(CaptureEndSignal) onReport;
+
+  @override
+  Future<void> report(CaptureEndSignal signal) async => onReport(signal);
 }
 
 /// A transport whose sink closed underneath the app just as Stop was tapped.

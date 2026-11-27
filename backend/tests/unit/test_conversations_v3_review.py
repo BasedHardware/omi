@@ -82,7 +82,7 @@ async def test_on_open_scopes_load_and_queues_processing(builder, monkeypatch):
 
     monkeypatch.setattr(store, 'load', load)
     await service.reconcile('u', on_open=True, conversation_id='c')
-    assert seen == [{'conversation_id': 'c'}]
+    assert seen == [{'conversation_id': 'c', 'lease_token': 'token'}]
     service.drain_processing.assert_not_awaited()
     assert committed
 
@@ -150,6 +150,32 @@ async def test_preceding_outline_context_is_title_and_line(builder, monkeypatch)
     a_row, b_row = a, b
     await service.reconcile('u')
     assert messages[1][-1] == ('human', 'Preceding conversation: A plan\nYou made a plan.')
+
+
+@pytest.mark.asyncio
+async def test_malformed_outline_uses_cached_deterministic_fallback(builder, monkeypatch):
+    monkeypatch.delenv('OMI_V3_SUMMARY_FIRST_OPEN_GATING', raising=False)
+    monkeypatch.delenv('LLM_GATEWAY_BACKGROUND_OUTLINE_FLEX', raising=False)
+    committed, _ = builder
+    recording = source()
+    monkeypatch.setattr(store, 'load', lambda *a, **kw: ({'r': recording}, {}, []))
+    monkeypatch.setattr(service.context, 'cache_key', lambda *a: 'fingerprint')
+    malformed = AsyncMock(return_value='malformed JSON')
+    monkeypatch.setattr(service, 'leased_work', malformed)
+
+    await service.reconcile('u')
+    (row,) = committed[0][4]
+    cache = committed[0][5]
+    (cache_entry,) = cache
+    assert cache_entry['entries'][0]['first_line'] == 1
+    assert cache_entry['entries'][0]['_outline_failed'] is True
+    assert row['v3_process_failure_reason'] == 'outline'
+
+    monkeypatch.setattr(store, 'load', lambda *a, **kw: ({'r': recording}, {row['id']: row}, cache))
+    await service.reconcile('u')
+
+    malformed.assert_awaited_once()
+    assert committed[1][4][0]['structured']['title'] == row['structured']['title']
 
 
 @pytest.mark.asyncio

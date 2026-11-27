@@ -549,7 +549,7 @@ def test_production_cloud_run_only_smokes_the_promoted_serving_api():
 
     serving_smoke = by_name['Smoke promoted production serving API']
     assert serving_smoke['if'] == (
-        "${{ (inputs.cloud_run_service == 'all' || inputs.cloud_run_service == 'backend') && "
+        "${{ success() && !cancelled() && (inputs.cloud_run_service == 'all' || inputs.cloud_run_service == 'backend') && "
         "(inputs.deploy_profile == 'manual' && inputs.environment == 'prod') }}"
     )
     assert 'https://api.omi.me/v2/desktop/beta/candidates/reserve' in serving_smoke['run']

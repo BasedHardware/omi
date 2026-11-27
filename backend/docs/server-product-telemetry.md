@@ -93,6 +93,50 @@ unsampled best-effort delivery is not a durable outbox or proof of ingestion.
 `MCP Tool Call` remains the stable 25%-per-UID sampled diagnostic; `MCP Active`
 remains authenticated transport presence and never qualifies by itself.
 
+### `MCP Daily Activity` rollup (SCA-3665)
+
+The per-call stream is about 71k PostHog events a day, 80% of them from a few
+always-on streams. `utils/mcp_daily_rollup.py` keeps, per uid/client/UTC day, the
+counters the Omi TV reader needs in a Redis hash `mcp:roll:{YYYYMMDD}:{client}:{uid}`:
+raw calls, qualifying calls (`user`/`unknown`), first/last call second,
+positive-gap count, sum and sum of squares, and the dominant tool's count. Each
+success queues one atomic Lua call on `postprocess_executor` (hash, TTL 3 days,
+and a `ZADD NX` on the day's dirty set `mcp:roll:dirty:{YYYYMMDD}`). A
+managed task on each API-serving process sweeps every 60 seconds on the DB
+executor and is cancelled during backend shutdown. It emits a cumulative
+`MCP Daily Activity` snapshot (schema 1, `$process_person_profile: false`) at
+most once per 30 minutes per key, plus a final one for every key still dirty
+after its day ends. Redis reads and claims a snapshot atomically. A rejected
+capture is requeued. Redis and scheduling failures emit the shared
+`omi_fallback_total` signal with `component="mcp_daily_rollup"`.
+
+`web/admin/lib/wall-mcp.ts` reads, per actor/client/day, whichever source saw
+more qualifying calls (raw on a tie; the largest snapshot by `raw_calls`). The
+counts and the UTC day match the raw stream (the day comes from the success
+time). Gaps use Redis TIME, one clock ordered across instances, so they can
+differ from the raw event clock by queue delay; the first full day's comparison
+against the raw reader gates switching the raw event off.
+
+Kill switch: `MCP_DAILY_ROLLUP_ENABLED` (on unless `0`/`false`/`off`/`no`).
+Redis errors fail open and never touch the raw event. The server keeps emitting
+the raw event. `contracts/analytics/posthog.json` already drops it at ingestion;
+the release owner applies that only after the first full UTC day of snapshots
+matches the raw-row reader.
+
+From `web/admin`, use the existing read-only PostHog credential and set
+`OMI_TV_MCP_RECONCILE_DAY` to the first UTC date served by the rollup from
+00:00 through 24:00. Run the comparison after the closing snapshots arrive.
+
+```sh
+OMI_TV_LIVE_CHECK=1 OMI_TV_MCP_RECONCILE_DAY=YYYY-MM-DD \
+  npx vitest run lib/__tests__/wall-mcp-live.test.ts -t 'first complete production UTC day'
+```
+
+The check runs the same reader independently for raw events and numeric
+snapshots. Record the UTC date, input rows, qualifying actor counts and
+eligible call totals. Both sources must have input rows and agree on actor
+and call counts before step B.
+
 ## Non-Python library labels
 
 `posthog-capture-v1-internal` comes from PostHog's own Django internal capture

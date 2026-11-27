@@ -109,6 +109,24 @@ transaction rechecks its live state and persists the cut or deferred batch
 request on its recording. A multi-unit batch request can cut only after the full
 native binding has projected. Set the switch to `off` on the API service to restore the lookup-miss 404.
 
+`CONVERSATIONS_V3_FINISH_NEWER_CAPTURE` defaults to `on`. When that Finish resolves to a live
+window, the same transaction reads at most `RECENT_FINISH_LIMIT` (8) recent sources. The newest sealed
+Listen capture that ended after the window's `finished_at`, is not one of its sources, carries
+`has_content`, is unclaimed and passes the recording-Finish checks is the newer capture. If its speech
+has landed, it takes the recording-scoped cut instead of the window tail and the response names it. If
+it is a server-batch capture whose speech has not landed (it may hold only silence), the transaction
+stores the window-tail cut and the capture's recording-scoped request together (two writes, both ledger
+reads first) and the response names the window. An exact tie, a capture already known empty, or one the
+cut declines keeps the window-tail cut. A retry never cuts the tail twice; a finished capture that can
+no longer answer leaves the tail cut rather than a 404. These outcomes count as `newer_*` (and
+`newer_dual_*`) in `omi_conversations_v3_finish_no_pointer_total`. A newer capture that was selected but
+declined the cut counts in `omi_conversations_v3_finish_newer_declined_total{reason}`, and the tail cut that
+answers counts as the tail's outcome. Each live-window Finish stamps its response target (the card the
+answer names; only the window tail in the stored-both case), and that card's first visible manual-end
+settlement observes `omi_conversations_v3_finish_to_visible_seconds{path=tail|newer|newer_dual}` once;
+a stamp older than 2 hours is dropped. Set it to `off` on the API service to restore the window-tail cut
+and skip the read.
+
 `CONVERSATIONS_V3_FAST_FINISH` defaults to `cohort` (the `v3-fast-finish` rollout cohort, empty
 until a member is added). For a member, or for every v3 owner with `on`, a manually
 finished v3 recording of up to 20 minutes is transcribed once through the prerecorded provider
@@ -149,6 +167,61 @@ timing settles from the later of recorded speech end and `v3_speech_landed_at`, 
 batch of short topics joins its sit-down instead of locking on arrival. Set it to `off` to
 restore the recorded clock at the default timing; custom timing always uses landing. See the
 [short-topic sit-down change note](./listen_pusher_pipeline/changes/2026-11-25-v3-short-topic-sitdown.md).
+
+`CONVERSATIONS_V3_LOCKED_CLOSURE_OWNERS` defaults to empty (off). It lists owner tags
+(`sha256(uid)[:12]`, the `owner=` tag of the blocked log) or `*`. This repository is public, so the list
+never goes in Git: it ships unbound on every loader, and a later change binds it to the Secret Manager
+secret of the same name, after an operator provisions it (version 1 `none`). It is read by every runtime
+that runs builder passes (`store.load()`): the on-open builder on `backend` and `backend-integration`, and
+builder tasks on `backend-sync` and `backend-sync-backfill`. `pusher` and `backend-listen` only mark
+pending and enqueue. The sizes, cap and daily budget below must have one value on all four loaders
+(`deploy/activation/conversations-v3.yaml`, `v3-locked-closure-*`). Only builder passes get the
+allowance; derive and re-derive keep their bounds.
+
+For a listed owner, the live closure's locked claimants (rows `preserve_finished_windows` keeps fixed)
+may go past the origin bound:
+- past `CONVERSATIONS_V3_DERIVED_LIMIT` (1024) by `CONVERSATIONS_V3_LOCKED_DERIVED_ALLOWANCE` rows
+  (default 2048);
+- past `CONVERSATIONS_V3_DERIVED_BYTES` (16 MiB) by `CONVERSATIONS_V3_LOCKED_DERIVED_BYTES` (default 8 MiB).
+
+The row room never exceeds what the batch cap can commit: at most `LOCKED_MAX_BATCHES` x (449 - loaded
+sources) rows in all, so 2,694 at the defaults, and fewer as sources load. This is an upper bound from sources and the lease only: removals, absorption redirects (up to 16 writes),
+retire, retired and settle writes, and the byte and pointer splits on prepared rows are not known at load
+time. A closure that needs more batches for those reasons still parks at the commit's batch cap
+(`LockedBatchCap`, before any transaction), which stays the backstop. The load
+also reads at most twice its row bound of derived documents, plus the one sentinel document that detects an
+overflow, counting a row each time a claim read or an interval query returns it. The attempt is charged to the
+pass's own builder lease token; a stale pass charges nothing and gets the origin bound.
+
+Rewritable rows keep the original bound. Such a closure may commit in at most
+`CONVERSATIONS_V3_LOCKED_MAX_BATCHES` (default 6) projection batches. Otherwise the commit raises
+`LockedBatchCap` (`v3_derived_budget`) before any transaction and before anything is uploaded to the object
+lake, so a capped attempt leaves no uploaded copy behind. Preparation runs once with uploads deferred: a row the
+real offload test would offload carries a stand-in pointer at least as large as the real one, so the cap (and the
+partition's settle refusal) is decided on the exact pointer count, and the uploads run only after it passes. The
+builder then retries down the load
+ladder below the seeds it read (pending + unlocked: 32 + 8, 8 + 8, 1 + 1, then one of either kind). It
+re-enters at most three times and parks only at one seed.
+
+`CONVERSATIONS_V3_LOCKED_DAILY_PASSES` (default 20) is the owner's daily budget of allowance attempts.
+Every builder load of a listed owner charges one in `v3_locked_day` and `v3_locked_passes` on the builder
+lease, under the held lease and before it reads, whatever the pass does next. A spent day, or a charge
+that cannot be written, loads with the origin bound. Ceiling: 20 attempts x about 78k reads (a load of at most
+5,389 fetched derived documents plus 400 sources and the seeds, an on-open load reading at most 400 seed ids,
+each once, plus a commit whose batches each run their body at most three times: contention retries and
+transcript-pointer replays alike, with each batch's pointers loaded from the lake before its transaction, for any
+listed owner's commit with pointer rows, inside the origin bound too), about 1.6M Firestore reads per listed owner per day. Lake object reads are
+separate: about one GET per decoded pointer row in the load (about 5.8k) plus at most 192 for the commit's preload,
+so about 0.12M per owner per day, and none while rows stay inline (prod admits no lake writes today).
+
+An empty list, or `CONVERSATIONS_V3_LOCKED_DERIVED_ALLOWANCE`, `CONVERSATIONS_V3_LOCKED_DERIVED_BYTES`,
+`CONVERSATIONS_V3_LOCKED_MAX_BATCHES` or `CONVERSATIONS_V3_LOCKED_DAILY_PASSES` set to `0`, restores the origin
+bound. A negative or unparseable value keeps the default.
+
+`CONVERSATIONS_V3_COMMIT_LEASE_RENEWAL` defaults to on. A multi-batch projection commit renews the
+pass's lease (`builder`, or `backfill-builder` for a derive pass) before each batch after the first.
+Set it to `off` to restore the single renewal before the commit. See the
+[locked-closure allowance change note](./listen_pusher_pipeline/changes/2026-11-26-v3-locked-closure-allowance.md).
 
 `POST /v1/conversations-v3/reconcile` returns HTTP 409 with
 `{"status":"retry","reason":"dependency_warming"}` for exhausted Firestore contention,
@@ -6350,7 +6423,7 @@ The funnel `(stage,reason)` pairs are closed:
 | entry | candidate | Known deduplicated candidates, before slot/scan admission; first passes at resolver entry. |
 | eligible | candidate | Late snapshot passed existing retry eligibility and ID check; first pass has a nonempty conversation model. |
 | deferred | slot_limit, coalesced, in_flight | Candidates retained in legacy admission waiters or merged into a UID cohort; retained pending IDs read no snapshot or audio. |
-| skipped | slot_limit, queue_limit, queue_expired, cancelled, cohort_seen, scan_limit, pass_limit, missing, not_completed, deleted, discarded, locked, channel_source, private_cloud_disabled, missing_revision, already_resolved_owner, id_mismatch, empty_transcript, manual_receipt_unavailable, read_error, processing_error, submission_error | One terminal skip; capacity reasons mean the candidate was not scanned, not that its audio was ineligible. |
+| skipped | slot_limit, queue_limit, queue_expired, cancelled, cohort_seen, scan_limit, pass_limit, missing, not_completed, deleted, discarded, locked, channel_source, private_cloud_disabled, missing_revision, already_resolved_owner, split_by_final_pass, id_mismatch, empty_transcript, manual_receipt_unavailable, read_error, processing_error, submission_error | One terminal skip; capacity reasons mean the candidate was not scanned, not that its audio was ineligible. |
 | cas_refused | missing, account_deleting, deleted, discarded, locked, not_completed, revision_changed | Late-only terminal verdict from the actual transaction snapshot, emitted after the outer transaction returns. |
 | cas_committed | done | Late-only terminal commit, including canonical identity no-op; transaction callback retries do not increment. |
 
@@ -6587,6 +6660,26 @@ STT or charge live transcription hours. Phone-only mode submits nothing and
 keeps transcript-only conversations in the account-owned local WAL index.
 `/reprocess` processes the existing transcript and does not re-transcribe audio;
 mobile therefore hides the cloud re-transcription action for these recordings.
+
+### Continued iOS from-segments processing
+
+`FROM_SEGMENTS_CONTINUED_PROCESSING_MODE` defaults to `off`. Release can use
+`shadow` with `FROM_SEGMENTS_CONTINUED_PROCESSING_MODE_SERVE_PERCENT` (default 0)
+or `FROM_SEGMENTS_CONTINUED_PROCESSING_MODE_SERVE_UID_SHA256S` (default empty)
+to enable the behavior for a cohort. `serve` enables it for keyed iOS uploads.
+The Backend revision needs CPU available between HTTP requests for the worker
+to continue after a response.
+
+The 25-second HTTP deadline bounds intake and the enrichment wait for keyed uploads.
+During continued processing, an admitted worker keeps its existing processing
+claim while enrichment runs under a separate budget. An HTTP budget cut uses
+`request_budget_exhausted`. A keyed replay that finds a live claim uses
+`from_segments_processing_in_flight` with the same retryable 503 body and
+headers in every rollout mode. A replay of a completed row returns the existing
+conversation response, independent of enrichment capacity. An aged claim can be retaken
+only if the lease observed at intake still matches, using the stored transcript.
+See the [SCA-4146 change note](listen_pusher_pipeline/changes/2026-11-25-from-segments-continued-processing.md).
+
 ### Mobile Standard batch admission (default off)
 
 New Flutter clients reuse `client_state` visibility and add
@@ -7917,9 +8010,13 @@ Setting the repair flag to false stops only that scan.
 A lease-admitted finalizer processes its own completed server minimum before
 finishing its job, using the same summary gate and existing retry/fanout fences.
 It still skips a completed row that already contains a summary or is excluded
-by the repair safety policy. `finalization_status=queued` on a conversation is
-an admission projection, not current job state: inspect its durable job and
-actual output presence before diagnosing missing summaries.
+by the repair safety policy. The server-batch capture handoff settles the
+conversation's `finalization_status` with its bound job in the same transaction.
+Home still shows transcription in progress using the independent wait stamp.
+An authoritative discard also settles a queued conversation projection without
+changing the job receipt or retained audio. A later verified speech or full
+silence projection can settle a historical queued capture handoff. Inspect its
+durable job and actual output before diagnosing missing summaries.
 
 The 120-second budget is dispatch, not model completion.
 With the same master flag on, both sync and finalization enrichment adapters
@@ -9621,8 +9718,10 @@ publication latency. Clients send `none`, `bg300`, `fg_preview300`, or `fg60`.
 An absent or unrecognized value becomes `unknown`. The value does not control
 admission, processing priority, or custody.
 Clients with holding enabled also send `X-Omi-Upload-Hold-Age-Ms` for a held
-upload. It is the oldest included file's age at send time, as an integer in
-`0..86400000` milliseconds. An absent or malformed age produces no sample.
+upload. It is the oldest included file's age at send time, as an ASCII decimal
+integer in `0..86400000` milliseconds. Leading zeroes are accepted. An absent
+or malformed age produces no sample. The phone-age histogram uses the
+bounded `gate` from the upload trace, with `other` for an absent or malformed trace.
 The optional `X-Omi-Upload-Recovered: 1` header labels a held file recovered
 from the phone journal. Both latency histograms expose `recovered="true"`
 for this exact value and `recovered="false"` for all other values, including
