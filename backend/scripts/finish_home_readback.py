@@ -19,6 +19,9 @@ MARKER = 'event=v3_finish_home_sli '
 KEY = re.compile(r'[0-9a-f]{32}')
 SOURCES = {'app', 'pendant', 'unknown'}
 DEADLINE = timedelta(seconds=60)
+# A legacy request's candidate is logged before its proof (same call on the live-window path, before the
+# finalization commit otherwise). Only log-timestamp jitter can invert them; this bounds that allowance.
+LEGACY_PROOF_TOLERANCE = timedelta(seconds=5)
 
 
 def timestamp(value):
@@ -85,7 +88,7 @@ def readback(events, start, through):
         raise ValueError('the last Finish in the cohort needs a full 60 seconds')
     censor_seconds = (through - end).total_seconds()
     cuts, bindings = {}, {}
-    legacy_candidates, legacy_proofs = {}, set()
+    legacy_candidates, legacy_proofs = defaultdict(list), defaultdict(list)
     eligible, fetched = defaultdict(list), defaultdict(list)
     routes, windows = defaultdict(list), defaultdict(list)
     visible = {}
@@ -106,17 +109,17 @@ def readback(events, start, through):
                 bindings[finish] = candidate
         elif stage == 'legacy_candidate':
             finish = event['finish']
-            candidate = (
-                timestamp(event['cut_at']),
-                observed_at,
-                event['source'] if event['source'] in SOURCES else 'unknown',
-                event['basis'],
-                event['recording'],
+            legacy_candidates[event['recording']].append(
+                (
+                    observed_at,
+                    timestamp(event['cut_at']),
+                    event['source'] if event['source'] in SOURCES else 'unknown',
+                    event['basis'],
+                    finish,
+                )
             )
-            if finish not in legacy_candidates or candidate < legacy_candidates[finish]:
-                legacy_candidates[finish] = candidate
         elif stage == 'legacy_manual_end':
-            legacy_proofs.add(event['recording'])
+            legacy_proofs[event['recording']].append(observed_at)
         elif stage == 'window':
             windows[event['recording']].append((observed_at, event['card']))
         elif stage == 'eligible':
@@ -131,15 +134,22 @@ def readback(events, start, through):
             if finish not in visible or candidate < visible[finish]:
                 visible[finish] = candidate
 
-    # An older client has no local cut token. Its candidate becomes eligible
-    # only when a committed server manual-end marker names the same recording.
-    for finish, (cut, observed_at, source, basis, recording) in legacy_candidates.items():
-        if recording not in legacy_proofs:
-            continue
-        candidate = (cut, observed_at, source, basis)
-        if finish not in cuts or candidate < cuts[finish]:
-            cuts[finish] = candidate
-        if finish not in bindings or (observed_at, recording) < bindings[finish]:
+    # An older client has no local cut token, and every headerless request on a recording logs a candidate
+    # under the same recording key. The Finish is the request whose manual end the server committed: the
+    # last candidate logged at or before the recording's first proof (else the first one within the
+    # tolerance after it). Every other candidate, and every candidate on a recording with no proof, is
+    # excluded and only reported.
+    legacy_excluded = {'no_proof': 0, 'not_the_proven_request': 0}
+    for recording, candidates in legacy_candidates.items():
+        candidates.sort()
+        proven = _proven_candidate(candidates, min(legacy_proofs[recording], default=None))
+        for candidate in candidates:
+            observed_at, cut, source, basis, finish = candidate
+            if candidate is not proven:
+                if start <= cut < end:
+                    legacy_excluded['no_proof' if proven is None else 'not_the_proven_request'] += 1
+                continue
+            cuts[finish] = (cut, observed_at, source, basis)
             bindings[finish] = (observed_at, recording)
 
     by_route_source = defaultdict(list)
@@ -208,12 +218,24 @@ def readback(events, start, through):
             {'route': route, 'source': source, **counts(delays, censor_seconds)}
             for (route, source), delays in sorted(by_route_source.items())
         ],
+        # Headerless candidates that are not a proven Finish: reported, never scored as cuts or misses.
+        'legacy_excluded': legacy_excluded,
         # Validation, not the score: did a Home response carry each eligible summary to the reader?
         'home_fetch_validation': {
             **validation,
             'fetch_after_eligible_p95_seconds': percentile(sorted(fetch_lags), len(fetch_lags)),
         },
     }
+
+
+def _proven_candidate(candidates, proof_at):
+    """The candidate (sorted by log time) of the request that committed ``proof_at``, or None."""
+    if proof_at is None:
+        return None
+    before = [candidate for candidate in candidates if candidate[0] <= proof_at]
+    if before:
+        return before[-1]
+    return next((candidate for candidate in candidates if candidate[0] <= proof_at + LEGACY_PROOF_TOLERANCE), None)
 
 
 def _first(observed, linked, after):

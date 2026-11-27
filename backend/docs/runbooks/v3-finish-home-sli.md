@@ -11,8 +11,12 @@ in readback.
 An older beta request without the operation header is only eligible when a
 committed server-side manual-end marker proves the deliberate Finish. Those
 legacy samples use `unknown` source and the server receipt time (`server_cut`),
-which is a lower bound on elapsed time. An untagged request without that proof
-is excluded.
+which is a lower bound on elapsed time. Every untagged request on a recording
+logs a candidate for it, so the proof names one request: the last candidate
+logged at or before the recording's first proof (or the first within 5 seconds
+after it). Earlier or later requests on that recording, and untagged requests
+on a recording with no proof, are excluded and counted in `legacy_excluded`
+(`not_the_proven_request`, `no_proof`); they are neither cuts nor misses.
 
 The scored readiness signal is `eligible`: the first committed server write
 that leaves the Finish window Home-eligible with a summary. The v3 notes

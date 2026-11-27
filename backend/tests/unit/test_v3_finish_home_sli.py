@@ -133,6 +133,7 @@ def test_readback_only_admits_proven_legacy_candidates():
     assert result['totals']['finishes'] == 1
     assert result['totals']['timing_unknown'] == 1
     assert result['by_route_source'][0]['source'] == 'unknown'
+    assert result['legacy_excluded'] == {'no_proof': 1, 'not_the_proven_request': 0}
 
 
 def test_readback_keeps_missing_and_late_finishes_in_the_cohort():
@@ -655,3 +656,79 @@ def test_repeated_reconcile_commits_emit_one_window_event(monkeypatch, caplog):
             sli.observe_windows('owner', [row], windows)
             stored = row
     assert [e['stage'] for e in _sli_events(caplog)] == ['window']
+
+
+# --- SCA-4489 review: a legacy proof proves the request that committed it, not the recording's first one ---
+
+
+def _legacy_candidate(elapsed, recording='rec'):
+    return _event(
+        'legacy_candidate',
+        elapsed,
+        finish='legacy-' + recording,
+        recording=recording,
+        cut_at=(START + timedelta(seconds=elapsed)).isoformat(),
+        source='unknown',
+        basis='server_cut',
+    )
+
+
+def test_legacy_proof_cuts_at_the_finish_request_not_an_earlier_request_on_the_recording():
+    # 1 s: a headerless request that was not a Finish binds the recording (no manual end committed).
+    # 5 s: the Finish request binds it again and its manual end is proven. Eligible at 64 s: 59 s after the
+    # Finish (within the deadline), 63 s after the earlier request (late), so the chosen cut is visible.
+    events = [
+        _legacy_candidate(1),
+        _legacy_candidate(5),
+        _event('legacy_manual_end', 5, recording='rec'),
+        _event('window', 6, recording='rec', card='card'),
+        _event('eligible', 64, card='card'),
+    ]
+    result = readback.readback(events, START, THROUGH)
+    assert result['totals']['finishes'] == 1
+    assert result['totals']['late'] == 0, 'the earlier request is not the cut'
+    assert result['totals']['timing_unknown'] == 1
+    assert result['legacy_excluded'] == {'no_proof': 0, 'not_the_proven_request': 1}
+
+
+def test_legacy_proof_committed_after_the_finish_proves_that_request_not_a_later_one():
+    # The finalization commit lands after the Finish request; a later retry on the recording is not the cut.
+    events = [
+        _legacy_candidate(1),
+        _event('legacy_manual_end', 30, recording='rec'),
+        _legacy_candidate(40),
+        _event('window', 2, recording='rec', card='card'),
+        _event('eligible', 50, card='card'),
+    ]
+    result = readback.readback(events, START, THROUGH)
+    assert result['totals']['finishes'] == 1
+    assert result['legacy_excluded'] == {'no_proof': 0, 'not_the_proven_request': 1}
+    assert result['by_route_source'][0]['timing_unknown'] == 1
+
+
+def test_legacy_candidate_without_proof_is_excluded_and_reported_not_a_miss():
+    events = [_legacy_candidate(1), _legacy_candidate(3), _event('window', 2, recording='rec', card='card')]
+    result = readback.readback(events, START, THROUGH)
+    assert result['totals']['finishes'] == 0
+    assert result['totals']['unmatched'] == 0
+    assert result['by_route_source'] == []
+    assert result['legacy_excluded'] == {'no_proof': 2, 'not_the_proven_request': 0}
+
+
+def test_emitted_legacy_events_read_back_as_the_proven_finish_request(monkeypatch, caplog):
+    # End to end through the emitters: the conversation path binds without proof, then the live-window
+    # Finish binds the same recording and proves it in the same call.
+    monkeypatch.setenv('CONVERSATIONS_V3_FINISH_HOME_SLI', 'on')
+    _in_cohort(monkeypatch)
+    beta = SimpleNamespace(headers={sli.APP_CHANNEL_HEADER: 'beta'})
+    with caplog.at_level('INFO'):
+        sli.from_request('owner', beta).bind('recording')
+        sli.from_request('owner', beta).bind('recording', prove_legacy_manual_end=True)
+    emitted = _sli_events(caplog)
+    assert [e['stage'] for e in emitted] == ['legacy_candidate', 'legacy_candidate', 'legacy_manual_end']
+    events = [{**e, 'observed_at': START + timedelta(seconds=index)} for index, e in enumerate(emitted)]
+    for e, at in zip(events[:2], (START, START + timedelta(seconds=1))):
+        e['cut_at'] = at.isoformat()
+    result = readback.readback(events, START, THROUGH)
+    assert result['totals']['finishes'] == 1
+    assert result['legacy_excluded'] == {'no_proof': 0, 'not_the_proven_request': 1}

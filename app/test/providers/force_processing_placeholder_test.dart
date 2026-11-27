@@ -18,6 +18,7 @@ import 'package:omi/services/capture/capture_external_actions.dart';
 import 'package:omi/services/capture/capture_seams.dart';
 import 'package:omi/services/capture/empty_recording_notice.dart';
 import 'package:omi/services/capture/local_segment_store.dart';
+import 'package:omi/services/telemetry/client_telemetry_outbox.dart';
 import 'package:omi/services/telemetry/client_telemetry_schema.dart';
 import 'package:omi/services/telemetry/finish_home_sli_telemetry.dart';
 import 'package:omi/services/wals/wal_interfaces.dart';
@@ -121,6 +122,21 @@ class _NoopBle implements CaptureBleListeners {
 
   @override
   void removeBatchRecordingFinalizedListener(void Function(String) callback) {}
+}
+
+/// Holds every telemetry write until [release], so the cut's write is still pending when End reads its row.
+class _GatedTelemetryStore implements ClientTelemetryStore {
+  final release = Completer<void>();
+  var writeStarted = false;
+
+  @override
+  Future<Map<String, dynamic>?> read() async => null;
+
+  @override
+  Future<void> write(Map<String, dynamic> document) async {
+    writeStarted = true;
+    await release.future;
+  }
 }
 
 class _ThrowingRemovalActions extends _RecordingActions {
@@ -247,7 +263,7 @@ void main() {
     expect(result.absence, ProcessAbsence.notFound);
   });
 
-  test('a coordinator Finish records exactly one Finish cut before the WAL drain', () async {
+  test('a coordinator Finish records exactly one Finish cut before its request leaves', () async {
     const owner = 'coordinator-finish-owner';
     final wasTestFlight = Env.isTestFlight;
     Env.isTestFlight = true;
@@ -266,27 +282,77 @@ void main() {
         telemetry.outbox.pending(owner).where((observation) => observation.family == 'finish_cut').toList();
 
     final finalize = Completer<void>();
-    final drainEntered = Completer<int>();
+    final requestSent = Completer<int>();
     final provider = _provider(
       actions: _RecordingActions(),
       finalizeGate: finalize,
-      phone: _GatedPhoneSync(finalize, onFinalize: () {
-        if (!drainEntered.isCompleted) drainEntered.complete(cuts().length);
-      }),
-      process: () async => null,
+      process: () async {
+        if (!requestSent.isCompleted) requestSent.complete(cuts().length);
+        return null;
+      },
     );
     addTearDown(provider.dispose);
 
     // Home's Wrap Up and the live page's Finish reach Process Now only through the coordinator.
     final finish = provider.finishCaptureWithOutcome(liveConversationId: 'window-1');
-    expect(await drainEntered.future.timeout(const Duration(seconds: 5)), 1,
-        reason: 'the cut is durable before the WAL drain starts');
     finalize.complete();
+    expect(await requestSent.future.timeout(const Duration(seconds: 5)), 1,
+        reason: 'the cut is recorded before the request leaves');
     await finish;
     await _flushEventQueue();
 
     expect(cuts(), hasLength(1));
     expect(cuts().single.attributes['source'], 'app');
+  });
+
+  // Regression (PR #26332 review): the End button reads the manual Finish row the moment this call
+  // returns; a row published only after the cut's write left End without feedback or its Home return.
+  test('End publishes the manual Finish row before the cut write completes; the request waits for it', () async {
+    const owner = 'end-button-cut-owner';
+    final wasTestFlight = Env.isTestFlight;
+    Env.isTestFlight = true;
+    addTearDown(() => Env.isTestFlight = wasTestFlight);
+    final telemetry = FinishHomeSliTelemetry.instance;
+    final (enabled, ownerId, platform) = (telemetry.testFlightEnabled, telemetry.ownerId, telemetry.platform);
+    final store = telemetry.outbox.store;
+    final gated = _GatedTelemetryStore();
+    telemetry
+      ..testFlightEnabled = (() => true)
+      ..ownerId = (() => owner)
+      ..platform = (() => 'ios')
+      ..outbox.store = gated;
+    addTearDown(() => telemetry
+      ..testFlightEnabled = enabled
+      ..ownerId = ownerId
+      ..platform = platform
+      ..outbox.store = store);
+
+    var requests = 0;
+    final actions = _RecordingActions();
+    final provider = _provider(
+      actions: actions,
+      finalizeGate: Completer<void>()..complete(),
+      process: () async {
+        requests++;
+        return null;
+      },
+    );
+    addTearDown(provider.dispose);
+
+    final finish = provider.forceProcessingCurrentConversation(
+        manualFinish: true, finishSource: FinishCutSource.app, liveConversationId: 'window-1');
+    expect(actions.manualFinishRow, isNotNull, reason: 'the row is published synchronously at the tap');
+    expect(actions.manualFinishRow, same(actions.processing.single));
+
+    await _flushEventQueue();
+    expect(gated.writeStarted, isTrue);
+    expect(requests, 0, reason: 'the cut is on disk before the request leaves');
+
+    gated.release.complete();
+    await finish;
+    await _flushEventQueue();
+    expect(requests, 1);
+    expect(telemetry.outbox.pending(owner).where((observation) => observation.family == 'finish_cut'), hasLength(1));
   });
 
   test('end_open_conversation: every End carries the moment it was asked for; off, no header is sent', () async {

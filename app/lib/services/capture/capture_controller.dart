@@ -4465,13 +4465,14 @@ class CaptureController extends ChangeNotifier
         finishSource != null && Env.isTestFlight && !Env.hasApiBaseUrlOverride ? const Uuid().v4() : null;
     final finishCut =
         finishCutId == null ? null : '${finishSource!.wire},$finishCutId,${finishCutAt.millisecondsSinceEpoch}';
-    if (finishCutId != null) {
-      await FinishHomeSliTelemetry.instance.recordCut(
-        operationId: finishCutId,
-        source: finishSource!.wire,
-        occurredAt: finishCutAt,
-      );
-    }
+    // Not awaited here: the manual Finish row (and the End button's Home return, which reads it as soon
+    // as this call returns) must publish synchronously at the tap. The write is joined before the request
+    // leaves, so the cut is still on disk first. A failed telemetry write never blocks the Finish.
+    final Future<void> cutRecorded = finishCutId == null
+        ? Future<void>.value()
+        : FinishHomeSliTelemetry.instance
+            .recordCut(operationId: finishCutId, source: finishSource!.wire, occurredAt: finishCutAt)
+            .catchError((Object error, StackTrace _) => Logger.debug('finish_home_sli: cut not recorded: $error'));
     final close = _admitConversationClose(processNow: true);
     _pendingProcessCloses.add(close);
     final placeholderOwner = ++_processingPlaceholderOwner;
@@ -4494,6 +4495,7 @@ class CaptureController extends ChangeNotifier
       _finalizeGate.markFinalized();
       externalActions.onLiveFinalized();
       await close.snapshot;
+      await cutRecorded;
       if (lifetime.isClosed ||
           !_closeStoreIsCurrent(close) ||
           recordingSessionId != activeRecordingId ||
