@@ -229,6 +229,7 @@ from utils.apps import get_available_app_model_by_id, get_available_apps, update
 from utils import ai_profile_refresh
 from utils.executors import llm_executor, postprocess_executor, submit_with_context
 from utils.llm.conversation_processing import (
+    conversation_notes_steps,
     get_app_result,
     should_discard_conversation,
     get_conversation_notes,
@@ -795,8 +796,6 @@ def _get_structured_steps(
                 **notes_agent_inputs(main_conv, desktop_capture),
             )
             if async_notes:
-                from utils.llm.conversation_processing import conversation_notes_steps
-
                 structured = yield from llm_input_dedupe.notes_steps(
                     uid, main_conv, prefix, conversation_notes_steps, llm_hashes, **notes_inputs
                 )

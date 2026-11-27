@@ -220,6 +220,7 @@ def _build_fakes() -> dict[str, ModuleType]:
         "should_discard_conversation",
         "assign_conversation_to_folder",
         "get_conversation_notes",
+        "conversation_notes_steps",
         "validate_structured_source_segment_ids",
     ]:
         setattr(conv_proc, attr, MagicMock())
