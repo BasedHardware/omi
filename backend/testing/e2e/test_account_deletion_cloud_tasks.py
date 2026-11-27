@@ -806,8 +806,20 @@ def test_synthetic_speaker_evidence_pending_receipt_and_expiry(client, verificat
     queue_path = tasks_v2.CloudTasksClient.queue_path(_PROJECT, _LOCATION, _QUEUE)
     task = verification.reserve_task(fresh_uid, 'job', queue_path, 'task')
     assert task is not None
+    marker = verification_emulator.document(f'account_deletions/{fresh_uid}')
+    marker.set({'wipe_job_id': 'job', 'wipe_status': 'pending'})
     before = _verification_counts()
-    assert verification.admit_task(fresh_uid, 'job', token, queue_path, _QUEUE, 'task', 0) == (True, None)
+    headers = _worker_headers(retry_count=0)
+    headers.update({'X-CloudTasks-QueueName': _QUEUE, 'X-CloudTasks-TaskName': 'task'})
+    deferred = client.post(
+        '/v1/users/account-deletion-wipes/run',
+        json={'job_id': 'job', verification.TASK_FIELD: token},
+        headers=headers,
+    )
+    assert deferred.status_code == 409, deferred.text
+    assert deferred.json() == {'status': 'retry', 'reason': 'callback_pending'}
+    assert marker.get().get('wipe_status') == 'pending'
+    assert control.get().get('dispatch') == 'pending'
     assert verification.admit_task(fresh_uid, 'job', token, queue_path, _QUEUE, 'wrong', 0) == (False, None)
 
     control.update({'confirm_until': datetime.now(timezone.utc) - timedelta(seconds=1)})
@@ -822,3 +834,4 @@ def test_synthetic_speaker_evidence_pending_receipt_and_expiry(client, verificat
     after = _verification_counts()
     assert {name: after[name] - before[name] for name in before if after[name] != before[name]} == {'task_deferred': 1}
     control.delete()
+    marker.delete()

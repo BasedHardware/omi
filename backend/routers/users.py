@@ -73,6 +73,8 @@ from database.users import (
 )
 from utils import ai_profile_refresh, billing_recovery, screen_vector_entitlements
 from utils.observability.fallback import record_fallback
+from utils.observability.reasons import RetryReason
+from utils.workers.retry import retry_response
 from config import play_billing as play_billing_config
 from config import prepaid_code_redeem as prepaid_code_config
 import database.play_subscriptions as play_subscriptions_db
@@ -383,7 +385,7 @@ async def run_account_deletion_wipe(
             task_authentication.retry_count,
         )
         if defer:
-            return JSONResponse(status_code=503, content={'status': 'retry'})
+            return retry_response(RetryReason.CALLBACK_PENDING)
 
     lock_key = f'account-deletion:{uid}'
     needs_erase = resolution.get('erase_armed') is True or go_queue_erase_required()
