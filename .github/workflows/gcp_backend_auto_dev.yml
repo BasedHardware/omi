@@ -281,10 +281,10 @@ jobs:
           # SCA-3748: bind the shared record token lease vector exactly as
           # Listen and Pusher do. Without these the composite defaults would
           # reset Cloud Run and prod-omi-backend-config lease env on every deploy.
-          record_token_lease_mode: ${{ vars.RECORD_TOKEN_LEASE_MODE || 'off' }}
-          record_token_lease_mode_serve_percent: ${{ vars.RECORD_TOKEN_LEASE_MODE_SERVE_PERCENT || '0' }}
+          record_token_lease_mode: ${{ vars.RECORD_TOKEN_LEASE_MODE || 'serve' }}
+          record_token_lease_mode_serve_percent: ${{ vars.RECORD_TOKEN_LEASE_MODE_SERVE_PERCENT || '100' }}
           record_token_lease_seconds: ${{ vars.RECORD_TOKEN_LEASE_SECONDS || '3600' }}
-          record_token_lease_deployed_at: ${{ vars.RECORD_TOKEN_LEASE_DEPLOYED_AT || '0' }}
+          record_token_lease_deployed_at: ${{ vars.RECORD_TOKEN_LEASE_DEPLOYED_AT || '1795662310' }}
           admitted_sha: ${{ needs.firestore_readiness.outputs.admitted_sha }}
           environment: development
           deploy_targets: all

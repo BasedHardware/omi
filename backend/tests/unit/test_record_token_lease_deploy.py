@@ -98,14 +98,46 @@ def test_custody_lease_covers_the_rendered_sync_request_timeout(
     assert lease.token_lease_seconds() == int(frame_seconds)
 
 
-def test_lease_chart_defaults_are_dark_and_no_age_grace_remains():
+SERVE_VECTOR = {
+    'RECORD_TOKEN_LEASE_MODE': 'serve',
+    'RECORD_TOKEN_LEASE_MODE_SERVE_PERCENT': '100',
+    'RECORD_TOKEN_LEASE_SECONDS': '3600',
+    'RECORD_TOKEN_LEASE_DEPLOYED_AT': '1795662310',
+}
+
+
+def test_prod_worker_pins_the_serve_vector_and_no_age_grace_remains():
+    # documents() renders the checked-in prod values. On this release off is a
+    # kill, so a worker Helm upgrade must keep both seal readers on serve.
+    prod = yaml.safe_load(
+        (
+            Path(__file__).resolve().parents[2]
+            / 'charts/batch-pipeline-worker/prod_omi_batch-pipeline-worker_values.yaml'
+        ).read_text()
+    )
+    # The epoch is a string: Helm renders a bare YAML int this large as 1.79566231e+09.
+    assert prod['recordTokenLease'] == {
+        'mode': 'serve',
+        'servePercent': 100,
+        'seconds': 3600,
+        'deployedAt': '1795662310',
+    }
     for container in containers(documents()):
         env = {e['name']: e.get('value') for e in container['env']}
-        assert env['RECORD_TOKEN_LEASE_MODE'] == 'off'
-        assert env['RECORD_TOKEN_LEASE_MODE_SERVE_PERCENT'] == '0'
-        assert env['RECORD_TOKEN_LEASE_SECONDS'] == '3600'
-        assert env['RECORD_TOKEN_LEASE_DEPLOYED_AT'] == '0'
+        assert {key: env[key] for key in SERVE_VECTOR} == SERVE_VECTOR
         assert not any('LIVE_PRODUCER_GRACE' in k for k in env)
+
+
+def test_chart_default_lease_vector_is_serve_not_a_kill():
+    defaults = yaml.safe_load(
+        (Path(__file__).resolve().parents[2] / 'charts/batch-pipeline-worker/values.yaml').read_text()
+    )
+    assert defaults['recordTokenLease'] == {
+        'mode': 'serve',
+        'servePercent': 100,
+        'seconds': 3600,
+        'deployedAt': '1795662310',
+    }
 
 
 @pytest.mark.parametrize('mode', ['shadow', 'serve'])
@@ -122,7 +154,7 @@ def test_all_repair_children_inherit_same_pinned_release_epoch(mode):
 
 @pytest.mark.parametrize('mode', ['shadow', 'serve', 'typo'])
 def test_enabled_mode_cannot_silently_reanchor_stock_per_process(mode):
-    assert render('--set', f'recordTokenLease.mode={mode}').returncode != 0
+    assert render('--set', f'recordTokenLease.mode={mode},recordTokenLease.deployedAt=0').returncode != 0
 
 
 def test_alerts_use_exported_counters_and_match_the_approved_combined_entries():

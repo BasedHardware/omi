@@ -61,9 +61,11 @@ def test_lease_setting_is_bounded(monkeypatch, raw, expected):
     'raw,killed',
     [
         (None, False),
-        ('', False),
         ('serve', False),
         (' Serve ', False),
+        ('', True),
+        ('   ', True),
+        ('\t\n', True),
         ('off', True),
         ('OFF', True),
         ('shadow', True),
@@ -72,8 +74,9 @@ def test_lease_setting_is_bounded(monkeypatch, raw, expected):
 )
 @pytest.mark.parametrize('percent', [None, '0', '100'])
 def test_lease_serves_everyone_and_only_the_kill_switch_withdraws_it(monkeypatch, raw, killed, percent):
-    # The retired cohort levers are inert. Any explicit non-serve value,
-    # including the retired shadow mode, fails closed like off.
+    # The retired cohort levers are inert. Only unset or serve serves. Any
+    # explicit non-serve value, including blank, whitespace and the retired
+    # shadow mode, fails closed like off.
     monkeypatch.delenv('RECORD_TOKEN_LEASE_MODE', raising=False)
     monkeypatch.delenv('RECORD_TOKEN_LEASE_MODE_SERVE_PERCENT', raising=False)
     monkeypatch.setenv('RECORD_TOKEN_LEASE_MODE_SERVE_UID_SHA256S', refactor_modes.uid_digest('synthetic'))

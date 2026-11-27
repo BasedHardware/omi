@@ -162,7 +162,9 @@ def test_native_zero_preview_stop_wakes_v3_only_after_projection(lane, monkeypat
         record_barrier=require_record_audio_barrier(sealed),
     )
     admitted = lane.client.collection(lane.store.namespace + '_jobs').document(item.segment_id).get().to_dict()
-    assert admitted.get('record_input_upload_revision') == (7 if lease_mode == 'serve' else None)
+    # SCA-3748: native intake always captures the barrier revision. The kill
+    # (lease_mode off) pauses Sync custody, never admission's revision capture.
+    assert admitted.get('record_input_upload_revision') == 7
     assert admitted.get('v3_native_manual_input_revision') == (7 if manual else None)
     lease = lane.queue.pull(0)[0]
     assert lane.queue.complete(WorkResult(item.segment_id, 'gs://synthetic/result#1'), lease.token, 1)

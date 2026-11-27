@@ -399,6 +399,83 @@ async def test_unresolved_session_keeps_original_response_without_custody_append
     assert client.rows == before
 
 
+@pytest.mark.parametrize('mode', ['serve', 'off', 'shadow', ''])
+async def test_session_registered_after_admission_is_fenced_or_killed_when_routing_resolves_it(monkeypatch, mode):
+    # Race: Sync admission resolves the recording session before registration
+    # lands, so it acquires no fence. Record routing then resolves the same
+    # session after staging. Routing must apply the same gate before writing.
+    monkeypatch.setenv('RECORD_TOKEN_LEASE_MODE', mode)
+    monkeypatch.setenv('RECORD_TOKEN_LEASE_SECONDS', '3600')
+    monkeypatch.setenv('OMI_ENV_STAGE', 'dev')
+    monkeypatch.setattr(database.time, 'time', lambda: NOW)
+    client = custody_client({PATH: ROW})
+    monkeypatch.setattr(database, 'get_firestore_client', lambda: client)
+    monkeypatch.setattr(request.record_audio, 'get_firestore_client', lambda: client)
+    session = 'custody:late-registration'
+    stored = []
+
+    def archive(uid, paths, metadata):
+        assert session in client.rows[PATH]['record_upload_sessions']
+        stored.append(paths)
+        return ['committed-object']
+
+    @request.custody_upload
+    async def upload():
+        await request.begin_upload('synthetic', None, 'late-registration', recording_session_id='capture')
+        assert 'session' not in request._upload.get()
+        # Registration lands between admission's resolve and routing's resolve.
+        client.rows['users', 'synthetic', 'recording_sessions', 'capture'] = {'conversation_id': 'record'}
+        target = database.resolve_target('synthetic', None, 'capture', firestore_client=client)
+        await request.bind_upload_target('synthetic', target)
+        archived = await request.archive(archive, 'synthetic', ['local'], {})
+        request.stored(['local'], archived)
+        return JSONResponse(status_code=202, content={'status': 'queued'})
+
+    if mode != 'serve':
+        before = deepcopy(client.rows)
+        with pytest.raises(HTTPException) as refused:
+            await upload()
+        assert refused.value.status_code == 503
+        assert refused.value.detail == 'Retain local audio; record custody is paused'
+        assert not stored
+        # Only the synthetic registration changed; custody wrote nothing.
+        registration = ('users', 'synthetic', 'recording_sessions', 'capture')
+        assert {k: v for k, v in client.rows.items() if k != registration} == before
+        assert not any(tx.has_written for tx in client.transactions)
+    else:
+        assert (await upload()).status_code == 202
+        assert stored == [['local']]
+        assert client.rows[PATH]['record_upload_revision'] == 8
+        assert session not in client.rows[PATH]['record_upload_sessions']
+    assert request._upload.get() is None
+
+
+async def test_routing_cannot_rebind_an_admitted_upload_to_another_target(monkeypatch):
+    monkeypatch.setenv('RECORD_TOKEN_LEASE_MODE', 'serve')
+    monkeypatch.setenv('OMI_ENV_STAGE', 'dev')
+    monkeypatch.setattr(database.time, 'time', lambda: NOW)
+    client = custody_client({PATH: ROW})
+    monkeypatch.setattr(database, 'get_firestore_client', lambda: client)
+    archive = Mock(return_value=['object'])
+
+    @request.custody_upload
+    async def upload():
+        await request.begin_upload('synthetic', 'record', 'rebind')
+        # The same target is a no-op; a different one is refused before writes.
+        await request.bind_upload_target('synthetic', 'record')
+        await request.bind_upload_target('synthetic', 'other-record')
+        await request.archive(archive, 'synthetic', ['local'], {})
+        return JSONResponse(status_code=202, content={'status': 'queued'})
+
+    with pytest.raises(HTTPException) as refused:
+        await upload()
+    assert refused.value.status_code == 503
+    archive.assert_not_called()
+    # The admitted fence is released as an unaccepted upload.
+    assert 'custody:rebind' not in client.rows[PATH]['record_upload_sessions']
+    assert client.rows[PATH]['record_upload_revision'] == 7
+
+
 @pytest.mark.parametrize('late', [False, True])
 def test_finish_receipt_makes_repeated_completion_read_only(monkeypatch, late):
     monkeypatch.setenv('RECORD_TOKEN_LEASE_MODE', 'serve')

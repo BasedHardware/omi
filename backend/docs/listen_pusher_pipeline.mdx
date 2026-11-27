@@ -462,8 +462,9 @@ object span, retaining the earlier accepted bytes within that span. A wholly
 covered object does not replace this comparison history.
 
 The record token lease serves every account; SCA-3748 deleted the non-lease
-path. `RECORD_TOKEN_LEASE_MODE` defaults to `serve`; `off`, or any other value
-(including the retired `shadow`), is the fail-closed kill switch: Sync refuses
+path. `RECORD_TOKEN_LEASE_MODE` defaults to `serve`: only an unset variable or
+`serve` serves. `off`, or any other value (including the retired `shadow`, blank
+and whitespace), is the fail-closed kill switch: Sync refuses
 new custody with 503 "Retain local audio" and a lapsed lease grants no seal or
 partial-finish authority, while registration and renewal keep stamping clocks.
 `RECORD_TOKEN_LEASE_MODE_SERVE_PERCENT` is inert. Only observed custody appends and
@@ -517,8 +518,10 @@ worker returns. Original work and projection bindings are not rewritten.
 Frame late-append counting follows successful durable window/object commit.
 Producer Helm env bindings use the shared runtime ConfigMap; Cloud Run and that
 ConfigMap render the same protected-environment `RECORD_TOKEN_LEASE_*` input
-vector with off defaults, and off now engages the kill switch: set serve
-explicitly in every protected environment. The first serve-enable epoch stays pinned.
+vector. An unset input renders `serve`, percent 100, at the shared serve-enable
+epoch `1795662310` (composite defaults, workflow fallbacks, runtime manifest and
+worker chart), so an unset variable never renders the kill. `off` is an upload
+pause, not a rollback. The first serve-enable epoch stays pinned.
 Custody late-append accounting observes the post-storage renewal/finish transaction
 for owned and unowned archives, including throttled renewals. Each
 request retains every durable-file observation through transaction retries and

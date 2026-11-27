@@ -57,7 +57,7 @@ from utils.executors import db_executor, storage_executor, run_blocking, sync_ex
 from utils.metrics import OMI_PIPELINE_RECORD_WAIT_ANSWERS_TOTAL, OMI_PIPELINE_RECORD_WAIT_MEMO_HITS_TOTAL
 from utils.observability.reasons import ReasonFamily, reason_label
 from utils.sync.stage import current_stage
-from utils.sync.record_token_lease import handoff_committed
+from utils.sync.record_token_lease import bind_upload_target, handoff_committed
 from utils.sync.legacy_dark import LegacySyncMode
 
 
@@ -353,6 +353,11 @@ async def registered_record_response(
         if snapshot is None or conversation_id is None:
             return _pending(RecordUploadWait.TARGET_UNRESOLVED) if policy.live_record_enabled else None
         row = snapshot.to_dict() or {}
+    if isinstance(conversation_id, str) and conversation_id:
+        # One target decision for admission and routing: a session that
+        # registered after Sync admission's resolve is fenced (or killed) here,
+        # before the handoff, archive or retention writes below.
+        await bind_upload_target(uid, conversation_id)
     if row.get('record_lane_owner') != OWNER:
         if row.get('record_lane_owner') == 'legacy_final_pass_v1':
             # The upload follows a prior durable owner whether the re-home

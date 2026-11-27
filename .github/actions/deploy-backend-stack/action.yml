@@ -35,11 +35,11 @@ inputs:
   record_token_lease_mode:
     description: 'Caller-supplied record token lease mode'
     required: false
-    default: 'off'
+    default: 'serve'
   record_token_lease_mode_serve_percent:
     description: 'Caller-supplied record token lease serve percentage'
     required: false
-    default: '0'
+    default: '100'
   record_token_lease_seconds:
     description: 'Caller-supplied record token lease duration in seconds'
     required: false
@@ -47,7 +47,7 @@ inputs:
   record_token_lease_deployed_at:
     description: 'Caller-supplied pinned record token lease release epoch'
     required: false
-    default: '0'
+    default: '1795662310'
   backend_sync_memory:
     description: 'backend-sync memory input for dev; production uses backend/deploy/ops/prod.yaml'
     required: false

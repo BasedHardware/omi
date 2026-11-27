@@ -303,7 +303,7 @@ the only producer custody path, for every account: server-observed frame batches
 and custody appends stamp per-token `last_signal_at`, `lease_expires_at`, and
 `signal_source`. A token is lease-dead only if its lease lapsed AND heartbeat
 missed AND no append since the last signal. `RECORD_TOKEN_LEASE_MODE=off` (or any
-value other than `serve`) is the fail-closed kill: Sync refuses new custody with
+set value other than `serve`, including blank) is the fail-closed kill: Sync refuses new custody with
 503 so the phone retains its audio, and a lapsed lease grants no seal or
 partial-finish authority. Lease writes continue; nothing is sealed or dropped.
 Retained-tail/privacy proof remains mandatory for a complete seal. A late signal

@@ -48,12 +48,16 @@ def refused_stamp_enabled():
 def token_lease_killed():
     """The lease serves every account; ``RECORD_TOKEN_LEASE_MODE=off`` is its fail-closed kill switch.
 
-    Unset or ``serve`` serves. Any other value, including the retired ``shadow``
-    and a typo, kills like ``off``. Killed, Sync refuses new custody with a 503
-    so the phone retains its audio, and a lapsed lease grants no seal or
-    partial-finish authority. The kill seals nothing and drops nothing.
+    Only a truly unset variable or ``serve`` (case and surrounding space
+    ignored) serves. Any other value kills like ``off``: the retired
+    ``shadow``, a typo, and a blank or whitespace-only value, which is an
+    operator write that lost its value, never a request to serve. Killed, Sync
+    refuses new custody with a 503 so the phone retains its audio, and a
+    lapsed lease grants no seal or partial-finish authority. The kill seals
+    nothing and drops nothing.
     """
-    return os.getenv(RECORD_TOKEN_LEASE_MODE_ENV, '').strip().lower() not in {'', 'serve'}
+    raw = os.getenv(RECORD_TOKEN_LEASE_MODE_ENV)
+    return raw is not None and raw.strip().lower() != 'serve'
 
 
 def token_lease_seconds():

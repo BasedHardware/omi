@@ -13,6 +13,15 @@ dataPlaneProject: based-hardware
 stage: prod
 namespace: batch_pipeline_prod
 secretName: prod-omi-backend-secrets
+# Durable lease vector for record-seal-worker and record-seal-repair (SCA-3748).
+# Pinned here, not inherited, so a normal worker Helm upgrade can never move the
+# seal readers off the vector Pusher, Listen and Sync serve. "off" is an upload
+# pause, not a rollback; roll back by reverting the PR or restoring the image.
+recordTokenLease:
+  mode: "serve"
+  servePercent: 100
+  seconds: 3600
+  deployedAt: "1795662310"  # quoted: Helm would render a bare int as 1.79566231e+09
 # Floor 6 (David, 2026-11-20, superseding D4's floor 4 of 2026-11-06): over the
 # prior 3 days the HPA never asked for fewer than 6 workers, so the floor costs
 # ~0 extra machine-hours at current demand and keeps 6 L4s standing through an

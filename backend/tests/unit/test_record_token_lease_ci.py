@@ -6,6 +6,16 @@ import pytest
 
 ROOT = Path(__file__).resolve().parents[3]
 
+# SCA-3748: the lease is the only custody path and any non-serve mode is the
+# fail-closed kill, so an unset deploy variable must render serve at the shared
+# serve-enable epoch, never off.
+LEASE_FALLBACKS = {
+    'RECORD_TOKEN_LEASE_MODE': 'serve',
+    'RECORD_TOKEN_LEASE_MODE_SERVE_PERCENT': '100',
+    'RECORD_TOKEN_LEASE_SECONDS': '3600',
+    'RECORD_TOKEN_LEASE_DEPLOYED_AT': '1795662310',
+}
+
 
 def test_transaction_and_lifecycle_proofs_are_in_the_emulator_ci_lane():
     runner = (ROOT / 'backend/scripts/run-emulator-proofs.sh').read_text()
@@ -82,15 +92,7 @@ def test_standalone_and_stack_deploys_bind_the_same_rollout_inputs():
                 assert 'vars.' + key in actual['env'][key]
                 name = key.lower()
                 assert binding['env'][key] == '${{ inputs.' + name + ' }}'
-                assert (
-                    action['inputs'][name]['default']
-                    == {
-                        'RECORD_TOKEN_LEASE_MODE': 'off',
-                        'RECORD_TOKEN_LEASE_MODE_SERVE_PERCENT': '0',
-                        'RECORD_TOKEN_LEASE_SECONDS': '3600',
-                        'RECORD_TOKEN_LEASE_DEPLOYED_AT': '0',
-                    }[key]
-                )
+                assert action['inputs'][name]['default'] == LEASE_FALLBACKS[key]
         assert writers, 'standalone workflow no longer exercises the runtime ConfigMap writer'
 
 
@@ -148,14 +150,6 @@ def test_invalid_rollout_vector_cannot_partially_write_job_env(monkeypatch, tmp_
     with pytest.raises(ValueError):
         exec(compile(code, '<actual composite binding step>', 'exec'), {})
     assert target.read_text() == 'PREVIOUS=kept\n'
-
-
-LEASE_FALLBACKS = {
-    'RECORD_TOKEN_LEASE_MODE': 'off',
-    'RECORD_TOKEN_LEASE_MODE_SERVE_PERCENT': '0',
-    'RECORD_TOKEN_LEASE_SECONDS': '3600',
-    'RECORD_TOKEN_LEASE_DEPLOYED_AT': '0',
-}
 
 
 def _deploy_backend_stack_callers():

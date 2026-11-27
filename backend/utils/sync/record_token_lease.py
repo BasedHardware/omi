@@ -20,6 +20,7 @@ logger = logging.getLogger(__name__)
 class UploadState(TypedDict, total=False):
     uid: str
     cid: str
+    job_id: str
     session: str
     durable: bool
     no_append: bool
@@ -101,17 +102,48 @@ async def begin_upload(uid: str, cid: str | None, job_id: str, *, recording_sess
     state = _upload.get()
     if state is None:
         return
+    # Keep the job identity even while the target is unknown: record routing
+    # may resolve the same session later and must fence it under this request.
+    state['job_id'] = job_id
     if not cid and recording_session_id:
         cid = await run_blocking(db_executor, record_custody_append.resolve_target, uid, cid, recording_session_id)
     # An unresolved session preserves the pre-existing archive/admission path;
-    # it cannot create a custody append for an unknown conversation.
+    # it cannot create a custody append for an unknown conversation. If record
+    # routing resolves it later, ``bind_upload_target`` applies this same gate.
     if not isinstance(cid, str) or not cid:
+        return
+    await bind_upload_target(uid, cid)
+
+
+async def bind_upload_target(uid: str, cid: str) -> None:
+    """Apply the custody gate the first time this upload's record target is known.
+
+    Admission and record routing share one target decision. Sync admission
+    calls this when it can resolve the target up front; record routing calls it
+    again once it resolves the target itself, because a recording session can
+    register between the two reads. The first caller checks the kill switch and
+    acquires the fence. Later callers with the same target are no-ops, and a
+    different target is refused, so no request reaches record routing unfenced.
+    """
+    state = _upload.get()
+    if state is None or not isinstance(cid, str) or not cid:
+        return
+    bound = state.get('cid')
+    if bound is not None:
+        if (state.get('uid'), bound) != (uid, cid):
+            raise HTTPException(status_code=503, detail='Retain local audio; upload target changed during admission')
         return
     state.update(uid=uid, cid=cid)
     if lease.token_lease_killed():
         # Kill switch: no unfenced append exists to fall back to. Refuse before
         # any storage write; the phone retains its audio and retries later.
         raise HTTPException(status_code=503, detail='Retain local audio; record custody is paused')
+    job_id = state.get('job_id')
+    if not job_id:
+        # A custody request always begins before it routes. Without its job
+        # identity there is no exact fence to acquire, so refuse rather than
+        # route this target unfenced.
+        raise HTTPException(status_code=503, detail='Retain local audio and retry custody admission')
     # Retain the exact candidate even if the commit response is lost.
     state['session'] = 'custody:' + job_id
     try:
