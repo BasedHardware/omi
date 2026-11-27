@@ -5,6 +5,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:crypto/crypto.dart';
+import 'package:flutter/services.dart';
 import 'package:path/path.dart' as path;
 import 'package:uuid/uuid.dart';
 
@@ -16,11 +17,27 @@ import 'wal.dart';
 typedef LiveWalBinding = ({String id, String owner, String digest});
 typedef LiveWalIndexEntry = ({LiveWalBinding binding, Object row});
 
+class LiveWalPurgeSnapshot {
+  LiveWalPurgeSnapshot(this.basenames, this.revision, this.documentsPath);
+  final Set<String> basenames;
+  final int revision;
+  final String documentsPath;
+}
+
+class _LiveWalMemoryProof {
+  const _LiveWalMemoryProof(this.basename, this.length, this.binding);
+  final String basename;
+  final int length;
+  final LiveWalBinding binding;
+}
+
 enum LiveWalWithheld { invalid, deletedOwner, missingAudio, contentMismatch }
 
 typedef LiveWalReplay = ({List<Wal> rows, Map<LiveWalWithheld, int> withheld, bool budgetExhausted, String? nextAfter});
 
 class LiveWalReceipt {
+  static const MethodChannel _durabilityChannel = MethodChannel('com.omi/live_wal_receipt_durability');
+  static Future<void> Function(Directory directory)? syncDirectoryForTesting;
   static const directoryName = '.wal-live-receipts';
   static const writeEnabled = !bool.fromEnvironment('OMI_LIVE_WAL_RECEIPT_OFF');
   static const purgeEnabled = !bool.fromEnvironment('OMI_LIVE_WAL_RECEIPT_PURGE_OFF');
@@ -30,11 +47,15 @@ class LiveWalReceipt {
   static const _maxEntries = 128;
   static const _maxReceiptBytes = 16 * 1024;
   static const _maxReplayBytes = 32 * 1024 * 1024;
+  static const _maxIndexDirectoryEntries = 4096;
+  static const _maxQuarantineIndexes = 64;
+  static const _maxPurgeIndexBytes = 32 * 1024 * 1024;
   static final _idPattern = RegExp(r'^[a-f0-9]{32}$');
   static final _managedNamePattern =
       RegExp(r'_wr([a-f0-9]{32})(?:_clke[0-9a-z]{1,32})?_[^_]+\.bin$', caseSensitive: false);
   static final _clockSuffix = RegExp(r'_clke[0-9a-z]{1,32}$');
   static final _digestPattern = RegExp(r'^[a-f0-9]{64}$');
+  static final Expando<_LiveWalMemoryProof> _writerProofs = Expando<_LiveWalMemoryProof>('live_wal_writer_proof');
 
   static Directory directory(Directory documents) => Directory(path.join(documents.path, directoryName));
 
@@ -73,11 +94,19 @@ class LiveWalReceipt {
 
   static File _receipt(Directory documents, String name) => File(path.join(directory(documents).path, name + _pending));
 
+  static Future<void> _syncDirectory(Directory directory) async {
+    final override = syncDirectoryForTesting;
+    if (override != null) return override(directory);
+    await _durabilityChannel.invokeMethod<void>('syncDirectory', {'path': directory.path});
+  }
+
   static Future<Directory> _checkedDirectory(Directory directory) async {
+    final existed = await FileSystemEntity.type(directory.path, followLinks: false) == FileSystemEntityType.directory;
     await directory.create(recursive: true);
     if (await FileSystemEntity.type(directory.path, followLinks: false) != FileSystemEntityType.directory) {
       throw const FileSystemException('invalid live WAL receipt directory');
     }
+    if (!existed) await _syncDirectory(directory.parent);
     return directory;
   }
 
@@ -90,6 +119,10 @@ class LiveWalReceipt {
     final pending = _receipt(audio.parent, name);
     await _checkedDirectory(pending.parent);
     final staging = await _checkedDirectory(Directory(path.join(pending.parent.path, _stagingDirectory)));
+    // Retry these barriers when the directories already exist: an earlier
+    // attempt may have created them but failed before confirming durability.
+    await _syncDirectory(audio.parent);
+    await _syncDirectory(pending.parent);
     final temporary = File(path.join(staging.path, name + _pending));
     // Freeze the policy after the digest finishes. Any pending live file is
     // replayed held because later policy tightening may have been interrupted.
@@ -104,6 +137,10 @@ class LiveWalReceipt {
     if (await pending.exists()) throw const FileSystemException('live WAL receipt already exists');
     await temporary.writeAsString(body, flush: true);
     await temporary.rename(pending.path);
+    // The rename crosses directories, so persist both the removed staging name
+    // and the newly published pending name before audio bytes can be written.
+    await _syncDirectory(staging);
+    await _syncDirectory(pending.parent);
     return digest;
   }
 
@@ -171,6 +208,11 @@ class LiveWalReceipt {
     return (wal: decodeWalIndexRow(fields), length: length, binding: binding);
   }
 
+  static Future<bool> isValidPendingReceipt(File entry) async {
+    final name = _receiptBasename(entry.path);
+    return name != null && await _read(entry, name) != null;
+  }
+
   static Future<bool> _matchesAudio(File audio, int length, String expectedDigest) async {
     final handle = await audio.open();
     final List<int> bytes;
@@ -193,22 +235,38 @@ class LiveWalReceipt {
         await FileSystemEntity.type(audio.path, followLinks: false) == FileSystemEntityType.file;
   }
 
-  /// A failed index commit can leave a disk WAL in memory. A memory row does
-  /// not waive the receipt proof needed to purge that still-unindexed file.
-  static Future<bool> matchesPendingPurge(File audio, Wal wal, File primary, File backup) async {
-    if (!purgeEnabled || audio.parent.path != primary.parent.path) return false;
-    final name = path.basename(audio.path);
-    final expected = _binding(name, wal.toJson());
-    if (expected == null) return false;
-    final pending = _receipt(audio.parent, name);
-    if (await FileSystemEntity.type(pending.parent.path, followLinks: false) != FileSystemEntityType.directory) {
+  /// Validates an unindexed purge against a writer-owned snapshot and, when a
+  /// receipt has since disappeared, this process's exact write proof.
+  static Future<LiveWalPurgeSnapshot> capturePurgeSnapshot(File primary, File backup, int revision) async =>
+      LiveWalPurgeSnapshot(await _indexedBasenames(primary, backup), revision, primary.parent.path);
+
+  static Future<bool> matchesPendingPurgeInSnapshot(File audio, Wal wal, LiveWalPurgeSnapshot snapshot) async {
+    if (!purgeEnabled || !isManagedBasename(path.basename(audio.path)) || audio.parent.path != snapshot.documentsPath) {
       return false;
     }
-    final record = await _read(pending, name);
-    return record != null &&
-        record.binding == expected &&
-        !(await _indexedBasenames(primary, backup)).contains(name.toLowerCase()) &&
-        await _matchesPurgeAudio(audio, record.length, record.binding.digest);
+    final name = path.basename(audio.path);
+    final expected = _binding(name, wal.toJson());
+    if (expected == null || snapshot.basenames.contains(name.toLowerCase())) return false;
+    final pending = _receipt(audio.parent, name);
+    int? length;
+    try {
+      if (await FileSystemEntity.type(pending.parent.path, followLinks: false) == FileSystemEntityType.directory) {
+        final record = await _read(pending, name);
+        if (record != null && record.binding == expected) length = record.length;
+      }
+    } catch (_) {
+      // The exact write proof below is limited to this in-memory WAL object.
+    }
+    final memoryProof = _writerProofs[wal];
+    if (length == null && memoryProof?.basename == name && memoryProof?.binding == expected) {
+      length = memoryProof!.length;
+    }
+    if (length == null) return false;
+    return await _matchesPurgeAudio(audio, length, expected.digest);
+  }
+
+  static void rememberWriterProof(Wal wal, String basename, int length, LiveWalBinding binding) {
+    _writerProofs[wal] = _LiveWalMemoryProof(basename, length, binding);
   }
 
   static Future<Set<String>> _indexedBasenames(File primary, File backup) async {
@@ -218,19 +276,33 @@ class LiveWalReceipt {
     // reference in the quarantine copy. Missing canonical files alone do
     // not establish that the basename was unreferenced.
     final quarantinePrefixes = indexes.map((index) => walIndexQuarantinePrefix(index.path)).toList();
+    var directoryEntries = 0;
+    var quarantineCount = 0;
     await for (final entry in primary.parent.list(followLinks: false)) {
+      if (++directoryEntries > _maxIndexDirectoryEntries) {
+        throw const FileSystemException('WAL index reference scan exceeded directory entry limit');
+      }
       if (quarantinePrefixes.any((prefix) => entry.path.startsWith(prefix))) {
         if (entry is! File) throw const FileSystemException('invalid quarantined WAL index path');
+        if (++quarantineCount > _maxQuarantineIndexes) {
+          throw const FileSystemException('WAL index reference scan exceeded quarantine limit');
+        }
         indexes.add(entry);
       }
     }
+    var bytesRemaining = _maxPurgeIndexBytes;
     for (final index in indexes) {
       final type = await FileSystemEntity.type(index.path, followLinks: false);
       if (type == FileSystemEntityType.notFound && (index == primary || index == backup)) continue;
       if (type != FileSystemEntityType.file) throw const FileSystemException('invalid WAL index path');
+      final length = await index.length();
+      if (length > bytesRemaining) throw const FileSystemException('WAL index reference scan exceeded byte limit');
+      bytesRemaining -= length;
       final content = await index.readAsString();
       names.addAll(await offUiIsolate(() {
-        final rows = (jsonDecode(content) as Map)['wals'] as List;
+        final decoded = jsonDecode(content);
+        if (decoded is! Map || decoded['wals'] is! List) throw const FormatException('invalid WAL index schema');
+        final rows = decoded['wals'] as List;
         final basenames = <String>[];
         for (final row in rows) {
           final filePath = (row as Map)['file_path'];

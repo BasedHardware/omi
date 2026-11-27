@@ -73,11 +73,24 @@ class WalFileManager {
             owners: owners, reservedNames: reservedNames, mayDelete: mayDelete);
       });
 
-  static Future<bool> matchesPendingLiveWalPurge(File audio, Wal wal) => _saveLock.withResource(() async {
+  static Future<LiveWalPurgeSnapshot?> captureLiveWalPurgeSnapshot() => _saveLock.withResource(() async {
         final primary = _walFile;
         final backup = _walBackupFile;
-        if (primary == null || backup == null) return false;
-        return LiveWalReceipt.matchesPendingPurge(audio, wal, primary, backup);
+        if (primary == null || backup == null) return null;
+        try {
+          return await LiveWalReceipt.capturePurgeSnapshot(primary, backup, _indexRevision);
+        } catch (_) {
+          return null;
+        }
+      });
+
+  static Future<bool> matchesPendingLiveWalPurge(File audio, Wal wal, LiveWalPurgeSnapshot snapshot) =>
+      _saveLock.withResource(() async {
+        final primary = _walFile;
+        if (primary == null || snapshot.revision != _indexRevision || snapshot.documentsPath != primary.parent.path) {
+          return false;
+        }
+        return LiveWalReceipt.matchesPendingPurgeInSnapshot(audio, wal, snapshot);
       });
 
   static Future<List<Wal>> _loadWals() async {

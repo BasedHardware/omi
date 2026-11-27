@@ -8,6 +8,7 @@ import Speech
 import WidgetKit
 import BackgroundTasks
 import flutter_background_service_ios
+import Darwin
 
 extension FlutterError: Error {}
 // MARK: - Quick Actions Icon Patcher
@@ -224,6 +225,39 @@ final class QuickActionsIconPatcher: NSObject {
     GeneratedPluginRegistrant.register(with: engineBridge.pluginRegistry)
     let messenger = engineBridge.applicationRegistrar.messenger()
     OmiPostHogSetup.register(messenger: messenger)
+    FlutterMethodChannel(name: "com.omi/live_wal_receipt_durability", binaryMessenger: messenger)
+      .setMethodCallHandler { call, result in
+        guard call.method == "syncDirectory" else {
+          result(FlutterMethodNotImplemented)
+          return
+        }
+        guard let arguments = call.arguments as? [String: Any], let rawPath = arguments["path"] as? String else {
+          result(FlutterError(code: "invalid_path", message: "directory path is required", details: nil))
+          return
+        }
+        let documents = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+          .resolvingSymlinksInPath().standardizedFileURL.path
+        let directory = URL(fileURLWithPath: rawPath).resolvingSymlinksInPath().standardizedFileURL.path
+        var isDirectory: ObjCBool = false
+        guard directory == documents || directory.hasPrefix(documents + "/"),
+              FileManager.default.fileExists(atPath: directory, isDirectory: &isDirectory), isDirectory.boolValue else {
+          result(FlutterError(code: "invalid_path", message: "directory is outside app documents", details: nil))
+          return
+        }
+        let descriptor = Darwin.open(directory, O_RDONLY | O_DIRECTORY)
+        guard descriptor >= 0 else {
+          result(FlutterError(code: "directory_sync_failed", message: String(cString: strerror(errno)), details: nil))
+          return
+        }
+        let status = Darwin.fsync(descriptor)
+        let syncError = errno
+        Darwin.close(descriptor)
+        guard status == 0 else {
+          result(FlutterError(code: "directory_sync_failed", message: String(cString: strerror(syncError)), details: nil))
+          return
+        }
+        result(nil)
+      }
     FlutterMethodChannel(name: "com.omi/device_health_policy", binaryMessenger: messenger).setMethodCallHandler { call, result in
       guard call.method == "setPolicy", let args = call.arguments as? [String: Any], let epoch = args["epoch"] as? NSNumber else {
         result(FlutterMethodNotImplemented); return

@@ -6,6 +6,7 @@ import io.flutter.FlutterInjector
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.embedding.engine.dart.DartExecutor
 import io.flutter.plugin.common.MethodChannel
+import com.friend.ios.LiveWalReceiptDurabilityChannel
 import kotlinx.coroutines.*
 import java.lang.ref.WeakReference
 import java.util.concurrent.TimeUnit
@@ -74,6 +75,7 @@ class OnDeviceBackgroundWorker(context: Context, params: WorkerParameters) : Cor
                     loader.startInitialization(applicationContext)
                     loader.ensureInitializationComplete(applicationContext, null)
                     engine = FlutterEngine(applicationContext)
+                    LiveWalReceiptDurabilityChannel.register(applicationContext, engine!!)
                     headlessStop = false
                     headless = engine
                     PhoneBatteryChannel.register(applicationContext, engine!!)

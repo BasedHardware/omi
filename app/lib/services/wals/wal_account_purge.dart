@@ -55,10 +55,21 @@ extension _WalAccountPurge on LocalWalSyncImpl {
     bool owned(Wal wal) => wal.ownerUid == uid || (wal.ownerUid == null && uid == current);
     final doomed = [..._wals, ..._retiredWals, ..._foreignWals].where(owned).toList();
     final unindexedRemoved = await _purgeUnindexedAccountWals({uid}, generation);
+    final needsPurgeSnapshot = doomed.any((wal) =>
+        LiveWalReceipt.isManagedBasename(path.basename(wal.filePath ?? '')) &&
+        !_confirmedDurableWalKeys.contains(_durableKey(wal)));
+    final LiveWalPurgeSnapshot? purgeSnapshot;
+    if (needsPurgeSnapshot) {
+      purgeSnapshot = await WalFileManager.captureLiveWalPurgeSnapshot();
+    } else {
+      purgeSnapshot = null;
+    }
     var removed = 0;
     for (final wal in doomed) {
       if (!_isCurrent(generation)) break;
-      if (await _deleteWal(wal, generation: generation, accountPurge: true)) removed++;
+      if (await _deleteWal(wal, generation: generation, accountPurge: true, liveWalPurgeSnapshot: purgeSnapshot)) {
+        removed++;
+      }
     }
     if (removed > 0 && _isCurrent(generation)) {
       await _saveWalsToFile(generation);

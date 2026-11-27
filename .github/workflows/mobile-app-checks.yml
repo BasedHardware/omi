@@ -225,6 +225,13 @@ jobs:
         working-directory: app
         run: dart run build_runner build --delete-conflicting-outputs
 
+      - name: Exercise live WAL receipt kill switch
+        working-directory: app
+        run: >-
+          flutter test --no-pub --dart-define=OMI_LIVE_WAL_RECEIPT_OFF=true
+          --plain-name "receipt issuance kill switch still replays and retires existing receipts"
+          test/unit/wal_orphan_recovery_test.dart
+
       - name: Run analyzer ratchet
         working-directory: app
         run: bash scripts/analyze_ratchet.sh

@@ -92,6 +92,7 @@ class OrphanAudioFile {
   /// Independent of the adoption owner class: multiple accounts may reclaim.
   String? reclaimSkipReason(DateTime now) {
     if (classification == 'working') return 'working';
+    if (classification == 'receiptless_managed') return 'managed_receipt_missing';
     // Legacy Limitless wrote random + milliseconds without the later sequence
     // field. Its capture clock is known even though it is not adoptable by the
     // strict current producer/framing classifier. Do not loosen adoption.
@@ -146,7 +147,7 @@ const orphanReclaimMarginSeconds = 7 * 86400;
 /// Reclaim deletes an unreferenced orphan only when both its capture time and mtime are strictly
 /// older than this (67 days): never audio the server would still admit or recovery could adopt.
 const orphanReclaimAgeSeconds = serverSyncLookbackSeconds + orphanReclaimMarginSeconds;
-const orphanAudioClasses = ['working', 'unparseable', 'recoverable', 'expired', 'owner_unknown'];
+const orphanAudioClasses = ['working', 'unparseable', 'recoverable', 'expired', 'owner_unknown', 'receiptless_managed'];
 
 ({List<OrphanAudioFile> files, OrphanAudioFrameCache cache, int reads, int hits}) _classifyOrphans(
     List<_Metadata> candidates, int phoneSeconds, bool owned, OrphanAudioFrameCache frameCache) {
@@ -163,6 +164,10 @@ const orphanAudioClasses = ['working', 'unparseable', 'recoverable', 'expired', 
     var frames = 0;
     var classification = 'working';
     if (!working) {
+      if (LiveWalReceipt.isManagedBasename(name)) {
+        return OrphanAudioFile(
+            file.filePath, file.bytes, file.modifiedUs, file.changedUs, 'receiptless_managed', null, 0, null);
+      }
       // BatchRecordingInfo is intentionally forgiving for legacy native intake;
       // unattended orphan adoption additionally requires the complete mono shape.
       // Strip only known producer suffixes for the legacy parser. Preserve the
