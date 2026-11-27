@@ -92,7 +92,8 @@ async def wake_soon(uid, rid, reason, now):
     metrics.safe_metric(lambda: metrics.FINISH_REWAKES.labels(reason, outcome).inc())
 
 
-def _failed(error):
+def _failed(reason, error):
+    metrics.safe_metric(lambda: metrics.FINISH_REWAKES.labels(reason, 'error').inc())
     metrics.safe_metric(
         lambda: logger.warning('event=v3_finish_rewake outcome=error exception_type=%s', type(error).__name__)
     )
@@ -126,17 +127,25 @@ async def after_moved(uid, recordings, moved):
         if rid is not None:
             await wake_soon(uid, rid, 'source_moved', now)
     except Exception as error:
-        _failed(error)
+        _failed('source_moved', error)
 
 
 async def after_raced(uid, recordings):
-    """Nothing committed; wake soon if the pass loaded a pending recent Finish. Called after the release."""
+    """Nothing committed; wake soon if a pending recording is a recent Finish. Called after the release.
+
+    The write that raced the pass is often the Finish itself (a live-window cut), so a loaded row can
+    predate it: when no loaded row shows a recent Finish, judge the stored markers, as the moved path does.
+    """
     try:
         if not finish_fast_rewake_enabled():
             return
         now = datetime.now(timezone.utc)
-        rid = _newest({rid: row for rid, row in recordings.items() if row.get('v3_pending')}, now)
+        pending = {rid: row for rid, row in recordings.items() if row.get('v3_pending')}
+        rid = _newest(pending, now)
+        if rid is None and pending:
+            current = await run_blocking(db_executor, markers.finish_markers, uid, _by_recency(recordings, pending))
+            rid = _newest(current, now)
         if rid is not None:
             await wake_soon(uid, rid, 'raced', now)
     except Exception as error:
-        _failed(error)
+        _failed('raced', error)

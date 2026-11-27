@@ -155,7 +155,7 @@ FINISH_HELD = Counter(
 FINISH_REWAKES = Counter(
     'omi_conversations_v3_finish_rewakes_total',
     'Seconds-scale Finish re-wakes after a pass committed (moved) or raced while a recent Finish recording changed;'
-    ' outcome capped: that Finish had used its re-wakes',
+    ' outcome capped: that Finish recording had used its re-wakes; outcome error: the marker read or task create failed',
     ['reason', 'outcome'],
 )
 

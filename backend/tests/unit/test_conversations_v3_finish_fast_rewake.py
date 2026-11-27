@@ -162,10 +162,67 @@ async def test_a_raced_pass_with_a_pending_finish_is_woken_in_seconds(builder, m
 async def test_a_raced_pass_of_live_speech_keeps_only_the_minute_wake(builder, monkeypatch):
     monkeypatch.setattr(store, 'load', lambda *a, **kw: ({'r': _recent()}, {}, []))
     _raced(monkeypatch)
+    monkeypatch.setattr(markers, 'finish_markers', lambda *a, **kw: {'r': {}})
     wakes, queue = _wakes(monkeypatch)
 
     assert await service.reconcile('u') == 'raced'
     assert len(wakes) == 1 and queue.tasks == []
+
+
+@pytest.mark.asyncio
+async def test_a_pass_raced_by_the_finish_write_itself_reads_the_stored_marker(builder, monkeypatch):
+    # A live-window Finish writes its cut once; that write is what raced the pass, so the loaded row predates it.
+    monkeypatch.setattr(store, 'load', lambda *a, **kw: ({'r': _recent()}, {}, []))
+    _raced(monkeypatch)
+    read = []
+
+    def stored_markers(uid, ids):
+        read.append((uid, list(ids)))
+        return {'r': {'v3_manual_end': True, 'finished_at': datetime.now(timezone.utc)}}
+
+    monkeypatch.setattr(markers, 'finish_markers', stored_markers)
+    wakes, queue = _wakes(monkeypatch)
+    counted = _count('raced')
+
+    assert await service.reconcile('u') == 'raced'
+    assert read == [('u', ['r'])]
+    assert [task[0] for task in queue.tasks] == [_name('u', 'r', 1)]
+    assert _count('raced') == counted + 1 and len(wakes) == 1
+
+
+@pytest.mark.asyncio
+async def test_a_raced_pass_that_loaded_a_finish_reads_no_markers(builder, monkeypatch):
+    monkeypatch.setattr(store, 'load', lambda *a, **kw: ({'r': _recent(v3_manual_end=True)}, {}, []))
+    _raced(monkeypatch)
+    monkeypatch.setattr(
+        markers, 'finish_markers', lambda *a, **kw: pytest.fail('the loaded row already names a Finish')
+    )
+    _, queue = _wakes(monkeypatch)
+
+    assert await service.reconcile('u') == 'raced'
+    assert [task[0] for task in queue.tasks] == [_name('u', 'r', 1)]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('path', ['moved', 'raced'])
+async def test_a_failed_rewake_is_counted_as_an_error(builder, monkeypatch, path):
+    monkeypatch.setattr(store, 'load', lambda *a, **kw: ({'r': _recent()}, {}, []))
+    if path == 'raced':
+        _raced(monkeypatch)
+    else:
+        monkeypatch.setattr(service, '_commit', lambda *a, **kw: {'r'})
+
+    def unavailable(*a, **kw):
+        raise RuntimeError('synthetic read failure')
+
+    monkeypatch.setattr(markers, 'finish_markers', unavailable)
+    wakes, queue = _wakes(monkeypatch)
+    reason = 'raced' if path == 'raced' else 'source_moved'
+    errors = _count(reason, 'error')
+
+    assert await service.reconcile('u') == ('raced' if path == 'raced' else 'committed')
+    assert queue.tasks == [] and wakes
+    assert _count(reason, 'error') == errors + 1
 
 
 @pytest.mark.asyncio

@@ -28,7 +28,11 @@ before.
 
 - A moved pass whose loaded rows show no Finish reads at most 8 documents, Finish marker fields
   only, newest moved recordings first. That is one read for a typical pass.
-- At most two extra Cloud Tasks and two builder passes per Finish, plus at most two refused
+- A raced pass whose loaded pending rows show no Finish does the same bounded read over its pending
+  recordings: the write that raced it is often the Finish itself (a live-window cut), which the loaded
+  row predates. At most about 16k raced passes a day times 8 marker reads, under $0.10 a day.
+- At most two extra Cloud Tasks and two builder passes per Finish recording (a `newer_dual` Finish
+  that marks two recordings can use two each), plus at most two refused
   task creates per later racing pass inside the 3-minute window.
 - No new writes. Outline calls: none when the Finish's input did not change, because a raced pass
   keeps its paid outline on the lease (`save_outline`) and the follow-up reuses it; at most one per
@@ -41,5 +45,5 @@ Set `CONVERSATIONS_V3_FINISH_FAST_REWAKE=off` on backend-sync. The off path neit
 ## Readback
 
 - Watch `omi_conversations_v3_finish_rewakes_total{reason,outcome}` after serving; `capped` should stay
-  a small share of `scheduled`.
+  a small share of `scheduled`, and `error` near zero (a failed marker read or task create).
 - The Finish-to-Home SLI (SCA-4489 readback) should show fewer Finishes in the 60 to 120 s band.
