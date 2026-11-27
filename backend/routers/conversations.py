@@ -182,7 +182,8 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-from config.conversations_v3 import conversations_v3_enabled, live_recap_enabled
+from config.llm_spend import v3_summary_first_open_gating_enabled
+from config.conversations_v3 import conversations_v3_enabled, live_recap_enabled, v3_intake_held_out
 from config.app_channel import APP_CHANNEL_HEADER, app_channel
 from utils.episodes import client_gate
 from models.conversation import ConversationsLiveResponse
@@ -210,7 +211,21 @@ def get_live_conversation(
     if not enabled:
         return {'v3': False, 'conversation': None}
     now = datetime.now(timezone.utc)
-    row = conversations_v3_live.live_window(uid, now=now, max_idle=v3_live.MAX_IDLE, pick=v3_live.active)
+    row, complete = conversations_v3_live.live_window_lookup(
+        uid, now=now, max_idle=v3_live.MAX_IDLE, pick=v3_live.active
+    )
+    if row is None and v3_intake_held_out(uid):
+        # Holdout (SCA-2918): an existing active window is still served; only a complete lookup proves
+        # there is none, and then the owner's new captures are legacy. A capped one keeps v3.
+        if complete:
+            return {'v3': False, 'conversation': None}
+        record_fallback(
+            component='feature_flags',
+            from_mode='v3_holdout',
+            to_mode='v3_live',
+            reason='lookup_cap',
+            outcome='degraded',
+        )
     compact = (
         {
             key: row[key]
@@ -693,8 +708,31 @@ def process_in_progress_conversation(
     # Experiment end_open_conversation: End also cuts the owner's v3 conversation, at the End time the app
     # sent in this header (else now), and wakes the builder at once, so it closes whatever the listening
     # session's recording below is doing. Off: the header is ignored and nothing is written.
-    cut_id = v3_manual_cuts.record_end(uid, ended_at=v3_manual_cuts.parse_ended_at(ended_at))
+    # Experiment live_words_cascade: the request may also carry the live words the phone was showing for the
+    # conversation being ended (live_tail); they are kept with the cut for that conversation's summary and
+    # nowhere else. A request without them stores its End exactly as before.
+    live_tail = getattr(request, 'live_tail', None)
+    if live_tail is None:
+        cut_id = v3_manual_cuts.record_end(uid, ended_at=v3_manual_cuts.parse_ended_at(ended_at))
+    else:
+        cut_id = v3_manual_cuts.record_end(uid, ended_at=v3_manual_cuts.parse_ended_at(ended_at), live_tail=live_tail)
     conversation = retrieve_in_progress_conversation(uid)
+    named = request.live_conversation_id if request else None
+    if (
+        conversation
+        and named
+        and named != conversation.get('id')
+        and not conversation.get('recording')
+        and conversations_v3_enabled(uid)
+        and v3_intake_held_out(uid)
+    ):
+        # Held-out owner only (SCA-2918): a legacy row in progress beside an older v3 window. A Finish naming
+        # the window closes exactly that window; the legacy row keeps recording. A miss runs the legacy Finish.
+        # No experiment wake here: record_end stores no cut for a held-out owner, and the window cut
+        # wakes its builder itself (finish._acknowledge enqueues the pending recording).
+        finished = finish_live_window(uid, named, named_only=True)
+        if finished is not None:
+            return finished
     if not conversation:
         response = finish_live_window(
             uid,
@@ -1290,7 +1328,9 @@ def get_conversations(
     default_home = not (reveal or start_date or end_date)
     # Legacy Home only: a v3 owner's Home is built from derived rows, so a held
     # legacy sync piece there would duplicate them.
-    v3_home = default_home and conversations_v3_enabled(uid)
+    # A held-out owner (SCA-2918) reads legacy Home: it shows their v3_derived cards too, and their new
+    # legacy pieces held for notes, which v3 Home would hide for the whole capture.
+    v3_home = default_home and conversations_v3_enabled(uid) and not v3_intake_held_out(uid)
     show_held = default_home and not v3_home
     requested_mode = request.headers.get(list_page_headers.HOME_MODE_HEADER) if request is not None else None
     first_page = offset == 0 and not cursor
@@ -1487,7 +1527,7 @@ def get_conversation_by_id(
     if request is not None and request.headers.get('X-Omi-Recording-Detail') == '1':
         open_recording(uid, conversation)
     # A desktop conversation stored raw (deferred) for a freemium/Neo user is
-    # enriched on first open. Other conversations are returned unchanged.
+    # enriched on first detail read except for explicit status polling.
     polling = request is not None and request.query_params.get('status_poll') == '1'
     if not polling and conversation.get('deferred') and not conversation.get('processing_deferred'):
         conversation = _enrich_deferred_conversation(uid, conversation, include_discarded=include_discarded)
@@ -3205,7 +3245,11 @@ def open_historical_summary(
         },
     },
 )
-async def conversation_summary_stream(conversation_id: str, uid: str = Depends(auth.get_current_user_uid)):
+async def conversation_summary_stream(
+    conversation_id: str,
+    uid: str = Depends(auth.get_current_user_uid),
+    request: Request = cast(Request, None),
+):
     def reject_live_target(conversation):
         if v3_policy.live_summary_target(conversation) and not conversation.get('v3_unlocked'):
             detail = 'use_live_recap_stream' if live_recap_enabled(uid) else 'live_recap_unavailable'
@@ -3214,14 +3258,21 @@ async def conversation_summary_stream(conversation_id: str, uid: str = Depends(a
     conversation = await run_blocking(db_executor, _get_valid_conversation_by_id, uid, conversation_id)
     reject_live_target(conversation)
     await run_blocking(db_executor, require_generated_compute, uid, 'conversation_v3_summary_open')
-    if v3_summary.needs_open_reconcile(conversation):
+    detail_intent = (
+        request.headers.get('X-Omi-Recording-Detail')
+        if request is not None and v3_summary_first_open_gating_enabled()
+        else None
+    )
+    promote_llm = detail_intent == '1'
+    allow_generation = detail_intent != '0'
+    if allow_generation and v3_summary.needs_open_reconcile(conversation):
         from utils.conversations.v3.service import reconcile
 
         try:
             from utils.executors import start_background_task
 
             work = start_background_task(
-                reconcile(uid, on_open=True, conversation_id=conversation_id),
+                reconcile(uid, on_open=True, promote_llm=promote_llm, conversation_id=conversation_id),
                 name='v3-reconcile-open',
                 bounded_provider_failure=True,
             )
@@ -3230,9 +3281,9 @@ async def conversation_summary_stream(conversation_id: str, uid: str = Depends(a
             logger.warning('event=v3_on_open_reconcile outcome=stored exception_type=%s', type(exc).__name__)
         conversation = await run_blocking(db_executor, _get_valid_conversation_by_id, uid, conversation_id)
         reject_live_target(conversation)
-    token = await v3_summary.prepare(uid, conversation)
+    token = await v3_summary.prepare(uid, conversation, promote_llm=promote_llm) if allow_generation else None
     return StreamingResponse(
-        v3_summary.stream(uid, conversation, token=token),
+        v3_summary.stream(uid, conversation, token=token, allow_generation=allow_generation),
         media_type='text/event-stream',
         headers={'Cache-Control': 'no-cache'},
     )

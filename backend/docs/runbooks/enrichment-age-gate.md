@@ -47,8 +47,12 @@ also prevents unpark. The receipt includes the confirmed window and the fixed
 `based-hardware/us-central1` using each row's persisted handler binding.
 
 Dry-run accepts the `ro-prod` and `prod-operator` tiers. Pass `--next-file` in a
-pre-existing private directory under `/Volumes/Ephemeral/scratch`. The CLI checks
-the output path before opening Firestore. Input refusals use a short reason
+pre-existing private directory under `/Volumes/Ephemeral/scratch`. On hosts
+without that path, pass `--scratch-root` with an existing operator-owned
+directory with mode `0700` on local scratch. The checkpoint parent must also
+have mode `0700` and resolve within that root. The CLI checks the output path
+before opening Firestore and reports the discovered row count as `rows_scanned`.
+Input refusals use a short reason
 code where available. Runtime failures include the exception type. For example,
 `FailedPrecondition` during discovery can indicate that the index is still pending.
 For apply, use the `prod-operator` tier and repeat the page inputs with

@@ -47,12 +47,14 @@ void main() {
       holdState: 'fg60',
       holdSealedAtMs: 1990000,
       recovered: true,
+      journalRecovery: WalJournalRecovery.recovered,
     );
     final upload = trace.take('/recovered.bin');
     expect(trace.holdHeadersAtSend(upload, holdEnabled: true), {
       'X-Omi-Upload-Hold': 'fg60',
       'X-Omi-Upload-Hold-Age-Ms': '10000',
       'X-Omi-Upload-Recovered': '1',
+      'X-Omi-Upload-Journal-Recovery': 'recovered',
     });
     expect(trace.holdHeadersAtSend(upload, holdEnabled: false), {
       'X-Omi-Upload-Hold': 'none',
@@ -60,12 +62,41 @@ void main() {
     });
   });
 
+  test('journal evidence and reported label stay independent at send', () {
+    trace.prepare(
+      firstFilePath: '/a.bin',
+      oldestId: 'w1',
+      sealedAtSeconds: 1990,
+      holdState: 'fg60',
+      journalRecovery: WalJournalRecovery.recovered,
+    );
+    final upload = trace.take('/a.bin');
+    expect(trace.holdHeadersAtSend(upload, holdEnabled: true), {
+      'X-Omi-Upload-Hold': 'fg60',
+      'X-Omi-Upload-Recovered': '0',
+      'X-Omi-Upload-Journal-Recovery': 'recovered',
+    });
+    expect(trace.holdHeadersAtSend(upload, holdEnabled: false), {'X-Omi-Upload-Hold': 'none'});
+  });
+
   test('hold age clamps clock changes and requires a held file', () {
-    const held = (trace: 'trace', holdState: 'fg60', holdSealedAtMs: 2010000, recovered: false);
+    const UploadTraceSnapshot held = (
+      trace: 'trace',
+      holdState: 'fg60',
+      holdSealedAtMs: 2010000,
+      recovered: false,
+      journalRecovery: null,
+    );
     expect(trace.holdHeadersAtSend(held, holdEnabled: true)['X-Omi-Upload-Hold-Age-Ms'], '0');
     clock = at(200000);
     expect(trace.holdHeadersAtSend(held, holdEnabled: true)['X-Omi-Upload-Hold-Age-Ms'], '86400000');
-    const unheld = (trace: 'trace', holdState: 'none', holdSealedAtMs: 2010000, recovered: false);
+    const UploadTraceSnapshot unheld = (
+      trace: 'trace',
+      holdState: 'none',
+      holdSealedAtMs: 2010000,
+      recovered: false,
+      journalRecovery: null,
+    );
     expect(trace.holdHeadersAtSend(unheld, holdEnabled: true), {'X-Omi-Upload-Hold': 'none'});
   });
 

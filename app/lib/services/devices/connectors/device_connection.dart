@@ -525,8 +525,8 @@ abstract class DeviceConnection {
   }
 
   /// Send CMD_RING_READ. If [packetCount] is null or 0, firmware streams everything from [startSeq].
-  Future<bool> readRingFromSeq(int startSeq, {int? packetCount}) async {
-    if (await isConnected()) {
+  Future<bool> readRingFromSeq(int startSeq, {int? packetCount, bool Function()? canStart}) async {
+    if (await isConnected() && (canStart?.call() ?? true)) {
       return await performReadRingFromSeq(startSeq, packetCount: packetCount);
     }
     return false;

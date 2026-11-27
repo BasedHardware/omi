@@ -131,6 +131,7 @@ def entries():
             neutrals={
                 'unlocked_page': (None, 'bounds indexed point reads; source and neighbor query shapes are unchanged'),
                 'unlocked_limit': (None, 'caps indexed point reads; adds no query shape'),
+                'lease_token': (None, 'names the lease the allowance charge must match; adds no query shape'),
             },
             setup=_pending_source,
             patchers=(_decode,),
@@ -192,6 +193,11 @@ def entries():
             neutrals={'pick': (_pick_none, 'row selection only; no window is live, so both bands read')},
         ),
         DriverEntry(
+            'database.conversations_v3_live.live_window_lookup',
+            base={'uid': SHAPE_UID, 'now': FROZEN_NOW, 'max_idle': timedelta(hours=2)},
+            neutrals={'pick': (_pick_none, 'row selection only; no window is live, so both bands read')},
+        ),
+        DriverEntry(
             'database.conversations_v3_live.request_recording_finish',
             base={'uid': SHAPE_UID, 'now': FROZEN_NOW},
             setup=_finish_source,
@@ -201,6 +207,7 @@ def entries():
             'database.conversations_v3_live.request_named_finish',
             base={'uid': SHAPE_UID, 'now': FROZEN_NOW},
             domains={'named_id': ['source', 'window']},
+            neutrals={'strict': (True, 'refuses a superseded capture after the same reads; no query changes')},
             setup=_named_finish_sources,
             patchers=(_transaction_without_rpc,),
         ),
@@ -247,6 +254,12 @@ def entries():
         # Owner-level End instants (flag end_open_conversation): single-field range reads on the cut time.
         DriverEntry('database.conversations_v3_manual_cuts.around', base={'uid': SHAPE_UID, 'at': FROZEN_NOW}),
         DriverEntry('database.conversations_v3_manual_cuts.load', base={'uid': SHAPE_UID, 'since': FROZEN_NOW}),
+        # The live tail kept with an End (flag live_words_cascade): single-field reads on the cut time.
+        DriverEntry('database.conversations_v3_manual_cuts.tail', base={'uid': SHAPE_UID, 'at': FROZEN_NOW}),
+        DriverEntry('database.conversations_v3_manual_cuts.clear_tail', base={'uid': SHAPE_UID, 'at': FROZEN_NOW}),
+        DriverEntry(
+            'database.conversations_v3_manual_cuts.clear_tails_before', base={'uid': SHAPE_UID, 'before': FROZEN_NOW}
+        ),
         DriverEntry(
             'utils.conversations.v3.service.has_pending',
             base={'uid': SHAPE_UID},

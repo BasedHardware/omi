@@ -15,12 +15,31 @@ the live proof path. The switch `PRIVATE_SYNC_INVENTORY_MANIFEST_BODY_CACHE_ENAB
 defaults on. Set it to `false` to restore a body GET for each manifest lookup.
 Disabling the listed-manifest fast path also uses the ordinary live proof.
 
+For SCA-3882, Release can set `PUSHER_INVENTORY_MANIFEST_LONG_TTL_ENABLED=true`
+on Pusher after custody review. This extends the lifetime from 120 to 900
+seconds under the same process-local 8 MiB budget. Set it to `false` for the
+120-second control. Entries expire from insertion and enter the cache only
+after media binding and gap-count validation. Fresh, strict and deadline-bound
+reads bypass manifest body reuse.
+
 Compare native private-sync `ReadObject` requests and `network_sent_bytes_count`
 for the `ReadObject` method over matching workload windows. Use the
 `playback_inventory` payload counter from PR #25779 to isolate the change once
 it is serving. The counter covers shared inventory helpers. Each cache hit
 avoids one payload GET and that response's bytes, with the live metadata GET
 still required. Compare billed SKU `3C8A-99C5-F47B` across complete UTC days.
+
+For the TTL comparison, match full UTC days, serving code and workload between
+flag settings. Measure `omi_pusher_inventory_manifest_cache_events_total`
+by `event` for hits, misses and byte-budget evictions, alongside Pusher memory,
+CPU, list traffic, playback coverage and custody exclusions. The
+`pusher_inventory_manifest` change label on the GCS read reuse counters gives
+skipped payload GETs, encoded body bytes and replacement operations. Use native
+GCS response-byte metrics for the wire comparison and report the difference
+from billed bytes. At D+2, record settled private-sync North America transfer
+GiB/day and dollars/day plus bucket ReadObject/day. Debit replacement and
+fallback operations and any added compute. Count savings once with SCA-4225
+and exclude the effect of the main roll.
 
 ## SCA-4225 operation-local reads
 

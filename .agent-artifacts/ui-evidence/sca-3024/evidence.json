@@ -1,0 +1,19 @@
+{
+  "version": 1,
+  "images": [
+    {
+      "file": "001-mobile-ios-finish-processing.png",
+      "platform": "mobile-ios",
+      "description": "Flutter widget render of native Finish waiting for the matching conversation",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "002-mobile-ios-finish-pending-on-home.png",
+      "platform": "mobile-ios",
+      "description": "Flutter widget render when the bounded Finish wait expires",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    }
+  ]
+}

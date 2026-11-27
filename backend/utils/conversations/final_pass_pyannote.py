@@ -113,8 +113,13 @@ def run_final_pass(
                                 'speaker_match_source': 'final_centroid',
                             }
                         ),
+                        # A voice naming never evaluated (no centroid, under the evidence floor, no
+                        # compatible prints) is unknown: no new evidence must not revoke an earlier
+                        # resolver or manual-free decision. Only an evaluated, rejected voice is no_match.
                         speaker_identity_status=(
-                            'user' if identity == 'user' else 'not_user' if identity else 'no_match'
+                            'user'
+                            if identity == 'user'
+                            else 'not_user' if identity else 'no_match' if decision is not None else 'unknown'
                         ),
                     )
                 )
