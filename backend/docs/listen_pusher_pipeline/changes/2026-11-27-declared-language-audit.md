@@ -15,7 +15,7 @@ A stable 2% sample:
 - re-runs serving's privacy authorization and consent check, then a read-only funding check that records no admission telemetry (unfunded owners skip as `not_funded`); BYOK and custom-STT units are never sampled;
 - skips probes that are mostly silence;
 - is classified on its first 30 s by the self-hosted gate when configured, else by the Modulate
-  language-ID probe (either classifier at most 60 per process per hour; vendor outcomes also reach the routing probe's breaker and counters);
+  language-ID probe (either classifier at most 60 per process per hour; the vendor call never touches the routing probe's breaker, health or counters);
 - is counted in `omi_batch_pipeline_declared_language_audit_total`.
 
 The returned decision is unchanged: always `declared`.

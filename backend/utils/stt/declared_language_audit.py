@@ -13,9 +13,9 @@ This audit samples ``SAMPLE_PERCENT`` of those units by a stable hash of their a
    including BYOK-only owners, are skipped (``not_funded``): the classifier is an Omi-paid vendor or GPU;
 2. cuts the first 30 s, and skips it when it holds under ``MIN_SPEECH_SECONDS`` of voiced audio (leading silence);
 3. classifies it with the self-hosted language gate when one is configured, otherwise with the existing Modulate
-   language-ID probe (the vendor that already serves live STT). Either classifier runs at most
-   ``MAX_PROBES_PER_HOUR`` times per process. A vendor probe is the routing probe (``batch_language.detect``), so its
-   real outcomes also reach that endpoint's circuit breaker, probe counters and the empty-success guard;
+   language-ID endpoint (the vendor that already serves live STT) through ``batch_language.audit_detect``, which never
+   touches the routing probe's circuit breaker, provider health or probe counters. Either classifier runs at most
+   ``MAX_PROBES_PER_HOUR`` times per process;
 4. counts ``omi_batch_pipeline_declared_language_audit_total{declared, heard, heard_class, confident, classifier}``.
 
 It never changes a route, stores nothing, and records no user identifier or transcript. Shadow intake (its own guard
@@ -79,9 +79,22 @@ def audit_enabled() -> bool:
     )
 
 
+_FINGERPRINT_BLOCKS = 16
+_FINGERPRINT_BLOCK = 4096
+
+
 def sampled(audio: bytes) -> bool:
-    # The whole unit: equal-length units that open with the same silence must not share a decision.
-    digest = hashlib.blake2b(audio, digest_size=8).digest()
+    """A stable 2% decision from a bounded fingerprint (length plus 16 blocks spread across the whole unit).
+
+    It runs inline on every declared unit, so it reads at most 64 KiB; spreading the blocks keeps equal-length units
+    that open with the same silence from sharing a decision.
+    """
+    span = max(0, len(audio) - _FINGERPRINT_BLOCK)
+    hasher = hashlib.blake2b(len(audio).to_bytes(8, 'big'), digest_size=8)
+    for index in range(_FINGERPRINT_BLOCKS):
+        start = span * index // (_FINGERPRINT_BLOCKS - 1)
+        hasher.update(audio[start : start + _FINGERPRINT_BLOCK])
+    digest = hasher.digest()
     return int.from_bytes(digest[:4], 'big') % 10000 < SAMPLE_PERCENT * 100
 
 
@@ -95,7 +108,9 @@ def maybe_audit(
 ) -> None:
     """Queue one sampled audit of a declared-supported serving unit. Never raises, never blocks.
 
-    ``cut`` is ``batch_language.probe_wav`` and ``vendor`` its ``detect`` (passed in: that module imports this one).
+    ``cut`` is ``batch_language.probe_wav`` and ``vendor`` its ``audit_detect`` (passed in: that module imports this
+    one). Inline work is the bounded sampling fingerprint and the submission; the cut and everything after run on the
+    audit pool.
     ``guard`` is serving intake's ``ServingLanguageProbeGuard``; any other caller (shadow intake) is not audited.
     """
     try:
@@ -109,17 +124,12 @@ def maybe_audit(
         if guard.provider_routed:
             SKIPPED.labels('provider_routed').inc()  # a vendor transcribes it; no Parakeet leak to measure
             return
-        try:
-            probe, seconds = cut(audio)  # only the first 30 s is kept, never the whole unit
-        except Exception:
-            SKIPPED.labels('decode').inc()
-            return
         access = (guard.store, guard.item, guard.authorize)
         context = contextvars.copy_context()
         # A fire-and-forget probe must not inherit the caller's request deadline.
         context.run(verification_deadline.set, None)
         try:
-            declared_language_audit_executor.submit(context.run, _classify, declared, probe, seconds, access, vendor)
+            declared_language_audit_executor.submit(context.run, _classify, declared, audio, cut, access, vendor)
         except ExecutorSaturatedError:
             SKIPPED.labels('busy').inc()
         except Exception as error:
@@ -182,8 +192,13 @@ def _authorization(access) -> str | None:
     return None
 
 
-def _classify(declared: str, probe: bytes, seconds: float, access, vendor) -> None:
+def _classify(declared: str, audio: bytes, cut, access, vendor) -> None:
     try:
+        try:
+            probe, seconds = cut(audio)  # only the first 30 s is kept, never the whole unit
+        except Exception:
+            SKIPPED.labels('decode').inc()
+            return
         # Local checks first: a silent probe needs no authorization reads.
         if voiced_seconds(probe) < MIN_SPEECH_SECONDS:
             SKIPPED.labels('no_speech').inc()

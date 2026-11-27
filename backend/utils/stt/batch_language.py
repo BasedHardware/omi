@@ -107,6 +107,41 @@ def probe_wav(audio: bytes, *, sample_rate=16000, channels=1, encoding=None) -> 
     return output.getvalue(), duration
 
 
+def audit_detect(probe: bytes) -> LanguageDecision:
+    """Modulate language ID for the declared-language audit only (a probe already cut to 30 s).
+
+    Unlike ``detect`` it never touches the LID circuit breaker, provider health or the routing probe counters, so a
+    measurement cannot take the breaker's half-open trial, clear its failures or flip the empty-success guard. Only
+    cost metering (payload bytes, vendor audio seconds) is recorded.
+    """
+    unavailable = LanguageDecision('und', 0.0, 'unavailable')
+    key = os.getenv('MODULATE_API_KEY', '')
+    if not key:
+        return unavailable
+    with wave.open(BytesIO(probe), 'rb') as reader:
+        seconds = reader.getnframes() / float(reader.getframerate() or 1)
+    ok = False
+    try:
+        record_vendor_payload('modulate', 'lid', len(probe))
+        with httpx.Client(timeout=httpx.Timeout(8, connect=2)) as client:
+            response = client.post(
+                LID_URL, headers={'X-API-Key': key}, files={'upload_file': ('language.wav', probe, 'audio/wav')}
+            )
+        response.raise_for_status()
+        data = response.json()
+        code, confidence = data.get('predicted_language_code'), data.get('confidence')
+        if not (isinstance(code, str) and len(code) == 2 and code.isascii() and code.isalpha()):
+            return unavailable
+        if not _finite_number(confidence) or not 0 <= confidence <= 1:
+            return unavailable
+        ok = True
+        return LanguageDecision(code.lower(), float(confidence), 'audio_lid', seconds)
+    except Exception:
+        return unavailable
+    finally:
+        record_vendor_burn(ENDPOINT_LID, 'ok' if ok else 'error', seconds)
+
+
 def _probe_failure_outcome(exc: BaseException) -> str:
     if is_quota_error(exc):
         return 'quota'
@@ -354,7 +389,7 @@ def resolve_language(
     if not language_guard_enabled() or language_class(language) != 'unknown':
         if surface == 'batch' and language_class(language) == 'supported':
             # Sampled, off the intake path, on serving's own fresh authorization; the decision is unchanged.
-            declared_language_audit.maybe_audit(code, audio, cut=probe_wav, guard=before_probe, vendor=detect)
+            declared_language_audit.maybe_audit(code, audio, cut=probe_wav, guard=before_probe, vendor=audit_detect)
         return LanguageDecision(code, 1.0, 'declared')
     enforced, verdict = (
         _self_gate(audio, surface, cohort_key, audio_options)

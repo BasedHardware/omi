@@ -83,7 +83,7 @@ def lab(monkeypatch):
     monkeypatch.delenv('BATCH_DECLARED_LANGUAGE_AUDIT_ENABLED', raising=False)
     monkeypatch.setenv('HOSTED_LID_API_URL', 'http://lid.test')
     monkeypatch.setattr(audit.language_gate, 'self_detect', self_detect)
-    monkeypatch.setattr(batch_language, 'detect', vendor)
+    monkeypatch.setattr(batch_language, 'audit_detect', vendor)
     monkeypatch.setattr(audit, 'declared_language_audit_executor', Inline())
     monkeypatch.setattr(audit, 'sampled', lambda audio: True)
     monkeypatch.setattr('utils.funded_processing.consent_allows', lambda uid: True)
@@ -159,7 +159,7 @@ def test_self_gate_probes_share_the_hourly_cap(lab, monkeypatch):
 def test_an_unusable_vendor_answer_is_skipped(lab, monkeypatch):
     monkeypatch.setenv('HOSTED_LID_API_URL', '')
     monkeypatch.setenv('STT_GPU_FLEET_OFF', 'true')
-    monkeypatch.setattr(batch_language, 'detect', lambda probe: LanguageDecision('und', 0.0, 'unavailable', 30.0))
+    monkeypatch.setattr(batch_language, 'audit_detect', lambda probe: LanguageDecision('und', 0.0, 'unavailable', 30.0))
     before = skipped('vendor_unavailable')
 
     resolve()
@@ -412,3 +412,78 @@ def test_sampling_hashes_past_a_shared_silent_opening():
     opening = b'\x00' * 200_000
     picks = [audit.sampled(opening + os.urandom(64)) for _ in range(5000)]
     assert 0 < sum(picks) < len(picks)
+
+
+class _Response:
+    def __init__(self, payload, status=200):
+        self.payload, self.status_code = payload, status
+
+    def raise_for_status(self):
+        if self.status_code >= 400:
+            raise RuntimeError('http %s' % self.status_code)
+
+    def json(self):
+        return self.payload
+
+
+@pytest.mark.parametrize(
+    'reply, expected',
+    [
+        (_Response({'predicted_language_code': 'ZH', 'confidence': 0.91}), ('zh', 'audio_lid')),
+        (_Response({'predicted_language_code': 'zh'}), ('und', 'unavailable')),
+        (_Response({}, status=429), ('und', 'unavailable')),
+    ],
+)
+def test_the_audit_vendor_call_never_touches_the_routing_breaker_or_health(monkeypatch, reply, expected):
+    from utils.stt import vendor_guard
+
+    posted = []
+
+    class Client:
+        def __init__(self, **kwargs):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *exc):
+            return False
+
+        def post(self, url, **kwargs):
+            posted.append(url)
+            return reply
+
+    monkeypatch.setenv('MODULATE_API_KEY', 'test-key')
+    monkeypatch.setattr(batch_language.httpx, 'Client', Client)
+    for name in (
+        'breaker_allows',
+        'record_breaker_success',
+        'record_breaker_quota_error',
+        'record_breaker_other_failure',
+        'note_provider_failure',
+    ):
+        monkeypatch.setattr(batch_language, name, Mock(side_effect=AssertionError(name)))
+    before = REGISTRY.get_sample_value('omi_batch_pipeline_language_probe_total', {'outcome': 'accepted'}) or 0.0
+    probe, _ = batch_language.probe_wav(VOICED)
+
+    decision = batch_language.audit_detect(probe)
+
+    assert (decision.language, decision.evidence) == expected
+    assert posted == [batch_language.LID_URL]
+    assert (
+        REGISTRY.get_sample_value('omi_batch_pipeline_language_probe_total', {'outcome': 'accepted'}) or 0.0
+    ) == before
+
+
+def test_inline_sampling_reads_a_bounded_fingerprint(monkeypatch):
+    class Counting(bytes):
+        sliced = 0
+
+        def __getitem__(self, key):
+            part = bytes.__getitem__(self, key)
+            Counting.sliced += len(part)
+            return part
+
+    audit.sampled(Counting(os.urandom(5_000_000)))
+
+    assert Counting.sliced <= audit._FINGERPRINT_BLOCKS * audit._FINGERPRINT_BLOCK

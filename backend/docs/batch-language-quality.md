@@ -104,8 +104,8 @@ declared-language audit (`utils/stt/declared_language_audit.py`,
 - It drops probes with under 3 s of voiced audio in their first 30 s (leading silence).
 - It classifies the first 30 s with the self-hosted gate when one is configured. Otherwise it
   uses the existing Modulate language-ID probe. Either classifier runs at most 60 times per
-  process per hour. A vendor probe is the routing probe, so its real outcomes also reach the
-  Modulate language-ID circuit breaker, the probe counters and the empty-success guard.
+  process per hour. The vendor call (`batch_language.audit_detect`) never touches the routing
+  probe's circuit breaker, provider health or probe counters; only cost metering is recorded.
 - It counts
   `omi_batch_pipeline_declared_language_audit_total{declared, heard, heard_class, confident, classifier}`
   (`confident` is top-1 probability >= 0.8) and never changes a route.
@@ -117,7 +117,9 @@ Units whose owner brought their own STT (BYOK or a custom provider) are never sa
 (`reason="custom_stt"`), and owners without an Omi-funded allowance skip as `reason="not_funded"`,
 because the classifier is Omi-paid. Units admitted to a vendor STT route skip as
 `reason="provider_routed"`, since they never reach Parakeet. The share therefore describes
-Parakeet-routed units of funded, Omi-STT owners. The sample is a stable hash of the whole unit.
+Parakeet-routed units of funded, Omi-STT owners. The sample is a stable hash of a bounded fingerprint (the length plus 16 blocks spread across
+the unit). That fingerprint and the submission are the only inline work; the probe cut and
+everything after it run on the audit pool.
 
 The private rollout `fleet_gate.sh` requires language-route coverage for every
 since-T0 completed cohort unit and rejects any unknown/unsupported Parakeet
