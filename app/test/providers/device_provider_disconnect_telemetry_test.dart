@@ -329,6 +329,7 @@ void main() {
           now: now,
           lastConnectedAt: preferences.lastPendantConnectedAt,
           lastShownAt: 0,
+          lastEnrolledAt: 0,
           lastDropoffSurfaceDay: '',
           lastSyncAlertAt: 0,
           createdAt: null,

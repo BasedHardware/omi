@@ -113,12 +113,14 @@ class _PendantReconnectNudgeCardState extends State<PendantReconnectNudgeCard> w
       now: now,
       lastConnectedAt: _preferences.lastPendantConnectedAt,
       lastShownAt: _preferences.pendantReconnectNudgeLastShownAt,
+      lastEnrolledAt: _preferences.pendantReconnectNudgeLastEnrolledAt,
       lastDropoffSurfaceDay: _preferences.pendantDropoffSurfaceLastDay,
       lastSyncAlertAt: _preferences.lastSyncAlertTimestamp,
       createdAt: widget.createdAt,
       paying: widget.paying,
     );
     if (enrollment == null) return;
+    _preferences.pendantReconnectNudgeLastEnrolledAt = now.millisecondsSinceEpoch;
     _emit(enrollment);
     if (enrollment.arm == PendantReconnectNudgeEligibleArm.holdout) return;
 

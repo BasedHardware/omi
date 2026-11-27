@@ -766,7 +766,8 @@ class SharedPreferencesUtil {
 
   set lastSyncAlertTimestamp(int value) => saveInt('lastSyncAlertTimestamp', value);
 
-  // Per-account epoch millis from the last evidence of a live pendant link, including when it ends.
+  // Per-account epoch millis from the last live pendant link. For old pairings
+  // without a stamp, the first observation starts a conservative window.
   int get lastPendantConnectedAt => uid.isEmpty ? 0 : getInt(_userScopedKey('lastPendantConnectedAt', uid));
 
   set lastPendantConnectedAt(int value) {
@@ -778,6 +779,13 @@ class SharedPreferencesUtil {
 
   set pendantReconnectNudgeLastShownAt(int value) {
     if (uid.isNotEmpty) unawaited(saveInt(_userScopedKey('pendant_reconnect_nudge_last_shown_at', uid), value));
+  }
+
+  int get pendantReconnectNudgeLastEnrolledAt =>
+      uid.isEmpty ? 0 : getInt(_userScopedKey('pendant_reconnect_nudge_last_enrolled_at', uid));
+
+  set pendantReconnectNudgeLastEnrolledAt(int value) {
+    if (uid.isNotEmpty) unawaited(saveInt(_userScopedKey('pendant_reconnect_nudge_last_enrolled_at', uid), value));
   }
 
   // Shared with SCA-4815's drop-off question. Both surfaces check and claim

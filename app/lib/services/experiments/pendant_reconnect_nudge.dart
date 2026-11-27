@@ -1,6 +1,7 @@
 // Owns EXP-005 assignment and eligibility. The flag must resolve on before
 // the client evaluates an account, and only bucketed context leaves this decision.
 import 'dart:convert';
+import 'dart:math';
 
 import 'package:crypto/crypto.dart';
 
@@ -39,6 +40,7 @@ abstract final class PendantReconnectNudge {
     required DateTime now,
     required int lastConnectedAt,
     required int lastShownAt,
+    required int lastEnrolledAt,
     required String lastDropoffSurfaceDay,
     required int lastSyncAlertAt,
     required DateTime? createdAt,
@@ -48,8 +50,9 @@ abstract final class PendantReconnectNudge {
 
     final gap = now.difference(DateTime.fromMillisecondsSinceEpoch(lastConnectedAt));
     if (gap < const Duration(hours: 72)) return null;
-    if (lastShownAt > 0 &&
-        now.difference(DateTime.fromMillisecondsSinceEpoch(lastShownAt)) < const Duration(days: 30)) {
+    final cooldownStartedAt = max(lastShownAt, lastEnrolledAt);
+    if (cooldownStartedAt > 0 &&
+        now.difference(DateTime.fromMillisecondsSinceEpoch(cooldownStartedAt)) < const Duration(days: 30)) {
       return null;
     }
 

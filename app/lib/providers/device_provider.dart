@@ -974,9 +974,16 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
   /// Hardware connect is not account publication; `_handleDeviceConnected` is.
   Future<void> initiateConnection(String caller, {bool boundDeviceOnly = false}) async {
     if (_isDisposed) return;
-    final pairedDeviceId = SharedPreferencesUtil().btDevice.id;
+    final preferences = SharedPreferencesUtil();
+    final savedDevice = preferences.btDevice;
+    final pairedDeviceId = savedDevice.id;
+    // An older pairing may have no link history on this build. Begin the
+    // observation window now so a missing stamp cannot imply 72 hours away.
+    if (savedDevice.isPendant && preferences.lastPendantConnectedAt == 0) {
+      preferences.lastPendantConnectedAt = _clock().millisecondsSinceEpoch;
+    }
     if (pairedDeviceId.isNotEmpty) {
-      unawaited(DeviceHealthTelemetry.maybeEmit(SharedPreferencesUtil().btDevice));
+      unawaited(DeviceHealthTelemetry.maybeEmit(savedDevice));
     }
 
     if (ServiceManager.instance().device.staleBondRecoveryRequired) {
@@ -985,7 +992,7 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     }
 
     // Arm recovery even if native restoration connected before the home frame.
-    if (pairedDeviceId.isNotEmpty && SharedPreferencesUtil().btDevice.locator?.kind == TransportKind.bluetooth) {
+    if (pairedDeviceId.isNotEmpty && savedDevice.locator?.kind == TransportKind.bluetooth) {
       await ServiceManager.instance().device.reconnectSavedDevice('launch');
       return;
     }

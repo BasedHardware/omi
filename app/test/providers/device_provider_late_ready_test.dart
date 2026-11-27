@@ -127,6 +127,33 @@ void main() {
     BleBridge.instance.clearPeripheralForTesting(_deviceId);
   });
 
+  test('launch starts a conservative window for an old pairing once', () {
+    fakeAsync((async) {
+      final preferences = SharedPreferencesUtil();
+      final originalUid = preferences.uid;
+      preferences.uid = 'legacy-pairing';
+      preferences.lastPendantConnectedAt = 0;
+      addTearDown(() {
+        preferences.lastPendantConnectedAt = 0;
+        preferences.uid = originalUid;
+      });
+      pairPendant();
+      adapterState = 'off';
+      final launchTime = DateTime(2026, 11, 27, 12);
+      final provider = DeviceProvider(clock: () => launchTime.add(async.elapsed));
+
+      unawaited(provider.initiateConnection('HomePageWrapper', boundDeviceOnly: true));
+      expect(preferences.lastPendantConnectedAt, launchTime.millisecondsSinceEpoch);
+      async.elapse(const Duration(hours: 24));
+      expect(provider.isConnected, isFalse);
+
+      unawaited(provider.initiateConnection('HomePageWrapper', boundDeviceOnly: true));
+      expect(preferences.lastPendantConnectedAt, launchTime.millisecondsSinceEpoch);
+      provider.dispose();
+      async.flushMicrotasks();
+    });
+  });
+
   test('a link that becomes ready after the launch connect timed out still reaches the provider', () {
     fakeAsync((async) {
       pairPendant();

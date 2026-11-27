@@ -13,6 +13,7 @@ void main() {
     bool paired = true,
     Duration? gap = const Duration(days: 4),
     Duration? sinceShown,
+    Duration? sinceEnrolled,
     String otherSurfaceDay = '',
     DateTime? syncAlertAt,
   }) =>
@@ -23,6 +24,7 @@ void main() {
         now: now,
         lastConnectedAt: gap == null ? 0 : now.subtract(gap).millisecondsSinceEpoch,
         lastShownAt: sinceShown == null ? 0 : now.subtract(sinceShown).millisecondsSinceEpoch,
+        lastEnrolledAt: sinceEnrolled == null ? 0 : now.subtract(sinceEnrolled).millisecondsSinceEpoch,
         lastDropoffSurfaceDay: otherSurfaceDay,
         lastSyncAlertAt: syncAlertAt?.millisecondsSinceEpoch ?? 0,
         createdAt: now.subtract(const Duration(days: 14)),
@@ -65,6 +67,13 @@ void main() {
   test('the cap expires after 30 full days', () {
     expect(decide(sinceShown: const Duration(days: 30) - const Duration(milliseconds: 1)), isNull);
     expect(decide(sinceShown: const Duration(days: 30)), isNotNull);
+  });
+
+  test('the same enrollment window expires after 30 full days for either arm', () {
+    for (final uid in ['fixture-0', 'fixture-1']) {
+      expect(decide(uid: uid, sinceEnrolled: const Duration(days: 29, hours: 23)), isNull);
+      expect(decide(uid: uid, sinceEnrolled: const Duration(days: 30)), isNotNull);
+    }
   });
 
   test('the drop-off and sync-stall surfaces suppress only on the same local day', () {

@@ -121,7 +121,7 @@ void main() {
     expect(find.byKey(cardKey), findsNothing);
   });
 
-  testWidgets('holdout logs Eligible once per foreground evaluation and sees no card', (tester) async {
+  testWidgets('holdout enrolls once per cooldown and sees no card on a later resume', (tester) async {
     seed(uid: holdout);
     await pumpHome(tester, uid: holdout, homeSelected: false);
     expect(flagReads, 0);
@@ -134,7 +134,8 @@ void main() {
     tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
     tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
     await tester.pumpAndSettle();
-    expect(eventNames(), [eligibleName, eligibleName]);
+    expect(eventNames(), [eligibleName]);
+    expect(preferences.pendantReconnectNudgeLastEnrolledAt, greaterThan(0));
     expect(preferences.pendantReconnectNudgeLastShownAt, 0);
     expect(preferences.pendantDropoffSurfaceLastDay, isEmpty);
   });
