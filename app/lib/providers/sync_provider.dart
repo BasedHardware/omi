@@ -860,42 +860,95 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
     await _refreshWals(generation);
   }
 
+  bool _isDeviceBackedWal(Wal wal) => wal.storage != WalStorage.disk && wal.storage != WalStorage.mem;
+
+  bool _sameDeleteInventoryIdentity(Wal a, Wal b) {
+    if (a.storage != b.storage) return false;
+    final aRing = a.storage == WalStorage.sdcard && a.fileNum == -1;
+    if (aRing) return b.fileNum == -1 && a.device == b.device;
+    return a.id == b.id;
+  }
+
+  void _retainUnconfirmedDeviceWals(Iterable<Wal> targets) {
+    final retained = [..._allWals];
+    var changed = false;
+    for (final wal in targets) {
+      if (retained.any((candidate) => _sameDeleteInventoryIdentity(wal, candidate))) continue;
+      retained.add(wal);
+      changed = true;
+    }
+    if (!changed) return;
+    _allWals = retained;
+    notifyListeners();
+  }
+
+  /// A device delete can evict its cached row before the pendant confirms it.
+  /// Re-enumerate after every attempted device deletion, and if the operation
+  /// failed keep the original rows visible until a later successful inventory
+  /// proves they are gone.
+  Future<void> _deleteAndRefreshInventory({
+    required Iterable<Wal> candidates,
+    required Future<void> Function() delete,
+    String? firmwareVersion,
+    bool refreshDevice = true,
+  }) async {
+    final generation = _sessionGeneration;
+    final deviceTargets = candidates.where(_isDeviceBackedWal).toList();
+    Object? firstError;
+    StackTrace? firstStackTrace;
+    try {
+      await delete();
+    } catch (error, stackTrace) {
+      firstError = error;
+      firstStackTrace = stackTrace;
+    }
+
+    try {
+      if (deviceTargets.isNotEmpty && refreshDevice) {
+        await _walService.getSyncs().refreshWalsFromDevice(firmwareVersion: firmwareVersion);
+      }
+      await _refreshWals(generation);
+    } catch (error, stackTrace) {
+      firstError ??= error;
+      firstStackTrace ??= stackTrace;
+    }
+
+    if (firstError != null && deviceTargets.isNotEmpty && _isCurrent(generation)) {
+      _retainUnconfirmedDeviceWals(deviceTargets);
+    }
+    if (firstError != null) Error.throwWithStackTrace(firstError, firstStackTrace!);
+  }
+
   Future<WalStats> getWalStats() async {
     return await _walService.getSyncs().getWalStats();
   }
 
-  Future<void> deleteWal(Wal wal) async {
-    final generation = _sessionGeneration;
-    try {
-      await _walService.getSyncs().deleteWal(wal);
-    } finally {
-      await _refreshWals(generation);
-    }
-  }
+  Future<void> deleteWal(Wal wal, {String? firmwareVersion, bool refreshDevice = true}) => _deleteAndRefreshInventory(
+        candidates: [wal],
+        firmwareVersion: firmwareVersion,
+        refreshDevice: refreshDevice,
+        delete: () => _walService.getSyncs().deleteWal(wal),
+      );
 
-  Future<void> deleteAllSyncedWals() async {
-    final generation = _sessionGeneration;
-    try {
-      await _walService.getSyncs().deleteAllSyncedWals();
-    } finally {
-      await _refreshWals(generation);
-    }
-  }
+  Future<void> deleteAllSyncedWals({String? firmwareVersion, bool refreshDevice = true}) => _deleteAndRefreshInventory(
+        candidates: List<Wal>.of(syncedWals),
+        firmwareVersion: firmwareVersion,
+        refreshDevice: refreshDevice,
+        delete: () => _walService.getSyncs().deleteAllSyncedWals(),
+      );
 
-  Future<void> deleteAllPendingWals() async {
-    final generation = _sessionGeneration;
-    try {
-      await _walService.getSyncs().deleteAllPendingWals();
-    } finally {
-      await _refreshWals(generation);
-    }
-  }
+  Future<void> deleteAllPendingWals({String? firmwareVersion, bool refreshDevice = true}) => _deleteAndRefreshInventory(
+        candidates: List<Wal>.of(pendingDeletableWals),
+        firmwareVersion: firmwareVersion,
+        refreshDevice: refreshDevice,
+        delete: () => _walService.getSyncs().deleteAllPendingWals(),
+      );
 
   /// Clears every local recording category. Unlike the retryable Pending
   /// action, this deliberately includes terminally corrupted phone WALs.
-  Future<void> deleteAllClearableWals() async {
-    final generation = _sessionGeneration;
+  Future<void> deleteAllClearableWals({String? firmwareVersion, bool refreshDevice = true}) async {
     final syncs = _walService.getSyncs();
+    final candidates = [...syncedWals, ...pendingDeletableWals, ...corruptedWals, ...refusedWals];
     final terminalDeviceWals = [...corruptedWals, ...refusedWals].where((wal) {
       final deviceBacked = wal.storage == WalStorage.sdcard || wal.storage == WalStorage.flashPage;
       if (!deviceBacked) return false;
@@ -904,33 +957,36 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
           wal.status == WalStatus.uploadRejected ||
           (wal.storage == WalStorage.sdcard && wal.fileNum == -1 && wal.status == WalStatus.corrupted);
     }).toList();
-    try {
-      Object? firstError;
-      StackTrace? firstStackTrace;
+    await _deleteAndRefreshInventory(
+      candidates: candidates,
+      firmwareVersion: firmwareVersion,
+      refreshDevice: refreshDevice,
+      delete: () async {
+        Object? firstError;
+        StackTrace? firstStackTrace;
 
-      Future<void> attempt(Future<void> Function() operation) async {
-        try {
-          await operation();
-        } catch (error, stackTrace) {
-          firstError ??= error;
-          firstStackTrace ??= stackTrace;
+        Future<void> attempt(Future<void> Function() operation) async {
+          try {
+            await operation();
+          } catch (error, stackTrace) {
+            firstError ??= error;
+            firstStackTrace ??= stackTrace;
+          }
         }
-      }
 
-      await attempt(syncs.deleteAllSyncedWals);
-      await attempt(syncs.deleteAllPendingWals);
-      await attempt(syncs.deleteAllCorruptedWals);
-      // Bulk device sweeps handle synced, missed and corrupted rows. Terminal
-      // refusals live in separate display buckets, so route those through the
-      // same per-row delete path used by the explicit row action.
-      for (final wal in terminalDeviceWals) {
-        await attempt(() async => syncs.deleteWal(wal));
-      }
+        await attempt(syncs.deleteAllSyncedWals);
+        await attempt(syncs.deleteAllPendingWals);
+        await attempt(syncs.deleteAllCorruptedWals);
+        // Bulk device sweeps handle synced, missed and corrupted rows. Terminal
+        // refusals live in separate display buckets, so route those through the
+        // same per-row delete path used by the explicit row action.
+        for (final wal in terminalDeviceWals) {
+          await attempt(() async => syncs.deleteWal(wal));
+        }
 
-      if (firstError != null) Error.throwWithStackTrace(firstError!, firstStackTrace!);
-    } finally {
-      await _refreshWals(generation);
-    }
+        if (firstError != null) Error.throwWithStackTrace(firstError!, firstStackTrace!);
+      },
+    );
   }
 
   Future<void> syncWals({WakeTrigger trigger = WakeTrigger.userRetry}) async {

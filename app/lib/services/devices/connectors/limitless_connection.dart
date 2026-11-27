@@ -621,10 +621,18 @@ class LimitlessDeviceConnection extends DeviceConnection {
               final flashPage = _extractStorageBufferFlashPage(storageBuffer);
               final pageFrames = _extractOpusFramesFromFlashPage(flashPage ?? storageBuffer);
               final pageIndex = pageFrames.isEmpty ? null : _extractStorageBufferPageIndex(storageBuffer);
+              final alreadyAcknowledged = pageIndex != null && pageIndex <= _lastAcknowledgedIndex;
               final withheldByUnconfirmedMode = _batchModeUnconfirmed;
               final withheldByActiveDrain = _batchDrainActive && !_isBatchMode;
               final withheldByExistingBarrier = pageIndex != null && _unconfirmedStoredPageIndices.contains(pageIndex);
-              if (pageFrames.isNotEmpty &&
+              if (pageFrames.isNotEmpty && alreadyAcknowledged) {
+                // A delayed copy can arrive after a successful drain exit, when
+                // no mode latch is holding stored pages back. It was already
+                // delivered to the phone and ACKed, so it must never become
+                // live audio or create a new ACK barrier.
+                _unconfirmedStoredPageIndices.remove(pageIndex);
+                withheldStoredFrames = true;
+              } else if (pageFrames.isNotEmpty &&
                   (withheldByUnconfirmedMode || withheldByActiveDrain || withheldByExistingBarrier)) {
                 if (pageIndex == null) {
                   // Without an index there is no safe ACK barrier. While mode
@@ -640,12 +648,6 @@ class LimitlessDeviceConnection extends DeviceConnection {
                   } else {
                     audioBatches.add((pageFrames, !(_batchDrainActive && !_isBatchMode)));
                   }
-                } else if (pageIndex <= _lastAcknowledgedIndex) {
-                  // The pendant has already been told to consume this page.
-                  // Suppress a late copy without creating an ACK barrier behind
-                  // the acknowledged frontier.
-                  _unconfirmedStoredPageIndices.remove(pageIndex);
-                  withheldStoredFrames = true;
                 } else {
                   withheldStoredFrames = true;
                   if (_unconfirmedStoredPageIndices.add(pageIndex)) {

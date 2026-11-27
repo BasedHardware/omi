@@ -93,30 +93,46 @@ class _Sync extends ChangeNotifier with WalDerivedSyncViews implements SyncProvi
   List<Wal>? discoveredWals;
 
   @override
-  Future<void> deleteAllPendingWals() async {
-    final targets = pendingDeletableWals.map((wal) => wal.id).toSet();
-    wals.removeWhere((wal) => targets.contains(wal.id) && wal.id != retainedPendingId);
-    notifyListeners();
+  Future<void> deleteAllPendingWals({String? firmwareVersion, bool refreshDevice = true}) async {
+    try {
+      final targets = pendingDeletableWals.map((wal) => wal.id).toSet();
+      wals.removeWhere((wal) => targets.contains(wal.id) && wal.id != retainedPendingId);
+      notifyListeners();
+    } finally {
+      if (refreshDevice) await discoverDeviceWals(firmwareVersion: firmwareVersion);
+    }
   }
 
   @override
-  Future<void> deleteAllSyncedWals() async {
-    final targets = syncedWals.map((wal) => wal.id).toSet();
-    wals.removeWhere((wal) => targets.contains(wal.id) && wal.id != retainedSyncedId);
-    notifyListeners();
-    if (failSyncedBulkAfterPartial) throw StateError('synthetic device ACK failure');
+  Future<void> deleteAllSyncedWals({String? firmwareVersion, bool refreshDevice = true}) async {
+    try {
+      final targets = syncedWals.map((wal) => wal.id).toSet();
+      wals.removeWhere((wal) => targets.contains(wal.id) && wal.id != retainedSyncedId);
+      notifyListeners();
+      if (failSyncedBulkAfterPartial) throw StateError('synthetic device ACK failure');
+    } finally {
+      if (refreshDevice) await discoverDeviceWals(firmwareVersion: firmwareVersion);
+    }
   }
 
   @override
-  Future<void> deleteAllClearableWals() async {
-    if (failClearAll) throw StateError('synthetic device ACK failure');
+  Future<void> deleteAllClearableWals({String? firmwareVersion, bool refreshDevice = true}) async {
+    try {
+      if (failClearAll) throw StateError('synthetic device ACK failure');
+    } finally {
+      if (refreshDevice) await discoverDeviceWals(firmwareVersion: firmwareVersion);
+    }
   }
 
   @override
-  Future<void> deleteWal(Wal wal) async {
-    if (failDelete) throw StateError('synthetic device ACK failure');
-    wals.removeWhere((item) => item.id == wal.id);
-    notifyListeners();
+  Future<void> deleteWal(Wal wal, {String? firmwareVersion, bool refreshDevice = true}) async {
+    try {
+      if (failDelete) throw StateError('synthetic device ACK failure');
+      wals.removeWhere((item) => item.id == wal.id);
+      notifyListeners();
+    } finally {
+      if (refreshDevice) await discoverDeviceWals(firmwareVersion: firmwareVersion);
+    }
   }
 
   @override
@@ -619,6 +635,63 @@ void main() {
     expect(sync.allWals, [rediscovered]);
     expect(find.text(l.failedToDeleteSomeItems), findsOneWidget);
     expect(find.text(l.pendingFilesDeleted), findsNothing);
+  });
+
+  testWidgets('row delete does not treat a rebuilt ring as the deleted row', (tester) async {
+    final now = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+    Wal ring(int start) => Wal(
+          timerStart: start,
+          codec: BleAudioCodec.opus,
+          seconds: 30,
+          storage: WalStorage.sdcard,
+          status: WalStatus.miss,
+          device: 'synthetic-pendant',
+          fileNum: -1,
+        );
+
+    final original = ring(now - 30);
+    final rediscovered = ring(now - 29);
+    final sync = await _pump(tester, const SyncPage(), WalStatus.miss, recordings: [original]);
+    sync.discoveredWals = [rediscovered];
+    final l = AppLocalizations.of(tester.element(find.byType(SyncPage)));
+
+    await tester.drag(find.byKey(Key(original.id)), const Offset(-500, 0));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text(l.delete));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(Key(rediscovered.id)), findsOneWidget);
+    expect(find.text(l.failedToDeleteSomeItems), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('empty Clear All confirms that there are no recordings', (tester) async {
+    final wal = Wal(
+      timerStart: DateTime.now().millisecondsSinceEpoch ~/ 1000,
+      codec: BleAudioCodec.opus,
+      seconds: 30,
+      status: WalStatus.miss,
+      storage: WalStorage.disk,
+    );
+    final sync = await _pump(tester, const SyncPage(), WalStatus.miss, recordings: [wal]);
+    final l = AppLocalizations.of(tester.element(find.byType(SyncPage)));
+
+    await tester.tap(find.byTooltip(l.manageStorage));
+    await tester.pumpAndSettle();
+    // The sheet was opened with a nonempty snapshot; another refresh can empty
+    // the provider before the user taps its still-visible action.
+    sync.wals.clear();
+    sync.notifyListeners();
+    await tester.pumpAndSettle();
+    await tester.tap(find.text(l.clearAll));
+    await tester.pumpAndSettle();
+    expect(find.text(l.deleteAllFiles), findsOneWidget);
+    await tester.tap(find.text(l.clearAll));
+    await tester.pumpAndSettle();
+
+    expect(sync.allWals, isEmpty);
+    expect(find.text(l.noRecordings).last, findsOneWidget);
+    expect(tester.takeException(), isNull);
   });
 }
 

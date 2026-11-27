@@ -1187,6 +1187,59 @@ void main() {
     expect(decoded, [liveFrame, storedFrame]);
   });
 
+  test('already-acknowledged stored pages stay suppressed after batch mode exits', () async {
+    final transport = FakeDeviceTransport();
+    final connection = LimitlessDeviceConnection(
+      BtDevice(name: 'Limitless Pendant', id: 'fake-limitless', type: DeviceType.limitless, rssi: -50),
+      transport,
+      streamHealthWindow: const Duration(minutes: 1),
+      setupSettleDelay: Duration.zero,
+    );
+    addTearDown(connection.disconnect);
+    final decoded = <List<int>>[];
+    final gotLiveFrame = Completer<void>();
+    final subscription = await connection.performGetBleAudioBytesListener(
+      onAudioBytesReceived: (frame) {
+        decoded.add(frame);
+        if (!gotLiveFrame.isCompleted) gotLiveFrame.complete();
+      },
+    );
+    addTearDown(() => subscription?.cancel());
+    await connection.connect();
+    await connection.acknowledgeProcessedData(100);
+    await connection.enableBatchMode();
+    await connection.disableBatchMode();
+
+    final duplicateStoredFrame = opusFrame(0xb8, 51, 40);
+    final liveFrame = opusFrame(0xb8, 52, 40);
+    transport.emit(
+      limitlessRxCharUuid,
+      bleWrapper(
+        10,
+        0,
+        1,
+        [
+          ...intField(1, 1234),
+          ...pendantMessage(
+            storageBufferBytes(
+              session: 7,
+              seq: 1,
+              index: 100,
+              page: flashPageBytes(1750000000000, [
+                audioWrapper(audioBlobOfFrames([duplicateStoredFrame]))
+              ]),
+            ),
+          ),
+          ...realtimeAudioBytes([liveFrame]),
+        ],
+      ),
+    );
+
+    await gotLiveFrame.future.timeout(const Duration(seconds: 2));
+    await Future<void>.delayed(Duration.zero);
+    expect(decoded, [liveFrame], reason: 'an ACKed field-2 page cannot be replayed as live audio');
+  });
+
   test('real-time mode parses a bare flash-page payload', () async {
     final transport = FakeDeviceTransport();
     final connection = LimitlessDeviceConnection(

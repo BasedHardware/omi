@@ -313,7 +313,7 @@ class _RetainingDeleteSync extends ChangeNotifier implements SyncProvider {
   Wal? get failedWal => null;
 
   @override
-  Future<void> deleteWal(Wal wal) async {
+  Future<void> deleteWal(Wal wal, {String? firmwareVersion, bool refreshDevice = true}) async {
     deleteCalls++;
   }
 

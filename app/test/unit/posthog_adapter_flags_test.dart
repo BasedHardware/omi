@@ -243,4 +243,19 @@ void main() {
       expect(await adapter.resolvedFeatureEnabled('missing'), isNull);
     }
   });
+
+  test('synchronous Omi flag loader errors return false and release the shared slot', () async {
+    var calls = 0;
+    final adapter = PostHogAnalyticsAdapter(
+      apiKey: 'test',
+      omiFlags: () {
+        calls++;
+        throw StateError('synchronous loader failure');
+      },
+    )..identify(userId: 'u');
+
+    expect(await adapter.reloadFeatureFlags(), isFalse);
+    expect(await adapter.reloadFeatureFlags(), isFalse);
+    expect(calls, 2, reason: 'a failed synchronous loader must release the shared reload slot');
+  });
 }

@@ -926,7 +926,7 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
     var failed = false;
     for (final wal in wals) {
       try {
-        await provider.deleteWal(wal);
+        await provider.deleteWal(wal, firmwareVersion: firmware, refreshDevice: false);
       } catch (e) {
         failed = true;
         Logger.debug('Offline Sync delete failed: $e');
@@ -1069,10 +1069,11 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
     // Built before the sheet's async callbacks run, so the clear handlers do not
     // reach through a BuildContext across an await — and so every action is
     // paired with the storage re-read at a single construction site.
+    final firmware = context.read<DeviceProvider>().currentFirmwareVersion;
     final clearActions = buildStorageClearActions(
-      clearSynced: provider.deleteAllSyncedWals,
-      clearPending: provider.deleteAllPendingWals,
-      clearAll: provider.deleteAllClearableWals,
+      clearSynced: () => provider.deleteAllSyncedWals(firmwareVersion: firmware, refreshDevice: false),
+      clearPending: () => provider.deleteAllPendingWals(firmwareVersion: firmware, refreshDevice: false),
+      clearAll: () => provider.deleteAllClearableWals(firmwareVersion: firmware, refreshDevice: false),
       refreshDeviceStorage: context.read<DeviceProvider>().refreshRingStorageStatus,
     );
     showOmiSheet<void>(

@@ -587,19 +587,12 @@ class _WalItemDetailPageState extends State<WalItemDetailPage> {
       try {
         final provider = context.read<SyncProvider>();
         final target = widget.wal;
-        final ring = target.storage == WalStorage.sdcard && target.fileNum == -1;
-        final identity = (target.storage, ring, ring ? target.device : target.id);
-        await provider.deleteWal(target);
-        if (target.storage != WalStorage.disk && target.storage != WalStorage.mem && context.mounted) {
-          await provider.discoverDeviceWals(
-            firmwareVersion: context.read<DeviceProvider>().currentFirmwareVersion,
-          );
-        }
+        final firmwareVersion = target.storage == WalStorage.disk || target.storage == WalStorage.mem
+            ? null
+            : context.read<DeviceProvider>().currentFirmwareVersion;
+        await provider.deleteWal(target, firmwareVersion: firmwareVersion);
         if (!context.mounted) return;
-        final retained = provider.allWals.any((wal) {
-          final currentRing = wal.storage == WalStorage.sdcard && wal.fileNum == -1;
-          return (wal.storage, currentRing, currentRing ? wal.device : wal.id) == identity;
-        });
+        final retained = provider.allWals.any((wal) => wal.storage == target.storage && wal.id == target.id);
         if (retained) {
           OmiFeedback.error(context, context.l10n.failedToDeleteSomeItems);
         } else {

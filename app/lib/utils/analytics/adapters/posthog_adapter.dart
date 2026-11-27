@@ -237,27 +237,26 @@ class PostHogAnalyticsAdapter
     if (fetch == null) return Future.value(false);
     final identityGeneration = _identityGeneration;
     final reloadGeneration = ++_omiFlagsReloadGeneration;
-    late final Future<bool> reload;
-    reload = () async {
-      try {
-        final flags = await fetch();
-        if (flags == null || identityGeneration != _identityGeneration) return false;
-        if (reloadGeneration > _omiFlagsReloadCommittedGeneration) {
-          _omi = Map.unmodifiable(flags);
-          _omiFlagsReloadCommittedGeneration = reloadGeneration;
-        }
-        return true;
-      } catch (_) {
-        return false;
-      } finally {
-        if (identical(_omiFlagsReloadInFlight, reload)) {
-          _omiFlagsReloadInFlight = null;
-          _omiFlagsReloadInFlightIdentityGeneration = null;
-        }
-      }
-    }();
+    final completer = Completer<bool>();
+    final reload = completer.future;
     _omiFlagsReloadInFlight = reload;
     _omiFlagsReloadInFlightIdentityGeneration = identityGeneration;
+    final fetchResult = Future<Map<String, OmiFlag>?>.sync(fetch);
+    unawaited(fetchResult.then<void>((flags) {
+      final accepted = flags != null && identityGeneration == _identityGeneration;
+      if (accepted && reloadGeneration > _omiFlagsReloadCommittedGeneration) {
+        _omi = Map.unmodifiable(flags);
+        _omiFlagsReloadCommittedGeneration = reloadGeneration;
+      }
+      completer.complete(accepted);
+    }, onError: (Object _, StackTrace __) {
+      completer.complete(false);
+    }).whenComplete(() {
+      if (identical(_omiFlagsReloadInFlight, reload)) {
+        _omiFlagsReloadInFlight = null;
+        _omiFlagsReloadInFlightIdentityGeneration = null;
+      }
+    }));
     return reload;
   }
 

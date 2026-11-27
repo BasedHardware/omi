@@ -46,7 +46,7 @@ class _Sync extends ChangeNotifier implements SyncProvider {
   @override
   Future<void> shareWalAsWav(Wal wal) async => shared.add(wal);
   @override
-  Future<void> deleteWal(Wal wal) async {
+  Future<void> deleteWal(Wal wal, {String? firmwareVersion, bool refreshDevice = true}) async {
     deleted.add(wal);
     if (failDelete) throw StateError('simulated device delete failure');
     if (!retainOnDelete) wals.removeWhere((item) => item.id == wal.id && item.storage == wal.storage);

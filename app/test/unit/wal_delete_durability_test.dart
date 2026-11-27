@@ -243,5 +243,26 @@ void main() {
 
       expect((await sync.getMissingWals()).map((w) => w.id), [rejected.id]);
     });
+
+    test('bulk pending delete continues after one file throws', () async {
+      final first = _sdWal(timerStart: 3000, fileNum: 1);
+      final second = _sdWal(timerStart: 4000, fileNum: 2);
+      final connection = _FakeConnection(
+        writeResult: (numFile, command) {
+          if (numFile == first.fileNum && command == 1) throw StateError('simulated BLE write failure');
+          return true;
+        },
+        storageList: [0],
+      );
+      final sync = SDCardWalSyncImpl(_Listener())
+        ..testDevice = _device
+        ..testConnection = connection
+        ..testWals = [first, second];
+
+      await expectLater(sync.deleteAllPendingWals(), throwsStateError);
+
+      expect(connection.deleteCommands, 2, reason: 'the second row is attempted after the first throws');
+      expect((await sync.getMissingWals()).map((wal) => wal.id), [first.id]);
+    });
   });
 }
