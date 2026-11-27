@@ -17,6 +17,7 @@ import pytest
 from tests.unit.test_sync_backfill_day_cap_upload import cap  # noqa: F401
 from tests.unit.test_sync_capture_time_skew import client, _default_skew, _filename  # noqa: F401
 from routers import sync as router
+from utils.sync import designed_refusal
 
 DAY = 86400
 TRACE = '0af7651916cd43dd8448eb211c80319c'
@@ -51,16 +52,16 @@ def _records(caplog):
     ],
 )
 def test_record_names_the_cloud_trace_id(caplog, header, trace):
-    with caplog.at_level(logging.INFO, logger=router.__name__):
-        router._log_designed_refusal('uid-1', 'backfill_day_cap', header)
+    with caplog.at_level(logging.INFO, logger=designed_refusal.__name__):
+        designed_refusal.log_designed_refusal('uid-1', 'backfill_day_cap', header)
     assert _records(caplog) == [f'sync_upload_refused uid=uid-1 status=503 reason=backfill_day_cap trace={trace}']
     record = caplog.records[-1]
-    assert record.levelno == logging.INFO and record.name == 'routers.sync'
+    assert record.levelno == logging.INFO and record.name == 'utils.sync.designed_refusal'
 
 
 def test_guard_parses_the_record_as_written_by_the_shared_text_formatter(caplog):
-    with caplog.at_level(logging.INFO, logger=router.__name__):
-        router._log_designed_refusal('uid-1', 'dispatch_hold', f'{TRACE}/1;o=1')
+    with caplog.at_level(logging.INFO, logger=designed_refusal.__name__):
+        designed_refusal.log_designed_refusal('uid-1', 'dispatch_hold', f'{TRACE}/1;o=1')
     line = logging.Formatter('%(levelname)s %(name)s: %(message)s').format(caplog.records[-1])
     match = GUARD_RECORD.search(line)
     assert match and match.groups() == ('503', TRACE)
@@ -68,7 +69,7 @@ def test_guard_parses_the_record_as_written_by_the_shared_text_formatter(caplog)
 
 def test_over_cap_upload_writes_one_record_with_its_trace(client, cap, caplog):
     cap['seconds'] = 24 * 3600
-    with caplog.at_level(logging.INFO, logger=router.__name__):
+    with caplog.at_level(logging.INFO, logger=designed_refusal.__name__):
         response = client.post(
             '/v2/sync-local-files',
             files=[('files', (_filename(-45 * DAY), b'\x00' * 32, 'application/octet-stream'))],
@@ -93,7 +94,7 @@ def test_each_designed_refusal_records_once_right_before_its_503():
             continue
         for index, statement in enumerate(body):
             call = getattr(statement, 'value', None)
-            if not (isinstance(call, ast.Call) and getattr(call.func, 'id', None) == '_log_designed_refusal'):
+            if not (isinstance(call, ast.Call) and getattr(call.func, 'id', None) == 'log_designed_refusal'):
                 continue
             reasons.append(call.args[1].value)
             following = ast.unparse(body[index + 1]) if index + 1 < len(body) else ''
