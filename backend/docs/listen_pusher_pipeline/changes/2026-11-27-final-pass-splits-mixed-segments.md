@@ -57,8 +57,21 @@ No new model call, GPU request or read: the pass already computes every word's v
   share (0.25, 0.5). Absorbing short runs and capping at three pieces cost the most (0.921 attribution, 0.966 owner
   precision). The simulation places stored segments on the audio by their text; the real path is measured below.
 - Real batch path, read-only (`testing.pipeline_lab.speakers diagnose --final-pass`, production's
-  `final_pass_batch._run` over the owner's staged units with the speaker peer replaying cassettes, writes fenced):
-  READOUT_REAL_PATH
+  `final_pass_batch._run` over the owner's staged units with the speaker peer replaying cassettes, writes fenced), over the owner's 24 fresh conversations-v3 rows, switch on vs off (2026-11-27):
+
+  | | switch off | switch on |
+  |---|---|---|
+  | final pass `success` | 5 | 8 |
+  | `failed_unassigned_words` | 16 | 13 |
+  | segments split | 0 | 141 |
+  | conversations `resolved` after the pass | 6 | 9 |
+  | attribution (silver, the rows' own 600 words) | 0.490 | 0.725 |
+  | owner precision / wrong-name rate | 1.000 / 0 | 1.000 / 0 |
+
+  No split was refused for text, translation or the piece cap. The 13 remaining partial passes hold segments whose
+  words all fall in diarizer gaps (`split_refusals: no_voice`, a few `mostly_gap`): splitting cannot place those,
+  and letting gap words follow the neighbouring voice (gap share 1.0) changed none of the 13. Silver truth favours
+  community-1, so attribution here ranks the write-back, not the diarizer.
 - Unit tests: split at the voice change, a later pass reading the pieces back with the same obligation key, the kill
   switch, a one-word reply as its own piece, the piece cap, manual and translated refusals, gap handling, and a
   rebuilt conversations-v3 row keeping the pieces without a duplicate. Pipeline-lab speaker scenarios pass.

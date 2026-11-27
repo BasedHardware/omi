@@ -804,6 +804,8 @@ def _run(uid, conversation, receipt, load_prints, apply, failure_context: UnitFa
             continue
         runs = splitting.plan_runs(segment_words) if can_split else None
         if runs is None:
+            if can_split:
+                split_refusals['no_voice' if all(v is None for v in labels) else 'mostly_gap'] += 1
             unassigned = True
             continue
         if len(runs) == 1:  # a gap or a short aside inside one voice's segment: the voice holding the rest

@@ -109,7 +109,13 @@ def final_pass(uid: str, conversation: Any, receipt: Mapping[str, Any]) -> dict[
                 'reason': str(reason or '')[:60],
                 'location': str(details.get('location') or '')[:120],
             }
-    outcome = {k: v for k, v in outcome.items() if isinstance(v, (str, int, float, bool)) or v is None}
+    scalar = (str, int, float, bool, type(None))
+    # Counts (coverage, coverage_reasons, split_refusals) are kept: aggregates, never text or ids.
+    outcome = {
+        k: v
+        for k, v in outcome.items()
+        if isinstance(v, scalar) or (isinstance(v, dict) and all(isinstance(x, (int, float)) for x in v.values()))
+    }
     return {**outcome, 'applied': 'segments' in captured, 'segments': captured.get('segments')}
 
 
