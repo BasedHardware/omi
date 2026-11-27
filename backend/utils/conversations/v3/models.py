@@ -212,7 +212,7 @@ def outline(uid, messages):
             options={'request_timeout': 30, 'max_retries': 0},
             feature='conversation_v3_outline',
         )
-        return asyncio.run(_stream_outline(model, messages))
+        return asyncio.run(_stream_outline(uid, model, messages))
 
 
 async def background_outline(uid, messages, *, claim):
@@ -222,7 +222,7 @@ async def background_outline(uid, messages, *, claim):
         model = get_or_create_omi_gateway_llm(
             feature_auto_lane_id(feature), options={'request_timeout': 115, 'max_retries': 0}, feature=feature
         )
-        messages, options = _outline_cache_request(messages)
+        messages, options = _outline_cache_request(uid, messages)
         budget_ms = await claim()
         if not budget_ms:
             return None
@@ -256,7 +256,7 @@ async def background_outline(uid, messages, *, claim):
         return response.content
 
 
-def _outline_cache_request(messages) -> tuple[Any, dict[str, Any]]:
+def _outline_cache_request(uid: str, messages) -> tuple[Any, dict[str, Any]]:
     if not messages or messages[0] != ('system', OUTLINE_CACHE_PREFIX):
         return messages, {}
     prefix = {
@@ -272,16 +272,16 @@ def _outline_cache_request(messages) -> tuple[Any, dict[str, Any]]:
     return [prefix, *messages[1:]], {
         'extra_body': {
             'prompt_cache_options': dict(EXPLICIT_CACHE_OPTIONS),
-            'prompt_cache_key': prefix_cache_key('v3-outline', OUTLINE_CACHE_PREFIX),
+            'prompt_cache_key': prefix_cache_key('v3-outline', OUTLINE_CACHE_PREFIX, owner_uid=uid),
         }
     }
 
 
-async def _stream_outline(model, messages):
+async def _stream_outline(uid, model, messages):
     # Each executor call owns its event loop, so give it a fresh connection pool.
     async with DefaultAsyncHttpxClient() as transport:
         client = model.root_async_client.with_options(http_client=transport)
-        messages, cache_options = _outline_cache_request(messages)
+        messages, cache_options = _outline_cache_request(uid, messages)
         stream = model.model_copy(update={'root_async_client': client, 'async_client': client.chat.completions}).bind(
             reasoning_effort='none', response_format={'type': 'json_object'}, **cache_options
         )
