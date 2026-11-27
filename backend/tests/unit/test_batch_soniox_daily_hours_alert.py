@@ -7,6 +7,7 @@ import pytest
 
 from scripts.alert_backtest import math_expression
 from utils.batch_pipeline import vendor_route_contracts as c
+from utils.batch_pipeline import vendor_route_metrics as m
 
 MONITORING = Path(__file__).resolve().parents[2] / 'charts' / 'monitoring'
 UID = 'omi-batch-soniox-daily-hours'
@@ -31,8 +32,6 @@ def test_the_page_reads_24h_of_batch_soniox_audio_hours(rule):
 
 
 def test_the_emitted_counter_is_the_one_the_page_reads():
-    from utils.batch_pipeline import vendor_route_metrics as m
-
     assert m.ATTEMPT_AUDIO._name + '_total' == c.METRIC_ATTEMPT_AUDIO
 
 
