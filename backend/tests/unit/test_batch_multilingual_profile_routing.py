@@ -105,3 +105,21 @@ def test_kill_switch(monkeypatch, value, enabled):
     assert multilingual_profile_routing_enabled() is enabled
     expected = (None, MULTILINGUAL_PROFILE) if enabled else ('en', None)
     assert batch_admission_language(multi_user(MULTILINGUAL), {'language': 'en'}) == expected
+
+
+@pytest.mark.parametrize(
+    'switch, inherit, expected',
+    [(None, True, None), ('false', True, 'en'), (None, False, None), ('false', False, None)],
+)
+def test_profile_inherited_language_is_the_one_rule_for_serving_and_shadow_intake(
+    monkeypatch, switch, inherit, expected
+):
+    from config.batch_pipeline_language import profile_inherited_language
+    from utils.batch_pipeline import intake, shadow_intake
+
+    if switch is not None:
+        monkeypatch.setenv('BATCH_MULTILINGUAL_PROFILE_ROUTING_ENABLED', switch)
+    assert profile_inherited_language({'language': 'en'}, multi_user(MULTILINGUAL), inherit) == expected
+    # Both stages call this helper rather than their own copy.
+    assert intake.profile_inherited_language is profile_inherited_language
+    assert shadow_intake.profile_inherited_language is profile_inherited_language

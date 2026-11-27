@@ -9,8 +9,7 @@ import shutil
 import tempfile
 
 from config.batch_pipeline import Priority, priority_for, language_inheritance_enabled
-from config.batch_language_recovery import inherited_language
-from config.batch_pipeline_language import pin_untrusted
+from config.batch_pipeline_language import pin_untrusted, profile_inherited_language
 from config.prerecorded_language import language_class, language_guard_enabled
 from config.stt_provider_policy import normalized_stt_language
 from config.batch_pipeline_shadow import selected, shadow_percent
@@ -178,9 +177,7 @@ async def stage_upload(
         prefs = user.get('transcription_preferences') or {}
         input_language = normalized_stt_language(user.get('language')) if prefs.get('single_language_mode') else 'multi'
         inherit = language_inheritance_enabled()
-        inherited = inherited_language(target.get('language'), user.get('language')) if inherit else None
-        if inherited and pin_untrusted(user):
-            inherited = None
+        inherited = profile_inherited_language(target, user, inherit)
         if inherited:
             language = inherited
             if language_class(inherited) == 'supported':

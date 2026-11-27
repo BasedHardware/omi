@@ -12,7 +12,7 @@ product's own decisions, under the arm's env, and its words come from the casset
 | Sampled units | one per recording: intake joins contiguous files into one unit up to the sampled bound | simulated; an upload with capture gaps is several units in production, each probed |
 | Sampled speech windows | ``intake._speech_windows`` (strict local VAD, 30 s windows) | yes |
 | Sampled first window | vendor audio LID, ``LanguageDecision.parakeet_safe`` and ``evidence == 'audio_lid'`` | yes; answer recorded |
-| Sampled later windows | ``language_class`` of the self gate's top-1 language | yes; answer from a local Whisper-base, recorded |
+| Sampled later windows | ``language_class`` of the self gate's top-1 language | yes; answer from a local Whisper-base, recorded; production also refuses below its P(supported) floor and on an unavailable gate, so lab admissions are an upper bound (legacy audio and spend a lower bound) |
 | Engine for an admitted upload | the batch GPU worker: Parakeet (``PARAKEET_MODEL_BY_SURFACE[PRERECORDED]``) | yes (by construction) |
 | Engine for a legacy upload | per file (``resolve_file``): guard off -> ``multi``; on -> vendor LID, then ``get_prerecorded_service`` | yes; files simulated as fixed pieces; the self gate's confident skip is not modelled (vendor answer used) |
 | Capacity fallback (GPU ring saturated) | not run: the batch lane is assumed unsaturated | simulated |

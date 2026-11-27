@@ -2,6 +2,7 @@
 
 import os
 
+from config.batch_language_recovery import inherited_language
 from config.prerecorded_language import language_class
 from config.refactor_switches import default_on
 from config.stt_provider_policy import (
@@ -103,6 +104,17 @@ def pin_untrusted(user: dict) -> bool:
         and multilingual_profile_routing_enabled()
         and profile_speaks_unsupported(user)
     )
+
+
+def profile_inherited_language(target: dict, user: dict, inherit: bool) -> str | None:
+    """``inherited_language`` when inheritance is on, except a multilingual-profile user's pin is never inherited.
+
+    Serving intake and shadow intake both use this, so the two stages stay in step. It covers every legacy mode
+    and an existing ``batch_sync_v1`` owner, which skips admission: such units are classified per unit as
+    ``multi``."""
+    if not inherit or pin_untrusted(user):
+        return None
+    return inherited_language(target.get('language'), user.get('language'))
 
 
 def batch_admission_language(user: dict, conversation: dict) -> tuple[str | None, str | None]:
