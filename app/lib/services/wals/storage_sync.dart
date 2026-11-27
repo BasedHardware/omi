@@ -63,6 +63,10 @@ class StorageSyncImpl implements StorageSync {
   @visibleForTesting
   set testWals(List<Wal> wals) => _wals = wals;
 
+  /// Whether this sync still holds files for [deviceId] that need an
+  /// authoritative multi-file inventory before deletion can be confirmed.
+  bool hasCachedWalsForDevice(String deviceId) => _wals.any((wal) => wal.device == deviceId);
+
   @visibleForTesting
   set testDevice(BtDevice? device) => _device = device;
 

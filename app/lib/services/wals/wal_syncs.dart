@@ -349,8 +349,9 @@ class WalSyncs implements IWalSync {
       storageInventoryConfirmed = await _ringSync.refreshWalsFromDevice();
     } else if (_usesLegacySdcard && !isMultiFileStorageFirmware(fw)) {
       // Old firmware has no multi-file stats command; the SD-card list below
-      // is its authoritative device inventory.
-      storageInventoryConfirmed = true;
+      // is its authoritative device inventory. Any cached multi-file rows for
+      // this device still need a supported refresh before their deletes count.
+      storageInventoryConfirmed = !_storageSync.hasCachedWalsForDevice(_device!.id);
     } else {
       storageInventoryConfirmed = await _storageSync.refreshWalsFromDevice();
     }

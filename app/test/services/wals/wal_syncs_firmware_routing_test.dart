@@ -544,6 +544,40 @@ void main() {
       expect(sdcard.refreshCalls, 1);
     });
 
+    test('legacy SD firmware does not confirm stale cached multi-file rows', () async {
+      final sdcard = _SpySdcard();
+      final storage = _InventoryStorage(confirmed: false)
+        ..testWals = [
+          Wal(
+            timerStart: 1704067200,
+            codec: BleAudioCodec.opus,
+            seconds: 60,
+            status: WalStatus.miss,
+            storage: WalStorage.sdcard,
+            device: 'pendant',
+            fileNum: 2,
+          ),
+        ];
+      final syncs = WalSyncs(
+        _Listener(),
+        sdcardSync: sdcard,
+        storageSync: storage,
+        flashPageSync: _ReadyFlashPage(),
+        phoneSync: _PhoneSync(),
+      );
+      syncs.setDevice(BtDevice(
+        id: 'pendant',
+        name: 'Omi',
+        type: DeviceType.omi,
+        rssi: -40,
+        firmwareRevision: '3.0.16',
+      ));
+
+      expect(await syncs.refreshWalsFromDevice(), isFalse);
+      expect(storage.refreshCalls, 0, reason: 'the old firmware cannot confirm the cached multi-file row');
+      expect(sdcard.refreshCalls, 1);
+    });
+
     test('multi-file firmware requires both device inventories to confirm', () async {
       final sdcard = _SpySdcard();
       final storage = _InventoryStorage(confirmed: true);
