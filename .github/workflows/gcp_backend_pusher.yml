@@ -1061,7 +1061,7 @@ jobs:
       contents: read
       id-token: write
     runs-on: ubuntu-latest
-    timeout-minutes: 180
+    timeout-minutes: 210
     steps:
       - name: Validate protected image-only dispatch
         env:
