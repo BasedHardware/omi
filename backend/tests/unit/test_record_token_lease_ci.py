@@ -148,3 +148,53 @@ def test_invalid_rollout_vector_cannot_partially_write_job_env(monkeypatch, tmp_
     with pytest.raises(ValueError):
         exec(compile(code, '<actual composite binding step>', 'exec'), {})
     assert target.read_text() == 'PREVIOUS=kept\n'
+
+
+LEASE_FALLBACKS = {
+    'RECORD_TOKEN_LEASE_MODE': 'off',
+    'RECORD_TOKEN_LEASE_MODE_SERVE_PERCENT': '0',
+    'RECORD_TOKEN_LEASE_SECONDS': '3600',
+    'RECORD_TOKEN_LEASE_DEPLOYED_AT': '0',
+}
+
+
+def _deploy_backend_stack_callers():
+    callers = []
+    for path in sorted((ROOT / '.github/workflows').glob('*.y*ml')):
+        config = yaml.safe_load(path.read_text())
+        for job_name, job in (config.get('jobs') or {}).items():
+            for step in job.get('steps', []):
+                if step.get('uses') == './.github/actions/deploy-backend-stack':
+                    callers.append((path.name, job_name, job, step))
+    return callers
+
+
+def test_every_deploy_backend_stack_caller_passes_the_shared_lease_vector():
+    # SCA-3748: a caller that omits these inputs gets the composite defaults,
+    # so an ordinary backend deploy silently resets the production lease ramp.
+    callers = _deploy_backend_stack_callers()
+    assert {name for name, *_ in callers} >= {'gcp_backend.yml', 'gcp_backend_auto_dev.yml'}
+    for name, job_name, job, step in callers:
+        where = f'{name}:{job_name}'
+        # Protected environment variables only resolve once the job declares its environment.
+        assert job.get('environment'), where
+        inputs = step.get('with') or {}
+        for key, fallback in LEASE_FALLBACKS.items():
+            assert inputs.get(key.lower()) == f"${{{{ vars.{key} || '{fallback}' }}}}", where
+
+
+def test_stack_callers_use_the_same_lease_expressions_as_listen_and_pusher():
+    callers = _deploy_backend_stack_callers()
+    for workflow in ('gcp_backend_pusher.yml', 'gcp_backend_listen_helm.yml'):
+        config = yaml.safe_load((ROOT / '.github/workflows' / workflow).read_text())
+        bindings = [
+            step['env']
+            for job in config['jobs'].values()
+            for step in job.get('steps', [])
+            if step.get('name') == 'Bind shared record token lease rollout inputs'
+        ]
+        assert bindings, workflow
+        for env in bindings:
+            for name, job_name, _, step in callers:
+                for key in LEASE_FALLBACKS:
+                    assert step['with'][key.lower()] == env[key], f'{name}:{job_name} vs {workflow} {key}'
