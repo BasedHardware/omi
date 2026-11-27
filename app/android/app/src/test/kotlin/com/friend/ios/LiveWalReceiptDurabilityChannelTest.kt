@@ -1,5 +1,6 @@
 package com.friend.ios
 
+import android.app.Application
 import android.content.Context
 import android.os.Looper
 import io.flutter.util.PathUtils
@@ -10,6 +11,7 @@ import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
+import org.robolectric.annotation.Config
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.RuntimeEnvironment
 import org.robolectric.Shadows.shadowOf
@@ -18,6 +20,7 @@ import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 
 @RunWith(RobolectricTestRunner::class)
+@Config(sdk = [36], manifest = Config.NONE, application = Application::class)
 class LiveWalReceiptDurabilityChannelTest {
     private val context: Context = RuntimeEnvironment.getApplication()
 
