@@ -100,6 +100,25 @@ void main() {
     expect(await adapter.resolvedFeatureEnabled('b'), isNull);
   });
 
+  test('a slower same-account refresh cannot overwrite a newer flag snapshot', () async {
+    final older = Completer<Map<String, OmiFlag>?>();
+    final newer = Completer<Map<String, OmiFlag>?>();
+    var calls = 0;
+    final adapter = PostHogAnalyticsAdapter(
+      apiKey: 'test',
+      omiFlags: () => ++calls == 1 ? older.future : newer.future,
+    )..identify(userId: 'u');
+
+    final olderRead = adapter.reloadFeatureFlags();
+    final newerRead = adapter.reloadFeatureFlags();
+    newer.complete({'kill': (enabled: true, variant: null, payloadJson: null)});
+    expect(await newerRead, isTrue);
+    older.complete({'kill': (enabled: false, variant: null, payloadJson: null)});
+
+    expect(await olderRead, isFalse, reason: 'a superseded request cannot claim to have refreshed the cache');
+    expect(await adapter.resolvedFeatureEnabled('kill'), isTrue);
+  });
+
   test('same-account profile updates preserve flags and an in-flight refresh', () async {
     final pending = Completer<Map<String, OmiFlag>?>();
     var delayed = false;

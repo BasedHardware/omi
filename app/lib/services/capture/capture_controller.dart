@@ -2093,6 +2093,7 @@ class CaptureController extends ChangeNotifier
       }
       await conn?.onNetworkSocketReconnected();
       _limitlessCustomLiveSocketUnavailable = false;
+      _refreshLimitlessCustomLiveWatch(restartWatch: true);
     }
 
     if (!_captureSessionIsCurrent(sessionToken) || _deviceIdentityStale(deviceRevision)) {
@@ -2938,10 +2939,7 @@ class CaptureController extends ChangeNotifier
       _customLiveAudioRecoveryFlagRefreshInFlight = false;
       if (refreshFailed && enabled != true) {
         // Keep the last successful result across refresh failures. A new
-        // capture clears this value before its identity-scoped read begins.
-        if (_customLiveAudioRecoveryKillSwitchEnabled != false) {
-          _customLiveAudioRecoveryKillSwitchEnabled = null;
-        }
+        // capture or flag-context change clears it before its scoped read.
         if (_customLiveAudioRecoveryFlagFetchRetriesForEpoch == 0) {
           _customLiveAudioRecoveryFlagFetchRetriesForEpoch = 1;
           _scheduleCustomLiveAudioFlagRetry(generation, identityEpoch, delay: const Duration(seconds: 1));
@@ -2991,11 +2989,22 @@ class CaptureController extends ChangeNotifier
           identityEpoch != AnalyticsManager.identityEpoch) {
         return;
       }
+      if (activeRecordingId != _customLiveAudioRecoveryFlagRecordingId) return;
       _customLiveAudioRecoveryFlagIdentityEpoch = -1;
       if (resetFetchRetries) {
         _customLiveAudioRecoveryFlagFetchRetriesForEpoch = 0;
       }
-      _refreshLimitlessCustomLiveWatch();
+      _refreshCustomLiveAudioKillSwitch();
+      if (activeRecordingId == _customLiveAudioRecoveryFlagRecordingId &&
+          !_customLiveAudioRecoveryFlagRefreshInFlight &&
+          _customLiveAudioRecoveryFlagRetryTimer == null) {
+        _scheduleCustomLiveAudioFlagRetry(
+          generation,
+          identityEpoch,
+          delay: const Duration(minutes: 5),
+          resetFetchRetries: true,
+        );
+      }
     });
   }
 

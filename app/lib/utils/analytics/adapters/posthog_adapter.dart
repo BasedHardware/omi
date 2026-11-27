@@ -37,6 +37,7 @@ class PostHogAnalyticsAdapter
   /// Bumped on every identity change; a reload commits its answer only if the generation it started
   /// in is still current, so a slow response for account A cannot land after B took over.
   int _identityGeneration = 0;
+  int _omiFlagsReloadGeneration = 0;
   String? _flagIdentity;
 
   void _identityChanged(String? identity, {bool reset = false}) {
@@ -210,10 +211,13 @@ class PostHogAnalyticsAdapter
   Future<bool> _reloadOmiFlags() async {
     final fetch = omiFlags;
     if (fetch == null) return false;
-    final generation = _identityGeneration;
+    final identityGeneration = _identityGeneration;
+    final reloadGeneration = ++_omiFlagsReloadGeneration;
     try {
       final flags = await fetch();
-      if (flags == null || generation != _identityGeneration) return false;
+      if (flags == null || identityGeneration != _identityGeneration || reloadGeneration != _omiFlagsReloadGeneration) {
+        return false;
+      }
       _omi = Map.unmodifiable(flags);
       return true;
     } catch (_) {

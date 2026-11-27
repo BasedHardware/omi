@@ -37,6 +37,7 @@ class MobileHeldWalSignal {
   static Future<bool?> _readCohort(bool refresh) => AnalyticsManager().resolvedBooleanFeatureFlag(
         MobileBatchUploadHoldGate.enabledFlag,
         refresh: refresh,
+        refreshTimeout: const Duration(seconds: 6),
       );
 
   void startup(Iterable<Wal> wals, DateTime now) {

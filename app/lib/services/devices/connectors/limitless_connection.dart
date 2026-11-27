@@ -45,6 +45,7 @@ class LimitlessDeviceConnection extends DeviceConnection {
 
   // Completed flash pages
   final List<Map<String, dynamic>> _completedFlashPages = [];
+  final Set<int> _unconfirmedStoredPageIndices = {};
 
   StreamSubscription? _rxSubscription;
   StreamSubscription? _transportReconnectSubscription;
@@ -348,10 +349,10 @@ class LimitlessDeviceConnection extends DeviceConnection {
       Logger.debug('Limitless: Re-initialization after reconnect failed: $e');
       DebugLogManager.logError(e, null, 'Limitless reconnect initialization failed');
       if (attemptingBatchReentry && _isCurrentSession(epoch) && _batchDrainActive) {
-        _batchDrainActive = false;
-        _batchModeEpoch = null;
+        DebugLogManager.logWarning(
+            'Limitless batch re-entry failed; retaining drain ownership until mode is confirmed');
       }
-      if (_isCurrentSession(epoch) && !_isBatchMode && !_realtimeSuppressed) {
+      if (_isCurrentSession(epoch) && !_isBatchMode && !_batchDrainActive && !_realtimeSuppressed) {
         _armStreamHealthWatch(reason: 'reconnect_reinit_failed');
       }
     }
@@ -602,7 +603,18 @@ class LimitlessDeviceConnection extends DeviceConnection {
             pos = valueStart + length;
             if (fieldNumber == 2) {
               foundAudioField = true;
-              storedFrames.addAll(_extractOpusFramesFromFlashPage(payload.sublist(valueStart, pos)));
+              final storageBuffer = payload.sublist(valueStart, pos);
+              final pageFrames = _extractOpusFramesFromFlashPage(storageBuffer);
+              storedFrames.addAll(pageFrames);
+              if (_batchDrainActive && !_isBatchMode && pageFrames.isNotEmpty) {
+                final pageIndex = _extractStorageBufferPageIndex(storageBuffer);
+                if (pageIndex != null) _unconfirmedStoredPageIndices.add(pageIndex);
+                DebugLogManager.logEvent('limitless_stored_frames_dropped', {
+                  'frames': pageFrames.length,
+                  'pageIndex': pageIndex,
+                  'drainActive': true,
+                });
+              }
             } else if (fieldNumber == 4) {
               foundAudioField = true;
               final encodedLiveField = payload.sublist(fieldStart, pos);
@@ -623,8 +635,7 @@ class LimitlessDeviceConnection extends DeviceConnection {
 
     if (!foundAudioField) return false;
     // During reconnect the active drain's mode is unconfirmed. Keep stored
-    // flash pages out of the live stream; the next confirmed batch pass can
-    // request and process them without duplicating audio into Custom Live.
+    // pages out of the live stream and cap ACKs until the page is replayed.
     if (_batchDrainActive && !_isBatchMode) storedFrames.clear();
     _publishAudioFrames(storedFrames, fromRealtimeStream: false);
     _publishAudioFrames(liveFrames, fromRealtimeStream: true);
@@ -866,6 +877,8 @@ class LimitlessDeviceConnection extends DeviceConnection {
             'did_stop_recording': pageInfo['did_stop_recording'] ?? false,
           };
 
+          _clearReplayedStoredPageBarrier(index);
+
           _completedFlashPages.add(flashPage);
 
           // Update first flash page timestamp if not set
@@ -900,6 +913,8 @@ class LimitlessDeviceConnection extends DeviceConnection {
               'did_stop_recording': false,
             };
 
+            _clearReplayedStoredPageBarrier(index);
+
             _completedFlashPages.add(flashPage);
             _flashPageController.add(flashPage);
           } else {
@@ -923,6 +938,54 @@ class LimitlessDeviceConnection extends DeviceConnection {
         'storageDataLength': storageData.length,
       });
     }
+  }
+
+  int? _extractStorageBufferPageIndex(List<int> storageData) {
+    var pos = 0;
+    try {
+      while (pos < storageData.length) {
+        final tagResult = _decodeVarint(storageData, pos);
+        final tag = tagResult[0] as int;
+        final afterTag = tagResult[1] as int;
+        if (tag == 0 || afterTag <= pos) return null;
+        pos = afterTag;
+        final fieldNum = tag >> 3;
+        switch (tag & 0x07) {
+          case 0:
+            final value = _decodeVarint(storageData, pos);
+            final next = value[1] as int;
+            if (next <= pos) return null;
+            if (fieldNum == 5) return value[0] as int;
+            pos = next;
+            break;
+          case 1:
+            if (pos + 8 > storageData.length) return null;
+            pos += 8;
+            break;
+          case 2:
+            final lengthResult = _decodeVarint(storageData, pos);
+            final length = lengthResult[0] as int;
+            final valueStart = lengthResult[1] as int;
+            if (valueStart <= pos || length < 0 || length > storageData.length - valueStart) return null;
+            pos = valueStart + length;
+            break;
+          case 5:
+            if (pos + 4 > storageData.length) return null;
+            pos += 4;
+            break;
+          default:
+            return null;
+        }
+      }
+    } catch (_) {
+      return null;
+    }
+    return null;
+  }
+
+  void _clearReplayedStoredPageBarrier(int? index) {
+    if (!_batchDrainActive || !_isBatchMode || index == null || !_unconfirmedStoredPageIndices.remove(index)) return;
+    DebugLogManager.logEvent('limitless_unconfirmed_stored_page_replayed', {'pageIndex': index});
   }
 
   Map<String, dynamic> _parseFlashPageInfo(List<int> flashPageData) {
@@ -1445,14 +1508,27 @@ class LimitlessDeviceConnection extends DeviceConnection {
     if (!_isInitialized) return;
 
     try {
-      final ackCmd = _encodeAcknowledgeProcessedData(upToIndex);
+      var acknowledgedIndex = upToIndex;
+      if (_unconfirmedStoredPageIndices.isNotEmpty) {
+        final lowestUnconfirmed = _unconfirmedStoredPageIndices.reduce((a, b) => a < b ? a : b);
+        if (acknowledgedIndex >= lowestUnconfirmed) {
+          acknowledgedIndex = lowestUnconfirmed - 1;
+          DebugLogManager.logEvent('limitless_ack_capped_for_unconfirmed_stored_page', {
+            'requestedIndex': upToIndex,
+            'acknowledgedIndex': acknowledgedIndex,
+            'lowestUnconfirmedPageIndex': lowestUnconfirmed,
+          });
+          if (acknowledgedIndex <= _lastAcknowledgedIndex) return;
+        }
+      }
+      final ackCmd = _encodeAcknowledgeProcessedData(acknowledgedIndex);
       await transport.writeCharacteristic(limitlessServiceUuid, limitlessTxCharUuid, ackCmd);
-      Logger.debug('Limitless: Acknowledged processed data up to index $upToIndex');
+      Logger.debug('Limitless: Acknowledged processed data up to index $acknowledgedIndex');
       DebugLogManager.logInfo('Limitless ACK sent', {
-        'upToIndex': upToIndex,
+        'upToIndex': acknowledgedIndex,
         'lastAcknowledgedIndex': _lastAcknowledgedIndex,
       });
-      _lastAcknowledgedIndex = upToIndex;
+      _lastAcknowledgedIndex = acknowledgedIndex;
     } catch (e) {
       Logger.debug('Limitless: Error sending acknowledgment: $e');
       DebugLogManager.logError(e, null, 'Limitless ACK failed', {'upToIndex': upToIndex});
