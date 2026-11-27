@@ -87,9 +87,23 @@ class WalFileManager {
   static Future<bool> matchesPendingLiveWalPurge(File audio, Wal wal, LiveWalPurgeSnapshot snapshot) =>
       _saveLock.withResource(() async {
         final primary = _walFile;
-        if (primary == null || snapshot.revision != _indexRevision || snapshot.documentsPath != primary.parent.path) {
+        final backup = _walBackupFile;
+        if (primary == null || backup == null || snapshot.documentsPath != primary.parent.path) {
           return false;
         }
+        if (snapshot.revision != _indexRevision) {
+          try {
+            final refreshed = await LiveWalReceipt.capturePurgeSnapshot(primary, backup, _indexRevision);
+            if (refreshed.revision != _indexRevision || refreshed.documentsPath != snapshot.documentsPath) return false;
+            snapshot
+              ..basenames = refreshed.basenames
+              ..revision = refreshed.revision;
+          } catch (_) {
+            // A stale snapshot grants no deletion authority if refresh is incomplete.
+            return false;
+          }
+        }
+        if (snapshot.revision != _indexRevision) return false;
         return LiveWalReceipt.matchesPendingPurgeInSnapshot(audio, wal, snapshot);
       });
 

@@ -770,6 +770,47 @@ void main() {
     expect(await receiptFor(basename).exists(), isTrue);
   });
 
+  test('bounded index reference scan covers large Documents directories', () async {
+    final audioFile = await makePendingReceipt('owner-a');
+    await Future.wait(List.generate(4100, (i) => File('${dir.path}/unrelated-$i').create()));
+
+    final removed = await WalFileManager.purgeUnindexedLiveWalReceipts(
+      owners: {'owner-a'},
+      reservedNames: {},
+      mayDelete: (_) => true,
+    );
+
+    expect(removed, 1);
+    expect(await audioFile.exists(), isFalse);
+  });
+
+  test('receipt scan excludes staging and retired directories from its entry budget', () async {
+    await Directory('${LiveWalReceipt.directory(dir).path}/staging').create(recursive: true);
+    await Directory('${LiveWalReceipt.directory(dir).path}/retired').create(recursive: true);
+    for (var i = 0; i < 127; i++) {
+      await makePendingReceipt('owner-a');
+    }
+
+    final result = await census();
+
+    expect(result.complete, isTrue);
+    expect(result.summary['orphan_census_complete'], isTrue);
+  });
+
+  test('stale purge snapshots refresh under the index writer lock', () async {
+    final audioFile = await makePendingReceipt('owner-a');
+    final basename = audioFile.uri.pathSegments.last;
+    final receiptBody = jsonDecode(await receiptFor(basename).readAsString()) as Map<String, dynamic>;
+    final wal = Wal.fromJson(receiptBody['wal'] as Map<String, dynamic>);
+    final snapshot = (await WalFileManager.captureLiveWalPurgeSnapshot())!;
+    final capturedRevision = snapshot.revision;
+    expect(await WalFileManager.saveWals(await WalFileManager.loadIndexedWals()), isTrue);
+    expect(WalFileManager.indexRevision, greaterThan(capturedRevision));
+
+    expect(await WalFileManager.matchesPendingLiveWalPurge(audioFile, wal, snapshot), isTrue);
+    expect(snapshot.revision, WalFileManager.indexRevision);
+  });
+
   test('receiptless managed audio is visible but cannot be recovered or reclaimed', () async {
     final basename = LiveWalReceipt.uniqueName(name(now - 2), LiveWalReceipt.newId());
     final candidate = await audio(basename);

@@ -19,8 +19,8 @@ typedef LiveWalIndexEntry = ({LiveWalBinding binding, Object row});
 
 class LiveWalPurgeSnapshot {
   LiveWalPurgeSnapshot(this.basenames, this.revision, this.documentsPath);
-  final Set<String> basenames;
-  final int revision;
+  Set<String> basenames;
+  int revision;
   final String documentsPath;
 }
 
@@ -47,7 +47,9 @@ class LiveWalReceipt {
   static const _maxEntries = 128;
   static const _maxReceiptBytes = 16 * 1024;
   static const _maxReplayBytes = 32 * 1024 * 1024;
-  static const _maxIndexDirectoryEntries = 4096;
+  // A known affected Documents directory contained about 164k leaked audio
+  // files. Keep the enumeration finite while allowing that supported scale.
+  static const _maxIndexDirectoryEntries = 262144;
   static const _maxQuarantineIndexes = 64;
   static const _maxPurgeIndexBytes = 32 * 1024 * 1024;
   static final _idPattern = RegExp(r'^[a-f0-9]{32}$');

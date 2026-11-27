@@ -269,12 +269,12 @@ Future<RecordingOrphanCensus> captureRecordingCensus(
       sourceDirectories[receipts.path] = await receipts.stat();
       var entriesSeen = 0;
       await for (final entry in receipts.list(followLinks: false)) {
+        final name = path.basename(entry.path);
+        if (entry is Directory && const {'staging', 'retired'}.contains(name)) continue;
         if (++entriesSeen > 128) {
           receiptScanErrors++;
           break;
         }
-        final name = path.basename(entry.path);
-        if (entry is Directory && const {'staging', 'retired'}.contains(name)) continue;
         if (entry is! File) {
           receiptScanErrors++;
           linksSkipped++;
