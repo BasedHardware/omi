@@ -19388,5 +19388,15 @@
                 "example": "Dec 1"
             }
         }
-    }
+    },
+    "pendantStopQuestionTitle": "Why did you stop wearing your pendant?",
+    "pendantStopReasonUncomfortable": "Uncomfortable to wear",
+    "pendantStopReasonHabit": "I forgot or never got into the habit",
+    "pendantStopReasonCharging": "Charging is a hassle",
+    "pendantStopReasonValue": "Not useful enough",
+    "pendantStopReasonDevice": "A device problem",
+    "pendantStopReasonOther": "Other",
+    "pendantStopOptionalNote": "Add a note (optional)",
+    "pendantStopSendNote": "Send note",
+    "pendantStopQuestionThanks": "Thanks for sharing your feedback"
 }

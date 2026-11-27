@@ -27824,6 +27824,66 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Processes {date}'**
   String onTheWayDayProcessesOn(String date);
+
+  /// No description provided for @pendantStopQuestionTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Why did you stop wearing your pendant?'**
+  String get pendantStopQuestionTitle;
+
+  /// No description provided for @pendantStopReasonUncomfortable.
+  ///
+  /// In en, this message translates to:
+  /// **'Uncomfortable to wear'**
+  String get pendantStopReasonUncomfortable;
+
+  /// No description provided for @pendantStopReasonHabit.
+  ///
+  /// In en, this message translates to:
+  /// **'I forgot or never got into the habit'**
+  String get pendantStopReasonHabit;
+
+  /// No description provided for @pendantStopReasonCharging.
+  ///
+  /// In en, this message translates to:
+  /// **'Charging is a hassle'**
+  String get pendantStopReasonCharging;
+
+  /// No description provided for @pendantStopReasonValue.
+  ///
+  /// In en, this message translates to:
+  /// **'Not useful enough'**
+  String get pendantStopReasonValue;
+
+  /// No description provided for @pendantStopReasonDevice.
+  ///
+  /// In en, this message translates to:
+  /// **'A device problem'**
+  String get pendantStopReasonDevice;
+
+  /// No description provided for @pendantStopReasonOther.
+  ///
+  /// In en, this message translates to:
+  /// **'Other'**
+  String get pendantStopReasonOther;
+
+  /// No description provided for @pendantStopOptionalNote.
+  ///
+  /// In en, this message translates to:
+  /// **'Add a note (optional)'**
+  String get pendantStopOptionalNote;
+
+  /// No description provided for @pendantStopSendNote.
+  ///
+  /// In en, this message translates to:
+  /// **'Send note'**
+  String get pendantStopSendNote;
+
+  /// No description provided for @pendantStopQuestionThanks.
+  ///
+  /// In en, this message translates to:
+  /// **'Thanks for sharing your feedback'**
+  String get pendantStopQuestionThanks;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

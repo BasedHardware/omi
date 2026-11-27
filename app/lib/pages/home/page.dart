@@ -39,6 +39,7 @@ import 'package:omi/pages/action_items/widgets/task_selection_action_bar.dart';
 import 'package:omi/pages/conversations/widgets/merge_action_bar.dart';
 import 'package:omi/pages/home/home_content.dart';
 import 'package:omi/pages/home/widgets/home_tab_switcher.dart';
+import 'package:omi/pages/home/widgets/pendant_stop_question.dart';
 import 'package:omi/pages/home/home_widgets_publisher.dart';
 import 'package:omi/pages/home/plan_refresh_on_resume.dart';
 import 'package:omi/pages/phone_calls/active_call_banner.dart';
@@ -63,6 +64,7 @@ import 'package:omi/services/quick_actions_service.dart';
 import 'package:omi/utils/device.dart';
 import 'package:omi/utils/platform/platform_service.dart';
 import 'package:omi/services/announcement_service.dart';
+import 'package:omi/services/experiments/pendant_absence.dart';
 import 'package:omi/services/account_cutover/account_cutover_blocking_gate.dart';
 import 'package:omi/services/notifications.dart';
 import 'package:omi/services/wals/recording_transfer_coordinator.dart';
@@ -71,6 +73,7 @@ import 'package:omi/utils/audio/foreground.dart';
 import 'package:omi/utils/analytics/background_resource_telemetry.dart';
 import 'package:omi/utils/analytics/background_checkpoint_store.dart';
 import 'package:omi/utils/analytics/analytics_manager.dart';
+import 'package:omi/utils/analytics/registry/events.g.dart' show PendantStopQuestionAnsweredPlan;
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
@@ -414,6 +417,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
         // audio (Stage Manager / YouTube) without an AVAudioSession interrupt.
         captureProvider.onAppResumed();
         _scheduleHomeWidgetFreshness(context.read<ActionItemsProvider>());
+        _checkPendantStopQuestion(context.read<DeviceProvider>());
         // Pick up any batch recordings the native layer wrote while backgrounded/closed.
         Provider.of<LocalRecordingsProvider>(context, listen: false).refresh();
         if (context.read<HomeProvider>().selectedIndex == HomeProvider.tasksTab) {
@@ -619,6 +623,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
           },
         );
 
+        _checkPendantStopQuestion(deviceProvider);
+
         // Register callback for device connection to check firmware announcements and device onboarding
         deviceProvider.onDeviceConnected = (BtDevice device) {
           _onDeviceConnectedForAnnouncements(device);
@@ -631,6 +637,33 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
         }
       });
     });
+  }
+
+  void _checkPendantStopQuestion(DeviceProvider deviceProvider) {
+    final prefs = SharedPreferencesUtil();
+    final uid = prefs.uid;
+    if (!prefs.onboardingCompleted || uid.isEmpty) return;
+    final absence = PendantAbsence.instance;
+    bool connected() => deviceProvider.isConnected || deviceProvider.connectedDevice != null;
+    if (!connected() && PendantAbsence.isPendant(prefs.btDevice)) absence.observeAbsence(uid);
+
+    PendantStopQuestion.enqueue(
+      queue: PromptQueue.instance,
+      absence: absence,
+      uid: uid,
+      isCurrentUser: () => mounted && prefs.uid == uid,
+      eligibleDays: () {
+        if (WidgetsBinding.instance.lifecycleState != AppLifecycleState.resumed || !prefs.onboardingCompleted) {
+          return null;
+        }
+        return absence.eligibleDays(uid, paired: prefs.btDevice, connected: connected());
+      },
+      plan: () {
+        final plan = context.read<UsageProvider>().subscription?.subscription.plan;
+        if (plan == null || plan.isUnknown) return PendantStopQuestionAnsweredPlan.unknown;
+        return plan.isPaid ? PendantStopQuestionAnsweredPlan.paid : PendantStopQuestionAnsweredPlan.free;
+      },
+    );
   }
 
   bool _deviceOnboardingShown = false;
@@ -1136,7 +1169,12 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
     HomeNavigation.unregister(_openRoute);
     _promptGate.detach();
     // These prompts close over this Home; a later Home (after sign-out and sign-in) enqueues its own.
-    for (final id in const ['home-announcements', 'device-tutorial', 'firmware-announcements']) {
+    for (final id in const [
+      'home-announcements',
+      'device-tutorial',
+      'firmware-announcements',
+      PendantStopQuestion.promptId,
+    ]) {
       PromptQueue.instance.remove(id);
     }
     _releaseFeedbackClearance();

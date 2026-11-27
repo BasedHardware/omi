@@ -19,6 +19,7 @@ import asyncio
 import pytz
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request, Response
 from fastapi.responses import JSONResponse, StreamingResponse
+from google.api_core.exceptions import NotFound
 from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from database import (
@@ -325,6 +326,30 @@ def _location_context_consent_response(consent) -> LocationContextConsentRespons
 class DailySummaryTestResponse(UserStatusResponse):
     summary_id: str
     conversations_count: int
+
+
+class PendantStopFeedbackRequest(BaseModel):
+    model_config = ConfigDict(extra='forbid', str_strip_whitespace=True)
+
+    reason: Literal[
+        'uncomfortable_to_wear',
+        'forgot_or_no_habit',
+        'charging_is_a_hassle',
+        'not_useful_enough',
+        'device_problem',
+        'other',
+    ]
+    details: Annotated[str, Field(min_length=1, max_length=4000)]
+    days_without_connection: Annotated[int, Field(strict=True, ge=3, le=100_000_000)]
+
+
+@router.post('/v1/users/pendant-stop-feedback', tags=['v1'], status_code=204)
+def submit_pendant_stop_feedback(data: PendantStopFeedbackRequest, uid: str = Depends(auth.get_current_user_uid)):
+    """Store the optional note on the authenticated user's existing profile."""
+    try:
+        users_db.set_user_pendant_stop_feedback(uid, data.reason, data.details, data.days_without_connection)
+    except NotFound as exc:
+        raise HTTPException(status_code=404, detail='User profile not found') from exc
 
 
 @router.get('/v1/users/profile', tags=['v1'], response_model=UserProfileResponse)

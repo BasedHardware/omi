@@ -236,6 +236,9 @@ Source: events.json. Presence is not task success. Existing SDK provenance/ident
 | walCustodyAudit | WAL Custody Audit | agree_covered, agree_pending, disagree, unknown, released | active | wal-custody-audit |
 | appForegroundEnded | App Foreground Ended | foreground_seconds, capturing_seconds | active | app-foreground-time |
 | batteryReadingHidden | Battery Reading Hidden | reason | active | battery-reading-hidden |
+| pendantStopQuestionShown | Pendant Stop Question Shown | none | active | pendant-stop-question |
+| pendantStopQuestionAnswered | Pendant Stop Question Answered | reason, days_without_connection, note_provided, plan | active | pendant-stop-question |
+| pendantStopQuestionDismissed | Pendant Stop Question Dismissed | none | active | pendant-stop-question |
 
 ## App Review Opportunity decisions
 

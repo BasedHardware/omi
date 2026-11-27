@@ -735,6 +735,7 @@ and an explicit empty literal renders as `''`.
 | `mobile-speech-analyzer-disabled` | Force existing iOS freemium fallback to SFSpeech; false or absent selects SpeechAnalyzer on supported iOS 26 devices/locales | mobile | posthog | inverted | — | — | — | expected (kill) | keep | keep | — | auditfix |
 | `mobile-wal-delta-index-off` | True makes the iOS and Android clients save the WAL recording index through the pre-delta full-snapshot writer; false or absent keeps the delta index worker on | mobile | posthog | inverted | — | — | — | expected (kill) | keep | keep | — | auditfix |
 | `negative_feedback_remediation_kill` | Stop negative-feedback remediation on macOS | macos | posthog | inverted | — | — | — | expected (kill) | keep | keep | — | unowned |
+| `pendant_stop_question_off` | True suppresses the in-app pendant-stop question. False, absent or unreadable keeps it on. | mobile | posthog | open | — | — | — | absent (kill) | keep | keep | — | Goal: Churn |
 | `screen_activity_lossless_sync_kill` | Beta lossless screen sync stop | macos | posthog | inverted | — | — | — | expected (kill) | keep | keep | — | auditfix |
 | `screen_task_jev_gate` | Default-on screen OCR text dedupe gate using Jev; explicit false is the kill switch; flag read failures keep it on | macos | posthog | open | — | — | — | expected (enable) | keep | keep | — | auditfix |
 

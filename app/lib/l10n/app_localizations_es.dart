@@ -15905,4 +15905,34 @@ class AppLocalizationsEs extends AppLocalizations {
   String onTheWayDayProcessesOn(String date) {
     return 'Se procesan el $date';
   }
+
+  @override
+  String get pendantStopQuestionTitle => 'Why did you stop wearing your pendant?';
+
+  @override
+  String get pendantStopReasonUncomfortable => 'Uncomfortable to wear';
+
+  @override
+  String get pendantStopReasonHabit => 'I forgot or never got into the habit';
+
+  @override
+  String get pendantStopReasonCharging => 'Charging is a hassle';
+
+  @override
+  String get pendantStopReasonValue => 'Not useful enough';
+
+  @override
+  String get pendantStopReasonDevice => 'A device problem';
+
+  @override
+  String get pendantStopReasonOther => 'Other';
+
+  @override
+  String get pendantStopOptionalNote => 'Add a note (optional)';
+
+  @override
+  String get pendantStopSendNote => 'Send note';
+
+  @override
+  String get pendantStopQuestionThanks => 'Thanks for sharing your feedback';
 }

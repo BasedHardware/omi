@@ -6,6 +6,7 @@ import 'package:omi/app_globals.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/core/app_shell.dart';
 import 'package:omi/services/auth_service.dart';
+import 'package:omi/services/experiments/pendant_absence.dart';
 import 'package:omi/services/notifications/fcm_token_registration.dart' show fcmRegistrationOrderKey;
 import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/auth/clear_user_state.dart';
@@ -18,7 +19,8 @@ import 'package:omi/services/wals/deleted_account_uids.dart';
 /// caches, onboarding progress and account-scoped toggles — is cleared, as before.
 ///
 /// Keep this list to device pairing, device behaviour and display preferences. Never add
-/// credentials (auth tokens, OTA Wi-Fi password) or anything derived from the account.
+/// credentials (auth tokens, OTA Wi-Fi password) or account data. The local
+/// pendant question receipts are opaque digests that prevent repeat prompts.
 const Set<String> kPreferencesKeptOnSignOut = {
   // Paired device
   'btDevice',
@@ -47,6 +49,8 @@ const Set<String> kPreferencesKeptOnSignOut = {
   // So announcements already seen on this phone do not come back
   'lastKnownAppVersion',
   'lastAnnouncementCheckTime',
+  PendantAbsence.lastSurfaceDayKey,
+  PendantAbsence.questionReceiptsKey,
   // Audio of accounts deleted from this phone is purged by the WAL index on load
   deletedAccountUidsKey,
 };

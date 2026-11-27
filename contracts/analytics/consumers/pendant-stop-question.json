@@ -1,0 +1,16 @@
+{
+  "id": "pendant-stop-question",
+  "kind": "question",
+  "owner": "Goal: Churn",
+  "question": "In the first 14 days after release, how many people answer the pendant-stop question and which reasons do they give, by account tenure and plan at answer?",
+  "query": "contracts/analytics/consumers/pendant-stop-question-presence.sql",
+  "outcomes_query": "contracts/analytics/consumers/pendant-stop-question.sql",
+  "events": [
+    "pendantStopQuestionShown",
+    "pendantStopQuestionAnswered",
+    "pendantStopQuestionDismissed"
+  ],
+  "namespace_property": "$app_namespace",
+  "dimensions": ["git_sha", "build_number"],
+  "zero_policy": "Report no responses if the answer rows are empty. Use the shown and dismissed rows to distinguish exposure without answers from no exposure. Unknown tenure and plan remain separate."
+}

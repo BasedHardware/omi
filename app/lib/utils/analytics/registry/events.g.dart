@@ -3843,3 +3843,50 @@ final class BatteryReadingHidden extends RegisteredEvent {
   @override
   Map<String, Object> get properties => {"reason": reason.wireName};
 }
+
+final class PendantStopQuestionShown extends RegisteredEvent {
+  const PendantStopQuestionShown();
+  @override
+  String get wireName => "Pendant Stop Question Shown";
+  @override
+  Map<String, Object> get properties => {};
+}
+
+enum PendantStopQuestionAnsweredReason {
+  uncomfortableToWear("uncomfortable_to_wear"),
+  forgotOrNoHabit("forgot_or_no_habit"),
+  chargingIsAHassle("charging_is_a_hassle"),
+  notUsefulEnough("not_useful_enough"),
+  deviceProblem("device_problem"),
+  other("other");
+  const PendantStopQuestionAnsweredReason(this.wireName);
+  final String wireName;
+}
+
+enum PendantStopQuestionAnsweredPlan {
+  paid("paid"),
+  free("free"),
+  unknown("unknown");
+  const PendantStopQuestionAnsweredPlan(this.wireName);
+  final String wireName;
+}
+
+final class PendantStopQuestionAnswered extends RegisteredEvent {
+  const PendantStopQuestionAnswered({required this.reason, required this.daysWithoutConnection, required this.noteProvided, required this.plan});
+  final PendantStopQuestionAnsweredReason reason;
+  final int daysWithoutConnection;
+  final bool noteProvided;
+  final PendantStopQuestionAnsweredPlan plan;
+  @override
+  String get wireName => "Pendant Stop Question Answered";
+  @override
+  Map<String, Object> get properties => {"reason": reason.wireName, "days_without_connection": daysWithoutConnection, "note_provided": noteProvided, "plan": plan.wireName};
+}
+
+final class PendantStopQuestionDismissed extends RegisteredEvent {
+  const PendantStopQuestionDismissed();
+  @override
+  String get wireName => "Pendant Stop Question Dismissed";
+  @override
+  Map<String, Object> get properties => {};
+}

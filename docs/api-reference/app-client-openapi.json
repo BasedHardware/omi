@@ -26520,6 +26520,42 @@
         "title": "PaywallStatusResponse",
         "type": "object"
       },
+      "PendantStopFeedbackRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "days_without_connection": {
+            "maximum": 100000000.0,
+            "minimum": 3.0,
+            "title": "Days Without Connection",
+            "type": "integer"
+          },
+          "details": {
+            "maxLength": 4000,
+            "minLength": 1,
+            "title": "Details",
+            "type": "string"
+          },
+          "reason": {
+            "enum": [
+              "uncomfortable_to_wear",
+              "forgot_or_no_habit",
+              "charging_is_a_hassle",
+              "not_useful_enough",
+              "device_problem",
+              "other"
+            ],
+            "title": "Reason",
+            "type": "string"
+          }
+        },
+        "required": [
+          "reason",
+          "details",
+          "days_without_connection"
+        ],
+        "title": "PendantStopFeedbackRequest",
+        "type": "object"
+      },
       "PendingSyncResponse": {
         "properties": {
           "pending_export": {
@@ -83049,6 +83085,87 @@
           }
         ],
         "summary": "Update Onboarding State",
+        "tags": [
+          "v1"
+        ]
+      }
+    },
+    "/v1/users/pendant-stop-feedback": {
+      "post": {
+        "description": "Store the optional note on the authenticated user's existing profile.",
+        "operationId": "submit_pendant_stop_feedback_v1_users_pendant_stop_feedback_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PendantStopFeedbackRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Submit Pendant Stop Feedback",
         "tags": [
           "v1"
         ]

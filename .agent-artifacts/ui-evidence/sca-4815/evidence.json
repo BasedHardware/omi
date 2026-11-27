@@ -1,0 +1,12 @@
+{
+  "version": 1,
+  "images": [
+    {
+      "file": "001-mobile-ios-pendant-stop-question.png",
+      "platform": "mobile-ios",
+      "description": "Pendant-stop question rendered by the Flutter widget harness at iPhone dimensions",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    }
+  ]
+}

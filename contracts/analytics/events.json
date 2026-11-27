@@ -5834,6 +5834,75 @@
         "battery-reading-hidden"
       ],
       "correlation": null
+    },
+    {
+      "id": "pendantStopQuestionShown",
+      "wire_name": "Pendant Stop Question Shown",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {},
+      "consumers": [
+        "pendant-stop-question"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "pendantStopQuestionAnswered",
+      "wire_name": "Pendant Stop Question Answered",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {
+        "reason": {
+          "type": "enum",
+          "wire_name": "reason",
+          "values": [
+            "uncomfortable_to_wear",
+            "forgot_or_no_habit",
+            "charging_is_a_hassle",
+            "not_useful_enough",
+            "device_problem",
+            "other"
+          ]
+        },
+        "daysWithoutConnection": {
+          "type": "int",
+          "wire_name": "days_without_connection"
+        },
+        "noteProvided": {
+          "type": "bool",
+          "wire_name": "note_provided"
+        },
+        "plan": {
+          "type": "enum",
+          "wire_name": "plan",
+          "values": [
+            "paid",
+            "free",
+            "unknown"
+          ]
+        }
+      },
+      "consumers": [
+        "pendant-stop-question"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "pendantStopQuestionDismissed",
+      "wire_name": "Pendant Stop Question Dismissed",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {},
+      "consumers": [
+        "pendant-stop-question"
+      ],
+      "correlation": null
     }
   ],
   "transport_dispositions": {

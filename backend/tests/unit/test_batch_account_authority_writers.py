@@ -10,6 +10,9 @@ from database.batch_account_authority_schema import ACCOUNT_DELETION_COLLECTION,
 
 BACKEND = Path(__file__).resolve().parents[2]
 OPERATIONS = frozenset({'create', 'set', 'update', 'delete'})
+# Private survey notes are user-root writes worth inventorying even though
+# their field does not participate in the account authority protocol.
+TRACKED_USER_UPDATES = frozenset(ACCOUNT_FIELD_GROUPS['users']) | {'pendant_stop_feedback'}
 # Count sites by enclosing function so adding a raw call to an existing writer
 # still needs review. See the reason on every admitted site.
 KNOWN_RAW = {
@@ -82,6 +85,10 @@ KNOWN_RAW = {
     ('database/users.py', 'record_user_platform', 'users', 'set'): (
         1,
         'Client platform registration can provision a profile. Keep its current request-path read/write budget.',
+    ),
+    ('database/users.py', 'set_user_pendant_stop_feedback', 'users', 'update'): (
+        1,
+        'Exists-only pendant survey feedback. Replaces one feedback record and cannot provision a profile.',
     ),
     ('database/users.py', 'set_user_cancellation_feedback', 'users', 'set'): (
         1,
@@ -279,9 +286,8 @@ def raw_writes(source):
                 family = _ref_family(node.args[0], definitions)
                 data = node.args[1] if len(node.args) > 1 else None
             fields = _field_roots(data, definitions)
-            if family and (
-                operation != 'update' or fields.intersection(ACCOUNT_FIELD_GROUPS[family]) or None in fields
-            ):
+            tracked_updates = TRACKED_USER_UPDATES if family == 'users' else ACCOUNT_FIELD_GROUPS.get(family, ())
+            if family and (operation != 'update' or fields.intersection(tracked_updates) or None in fields):
                 result[(qualified, family, operation)] += 1
             elif not family and operation in {'set', 'update', 'create'}:
                 # Wipe status is specific to the marker; catch writes in
