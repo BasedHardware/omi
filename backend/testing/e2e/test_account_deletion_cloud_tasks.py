@@ -2,14 +2,21 @@
 
 from __future__ import annotations
 
+from concurrent.futures import ThreadPoolExecutor
+from datetime import datetime, timedelta, timezone
 import hashlib
 import json
+import os
 import re
+from secrets import token_hex
+import time
+from types import SimpleNamespace
 from typing import Any, Callable
 
 import pytest
 from google.api_core.exceptions import NotFound
-from google.cloud import tasks_v2
+from google.auth.credentials import AnonymousCredentials
+from google.cloud import firestore, tasks_v2
 
 _PROJECT = "test-e2e-project"
 _LOCATION = "us-central1"
@@ -17,6 +24,11 @@ _QUEUE = "account-deletion"
 _HANDLER_URL = "http://127.0.0.1:8765/v1/users/account-deletion-wipes/run"
 _INVOKER_SERVICE_ACCOUNT = "account-deletion-worker@example.invalid"
 _LOCAL_TASK_TOKEN = "local-account-deletion-cloud-task"
+
+
+class _LoopbackFirestore(firestore.Client):
+    # The e2e harness subsequently patches firestore.Client's constructor.
+    __init__ = firestore.Client.__init__
 
 
 @pytest.mark.parametrize(
@@ -56,6 +68,7 @@ class _CapturedCloudTasksClient:
         self.task_path_calls: list[tuple[str, str, str, str]] = []
         self._assert_pending_marker: Callable[[str], None] | None = None
         self.create_error: Exception | None = None
+        self.verification_token: str | None = None
 
     def queue_path(self, project: str, location: str, queue: str) -> str:
         assert (project, location, queue) == (_PROJECT, _LOCATION, _QUEUE)
@@ -81,7 +94,13 @@ class _CapturedCloudTasksClient:
         assert task.http_request.oidc_token.audience == _HANDLER_URL
         assert task.dispatch_deadline.seconds == DISPATCH_DEADLINE_SECONDS
         payload = json.loads(task.http_request.body)
-        assert set(payload) == {"job_id"}
+        expected_keys = {"job_id"}
+        if self.verification_token:
+            from database.speaker_evidence_verification import TASK_FIELD
+
+            expected_keys.add(TASK_FIELD)
+            assert payload[TASK_FIELD] == self.verification_token
+        assert set(payload) == expected_keys
         wipe_job_id = payload["job_id"]
         assert isinstance(wipe_job_id, str) and re.fullmatch(r"[0-9a-f]{32}", wipe_job_id)
         job_hash = hashlib.sha256(wipe_job_id.encode("utf-8")).hexdigest()[:32]
@@ -545,3 +564,276 @@ def test_missing_root_document_does_not_hide_immediate_child_data(
     assert completed.status_code == 200, completed.text
     assert _read_marker(fake_firestore, test_uid)["wipe_status"] == "completed"
     assert not orphan_child.get().exists
+
+
+@pytest.fixture
+def verification_emulator(monkeypatch):
+    host = os.getenv('FIRESTORE_EMULATOR_HOST', '')
+    if not host.startswith(('127.0.0.1:', 'localhost:')):
+        pytest.skip('loopback Firestore emulator required')
+    from database import _client, user_data_deletion, users
+    from database import speaker_evidence_verification as verification
+
+    plane = _LoopbackFirestore(project=f'demo-evidence-{token_hex(6)}', credentials=AnonymousCredentials())
+    monkeypatch.setattr(_client, 'get_data_plane_firestore_client', lambda: plane)
+    monkeypatch.setattr(user_data_deletion, 'get_data_plane_firestore_client', lambda: plane)
+    monkeypatch.setattr(users, 'db', plane)
+    monkeypatch.setattr(users, 'account_authority_writer_enabled', lambda: False)
+    monkeypatch.setattr(user_data_deletion, 'account_authority_writer_enabled', lambda: False)
+    monkeypatch.setenv('K_SERVICE', 'backend-sync')
+    metrics = verification.metrics
+    monkeypatch.setattr(metrics, '_REVISION', 'worker-sync-rehearsal')
+    monkeypatch.setattr(
+        metrics,
+        '_VERIFICATION_OUTCOMES',
+        {name: metrics._VERIFICATION.labels('worker-sync-rehearsal', name) for name in metrics._VERIFICATION_OUTCOMES},
+    )
+    yield plane
+    plane.close()
+
+
+def _arm_verification(monkeypatch, plane, uid, *, duration=120):
+    from database import speaker_evidence_verification as verification
+
+    token = token_hex(32)
+    ref = plane.collection(verification.COLLECTION).document(hashlib.sha256(token.encode()).hexdigest())
+    ref.create(
+        {
+            'account_hash': hashlib.sha256(uid.encode()).hexdigest(),
+            'expires_at': datetime.now(timezone.utc) + timedelta(seconds=duration),
+        }
+    )
+    monkeypatch.setenv('SPEAKER_EVIDENCE_VERIFY_UID_SHA256', hashlib.sha256(uid.encode()).hexdigest())
+    monkeypatch.setenv('SPEAKER_EVIDENCE_VERIFY_TOKEN', token)
+    return token, ref
+
+
+def _verification_counts():
+    from utils.observability import speaker_evidence_erasure as metrics
+
+    return {name: counter._value.get() for name, counter in metrics._VERIFICATION_OUTCOMES.items()}
+
+
+def _wait_for_writer(ref):
+    deadline = time.monotonic() + 8
+    while time.monotonic() < deadline:
+        if (ref.get(retry=None, timeout=1).to_dict() or {}).get('writer') == 'waiting':
+            return
+        time.sleep(0.025)
+    pytest.fail('sampled writer did not claim the rendezvous')
+
+
+@pytest.mark.parametrize('delivery', ['exact', 'wrong_queue', 'wrong_task', 'unrelated', 'unchecked_sweep'])
+def test_synthetic_speaker_evidence_verification(
+    client, verification_emulator, monkeypatch, account_deletion_identity, cloud_tasks_client, delivery
+):
+    from database import batch_pipeline_purge, speaker_evidence, speaker_evidence_verification, user_data_deletion
+    from database.conversation_revisions import firestore_revision_datetime
+    from models.speaker_evidence import SpeakerEvidence
+    from routers import users as users_router
+    from services.users import account_deletion
+    from utils.observability import speaker_evidence_erasure as metrics
+    from utils.other import endpoints as auth
+    from utils.speakers import processing
+
+    plane = verification_emulator
+    uid, auth_headers = account_deletion_identity
+    _configure_durable_account_deletion(monkeypatch)
+    _stub_external_deletion_boundaries(monkeypatch)
+    monkeypatch.setattr(batch_pipeline_purge, 'purge_batch_owner', lambda _uid: None)
+    monkeypatch.setattr(account_deletion, '_emit_deletion_telemetry', lambda *a: None)
+    monkeypatch.setattr(processing, '_roster', lambda *_: [])
+    # Force one transient provider failure on the exact task before the real sweep.
+    failures = iter([delivery == 'exact', False])
+
+    def purge_derived(_uid):
+        failure = [{'operation': 'synthetic_provider'}] if next(failures) else []
+        return {'required_failures': failure, 'best_effort_failures': []}
+
+    monkeypatch.setattr(account_deletion, 'purge_derived_user_data', purge_derived)
+    root = plane.document(f'users/{uid}')
+    root.set({'uid': uid})
+    parent = root.collection('conversations').document('fixture')
+    revision = firestore_revision_datetime(parent.set({'status': 'completed'}).update_time)
+    evidence = SpeakerEvidence(status='unavailable', policy_version='synthetic')
+    speaker_evidence.store_evidence(uid, parent.id, evidence, expected_updated_at=revision, firestore_client=plane)
+    child = parent.collection('speaker_evidence').document('current')
+    assert child.get().exists
+    expected_child = child.get().update_time
+    foreign = plane.document('users/unrelated/conversations/fixture/speaker_evidence/current')
+    foreign.set({'version': 1})
+    token, control = _arm_verification(monkeypatch, plane, uid)
+    cloud_tasks_client.verification_token = token
+    cloud_tasks_client.expect_pending_marker(plane, uid)
+    before = _verification_counts()
+    checked_before = metrics.SWEEP_CHECKED._value.get()
+    remaining_before = metrics.REMAINING._value.get()
+    committed_before = metrics.COMMITTED_MARKER_PRESENT._value.get()
+    refused_before = metrics.REFUSED_MARKER_PRESENT._value.get()
+    conversation = SimpleNamespace(id=parent.id, updated_at=revision, transcript_segments=[])
+
+    def writer():
+        auth.enforce_account_deletion_http_access(uid, allow_grace_erase_now=False)
+        processing.finish(processing.begin(conversation), uid, conversation, receipt=None)
+
+    # An enabled rendezvous must never admit an unsampled writer.
+    monkeypatch.setenv('SPEAKER_EVIDENCE_MODE', 'shadow')
+    monkeypatch.setenv('SPEAKER_EVIDENCE_MODE_SHADOW_PERCENT', '0')
+    writer()
+    assert 'writer' not in control.get().to_dict()
+    monkeypatch.setenv('SPEAKER_EVIDENCE_MODE_SHADOW_PERCENT', '100')
+    with ThreadPoolExecutor(max_workers=1) as writer_pool:
+        writing = writer_pool.submit(writer)
+        _wait_for_writer(control)
+        admitted = client.request('DELETE', '/v1/users/delete-account', headers=auth_headers, json={'erase_now': True})
+        assert admitted.status_code == 200, admitted.text
+        writing.result(timeout=20)
+    assert control.get().get('writer') == 'refused_marker_present'
+    assert child.get().update_time == expected_child
+
+    ((queue_path, task),) = cloud_tasks_client.create_calls
+    assert queue_path.endswith('/queues/account-deletion')
+    path = '/v1/users/account-deletion-wipes/run'
+    payload = json.loads(task.http_request.body)
+    headers = _worker_headers(retry_count=0)
+    headers['X-CloudTasks-QueueName'] = _QUEUE
+    headers['X-CloudTasks-TaskName'] = task.name.rsplit('/', 1)[-1]
+    assert client.post(path, json=payload).status_code == 403
+    with monkeypatch.context() as unavailable_job:
+        # Deliver the exact task and headers through OIDC, but simulate its
+        # durable job becoming non-actionable before the route can claim it.
+        unavailable_job.setattr(users_router, 'resolve_deletion_wipe_job_id', lambda _job: {'outcome': 'missing'})
+        dropped = client.post(path, json=payload, headers=headers)
+        assert dropped.json() == {'status': 'dropped', 'reason': 'missing'}
+    assert control.get().get('dispatch') == 'enqueued'
+    assert _verification_counts()['task_admitted'] == before['task_admitted']
+
+    # Seed a child under a missing conversation and user immediately before the
+    # second sweep, after the ordinary deletion traversal has already finished.
+    late_child = plane.document(f'users/{uid}/conversations/late/speaker_evidence/current')
+    real_sweep = user_data_deletion._sweep_speaker_evidence
+
+    def sweep(owner, firestore_client, delete_collection):
+        assert not root.get().exists
+        late_child.set({'version': 1})
+        real_sweep(owner, firestore_client, delete_collection)
+        assert not late_child.get().exists
+
+    monkeypatch.setattr(user_data_deletion, '_sweep_speaker_evidence', sweep)
+    if delivery == 'wrong_queue':
+        headers['X-CloudTasks-QueueName'] = 'wrong'
+    if delivery == 'wrong_task':
+        headers['X-CloudTasks-TaskName'] = 'wrong'
+    if delivery == 'unrelated':
+        payload.pop(speaker_evidence_verification.TASK_FIELD)
+    if delivery == 'unchecked_sweep':
+        monkeypatch.setenv(user_data_deletion.SPEAKER_EVIDENCE_ERASURE_CHECK_ENV, 'off')
+    if delivery == 'exact':
+        retry = client.post(path, json=payload, headers=headers)
+        assert retry.status_code == 500 and retry.json() == {'status': 'retry'}
+        assert control.get().get('dispatch') == 'enqueued'
+        assert (
+            _verification_counts()['task_completed_checked_zero_remaining']
+            == before['task_completed_checked_zero_remaining']
+        )
+        headers['X-CloudTasks-TaskRetryCount'] = '1'
+    completed = client.post(path, json=payload, headers=headers)
+    assert completed.json() == {'status': 'done'}, completed.text
+    duplicate = client.post(path, json=payload, headers=headers)
+    assert duplicate.json() == {'status': 'dropped', 'reason': 'completed'}
+    assert not child.get().exists and not late_child.get().exists and foreign.get().exists
+    assert metrics.REFUSED_MARKER_PRESENT._value.get() - refused_before == 1
+    assert metrics.COMMITTED_MARKER_PRESENT._value.get() - committed_before == 0
+    assert metrics.SWEEP_CHECKED._value.get() - checked_before == int(delivery != 'unchecked_sweep')
+    assert metrics.REMAINING._value.get() - remaining_before == 0
+    after = _verification_counts()
+    deltas = {name: after[name] - before[name] for name in before}
+    expected = dict.fromkeys(before, 0)
+    for key in ('writer_waiting', 'writer_released', 'writer_refused_marker_present', 'task_enqueued'):
+        expected[key] = 1
+    if delivery == 'exact':
+        expected.update(
+            task_admitted=2,
+            task_admitted_retry=1,
+            task_completed_checked_zero_remaining=1,
+            task_completed_after_writer_refusal=1,
+        )
+        completed_receipt = control.get().to_dict()
+        assert completed_receipt['executor_revision'] == 'worker-sync-rehearsal'
+        assert completed_receipt['dispatch'] == 'completed'
+        assert not {'job', 'task', 'marker_job', 'confirm_until', 'wait_until'}.intersection(completed_receipt)
+        assert speaker_evidence_verification.reserve_task(uid, 'other-job', queue_path, 'other-task') is None
+        assert control.get().to_dict() == completed_receipt
+    elif delivery == 'unchecked_sweep':
+        expected['task_admitted'] = 1
+    assert deltas == expected
+    control.delete()
+    foreign.delete()
+    plane.document(f'account_deletions/{uid}').delete()
+
+
+def test_synthetic_speaker_evidence_writer_is_single_use_and_times_out(
+    client, verification_emulator, monkeypatch, fresh_uid
+):
+    from database import speaker_evidence, speaker_evidence_verification as verification
+    from models.speaker_evidence import SpeakerEvidence
+
+    plane = verification_emulator
+    parent = plane.document(f'users/{fresh_uid}/conversations/fixture')
+    parent.set({})
+    _, control = _arm_verification(monkeypatch, plane, fresh_uid)
+    monkeypatch.setattr(verification, 'WRITER_WAIT_SECONDS', 0.3)
+    evidence = SpeakerEvidence(status='unavailable', policy_version='synthetic')
+    before = _verification_counts()
+    with pytest.raises(TimeoutError, match='verification writer timed out'):
+        speaker_evidence.store_evidence(fresh_uid, parent.id, evidence, firestore_client=plane)
+    assert control.get().get('writer') == 'timed_out'
+    child = parent.collection('speaker_evidence').document('current')
+    assert not child.get().exists
+    speaker_evidence.store_evidence(fresh_uid, parent.id, evidence, firestore_client=plane)
+    assert child.get().exists
+    after = _verification_counts()
+    deltas = {name: after[name] - before[name] for name in before}
+    assert {name: value for name, value in deltas.items() if value} == {'writer_waiting': 1, 'writer_timed_out': 1}
+    child.delete()
+    parent.delete()
+    control.delete()
+
+
+def test_synthetic_speaker_evidence_pending_receipt_and_expiry(client, verification_emulator, monkeypatch, fresh_uid):
+    from database import speaker_evidence_verification as verification
+
+    _configure_durable_account_deletion(monkeypatch)
+    token, control = _arm_verification(monkeypatch, verification_emulator, fresh_uid)
+    queue_path = tasks_v2.CloudTasksClient.queue_path(_PROJECT, _LOCATION, _QUEUE)
+    task = verification.reserve_task(fresh_uid, 'job', queue_path, 'task')
+    assert task is not None
+    marker = verification_emulator.document(f'account_deletions/{fresh_uid}')
+    marker.set({'wipe_job_id': 'job', 'wipe_status': 'pending'})
+    before = _verification_counts()
+    headers = _worker_headers(retry_count=0)
+    headers.update({'X-CloudTasks-QueueName': _QUEUE, 'X-CloudTasks-TaskName': 'task'})
+    deferred = client.post(
+        '/v1/users/account-deletion-wipes/run',
+        json={'job_id': 'job', verification.TASK_FIELD: token},
+        headers=headers,
+    )
+    assert deferred.status_code == 409, deferred.text
+    assert deferred.json() == {'status': 'retry', 'reason': 'callback_pending'}
+    assert marker.get().get('wipe_status') == 'pending'
+    assert control.get().get('dispatch') == 'pending'
+    assert verification.admit_task(fresh_uid, 'job', token, queue_path, _QUEUE, 'wrong', 0) == (False, None)
+
+    control.update({'confirm_until': datetime.now(timezone.utc) - timedelta(seconds=1)})
+    assert verification.admit_task(fresh_uid, 'job', token, queue_path, _QUEUE, 'task', 1) == (False, None)
+    assert _verification_counts()['task_enqueued'] == before['task_enqueued']
+
+    control.update({'expires_at': datetime.now(timezone.utc) - timedelta(seconds=1)})
+    verification.confirm_enqueue(task)
+    assert verification.wait_for_deletion_marker(fresh_uid, verification_emulator) is None
+    assert verification.reserve_task(fresh_uid, 'job', queue_path, 'second') is None
+    assert verification.admit_task(fresh_uid, 'job', token, queue_path, _QUEUE, 'task', 1) == (False, None)
+    after = _verification_counts()
+    assert {name: after[name] - before[name] for name in before if after[name] != before[name]} == {'task_deferred': 1}
+    control.delete()
+    marker.delete()
