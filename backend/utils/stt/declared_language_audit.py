@@ -108,6 +108,8 @@ def maybe_audit(
 ) -> None:
     """Queue one sampled audit of a declared-supported serving unit. Never raises, never blocks.
 
+    The caller passes a normalized code from Parakeet's finite supported-language set.
+
     ``cut`` is ``batch_language.probe_wav`` and ``vendor`` its ``audit_detect`` (passed in: that module imports this
     one). Inline work is the bounded sampling fingerprint and the submission; the cut and everything after run on the
     audit pool.
@@ -210,7 +212,6 @@ def _classify(declared: str, audio: bytes, cut, access, vendor) -> None:
         if not _probe_allowed():
             SKIPPED.labels('probe_cap').inc()
             return
-        bucket = language_gate.language_bucket(declared)
         if _self_gate_configured():
             verdict = language_gate.self_detect(probe, surface='batch_audit')
             if verdict is None:
@@ -227,7 +228,7 @@ def _classify(declared: str, audio: bytes, cut, access, vendor) -> None:
                 return
             heard, probability, classifier = decision.language, decision.confidence, 'vendor'
         AUDIT.labels(
-            bucket,
+            declared,
             language_gate.language_bucket(heard),
             language_class(heard),
             'true' if probability >= CONFIDENT else 'false',

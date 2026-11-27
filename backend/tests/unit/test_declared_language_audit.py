@@ -123,6 +123,16 @@ def test_a_declared_english_unit_is_audited_and_still_routed_as_declared(lab):
     assert lab.self_calls[0][0] <= 30 * 16000 * 2 + 100  # only the first 30 s of the 40 s unit
 
 
+@pytest.mark.parametrize(('language', 'code'), [('de-DE', 'de'), ('es_MX', 'es')])
+def test_audit_keeps_each_supported_declaration_in_its_own_series(lab, language, code):
+    before = audited(declared=code)
+
+    decision, _ = resolve(language=language)
+
+    assert (decision.language, decision.evidence) == (code, 'declared')
+    assert audited(declared=code) == before + 1
+
+
 def test_without_a_self_gate_the_vendor_probe_classifies(lab, monkeypatch):
     monkeypatch.setenv('HOSTED_LID_API_URL', '')
     monkeypatch.setenv('STT_GPU_FLEET_OFF', 'true')

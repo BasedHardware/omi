@@ -110,8 +110,9 @@ declared-language audit (`utils/stt/declared_language_audit.py`,
   `omi_batch_pipeline_declared_language_audit_total{declared, heard, heard_class, confident, classifier}`
   (`confident` is top-1 probability >= 0.8) and never changes a route.
 
-The leak share is `heard_class="unsupported"` over all audited rows. Report it twice: once
-with all rows, and once restricted to `confident="true"` in both numerator and denominator.
+For each normalized Parakeet-supported `declared` language code, divide rows with
+`heard_class="unsupported"` by all audited rows for that code. Report the counts and
+share again with `confident="true"` in both numerator and denominator.
 Skips count in `omi_batch_pipeline_declared_language_audit_skipped_total{reason}`.
 Units whose owner brought their own STT (BYOK or a custom provider) are never sampled
 (`reason="custom_stt"`), and owners without an Omi-funded allowance skip as `reason="not_funded"`,
