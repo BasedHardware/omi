@@ -107,7 +107,6 @@ DEFAULT_FLAGS = {
     'BATCH_PIPELINE_PERCENT': '100',
     'BATCH_PIPELINE_UID_ALLOWLIST': '',
     'BATCH_PIPELINE_MAX_ATTEMPTS': '5',
-    'BATCH_PIPELINE_SHARED_LIVE_ENABLED': 'false',
     'BATCH_PIPELINE_HEAD_PRIORITY_ENABLED': 'false',
     'BATCH_PIPELINE_ASYNC_PROJECTION_ENABLED': 'false',
     'BATCH_PIPELINE_RECOVERY_MODE': 'on',
@@ -969,7 +968,7 @@ class Simulation:
         for index in range(self.config.gpu_pumps):
             worker = SimWorker(self, index)
             pump = Pump(
-                Scheduler(self.store, pool='batch', worker_id=f'worker-{index}'),
+                Scheduler(self.store, worker_id=f'worker-{index}'),
                 worker,
                 batch_size=self.config.pump_batch_size,
                 capacity=lambda: PoolCapacity(

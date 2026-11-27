@@ -97,7 +97,7 @@ class Serving:
         self.metrics = metrics
         # Bounded process state: retry cursors and small-pull share cadence
         # must survive queue() calls on the serving/maintenance plane too.
-        self._queues = {pool: Scheduler(store, metrics=metrics, pool=pool) for pool in ('batch', 'live')}
+        self._queues = {'batch': Scheduler(store, metrics=metrics)}
         self.projector = projector
         self.outbox = outbox
         self.cleanup = cleanup
@@ -130,15 +130,13 @@ class Serving:
         self.held_pass_counts = dict.fromkeys(HELD_PASS_COUNT_KEYS, 0)
         self.held_pass_segments = 0
 
-    def queue(self, pool='batch'):
+    def queue(self):
         if not protected_share.enabled():
-            return Scheduler(self.store, metrics=self.metrics, pool=pool)
-        if pool not in self._queues:
-            raise ValueError('pool must be batch or live')
-        return self._queues[pool]
+            return Scheduler(self.store, metrics=self.metrics)
+        return self._queues['batch']
 
-    def pull(self, limit: int, capacity: PoolCapacity, *, pool: str = 'batch'):
-        return self.queue(pool).pull(time.time(), limit, capacity=capacity)
+    def pull(self, limit: int, capacity: PoolCapacity):
+        return self.queue().pull(time.time(), limit, capacity=capacity)
 
     def complete(self, result: WorkResult, token: str) -> bool:
         accepted = self.queue().complete(result, token, time.time())

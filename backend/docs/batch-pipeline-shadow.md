@@ -169,8 +169,8 @@ exist, within the existing fleet's <=4-node operator limit. Upload staging has
 ordinary ready/leased/retry work means `dropped`, with no queue or later retry.
 The worker rechecks ordinary flights and pool admission immediately before
 acquiring the existing exclusive GPU lock. Shadow never waits behind ordinary compute.
-The exact normal-pull capacity snapshot also gates shadow: no shared-live pool,
-stale sample, exhausted slot budget, reserved fresh capacity or oversized unit
+The exact normal-pull capacity snapshot also gates shadow: a stale sample,
+exhausted slot budget, reserved fresh capacity or oversized unit
 can start a shadow chain. A live arrival after CUDA starts waits for that one non-preemptible unit, as with any batch
 flight; shadow never starts a second unit ahead of waiting ordinary work.
 

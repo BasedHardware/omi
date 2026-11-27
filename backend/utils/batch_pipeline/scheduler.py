@@ -107,19 +107,8 @@ def _append(tx: Transaction, control: dict, job: dict) -> None:
         tx.put('control', control_key, control)
 
 
-def _pool_allows(job: dict, max_seconds: float, shared_gpu: bool) -> bool:
-    return within_unit_ceiling(job['duration_seconds'], max_seconds) and not (
-        shared_gpu and job.get('unit_kind', 'conversation') != 'capture_span'
-    )
-
-
-def _park_reason(job: dict, max_seconds: float, shared_gpu: bool) -> str:
-    """Bounded label for a head this pull cannot lease; privacy is labeled by the caller."""
-    if not within_unit_ceiling(job['duration_seconds'], max_seconds):
-        return 'pool_duration'
-    if shared_gpu and job.get('unit_kind', 'conversation') != 'capture_span':
-        return 'pool_unit_kind'
-    return 'shared_live_policy'
+def _pool_allows(job: dict, max_seconds: float) -> bool:
+    return within_unit_ceiling(job['duration_seconds'], max_seconds)
 
 
 class _OwnWrites:
@@ -203,7 +192,6 @@ def _prefer_merge_head(
     *,
     now: float,
     max_seconds: float,
-    shared_gpu: bool,
     candidates=None,
 ) -> dict:
     """Promote an indexed capture head with O(1) queries, independent of FIFO depth.
@@ -226,7 +214,7 @@ def _prefer_merge_head(
         head['segment_id'] == job['segment_id']
         or head['state'] != 'ready'
         or head['priority'] != job['priority']
-        or not _pool_allows(head, max_seconds, shared_gpu)
+        or not _pool_allows(head, max_seconds)
     ):
         return job
     previous = tx.ready_predecessor(job['owner_key'], job['priority'], head['segment_id'])
@@ -258,7 +246,7 @@ def owns_lease(job: dict, token: str, now: float) -> bool:
     return job.get('state') == 'leased' and job.get('token') == token and job['lease_until'] > now
 
 
-def _prefer_protected(tx, queue, job, budget, now, max_seconds, shared_gpu):
+def _prefer_protected(tx, queue, job, budget, now, max_seconds):
     """One indexed page per owner visit, sharing the original FIFO and DRR credit.
 
     Old workers see a valid ordinary queue at every commit. A failed splice
@@ -273,7 +261,7 @@ def _prefer_protected(tx, queue, job, budget, now, max_seconds, shared_gpu):
     queue['protected_after'] = None
     for candidate in page:
         queue['protected_after'] = [candidate['capture_at'], candidate['segment_id']]
-        if not protected_share.eligible(candidate, now) or not _pool_allows(candidate, max_seconds, shared_gpu):
+        if not protected_share.eligible(candidate, now) or not _pool_allows(candidate, max_seconds):
             continue
         try:
             check_unit_privacy(tx, candidate)
@@ -343,16 +331,15 @@ class Scheduler:
         store: Store,
         *,
         metrics: QueueMetrics | None = None,
-        pool: str = 'batch',
         worker_id: str = '',
         recovery_caller: RecoveryCaller = RecoveryCaller.UNKNOWN,
     ):
-        if pool not in {'batch', 'live'}:
-            raise ValueError('pool must be batch or live')
         self.store = store
         self.recovery_caller = recovery_caller
         self.metrics = metrics
-        self.pool = pool
+        # The shared-live GPU pull is retired; the dedicated batch pool is the
+        # only queue this scheduler serves.
+        self.pool = 'batch'
         self.worker_id = worker_id or uuid.uuid4().hex
         self._contention_failures = 0
         self._contention_backoff_until = 0.0
@@ -453,27 +440,19 @@ class Scheduler:
             if self._contention_backoff_until > monotonic():
                 return []
             contention_generation = self._contention_generation
-        if self.pool == 'live' and (capacity is None or not capacity.shared_with_live):
-            return []
-        if self.pool == 'batch' and capacity is not None and capacity.shared_with_live:
-            return []
-        # No snapshot is the dedicated-batch worker contract only. Shared live
-        # callers must supply a fresh exclusive-admission snapshot every pull.
+        # No snapshot is the dedicated-batch worker contract only.
         allow_backfill, max_seconds, backfill_budget = True, 7200.0, limit
         if capacity is not None:
-            slots, allow_backfill, max_seconds = capacity.limits(now, shared_live_enabled=True)
+            slots, allow_backfill, max_seconds = capacity.limits(now)
             limit = min(limit, slots)
             backfill_budget = max(0, slots - capacity.reserved_fresh_slots)
         result = []
         contention_deferred = False
-        shared_gpu_id = capacity.gpu_id if capacity is not None and capacity.shared_with_live else None
         # One shard transaction may lease several units from the ring it has
         # already read; the kill switch restores one lease per transaction.
-        multi = pull_multi_lease_enabled() and shared_gpu_id is None
-        # Only a dedicated-batch lane may borrow past claimed fresh shards; a
-        # shared live GPU takes one short item and stays strictly fresh-first.
-        borrow = borrow_when_fresh_busy and shared_gpu_id is None and pull_busy_borrow_enabled()
-        protected = protected_share.enabled() and shared_gpu_id is None
+        multi = pull_multi_lease_enabled()
+        borrow = borrow_when_fresh_busy and pull_busy_borrow_enabled()
+        protected = protected_share.enabled()
         discovery_budget = [protected_share.READY_OWNER_BUDGET, 0, protected_share.READY_OWNER_BUDGET]
         service_plan = {}
         while len(result) < limit:
@@ -483,7 +462,6 @@ class Scheduler:
                     now,
                     allow_backfill=allow_backfill and backfill_budget > 0,
                     max_seconds=max_seconds,
-                    shared_gpu_id=shared_gpu_id,
                     max_fresh=remaining,
                     max_backfill=min(remaining, backfill_budget),
                     borrow_when_fresh_busy=borrow,
@@ -533,8 +511,6 @@ class Scheduler:
                 break
             result.extend(leases)
             backfill_budget -= sum(lease.item.priority != Priority.FRESH for lease in leases)
-            if capacity is not None and capacity.shared_with_live:
-                break  # One non-preemptible short item, never a mixed long batch.
         if not contention_deferred:
             with self._contention_lock:
                 if self._contention_generation == contention_generation:
@@ -602,7 +578,6 @@ class Scheduler:
         *,
         allow_backfill: bool,
         max_seconds: float,
-        shared_gpu_id: str | None = None,
         max_fresh: int = 1,
         max_backfill: int = 1,
         borrow_when_fresh_busy: bool = False,
@@ -669,14 +644,13 @@ class Scheduler:
                         shard,
                         priority,
                         max_seconds,
-                        shared_gpu_id,
                         max_leases,
                         protected_phase=protected_phase,
                         discovery_budget=discovery_budget,
                         service=('protected' if protected_phase else priority.name.lower()) if protected else None,
                     )
                 else:
-                    receipts, eligible = self._pull_shard(now, shard, priority, max_seconds, shared_gpu_id, max_leases)
+                    receipts, eligible = self._pull_shard(now, shard, priority, max_seconds, max_leases)
                 if receipts:
                     if protected and priority != Priority.FRESH:
                         service_plan['quota'][service_key] -= len(receipts)
@@ -692,8 +666,6 @@ class Scheduler:
                             except Exception:
                                 pass  # Metrics cannot turn an issued lease into a failed pull.
                     return [lease for lease, _, _ in receipts]
-                if eligible == 'reserved':
-                    return []
                 if eligible == 'busy':
                     excluded.add(shard)
                     busy = True
@@ -728,7 +700,6 @@ class Scheduler:
         shard,
         priority,
         max_seconds,
-        shared_gpu_id,
         max_leases=1,
         *,
         protected_phase=False,
@@ -763,10 +734,6 @@ class Scheduler:
                 # Buffered release commits atomically with the pull. Reading
                 # this fence also invalidates a paused holder after takeover.
                 tx.put('pull_claims', shard, {'token': '', 'expires_at': 0.0})
-            gpu_key = owner_key(shared_gpu_id) if shared_gpu_id is not None else ''
-            gpu = tx.get('gpus', gpu_key) if gpu_key else {}
-            if gpu.get('token'):
-                return None, 'reserved', observations
             control = read_control(tx, shard)
             consume_frontier_hint(tx, control, int(priority), current_time())
             ring = control['rings'][str(int(priority))]
@@ -802,9 +769,7 @@ class Scheduler:
                     ring.pop(0)  # A completed purge may have removed this queue.
                     continue
                 if protected_phase and queue_key not in eligible_queues and queue_key not in blocked:
-                    selected = _prefer_protected(
-                        tx, queue, job, protected_budget, current_time(), max_seconds, bool(gpu_key)
-                    )
+                    selected = _prefer_protected(tx, queue, job, protected_budget, current_time(), max_seconds)
                     tx.put('queues', queue_key, queue)
                     if selected is None:
                         blocked.add(queue_key)
@@ -835,7 +800,6 @@ class Scheduler:
                                 observations,
                                 now=now,
                                 max_seconds=max_seconds,
-                                shared_gpu=bool(gpu_key),
                                 candidates=candidates,
                             )
                         job.setdefault('unit_kind', 'conversation')
@@ -847,10 +811,8 @@ class Scheduler:
                                     (job['conversation_id'],) if job.get('conversation_id') else (),
                                     job.get('privacy_generation'),
                                 )
-                            policy = stage_in_transaction(tx, job, 'scheduler', candidates=candidates)
-                            allowed = _pool_allows(job, max_seconds, bool(gpu_key)) and (
-                                not gpu_key or policy.shared_live
-                            )
+                            stage_in_transaction(tx, job, 'scheduler', candidates=candidates)
+                            allowed = _pool_allows(job, max_seconds)
                         except BatchPrivacyBlocked:
                             allowed, park = False, 'privacy'
                         if allowed:
@@ -861,7 +823,7 @@ class Scheduler:
                         else:
                             blocked.add(queue_key)
                             # Parking is otherwise silent: the owner's whole FIFO waits behind this head.
-                            park = park or _park_reason(job, max_seconds, bool(gpu_key))
+                            park = park or 'pool_duration'
                             observations.append((f'parked_{park}', None))
                 if queue_key in blocked:
                     ring.append(ring.pop(0))
@@ -915,18 +877,11 @@ class Scheduler:
                     token=token,
                     attempt=job['attempt'] + 1,
                     lease_until=now + LEASE_SECONDS,
-                    shared_gpu_key=gpu_key,
                 )
                 if not job.get('requires_compute_admission') and not cap_dispatch_enabled(job['owner_id'], 'batch'):
                     # The pump dispatches this lease without admission, so it
                     # is a real commitment: a parked hold must not hide it.
                     job.pop('last_policy_hold', None)
-                if gpu_key:
-                    tx.put(
-                        'gpus',
-                        gpu_key,
-                        {'token': token, 'segment_id': job['segment_id'], 'lease_until': job['lease_until']},
-                    )
                 tx.put('queues', queue_key, queue)
                 tx.put('jobs', job['segment_id'], job)
                 control[field(int(priority), 'service')] += cost / owner_count
@@ -1004,14 +959,7 @@ class Scheduler:
             job = tx.get('jobs', segment_id)
             if not owns_lease(job, token, now):
                 return False
-            gpu_key = job.get('shared_gpu_key')
-            gpu = tx.get('gpus', gpu_key) if gpu_key else {}
-            if gpu_key and gpu.get('token') != token:
-                return False
             job['lease_until'] = max(job['lease_until'], now + LEASE_SECONDS)
-            if gpu_key:
-                gpu['lease_until'] = job['lease_until']
-                tx.put('gpus', gpu_key, gpu)
             tx.put('jobs', segment_id, job)
             return True
 
@@ -1420,28 +1368,6 @@ class Scheduler:
 
             record_transition('held_redrive_budget_spent')
         return bool(outcome)
-
-    def acknowledge_gpu_idle(self, gpu_id: str, token: str) -> bool:
-        """Only the hardware admission owner may call this after GPU quiescence.
-
-        Complete/fail/lease expiry never proves non-preemptible inference stopped.
-        An orphaned shared reservation stays closed until that owner verifies idle.
-        """
-        if not gpu_id or len(gpu_id) > 128 or not token:
-            raise ValueError('bounded GPU identity and current reservation token required')
-
-        def commit(tx):
-            key = owner_key(gpu_id)
-            gpu = tx.get('gpus', key)
-            if not gpu.get('token'):
-                return gpu.get('released_token') == token
-            if gpu['token'] != token:
-                return False
-            gpu.update(token='', lease_until=0.0, released_token=token)
-            tx.put('gpus', key, gpu)
-            return True
-
-        return self.store.run(commit)
 
 
 def held_redrives(job: dict) -> int:

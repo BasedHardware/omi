@@ -104,7 +104,6 @@ RESOLUTION_EDGES = {
 SNAPSHOT_GETTERS = {
     'enabled_for',
     'live_record_enabled_for',
-    'shared_live_enabled',
     'max_worker_attempts',
     'authoritative_labels_enabled',
     'require_live_target_enabled',

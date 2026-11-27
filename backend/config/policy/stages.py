@@ -33,7 +33,6 @@ def projection_phase_sample_percent() -> int:
 class SchedulerPolicy(PolicyPart):
     source_role: str = 'scheduler'
     head_priority: bool = False
-    shared_live: bool = False
     max_attempts: int = 5
 
     def __post_init__(self):
@@ -117,7 +116,6 @@ def resolve_stage_policy(uid: str, stage: str, *, flags=None, obligation=None) -
         return SchedulerPolicy(
             source_role=role,
             head_priority=boolean(env, 'BATCH_PIPELINE_HEAD_PRIORITY_ENABLED'),
-            shared_live=boolean(env, 'BATCH_PIPELINE_SHARED_LIVE_ENABLED', strip=False),
             max_attempts=attempts,
         )
     if stage == 'recovery':

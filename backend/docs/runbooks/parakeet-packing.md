@@ -48,8 +48,7 @@ can starve historical work; watch oldest backfill age and upstream fresh/
 backfill delivery deadlines (open <=1min, normal p95 <=5min, ceiling <=60min).
 If those gates fail, stop expansion and restore dedicated backfill capacity or
 reduce admitted backfill, rather than letting historical work jump queued live
-requests. This PR does not admit the dedicated record worker onto live GPUs:
-that worker still rejects shared-live mode. Stage C does zero ASR.
+requests. The dedicated record worker never runs on live GPUs. Stage C does zero ASR.
 The older streaming-shaped HTTP caller marks `X-Omi-STT-Surface: live-stream`;
 only packing-enabled service pods promote that marker to live priority, so its
 dark-merge behavior is unchanged. Modern windows keep their `live-window` marker.

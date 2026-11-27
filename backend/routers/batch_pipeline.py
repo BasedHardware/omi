@@ -68,7 +68,6 @@ class WorkerRequest(BaseModel):
 
 class PullRequest(WorkerRequest):
     limit: int = Field(default=8, ge=1, le=32, strict=True)
-    pool: Literal['batch', 'live'] = 'batch'
     capacity: PoolCapacity
 
 
@@ -96,15 +95,10 @@ class RedriveRequest(WorkerRequest):
     segment_id: str = Field(min_length=1, max_length=128, pattern=r'^[^/]+$')
 
 
-class IdleRequest(WorkerRequest):
-    gpu_id: str = Field(min_length=1, max_length=128)
-    token: str = Field(min_length=1, max_length=128)
-
-
 @router.post('/pull', include_in_schema=False)
 async def pull(body: PullRequest):
     try:
-        leases = await run_blocking(db_executor, body.service().pull, body.limit, body.capacity, pool=body.pool)
+        leases = await run_blocking(db_executor, body.service().pull, body.limit, body.capacity)
     except BatchPrivacyBlocked:
         return {'leases': []}
     return {'leases': [{**asdict(lease), 'item': lease.item.to_dict(include_nulls=True)} for lease in leases]}
@@ -266,12 +260,6 @@ async def commit_wake(body: CommitWakeRequest):
     for owner_id in owners:
         await reliability_experiments.warm(owner_id)
     return {'accepted': wake.request(owners) if owners else 0}
-
-
-@router.post('/gpu-idle', include_in_schema=False)
-async def gpu_idle(body: IdleRequest):
-    accepted = await run_blocking(db_executor, body.service().queue().acknowledge_gpu_idle, body.gpu_id, body.token)
-    return {'accepted': accepted}
 
 
 @router.post('/reconcile', include_in_schema=False)

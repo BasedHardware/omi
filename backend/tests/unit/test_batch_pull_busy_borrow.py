@@ -101,28 +101,6 @@ def test_kill_switch_restores_strict_fresh_first_on_every_lane(monkeypatch):
     assert store.rows['jobs', 'deep-unit']['state'] == 'ready'
 
 
-@pytest.mark.parametrize('shared, expected', [(False, [True]), (True, [False])])
-def test_shared_live_gpu_never_borrows(monkeypatch, shared, expected):
-    queue = Scheduler(MemoryStore())
-    seen = []
-
-    def pull_one(now, **kwargs):
-        seen.append(kwargs['borrow_when_fresh_busy'])
-        return []
-
-    monkeypatch.setattr(queue, '_pull_one', pull_one)
-    if shared:
-        queue.pool = 'live'
-        capacity = PoolCapacity(1, 1, shared_with_live=True, gpu_id='synthetic-gpu')
-    else:
-        capacity = PoolCapacity(1, 8)
-    monkeypatch.setattr(
-        PoolCapacity, 'limits', lambda self, now, shared_live_enabled: (self.available_slots, True, 7200.0)
-    )
-    queue.pull(1, 8, capacity=capacity, borrow_when_fresh_busy=True)
-    assert seen == expected
-
-
 @pytest.mark.asyncio
 async def test_only_lanes_after_the_first_ask_to_borrow(monkeypatch):
     queue = Scheduler(MemoryStore())

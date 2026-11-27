@@ -127,7 +127,6 @@ environments:
           BATCH_PIPELINE_UNIT_SECONDS:
             value: '3600'
             category: reliability
-          BATCH_PIPELINE_SHARED_LIVE_ENABLED: {value: 'false', category: rollout}
           AUDIO_ARCHIVE_LIVE_ENABLED: {value: 'true', category: rollout}
           AUDIO_ARCHIVE_READ_ENABLED: {value: 'true', category: rollout}
           AUDIO_ARCHIVE_STOP_PCM_ENABLED: {value: 'false', category: rollout}
@@ -1148,7 +1147,6 @@ environments:
             BATCH_PIPELINE_UNIT_SECONDS:
               value: '3600'
               category: reliability
-            BATCH_PIPELINE_SHARED_LIVE_ENABLED: {value: 'false', category: rollout}
             BUCKET_TEMPORAL_SYNC_LOCAL:
               category: storage_retention
               value: syncing-local-development
@@ -1560,7 +1558,6 @@ environments:
             BATCH_PIPELINE_UNIT_SECONDS:
               value: '3600'
               category: reliability
-            BATCH_PIPELINE_SHARED_LIVE_ENABLED: {value: 'false', category: rollout}
             PROMETHEUS_SIDECAR_PORT:
               value: '9090'
               category: telemetry
@@ -1990,7 +1987,6 @@ environments:
             BATCH_PIPELINE_UNIT_SECONDS:
               value: '3600'
               category: reliability
-            BATCH_PIPELINE_SHARED_LIVE_ENABLED: {value: 'false', category: rollout}
             PROMETHEUS_SIDECAR_PORT:
               value: '9090'
               category: telemetry
@@ -2391,7 +2387,6 @@ environments:
             BATCH_PIPELINE_UNIT_SECONDS:
               value: '3600'
               category: reliability
-            BATCH_PIPELINE_SHARED_LIVE_ENABLED: {value: 'false', category: rollout}
             PROMETHEUS_SIDECAR_PORT:
               value: '9090'
               category: telemetry
@@ -3061,7 +3056,6 @@ environments:
           BATCH_PIPELINE_UNIT_SECONDS:
             value: '3600'
             category: reliability
-          BATCH_PIPELINE_SHARED_LIVE_ENABLED: {value: 'false', category: rollout}
           AUDIO_ARCHIVE_LIVE_ENABLED: {value: 'true', category: rollout}
           AUDIO_ARCHIVE_READ_ENABLED: {value: 'true', category: rollout}
           AUDIO_ARCHIVE_STOP_PCM_ENABLED: {value: 'false', category: rollout}
@@ -4252,7 +4246,6 @@ environments:
             BATCH_PIPELINE_UNIT_SECONDS:
               value: '3600'
               category: reliability
-            BATCH_PIPELINE_SHARED_LIVE_ENABLED: {value: 'false', category: rollout}
             BUCKET_TEMPORAL_SYNC_LOCAL:
               category: storage_retention
               value: syncing-local
@@ -4848,7 +4841,6 @@ environments:
             BATCH_PIPELINE_UNIT_SECONDS:
               value: '3600'
               category: reliability
-            BATCH_PIPELINE_SHARED_LIVE_ENABLED: {value: 'false', category: rollout}
             PROMETHEUS_SIDECAR_PORT:
               value: '9090'
               category: telemetry
@@ -5448,7 +5440,6 @@ environments:
             BATCH_PIPELINE_UNIT_SECONDS:
               value: '3600'
               category: reliability
-            BATCH_PIPELINE_SHARED_LIVE_ENABLED: {value: 'false', category: rollout}
             PROMETHEUS_SIDECAR_PORT:
               value: '9090'
               category: telemetry
@@ -6000,7 +5991,6 @@ environments:
             BATCH_PIPELINE_UNIT_SECONDS:
               value: '3600'
               category: reliability
-            BATCH_PIPELINE_SHARED_LIVE_ENABLED: {value: 'false', category: rollout}
             PROMETHEUS_SIDECAR_PORT:
               value: '9090'
               category: telemetry
@@ -6526,7 +6516,6 @@ environments:
             BATCH_PIPELINE_UNIT_SECONDS:
               value: '3600'
               category: reliability
-            BATCH_PIPELINE_SHARED_LIVE_ENABLED: {value: 'false', category: rollout}
             PROMETHEUS_SIDECAR_PORT:
               value: '9090'
               category: telemetry

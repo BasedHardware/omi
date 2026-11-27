@@ -442,10 +442,7 @@ def test_process_composes_a_pump_with_fresh_dedicated_capacity(monkeypatch):
             assert captured['timings'] is model_worker.timings is captured['worker'].timings
             snapshot = captured['capacity']()
             assert snapshot.available_slots == 4 and snapshot.max_item_seconds == 3600
-            assert (
-                not snapshot.shared_with_live
-                and snapshot.limits(snapshot.observed_at, shared_live_enabled=False)[0] == 4
-            )
+            assert snapshot.limits(snapshot.observed_at)[0] == 4
             stop.set()
 
     monkeypatch.setattr(runtime, 'Pump', Pump)
@@ -492,12 +489,12 @@ def test_worker_pipeline_depth_ships_on_and_one_restores_serial_pump(monkeypatch
     assert worker_pipeline_depth() == expected
 
 
-def test_process_refuses_shared_live_before_model_startup(monkeypatch):
+def test_process_refuses_retired_shared_live_pool_kind_before_model_startup(monkeypatch):
     monkeypatch.setenv('BATCH_PIPELINE_POOL_KIND', 'shared_live')
     monkeypatch.delenv('BATCH_PIPELINE_UNIT_SECONDS', raising=False)
     monkeypatch.delenv('BATCH_PIPELINE_PADDED_SECONDS', raising=False)
     monkeypatch.setattr(runtime, 'load_worker', lambda *a: pytest.fail('shared-live loaded local GPU models'))
-    with pytest.raises(ValueError, match='dedicated'):
+    with pytest.raises(ValueError, match='unknown GPU pool kind'):
         asyncio.run(runtime.run_process(object(), object(), CollectorRegistry(), runtime.RuntimeState()))
 
 
