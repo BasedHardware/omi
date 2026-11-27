@@ -371,9 +371,16 @@ class EvidenceGateTest(unittest.TestCase):
                 "status": "PASS",
                 "run_id": CANARY_RUN,
                 "source_sha": SOURCE,
+                "mode": "canary_only",
                 "candidate_image": CANDIDATE,
                 "baseline_image": control.BASELINE,
                 "dry_run": "server",
+                "template_parity": {
+                    "live_deployment": control.TARGET,
+                    "canary_deployment": f"prod-omi-pusher-canary-{CANARY_RUN}",
+                    "excluded": ["containers[*].image"],
+                    "classes": {name: "equal" for name in control.PARITY_CLASSES},
+                },
                 "deployment": {
                     "namespace": control.NAMESPACE,
                     "name": f"prod-omi-pusher-canary-{CANARY_RUN}",
@@ -420,6 +427,8 @@ class EvidenceGateTest(unittest.TestCase):
             ("wrong-preservation", "preserved_canary_review_missing"),
             ("noncanonical-evidence", "canonical_canary_refused"),
             ("wrong-inverse", "canary_inverse_receipt_refused"),
+            ("wrong-inverse-mode", "canary_inverse_receipt_refused"),
+            ("missing-parity", "canary_inverse_receipt_refused"),
         )
         for case, reason in cases:
             with self.subTest(case=case):
@@ -439,6 +448,10 @@ class EvidenceGateTest(unittest.TestCase):
                     self.packet["canary"]["preservation_review"]["proof_sha256"] = "f" * 64
                 elif case == "noncanonical-evidence":
                     validation = ["canary_digest_mismatch"]
+                elif case == "wrong-inverse-mode":
+                    artifacts["inverse_receipt"]["mode"] = "deploy"
+                elif case == "missing-parity":
+                    artifacts["inverse_receipt"]["template_parity"]["classes"]["container_env"] = "unknown"
                 else:
                     artifacts["inverse_receipt"]["preconditions"]["container"] = "listener"
                 mocks = self.canary_mocks(artifacts, validation=validation)
@@ -662,6 +675,70 @@ class MainTest(unittest.TestCase):
         self.assertNotIn("PUSHER_IMAGE_ONLY_PACKET", match.group(1))
         self.assertNotIn("PUSHER_IMAGE_ONLY_ISOLATED_KUBECONFIG", match.group(1))
         self.assertIn("inputs.pusher_image_only_evidence", match.group(1))
+
+
+class CanaryOnlyWorkflowTest(unittest.TestCase):
+    """The canary_only stop is the canary evidence producer for the image-only promote."""
+
+    PROMOTE_STEPS = (
+        "Apply non-secret pusher runtime config",
+        "Verify reconciled pusher ConfigMap and Secret references",
+        "Verify live Pusher surge capacity and digest render",
+        "Deploy Pusher to GKE cluster using Helm",
+        "Record exact live production Pusher deployment receipt",
+        "Reverify live finalization alert route after production rollout",
+        "Verify final production Pusher matches the canary-qualified candidate",
+        "Upload exact live production Pusher deployment receipt",
+        "Generate deployment summary",
+        "Notify deployment status on Telegram",
+    )
+
+    def setUp(self):
+        self.text = (control.ROOT / ".github/workflows/gcp_backend_pusher.yml").read_text(encoding="utf-8")
+        deploy = self.text.split("\n  deploy:\n", 1)[1].split("\n  pusher-image-only:", 1)[0]
+        self.job = deploy
+        self.blocks = {}
+        for block in re.split(r"\n      - name: ", deploy):
+            name, _, rest = block.partition("\n")
+            self.blocks[name.strip()] = rest
+
+    def test_new_dispatch_input_and_job_stop(self):
+        inputs = self.text.split("workflow_dispatch:", 1)[1].split("\n# ", 1)[0]
+        self.assertIn("pusher_canary_only:", inputs)
+        self.assertIn("type: boolean", inputs)
+        self.assertIn("CANARY_ONLY: ${{ inputs.pusher_canary_only }}", self.job)
+
+    def test_every_promote_step_is_gated_but_canary_steps_are_not(self):
+        for name in self.PROMOTE_STEPS:
+            with self.subTest(step=name):
+                self.assertIn(name, self.blocks)
+                self.assertIn("env.CANARY_ONLY != 'true'", self.blocks[name])
+        for name in (
+            "Create isolated production Pusher and listener canary",
+            "Prove the canary inverse admission at one replica",
+            "Upload protected production Pusher canary evidence",
+            "Remove isolated production Pusher canary",
+        ):
+            with self.subTest(step=name):
+                self.assertIn(name, self.blocks)
+                self.assertNotIn("env.CANARY_ONLY != 'true'", self.blocks[name])
+
+    def test_stop_sits_after_canary_cleanup_and_before_shared_config(self):
+        order = [
+            "Create isolated production Pusher and listener canary",
+            "Prove the canary inverse admission at one replica",
+            "Remove isolated production Pusher canary",
+            "Apply non-secret pusher runtime config",
+        ]
+        offsets = [self.job.index(name) for name in order]
+        self.assertEqual(offsets, sorted(offsets))
+        self.assertIn("--mode \"$mode\"", self.blocks["Prove the canary inverse admission at one replica"])
+        self.assertIn("mode=canary_only", self.blocks["Prove the canary inverse admission at one replica"])
+
+    def test_canary_only_validates_production_pusher_inputs(self):
+        validation = self.text.split("Validate Environment Input", 1)[1]
+        self.assertIn("CANARY_ONLY_INPUT", validation)
+        self.assertIn("canary_only requires a prod Pusher dispatch", validation)
 
 
 if __name__ == "__main__":

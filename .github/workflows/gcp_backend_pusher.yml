@@ -79,6 +79,11 @@ on:
         description: 'Protected production Pusher image-only evidence: non-secret JSON of run and record ids (schema 2)'
         required: false
         default: ''
+      pusher_canary_only:
+        description: 'Production Pusher only: stop after the isolated canary qualifies (no shared-config apply, no Helm)'
+        required: false
+        default: false
+        type: boolean
 
 # The LLM Gateway path reapplies shared backend-secrets; standalone pusher only
 # mutates its own GKE release and therefore keeps a separate environment lock.
@@ -102,6 +107,11 @@ jobs:
   deploy:
     if: inputs.pusher_image_only == '' || inputs.pusher_image_only == 'disabled'
     environment: ${{ github.event.inputs.environment == 'prod' && 'prod' || 'development' }}
+    env:
+      # A canary_only run stops after the isolated canary and its inverse receipt.
+      # Every promote step below is gated on this, so no shared-config apply and no
+      # Helm happen; a green conclusion means "canary qualified".
+      CANARY_ONLY: ${{ inputs.pusher_canary_only }}
     permissions:
       actions: 'read'
       contents: 'read'
@@ -114,7 +124,23 @@ jobs:
         # through env, never inline ${{ }} interpolation (script injection).
         env:
           PUSHER_ROLE_IMAGE_DIGEST_INPUT: ${{ github.event.inputs.pusher_role_image_digest }}
+          CANARY_ONLY_INPUT: ${{ github.event.inputs.pusher_canary_only }}
+          CANARY_ONLY_ENV: ${{ github.event.inputs.environment }}
+          CANARY_ONLY_SERVICE: ${{ env.SERVICE }}
+          CANARY_ONLY_DIGEST: ${{ github.event.inputs.pusher_image_digest }}
+          CANARY_ONLY_QUALIFICATION: ${{ github.event.inputs.pusher_dev_qualification_run_id }}
+          CANARY_ONLY_SKIP_CAPACITY: ${{ github.event.inputs.skip_live_capacity_gate }}
+          CANARY_ONLY_SKIP_LOCK: ${{ github.event.inputs.break_glass_lock }}
         run: |
+          if [[ "${CANARY_ONLY_INPUT:-false}" == "true" ]]; then
+            if [[ "$CANARY_ONLY_ENV" != "prod" || "$CANARY_ONLY_SERVICE" != "pusher" ||
+                  ! "$CANARY_ONLY_DIGEST" =~ ^sha256:[0-9a-f]{64}$ ||
+                  ! "$CANARY_ONLY_QUALIFICATION" =~ ^[1-9][0-9]*$ ||
+                  "$CANARY_ONLY_SKIP_CAPACITY" == "true" || "$CANARY_ONLY_SKIP_LOCK" == "true" ]]; then
+              echo "canary_only requires a prod Pusher dispatch with the qualified digest and qualification run, and no break-glass options." >&2
+              exit 1
+            fi
+          fi
           if [[ "${{ github.event.inputs.environment }}" != "development" && "${{ github.event.inputs.environment }}" != "prod" ]]; then
             echo "Invalid environment: ${{ github.event.inputs.environment }}. Must be 'development' or 'prod'."
             exit 1
@@ -673,9 +699,13 @@ jobs:
       # canary move and before any Pusher promote. It is read-only.
       - name: Prove the canary inverse admission at one replica
         if: env.SERVICE == 'pusher' && github.event.inputs.environment == 'prod'
+        env:
+          CANARY_ONLY: ${{ inputs.pusher_canary_only }}
         run: |
           set -euo pipefail
           test -n "$PUSHER_CANARY" -a -n "$PUSHER_IMAGE_REPOSITORY" -a -n "$PUSHER_IMAGE_DIGEST"
+          mode=deploy
+          if [[ "${CANARY_ONLY:-false}" == "true" ]]; then mode=canary_only; fi
           python3 .github/scripts/pusher_canary_inverse.py \
             --namespace prod-omi-backend \
             --name "$PUSHER_CANARY" \
@@ -683,6 +713,7 @@ jobs:
             --baseline-deployment prod-omi-pusher \
             --run-id "$GITHUB_RUN_ID" \
             --source-sha "$CHECKED_OUT_SHA" \
+            --mode "$mode" \
             --output pusher-prod-canary-inverse-receipt.json
 
       - name: Exercise isolated production Pusher finalization semantics
@@ -789,7 +820,7 @@ jobs:
           exit "$cleanup_failed"
 
       - name: Apply non-secret pusher runtime config
-        if: env.SERVICE == 'pusher'
+        if: env.SERVICE == 'pusher' && env.CANARY_ONLY != 'true'
         env:
           LADDER_V1_PLUS_MONTH_PRICE_ID: ${{ vars.LADDER_V1_PLUS_MONTH_PRICE_ID }}
           LADDER_V1_PLUS_YEAR_PRICE_ID: ${{ vars.LADDER_V1_PLUS_YEAR_PRICE_ID }}
@@ -826,14 +857,14 @@ jobs:
         run: backend/scripts/deploy-backend-config.sh
 
       - name: Verify reconciled pusher ConfigMap and Secret references
-        if: env.SERVICE == 'pusher'
+        if: env.SERVICE == 'pusher' && env.CANARY_ONLY != 'true'
         run: |
           python3 -m pip install -q pyyaml
           python3 backend/scripts/verify_pusher_config_references.py \
             --environment ${{ vars.ENV }} --namespace ${{ vars.ENV }}-omi-backend
 
       - name: Verify live Pusher surge capacity and digest render
-        if: env.SERVICE == 'pusher' && github.event.inputs.skip_live_capacity_gate != 'true'
+        if: env.SERVICE == 'pusher' && github.event.inputs.skip_live_capacity_gate != 'true' && env.CANARY_ONLY != 'true'
         run: |
           python3 backend/scripts/verify_pusher_live_deployment_gate.py \
             --environment ${{ vars.ENV }} \
@@ -841,6 +872,7 @@ jobs:
             --image "$PUSHER_IMAGE_REFERENCE"
 
       - name: Deploy Pusher to GKE cluster using Helm
+        if: env.CANARY_ONLY != 'true'
         env:
           LLM_GATEWAY_GSA: ${{ vars.LLM_GATEWAY_GSA }}
           ENVIRONMENT: ${{ vars.ENV }}
@@ -885,7 +917,7 @@ jobs:
           fi
 
       - name: Record exact live production Pusher deployment receipt
-        if: env.SERVICE == 'pusher' && github.event.inputs.environment == 'prod'
+        if: env.SERVICE == 'pusher' && github.event.inputs.environment == 'prod' && env.CANARY_ONLY != 'true'
         run: |
           python3 backend/scripts/pusher_release_receipt.py record-live \
             --environment "${{ vars.ENV }}" \
@@ -897,7 +929,7 @@ jobs:
             --output pusher-prod-deployment-receipt.json
 
       - name: Reverify live finalization alert route after production rollout
-        if: env.SERVICE == 'pusher' && github.event.inputs.environment == 'prod'
+        if: env.SERVICE == 'pusher' && github.event.inputs.environment == 'prod' && env.CANARY_ONLY != 'true'
         env:
           MONITOR_GRAFANA_TOKEN: ${{ secrets.MONITOR_GRAFANA_TOKEN }}
         run: |
@@ -915,7 +947,7 @@ jobs:
             --attempts 12
 
       - name: Verify final production Pusher matches the canary-qualified candidate
-        if: env.SERVICE == 'pusher' && github.event.inputs.environment == 'prod'
+        if: env.SERVICE == 'pusher' && github.event.inputs.environment == 'prod' && env.CANARY_ONLY != 'true'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -941,7 +973,7 @@ jobs:
             --expected-canary-workflow-sha "$GITHUB_SHA"
 
       - name: Upload exact live production Pusher deployment receipt
-        if: env.SERVICE == 'pusher' && github.event.inputs.environment == 'prod'
+        if: env.SERVICE == 'pusher' && github.event.inputs.environment == 'prod' && env.CANARY_ONLY != 'true'
         uses: actions/upload-artifact@v7
         with:
           name: pusher-prod-deployment-receipt
@@ -1032,6 +1064,7 @@ jobs:
 
       # If required, use the Cloud Run url output in later steps
       - name: Show Output
+        if: env.CANARY_ONLY != 'true'
         run: echo "${{ env.SERVICE }} deployed to ${{ github.event.inputs.environment }}"
 
       - name: Record live-capacity-gate break-glass use
@@ -1056,7 +1089,7 @@ jobs:
               "The gate being unusable is the defect. Fix the gate, then close this.")" || true
 
       - name: Generate deployment summary
-        if: always() && github.event.inputs.environment == 'prod'
+        if: always() && github.event.inputs.environment == 'prod' && env.CANARY_ONLY != 'true'
         uses: ./.github/actions/deployment-summary
         with:
           deployment_tag: ${{ env.IMAGE_TAG }}
@@ -1065,8 +1098,18 @@ jobs:
           status: ${{ job.status }}
           service: ${{ env.SERVICE }}
 
+      - name: Summarize canary-only qualification
+        if: always() && inputs.pusher_canary_only
+        run: |
+          # A green canary_only run means the isolated canary qualified; nothing was promoted.
+          {
+            echo "### Pusher canary-only qualification"
+            echo ""
+            echo "The isolated canary ran the qualified digest, the canary inverse receipt was recorded, and the canary was removed. No shared-config apply or Helm promote ran. This run is the canary evidence for the protected image-only promote."
+          } >> "$GITHUB_STEP_SUMMARY"
+
       - name: Notify deployment status on Telegram
-        if: always() && github.event.inputs.environment == 'prod'
+        if: always() && github.event.inputs.environment == 'prod' && env.CANARY_ONLY != 'true'
         uses: ./.github/actions/deployment-notifier
         with:
           deployment_tag: ${{ env.IMAGE_TAG }}

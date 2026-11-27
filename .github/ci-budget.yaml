@@ -1525,7 +1525,7 @@
       "matrix_size": 1,
       "needs": [],
       "owner": "CI maintainers",
-      "rationale": "Manual prod/dev deploy, about one dispatch a day. SCA-4763 adds a one-replica canary inverse server dry-run (read-only admission probe) after canary readiness, one more minute; no PR or scheduled runs.",
+      "rationale": "Manual prod/dev deploy, about one dispatch a day. SCA-4763 adds a one-replica canary inverse server dry-run (read-only admission probe) after canary readiness, one more minute. The canary_only input stops before shared-config apply and Helm, so that branch costs less than the budget; no PR or scheduled runs.",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -5398,7 +5398,7 @@
     "gcp_backend_pusher.yml": {
       "name": "Deploy Backend Pusher to GKE",
       "owner": "CI maintainers",
-      "rationale": "SCA-4763 adds the non-secret pusher_image_only_evidence dispatch input under the existing manual trigger and prod-train lock. No PR or scheduled runs.",
+      "rationale": "SCA-4763 adds the non-secret pusher_image_only_evidence dispatch input and the pusher_canary_only stop under the existing manual trigger and prod-train lock. No PR or scheduled runs.",
       "triggers": {
         "workflow_dispatch": {
           "inputs": {
@@ -5432,6 +5432,12 @@
               ],
               "required": "true",
               "type": "choice"
+            },
+            "pusher_canary_only": {
+              "default": "false",
+              "description": "Production Pusher only: stop after the isolated canary qualifies (no shared-config apply, no Helm)",
+              "required": "false",
+              "type": "boolean"
             },
             "pusher_dev_qualification_run_id": {
               "default": "",

@@ -26,6 +26,42 @@ from pusher_image_rehearsal import Refused, require, version
 IMAGE = re.compile(r"gcr\.io/based-hardware/(?:backend-)?pusher@sha256:[a-f0-9]{64}")
 NAME = re.compile(r"[a-z0-9][a-z0-9.-]{0,252}")
 STORAGE_METADATA = {"uid", "resourceVersion", "generation", "creationTimestamp", "managedFields"}
+CONTAINER_FIELDS = (
+    "env",
+    "envFrom",
+    "command",
+    "args",
+    "ports",
+    "resources",
+    "volumeMounts",
+    "securityContext",
+    "imagePullPolicy",
+    "lifecycle",
+    "startupProbe",
+    "livenessProbe",
+    "readinessProbe",
+)
+POD_FIELDS = (
+    ("service_account", "serviceAccountName"),
+    ("node_selector", "nodeSelector"),
+    ("tolerations", "tolerations"),
+    ("affinity", "affinity"),
+    ("pod_security_context", "securityContext"),
+    ("init_containers", "initContainers"),
+    ("topology_spread", "topologySpreadConstraints"),
+    ("priority_class", "priorityClassName"),
+    ("restart_policy", "restartPolicy"),
+    ("termination_grace", "terminationGracePeriodSeconds"),
+    ("dns_config", "dnsConfig"),
+    ("volumes", "volumes"),
+)
+PARITY_CLASSES = (
+    "container_names",
+    *(f"container_{field}" for field in CONTAINER_FIELDS),
+    "pod_labels",
+    "pod_annotations",
+    *(label for label, _ in POD_FIELDS),
+)
 
 
 def read_json(path):
@@ -80,6 +116,65 @@ def guarded_patch(obj, name, expected, desired):
     ]
 
 
+def pod_template(obj):
+    return copy.deepcopy(obj["spec"]["template"])
+
+
+def _containers(template):
+    return {container["name"]: container for container in template["spec"]["containers"]}
+
+
+def _strip_images(items):
+    stripped = []
+    for item in items or []:
+        if isinstance(item, dict):
+            stripped.append({key: value for key, value in item.items() if key != "image"})
+        else:
+            stripped.append(item)
+    return stripped
+
+
+def _pod_metadata(template):
+    metadata = template.get("metadata") or {}
+    return {
+        key: {field: value for field, value in (metadata.get(key) or {}).items() if field != "pod-template-hash"}
+        for key in ("labels", "annotations")
+    }
+
+
+def template_parity(canary, live, *, canary_name, live_name):
+    """Redacted per-field-class comparison of the canary and live Pod templates.
+
+    Images are excluded everywhere: the canary is supposed to run the candidate.
+    Only `equal`/`differs` is recorded, never a field value.
+    """
+    canary_template, live_template = pod_template(canary), pod_template(live)
+    canary_containers, live_containers = _containers(canary_template), _containers(live_template)
+    classes = {
+        "container_names": "equal" if sorted(canary_containers) == sorted(live_containers) else "differs",
+    }
+    for field in CONTAINER_FIELDS:
+        classes[f"container_{field}"] = (
+            "equal"
+            if {name: item.get(field) for name, item in sorted(canary_containers.items())}
+            == {name: item.get(field) for name, item in sorted(live_containers.items())}
+            else "differs"
+        )
+    canary_metadata, live_metadata = _pod_metadata(canary_template), _pod_metadata(live_template)
+    classes["pod_labels"] = "equal" if canary_metadata["labels"] == live_metadata["labels"] else "differs"
+    classes["pod_annotations"] = "equal" if canary_metadata["annotations"] == live_metadata["annotations"] else "differs"
+    for label, key in POD_FIELDS:
+        canary_value = _strip_images(canary_template["spec"].get(key)) if key == "initContainers" else canary_template["spec"].get(key)
+        live_value = _strip_images(live_template["spec"].get(key)) if key == "initContainers" else live_template["spec"].get(key)
+        classes[label] = "equal" if canary_value == live_value else "differs"
+    return {
+        "live_deployment": live_name,
+        "canary_deployment": canary_name,
+        "excluded": ["containers[*].image"],
+        "classes": classes,
+    }
+
+
 def kubectl_json(args, *, stdin=None):
     result = subprocess.run(
         ["kubectl", *args], input=stdin, capture_output=True, text=True, check=False, timeout=120
@@ -88,10 +183,12 @@ def kubectl_json(args, *, stdin=None):
     return json.loads(result.stdout)
 
 
-def record(namespace, name, candidate, baseline, run_id, source_sha):
-    require(NAME.fullmatch(namespace) and NAME.fullmatch(name), "invalid_canary_name")
+def record(namespace, name, candidate, baseline, run_id, source_sha, mode, live_name):
+    require(NAME.fullmatch(namespace) and NAME.fullmatch(name) and NAME.fullmatch(live_name), "invalid_canary_name")
     require(type(run_id) is int and run_id > 0 and re.fullmatch(r"[a-f0-9]{40}", source_sha) is not None, "invalid_canary_identity")
+    require(mode in {"canary_only", "deploy"}, "invalid_canary_mode")
     canary = kubectl_json(["get", "deployment", name, "--namespace", namespace, "-o", "json"])
+    live = kubectl_json(["get", "deployment", live_name, "--namespace", namespace, "-o", "json"])
     patch = guarded_patch(canary, name, candidate, baseline)
     admitted = kubectl_json(
         [
@@ -116,6 +213,7 @@ def record(namespace, name, candidate, baseline, run_id, source_sha):
     return {
         "schema": 1,
         "status": "PASS",
+        "mode": mode,
         "run_id": run_id,
         "source_sha": source_sha,
         "candidate_image": candidate,
@@ -136,6 +234,7 @@ def record(namespace, name, candidate, baseline, run_id, source_sha):
             "image": candidate,
         },
         "admitted_image": baseline,
+        "template_parity": template_parity(canary, live, canary_name=name, live_name=live_name),
     }
 
 
@@ -145,6 +244,7 @@ def parse_args(argv):
     parser.add_argument("--name", required=True, help="isolated canary Deployment name")
     parser.add_argument("--candidate-image", required=True)
     parser.add_argument("--baseline-deployment", required=True, help="Deployment whose current image is the restore target")
+    parser.add_argument("--mode", choices=("canary_only", "deploy"), default="deploy")
     parser.add_argument("--run-id", type=int, required=True)
     parser.add_argument("--source-sha", required=True)
     parser.add_argument("--output", type=Path, required=True)
@@ -168,6 +268,8 @@ def main(argv=None):
             baseline,
             args.run_id,
             args.source_sha,
+            args.mode,
+            args.baseline_deployment,
         )
     except Refused as error:
         result["reason"] = str(error)

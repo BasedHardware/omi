@@ -78,13 +78,16 @@ class InverseTest(unittest.TestCase):
                 assign(changed, op["path"], op["value"])
         return changed
 
-    def record(self):
+    def record(self, mode="canary_only"):
         with patch.object(inverse, "kubectl_json", side_effect=self.kubectl):
-            return inverse.record("prod-omi-backend", "prod-omi-pusher-canary-42", CANDIDATE, BASELINE, 42, SOURCE)
+            return inverse.record(
+                "prod-omi-backend", "prod-omi-pusher-canary-42", CANDIDATE, BASELINE, 42, SOURCE, mode, "prod-omi-pusher"
+            )
 
     def test_records_guarded_candidate_to_baseline_server_dry_run(self):
         receipt = self.record()
         self.assertEqual(receipt["status"], "PASS")
+        self.assertEqual(receipt["mode"], "canary_only")
         self.assertEqual(receipt["dry_run"], "server")
         self.assertEqual(receipt["candidate_image"], CANDIDATE)
         self.assertEqual(receipt["baseline_image"], BASELINE)
@@ -97,9 +100,32 @@ class InverseTest(unittest.TestCase):
         self.assertIn("--dry-run=server", patch)
         self.assertIn("--type=json", patch)
 
+    def test_template_parity_is_redacted_and_excludes_the_image(self):
+        receipt = self.record()
+        parity = receipt["template_parity"]
+        self.assertEqual(parity["live_deployment"], "prod-omi-pusher")
+        self.assertEqual(parity["canary_deployment"], "prod-omi-pusher-canary-42")
+        self.assertEqual(parity["excluded"], ["containers[*].image"])
+        self.assertEqual(set(parity["classes"]), set(inverse.PARITY_CLASSES))
+        self.assertTrue(all(value in {"equal", "differs"} for value in parity["classes"].values()))
+        # The only deliberate difference is the image.
+        self.assertEqual(parity["classes"]["container_names"], "equal")
+        self.assertEqual(parity["classes"]["container_env"], "equal")
+        self.assertEqual(parity["classes"]["service_account"], "equal")
+        self.assertNotIn(CANDIDATE, json.dumps(parity))
+        self.assertNotIn(BASELINE, json.dumps(parity))
+
+    def test_template_parity_reports_a_field_class_difference(self):
+        self.baseline["spec"]["template"]["spec"]["containers"][1]["env"] = [{"name": "X", "value": "y"}]
+        receipt = self.record()
+        self.assertEqual(receipt["template_parity"]["classes"]["container_env"], "differs")
+        self.assertEqual(receipt["template_parity"]["classes"]["container_resources"], "equal")
+
     def test_patch_preconditions_are_uid_resource_version_container_and_old_digest(self):
         with patch.object(inverse, "kubectl_json", side_effect=self.kubectl):
-            inverse.record("prod-omi-backend", "prod-omi-pusher-canary-42", CANDIDATE, BASELINE, 42, SOURCE)
+            inverse.record(
+                "prod-omi-backend", "prod-omi-pusher-canary-42", CANDIDATE, BASELINE, 42, SOURCE, "canary_only", "prod-omi-pusher"
+            )
         ops = inverse.guarded_patch(self.canary, "prod-omi-pusher-canary-42", CANDIDATE, BASELINE)
         self.assertEqual(
             [(op["op"], op["path"]) for op in ops],
@@ -113,6 +139,10 @@ class InverseTest(unittest.TestCase):
         )
         self.assertEqual(ops[3]["value"], CANDIDATE)
         self.assertEqual(ops[4]["value"], BASELINE)
+
+    def test_refuses_an_unknown_mode(self):
+        with self.assertRaisesRegex(inverse.Refused, "invalid_canary_mode"):
+            self.record(mode="promote")
 
     def test_refuses_when_the_canary_does_not_hold_the_candidate(self):
         self.canary = canary_deployment(image=BASELINE)
@@ -130,7 +160,9 @@ class InverseTest(unittest.TestCase):
 
         with patch.object(inverse, "kubectl_json", side_effect=changed):
             with self.assertRaisesRegex(inverse.Refused, "canary_inverse_changed_more_than_image"):
-                inverse.record("prod-omi-backend", "prod-omi-pusher-canary-42", CANDIDATE, BASELINE, 42, SOURCE)
+                inverse.record(
+                    "prod-omi-backend", "prod-omi-pusher-canary-42", CANDIDATE, BASELINE, 42, SOURCE, "canary_only", "prod-omi-pusher"
+                )
 
     def test_main_writes_a_refused_receipt_and_fails_closed(self):
         self.canary = canary_deployment(image=BASELINE)

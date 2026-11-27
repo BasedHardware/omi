@@ -44,6 +44,8 @@ from pusher_image_rehearsal import (
 )
 
 sys.path.insert(0, str(ROOT / "backend/scripts"))
+sys.path.insert(0, str(ROOT / ".github/scripts"))
+from pusher_canary_inverse import PARITY_CLASSES
 from pusher_release_receipt import ReceiptError, validate_live_identity
 from verify_pusher_live_deployment_gate import GateError, capacity_evidence
 from verify_pusher_promotion_evidence import _validate_canary, canonical_sha256
@@ -465,7 +467,15 @@ def check_canary_inverse(inverse, packet, deployment):
         and inverse.get("source_sha") == packet["source_sha"]
         and inverse.get("candidate_image") == packet["candidate_image"]
         and inverse.get("baseline_image") == packet["prior_image"]
+        and inverse.get("mode") == "canary_only"
         and inverse.get("dry_run") == "server"
+        and isinstance(inverse.get("template_parity"), dict)
+        and inverse["template_parity"].get("live_deployment") == TARGET
+        and inverse["template_parity"].get("canary_deployment") == canary_target(packet["canary"]["run_id"])
+        and inverse["template_parity"].get("excluded") == ["containers[*].image"]
+        and isinstance(inverse["template_parity"].get("classes"), dict)
+        and set(inverse["template_parity"]["classes"]) == set(PARITY_CLASSES)
+        and all(value in {"equal", "differs"} for value in inverse["template_parity"]["classes"].values())
         and inverse.get("deployment", {}).get("namespace") == NAMESPACE
         and inverse.get("deployment", {}).get("name") == canary_target(packet["canary"]["run_id"])
         and inverse.get("deployment", {}).get("image") == packet["candidate_image"]

@@ -335,9 +335,51 @@ After Release removes both isolated workloads and Services, promote requires
 that successful attestation, the reviewed preview and inverse, and a fresh
 guarded forward dry-run and live surge check. The job then patches only the
 Pusher image, dry-runs the exact live inverse, and checks readiness for every
-serving Pusher replica at the approved digest. The first true live inverse
-dry-run needs the candidate as the production Deployment's old object. The
-pre-move inverse rehearsal is admission evidence from the isolated server.
+serving Pusher replica at the approved digest. The exact candidate→baseline
+inverse is the canary receipt; the pre-move baseline→baseline dry-run on
+`prod-omi-pusher` is the rollback evidence. Warden evaluates the object, so
+the `oldObject` difference does not change that baseline verdict. A scoped
+ruling accepts the residual risk for `oldObject` on the target Deployment.
+
+### Canary qualification run
+
+Dispatch the regular deploy job with `pusher_canary_only=true`, for prod
+Pusher, with the exact `pusher_image_digest` and
+`pusher_dev_qualification_run_id` and no break-glass option. That run:
+
+- promotes the qualified digest into the production registry;
+- creates the isolated canary and runs the canonical semantic probe;
+- records the candidate→baseline inverse server dry-run on the canary,
+  including a redacted equal/differs parity check of the canary Pod template
+  against live `prod-omi-pusher` per field class, excluding the image;
+- uploads the canary evidence and removes the canary.
+
+It then stops before "Apply non-secret pusher runtime config": no shared
+ConfigMap apply and no Helm. A green conclusion means "canary qualified", and
+the image-only promote accepts only a `canary_only` canary receipt.
+
+### Manual recovery after REFUSED_INVERSE
+
+Under R44 the Pusher operator performs this restore with the prod environment
+credentials. Prerequisites: the prior production ReplicaSet is still retained
+(unexpired `revisionHistoryLimit`), release custody is unchanged, and admission
+accepts the baseline object. Keep the Helm values untouched.
+
+```sh
+kubectl -n prod-omi-backend rollout history deployment/prod-omi-pusher
+kubectl -n prod-omi-backend rollout undo deployment/prod-omi-pusher --to-revision=<last-admitted>
+kubectl -n prod-omi-backend rollout status deployment/prod-omi-pusher --timeout=9600s
+kubectl -n prod-omi-backend get deployment prod-omi-pusher \
+  -o jsonpath='{.spec.template.spec.containers[?(@.name=="pusher")].image}{"\n"}'
+python3 backend/scripts/deploy_status_report.py --env prod --include-gke --gke-service pusher
+```
+
+Required serving readback: the Pusher container image reads
+`gcr.io/based-hardware/pusher@sha256:f26e8757759fe6907a9ef0e4c31d0a08a8ed527d777db5f472b33bffcff6d925`,
+the rollout reports the new ReplicaSet ready with no active old-replicaset pods,
+and `deploy_status_report.py` exits clean. If the restore is refused or the
+readback does not match, leave traffic as it is and escalate to Release; do not
+attempt another patch.
 
 Rollback uses a separately approved protected run. It accepts the same
 candidate identity, proof and rehearsal, verifies the pinned prior image in
