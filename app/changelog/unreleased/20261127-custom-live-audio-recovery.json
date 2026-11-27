@@ -1,4 +1,4 @@
 {
-  "change": "Custom Live recordings recover more reliably after audio interruptions; iOS control messages retain primary-socket delivery.",
-  "platforms": ["android", "ios"]
+  "change": "Custom Live recordings recover more reliably after audio interruptions.",
+  "platforms": ["android"]
 }

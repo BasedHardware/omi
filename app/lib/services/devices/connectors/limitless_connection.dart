@@ -1551,8 +1551,11 @@ class LimitlessDeviceConnection extends DeviceConnection {
         if (!_realtimeSuppressed) _armStreamHealthWatch(reason: 'batch_mode_disable_reconciled');
       } catch (reconcileError) {
         if (_isCurrentSession(epoch)) {
-          _isBatchMode = true;
-          _batchModeEpoch = epoch;
+          // The pendant's mode is unknown. Keep the parser on the live path so
+          // an arriving audio frame is not discarded as a flash-page message;
+          // reconnect initialization will explicitly select real-time mode.
+          _isBatchMode = false;
+          _batchModeEpoch = null;
         } else if (_batchModeEpoch == epoch) {
           _isBatchMode = false;
           _batchModeEpoch = null;

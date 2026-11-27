@@ -1274,6 +1274,25 @@ void main() {
     expect(transport.writes, hasLength(5), reason: 'one failed mode write is followed by one reconciliation write');
   });
 
+  test('failed batch-mode exit keeps the live parser when reconciliation also fails', () async {
+    final transport = FakeDeviceTransport();
+    final connection = LimitlessDeviceConnection(
+      BtDevice(name: 'Limitless Pendant', id: 'fake-limitless', type: DeviceType.limitless, rssi: -50),
+      transport,
+      setupSettleDelay: Duration.zero,
+    );
+    addTearDown(connection.disconnect);
+    await connection.connect();
+    await connection.enableBatchMode();
+    expect(connection.isBatchMode, isTrue);
+
+    transport.onWrite = (_) => throw StateError('realtime mode write failed');
+    await connection.disableBatchMode();
+
+    expect(connection.isBatchMode, isFalse,
+        reason: 'unknown device mode must not route live audio into the flash parser');
+  });
+
   test('stale batch mode clears and reconnect resumes realtime after disable failure', () async {
     final transport = FakeDeviceTransport();
     final connection = LimitlessDeviceConnection(

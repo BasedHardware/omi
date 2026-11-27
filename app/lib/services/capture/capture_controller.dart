@@ -290,6 +290,8 @@ class CaptureController extends ChangeNotifier
   bool _customLiveAudioRecoveryFlagRefreshInFlight = false;
   int _customLiveAudioRecoveryFlagRetriesForEpoch = 0;
   int _customLiveAudioRecoveryFlagFetchRetriesForEpoch = 0;
+  bool _customLiveAudioRecoveryFlagUnresolvedRetriesExhausted = false;
+  String? _customLiveAudioRecoveryFlagRecordingId;
   Timer? _customLiveAudioRecoveryFlagRetryTimer;
 
   String get _captureEvidenceRoot {
@@ -2861,11 +2863,16 @@ class CaptureController extends ChangeNotifier
       connection.stopCustomLiveAudioWatch();
       return;
     }
+    if (_customLiveAudioRecoveryFlagRecordingId != recordingId) {
+      _customLiveAudioRecoveryFlagRecordingId = recordingId;
+      _resetCustomLiveAudioFlagResolution();
+    }
+    _refreshCustomLiveAudioKillSwitch();
     _recordingTelemetry.observeCustomLiveAudioEligibility();
-    if (AnalyticsManager.canResolveBooleanFeatureFlags && _customLiveAudioRecoveryKillSwitchEnabled == null) {
+    if (AnalyticsManager.canResolveBooleanFeatureFlags &&
+        _customLiveAudioRecoveryKillSwitchEnabled == null &&
+        !_customLiveAudioRecoveryFlagUnresolvedRetriesExhausted) {
       connection.stopCustomLiveAudioWatch();
-      _recordingTelemetry.observeCustomLiveAudioDetection(enabled: false);
-      _refreshCustomLiveAudioKillSwitch();
       return;
     }
     if (_customLiveAudioRecoveryKilled) {
@@ -2886,15 +2893,20 @@ class CaptureController extends ChangeNotifier
   }
 
   void _onCustomLiveAudioFlagContextChanged() {
+    _resetCustomLiveAudioFlagResolution();
+    _refreshLimitlessCustomLiveWatch();
+  }
+
+  void _resetCustomLiveAudioFlagResolution() {
     _customLiveAudioRecoveryFlagGeneration++;
     _customLiveAudioRecoveryFlagIdentityEpoch = -1;
     _customLiveAudioRecoveryFlagRefreshInFlight = false;
     _customLiveAudioRecoveryFlagRetriesForEpoch = 0;
     _customLiveAudioRecoveryFlagFetchRetriesForEpoch = 0;
+    _customLiveAudioRecoveryFlagUnresolvedRetriesExhausted = false;
     _customLiveAudioRecoveryFlagRetryTimer?.cancel();
     _customLiveAudioRecoveryFlagRetryTimer = null;
     _customLiveAudioRecoveryKillSwitchEnabled = null;
-    _refreshLimitlessCustomLiveWatch();
   }
 
   void _refreshCustomLiveAudioKillSwitch() {
@@ -2932,10 +2944,15 @@ class CaptureController extends ChangeNotifier
         if (_customLiveAudioRecoveryFlagRetriesForEpoch == 0) {
           _customLiveAudioRecoveryFlagRetriesForEpoch = 1;
           _scheduleCustomLiveAudioFlagRetry(generation, identityEpoch);
+        } else {
+          // This key is a kill switch. After a bounded lookup confirms that
+          // no kill value exists, absence must not keep recovery dark forever.
+          _customLiveAudioRecoveryFlagUnresolvedRetriesExhausted = true;
         }
       } else {
         _customLiveAudioRecoveryFlagRetriesForEpoch = 0;
         _customLiveAudioRecoveryFlagFetchRetriesForEpoch = 0;
+        _customLiveAudioRecoveryFlagUnresolvedRetriesExhausted = false;
       }
       _refreshLimitlessCustomLiveWatch();
     }());
@@ -2960,6 +2977,7 @@ class CaptureController extends ChangeNotifier
       buildEnabled: customLiveCaptureFixEnabled,
       flagReadContextAvailable: AnalyticsManager.canResolveBooleanFeatureFlags,
       cachedKillSwitchEnabled: _customLiveAudioRecoveryKillSwitchEnabled,
+      unresolvedRetryExhausted: _customLiveAudioRecoveryFlagUnresolvedRetriesExhausted,
     );
   }
 

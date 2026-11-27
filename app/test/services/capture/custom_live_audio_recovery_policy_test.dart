@@ -16,14 +16,27 @@ void main() {
     await SharedPreferencesUtil.init();
   });
 
-  bool disabled({required bool contextAvailable, required bool? killSwitch}) => shouldDisableCustomLiveAudioRecovery(
+  bool disabled({
+    required bool contextAvailable,
+    required bool? killSwitch,
+    bool unresolvedRetryExhausted = false,
+  }) =>
+      shouldDisableCustomLiveAudioRecovery(
         buildEnabled: true,
         flagReadContextAvailable: contextAvailable,
         cachedKillSwitchEnabled: killSwitch,
+        unresolvedRetryExhausted: unresolvedRetryExhausted,
       );
 
   test('a readable but unresolved kill switch blocks recovery', () {
     expect(disabled(contextAvailable: true, killSwitch: null), isTrue);
+  });
+
+  test('a missing kill switch permits recovery after its bounded lookup retry', () {
+    expect(
+      disabled(contextAvailable: true, killSwitch: null, unresolvedRetryExhausted: true),
+      isFalse,
+    );
   });
 
   test('tracking opt-out or a missing adapter preserves recovery', () {

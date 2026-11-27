@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'dart:collection';
 import 'dart:convert';
-import 'dart:io';
 
 import 'package:omi/services/sockets/local_stt_failure.dart';
 
@@ -21,7 +20,6 @@ class CompositeTranscriptionSocket implements IPureSocket {
   final String? suggestedTranscriptType;
   final String? sttProvider;
   final bool forwardRawAudioToSecondary;
-  final bool _isAndroid;
 
   /// When true, a secondary (Omi backend) socket that fails to connect, closes
   /// or errors no longer tears down the primary (custom STT) socket. The
@@ -74,8 +72,7 @@ class CompositeTranscriptionSocket implements IPureSocket {
     this.keepPrimaryWhenSecondaryFails = false,
     this.secondaryRetryInitialDelay = const Duration(seconds: 5),
     this.secondaryRetryMaxDelay = const Duration(seconds: 60),
-    bool? isAndroid,
-  }) : _isAndroid = isAndroid ?? Platform.isAndroid {
+  }) {
     _nextSecondaryRetryDelay = secondaryRetryInitialDelay;
     _primaryListener = _PrimarySocketListener(this);
     _secondaryListener = _SecondarySocketListener(this);
@@ -335,8 +332,9 @@ class CompositeTranscriptionSocket implements IPureSocket {
     onError(err, trace);
   }
 
-  bool get _routesOmiControls =>
-      _isAndroid && customLiveCaptureFixEnabled && sttProvider == SttProvider.customLive.name;
+  // Omi controls belong on the Omi secondary socket, never on the configured
+  // Custom Live provider's primary socket, on either mobile platform.
+  bool get _routesOmiControls => customLiveCaptureFixEnabled && sttProvider == SttProvider.customLive.name;
 
   @override
   void send(dynamic message) {

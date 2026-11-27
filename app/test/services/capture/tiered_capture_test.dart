@@ -196,12 +196,42 @@ void main() {
     final adapter = await setRefactorFlags({});
     await world.settle();
     expect(connection.captureIsCurrent, isNull, reason: 'an unresolved remote flag keeps recovery gated');
-    adapter.flags['android-custom-live-audio-recovery-kill'] = false;
-
     await world.elapse(const Duration(seconds: 5));
     await world.settle();
     expect(connection.watchStarts, 2);
     expect(connection.captureIsCurrent?.call(), isTrue);
+    expect(
+      adapter.flags.containsKey('android-custom-live-audio-recovery-kill'),
+      isFalse,
+      reason: 'an absent kill switch must not leave recovery disabled after its bounded retry',
+    );
+  });
+
+  test('a new Custom Live recording refreshes the kill switch for the same identity', () async {
+    final adapter = await setRefactorFlags({'android-custom-live-audio-recovery-kill': false});
+    addTearDown(AnalyticsManager.resetForTesting);
+    world.controller.updateRecordingDevice(null);
+    await world.settle();
+    SharedPreferencesUtil().uid = 'capture-test-owner';
+    await SharedPreferencesUtil().saveCustomSttConfig(
+      const CustomSttConfig(provider: SttProvider.customLive, url: 'wss://local-stt.example.test'),
+    );
+    final device = BtDevice(id: 'limitless-flag-refresh', name: 'Limitless', type: DeviceType.limitless, rssi: -40);
+    final connection = _WatchedLimitlessConnection();
+    world.deviceConnection = connection;
+    await world.controller.streamDeviceRecording(device: device);
+    await world.settle();
+    expect(connection.watchStarts, 1);
+    expect(connection.captureIsCurrent?.call(), isTrue);
+
+    await world.controller.stopStreamDeviceRecording();
+    await world.settle();
+    adapter.flags['android-custom-live-audio-recovery-kill'] = true;
+    await world.controller.streamDeviceRecording(device: device);
+    await world.settle();
+
+    expect(connection.captureIsCurrent, isNull);
+    expect(connection.stopCalls, greaterThan(0));
   });
 
   test('a failed kill-switch fetch can retry on a later capture gate pass', () async {
