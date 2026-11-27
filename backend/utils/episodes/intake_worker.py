@@ -19,7 +19,7 @@ def notify_workerd(uid: str, conversation_id: str, revision: object) -> None:
     import httpx
 
     from database._client import get_firestore_client
-    from utils.sync.worker_client import identity_token
+    from utils.oidc_identity import identity_token
 
     ref = get_firestore_client().collection('users').document(uid).collection('conversations').document(conversation_id)
     snapshot = ref.get(field_paths=['sync_content_revision'], timeout=2, retry=None)

@@ -1628,11 +1628,6 @@ environments:
               provisional: true
               value: 'true'
               category: rollout
-            SYNC_BACKFILL_UID_SEQUENCER:
-              provisional: true
-              value: 'off'
-              category: rollout
-            SYNC_BACKFILL_RETIRE_EXPIRED_AT_CLAIM: {category: rollout, value: 'false'}
             SYNC_REPROCESS_SETTLE_SECONDS: {value: '600', category: rollout}
             USE_VERTEX_AI:
               value: 'true'
@@ -1901,15 +1896,6 @@ environments:
             STT_CAP_DISPATCH_LANES: {value: live, category: rollout}
             UNLIMITED_V2_BACKFILL_HOURS_CAP_ENABLED: {value: 'false', category: rollout}
             UNLIMITED_V2_BACKFILL_HOURS_CAP_HOURS: {value: '24', category: rollout}
-            SYNC_BACKFILL_OWNER_CONCURRENCY_ENABLED:
-              value: 'on'
-              category: ops_kill
-            SYNC_BACKFILL_OWNER_CONCURRENCY:
-              value: '2'
-              category: reliability
-            SYNC_BACKFILL_OWNER_CONCURRENCY_THRESHOLD:
-              value: '8'
-              category: reliability
             PLAYBACK_ON_DEMAND_ENABLED: {value: 'true', category: rollout}
             SYNC_RECORD_COVERAGE_WAIT_MEMO:
               value: 'true'
@@ -2052,11 +2038,6 @@ environments:
               provisional: true
               value: 'true'
               category: rollout
-            SYNC_BACKFILL_UID_SEQUENCER:
-              provisional: true
-              value: 'off'
-              category: rollout
-            SYNC_BACKFILL_RETIRE_EXPIRED_AT_CLAIM: {category: rollout, value: 'false'}
             SYNC_REPROCESS_SETTLE_SECONDS: {value: '600', category: rollout}
             USE_VERTEX_AI:
               value: 'true'
@@ -4916,11 +4897,6 @@ environments:
               provisional: true
               value: 'true'
               category: rollout
-            SYNC_BACKFILL_UID_SEQUENCER:
-              provisional: true
-              value: 'on'
-              category: rollout
-            SYNC_BACKFILL_RETIRE_EXPIRED_AT_CLAIM: {category: rollout, value: 'false'}
             SYNC_REPROCESS_SETTLE_SECONDS: {value: '600', category: rollout}
             USE_VERTEX_AI:
               value: 'true'
@@ -5266,8 +5242,6 @@ environments:
               value: based-hardware
             OMI_LLM_GATEWAY_ALLOW_PROD_FEATURE_MODE: {value: 'true', category: rollout}
             NOTES_TIER_ESCALATION_ENABLED: {value: 'true', category: rollout}
-            SYNC_BACKFILL_ORDER: {value: newest, category: rollout}
-            SYNC_BACKFILL_ORDER_PERCENT: {value: '100', category: rollout}
             SYNC_BACKFILL_ROUTING_ENABLED: {value: 'true', category: rollout}
             SYNC_BACKFILL_TASKS_HANDLER_URL:
               env_var: SYNC_BACKFILL_TASKS_HANDLER_URL
@@ -5280,10 +5254,8 @@ environments:
             SYNC_BACKFILL_TASKS_QUEUE:
               value: sync-backfill-fresh
               category: reliability
-            SYNC_DURABLE_REDRIVE_GUARD: {value: 'true', category: rollout}
             SYNC_JOB_COMPLETED_TTL_SECONDS: {value: '21600', category: rollout}
             SYNC_JOB_METRIC_ONCE_TTL_SECONDS: {value: '3600', category: rollout}
-            SYNC_LEGACY_COMPLETION_CONVERGENCE: {value: 'true', category: rollout}
             SYNC_TASKS_MAX_ATTEMPTS:
               value: '5'
               category: reliability
@@ -5359,15 +5331,6 @@ environments:
             STT_CAP_DISPATCH_LANES: {value: live, category: rollout}
             UNLIMITED_V2_BACKFILL_HOURS_CAP_ENABLED: {value: 'true', category: rollout}
             UNLIMITED_V2_BACKFILL_HOURS_CAP_HOURS: {value: '24', category: rollout}
-            SYNC_BACKFILL_OWNER_CONCURRENCY_ENABLED:
-              value: 'on'
-              category: ops_kill
-            SYNC_BACKFILL_OWNER_CONCURRENCY:
-              value: '2'
-              category: reliability
-            SYNC_BACKFILL_OWNER_CONCURRENCY_THRESHOLD:
-              value: '8'
-              category: reliability
             PLAYBACK_ON_DEMAND_ENABLED: {value: 'true', category: rollout}
             SYNC_RECORD_COVERAGE_WAIT_MEMO:
               value: 'true'
@@ -5510,11 +5473,6 @@ environments:
               provisional: true
               value: 'true'
               category: rollout
-            SYNC_BACKFILL_UID_SEQUENCER:
-              provisional: true
-              value: 'on'
-              category: rollout
-            SYNC_BACKFILL_RETIRE_EXPIRED_AT_CLAIM: {category: rollout, value: 'false'}
             SYNC_REPROCESS_SETTLE_SECONDS: {value: '600', category: rollout}
             USE_VERTEX_AI:
               value: 'true'
@@ -5824,8 +5782,6 @@ environments:
               value: '100'
               category: ops_kill
             NOTES_TIER_ESCALATION_ENABLED: {value: 'true', category: rollout}
-            SYNC_BACKFILL_ORDER: {value: newest, category: rollout}
-            SYNC_BACKFILL_ORDER_PERCENT: {value: '0', category: rollout}
             SYNC_BACKFILL_ROUTING_ENABLED: {value: 'true', category: rollout}
             SYNC_BACKFILL_TASKS_HANDLER_URL:
               env_var: SYNC_BACKFILL_TASKS_HANDLER_URL
@@ -5838,10 +5794,8 @@ environments:
             SYNC_BACKFILL_TASKS_QUEUE:
               value: sync-backfill-fresh
               category: reliability
-            SYNC_DURABLE_REDRIVE_GUARD: {value: 'true', category: rollout}
             SYNC_JOB_COMPLETED_TTL_SECONDS: {value: '21600', category: rollout}
             SYNC_JOB_METRIC_ONCE_TTL_SECONDS: {value: '3600', category: rollout}
-            SYNC_LEGACY_COMPLETION_CONVERGENCE: {value: 'true', category: rollout}
             SYNC_TASKS_MAX_ATTEMPTS:
               value: '5'
               category: reliability

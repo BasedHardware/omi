@@ -421,7 +421,7 @@ def test_serving_intake_notifies_workerd_only_for_current_bound_revision(monkeyp
     import httpx
     from database import _client
     from utils.episodes import service
-    from utils.sync import worker_client
+    from utils import oidc_identity
 
     monkeypatch.delenv('SYNC_EPISODE_INTAKE_ORIGIN', raising=False)
     monkeypatch.delenv('WORKER_EPISODE_INTAKE_AUDIENCE', raising=False)
@@ -438,7 +438,7 @@ def test_serving_intake_notifies_workerd_only_for_current_bound_revision(monkeyp
     firestore_client = Mock(return_value=client)
     monkeypatch.setattr(_client, 'get_firestore_client', firestore_client)
     token = Mock(return_value='fixture-token')
-    monkeypatch.setattr(worker_client, 'identity_token', token)
+    monkeypatch.setattr(oidc_identity, 'identity_token', token)
     request = Mock(return_value=Mock(status_code=200))
     monkeypatch.setattr(httpx, 'post', request)
 

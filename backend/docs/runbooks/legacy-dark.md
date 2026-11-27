@@ -1,6 +1,12 @@
 # Legacy dark: retiring legacy sync without a deploy
 
-Contract (h) of the legacy-retire swarm. Code: `utils/sync/legacy_dark.py`. Switch: `rollout_cohorts/_ramp.envs.<env>.legacy_sync`, scoped by the same entry's `percents.legacy-sync`, read through `utils.rollout.runtime_percent.legacy_sync_mode(uid)` (30s TTL; a read error keeps the last-known-good mode, and only a process that has never read the document serves `on`).
+> **Deleted (plan C C9-C11, 2026-11-17).** Legacy transcription, the backfill sequencer, legacy redrive and the
+> backfill pull worker are gone; `current_mode()` always serves `dark` and the `legacy_sync` ramp field is inert.
+> The fence below still answers content legacy claimed before the switch. Rollback is an image redeploy plus the
+> queue/scheduler recreation in "Rollback after deletion"; writing `legacy_sync=on` no longer restores anything.
+> The rest of this runbook is the historical soak and deletion record.
+
+Contract (h) of the legacy-retire swarm. Code: `utils/sync/legacy_dark.py`. Switch: `rollout_cohorts/_ramp.envs.<env>.legacy_sync`, scoped by the same entry's `percents.legacy-sync`, read through `utils.rollout.runtime_percent.legacy_sync_mode(uid)` (30s TTL, mode fails safe to `on` on read errors).
 
 ## Containment-only changes to retiring code
 
@@ -132,7 +138,7 @@ Content already claimed in `sync_content_ledger` by legacy is never re-admitted 
 
 A conversation whose `record_lane_owner` is `legacy_final_pass_v1` (a durable route owner, not a ledger row) is re-homed in `draining`/`dark` by its next upload, in both the router route and batch intake, once the ramp document is at least 5 minutes old (`FLIP_GRACE_SECONDS`): a request that read `on` just before the flip can still create a legacy job after it, visible to the live-job probe only once created, and the router re-reads a mode older than `ADMISSION_REVALIDATE_SECONDS` (60s) before creating any legacy job, so with the 30s ramp cache no stale `on` creates one later than 90s after the flip. With no live legacy job for the uid (the Redis pending index) its owner moves to `batch_sync_v1` by the same revision-fenced CAS every owner transition uses, and the upload is admitted to batch intake, which keeps its privacy, binding and predecessor fences (`legacy_final_pass_rehomed`). While a legacy job is live for the uid, inside the grace, or when the CAS is lost to a concurrent claim, the upload gets the in-progress 409 (`legacy_active`) and the client retries; `promote_final_pass_if_current` refuses a batch-owned conversation, so a final pass still running cannot promote over batch's work. Outside `on` no new `legacy_final_pass_v1` owner is created: the shadow final pass neither claims nor starts for an unowned conversation, and an ownerless upload for a narrowed uid takes `batch_sync_v1`. The pre-flip stock is cleared by the sweep above, applied in `draining`.
 
-An epoch-less backfill task in `draining`/`dark` never runs beside a live sequencer owner for the same uid: if the sequencer already holds the job and its sweep still dispatches (`draining`) the task is acked (`sequencer_owns_job`); while another job is the uid's active owner it answers 409 so the queue retries (`sequencer_owner_active`).
+An epoch-less backfill task in `draining`/`dark` never runs beside a live sequencer owner for the same uid: if the sequencer already holds the job and its sweep still dispatches (`draining`) the task is acked (`sequencer_owns_job`); while another job is the uid's active owner it answers 409 so the queue retries (`sequencer_owner_active`). C10 deleted the sequencer and the legacy executor (2026-11-17): every transcription or sequencer delivery to `/v2/sync-jobs/run` is now acknowledged with 200 and dropped (`legacy_retired`, log `event=sync_transcription_job outcome=dropped`); nothing runs. Only `batch_final_pass` and `sync_reprocess` payloads are served.
 
 Never 503 (invariant 2). `omi_legacy_dark_ack_total{reason}` counts every fenced answer; `omi_legacy_sync_admissions_total{reason}` must stay flat outside `on`, and a non-`on` admission logs `event=legacy_dark action=legacy_admission outcome=invariant_violation`.
 

@@ -1568,12 +1568,6 @@ environment_shared:
             provisional: true
             value: 'true'
             category: rollout
-          SYNC_BACKFILL_UID_SEQUENCER:
-            provisional: true
-            value: 'off'
-            category: rollout
-          SYNC_BACKFILL_RETIRE_EXPIRED_AT_CLAIM:
-            category: rollout
           SYNC_REPROCESS_SETTLE_SECONDS:
             value: '600'
             category: rollout
@@ -1756,9 +1750,6 @@ environment_shared:
           STT_CAP_DISPATCH_LANES: {value: 'live', category: rollout}
           UNLIMITED_V2_BACKFILL_HOURS_CAP_ENABLED: {value: 'false', category: rollout}
           UNLIMITED_V2_BACKFILL_HOURS_CAP_HOURS: {value: '24', category: rollout}
-          SYNC_BACKFILL_OWNER_CONCURRENCY_ENABLED: {value: 'on', category: ops_kill}
-          SYNC_BACKFILL_OWNER_CONCURRENCY: {value: '2', category: reliability}
-          SYNC_BACKFILL_OWNER_CONCURRENCY_THRESHOLD: {value: '8', category: reliability}
           PLAYBACK_ON_DEMAND_ENABLED: {value: 'false', category: rollout}
           SYNC_RECORD_COVERAGE_WAIT_MEMO: {value: 'true', category: ops_kill}
           SYNC_RECORD_WAIT_MEMO_FIRST: {value: 'true', category: ops_kill}
@@ -1942,12 +1933,6 @@ environment_shared:
           SYNC_BACKFILL_ENABLED:
             provisional: true
             value: 'true'
-            category: rollout
-          SYNC_BACKFILL_UID_SEQUENCER:
-            provisional: true
-            value: 'off'
-            category: rollout
-          SYNC_BACKFILL_RETIRE_EXPIRED_AT_CLAIM:
             category: rollout
           SYNC_REPROCESS_SETTLE_SECONDS:
             value: '600'

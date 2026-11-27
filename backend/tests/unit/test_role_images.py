@@ -31,7 +31,6 @@ def test_every_role_image_builds_from_the_role_dockerfile_plus_listen_edge():
     entries = role_images.role_image_entries(role_images.load_registry())
     by_name = {entry['name']: entry for entry in entries}
     assert list(by_name) == [
-        'backend-sync-backfill-worker',
         'backend-api',
         'backend-workers',
         'backend-realtime',
@@ -39,8 +38,7 @@ def test_every_role_image_builds_from_the_role_dockerfile_plus_listen_edge():
         'backend-pusher',
         'listen-edge',
     ]
-    assert {by_name[name]['target'] for name in list(by_name)[:6]} == {
-        'sync-backfill-worker',
+    assert {by_name[name]['target'] for name in list(by_name)[:5]} == {
         'api',
         'workers',
         'realtime',

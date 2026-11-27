@@ -4,15 +4,15 @@ This package owns uploaded-audio sync admission, decoding, transcription orchest
 
 ## Boundaries
 
-- `pipeline.py` coordinates job/run leases, segment processing, persistence fences, and terminal outcomes. `assignment_errors.py` distinguishes terminal user authority from corrupt/mismatched intake.
+- Uploads are transcribed by the batch pipeline (`utils/batch_pipeline/`). The legacy job pipeline and its backfill sequencer were deleted on 2026-11-17 (plan C, C9-C11); `legacy_segment_core.py` keeps the segment-processing core that cap-hold recovery still reuses, and the `/v2/sync-jobs/run` route now serves only enrichment and batch final-pass tasks. `assignment_errors.py` distinguishes terminal user authority from corrupt/mismatched intake.
 - `files.py`, `content_id.py`, and `capture_manifest.py` normalize uploads and identities. `input_limits.py` bounds historical batches before custody transfer and each worker attempt, including codec expansion and retryable tmpfs pressure. Capture assignment never grants fresh-lane provenance.
 - `capture.py` derives retry-stable incoming IDs from the VAD-segment timestamp. VAD exports speech segments only; empty VAD/STT creates no conversation or bridge and bills no speech.
-- `lanes.py`, `backfill.py`, and `rate_limit.py` classify work and enforce admission policy. `uid_sequencer.py` dispatches accepted backfill jobs through the Firestore owner/pending registry in `database/sync_backfill_sequencer.py`; it owns no STT or conversation writes. See `backend/docs/runbooks/sync-two-lane.md` for lease, cutover, and monitoring details.
+- `lanes.py`, `backfill.py`, and `rate_limit.py` classify work and enforce admission policy. See `backend/docs/runbooks/sync-two-lane.md` for lease, cutover, and monitoring details.
 - `merge_audio.py` and `merge_dedupe.py` contain deterministic merge helpers; `playback.py` reconstructs audio artifacts.
 - `provenance.py` and `telemetry.py` provide bounded attribution and operational labels.
 - `recording_lineage.py` (default) and `recording_session_target.py` (kill-switch path) choose explicit live targets for safety-WAL uploads that carry a recording id; they only read, and intake stays in `assignment.py`.
 
-Keep HTTP routing and database implementations outside this package. Changes must preserve run-lease, durable result, and conversation-persistence fences in `pipeline.py`.
+Keep HTTP routing and database implementations outside this package. Changes must preserve run-lease, durable result, and conversation-persistence fences in `legacy_segment_core.py` and the batch pipeline.
 
 ## Capture assignment
 
@@ -136,13 +136,11 @@ Offline replay: `scripts/sync_live_dedupe_replay.py` replays supplied STT candid
 `LocalRecordingsProvider` uploads one selected native file at a time through
 `/v2/sync-local-files`. The native `audio_omibatchphone_` marker denotes explicit
 Transcribe Later; `audio_omibatchphoneauto_` denotes automatic offline fallback.
-The shared job coordinator uses `recording_intent.user_selected_recording` to
-recognize only a single explicit file, covering
-already-released clients without a new request field. A single Watch recovery
-file matching `audio_omibatchwatch<32-hex-session>s<segment>_pcm16_16000_1_fs160_<timestamp>.bin`
-uses this same explicit keep path. Watch backups are uploaded only when selected
-in the local Recordings list. Mixed/bulk jobs and malformed Watch markers retain
-automatic relevance policy.
+Watch recovery files are named
+`audio_omibatchwatch<32-hex-session>s<segment>_pcm16_16000_1_fs160_<timestamp>.bin`
+and are uploaded only when selected in the local Recordings list. The legacy job
+coordinator's explicit-keep rule for these markers (`recording_intent`) was
+deleted with legacy sync on 2026-11-17.
 
 After all speech segments finish assignment, the coordinator enrolls every
 resulting retained row for enrichment, including rule-discard rows that intake
@@ -167,10 +165,6 @@ Speech the deterministic relevance rules (`utils/conversations/relevance_rules.p
 Known limitation: WALs carrying different existing live target IDs can remain separate even during one continuous recording. Sync never bridges those live-owned targets because an open socket may still write to them; partial-flap intake does not guarantee partition parity. Realtime now remembers same-origin continuations inside the continuity window and reaps expired empty generations on reconnect. This prevents one source of new target proliferation; it does not redirect historical distinct explicit live targets. Recording lineage binding (below) covers uploads that carry a recording id; historical rows are not migrated.
 
 The shared arithmetic does not unify the observed clocks: live finished_at is currently callback wall time, while sync uses VAD/word ends. Another boundary-policy input difference is timeout configuration: realtime can configure its timeout per session; shipped WALs do not carry that setting, so sync uses the default 120 seconds. Tests replay the in-order realtime speech rule as the reference and require identical sync membership, absolute transcript ranges and extents across arrival permutations for temporal intake, including 119-second joins and >=120-second splits with hint-only live stubs and missing target IDs present. Sync enrichment remains per finishing job and revision-fenced, not quiescence-debounced. Historical aliases already returned to clients may require a history refresh. Tests model serial commit permutations and replay failures hermetically; Firestore retry contention and live UI acceptance require separate evidence.
-
-### Operator minimal redrive
-
-An operator-built Cloud Tasks payload with `redrive_mode: 'minimal'` (`utils/sync/minimal_redrive.py`; clients never set it) keeps the ledger, dedupe and receipts but pins Parakeet through `selected_service`, skips paid empty-segment recovery (a double empty is silence), and fails retryably with `sync_minimal_provider_unavailable` when Parakeet cannot serve the language. Before temporal assignment it passes the closest same-partition, non-deleted completed row within 10 minutes as the explicit `target_id`; normal traffic keeps the ±2 minute hint and 120-second continuity. Post-processing is replaced: appended rows get no enrichment, and each new row gets one `sync_redrive_title` (gpt-5-nano) title and overview through `persist_processed_conversation`, keeping the deterministic minimum if that call fails. `SYNC_MINIMAL_REDRIVE_ENABLED=false` refuses such tasks with a retryable 409 before any work.
 
 ## Conversation size
 
@@ -307,8 +301,8 @@ Observe `sync_safety_wal_seconds_skipped_total`,
 `sync_safety_wal_segments_deduped_total`, `sync_safety_wal_audio_bytes_not_stored_total`
 (by reason) and `event=sync_safety_wal_coverage` per job. Byte counters measure
 suppressed decoded PCM bytes. No historical rewrite. Client 30-second edge
-suppression remains separate. #20688 touches different VAD/cleanup hunks in
-`pipeline.py`; #21362 touches client WAL recovery.
+suppression remains separate. #20688 touched different VAD/cleanup hunks in
+the former `pipeline.py`; #21362 touches client WAL recovery.
 
 `live_cap_journal.py` owns encrypted emergency staging when GCS is unavailable.
 The existing sealer materializes those journals before its fragment-claim commit;

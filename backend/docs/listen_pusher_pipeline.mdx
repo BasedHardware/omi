@@ -4273,72 +4273,15 @@ Inline coordinators retain their own terminal-write authority. The recovery
 and retained-audio limits are documented in the
 [two-lane sync runbook](runbooks/sync-two-lane.md).
 
-### Sync backfill handler-budget deferral (Cloud Run request timeout)
+### Sync backfill handler-budget deferral (retired)
 
-`backend-sync-backfill` runs each Cloud Tasks sync job inside one
-`POST /v2/sync-jobs/run` request. Stale sequencer epochs and no-op deliveries
-skip cohort warming; real work warms membership after the run-lock and
-terminal/convergence checks. A valid sequencer claim carries its prior Redis
-job snapshot back to the route, preserving retry history without a second
-executor dispatch. Locked retries and the final terminal re-read stay fenced.
-Cohort-only timeouts retain the queue-owned 409 after a confirmed lock release;
-an uncertain release keeps the existing preserved-lock continuation. Paid-work
-timeouts still preserve their lock and staged audio.
-Starlette's `TimeoutMiddleware` answers its
-route cap (`HTTP_SYNC_JOBS_RUN_TIMEOUT`, default 1500 s) with a 504 without
-cancelling the downstream pipeline, so an over-budget job would hold the ASGI
-request until Cloud Run kills it at the platform's maximum request timeout.
-The handler therefore ends the attempt itself: one budget
-(`SYNC_JOB_HANDLER_BUDGET_SECONDS`, derived at startup to sit strictly below
-the route cap, the Cloud Tasks dispatch deadline, and the run lock's TTL minus
-`SYNC_JOB_RESPONSE_MARGIN_SECONDS`) wraps payload parsing, lock admission,
-staged-file downloads, and the pipeline as a single deadline. For sequenced
-deliveries the deadline is captured before the wrapper's `begin_job` and
-prior-job reads and rides the attempt state into the body's timeout as
-remaining time, so a stalled setup read cannot buy the attempt a fresh full
-budget after it.
-
-On expiry the handler defers instead of failing: it persists the chain count
-on the sequencer owner FIRST (`budget_deferrals` in the task payload,
-`active_budget_deferrals` on the owner) — required before anything schedules
-a replacement, because the sweep's lease-expiry redrive re-dispatches the
-owner's original payload and a write that fails first returns the
-queue-owned 409 (`owner_write_failed`) with no replacement left orphaned —
-then writes a `deferred_until` marker on the Redis job (replacement time +
-`QUEUED_DISPATCH_STALE_SECONDS`), enqueues one delayed replacement task past
-the preserved run lock's TTL (`RUN_LOCK_TTL_SECONDS + 60 s`), and acks 200
-with status `deferred_handler_budget`. One absolute post-budget deadline
-bounds the owner-count write, run-lock acquire drain, marker write, and
-enqueue together; a mid-flight executor leaf (lock acquire or marker CAS) is
-drained or fenced rather than racing the cleanup clear, and an acquire that
-cannot be settled returns the queue-owned 409 (`acquire_unsettled`) because
-no replacement schedule can be proven past the lock. When the enqueue
-definitively failed, the compensating marker clear is best-effort: a clear
-that also fails or times out records its own fallback (`marker_clear_failed`)
-on top of the enqueue failure, because the surviving marker keeps
-suppressing stale recovery after the queue-owned retries exhaust.
-
-Status polling honors the marker: a deferred job — `processing` or `queued`,
-direct or sequenced-excluded — is not stale until `deferred_until` passes
-(polls must not terminalize the planned silent window). Once the marker is
-overdue the job resumes normal staleness so a lost replacement self-heals
-through the poll's run-lease finalizer; for a queued job the overdue marker
-is itself the recovery signal even when earlier retryable failures left
-`attempt`/`started_at` populated. When the chain spends the whole attempt
-contract (`SYNC_TASKS_MAX_ATTEMPTS`), the handler returns the queue-owned
-409, and the UID sequencer's sweep terminalizes the abandoned Redis job
-(reason `sync_budget_chain_exhausted`) before releasing its owner. The
-persisted count denotes a successfully scheduled next attempt, not a
-completed one, and the replacement is deliberately delayed past the lease —
-so a still-future `deferred_until` marker keeps the owner until its horizon
-instead of terminalizing the final paid-for delivery as a stale epoch. A
-fence job whose content ledger durably completed before the terminal write
-converges that result instead of failing (`ledger_converged`). The terminal
-handoff is required before the lane advances, retried on transient Redis
-failures and on a terminalization CAS whose re-read still shows a nonterminal
-job, and fenced by an atomically acquired run lock (an unacquirable lock
-retains the owner — the holder's own terminal write always wins) so the
-finalization never races a live attempt.
+Deleted with the legacy sync pipeline and the UID backfill sequencer (plan C C9-C11,
+2026-11-17). `POST /v2/sync-jobs/run` now serves only `batch_final_pass` and
+`sync_reprocess` tasks; a stray legacy transcription payload is acknowledged with
+200 `dropped/legacy_retired` (`omi_legacy_dark_ack{reason="legacy_retired"}`) so it
+drains instead of retrying. There is no handler-budget deferral chain, sequencer
+owner or sequencer sweep any more. See the
+[change note](listen_pusher_pipeline/changes/2026-11-17-legacy-sync-deleted.md).
 
 ### Conversation playback artifact
 
@@ -6863,7 +6806,7 @@ Backfill admission transactionally creates or repairs its sequencer owner. Compl
 
 ### Bounded backfill preparation
 
-The per-owner sequencer can warm a bounded prefix of staged-audio downloads while its head runs. Execution remains serial, including adjacent recordings, assignment, merge and billing. `SYNC_BACKFILL_OWNER_CONCURRENCY_ENABLED=off` stops preparation and ignores cached bytes; the default width is 2 only with at least 8 pending jobs. Generation validation protects deletion and replacement. Queue limits and backfill maxScale are unchanged. Bounds, fairness and throughput limits are in [bounded owner preparation](runbooks/sync-owner-concurrency.md).
+Deleted with the legacy backfill sequencer (plan C C10/C11, 2026-11-17). `SYNC_BACKFILL_OWNER_CONCURRENCY*` are retired; batch admission owns ordering. See [change note](listen_pusher_pipeline/changes/2026-11-17-legacy-sync-deleted.md).
 
 ### Sync VAD segment cache
 
@@ -7069,8 +7012,8 @@ before dispatch, including the batch projection's atomic ready receipt. A host
 without a complete queue, sync worker handler, matching OIDC audience, and
 invoker identity persists `dispatch=null`; it does not retry an invalid binding.
 Production backend-integration uses the fresh `sync-jobs` binding from the runtime
-manifest. The projection pump and backend-sync's two-minute sequencer sweep both
-repair due obligations. Repair can bind an incomplete legacy row inside its CAS,
+manifest. The projection pump repairs due obligations (the backend-sync sequencer
+sweep that also did so was deleted in plan C C10; `enrichment-maintenance` replaces it). Repair can bind an incomplete legacy row inside its CAS,
 rotating the task token while retaining version, quiet-window, and lease fences.
 Valid backfill bindings remain on their original worker and queue. Unbound hosts
 skip invalid rows and increment `sync_reprocess_unbound_total{action="repair"}`
@@ -8678,9 +8621,26 @@ retained uncertainty, kill switches, three new group indexes, deployment order,
 15-second SIGKILL residual window and measured cost increase. Enforcement flags
 remain off; this source change does not activate the cap cohort.
 
-## Operator minimal sync redrive
+## Legacy sync retirement and retained recovery
 
-Operator redrive payloads may carry `redrive_mode: 'minimal'` to re-transcribe preserved legacy sync audio at minimum cost: Parakeet-only pre-recorded STT with no Modulate recovery, attach-first assignment to a compatible row within 10 minutes through the normal lifecycle owner, and one gpt-5-nano title per newly created row instead of conversation processing. Details and the kill switch live in `backend/utils/sync/ARCHITECTURE.md`.
+The retired sync routes do not start a legacy job coordinator. V1 uploads return
+410 with a successor link; v2 offers uploads to batch first and otherwise uses
+the durable ownership fence and client cooldown response. Existing poll and
+held-capture recovery boundaries remain available. Stale non-enrichment task
+deliveries acknowledge `dropped/legacy_retired` rather than dispatching old work.
+
+Batch and cap-hold recovery retain the current segment-processing closure in
+`utils/sync/legacy_segment_core.py`: transcript admission, assignment/owner fences,
+recording-session and clock-run provenance, language selection, empty-success
+protection and paid-recovery checks. The legacy sequencer, job coordinator and
+minimal-redrive runner are deleted. Enrichment and summary-debt maintenance must
+already have their replacement owners serving before retirement is deployed.
+
+Deletion releases require qualified batch coverage, held-capture rehome, verified
+overlapping phone/Watch S1 behavior, drain confirmation and a continuous **12-hour**
+legacy-dark soak. The shared soak checker's older six-hour floor alone does not
+qualify this deletion sequence. Repeat the clean soak between deletion steps and
+retain the predecessor image plus queue/scheduler restoration specifications.
 
 Runtime STT-cap and ladder execution scope shares the 60-second, environment-fenced
 Firestore token cache; session admission does not wait for it. Existing live sessions

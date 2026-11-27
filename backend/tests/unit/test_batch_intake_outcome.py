@@ -72,6 +72,14 @@ def _router():
     return module, saved, BytesIO
 
 
+@pytest.fixture(scope='module', autouse=True)
+def _warm_sync_router():
+    # Pay the router's one-time dependency imports in setup, not in the first test's
+    # call phase, which the fast-unit CPU guard measures.
+    _, saved, _, _, _, _ = _load_sync_router_for_fast_path()
+    _restore(saved)
+
+
 @pytest.fixture
 def router_harness(_router):
     # Cold construction of the stubbed router is setup, not the routing behavior
@@ -401,99 +409,5 @@ async def test_rehomed_final_pass_owner_batch_landing_is_not_counted(monkeypatch
         assert response.status_code == 202
         assert _counts() == before  # ...behind a final-pass owner: still not counted.
         module.create_sync_job.assert_not_called()
-    finally:
-        _restore(saved)
-
-
-async def test_heavy_owner_excluded_upload_counts_heavy_excluded(monkeypatch, _router):
-    module, saved, BytesIO = _router
-    try:
-        monkeypatch.setattr(legacy_dark, 'current_mode', lambda uid=None: ON)
-        module.resolve_batch_policy = lambda uid: enabled_policy()
-        module.registered_record_response = AsyncMock(return_value=None)
-        # The narrowed policy declines the upload back to legacy inside intake.
-        module.accept_batch_upload = AsyncMock(return_value=None)
-        module.create_sync_job = Mock()
-        # Real ramp: no durable owner, the owner-load read excludes this uid.
-        monkeypatch.setattr(batch_ramp, 'current_stage', lambda: 'dev')
-        monkeypatch.setattr(batch_ramp, 'get_data_plane_firestore_client', _no_durable_owner_client)
-        monkeypatch.setattr(
-            batch_ramp,
-            'read_owner_load',
-            lambda *a, **k: {'open_backlog': 42, 'recording_seconds': 0, 'complete': True},
-        )
-        before = _counts()
-        response = await _upload(module, BytesIO)
-        assert response.status_code == 202
-        after = _counts()
-        assert after['heavy_excluded'] == before['heavy_excluded'] + 1
-        assert {k: v for k, v in after.items() if k != 'heavy_excluded'} == {
-            k: v for k, v in before.items() if k != 'heavy_excluded'
-        }
-        module.create_sync_job.assert_called_once()
-    finally:
-        _restore(saved)
-
-
-async def test_language_excluded_upload_counts_language_excluded(monkeypatch, _router):
-    world = _language_world(monkeypatch)
-    module, saved, BytesIO = _router
-    try:
-        monkeypatch.setattr(legacy_dark, 'current_mode', lambda uid=None: ON)
-        monkeypatch.setattr(legacy_dark, 'read_ledger_row', lambda *a: None)
-        module.resolve_batch_policy = lambda uid: world.policy
-        module.ramp_admission_policy = lambda uid, policy, **kwargs: policy
-        module.compute_sync_content_id = lambda *a: 'new'
-        module.registered_record_response = live_upload.registered_record_response
-        module.accept_batch_upload = Mock(side_effect=AssertionError('excluded upload must not enter batch intake'))
-        module.archive_mobile_batch_raw_files = lambda *a, **k: []
-        before = _counts()
-        response = await _upload(module, BytesIO, conversation_id=CID)
-        assert response.status_code == 202
-        assert world.claims == ['legacy_final_pass_v1']
-        after = _counts()
-        assert after['language_excluded'] == before['language_excluded'] + 1
-        assert {k: v for k, v in after.items() if k != 'language_excluded'} == {
-            k: v for k, v in before.items() if k != 'language_excluded'
-        }
-    finally:
-        _restore(saved)
-
-
-async def test_not_cohort_upload_counts_not_cohort(monkeypatch, _router):
-    module, saved, BytesIO = _router
-    try:
-        monkeypatch.setattr(legacy_dark, 'current_mode', lambda uid=None: ON)
-        module.resolve_batch_policy = lambda uid: BatchUnitPolicy(batch_enabled=False)
-        module.registered_record_response = AsyncMock(return_value=None)
-        module.accept_batch_upload = AsyncMock(side_effect=AssertionError('batch is not enabled for this uid'))
-        module.create_sync_job = Mock()
-        before = _counts()
-        response = await _upload(module, BytesIO)
-        assert response.status_code == 202
-        after = _counts()
-        assert after['not_cohort'] == before['not_cohort'] + 1
-        assert {k: v for k, v in after.items() if k != 'not_cohort'} == {
-            k: v for k, v in before.items() if k != 'not_cohort'
-        }
-        module.create_sync_job.assert_called_once()
-    finally:
-        _restore(saved)
-
-
-async def test_durable_legacy_owner_landing_is_not_counted(monkeypatch, _router):
-    module, saved, BytesIO = _router
-    try:
-        monkeypatch.setattr(legacy_dark, 'current_mode', lambda uid=None: ON)
-        module.resolve_batch_policy = lambda uid: enabled_policy()
-        module.ramp_admission_policy = lambda uid, policy, **kwargs: policy
-        module.registered_record_response = AsyncMock(return_value=RecordUploadRoute.LEGACY)
-        module.accept_batch_upload = AsyncMock(side_effect=AssertionError('a legacy owner must not enter batch intake'))
-        module.create_sync_job = Mock()
-        before = _counts()
-        response = await _upload(module, BytesIO)
-        assert response.status_code == 202
-        assert _counts() == before  # Prior owner: no fresh decision, no outcome.
-        module.create_sync_job.assert_called_once()
     finally:
         _restore(saved)

@@ -48,8 +48,7 @@ GKE `DD_SERVICE` names the JSON ledger, not Prometheus samples. The workload
 charts set a static `service_name` pod label. GMP PodMonitoring and the
 in-cluster Prometheus scrape jobs copy that label onto their samples. Seal
 CronJobs carry their own pod identity for Alloy logs only; their pods are not
-scraped. The sync-backfill-worker pilot carries the label and GMP mapping for
-its future deployment.
+scraped.
 
 The checked-in production seal-worker values set `runtimeEnabled: false`.
 That worker serves its private metrics registry but performs no discovery or
@@ -523,7 +522,6 @@ and an overlapping context for the same entrypoint.
 | `modal/frame_request_retention_job.py:main` | `@read_origin('job:frame_request_retention')` |
 | `modal/day3_reengagement_email_job.py:main` | `@read_origin('job:day3_reengagement_email')` |
 | `modal/conversation_selfheal_job.py:main` | `@read_origin('job:conversation_selfheal')` |
-| `routers/sync.py:sweep_sync_backfill_sequencer` (`/v2/sync-backfill-sequencer/sweep`) | `@read_origin('job:sync_backfill_sequencer')` |
 | `routers/dream_sweep.py:canary_dream_agent` (`/v2/dream-agent/canary`) | `@read_origin('job:dream_agent_canary')` |
 | `routers/dream_sweep.py:sweep_dream_agent` (`/v2/dream-agent/sweep`) | `@read_origin('job:dream_agent_sweep')` |
 | `routers/candidate_integration_sweep.py:sweep_candidate_integrations` (`/v2/candidate-integrations/sweep`) | `@read_origin('job:candidate_integration_sweep')` |

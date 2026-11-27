@@ -47,7 +47,9 @@ class TestProcessSegmentErrorHandling:
 
     @staticmethod
     def _read_pipeline_source():
-        return _read_text(os.path.join(os.path.dirname(__file__), '..', '..', 'utils', 'sync', 'pipeline.py'))
+        return _read_text(
+            os.path.join(os.path.dirname(__file__), '..', '..', 'utils', 'sync', 'legacy_segment_core.py')
+        )
 
     def test_process_segment_has_try_except(self):
         """process_segment() must wrap its body in try/except to catch all errors."""
@@ -96,21 +98,6 @@ class TestProcessSegmentErrorHandling:
 
         assert 'lock:' in signature, "Must accept lock parameter"
         assert 'errors:' in signature, "Must accept errors parameter"
-
-
-class TestSyncEndpointErrorReporting:
-    """Verify the endpoint properly reports errors."""
-
-    @staticmethod
-    def _read_sync_source():
-        return _read_text(os.path.join(os.path.dirname(__file__), '..', '..', 'routers', 'sync.py'))
-
-    def test_response_includes_failed_segments_count(self):
-        """Response must include failed_segments count for app to check."""
-        source = self._read_sync_source()
-        assert "'failed_segments'" in source, "Response must include failed_segments"
-        assert "'total_segments'" in source, "Response must include total_segments"
-        assert "'errors'" in source, "Response must include errors list"
 
 
 # ---------------------------------------------------------------------------
@@ -465,7 +452,7 @@ class TestSegmentDeduplication:
 
     @staticmethod
     def _read_pipeline_source():
-        pipeline_path = os.path.join(os.path.dirname(__file__), '..', '..', 'utils', 'sync', 'pipeline.py')
+        pipeline_path = os.path.join(os.path.dirname(__file__), '..', '..', 'utils', 'sync', 'legacy_segment_core.py')
         return _read_text(pipeline_path)
 
     def test_merge_path_calls_shared_dedupe_helper(self):
@@ -977,7 +964,7 @@ class TestProcessSegmentReal:
             'utils.sync.merge_audio',
             'utils.sync.assignment',
             'utils.conversations.deterministic_minimum',
-            'utils.sync.pipeline',
+            'utils.sync.legacy_segment_core',
             'utils.sync.ledger_completion',
         ):
             fakes[name] = None
@@ -992,7 +979,7 @@ class TestProcessSegmentReal:
             patch.setattr(firestore_client, 'get_firestore_client', unexpected_client)
             patch.setattr(firestore_client, 'get_data_plane_firestore_client', unexpected_client)
             patch.setattr(firestore_client, 'run_transactional', unexpected_transaction)
-            pipeline = import_module('utils.sync.pipeline')
+            pipeline = import_module('utils.sync.legacy_segment_core')
             cls._process_segment = staticmethod(pipeline.process_segment)
             pipeline.get_wav_duration = lambda path: 60
             pipeline.get_timestamp_from_path = lambda path: float(Path(path).stem)
@@ -1014,10 +1001,12 @@ class TestProcessSegmentReal:
         errors = []
         lock = threading.Lock()
 
-        with patch('utils.sync.pipeline.prerecorded', return_value=([], 'en')), patch(
-            'utils.sync.pipeline.delete_syncing_temporal_file'
-        ), patch('utils.sync.pipeline.get_syncing_file_temporal_signed_url', return_value='https://fake'), patch(
-            'utils.sync.pipeline.time.sleep'
+        with patch('utils.sync.legacy_segment_core.prerecorded', return_value=([], 'en')), patch(
+            'utils.sync.legacy_segment_core.delete_syncing_temporal_file', create=True
+        ), patch(
+            'utils.sync.legacy_segment_core.get_syncing_file_temporal_signed_url', return_value='https://fake'
+        ), patch(
+            'utils.sync.legacy_segment_core.time.sleep'
         ):
             from models.conversation_enums import ConversationSource
 
@@ -1039,12 +1028,12 @@ class TestProcessSegmentReal:
         errors = []
         lock = threading.Lock()
 
-        with patch('utils.sync.pipeline.prerecorded', return_value=([{'text': 'um'}], 'en')), patch(
-            'utils.sync.pipeline.postprocess_words', return_value=[]
-        ), patch('utils.sync.pipeline.delete_syncing_temporal_file'), patch(
-            'utils.sync.pipeline.get_syncing_file_temporal_signed_url', return_value='https://fake'
+        with patch('utils.sync.legacy_segment_core.prerecorded', return_value=([{'text': 'um'}], 'en')), patch(
+            'utils.sync.legacy_segment_core.postprocess_words', return_value=[]
+        ), patch('utils.sync.legacy_segment_core.delete_syncing_temporal_file', create=True), patch(
+            'utils.sync.legacy_segment_core.get_syncing_file_temporal_signed_url', return_value='https://fake'
         ), patch(
-            'utils.sync.pipeline.time.sleep'
+            'utils.sync.legacy_segment_core.time.sleep'
         ):
             from models.conversation_enums import ConversationSource
 
@@ -1066,10 +1055,12 @@ class TestProcessSegmentReal:
         errors = []
         lock = threading.Lock()
 
-        with patch('utils.sync.pipeline.prerecorded', side_effect=ConnectionError('timeout')), patch(
-            'utils.sync.pipeline.delete_syncing_temporal_file'
-        ), patch('utils.sync.pipeline.get_syncing_file_temporal_signed_url', return_value='https://fake'), patch(
-            'utils.sync.pipeline.time.sleep'
+        with patch('utils.sync.legacy_segment_core.prerecorded', side_effect=ConnectionError('timeout')), patch(
+            'utils.sync.legacy_segment_core.delete_syncing_temporal_file', create=True
+        ), patch(
+            'utils.sync.legacy_segment_core.get_syncing_file_temporal_signed_url', return_value='https://fake'
+        ), patch(
+            'utils.sync.legacy_segment_core.time.sleep'
         ):
             from models.conversation_enums import ConversationSource
 
@@ -1100,19 +1091,19 @@ class TestProcessSegmentReal:
             'transcript_segments': [{'start': 0.0, 'end': 5.0, 'text': 'hello', 'speaker': 'SPEAKER_00'}],
         }
 
-        with patch('utils.sync.pipeline.prerecorded', return_value=([{'text': 'hello'}], 'en')), patch(
-            'utils.sync.pipeline.postprocess_words', return_value=[real_segment]
-        ), patch('utils.sync.pipeline.get_timestamp_from_path', return_value=1700000000.0), patch(
-            'utils.sync.pipeline.get_closest_conversation_to_timestamps', return_value=None
+        with patch('utils.sync.legacy_segment_core.prerecorded', return_value=([{'text': 'hello'}], 'en')), patch(
+            'utils.sync.legacy_segment_core.postprocess_words', return_value=[real_segment]
+        ), patch('utils.sync.legacy_segment_core.get_timestamp_from_path', return_value=1700000000.0), patch(
+            'utils.sync.legacy_segment_core.get_closest_conversation_to_timestamps', return_value=None
         ), patch(
             'utils.conversations.lifecycle.ingest_sync_conversation',
             return_value=(assigned_conversation, True, assigned_conversation['transcript_segments']),
         ) as mock_intake, patch(
-            'utils.sync.pipeline.delete_syncing_temporal_file'
+            'utils.sync.legacy_segment_core.delete_syncing_temporal_file', create=True
         ), patch(
-            'utils.sync.pipeline.get_syncing_file_temporal_signed_url', return_value='https://fake'
+            'utils.sync.legacy_segment_core.get_syncing_file_temporal_signed_url', return_value='https://fake'
         ), patch(
-            'utils.sync.pipeline.time.sleep'
+            'utils.sync.legacy_segment_core.time.sleep'
         ):
             from models.conversation_enums import ConversationSource
 
@@ -1160,18 +1151,18 @@ class TestProcessSegmentReal:
             assigned['id'] = f"conv-{incoming['started_at'].timestamp()}"
             return assigned, True, assigned['transcript_segments']
 
-        with patch('utils.sync.pipeline.prerecorded', side_effect=mock_deepgram_mixed), patch(
-            'utils.sync.pipeline.postprocess_words', return_value=[real_segment]
-        ), patch('utils.sync.pipeline.get_timestamp_from_path', return_value=1700000000.0), patch(
-            'utils.sync.pipeline.get_closest_conversation_to_timestamps', return_value=None
+        with patch('utils.sync.legacy_segment_core.prerecorded', side_effect=mock_deepgram_mixed), patch(
+            'utils.sync.legacy_segment_core.postprocess_words', return_value=[real_segment]
+        ), patch('utils.sync.legacy_segment_core.get_timestamp_from_path', return_value=1700000000.0), patch(
+            'utils.sync.legacy_segment_core.get_closest_conversation_to_timestamps', return_value=None
         ), patch(
             'utils.conversations.lifecycle.ingest_sync_conversation', side_effect=_intake_success
         ), patch(
-            'utils.sync.pipeline.delete_syncing_temporal_file'
+            'utils.sync.legacy_segment_core.delete_syncing_temporal_file', create=True
         ), patch(
-            'utils.sync.pipeline.get_syncing_file_temporal_signed_url', return_value='https://fake'
+            'utils.sync.legacy_segment_core.get_syncing_file_temporal_signed_url', return_value='https://fake'
         ), patch(
-            'utils.sync.pipeline.time.sleep'
+            'utils.sync.legacy_segment_core.time.sleep'
         ):
             from models.conversation_enums import ConversationSource
 
@@ -1219,10 +1210,10 @@ class TestProcessSegmentReal:
             'discarded': False,
         }
 
-        with patch('utils.sync.pipeline.prerecorded', return_value=([{'text': 'hello'}], 'en')), patch(
-            'utils.sync.pipeline.postprocess_words', return_value=[mock_segment]
-        ), patch('utils.sync.pipeline.get_timestamp_from_path', return_value=1700000000.0), patch(
-            'utils.sync.pipeline.get_closest_conversation_to_timestamps', return_value=existing_conv
+        with patch('utils.sync.legacy_segment_core.prerecorded', return_value=([{'text': 'hello'}], 'en')), patch(
+            'utils.sync.legacy_segment_core.postprocess_words', return_value=[mock_segment]
+        ), patch('utils.sync.legacy_segment_core.get_timestamp_from_path', return_value=1700000000.0), patch(
+            'utils.sync.legacy_segment_core.get_closest_conversation_to_timestamps', return_value=existing_conv
         ), patch(
             'utils.conversations.lifecycle.ingest_sync_conversation',
             return_value=(
@@ -1237,11 +1228,11 @@ class TestProcessSegmentReal:
                 [],
             ),
         ), patch(
-            'utils.sync.pipeline.delete_syncing_temporal_file'
+            'utils.sync.legacy_segment_core.delete_syncing_temporal_file', create=True
         ), patch(
-            'utils.sync.pipeline.get_syncing_file_temporal_signed_url', return_value='https://fake'
+            'utils.sync.legacy_segment_core.get_syncing_file_temporal_signed_url', return_value='https://fake'
         ), patch(
-            'utils.sync.pipeline.time.sleep'
+            'utils.sync.legacy_segment_core.time.sleep'
         ):
             from models.conversation_enums import ConversationSource
 
@@ -1286,10 +1277,10 @@ class TestProcessSegmentReal:
         # Offline WAL filename ~5 minutes ahead of live conversation start
         wal_ts = conv_start + 300.0
 
-        with patch('utils.sync.pipeline.prerecorded', return_value=([{'text': 'hello'}], 'en')), patch(
-            'utils.sync.pipeline.postprocess_words', return_value=[mock_segment]
-        ), patch('utils.sync.pipeline.get_timestamp_from_path', return_value=wal_ts), patch(
-            'utils.sync.pipeline.get_closest_conversation_to_timestamps', return_value=existing_conv
+        with patch('utils.sync.legacy_segment_core.prerecorded', return_value=([{'text': 'hello'}], 'en')), patch(
+            'utils.sync.legacy_segment_core.postprocess_words', return_value=[mock_segment]
+        ), patch('utils.sync.legacy_segment_core.get_timestamp_from_path', return_value=wal_ts), patch(
+            'utils.sync.legacy_segment_core.get_closest_conversation_to_timestamps', return_value=existing_conv
         ), patch(
             'utils.conversations.lifecycle.ingest_sync_conversation',
             return_value=(
@@ -1304,11 +1295,11 @@ class TestProcessSegmentReal:
                 [],
             ),
         ), patch(
-            'utils.sync.pipeline.delete_syncing_temporal_file'
+            'utils.sync.legacy_segment_core.delete_syncing_temporal_file', create=True
         ), patch(
-            'utils.sync.pipeline.get_syncing_file_temporal_signed_url', return_value='https://fake'
+            'utils.sync.legacy_segment_core.get_syncing_file_temporal_signed_url', return_value='https://fake'
         ), patch(
-            'utils.sync.pipeline.time.sleep'
+            'utils.sync.legacy_segment_core.time.sleep'
         ):
             from models.conversation_enums import ConversationSource
 
@@ -1380,25 +1371,25 @@ class TestProcessSegmentReal:
             {'start': 5.0, 'end': 10.0, 'text': 'and then this brand new sentence arrives here'},
         ]
 
-        with patch('utils.sync.pipeline.prerecorded', return_value=([{'text': 'hello'}], 'en')), patch(
-            'utils.sync.pipeline.postprocess_words', return_value=[dup_seg, new_seg]
-        ), patch('utils.sync.pipeline.get_timestamp_from_path', return_value=conv_start), patch(
-            'utils.sync.pipeline.get_closest_conversation_to_timestamps', return_value=existing_conv
+        with patch('utils.sync.legacy_segment_core.prerecorded', return_value=([{'text': 'hello'}], 'en')), patch(
+            'utils.sync.legacy_segment_core.postprocess_words', return_value=[dup_seg, new_seg]
+        ), patch('utils.sync.legacy_segment_core.get_timestamp_from_path', return_value=conv_start), patch(
+            'utils.sync.legacy_segment_core.get_closest_conversation_to_timestamps', return_value=existing_conv
         ), patch(
             'utils.conversations.lifecycle.ingest_sync_conversation',
             return_value=(assigned_conv, False, survivors),
         ), patch(
-            'utils.sync.pipeline.delete_syncing_temporal_file'
+            'utils.sync.legacy_segment_core.delete_syncing_temporal_file', create=True
         ), patch(
-            'utils.sync.pipeline.get_syncing_file_temporal_signed_url', return_value='https://fake'
+            'utils.sync.legacy_segment_core.get_syncing_file_temporal_signed_url', return_value='https://fake'
         ), patch(
-            'utils.sync.pipeline._download_audio_bytes', return_value=b'fake-wav'
+            'utils.sync.legacy_segment_core._download_audio_bytes', return_value=b'fake-wav'
         ), patch(
-            'utils.sync.pipeline._store_sync_audio_chunk'
+            'utils.sync.legacy_segment_core._store_sync_audio_chunk'
         ) as mock_full_store, patch(
-            'utils.sync.pipeline.store_partial_merge_survivor_audio'
+            'utils.sync.legacy_segment_core.store_partial_merge_survivor_audio'
         ) as mock_partial_store, patch(
-            'utils.sync.pipeline.time.sleep'
+            'utils.sync.legacy_segment_core.time.sleep'
         ):
             from models.conversation_enums import ConversationSource
 
@@ -1441,10 +1432,12 @@ class TestProcessSegmentReal:
         lock = threading.Lock()
 
         # VAD selected these three as speech-eligible; every one transcribes empty.
-        with patch('utils.sync.pipeline.prerecorded', return_value=([], 'en')), patch(
-            'utils.sync.pipeline.delete_syncing_temporal_file'
-        ), patch('utils.sync.pipeline.get_syncing_file_temporal_signed_url', return_value='https://fake'), patch(
-            'utils.sync.pipeline.time.sleep'
+        with patch('utils.sync.legacy_segment_core.prerecorded', return_value=([], 'en')), patch(
+            'utils.sync.legacy_segment_core.delete_syncing_temporal_file', create=True
+        ), patch(
+            'utils.sync.legacy_segment_core.get_syncing_file_temporal_signed_url', return_value='https://fake'
+        ), patch(
+            'utils.sync.legacy_segment_core.time.sleep'
         ):
             from models.conversation_enums import ConversationSource
 
@@ -1468,12 +1461,12 @@ class TestProcessSegmentReal:
         lock = threading.Lock()
 
         with patch(
-            'utils.sync.pipeline.prerecorded',
+            'utils.sync.legacy_segment_core.prerecorded',
             side_effect=RuntimeError('Deepgram transcription failed after 2 attempts: timeout'),
-        ), patch('utils.sync.pipeline.delete_syncing_temporal_file'), patch(
-            'utils.sync.pipeline.get_syncing_file_temporal_signed_url', return_value='https://fake'
+        ), patch('utils.sync.legacy_segment_core.delete_syncing_temporal_file', create=True), patch(
+            'utils.sync.legacy_segment_core.get_syncing_file_temporal_signed_url', return_value='https://fake'
         ), patch(
-            'utils.sync.pipeline.time.sleep'
+            'utils.sync.legacy_segment_core.time.sleep'
         ):
             from models.conversation_enums import ConversationSource
 
@@ -1683,6 +1676,6 @@ def test_sync_intake_holds_no_transcript_writer():
     than importing it — importing the real module here costs seconds against the duration guard,
     and a text check also catches a reintroduced import that was never loaded.
     """
-    pipeline_path = os.path.join(os.path.dirname(__file__), '..', '..', 'utils', 'sync', 'pipeline.py')
+    pipeline_path = os.path.join(os.path.dirname(__file__), '..', '..', 'utils', 'sync', 'legacy_segment_core.py')
 
     assert 'update_conversation_segments' not in _read_text(pipeline_path)

@@ -10,7 +10,7 @@ import logging
 
 import config.demand_processing
 import config.sync_reprocess
-from utils.sync import pipeline, processing_hold
+from utils.sync import legacy_segment_core as pipeline, processing_hold
 from utils.sync.assignment_errors import SyncAssignmentSuperseded
 
 

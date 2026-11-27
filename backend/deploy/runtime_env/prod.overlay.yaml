@@ -1215,9 +1215,6 @@ overlay:
             value: 'true'
           BUCKET_AUDIO_DERIVED:
             value: omi-audio-derived-uc1
-          SYNC_BACKFILL_RETIRE_EXPIRED_AT_CLAIM:
-            value: 'false'
-            category: rollout
           HOSTED_LID_API_URL: {value: '', category: service_discovery}  # held empty until prod-omi-parakeet-lid passes acceptance (cpu-language-id.md step 4)
           HOSTED_PARAKEET_API_URL:
             value: http://parakeet.omi.me
@@ -1450,12 +1447,6 @@ overlay:
           SYNC_BACKFILL_MAX_AGE_SECONDS:
             value: '5184000'
             category: rollout
-          SYNC_BACKFILL_ORDER:
-            value: 'newest'
-            category: rollout
-          SYNC_BACKFILL_ORDER_PERCENT:
-            value: '100'
-            category: rollout
           SYNC_BACKFILL_ROUTING_ENABLED:
             value: 'true'
             category: rollout
@@ -1470,23 +1461,14 @@ overlay:
           SYNC_BACKFILL_TASKS_QUEUE:
             value: 'sync-backfill-fresh'
             category: reliability
-          SYNC_BACKFILL_UID_SEQUENCER:
-            value: 'on'
-            category: rollout
           SYNC_BACKFILL_USER_DAILY_HOURS:
             value: '4'
-            category: rollout
-          SYNC_DURABLE_REDRIVE_GUARD:
-            value: 'true'
             category: rollout
           SYNC_JOB_COMPLETED_TTL_SECONDS:
             value: '21600'
             category: rollout
           SYNC_JOB_METRIC_ONCE_TTL_SECONDS:
             value: '3600'
-            category: rollout
-          SYNC_LEGACY_COMPLETION_CONVERGENCE:
-            value: 'true'
             category: rollout
           SYNC_REPROCESS_SETTLE_SECONDS:
             value: '600'
@@ -1642,9 +1624,6 @@ overlay:
             value: 'true'
           BUCKET_AUDIO_DERIVED:
             value: omi-audio-derived-uc1
-          SYNC_BACKFILL_RETIRE_EXPIRED_AT_CLAIM:
-            value: 'false'
-            category: rollout
           HOSTED_LID_API_URL: {value: '', category: service_discovery}  # held empty until prod-omi-parakeet-lid passes acceptance (cpu-language-id.md step 4)
           HOSTED_PARAKEET_API_URL:
             value: http://parakeet.omi.me
@@ -1848,12 +1827,6 @@ overlay:
           SYNC_BACKFILL_MAX_AGE_SECONDS:
             value: '5184000'
             category: rollout
-          SYNC_BACKFILL_ORDER:
-            value: 'newest'
-            category: rollout
-          SYNC_BACKFILL_ORDER_PERCENT:
-            value: '0'
-            category: rollout
           SYNC_BACKFILL_ROUTING_ENABLED:
             value: 'true'
             category: rollout
@@ -1868,23 +1841,14 @@ overlay:
           SYNC_BACKFILL_TASKS_QUEUE:
             value: 'sync-backfill-fresh'
             category: reliability
-          SYNC_BACKFILL_UID_SEQUENCER:
-            value: 'on'
-            category: rollout
           SYNC_BACKFILL_USER_DAILY_HOURS:
             value: '4'
-            category: rollout
-          SYNC_DURABLE_REDRIVE_GUARD:
-            value: 'true'
             category: rollout
           SYNC_JOB_COMPLETED_TTL_SECONDS:
             value: '21600'
             category: rollout
           SYNC_JOB_METRIC_ONCE_TTL_SECONDS:
             value: '3600'
-            category: rollout
-          SYNC_LEGACY_COMPLETION_CONVERGENCE:
-            value: 'true'
             category: rollout
           SYNC_REPROCESS_SETTLE_SECONDS:
             value: '600'

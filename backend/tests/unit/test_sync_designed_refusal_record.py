@@ -37,7 +37,7 @@ DESIGNED_REASONS = {
     'retained_recovery_disabled',
     'capture_clock_identity_required',
     'repaired_clock_batch_declined',
-    'dispatch_hold',
+    # 'dispatch_hold' marked the legacy staging dispatch, deleted with legacy sync (SCA-2965).
 }
 
 

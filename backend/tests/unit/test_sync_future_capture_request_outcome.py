@@ -53,6 +53,11 @@ def test_router_early_exits(client, monkeypatch, scenario, outcome, status, code
         monkeypatch.setenv('SYNC_BACKFILL_ENABLED', 'false')
     elif scenario == 'disabled':
         monkeypatch.setenv('SYNC_FUTURE_CAPTURE_CLAMP_ENABLED', 'false')
+    elif scenario == 'ineligible':
+        # No durable batch owner and a policy outside the batch cohort: the future
+        # capture cannot fall through to a reader (legacy admission is deleted).
+        monkeypatch.setattr(router, 'registered_record_response', AsyncMock(return_value=None))
+        monkeypatch.setattr(router, 'resolve_batch_policy', lambda _: BatchUnitPolicy(batch_enabled=False))
     elif scenario == 'stage_error':
         monkeypatch.setattr(router, '_retrieve_file_paths_v2', Mock(side_effect=OSError('stage failed')))
     before = _counts()

@@ -142,7 +142,7 @@ def test_wrong_key_transcript_keeps_ciphertext_and_retries(rows, client, monkeyp
 def test_legacy_direct_redirect_queues_undecodable_transcript(
     state, monkeypatch, wrong_key_conversation, reuse_snapshot
 ):
-    from utils.sync import pipeline
+    from utils.sync import legacy_segment_core as pipeline
 
     store, path, conversation = wrong_key_conversation
     donor_path = ('users', 'u', 'conversations', 'donor')

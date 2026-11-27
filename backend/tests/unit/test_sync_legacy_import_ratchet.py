@@ -7,6 +7,12 @@ recovery) once the batch record lane serves 100% of owners. Each deletion PR
 must be able to see every dependant it has to cut. This test freezes today's
 import edges into those modules so the set can only shrink.
 
+Deleted in plan C C9-C11 (2026-11-17): the coordinator ``utils/sync/pipeline.py``
+(its cap-hold segment core moved to ``utils/sync/legacy_segment_core.py``), the
+backfill sequencer and its prefetch/cutover/order helpers, and legacy redrive.
+The modules below remain because retained surfaces (status polling, cap-hold
+recovery, capture coverage) still import them.
+
 Scope (exact):
 
 - Retiring modules: ``RETIRING_MODULES`` below, the class (a) rows of plan C
@@ -70,16 +76,7 @@ UNREVIEWED = 'UNREVIEWED: justify this new dependant on retiring legacy sync cod
 # module -> plan C deletion PR. Plan: omi-knowledge-base
 # projects/backend-target-architecture/plan-c-legacy-consolidation.md, section 2.
 RETIRING_MODULES: dict[str, str] = {
-    'utils.sync.pipeline': 'C11',
-    'utils.sync.uid_sequencer': 'C10',
-    'database.sync_backfill_sequencer': 'C10',
-    'utils.sync.owner_prefetch': 'C10',
-    'utils.sync.staged_prefetch': 'C10',
-    'utils.sync.backfill_cutover': 'C10',
-    'utils.sync.backfill_order': 'C10',
-    'database.sync_redrive': 'C10',
     'database.sync_dead_letters': 'C10',
-    'utils.sync.redrive_policy': 'C10',
     'utils.sync.completed_status': 'C10',
     'utils.sync.wal_audio_coverage': 'C11',
     'utils.sync.wal_audio_coverage_metrics': 'C11',
@@ -94,16 +91,7 @@ RETIRING_MODULES: dict[str, str] = {
 # may only shrink. Raising a ceiling is a reviewed decision to change dead code; prefer
 # fixing the batch pipeline, which serves every sync upload.
 RETIRING_LINE_CEILINGS: dict[str, int] = {
-    'utils.sync.pipeline': 4072,
-    'utils.sync.uid_sequencer': 776,
-    'database.sync_backfill_sequencer': 988,
-    'utils.sync.owner_prefetch': 60,
-    'utils.sync.staged_prefetch': 90,
-    'utils.sync.backfill_cutover': 79,
-    'utils.sync.backfill_order': 54,
-    'database.sync_redrive': 131,
     'database.sync_dead_letters': 207,
-    'utils.sync.redrive_policy': 20,
     'utils.sync.completed_status': 164,
     'utils.sync.wal_audio_coverage': 586,
     'utils.sync.wal_audio_coverage_metrics': 37,
@@ -412,11 +400,11 @@ def test_baseline_only_shrinks_stale_edges_are_removed(edges):
 @pytest.mark.parametrize(
     ('source', 'importer', 'expected'),
     [
-        ('import utils.sync.pipeline', 'utils/x.py', {'utils.sync.pipeline'}),
-        ('import utils.sync.pipeline as legacy', 'utils/x.py', {'utils.sync.pipeline'}),
-        ('from utils.sync import pipeline, reprocess', 'utils/x.py', {'utils.sync.pipeline'}),
-        ('from utils.sync.uid_sequencer import sweep', 'utils/x.py', {'utils.sync.uid_sequencer'}),
-        ('def f():\n    from database import sync_redrive\n', 'services/x.py', {'database.sync_redrive'}),
+        ('import utils.sync.wal_audio_coverage', 'utils/x.py', {'utils.sync.wal_audio_coverage'}),
+        ('import utils.sync.wal_audio_coverage as legacy', 'utils/x.py', {'utils.sync.wal_audio_coverage'}),
+        ('from utils.sync import wal_audio_coverage, reprocess', 'utils/x.py', {'utils.sync.wal_audio_coverage'}),
+        ('from utils.sync.empty_recovery import recover', 'utils/x.py', {'utils.sync.empty_recovery'}),
+        ('def f():\n    from database import sync_empty_recovery\n', 'services/x.py', {'database.sync_empty_recovery'}),
         ('from .sync_dead_letters import x', 'database/other.py', {'database.sync_dead_letters'}),
         ('from . import sync_dead_letters', 'database/other.py', {'database.sync_dead_letters'}),
         (
@@ -446,22 +434,22 @@ def test_baseline_only_shrinks_stale_edges_are_removed(edges):
         ),
         # Relative targets resolve against the literal package argument.
         (
-            'import importlib\nimportlib.import_module(".pipeline", package="utils.sync")',
+            'import importlib\nimportlib.import_module(".wal_audio_coverage", package="utils.sync")',
             'utils/x.py',
-            {'utils.sync.pipeline'},
+            {'utils.sync.wal_audio_coverage'},
         ),
         (
-            'import importlib\nimportlib.import_module(".pipeline", "utils.sync")',
+            'import importlib\nimportlib.import_module(".wal_audio_coverage", "utils.sync")',
             'utils/x.py',
-            {'utils.sync.pipeline'},
+            {'utils.sync.wal_audio_coverage'},
         ),
         (
-            'import importlib\nimportlib.import_module("..wal_audio_coverage", package="utils.sync.pipeline")',
+            'import importlib\nimportlib.import_module("..wal_audio_coverage", package="utils.sync.wal_audio_coverage")',
             'utils/x.py',
             {'utils.sync.wal_audio_coverage'},
         ),
         # Relative name without a literal package cannot be resolved.
-        ('import importlib\nimportlib.import_module(".pipeline")', 'utils/x.py', set()),
+        ('import importlib\nimportlib.import_module(".wal_audio_coverage")', 'utils/x.py', set()),
         # Unproven bindings are not importlib.import_module.
         ('from importlib import load  # not import_module\nload("utils.sync.completed_status")', 'utils/x.py', set()),
         ('import load\nload("utils.sync.completed_status")', 'utils/x.py', set()),
@@ -469,7 +457,7 @@ def test_baseline_only_shrinks_stale_edges_are_removed(edges):
         ('def import_module(n):\n    return None\nimport_module("utils.sync.completed_status")', 'utils/x.py', set()),
         ('importlib.import_module(name=name_variable)', 'utils/x.py', set()),
         ('from utils.sync import reprocess, assignment', 'utils/x.py', set()),
-        ('from utils.sync.pipeline_v2 import x', 'utils/x.py', set()),
+        ('from utils.sync.wal_audio_coverage_v2 import x', 'utils/x.py', set()),
         ('import database.sync_ledger', 'utils/x.py', set()),
     ],
 )
@@ -488,7 +476,7 @@ def test_import_detection(source, importer, expected):
         ('utils/sync/recording_lineage.py', True),
         ('utils/sync/reprocess.py', True),  # class (b) survivor: scanned, zero edges today
         ('routers/sync.py', False),
-        ('database/sync_redrive.py', False),
+        ('database/sync_empty_recovery.py', False),
         ('tests/unit/test_x.py', False),
         ('.openapi-venv/lib/python3.11/site-packages/aenum/_py2.py', False),
         ('venv/lib/x.py', False),

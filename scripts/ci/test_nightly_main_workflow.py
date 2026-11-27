@@ -163,6 +163,12 @@ class WorkflowTests(unittest.TestCase):
                 continue
             baseline = shown.stdout
             before, after = jobs(baseline), jobs((WORKFLOWS / filename).read_text())
+            if filename == "backend-hermetic-e2e.yml":
+                # Legacy-retire C11 (SCA-2965) deletes Phase0A and its only job.
+                # Pin that exact retirement; every other job/budget stays fixed.
+                self.assertFalse((ROOT / "backend/testing/replay_harness_phase0a/runner.py").exists())
+                self.assertNotIn("replay-harness-phase0a-gauntlet", after)
+                before.pop("replay-harness-phase0a-gauntlet", None)
             approved_jobs = {
                 name for workflow, name, field in INTENTIONAL_BUDGET_CHANGES
                 if workflow == filename and field == "runs-on"

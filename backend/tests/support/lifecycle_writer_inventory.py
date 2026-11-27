@@ -2765,9 +2765,6 @@ FIELD_SITES = {
             ('summary_blocked_reason', 'summary_due_at', 'summary_empty_failures'),
         )
     ],
-    'database/sync_backfill_sequencer.py': [
-        ('retire_expired.commit', 'status', "'retryable'", ('job_id', 'status', 'updated_at'))
-    ],
     'database/sync_cap_holds.py': [
         (
             'mark_content_held.commit',
@@ -2911,14 +2908,6 @@ FIELD_SITES = {
             "'completed'",
             ('completed_at', 'expires_at', 'result', 'status', 'updated_at'),
         ),
-    ],
-    'database/sync_redrive.py': [
-        (
-            'prepare',
-            'status',
-            "'redrive_required'",
-            ('accepted_at', 'deadline_kind', 'job_id', 'marked_at', 'payload', 'source_deadline_at', 'status', 'uid'),
-        )
     ],
     'database/usage_units.py': [
         (
@@ -4740,9 +4729,6 @@ FIELD_SITES = {
         ),
         ('sequencer_dark_response', 'status', "'legacy_dark'", ('outcomes', 'status')),
     ],
-    'utils/sync/minimal_redrive.py': [
-        ('_title_new_conversation', 'status', "'completed'", ('id', 'status', 'structured'))
-    ],
     'utils/sync/playback.py': [
         (
             '_conversation_audio_urls_entry',
@@ -4998,7 +4984,6 @@ KNOWN_TERMINAL_WRITERS = {
         ('utils/imports/limitless.py', 'process_limitless_import'): 'unclassified',
         ('utils/imports/transcript_files.py', 'build_imported_conversation'): 'unclassified',
         ('utils/sync/late_audio.py', 'ingest_late_transcript'): 'unclassified',
-        ('utils/sync/minimal_redrive.py', '_title_new_conversation'): 'unclassified',
     },
     'finalization': {
         ('database/conversation_finalization_jobs.py', '_abandon_byok_finalization_job_txn'): 'owner',
