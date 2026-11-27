@@ -7,7 +7,7 @@ import math
 import os
 from pathlib import Path
 
-from config.refactor_modes import RECORD_TOKEN_LEASE_MODE_ENV, mode, serving_for
+RECORD_TOKEN_LEASE_MODE_ENV = 'RECORD_TOKEN_LEASE_MODE'
 
 # Cover request teardown and final custody metadata after the Cloud Run timeout.
 # This floor applies only to the exact, podless custody token, never frame leases.
@@ -45,12 +45,15 @@ def refused_stamp_enabled():
     return os.getenv('RECORD_SEAL_REFUSED_STAMP_ENABLED', 'true').strip().lower() == 'true'
 
 
-def token_lease_mode():
-    return mode(RECORD_TOKEN_LEASE_MODE_ENV, 'off')
+def token_lease_killed():
+    """The lease serves every account; ``RECORD_TOKEN_LEASE_MODE=off`` is its fail-closed kill switch.
 
-
-def token_lease_serving(uid):
-    return serving_for(RECORD_TOKEN_LEASE_MODE_ENV, uid, 'off')
+    Unset or ``serve`` serves. Any other value, including the retired ``shadow``
+    and a typo, kills like ``off``. Killed, Sync refuses new custody with a 503
+    so the phone retains its audio, and a lapsed lease grants no seal or
+    partial-finish authority. The kill seals nothing and drops nothing.
+    """
+    return os.getenv(RECORD_TOKEN_LEASE_MODE_ENV, '').strip().lower() not in {'', 'serve'}
 
 
 def token_lease_seconds():

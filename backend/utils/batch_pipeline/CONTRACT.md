@@ -298,12 +298,14 @@ conversation `status`. The existing reconciler is
 
 ### record_audio custody and conversation
 
-These are field/reader views, not additional dead-letter shapes. Live producer
-tokens retain their original proof rules in `RECORD_TOKEN_LEASE_MODE=off` (default).
-In shadow, server-observed frame batches and custody appends stamp per-token
-`last_signal_at`, `lease_expires_at`, and `signal_source`; shadow cannot expire.
-Serve honors the `record-token-lease` uid cohort. A token is lease-dead only if
-its lease lapsed AND heartbeat missed AND no append since the last signal.
+These are field/reader views, not additional dead-letter shapes. The lease is
+the only producer custody path, for every account: server-observed frame batches
+and custody appends stamp per-token `last_signal_at`, `lease_expires_at`, and
+`signal_source`. A token is lease-dead only if its lease lapsed AND heartbeat
+missed AND no append since the last signal. `RECORD_TOKEN_LEASE_MODE=off` (or any
+value other than `serve`) is the fail-closed kill: Sync refuses new custody with
+503 so the phone retains its audio, and a lapsed lease grants no seal or
+partial-finish authority. Lease writes continue; nothing is sealed or dropped.
 Retained-tail/privacy proof remains mandatory for a complete seal. A late signal
 re-activates its producer fence before bytes. Custody uploads acquire a separate
 exact token before archive/staging; only durable acceptance bumps
@@ -335,8 +337,8 @@ counters on its scraped metrics port; the idle worker scanner remains disabled.
 | Machine:state | Entry writer | Exit writer | Deadline field | Dwell metric | Alert | Flag / kill switch | Rollback behavior |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | `record_audio:capturing` | `A:set_record_upload_pending` (exact token) | Same function on exact-token finish; conditional `A:abandon_record_upload_session.commit` after eviction worker/futures settle | none by design | none for all live producers | none | `PUSHER_ABANDON_EVICTED_TOKENS` for conditional abandonment | Off leaves tokens fenced for finish/proven-dead repair |
-| `record_token:capturing` | `A:set_record_upload_pending`; `A:renew_record_token_lease`; `record_custody_append.begin` | Exact-token finish clear; abandon attestation; computed lease lapse | nested `lease_expires_at` | `omi_record_token_lease_active` | `omi-record-token-lease-late-append` (page) | `RECORD_TOKEN_LEASE_MODE` | Off restores pod/abandon proof |
-| `record_token:lease_lapsed` (computed) | Three quiet lease clocks | **seal** via `apply_seals` (full retained tail); **partial finish** via `finish_partial` (clear map, hourly coordinator); **re-activated** via frame renewal or custody fence + durable `record_custody_append.finish` (revision bump) | computed, never persisted | `omi_record_token_lease_expired_would_total` | `omi-record-token-lease-late-append` (page) | Same mode/cohort | No migration or audio deletion |
+| `record_token:capturing` | `A:set_record_upload_pending`; `A:renew_record_token_lease`; `record_custody_append.begin` | Exact-token finish clear; abandon attestation; computed lease lapse | nested `lease_expires_at` | `omi_record_token_lease_active` | `omi-record-token-lease-late-append` (page) | `RECORD_TOKEN_LEASE_MODE` | Off refuses new Sync custody (503, phone retains) and withdraws lapse authority; pod/abandon proof unchanged |
+| `record_token:lease_lapsed` (computed) | Three quiet lease clocks | **seal** via `apply_seals` (full retained tail); **partial finish** via `finish_partial` (clear map, hourly coordinator); **re-activated** via frame renewal or custody fence + durable `record_custody_append.finish` (revision bump) | computed, never persisted | `omi_record_token_lease_expired_would_total` | `omi-record-token-lease-late-append` (page) | Same kill switch: off holds lapsed tokens fenced | No migration or audio deletion |
 | `record_audio:seal_refused` | `A:seal_record_audio.commit` | `A:seal_record_audio` after producer finish | none; `record_seal_refused_at` is first-entry age only | `omi_record_seal_refused_age_seconds` (bounded job page, open rows only) | `omi-record-seal-refused-age` (agent, declaration) | `RECORD_SEAL_REFUSED_STAMP_ENABLED` | False stops stamps/observation, never seals or clears custody |
 | `record_audio:abandoned` | `A:abandon_record_upload_session.commit` | `utils/batch_pipeline/record_seal_sweeper.py:sweep` repair discovery | none; `abandoned_at` is proof/age anchor | none | none | `PUSHER_ABANDON_EVICTED_TOKENS` | Existing exact-token/repair path; no age-only exit |
 | `record_audio_orphan:capturing` | Derived proven-dead subset of `A:set_record_upload_pending` tokens | `utils/batch_pipeline/record_seal_sweeper.py:sweep` | none by design | none | none | No held-specific switch | Preserve producer and tail proof requirements |

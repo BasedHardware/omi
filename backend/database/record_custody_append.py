@@ -44,8 +44,6 @@ def _receipt(ref, session):
 
 
 def begin(uid, cid, session, *, firestore_client=None):
-    if not lease.token_lease_serving(uid):
-        return False
     client = firestore_client if firestore_client is not None else get_firestore_client()
     ref = client.collection('users').document(uid).collection('conversations').document(cid)
 
@@ -87,8 +85,8 @@ def begin(uid, cid, session, *, firestore_client=None):
         late = bool(row.get('record_audio_partial') or row.get('record_audio_closed')) or any(
             lease.token_lease_lapsed(token, now, row=row) for token in sessions.values()
         )
-        # An uploader is not a GKE pusher pod. Its own lease remains the exit
-        # even after rollback; it never acquires a pusher pod-gone proof.
+        # An uploader is not a GKE pusher pod. Its own lease is the only exit
+        # (held while killed); it never acquires a pusher pod-gone proof.
         sessions[session] = {
             'pod': '',
             'process_started_at': now,
@@ -104,8 +102,8 @@ def begin(uid, cid, session, *, firestore_client=None):
 
 
 def finish(uid, cid, session, *, accepted, late_observed: bool = False, firestore_client=None):
-    # A mode rollback must still clear this request's exact fence. Callers only
-    # invoke finish for a token acquired by begin; off requests do no IO.
+    # The kill switch must still clear this request's exact fence. Callers only
+    # invoke finish for a token acquired by begin.
     client = firestore_client if firestore_client is not None else get_firestore_client()
     ref = client.collection('users').document(uid).collection('conversations').document(cid)
     receipt = _receipt(ref, session)
@@ -140,7 +138,7 @@ def finish(uid, cid, session, *, accepted, late_observed: bool = False, firestor
         if accepted and eligible:
             revision = int(row.get('record_upload_revision') or 0) + 1
             patch['record_upload_revision'] = revision
-            # Begin already acquired serve custody. A rollback cannot cancel
+            # Begin already acquired custody. The kill switch cannot cancel
             # recovery of bytes accepted under that durable obligation.
             recovered, recovery = prepare_recovery(client, tx, uid, cid, row, revision, time.time())
             patch.update(recovered)

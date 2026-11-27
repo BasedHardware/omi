@@ -384,10 +384,9 @@ def test_listed_source_precondition_failure_never_seals(source, monkeypatch, cha
 @pytest.mark.parametrize(
     'mode,disposition', [('off', 'upload_pending'), ('shadow', 'upload_pending'), ('serve', 'eligible')]
 )
-def test_lease_dead_plan_and_shadow_dispositions(source, monkeypatch, mode, disposition):
+def test_lease_dead_plan_and_kill_switch_dispositions(source, monkeypatch, mode, disposition):
     store, client, _ = source
     monkeypatch.setenv('RECORD_TOKEN_LEASE_MODE', mode)
-    monkeypatch.setenv('RECORD_TOKEN_LEASE_MODE_SERVE_PERCENT', '100')
     monkeypatch.setattr(record_producer_proof.time, 'time', lambda: 10000)
     client.rows[PATH]['record_upload_sessions'] = {
         's': {
@@ -400,7 +399,8 @@ def test_lease_dead_plan_and_shadow_dispositions(source, monkeypatch, mode, disp
     }
     result = plan(source)
     assert result['entries'][0]['disposition'] == disposition
-    assert result['entries'][0].get('lease_reason') == ('lease_would_expire' if mode == 'shadow' else None)
+    # Killed, the lapsed lease holds the seal and no would-expire diagnostic fires.
+    assert result['entries'][0].get('lease_reason') is None
     outcome = repair.apply_seals(store, result, result['plan_sha256'])
     assert outcome == ({'sealed': 1} if mode == 'serve' else {'upload_pending': 1})
     assert bool(client.rows[PATH].get('record_audio_closed')) is (mode == 'serve')

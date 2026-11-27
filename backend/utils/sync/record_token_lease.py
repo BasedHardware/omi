@@ -43,8 +43,6 @@ def accepted_response(response: Response | None) -> bool:
 def custody_upload(fn: Callable[P, Awaitable[R]]) -> Callable[P, Awaitable[R]]:
     @wraps(fn)
     async def run(*args: P.args, **kwargs: P.kwargs) -> R:
-        if lease.token_lease_mode() == 'off':
-            return await fn(*args, **kwargs)
         state: UploadState = {}
         token = _upload.set(state)
         response: Response | None = None
@@ -110,8 +108,10 @@ async def begin_upload(uid: str, cid: str | None, job_id: str, *, recording_sess
     if not isinstance(cid, str) or not cid:
         return
     state.update(uid=uid, cid=cid)
-    if not lease.token_lease_serving(uid):
-        return
+    if lease.token_lease_killed():
+        # Kill switch: no unfenced append exists to fall back to. Refuse before
+        # any storage write; the phone retains its audio and retries later.
+        raise HTTPException(status_code=503, detail='Retain local audio; record custody is paused')
     # Retain the exact candidate even if the commit response is lost.
     state['session'] = 'custody:' + job_id
     try:

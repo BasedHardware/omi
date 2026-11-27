@@ -1,15 +1,12 @@
-"""Producer custody lease: modes, stock seed, exact clocks and transactional renewal."""
+"""Producer custody lease: kill switch, stock seed, exact clocks and transactional renewal."""
 
 from copy import deepcopy
 from datetime import datetime, timezone
-import json
-from unittest.mock import Mock
 
 from prometheus_client import Counter
 import pytest
 
 from config import record_seal_rules as lease, refactor_modes
-from config.policy.batch import cohort_bucket
 from database import record_audio, record_custody_append
 from utils.observability import firestore_probe_export
 from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
@@ -60,73 +57,57 @@ def test_lease_setting_is_bounded(monkeypatch, raw, expected):
     assert lease.token_lease_seconds() == expected
 
 
-@pytest.mark.parametrize('mode', ['off', 'shadow', 'serve', '', 'invalid'])
-@pytest.mark.parametrize('percent', [0, 1, 10, 50, 100])
-def test_mode_cohort_and_kill_switch(monkeypatch, mode, percent):
-    monkeypatch.setenv('RECORD_TOKEN_LEASE_MODE', mode)
-    monkeypatch.setenv('RECORD_TOKEN_LEASE_MODE_SERVE_PERCENT', str(percent))
-    monkeypatch.delenv('RECORD_TOKEN_LEASE_MODE_SERVE_UID_SHA256S', raising=False)
-    assert lease.token_lease_serving('synthetic') is (
-        mode == 'serve' and cohort_bucket('synthetic', 'record-token-lease') < percent
-    )
-
-
-def test_digest_cohort_never_bypasses_off_or_shadow(monkeypatch):
+@pytest.mark.parametrize(
+    'raw,killed',
+    [
+        (None, False),
+        ('', False),
+        ('serve', False),
+        (' Serve ', False),
+        ('off', True),
+        ('OFF', True),
+        ('shadow', True),
+        ('invalid', True),
+    ],
+)
+@pytest.mark.parametrize('percent', [None, '0', '100'])
+def test_lease_serves_everyone_and_only_the_kill_switch_withdraws_it(monkeypatch, raw, killed, percent):
+    # The retired cohort levers are inert. Any explicit non-serve value,
+    # including the retired shadow mode, fails closed like off.
+    monkeypatch.delenv('RECORD_TOKEN_LEASE_MODE', raising=False)
+    monkeypatch.delenv('RECORD_TOKEN_LEASE_MODE_SERVE_PERCENT', raising=False)
     monkeypatch.setenv('RECORD_TOKEN_LEASE_MODE_SERVE_UID_SHA256S', refactor_modes.uid_digest('synthetic'))
-    for mode in ('serve', 'shadow', 'off'):
-        monkeypatch.setenv('RECORD_TOKEN_LEASE_MODE', mode)
-        assert lease.token_lease_serving('synthetic') is (mode == 'serve')
+    if raw is not None:
+        monkeypatch.setenv('RECORD_TOKEN_LEASE_MODE', raw)
+    if percent is not None:
+        monkeypatch.setenv('RECORD_TOKEN_LEASE_MODE_SERVE_PERCENT', percent)
+    assert lease.token_lease_killed() is killed
 
 
-def test_default_and_malformed_mode_are_dark(monkeypatch):
-    monkeypatch.delenv('RECORD_TOKEN_LEASE_MODE', raising=False)
-    assert lease.token_lease_mode() == 'off'
-    monkeypatch.setenv('RECORD_TOKEN_LEASE_MODE', 'bad')
-    assert lease.token_lease_mode() == 'off'
-
-
-@pytest.mark.parametrize('mode', ['off', None])
-def test_off_preserves_custody_payload_and_performs_no_renewal_io(monkeypatch, mode):
-    monkeypatch.delenv('RECORD_TOKEN_LEASE_MODE', raising=False)
-    if mode:
-        monkeypatch.setenv('RECORD_TOKEN_LEASE_MODE', mode)
-    client = StrictFirestore({PATH: {**ROW, 'record_upload_sessions': {}}})
+@pytest.mark.parametrize('mode', ['off', 'shadow'])
+def test_kill_switch_holds_lapsed_leases_and_keeps_lease_writes(enabled, monkeypatch, mode):
+    custody = {**TOKEN, 'pod': '', 'signal_source': 'custody_append'}
+    for tokens in ({'s': TOKEN}, {'c': custody}):
+        assert producer_tokens_dead(tokens, None, uid='synthetic', row=ROW)
+    monkeypatch.setenv('RECORD_TOKEN_LEASE_MODE', mode)
+    # Killed, lease expiry grants no seal or partial-finish authority.
+    for tokens in ({'s': TOKEN}, {'c': custody}):
+        assert not producer_tokens_dead(tokens, None, uid='synthetic', row=ROW)
+    # Non-lease stoppage proofs are unchanged for unsignalled stock tokens.
+    monkeypatch.setenv('RECORD_TOKEN_LEASE_DEPLOYED_AT', str(NOW - 10))
+    proof = {'namespace': 'prod-omi-backend', 'captured_at': NOW, 'pods': {}}
+    assert producer_tokens_dead({'s': POD}, proof, uid='synthetic', row=ROW)
+    assert producer_tokens_dead({'s': {**POD, 'abandoned_at': NOW - 10}}, None, uid='synthetic', row=ROW)
+    # Registration and renewal keep stamping lease clocks, so lifting the
+    # kill cannot expire every token that registered while it was engaged.
     assert record_audio.set_record_upload_pending(
-        'synthetic', 'record', 's', True, producer=POD, firestore_client=client
+        'synthetic', 'record', 'new', True, producer=POD, firestore_client=enabled
     )
-    assert client.transactions[-1].updates == [
-        (
-            PATH,
-            {
-                'record_upload_sessions': {'s': POD},
-                'record_audio_closed': False,
-                'record_upload_revision': 8,
-            },
-        )
-    ]
-    before = json.dumps(client.rows[PATH], sort_keys=True, default=str)
-    no_client = Mock(side_effect=AssertionError('off must not construct a client'))
-    monkeypatch.setattr(record_audio, 'get_firestore_client', no_client)
-    assert not record_audio.renew_record_token_lease('synthetic', 'record', source='custody_append')
-    assert json.dumps(client.rows[PATH], sort_keys=True, default=str) == before
-    # Inert expired fields never change the original live-pod decision.
-    assert not producer_tokens_dead({'s': TOKEN}, None, uid='synthetic', row=ROW)
-    assert producer_tokens_dead({'s': {**TOKEN, 'abandoned_at': NOW - 50}}, None, uid='synthetic', row=ROW)
-    assert record_audio.set_record_upload_pending('synthetic', 'record', 's', False, firestore_client=client)
-    assert client.transactions[-1].updates == [(PATH, {'record_upload_sessions': {}})]
-    assert record_audio.seal_record_audio('synthetic', 'record', firestore_client=client) is None
-    # The ledger writes in its own transaction after the seal commits, so find
-    # the seal transaction by payload rather than assuming it is the last one.
-    seal_updates = [
-        payload
-        for transaction in client.transactions
-        for _, payload in transaction.updates
-        if payload.get('record_audio_closed') is True
-    ]
-    assert len(seal_updates) == 1
-    assert seal_updates[0]['record_audio_closed'] is True
-    assert isinstance(seal_updates[0]['record_admitted_at'], float)
-    assert isinstance(seal_updates[0]['record_sealed_at'], (int, float))
+    assert enabled.rows[PATH]['record_upload_sessions']['new']['lease_expires_at'] == NOW + lease.token_lease_seconds()
+    assert record_audio.renew_record_token_lease(
+        'synthetic', 'record', source='frames', session='s', firestore_client=enabled
+    )
+    assert enabled.rows[PATH]['record_upload_sessions']['s']['last_signal_at'] == NOW
 
 
 @pytest.mark.parametrize('source', ['frames', 'custody_append'])
@@ -282,12 +263,6 @@ def test_partial_custody_fences_before_and_bumps_only_after_durable_acceptance(e
     assert not row['record_audio_closed']
 
 
-def test_generic_mode_reader_uses_dark_default(monkeypatch):
-    monkeypatch.delenv('RECORD_TOKEN_LEASE_MODE', raising=False)
-    assert refactor_modes.mode('RECORD_TOKEN_LEASE_MODE') == 'off'
-    assert not refactor_modes.serving_for('RECORD_TOKEN_LEASE_MODE', 'synthetic')
-
-
 def test_stock_seed_preserves_original_pod_and_abandon_authorities(enabled, monkeypatch):
     monkeypatch.setenv('RECORD_TOKEN_LEASE_DEPLOYED_AT', str(NOW - 10))
     proof = {'namespace': 'prod-omi-backend', 'captured_at': NOW, 'pods': {}}
@@ -339,14 +314,12 @@ def test_partial_and_complete_seals_restore_exact_frame_token_in_serve(enabled):
     assert enabled.rows[PATH]['record_upload_revision'] == 9
 
 
-def test_off_terminal_metrics_keep_old_wire_output_even_after_rollback(monkeypatch):
-    monkeypatch.setenv('RECORD_TOKEN_LEASE_MODE', 'off')
-    before = firestore_probe_export.terminal_totals()
+@pytest.mark.parametrize('mode', ['off', 'serve'])
+def test_terminal_metrics_export_lease_counters_even_while_killed(monkeypatch, mode):
+    monkeypatch.setenv('RECORD_TOKEN_LEASE_MODE', mode)
     counter = Counter('omi_record_token_lease_expired_would_total', 'Synthetic lease expiry', registry=None)
     counter.inc()
     monkeypatch.setattr(firestore_probe_export, 'COLLECTORS', (*firestore_probe_export.COLLECTORS[:2], counter))
-    assert firestore_probe_export.terminal_totals() == before
-    monkeypatch.setenv('RECORD_TOKEN_LEASE_MODE', 'shadow')
     assert any(
         row[0] == 'omi_record_token_lease_expired_would_total' for row in firestore_probe_export.terminal_totals()
     )
@@ -395,9 +368,9 @@ def test_custody_heartbeat_writes_at_most_once_per_half_lease(enabled, monkeypat
     assert len(enabled.transactions[-1].updates) == 1
 
 
-@pytest.mark.parametrize('mode', ['off', 'shadow', 'serve'])
+@pytest.mark.parametrize('mode', ['off', 'serve'])
 @pytest.mark.parametrize('sessions', [{}, {'s': TOKEN}])
-def test_complete_frame_reopen_is_serve_only_and_shadow_only_counts(enabled, monkeypatch, mode, sessions):
+def test_complete_frame_reopen_retains_audio_even_while_killed(enabled, monkeypatch, mode, sessions):
     monkeypatch.setenv('RECORD_TOKEN_LEASE_MODE', mode)
     enabled.rows[PATH].update(record_audio_closed=True, record_upload_sessions=deepcopy(sessions), raw_audio='retained')
     before = deepcopy(enabled.rows)
@@ -412,19 +385,19 @@ def test_complete_frame_reopen_is_serve_only_and_shadow_only_counts(enabled, mon
         firestore_client=enabled,
         late_observation=observed,
     )
-    if mode == 'serve':
-        assert not enabled.rows[PATH]['record_audio_closed']
-        assert enabled.rows[PATH]['raw_audio'] == 'retained'
-        assert enabled.rows[PATH]['record_upload_revision'] == 8
-        assert any(row.get('partial_coordinator') for row in enabled.rows.values())
-    else:
-        assert enabled.rows == before
+    # Reopening a seal for newly retained audio neither seals nor drops it,
+    # so the kill switch leaves it in place.
+    assert enabled.rows != before
+    assert not enabled.rows[PATH]['record_audio_closed']
+    assert enabled.rows[PATH]['raw_audio'] == 'retained'
+    assert enabled.rows[PATH]['record_upload_revision'] == 8
+    assert any(row.get('partial_coordinator') for row in enabled.rows.values())
     assert record_audio.lease_metrics.LATE_APPEND._value.get() == counter
-    assert bool(observed.get('late')) is (mode != 'off')
+    assert observed.get('late') is True
 
 
 @pytest.mark.parametrize('mode', ['off', 'shadow', 'serve'])
-def test_crashed_custody_token_keeps_own_lease_exit_after_rollback(enabled, monkeypatch, mode):
+def test_crashed_custody_token_exits_by_own_lease_only_while_serving(enabled, monkeypatch, mode):
     enabled.rows[PATH]['record_upload_sessions'] = {}
     assert record_custody_append.begin('synthetic', 'record', 'custody:crashed', firestore_client=enabled)
     row = enabled.rows[PATH]
@@ -436,17 +409,8 @@ def test_crashed_custody_token_keeps_own_lease_exit_after_rollback(enabled, monk
         monkeypatch.setattr(record_audio.time, 'time', lambda: NOW + elapsed)
         assert not producer_tokens_dead(row['record_upload_sessions'], None, uid='synthetic', row=row)
     monkeypatch.setattr(record_audio.time, 'time', lambda: NOW + duration + 1)
-    assert producer_tokens_dead(row['record_upload_sessions'], None, uid='synthetic', row=row)
-    if mode == 'off':
-        assert not producer_tokens_dead({'frame': TOKEN}, None, uid='synthetic', row=row)
-
-
-def test_off_custody_begin_has_no_io(enabled, monkeypatch):
-    monkeypatch.setenv('RECORD_TOKEN_LEASE_MODE', 'off')
-    monkeypatch.setattr(record_custody_append, 'get_firestore_client', Mock(side_effect=AssertionError('off IO')))
-    before = deepcopy(enabled.rows)
-    assert not record_custody_append.begin('synthetic', 'record', 'custody:upload')
-    assert enabled.rows == before
+    # Killed, the lapsed fence keeps holding the seal; serving, it is the exit.
+    assert producer_tokens_dead(row['record_upload_sessions'], None, uid='synthetic', row=row) is (mode == 'serve')
 
 
 @pytest.mark.parametrize('mode', ['off', 'shadow', 'serve'])
@@ -460,7 +424,7 @@ def test_new_frame_token_observes_older_lease_before_replacing_custody(enabled, 
     assert record_audio.set_record_upload_pending(
         'synthetic', 'record', 'new', True, producer=POD, firestore_client=enabled, late_observation=observed
     )
-    assert observed['late'] is (expired and mode != 'off')
+    assert observed['late'] is expired
     assert enabled.rows[PATH]['record_upload_sessions']['old'] == old
     assert enabled.rows[PATH]['record_upload_revision'] == 8
     assert not enabled.rows[PATH].get('record_audio_partial')

@@ -1055,7 +1055,6 @@ async def test_native_admission_stages_references_and_drains_after_rollback(
         # The reservation predates the append. No input was captured yet, so
         # admission must capture the newer revision, never its old snapshot.
         current['record_upload_revision'] = 9
-        monkeypatch.setenv('RECORD_TOKEN_LEASE_MODE', 'serve')
         barrier_change = None
 
     class Reference:
@@ -1140,10 +1139,10 @@ async def test_native_admission_stages_references_and_drains_after_rollback(
     job = store.rows['jobs', segment]
     assert job['record_origin'] is True
     assert job['record_lane_owner'] == 'batch_live_v1'
-    if current.get('record_upload_revision') == 9:
+    # Admission always captures the barrier revision it read.
+    assert job.get('record_input_upload_revision') == current.get('record_upload_revision')
+    if barrier_change is None and current.get('record_upload_revision') == 9:
         assert job['record_input_upload_revision'] == 9
-    else:
-        assert 'record_input_upload_revision' not in job
     assert job['state'] == ('provider_pending' if language == 'ca' else 'ready')
     if language == 'ca':
         assert job['stt_route']['provider_service'] == 'modulate'

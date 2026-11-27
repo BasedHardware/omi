@@ -197,8 +197,9 @@ def test_shared_rollout_inputs_reach_sync_listen_pusher_and_repair(monkeypatch, 
     }
     for key, value in expected.items():
         monkeypatch.setenv(key, value)
+    # Staging serves the lease like prod; off there would engage the kill switch.
     expected_staging = {
-        'RECORD_TOKEN_LEASE_MODE': 'off',
+        'RECORD_TOKEN_LEASE_MODE': 'serve',
         'RECORD_TOKEN_LEASE_MODE_SERVE_PERCENT': '0',
         'RECORD_TOKEN_LEASE_SECONDS': '3600',
         'RECORD_TOKEN_LEASE_DEPLOYED_AT': '1794268800',

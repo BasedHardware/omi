@@ -4023,14 +4023,12 @@ class TestV2EndpointExecution:
         acquire.assert_not_called()
         renew.assert_not_called()
 
-    @pytest.mark.parametrize('mode', ['off', 'shadow', 'serve'])
-    @pytest.mark.parametrize('percent', [0, 100])
-    async def test_custody_manifest_lease_fences_before_claim(self, sync_endpoint_module, monkeypatch, mode, percent):
+    @pytest.mark.parametrize('mode', ['off', 'serve'])
+    async def test_custody_manifest_lease_fences_before_claim(self, sync_endpoint_module, monkeypatch, mode):
 
         _, _, module = sync_endpoint_module
         events = []
         monkeypatch.setenv('RECORD_TOKEN_LEASE_MODE', mode)
-        monkeypatch.setenv('RECORD_TOKEN_LEASE_MODE_SERVE_PERCENT', str(percent))
         module.resolve_client_device = lambda **kw: SimpleNamespace(client_device_id='synthetic-device')
         module._capture_matches_server_conversation = lambda *a: True
         module.claim_conversation_manifest = lambda *a: events.append('claim') or True
@@ -4054,7 +4052,9 @@ class TestV2EndpointExecution:
             x_app_version=None,
         )
         assert result.manifest == 'synthetic-manifest'
-        assert events == (['renew', 'claim'] if mode == 'serve' and percent == 100 else ['claim'])
+        # The manifest heartbeat neither seals nor drops audio, so it runs
+        # (and fences before the claim) even while the kill switch is engaged.
+        assert events == ['renew', 'claim']
 
     async def test_custody_lease_outage_preserves_retry_before_claim(self, sync_endpoint_module, monkeypatch):
 
@@ -4075,17 +4075,6 @@ class TestV2EndpointExecution:
             await module.create_sync_capture_manifest(payload, uid='synthetic')
         assert error.value.status_code == 503
         module.claim_conversation_manifest.assert_not_called()
-
-    @pytest.mark.parametrize('mode', ['off', 'shadow', 'serve'])
-    async def test_manifest_non_serving_renewal_outage_has_no_io(self, sync_endpoint_module, monkeypatch, mode):
-        _, _, module = sync_endpoint_module
-        monkeypatch.setenv('RECORD_TOKEN_LEASE_MODE', mode)
-        monkeypatch.setenv('RECORD_TOKEN_LEASE_MODE_SERVE_PERCENT', '0')
-        monkeypatch.delenv('RECORD_TOKEN_LEASE_MODE_SERVE_UID_SHA256S', raising=False)
-        forbidden = AsyncMock(side_effect=OSError('metadata unavailable'))
-        monkeypatch.setattr(module, 'run_blocking', forbidden)
-        await module._renew_custody_lease('synthetic', 'record')
-        forbidden.assert_not_awaited()
 
     @staticmethod
     def _capture_end_payload(**changes):

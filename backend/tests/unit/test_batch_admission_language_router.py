@@ -91,6 +91,7 @@ def sync_router(defaults):
         _restore(saved)
 
 
+@pytest.mark.usefixtures('record_custody_not_acquired')
 @pytest.mark.parametrize('mode', [LegacySyncMode.ON])
 @pytest.mark.parametrize('language', ['auto', 'ja'])
 async def test_actual_sync_router_excludes_before_claim_and_batch_intake(monkeypatch, mode, language, sync_router):
@@ -218,6 +219,7 @@ async def test_existing_batch_owner_and_kill_switch_never_read_new_preferences(m
     assert world.claims == (['batch_sync_v1'] if disabled else [])
 
 
+@pytest.mark.usefixtures('record_custody_not_acquired')
 async def test_negative_control_router_without_preclaim_gate_exposes_the_reviewed_bypass(monkeypatch, sync_router):
     # Disable only the early gate, leaving the intake exclusion ON. The real
     # router reserves batch_sync_v1 first, and the regression catches staging.

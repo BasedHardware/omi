@@ -327,18 +327,17 @@ class PusherRecordBarrier:
                 token,
                 True,
                 producer=producer_identity(),
-                **({'late_observation': observed} if lease.token_lease_mode() != 'off' else {}),
+                late_observation=observed,
             ):
                 if conversation_id in self.failed_recordings:
                     return
                 self.registered_sessions.add(conversation_id)
                 if observed.get('late'):
                     self.late_appends.add(conversation_id)
-                if lease.token_lease_mode() != 'off':
-                    # A delayed commit response must not make an old lease
-                    # look newly renewed to the receive/projection cache.
-                    self.lease_renewed_at[conversation_id] = began_at
-                    lease_metrics.ACTIVE.inc()
+                # A delayed commit response must not make an old lease
+                # look newly renewed to the receive/projection cache.
+                self.lease_renewed_at[conversation_id] = began_at
+                lease_metrics.ACTIVE.inc()
                 return
             self.upload_sessions.pop(conversation_id, None)
             registry.forget(self.uid, conversation_id, token)
@@ -353,8 +352,7 @@ class PusherRecordBarrier:
     async def renew_recording(self, conversation_id: str) -> bool:
         """Frame-bearing receive/projection batches only; no idle socket timer."""
         if (
-            lease.token_lease_mode() == 'off'
-            or conversation_id not in self.upload_sessions
+            conversation_id not in self.upload_sessions
             or conversation_id in self.failed_recordings
             or conversation_id not in self.registered_sessions
         ):
@@ -367,8 +365,7 @@ class PusherRecordBarrier:
         # second appender pass while the first metadata write is still pending.
         async with self.lease_locks.setdefault(conversation_id, asyncio.Lock()):
             if (
-                lease.token_lease_mode() == 'off'
-                or conversation_id not in self.upload_sessions
+                conversation_id not in self.upload_sessions
                 or conversation_id in self.failed_recordings
                 or conversation_id not in self.registered_sessions
             ):

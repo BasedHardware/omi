@@ -49,9 +49,8 @@ def test_begin_refuses_missing_owner_or_active_erasure_without_writing(monkeypat
 
 @pytest.mark.parametrize('status,durable', [(202, True), (409, True), (503, True), (202, False)])
 @pytest.mark.parametrize('mode', ['off', 'shadow', 'serve'])
-async def test_response_storage_and_mode_matrix(monkeypatch, status, durable, mode):
+async def test_response_storage_and_kill_switch_matrix(monkeypatch, status, durable, mode):
     monkeypatch.setenv('RECORD_TOKEN_LEASE_MODE', mode)
-    monkeypatch.setenv('RECORD_TOKEN_LEASE_MODE_SERVE_PERCENT', '100')
     monkeypatch.setenv('OMI_ENV_STAGE', 'dev')
     monkeypatch.setattr(database.time, 'time', lambda: NOW)
     client = custody_client({PATH: ROW, ('users', 'synthetic'): {'private_cloud_sync_enabled': True}})
@@ -59,19 +58,35 @@ async def test_response_storage_and_mode_matrix(monkeypatch, status, durable, mo
     monkeypatch.setattr(record_audio, 'get_firestore_client', lambda: client)
     counter = metrics.LATE_APPEND._value.get()
     before = deepcopy(client.rows)
+    stored = []
 
     @request.custody_upload
     async def upload():
         await request.begin_upload('synthetic', 'record', 'request')
         row = client.rows[PATH]
         assert row['record_upload_revision'] == 7
-        assert ('custody:request' in row['record_upload_sessions']) is (mode == 'serve')
+        assert 'custody:request' in row['record_upload_sessions']
         if durable:
-            archived = await request.archive(lambda *args: ['durable-archive'], 'synthetic', ['local'], {})
+            archived = await request.archive(
+                lambda *args: stored.append(args) or ['durable-archive'], 'synthetic', ['local'], {}
+            )
             request.stored(['local'], archived)
         return JSONResponse(status_code=status, content={'status': 'synthetic'})
 
-    if status == 202 and not durable and mode == 'serve':
+    if mode != 'serve':
+        # Kill switch: refuse before any storage or metadata write. There is no
+        # unfenced append to fall back to; the phone retains its audio.
+        with pytest.raises(HTTPException) as failure:
+            await upload()
+        assert failure.value.status_code == 503
+        assert failure.value.detail.startswith('Retain local audio')
+        assert not stored
+        assert client.rows == before
+        assert not any(tx.has_written for tx in client.transactions)
+        assert metrics.LATE_APPEND._value.get() == counter
+        assert request._upload.get() is None
+        return
+    if status == 202 and not durable:
         with pytest.raises(HTTPException) as failure:
             await upload()
         assert failure.value.status_code == 503
@@ -79,10 +94,8 @@ async def test_response_storage_and_mode_matrix(monkeypatch, status, durable, mo
         assert (await upload()).status_code == status
     accepted = status == 202 and durable
     assert 'custody:request' not in client.rows[PATH]['record_upload_sessions']
-    assert client.rows[PATH]['record_upload_revision'] == 7 + (mode == 'serve' and accepted)
-    assert metrics.LATE_APPEND._value.get() == counter + (mode != 'off' and accepted)
-    if mode == 'off' or (mode == 'shadow' and not durable):
-        assert client.rows == before
+    assert client.rows[PATH]['record_upload_revision'] == 7 + accepted
+    assert metrics.LATE_APPEND._value.get() == counter + accepted
     assert request._upload.get() is None
 
 
@@ -523,15 +536,12 @@ def test_recovery_receipt_counts_once_after_a_committed_reply_is_lost(monkeypatc
     assert not client.transactions[-1].has_written
 
 
-@pytest.mark.parametrize('mode,percent', [('shadow', '100'), ('serve', '0'), ('serve', '100')])
 @pytest.mark.parametrize('transition', ['none', 'closed', 'partial', 'lapsed'])
 @pytest.mark.parametrize('lose_reply', [False, True])
 async def test_post_storage_late_observation_survives_repair_and_renewal_reply_loss(
-    monkeypatch, mode, percent, transition, lose_reply
+    monkeypatch, transition, lose_reply
 ):
-    monkeypatch.setenv('RECORD_TOKEN_LEASE_MODE', mode)
-    monkeypatch.setenv('RECORD_TOKEN_LEASE_MODE_SERVE_PERCENT', percent)
-    monkeypatch.delenv('RECORD_TOKEN_LEASE_MODE_SERVE_UID_SHA256S', raising=False)
+    monkeypatch.delenv('RECORD_TOKEN_LEASE_MODE', raising=False)
     monkeypatch.setenv('OMI_ENV_STAGE', 'dev')
     monkeypatch.setattr(database.time, 'time', lambda: NOW)
     client = custody_client(
@@ -580,21 +590,17 @@ async def test_post_storage_late_observation_survives_repair_and_renewal_reply_l
     assert objects == ['local-a', 'local-b']
     assert lost == ([True] if lose_reply else [])
     assert metrics.LATE_APPEND._value.get() == counter + (transition != 'none')
-    if mode == 'serve' and percent == '100':
-        before = deepcopy(client.rows)
-        assert database.finish(
-            'synthetic', 'record', 'custody:post-storage', accepted=True, late_observed=True, firestore_client=client
-        ) is (transition != 'none')
-        assert client.rows == before
-        assert metrics.LATE_APPEND._value.get() == counter + (transition != 'none')
+    before = deepcopy(client.rows)
+    assert database.finish(
+        'synthetic', 'record', 'custody:post-storage', accepted=True, late_observed=True, firestore_client=client
+    ) is (transition != 'none')
+    assert client.rows == before
+    assert metrics.LATE_APPEND._value.get() == counter + (transition != 'none')
 
 
-@pytest.mark.parametrize('mode,percent', [('shadow', '100'), ('serve', '0'), ('serve', '100')])
 @pytest.mark.parametrize('failure', ['archive', 'partial_archive', 'refused'])
-async def test_post_storage_observation_never_counts_failed_or_refused_append(monkeypatch, mode, percent, failure):
-    monkeypatch.setenv('RECORD_TOKEN_LEASE_MODE', mode)
-    monkeypatch.setenv('RECORD_TOKEN_LEASE_MODE_SERVE_PERCENT', percent)
-    monkeypatch.delenv('RECORD_TOKEN_LEASE_MODE_SERVE_UID_SHA256S', raising=False)
+async def test_post_storage_observation_never_counts_failed_or_refused_append(monkeypatch, failure):
+    monkeypatch.delenv('RECORD_TOKEN_LEASE_MODE', raising=False)
     monkeypatch.setattr(database.time, 'time', lambda: NOW)
     client = custody_client({PATH: {**ROW, 'record_audio_closed': False, 'record_upload_sessions': {}}})
     monkeypatch.setattr(database, 'get_firestore_client', lambda: client)

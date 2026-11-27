@@ -29,10 +29,8 @@ from config import refactor_modes
 from config import record_seal_repair as config
 from config import record_partial as partial_config
 from config.record_audio import record_identity
-from config import record_seal_rules as lease
 from database import record_custody_receipts
 from database.batch_pipeline_store import promote_record_recoveries
-from utils.batch_pipeline.record_producer_proof import leases_would_release
 from database.firestore_read_origin import read_origin
 from database.record_partial import finish_partial
 from utils.batch_pipeline.record_seal_reasons import PROOF_REASONS, TAIL_GAP_BUCKETS
@@ -151,18 +149,6 @@ def repair_one(store, storage, artifacts, path, *, flags, inventory, budget, mod
     proof = inventory()
     require_fresh_proof(proof)  # Required for every attempted seal or rearm.
     if partial:
-        if (
-            reason_out is not None
-            and lease.token_lease_mode() == 'shadow'
-            and leases_would_release(
-                row.get('record_upload_sessions'),
-                proof,
-                uid=uid,
-                row=row,
-                job=job,
-            )
-        ):
-            reason_out['lease_reason'] = 'lease_would_expire'
         if reason_out is not None:
             reason = job.get('partial_reason')
             reason_out['partial_reason'] = reason if reason in partial_config.REASONS else 'tail_lost_or_unproven'

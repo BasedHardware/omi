@@ -28,7 +28,6 @@ def delivery(recording, monkeypatch, request):
 def make_delivery(recording, monkeypatch, adapter_kind):
     f = recording
     monkeypatch.setenv('DEMAND_PROCESSING_ENABLED', 'false')
-    monkeypatch.setenv('RECORD_TOKEN_LEASE_MODE', 'off')
     monkeypatch.setattr(age_gate, 'park_if_expired', lambda *a, **k: False)
     monkeypatch.setattr(demand_processing, 'admit', lambda *a, **k: True)
     adapter = FirestoreEnrichmentOutbox(f.client, privacy_blocked=lambda *_: False, create_wake=Mock())
@@ -81,6 +80,10 @@ def reopen(d):
 
 def test_reopened_record_defers_until_new_revision_projects_then_runs_once(delivery):
     d = delivery
+    # The producer registers before the seal. On an already sealed record the
+    # lease instead re-arms a partial continuation, and notes wait at the hold
+    # cap (test_never_cleared_producer_is_parked_at_existing_hold_cap...).
+    d.f.client.rows[d.f.conversation.path]['record_audio_closed'] = False
     reopen(d)
     assert d.deliver(NOW + 120).outcome == 'deferred'
     assert d.ref.get().to_dict()['due_at'] == NOW + 240
@@ -217,22 +220,8 @@ def test_fallback_refresh_rechecks_canonical_hold_before_any_sibling_completion(
     paid.assert_not_called()
 
 
-@pytest.mark.parametrize('adapter_kind', ['consumer', 'legacy'])
-def test_lease_off_intake_projection_delivery_reproduces_missing_revision(recording, monkeypatch, adapter_kind):
-
-    f = admit_lease_off(recording, monkeypatch, eager='true')
-    d = make_delivery(f, monkeypatch, adapter_kind)
-    f.store.mark_enrichment('last', f.binding, NOW, 'capture', 'en', policy=POLICY)
-    assert f.store.complete('last', f.binding, NOW, f.accounting, policy=POLICY)
-    assert f.conversation.get().to_dict()['record_upload_revision'] == 1
-    assert d.ref.get().to_dict()['record_notes_producers'] == {'capture': None}
-    assert d.deliver(NOW + 120).outcome == 'deferred'
-    d.paid.assert_not_called()
-
-
-def admit_lease_off(recording, monkeypatch, *, eager):
+def admit_main_intake(recording, monkeypatch, *, eager):
     f = recording
-    monkeypatch.setenv('RECORD_TOKEN_LEASE_MODE', 'off')
     if eager is None:
         monkeypatch.delenv('RECORD_NOTES_EAGER_ENABLED', raising=False)
     else:
@@ -250,7 +239,7 @@ def admit_lease_off(recording, monkeypatch, *, eager):
     admit(intake, works, f.binding, NOW, namespace='record_notes', record_barrier=require_record_audio_barrier(source))
     for sid in f.binding.segment_ids:
         job = intake.rows['jobs', sid]
-        assert 'record_input_upload_revision' not in job
+        assert job['record_input_upload_revision'] == source.get('record_upload_revision')
         job['result'] = f.client.rows[f.store.ref('results', sid).path]['result']
         f.client.rows[f.store.ref('jobs', sid).path] = job
     return f
@@ -259,14 +248,11 @@ def admit_lease_off(recording, monkeypatch, *, eager):
 @pytest.mark.parametrize('adapter_kind', ['consumer', 'legacy'])
 @pytest.mark.parametrize('eager', [None, 'false'])
 @pytest.mark.parametrize('retired_hold', [None, 'sync_hold', 'merge_hold'])
-def test_notes_off_matches_main_intake_enqueue_delivery_with_lease_off(
-    recording, monkeypatch, adapter_kind, eager, retired_hold
-):
-    f = admit_lease_off(recording, monkeypatch, eager=eager)
+def test_notes_off_matches_main_intake_enqueue_delivery(recording, monkeypatch, adapter_kind, eager, retired_hold):
+    f = admit_main_intake(recording, monkeypatch, eager=eager)
     for sid in f.binding.segment_ids:
         job = f.client.rows[f.store.ref('jobs', sid).path]
         assert 'record_notes_after_complete' not in job
-        assert 'record_input_upload_revision' not in job
     key = reprocess.key(f.binding.owner_id, 'capture')
     ref = f.client.collection(reprocess.COLLECTION).document(key)
     if retired_hold:

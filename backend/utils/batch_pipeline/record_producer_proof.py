@@ -72,7 +72,7 @@ def parse_pusher_pod_proof(payload, captured_at):
     }
 
 
-def producer_tokens_dead(tokens, proof, *, producers_stopped=False, uid=None, row=None, job=None, lease_shadow=False):
+def producer_tokens_dead(tokens, proof, *, producers_stopped=False, uid=None, row=None, job=None):
     if not isinstance(tokens, dict):
         return False
     proof_valid = proof is not None and (
@@ -82,7 +82,9 @@ def producer_tokens_dead(tokens, proof, *, producers_stopped=False, uid=None, ro
     )
     if proof is not None and not proof_valid and not tokens:
         return False  # Cluster repair also uses the empty map to validate inventory freshness.
-    use_lease = lease.token_lease_serving(uid) or (lease_shadow and lease.token_lease_mode() != 'off')
+    # The kill switch withdraws lease expiry as release authority. It never
+    # grants one: killed, a lapsed lease leaves its token fencing the seal.
+    killed = lease.token_lease_killed()
     now = time.time()
     for value in tokens.values():
         if value is True:
@@ -99,32 +101,31 @@ def producer_tokens_dead(tokens, proof, *, producers_stopped=False, uid=None, ro
             or not 0 < started
         ):
             return False
-        # Only serve can mint the podless custody fence. Its own observed
-        # lease remains its exit after rollback; frame pod proof is unchanged.
+        # Only Sync custody mints the podless fence. Its own observed lease is
+        # its only exit; frame pod proof is unchanged.
         if pod == '' and value.get('signal_source') == 'custody_append':
-            if not lease.token_lease_lapsed(value, now, row=row, job=job):
+            if killed or not lease.token_lease_lapsed(value, now, row=row, job=job):
                 return False
             continue
-        if use_lease:
-            clocks = lease.token_lease_clocks(value, row=row, job=job)
-            if clocks:
-                signal = lease.lease_timestamp(value.get('last_signal_at'))
-                abandoned = lease.lease_timestamp(value.get('abandoned_at'))
-                # Observed activity supersedes earlier stoppage evidence, even
-                # if a stale token still carries that evidence after renewal.
-                # A computed stock seed is never evidence of activity.
-                if signal and (
-                    (abandoned and abandoned >= started and signal > abandoned)
-                    or (proof_valid and signal > proof['captured_at'])
-                ):
-                    return False
-                if lease.token_lease_lapsed(value, now, row=row, job=job):
-                    continue
-                # A custody uploader can outlive its pusher. Actual server
-                # signals re-fence an abandoned/gone identity. A computed stock
-                # seed is not a live signal and preserves the original proofs.
-                if 'last_signal_at' in value:
-                    return False
+        clocks = lease.token_lease_clocks(value, row=row, job=job)
+        if clocks:
+            signal = lease.lease_timestamp(value.get('last_signal_at'))
+            abandoned = lease.lease_timestamp(value.get('abandoned_at'))
+            # Observed activity supersedes earlier stoppage evidence, even
+            # if a stale token still carries that evidence after renewal.
+            # A computed stock seed is never evidence of activity.
+            if signal and (
+                (abandoned and abandoned >= started and signal > abandoned)
+                or (proof_valid and signal > proof['captured_at'])
+            ):
+                return False
+            if not killed and lease.token_lease_lapsed(value, now, row=row, job=job):
+                continue
+            # A custody uploader can outlive its pusher. Actual server
+            # signals re-fence an abandoned/gone identity. A computed stock
+            # seed is not a live signal and preserves the original proofs.
+            if 'last_signal_at' in value:
+                return False
         if 'abandoned_at' in value:
             abandoned = value['abandoned_at']
             if (
@@ -151,10 +152,9 @@ def producer_tokens_dead(tokens, proof, *, producers_stopped=False, uid=None, ro
 
 
 def leases_would_release(tokens, proof, *, uid=None, row=None, job=None, producers_stopped=False):
-    """Content-free shadow diagnostic; never grants write authority."""
+    """Content-free diagnostic for a committed release; never grants write authority."""
     return bool(
         tokens
-        and lease.token_lease_mode() != 'off'
         and producer_tokens_dead(
             tokens,
             proof,
@@ -162,7 +162,6 @@ def leases_would_release(tokens, proof, *, uid=None, row=None, job=None, produce
             row=row,
             job=job,
             producers_stopped=producers_stopped,
-            lease_shadow=True,
         )
         and any(lease.token_lease_lapsed(value, time.time(), row=row, job=job) for value in tokens.values())
     )

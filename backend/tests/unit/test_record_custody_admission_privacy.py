@@ -112,11 +112,19 @@ def test_sync_opt_out_keeps_existing_no_custody_admission(client):
 
 
 @pytest.mark.parametrize('mode', ['off', 'shadow'])
-def test_non_serving_begin_preserves_no_metadata_io(client, monkeypatch, mode):
+async def test_killed_admission_refuses_before_metadata_io(client, monkeypatch, mode):
     monkeypatch.setenv('RECORD_TOKEN_LEASE_MODE', mode)
-    forbidden = Mock(side_effect=AssertionError('non-serving admission performed metadata IO'))
+    forbidden = Mock(side_effect=AssertionError('killed admission performed metadata IO'))
     monkeypatch.setattr(custody, 'get_firestore_client', forbidden)
-    assert not custody.begin('synthetic', 'record', 'custody:off')
+    state = {}
+    context = request._upload.set(state)
+    try:
+        with pytest.raises(HTTPException) as refused:
+            await request.begin_upload('synthetic', 'record', 'off')
+    finally:
+        request._upload.reset(context)
+    assert refused.value.status_code == 503
+    assert 'session' not in state
     forbidden.assert_not_called()
     assert client.transactions == []
 

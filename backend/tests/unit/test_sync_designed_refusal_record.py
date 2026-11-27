@@ -126,7 +126,7 @@ async def test_a_wrapper_that_replaces_the_designed_503_leaves_it_unrecorded(cap
 
 
 def _custody_stack(monkeypatch, finish):
-    monkeypatch.setattr(custody_lease.lease, 'token_lease_mode', lambda: 'on')
+    monkeypatch.delenv('RECORD_TOKEN_LEASE_MODE', raising=False)
     monkeypatch.setattr(record_custody_append, 'finish', finish)
 
     @designed_refusal.designed_refusal_outcome

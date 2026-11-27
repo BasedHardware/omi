@@ -333,3 +333,18 @@ def empty_rollout_cohorts(monkeypatch):
     monkeypatch.setattr(cohorts, '_members_resolver', members)
     monkeypatch.setattr(cohorts, '_load_resolver', lambda _uid: None)
     monkeypatch.setattr(cohorts, '_warm_resolver', warm)
+
+
+@pytest.fixture
+def record_custody_not_acquired(monkeypatch):
+    """For Sync tests about other gates: admission acquires no custody fence.
+
+    The record token lease is the only custody path, and its transactions need
+    Firestore. ``begin`` returning False is the real sync-opt-out outcome: no
+    fence, and the route keeps its original admission semantics. An unowned
+    archive's renewal is a read-only late observation, so it is a no-op here.
+    """
+    from database import record_audio, record_custody_append
+
+    monkeypatch.setattr(record_custody_append, 'begin', lambda *args, **kwargs: False)
+    monkeypatch.setattr(record_audio, 'renew_record_token_lease', lambda *args, **kwargs: False)

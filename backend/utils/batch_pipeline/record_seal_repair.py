@@ -23,7 +23,6 @@ from utils.batch_pipeline.metrics import RECORD_SEAL_ORPHAN_PARKED
 from utils.batch_pipeline.record_barrier import validate_record_tail
 from utils.batch_pipeline.record_producer_proof import producer_tokens_dead, leases_would_release
 from database import record_token_lease_metrics as lease_metrics
-from config import record_seal_rules as lease
 from utils.batch_pipeline.record_seal_reasons import proof_reason, proof_diagnostics, tail_gap_bucket, TailGapRefusal
 from utils.other.storage import list_audio_chunks
 from utils.batch_pipeline import record_seal_profile
@@ -409,16 +408,12 @@ def apply_seals(store, plan, approved_digest, *, check_budget=lambda: None, outc
                     )
                     if observation_counts is not None:
                         observation_counts['ledger_misses'] = observation_counts.get('ledger_misses', 0) + 1
-            if (
-                result in {'sealed', 'upload_failed_cleared'}
-                and lease.token_lease_serving(uid)
-                and leases_would_release(
-                    entry['row'].get('record_upload_sessions'),
-                    plan['producer_proof'],
-                    uid=uid,
-                    row=entry['row'],
-                    job=job,
-                )
+            if result in {'sealed', 'upload_failed_cleared'} and leases_would_release(
+                entry['row'].get('record_upload_sessions'),
+                plan['producer_proof'],
+                uid=uid,
+                row=entry['row'],
+                job=job,
             ):
                 lease_metrics.EXPIRED_SEALED.inc()
             if observation:

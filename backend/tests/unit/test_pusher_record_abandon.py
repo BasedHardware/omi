@@ -352,7 +352,7 @@ async def test_shared_storage_settles_before_four_coordinators_attest(records, m
 
 
 async def test_frame_batch_renewal_is_throttled_and_late_append_bumps_revision(records, monkeypatch):
-    monkeypatch.setenv('RECORD_TOKEN_LEASE_MODE', 'shadow')
+    monkeypatch.delenv('RECORD_TOKEN_LEASE_MODE', raising=False)
     epoch = [10000.0]
     monotonic = [10000.0]
     monkeypatch.setattr(record_audio.time, 'time', lambda: epoch[0])
@@ -375,17 +375,18 @@ async def test_frame_batch_renewal_is_throttled_and_late_append_bumps_revision(r
     monotonic[0] += 3601
     await barrier.renew_recording('record')
     assert records.rows[PATH]['record_upload_revision'] == revision + 1
+    # The kill switch keeps frame renewals: a live producer's fence stays
+    # fresh, so lifting the kill cannot expire it.
     monkeypatch.setenv('RECORD_TOKEN_LEASE_MODE', 'off')
-    before = len(records.transactions)
-    epoch[0] += 7200
-    monotonic[0] += 7200
+    epoch[0] += 1800
+    monotonic[0] += 1800
     await barrier.renew_recording('record')
-    assert len(records.transactions) == before
+    assert records.rows[PATH]['record_upload_sessions'][token]['last_signal_at'] == epoch[0]
     await barrier.finish_recording('record')
 
 
 async def test_receive_and_projection_batches_share_one_committed_renewal(records, monkeypatch):
-    monkeypatch.setenv('RECORD_TOKEN_LEASE_MODE', 'shadow')
+    monkeypatch.delenv('RECORD_TOKEN_LEASE_MODE', raising=False)
     monkeypatch.setattr(barriers, 'producer_identity', lambda: {'pod': 'synthetic-pusher', 'process_started_at': 100})
     barrier = barriers.PusherRecordBarrier('uid-at')
     await barrier.begin_recording('record')
@@ -446,7 +447,7 @@ async def test_delayed_begin_response_cannot_hide_a_lapsed_lease(records, monkey
 
 
 async def test_projection_after_partial_clear_restores_its_exact_producer(records, monkeypatch):
-    monkeypatch.setenv('RECORD_TOKEN_LEASE_MODE', 'shadow')
+    monkeypatch.delenv('RECORD_TOKEN_LEASE_MODE', raising=False)
     monkeypatch.setattr(barriers, 'producer_identity', lambda: {'pod': 'synthetic-pusher', 'process_started_at': 100})
     barrier = barriers.PusherRecordBarrier('uid-at')
     await barrier.begin_recording('record')

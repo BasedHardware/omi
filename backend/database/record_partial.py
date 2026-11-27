@@ -13,7 +13,6 @@ from database.batch_pipeline_privacy import BatchPrivacyBlocked
 from database.batch_pipeline_store import FirestoreTransaction
 from utils.batch_pipeline.record_producer_proof import producer_tokens_dead, leases_would_release
 from database import record_token_lease_metrics as lease_metrics
-from config import record_seal_rules as lease
 
 PAYER_REFUSALS = Counter('omi_record_audio_partial_byok_refusals_total', 'Partial finishes refused for BYOK')
 
@@ -141,7 +140,7 @@ def finish_partial(store, path, *, reason, proof, now, register=None, preview=Fa
             job['partial_run'] = {**job['partial_run'], 'next_inventory_at': now}
         if not producer_tokens_dead({}, proof):
             return 'state_changed'
-        observation['expired'] = lease.token_lease_serving(uid) and leases_would_release(
+        observation['expired'] = leases_would_release(
             row.get('record_upload_sessions'),
             proof,
             uid=uid,
