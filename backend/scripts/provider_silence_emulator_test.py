@@ -223,7 +223,8 @@ def test_pl426_positive_speech_abandonment_keeps_its_paid_attempt_and_health_fai
         artifacts,
         stt=vendor,
         allowed=lambda *_: True,
-        inspect=lambda *_: (b'\0\0', 5.0, [{'start': 0, 'end': 1}]),
+        # Keep strict-VAD speech above the default 2.0 s minimum so the vendor is called.
+        inspect=lambda *_: (b'\0\0', 5.0, [{'start': 0.5, 'end': 3.0}]),
         clock=lambda: T0,
         health=service,
         armed=lambda: True,
