@@ -289,7 +289,8 @@ A scenario with a `speakers` block runs the product's speaker code on real voice
   the truth (`speakers/score.score_conversation`, segment clocks moved from the conversation's `started_at` onto
   the recording's audio clock): `attribution_min`, `owner_precision_min`, `owner_recall_min`,
   `named_accuracy_min`, `named_coverage_min`, `wrong_name_max`, `owner_words_max`, `voices` (`N` or
-  `[N, tolerance]`). A rate with nothing to measure is `null` and fails a minimum. The scorecard (numbers only)
+  `[N, tolerance]`), `final_pass` (the run's last `run_batch_final_pass` outcome) and `resolution` (the stored
+  `speaker_resolution.status`: the app numbers voices only when it is `resolved`). A rate with nothing to measure is `null` and fails a minimum. The scorecard (numbers only)
   is on each conversation row in `result.json` and in the verdict's actual; `scenario compare` reports it as
   metric `speakers` (`speakers/compare_metrics.py`).
 
@@ -428,8 +429,39 @@ about 130 s, on a busier host; the five before those: 35 s); `.github/ci-budget.
 | `home_paging_past_hidden_runs` | Home paged past runs of hidden rows shows every visible conversation once | #25721, #25725, #26193 |
 | `speaker_owner_and_person_finish` | real voices (public LibriSpeech): the owner and an enrolled person, Finish while capturing; owner and person named, attribution high (`receipts: processed`) | speaker scenarios |
 | `speaker_owner_absent` | an enrolled person and a stranger, the owner silent: no word labelled as the owner, the person named, the stranger unnamed (`receipts: processed`) | speaker scenarios |
+| `speaker_partial_final_pass_keeps_voices` | three voices with short turns; the final pass ends partial (diarizer-gap words) and the conversation stays `resolved` on the resolver's voice ids | `BATCH_FINAL_PASS_KEEP_RESOLVED_ON_PARTIAL_ENABLED` |
 
 Turning a production incident into a scenario: [scenario/IMPORTER.md](scenario/IMPORTER.md).
+
+### STT routing (which engine transcribes each recording)
+
+By default an `audio_file` recording plays the cassette the scenario pins, so arms that route speech
+differently transcribe identically. With `OMI_PIPELINE_LAB_STT_ROUTING=product` in the scenario or arm env,
+`stt_routing/routing.py` routes each recording with production's own decisions under that arm's env
+(production profile, then scenario env, then arm env): `batch_admission_language`, the sampled LID
+(`probe_wav` + `LanguageDecision.parakeet_safe`) and `get_prerecorded_service` for the legacy path. The
+recording then plays the cassette of the engine chosen. Capacity fallback and legacy modes other than `on`
+are not modelled (see the module's table).
+
+- `OMI_PIPELINE_LAB_STT_ROUTING_INPUTS`: a private JSON file with the user fields routing reads and each
+  label's conversation fields (`{"user", "conversations", "default_conversation"}`).
+- `OMI_PIPELINE_LAB_STT_ROUTE_CASSETTES`: JSON mapping a route (`parakeet`, `multilingual`) to the cassette pin
+  that stands in for it, e.g. `parakeet_local` for production's GPU Parakeet.
+- A routed engine with no provider/model pin (from the mapping or the route itself) is a miss, never a
+  wildcard match.
+- LID answers are recorded once per 30 s probe under `<lab root>/lid/` on a `--stt record-vendor` run with
+  `OMI_PIPELINE_LAB_LID_KEY_FILE` (a 0600 key file) and `--stt-budget-usd`. Each probe reserves and settles its
+  list price in `lid_ledger.json`. Answers are replayed after that. The self gate's later windows (Whisper-base
+  in production) are classified locally by `stt_routing/self_lid.py` under `OMI_PIPELINE_LAB_MLX_PYTHON` (a
+  venv with `mlx-whisper`) and cached under `<lab root>/self_lid/`. Every engine's cassettes are recorded
+  beforehand, one pinned `record-*` pass per engine.
+- Metric `stt_routing` (`stt_routing/compare_metrics.py`): recordings and audio per route, LID probes, and with
+  `OMI_PIPELINE_LAB_STT_REFERENCE` (a private per-audio reference, never an arm's own detector) the
+  unsupported-language speech each arm sent to Parakeet.
+
+The batch lane cannot play a multilingual cassette: the real worker refuses a window whose language Parakeet
+does not support (`vad_windows` / `unsupported_language`), as production does before recovery. Route
+multilingual audio through `sync` fragments.
 
 ## affected
 

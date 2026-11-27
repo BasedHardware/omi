@@ -104,8 +104,17 @@ def test_scenarios_follow_their_closure_and_their_own_file(report):
     assert rows['backend/testing/pipeline_lab/timeline/build.py']['scenarios'] == []
 
 
-AUDIO_SCENARIOS = ['audio_single_recording_finish', 'speaker_owner_absent', 'speaker_owner_and_person_finish']
-SPEAKER_SCENARIOS = ['speaker_owner_absent', 'speaker_owner_and_person_finish']
+AUDIO_SCENARIOS = [
+    'audio_single_recording_finish',
+    'speaker_owner_absent',
+    'speaker_owner_and_person_finish',
+    'speaker_partial_final_pass_keeps_voices',
+]
+SPEAKER_SCENARIOS = [
+    'speaker_owner_absent',
+    'speaker_owner_and_person_finish',
+    'speaker_partial_final_pass_keeps_voices',
+]
 
 
 @pytest.mark.parametrize(

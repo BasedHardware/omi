@@ -13,14 +13,85 @@ final class LivePreviewCoverage {
   /// passes their first observed time before they are discarded.
   static const untimedGrace = Duration(seconds: 10);
 
+  /// Reliability experiment `live_words_cascade`: a live word counts as stored when its middle lies
+  /// within this much of a stored line. The two texts are timed by different recognisers.
+  static const cascadeReach = Duration(seconds: 2);
+
+  /// Reliability experiment `live_words_cascade`: a live word that no stored line has replaced is
+  /// dropped once it is this old, where stored text exists to compare it with.
+  static const cascadeTimeout = Duration(minutes: 5);
+
   /// Prepare final intervals once for a transcript snapshot. Preview revisions
   /// can reuse them without walking the final history again.
-  LivePreviewCoverage.forFinals(List<TranscriptSegment> finals, DateTime? origin)
+  ///
+  /// [cascade] (default: reliability experiment `live_words_cascade` is on) replaces the settled-tail
+  /// rule with one rule per word, whatever state the conversation is in: a live word stays until a
+  /// stored line covers its moment of audio ([cascadeReach]) or it is [cascadeTimeout] old.
+  LivePreviewCoverage.forFinals(List<TranscriptSegment> finals, DateTime? origin,
+      {bool? cascade, DateTime Function()? now})
       : _hasOrigin = origin != null,
-        _merged = origin == null ? const [] : _mergedFinalSpans(finals, origin);
+        _merged = origin == null ? const [] : _mergedFinalSpans(finals, origin),
+        _cascade = cascade ?? LivePreviewController.cascadeEnabled(),
+        _now = now ?? DateTime.now;
 
   final bool _hasOrigin;
   final List<_TimeSpan> _merged;
+  final bool _cascade;
+  final DateTime Function() _now;
+
+  /// Stored text, else live words: [lines] without the words a stored line covers, and without the
+  /// words older than [cascadeTimeout] that none has replaced. With no stored line at all there is
+  /// nothing to wait for and nothing is dropped.
+  List<LivePreviewLine> _cascadeUncovered(List<LivePreviewLine> lines) {
+    final merged = _merged;
+    if (merged.isEmpty) return List.of(lines);
+    final reach = cascadeReach.inMicroseconds;
+    final oldest = _now().microsecondsSinceEpoch - cascadeTimeout.inMicroseconds;
+    bool stored(int at) {
+      var low = 0, high = merged.length;
+      while (low < high) {
+        final mid = (low + high) >> 1;
+        if (merged[mid].$2 + reach < at) {
+          low = mid + 1;
+        } else {
+          high = mid;
+        }
+      }
+      return low < merged.length && merged[low].$1 - reach <= at;
+    }
+
+    bool keep(int startUs, int endUs) =>
+        startUs >= oldest && !stored((startUs + (endUs < startUs ? startUs : endUs)) ~/ 2);
+
+    final result = <LivePreviewLine>[];
+    for (final line in lines) {
+      if (line.spans.isEmpty) {
+        final start = (line.startedAt ?? line.firstSeenAt)?.microsecondsSinceEpoch;
+        if (start == null || keep(start, line.endedAt?.microsecondsSinceEpoch ?? start)) result.add(line);
+        continue;
+      }
+      final spans = [
+        for (final span in line.spans)
+          if (keep(span.startedAt.microsecondsSinceEpoch, span.endedAt.microsecondsSinceEpoch)) span,
+      ];
+      if (spans.length == line.spans.length) {
+        result.add(line);
+      } else if (spans.isNotEmpty) {
+        final text = LivePreviewLine.textOf(spans);
+        if (text.isEmpty) continue;
+        result.add(LivePreviewLine(
+          id: line.id,
+          isFinal: line.isFinal,
+          text: text,
+          startedAt: spans.first.startedAt,
+          endedAt: spans.last.endedAt,
+          firstSeenAt: line.firstSeenAt,
+          spans: spans,
+        ));
+      }
+    }
+    return result;
+  }
 
   static List<LivePreviewLine> uncovered(
           List<LivePreviewLine> lines, List<TranscriptSegment> finals, DateTime? origin) =>
@@ -60,6 +131,7 @@ final class LivePreviewCoverage {
 
   List<LivePreviewLine> excludeCovered(List<LivePreviewLine> lines) {
     if (!_hasOrigin) return List.of(lines);
+    if (_cascade) return _cascadeUncovered(lines);
     final merged = _merged;
 
     // Segment ends do not prove that every earlier batch arrived. Moving this
