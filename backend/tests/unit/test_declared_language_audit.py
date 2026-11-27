@@ -57,9 +57,11 @@ def skipped(reason):
     )
 
 
-def serving_guard(authorize=None):
+def serving_guard(authorize=None, custom_stt=False):
     item = SimpleNamespace(owner_id='owner-test', duration_seconds=40.0)
-    return ServingLanguageProbeGuard(object(), item, authorize=authorize or (lambda store, item, snapshots=None: None))
+    return ServingLanguageProbeGuard(
+        object(), item, authorize=authorize or (lambda store, item, snapshots=None: None), custom_stt=custom_stt
+    )
 
 
 @pytest.fixture
@@ -90,7 +92,7 @@ def lab(monkeypatch):
     state.funded = True
     monkeypatch.setattr('utils.stt_cap_dispatch.funded_allowance', funded)
     monkeypatch.setattr('utils.stt_cap_dispatch.sync_allowed', Mock(side_effect=AssertionError('admission')))
-    monkeypatch.setattr(audit, '_vendor_window', [0.0, 0])
+    monkeypatch.setattr(audit, '_probe_window', [0.0, 0])
     return state
 
 
@@ -129,14 +131,25 @@ def test_without_a_self_gate_the_vendor_probe_classifies(lab, monkeypatch):
 def test_vendor_probes_are_capped_per_process_per_hour(lab, monkeypatch):
     monkeypatch.setenv('HOSTED_LID_API_URL', '')
     monkeypatch.setenv('STT_GPU_FLEET_OFF', 'true')
-    monkeypatch.setattr(audit, 'MAX_VENDOR_PER_HOUR', 1)
-    before = skipped('vendor_cap')
+    monkeypatch.setattr(audit, 'MAX_PROBES_PER_HOUR', 1)
+    before = skipped('probe_cap')
 
     resolve()
     resolve()
 
     assert len(lab.vendor_calls) == 1
-    assert skipped('vendor_cap') == before + 1
+    assert skipped('probe_cap') == before + 1
+
+
+def test_self_gate_probes_share_the_hourly_cap(lab, monkeypatch):
+    monkeypatch.setattr(audit, 'MAX_PROBES_PER_HOUR', 1)
+    before = skipped('probe_cap')
+
+    resolve()
+    resolve()
+
+    assert len(lab.self_calls) == 1
+    assert skipped('probe_cap') == before + 1
 
 
 def test_an_unusable_vendor_answer_is_skipped(lab, monkeypatch):
@@ -182,6 +195,7 @@ def test_leading_silence_is_not_a_language_sample(lab):
     resolve(audio=wav_bytes(voiced=False))
 
     assert lab.self_calls == []
+    assert lab.funding_calls == []  # a silent probe skips before any authorization read
     assert skipped('no_speech') == before + 1
 
 
@@ -320,3 +334,61 @@ def test_the_funding_check_is_read_only(lab):
     resolve()
 
     assert lab.funding_calls == [{'lane': 'batch', 'ready_usage_only': True}]
+
+
+def test_an_owner_with_their_own_stt_is_never_sampled(lab):
+    before = skipped('custom_stt')
+
+    decision, _ = resolve(guard=serving_guard(custom_stt=True))
+
+    assert decision.evidence == 'declared'
+    assert lab.self_calls == [] and lab.vendor_calls == [] and lab.funding_calls == []
+    assert skipped('custom_stt') == before + 1
+
+
+def test_the_real_pool_runs_the_sample_without_the_callers_deadline(lab, monkeypatch):
+    import time
+
+    from utils import executors
+    from utils.stt.prerecorded_deadline import verification_deadline, verification_stt_deadline
+
+    seen = []
+
+    def self_detect(probe, *, surface):
+        seen.append(verification_deadline.get())
+        return lab.verdict
+
+    monkeypatch.setattr(audit.language_gate, 'self_detect', self_detect)
+    monkeypatch.setattr(audit, 'declared_language_audit_executor', executors.declared_language_audit_executor)
+    before = audited()
+
+    with verification_stt_deadline(time.monotonic() - 1):
+        resolve()
+    deadline = time.monotonic() + 5
+    while not seen and time.monotonic() < deadline:
+        time.sleep(0.01)
+
+    assert seen == [None]
+    for _ in range(100):
+        if audited() == before + 1:
+            break
+        time.sleep(0.01)
+    assert audited() == before + 1
+
+
+def test_voiced_seconds_reads_the_probe_rate():
+    assert audit.voiced_seconds(wav_bytes(5, sample_rate=8000)) == pytest.approx(5.0, abs=0.05)
+    assert audit.voiced_seconds(wav_bytes(5, sample_rate=48000)) == pytest.approx(5.0, abs=0.05)
+
+
+def test_an_unexpected_error_before_submission_is_counted(lab, monkeypatch):
+    def broken(audio):
+        raise RuntimeError('boom')
+
+    monkeypatch.setattr(audit, 'sampled', broken)
+    before = skipped('error')
+
+    decision, _ = resolve()
+
+    assert decision.evidence == 'declared'
+    assert skipped('error') == before + 1

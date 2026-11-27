@@ -13,21 +13,26 @@ This audit samples ``SAMPLE_PERCENT`` of those units by a stable hash of their a
    including BYOK-only owners, are skipped (``not_funded``): the classifier is an Omi-paid vendor or GPU;
 2. cuts the first 30 s, and skips it when it holds under ``MIN_SPEECH_SECONDS`` of voiced audio (leading silence);
 3. classifies it with the self-hosted language gate when one is configured, otherwise with the existing Modulate
-   language-ID probe (the vendor that already serves live STT), at most ``MAX_VENDOR_PER_HOUR`` per process;
+   language-ID probe (the vendor that already serves live STT). Either classifier runs at most
+   ``MAX_PROBES_PER_HOUR`` times per process. A vendor probe is the routing probe (``batch_language.detect``), so its
+   real outcomes also reach that endpoint's circuit breaker, probe counters and the empty-success guard;
 4. counts ``omi_batch_pipeline_declared_language_audit_total{declared, heard, heard_class, confident, classifier}``.
 
 It never changes a route, stores nothing, and records no user identifier or transcript. Shadow intake (its own guard
-class) is not audited.
+class) is not audited, and neither is a unit whose owner brought their own STT (BYOK or a custom provider): their
+audio is never sent to an Omi-paid classifier for measurement.
 
 ``BATCH_DECLARED_LANGUAGE_AUDIT_ENABLED=false`` stops sampling.
 """
 
 import contextvars
 import hashlib
+import io
 import logging
 import os
 import threading
 import time
+import wave
 from typing import Callable
 
 import numpy as np
@@ -47,7 +52,7 @@ SAMPLE_PERCENT = 2.0
 CONFIDENT = 0.8  # top-1 probability for a verdict to count as confident
 MIN_SPEECH_SECONDS = 3.0  # voiced audio needed in the 30 s probe; less is leading silence, not a language sample
 _VOICED_RMS = 300  # int16 RMS of a voiced 20 ms frame
-MAX_VENDOR_PER_HOUR = 60  # vendor probes per process per hour (30 s each: at most $0.005/h/process at $0.01/h)
+MAX_PROBES_PER_HOUR = 60  # classifications per process per hour (30 s each: vendor at most $0.005/h/process)
 
 AUDIT = Counter(
     'omi_batch_pipeline_declared_language_audit_total',
@@ -60,8 +65,8 @@ SKIPPED = Counter(
     ['reason'],
 )
 
-_vendor_lock = threading.Lock()
-_vendor_window = [0.0, 0]  # [hour start, probes in it]
+_probe_lock = threading.Lock()
+_probe_window = [0.0, 0]  # [hour start, probes in it]
 
 
 def audit_enabled() -> bool:
@@ -95,6 +100,9 @@ def maybe_audit(
             return
         if not isinstance(guard, ServingLanguageProbeGuard):
             return
+        if guard.custom_stt:
+            SKIPPED.labels('custom_stt').inc()
+            return
         try:
             probe, seconds = cut(audio)  # only the first 30 s is kept, never the whole unit
         except Exception:
@@ -112,17 +120,24 @@ def maybe_audit(
             SKIPPED.labels('submit').inc()
             logger.warning('event=declared_language_audit outcome=submit_failed error=%s', type(error).__name__)
     except Exception as error:
+        SKIPPED.labels('error').inc()
         logger.warning('event=declared_language_audit outcome=error error=%s', type(error).__name__)
 
 
 def voiced_seconds(probe: bytes) -> float:
-    """Seconds of 20 ms frames above a voicing RMS in a 16-bit PCM WAV probe."""
-    body = probe[44:]
-    pcm = np.frombuffer(body[: len(body) // 2 * 2], dtype='<i2').astype(np.float64)
-    frames = len(pcm) // 320
+    """Seconds of 20 ms frames above a voicing RMS in a 16-bit PCM WAV probe, at the probe's own rate."""
+    with wave.open(io.BytesIO(probe), 'rb') as reader:
+        if reader.getsampwidth() != 2:
+            return 0.0
+        rate, channels = reader.getframerate(), reader.getnchannels()
+        pcm = np.frombuffer(reader.readframes(reader.getnframes()), dtype='<i2').astype(np.float64)
+    if channels > 1:
+        pcm = pcm[: len(pcm) // channels * channels].reshape(-1, channels).mean(axis=1)
+    size = max(1, rate // 50)  # 20 ms
+    frames = len(pcm) // size
     if frames == 0:
         return 0.0
-    rms = np.sqrt((pcm[: frames * 320].reshape(frames, 320) ** 2).mean(axis=1))
+    rms = np.sqrt((pcm[: frames * size].reshape(frames, size) ** 2).mean(axis=1))
     return float((rms >= _VOICED_RMS).sum()) * 0.02
 
 
@@ -132,14 +147,14 @@ def _self_gate_configured() -> bool:
     )
 
 
-def _vendor_allowed() -> bool:
-    with _vendor_lock:
+def _probe_allowed() -> bool:
+    with _probe_lock:
         now = time.monotonic()
-        if now - _vendor_window[0] >= 3600:
-            _vendor_window[0], _vendor_window[1] = now, 0
-        if _vendor_window[1] >= MAX_VENDOR_PER_HOUR:
+        if now - _probe_window[0] >= 3600:
+            _probe_window[0], _probe_window[1] = now, 0
+        if _probe_window[1] >= MAX_PROBES_PER_HOUR:
             return False
-        _vendor_window[1] += 1
+        _probe_window[1] += 1
         return True
 
 
@@ -166,12 +181,16 @@ def _authorization(access) -> str | None:
 
 def _classify(declared: str, probe: bytes, seconds: float, access, vendor) -> None:
     try:
+        # Local checks first: a silent probe needs no authorization reads.
+        if voiced_seconds(probe) < MIN_SPEECH_SECONDS:
+            SKIPPED.labels('no_speech').inc()
+            return
         skip = _authorization(access)
         if skip is not None:
             SKIPPED.labels(skip).inc()
             return
-        if voiced_seconds(probe) < MIN_SPEECH_SECONDS:
-            SKIPPED.labels('no_speech').inc()
+        if not _probe_allowed():
+            SKIPPED.labels('probe_cap').inc()
             return
         bucket = language_gate.language_bucket(declared)
         if _self_gate_configured():
@@ -184,9 +203,6 @@ def _classify(declared: str, probe: bytes, seconds: float, access, vendor) -> No
                 return
             heard, probability, classifier = verdict.language, verdict.language_probability, 'self'
         else:
-            if not _vendor_allowed():
-                SKIPPED.labels('vendor_cap').inc()
-                return
             decision = vendor(probe)
             if getattr(decision, 'evidence', None) != 'audio_lid':
                 SKIPPED.labels('vendor_unavailable').inc()

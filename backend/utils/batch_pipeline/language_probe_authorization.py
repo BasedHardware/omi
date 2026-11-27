@@ -16,8 +16,10 @@ class LanguageProbeDenied(RuntimeError):
 
 
 class ServingLanguageProbeGuard:
-    def __init__(self, store, item, *, authorize):
+    def __init__(self, store, item, *, authorize, custom_stt=False):
         self.store, self.item, self.authorize = store, item, authorize
+        # The owner brought their own STT (BYOK or a custom provider): measurement-only probes stay off this unit.
+        self.custom_stt = bool(custom_stt)
         self.decision: ProbeDecision | None = None
         self.privacy_error: BatchPrivacyBlocked | None = None
 

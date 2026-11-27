@@ -1120,7 +1120,12 @@ async def accept_upload(
                 language_decision = decisions[len(items)]
             else:
                 phase = 'language_probe'
-                probe_guard = ServingLanguageProbeGuard(store, item, authorize=batch_artifact_authorize)
+                probe_guard = ServingLanguageProbeGuard(
+                    store,
+                    item,
+                    authorize=batch_artifact_authorize,
+                    custom_stt=byok_enabled or bool(target and target.get('uses_custom_stt')),
+                )
                 # Every self/vendor classification gets fresh dispatch authority on CPU.
                 language_decision = await run_blocking(
                     sync_executor,
@@ -1337,7 +1342,12 @@ async def _sample_language_units(
         set_phase('language_probe')
         # Every probe of the upload runs here, so any refusal happens before anything is staged.
         # Authorize each as the exact unit it will replay as (index, derived conversation).
-        probe_guard = ServingLanguageProbeGuard(store, unit_item(unit, index), authorize=batch_artifact_authorize)
+        probe_guard = ServingLanguageProbeGuard(
+            store,
+            unit_item(unit, index),
+            authorize=batch_artifact_authorize,
+            custom_stt=bool(user.get('stt_byok_enabled') or (target and target.get('uses_custom_stt'))),
+        )
         decision = await run_blocking(
             sync_executor,
             resolve_language,

@@ -331,6 +331,7 @@ declared_language_audit_executor = MonitoredThreadPoolExecutor(
     max_workers=2,
     max_queue_size=4,
     thread_name_prefix="declared-language-audit",
+    wait_on_saturation=True,  # submit still raises immediately; a full pool is an expected skip, not a warning.
 )
 # Optional per-window LID must not hold the shared sync coordination pool.
 # Bound outstanding calls; run_blocking awaits capacity without blocking a loop.
