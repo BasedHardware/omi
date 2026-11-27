@@ -18,20 +18,12 @@ from utils.conversations.v3 import (
 from utils.observability.reasons import RetryReason
 from utils.workers.retry import exhausted_transaction_retry_class, retry_response
 from utils.llm.gateway_error_contract import (
-    RETRYABLE_CONVERSATION_PROCESSING_ERROR_CODE,
+    is_retryable_processing_http_exception,
     retryable_provider_failure_http_exception,
 )
 from config.conversations_v3 import backfill_enabled
 
 router = APIRouter()
-
-
-def _is_retryable_provider_http_answer(error: HTTPException) -> bool:
-    return (
-        error.status_code == 503
-        and isinstance(error.detail, dict)
-        and error.detail.get('code') == RETRYABLE_CONVERSATION_PROCESSING_ERROR_CODE
-    )
 
 
 class ReconcileRequest(BaseModel):
@@ -53,7 +45,7 @@ async def reconcile(body: ReconcileRequest, request: Request, _retry: int = Depe
         # Keep the shared boundary's metric, but adapt its mobile 503 contract
         # to the task-target 409 contract; Cloud Tasks ignores Retry-After.
         if isinstance(error, HTTPException):
-            if _is_retryable_provider_http_answer(error):
+            if is_retryable_processing_http_exception(error):
                 return retry_response(RetryReason.DEPENDENCY_WARMING)
             raise
         if os.getenv('CONVERSATIONS_V3_RECONCILE_RETRY_RESPONSE', 'on').strip().lower() != 'off':
@@ -102,7 +94,7 @@ async def run_backfill(body: BackfillRequest, _retry: int = Depends(verify_cloud
         # An already-typed provider 503 has been counted at the composition
         # boundary; translate it without recording the same failure twice.
         if isinstance(error, HTTPException):
-            if _is_retryable_provider_http_answer(error):
+            if is_retryable_processing_http_exception(error):
                 return retry_response(RetryReason.DEPENDENCY_WARMING)
             raise
         retryable = retryable_provider_failure_http_exception(error, route='conversations_v3_backfill')

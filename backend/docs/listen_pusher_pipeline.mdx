@@ -158,6 +158,17 @@ same response. `CONVERSATIONS_V3_RECONCILE_RETRY_RESPONSE` defaults to on. Set i
 [reconcile retry change note](./listen_pusher_pipeline/changes/2026-11-25-v3-reconcile-retry-contract.md)
 for retry metrics and processing settlement.
 
+The `/v1/conversations-v3/reconcile` and `/v1/conversations-v3/backfill` Cloud Tasks
+routes answer retryable provider faults with HTTP 409 `dependency_warming`; Cloud Tasks
+uses queue backoff and ignores `Retry-After`. A typed retryable 503 from the shared
+composition boundary is translated without a second metric. Owner-busy on native
+manual-ready reconcile and backfill answers 409 `locked`; ordinary background
+reconcile acknowledges `busy` with HTTP 200 while another pass owns the work. The
+`CONVERSATION_PROCESSING_RETRYABLE_PROVIDER_FAILURE_ENABLED` switch defaults to on;
+off restores the generic 500 provider-failure path. Synchronous mobile processing
+continues to use typed 503 + `Retry-After` while the switch is on. See the
+[provider retry change note](./listen_pusher_pipeline/changes/2026-11-23-v3-outline-retryable-503.md).
+
 
 ## Pre-recorded Modulate credit-refusal failover
 

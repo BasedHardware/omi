@@ -154,3 +154,16 @@ def test_real_tree_has_no_new_violators(real_keys):
 def test_listen_finalization_route_never_answers_503(real_keys):
     # M1 L04-3: the sync_reprocess branch answered 503 on an expected first-summary retry.
     assert not [k for k in real_keys if 'conversation_finalization.py' in k and k.endswith('/503')]
+
+
+def test_conversations_v3_task_routes_never_answer_429_or_503():
+    class Ctx:
+        source = Source()
+
+    edges = [
+        Edge('conversations-v3-reconcile', '/v1/conversations-v3/reconcile'),
+        Edge('conversations-v3-backfill', '/v1/conversations-v3/backfill'),
+    ]
+    findings = tt.violations_for(edges, tt.load_router_modules(Ctx.source), Violation)
+    forbidden = [finding.scope for finding in findings if finding.scope.endswith(('/429', '/503'))]
+    assert forbidden == []
