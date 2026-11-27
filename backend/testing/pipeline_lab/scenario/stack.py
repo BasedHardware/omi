@@ -813,8 +813,14 @@ def run_files(
     stt: str = 'replay',
     stt_budget_usd: Optional[float] = None,
     trace_calls: bool = False,
+    windows: str = 'vad',
+    speakers: str = 'replay',
 ) -> int:
     stt_args = ['--stt', stt] + (['--stt-budget-usd', str(stt_budget_usd)] if stt_budget_usd is not None else [])
+    if windows != 'vad':  # record-local: fixed 30 s windows instead of VAD spans
+        stt_args += ['--windows', windows]
+    if speakers != 'replay':  # speakers scenarios: record speaker peer misses with the local models
+        stt_args += ['--speakers', speakers]
     if trace_calls:  # scenario/reach.py: each scenario writes called_files.json
         stt_args.append('--trace-calls')
     names = list(names) or sorted(path.stem for path in SCENARIO_DIR.glob('*.json'))  # default: all committed

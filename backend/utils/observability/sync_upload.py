@@ -1,6 +1,6 @@
 """Measure server-observed upload admission without reading bodies or changing sync."""
 
-from prometheus_client import Histogram
+from prometheus_client import Counter, Histogram
 from starlette.datastructures import Headers
 
 from config.request_clock import bounded_hold_state, recovered_label
@@ -13,6 +13,38 @@ HOLD_AGE = Histogram(
     ['hold_state', 'recovered'],
     buckets=(1, 5, 15, 30, 60, 120, 300, 360, 600, 900, 1200, 1800, 3600, 7200, 14400, 86400),
 )
+RECOVERY_LABEL_MISMATCH = Counter(
+    'omi_batch_pipeline_upload_recovery_label_mismatch_total',
+    'Mobile WAL uploads with missing or inconsistent recovery telemetry',
+    ['direction'],
+)
+RECOVERY_COMPARISONS = Counter(
+    'omi_batch_pipeline_upload_recovery_label_comparisons_total',
+    'Mobile WAL uploads evaluated against their journal recovery state',
+    ['journal_state'],
+)
+_JOURNAL_STATES = ('fresh', 'recovered', 'mixed')
+for _direction in ('fresh_labelled_recovered', 'recovered_labelled_fresh', 'missing'):
+    RECOVERY_LABEL_MISMATCH.labels(_direction)
+for _state in _JOURNAL_STATES:
+    RECOVERY_COMPARISONS.labels(_state)
+
+
+def compare_recovery_label(journal_state: str | None, reported_recovery: str | None, hold_state: str | None) -> None:
+    if journal_state is None and bounded_hold_state(hold_state) in ('none', 'unknown'):
+        # Legacy and flag-off uploads may omit the fresh label.
+        return
+    if journal_state not in _JOURNAL_STATES:
+        RECOVERY_LABEL_MISMATCH.labels('missing').inc()
+        return
+
+    RECOVERY_COMPARISONS.labels(journal_state).inc()
+    if reported_recovery not in ('0', '1'):
+        RECOVERY_LABEL_MISMATCH.labels('missing').inc()
+    elif reported_recovery == '1' and journal_state != 'recovered':
+        RECOVERY_LABEL_MISMATCH.labels('fresh_labelled_recovered').inc()
+    elif reported_recovery == '0' and journal_state != 'fresh':
+        RECOVERY_LABEL_MISMATCH.labels('recovered_labelled_fresh').inc()
 
 
 def observe_hold_age(age_ms, hold_state, recovered=False):

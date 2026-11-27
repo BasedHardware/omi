@@ -23,6 +23,7 @@ from fastapi import APIRouter, Body, Depends, Form, UploadFile, File, HTTPExcept
 from fastapi.responses import HTMLResponse
 
 from config import play_billing as play_billing_config
+from config.refactor_modes import default_off
 
 from langchain_core.messages import SystemMessage, HumanMessage
 from utils.apps import _clamp_review_score, fetch_app_chat_tools_from_manifest
@@ -1759,9 +1760,6 @@ async def generate_app_icon_endpoint(
     """
     if generated_compute_configured():
         await run_blocking(db_executor, require_generated_compute, uid, 'app_generator', allow_byok=False)
-    from utils.llm.app_generator import generate_app_icon
-    import base64
-
     # User-initiated LLM generation — same free-tier gate as chat (402 past cap).
     await run_blocking(db_executor, enforce_chat_quota, uid, platform=x_app_platform)
 
@@ -1775,8 +1773,18 @@ async def generate_app_icon_endpoint(
     if not app_description:
         raise HTTPException(status_code=422, detail='App description is required')
 
+    # The provider retired the only image model in the gateway rate card.
+    if not default_off('APP_ICON_GENERATION_ENABLED'):
+        raise HTTPException(
+            status_code=424,
+            detail={'code': 'icon_generation_disabled', 'retryable': False},
+        )
+
+    from utils.llm.app_generator import generate_app_icon
+    from utils.llm.gateway_client import ImageGatewayError
+    import base64
+
     try:
-        # Generate icon using DALL-E
         with track_usage(uid, Features.APP_GENERATOR):
             icon_bytes = await generate_app_icon(app_name, app_description, category)
 
@@ -1786,8 +1794,11 @@ async def generate_app_icon_endpoint(
         return {'status': 'ok', 'icon_base64': icon_base64, 'mime_type': 'image/png'}
     except HTTPException:
         raise
+    except ImageGatewayError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=exc.detail, headers=exc.headers) from exc
     except Exception as e:
-        logger.error(f"Error generating icon: {e}")
+        gateway_status = e.response.status_code if isinstance(e, httpx.HTTPStatusError) else None
+        logger.error('Error generating icon: %s gateway_http_status=%s', type(e).__name__, gateway_status)
         raise HTTPException(status_code=500, detail='Failed to generate icon')
 
 

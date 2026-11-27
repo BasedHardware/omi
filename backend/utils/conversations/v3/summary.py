@@ -197,7 +197,7 @@ async def stream(
             queue.put_nowait(text)
 
     def emit(text):
-        if not live:
+        if not live and row.get(policy.NATIVE_MANUAL_BINDING) is None:
             loop.call_soon_threadsafe(deliver, text)
 
     def write_live():
@@ -257,6 +257,11 @@ async def stream(
             await run_blocking(db_executor, leases.release, uid, 'summary-' + cid, token)
             token = None
             yield done(row)
+            return
+        if row.get(policy.NATIVE_MANUAL_BINDING) is not None and not await run_blocking(
+            db_executor, writers.admit_native_summary, uid, cid, token, snapshot.update_time
+        ):
+            yield 'error: {"detail":"Summary unavailable; poll conversation detail"}\n\n'
             return
         # run_blocking is awaited by a tracked task and never holds a DB worker
         # while waiting on a model. Request cancellation cannot authorize a write.

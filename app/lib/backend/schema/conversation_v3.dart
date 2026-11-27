@@ -76,6 +76,7 @@ class ConversationV3Fields {
     this.summaryCoversThrough,
     this.liveSummary,
     this.recording = false,
+    this.completedDerived = false,
     this.captureDeviceId,
     this.manualCutAt,
   });
@@ -102,6 +103,10 @@ class ConversationV3Fields {
   /// delivers them by recording id for released builds; a v3 Home never shows one as a row.
   final bool recording;
 
+  /// A derived row explicitly completed on the wire. Preserve this proof in
+  /// the cache because unknown conversation statuses default to completed.
+  final bool completedDerived;
+
   /// Reliability experiment `end_button_by_device`: the app install (`{platform}_{hash}`) behind the
   /// open conversation's latest speech, on the live read only. Null when the server does not send it.
   final String? captureDeviceId;
@@ -120,6 +125,7 @@ class ConversationV3Fields {
     'summary_covers_through',
     'live_summary',
     'recording',
+    'v3_derived',
   ];
 
   /// Null when the JSON carries none of the v3 fields.
@@ -143,6 +149,7 @@ class ConversationV3Fields {
       summaryCoversThrough: covers is String ? DateTime.tryParse(covers) : null,
       liveSummary: _readLiveSummary(json['live_summary']),
       recording: json['recording'] == true,
+      completedDerived: json['v3_derived'] == true && json['status'] == 'completed',
       captureDeviceId: captureDevice is String && captureDevice.isNotEmpty ? captureDevice : null,
       manualCutAt: manualCut is String ? DateTime.tryParse(manualCut) : null,
     );
@@ -171,6 +178,7 @@ class ConversationV3Fields {
         if (recordingIds.isNotEmpty) 'v3_recording_ids': recordingIds,
         if (summaryCoversThrough != null) 'summary_covers_through': summaryCoversThrough!.toUtc().toIso8601String(),
         if (recording) 'recording': true,
+        if (completedDerived) 'v3_derived': true,
         if (captureDeviceId != null) 'v3_capture_device_id': captureDeviceId,
         if (manualCutAt != null) 'v3_manual_cut_at': manualCutAt!.toUtc().toIso8601String(),
       };
