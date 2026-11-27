@@ -96,6 +96,7 @@ void main() {
         secondarySocket: secondary,
         sttProvider: SttProvider.customLive.name,
         forwardRawAudioToSecondary: false,
+        isAndroid: true,
       );
       addTearDown(socket.stop);
 
@@ -104,6 +105,26 @@ void main() {
       socket.send(controlMessage);
 
       expect(primary.sent, isEmpty);
+      expect(secondary.sent, [controlMessage]);
+    });
+
+    test('keeps Custom Live controls on the primary outside Android', () async {
+      final primary = _FakeSocket();
+      final secondary = _FakeSocket();
+      final socket = CompositeTranscriptionSocket(
+        primarySocket: primary,
+        secondarySocket: secondary,
+        sttProvider: SttProvider.customLive.name,
+        forwardRawAudioToSecondary: false,
+        isAndroid: false,
+      );
+      addTearDown(socket.stop);
+
+      expect(await socket.connect(), isTrue);
+      final controlMessage = jsonEncode({'type': 'speaker_assigned', 'speaker_id': 1});
+      socket.send(controlMessage);
+
+      expect(primary.sent, [controlMessage]);
       expect(secondary.sent, [controlMessage]);
     });
 
@@ -116,6 +137,7 @@ void main() {
           secondarySocket: secondary,
           sttProvider: SttProvider.customLive.name,
           forwardRawAudioToSecondary: shareRawAudio,
+          isAndroid: true,
         );
         addTearDown(socket.stop);
 
@@ -135,6 +157,7 @@ void main() {
           secondarySocket: secondary,
           sttProvider: SttProvider.customLive.name,
           forwardRawAudioToSecondary: shareRawAudio,
+          isAndroid: true,
         );
         addTearDown(socket.stop);
         final service = TranscriptSegmentSocketService.withSocket(16000, BleAudioCodec.opus, 'en', socket);

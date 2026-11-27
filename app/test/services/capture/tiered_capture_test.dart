@@ -14,9 +14,11 @@ import 'package:omi/services/capture/capture_coordinator.dart';
 import 'package:omi/services/wals/wal.dart';
 import 'package:omi/services/wals/recording_transfer_coordinator.dart';
 import 'package:omi/services/wals/sync_wake_scope.dart';
+import 'package:omi/utils/analytics/analytics_manager.dart';
 
 import '../../support/capture/capture_replay_world.dart';
 import '../../support/capture/scripted_device_connection.dart';
+import '../../support/refactor_flag_adapter.dart';
 
 void main() {
   late Directory directory;
@@ -90,6 +92,8 @@ void main() {
 
   test('Android Limitless watchdog keeps the admitted owner through metadata and unchanged settings refreshes',
       () async {
+    await setRefactorFlags({});
+    addTearDown(AnalyticsManager.resetForTesting);
     world.controller.updateRecordingDevice(null);
     await world.settle();
     SharedPreferencesUtil().uid = 'capture-test-owner';
@@ -123,11 +127,27 @@ void main() {
     await SharedPreferencesUtil().saveCustomSttConfig(
       const CustomSttConfig(provider: SttProvider.customLive, url: 'wss://changed-stt.example.test'),
     );
+    expect(admitted?.call(), isTrue);
+    await world.controller.onTranscriptionSettingsChanged();
+    expect(connection.captureIsCurrent, same(admitted));
+    expect(connection.watchStarts, 1);
+
+    await SharedPreferencesUtil().saveCustomSttConfig(
+      const CustomSttConfig(provider: SttProvider.custom, url: 'wss://other-stt.example.test'),
+    );
     expect(admitted?.call(), isFalse);
+    await world.controller.onTranscriptionSettingsChanged();
+    expect(connection.captureIsCurrent, isNull);
+    expect(connection.stopCalls, greaterThan(0));
+
+    await SharedPreferencesUtil().saveCustomSttConfig(
+      const CustomSttConfig(provider: SttProvider.customLive, url: 'wss://returned-stt.example.test'),
+    );
     await world.controller.onTranscriptionSettingsChanged();
     final replacement = connection.captureIsCurrent;
     expect(replacement, isNot(same(admitted)));
     expect(replacement?.call(), isTrue);
+    expect(connection.watchStarts, 2);
 
     SharedPreferencesUtil().uid = 'replaced-test-owner';
     expect(replacement?.call(), isFalse);
@@ -332,6 +352,8 @@ void main() {
 
 class _WatchedLimitlessConnection extends ScriptedDeviceConnection implements LimitlessDeviceConnection {
   bool Function()? captureIsCurrent;
+  int watchStarts = 0;
+  int stopCalls = 0;
 
   @override
   bool get supportsCustomLiveRecovery => true;
@@ -342,14 +364,19 @@ class _WatchedLimitlessConnection extends ScriptedDeviceConnection implements Li
   @override
   void watchCustomLiveAudio({
     required bool Function() captureIsCurrent,
+    bool Function()? reactivationIsCurrent,
     required void Function() onEnabled,
     required void Function(LimitlessRealtimeHealthOutcome) report,
   }) {
     if (this.captureIsCurrent?.call() ?? false) return;
     this.captureIsCurrent = captureIsCurrent;
+    watchStarts++;
     onEnabled();
   }
 
   @override
-  void stopCustomLiveAudioWatch() => captureIsCurrent = null;
+  void stopCustomLiveAudioWatch() {
+    stopCalls++;
+    captureIsCurrent = null;
+  }
 }

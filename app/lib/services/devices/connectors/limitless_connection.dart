@@ -178,6 +178,7 @@ class LimitlessDeviceConnection extends DeviceConnection {
 
   void watchCustomLiveAudio({
     required bool Function() captureIsCurrent,
+    bool Function()? reactivationIsCurrent,
     required void Function() onEnabled,
     required void Function(LimitlessRealtimeHealthOutcome) report,
   }) {
@@ -189,15 +190,31 @@ class LimitlessDeviceConnection extends DeviceConnection {
     bool start(int epoch) {
       bool isCurrent() =>
           _isCurrentSession(epoch) && _isInitialized && !_isBatchMode && !_realtimeSuppressed && captureIsCurrent();
+      bool canReactivate() => isCurrent() && (reactivationIsCurrent?.call() ?? true) && !_isReinitializing;
 
       if (!isCurrent()) return false;
       _cancelStreamHealthWatch();
+      _resetStreamActivationCounters();
       _customLiveHealth = LimitlessRealtimeHealth(
         window: _streamHealthWindow,
         isCurrent: isCurrent,
         reactivate: () async {
-          if (_isReinitializing) return; // The current setup already enables the stream.
+          if (!canReactivate()) return false;
+          final framesBeforeProbe = _audioFramesSinceStreamActivation;
+          final stage = _rxPacketsSinceStreamActivation == 0 ? 'no_rx_packets' : 'rx_without_audio_frames';
+          final status = await getStorageStatus();
+          if (!isCurrent()) return false;
+          DebugLogManager.logEvent('limitless_stream_health_probe', {
+            'stage': stage,
+            'statusReceived': status != null,
+            'storedPages': status == null
+                ? null
+                : ((status['newest_flash_page'] ?? -1) - (status['oldest_flash_page'] ?? 0) + 1).clamp(0, 1 << 31),
+            'freePages': status?['free_capture_pages'],
+          });
+          if (!canReactivate() || _audioFramesSinceStreamActivation != framesBeforeProbe) return false;
           await transport.writeCharacteristic(limitlessServiceUuid, limitlessTxCharUuid, _encodeEnableDataStream());
+          return true;
         },
         report: report,
       );
@@ -493,26 +510,28 @@ class LimitlessDeviceConnection extends DeviceConnection {
     final frames = _extractOpusFramesFromFlashPage(payload);
 
     if (frames.isNotEmpty) {
-      _publishAudioFrames(frames);
+      _publishAudioFrames(frames, fromRealtimeStream: false);
     } else {
       final result = _extractOpusFrames(payload);
       final extractedFrames = result[0] as List<List<int>>;
       if (extractedFrames.isNotEmpty) {
-        _publishAudioFrames(extractedFrames);
+        _publishAudioFrames(extractedFrames, fromRealtimeStream: true);
       }
     }
   }
 
-  void _publishAudioFrames(List<List<int>> frames) {
+  void _publishAudioFrames(List<List<int>> frames, {required bool fromRealtimeStream}) {
     if (frames.isEmpty) return;
-    if (_audioFramesSinceStreamActivation == 0) {
-      Logger.debug('Limitless: First decoded audio frame observed after stream activation');
-      DebugLogManager.logEvent('limitless_first_audio_frame', {'frames': frames.length});
+    if (fromRealtimeStream) {
+      if (_audioFramesSinceStreamActivation == 0) {
+        Logger.debug('Limitless: First decoded audio frame observed after stream activation');
+        DebugLogManager.logEvent('limitless_first_audio_frame', {'frames': frames.length});
+      }
+      _audioFramesSinceStreamActivation += frames.length;
+      _customLiveHealth?.observeFrame();
+      _streamHealthTimer?.cancel();
+      _streamHealthTimer = null;
     }
-    _audioFramesSinceStreamActivation += frames.length;
-    _customLiveHealth?.observeFrame();
-    _streamHealthTimer?.cancel();
-    _streamHealthTimer = null;
     for (final frame in frames) {
       _audioController.add(frame);
     }
@@ -535,13 +554,18 @@ class LimitlessDeviceConnection extends DeviceConnection {
     _streamHealthCheckInFlight = false;
   }
 
+  void _resetStreamActivationCounters() {
+    _rxPacketsSinceStreamActivation = 0;
+    _audioFramesSinceStreamActivation = 0;
+  }
+
   void _armStreamHealthWatch({required String reason, bool resetAttempts = true}) {
-    if (_customLiveHealth != null || (_customLiveWatch?.start(connectionEpoch) ?? false)) return;
     _streamHealthGeneration++;
     final generation = _streamHealthGeneration;
     _streamHealthTimer?.cancel();
-    _rxPacketsSinceStreamActivation = 0;
-    _audioFramesSinceStreamActivation = 0;
+    _streamHealthTimer = null;
+    _resetStreamActivationCounters();
+    if (_customLiveHealth != null || (_customLiveWatch?.start(connectionEpoch) ?? false)) return;
     if (resetAttempts) _streamReactivationAttempts = 0;
     _streamHealthTimer = Timer(
       _streamHealthWindow,
@@ -1412,7 +1436,9 @@ class LimitlessDeviceConnection extends DeviceConnection {
     if (!_isInitialized) return;
 
     try {
-      stopCustomLiveAudioWatch();
+      // Flash drain temporarily owns the stream. Retire the current episode but
+      // keep its capture binding so Custom Live can resume afterward.
+      _closeCustomLiveAudioWatch();
       _cancelStreamHealthWatch();
       // Clear all buffers before switching modes to prevent cross-contamination
       _rawDataBuffer.clear();
@@ -1424,6 +1450,7 @@ class LimitlessDeviceConnection extends DeviceConnection {
       DebugLogManager.logInfo('Limitless batch mode enabled');
     } catch (e) {
       _isBatchMode = false;
+      if (!_realtimeSuppressed) _armStreamHealthWatch(reason: 'batch_mode_enable_failed');
       Logger.debug('Limitless: Error enabling batch mode: $e');
       DebugLogManager.logError(e, null, 'Limitless failed to enable batch mode');
     }

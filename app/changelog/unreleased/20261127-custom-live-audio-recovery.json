@@ -1,0 +1,4 @@
+{
+  "change": "Custom Live recordings recover more reliably after audio interruptions.",
+  "platforms": ["android"]
+}

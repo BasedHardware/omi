@@ -20,7 +20,7 @@ class LimitlessRealtimeHealth {
 
   final Duration window;
   final bool Function() isCurrent;
-  final Future<void> Function() reactivate;
+  final Future<bool> Function() reactivate;
   final void Function(LimitlessRealtimeHealthOutcome) report;
   final Duration Function() _elapsed;
 
@@ -29,6 +29,7 @@ class LimitlessRealtimeHealth {
   Duration? _firstRecoveryFrame;
   Duration? _recoveryDeadline;
   bool _attempted = false;
+  bool _reactivationInFlight = false;
   bool _closed = false;
 
   bool get isClosed => _closed;
@@ -86,7 +87,10 @@ class LimitlessRealtimeHealth {
       if (!_attempted) {
         _attempted = true;
         _recoveryDeadline = now + window * 2;
-        unawaited(_reactivate());
+        if (!_reactivationInFlight) {
+          _reactivationInFlight = true;
+          unawaited(_reactivate());
+        }
       }
       final recoveryDeadline = _recoveryDeadline;
       if (recoveryDeadline != null) _timer = Timer(recoveryDeadline - now, _check);
@@ -100,14 +104,27 @@ class LimitlessRealtimeHealth {
   }
 
   Future<void> _reactivate() async {
-    if (_closed || !isCurrent()) {
-      close();
-      return;
-    }
+    var wroteEnable = false;
     try {
-      await reactivate();
+      if (_closed || !isCurrent()) {
+        close();
+        return;
+      }
+      wroteEnable = await reactivate();
     } catch (_) {
-      // The same terminal deadline covers write failures and missing frames.
+      // A failed or skipped write does not consume the one-shot recovery budget.
+    } finally {
+      _reactivationInFlight = false;
+    }
+    if (_closed) return;
+    if (!wroteEnable) {
+      _attempted = false;
+      _recoveryDeadline = null;
+      _firstRecoveryFrame = null;
+      _timer?.cancel();
+      _timer = isCurrent() ? Timer(window, _check) : null;
+      if (_timer == null) close();
+      return;
     }
     if (!isCurrent()) close();
   }

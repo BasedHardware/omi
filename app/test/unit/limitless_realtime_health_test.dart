@@ -18,6 +18,7 @@ void main() {
         isCurrent: () => true,
         reactivate: () async {
           writes++;
+          return true;
         },
         report: outcomes.add,
       );
@@ -45,7 +46,7 @@ void main() {
   test('isolated frames and a hanging write cannot reset the recovery budget', () {
     fakeAsync((time) {
       var writes = 0;
-      final pendingWrite = Completer<void>();
+      final pendingWrite = Completer<bool>();
       final outcomes = <LimitlessRealtimeHealthOutcome>[];
       final monitor = LimitlessRealtimeHealth(
         window: window,
@@ -65,10 +66,41 @@ void main() {
       time.elapse(window * 3);
       expect(writes, 1);
       expect(outcomes, [LimitlessRealtimeHealthOutcome.exhausted]);
-      pendingWrite.complete();
+      pendingWrite.complete(true);
       time.flushMicrotasks();
       monitor.close();
       expect(outcomes, hasLength(1));
+    });
+  });
+
+  test('a skipped enable does not consume the one-shot recovery budget', () {
+    fakeAsync((time) {
+      var current = true;
+      var attempts = 0;
+      final outcomes = <LimitlessRealtimeHealthOutcome>[];
+      final monitor = LimitlessRealtimeHealth(
+        window: window,
+        elapsed: () => time.elapsed,
+        isCurrent: () => current,
+        reactivate: () async {
+          attempts++;
+          return attempts > 1;
+        },
+        report: outcomes.add,
+      );
+
+      time.elapse(window);
+      time.flushMicrotasks();
+      expect(attempts, 1);
+      expect(outcomes, isEmpty);
+
+      time.elapse(window);
+      time.flushMicrotasks();
+      expect(attempts, 2);
+      time.elapse(window * 2);
+      expect(outcomes, [LimitlessRealtimeHealthOutcome.exhausted]);
+      current = false;
+      monitor.close();
     });
   });
 
@@ -76,7 +108,7 @@ void main() {
     fakeAsync((time) {
       var current = true;
       var writes = 0;
-      final pendingWrite = Completer<void>();
+      final pendingWrite = Completer<bool>();
       final outcomes = <LimitlessRealtimeHealthOutcome>[];
       LimitlessRealtimeHealth start() => LimitlessRealtimeHealth(
             window: window,
@@ -100,7 +132,7 @@ void main() {
       time.elapse(window);
       expect(writes, 1);
       current = false;
-      pendingWrite.complete();
+      pendingWrite.complete(true);
       time.flushMicrotasks();
       time.elapse(window * 3);
       expect(writes, 1);

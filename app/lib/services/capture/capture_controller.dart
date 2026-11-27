@@ -46,6 +46,7 @@ import 'package:omi/env/env.dart';
 import 'package:omi/models/custom_stt_config.dart';
 import 'package:omi/providers/device_onboarding_provider.dart';
 import 'package:omi/services/capture/capture_coordinator.dart';
+import 'package:omi/services/capture/custom_live_audio_recovery_policy.dart';
 import 'package:omi/services/capture/capture_end.dart';
 import 'package:omi/services/capture/capture_liveness_watchdog.dart';
 import 'package:omi/services/capture/calendar_capture_gap_monitor.dart';
@@ -2819,11 +2820,10 @@ class CaptureController extends ChangeNotifier
       connection.stopCustomLiveAudioWatch();
       return;
     }
-    final configId = config.sttConfigId;
-
     bool isCurrent() {
       final capture = _capture.stagedReadModel;
       final currentSession = capture.state.active;
+      final currentConfig = _preferences.customSttConfig;
       // DeviceProvider publishes normalized metadata after starting capture.
       // Use the admitted recording and link, which survive that refresh.
       if (_captureControllerDisposed ||
@@ -2839,10 +2839,12 @@ class CaptureController extends ChangeNotifier
           _omiCallActive ||
           _pendantSuspension != null ||
           capture.phase != CapturePhase.pendantLive ||
-          _preferences.batchModeEnabled) {
+          _preferences.batchModeEnabled ||
+          !currentConfig.isEnabled ||
+          currentConfig.provider != SttProvider.customLive) {
         return false;
       }
-      return _preferences.customSttConfig.sttConfigId == configId;
+      return true;
     }
 
     if (!isCurrent()) {
@@ -2857,6 +2859,7 @@ class CaptureController extends ChangeNotifier
     }
     connection.watchCustomLiveAudio(
       captureIsCurrent: () => isCurrent() && !_customLiveAudioRecoveryKilled,
+      reactivationIsCurrent: () => isCurrent() && _socket?.state == SocketServiceState.connected,
       onEnabled: () => _recordingTelemetry.observeCustomLiveAudioDetection(enabled: true),
       report: (outcome) {
         if (activeRecordingId == recordingId) {
@@ -2867,9 +2870,17 @@ class CaptureController extends ChangeNotifier
   }
 
   // DeviceService's saved-reconnect policy already refreshes the shared flag cache.
-  bool get _customLiveAudioRecoveryKilled =>
-      !customLiveCaptureFixEnabled ||
-      AnalyticsManager().isBooleanFeatureEnabledCached('android-custom-live-audio-recovery-kill');
+  bool get _customLiveAudioRecoveryKilled {
+    final analytics = AnalyticsManager();
+    return shouldDisableCustomLiveAudioRecovery(
+      buildEnabled: customLiveCaptureFixEnabled,
+      analyticsTrackingEnabled: AnalyticsManager.trackingEnabled,
+      identitySettled: analytics.settledDistinctId != null,
+      cachedKillSwitchEnabled: analytics.isBooleanFeatureEnabledCached(
+        'android-custom-live-audio-recovery-kill',
+      ),
+    );
+  }
 
   Future<void> _saveNativeBleStreamConfig(BtDevice device, BleAudioCodec codec) async {
     final audioTarget = _nativeBleAudioTarget(device);
