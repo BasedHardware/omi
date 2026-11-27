@@ -1565,6 +1565,13 @@ class _ConversationsPageState extends State<ConversationsPage>
                     if (index == conversationRows.length) {
                       Logger.debug('loading more conversations');
                       if (cardsOn) {
+                        // A failed page keeps an in-place retry at the footer; the partial notice sits off-screen above.
+                        if (hasCollapsedDays && feed.problem != null && feed.items.isNotEmpty) {
+                          return OmiLoadMoreFailed(
+                            key: const Key('conversations_load_more_failed_cards'),
+                            onRetry: feed.retry,
+                          );
+                        }
                         // Collapsed days can leave the list too short to scroll, so scroll prefetch never fires.
                         if (hasCollapsedDays && feed.hasMore && feed.problem == null) {
                           return Center(

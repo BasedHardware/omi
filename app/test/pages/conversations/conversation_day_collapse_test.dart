@@ -401,6 +401,86 @@ void main() {
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
+  testWidgets('a failed card page under a collapsed day keeps a retry at the footer', (tester) async {
+    tester.view.physicalSize = const Size(800, 1600);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    final today = DateUtils.dateOnly(DateTime.now());
+    HomeFeedCard card(String id, DateTime at) => HomeFeedCard(
+          id: 'conversation:$id',
+          kind: 'conversation',
+          detailId: id,
+          startedAt: at,
+          title: id,
+          emoji: '',
+          preview: '',
+          status: 'completed',
+          homeStep: 'ready',
+          starred: false,
+          isLocked: false,
+          hasTasks: false,
+          memberCount: 1,
+          sources: const [],
+          summaryAvailable: true,
+          revision: 'fixture',
+        );
+    final cursors = <String?>[];
+    var failNext = true;
+    final feed = HomeFeedProvider(
+      owner: () => 'fixture',
+      fetch: ({cursor}) async {
+        cursors.add(cursor);
+        if (cursor == 'next' && failNext) {
+          failNext = false;
+          return const ApiFailure(ApiProblem(ApiProblemKind.server, statusCode: 500));
+        }
+        return ApiSuccess(HomeFeedPage(
+          // The newest page ends beyond the seven-day warm window, so only the button loads more.
+          items: cursor == null
+              ? [
+                  card('new', today.add(const Duration(hours: 9))),
+                  card('old', today.subtract(const Duration(days: 10)))
+                ]
+              : [card('older', today.subtract(const Duration(days: 11)))],
+          nextCursor: cursor == null ? 'next' : null,
+          hasMore: cursor == null,
+          truncated: false,
+          generation: 'fixture',
+        ));
+      },
+    );
+    addTearDown(feed.dispose);
+    final provider = ConversationProvider(isSignedIn: () => false)
+      ..isLoadingConversations = false
+      ..groupConversationsByDate();
+    addTearDown(provider.dispose);
+    final screen = await buildTypedConversationScreen(provider, feed: feed);
+    await tester.runAsync(feed.start);
+    await tester.pumpWidget(screen);
+    await tester.pump();
+
+    await tester.tap(find.byKey(ValueKey('collapse_day_${today.toIso8601String()}')));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 250));
+    await tester.tap(find.byKey(const Key('conversations_show_more_cards')));
+    await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 50)));
+    await tester.pump();
+    expect(cursors, [null, 'next']);
+    expect(find.byKey(const Key('conversations_show_more_cards')), findsNothing);
+    final failed = find.byKey(const Key('conversations_load_more_failed_cards'));
+    expect(failed, findsOneWidget);
+
+    await tester.tap(failed);
+    await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 50)));
+    await tester.pump();
+    expect(cursors, [null, 'next', 'next']);
+    expect(failed, findsNothing);
+    expect(find.text('older'), findsOneWidget);
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
   testWidgets('a failed search page leaves Show more retryable', (tester) async {
     tester.view.physicalSize = const Size(800, 1600);
     tester.view.devicePixelRatio = 1;

@@ -44,7 +44,10 @@ class DateListItem extends StatelessWidget {
                 child: OmiIconButton(
                   key: ValueKey('collapse_day_${DateUtils.dateOnly(date).toIso8601String()}'),
                   label: collapsed ? context.l10n.expand : context.l10n.collapseAction,
-                  onPressed: onToggle,
+                  onPressed: () {
+                    OmiHaptics.light();
+                    onToggle!();
+                  },
                   icon: Icon(collapsed ? Icons.expand_more : Icons.expand_less, size: 20),
                 ),
               ),
