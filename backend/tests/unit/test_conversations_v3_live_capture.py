@@ -229,7 +229,7 @@ async def test_promoted_native_stop_commits_one_tail_summary_across_a_ready_repl
         def now(cls, tz=None):
             return clock
 
-    def load(uid):
+    def load(uid, **kw):
         existing = {
             key[-1]: {**deepcopy(row), '_v3_revision': 1}
             for key, row in strict.rows.items()
@@ -402,7 +402,7 @@ async def test_adjacent_revoked_native_windows_settle_unmatched_tile_with_links(
         began = start + timedelta(seconds=30 * offset)
         strict.rows[path] = live(began, id=rid, **native_ready_fields(began + timedelta(seconds=20)))
 
-    def load(uid):
+    def load(uid, **kw):
         existing = {
             path[-1]: {**deepcopy(row), '_v3_revision': 1}
             for path, row in strict.rows.items()
