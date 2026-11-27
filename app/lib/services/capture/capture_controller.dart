@@ -2928,6 +2928,7 @@ class CaptureController extends ChangeNotifier
         refresh: true,
         missingIsUnresolved: true,
         onRefreshFailure: () => refreshFailed = true,
+        refreshTimeout: const Duration(seconds: 1),
       );
       if (_captureControllerDisposed ||
           generation != _customLiveAudioRecoveryFlagGeneration ||
@@ -2941,7 +2942,7 @@ class CaptureController extends ChangeNotifier
         _customLiveAudioRecoveryKillSwitchEnabled = null;
         if (_customLiveAudioRecoveryFlagFetchRetriesForEpoch == 0) {
           _customLiveAudioRecoveryFlagFetchRetriesForEpoch = 1;
-          _scheduleCustomLiveAudioFlagRetry(generation, identityEpoch);
+          _scheduleCustomLiveAudioFlagRetry(generation, identityEpoch, delay: const Duration(seconds: 1));
         } else {
           _customLiveAudioRecoveryFlagIdentityEpoch = -1;
           _customLiveAudioRecoveryFlagFetchRetriesForEpoch = 0;

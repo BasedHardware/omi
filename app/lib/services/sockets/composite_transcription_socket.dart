@@ -332,8 +332,8 @@ class CompositeTranscriptionSocket implements IPureSocket {
     onError(err, trace);
   }
 
-  // Omi controls belong on the Omi secondary socket, never on the configured
-  // Custom Live provider's primary socket, on either mobile platform.
+  // With OMI_CUSTOM_LIVE_CAPTURE_FIX enabled, Omi controls belong on the Omi
+  // secondary socket, never on the configured Custom Live provider's primary socket.
   bool get _routesOmiControls => customLiveCaptureFixEnabled && sttProvider == SttProvider.customLive.name;
 
   @override

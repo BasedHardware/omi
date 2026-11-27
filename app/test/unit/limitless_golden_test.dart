@@ -1534,16 +1534,35 @@ void main() {
     expect(connection.isBatchMode, isTrue);
 
     final gotLiveFrame = Completer<void>();
+    final receivedFrames = <List<int>>[];
     final subscription = await connection.performGetBleAudioBytesListener(
-      onAudioBytesReceived: (_) {
+      onAudioBytesReceived: (frame) {
+        receivedFrames.add(List<int>.from(frame));
         if (!gotLiveFrame.isCompleted) gotLiveFrame.complete();
       },
     );
     addTearDown(() => subscription?.cancel());
     final reentryAttempted = Completer<void>();
+    final storedFrame = opusFrame(0xb8, 42, 40);
+    final storedPacket = bleWrapper(
+      10,
+      0,
+      1,
+      pendantMessage(
+        storageBufferBytes(
+          session: 7,
+          seq: 1,
+          index: 100,
+          page: flashPageBytes(1750000000000, [
+            audioWrapper(audioBlobOfFrames([storedFrame]))
+          ]),
+        ),
+      ),
+    );
     transport.onWrite = (data) {
       if (decodeWrapperCommand(data)['messageNumber'] == 8) {
         if (!reentryAttempted.isCompleted) reentryAttempted.complete();
+        transport.emit(limitlessRxCharUuid, storedPacket);
         throw StateError('batch mode re-entry failed');
       }
     };
@@ -1555,9 +1574,36 @@ void main() {
     await monitorRestored.future.timeout(const Duration(seconds: 2));
 
     expect(connection.isBatchMode, isFalse, reason: 'unconfirmed mode keeps the live parser selected');
-    transport.emit(limitlessRxCharUuid, bleWrapper(10, 0, 1, realtimeAudioBytes([opusFrame(0xb8, 43, 40)])));
+    expect(receivedFrames, isEmpty, reason: 'stored pages stay out of the live stream until batch mode is confirmed');
+
+    final liveFrame = opusFrame(0xb8, 43, 40);
+    transport.emit(limitlessRxCharUuid, bleWrapper(11, 0, 1, realtimeAudioBytes([liveFrame])));
     await gotLiveFrame.future.timeout(const Duration(seconds: 2));
+    expect(receivedFrames, [liveFrame]);
     expect(activations, 2, reason: 'the retained health monitor is restored after re-entry fails');
+
+    final realtimeReentry = Completer<List<int>>();
+    transport.onWrite = (data) {
+      if (decodeWrapperCommand(data)['messageNumber'] == 8 && !realtimeReentry.isCompleted) {
+        realtimeReentry.complete(List<int>.from(data));
+      }
+    };
+    transport.emitState(DeviceTransportState.disconnected);
+    await Future<void>.delayed(Duration.zero);
+    transport.emitState(DeviceTransportState.connected);
+    final command = await realtimeReentry.future.timeout(const Duration(seconds: 2));
+    final decoded = decodeWrapperCommand(command);
+    expect(connection.isBatchMode, isFalse);
+    expect(
+      command,
+      equals(mirrorDownloadFlashPages(
+        decoded['index'] as int,
+        decoded['requestId'] as int,
+        false,
+        true,
+      )),
+      reason: 'a relinquished failed drain reconnects to live streaming instead of re-entering batch mode',
+    );
   });
 
   test('failed batch-mode enable clears the batch latch and restores the Custom Live monitor', () async {

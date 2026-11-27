@@ -196,8 +196,14 @@ class LimitlessDeviceConnection extends DeviceConnection {
     // The coordinator may install the listener while the first BLE setup settles.
     bool start(int epoch) {
       bool isCurrent() =>
-          _isCurrentSession(epoch) && _isInitialized && !_isBatchMode && !_realtimeSuppressed && captureIsCurrent();
-      bool canReactivate() => isCurrent() && (reactivationIsCurrent?.call() ?? true) && !_isReinitializing;
+          _isCurrentSession(epoch) &&
+          _isInitialized &&
+          !_isBatchMode &&
+          !_batchDrainActive &&
+          !_realtimeSuppressed &&
+          captureIsCurrent();
+      bool canReactivate() =>
+          isCurrent() && !_batchDrainActive && (reactivationIsCurrent?.call() ?? true) && !_isReinitializing;
 
       if (!isCurrent()) return false;
       _cancelStreamHealthWatch();
@@ -299,6 +305,7 @@ class LimitlessDeviceConnection extends DeviceConnection {
       _batchModeEpoch = null;
     }
     if (!_isCurrentSession(epoch)) return;
+    var attemptingBatchReentry = false;
     try {
       _resetProtocolSessionForReconnect();
 
@@ -313,6 +320,7 @@ class LimitlessDeviceConnection extends DeviceConnection {
 
       if (_batchDrainActive) {
         final batchModeCmd = _encodeDownloadFlashPages(batchMode: true, realTime: false);
+        attemptingBatchReentry = true;
         await transport.writeCharacteristic(limitlessServiceUuid, limitlessTxCharUuid, batchModeCmd);
         if (!_isCurrentSession(epoch)) return;
         if (_batchDrainActive) {
@@ -339,6 +347,10 @@ class LimitlessDeviceConnection extends DeviceConnection {
     } catch (e) {
       Logger.debug('Limitless: Re-initialization after reconnect failed: $e');
       DebugLogManager.logError(e, null, 'Limitless reconnect initialization failed');
+      if (attemptingBatchReentry && _isCurrentSession(epoch) && _batchDrainActive) {
+        _batchDrainActive = false;
+        _batchModeEpoch = null;
+      }
       if (_isCurrentSession(epoch) && !_isBatchMode && !_realtimeSuppressed) {
         _armStreamHealthWatch(reason: 'reconnect_reinit_failed');
       }
@@ -378,7 +390,7 @@ class LimitlessDeviceConnection extends DeviceConnection {
       await _handleTransportReconnected();
       // Reinitialization logs and swallows write failures. Restore a monitor
       // after it returns so a failed reconnect still has a bounded retry path.
-      if (_isCurrentSession(epoch) && !_isBatchMode && !_realtimeSuppressed) {
+      if (_isCurrentSession(epoch) && !_isBatchMode && !_batchDrainActive && !_realtimeSuppressed) {
         _armStreamHealthWatch(reason: 'socket_reconnect_fallback');
       }
     }
@@ -610,6 +622,10 @@ class LimitlessDeviceConnection extends DeviceConnection {
     }
 
     if (!foundAudioField) return false;
+    // During reconnect the active drain's mode is unconfirmed. Keep stored
+    // flash pages out of the live stream; the next confirmed batch pass can
+    // request and process them without duplicating audio into Custom Live.
+    if (_batchDrainActive && !_isBatchMode) storedFrames.clear();
     _publishAudioFrames(storedFrames, fromRealtimeStream: false);
     _publishAudioFrames(liveFrames, fromRealtimeStream: true);
     return true;

@@ -21,12 +21,13 @@ void main() {
     required bool? killSwitch,
     bool unresolvedRetryExhausted = false,
   }) =>
-      shouldDisableCustomLiveAudioRecovery(
+      resolveCustomLiveAudioRecoveryGate(
         buildEnabled: true,
         flagReadContextAvailable: contextAvailable,
         cachedKillSwitchEnabled: killSwitch,
         unresolvedRetryExhausted: unresolvedRetryExhausted,
-      );
+      ) !=
+      CustomLiveAudioRecoveryGate.enabled;
 
   test('a readable but unresolved kill switch blocks recovery', () {
     expect(disabled(contextAvailable: true, killSwitch: null), isTrue);
@@ -67,12 +68,12 @@ void main() {
 
   test('the build gate always blocks recovery', () {
     expect(
-      shouldDisableCustomLiveAudioRecovery(
+      resolveCustomLiveAudioRecoveryGate(
         buildEnabled: false,
         flagReadContextAvailable: false,
         cachedKillSwitchEnabled: null,
       ),
-      isTrue,
+      isNot(CustomLiveAudioRecoveryGate.enabled),
     );
   });
 

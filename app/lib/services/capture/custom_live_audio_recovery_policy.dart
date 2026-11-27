@@ -13,18 +13,3 @@ CustomLiveAudioRecoveryGate resolveCustomLiveAudioRecoveryGate({
   }
   return CustomLiveAudioRecoveryGate.enabled;
 }
-
-/// Applies the release kill switch when an analytics flag context is usable.
-bool shouldDisableCustomLiveAudioRecovery({
-  required bool buildEnabled,
-  required bool flagReadContextAvailable,
-  required bool? cachedKillSwitchEnabled,
-  bool unresolvedRetryExhausted = false,
-}) =>
-    resolveCustomLiveAudioRecoveryGate(
-      buildEnabled: buildEnabled,
-      flagReadContextAvailable: flagReadContextAvailable,
-      cachedKillSwitchEnabled: cachedKillSwitchEnabled,
-      unresolvedRetryExhausted: unresolvedRetryExhausted,
-    ) !=
-    CustomLiveAudioRecoveryGate.enabled;
