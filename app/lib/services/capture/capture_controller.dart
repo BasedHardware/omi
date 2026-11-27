@@ -2944,12 +2944,17 @@ class CaptureController extends ChangeNotifier
         onRefreshFailure: () => refreshFailed = true,
         refreshTimeout: const Duration(seconds: 1),
       );
-      if (_captureControllerDisposed ||
-          generation != _customLiveAudioRecoveryFlagGeneration ||
-          identityEpoch != AnalyticsManager.identityEpoch) {
+      if (_captureControllerDisposed || generation != _customLiveAudioRecoveryFlagGeneration) return;
+      _customLiveAudioRecoveryFlagRefreshInFlight = false;
+      if (identityEpoch != AnalyticsManager.identityEpoch) {
+        _customLiveAudioRecoveryFlagIdentityEpoch = -1;
+        _scheduleCustomLiveAudioFlagRetry(
+          generation,
+          AnalyticsManager.identityEpoch,
+          delay: const Duration(seconds: 1),
+        );
         return;
       }
-      _customLiveAudioRecoveryFlagRefreshInFlight = false;
       if (refreshFailed && enabled != true) {
         // Keep the last successful result across refresh failures. A new
         // capture or flag-context change clears it before its scoped read.

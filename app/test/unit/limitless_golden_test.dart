@@ -1199,10 +1199,15 @@ void main() {
     final connection = LimitlessDeviceConnection(
       BtDevice(name: 'Limitless Pendant', id: 'fake-limitless', type: DeviceType.limitless, rssi: -50),
       transport,
+      streamHealthWindow: const Duration(minutes: 1),
       setupSettleDelay: Duration.zero,
       reconnectSettleDelay: Duration.zero,
     );
     addTearDown(connection.disconnect);
+    final realtimeFrames = <List<int>>[];
+    final audioSubscription =
+        await connection.performGetBleAudioBytesListener(onAudioBytesReceived: realtimeFrames.add);
+    addTearDown(() => audioSubscription?.cancel());
     await connection.connect();
     await connection.acknowledgeProcessedData(150);
     await connection.enableBatchMode();
@@ -1235,6 +1240,28 @@ void main() {
       ),
     );
     await pumpEventQueue();
+
+    connection.releaseBatchDrainAfterSyncFailure();
+    transport.emit(
+      limitlessRxCharUuid,
+      bleWrapper(
+        11,
+        0,
+        1,
+        pendantMessage(
+          storageBufferBytes(
+            session: 7,
+            seq: 1,
+            index: 100,
+            page: flashPageBytes(1750000000000, [
+              audioWrapper(audioBlobOfFrames([withheldFrame]))
+            ]),
+          ),
+        ),
+      ),
+    );
+    await pumpEventQueue();
+    expect(realtimeFrames, isEmpty, reason: 'an unconfirmed page stays withheld after drain ownership is released');
 
     expect(await connection.acknowledgeProcessedData(150), 99,
         reason: 'the capped frontier, not the older stored ACK maximum, is returned');

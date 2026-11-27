@@ -76,6 +76,8 @@ class _Sync extends ChangeNotifier with WalDerivedSyncViews implements SyncProvi
   @override
   WalStatusFilter get statusFilter => WalStatusFilter.pending;
   String? retainedPendingId;
+  String? retainedSyncedId;
+  bool failSyncedBulkAfterPartial = false;
   List<Wal>? discoveredWals;
 
   @override
@@ -83,6 +85,14 @@ class _Sync extends ChangeNotifier with WalDerivedSyncViews implements SyncProvi
     final targets = pendingDeletableWals.map((wal) => wal.id).toSet();
     wals.removeWhere((wal) => targets.contains(wal.id) && wal.id != retainedPendingId);
     notifyListeners();
+  }
+
+  @override
+  Future<void> deleteAllSyncedWals() async {
+    final targets = syncedWals.map((wal) => wal.id).toSet();
+    wals.removeWhere((wal) => targets.contains(wal.id) && wal.id != retainedSyncedId);
+    notifyListeners();
+    if (failSyncedBulkAfterPartial) throw StateError('synthetic device ACK failure');
   }
 
   @override
@@ -224,6 +234,18 @@ Future<AppLocalizations> _clearPending(WidgetTester tester) async {
   await tester.pumpAndSettle();
   expect(find.text(l.deletePendingFiles), findsOneWidget);
   await tester.tap(find.text(l.clear));
+  await tester.pumpAndSettle();
+  return l;
+}
+
+Future<AppLocalizations> _clearSynced(WidgetTester tester) async {
+  final l = AppLocalizations.of(tester.element(find.byType(SyncPage)));
+  await tester.tap(find.byTooltip(l.manageStorage));
+  await tester.pumpAndSettle();
+  await tester.tap(find.text(l.clear).first);
+  await tester.pumpAndSettle();
+  expect(find.text(l.deleteSyncedFiles), findsOneWidget);
+  await tester.tap(find.text(l.clear).last);
   await tester.pumpAndSettle();
   return l;
 }
@@ -407,6 +429,36 @@ void main() {
       await _capture(tester, retainOne ? '001-mobile-ios-pending-retained.png' : '002-mobile-ios-pending-cleared.png');
     });
   }
+
+  testWidgets('Classic Clear Synced reports a partial failure and keeps the retained recording', (tester) async {
+    final now = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+    final retained = Wal(
+      timerStart: now - 60,
+      codec: BleAudioCodec.opus,
+      seconds: 30,
+      storage: WalStorage.disk,
+      status: WalStatus.synced,
+      device: 'phone',
+    );
+    final deleted = Wal(
+      timerStart: now - 30,
+      codec: BleAudioCodec.opus,
+      seconds: 30,
+      storage: WalStorage.disk,
+      status: WalStatus.synced,
+      device: 'phone',
+    );
+    final sync = await _pump(tester, const SyncPage(), WalStatus.synced, recordings: [retained, deleted]);
+    sync
+      ..retainedSyncedId = retained.id
+      ..failSyncedBulkAfterPartial = true;
+
+    final l = await _clearSynced(tester);
+
+    expect(sync.allWals, [retained]);
+    expect(find.text(l.failedToDeleteSomeItems), findsOneWidget);
+    expect(find.text(l.syncedFilesDeleted), findsNothing);
+  });
 
   testWidgets('Classic Clear Pending reports a retained ring after its virtual row is rebuilt', (tester) async {
     final now = DateTime.now().millisecondsSinceEpoch ~/ 1000;

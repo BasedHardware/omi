@@ -216,11 +216,10 @@ class PostHogAnalyticsAdapter
     try {
       return await reload.timeout(timeout);
     } on TimeoutException {
-      // The underlying GET cannot be cancelled. Invalidate its generation and
-      // release the slot so a scheduled retry starts a fresh request; a late
-      // result from this request can no longer replace the active snapshot.
+      // The underlying GET cannot be cancelled. Release the slot so a scheduled
+      // retry starts a fresh request. A caller still awaiting this shared future
+      // can use its result unless a newer refresh starts first.
       if (identical(_omiFlagsReloadInFlight, reload)) {
-        _omiFlagsReloadGeneration++;
         _omiFlagsReloadInFlight = null;
         _omiFlagsReloadInFlightIdentityGeneration = null;
       }

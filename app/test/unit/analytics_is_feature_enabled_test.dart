@@ -64,7 +64,7 @@ class _FlagAdapter
   @override
   Future<bool> reloadFeatureFlagsWithTimeout(Duration timeout) {
     refreshTimeouts.add(timeout);
-    return reloadFeatureFlags();
+    return reloadFeatureFlags().timeout(timeout, onTimeout: () => false);
   }
 
   @override

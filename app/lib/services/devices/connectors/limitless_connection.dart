@@ -605,20 +605,23 @@ class LimitlessDeviceConnection extends DeviceConnection {
             if (fieldNumber == 2) {
               final storageBuffer = payload.sublist(valueStart, pos);
               final pageFrames = _extractOpusFramesFromFlashPage(storageBuffer);
-              if (_batchDrainActive && !_isBatchMode && pageFrames.isNotEmpty) {
-                final pageIndex = _extractStorageBufferPageIndex(storageBuffer);
+              final pageIndex = pageFrames.isEmpty ? null : _extractStorageBufferPageIndex(storageBuffer);
+              final withheldByActiveDrain = _batchDrainActive && !_isBatchMode;
+              final withheldByExistingBarrier = pageIndex != null && _unconfirmedStoredPageIndices.contains(pageIndex);
+              if (pageFrames.isNotEmpty && (withheldByActiveDrain || withheldByExistingBarrier)) {
                 if (pageIndex == null) {
                   // Without an index there is no safe ACK barrier to protect
                   // this page, so preserve its frames in the live delivery path.
                   storedFrames.addAll(pageFrames);
                 } else {
                   withheldStoredFrames = true;
-                  _unconfirmedStoredPageIndices.add(pageIndex);
-                  DebugLogManager.logEvent('limitless_stored_frames_dropped', {
-                    'frames': pageFrames.length,
-                    'pageIndex': pageIndex,
-                    'drainActive': true,
-                  });
+                  if (_unconfirmedStoredPageIndices.add(pageIndex)) {
+                    DebugLogManager.logEvent('limitless_stored_frames_dropped', {
+                      'frames': pageFrames.length,
+                      'pageIndex': pageIndex,
+                      'drainActive': _batchDrainActive,
+                    });
+                  }
                 }
               } else {
                 storedFrames.addAll(pageFrames);

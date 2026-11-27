@@ -283,10 +283,17 @@ void main() {
         reason: 'bounded fetch failures must not leave the watch torn down');
     expect(connection.watchStarts, 2);
 
+    final readsBeforeGatePass = adapter.reloadCount;
+    final watchStartsBeforeGatePass = connection.watchStarts;
     adapter.flags['android-custom-live-audio-recovery-kill'] = false;
+    adapter.reloadFailuresRemaining = 1;
+    connection.stopCustomLiveAudioWatch();
     await world.controller.onTranscriptionSettingsChanged();
     await world.settle();
     expect(connection.captureIsCurrent?.call(), isTrue);
+    expect(adapter.reloadCount, readsBeforeGatePass + 1, reason: 'the later gate pass must retry the flag read');
+    expect(connection.watchStarts, greaterThan(watchStartsBeforeGatePass),
+        reason: 'the eligible gate pass restores the watch');
   });
 
   test('a periodic refresh applies the kill switch during a long capture', () async {

@@ -121,6 +121,26 @@ void main() {
     expect(await adapter.resolvedFeatureEnabled('kill'), isTrue);
   });
 
+  test('a timed out caller does not cancel a shared refresh another caller awaits', () async {
+    final pending = Completer<Map<String, OmiFlag>?>();
+    var calls = 0;
+    final adapter = PostHogAnalyticsAdapter(
+      apiKey: 'test',
+      omiFlags: () {
+        calls++;
+        return pending.future;
+      },
+    )..identify(userId: 'u');
+
+    final unboundedRead = adapter.reloadFeatureFlags();
+    expect(await adapter.reloadFeatureFlagsWithTimeout(const Duration(milliseconds: 5)), isFalse);
+    expect(calls, 1);
+
+    pending.complete({'kill': (enabled: true, variant: null, payloadJson: null)});
+    expect(await unboundedRead, isTrue);
+    expect(await adapter.resolvedFeatureEnabled('kill'), isTrue);
+  });
+
   test('a timed out refresh releases the slot and ignores its late answer', () async {
     final pendingFirst = Completer<Map<String, OmiFlag>?>();
     var calls = 0;

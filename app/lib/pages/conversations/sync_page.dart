@@ -423,8 +423,37 @@ class _SyncPageState extends State<SyncPage> {
             destructive: true,
           );
           if (confirmed && context.mounted) {
-            await provider.deleteAllSyncedWals();
-            if (context.mounted) {
+            // Ring discovery rebuilds its virtual WAL with a new display timestamp.
+            (WalStorage, bool, String) syncedIdentity(Wal wal) {
+              final ring = wal.storage == WalStorage.sdcard && wal.fileNum == -1;
+              return (wal.storage, ring, ring ? wal.device : wal.id);
+            }
+
+            final targets = provider.syncedWals.map(syncedIdentity).toSet();
+            if (targets.isEmpty) return;
+            final uid = SharedPreferencesUtil().uid;
+            final hasDeviceRows = targets.any((row) => row.$1 != WalStorage.disk && row.$1 != WalStorage.mem);
+            final firmware = hasDeviceRows ? context.read<DeviceProvider>().currentFirmwareVersion : null;
+            var failed = false;
+            try {
+              await provider.deleteAllSyncedWals();
+            } catch (error) {
+              failed = true;
+              Logger.debug('Sync clear synced failed: ${error.runtimeType}');
+            }
+            if (hasDeviceRows && uid == SharedPreferencesUtil().uid) {
+              try {
+                await provider.discoverDeviceWals(firmwareVersion: firmware);
+              } catch (error) {
+                failed = true;
+                Logger.debug('Sync clear synced discovery failed: ${error.runtimeType}');
+              }
+            }
+            if (!context.mounted || uid != SharedPreferencesUtil().uid) return;
+            final retained = provider.allWals.any((wal) => targets.contains(syncedIdentity(wal)));
+            if (failed || retained) {
+              OmiFeedback.error(context, context.l10n.failedToDeleteSomeItems);
+            } else {
               OmiFeedback.confirm(context, context.l10n.syncedFilesDeleted);
             }
           }
