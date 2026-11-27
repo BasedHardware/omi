@@ -8,6 +8,7 @@ extension _LiveWalReceiptReplay on LocalWalSyncImpl {
           for (final wal in bucket)
             if (wal.filePath case final name? when LiveWalReceipt.isManagedBasename(path.basename(name)))
               path.basename(name).toLowerCase(),
+        for (final write in _pendingLiveWalWrites.values) write.fileName.toLowerCase(),
         for (final name in _liveWalWrites) name.toLowerCase(),
       };
 

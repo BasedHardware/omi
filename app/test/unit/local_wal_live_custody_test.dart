@@ -11,6 +11,7 @@ import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/services/audio_sources/audio_source.dart';
 import 'package:omi/services/devices/connectors/device_connection.dart';
 import 'package:omi/services/devices/ring_protocol.dart';
+import 'package:omi/services/wals/live_wal_receipt.dart';
 import 'package:omi/services/wals/local_wal_sync.dart';
 import 'package:omi/services/wals/pendant_ring_custody.dart';
 import 'package:omi/services/wals/wal.dart';
@@ -385,6 +386,65 @@ void main() {
     expect(conn.advances, hasLength(1));
     expect(conn.advances.single.seq, 5);
     expect(conn.advances.single.ringId, 42);
+  });
+
+  test('retry after a final flush error reuses the live WAL transaction and receipt', () async {
+    final writePaths = <String>[];
+    final sync = LocalWalSyncImpl(
+      _MockListener(),
+      freeDiskBytes: () async => 1 << 40,
+      persistWals: (wals) async {
+        expect(await WalFileManager.saveWals(wals), isTrue);
+      },
+      writeWalBytes: (file, data, {required flush}) async {
+        writePaths.add(file.path);
+        if (writePaths.length == 1) {
+          await file.writeAsBytes(data, flush: false);
+          throw const FileSystemException('simulated final flush failure');
+        }
+        await file.writeAsBytes(data, flush: flush);
+      },
+    );
+    addTearDown(sync.stop);
+    sync.start();
+    await sync.walReady;
+    final wal = Wal(
+      timerStart: 1700000000,
+      codec: BleAudioCodec.opus,
+      seconds: 1,
+      status: WalStatus.miss,
+      storage: WalStorage.mem,
+      data: [
+        <int>[0xAA, 0xBB]
+      ],
+      ownerUid: 'owner',
+      onDeviceOnly: true,
+      capturedOnDeviceOnly: true,
+      totalFrames: 1,
+    );
+    sync.testWals = [wal];
+
+    await sync.syncAll();
+    expect(wal.storage, WalStorage.mem);
+    expect(writePaths, hasLength(1));
+
+    await sync.syncAll();
+    expect(wal.storage, WalStorage.disk);
+    expect(writePaths, [writePaths.first, writePaths.first], reason: 'retry must keep the original basename');
+    expect(
+      await tempDir.list().where((entry) => entry is File && entry.path.endsWith('.bin')).length,
+      1,
+    );
+    expect(
+      await LiveWalReceipt.directory(tempDir)
+          .list()
+          .where((entry) => entry is File && entry.path.endsWith('.json'))
+          .length,
+      1,
+    );
+
+    final replay = await LiveWalReceipt.recover(tempDir, knownBasenames: {}, deletedOwners: {});
+    expect(replay.rows.map((row) => row.id), [wal.id], reason: 'one transaction can replay only one copy');
   });
 
   test('a lost live ACK keeps ranges for replay on the next connection; deleted files keep both', () async {
