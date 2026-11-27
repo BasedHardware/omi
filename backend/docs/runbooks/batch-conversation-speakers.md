@@ -118,10 +118,23 @@ segments and manual labels keep their existing authority. When some required
 segments lack reconstructable evidence, covered segments may receive revalidated
 updates; unplaced segments keep their labels. This reports `partial_coverage`,
 includes `coverage` and `coverage_reasons`, leaves conversation-wide speaker
-resolution unavailable, and performs no recurring learning. No reconstructable
+resolution unavailable (unless the resolved-voice mapping below applies), and
+performs no recurring learning. No reconstructable
 words means no updates. Mixed-speaker segments and diarizer gap words also abstain
 individually, with `failed_unassigned_words` if any remain; covered segments may
 already have changed, and recurring learning is suppressed.
+
+A partial pass on a conversation the resolver already marked `resolved` keeps it
+resolved. Each final-pass voice maps to the resolver voice holding more than half of
+its assigned words, and updated segments reuse that id. The map must be one to one:
+a split (two final voices on one resolver voice) or a merge (a resolver voice mostly
+held by a final voice mapped elsewhere) falls back. So does any speaker id left with
+two scopes or two identities on automatic segments, because the app numbers voices
+by id alone. A fallback, or a prior status other than `resolved`, keeps the earlier
+behaviour: new ids and `unavailable`. Manual segments are never updated.
+`partial_resolution` in the result and the `batch_final_pass_partial_resolution`
+log say which branch ran. Kill switch: `BATCH_FINAL_PASS_KEEP_RESOLVED_ON_PARTIAL_ENABLED=false`
+(default on, read per call).
 
 Expired, merged, shared or privacy-fenced references and read-budget failures
 refuse the whole invocation before application. A conversations-v3 row reads the

@@ -1514,7 +1514,10 @@ void main() {
     final position = tester.state<ScrollableState>(pageScrollable).position;
     final before = position.pixels;
     final box = tester.getRect(tabs);
-    final gesture = await tester.startGesture(Offset(box.left + 72, box.top + 24));
+    // The transcript of a conversation in progress opens at its newest line, which sits just above
+    // the floating bar. The swipe starts in the clear strip between that line and the bar (the bar
+    // reaches 88 points up, the list's foot 136), not on a line.
+    final gesture = await tester.startGesture(Offset(box.left + 72, box.bottom - 110));
     await gesture.moveBy(const Offset(30, 0));
     await tester.pump();
     await gesture.moveBy(const Offset(100, 0));
@@ -1624,6 +1627,29 @@ void main() {
       await tester.pump();
       await tester.pump();
       expect(tester.widget<ConversationTitleField>(field).controller!.text, 'Launch checklist');
+      await _dispose(tester, home);
+    });
+  });
+
+  testWidgets('title_at_end: a live conversation the server named still reads Listening, on Home and on its page',
+      (tester) async {
+    ReliabilityExperiments.overrideForTesting({'title_at_end'});
+    addTearDown(() => ReliabilityExperiments.overrideForTesting(null));
+    await withClock(Clock.fixed(_now), () async {
+      final home = await _pumpHome(tester, v3: true);
+      expect(home.liveTitle, 'Launch checklist');
+
+      final live = find.byKey(const ValueKey('live-1'));
+      expect(find.descendant(of: live, matching: find.text('Listening')), findsOneWidget);
+      expect(find.text('Launch checklist'), findsNothing);
+      expect(tester.widget<Text>(find.byKey(const Key('conversation_row_live_length'))).data, 'Live · 11m');
+
+      await tester.tap(live);
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 500));
+      await tester.pump(const Duration(milliseconds: 500));
+      // What the page draws as the title; the name stays in the (invisible) edit field for an edit.
+      expect(tester.widget<Text>(find.byKey(const Key('conversation_title_at_rest'))).data, 'Listening');
       await _dispose(tester, home);
     });
   });
@@ -2258,6 +2284,75 @@ void main() {
             reason: 'the next capture can show Listening before its live window exists');
         await _dispose(tester, home);
         debugDefaultTargetPlatformOverride = null;
+      });
+    });
+
+    // Reliability experiment end_open_conversation: the server stored the End before its conversation
+    // existed, so no id names the result. The row is handed to the conversation that carries the same
+    // End time, and goes after two minutes when none comes.
+    testWidgets('a stored End with no conversation yet hands Processing to the one closed at that time',
+        (tester) async {
+      await withClock(Clock.fixed(_now), () async {
+        final home = await _pumpHome(tester, v3: true, boundary: boundary, theme: theme(), size: const Size(393, 852));
+        final v3 = home.conversationsV3;
+        final endedAt = home.liveStart.add(const Duration(minutes: 3));
+        final pending = OptimisticProcessingPlaceholder.conversation(targetConversationId: 'listening-recording');
+        v3.startManualFinish(pending, 'listening-recording', captureId: home.capture.activeRecordingId);
+        expect(v3.settleManualFinish(pending, null, alreadyClosed: true, endStoredAt: endedAt), isTrue);
+        home.liveOpen = false;
+        await v3.refresh();
+        await tester.pump();
+        expect(find.byKey(const Key('home_processing_row')), findsOneWidget);
+
+        // The conversation an earlier End closed is not this End's result.
+        home.conversations.upsertConversation(
+          _conversation('earlier', home.liveStart.subtract(const Duration(minutes: 9)), 'Earlier talk',
+              v3: ConversationV3Fields(
+                  kind: 'conversation',
+                  tileState: ConversationTileState.done,
+                  manualCutAt: endedAt.subtract(const Duration(seconds: 21)))),
+          preserveHomeStep: false,
+        );
+        await tester.pump();
+        await tester.pump();
+        expect(find.text('Earlier talk'), findsOneWidget);
+        expect(find.byKey(const Key('home_processing_row')), findsOneWidget);
+
+        home.conversations.upsertConversation(
+          _conversation('closed-by-end', home.liveStart, 'Launch checklist',
+              v3: ConversationV3Fields(
+                  kind: 'conversation', tileState: ConversationTileState.done, manualCutAt: endedAt)),
+          preserveHomeStep: false,
+        );
+        await tester.pump();
+        await tester.pump();
+        expect(find.byKey(const Key('home_processing_row')), findsNothing);
+        expect(find.text('Launch checklist'), findsOneWidget);
+        expect(v3.finishRow, isNull);
+        await _dispose(tester, home);
+      });
+    });
+
+    testWidgets('a stored End whose conversation never comes drops Processing after two minutes', (tester) async {
+      await withClock(Clock.fixed(_now), () async {
+        final home = await _pumpHome(tester, v3: true, boundary: boundary, theme: theme(), size: const Size(393, 852));
+        final v3 = home.conversationsV3;
+        final pending = OptimisticProcessingPlaceholder.conversation(targetConversationId: 'listening-recording');
+        v3.startManualFinish(pending, 'listening-recording', captureId: home.capture.activeRecordingId);
+        expect(v3.settleManualFinish(pending, null, alreadyClosed: true, endStoredAt: home.liveStart), isTrue);
+        home.liveOpen = false;
+        await v3.refresh();
+        await tester.pump();
+        expect(find.byKey(const Key('home_processing_row')), findsOneWidget);
+
+        final reads = home.conversations.listReads;
+        await tester.pump(OptimisticProcessingPlaceholder.timeout + const Duration(seconds: 1));
+        await tester.pump();
+        await tester.pump();
+        expect(find.byKey(const Key('home_processing_row')), findsNothing);
+        expect(v3.finishRow, isNull);
+        expect(home.conversations.listReads, greaterThan(reads), reason: 'Home reads its list once');
+        await _dispose(tester, home);
       });
     });
 

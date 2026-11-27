@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import asyncio
 import copy
+from contextlib import contextmanager
 from contextvars import ContextVar
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -136,6 +137,58 @@ def _memo() -> _Memo:
         memo = _Memo()
         _MEMO.set(memo)
     return memo
+
+
+# Deferred offload (SCA-2918): a caller that must size its writes before it may upload anything (the v3 locked-closure
+# batch cap) prepares under deferred_offloads(). offload_or_inline then runs its exact admission and inline-threshold
+# test, but a transcript it would upload gets a stand-in pointer instead, and the upload is recorded for
+# upload_deferred. The stand-in is structurally valid (object_lake._parse_ref limits) and its encoding is at least as
+# large as any real pointer for that conversation, so sizing on it never under-counts; it must never be written.
+_DEFERRED: ContextVar[list | None] = ContextVar('transcript_pointer_deferred', default=None)
+# object_lake's limits are read at use (test stubs replace the module in sys.modules): bytes up to the data-class
+# limit plus 64 KiB, and the largest dek_version, as _parse_ref allows.
+_STAND_IN_DEK_VERSION = 0xFFFFFFFF
+
+
+@contextmanager
+def deferred_offloads():
+    """Yield the list of uploads that preparation inside this block deferred (see upload_deferred)."""
+    pending: list = []
+    token = _DEFERRED.set(pending)
+    try:
+        yield pending
+    finally:
+        _DEFERRED.reset(token)
+
+
+def _stand_in_pointer(uid, conversation_id, index) -> dict:
+    digest = f'{index:064x}'
+    return object_lake.LakeObjectRef(
+        config.bucket(),
+        f'{config.release()}/spaces/{uid}/transcript/{conversation_id}/{digest}',
+        digest,
+        object_lake.MAX_PLAINTEXT_BYTES['transcript'] + 65536,
+        'transcript',
+        _STAND_IN_DEK_VERSION,
+    ).to_pointer_dict()
+
+
+def upload_deferred(pending: list, rows: list) -> None:
+    """Upload what deferred_offloads recorded for ``rows`` and put each real pointer where its stand-in is.
+
+    Only stand-ins still present in ``rows`` are uploaded, exactly as offload_or_inline would have (memo first)."""
+    stand_ins = {_stand_in_pointer(uid, cid, index)['key']: index for index, (uid, cid, _, _) in enumerate(pending)}
+    for row in rows:
+        value = row.get('transcript_segments')
+        index = stand_ins.get(value.get('key')) if isinstance(value, dict) else None
+        if index is None:
+            continue
+        uid, conversation_id, plaintext, source_digest = pending[index]
+        try:
+            ref = _memo().uploaded[(uid, conversation_id, source_digest)]
+        except KeyError:
+            ref = _upload_candidate(uid, conversation_id, plaintext, source_digest, cache_decoded=True)
+        row['transcript_segments'] = ref.to_pointer_dict()
 
 
 def clear_memo() -> None:
@@ -307,6 +360,10 @@ def offload_or_inline(
     plaintext = json.dumps(segments).encode('utf-8')
     if len(zlib.compress(plaintext)) <= config.inline_max_bytes():
         return inline
+    deferred = _DEFERRED.get()
+    if deferred is not None:
+        deferred.append((uid, conversation_id, plaintext, source_digest))
+        return _stand_in_pointer(uid, conversation_id, len(deferred) - 1)
     memo = _memo()
     key = uid, conversation_id, source_digest
     try:

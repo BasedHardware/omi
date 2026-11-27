@@ -7,6 +7,7 @@ import 'device_capture_clock.dart';
 /// Vocabulary, rather than arbitrary log text, keeps this buffer content-free.
 enum RingDiagnosticEvent {
   connection,
+  captureMuteReadback,
   liveGrant,
   readRequest,
   readBegin,
@@ -44,6 +45,8 @@ class _Trace {
   int? epoch;
   int? grantedAtMs;
   final events = Queue<Map<String, Object?>>();
+  Map<String, Object?>? lastConfirmedMuteReadback;
+  Map<String, Object?>? lastUnconfirmedMuteReadback;
   final firstRecords = <Map<String, Object?>>[];
   final invalidRecords = Queue<Map<String, Object?>>();
   final minutes = <int, Map<String, int>>{};
@@ -83,6 +86,8 @@ class RingCustodyDiagnostics {
       int? records,
       int? status,
       bool? granted,
+      bool? requestedMuted,
+      bool? observedMuted,
       RingDiagnosticReason reason = RingDiagnosticReason.none}) {
     final t = _trace(deviceId);
     final at = _now().millisecondsSinceEpoch;
@@ -91,7 +96,7 @@ class RingCustodyDiagnostics {
       t.grantedAtMs = null;
     }
     if (event == RingDiagnosticEvent.liveGrant && granted == true) t.grantedAtMs = at;
-    t.events.add({
+    final entry = <String, Object?>{
       'at_ms': at,
       'event': event.name,
       'reason': reason.name,
@@ -102,7 +107,18 @@ class RingCustodyDiagnostics {
       if (records != null) 'records': records,
       if (status != null) 'status': status,
       if (granted != null) 'granted': granted,
-    });
+      if (requestedMuted != null) 'requested_muted': requestedMuted,
+      if (observedMuted != null) 'observed_muted': observedMuted,
+    };
+    if (event == RingDiagnosticEvent.captureMuteReadback) {
+      // A later ring drain or successful retry must not hide the mismatch.
+      if (reason == RingDiagnosticReason.none) {
+        t.lastConfirmedMuteReadback = entry;
+      } else {
+        t.lastUnconfirmedMuteReadback = entry;
+      }
+    }
+    t.events.add(entry);
     while (t.events.length > maxEvents) {
       t.events.removeFirst();
     }
@@ -270,6 +286,10 @@ class RingCustodyDiagnostics {
       },
       'live_persistence_granted_at_ms': t?.epoch == device['connection_epoch'] ? t?.grantedAtMs : null,
       'events': [for (final e in t?.events ?? <Map<String, Object?>>[]) Map<String, Object?>.of(e)],
+      'capture_mute_readbacks': {
+        if (t?.lastConfirmedMuteReadback case final entry?) 'last_confirmed': Map<String, Object?>.of(entry),
+        if (t?.lastUnconfirmedMuteReadback case final entry?) 'last_unconfirmed': Map<String, Object?>.of(entry),
+      },
       'ledger': ledger == null
           ? null
           : {

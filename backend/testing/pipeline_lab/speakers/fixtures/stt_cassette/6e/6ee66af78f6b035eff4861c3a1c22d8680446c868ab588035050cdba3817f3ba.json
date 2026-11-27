@@ -1,0 +1,476 @@
+{
+  "schema": "pipeline_lab.stt_cassette/v1",
+  "key": {
+    "provider": "parakeet_local",
+    "model": "parakeet-tdt-0.6b-v3@541d1f99/cpu-fp32/vad",
+    "language": "en",
+    "vocabulary_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+    "audio_sha256": "8592d6c879ac77c8ece86ff7d55263be3e19c6283b9359501b123fbece9d3dcd"
+  },
+  "key_digest": "6ee66af78f6b035eff4861c3a1c22d8680446c868ab588035050cdba3817f3ba",
+  "audio": {
+    "seconds": 34.714,
+    "sample_rate": 16000,
+    "format": "pcm16le_mono"
+  },
+  "adapter": "local",
+  "source": "local",
+  "source_detail": {
+    "windows": "vad",
+    "vad": {
+      "model": "silero_vad.onnx (utils/stt/local_vad.py, threshold 0.5)",
+      "max_seconds": 30.0,
+      "join_gap": 0.3,
+      "pad": 0.2
+    }
+  },
+  "recorded_at": "2026-11-26T22:37:58.977210Z",
+  "served": {
+    "provider": "parakeet_local",
+    "model": "parakeet-tdt-0.6b-v3@541d1f99/cpu-fp32/vad"
+  },
+  "detected_language": "en",
+  "usd": 0.0,
+  "words": [
+    {
+      "start": 6.5840000000000005,
+      "end": 6.904,
+      "text": "Mode.",
+      "speaker": null
+    },
+    {
+      "start": 7.224,
+      "end": 7.5440000000000005,
+      "text": "Put",
+      "speaker": null
+    },
+    {
+      "start": 7.5440000000000005,
+      "end": 7.704000000000001,
+      "text": "the",
+      "speaker": null
+    },
+    {
+      "start": 7.704000000000001,
+      "end": 8.184000000000001,
+      "text": "flower",
+      "speaker": null
+    },
+    {
+      "start": 8.184000000000001,
+      "end": 8.264,
+      "text": "in",
+      "speaker": null
+    },
+    {
+      "start": 8.904,
+      "end": 8.984,
+      "text": "I",
+      "speaker": null
+    },
+    {
+      "start": 9.064,
+      "end": 9.224,
+      "text": "know,",
+      "speaker": null
+    },
+    {
+      "start": 9.304,
+      "end": 9.544,
+      "text": "I'm",
+      "speaker": null
+    },
+    {
+      "start": 9.544,
+      "end": 9.624,
+      "text": "just",
+      "speaker": null
+    },
+    {
+      "start": 9.704,
+      "end": 10.024000000000001,
+      "text": "awful,",
+      "speaker": null
+    },
+    {
+      "start": 10.104,
+      "end": 10.344000000000001,
+      "text": "Jim.",
+      "speaker": null
+    },
+    {
+      "start": 10.424,
+      "end": 10.504000000000001,
+      "text": "I",
+      "speaker": null
+    },
+    {
+      "start": 10.504000000000001,
+      "end": 10.664000000000001,
+      "text": "was",
+      "speaker": null
+    },
+    {
+      "start": 10.664000000000001,
+      "end": 10.824000000000002,
+      "text": "so",
+      "speaker": null
+    },
+    {
+      "start": 10.824000000000002,
+      "end": 11.144,
+      "text": "scared",
+      "speaker": null
+    },
+    {
+      "start": 11.992,
+      "end": 12.152000000000001,
+      "text": "In",
+      "speaker": null
+    },
+    {
+      "start": 12.152000000000001,
+      "end": 12.472000000000001,
+      "text": "fact,",
+      "speaker": null
+    },
+    {
+      "start": 12.552000000000001,
+      "end": 12.712000000000002,
+      "text": "he",
+      "speaker": null
+    },
+    {
+      "start": 12.712000000000002,
+      "end": 12.872,
+      "text": "is",
+      "speaker": null
+    },
+    {
+      "start": 12.872,
+      "end": 13.112,
+      "text": "quite",
+      "speaker": null
+    },
+    {
+      "start": 13.112,
+      "end": 13.432,
+      "text": "severe",
+      "speaker": null
+    },
+    {
+      "start": 13.432,
+      "end": 13.592,
+      "text": "on",
+      "speaker": null
+    },
+    {
+      "start": 14.856,
+      "end": 15.176,
+      "text": "Next",
+      "speaker": null
+    },
+    {
+      "start": 15.256,
+      "end": 15.496,
+      "text": "take",
+      "speaker": null
+    },
+    {
+      "start": 15.496,
+      "end": 15.736,
+      "text": "either",
+      "speaker": null
+    },
+    {
+      "start": 15.736,
+      "end": 15.896,
+      "text": "a",
+      "speaker": null
+    },
+    {
+      "start": 15.896,
+      "end": 16.136,
+      "text": "large",
+      "speaker": null
+    },
+    {
+      "start": 16.136,
+      "end": 16.776,
+      "text": "tablespoon",
+      "speaker": null
+    },
+    {
+      "start": 16.776,
+      "end": 16.856,
+      "text": "of",
+      "speaker": null
+    },
+    {
+      "start": 18.023999999999997,
+      "end": 18.424,
+      "text": "Only,",
+      "speaker": null
+    },
+    {
+      "start": 18.503999999999998,
+      "end": 19.224,
+      "text": "unfortunately,",
+      "speaker": null
+    },
+    {
+      "start": 19.384,
+      "end": 19.624,
+      "text": "he's",
+      "speaker": null
+    },
+    {
+      "start": 20.856,
+      "end": 20.936,
+      "text": "I",
+      "speaker": null
+    },
+    {
+      "start": 21.016000000000002,
+      "end": 21.176000000000002,
+      "text": "never",
+      "speaker": null
+    },
+    {
+      "start": 21.256,
+      "end": 21.336000000000002,
+      "text": "know",
+      "speaker": null
+    },
+    {
+      "start": 21.416,
+      "end": 21.576,
+      "text": "you",
+      "speaker": null
+    },
+    {
+      "start": 21.576,
+      "end": 21.736,
+      "text": "were",
+      "speaker": null
+    },
+    {
+      "start": 21.736,
+      "end": 21.896,
+      "text": "so",
+      "speaker": null
+    },
+    {
+      "start": 21.896,
+      "end": 22.216,
+      "text": "brave,",
+      "speaker": null
+    },
+    {
+      "start": 22.376,
+      "end": 22.696,
+      "text": "Jim.",
+      "speaker": null
+    },
+    {
+      "start": 23.72,
+      "end": 23.8,
+      "text": "look",
+      "speaker": null
+    },
+    {
+      "start": 23.96,
+      "end": 24.12,
+      "text": "at",
+      "speaker": null
+    },
+    {
+      "start": 24.12,
+      "end": 24.36,
+      "text": "it",
+      "speaker": null
+    },
+    {
+      "start": 24.36,
+      "end": 24.68,
+      "text": "from",
+      "speaker": null
+    },
+    {
+      "start": 24.68,
+      "end": 25.0,
+      "text": "time",
+      "speaker": null
+    },
+    {
+      "start": 25.0,
+      "end": 25.32,
+      "text": "to",
+      "speaker": null
+    },
+    {
+      "start": 25.32,
+      "end": 25.64,
+      "text": "time.",
+      "speaker": null
+    },
+    {
+      "start": 26.04,
+      "end": 26.2,
+      "text": "A",
+      "speaker": null
+    },
+    {
+      "start": 26.2,
+      "end": 26.52,
+      "text": "faint",
+      "speaker": null
+    },
+    {
+      "start": 26.68,
+      "end": 27.16,
+      "text": "fetid",
+      "speaker": null
+    },
+    {
+      "start": 27.240000000000002,
+      "end": 27.64,
+      "text": "smell",
+      "speaker": null
+    },
+    {
+      "start": 27.64,
+      "end": 27.8,
+      "text": "came",
+      "speaker": null
+    },
+    {
+      "start": 27.8,
+      "end": 28.04,
+      "text": "from",
+      "speaker": null
+    },
+    {
+      "start": 28.04,
+      "end": 28.2,
+      "text": "him",
+      "speaker": null
+    },
+    {
+      "start": 28.28,
+      "end": 28.6,
+      "text": "and",
+      "speaker": null
+    },
+    {
+      "start": 29.080000000000002,
+      "end": 29.4,
+      "text": "mister",
+      "speaker": null
+    },
+    {
+      "start": 29.48,
+      "end": 30.2,
+      "text": "Quilter",
+      "speaker": null
+    },
+    {
+      "start": 30.2,
+      "end": 30.36,
+      "text": "has",
+      "speaker": null
+    },
+    {
+      "start": 30.36,
+      "end": 30.76,
+      "text": "missed",
+      "speaker": null
+    },
+    {
+      "start": 30.76,
+      "end": 31.0,
+      "text": "his",
+      "speaker": null
+    },
+    {
+      "start": 31.0,
+      "end": 31.64,
+      "text": "chance.",
+      "speaker": null
+    },
+    {
+      "start": 31.880000000000003,
+      "end": 32.120000000000005,
+      "text": "Then",
+      "speaker": null
+    },
+    {
+      "start": 32.2,
+      "end": 32.68,
+      "text": "placed",
+      "speaker": null
+    },
+    {
+      "start": 32.68,
+      "end": 32.92,
+      "text": "the",
+      "speaker": null
+    },
+    {
+      "start": 32.92,
+      "end": 33.16,
+      "text": "pan",
+      "speaker": null
+    },
+    {
+      "start": 33.16,
+      "end": 33.32,
+      "text": "on",
+      "speaker": null
+    },
+    {
+      "start": 33.32,
+      "end": 33.480000000000004,
+      "text": "a",
+      "speaker": null
+    },
+    {
+      "start": 33.480000000000004,
+      "end": 33.8,
+      "text": "strong",
+      "speaker": null
+    }
+  ],
+  "segments": [
+    {
+      "start": 6.5840000000000005,
+      "end": 13.592,
+      "speaker": null,
+      "text": "Mode. Put the flower in I know, I'm just awful, Jim. I was so scared In fact, he is quite severe on"
+    },
+    {
+      "start": 14.856,
+      "end": 16.856,
+      "speaker": null,
+      "text": "Next take either a large tablespoon of"
+    },
+    {
+      "start": 18.023999999999997,
+      "end": 19.624,
+      "speaker": null,
+      "text": "Only, unfortunately, he's"
+    },
+    {
+      "start": 20.856,
+      "end": 22.696,
+      "speaker": null,
+      "text": "I never know you were so brave, Jim."
+    },
+    {
+      "start": 23.72,
+      "end": 33.8,
+      "speaker": null,
+      "text": "look at it from time to time. A faint fetid smell came from him and mister Quilter has missed his chance. Then placed the pan on a strong"
+    }
+  ]
+}

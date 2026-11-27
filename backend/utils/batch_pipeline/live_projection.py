@@ -8,6 +8,7 @@ import math
 
 from config.record_audio import restore_pending
 from config.server_batch import manual_end_marker_enabled
+from utils.conversations.v3.policy import NATIVE_MANUAL_STOP
 from utils.batch_pipeline import empty_transcription
 from utils.conversations.final_pass_remap import remap_final_record
 from utils.conversations.fragment_visibility import is_automatic_discard
@@ -148,6 +149,7 @@ def replace_record(
         and span.get('whole_native_record')
         and current.get('recording')
         and current.get('v3_manual_end_requested')
+        and not current.get(NATIVE_MANUAL_STOP)
         and not current.get(FINISH_RECORDING_FIELD)
         and not current.get('v3_manual_end')
         and manual_end_marker_enabled()

@@ -90,6 +90,10 @@ Map<String, String> endedAtHeaders(DateTime? endedAt) =>
 Future<InProgressProcessOutcome> processInProgressConversationOutcome({
   String? liveConversationId,
   DateTime? endedAt,
+  // Reliability experiment `live_words_cascade`: the live words the phone was showing for the
+  // conversation being ended (LiveTail.payload). The server keeps them with the stored End for that
+  // conversation's first summary only. Null (the experiment is off, or no words): the field is not sent.
+  Map<String, Object?>? liveTail,
   InProgressConversationRequestSender? sendRequest,
   @visibleForTesting Future<void> Function(Duration)? waitBeforeRetry,
   @visibleForTesting void Function(http.Response)? reportUnexpectedResponse,
@@ -98,7 +102,10 @@ Future<InProgressProcessOutcome> processInProgressConversationOutcome({
     url: '${Env.apiBaseUrl}v1/conversations',
     headers: endedAtHeaders(endedAt),
     method: 'POST',
-    body: jsonEncode({if (liveConversationId != null) 'live_conversation_id': liveConversationId}),
+    body: jsonEncode({
+      if (liveConversationId != null) 'live_conversation_id': liveConversationId,
+      if (liveTail != null) 'live_tail': liveTail,
+    }),
   );
   Future<http.Response?> sendProductionRequest(ApiRequest request) => makeApiCall(
         url: request.url,
