@@ -28,7 +28,10 @@ more rows than six batches could ever commit (6 x (449 - sources)) stops at load
 that bound (or by id, before reading, when one round's claims name them all). It never plans, calls the outline or
 reaches the commit. In the fixture, at a cap of 5, the 2,276-row closure parked after 4 charged loads of about 2.6k
 reads each; a closure split into more batches by prepared bytes, which the load cannot see, still parks at the
-commit's cap before any transaction. The 8 MiB byte
+commit's cap before any transaction. The clamp counts only sources and the lease: removals, absorption redirects (up
+to 16 writes), retire, retired and settle writes, and pointer splits can also push a closure past the cap, which
+stays the backstop. Each attempt is charged to the pass's own builder lease token, so a stale pass charges nothing
+and loads with the origin bound. The 8 MiB byte
 allowance keeps the batch count from being driven by stored speech.
 
 **Per-owner ceiling.** While pending remains, a pending-seeded request runs up to 3 inline passes, and the owner is
@@ -44,7 +47,7 @@ own.
 The ceiling is derived from that counter as attempts x the most one attempt can read:
 - the charge: 1 read and 1 write, at most three tries;
 - the load: at most about 5.9k reads. It admits at most 6 x (449 - sources) rows, what six batches can commit
-  (2,694 with no sources), and fetches at most twice that many derived documents (5,388) across the unlocked
+  (2,694 with no sources), and fetches at most twice that many derived documents plus one sentinel (5,389) across the unlocked
   page, the claim reads and every interval query, counting repeats; plus up to 400 sources and the seeds;
 - the commit: up to about 24k reads; each batch runs at most three transactions under main's contention retry, so
   up to about 72k;

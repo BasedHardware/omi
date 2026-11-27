@@ -131,6 +131,7 @@ def entries():
             neutrals={
                 'unlocked_page': (None, 'bounds indexed point reads; source and neighbor query shapes are unchanged'),
                 'unlocked_limit': (None, 'caps indexed point reads; adds no query shape'),
+                'lease_token': (None, 'names the lease the allowance charge must match; adds no query shape'),
             },
             setup=_pending_source,
             patchers=(_decode,),

@@ -107,8 +107,9 @@ def _env_allowance(name, default):
 # for every owner. Every commit batch rereads the whole loaded closure to fence revisions, so a pass costs
 # about (batches x closure) reads: 6.5k to 15k measured. The cost is bounded by the commit itself. A listed
 # owner's closure past the origin bound may need at most LOCKED_MAX_BATCHES batches; otherwise it parks before
-# any transaction. load() never admits more rows than those batches can hold (_committable_rows), and it reads
-# at most LOCKED_FETCH_FACTOR x its row bound of derived documents, repeats included. The bytes allowance stays
+# any transaction. load() never admits more rows than those batches can hold for its sources and the lease
+# (_committable_rows; other fixed writes and prepared-byte splits can still park at the cap, the backstop), and it
+# reads at most LOCKED_FETCH_FACTOR x its row bound + 1 of derived documents, repeats included. The bytes allowance stays
 # small (8 MiB) because stored speech is what splits batches (BATCH_ROW_BYTES).
 # An empty list, or a size, the batch cap or the daily passes set to 0, is the kill switch: the origin bound
 # applies to every row.
@@ -120,7 +121,7 @@ LOCKED_FETCH_FACTOR = 2
 # builder lease before it reads anything, whether it then commits, hits the batch cap and retries smaller, fits
 # the origin bound, is interrupted after a committed prefix, or parks. A spent day, or a charge that cannot be
 # written, loads with the origin bound. The ceiling is attempts x the most one attempt can read: the charge, a load
-# of at most 2 x 2,694 derived documents plus 400 sources and the seeds (about 5.9k), and a commit of up to about
+# of at most 2 x 2,694 + 1 derived documents plus 400 sources and the seeds (about 5.9k), and a commit of up to about
 # 24k reads whose batches each run at most three transactions (main's contention retry), so about 78k; 20 x 78k
 # is about 1.6M reads per listed owner per day. 0 turns the allowance off.
 LOCKED_DAILY_PASSES = _env_allowance('CONVERSATIONS_V3_LOCKED_DAILY_PASSES', 20)
@@ -605,8 +606,11 @@ def _locked_passes_today(lease, now=None):
     return int(lease.get(LOCKED_PASSES_FIELD) or 0) if lease.get(LOCKED_DAY_FIELD) == day else 0
 
 
-def _charge_locked_attempt(client, uid, now=None):
-    """Charge one allowance attempt to the owner's UTC day under the held builder lease, before the load reads.
+def _charge_locked_attempt(client, uid, token, now=None):
+    """Charge one allowance attempt to the owner's UTC day under the caller's own builder lease, before the load reads.
+
+    ``token`` is the lease token of the pass doing the load. Only that exact live lease is charged: a stale pass, or
+    a load without a token, gets today's bound and charges nothing.
 
     Attempts, not commits (Release FIX-FIRST and panel F2 on #26443): every builder load of a listed owner spends
     one, so the daily cap bounds capped retries, interrupted commits and smaller pages alike. The day's count is
@@ -618,7 +622,7 @@ def _charge_locked_attempt(client, uid, now=None):
     def charge(tx):
         lease = ref.get(transaction=tx).to_dict() or {}
         at = now or datetime.now(timezone.utc)
-        if not lease.get('token') or not lease.get('until') or lease['until'] <= at:
+        if not token or lease.get('token') != token or not lease.get('until') or lease['until'] <= at:
             return False
         used = _locked_passes_today(lease, at)
         if used >= LOCKED_DAILY_PASSES:
@@ -668,6 +672,10 @@ def _committable_rows(sources):
 
     partition_rows gives each batch BATCH_MAX_WRITES - fixed_writes rows, and fixed_writes is at least one write per
     loaded source plus the lease. A loaded row takes a batch slot whether or not its write is skipped.
+    This is an upper bound only. The rest of fixed_writes (removals, absorption redirects of up to 16 writes, retire,
+    retired, settle) and the byte and pointer splits on prepared rows are not known at load time, so such a closure
+    can still need more batches. commit_projection's LockedBatchCap stays the backstop and parks it before any
+    transaction.
     """
     return LOCKED_MAX_BATCHES * max(1, BATCH_MAX_WRITES - sources - 1)
 
@@ -682,7 +690,12 @@ def _past_origin_bound(uid, existing, *, key='builder'):
 
 
 def locked_claimant(row):
-    """A row whose boundaries this pass cannot move: the planner's preserve_finished_windows predicate."""
+    """A row whose boundaries this pass cannot move: preserve_finished_windows's base predicate.
+
+    Under custom timing (protect_provisional) the planner also protects provisional v3_unlocked rows that several
+    overlap one planned window. That set depends on the planned windows, which do not exist at load time, so load
+    counts those rows as rewritable. The effect is only under-admission (they stay inside DERIVED_LIMIT), never
+    over-admission."""
     return bool(
         row.get('status') != 'in_progress'
         and not row.get('v3_unlocked')
@@ -711,14 +724,16 @@ def load(
     pending_limit=32,
     unlocked_page: UnlockedPage | None = None,
     unlocked_limit=None,
+    lease_token=None,
     firestore_client=None,
 ):
     client = firestore_client or get_firestore_client()
     if account_deletion_blocks_user_work(uid):
         raise Conflict('account_deletion')
-    # A listed owner's builder load is an allowance attempt: charged before it reads, or it gets today's bound.
+    # A listed owner's builder load is an allowance attempt: charged to the caller's own held lease (lease_token)
+    # before it reads, or it gets today's bound.
     allowed = _locked_allowance(uid, key='builder')
-    if allowed != (0, 0) and not _charge_locked_attempt(client, uid):
+    if allowed != (0, 0) and not _charge_locked_attempt(client, uid, lease_token):
         allowed = (0, 0)
     coll = user_conversations(client, uid)
     silence_gap = timedelta(seconds=boundary_seconds(cohesion=stretch_cohesion_enabled())[0])
@@ -794,7 +809,9 @@ def load(
     # plan and then park on LockedBatchCap. The origin bound itself is never lowered.
     row_limit = DERIVED_LIMIT + min(extra_rows, max(0, _committable_rows(0) - DERIVED_LIMIT))
     # One budget of fetched derived documents for the whole allowance load, repeats included: a row that spans
-    # several interval queries, or that a claim read and a time query both return, is counted each time.
+    # several interval queries, or that a claim read and a time query both return, is counted each time. Claim and
+    # unlocked reads are refused before reading; an interval query asks for one document past what is left, so the
+    # load reads at most fetch_budget + 1 derived documents (that sentinel detects the overflow and ends the load).
     fetch_budget = LOCKED_FETCH_FACTOR * row_limit if allowed != (0, 0) else None
     fetched = 0
 

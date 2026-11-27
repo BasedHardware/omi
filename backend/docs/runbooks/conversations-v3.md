@@ -428,7 +428,8 @@ the owner parks as before.
 The ceiling is attempts x the most one attempt can read:
 - the charge: 1 read and 1 write, at most three tries;
 - the load: at most about 5.9k reads. It admits at most 6 x (449 - sources) rows (2,694 with no sources), what
-  six batches can commit, and fetches at most twice that many derived documents (5,388), repeats included:
+  six batches can commit, and fetches at most twice that many derived documents plus one sentinel (5,389),
+  repeats included:
   a row that a claim read and a time query both return, or that spans several interval queries, counts each
   time. Add up to 400 sources and the seeds;
 - the commit: up to about 24k reads, and each batch runs at most three transactions under main's contention
@@ -442,6 +443,13 @@ day: in the readback, a `v3_locked_passes` of 20 with pending still owed is that
 budget is spent run at the origin bound, as for any parked owner today. Admit owners one at a time first. A
 step expected to exceed 10M reads a day (more than about six listed owners) needs the Firestore cost owner
 (SCA-2173).
+
+The row clamp is an upper bound from sources and the lease only: removals, absorption redirects (up to 16 writes),
+retire, retired and settle writes, and the byte and pointer splits on prepared rows are not known at load
+time. A closure that needs more batches for those reasons still parks at the commit's batch cap
+(`LockedBatchCap`, before any transaction), which stays the backstop.
+Each attempt is charged to the pass's own builder lease token: a stale pass, whose token no longer holds the
+lease, charges nothing and loads with the origin bound.
 
 Kill switches: an empty list, or `CONVERSATIONS_V3_LOCKED_DERIVED_ALLOWANCE`, `_DERIVED_BYTES`, `_MAX_BATCHES` or
 `_DAILY_PASSES` (each `CONVERSATIONS_V3_LOCKED_*`) set to `0`, restores the origin bound for every owner; a

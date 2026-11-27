@@ -410,7 +410,7 @@ async def _load_live_batch(uid, token, parked, unlocked_page=None, seed_ceiling=
     for index, options in enumerate(attempts):
         try:
             extra = {'unlocked_page': unlocked_page} if unlocked_page is not None else {}
-            result = await run_blocking(db_executor, store.load, uid, **options, **extra)
+            result = await run_blocking(db_executor, store.load, uid, **options, **extra, lease_token=token)
         except Conflict as error:
             if index == len(attempts) - 1 or str(error) not in budget_reasons:
                 raise
@@ -1054,7 +1054,9 @@ async def reconcile(
     deferred: dict[str, datetime] = {}
     if not on_open and not derive:
         backoff, parked = await run_blocking(db_executor, store.backoff_state, uid)
-        if backoff and backoff > datetime.now(timezone.utc):
+        # A batch-cap retry (_seed_ceiling) belongs to a pass that already got past this gate. Its own early attempt
+        # (mark_bounded_attempt) may have restored a park's future backoff, which must not stop the smaller load.
+        if _seed_ceiling is None and backoff and backoff > datetime.now(timezone.utc):
             metrics.RECONCILES.labels('backoff').inc()
             # Rows earlier passes committed still owe notes while the builder is parked.
             with suspend_committed_write_count():
@@ -1119,6 +1121,7 @@ async def reconcile(
                 store.load,
                 uid,
                 **({'conversation_id': conversation_id} if on_open and conversation_id else {}),
+                lease_token=token,
             )
         # The legacy backfill delete set must never depend on native Finish planning.
         if (

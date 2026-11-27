@@ -841,6 +841,9 @@ def test_park_with_indexed_unlocked_windows_spends_the_paging_attempt(strict):
 
 
 CHARGE = store._charge_locked_attempt
+REAL_COMMIT = service._commit
+REAL_BACKOFF_STATE = store.backoff_state
+REAL_MARK_BOUNDED_ATTEMPT = store.mark_bounded_attempt
 
 
 def allowance(monkeypatch, rows, nbytes=1 << 30, owners='*', counted=True):
@@ -850,7 +853,7 @@ def allowance(monkeypatch, rows, nbytes=1 << 30, owners='*', counted=True):
     monkeypatch.setattr(store, 'LOCKED_DERIVED_ALLOWANCE', rows)
     monkeypatch.setattr(store, 'LOCKED_DERIVED_BYTES', nbytes)
     attempts = []
-    monkeypatch.setattr(store, '_charge_locked_attempt', lambda client, uid: attempts.append(uid) or counted)
+    monkeypatch.setattr(store, '_charge_locked_attempt', lambda client, uid, token: attempts.append(uid) or counted)
     return attempts
 
 
@@ -1107,7 +1110,7 @@ def test_one_fetched_document_budget_spans_every_interval_query_and_counts_repea
     # row bound of 30, but 75 fetches. The budget stops the third query at its 61st document.
     with pytest.raises(Conflict, match='v3_derived_budget'):
         store.load('u', firestore_client=MemoryQuery(spanning(25, 3)))
-    assert len(streamed) == 61
+    assert len(streamed) == 61  # the budget of 60, plus the one sentinel document that detects the overflow
     assert len(set(streamed)) == 25
 
 
@@ -1300,9 +1303,10 @@ TODAY = lambda: datetime.now(timezone.utc).date().isoformat()  # noqa: E731
 
 
 def builder_lease(strict, day_lease=None):
-    leases.acquire(UID, 'builder', firestore_client=strict)
+    token = leases.acquire(UID, 'builder', firestore_client=strict)
     if day_lease:
         lease_doc(strict).update(day_lease)
+    return token
 
 
 @pytest.mark.parametrize(
@@ -1316,8 +1320,8 @@ def builder_lease(strict, day_lease=None):
 def test_an_allowance_attempt_is_charged_to_the_owners_day(strict, seeded, expected):
     if seeded and seeded['v3_locked_day'] == 'today':
         seeded = {**seeded, 'v3_locked_day': TODAY()}
-    builder_lease(strict, seeded)
-    assert store._charge_locked_attempt(strict, UID) is True
+    token = builder_lease(strict, seeded)
+    assert store._charge_locked_attempt(strict, UID, token) is True
     assert (lease_doc(strict)['v3_locked_day'], lease_doc(strict)['v3_locked_passes']) == (TODAY(), expected)
 
 
@@ -1325,21 +1329,40 @@ def test_an_allowance_attempt_is_charged_to_the_owners_day(strict, seeded, expec
 def test_the_day_holds_twenty_attempts_checked_in_the_charge_transaction(strict, used, charged):
     # The default budget; a concurrent pass that spent the last attempt after this one was admitted is refused here.
     assert store.LOCKED_DAILY_PASSES == 20
-    builder_lease(strict, {'v3_locked_day': TODAY(), 'v3_locked_passes': used})
-    assert store._charge_locked_attempt(strict, UID) is charged
+    token = builder_lease(strict, {'v3_locked_day': TODAY(), 'v3_locked_passes': used})
+    assert store._charge_locked_attempt(strict, UID, token) is charged
     assert lease_doc(strict)['v3_locked_passes'] == used + charged
 
 
 def test_an_attempt_is_charged_only_under_a_held_builder_lease(strict):
-    builder_lease(strict)
+    token = builder_lease(strict)
     lease_doc(strict)['until'] = datetime.now(timezone.utc) - timedelta(seconds=1)
-    assert store._charge_locked_attempt(strict, UID) is False
+    assert store._charge_locked_attempt(strict, UID, token) is False
     assert 'v3_locked_passes' not in lease_doc(strict)
+
+
+@pytest.mark.parametrize('caller', ['stale', None])
+def test_only_the_callers_own_live_lease_is_charged(strict, caller):
+    # Panel F3 (review-20261127t015947-1583): another pass's live lease must not pay for, or admit, a stale load.
+    stale = builder_lease(strict)
+    leases.release(UID, 'builder', stale, firestore_client=strict)
+    builder_lease(strict)  # a newer pass holds the lease now
+    assert store._charge_locked_attempt(strict, UID, stale if caller else None) is False
+    assert 'v3_locked_passes' not in lease_doc(strict)
+
+
+def test_load_charges_with_the_callers_lease_token(monkeypatch):
+    allowance(monkeypatch, 20)
+    tokens = []
+    monkeypatch.setattr(store, '_charge_locked_attempt', lambda client, uid, token: tokens.append(token) or True)
+    store.load('u', lease_token='pass-token', firestore_client=MemoryQuery(fragmented(30)))
+    store.load('u', firestore_client=MemoryQuery(fragmented(10)))
+    assert tokens == ['pass-token', None]  # no token: the real charge refuses it, so today's bound
 
 
 @pytest.mark.parametrize('error', [FirestoreContentionExhausted('lease contention'), RuntimeError('unavailable')])
 def test_an_unwritable_charge_fails_closed_to_the_origin_bound(strict, monkeypatch, error):
-    builder_lease(strict)
+    token = builder_lease(strict)
     fallbacks = []
 
     def fail(*a, **kw):
@@ -1347,7 +1370,7 @@ def test_an_unwritable_charge_fails_closed_to_the_origin_bound(strict, monkeypat
 
     monkeypatch.setattr(store, 'run_preloaded_transaction_with_contention_retry', fail)
     monkeypatch.setattr(store, 'record_fallback', lambda **kw: fallbacks.append(kw))
-    assert store._charge_locked_attempt(strict, UID) is False
+    assert store._charge_locked_attempt(strict, UID, token) is False
     assert fallbacks == [
         {
             'component': 'conversations_v3',
@@ -1573,3 +1596,126 @@ def test_only_the_batch_cap_steps_the_seed_ceiling_down():
     assert step(9, 0, eight) is None  # never back up the ladder
     assert service._smaller_seed_ceiling(cap, None) is None  # not a paged pass: park
     assert service._smaller_seed_ceiling(Conflict('v3_derived_budget'), UnlockedPage(seeds=(32, 0))) is None
+
+
+# ---- panel review-20261127t015947-1583: the cap retry against the real backoff gate and a real commit ----------
+
+
+def parked_builder_lease(strict, **fields):
+    now = datetime.now(timezone.utc)
+    strict.rows[('users', UID, 'conversation_v3_leases', 'builder')] = {
+        'token': 'token',  # the builder fixture's acquire answers 'token'
+        'until': now + timedelta(minutes=4),
+        **fields,
+    }
+
+
+@pytest.mark.asyncio
+async def test_a_cap_retry_runs_after_the_early_attempt_restores_the_parks_backoff(builder, strict, monkeypatch):
+    # F1: a legacy park still in its backoff gets one early attempt; mark_bounded_attempt spends it, which makes the
+    # real backoff_state answer the future backoff again. The smaller-seed retry must still run its load.
+    loads, commits, parks = batch_cap_pass(builder, monkeypatch, fits_at=1)
+    monkeypatch.setattr(store, 'backoff_state', REAL_BACKOFF_STATE)
+    monkeypatch.setattr(store, 'mark_bounded_attempt', REAL_MARK_BOUNDED_ATTEMPT)
+    parked_builder_lease(
+        strict,
+        v3_blocked_reason='v3_derived_budget',
+        v3_blocked_count=1,
+        v3_backoff_until=datetime.now(timezone.utc) + timedelta(hours=1),
+    )
+    assert REAL_BACKOFF_STATE(UID)[0] is None  # the early attempt is still owed
+    assert await service.reconcile(UID) == 'committed'
+    assert lease_doc(strict)['v3_bounded_pending_attempted'] is True
+    assert REAL_BACKOFF_STATE(UID)[0] is not None  # the gate a fresh pass would meet again
+    assert loads == [(8, 0), (1, 0)] and commits == [8, 1] and parks == []
+
+
+@pytest.mark.asyncio
+async def test_an_ordinary_pass_in_backoff_still_waits(builder, strict, monkeypatch):
+    loads, _, _ = batch_cap_pass(builder, monkeypatch, fits_at=1)
+    monkeypatch.setattr(store, 'backoff_state', REAL_BACKOFF_STATE)
+    parked_builder_lease(
+        strict,
+        v3_blocked_reason='v3_derived_budget',
+        v3_bounded_pending_attempted=True,
+        v3_backoff_until=datetime.now(timezone.utc) + timedelta(hours=1),
+    )
+    assert await service.reconcile(UID) == 'backoff' and loads == []
+
+
+@pytest.mark.asyncio
+async def test_a_real_commit_over_the_batch_cap_at_two_seeds_retries_at_one_seed_and_commits(
+    builder, strict, monkeypatch
+):
+    # F6: reconcile runs the real store.commit_projection. Four planned rows per seed, BATCH_MAX_WRITES 5: two seeds
+    # (fixed writes 3) need 4 batches against a cap of 2, so nothing is written; one seed (fixed writes 2) needs 2.
+    monkeypatch.setattr(service, '_commit', REAL_COMMIT)
+    monkeypatch.setattr(leases, 'renew', lambda *a, **kw: None)  # the per-batch renewal has its own tests
+    monkeypatch.setenv('CONVERSATIONS_V3_LOCKED_CLOSURE_OWNERS', '*')
+    monkeypatch.setattr(store, 'LOCKED_DERIVED_ALLOWANCE', 20)
+    monkeypatch.setattr(store, 'DERIVED_LIMIT', 2)  # three loaded rows: past the origin bound, so the cap applies
+    monkeypatch.setattr(store, 'BATCH_MAX_WRITES', 5)
+    monkeypatch.setattr(store, 'LOCKED_MAX_BATCHES', 2)
+    monkeypatch.setattr(service, '_drain_blocked', AsyncMock())
+    monkeypatch.setattr(service, '_wake_after_backoff', AsyncMock())
+    parked_builder_lease(strict)
+    seeds_ids = ('r0', 'r1')
+    for k, rid in enumerate(seeds_ids):
+        start = AT + timedelta(hours=k)
+        strict.rows[path(rid)] = source(rid, started_at=start, finished_at=start + timedelta(seconds=10))
+    for i in range(3):
+        strict.rows[path(f'l{i}')] = derived(f'l{i}', T0, 10, ['r0'])
+    loads, transactions = [], []
+
+    def load(uid, *, pending_limit=32, unlocked_limit=None, unlocked_page=None, **kw):
+        seeds = (min(pending_limit, len(seeds_ids)), 0)
+        loads.append(seeds)
+        if unlocked_page is not None:
+            unlocked_page.seeds = seeds
+        recordings = {rid: {**strict.rows[path(rid)], '_v3_revision': 1} for rid in seeds_ids[: seeds[0]]}
+        existing = {f'l{i}': {**strict.rows[path(f'l{i}')], '_v3_revision': 1} for i in range(3)}
+        return recordings, existing, []
+
+    async def plan(uid, groups, outlines, recordings, *a, **kw):
+        return [
+            {
+                'id': f'c-{rid}-{i}',
+                'status': 'processing',
+                'started_at': T0,
+                'finished_at': T0,
+                'v3_recording_ids': [rid],
+            }
+            for rid in recordings
+            for i in range(4)
+        ]
+
+    original = store.firestore.transactional
+
+    def transactional(body):
+        wrapped = original(body)
+
+        def run(tx, *args):
+            if body.__name__ == 'commit':
+                transactions.append(len(args[0]))
+            return wrapped(tx, *args)
+
+        return run
+
+    class EvenMinute(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            # The one-seed lanes lead with the pending lane on even minutes; pin it so the ladder is deterministic.
+            real = datetime.now(tz)
+            return real.replace(minute=real.minute - real.minute % 2)
+
+    monkeypatch.setattr(service, 'datetime', EvenMinute)
+    monkeypatch.setattr(store, 'load', load)
+    monkeypatch.setattr(service, '_plan_projection', plan)
+    monkeypatch.setattr(store.firestore, 'transactional', transactional)
+    assert await service.reconcile(UID) == 'committed'
+    assert loads == [(2, 0), (1, 0)]
+    assert transactions == [3, 1]  # only the one-seed pass committed: two batches, the first two seeds' cap wrote none
+    written_ids = sorted(p[3] for p in strict.rows if p[2] == 'conversations' and p[3].startswith('c-'))
+    assert written_ids == [f'c-r0-{i}' for i in range(4)]
+    assert strict.rows[path('r0')]['v3_pending'] is False
+    assert strict.rows[path('r1')]['v3_pending'] is True  # the second seed stays owed for the next pass

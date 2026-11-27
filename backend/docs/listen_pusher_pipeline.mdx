@@ -166,8 +166,13 @@ may go past the origin bound:
 - past `CONVERSATIONS_V3_DERIVED_BYTES` (16 MiB) by `CONVERSATIONS_V3_LOCKED_DERIVED_BYTES` (default 8 MiB).
 
 The row room never exceeds what the batch cap can commit: at most `LOCKED_MAX_BATCHES` x (449 - loaded
-sources) rows in all, so 2,694 at the defaults, and fewer as sources load. The load also reads at most twice
-its row bound of derived documents, counting a row each time a claim read or an interval query returns it.
+sources) rows in all, so 2,694 at the defaults, and fewer as sources load. This is an upper bound from sources and the lease only: removals, absorption redirects (up to 16 writes),
+retire, retired and settle writes, and the byte and pointer splits on prepared rows are not known at load
+time. A closure that needs more batches for those reasons still parks at the commit's batch cap
+(`LockedBatchCap`, before any transaction), which stays the backstop. The load
+also reads at most twice its row bound of derived documents, plus the one sentinel document that detects an
+overflow, counting a row each time a claim read or an interval query returns it. The attempt is charged to the
+pass's own builder lease token; a stale pass charges nothing and gets the origin bound.
 
 Rewritable rows keep the original bound. Such a closure may commit in at most
 `CONVERSATIONS_V3_LOCKED_MAX_BATCHES` (default 6) projection batches. Otherwise the commit raises
@@ -179,7 +184,7 @@ re-enters at most three times and parks only at one seed.
 Every builder load of a listed owner charges one in `v3_locked_day` and `v3_locked_passes` on the builder
 lease, under the held lease and before it reads, whatever the pass does next. A spent day, or a charge
 that cannot be written, loads with the origin bound. Ceiling: 20 attempts x about 78k reads (a load of at most
-5,388 fetched derived documents plus 400 sources and the seeds, plus a commit whose batches each run at most
+5,389 fetched derived documents plus 400 sources and the seeds, plus a commit whose batches each run at most
 three transactions), about 1.6M reads per listed owner per day.
 
 An empty list, or `CONVERSATIONS_V3_LOCKED_DERIVED_ALLOWANCE`, `CONVERSATIONS_V3_LOCKED_DERIVED_BYTES`,
