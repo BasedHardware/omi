@@ -86,14 +86,14 @@ def test_every_sync_lane_counts(vendors, caller):
     assert provider.served_provider == 'soniox'
 
 
-@pytest.mark.parametrize('language', ['zh', 'ja', 'ko', 'hi', 'zh-CN'])
+@pytest.mark.parametrize('language', ['zh', 'ja', 'ko', 'hi', 'zh-CN', 'es', 'fr', 'de', 'sv'])
 def test_languages_velma_is_weak_on_go_to_soniox(vendors, language):
     provider, _ = sync_call(language)
 
     assert provider.served_provider == 'soniox'
 
 
-@pytest.mark.parametrize('language', ['en', 'es', 'fr', 'de', 'it', 'pt', 'nl', 'en-US'])
+@pytest.mark.parametrize('language', ['en', 'en-US', 'en-GB'])
 def test_velma_first_languages_keep_velma(vendors, language):
     provider, result = sync_call(language)
 

@@ -216,8 +216,8 @@ is never a fallback.
 
 Legacy sync's multilingual files run the other way round: Soniox first, Velma on any
 Soniox failure (`STT_PRERECORDED_SONIOX_MULTILINGUAL_ENABLED`, default `true`). This
-covers unknown or code-switched audio and languages outside English and the major
-European ones. See the pipeline contract's "Soniox first for legacy sync multilingual
+covers unknown or code-switched audio and every language but English, where Velma
+matches Soniox (public eval 2026-11-27). See the pipeline contract's "Soniox first for legacy sync multilingual
 audio" section.
 
 ### Provider Capabilities

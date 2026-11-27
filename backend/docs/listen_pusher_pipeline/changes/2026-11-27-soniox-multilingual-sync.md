@@ -9,16 +9,23 @@ Chinese on every blind-labelled clip (0/9 picks); Soniox was picked 5/9 and scor
 automatic agreement over 293 VAD units. Public per-language tables (FLEURS) put Soniox at or near
 the top on Mandarin, Japanese, Korean, Hindi and Arabic; Velma publishes English-only accuracy.
 
-**Change.** Inside a legacy sync attempt, a Modulate-selected file with language `multi` (or a
-non-European language Soniox accepts as a hint) runs Soniox first. Any Soniox failure falls back
+**Change.** Inside a legacy sync attempt, a Modulate-selected file with language `multi` (or any
+language other than English that Soniox accepts as a hint) runs Soniox first. Any Soniox failure falls back
 to Velma on the same audio. Legacy sync passes `multi` for every user not in single-language mode, so in practice every
 Velma-bound file goes to Soniox first, including low-confidence English (where code-switched speech
-lands); `en` and `es`/`fr`/`de`/`it`/`pt`/`nl` keep Velma first only when that language reaches the
-provider (single-language users). Voice
+lands); `en` keeps Velma first only when it reaches the provider (single-language users). Voice
 messages, push-to-talk, shadow scoring, batch recovery, held-piece recovery and prompt
 verification are unchanged. Files over 300 s stay on Velma (Soniox's sync client has a 120 s
 deadline), and each process runs at most 8 Soniox-first calls at once; a full process uses Velma
 without waiting. This bounds the create rate against Soniox's 2,000 stored-transcription cap.
+
+**Public eval (2026-11-27).** FLEURS dev (12 languages, about 10 min each) and ASCEND test
+(code-switched Mandarin/English), cut into 60 s blocks, through production's own Velma and Soniox
+clients. Error rate, Soniox vs Velma: English WER 4.5% vs 4.7%, Spanish 3.8 vs 5.3, Swedish 8.8 vs
+20.3, Turkish 5.3 vs 19.4, Vietnamese 4.1 vs 15.4, Malay 5.5 vs 16.8, Arabic 10.9 vs 22.0, Hebrew
+17.8 vs 58.9, Hindi 8.3 vs 33.6; CER Mandarin 8.4 vs 21.8, Japanese 4.1 vs 12.8, Korean 5.6 vs 16.8;
+ASCEND mixed error rate 11.3 vs 16.9. Soniox: 0 failures in 156 files, p95 latency 5.3 s per 60 s
+file. Harness and full table: omi-workspace `data/run-2026-11-26-multilang-stt-lab/eval/`.
 
 **Cost.** List rate card (`config/rate_card_v2.json`): Soniox 0.12, Velma 0.06 USD per audio hour.
 Production Velma batch audio was 1,056 h in the 24 h to 2026-11-27T02:38Z (sum of 10-minute

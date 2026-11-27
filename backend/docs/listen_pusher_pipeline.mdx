@@ -183,13 +183,15 @@ No Deepgram route or ordinary `soniox` pre-recorded model token is added.
 
 `STT_PRERECORDED_SONIOX_MULTILINGUAL_ENABLED` defaults to `true`. Inside a legacy sync
 attempt (`current_parakeet_caller()` is `sync_*`), a Modulate-selected file whose
-language is unknown or code-switched (`multi`), or a language outside English and the
-major European languages (`en`, `es`, `fr`, `de`, `it`, `pt`, `nl`) that Soniox accepts
-as a hint, is sent to the Soniox batch client first. Legacy sync passes `multi` for every
+language is unknown or code-switched (`multi`), or any language other than English that
+Soniox accepts as a hint, is sent to the Soniox batch client first. English stays Velma-first
+because the two match there (public eval 2026-11-27, FLEURS: English WER 4.5% Soniox vs 4.7%
+Velma); Soniox won every other language measured (Mandarin CER 8.4% vs 21.8%, Japanese 4.1% vs
+12.8%, Hindi WER 8.3% vs 33.6%, Spanish 3.8% vs 5.3%, code-switched Mandarin/English 11.3% vs 16.9%). Legacy sync passes `multi` for every
 user not in single-language mode (the per-file language probe picks only the provider), so in
 practice every Velma-bound file goes to Soniox first, including files the probe heard as
-English with low confidence, which is where code-switched speech lands. The Velma-first
-language list applies when a language reaches the provider (single-language users). Any Soniox failure (refusal, 429,
+English with low confidence, which is where code-switched speech lands. The English
+exception applies when a language reaches the provider (single-language users). Any Soniox failure (refusal, 429,
 timeout, 5xx, invalid response) runs Velma on the same audio, exactly as before. The
 fallback reports `component=stt_prerecorded,from=soniox,to=modulate,outcome=degraded`
 and logs `event=prerecorded_soniox_multilingual outcome=fallback kind=<kind>`. An empty

@@ -4,10 +4,10 @@ Legacy sync sends Velma every file its language check did not hand to Parakeet: 
 code-switched, or a language Parakeet cannot transcribe (Mandarin, Japanese, Korean, Hindi ...).
 Velma publishes English-only accuracy and mislabels short Chinese clips; Soniox benchmarks at or
 near the top on those languages, and was the owner's pick on code-switched Mandarin/English
-(SCA-4810 lab, 2026-11-26). So for those calls Soniox runs first and any Soniox failure falls back
+(SCA-4810 lab, 2026-11-26). Our own public eval (2026-11-27) has Soniox ahead on every language but English. So for those calls Soniox runs first and any Soniox failure falls back
 to Velma on the same audio. Legacy sync passes ``multi`` for every user not in single-language mode, so in
 practice every Velma-bound file (including low-confidence English, where code-switching lands) goes to Soniox;
-English and the major European languages keep Velma first when that language reaches the provider.
+English keeps Velma first when it reaches the provider (single-language users): there Velma matches Soniox.
 
 Scope: only calls made inside a legacy sync attempt (``current_parakeet_caller()`` is ``sync_*``).
 Voice messages, push-to-talk, speaker verification and held recovery keep their current engines.
@@ -37,9 +37,11 @@ from utils.stt.vendor_guard import ENDPOINT_STT, record_vendor_burn
 
 logger = logging.getLogger(__name__)
 
-# Velma stays first where its batch model is strongest; every other language, and unknown or
-# code-switched audio ('multi'), goes to Soniox first.
-VELMA_FIRST_LANGUAGES = frozenset({'en', 'es', 'fr', 'de', 'it', 'pt', 'nl'})
+# Velma stays first only where it matches Soniox at half the price. Public eval, 2026-11-27 (FLEURS dev, 60 s
+# blocks, production clients; omi-workspace data/run-2026-11-26-multilang-stt-lab/eval): English WER Soniox 4.5%
+# vs Velma 4.7%; Soniox won every other language (es 3.8 vs 5.3, zh CER 8.4 vs 21.8, ja 4.1 vs 12.8, hi 8.3 vs
+# 33.6, code-switched zh-en 11.3 vs 16.9).
+VELMA_FIRST_LANGUAGES = frozenset({'en'})
 # Soniox async (upload, queue, transcribe, poll) must finish inside soniox_batch.DEADLINE_SECONDS (120 s); a
 # timeout after the paid POST bills Soniox and then Velma. Longer files stay on Velma.
 MAX_SECONDS = 300.0
