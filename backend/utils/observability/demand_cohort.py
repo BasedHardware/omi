@@ -17,9 +17,12 @@ VISIBILITY_BUCKETS = ('visible', 'foreground', 'background', 'unreported')
 # Why a local-preview custody promotion fell back to a live transport. ``none`` is
 # every transport that was not opened by a fallback.
 FALLBACK_REASONS = ('none', 'policy', 'archive', 'claim')
-# A client flapping state is not a reason to grow memory; past this many
-# transitions the oldest are dropped and the retained tail still splits a flush.
-MAX_VISIBILITY_TRANSITIONS = 32
+# A client flapping state is not a reason to grow memory, but a flush still has
+# to name the bucket in force when its interval started. Keep every transition
+# inside the window a flush can report and fold anything older into a floor
+# checkpoint; the count cap is only a hard stop against a pathological rate.
+VISIBILITY_LOG_SECONDS = 60.0
+MAX_VISIBILITY_TRANSITIONS = 512
 
 
 def transport_origin() -> str:
@@ -232,6 +235,10 @@ class DemandTelemetry:
         # Bounded transition log so a connected-seconds flush can split its
         # interval at the exact moment the client changed state.
         self._visibility_log: list[tuple[float, str]] = []
+        # The newest transition dropped from the log: it names the bucket in
+        # force at the log's start, so a flush that begins before the retained
+        # tail still splits exactly instead of falling back to ``unreported``.
+        self._visibility_floor: tuple[float, str] | None = None
         # Sticky for the session: a custody fallback that opened a live transport
         # keeps naming that reason on every later transport, reconnects included.
         self.fallback_reason = 'none'
@@ -274,12 +281,33 @@ class DemandTelemetry:
             self.fallback_reason = reason
 
     def _note_visibility(self, bucket: str) -> None:
-        self._visibility_log.append((monotonic(), bucket))
-        if len(self._visibility_log) > MAX_VISIBILITY_TRANSITIONS:
-            del self._visibility_log[:-MAX_VISIBILITY_TRANSITIONS]
+        changed_at = monotonic()
+        self._visibility_log.append((changed_at, bucket))
+        self._trim_visibility_log(changed_at)
+
+    def _trim_visibility_log(self, now: float) -> None:
+        """Drop transitions no future flush can split, keeping the floor exact.
+
+        The entry dropped last is the newest transition before the retained
+        window, so it is the bucket in force at every instant the window no
+        longer describes by itself. Keeping it as the floor is what stops a
+        flapping client from being costed as ``unreported``.
+        """
+        log = self._visibility_log
+        window_start = now - VISIBILITY_LOG_SECONDS
+        dropped = 0
+        while dropped < len(log) - 1 and log[dropped][0] < window_start:
+            dropped += 1
+        if len(log) - dropped > MAX_VISIBILITY_TRANSITIONS:
+            dropped = len(log) - MAX_VISIBILITY_TRANSITIONS
+        if dropped:
+            self._visibility_floor = log[dropped - 1]
+            del log[:dropped]
 
     def _bucket_at(self, at: float) -> str:
         current = 'unreported'
+        if self._visibility_floor is not None and self._visibility_floor[0] <= at:
+            current = self._visibility_floor[1]
         for changed_at, bucket in self._visibility_log:
             if changed_at > at:
                 break

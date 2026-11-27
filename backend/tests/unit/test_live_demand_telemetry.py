@@ -767,6 +767,44 @@ def test_connected_seconds_split_at_a_transition_inside_one_flush(monkeypatch):
         telemetry.current_demand.reset(token)
 
 
+def test_connected_seconds_split_exactly_past_the_transition_cap(monkeypatch):
+    """A flapping client inside one flush must not be costed as ``unreported``.
+
+    More than the transition cap of changes land between the flush start and
+    its end, so the log trims; the bucket in force at the start still has to be
+    named, which the floor checkpoint is for.
+    """
+    now = [100.0]
+    monkeypatch.setattr(telemetry, 'monotonic', lambda: now[0])
+    cohort = telemetry.DemandTelemetry('ineligible')
+    token = telemetry.current_demand.set(cohort)
+    try:
+        cohort.observe_visibility({'foreground': True, 'transcript_visible': False})
+        meter = telemetry.create_connected_meter()
+        labels = dict(provider='soniox', demand_cohort='ineligible', origin='initial', fallback_reason='none')
+        before = {
+            bucket: value(telemetry.SONIOX_CONNECTED, visibility=bucket, **labels)
+            for bucket in telemetry.VISIBILITY_BUCKETS
+        }
+        # 40 alternating reports over the first 4 s of a 5 s flush interval.
+        for step in range(40):
+            now[0] += 0.1
+            cohort.observe_visibility({'foreground': step % 2 == 1, 'transcript_visible': False})
+        now[0] += 1.0
+        meter.flush(close=True)
+        after = {
+            bucket: value(telemetry.SONIOX_CONNECTED, visibility=bucket, **labels)
+            for bucket in telemetry.VISIBILITY_BUCKETS
+        }
+        assert after['unreported'] - before['unreported'] == pytest.approx(0)
+        assert after['visible'] - before['visible'] == pytest.approx(0)
+        assert after['foreground'] - before['foreground'] == pytest.approx(3.0)
+        assert after['background'] - before['background'] == pytest.approx(2.0)
+        assert len(cohort._visibility_log) <= telemetry.MAX_VISIBILITY_TRANSITIONS
+    finally:
+        telemetry.current_demand.reset(token)
+
+
 def test_connected_seconds_carry_the_custody_fallback_reason(monkeypatch):
     now = [100.0]
     monkeypatch.setattr(telemetry, 'monotonic', lambda: now[0])
