@@ -190,9 +190,15 @@ utterances by text, allowing a clipped word on either side) and keeps only what 
 (default 25, `long_canary` outside it) and `CONVERSATIONS_V3_FAST_FINISH_LONG_DAILY_SECONDS` (default
 7200 per UTC day across the fleet, of audio actually sent, retries, overlaps and the vendor probe
 included, in the Redis key `v3_fast_finish:long_audio_seconds:<UTC day>`; `long_cap` past it, and also
-whenever Redis errors or takes over 1 s). A long pass reserves the most it can send (every chunk twice
-plus a 30 s probe clip), so retries cannot push the day past the cap, and settles in the background to
-what it sent; while passes run the key reads high. Read today's total with `GET` on that key. Set `CONVERSATIONS_V3_FAST_FINISH_CHUNKED=off` on
+whenever Redis errors or takes over 1 s). A long pass reserves every chunk once plus a 30 s probe clip
+at admission, and each chunk retry reserves its own seconds on the same key just before it sends; a
+retry that does not fit (or meets a Redis error, a 1 s Redis stall or under 3 s of the deadline) is not
+sent, and the pass yields to batch as `retry_cap`. No audio is sent unreserved, so the day cannot pass
+the cap. The pass settles in the background to what it sent (unsent chunks and reserved but unsent
+retries refunded); while passes run the key reads high. At 7200 about three 30-minute passes fit a day
+(two while every retry was reserved up front); raising the cap is David's spend decision. Ramp
+`CONVERSATIONS_V3_FAST_FINISH_LONG_PERCENT` 25 → 100 only after the first 24 h readback of long-pass
+latency (first card within 60 s) and long audio seconds. Read today's total with `GET` on that key. Set `CONVERSATIONS_V3_FAST_FINISH_CHUNKED=off` on
 `backend-integration` to restore one serial request per unit and the 20-minute bound. Read
 `omi_conversations_v3_fast_finish_total{outcome}`, `omi_conversations_v3_fast_finish_seconds{stage}`,
 `omi_conversations_v3_fast_finish_chunks`, `omi_conversations_v3_fast_finish_chunk_seconds`,

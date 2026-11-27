@@ -20,7 +20,9 @@ Constraints it upholds:
 - Long recordings (over 20 minutes, the spend that chunking adds) are a canary:
   ``CONVERSATIONS_V3_FAST_FINISH_LONG_PERCENT`` of owners by a salted uid bucket, and at most
   ``CONVERSATIONS_V3_FAST_FINISH_LONG_DAILY_SECONDS`` of their audio per UTC day across the fleet
-  (a Redis counter; when Redis cannot answer, long passes are refused).
+  (a Redis counter; when Redis cannot answer, long passes are refused). A long pass reserves its
+  first sends and probe at admission and each chunk retry just before it sends; a retry that does
+  not fit is skipped (``retry_cap``). No audio leaves that was not reserved.
 """
 
 import functools
@@ -86,9 +88,20 @@ STOP_GRACE_SECONDS = 2.0
 # A language probe is sent only with at least this much of the deadline left; with less it is skipped
 # and the pass keeps the row's language. The whole language resolution is abandoned at the deadline.
 PROBE_MIN_SECONDS = 3.0
-# A long pass reserves from the fleet budget only with at least this much left: the bounded Redis
-# client answers within about 2 s (1 s connect, 1 s read), so the reservation ends before the deadline.
+# A long pass reserves from the fleet budget (at admission, and again before each chunk retry) only
+# with at least this much left. Each Redis call is bounded (1 s connect, 1 s per read), but one
+# reservation is several of them: AUTH on a new connection, the health-check PING, the INCRBYFLOAT
+# pipeline and, over the cap, the give-back round trip. It can therefore end past the deadline:
+# - At admission (``LONG_BUDGET.reserve`` on the pass's own thread) the worst case is about 5 s, so it
+#   ends at most about 2 s past the deadline, within STOP_GRACE_SECONDS. A pass whose reservation
+#   returns that late stops at the chunk loop's first deadline check, sends nothing, and refunds it all.
+# - A chunk retry's reservation (on the chunk pool) takes about 3-4 s at worst. The pass waits for
+#   running chunks at most until the deadline plus STOP_GRACE_SECONDS, and a retry left with under
+#   RETRY_SEND_MIN_SECONDS once its reservation returns is not sent (refunded at settle).
 RESERVE_MIN_SECONDS = 3.0
+# A retry is sent only with at least this much of the deadline left once its reservation returns.
+# With less it would almost certainly time out, so it is not paid for.
+RETRY_SEND_MIN_SECONDS = 1.0
 # A chunked pass's row refresh, transcript write and cut after its chunks may run this far past the
 # deadline; past it each is abandoned, so a stalled call releases the slot within STOP_GRACE_SECONDS.
 WRITE_GRACE_SECONDS = 1.5
@@ -145,6 +158,9 @@ for _outcome in (
     'too_long',
     'long_canary',
     'long_cap',
+    # A long pass's chunk retry skipped because the day's cap had no room for it (or Redis could not
+    # answer): the chunk failed and the pass yields to batch, as after a failed retry.
+    'retry_cap',
     'deadline',
     'superseded',
     'not_funded',
@@ -253,10 +269,11 @@ def _budget_redis() -> Any:
 class _FleetBudget:
     """Long-recording provider audio seconds the whole fleet may send per UTC day, in Redis.
 
-    ``reserve`` adds a pass's planned audio to the day's counter and takes it back if that went over
-    the cap; ``settle`` replaces the reservation with the audio actually sent. Fails closed: when
-    Redis cannot answer, no long pass is admitted (``long_cap``). Two passes racing for the last room
-    may both be refused; neither can push the day over the cap.
+    ``reserve`` adds a pass's first sends and probe to the day's counter and takes them back if that
+    went over the cap; ``take`` does the same for one chunk retry on the pass's own key; ``settle``
+    replaces everything a pass reserved with the audio it actually sent. Fails closed: when Redis
+    cannot answer, no long pass is admitted (``long_cap``) and no retry is sent (``retry_cap``). Two
+    callers racing for the last room may both be refused; neither can push the day over the cap.
     """
 
     def __init__(self, client: Any = None):
@@ -287,6 +304,15 @@ class _FleetBudget:
     def reserve(self, seconds: float, *, now: datetime | None = None) -> str | None:
         """The day's key when ``seconds`` fit and are now reserved; None (nothing reserved) otherwise."""
         key = self.key(now)
+        return key if self.take(key, seconds) else None
+
+    def take(self, key: str, seconds: float) -> bool:
+        """Reserve ``seconds`` more on ``key``; False (nothing kept) over the cap or when Redis cannot answer.
+
+        One pipelined round trip (INCRBYFLOAT, EXPIRE) on the bounded client; a second only to take
+        back an amount that went over the cap. Atomic across processes: an amount is kept only when
+        the counter, with it added, was within the cap.
+        """
         try:
             pipe = self._redis().pipeline()
             pipe.incrbyfloat(key, seconds)
@@ -296,14 +322,14 @@ class _FleetBudget:
             logger.warning(
                 'event=v3_fast_finish_long_budget outcome=unavailable exception_type=%s', type(error).__name__
             )
-            return None
+            return False
         if used > _number(LONG_DAILY_SECONDS_ENV, LONG_DAILY_SECONDS_DEFAULT):
             self._adjust(key, -seconds)
-            return None
-        return key
+            return False
+        return True
 
     def settle(self, key: str, reserved: float, sent: float) -> None:
-        """Replace a pass's reservation with the audio it actually sent: retries, overlaps and probe included."""
+        """Replace a pass's reservations (admission and retries) with the audio it actually sent."""
         if sent != reserved:
             self._adjust(key, sent - reserved)
 
@@ -312,22 +338,57 @@ class _FleetBudget:
             self._redis().incrbyfloat(key, delta)
         except Exception as error:
             # A refund that cannot land leaves the day overcharged: less long-pass spend, never more.
-            # An undercharge that cannot land lets the day run over by at most this pass's retries and probe.
+            # Every send is reserved first, so a settle is never an undercharge.
             logger.warning(
                 'event=v3_fast_finish_long_budget outcome=settle_failed exception_type=%s', type(error).__name__
             )
 
 
 class _Sent:
-    """Provider audio seconds one pass has sent, from any thread."""
+    """Provider audio seconds one pass has sent and, on a long pass, reserved; from any thread.
 
-    def __init__(self):
+    A long pass carries its budget ``key`` and what it reserved at admission; ``retry`` reserves one
+    chunk retry on that key. ``close`` (when the pass settles) ends both: nothing is sent or reserved
+    after it, so a settle always covers every send, and a retry reserved too late gives its seconds back.
+    """
+
+    def __init__(self, key: str | None = None, reserved: float = 0.0):
         self._lock = threading.Lock()
+        self._closed = False
         self.seconds = 0.0
+        self.key = key
+        self.reserved = reserved
 
-    def add(self, seconds: float) -> None:
+    def add(self, seconds: float) -> bool:
+        """Count ``seconds`` about to be sent; False (send nothing) once the pass has settled."""
         with self._lock:
+            if self._closed:
+                return False
             self.seconds += seconds
+            return True
+
+    def retry(self, seconds: float) -> bool:
+        """Reserve one chunk retry from the fleet budget; True on a short pass, which has no budget."""
+        if self.key is None:
+            return True
+        with self._lock:
+            if self._closed:
+                return False
+        if not LONG_BUDGET.take(self.key, seconds):
+            return False
+        with self._lock:
+            if not self._closed:
+                self.reserved += seconds
+                return True
+        # Settled while Redis answered: the pass sends nothing more, so give the seconds back now.
+        LONG_BUDGET.settle(self.key, seconds, 0.0)
+        return False
+
+    def close(self) -> tuple[float, float]:
+        """End the pass's spend; returns (reserved, sent) for its settle."""
+        with self._lock:
+            self._closed = True
+            return self.reserved, self.seconds
 
 
 LONG_BUDGET = _FleetBudget()
@@ -662,7 +723,8 @@ def _routed_transcriber(pcm: bytes, language: str | None, deadline: float, priva
             return False  # the privacy read itself took the time: keep the row's language
         if vendor:
             probe = min(len(pcm) / 2 / SAMPLE_RATE, MAX_PROBE_SECONDS)
-            sent.add(probe)
+            if not sent.add(probe):
+                return False  # the pass has settled: keep the row's language
             AUDIO_SECONDS.labels(path).inc(probe)
         return True
 
@@ -737,11 +799,11 @@ def planned_seconds(jobs: list) -> float:
 
 
 def reserved_seconds(jobs: list) -> float:
-    """What a long pass reserves from the daily cap: the most it can send, so retries cannot overshoot.
-
-    Every chunk twice (its one retry) plus one vendor language probe clip; settled down to what was sent.
+    """What a long pass reserves from the daily cap at admission: every chunk once plus one vendor
+    language probe clip. Each retry reserves its own chunk's seconds before it sends; all of it is
+    settled down to what was sent.
     """
-    return 2 * planned_seconds(jobs) + MAX_PROBE_SECONDS
+    return planned_seconds(jobs) + MAX_PROBE_SECONDS
 
 
 def pass_class(units: list) -> str:
@@ -967,6 +1029,10 @@ class _Abandoned(Exception):
     """The pass had already stopped when this chunk would have sent a request."""
 
 
+class _RetryCapped(Exception):
+    """A long pass's chunk retry did not fit the day's cap (or Redis could not answer): not sent."""
+
+
 def _chunk_job(
     call,
     holder: list[bytes],
@@ -983,7 +1049,9 @@ def _chunk_job(
     A leaf: it never waits on another pool. Its buffer arrives in ``holder``, which a stopped pass
     empties, so a cancelled job left in the pool's queue keeps no audio; once started it holds the
     buffer until it returns. Once its pass has stopped (``stop``), it sends nothing more: no first
-    request and no retry.
+    request and no retry. On a long pass a retry first reserves its own seconds from the fleet budget,
+    after the privacy and stop checks and with at least RESERVE_MIN_SECONDS left; when it cannot, the
+    retry is skipped and the chunk fails (``_RetryCapped`` over the cap, its first error on time).
     """
     CHUNK_QUEUE_SECONDS.observe(time.monotonic() - submitted)
     try:
@@ -992,6 +1060,7 @@ def _chunk_job(
     except IndexError:
         raise _Abandoned() from None
     seconds = len(pcm) / 2 / SAMPLE_RATE
+    failure: Exception | None = None
     for attempt in (1, 2):
         if stop.is_set():
             raise _Abandoned()
@@ -999,24 +1068,44 @@ def _chunk_job(
             raise _Expired()
         # At actual dispatch: a chunk can wait in the shared pool's queue, and consent may change
         # meanwhile. The round that submitted it was authorized; this request may still not leave.
+        # The pass's authority is sticky: after any denial this refuses without asking, so no retry
+        # is reserved either.
         if not _privacy_allows(privacy):
             raise _Refused()
         # Asked again after the privacy check, which can be slow: a pass that stopped meanwhile
-        # sends nothing more and charges nothing.
+        # sends nothing more, reserves nothing and charges nothing.
         if stop.is_set():
             raise _Abandoned()
+        if failure is not None:
+            # A retry with too little left for the Redis round trip is not reserved or sent: the
+            # chunk fails with its first error, as a retry out of time always has.
+            if sent.key is not None and deadline - time.monotonic() < RESERVE_MIN_SECONDS:
+                raise failure
+            # Nothing is reserved after a denial another chunk recorded since this chunk's check.
+            if _privacy_denied(privacy):
+                raise _Refused()
+            if not sent.retry(seconds):
+                raise _RetryCapped() from failure
+            # Stopped while Redis answered: reserved but not sent, so the settle refunds it.
+            if stop.is_set():
+                raise _Abandoned()
+            # The reservation took most of what was left: not sent, refunded at settle.
+            if deadline - time.monotonic() < RETRY_SEND_MIN_SECONDS:
+                raise _Expired()
         # Immediately before the charge and the send: a denial another chunk recorded after this
         # chunk's check passed still stops it, before the coordinator has set ``stop``.
         if _privacy_denied(privacy):
             raise _Refused()
+        if not sent.add(seconds):
+            raise _Abandoned()
         started = time.monotonic()
         AUDIO_SECONDS.labels(path).inc(seconds)
-        sent.add(seconds)
         try:
             return call(pcm, language) or []
         except Exception as error:
             if attempt == 2 or stop.is_set() or deadline - time.monotonic() < RETRY_MIN_SECONDS:
                 raise
+            failure = error
             logger.info('event=v3_fast_finish_chunk_retry exception_type=%s', type(error).__name__)
         finally:
             PROVIDER_CHUNK_SECONDS.observe(time.monotonic() - started)
@@ -1104,6 +1193,9 @@ def _chunked_segments(
                     raw[index] = future.result()
                 except _Refused as error:
                     raise _Stopped('privacy_blocked') from error
+                except _RetryCapped as error:
+                    logger.warning('event=v3_fast_finish outcome=retry_cap')
+                    raise _Stopped('retry_cap') from error
                 except (_Expired, TimeoutError) as error:
                     logger.warning('event=v3_fast_finish outcome=deadline exception_type=%s', type(error).__name__)
                     raise _Stopped('deadline') from error
@@ -1277,7 +1369,8 @@ def _run(
     budget_key = LONG_BUDGET.reserve(reserved) if long_audio else None
     if long_audio and budget_key is None:
         return 'long_cap'
-    sent = _Sent()
+    # Retries reserve on the same key, so a pass that runs past midnight stays on its own day.
+    sent = _Sent(budget_key, reserved)
     try:
         if chunked:
             path = 'long' if long_audio else 'short'
@@ -1289,11 +1382,13 @@ def _run(
     except _Stopped as stopped:
         return stopped.outcome
     finally:
+        # Closed first: a chunk still running sends and reserves nothing after this.
+        reserved, spent = sent.close()
         if budget_key is not None:
-            # Charge what was actually sent (retries and the language probe included, chunks never
-            # sent refunded), not the reservation. Best effort, off the pass's thread: the slot is
-            # never held for this Redis call.
-            _settle_later(budget_key, reserved, sent.seconds)
+            # Charge what was actually sent (retries and the language probe included, chunks and
+            # reserved retries never sent refunded), not the reservations. Best effort, off the
+            # pass's thread: the slot is never held for this Redis call.
+            _settle_later(budget_key, reserved, spent)
     if not segments:
         return 'empty'
     segments.sort(key=lambda segment: (segment['start'], segment['end']))
