@@ -124,7 +124,7 @@ from utils.conversations.meeting_receipt import record_finalized_meeting_receipt
 from utils.integration_telemetry import emit_posthog_event
 from utils.executors import db_executor, llm_executor, postprocess_executor, run_blocking, submit_with_context
 from utils.memory.memory_service import MemoryService
-from utils.metrics import record_lazy_desktop_deferral
+from utils.metrics import OMI_CONVERSATION_LIST_PAGES_TOTAL, record_lazy_desktop_deferral
 from utils.memory.retraction_scope import retraction_can_be_skipped
 from utils.memory.canonical_memory_adapter import ConversationReplacementConflictError
 from utils import byok
@@ -1238,8 +1238,6 @@ def get_conversations(
     if budget.truncated and response is not None:
         response.headers[OMI_LIST_TRUNCATED_HEADER] = OMI_LIST_TRUNCATED_VALUE
     budget.observe('truncated' if budget.truncated else 'complete')
-    from utils.metrics import OMI_CONVERSATION_LIST_PAGES_TOTAL
-
     paging = 'cursor_requested' if cursor is not None else 'offset' if offset else 'first'
     OMI_CONVERSATION_LIST_PAGES_TOTAL.labels(paging, str(include_discarded).lower()).inc()
     return conversations
