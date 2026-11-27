@@ -4,6 +4,7 @@ from io import BytesIO
 import math
 import os
 from types import SimpleNamespace
+from unittest.mock import Mock
 import wave
 
 import pytest
@@ -80,7 +81,15 @@ def lab(monkeypatch):
     monkeypatch.setattr(audit, 'declared_language_audit_executor', Inline())
     monkeypatch.setattr(audit, 'sampled', lambda audio: True)
     monkeypatch.setattr('utils.funded_processing.consent_allows', lambda uid: True)
-    monkeypatch.setattr('utils.stt_cap_dispatch.sync_allowed', lambda *args, **kwargs: True)
+    state.funding_calls = []
+
+    def funded(uid, **kwargs):
+        state.funding_calls.append(kwargs)
+        return SimpleNamespace(managed=state.funded)
+
+    state.funded = True
+    monkeypatch.setattr('utils.stt_cap_dispatch.funded_allowance', funded)
+    monkeypatch.setattr('utils.stt_cap_dispatch.sync_allowed', Mock(side_effect=AssertionError('admission')))
     monkeypatch.setattr(audit, '_vendor_window', [0.0, 0])
     return state
 
@@ -286,3 +295,28 @@ def test_sampling_is_stable_and_near_the_configured_share():
 def test_voiced_seconds_measures_voiced_audio():
     assert audit.voiced_seconds(wav_bytes(5)) == pytest.approx(5.0, abs=0.05)
     assert audit.voiced_seconds(wav_bytes(5, voiced=False)) == 0.0
+
+
+def test_an_unfunded_owner_is_skipped_without_admission_telemetry(lab, monkeypatch):
+    from utils import stt_cap_dispatch
+
+    lab.funded = False
+    record_audio, record_decision = Mock(), Mock()
+    monkeypatch.setattr(stt_cap_dispatch, 'record_audio', record_audio)
+    monkeypatch.setattr(stt_cap_dispatch, 'record_decision', record_decision)
+    before = skipped('not_funded')
+
+    decision, guard = resolve()
+
+    assert decision.evidence == 'declared'
+    assert guard.decision is None
+    assert lab.self_calls == [] and lab.vendor_calls == []
+    assert skipped('not_funded') == before + 1
+    record_audio.assert_not_called()
+    record_decision.assert_not_called()
+
+
+def test_the_funding_check_is_read_only(lab):
+    resolve()
+
+    assert lab.funding_calls == [{'lane': 'batch', 'ready_usage_only': True}]

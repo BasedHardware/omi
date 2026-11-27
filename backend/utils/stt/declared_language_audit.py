@@ -7,15 +7,17 @@ measured how much.
 
 This audit samples ``SAMPLE_PERCENT`` of those units by a stable hash of their audio. In the background it:
 
-1. re-runs serving's own privacy, consent and funding authorization for that unit on a *fresh* guard (the serving
-   guard is never touched, so a denial only skips the sample and never refuses or changes the upload);
+1. re-runs serving's privacy authorization and consent check for that unit, then a read-only funding check (no
+   subscription provisioning, no held-audio or admission-decision telemetry). The serving guard is never touched, so a
+   denial only skips the sample and never refuses or changes the upload. Owners without an Omi-funded allowance,
+   including BYOK-only owners, are skipped (``not_funded``): the classifier is an Omi-paid vendor or GPU;
 2. cuts the first 30 s, and skips it when it holds under ``MIN_SPEECH_SECONDS`` of voiced audio (leading silence);
 3. classifies it with the self-hosted language gate when one is configured, otherwise with the existing Modulate
    language-ID probe (the vendor that already serves live STT), at most ``MAX_VENDOR_PER_HOUR`` per process;
 4. counts ``omi_batch_pipeline_declared_language_audit_total{declared, heard, heard_class, confident, classifier}``.
 
 It never changes a route, stores nothing, and records no user identifier or transcript. Shadow intake (its own guard
-class) is not audited. Provider-routed (BYOK) units with a supported language are included; they are a small share.
+class) is not audited.
 
 ``BATCH_DECLARED_LANGUAGE_AUDIT_ENABLED=false`` stops sampling.
 """
@@ -98,12 +100,12 @@ def maybe_audit(
         except Exception:
             SKIPPED.labels('decode').inc()
             return
-        fresh = ServingLanguageProbeGuard(guard.store, guard.item, authorize=guard.authorize)
+        access = (guard.store, guard.item, guard.authorize)
         context = contextvars.copy_context()
         # A fire-and-forget probe must not inherit the caller's request deadline.
         context.run(verification_deadline.set, None)
         try:
-            declared_language_audit_executor.submit(context.run, _classify, declared, probe, seconds, fresh, vendor)
+            declared_language_audit_executor.submit(context.run, _classify, declared, probe, seconds, access, vendor)
         except ExecutorSaturatedError:
             SKIPPED.labels('busy').inc()
         except Exception as error:
@@ -141,10 +143,32 @@ def _vendor_allowed() -> bool:
         return True
 
 
-def _classify(declared: str, probe: bytes, seconds: float, guard, vendor) -> None:
+def _authorization(access) -> str | None:
+    """None when the sample may be classified, else the skip reason. Never records admission telemetry."""
+    from utils.funded_processing import consent_allows
+    from utils.stt_cap_dispatch import funded_allowance
+
+    store, item, authorize = access
     try:
-        if not guard():
-            SKIPPED.labels('not_authorized').inc()
+        authorize(store, item, snapshots=None)  # serving's privacy authorization; raises when blocked
+        if not consent_allows(item.owner_id):
+            return 'not_authorized'
+    except Exception:
+        return 'not_authorized'
+    try:
+        # ready_usage_only: no subscription provisioning. sync_admission would also record held audio and a decision.
+        if not funded_allowance(item.owner_id, lane='batch', ready_usage_only=True).managed:
+            return 'not_funded'
+    except Exception:
+        return 'not_funded'
+    return None
+
+
+def _classify(declared: str, probe: bytes, seconds: float, access, vendor) -> None:
+    try:
+        skip = _authorization(access)
+        if skip is not None:
+            SKIPPED.labels(skip).inc()
             return
         if voiced_seconds(probe) < MIN_SPEECH_SECONDS:
             SKIPPED.labels('no_speech').inc()

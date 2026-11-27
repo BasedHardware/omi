@@ -12,7 +12,7 @@ Latin phonetics. That includes users who never use live transcription, so they h
 language and serving intake's guard, hands the unit to `declared_language_audit.maybe_audit`.
 A stable 2% sample:
 - runs on the bounded `declared_language_audit` executor;
-- re-runs serving's own privacy, consent and funding authorization on a fresh guard;
+- re-runs serving's privacy authorization and consent check, then a read-only funding check that records no admission telemetry (unfunded and BYOK-only owners skip as `not_funded`);
 - skips probes that are mostly silence;
 - is classified on its first 30 s by the self-hosted gate when configured, else by the Modulate
   language-ID probe (at most 60 per process per hour);

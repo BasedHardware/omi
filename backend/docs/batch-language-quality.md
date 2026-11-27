@@ -98,8 +98,9 @@ declared-language audit (`utils/stt/declared_language_audit.py`,
   audio. Shadow intake is excluded.
 - It runs on the bounded `declared_language_audit` executor (2 workers, queue of 4); a full
   pool skips the sample.
-- For each sample, it re-runs serving's privacy, consent and funding authorization on a fresh
-  guard. A denial only skips the sample; the serving guard and custody are never touched.
+- For each sample, it re-runs serving's privacy authorization and consent check, then a
+  read-only funding check (no subscription provisioning, no held-audio or admission-decision
+  telemetry). A denial only skips the sample; the serving guard and custody are never touched.
 - It drops probes with under 3 s of voiced audio in their first 30 s (leading silence).
 - It classifies the first 30 s with the self-hosted gate when one is configured. Otherwise it
   uses the existing Modulate language-ID probe, at most 60 per process per hour.
@@ -110,7 +111,9 @@ declared-language audit (`utils/stt/declared_language_audit.py`,
 The leak share is `heard_class="unsupported"` over all audited rows. Report it twice: once
 with all rows, and once restricted to `confident="true"` in both numerator and denominator.
 Skips count in `omi_batch_pipeline_declared_language_audit_skipped_total{reason}`.
-Provider-routed (BYOK) units with a supported language are included; they are a small share.
+Owners without an Omi-funded allowance, BYOK-only owners included, are skipped as
+`reason="not_funded"`, because the classifier is Omi-paid. The share therefore describes funded
+owners.
 
 The private rollout `fleet_gate.sh` requires language-route coverage for every
 since-T0 completed cohort unit and rejects any unknown/unsupported Parakeet
