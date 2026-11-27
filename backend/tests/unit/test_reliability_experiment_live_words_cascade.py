@@ -510,7 +510,7 @@ CONVERSATION = ('users', 'synthetic', 'conversations', 'c')
 
 @pytest.fixture(autouse=True)
 def plain_rows(monkeypatch):
-    monkeypatch.setattr(writers.store, 'decode_row', lambda uid, snapshot: snapshot.to_dict())
+    monkeypatch.setattr(writers.store, 'decode_row', lambda uid, snapshot, **_kwargs: snapshot.to_dict())
 
 
 def summarised(strict, **updates):

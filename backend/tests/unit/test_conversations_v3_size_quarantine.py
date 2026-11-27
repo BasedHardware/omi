@@ -389,6 +389,10 @@ def owner(monkeypatch):
     monkeypatch.setattr(store.firestore, 'transactional', lambda body: body)
     for name in STRICT:
         monkeypatch.setattr(store, name, partial(getattr(store, name), firestore_client=strict))
+    charge_locked_attempt = store._charge_locked_attempt
+    monkeypatch.setattr(
+        store, '_charge_locked_attempt', lambda _client, uid, token: charge_locked_attempt(strict, uid, token)
+    )
     monkeypatch.setattr(StrictFirestoreSnapshot, 'update_time', 1, raising=False)
     oldest = store._oldest_pending
     # StrictFirestore models no queries: the terminal-pending scan reads the same rows through MemoryQuery.
@@ -404,7 +408,7 @@ def owner(monkeypatch):
         store, 'account_deletion_document', lambda uid, firestore_client=None: strict.document('deletions/' + uid)
     )
     monkeypatch.setattr(
-        store, 'decode_row', lambda uid, snap: {**snap.to_dict(), '_v3_revision': 1} if snap.exists else None
+        store, 'decode_row', lambda uid, snap, **_kwargs: {**snap.to_dict(), '_v3_revision': 1} if snap.exists else None
     )
     monkeypatch.setattr(service, 'run_blocking', blocking)
     monkeypatch.setattr(leases, 'acquire', lambda *a, promote_llm=False: 'token')
