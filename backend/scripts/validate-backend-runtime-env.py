@@ -155,6 +155,12 @@ def main() -> int:
         help='Immutable source root for workflow YAML and local composite actions; defaults to the runtime root.',
     )
     parser.add_argument(
+        '--chart-root',
+        type=Path,
+        default=ROOT,
+        help='Checkout root for Helm values paired with the manifest; defaults to the validator checkout.',
+    )
+    parser.add_argument(
         '--strict-provisional',
         action='store_true',
         help='Require provisional manifest values to match exactly. By default they only require presence.',
@@ -185,6 +191,7 @@ def main() -> int:
         check_live_cloud_run=args.check_live_cloud_run,
         check_workflows=args.check_workflows,
         workflow_root=args.workflow_root,
+        chart_root=args.chart_root,
         strict_provisional=args.strict_provisional,
         integration_canary_state=args.integration_canary_state,
         integration_canary_source=args.integration_canary_source,
