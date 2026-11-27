@@ -4,18 +4,12 @@ from datetime import datetime, timedelta, timezone
 from typing import Any, Mapping, Optional, Sequence
 
 from config.conversations_v3 import SPEECH_LANDED_FIELD
+from utils.conversations.v3.finish_stamp import FINISH_STAMP_FIELD, FINISH_STAMP_MAX_AGE, FINISH_STAMP_PATHS
 
 # The v3 window cap: an open conversation idle for longer is not in progress.
 MAX_IDLE = timedelta(hours=2)
 FINISH_WINDOW_FIELD = 'v3_finish_no_pointer_window_id'
 FINISH_RECORDING_FIELD = 'v3_finish_no_pointer_recording'
-# A live-window Finish stamps its request time and path (``FINISH_STAMP_PATHS``) on its response target's source
-# with the first write it stores there. The planner carries the stamp to the derived row that shows that source, and
-# that row's first manual-end settlement observes ``FINISH_TO_VISIBLE`` once. Older than ``FINISH_STAMP_MAX_AGE``, the
-# stamp is dropped instead of observed.
-FINISH_STAMP_FIELD = 'v3_finish_requested'
-FINISH_STAMP_PATHS = ('tail', 'newer', 'newer_dual')
-FINISH_STAMP_MAX_AGE = timedelta(hours=2)
 FINISH_FIELDS = [
     'started_at',
     'finished_at',

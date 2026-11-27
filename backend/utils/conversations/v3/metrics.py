@@ -8,7 +8,7 @@ from threading import Lock
 from prometheus_client import Counter, Histogram, Gauge
 
 from database.firestore_write_probe import count_committed_writes, probe_enabled, probe_installed
-from utils.conversations.v3.live import FINISH_STAMP_PATHS
+from utils.conversations.v3.finish_stamp import FINISH_STAMP_PATHS
 
 logger = logging.getLogger(__name__)
 _metric_warning_lock = Lock()
@@ -128,8 +128,8 @@ FINISH_NEWER_DECLINED = Counter(
 for reason in FINISH_NEWER_DECLINED_REASONS:
     FINISH_NEWER_DECLINED.labels(reason)
 
-# One sample per live-window Finish: its stamp (v3 live.FINISH_STAMP_FIELD) on the response target, observed at that
-# target's first manual-end settlement as a visible Home card. Stamps older than FINISH_STAMP_MAX_AGE are dropped.
+# One sample per live-window Finish: its stamp (v3 finish_stamp.FINISH_STAMP_FIELD) on the response target, observed at
+# that target's first manual-end settlement as a visible Home card. Stamps older than FINISH_STAMP_MAX_AGE are dropped.
 FINISH_TO_VISIBLE = Histogram(
     'omi_conversations_v3_finish_to_visible_seconds',
     'Live-window Finish request to its response target first settling as a visible Home card, by Finish path',
