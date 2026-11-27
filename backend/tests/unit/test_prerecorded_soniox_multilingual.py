@@ -31,10 +31,10 @@ def defaults(monkeypatch):
     monkeypatch.delenv('STT_PRERECORDED_SONIOX_MULTILINGUAL_ENABLED', raising=False)
     monkeypatch.delenv('PRERECORDED_SONIOX_FAILOVER_ENABLED', raising=False)
     monkeypatch.setenv('SONIOX_API_KEY', 'synthetic-test-key')
-    soniox_multilingual._EMPTY.clear()
+    soniox_multilingual._TRIED.clear()
     reset_vendor_guard_for_tests()
     yield
-    soniox_multilingual._EMPTY.clear()
+    soniox_multilingual._TRIED.clear()
     reset_vendor_guard_for_tests()
 
 
@@ -271,11 +271,11 @@ def test_the_in_flight_slot_is_released_after_success_and_failure(vendors, monke
     import threading
 
     monkeypatch.setattr(soniox_multilingual, '_IN_FLIGHT', threading.BoundedSemaphore(1))
-    sync_call('multi')
+    sync_call('multi', seconds=2)
     vendors.soniox.side_effect = SonioxBatchError('timeout', submitted=True)
-    sync_call('multi')
+    sync_call('multi', seconds=3)
     vendors.soniox.side_effect = None
-    provider, _ = sync_call('multi')
+    provider, _ = sync_call('multi', seconds=4)
 
     assert provider.served_provider == 'soniox'
     assert vendors.soniox.call_count == 3
@@ -323,3 +323,15 @@ def test_a_code_switched_transcript_is_named_by_its_majority_language():
     _, language = transcript_words({'text': '我们今天去公园散步 okay', 'tokens': tokens}, 2.0)
 
     assert language == 'zh'
+
+
+def test_after_a_failed_soniox_attempt_the_empty_retry_runs_velma_only(vendors):
+    vendors.soniox.side_effect = SonioxBatchError('timeout', submitted=True)
+    vendors.velma.return_value = ([], 'multi')
+
+    sync_call('multi')
+    provider, _ = sync_call('multi')  # legacy sync's bounded empty retry: attempts=0 again
+
+    assert vendors.soniox.call_count == 1
+    assert vendors.velma.call_count == 2
+    assert provider.served_provider == 'modulate'
