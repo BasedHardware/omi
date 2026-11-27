@@ -33,8 +33,19 @@ manager `helm`. That is the same request as the real apply without the write, so
 conflict the real apply would hit.
 
 The check runs before the shared backend secret reapply and again right before `helm upgrade
---install`. A failing check exits before anything is mutated: no secret write, no Helm release
-change, no rollout. Install, the rollout wait and the immutable-image handling are unchanged.
+--install`. The first check exits before anything is mutated: no secret write, no Helm release
+change, no rollout. The re-check runs after the secret reapply and after the ingress and
+BackendConfig adoption labels and annotations are written, so those may already have changed; it
+exits before Helm touches the release. Install, the rollout wait and the immutable-image handling
+are unchanged.
+
+Three callers run the script: `gcp_llm_gateway.yml` for a gateway-only release, the
+`deploy-backend-stack` action for a backend-stack deploy (`gcp_backend.yml`,
+`gcp_backend_auto_dev.yml`), and the `SERVICE=llm-gateway` branch of `gcp_backend_pusher.yml`, which
+that workflow's input check limits to the development environment. In each of them an ownership
+conflict stops the deploy at the first check with exit code 1, before the shared secret reapply,
+and nothing is rolled out. That fail-closed result is intended: the rollout stops with the gateway
+unchanged and waits for the handoff below, instead of failing inside the Helm upgrade.
 
 ## Who owns the image
 
@@ -115,7 +126,9 @@ The tool changes nothing and exits with code 3 when:
 - the entry owns anything besides the image, for example container resources set by the same patch;
 - the entry is not an `Update` of `apps/v1`, or targets a subresource;
 - the server dry-run of the patch differs from the plan, for example because the Deployment changed
-  between the read and the patch (the patch also tests the resource version).
+  between the read and the patch (the patch also tests the resource version);
+- with `--next-deployment`, the manifest is not the one Deployment being handed off: it names
+  another Deployment or namespace, is another kind, or holds more than one object.
 
 A refusal for an entry that owns more than the image needs a person to decide field by field; do not
 widen the tool to get past it.
@@ -142,8 +155,10 @@ through ordinary Helm, and that an entry owning more than the image is refused. 
 bash backend/scripts/proof-llm-gateway-ownership-handoff.sh
 ```
 
-The proof creates its own cluster, under a name unique to that run, and deletes it when it finishes.
-`--keep` leaves the cluster and its kubeconfig in place to inspect a failure.
+The proof creates its own cluster, under a name unique to that run, and deletes that cluster when
+it finishes. If `kwokctl` cannot create it, the proof refuses and deletes nothing, since that name
+may belong to a cluster in use. `--keep` leaves the cluster and its kubeconfig in place to inspect
+a failure.
 
 The proof never reads your kubeconfig. Before its first write it establishes, by reads only, that
 the cluster is the one it just created, and refuses otherwise:

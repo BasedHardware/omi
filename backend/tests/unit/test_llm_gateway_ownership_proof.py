@@ -173,10 +173,14 @@ def _assert_refused_before_any_write(
     assert f'REFUSED: {reason}' in result.stderr
     kwokctl = _calls_of(calls, 'kwokctl')
     assert [argv[:2] for argv in kwokctl][0] == ['create', 'cluster']
-    assert [argv[:2] for argv in kwokctl][-1] == ['delete', 'cluster'], 'the cluster this run asked for is removed'
-    if cluster_created:
-        name = kwokctl[0][kwokctl[0].index('--name') + 1]
+    name = kwokctl[0][kwokctl[0].index('--name') + 1]
+    if not cluster_created:
+        # A failed create may have hit a name in use, so that name is never deleted.
+        assert [argv[:2] for argv in kwokctl] == [['create', 'cluster']]
+        assert 'delete cluster' not in result.stderr
+    else:
         assert name[: len(CLUSTER_PREFIX)] == CLUSTER_PREFIX and len(name) == len(CLUSTER_PREFIX) + 12
+        assert kwokctl[-1] == ['delete', 'cluster', '--name', name], 'the cluster this run created is removed'
     written = [argv for argv in _calls_of(calls, 'kubectl') if _command(argv)[0] not in READS]
     assert written == [], f'the proof wrote before refusing: {written}'
 
@@ -187,8 +191,9 @@ def test_proof_refuses_a_cluster_kwokctl_does_not_list(tmp_path):
     assert _calls_of(calls, 'kubectl') == [], 'nothing is asked of a cluster kwokctl does not vouch for'
 
 
-def test_proof_refuses_when_kwokctl_cannot_create_the_cluster(tmp_path):
-    result, calls = _run_proof(tmp_path, kwokctl='fail')
+@pytest.mark.parametrize('args', [(), ('--keep',)], ids=['cleanup', 'keep'])
+def test_proof_refuses_when_kwokctl_cannot_create_the_cluster(tmp_path, args):
+    result, calls = _run_proof(tmp_path, *args, kwokctl='fail')
     _assert_refused_before_any_write(
         result, calls, 'kwokctl could not create the throwaway cluster', cluster_created=False
     )

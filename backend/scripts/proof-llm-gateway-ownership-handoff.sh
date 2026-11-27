@@ -59,7 +59,9 @@ refuse() { # refuse <reason>: the cluster has not been written to
 }
 fail() {
   echo "PROOF FAILED: $*" >&2
-  if [[ "$KEEP" == true ]]; then
+  if [[ "$CREATED" != true ]]; then
+    echo "kwokctl did not confirm a cluster for this run, so nothing was removed" >&2
+  elif [[ "$KEEP" == true ]]; then
     echo "cluster $CLUSTER kept for inspection" >&2
   else
     echo "cluster $CLUSTER removed; rerun with --keep to inspect it" >&2
@@ -67,12 +69,23 @@ fail() {
   exit 1
 }
 finish() {
+  # Only a cluster kwokctl confirmed for this run is deleted: a create that failed may have hit a
+  # name that was already in use.
+  if [[ "$CREATED" != true ]]; then
+    echo "nothing was deleted; kwokctl get clusters shows whether one was left as $CLUSTER" >&2
+    if [[ "$KEEP" == true ]]; then
+      echo "kwokctl's output is in $WORK/kwokctl.log" >&2
+    else
+      rm -rf "$WORK"
+    fi
+    return
+  fi
   if [[ "$KEEP" == true ]]; then
     echo "cluster $CLUSTER kept; kubeconfig: $KUBECONFIG_RUN" >&2
     echo "remove it with: kwokctl delete cluster --name $CLUSTER" >&2
     return
   fi
-  if ! kwokctl delete cluster --name "$CLUSTER" >/dev/null 2>&1 && [[ "$CREATED" == true ]]; then
+  if ! kwokctl delete cluster --name "$CLUSTER" >/dev/null 2>&1; then
     echo "WARNING: cluster $CLUSTER was not deleted; remove it with: kwokctl delete cluster --name $CLUSTER" >&2
   fi
   rm -rf "$WORK"

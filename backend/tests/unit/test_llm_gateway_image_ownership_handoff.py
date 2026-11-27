@@ -10,6 +10,7 @@ from __future__ import annotations
 import copy
 import importlib.util
 import json
+import re
 import subprocess
 from pathlib import Path
 from typing import Any
@@ -39,6 +40,37 @@ def handoff():
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module
+
+
+def rendered_deployment(name: str = NAME, *, kind: str = 'Deployment', namespace: str = '') -> str:
+    """The Deployment as `helm template --show-only templates/deployment.yaml` renders it: no namespace."""
+    lines = [
+        '# Source: llm-gateway/templates/deployment.yaml',
+        'apiVersion: apps/v1',
+        f'kind: {kind}',
+        'metadata:',
+        f'  name: {name}',
+        *([f'  namespace: {namespace}'] if namespace else []),
+        'spec:',
+        '  template:',
+        '    spec:',
+        '      containers:',
+        f'        - name: {CONTAINER}',
+        f'          image: {PATCHED_IMAGE}',
+    ]
+    return '\n'.join(lines) + '\n'
+
+
+def write_manifest(root: Path, text: str | None) -> Path:
+    path = root / NEXT_MANIFEST
+    if text is not None:
+        path.write_text(text, encoding='utf-8')
+    return path
+
+
+@pytest.fixture
+def next_deployment(tmp_path) -> Path:
+    return write_manifest(tmp_path, rendered_deployment())
 
 
 def image_only() -> dict[str, Any]:
@@ -242,12 +274,12 @@ def test_plan_only_sends_the_patch_as_a_server_dry_run_and_never_applies_it(hand
     assert 'plan only' in capsys.readouterr().out
 
 
-def test_apply_patches_once_then_rereads_and_proves_the_ordinary_apply_now_passes(handoff, capsys):
+def test_apply_patches_once_then_rereads_and_proves_the_ordinary_apply_now_passes(handoff, next_deployment, capsys):
     live = conflicting()
     after = handoff.expected_after(live, 1)
     kubectl = FakeKubectl(reads=[live, after], patch_preview=after, applies=[(1, f'error: {CONFLICT}\n'), (0, '')])
 
-    assert handoff.run_handoff(kubectl, NAMESPACE, NAME, CONTAINER, PATCH_MANAGER, NEXT_MANIFEST, True) == 0
+    assert handoff.run_handoff(kubectl, NAMESPACE, NAME, CONTAINER, PATCH_MANAGER, next_deployment, True) == 0
 
     assert kubectl.verbs() == ['get', 'apply', 'patch', 'patch', 'get', 'apply']
     preview, applied = kubectl.calls[2], kubectl.calls[3]
@@ -282,15 +314,47 @@ def test_a_patch_the_server_rejects_is_a_refusal_not_a_write(handoff):
     assert kubectl.verbs() == ['get', 'patch']
 
 
-def test_an_ordinary_apply_that_fails_for_another_reason_stops_the_handoff(handoff):
+def test_an_ordinary_apply_that_fails_for_another_reason_stops_the_handoff(handoff, next_deployment):
     kubectl = FakeKubectl(
         reads=[conflicting()], applies=[(1, 'error: Internal error occurred: failed calling webhook')]
     )
 
     with pytest.raises(handoff.Refused, match='the ordinary Helm apply fails for another reason'):
-        handoff.run_handoff(kubectl, NAMESPACE, NAME, CONTAINER, PATCH_MANAGER, NEXT_MANIFEST, True)
+        handoff.run_handoff(kubectl, NAMESPACE, NAME, CONTAINER, PATCH_MANAGER, next_deployment, True)
 
     assert kubectl.verbs() == ['get', 'apply']
+
+
+@pytest.mark.parametrize(
+    ('manifest', 'detail'),
+    [
+        pytest.param(rendered_deployment('dev-omi-llm-gateway'), 'dev-omi-llm-gateway', id='another-deployment'),
+        pytest.param(
+            rendered_deployment(namespace='dev-omi-backend'),
+            'dev-omi-backend/prod-omi-llm-gateway',
+            id='another-namespace',
+        ),
+        pytest.param(
+            rendered_deployment(kind='Service'),
+            'Service prod-omi-backend/prod-omi-llm-gateway',
+            id='same-named-service',
+        ),
+        pytest.param(f'{rendered_deployment()}---\n{rendered_deployment()}', 'holds 2 objects', id='two-objects'),
+        pytest.param('', 'holds 0 objects', id='empty'),
+        pytest.param(None, 'could not read the next Deployment', id='missing-file'),
+    ],
+)
+def test_a_next_deployment_manifest_for_another_object_is_refused_before_any_dry_run(
+    handoff, tmp_path, manifest, detail
+):
+    """The before/after proof is about this Deployment only when the manifest is this Deployment."""
+    kubectl = FakeKubectl(reads=[conflicting()])
+    path = write_manifest(tmp_path, manifest)
+
+    with pytest.raises(handoff.Refused, match=re.escape(detail)):
+        handoff.run_handoff(kubectl, NAMESPACE, NAME, CONTAINER, PATCH_MANAGER, path, True)
+
+    assert kubectl.verbs() == ['get'], 'nothing is dry-run or patched with a manifest of another object'
 
 
 def test_a_readback_that_differs_from_the_plan_is_a_verification_failure(handoff):
@@ -307,7 +371,7 @@ def test_a_readback_that_differs_from_the_plan_is_a_verification_failure(handoff
     assert kubectl.verbs() == ['get', 'patch', 'patch', 'get']
 
 
-def test_an_ordinary_apply_that_still_conflicts_after_the_handoff_is_a_verification_failure(handoff):
+def test_an_ordinary_apply_that_still_conflicts_after_the_handoff_is_a_verification_failure(handoff, next_deployment):
     live = conflicting()
     after = handoff.expected_after(live, 1)
     kubectl = FakeKubectl(
@@ -315,7 +379,7 @@ def test_an_ordinary_apply_that_still_conflicts_after_the_handoff_is_a_verificat
     )
 
     with pytest.raises(handoff.VerificationFailed, match='the ordinary Helm apply still fails'):
-        handoff.run_handoff(kubectl, NAMESPACE, NAME, CONTAINER, PATCH_MANAGER, NEXT_MANIFEST, True)
+        handoff.run_handoff(kubectl, NAMESPACE, NAME, CONTAINER, PATCH_MANAGER, next_deployment, True)
 
 
 def test_main_maps_outcomes_to_exit_codes(handoff, monkeypatch):

@@ -26,6 +26,8 @@ import tempfile
 from pathlib import Path
 from typing import Any, Callable
 
+import yaml
+
 HELM_MANAGER = "helm"
 PATCH_MANAGER = "kubectl-patch"
 HANDOFF_MANAGER = "llm-gateway-image-ownership-handoff"
@@ -194,6 +196,31 @@ def ordinary_apply_dry_run(kubectl: Kubectl, namespace: str, manifest: Path) -> 
     )
 
 
+def check_manifest_identity(manifest: Path, namespace: str, name: str) -> None:
+    """Refuse a manifest that is not the one Deployment being handed off.
+
+    A manifest for another object dry-runs as that object and proves nothing about this one.
+    """
+    try:
+        with manifest.open(encoding="utf-8") as stream:
+            documents = [document for document in yaml.safe_load_all(stream) if document is not None]
+    except (OSError, yaml.YAMLError) as error:
+        raise Refused(f"could not read the next Deployment from {manifest}: {error}") from error
+    if len(documents) != 1:
+        raise Refused(f"{manifest} holds {len(documents)} objects, not the one Deployment {namespace}/{name}")
+    document = _mapping(documents[0])
+    metadata = _mapping(document.get("metadata"))
+    # Without a namespace the manifest is applied to the one kubectl is given.
+    if (
+        document.get("apiVersion") != API_VERSION
+        or document.get("kind") != "Deployment"
+        or metadata.get("name") != name
+        or metadata.get("namespace") not in (None, namespace)
+    ):
+        described = f"{document.get('kind')} {metadata.get('namespace') or namespace}/{metadata.get('name')}"
+        raise Refused(f"{manifest} is for {described}, not the Deployment {namespace}/{name} being handed off")
+
+
 def _changed_sections(actual: dict[str, Any], expected: dict[str, Any]) -> list[str]:
     return [section for section in expected if actual.get(section) != expected[section]]
 
@@ -219,6 +246,7 @@ def run_handoff(
     _print_owners(live, container)
 
     if next_deployment is not None:
+        check_manifest_identity(next_deployment, namespace, name)
         preview = ordinary_apply_dry_run(kubectl, namespace, next_deployment)
         if preview.returncode:
             conflict = (
@@ -303,7 +331,10 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--next-deployment",
         type=Path,
-        help="Helm-rendered Deployment the next ordinary rollout applies; proves the conflict before and its absence after",
+        help=(
+            "Helm-rendered Deployment the next ordinary rollout applies, for this namespace and Deployment; "
+            "proves the conflict before and its absence after"
+        ),
     )
     parser.add_argument("--apply", action="store_true", help="execute the plan; the default only plans")
     args = parser.parse_args(argv)
