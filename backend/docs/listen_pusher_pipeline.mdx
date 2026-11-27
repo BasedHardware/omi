@@ -5825,9 +5825,14 @@ first silent frame to the next speech, the clock the close threshold reads,
 whether the gap stayed open or was idle-closed; it prices any threshold before a
 cohort runs), reopen latency
 histogram and estimated connected-seconds avoided counter register only for
-flag-on Soniox transports. `omi_soniox_connected_seconds_total{demand_cohort,origin}`
+flag-on Soniox transports. `omi_soniox_connected_seconds_total{provider,demand_cohort,origin,visibility,fallback_reason}`
 counts the wall time every Soniox websocket is actually open, flag on or off,
-flushed by the writer about every 10 s and once at close. That is the billed
+flushed by the writer about every 10 s and once at close. Each flush interval is
+split at the client's `client_state` transitions, so a session that goes
+background mid-stream is attributed to the bucket in force for each second;
+`visibility` is `visible|foreground|background|unreported` and `fallback_reason`
+is `none|policy|archive|claim` (the custody fallback that opened the transport,
+sticky for the session and carried across reconnects). That is the billed
 quantity: compare Soniox by connected hour, and divide
 `omi_stt_provider_wire_audio_seconds_total{provider="soniox"}` by it for the
 share of billed time that carried audio. Avoided seconds measure the actual closed interval, excluding
@@ -6751,8 +6756,12 @@ the first-frame claim/archive handoff is joined through cancellation before
 decoded-buffer teardown; originals commit exact sample bounds and teardown registers the batch obligation
 without live transcript segments. A failed claim falls back to the previous live
 open once per recording, counted by
-`omi_listen_preview_batch_custody_total{outcome="live_fallback"}`; successful claims
-use outcome `promoted`. Durable claims survive rollback and reconnect, subject to
+`omi_listen_preview_batch_custody_total{outcome="live_fallback",reason}`; successful claims
+use outcome `promoted` with reason `none`. The reason is `policy` (a consent,
+ownership, locale or watch-state exclusion), `archive` (no durable original
+archive) or `claim` (the claim failed or was absent), and it is carried onto the
+live transport so `omi_soniox_connected_seconds_total{fallback_reason}` prices
+the seconds each cause actually opened. Durable claims survive rollback and reconnect, subject to
 privacy and request compatibility checks.
 
 Setting `LISTEN_PREVIEW_BATCH_CUSTODY_ENABLED=false` restores deferred live opens
@@ -7312,8 +7321,11 @@ excludes a prepended WAV header. Deepgram observes the synchronous websocket
 below the SDK's exception-to-success conversion. Failed writes, JSON controls,
 keepalives and EOS do not count. These are successful local transport writes,
 not vendor acknowledgements or invoices. Only listen-created transports count.
-Pair wire seconds with `omi_listen_demand_capture_audio_seconds_total` (decoded
-mono capture before VAD/replay) and `omi_listen_live_lane_seconds_total` (adopted
+Pair wire seconds with `omi_listen_demand_capture_audio_seconds_total{demand_cohort,visibility}`
+(decoded mono capture before VAD/replay, one increment per decoded frame so each
+captured second is attributed exactly once, labelled with the `client_state`
+bucket in force: `visible|foreground|background|unreported`) and
+`omi_listen_live_lane_seconds_total` (adopted
 serving wall time, including silence). Capture increments during ingestion;
 controls flush lane seconds at teardown, admitted demand sessions also flush
 periodically. Use drained controls for a complete lane-time comparison.
