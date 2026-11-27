@@ -32,6 +32,12 @@ commit=$(git -C "$go_root/.." rev-parse HEAD)
     commit=$3
     repo_go=$PWD
     cd "$scratch"
+
+    # PL-001: make check covers the Go adapter, and the same emulator can run
+    # the legacy evaluator proof in its own synthetic project.
+    PYTHONPATH="$repo_go/../backend" GOOGLE_CLOUD_PROJECT=demo-quiet-replay PROVIDER_MODE=offline \
+        "$python_bin" -m scripts.quiet_finalization_replay_emulator_test
+
     run() {
         "$scratch/replay" -jobd "$scratch/jobd" -python "$python_bin" -commit "$commit" "$@"
     }
