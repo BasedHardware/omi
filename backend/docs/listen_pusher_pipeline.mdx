@@ -185,13 +185,20 @@ No Deepgram route or ordinary `soniox` pre-recorded model token is added.
 attempt (`current_parakeet_caller()` is `sync_*`), a Modulate-selected file whose
 language is unknown or code-switched (`multi`), or a language outside English and the
 major European languages (`en`, `es`, `fr`, `de`, `it`, `pt`, `nl`) that Soniox accepts
-as a hint, is sent to the Soniox batch client first. Any Soniox failure (refusal, 429,
+as a hint, is sent to the Soniox batch client first. Legacy sync passes `multi` for every
+user not in single-language mode (the per-file language probe picks only the provider), so in
+practice every Velma-bound file goes to Soniox first, including files the probe heard as
+English with low confidence, which is where code-switched speech lands. The Velma-first
+language list applies when a language reaches the provider (single-language users). Any Soniox failure (refusal, 429,
 timeout, 5xx, invalid response) runs Velma on the same audio, exactly as before. The
 fallback reports `component=stt_prerecorded,from=soniox,to=modulate,outcome=degraded`
 and logs `event=prerecorded_soniox_multilingual outcome=fallback kind=<kind>`. An empty
-Soniox transcript is the answer and does not run Velma.
+Soniox transcript is the answer; legacy sync's bounded empty retry of the same audio then runs
+Velma, not Soniox again. A Soniox-first attempt also disables the Modulate credit-refusal hop for
+that audio, so Soniox never receives it twice. Soniox's language is the one with the most text.
 
-Files over 600 s, retries (`attempts > 0`), held-piece recovery, prompt verification,
+Files over 300 s (Soniox's client deadline is 120 s), a process already running 8 Soniox-first
+calls (the file goes to Velma without waiting), retries (`attempts > 0`), held-piece recovery, prompt verification,
 a missing `SONIOX_API_KEY`, and every caller outside legacy sync (voice messages,
 push-to-talk, shadow, batch recovery) keep Velma first. Served audio is counted in
 `omi_prerecorded_vendor_audio_seconds_total{provider=soniox,endpoint=stt}` and logged as

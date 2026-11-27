@@ -11,10 +11,14 @@ the top on Mandarin, Japanese, Korean, Hindi and Arabic; Velma publishes English
 
 **Change.** Inside a legacy sync attempt, a Modulate-selected file with language `multi` (or a
 non-European language Soniox accepts as a hint) runs Soniox first. Any Soniox failure falls back
-to Velma on the same audio. English and `es`/`fr`/`de`/`it`/`pt`/`nl` keep Velma first. Voice
+to Velma on the same audio. Legacy sync passes `multi` for every user not in single-language mode, so in practice every
+Velma-bound file goes to Soniox first, including low-confidence English (where code-switched speech
+lands); `en` and `es`/`fr`/`de`/`it`/`pt`/`nl` keep Velma first only when that language reaches the
+provider (single-language users). Voice
 messages, push-to-talk, shadow scoring, batch recovery, held-piece recovery and prompt
-verification are unchanged. Files over 600 s stay on Velma (Soniox's sync client has a 120 s
-deadline).
+verification are unchanged. Files over 300 s stay on Velma (Soniox's sync client has a 120 s
+deadline), and each process runs at most 8 Soniox-first calls at once; a full process uses Velma
+without waiting. This bounds the create rate against Soniox's 2,000 stored-transcription cap.
 
 **Cost.** List rate card (`config/rate_card_v2.json`): Soniox 0.12, Velma 0.06 USD per audio hour.
 Production Velma batch audio was 1,056 h in the 24 h to 2026-11-27T02:38Z (sum of 10-minute

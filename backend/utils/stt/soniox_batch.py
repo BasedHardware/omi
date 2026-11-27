@@ -208,6 +208,7 @@ def transcript_words(payload, duration, *, mark_fallback=False):
     if not isinstance(payload, dict) or not isinstance(payload.get('tokens'), list):
         raise SonioxBatchError('invalid_response')
     words, language, previous, boundary, fallback = [], 'multi', -1.0, True, False
+    spoken: dict[str, int] = {}
     for token in payload['tokens']:
         text = token['text']
         if not isinstance(text, str):
@@ -231,7 +232,8 @@ def transcript_words(payload, duration, *, mark_fallback=False):
         speaker = f'SPEAKER_{max(int(raw_speaker) - 1, 0) if raw_speaker is not None else 0:02d}'
         detected = token.get('language')
         if isinstance(detected, str) and detected:
-            language = detected
+            # The language with the most text wins, so a code-switched transcript is not named by its last token.
+            spoken[detected] = spoken.get(detected, 0) + len(text.strip())
         if words and not boundary and not text[0].isspace() and words[-1]['speaker'] == speaker:
             words[-1]['text'] += text
             words[-1]['timestamp'][1] = max(end, words[-1]['timestamp'][1])
@@ -243,6 +245,7 @@ def transcript_words(payload, duration, *, mark_fallback=False):
         raise SonioxBatchError('invalid_response')
     if mark_fallback and fallback:
         words = [{**word, 'speaker_fallback': True} for word in words]
+    language = max(spoken, key=lambda code: spoken[code]) if spoken else language
     return words, language
 
 

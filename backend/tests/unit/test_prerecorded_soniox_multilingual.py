@@ -31,8 +31,10 @@ def defaults(monkeypatch):
     monkeypatch.delenv('STT_PRERECORDED_SONIOX_MULTILINGUAL_ENABLED', raising=False)
     monkeypatch.delenv('PRERECORDED_SONIOX_FAILOVER_ENABLED', raising=False)
     monkeypatch.setenv('SONIOX_API_KEY', 'synthetic-test-key')
+    soniox_multilingual._EMPTY.clear()
     reset_vendor_guard_for_tests()
     yield
+    soniox_multilingual._EMPTY.clear()
     reset_vendor_guard_for_tests()
 
 
@@ -142,8 +144,9 @@ def test_a_soniox_failure_falls_back_to_velma_on_the_same_audio(vendors, kind):
     }.get(kind, 'other')
 
 
-def test_a_local_refusal_falls_back_without_counting_soniox_audio(vendors):
-    vendors.soniox.side_effect = SonioxBatchError('refused')
+@pytest.mark.parametrize('kind', ['refused', 'timeout', 'error_5xx'])
+def test_an_unsubmitted_failure_falls_back_without_counting_soniox_audio(vendors, kind):
+    vendors.soniox.side_effect = SonioxBatchError(kind, submitted=False)
 
     provider, _ = sync_call('multi')
 
@@ -159,7 +162,7 @@ def test_an_unexpected_soniox_error_falls_back(vendors):
     assert provider.served_provider == 'modulate'
 
 
-def test_an_empty_soniox_transcript_is_the_answer(vendors):
+def test_an_empty_soniox_transcript_is_the_answer_and_the_empty_retry_runs_velma(vendors):
     vendors.soniox.return_value = ([], 'multi')
 
     provider, result = sync_call('multi')
@@ -167,6 +170,12 @@ def test_an_empty_soniox_transcript_is_the_answer(vendors):
     assert result == ([], 'multi')
     assert provider.served_provider == 'soniox'
     vendors.velma.assert_not_called()
+    # Legacy sync's bounded empty retry calls again with attempts=0: the same audio now goes to Velma.
+    provider, result = sync_call('multi')
+
+    assert result == (VELMA_WORDS, 'en')
+    assert provider.served_provider == 'modulate'
+    assert vendors.soniox.call_count == 1
 
 
 def test_kill_switch_restores_velma_first(vendors, monkeypatch):
@@ -242,3 +251,75 @@ def test_a_failed_soniox_first_attempt_is_never_followed_by_a_second_soniox_subm
     # The credit-refusal failover hop would raise AssertionError('failover hop') if it fired.
     assert vendors.soniox.call_count == 1
     assert vendors.velma.call_count == 1
+
+
+def test_a_full_process_sends_the_file_to_velma_without_waiting(vendors, monkeypatch):
+    import threading
+
+    monkeypatch.setattr(soniox_multilingual, '_IN_FLIGHT', threading.BoundedSemaphore(1))
+    soniox_multilingual._IN_FLIGHT.acquire()
+    try:
+        provider, _ = sync_call('multi')
+    finally:
+        soniox_multilingual._IN_FLIGHT.release()
+
+    assert provider.served_provider == 'modulate'
+    vendors.soniox.assert_not_called()
+
+
+def test_the_in_flight_slot_is_released_after_success_and_failure(vendors, monkeypatch):
+    import threading
+
+    monkeypatch.setattr(soniox_multilingual, '_IN_FLIGHT', threading.BoundedSemaphore(1))
+    sync_call('multi')
+    vendors.soniox.side_effect = SonioxBatchError('timeout', submitted=True)
+    sync_call('multi')
+    vendors.soniox.side_effect = None
+    provider, _ = sync_call('multi')
+
+    assert provider.served_provider == 'soniox'
+    assert vendors.soniox.call_count == 3
+
+
+def test_legacy_sync_url_path_is_served_by_soniox(vendors, monkeypatch):
+    audio = wav_bytes(2)
+
+    class Response:
+        content = audio
+
+        def raise_for_status(self):
+            return None
+
+    class Client:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *exc):
+            return False
+
+        def get(self, url):
+            return Response()
+
+    monkeypatch.setattr(stt.httpx, 'Client', Client)
+    provider = stt.ModulatePrerecordedProvider()
+    with parakeet_caller('sync_fresh'):
+        result = provider.transcribe_url('https://signed.example/audio.wav', return_language=True, language=None)
+
+    assert result == (SONIOX_WORDS, 'zh')
+    assert provider.served_provider == 'soniox'
+    vendors.velma.assert_not_called()
+
+
+def test_a_code_switched_transcript_is_named_by_its_majority_language():
+    from utils.stt.soniox_batch import transcript_words
+
+    tokens = [
+        {'text': '我们今天去公园散步', 'start_ms': 0, 'end_ms': 900, 'speaker': '1', 'language': 'zh'},
+        {'text': ' okay', 'start_ms': 1000, 'end_ms': 1200, 'speaker': '1', 'language': 'en'},
+    ]
+    _, language = transcript_words({'text': '我们今天去公园散步 okay', 'tokens': tokens}, 2.0)
+
+    assert language == 'zh'
