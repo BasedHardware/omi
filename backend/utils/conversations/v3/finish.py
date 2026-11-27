@@ -135,7 +135,7 @@ def _acknowledge(uid, window, outcome, recording_id, observe_recording=None):
         observe_recording(recording_id)
     elif observe_recording is not None and outcome == 'already_visible' and window and window.get('id'):
         # The Finish found its window already on Home: the SLI scores the card the answer carries as a 0 s
-        # success only when that card proves a summary is showing; otherwise it is reported, not scored.
+        # success only when that card proves a summary is showing; otherwise a later eligibility, or a miss.
         observe_recording(
             recording_id, visible_card=window['id'], visible_summary=finish_home_sli.visible_summary(window)
         )

@@ -90,7 +90,7 @@ class Finish:
         ``visible_card``: the Finish found that recording's window already on Home (``already_visible``) and
         changed nothing. ``visible_summary`` says whether that card proves a summary is showing
         (``visible_summary(row)``); only then does the readback score the cut as a 0 s success on the
-        ``already_visible`` route. Otherwise it is reported apart and not scored.
+        ``already_visible`` route. Otherwise it stays in the cohort: a later eligibility scores it, else a miss.
         """
         if self.finish is None:
             # Released clients without the header carry no source or device cut
@@ -145,8 +145,8 @@ def observe_legacy_manual_end(uid: str, recording_id: str, *, request: str | Non
     """Record positive proof of a deliberate Finish on a recording.
 
     ``request``: the proof belongs to that exact headerless request (``Finish.bind``). Without it (the
-    proof follows a committed manual-end marker on another path) it names only the recording, and the
-    readback scores it only when exactly one candidate on that recording could have produced it.
+    proof follows a committed manual-end marker on another path) it names only the recording: the readback
+    reports it (``recording_only_proof``) and never scores a candidate from it.
     """
     if enabled():
         _emit(

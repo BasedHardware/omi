@@ -1,10 +1,16 @@
 """Aggregate a read-only export of SCA-4489 Finish-to-Home observations.
 
 A Finish is scored from its cut to the first committed write that left its window Home-eligible with a
-summary (``eligible``). A Finish that found its window already on Home (``already_visible``) changes nothing and answers with that
-card: when the event proves the card shows a summary it is ready at its cut and scores 0 s on the
-``already_visible`` route; otherwise it is reported in ``already_visible_unproven`` and not scored. A Home response that carried the summary (``summary``) only validates that the
-reader actually showed it; when the app fetches Home does not change the score.
+summary (``eligible``). A Finish that found its window already on Home (``already_visible``) changes nothing
+and answers with that card: when the event proves the card shows a summary it is ready at its cut and scores
+0 s on the ``already_visible`` route. Otherwise it stays in the cohort on the ``already_visible_unproven``
+route: a later eligibility of its card (or a linked card) scores it, and without one it is a miss. It is also
+counted in ``already_visible_unproven``. A Home response that carried the summary (``summary``) only validates
+that the reader actually showed it; when the app fetches Home does not change the score.
+
+A headerless (legacy) candidate is scored only when a proof names its own request. A proof that names only the
+recording cannot say which request was the Finish, so those candidates are reported in
+``legacy_excluded.recording_only_proof`` and never scored.
 """
 
 import argparse
@@ -19,9 +25,6 @@ MARKER = 'event=v3_finish_home_sli '
 KEY = re.compile(r'[0-9a-f]{32}')
 SOURCES = {'app', 'pendant', 'unknown'}
 DEADLINE = timedelta(seconds=60)
-# A recording-level legacy proof follows its candidate (the finalization commit comes after the request). Only
-# log-timestamp jitter can invert them; this bounds that allowance. Request-tied proofs need no timing.
-LEGACY_PROOF_TOLERANCE = timedelta(seconds=5)
 
 
 def timestamp(value):
@@ -90,7 +93,7 @@ def readback(events, start, through):
         raise ValueError('the last Finish in the cohort needs a full 60 seconds')
     censor_seconds = (through - end).total_seconds()
     cuts, bindings = {}, {}
-    legacy_candidates, legacy_proofs, request_proofs = defaultdict(list), defaultdict(list), set()
+    legacy_candidates, legacy_proofs, request_proofs = defaultdict(list), set(), set()
     eligible, fetched = defaultdict(list), defaultdict(list)
     routes, windows = defaultdict(list), defaultdict(list)
     visible = {}
@@ -125,7 +128,7 @@ def readback(events, start, through):
             if event.get('request'):
                 request_proofs.add((event['recording'], event['request']))
             else:
-                legacy_proofs[event['recording']].append(observed_at)
+                legacy_proofs.add(event['recording'])
         elif stage == 'window':
             windows[event['recording']].append((observed_at, event['card']))
         elif stage == 'eligible':
@@ -141,14 +144,14 @@ def readback(events, start, through):
                 visible[finish] = candidate
 
     # An older client has no local cut token, and every headerless request on a recording logs a candidate
-    # under the same recording key. A candidate is scored only where a deliberate Finish is established:
-    # its own request id carries a proof (the request proved itself), or a recording-level proof follows the
-    # recording's only candidate. Retries of a proven Finish keep the earliest proven cut. Every other
-    # candidate is excluded and only reported; timing never picks between candidates.
-    legacy_excluded = {'no_proof': 0, 'not_the_proven_request': 0, 'ambiguous': 0, 'retry': 0}
+    # under the same recording key. A candidate is scored only where its own request id carries a proof (the
+    # request proved itself). A recording-level proof, even after the recording's only candidate, may come
+    # from a Finish that logged no candidate of its own, so it never scores one. Retries of a proven Finish
+    # keep the earliest proven cut. Every other candidate is excluded and only reported.
+    legacy_excluded = {'no_proof': 0, 'not_the_proven_request': 0, 'recording_only_proof': 0, 'retry': 0}
     for recording, candidates in legacy_candidates.items():
         candidates.sort(key=lambda candidate: candidate[:2])
-        scored, reasons = _attribute(candidates, recording, request_proofs, legacy_proofs[recording])
+        scored, reasons = _attribute(candidates, recording, request_proofs, recording in legacy_proofs)
         for candidate, reason in zip(candidates, reasons):
             observed_at, cut, source, basis, finish, _ = candidate
             if candidate is not scored:
@@ -176,20 +179,23 @@ def readback(events, start, through):
         if not start <= cut < end:
             continue
         already = visible.get(finish)
-        if already is not None and not already[2]:
-            # Found on Home, but the event does not prove a summary is showing: not a 0 s success, and no
-            # eligibility write follows (the Finish changed nothing), so it is reported, not scored.
+        proven_visible = already is not None and already[2]
+        if already is not None and not proven_visible:
+            # Found on Home, but the event does not prove a summary is showing: not a 0 s success. It stays in
+            # the denominator; only a later eligibility scores it, and none within 60 s is a miss.
             already_visible_unproven += 1
-            continue
         timing_basis[basis if basis in {'client_cut', 'server_cut'} else 'unknown'] += 1
         recording = bindings[finish][1] if finish in bindings else None
-        linked = windows.get(recording, ())
+        linked = list(windows.get(recording, ()))
         # The score is the first eligibility of any linked card; it never reads fetch timing. A Finish that
         # found its card already on Home showing a summary is ready at the cut: that card is its winner.
-        if already is not None:
+        if proven_visible:
             linked = [(cut, already[1])]
             winner = (cut, already[1])
         else:
+            if already is not None:
+                # The card it answered with is linked from the cut: its own later eligibility can score it.
+                linked.append((cut, already[1]))
             winner = _first(eligible, linked, cut)
         first_ready = winner[0] if winner else None
         if winner is None:
@@ -207,8 +213,10 @@ def readback(events, start, through):
                 # A projection mismatch: Home returned a sibling card but suppressed the eligible one.
                 validation['other_linked_card_fetched'] += _first(fetched, linked, ready_at) is not None
         route_signals = {route for t, route in routes.get(recording, ()) if cut <= t <= (first_ready or through)}
-        if already is not None:
+        if proven_visible:
             route = 'already_visible'
+        elif already is not None:
+            route = 'already_visible_unproven'
         elif 'held' in route_signals:
             route = 'held'
         elif 'fast' in route_signals:
@@ -234,7 +242,8 @@ def readback(events, start, through):
         ],
         # Headerless candidates that are not a proven Finish: reported, never scored as cuts or misses.
         'legacy_excluded': legacy_excluded,
-        # Finishes that found their card on Home without proof that it shows a summary: reported, not scored.
+        # Finishes that found their card on Home without proof that it shows a summary. Diagnostic only: they
+        # are in the totals, scored by a later eligibility or counted as misses.
         'already_visible_unproven': already_visible_unproven,
         # Validation, not the score: did a Home response carry each eligible summary to the reader?
         'home_fetch_validation': {
@@ -244,8 +253,12 @@ def readback(events, start, through):
     }
 
 
-def _attribute(candidates, recording, request_proofs, recording_proofs):
-    """``(scored candidate or None, exclusion reason per candidate)`` for one recording's legacy candidates."""
+def _attribute(candidates, recording, request_proofs, recording_proof):
+    """``(scored candidate or None, exclusion reason per candidate)`` for one recording's legacy candidates.
+
+    Only a proof that names a candidate's request scores it. ``recording_proof``: a proof that names only this
+    recording exists; its candidates are reported apart (``recording_only_proof``), never scored.
+    """
     tied = [candidate for candidate in candidates if (recording, candidate[5]) in request_proofs]
     if tied:
         # The proof names its request. Later proven requests on the recording are retries of that Finish and
@@ -254,11 +267,10 @@ def _attribute(candidates, recording, request_proofs, recording_proofs):
         proven = {id(candidate) for candidate in tied}
         reasons = ['retry' if id(candidate) in proven else 'not_the_proven_request' for candidate in candidates]
         return scored, reasons
-    if len(candidates) == 1 and any(proof >= candidates[0][0] - LEGACY_PROOF_TOLERANCE for proof in recording_proofs):
-        return candidates[0], [None]
-    if len(candidates) > 1 and recording_proofs:
-        # A recording-level proof cannot say which of several requests was the Finish.
-        return None, ['ambiguous'] * len(candidates)
+    if recording_proof:
+        # A recording-level proof cannot say which request was the Finish, even when only one logged a
+        # candidate: the Finish that committed the marker may have logged none.
+        return None, ['recording_only_proof'] * len(candidates)
     return None, ['no_proof'] * len(candidates)
 
 

@@ -13,17 +13,27 @@ committed server-side manual-end marker proves the deliberate Finish. Those
 legacy samples use `unknown` source and the server receipt time (`server_cut`),
 which is a lower bound on elapsed time. Every untagged request on a recording
 logs a candidate for it with a random per-request id, so timing never decides
-which request a proof belongs to. A candidate is scored only where a deliberate
-Finish is established: the live-window Finish proves its own request (its
-`legacy_manual_end` carries that candidate's request id), or a recording-level
-proof (a committed manual-end marker, which names no request) follows the
-recording's only candidate. Later proven requests on the same recording are
+which request a proof belongs to. A candidate is scored only when a proof names
+its own request: the live-window Finish proves its request (its
+`legacy_manual_end` carries that candidate's request id). A recording-level
+proof (a committed manual-end marker, which names no request) never scores a
+candidate, even the recording's only one: the deliberate Finish that committed
+the marker may have logged no candidate, and the only candidate may be an
+unrelated headerless request. Later proven requests on the same recording are
 retries and keep the earliest proven cut, so a retry never moves the cut
-forward. Other requests on a recording with a request-tied proof, every
-candidate on a recording whose recording-level proof cannot say which of
-several requests was the Finish, and candidates with no proof are excluded and
-counted in `legacy_excluded` (`not_the_proven_request`, `ambiguous`, `retry`,
-`no_proof`); they are neither cuts nor misses.
+forward. Other requests on a recording with a request-tied proof
+(`not_the_proven_request`), candidates on a recording with only a
+recording-level proof (`recording_only_proof`), retries (`retry`) and
+candidates with no proof (`no_proof`) are excluded and counted in
+`legacy_excluded`; they are neither cuts nor misses.
+
+Cohort limit: the headerless conversation Finish (in-progress conversation
+finalization) and batch Finish (server batch completion, batch-pipeline manual
+end) emit only recording-level proofs, from asynchronous finalization after the
+request returned. Carrying the request id there would mean persisting it on the
+finalization job and manual-end marker, so those legacy Finishes are not scored;
+`recording_only_proof` sizes them. Headered Finishes on every path are scored
+through their operation token.
 
 The scored readiness signal is `eligible`: the first committed server write
 that leaves the Finish window Home-eligible with a summary. The v3 notes
@@ -54,9 +64,13 @@ it answered with. The Finish path calls a window already visible when it is
 completed and not hidden, which does not prove notes, so the event also records
 whether that card is completed, carries an overview or rendered note section,
 and has none of Home's hiding flags (`summary`). Only then is it scored as
-ready at its cut (0 s) on the `already_visible` route; otherwise it is counted
-in `already_visible_unproven` and not scored. An unbound Finish, a client-only
-cut, and a cut whose card never became eligible remain unmatched (a miss).
+ready at its cut (0 s) on the `already_visible` route. Otherwise it stays in
+the denominator on the `already_visible_unproven` route: a later eligibility of
+the card it answered with (or another linked card) scores it, and without one
+within 60 s it is a miss. `already_visible_unproven` counts these Finishes as a
+diagnostic; it never removes them from the totals or the p95. An unbound
+Finish, a client-only cut, and a cut whose card never became eligible remain
+unmatched (a miss).
 
 Server-side route and window observations are collected only for the Home
 cohort that admits cuts (`conversations_v3_enabled` and not held out), read off
@@ -65,7 +79,8 @@ card with that Finish recording, not again on later reconcile passes; `held` is
 emitted once per held recording on each instance (the readback reads route
 signals as a set, so a repeat from another instance changes nothing).
 
-Route is `already_visible` for a Finish that found its card on Home, else
+Route is `already_visible` for a Finish that found its card on Home showing a
+summary, `already_visible_unproven` when that card did not prove one, else
 `held` when a predecessor holds the cut, `fast` after a successful
 fast transcript write, `batch` when ordinary batch admitted it and there is no
 earlier qualifying fast or hold observation, or `unknown`. Events carry
