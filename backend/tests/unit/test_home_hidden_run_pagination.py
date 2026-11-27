@@ -8,6 +8,7 @@ offset and stop below the page size) page past a hidden run.
 """
 
 from datetime import datetime, timedelta, timezone
+import json
 
 import pytest
 from fastapi import Request, Response
@@ -15,6 +16,7 @@ from fastapi import Request, Response
 from database import conversations as db
 from database import home_visibility_index
 from tests.unit.test_fsr_wq4_cursor import CountingQuery, budget, rows
+from utils.home_feed import list_transcript
 
 PAGE = 50  # app/lib/providers/conversation_provider.dart _conversationPageSize
 
@@ -191,7 +193,10 @@ def call_route(routes, **kwargs):
         cursor=None,
     )
     params.update(kwargs)
-    return routes.get_conversations(**params), response
+    result = routes.get_conversations(**params)
+    if isinstance(result, Response):
+        return json.loads(result.body), result
+    return result, response
 
 
 def test_route_sets_storage_advance_and_has_more_headers(monkeypatch, routes):
@@ -346,13 +351,21 @@ def test_run_the_scout_cannot_explain_keeps_full_document_refills(monkeypatch):
     assert counts['reads'] == info['storage_rows'] == 200
 
 
-def home_request(mode):
-    return Request({'type': 'http', 'query_string': b'', 'headers': [(b'x-omi-home-page-mode', mode.encode())]})
+def home_request(mode, *, compact=False):
+    headers = [(b'x-omi-home-page-mode', mode.encode())]
+    if compact:
+        headers.append((b'x-omi-home-list-transcript', b'1'))
+    return Request({'type': 'http', 'query_string': b'', 'headers': headers})
 
 
-def test_indexed_home_reads_fifty_candidates_across_equal_timestamp_pages(monkeypatch, routes):
+@pytest.mark.parametrize('compact', [False, True])
+def test_indexed_home_reads_fifty_candidates_across_equal_timestamp_pages(monkeypatch, routes, compact):
     monkeypatch.setattr(routes, 'conversations_v3_enabled', lambda uid: True)
     monkeypatch.setenv('OMI_HOME_VISIBILITY_INDEX_OWNERS', 'u')
+    monkeypatch.setenv('OMI_INDEXED_LIST_READS_ENABLED', 'true')
+    segments = [{'text': 'Owner spoke.', 'is_user': True, 'start': 0, 'end': 4}]
+    evidence = list_transcript.stamp('u', segments, preview_needed=False)
+    assert evidence is not None
     hidden = 1200
     data, _ = owner(before=10, hidden=hidden)
     # The last document on page one and the first on page two share a sort key.
@@ -361,6 +374,16 @@ def test_indexed_home_reads_fifty_candidates_across_equal_timestamp_pages(monkey
         if row.get('home_hidden') and i % 2:
             row.pop('home_hidden')
             row['recording'] = True
+        row.update(
+            visibility='private',
+            user_title='A conversation',
+            structured={'title': 'A conversation'},
+            recorded_start=row['created_at'],
+            recorded_end=row['created_at'] + timedelta(seconds=4),
+            finished_at=row['created_at'] + timedelta(seconds=4),
+            home_source_version='revision',
+            **{list_transcript.FIELD: evidence, list_transcript.SOURCE_VERSION: 'revision'},
+        )
         home_visibility_index.stamp(row)
     visible = [
         row['id']
@@ -370,20 +393,29 @@ def test_indexed_home_reads_fifty_candidates_across_equal_timestamp_pages(monkey
 
     query = CountingQuery(data)
     monkeypatch.setattr(db, 'db', query)
-    first, response = call_route(routes, request=home_request('auto'))
+    first, response = call_route(routes, request=home_request('auto', compact=compact))
     assert [row['id'] for row in first] == visible[:PAGE]
     assert response.headers['X-Omi-Home-Page-Mode'] == 'indexed'
     assert query.counts['reads'] == PAGE
 
     second, response = call_route(
-        routes, request=home_request('indexed'), cursor=response.headers['X-Omi-Next-Cursor'], offset=PAGE
+        routes,
+        request=home_request('indexed', compact=compact),
+        cursor=response.headers['X-Omi-Next-Cursor'],
+        offset=PAGE,
     )
     assert [row['id'] for row in second] == visible[PAGE : 2 * PAGE]
     assert response.headers['X-Omi-Home-Page-Mode'] == 'indexed'
     assert query.counts['reads'] == 2 * PAGE
+    for row in first + second:
+        if compact:
+            assert 'transcript_segments' not in row
+            assert row['home_list_transcript_evidence']['has_owner_speech'] is True
+        else:
+            assert 'home_list_transcript_evidence' not in row
 
     # Offset-only clients that opted in use offsets from the same candidate set.
-    second, response = call_route(routes, request=home_request('indexed'), offset=PAGE)
+    second, response = call_route(routes, request=home_request('indexed', compact=compact), offset=PAGE)
     assert [row['id'] for row in second] == visible[PAGE : 2 * PAGE]
 
 

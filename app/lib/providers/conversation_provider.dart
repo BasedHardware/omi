@@ -1533,6 +1533,7 @@ class ConversationProvider extends ChangeNotifier {
       var storageCount = 0;
       var page = const ConversationPageHeaders();
       final fetched = await getConversationsResult(
+        acceptHomeListTranscriptEvidence: true,
         heldHomeEpisodes: _homeEpisodeAcknowledgements,
         onStorageCount: (count) => storageCount = count,
         onPageHeaders: (headers) => page = headers,

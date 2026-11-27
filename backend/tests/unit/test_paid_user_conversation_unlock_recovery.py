@@ -221,17 +221,20 @@ def _http_client():
     return TestClient(app)
 
 
-def test_android_list_refresh_then_detail_and_restart_keep_paid_content_readable(monkeypatch):
+@pytest.mark.parametrize('capable', [False, True])
+def test_android_list_refresh_then_detail_and_restart_keep_paid_content_readable(monkeypatch, capable):
+    monkeypatch.setenv('OMI_INDEXED_LIST_READS_ENABLED', 'true')
+    headers = {'X-Omi-Home-List-Transcript': '1'} if capable else {}
     rows, updated, _ = _setup_mock_db(monkeypatch, allowance_reason='plan_unlimited')
     before = deepcopy(rows)
 
     def list_rows(*args, **kwargs):
-        assert kwargs['list_fields_only'] is True
+        assert kwargs['list_fields_only'] is capable
         return deepcopy(list(rows.values()))
 
     monkeypatch.setattr(conversations_db, 'get_conversations_without_photos', list_rows)
     with _http_client() as client:
-        listed = client.get('/v1/conversations')
+        listed = client.get('/v1/conversations', headers=headers)
         assert listed.status_code == 200, listed.text
         assert all(not row['is_locked'] for row in listed.json())
         detail = client.get(f'/v1/conversations/{CONV_LOCKED_1}')
@@ -239,7 +242,7 @@ def test_android_list_refresh_then_detail_and_restart_keep_paid_content_readable
         assert detail.json()['transcript_segments'][0]['text'] == 'Preserved speech'
     # A new HTTP/client lifetime reads the durable patch, not an in-memory unlock.
     with _http_client() as client:
-        assert client.get('/v1/conversations').json() == listed.json()
+        assert client.get('/v1/conversations', headers=headers).json() == listed.json()
     assert len(updated) == 2
     for cid, row in rows.items():
         assert row == {**before[cid], 'is_locked': False}

@@ -99,26 +99,57 @@ existing bare-array/object bodies stay unchanged; partial results carry
 `X-Omi-List-Truncated: true`. ID consumers must not treat a marked partial census
 as proof of deletion. Unbudgeted export/deletion callers retain complete scans.
 
-With the switch on, only the main conversation list requests a field projection
-containing all Conversation response fields except transcript blobs/encoding,
-plus the server metadata needed for visibility and user-title overrides. This
-uses the existing list contract allowing unloaded transcript detail. It avoids
-transcript decompression and correction-overlay point reads entirely. Detail,
-export, MCP, and developer conversation reads keep their existing reader mode.
-A malformed transcript cannot cause list response validation to fail in this mode;
-other malformed response fields remain outside that guarantee.
+## Mobile Home conversation compatibility
+
+The existing `/v1/home/feed` card uses a bounded preview from the notes gist or
+overview. The conversation list's discarded and deferred previews show the
+spoken words. The Home list uses the same encrypted display codec for a separate
+revision-bound receipt with owner speech, speech span, and a preview prefix
+when needed. The list formatter continues to apply the existing 160-character
+preview rule. Home requires explicit negative owner-speech evidence before moving
+a background row to Daily Recap. Missing segments or evidence leave it visible.
+
+With the switch on, only a Home request carrying
+`X-Omi-Home-List-Transcript: 1` can use the Firestore projection. A compact row
+omits `transcript_segments` and includes `home_list_transcript_evidence`.
+Missing or stale receipts, older rows, corrected text, and sources whose
+presentation or retention requires the transcript use the full reader.
+A mixed page hydrates its legacy rows by document ID and requires the same
+Firestore revision before returning them. A revision mismatch or a page with
+no compatible rows uses the existing full page query. Storage advances and
+opaque cursor scope remain based on the existing list scan, including the
+full-page fallback. Detail fetches still hydrate the full transcript. Receipt
+construction is limited to inline private transcripts, and locked rows keep
+the existing redaction.
+
+Published builds without this capability send the legacy wire:
+
+| Platform | Evidence | List contract |
+| --- | --- | --- |
+| iOS | U.S. App Store lookup reported 1.0.597 on 2026-11-24. The tagged 1.0.577/1520 source at `e2924da5a762` uses transcript segments for both owner speech and previews. | Full |
+| Android | The Nov 23 Release investigation records 1.0.573 production with 1.0.595 staged at 1% in its observation window. The 1.0.573/1502 and /1504 tags at `a98115af12f5` and the 1.0.577/1516 tag at `54584f3d7e2e` use transcript segments for both. | Full |
+| Candidate iOS and Android builds | Build from source containing the Home capability and verify its exact version, build ID and serving revision in Release. | Eligible for a canary after verification |
+| Other callers and unknown builds | No recognized capability. The [support policy](../../../contracts/client-compat/support-policy.json) has no enforced minimum build. | Full |
+
+The public [App Store listing](https://apps.apple.com/us/app/omi-smart-meeting-notes/id6502156163)
+does not identify the binary build. The public [Google Play listing](https://play.google.com/store/apps/details?id=com.friend.ios)
+does not identify the production or staged build codes. Use App Store Connect
+and Play Console receipts before graduating the rollout.
 
 ## Coordinator rollout
 
 1. Apply the generated index manifest through the repository's schema workflow;
    require both new composites READY before enabling the switch.
-2. Ship the backend with the switch unset. Then enable the switch through the
-   normal coordinated config rollout; no client upgrade or data backfill is needed.
+2. Ship the backend with the switch unset. Verify the flag-off full response and
+   use only a confirmed capability build for the 5% serving canary.
 3. Compare list latency, 504/500 counts, truncation rate, and documents read for
-   first pages, legacy offsets, and cursor pages on large accounts. Verify the
-   deployed release SHA and a user-facing canary separately from these local tests.
-4. Roll back the optimization by unsetting the switch. Leave additive indexes
-   in place; index deletion is neither necessary nor part of this change.
+   first pages, legacy offsets, and cursor pages on large accounts. Use
+   `compact_rows` on the existing list meter to verify that the canary exercised
+   projected reads. Record the deployed SHA and check legacy, owner-spoken,
+   discarded, deferred and older rows on the serving revision.
+4. Keep the global 100% gate and legacy-path retirement tied to supported-client
+   coverage. Turning on the backend switch does not upgrade installed callers.
+   Roll back by unsetting the switch.
 
 This implementation provides hermetic query/route evidence, not production
 latency or deployment acceptance. No production reads, writes, index creation,

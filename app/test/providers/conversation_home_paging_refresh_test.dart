@@ -90,6 +90,7 @@ void main() {
         final cursor = uri.queryParameters['cursor'];
         final offset = uri.queryParameters['offset'];
         final mode = request.headers[ConversationPageHeaders.homeModeHeader];
+        expect(request.headers['X-Omi-Home-List-Transcript'], '1');
         requests.add((mode, cursor, offset));
         if (!rolledBack && cursor == null) return page(rows(0, 50), cursor: 'i1', mode: 'indexed');
         if (!rolledBack) return page(rows(50, 100), cursor: 'i2', mode: 'indexed');

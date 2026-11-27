@@ -87,6 +87,7 @@ from utils.conversations import transcribing_hold
 from database.mcp_read_queries import MCP_CONVERSATION_CARD_FIELD_PATHS, MCP_CONVERSATION_TRANSCRIPT_FIELD_PATHS
 from database.quiet_check_retirement import restore_quiet_check_in_transaction, stop_quiet_check_for_conversation
 from database import transcript_pointer
+from utils.home_feed import list_transcript
 from utils.home_feed.projection import DISPLAY_FIELDS, stamp as stamp_home_display
 from database.transcript_pointer import (
     TranscriptSegmentsDecodeError,
@@ -384,10 +385,14 @@ def _prepare_conversation_for_write(
     conversation_id: Optional[str] = None,
     conversation_state: Optional[Mapping[str, Any]] = None,
     allow_offload: bool = True,
+    home_list_context: Optional[Mapping[str, Any]] = None,
 ) -> Dict[str, Any]:
     data = copy.deepcopy(data)
     data.pop(home_visibility_index.FIELD, None)
     data.pop('transcription_admission', None)  # Current authenticated read evidence, never persisted.
+    data.pop(list_transcript.FIELD, None)
+    data.pop(list_transcript.SOURCE_VERSION, None)
+    data.pop('home_list_transcript_evidence', None)
 
     # Partial writes cannot certify an entire legacy row. Explicit prepare
     # reconciles them; full creates/processing results get compact content now.
@@ -434,6 +439,18 @@ def _prepare_conversation_for_write(
             data['transcript_segments'] = canonicalize_transcript_segments_for_storage(data['transcript_segments'])
         from utils.conversations.speaker_grouping_storage import protect_segments
 
+        # Private rows are inline. Avoid duplicating content that can be
+        # independently removed or crypto-shredded in the transcript lake.
+        home_row = data if home_list_context is None else home_list_context
+        compact = (
+            list_transcript.stamp(
+                uid, data['transcript_segments'], preview_needed=list_transcript.shows_preview(home_row)
+            )
+            if home_row.get('visibility') == 'private'
+            and home_row.get('status') == 'completed'
+            and not home_row.get('is_locked')
+            else None
+        )
         data['transcript_segments'] = transcript_pointer.offload_or_inline(
             uid,
             conversation_id or data.get('id'),
@@ -444,6 +461,8 @@ def _prepare_conversation_for_write(
             current_state=conversation_state if allow_offload else None,
         )
         data['transcript_segments_compressed'] = True
+        if compact is not None and not isinstance(data['transcript_segments'], dict):
+            data[list_transcript.FIELD] = compact
     if match_scores.FIELD in data:
         try:
             encoded, trimmed = match_scores.encode_bounded(
@@ -723,7 +742,7 @@ def prepare_conversation_for_read(
     data.pop('transcription_admission', None)  # Only the current job lookup can supply this wire field.
     # Separate encrypted card data must not leak into hydrated detail or be
     # replayed as stale projection metadata by a logical-state writer.
-    for field in DISPLAY_FIELDS:
+    for field in (*DISPLAY_FIELDS, list_transcript.FIELD, list_transcript.SOURCE_VERSION):
         data.pop(field, None)
     if isinstance(data.get('transcript_segments'), dict):
         try:
@@ -757,10 +776,18 @@ def prepare_conversation_for_read(
         if 'transcript_segments' in data and isinstance(data['transcript_segments'], bytes):
             try:
                 decompressed_json = zlib.decompress(data['transcript_segments']).decode('utf-8')
-                data['transcript_segments'] = json.loads(decompressed_json)
-            except (json.JSONDecodeError, TypeError, zlib.error) as e:
-                logger.error(e)
-                pass
+                segments = json.loads(decompressed_json)
+                if not isinstance(segments, list) or any(not isinstance(segment, dict) for segment in segments):
+                    raise ValueError('Compressed transcript did not decode to segment objects')
+                data['transcript_segments'] = segments
+            except (TypeError, ValueError, zlib.error):
+                if current_portability_read() is not None:
+                    raise
+                logger.warning('Invalid compressed conversation transcript')
+                # An unreadable transcript is unknown. In particular, the
+                # correction overlay must never receive encoded bytes.
+                data.pop('transcript_segments', None)
+                data.pop('transcript_segments_compressed', None)
 
     if isinstance(segments := data.get('transcript_segments'), list):
         from utils.conversations.speaker_grouping_storage import reveal_segments
@@ -891,6 +918,10 @@ def _reapply_current_manual_assignments(uid: str, write_data: dict, existing: di
         write_data['data_protection_level'] = level
     if 'transcript_segments' not in write_data:
         return
+    # Any replacement must either certify the final segments or clear the
+    # previous receipt. The commit hook binds only receipts in this write.
+    write_data.pop(list_transcript.FIELD, None)
+    write_data.pop(list_transcript.SOURCE_VERSION, None)
     if existing.get('has_transcript_corrections'):
         # A reprocessor owns generated output, not captured speech or its legacy
         # anchors. Keep the exact committed blob and encoding across snapshots.
@@ -929,7 +960,14 @@ def _reapply_current_manual_assignments(uid: str, write_data: dict, existing: di
         payload[owner_diagnostics.FIELD] = write_data.pop(owner_diagnostics.FIELD)
         _merge_owner_diagnostics(payload, existing)
     write_data.update(
-        _prepare_conversation_for_write(payload, uid, level, conversation_id=write_data.get('id'), allow_offload=False)
+        _prepare_conversation_for_write(
+            payload,
+            uid,
+            level,
+            conversation_id=write_data.get('id'),
+            allow_offload=False,
+            home_list_context=write_data,
+        )
     )
     write_data['data_protection_level'] = level
 
@@ -1082,11 +1120,12 @@ class _PageFill:
     would charge every full page one more read to save that rare request.
     """
 
-    def __init__(self, conversations_ref, *, limit, budget, visible, scout=None):
+    def __init__(self, conversations_ref, *, limit, budget, visible, scout=None, include_snapshot_id=False):
         self.conversations_ref = conversations_ref
         self.limit = limit
         self.budget = budget
         self.visible = visible
+        self.include_snapshot_id = include_snapshot_id
         # Lean refills (see :class:`_Scout`); None keeps full-document refills.
         self.scout = scout if scout is not None and hasattr(conversations_ref, 'select') else None
         # Hidden rows of the first, full window that the scout's flags alone would have caught.
@@ -1116,7 +1155,7 @@ class _PageFill:
                 fetched += 1
                 self.consumed += 1
                 self.last_doc = doc
-                conversation = document_data_with_revision(doc)
+                conversation = _list_document_data(doc, self.include_snapshot_id)
                 if conversation is None or not self.visible(conversation):
                     self.skipped += 1
                     if self.scout is not None and conversation is not None and self.scout.hidden(conversation):
@@ -1215,11 +1254,18 @@ class _PageFill:
         self.hydrated += len(pending)
         for doc in pending:
             snapshot = snapshots.get(doc.id)
-            conversation = document_data_with_revision(snapshot) if snapshot is not None else None
+            conversation = _list_document_data(snapshot, self.include_snapshot_id) if snapshot is not None else None
             if conversation is None or not self.visible(conversation):
                 self.skipped += 1
                 continue
             self.rows.append(conversation)
+
+
+def _list_document_data(snapshot, include_snapshot_id):
+    data = document_data_with_revision(snapshot)
+    if data is not None and include_snapshot_id:
+        data['_home_list_snapshot_id'] = snapshot.id
+    return data
 
 
 def _visibility(**options):
@@ -1269,6 +1315,7 @@ def _collect_cursor_conversation_page(
     show_held=False,
     report=None,
     scout=None,
+    include_snapshot_id=False,
 ):
     """Bound the scan by page size plus the hidden-row allowance.
 
@@ -1287,6 +1334,7 @@ def _collect_cursor_conversation_page(
             show_held=show_held,
         ),
         scout=scout,
+        include_snapshot_id=include_snapshot_id,
     ).run(conversations_ref.start_after(bookmark).limit(limit), limit)
     if report is not None:
         report.update(storage_rows=fill.consumed, has_more=fill.has_more, hidden_rows=fill.skipped)
@@ -1401,6 +1449,7 @@ def _collect_visible_conversation_page(
                 show_held=show_held,
                 bookmark=BookmarkDict({sort_field: stamp, '__name__': doc_id}),
                 scout=scout,
+                include_snapshot_id=hydrate_fields is not None,
             )
             return finish(rows, last_doc, **report)
 
@@ -1412,7 +1461,7 @@ def _collect_visible_conversation_page(
         try:
             for doc in budgeted_stream_iter(conversations_ref, budget):
                 last_doc = doc
-                conversation = document_data_with_revision(doc)
+                conversation = _list_document_data(doc, hydrate_fields is not None)
                 if conversation is None or not visible(conversation):
                     continue
                 if skipped_visible < offset:
@@ -1435,9 +1484,14 @@ def _collect_visible_conversation_page(
             # Nothing was read, so there is no position to resume from; a retry
             # would pay the same charge and stop here again.
             return finish([], None, storage_rows=0, has_more=False)
-    fill = _PageFill(conversations_ref, limit=limit, budget=budget, visible=visible, scout=scout).run(
-        conversations_ref.limit(limit).offset(offset), limit
-    )
+    fill = _PageFill(
+        conversations_ref,
+        limit=limit,
+        budget=budget,
+        visible=visible,
+        scout=scout,
+        include_snapshot_id=hydrate_fields is not None,
+    ).run(conversations_ref.limit(limit).offset(offset), limit)
     return finish(
         fill.rows, fill.last_doc, storage_rows=fill.consumed, has_more=fill.has_more, hidden_rows=fill.skipped
     )
@@ -2549,7 +2603,8 @@ def get_conversations_without_photos(
     that exhausts the allowance returns an empty, explicitly truncated page
     instead of pretending to be complete.
     """
-    conversations_ref = db.collection('users').document(uid).collection(conversations_collection)
+    collection = db.collection('users').document(uid).collection(conversations_collection)
+    conversations_ref = collection
     hydrate_fields: Optional[List[str]] = None
     if list_fields_only and indexed_list_reads_enabled():
         # The archive list contract permits omitted transcript detail. Exclude
@@ -2561,6 +2616,12 @@ def get_conversations_without_photos(
         fields = set(Conversation.model_fields) - {'transcript_segments', 'transcript_segments_compressed'}
         fields.update(
             {
+                list_transcript.FIELD,
+                list_transcript.SOURCE_VERSION,
+                'home_source_version',
+                'has_transcript_corrections',
+                'manual_speaker_assignments',
+                'manual_speaker_assignments_compressed',
                 'data_protection_level',
                 'user_title',
                 'user_corrections_compressed',
@@ -2584,7 +2645,6 @@ def get_conversations_without_photos(
                 *transcribing_hold.READ_FIELDS,
             }
         )
-        conversations_ref = conversations_ref.select(sorted(fields))
         hydrate_fields = sorted(fields)
     if not include_discarded:
         conversations_ref = conversations_ref.where(filter=FieldFilter('discarded', '==', False))
@@ -2621,33 +2681,85 @@ def get_conversations_without_photos(
     # Sort
     conversations_ref = conversations_ref.order_by('created_at', direction=firestore.Query.DESCENDING)
 
-    rows = _collect_visible_conversation_page(
-        conversations_ref,
-        limit=limit,
-        offset=offset,
-        include_discarded=include_discarded,
-        presentation=presentation,
-        include_recordings=include_recordings,
-        hide_home=hide_home,
-        capture_only=capture_only,
-        show_held=show_held,
-        budget=budget,
-        uid=uid,
-        cursor=cursor,
-        cursor_page=cursor_page,
-        hydrate_fields=hydrate_fields,
-        indexed_home=indexed_home,
-        cursor_filters=dict(
-            statuses=statuses,
-            sources=sources,
-            start_date=start_date,
-            end_date=end_date,
-            categories=categories,
-            folder_id=folder_id,
-            starred=starred,
-        ),
-    )
+    def collect(query, fields):
+        return _collect_visible_conversation_page(
+            query,
+            limit=limit,
+            offset=offset,
+            include_discarded=include_discarded,
+            presentation=presentation,
+            include_recordings=include_recordings,
+            hide_home=hide_home,
+            capture_only=capture_only,
+            show_held=show_held,
+            budget=budget,
+            uid=uid,
+            cursor=cursor,
+            cursor_page=cursor_page,
+            hydrate_fields=fields,
+            indexed_home=indexed_home,
+            cursor_filters=dict(
+                statuses=statuses,
+                sources=sources,
+                start_date=start_date,
+                end_date=end_date,
+                categories=categories,
+                folder_id=folder_id,
+                starred=starred,
+            ),
+        )
 
+    if hydrate_fields is None:
+        return collect(conversations_ref, None)
+
+    def full_page_fallback(reason: str):
+        record_fallback(
+            component='firestore_read',
+            from_mode='projected',
+            to_mode='full',
+            reason=reason,
+            outcome='degraded',
+            log=logger,
+        )
+        return collect(conversations_ref, None)
+
+    rows = collect(conversations_ref.select(hydrate_fields), hydrate_fields)
+    compact = [None if is_completed_rule_discard(row) else list_transcript.evidence(uid, row) for row in rows]
+    missing = [row for row, value in zip(rows, compact) if value is None]
+    if missing:
+        # Older and unsupported rows use the legacy reader. For a mixed page,
+        # fetch only those documents and require the revision we paged over.
+        if len(missing) == len(rows):
+            return full_page_fallback('input_missing')
+        try:
+            snapshots = budgeted_get_all(
+                db, [collection.document(row['_home_list_snapshot_id']) for row in missing], budget
+            )
+        except ListReadBudgetExhausted as exc:
+            return full_page_fallback('timeout' if exc.reason == 'deadline' else 'capacity_full')
+        full_rows = {doc.id: document_data_with_revision(doc) for doc in snapshots}
+        visible = _visibility(
+            include_discarded=include_discarded,
+            presentation=presentation,
+            include_recordings=include_recordings,
+            hide_home=hide_home,
+            capture_only=capture_only,
+            show_held=show_held,
+        )
+        for row in missing:
+            full = full_rows.get(row['_home_list_snapshot_id'])
+            if not full or not row.get('updated_at'):
+                return full_page_fallback('input_missing')
+            if full.get('updated_at') != row['updated_at']:
+                return full_page_fallback('revision_changed')
+            if not visible(full):
+                return full_page_fallback('policy')
+            row.clear()
+            row.update(full)
+    for row, value in zip(rows, compact):
+        row.pop('_home_list_snapshot_id', None)
+        if value is not None:
+            row['home_list_transcript_evidence'] = value
     return rows
 
 

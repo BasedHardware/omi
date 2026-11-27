@@ -161,6 +161,8 @@ def test_an_external_change_between_batches_still_conflicts_and_names_the_field(
 
 
 def test_commit_stamped_fields_match_what_the_home_hook_adds():
+    from database.home_feed_fields import LIST_TRANSCRIPT, LIST_TRANSCRIPT_SOURCE_VERSION
+
     owner = 'projects/p/databases/(default)/documents/users/u'
     source = Write(
         update=Document(
@@ -169,6 +171,13 @@ def test_commit_stamped_fields_match_what_the_home_hook_adds():
         ),
         update_mask=DocumentMask(field_paths=['transcript_segments', 'status']),
     )
+    augmented = home_feed_writer.augment_home_writes([source])
+    # A transcript write without compact evidence has no binding to stamp.
+    assert set(augmented[0].update.fields) - set(source.update.fields) == (
+        COMMIT_STAMPED_FIELDS - {LIST_TRANSCRIPT_SOURCE_VERSION}
+    )
+    source.update.fields[LIST_TRANSCRIPT] = Value(string_value='encrypted-receipt')
+    source.update_mask.field_paths.append(LIST_TRANSCRIPT)
     augmented = home_feed_writer.augment_home_writes([source])
     assert set(augmented[0].update.fields) - set(source.update.fields) == COMMIT_STAMPED_FIELDS
     metadata = Write(

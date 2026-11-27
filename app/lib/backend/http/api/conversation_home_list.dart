@@ -3,6 +3,7 @@ part of 'conversations.dart';
 /// Typed Home list: the storage cursor and acknowledged fallback snapshots travel together.
 Future<ApiResult<List<ServerConversation>>> _listHomeConversations(
   ConversationApi api, {
+  required bool acceptHomeListTranscriptEvidence,
   required int limit,
   required int offset,
   required List<ConversationStatus> statuses,
@@ -43,6 +44,7 @@ Future<ApiResult<List<ServerConversation>>> _listHomeConversations(
       method: 'GET',
       headers: {
         'X-Omi-Home-Ownership': '1',
+        if (acceptHomeListTranscriptEvidence) _homeListTranscriptHeader: '1',
         if (pairs.isNotEmpty) 'X-Omi-Home-Episode-Ids': pairs.join(','),
         if (homeMode != null) ConversationPageHeaders.homeModeHeader: homeMode,
       },

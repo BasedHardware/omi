@@ -180,11 +180,14 @@ Future<List<ServerConversation>> getConversations({
   return result.items;
 }
 
+const _homeListTranscriptHeader = 'X-Omi-Home-List-Transcript';
+
 // Same as [getConversations] but reports whether the request actually
 // succeeded. An empty `items` with `ok == false` means the fetch failed
 // (no response / non-200, e.g. auth token not ready right after a cold
 // start) — which callers must NOT treat as "the user has no conversations".
 Future<({List<ServerConversation> items, bool ok, bool truncated})> getConversationsResult({
+  bool acceptHomeListTranscriptEvidence = false,
   Map<String, List<ServerConversation>> heldHomeEpisodes = const {},
   void Function(int)? onStorageCount,
   void Function(ConversationPageHeaders)? onPageHeaders,
@@ -226,6 +229,7 @@ Future<({List<ServerConversation> items, bool ok, bool truncated})> getConversat
       url: url,
       headers: {
         'X-Omi-Home-Ownership': '1',
+        if (acceptHomeListTranscriptEvidence) _homeListTranscriptHeader: '1',
         if (pairs.isNotEmpty) 'X-Omi-Home-Episode-Ids': pairs.join(','),
         if (homeMode != null) ConversationPageHeaders.homeModeHeader: homeMode,
       },
@@ -720,6 +724,7 @@ class ConversationApi {
   final ApiSend? _send;
 
   Future<ApiResult<List<ServerConversation>>> list({
+    bool acceptHomeListTranscriptEvidence = false,
     int limit = 50,
     int offset = 0,
     List<ConversationStatus> statuses = const [],
@@ -735,6 +740,7 @@ class ConversationApi {
     String? homeMode,
   }) =>
       _listHomeConversations(this,
+          acceptHomeListTranscriptEvidence: acceptHomeListTranscriptEvidence,
           limit: limit,
           offset: offset,
           cursor: cursor,

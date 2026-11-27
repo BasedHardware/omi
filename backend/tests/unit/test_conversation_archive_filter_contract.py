@@ -2,6 +2,7 @@
 
 import os
 import sys
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from types import ModuleType, SimpleNamespace
 from unittest.mock import MagicMock
@@ -40,11 +41,10 @@ class _FieldFilter:
 
 
 class _Snapshot:
-    update_time = None
-
-    def __init__(self, row):
-        self._row = row
+    def __init__(self, row, fields=None):
+        self._row = row if fields is None else {key: row[key] for key in fields if key in row}
         self.id = row['id']
+        self.update_time = row.get('updated_at')
 
     def to_dict(self):
         return dict(self._row)
@@ -125,7 +125,10 @@ class _Query:
         rows = self._matching_rows()
         if self._limit is not None:
             rows = rows[self._offset : self._offset + self._limit]
-        return [_Snapshot(row) for row in rows]
+        return [_Snapshot(row, self.selected_fields) for row in rows]
+
+    def document(self, doc_id):
+        return doc_id
 
     def count(self):
         self.events.append(("count",))
@@ -137,10 +140,15 @@ class _Firestore:
     def __init__(self, rows):
         self.rows = rows
         self.queries = []
+        self.bulk_reads = []
 
     def document(self, uid):
         assert uid == "user-1"
         return self
+
+    def get_all(self, refs):
+        self.bulk_reads.append(refs)
+        return [_Snapshot(row) for row in self.rows if row['id'] in refs]
 
     def collection(self, name):
         assert name in {"users", "conversations"}
@@ -423,7 +431,7 @@ def test_archive_filter_precedes_pagination_and_matches_count(conversations_db, 
         'record_audio_closed',
         'record_upload_sessions',
         'record_audio_partial',
-    } <= set(firestore.queries[-1].selected_fields)
+    } <= set(firestore.queries[-2].selected_fields)
 
 
 def test_sources_honor_legacy_include_discarded_default(conversations_db):
@@ -524,3 +532,139 @@ def test_hosted_mcp_list_uses_transcript_and_photo_free_projection(conversations
     assert "transcript_segments" in transcript_fields
     assert "photos" not in transcript_fields
     assert "structured.action_items" not in transcript_fields
+
+
+@pytest.mark.parametrize(
+    'failure,reason',
+    [
+        (None, None),
+        ('deadline', 'timeout'),
+        ('documents', 'capacity_full'),
+        ('missing', 'input_missing'),
+        ('revision', 'revision_changed'),
+        ('hidden', 'policy'),
+    ],
+)
+def test_home_list_evidence_only_replaces_transcripts_for_compatible_pages(
+    conversations_db, monkeypatch, failure, reason
+):
+    from utils.home_feed import list_transcript
+
+    module, _pages_module, firestore = conversations_db
+    model = ModuleType('models.conversation')
+    model.Conversation = SimpleNamespace(
+        model_fields={
+            key: None
+            for key in (
+                'id',
+                'created_at',
+                'started_at',
+                'finished_at',
+                'recorded_start',
+                'recorded_end',
+                'status',
+                'visibility',
+                'structured',
+                'discarded',
+                'processing_deferred',
+                'transcript_segments',
+            )
+        }
+    )
+    monkeypatch.setitem(sys.modules, 'models.conversation', model)
+    monkeypatch.setenv('ENCRYPTION_SECRET', 'synthetic_home_list_test_secret_at_least_32_bytes')
+    at = datetime(2026, 11, 22, tzinfo=timezone.utc)
+    segments = [{'text': '  Owner spoke here. ', 'start': 8, 'end': 16, 'is_user': True}]
+    base = {
+        'created_at': at,
+        'updated_at': at,
+        'started_at': at - timedelta(minutes=5),
+        'finished_at': at,
+        'recorded_start': at - timedelta(minutes=5),
+        'recorded_end': at,
+        'status': 'completed',
+        'visibility': 'private',
+        'structured': {'title': 'A title', 'overview': 'Notes', 'salience': 'background'},
+        'home_source_version': 'source-1',
+        list_transcript.SOURCE_VERSION: 'source-1',
+        'transcript_segments': segments,
+    }
+
+    def row(id, minutes, *, discarded=False, deferred=False, compact=True):
+        result = dict(base, id=id, created_at=at - timedelta(minutes=minutes), discarded=discarded)
+        if deferred:
+            result['processing_deferred'] = True
+        if compact:
+            result[list_transcript.FIELD] = list_transcript.stamp(
+                uid='user-1', segments=segments, preview_needed=discarded or deferred
+            )
+        return result
+
+    firestore.rows = [
+        row('owner', 0),
+        row('discarded', 1, discarded=True),
+        row('deferred', 2, deferred=True),
+        row('older', 3, compact=False),
+    ]
+    request = dict(uid='user-1', include_discarded=True, limit=2)
+
+    monkeypatch.setenv('OMI_INDEXED_LIST_READS_ENABLED', 'false')
+    off = module.get_conversations_without_photos(list_fields_only=True, **request)
+    assert all(r['transcript_segments'] == segments for r in off)
+    assert firestore.queries[-1].selected_fields is None
+
+    monkeypatch.setenv('OMI_INDEXED_LIST_READS_ENABLED', 'true')
+    legacy = module.get_conversations_without_photos(**request)
+    assert legacy == off
+    assert firestore.queries[-1].selected_fields is None
+
+    page = {}
+    slim = module.get_conversations_without_photos(list_fields_only=True, cursor_page=page, **request)
+    assert [r['id'] for r in slim] == ['owner', 'discarded']
+    assert page['storage_rows'] == 2 and page['has_more']
+    assert 'transcript_segments' not in firestore.queries[-1].selected_fields
+    assert all('transcript_segments' not in r for r in slim)
+    assert slim[0]['home_list_transcript_evidence'] == {'has_owner_speech': True, 'duration_seconds': 8}
+    assert slim[1]['home_list_transcript_evidence']['preview_prefix'] == 'Owner spoke here.'
+    assert not firestore.bulk_reads
+
+    fallback = MagicMock()
+    monkeypatch.setattr(module, 'record_fallback', fallback)
+
+    if failure is not None:
+
+        def hydrate(*args, **kwargs):
+            if failure in {'deadline', 'documents'}:
+                raise list_budget_real.ListReadBudgetExhausted(failure)
+            if failure == 'missing':
+                return []
+            older = dict(firestore.rows[-1])
+            if failure == 'revision':
+                older['updated_at'] = at + timedelta(seconds=1)
+            if failure == 'hidden':
+                older['deleted'] = True
+            return [_Snapshot(older)]
+
+        monkeypatch.setattr(module, 'budgeted_get_all', hydrate)
+
+    second = module.get_conversations_without_photos(list_fields_only=True, offset=2, cursor_page=page, **request)
+    assert [r['id'] for r in second] == ['deferred', 'older']
+    assert page['storage_rows'] == 2
+    if reason is not None:
+        assert all(r['transcript_segments'] == segments for r in second)
+        fallback.assert_called_once_with(
+            component='firestore_read',
+            from_mode='projected',
+            to_mode='full',
+            reason=reason,
+            outcome='degraded',
+            log=module.logger,
+        )
+        return
+    fallback.assert_not_called()
+    assert second[0]['home_list_transcript_evidence']['preview_prefix'] == 'Owner spoke here.'
+    assert 'transcript_segments' not in second[0]
+    assert 'home_list_transcript_evidence' not in second[1]
+    assert second[1]['transcript_segments'] == segments
+    assert firestore.bulk_reads == [['older']]
+    assert page['storage_rows'] == 2

@@ -851,6 +851,27 @@ class Conversation(BaseModel):
         return conversation_dict
 
 
+class ConversationListTranscriptEvidence(BaseModel):
+    has_owner_speech: bool
+    duration_seconds: int = Field(ge=0)
+    preview_prefix: Optional[str] = Field(default=None, max_length=161)
+
+
+class ConversationListRow(Conversation):
+    home_list_transcript_evidence: SkipJsonSchema[Optional[ConversationListTranscriptEvidence]] = None
+    omit_unloaded_transcript: SkipJsonSchema[bool] = Field(default=False, exclude=True)
+
+    @model_serializer(mode='wrap')
+    def _serialize_list_row(self, handler, info):
+        data = super()._serialize_match_scores(handler, info)
+        if self.home_list_transcript_evidence is None or self.is_locked:
+            data.pop('home_list_transcript_evidence', None)
+        if not self.is_locked and (self.home_list_transcript_evidence is not None or self.omit_unloaded_transcript):
+            data.pop('transcript_segments', None)
+            data.pop('transcript_segments_compressed', None)
+        return data
+
+
 class ConversationMutationResponse(BaseModel):
     """Canonical conversation snapshot returned after a user mutation."""
 

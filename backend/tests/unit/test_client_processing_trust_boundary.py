@@ -552,6 +552,9 @@ PINNED_CONVERSATION_DUMPS: FrozenSet[DumpSite] = frozenset(
             'process_user_expression_measurement_callback',
             'dict',
         ),
+        # Authenticated app-only list response after list redaction. The
+        # negotiated serializer feeds the HTTP response, never an intelligence sink.
+        DumpSite('routers/conversations.py', 'get_conversations', 'model_dump'),
         DumpSite('routers/conversations.py', 'process_in_progress_conversation', 'model_dump'),
         DumpSite('routers/conversations.py', 'finalize_conversation', 'model_dump'),
         DumpSite('routers/conversations.py', 'link_calendar_event', 'model_dump'),

@@ -72,6 +72,20 @@ void main() {
     expect(provider.conversations.single.transcriptSegments.map((s) => s.text), ['hello']);
   });
 
+  test('a carried transcript stays loaded in the persisted cache', () async {
+    final slimJson = _row('a').toJson()..remove('transcript_segments');
+    final slim = ServerConversation.fromJson(slimJson);
+    expect(slim.transcriptSegmentsLoaded, isFalse);
+
+    final carried = slim.keepingTranscriptOf(_row('a', lines: [_line('hello')]));
+    expect(carried.transcriptSegmentsLoaded, isTrue);
+
+    await SharedPreferencesUtil().cacheConversations([carried]);
+    final cached = await SharedPreferencesUtil().loadCachedConversations();
+    expect(cached.single.transcriptSegmentsLoaded, isTrue);
+    expect(cached.single.transcriptSegments.map((s) => s.text), ['hello']);
+  });
+
   test('a fresh row that carries its own transcript replaces the loaded one', () async {
     loaded(_row('a', lines: [_line('old')]));
     page = [

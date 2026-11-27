@@ -113,6 +113,7 @@ extension _ConversationHomeFetch on ConversationProvider {
       startDate = since ?? startDate;
       var storageCount = 0;
       final typed = await typedApi.list(
+        acceptHomeListTranscriptEvidence: true,
         heldHomeEpisodes: _homeEpisodeAcknowledgements,
         onStorageCount: (count) => storageCount = count,
         onPageHeaders: (headers) => page = headers,
@@ -143,6 +144,7 @@ extension _ConversationHomeFetch on ConversationProvider {
 
     var storageCount = 0;
     final result = await getConversationsResult(
+      acceptHomeListTranscriptEvidence: true,
       heldHomeEpisodes: _homeEpisodeAcknowledgements,
       onStorageCount: (count) => storageCount = count,
       onPageHeaders: (headers) => page = headers,
@@ -174,6 +176,7 @@ extension _ConversationHomeFetch on ConversationProvider {
     var storageCount = 0;
     var page = const ConversationPageHeaders();
     final result = await api.list(
+      acceptHomeListTranscriptEvidence: true,
       heldHomeEpisodes: _homeEpisodeAcknowledgements,
       onStorageCount: (count) => storageCount = count,
       onPageHeaders: (headers) => page = headers,

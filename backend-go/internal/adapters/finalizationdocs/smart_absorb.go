@@ -150,6 +150,7 @@ func (s Store) absorbTargetPatch(rows absorbRows, donorRef finalization.Ref, ids
 		return nil, finalization.SmartAbsorbResult{}, err
 	}
 	patch := document{"transcript_segments": cut.value, "transcript_segments_compressed": cut.compressed,
+		"home_list_transcript": nil, "home_list_transcript_source_version": nil,
 		"finished_at": field[time.Time](donor, "finished_at"), "has_content": true,
 		"sync_content_revision": rev + 1, "sync_merged_from": ids, "smart_merge": state}
 	if field[string](target, "data_protection_level") == "standard" && field[string](donor, "data_protection_level") == "enhanced" {

@@ -22,7 +22,12 @@ def test_source_preconditions_positions_and_fields_are_preserved():
     assert count == 1
     assert request.writes[0].update.fields['user_title'] == source.update.fields['user_title']
     assert source.update_mask.field_paths == ['user_title']
-    assert set(request.writes[0].update_mask.field_paths) == {'user_title', 'home_source_version'}
+    assert set(request.writes[0].update_mask.field_paths) == {
+        'user_title',
+        'home_source_version',
+        writer.LIST_TRANSCRIPT,
+        writer.LIST_SOURCE_VERSION,
+    }
     assert request.writes[0].current_document.exists
     receipt = next(write for write in request.writes[1:] if write.update.name == f'{OWNER}/episode_links/c')
     assert receipt.update.fields['home_dirty'].boolean_value
@@ -47,7 +52,17 @@ def test_live_title_claim_leaves_home_ready_but_publication_invalidates_it():
 def test_additive_live_append_and_progress_do_not_require_repreparation():
     progress = update(last_speech_at=Value(timestamp_value={'seconds': 1}))
     append = update(home_append_only=Value(boolean_value=True), transcript_segments=Value(string_value='encrypted'))
-    assert writer.augment_home_writes([progress, append]) == [progress, append]
+    writes = writer.augment_home_writes([progress, append])
+    assert len(writes) == 2
+    assert writes[0] == progress
+    assert set(writes[1].update_mask.field_paths) == {
+        'home_append_only',
+        'transcript_segments',
+        writer.LIST_TRANSCRIPT,
+        writer.LIST_SOURCE_VERSION,
+    }
+    request, count = augment_commit({'database': 'projects/p/databases/(default)', 'writes': [append]})
+    assert count == 1 and request.writes[0] == writes[1]
     renamed = update(home_append_only=Value(boolean_value=True), user_title=Value(string_value='edited'))
     assert len(writer.augment_home_writes([renamed])) > 1
 
@@ -103,3 +118,18 @@ def test_root_privacy_and_subscription_mutations_invalidate_full_policy():
     )
     subscription = update('subscriptions', 's', status=Value(string_value='expired'))
     assert len(writer.augment_home_writes([subscription])) > 1
+
+
+def test_compact_evidence_binds_to_the_same_write_and_is_cleared_on_replacement():
+    source = update(
+        transcript_segments=Value(string_value='encrypted'),
+        **{writer.LIST_TRANSCRIPT: Value(string_value='encrypted-prefix')},
+    )
+    stamped = writer.augment_home_writes([source])[0]
+    assert stamped.update.fields[writer.LIST_SOURCE_VERSION] == stamped.update.fields['home_source_version']
+    assert stamped.update.fields[writer.LIST_TRANSCRIPT].string_value == 'encrypted-prefix'
+
+    replaced = writer.augment_home_writes([update(transcript_segments=Value(string_value='changed'))])[0]
+    for field in (writer.LIST_TRANSCRIPT, writer.LIST_SOURCE_VERSION):
+        assert field in replaced.update_mask.field_paths
+        assert field not in replaced.update.fields
