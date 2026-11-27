@@ -29,6 +29,16 @@ class LiveWalDirectorySyncException extends FileSystemException {
   String toString() => 'LiveWalDirectorySyncException(circuitOpened: $circuitOpened, cause: $cause)';
 }
 
+class LiveWalReceiptPublicationException extends FileSystemException {
+  LiveWalReceiptPublicationException(this.cause, this.directorySyncFailure)
+      : super('live WAL receipt publication failed during cleanup');
+  final Object cause;
+  final LiveWalDirectorySyncException directorySyncFailure;
+
+  @override
+  String toString() => 'LiveWalReceiptPublicationException(cause: $cause, directorySyncFailure: $directorySyncFailure)';
+}
+
 class LiveWalPurgeSnapshot {
   LiveWalPurgeSnapshot(this.basenames, this.revision, this.documentsPath);
   Set<String> basenames;
@@ -301,12 +311,14 @@ class LiveWalReceipt {
       await _syncDirectory(staging);
       await _syncConfirmedDirectory(pending.parent);
     } catch (error, stackTrace) {
+      LiveWalDirectorySyncException? cleanupSyncFailure;
       // A partial staging write is not scanned or replayed. Retire it and sync
       // its directory so retries cannot accumulate abandoned receipt blobs.
       try {
         if (await temporary.exists()) await temporary.delete();
         await _syncDirectory(staging);
-      } catch (_) {
+      } catch (cleanupError) {
+        if (cleanupError is LiveWalDirectorySyncException) cleanupSyncFailure ??= cleanupError;
         // Preserve the original publication error; staging is never authority.
       }
       // Audio has not been written yet. Best-effort retirement prevents a
@@ -314,8 +326,12 @@ class LiveWalReceipt {
       try {
         if (await pending.exists()) await pending.delete();
         await _syncDirectory(pending.parent);
-      } catch (_) {
+      } catch (cleanupError) {
+        if (cleanupError is LiveWalDirectorySyncException) cleanupSyncFailure ??= cleanupError;
         // Any surviving final sidecar is still content-checked and fail-closed.
+      }
+      if (cleanupSyncFailure != null) {
+        Error.throwWithStackTrace(LiveWalReceiptPublicationException(error, cleanupSyncFailure), stackTrace);
       }
       Error.throwWithStackTrace(error, stackTrace);
     }

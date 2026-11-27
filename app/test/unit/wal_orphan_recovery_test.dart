@@ -529,6 +529,64 @@ void main() {
     expect(receiptFor(filename).existsSync(), isFalse);
   });
 
+  test('receipt cleanup sync failure preserves the original publication error', () async {
+    final staging = Directory('${LiveWalReceipt.directory(dir).path}/staging');
+    const publicationFailure = FileSystemException('injected receipt publication failure');
+    LiveWalReceipt.syncDirectoryForTesting = (directory) async {
+      if (directory.path == staging.path) throw const FileSystemException('injected staging cleanup sync failure');
+    };
+    LiveWalReceipt.writeReceiptForTesting = (file, body) async {
+      await file.writeAsString(body.substring(0, 12), flush: true);
+      throw publicationFailure;
+    };
+    final id = LiveWalReceipt.newId();
+    final filename = LiveWalReceipt.uniqueName(name(now), id);
+    final captured = Wal(
+      codec: BleAudioCodec.opusFS320,
+      timerStart: now,
+      seconds: 1,
+      totalFrames: receiptFrames.length,
+      storage: WalStorage.mem,
+      status: WalStatus.miss,
+      ownerUid: 'owner-a',
+      device: 'pendant',
+    );
+
+    LiveWalReceiptPublicationException? failure;
+    try {
+      await LiveWalReceipt.prepare(File('${dir.path}/$filename'), captured, id, encodeWalFrames(receiptFrames));
+    } on LiveWalReceiptPublicationException catch (error) {
+      failure = error;
+    }
+
+    expect(failure, isNotNull);
+    expect(identical(failure!.cause, publicationFailure), isTrue);
+    expect(failure.directorySyncFailure.reportFailure, isTrue);
+  });
+
+  test('receipt cleanup sync failure emits typed telemetry from the WAL flush', () async {
+    final staging = Directory('${LiveWalReceipt.directory(dir).path}/staging');
+    LiveWalReceipt.syncDirectoryForTesting = (directory) async {
+      if (directory.path == staging.path) throw const FileSystemException('injected staging cleanup sync failure');
+    };
+    LiveWalReceipt.writeReceiptForTesting = (file, body) async {
+      await file.writeAsString(body.substring(0, 12), flush: true);
+      throw const FileSystemException('injected receipt publication failure');
+    };
+    final events = <WalWriteReceipt>[];
+    final writer = await ledger(realCensus: true, receiptTelemetry: events.add);
+    await captureReceiptAudio(writer);
+
+    await writer.finalizeCurrentSession();
+
+    final written = writer.testWals.singleWhere((wal) => wal.recordingSessionId == 'receipt-session');
+    expect(written.storage, WalStorage.disk);
+    expect(written.liveFileWriteId, isNull);
+    expect(events.any((event) => event.result == WalWriteReceiptResult.publishFailed), isTrue);
+    expect(events.any((event) => event.result == WalWriteReceiptResult.directorySyncFailed), isTrue);
+    expect(staging.listSync(), isEmpty);
+  });
+
   test('receipt publication calls the durability channel with each exact directory', () async {
     LiveWalReceipt.syncDirectoryForTesting = null;
     final calls = <MethodCall>[];
