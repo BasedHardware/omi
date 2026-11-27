@@ -25,7 +25,7 @@ void main() {
   Future<void> writeSelection(String text) =>
       File('${dir.path}/${ReliabilityExperiments.fileName}').writeAsString(text);
 
-  test('the twelve app experiments are registered with a description', () {
+  test('the fourteen app experiments are registered with a description', () {
     expect(ReliabilityExperiments.registered.keys, {
       'receipt_long_poll',
       'receipt_finished_note',
@@ -39,6 +39,8 @@ void main() {
       'vendor_recognizer_on_opened_app',
       'phone_recogniser_mute',
       'early_title_icon',
+      'no_live_player',
+      'title_at_end',
     });
     expect(ReliabilityExperiments.registered.values.every((text) => text.trim().isNotEmpty), isTrue);
   });
@@ -92,6 +94,8 @@ void main() {
       'receipt_long_poll',
       'receipt_finished_note',
       'vendor_recognizer_on_opened_app',
+      'no_live_player',
+      'title_at_end',
     });
     expect(ReliabilityFlags.keys.values.toSet().length, ReliabilityFlags.keys.length);
     expect(ReliabilityFlags.enabled('phone_recogniser_mute', readFlag: (_) => true), isFalse);
