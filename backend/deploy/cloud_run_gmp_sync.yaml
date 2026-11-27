@@ -93,7 +93,9 @@ spec:
         # end-to-summary and first-speech-to-visible (observed by the builder here, default buckets), the
         # builder commit seconds, held-cut and blocked counters, and the v3 settle's first-summary latencies.
         # At most about 720 series per instance (the stage families, 21 per label set, are 504 of them and
-        # exist only for the stages and Finish paths an instance has observed).
+        # exist only for the stages and Finish paths an instance has observed). Separately, finish_to_visible
+        # moves to the same 18 buckets and is pre-initialized for its three paths, so every process that imports
+        # the v3 meters grows from 42 to 63 of its series; that also applies on profiles that keep omi_.*.
         - action: keep
           sourceLabels:
             - __name__

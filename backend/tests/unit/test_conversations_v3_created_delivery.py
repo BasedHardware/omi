@@ -16,7 +16,7 @@ from utils.app_integrations import ExternalIntegrationFanoutError
 from utils.conversations.v3 import created, outline, planner, processing, service
 from utils.conversations.v3.live import FINISH_RECORDING_FIELD, FINISH_STAMP_FIELD, FINISH_WINDOW_FIELD
 from tests.unit.test_conversations_v3_review import AT, builder, source  # noqa: F401
-from tests.unit.test_conversations_v3_transactions import strict  # noqa: F401
+from tests.unit.test_conversations_v3_transactions import _retried, strict  # noqa: F401
 
 C = ('users', 'synthetic', 'conversations', 'c')
 
@@ -255,6 +255,31 @@ def test_first_visible_settlement_closes_the_finish_timeline_once(strict, monkey
     assert 40 <= seconds < 120
     (seconds,), _ = ended.labels.return_value.observe.call_args
     assert 50 <= seconds < 120
+
+
+def test_a_contention_retry_of_the_settle_observes_the_finish_once(strict, monkeypatch):
+    """The settle's transaction body runs twice (the first attempt aborts before commit); one sample each."""
+    now = datetime.now(timezone.utc)
+    strict.rows[C] = derived(
+        manual_end=True,
+        v3_process_pending=True,
+        kind='conversation',
+        finished_at=now - timedelta(seconds=50),
+        **{FINISH_WINDOW_FIELD: 'c', FINISH_STAMP_FIELD: {'at': now - timedelta(seconds=40), 'path': 'tail'}},
+    )
+    finish, ended = _timeline(monkeypatch)
+    to_visible = _finish_latency(monkeypatch)
+    _retried(strict, monkeypatch)
+
+    settle(strict, notes=False)
+
+    finish.labels.assert_called_once_with('summary_visible', 'tail')
+    finish.labels.return_value.observe.assert_called_once()
+    ended.labels.assert_called_once_with('summary_visible')
+    ended.labels.return_value.observe.assert_called_once()
+    to_visible.labels.assert_called_once_with('tail')
+    to_visible.labels.return_value.observe.assert_called_once()
+    assert strict.rows[C]['v3_manual_end_home_counted'] is True
 
 
 @pytest.mark.parametrize(

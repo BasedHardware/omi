@@ -1687,13 +1687,13 @@ def _process(uid, row, token):
     below_minimum = words < MIN_TASK_WORDS
     passive = row.get('kind') in {'media', 'background'}
     manual = policy.manual_intent(row)
-    finish_timeline.observe_notes_started(row)
     notes = False
     tail_words = None
     if passive or (not manual and below_minimum):
         lifecycle.complete(uid, row['id'])
     else:
         notes = True
+        finish_timeline.observe_notes_started(row)
         persisted = []
 
         def summary_persisted(current):

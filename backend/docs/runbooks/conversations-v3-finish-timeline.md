@@ -34,7 +34,7 @@ Stages, in order (`metrics.FINISH_TIMELINE_STAGES`):
 | `transcript_fast` | backend-integration, fast finish | The fast first transcript was written. Batch-only Finishes have no sample here |
 | `builder_started` | backend-sync, builder | Start of the pass that first committed the card as manually ended |
 | `card_finished` | backend-sync, builder | That pass's commit: Home shows the ended card, writing its summary |
-| `notes_started` | backend-sync, notes | First notes attempt began |
+| `notes_started` | backend-sync, notes | First notes attempt began. Cards that settle without notes (media, background) have no sample here |
 | `summary_visible` | backend-sync, settle | First visible manual-end settlement, with the summary. For stamped Finishes it equals `finish_to_visible` |
 
 Both services deploy with `deploy/cloud_run_gmp_sync.yaml`, whose keep-list names these families. A family

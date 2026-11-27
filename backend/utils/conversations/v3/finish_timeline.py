@@ -39,6 +39,11 @@ from utils.conversations.v3.finish_stamp import FINISH_STAMP_FIELD, FINISH_STAMP
 STAGES = metrics.FINISH_TIMELINE_STAGES
 
 
+def _now() -> datetime:
+    """The clock a stage reads when its caller passes no time."""
+    return datetime.now(timezone.utc)
+
+
 def _seconds_since(at: Any, now: datetime) -> Optional[float]:
     """Seconds from ``at`` to ``now``, or None if ``at`` is not a time or is older than the stamp limit."""
     if not isinstance(at, datetime):
@@ -66,7 +71,7 @@ def observe(stage: str, row: Any, now: Optional[datetime] = None) -> None:
     def run():
         if stage not in STAGES or not isinstance(row, Mapping):
             return
-        finish, ended = samples(row, now or datetime.now(timezone.utc))
+        finish, ended = samples(row, now or _now())
         if finish is not None:
             metrics.FINISH_STAGE.labels(stage, finish[0]).observe(finish[1])
         if ended is not None:
@@ -114,19 +119,23 @@ def observe_card_finished(
         if not first_manual_end_commit(row, prior) or not visible(row):
             return
         observe('builder_started', row, pass_started)
-        observe('card_finished', row, now or datetime.now(timezone.utc))
+        observe('card_finished', row, now or _now())
 
     metrics.safe_metric(run)
 
 
 def first_notes_attempt(row: Mapping[str, Any]) -> bool:
-    """``row`` (as read before ``begin_processing``) is a shown manual-end card whose notes never started."""
+    """``row`` (as read before ``begin_processing``) is a shown manual-end card whose notes never started.
+
+    Called only where notes run: a card that settles without notes (media, background) has no notes stage.
+    """
     return bool(
         row.get('v3_derived')
         and row.get('manual_end')
         and not row.get('v3_notes_written')
         and not row.get('v3_process_attempts')
         and not row.get('backfilled')
+        and not row.get('discarded')
         and not row.get('home_hidden')
     )
 

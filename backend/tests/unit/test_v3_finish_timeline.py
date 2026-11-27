@@ -4,16 +4,25 @@ import asyncio
 import re
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import Mock
 
 import pytest
 import yaml
 
-from utils.conversations.v3 import finish_timeline, metrics, service
+from database import conversations_v3_processing as writers
+from utils.conversations import lifecycle, process_conversation as process
+from utils.conversations.v3 import finish_timeline, metrics, service, summary_wake
 from utils.conversations.v3.finish_stamp import FINISH_STAMP_FIELD
 
 BACKEND = Path(__file__).resolve().parents[2]
 NOW = datetime(2026, 11, 27, 20, 0, tzinfo=timezone.utc)
+
+
+@pytest.fixture(autouse=True)
+def clock(monkeypatch):
+    """Every stage a caller does not time reads NOW, so no sample depends on the wall clock."""
+    monkeypatch.setattr(finish_timeline, '_now', lambda: NOW)
 
 
 @pytest.fixture
@@ -152,6 +161,7 @@ def test_only_a_newly_ended_home_card_is_timed_at_commit(meters, row, prior, vis
         ({'v3_notes_written': True}, False),
         ({'manual_end': False}, False),
         ({'backfilled': True}, False),
+        ({'discarded': True}, False),
         ({'home_hidden': True}, False),
     ],
 )
@@ -189,7 +199,7 @@ def test_builder_commit_times_only_the_card_it_newly_ended(meters, monkeypatch):
     asyncio.run(run(derive=False))
     assert [args for args, _ in observed(finish)] == [('builder_started', 'tail'), ('card_finished', 'tail')]
     assert [args for args, _ in observed(ended)] == [('builder_started',), ('card_finished',)]
-    assert observed(finish)[0][1] == 12.0
+    assert [seconds for _, seconds in observed(finish)] == [12.0, 20.0]
 
 
 def test_home_visibility_at_commit_uses_the_home_filters():
@@ -205,7 +215,54 @@ def test_notes_start_is_observed_only_for_a_first_attempt(meters):
     finish_timeline.observe_notes_started(card(v3_process_attempts=1))
     finish.labels.assert_not_called()
     finish_timeline.observe_notes_started(card())
-    assert [call.args for call in finish.labels.call_args_list] == [('notes_started', 'tail')]
+    assert observed(finish) == [(('notes_started', 'tail'), 20.0)]
+
+
+@pytest.fixture
+def notes_pass(monkeypatch):
+    """service._process with its writes and the notes call stubbed; records which branch the pass took."""
+    taken = []
+    monkeypatch.setattr(writers, 'begin_processing', lambda *a, **kw: True)
+    monkeypatch.setattr(writers, 'settle_processing', lambda *a, **kw: None)
+    monkeypatch.setattr(lifecycle, 'complete', lambda *a: taken.append('no notes'))
+    monkeypatch.setattr(summary_wake, 'publish', lambda *a: None)
+
+    def notes(uid, language, conversation, **kw):
+        taken.append('notes')
+        kw['persistence_observer'](True)
+        return SimpleNamespace(status='completed')
+
+    monkeypatch.setattr(process, 'process_conversation', notes)
+    return taken
+
+
+def _notes_card(**updates):
+    return card(
+        created_at=NOW - timedelta(minutes=5),
+        transcript_segments=[{'text': 'word ' * 40, 'start': 0, 'end': 10, 'is_user': False}],
+        **updates,
+    )
+
+
+def test_a_notes_pass_observes_notes_start(meters, notes_pass):
+    finish, ended = meters
+
+    service._process('synthetic', _notes_card(), 'token')
+
+    assert notes_pass == ['notes']
+    assert observed(finish) == [(('notes_started', 'tail'), 20.0)]
+    assert observed(ended) == [(('notes_started',), 30.0)]
+
+
+@pytest.mark.parametrize('kind', ['media', 'background'])
+def test_a_manual_end_card_that_settles_without_notes_has_no_notes_start(meters, notes_pass, kind):
+    finish, ended = meters
+
+    service._process('synthetic', _notes_card(kind=kind), 'token')
+
+    assert notes_pass == ['no notes']
+    finish.labels.assert_not_called()
+    ended.labels.assert_not_called()
 
 
 def _sync_keep():
