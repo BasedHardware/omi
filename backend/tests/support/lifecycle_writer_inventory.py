@@ -301,7 +301,7 @@ FIELD_SITES = {
             ),
         ),
     ],
-    'utils/conversations/v3/service.py': [
+    'utils/conversations/v3/rederive_plan.py': [
         (
             '_retire_patch',
             'summary_due_at',
@@ -317,6 +317,10 @@ FIELD_SITES = {
                 'v3_rederive_live_run',
             ),
         ),
+    ],
+    'utils/conversations/v3/service.py': [
+        ('_plan_projection', 'status', "'in_progress'", ('status',)),
+        ('_plan_projection', 'status', "prior['status']", ('status',)),
         # Unmatched native Finish tiles stay addressable with their stale work settled.
         (
             'reconcile',
@@ -354,8 +358,6 @@ FIELD_SITES = {
                 'v3_unlocked',
             ),
         ),
-        ('_plan_projection', 'status', "'in_progress'", ('status',)),
-        ('_plan_projection', 'status', "prior['status']", ('status',)),
         ('recording_short_path.guarded', 'status', 'ConversationStatus.completed', ('status',)),
     ],
     'utils/batch_pipeline/empty_transcription.py': [
