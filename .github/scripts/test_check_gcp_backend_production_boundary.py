@@ -16,11 +16,13 @@ import tempfile
 import textwrap
 import time
 import unittest
+from unittest.mock import MagicMock, patch
 
 ROOT = Path(__file__).resolve().parents[2]
 if str(ROOT / ".github" / "scripts") not in sys.path:
     sys.path.insert(0, str(ROOT / ".github" / "scripts"))
 from workflow_composite_contract import backend_deploy_contract_text
+from app_icon_containment_probe import probe as probe_app_icon
 
 UPDATES_SOURCE = (ROOT / "backend/routers/updates.py").read_text(encoding="utf-8")
 
@@ -32,6 +34,51 @@ SPEC.loader.exec_module(CHECKER)
 
 
 class GcpBackendProductionBoundaryTests(unittest.TestCase):
+    def test_app_icon_probe_sends_one_request_and_only_accepts_typed_424(self) -> None:
+        cases = (
+            (424, b'{"detail":{"code":"icon_generation_disabled"}}', "icon_generation_disabled"),
+            (424, b'{"detail":{"code":"untrusted detail"}}', "unexpected_response"),
+            (424, b'["unexpected JSON shape"]', "unexpected_response"),
+            (424, b"x" * 4097, "unexpected_response"),
+            (307, b"redirect", "unexpected_status"),
+            (200, b"image response", "unexpected_status"),
+            (500, b"upstream body", "unexpected_status"),
+        )
+        with tempfile.TemporaryDirectory() as directory:
+            token_file = Path(directory) / "token"
+            token_file.write_text("test-token", encoding="ascii")
+            for status, body, outcome in cases:
+                with self.subTest(status=status, outcome=outcome):
+                    with patch("app_icon_containment_probe.http.client.HTTPSConnection") as https:
+                        connection = https.return_value
+                        response = MagicMock(status=status)
+                        response.read.return_value = body
+                        connection.getresponse.return_value.__enter__.return_value = response
+
+                        self.assertEqual(probe_app_icon(token_file), (status, outcome))
+                        https.assert_called_once_with("api.omi.me", timeout=15)
+                        connection.request.assert_called_once()
+                        self.assertEqual(connection.request.call_args.args, ("POST", "/v1/app/generate-icon"))
+                        self.assertEqual(
+                            connection.request.call_args.kwargs["headers"]["Authorization"], "Bearer test-token"
+                        )
+                        connection.close.assert_called_once()
+                        if status != 424:
+                            response.read.assert_not_called()
+
+    def test_app_icon_probe_does_not_retry_transport_failure(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            token_file = Path(directory) / "token"
+            token_file.write_text("test-token", encoding="ascii")
+            with patch("app_icon_containment_probe.http.client.HTTPSConnection") as https:
+                connection = https.return_value
+                connection.getresponse.side_effect = TimeoutError("untrusted transport detail")
+
+                self.assertEqual(probe_app_icon(token_file), (None, "response_unavailable"))
+                connection.request.assert_called_once()
+                connection.getresponse.assert_called_once()
+                connection.close.assert_called_once()
+
     def test_all_service_production_smoke_requires_completed_http_401(self) -> None:
         composite = (ROOT / CHECKER.DEPLOY_BACKEND_STACK_ACTION).read_text(encoding="utf-8")
         smoke = composite.split(f"- name: {CHECKER.PROD_SMOKE}\n", 1)[1].split("\n    - name: ", 1)[0]
