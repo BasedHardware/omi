@@ -103,7 +103,9 @@ def _manifest_literal_env_value(env_map: object, key: str) -> str | None:
     return str(entry['value'])
 
 
-def _validate_gke(env_config: ConfigDict, *, strict_provisional: bool) -> list[ValidationError]:
+def _validate_gke(
+    env_config: ConfigDict, *, strict_provisional: bool, chart_root: Path = ROOT
+) -> list[ValidationError]:
     errors: list[ValidationError] = []
     gke_config = _as_config_dict(env_config.get('gke')) or {}
     config_map = _as_config_dict(gke_config.get('config_map'))
@@ -116,7 +118,7 @@ def _validate_gke(env_config: ConfigDict, *, strict_provisional: bool) -> list[V
         if service_config is None:
             errors.append(ValidationError(f'gke/{service}', 'service config must be a mapping'))
             continue
-        values_file = ROOT / service_config['values_file']
+        values_file = chart_root / service_config['values_file']
         values = _load_yaml(values_file)
         actual_env = _chart_env_entries(values)
         # GKE ports are declared in Helm values, while the host may come from
@@ -547,7 +549,9 @@ def _validate_desktop_backend_vertex_pt_contract(env: str, env_config: ConfigDic
     return errors
 
 
-def _validate_proactivity_v2_flag_hosts(env: str, env_config: ConfigDict) -> list[ValidationError]:
+def _validate_proactivity_v2_flag_hosts(
+    env: str, env_config: ConfigDict, *, chart_root: Path = ROOT
+) -> list[ValidationError]:
     """Every feed/mentor host and gateway admission executor needs the dedicated token."""
     gke = _as_config_dict(env_config.get('gke')) or {}
     cloud_run = _as_config_dict(env_config.get('cloud_run')) or {}
@@ -567,7 +571,7 @@ def _validate_proactivity_v2_flag_hosts(env: str, env_config: ConfigDict) -> lis
     # Gateway has its own manifest section, outside _validate_gke's service loop.
     gateway = _as_config_dict(env_config.get('llm_gateway')) or {}
     gateway_env = _as_config_dict(gateway.get('env')) or {}
-    values = _load_yaml(ROOT / f'backend/charts/llm-gateway/{env}_omi_llm_gateway_values.yaml')
+    values = _load_yaml(chart_root / f'backend/charts/llm-gateway/{env}_omi_llm_gateway_values.yaml')
     errors.extend(
         _validate_env_entries(
             scope=f'{env}/llm_gateway',
@@ -672,6 +676,7 @@ def validate_runtime_env(
     check_live_cloud_run: bool = False,
     check_workflows: bool = False,
     workflow_root: Path | None = None,
+    chart_root: Path = ROOT,
     strict_provisional: bool = False,
     integration_canary_state: Path | None = None,
     integration_canary_source: str | None = None,
@@ -702,12 +707,12 @@ def validate_runtime_env(
 
     errors.extend(ValidationError(env, error) for error in validate_write_admission(env, env_config))
     errors.extend(_validate_desktop_backend_vertex_pt_contract(env, env_config))
-    errors.extend(_validate_proactivity_v2_flag_hosts(env, env_config))
+    errors.extend(_validate_proactivity_v2_flag_hosts(env, env_config, chart_root=chart_root))
     # A pump-only run (the declared selector, never a skip flag) mutates no GKE workload,
     # so listen chart-vs-manifest drift is not its target's drift (SCA-3318). Every other
     # selector, including 'all', still checks every GKE workload.
     if cloud_run_service != PUMP_ONLY_SELECTOR:
-        errors.extend(_validate_gke(env_config, strict_provisional=strict_provisional))
+        errors.extend(_validate_gke(env_config, strict_provisional=strict_provisional, chart_root=chart_root))
     errors.extend(validate_conversation_finalization_capabilities(env, env_config))
     errors.extend(validate_speaker_embedding_hosts(env, env_config))
     errors.extend(validate_voice_transcription_storage(env, env_config))

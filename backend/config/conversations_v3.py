@@ -1,11 +1,47 @@
 """Per-owner admission. Downstream work follows the stored recording marker."""
 
+import logging
 import os
 
 from config.refactor_modes import default_on
-from config.rollout_cohorts import in_rollout_cohort, parse_cohort, valid_uid
+from config.rollout_cohorts import (
+    V3_HOLDOUT_COHORT,
+    RolloutCohortUnavailable,
+    in_rollout_cohort,
+    parse_cohort,
+    valid_uid,
+)
 from utils.conversations.v3 import client_capability
 from utils.episodes import client_gate
+from utils.observability.fallback import record_fallback
+
+logger = logging.getLogger(__name__)
+
+
+def v3_intake_held_out(uid: str) -> bool:
+    """Owner is in the ``conversations-v3-holdout`` cohort: their NEW captures keep legacy intake.
+
+    Ask only after ``conversations_v3_enabled`` admitted the owner, and only where new intake is
+    decided (``triggers.mark_new``, manual cuts, Home's read mode, ``/live`` with no active window).
+    Stage admission itself never consults it, so Finish, ``/live`` and builders still reach existing
+    v3 work. ``CONVERSATIONS_V3_HOLDOUT=off`` skips the read. Unknown membership admits (fails open)
+    and is counted: failing closed would move every owner's new captures to legacy during a
+    membership-store outage, and a cold cache can therefore still admit a held-out owner.
+    """
+    if not default_on('CONVERSATIONS_V3_HOLDOUT'):
+        return False
+    try:
+        return in_rollout_cohort(uid, V3_HOLDOUT_COHORT)
+    except RolloutCohortUnavailable:
+        record_fallback(
+            component='feature_flags',
+            from_mode='v3_holdout',
+            to_mode='admitted',
+            reason='unavailable',
+            outcome='degraded',
+            log=logger,
+        )
+        return False
 
 
 def conversations_v3_enabled(uid: str) -> bool:
@@ -14,6 +50,7 @@ def conversations_v3_enabled(uid: str) -> bool:
     Neither admits an owner whose apps all predate v3: those builds show the raw recording a capture
     ends with as a blank card that 404s (utils/conversations/v3/client_capability.py). The episodes
     marker alone is not proof: code before #25500 also wrote it for store-channel episode callers.
+    New-intake callers also ask ``v3_intake_held_out`` after this returns True.
     """
     if not uid or os.getenv('CONVERSATIONS_V3', '').strip().lower() == 'off':
         return False
@@ -33,8 +70,25 @@ def bounded_pending_enabled() -> bool:
     return default_on('CONVERSATIONS_V3_BOUNDED_PENDING')
 
 
+def commit_lease_renewal_enabled() -> bool:
+    """Default on: a multi-batch projection commit renews the pass's lease before each later batch."""
+    return default_on('CONVERSATIONS_V3_COMMIT_LEASE_RENEWAL')
+
+
 def transcript_size_cap_enabled() -> bool:
     return default_on('CONVERSATIONS_V3_TRANSCRIPT_SIZE_CAP')
+
+
+def size_quarantine_enabled() -> bool:
+    """A one-seed pass Firestore rejects for size sets the seed and the pending sources its rejected commit
+    writes aside, so the rest of the backlog drains."""
+    return default_on('CONVERSATIONS_V3_SIZE_QUARANTINE')
+
+
+def size_quarantine_filters() -> bool:
+    """Whether live seeding skips held ids: load filters only on a bounded (UnlockedPage) pass, which needs
+    CONVERSATIONS_V3_BOUNDED_PENDING. The sweep and the pass chain skip held ids under exactly this condition."""
+    return size_quarantine_enabled() and bounded_pending_enabled()
 
 
 def finish_no_pointer_enabled() -> bool:

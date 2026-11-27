@@ -104,7 +104,17 @@ def test_scenarios_follow_their_closure_and_their_own_file(report):
     assert rows['backend/testing/pipeline_lab/timeline/build.py']['scenarios'] == []
 
 
-AUDIO_SCENARIOS = ['audio_single_recording_finish']
+AUDIO_SCENARIOS = [
+    'audio_single_recording_finish',
+    'speaker_owner_absent',
+    'speaker_owner_and_person_finish',
+    'speaker_partial_final_pass_keeps_voices',
+]
+SPEAKER_SCENARIOS = [
+    'speaker_owner_absent',
+    'speaker_owner_and_person_finish',
+    'speaker_partial_final_pass_keeps_voices',
+]
 
 
 @pytest.mark.parametrize(
@@ -123,7 +133,11 @@ AUDIO_SCENARIOS = ['audio_single_recording_finish']
         # audio words: only the scenarios with an audio_file
         ('backend/testing/pipeline_lab/cassette/player.py', AUDIO_SCENARIOS, 'STT cassettes'),
         ('backend/testing/pipeline_lab/scenario/audio.py', AUDIO_SCENARIOS, 'audio_file'),
-        ('backend/testing/pipeline_lab/scenario/fixtures/audio/synthetic_two_voices.wav', AUDIO_SCENARIOS, 'names it'),
+        (
+            'backend/testing/pipeline_lab/scenario/fixtures/audio/synthetic_two_voices.wav',
+            AUDIO_SCENARIOS[:1],
+            'names it',
+        ),
         ('backend/diarizer/batch_pipeline.py', AUDIO_SCENARIOS, 'measured'),  # the batch lane, audio only
         # not part of any scenario
         ('backend/testing/pipeline_lab/scenario/IMPORTER.md', [], 'documentation'),
@@ -137,6 +151,39 @@ def test_scenario_world_names_the_right_scenarios(report, path, expected, reason
     _, rows = report(path)
     assert rows[path]['scenarios'] == (names if expected == 'all' else expected), rows[path]
     assert reason in rows[path]['scenario_reason']
+
+
+@pytest.mark.parametrize(
+    'path',
+    [
+        'backend/utils/conversations/speaker_resolution.py',
+        'backend/utils/conversations/final_pass_batch.py',
+        'backend/utils/conversations/processing_speakers.py',
+        'backend/utils/speakers/processing.py',
+        'backend/utils/stt/speaker_embedding.py',
+        'backend/utils/stt/diarization.py',
+        'backend/database/speaker_auto_enroll.py',
+        'backend/diarizer/final_pass.py',
+        'backend/diarizer/embedding.py',
+        'backend/config/batch_conversation_speakers.py',
+        'backend/testing/pipeline_lab/speakers/scenario.py',
+        'backend/testing/pipeline_lab/speakers/fixtures/public-libri/gallery_audio/user.wav',
+    ],
+)
+def test_speaker_paths_name_the_speaker_scenarios_and_stage(report, path):
+    """Product and lab speaker code: the speaker scenarios (plus any scenario whose measured reach holds the
+    file), and a day replay's speakers stage unless an earlier stage already runs the file."""
+    _, rows = report(path)
+    row = rows[path]
+    assert set(SPEAKER_SCENARIOS) <= set(row['scenarios']), row
+    assert row['stage'] is not None and affected.stage_index(row['stage']) <= affected.stage_index('speakers'), row
+
+
+def test_speaker_selector_unions_measured_reach(report):
+    """The resolver runs in every scenario that writes notes: a change to it names those scenarios too."""
+    path = 'backend/utils/conversations/speaker_resolution.py'
+    _, rows = report(path)
+    assert set(rows[path]['scenarios']) > set(SPEAKER_SCENARIOS), rows[path]
 
 
 def test_scenario_reach_is_current():

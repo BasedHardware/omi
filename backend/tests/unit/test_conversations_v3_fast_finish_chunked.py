@@ -5,9 +5,13 @@ admission hook's serial behaviour are covered in test_conversations_v3_fast_fini
 """
 
 import asyncio
+import os
 import re
+import subprocess
+import sys
 import threading
 import time
+from concurrent.futures import wait
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -1531,8 +1535,8 @@ def test_finishes_up_to_twenty_minutes_are_not_in_the_canary(monkeypatch):
 
 
 def test_the_daily_cap_on_long_audio_stops_further_long_passes(monkeypatch):
-    # Room for one reservation (2 x 1818 + 30), not two.
-    monkeypatch.setenv('CONVERSATIONS_V3_FAST_FINISH_LONG_DAILY_SECONDS', '4000')
+    # Room for one pass (1818 sent) and then not for another reservation (1818 + 30).
+    monkeypatch.setenv('CONVERSATIONS_V3_FAST_FINISH_LONG_DAILY_SECONDS', '3000')
     unit, read = recording(1800)
     assert run([unit], read, Provider())[0] == 'written'
     never = lambda *args: pytest.fail('must not read audio or transcribe')
@@ -1610,7 +1614,7 @@ def test_a_reservation_is_settled_to_the_audio_sent_and_refunded_when_not_sent(m
 
 
 def test_the_cap_is_shared_by_every_process(monkeypatch):
-    monkeypatch.setenv('CONVERSATIONS_V3_FAST_FINISH_LONG_DAILY_SECONDS', '4000')
+    monkeypatch.setenv('CONVERSATIONS_V3_FAST_FINISH_LONG_DAILY_SECONDS', '3000')
     shared = fakeredis.FakeRedis()
     unit, read = recording(1800)
     # Process A sends one long pass; process B (a new or restarted instance) starts with no memory
@@ -1654,24 +1658,320 @@ def test_a_long_pass_that_cannot_reserve_sends_nothing(monkeypatch):
     assert run([unit], never, never, write=never)[0] == 'long_cap'
 
 
-def test_retries_cannot_push_the_day_past_the_cap(monkeypatch):
+def test_admission_reserves_every_chunk_once_plus_the_probe_clip():
     unit, read = recording(1800)
     jobs = fast_finish.plan([unit])
-    cap = fast_finish.reserved_seconds(jobs)
-    assert cap == pytest.approx(2 * 1818 + 30, abs=2)  # every chunk twice, plus one probe clip
-    monkeypatch.setenv('CONVERSATIONS_V3_FAST_FINISH_LONG_DAILY_SECONDS', str(cap))
-    racing = []
-
-    def fail_once(heard, attempt):
-        if attempt == 1:
-            # Another pass asks for room while this one runs: the reservation already covers every retry.
-            racing.append(fast_finish.LONG_BUDGET.reserve(1))
-        return attempt == 1
-
-    provider = Provider(fail=fail_once)
+    assert fast_finish.reserved_seconds(jobs) == pytest.approx(fast_finish.planned_seconds(jobs) + 30)
+    assert fast_finish.reserved_seconds(jobs) == pytest.approx(1818 + 30, abs=1)
+    held = []
+    provider = Provider(hold=lambda p: held.append(fast_finish.LONG_BUDGET.used()))
     assert run([unit], read, provider)[0] == 'written'
-    assert provider.calls == 2 * len(jobs) and set(racing) == {None}
-    assert used() == pytest.approx(sum(provider.durations)) and used() <= cap
+    # While the pass runs the day holds its admission reservation and nothing more.
+    assert set(round(value) for value in held) == {round(fast_finish.reserved_seconds(jobs))}
+    assert used() == pytest.approx(1818, abs=1)
+
+
+def _failing_chunk(target=700):
+    """Fails the chunk that hears second ``target`` on its first request; records the budget at its retry."""
+    seen = {}
+
+    def fail(heard, attempt):
+        if target in heard and attempt == 2:
+            seen['used_at_retry'] = fast_finish.LONG_BUDGET.used()
+            seen['chunk'] = len(heard) / RATE
+        return target in heard and attempt == 1
+
+    return fail, seen
+
+
+def test_a_retry_reserves_its_own_seconds_before_it_sends():
+    unit, read = recording(1800)
+    admission = fast_finish.reserved_seconds(fast_finish.plan([unit]))
+    fail, seen = _failing_chunk()
+    provider = Provider(fail=fail)
+    assert run([unit], read, provider)[0] == 'written'
+    # At the retry's send the counter already held admission plus that chunk's seconds.
+    assert seen['chunk'] > 200 and seen['used_at_retry'] == pytest.approx(admission + seen['chunk'])
+    assert provider.calls == 8 and used() == pytest.approx(sum(provider.durations))
+
+
+def test_a_retry_with_no_room_is_skipped_and_the_pass_yields_to_batch(monkeypatch):
+    unit, read = recording(1800)
+    admission = fast_finish.reserved_seconds(fast_finish.plan([unit]))
+    # Exactly the admission reservation: no room for any retry.
+    monkeypatch.setenv('CONVERSATIONS_V3_FAST_FINISH_LONG_DAILY_SECONDS', str(admission))
+    capped = fast_finish.OUTCOMES.labels('retry_cap')._value.get()
+    fail, seen = _failing_chunk()
+    provider = Provider(fail=fail)
+    outcome, written = run([unit], read, provider, cut=lambda: pytest.fail('must not cut'))
+    assert outcome == 'retry_cap' and written is None
+    # The failed chunk was sent once, never retried, and nothing beyond the reservation left.
+    assert 'used_at_retry' not in seen and max(provider.attempts.values()) == 1
+    assert used() == pytest.approx(sum(provider.durations)) and used() <= admission
+    assert fast_finish.OUTCOMES.labels('retry_cap')._value.get() - capped == 1
+
+
+def test_a_redis_error_at_the_retry_reserve_skips_the_retry(monkeypatch):
+    class _DownAfterAdmission(fakeredis.FakeRedis):
+        pipelines = 0
+
+        def pipeline(self, *args, **kwargs):
+            type(self).pipelines += 1
+            if type(self).pipelines > 1:
+                raise ConnectionError('redis down')
+            return super().pipeline(*args, **kwargs)
+
+    monkeypatch.setattr(fast_finish, 'LONG_BUDGET', fast_finish._FleetBudget(_DownAfterAdmission()))
+    unit, read = recording(1800)
+    fail, seen = _failing_chunk()
+    provider = Provider(fail=fail)
+    assert run([unit], read, provider)[0] == 'retry_cap'
+    assert _DownAfterAdmission.pipelines == 2 and 'used_at_retry' not in seen
+    assert max(provider.attempts.values()) == 1
+    assert used() == pytest.approx(sum(provider.durations))
+
+
+def test_two_processes_sharing_the_counter_cannot_exceed_the_cap(monkeypatch):
+    monkeypatch.setenv('CONVERSATIONS_V3_FAST_FINISH_LONG_DAILY_SECONDS', '100')
+    shared = fakeredis.FakeRedis()
+    processes = [fast_finish._FleetBudget(shared), fast_finish._FleetBudget(shared)]
+    key = fast_finish._FleetBudget.key()
+    start, kept, lock = threading.Barrier(40), [], threading.Lock()
+
+    def retry(budget):
+        start.wait(5)
+        if budget.take(key, 7):
+            with lock:
+                kept.append(7)
+
+    threads = [threading.Thread(target=retry, args=(processes[i % 2],)) for i in range(40)]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join(5)
+    # Every refused amount was taken back; what was kept fits.
+    assert sum(kept) <= 100 and len(kept) >= 1 and float(shared.get(key)) == pytest.approx(sum(kept))
+
+
+def test_a_retry_cannot_take_room_another_process_reserved_first(monkeypatch):
+    shared = fakeredis.FakeRedis()
+    monkeypatch.setattr(fast_finish, 'LONG_BUDGET', fast_finish._FleetBudget(shared))
+    other = fast_finish._FleetBudget(shared)  # a second instance, same counter
+    unit, read = recording(1800)
+    admission = fast_finish.reserved_seconds(fast_finish.plan([unit]))
+    cap = admission + 400  # room for one retry of a ~260 s chunk, once
+    monkeypatch.setenv('CONVERSATIONS_V3_FAST_FINISH_LONG_DAILY_SECONDS', str(cap))
+    taken = []
+
+    def fail(heard, attempt):
+        if 700 in heard and attempt == 1:
+            # The other process takes the last room while this chunk's first request fails.
+            taken.append(other.reserve(cap - admission))
+        return 700 in heard and attempt == 1
+
+    provider = Provider(fail=fail)
+    assert run([unit], read, provider)[0] == 'retry_cap'
+    assert taken[0] is not None and max(provider.attempts.values()) == 1
+    assert used() <= cap
+
+
+def _job(sent, *, privacy=lambda: True, stop=None, deadline=None, during_first=None):
+    """One 250 s long-pass chunk job whose first request fails (``during_first`` runs inside it)."""
+    calls = []
+
+    def call(pcm, language):
+        calls.append(len(pcm))
+        if len(calls) == 1:
+            if during_first is not None:
+                during_first()
+            raise RuntimeError('provider down')
+        return []
+
+    stop = stop or threading.Event()
+    deadline = deadline or time.monotonic() + 40
+    pcm = bytes(2 * RATE * 250)  # a 250 s chunk
+    try:
+        result = fast_finish._chunk_job(call, [pcm], 'en', privacy, deadline, time.monotonic(), 'long', sent, stop)
+    except Exception as error:
+        result = error
+    return result, calls
+
+
+def test_settle_refunds_a_reserved_retry_that_was_not_sent(monkeypatch):
+    stop = threading.Event()
+
+    class _StopDuringRetryReserve(fakeredis.FakeRedis):
+        def pipeline(self, *args, **kwargs):
+            pipe = super().pipeline(*args, **kwargs)
+            execute = pipe.execute
+
+            def stopped_meanwhile():
+                if fast_finish.LONG_BUDGET.used() > 0:
+                    stop.set()  # the pass stops while Redis answers the retry's reservation
+                return execute()
+
+            pipe.execute = stopped_meanwhile
+            return pipe
+
+    budget = fast_finish._FleetBudget(_StopDuringRetryReserve())
+    monkeypatch.setattr(fast_finish, 'LONG_BUDGET', budget)
+    key = budget.reserve(300)
+    sent = fast_finish._Sent(key, 300)
+    result, calls = _job(sent, stop=stop)
+    assert isinstance(result, fast_finish._Abandoned) and len(calls) == 1
+    reserved, spent = sent.close()
+    assert reserved == pytest.approx(550) and spent == pytest.approx(250)
+    assert budget.used() == pytest.approx(550)
+    budget.settle(key, reserved, spent)
+    assert budget.used() == pytest.approx(250)  # the unsent retry refunded
+
+
+def test_a_retry_reserved_after_the_pass_settled_gives_its_seconds_back(monkeypatch):
+    budget = fast_finish._FleetBudget(fakeredis.FakeRedis())
+    monkeypatch.setattr(fast_finish, 'LONG_BUDGET', budget)
+    key = budget.reserve(300)
+    sent = fast_finish._Sent(key, 300)
+    take = budget.take
+
+    def settled_meanwhile(key, seconds):
+        kept = take(key, seconds)
+        sent.close()  # the pass settles while Redis answers
+        return kept
+
+    monkeypatch.setattr(budget, 'take', settled_meanwhile)
+    assert sent.retry(250) is False and budget.used() == pytest.approx(300)
+    assert sent.add(10) is False  # nothing is sent after the settle
+    assert sent.retry(250) is False and budget.used() == pytest.approx(300)
+
+
+@pytest.mark.parametrize('how', ['denied_by_another_check', 'denied_at_retry', 'stopped'])
+def test_a_denial_or_stop_before_the_retry_reserves_nothing(monkeypatch, how):
+    budget = fast_finish._FleetBudget(fakeredis.FakeRedis())
+    monkeypatch.setattr(fast_finish, 'LONG_BUDGET', budget)
+    key = budget.reserve(300)
+    sent = fast_finish._Sent(key, 300)
+    takes = []
+    take = budget.take
+    monkeypatch.setattr(budget, 'take', lambda *args: takes.append(args) or take(*args))
+    asked, stop = [], threading.Event()
+    # The pass's sticky authority: it answers yes once, then no only when asked at the retry.
+    privacy = fast_finish._StickyPrivacy(lambda: asked.append(1) or not (how == 'denied_at_retry' and len(asked) > 1))
+    during_first = {
+        # Another check of the same pass (a probe or another chunk) is refused while this request runs.
+        'denied_by_another_check': privacy._denied.set,
+        'denied_at_retry': None,
+        # The pass stops while this request runs.
+        'stopped': stop.set,
+    }[how]
+    result, calls = _job(sent, privacy=privacy, stop=stop, during_first=during_first)
+    assert len(calls) == 1 and takes == [] and budget.used() == pytest.approx(300)
+    if how == 'stopped':
+        assert isinstance(result, RuntimeError)  # the first failure, no retry
+    else:
+        assert isinstance(result, fast_finish._Refused)
+        # Sticky: after another check's denial the retry does not even ask the authority.
+        assert len(asked) == (1 if how == 'denied_by_another_check' else 2)
+
+
+@pytest.mark.parametrize('left', [-0.05, 0.1])
+def test_a_retry_whose_reservation_leaves_too_little_time_is_not_sent(monkeypatch, left):
+    monkeypatch.setattr(fast_finish, 'RETRY_MIN_SECONDS', 0.0)
+    monkeypatch.setattr(fast_finish, 'RESERVE_MIN_SECONDS', 0.1)
+    monkeypatch.setattr(fast_finish, 'CHUNK_SEND_MIN_SECONDS', 0.0)
+    budget = fast_finish._FleetBudget(fakeredis.FakeRedis())
+    monkeypatch.setattr(fast_finish, 'LONG_BUDGET', budget)
+    key = budget.reserve(300)
+    sent = fast_finish._Sent(key, 300)
+    deadline = time.monotonic() + 0.5
+    take = budget.take
+
+    def slow_take(key, seconds):
+        kept = take(key, seconds)
+        # Redis answers with ``left`` seconds of the deadline remaining (negative: past it), under
+        # RETRY_SEND_MIN_SECONDS either way.
+        time.sleep(max(deadline - left - time.monotonic(), 0))
+        return kept
+
+    monkeypatch.setattr(budget, 'take', slow_take)
+    result, calls = _job(sent, deadline=deadline)
+    # Reserved, then expired: not sent, and the settle refunds the reserved retry.
+    assert isinstance(result, fast_finish._Expired) and len(calls) == 1
+    reserved, spent = sent.close()
+    assert reserved == pytest.approx(550) and spent == pytest.approx(250)
+    budget.settle(key, reserved, spent)
+    assert budget.used() == pytest.approx(250)
+
+
+def test_an_abandoned_chunk_that_reaches_its_send_after_the_settle_sends_and_charges_nothing(monkeypatch):
+    # The pass ends at its deadline with three long chunks held just before their send; they go on
+    # only once run() has returned and the pass has settled (``_run`` closes its ``_Sent`` there).
+    monkeypatch.setattr(fast_finish, 'RESERVE_MIN_SECONDS', 0.1)
+    monkeypatch.setattr(fast_finish, 'CHUNK_SEND_MIN_SECONDS', 0.1)
+    monkeypatch.setattr(fast_finish, 'STOP_GRACE_SECONDS', 0.05)
+    pool = get_fast_finish_chunk_executor()
+    futures, held, gate = [], [], threading.Event()
+
+    class Recording:
+        def submit(self, *args):
+            future = pool.submit(*args)
+            futures.append(future)
+            return future
+
+    denied = fast_finish._privacy_denied
+
+    def hold_before_send(privacy):
+        if threading.current_thread().name.startswith('ff-chunk'):
+            held.append(1)
+            assert gate.wait(5), 'never released'
+        return denied(privacy)
+
+    monkeypatch.setattr(fast_finish, 'get_fast_finish_chunk_executor', lambda: Recording())
+    monkeypatch.setattr(fast_finish, '_privacy_denied', hold_before_send)
+    unit, read = recording(1800)
+    provider = Provider()
+    audio = fast_finish.AUDIO_SECONDS.labels('long')._value.get()
+    try:
+        outcome, written = run([unit], read, provider, deadline=time.monotonic() + 1.0)
+        assert outcome == 'deadline' and written is None and len(held) == fast_finish.LONG_PASS_WINDOW
+        charged = used()  # the settle has landed: admission refunded down to what was sent (nothing)
+    finally:
+        # Released even when an assertion above fails, so no chunk worker stays parked on the gate.
+        gate.set()
+    wait(futures, timeout=5)
+    assert all(isinstance(f.exception(), fast_finish._Abandoned) for f in futures)
+    # No provider call after the settle, and no audio seconds that the counter does not carry.
+    assert provider.calls == 0 and charged == 0 and used() == pytest.approx(sum(provider.durations))
+    assert fast_finish.AUDIO_SECONDS.labels('long')._value.get() == audio
+
+
+def test_a_retry_with_too_little_time_left_reserves_nothing(monkeypatch):
+    monkeypatch.setattr(fast_finish, 'RETRY_MIN_SECONDS', 0.0)
+    budget = fast_finish._FleetBudget(fakeredis.FakeRedis())
+    monkeypatch.setattr(fast_finish, 'LONG_BUDGET', budget)
+    key = budget.reserve(300)
+    sent = fast_finish._Sent(key, 300)
+    deadline = time.monotonic() + fast_finish.RESERVE_MIN_SECONDS - 0.5
+    # Over CHUNK_SEND_MIN_SECONDS is not needed for the retry: the first send is checked on its own.
+    monkeypatch.setattr(fast_finish, 'CHUNK_SEND_MIN_SECONDS', 0.0)
+    result, calls = _job(sent, deadline=deadline)
+    # The chunk fails with its first error, as a retry out of time always has; nothing reserved.
+    assert isinstance(result, RuntimeError) and len(calls) == 1 and budget.used() == pytest.approx(300)
+
+
+def test_two_thirty_minute_passes_fit_the_default_cap_at_once_and_three_a_day(monkeypatch):
+    unit, read = recording(1800)
+    each = fast_finish.reserved_seconds(fast_finish.plan([unit]))
+    cap = fast_finish.LONG_DAILY_SECONDS_DEFAULT
+    # The earlier reservation (every chunk twice, plus the probe) fit only one pass at a time.
+    assert 2 * (2 * (each - 30) + 30) > cap >= 2 * each
+    running = fast_finish.LONG_BUDGET.reserve(each)  # another 30-minute pass still in flight
+    assert running is not None
+    assert run([unit], read, Provider())[0] == 'written'
+    fast_finish.LONG_BUDGET.settle(running, each, 1818)
+    assert run([unit], read, Provider())[0] == 'written'  # the day's third
+    never = lambda *args: pytest.fail('must not read audio or transcribe')
+    assert run([unit], never, never, write=never)[0] == 'long_cap'  # a fourth does not fit
+    assert used() <= cap
 
 
 def test_a_long_pass_with_too_little_time_left_reserves_nothing(monkeypatch):
@@ -1728,11 +2028,28 @@ def test_a_pass_that_is_not_written_observes_no_wall_seconds():
     assert _count(fast_finish.WALL_SECONDS) == before
 
 
+def test_every_outcome_is_pre_initialised_at_import():
+    # A fresh process: no earlier test can have created a label by counting it. A zero then reads as
+    # zero, not as a missing series.
+    script = (
+        'from utils.conversations.v3 import fast_finish\n'
+        "print(' '.join(sorted({s.labels['outcome'] for f in fast_finish.OUTCOMES.collect() for s in f.samples})))"
+    )
+    backend = Path(__file__).resolve().parents[2]
+    result = subprocess.run(
+        [sys.executable, '-c', script], cwd=backend, env=dict(os.environ), capture_output=True, text=True, timeout=120
+    )
+    assert result.returncode == 0, result.stderr[-2000:]
+    outcomes = set(result.stdout.split())
+    assert {'long_cap', 'retry_cap', 'deadline', 'provider_error', 'written'} <= outcomes
+
+
 def test_cloud_run_sync_scrapes_the_chunk_metrics():
     profile = Path(__file__).resolve().parents[2] / 'deploy' / 'cloud_run_gmp_sync.yaml'
     rules = yaml.safe_load(profile.read_text())['spec']['endpoints'][0]['metricRelabeling']
     (rule,) = [r for r in rules if r['action'] == 'keep' and r['sourceLabels'] == ['__name__']]
     for metric in (
+        fast_finish.OUTCOMES,
         fast_finish.CHUNKS,
         fast_finish.PROVIDER_CHUNK_SECONDS,
         fast_finish.CHUNK_QUEUE_SECONDS,

@@ -2238,6 +2238,8 @@ if args[:3] == ['container', 'images', 'describe']:
 if args[:2] == ['config', 'get-value']:
     print(os.environ.get('STUB_GCLOUD_PROJECT', '(unset)'))
     sys.exit(0)
+if args == ['auth', 'configure-docker', 'gcr.io', '--quiet']:
+    sys.exit(0)
 if args[:2] == ['auth', 'print-access-token']:
     print('stub-token')
     sys.exit(0)
@@ -2354,17 +2356,22 @@ def test_listen_deploy_tag_resolution_executes_against_stubbed_tools(tmp_path):
     assert outputs['BACKEND_LISTEN_SOURCE_SHA'] == 'd' * 40
     assert outputs['neg_coverage_exporter_image_tag'] == 'ddddddd'
 
-    case = tmp_path / 'image-only-wrong-source'
-    env = (
-        base_env
-        | _listen_env(case, {'ddddddd': 'd' * 40}, image='gcr.io/test-project/backend:abc1234')
-        | {'REQUESTED_TAG': 'ddddddd', 'DEPLOY_MODE': 'image-only', 'EXPECTED_SHA': 'e' * 40}
+    case = tmp_path / 'kept-digest'
+    digest = 'sha256:' + 'a' * 64
+    source = 'c' * 40
+    registry = 'gcr.io/based-hardware/backend'
+    docker = bin_dir / 'docker'
+    docker.write_text(
+        '#!/bin/bash\n'
+        f'[[ "$1 $2 $3 $4" == "buildx imagetools inspect {registry}@{digest}" ]] || exit 1\n'
+        f'echo {source}\n',
+        encoding='utf-8',
     )
+    docker.chmod(0o755)
+    env = base_env | _listen_env(case, {'ccccccc': source}, image=f'{registry}@{digest}') | {'REQUESTED_TAG': ''}
     proc, outputs = _run_step(run, env, _LISTEN_SUBSTITUTIONS, case)
-    assert proc.returncode == 1
-    assert 'exact admitted source' in proc.stdout
-    assert 'BACKEND_LISTEN_SOURCE_SHA' not in outputs
-    assert 'neg_coverage_exporter_image_tag' not in outputs
+    assert proc.returncode == 0, proc.stderr
+    assert outputs == {'BACKEND_LISTEN_IMAGE_DIGEST': digest}
 
     case = tmp_path / 'missing-tag'
     env = base_env | _listen_env(case, {'abc1234': 'c' * 40}, image='') | {'REQUESTED_TAG': ''}

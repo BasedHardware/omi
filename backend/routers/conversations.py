@@ -183,7 +183,7 @@ import logging
 logger = logging.getLogger(__name__)
 
 from config.llm_spend import v3_summary_first_open_gating_enabled
-from config.conversations_v3 import conversations_v3_enabled, live_recap_enabled
+from config.conversations_v3 import conversations_v3_enabled, live_recap_enabled, v3_intake_held_out
 from config.app_channel import APP_CHANNEL_HEADER, app_channel
 from utils.episodes import client_gate
 from models.conversation import ConversationsLiveResponse
@@ -211,7 +211,21 @@ def get_live_conversation(
     if not enabled:
         return {'v3': False, 'conversation': None}
     now = datetime.now(timezone.utc)
-    row = conversations_v3_live.live_window(uid, now=now, max_idle=v3_live.MAX_IDLE, pick=v3_live.active)
+    row, complete = conversations_v3_live.live_window_lookup(
+        uid, now=now, max_idle=v3_live.MAX_IDLE, pick=v3_live.active
+    )
+    if row is None and v3_intake_held_out(uid):
+        # Holdout (SCA-2918): an existing active window is still served; only a complete lookup proves
+        # there is none, and then the owner's new captures are legacy. A capped one keeps v3.
+        if complete:
+            return {'v3': False, 'conversation': None}
+        record_fallback(
+            component='feature_flags',
+            from_mode='v3_holdout',
+            to_mode='v3_live',
+            reason='lookup_cap',
+            outcome='degraded',
+        )
     compact = (
         {
             key: row[key]
@@ -694,8 +708,31 @@ def process_in_progress_conversation(
     # Experiment end_open_conversation: End also cuts the owner's v3 conversation, at the End time the app
     # sent in this header (else now), and wakes the builder at once, so it closes whatever the listening
     # session's recording below is doing. Off: the header is ignored and nothing is written.
-    cut_id = v3_manual_cuts.record_end(uid, ended_at=v3_manual_cuts.parse_ended_at(ended_at))
+    # Experiment live_words_cascade: the request may also carry the live words the phone was showing for the
+    # conversation being ended (live_tail); they are kept with the cut for that conversation's summary and
+    # nowhere else. A request without them stores its End exactly as before.
+    live_tail = getattr(request, 'live_tail', None)
+    if live_tail is None:
+        cut_id = v3_manual_cuts.record_end(uid, ended_at=v3_manual_cuts.parse_ended_at(ended_at))
+    else:
+        cut_id = v3_manual_cuts.record_end(uid, ended_at=v3_manual_cuts.parse_ended_at(ended_at), live_tail=live_tail)
     conversation = retrieve_in_progress_conversation(uid)
+    named = request.live_conversation_id if request else None
+    if (
+        conversation
+        and named
+        and named != conversation.get('id')
+        and not conversation.get('recording')
+        and conversations_v3_enabled(uid)
+        and v3_intake_held_out(uid)
+    ):
+        # Held-out owner only (SCA-2918): a legacy row in progress beside an older v3 window. A Finish naming
+        # the window closes exactly that window; the legacy row keeps recording. A miss runs the legacy Finish.
+        # No experiment wake here: record_end stores no cut for a held-out owner, and the window cut
+        # wakes its builder itself (finish._acknowledge enqueues the pending recording).
+        finished = finish_live_window(uid, named, named_only=True)
+        if finished is not None:
+            return finished
     if not conversation:
         response = finish_live_window(
             uid,
@@ -1291,7 +1328,9 @@ def get_conversations(
     default_home = not (reveal or start_date or end_date)
     # Legacy Home only: a v3 owner's Home is built from derived rows, so a held
     # legacy sync piece there would duplicate them.
-    v3_home = default_home and conversations_v3_enabled(uid)
+    # A held-out owner (SCA-2918) reads legacy Home: it shows their v3_derived cards too, and their new
+    # legacy pieces held for notes, which v3 Home would hide for the whole capture.
+    v3_home = default_home and conversations_v3_enabled(uid) and not v3_intake_held_out(uid)
     show_held = default_home and not v3_home
     requested_mode = request.headers.get(list_page_headers.HOME_MODE_HEADER) if request is not None else None
     first_page = offset == 0 and not cursor

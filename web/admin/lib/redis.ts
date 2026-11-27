@@ -1,7 +1,14 @@
 import Redis from "ioredis";
 
 let _redis: Redis | null = null;
+let _warnedUnset = false;
+// Distinct error messages seen since the last "ready" event.
+const _reportedErrors = new Set<string>();
 
+/**
+ * Shared best-effort Redis client. Redis is optional: when REDIS_HOST is
+ * unset or unreachable, callers fall back to their source of truth.
+ */
 export function getRedis(): Redis | null {
   if (_redis) return _redis;
 
@@ -10,7 +17,10 @@ export function getRedis(): Redis | null {
   const password = process.env.REDIS_PASSWORD;
 
   if (!host) {
-    console.warn("REDIS_HOST not set — cache invalidation will be skipped");
+    if (!_warnedUnset) {
+      _warnedUnset = true;
+      console.warn("REDIS_HOST not set — Redis cache and invalidation disabled");
+    }
     return null;
   }
 
@@ -25,7 +35,16 @@ export function getRedis(): Redis | null {
     maxRetriesPerRequest: 0,
     autoResendUnfulfilledCommands: false,
   });
-  _redis.on("error", (err) => console.error("Redis error:", err.message));
+  _redis.on("ready", () => {
+    _reportedErrors.clear();
+  });
+  // ioredis keeps retrying an unreachable host about every 2s. Log the first
+  // failure for each distinct message, then stay quiet until the link recovers.
+  _redis.on("error", (err) => {
+    if (_reportedErrors.has(err.message)) return;
+    _reportedErrors.add(err.message);
+    console.error("Redis unavailable, using fallbacks:", err.message);
+  });
   return _redis;
 }
 
