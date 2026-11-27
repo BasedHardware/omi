@@ -6,8 +6,10 @@ import json
 import os
 from pathlib import Path
 import re
+import subprocess
 from types import SimpleNamespace
 import unittest
+import unittest.mock
 from unittest.mock import patch
 
 import pusher_canary_inverse as inverse_script
@@ -69,7 +71,10 @@ class FakeLive:
                             {"name": "sidecar", "image": "gcr.io/based-hardware/sidecar@sha256:" + "c" * 64},
                             {"name": "pusher", "image": image},
                         ],
-                        "env": [{"name": "X", "valueFrom": {"configMapKeyRef": {"name": "prod-omi-backend-config", "key": "Y"}}}],
+                        "env": [
+                            {"name": "X", "valueFrom": {"configMapKeyRef": {"name": "prod-omi-backend-config", "key": "Y"}}},
+                            {"name": "S", "valueFrom": {"secretKeyRef": {"name": "backend-secrets", "key": "S"}}},
+                        ],
                     }
                 },
             },
@@ -86,6 +91,7 @@ class FakeLive:
             "metadata": {"name": "prod-omi-backend-config", "uid": "configmap-uid", "resourceVersion": "1"},
             "data": {"STT_SERVICE_MODELS": "dg-nova-3,modulate-velma-2,parakeet"},
         }
+        self.secret_versions = {"backend-secrets": ["secret-uid", "2"]}
         self.requests = []
         self.admit = None
         self.policy_resource_version = "5"
@@ -108,7 +114,7 @@ class FakeLive:
 
     def secret_version(self, name, *, namespace, optional=False):
         self.requests.append((True, [{"op": "secret-version", "value": name}]))
-        return ["secret-uid", "2"]
+        return self.secret_versions.get(name)
 
     def get(self, resource, name=None, *, namespace=None, optional=False):
         if resource == "deployment.apps":
@@ -221,7 +227,11 @@ class ImageOnlyTest(unittest.TestCase):
             )
         )
         self.environment = self.enterContext(
-            patch.object(control, "check_effective_environment", side_effect=lambda _live, _artifacts, result: result.update(effective_environment="equal"))
+            patch.object(
+                control,
+                "check_effective_environment",
+                side_effect=lambda _live, _artifacts, _before, result: result.update(effective_environment="equal"),
+            )
         )
         self.ready = self.enterContext(
             patch.object(
@@ -337,6 +347,7 @@ class ImageOnlyTest(unittest.TestCase):
         )
         self.assertEqual(helper.current_image(self.fake.target), control.BASELINE)
         self.assertEqual(result["reason"], "REFUSED_INVERSE_REVERSED")
+        self.assertEqual(result["reverse_patch"], "succeeded")
         self.assertEqual(result["live_inverse_server_dry_run"], "REFUSED")
         self.assertEqual(result["serving_image"], control.BASELINE)
         self.assertEqual(self.ready.call_args.args[2], control.BASELINE)
@@ -348,10 +359,13 @@ class ImageOnlyTest(unittest.TestCase):
         with self.assertRaises(control.Hold):
             control.execute("promote", self.promote_packet(), self.live, result, writer=self.writer)
         self.assertEqual(result["reason"], "REFUSED_INVERSE")
-        self.assertEqual(result["stage"], "hold_refused_inverse")
+        self.assertEqual(result["stage"], "hold")
         self.assertEqual(result["hold_stage"], "reverse_patch_failed")
+        self.assertEqual(result["reverse_patch"], "rejected")
         self.assertEqual(result["serving_image_observed"], CANDIDATE)
-        self.assertIn("rollout undo", result["manual_restore_path"])
+        self.assertEqual((result["deployment_uid_before"], result["deployment_uid_observed"]), ("deploy-uid", "deploy-uid"))
+        self.assertIn("--to-revision=<that verified revision>", result["manual_restore_path"])
+        self.assertIn("never an unpinned undo", result["manual_restore_path"])
         self.assertEqual(helper.current_image(self.fake.target), CANDIDATE)
         # The forward patch and exactly one reverse attempt; nothing after it.
         self.assertEqual([ops[-1]["value"] for ops in live_patches(self.fake)], [CANDIDATE, control.BASELINE])
@@ -369,6 +383,7 @@ class ImageOnlyTest(unittest.TestCase):
         with self.assertRaises(control.Hold):
             control.execute("promote", self.promote_packet(), self.live, result, writer=self.writer)
         self.assertEqual((result["reason"], result["hold_stage"]), ("REFUSED_INVERSE", "reverse_serving_unverified"))
+        self.assertEqual(result["reverse_patch"], "succeeded")
         self.assertEqual(result["serving_image_observed"], control.BASELINE)
         self.assertEqual(len(live_patches(self.fake)), 2)
 
@@ -387,7 +402,75 @@ class ImageOnlyTest(unittest.TestCase):
         result = self.result("promote")
         with self.assertRaises(control.Hold):
             control.execute("promote", self.promote_packet(), self.live, result, writer=self.writer)
-        self.assertEqual(result["reverse_refusal"], "reverse_preconditions_changed")
+        self.assertEqual((result["reason"], result["hold_stage"]), ("UNCERTAIN_AFTER_WRITE", "post_write_state_unexpected"))
+        self.assertEqual(result["reverse_patch"], "rejected_on_preconditions")
+        self.assertEqual((result["deployment_uid_before"], result["deployment_uid_observed"]), ("deploy-uid", "replaced-uid"))
+        self.assertEqual(len(live_patches(self.fake)), 1)
+
+    def fail_reads_after_write(self, *, failures):
+        """Inject TimeoutExpired on the next `failures` Deployment reads after the live write."""
+        original_get, original_call = self.fake.get, self.fake.call
+        state = {"written": False, "left": failures}
+
+        def call(*args, **kwargs):
+            value = original_call(*args, **kwargs)
+            state["written"] = state["written"] or "--dry-run=none" in args
+            return value
+
+        def get(resource, name=None, **kwargs):
+            if resource == "deployment.apps" and state["written"] and state["left"]:
+                state["left"] -= 1
+                raise subprocess.TimeoutExpired(["kubectl", "get"], 30)
+            return original_get(resource, name, **kwargs)
+
+        self.fake.call, self.fake.get = call, get
+
+    def test_timeout_at_the_post_write_read_recovers_with_the_one_reverse(self):
+        self.fail_reads_after_write(failures=1)
+        result = self.result("promote")
+        with self.assertRaises(control.Reversed):
+            control.execute("promote", self.promote_packet(), self.live, result, writer=self.writer)
+        self.assertEqual(result["reason"], "UNCERTAIN_AFTER_WRITE_REVERSED")
+        self.assertEqual(result["post_write_failure"], "unexpected_TimeoutExpired")
+        self.assertEqual(result["reverse_patch"], "succeeded")
+        self.assertEqual([ops[-1]["value"] for ops in live_patches(self.fake)], [CANDIDATE, control.BASELINE])
+        self.assertEqual(helper.current_image(self.fake.target), control.BASELINE)
+
+    def test_unreadable_state_after_the_write_holds_without_a_reverse(self):
+        self.fail_reads_after_write(failures=10)
+        result = self.result("promote")
+        with self.assertRaises(control.Hold):
+            control.execute("promote", self.promote_packet(), self.live, result, writer=self.writer)
+        self.assertEqual((result["reason"], result["hold_stage"]), ("UNCERTAIN_AFTER_WRITE", "post_write_state_unread"))
+        self.assertEqual((result["reverse_patch"], result["deployment_uid_observed"]), ("not_attempted", "unread"))
+        self.assertEqual(len(live_patches(self.fake)), 1)
+
+    def test_timeout_at_the_inverse_probe_recovers_with_the_one_reverse(self):
+        def admit(_old, ops, dry):
+            if dry and ops[3]["value"] == CANDIDATE and ops[4]["value"] == control.BASELINE:
+                raise subprocess.TimeoutExpired(["kubectl", "patch"], 120)
+            return None
+
+        self.fake.admit = admit
+        result = self.result("promote")
+        with self.assertRaises(control.Reversed):
+            control.execute("promote", self.promote_packet(), self.live, result, writer=self.writer)
+        self.assertEqual(result["reason"], "UNCERTAIN_AFTER_WRITE_REVERSED")
+        self.assertEqual(result["live_inverse_server_dry_run"], "UNPROVEN")
+        self.assertEqual([ops[-1]["value"] for ops in live_patches(self.fake)], [CANDIDATE, control.BASELINE])
+
+    def test_a_forward_patch_error_holds_when_the_write_did_not_land(self):
+        def admit(_old, ops, dry):
+            if not dry:
+                raise subprocess.TimeoutExpired(["kubectl", "patch"], 120)
+            return None
+
+        self.fake.admit = admit
+        result = self.result("promote")
+        with self.assertRaises(control.Hold):
+            control.execute("promote", self.promote_packet(), self.live, result, writer=self.writer)
+        self.assertEqual((result["reason"], result["hold_stage"]), ("UNCERTAIN_AFTER_WRITE", "post_write_state_unexpected"))
+        self.assertEqual(result["serving_image_observed"], control.BASELINE)
         self.assertEqual(len(live_patches(self.fake)), 1)
 
     def test_canary_verifies_the_recorded_inverse_and_never_writes(self):
@@ -420,11 +503,14 @@ class ImageOnlyTest(unittest.TestCase):
         result = self.result("promote")
         self.status_report.side_effect = REAL_STATUS_REPORT
         with patch.object(control.subprocess, "run", return_value=SimpleNamespace(returncode=1)) as report:
-            with self.assertRaisesRegex(helper.Refused, "deploy_status_report_failed"):
+            with self.assertRaises(control.Hold):
                 control.execute("promote", self.promote_packet(), self.live, result, writer=self.writer)
-        self.assertEqual(report.call_args.args[0], control.STATUS_REPORT)
-        self.assertEqual(result["stage"], "deploy_status_report")
+        self.assertEqual(report.call_args_list[0].args[0], control.STATUS_REPORT)
+        self.assertEqual(result["post_write_failure"], "deploy_status_report_failed")
+        self.assertEqual((result["reason"], result["hold_stage"]), ("UNCERTAIN_AFTER_WRITE", "forward_serving_unverified"))
         self.assertNotIn("serving_image", result)
+        # The single rollout wait is spent: no reverse after a failed forward verification.
+        self.assertEqual(len(live_patches(self.fake)), 1)
 
     def test_failed_rollout_runs_diagnostic_report_and_stays_failed(self):
         def rollout(args, reason, **_kwargs):
@@ -433,13 +519,42 @@ class ImageOnlyTest(unittest.TestCase):
             return ""
 
         self.command.side_effect = rollout
-        with self.assertRaisesRegex(helper.Refused, "rollout_unconfirmed"):
-            control.execute("promote", self.promote_packet(), self.live, self.result("promote"), writer=self.writer)
-        self.status_report.assert_called_once_with(strict=False)
+        result = self.result("promote")
+        with self.assertRaises(control.Hold):
+            control.execute("promote", self.promote_packet(), self.live, result, writer=self.writer)
+        self.assertEqual(result["post_write_failure"], "rollout_unconfirmed")
+        self.assertEqual(self.status_report.call_args_list, [unittest.mock.call(strict=False)] * 2)
+        self.assertEqual(len(live_patches(self.fake)), 1)
+
+    def test_rollback_failure_after_its_write_holds(self):
+        self.fake = FakeLive(image=CANDIDATE)
+        self.live, self.writer = control.ReadOnlyCluster(self.fake), control.LiveWriter(self.fake)
+        self.ready.side_effect = helper.Refused("pusher_replica_replacement_incomplete")
+        self.command.return_value = control.BASELINE.split("@")[1]
+        result = self.result("rollback")
+        with self.assertRaises(control.Hold):
+            control.execute("rollback", packet_for("rollback"), self.live, result, writer=self.writer)
+        self.assertEqual((result["reason"], result["hold_stage"]), ("UNCERTAIN_AFTER_WRITE", "rollback_unverified"))
+        self.assertEqual(len(live_patches(self.fake)), 1)
+
+
+def canary_dependencies(live):
+    """What the canary producer records, for a canary that saw the same references as `live`."""
+    digest = inverse_script.inventory_sha256(
+        control.dependency_versions(control.ReadOnlyCluster(live), live.target), exclude=control.SHARED
+    )
+    return {
+        "names": [["secret", "backend-secrets"]],
+        "excluded": "runtime_config_map",
+        "startup_sha256": digest,
+        "probe_sha256": digest,
+        "stable": True,
+    }
 
 
 def canary_artifacts(live=None):
     live = live or FakeLive()
+    dependencies = canary_dependencies(live)
     return {
         "evidence": {"status": "PASS", "fixture": "canonical"},
         "deployment_receipt": {
@@ -486,6 +601,7 @@ def canary_artifacts(live=None):
                 "image": CANDIDATE,
             },
             "admitted_image": control.BASELINE,
+            "dependencies": dependencies,
         },
     }
 
@@ -530,6 +646,8 @@ class EvidenceGateTest(unittest.TestCase):
             ("missing-parity", "canary_inverse_receipt_refused"),
             ("missing-catch-all", "canary_inverse_receipt_refused"),
             ("missing-live-binding", "canary_inverse_receipt_refused"),
+            ("unstable-dependencies", "canary_inverse_receipt_refused"),
+            ("unprobed-dependencies", "canary_inverse_receipt_refused"),
         )
         for case, reason in cases:
             with self.subTest(case=case):
@@ -552,6 +670,10 @@ class EvidenceGateTest(unittest.TestCase):
                     del inverse["template_parity"]["classes"]["other_template_fields"]
                 elif case == "missing-live-binding":
                     del inverse["live_deployment"]
+                elif case == "unstable-dependencies":
+                    inverse["dependencies"]["probe_sha256"] = "f" * 64
+                elif case == "unprobed-dependencies":
+                    inverse["dependencies"].update(probe_sha256=None, stable=False)
                 else:
                     inverse["preconditions"]["container"] = "listener"
                 mocks = self.canary_mocks(artifacts, validation=validation)
@@ -748,13 +870,22 @@ class EvidenceGateTest(unittest.TestCase):
         with patch.object(control, "run", side_effect=changed), self.assertRaisesRegex(helper.Refused, "evidence_workflow_revision_changed"):
             control.accepted_workflow_revision(CANARY_WORKFLOW_SHA, WORKFLOW_SHA)
 
-    def test_effective_environment_compares_config_and_template_redacted(self):
+    def compare(self, fake, artifacts, result):
+        live = control.ReadOnlyCluster(fake)
+        control.check_effective_environment(live, artifacts, control.state(live), result)
+
+    def test_effective_environment_compares_config_template_and_dependency_versions_redacted(self):
         fake = FakeLive()
         result = {}
-        control.check_effective_environment(control.ReadOnlyCluster(fake), canary_artifacts(fake), result)
+        self.compare(fake, canary_artifacts(fake), result)
         self.assertEqual(
             result["effective_environment"],
-            {"runtime_config_map": "equal", "pod_template": "equal", "live_template_since_canary": "equal"},
+            {
+                "runtime_config_map": "equal",
+                "pod_template": "equal",
+                "dependency_versions": "equal",
+                "live_template_since_canary": "equal",
+            },
         )
 
     def test_effective_environment_refuses_each_difference_without_values(self):
@@ -767,10 +898,19 @@ class EvidenceGateTest(unittest.TestCase):
         def template_changed(fake, _artifacts):
             fake.target["spec"]["template"]["spec"]["hostNetwork"] = True
 
+        def secret_rotated(fake, _artifacts):
+            # Same Secret, new resourceVersion since the canary: a rotation between canary and promote.
+            fake.secret_versions["backend-secrets"] = ["secret-uid", "3"]
+
+        def secret_replaced(fake, _artifacts):
+            fake.secret_versions["backend-secrets"] = ["new-secret-uid", "2"]
+
         for mutate, field in (
             (config_changed, "runtime_config_map"),
             (parity_differs, "pod_template"),
             (template_changed, "live_template_since_canary"),
+            (secret_rotated, "dependency_versions"),
+            (secret_replaced, "dependency_versions"),
         ):
             with self.subTest(field=field):
                 fake = FakeLive()
@@ -778,10 +918,42 @@ class EvidenceGateTest(unittest.TestCase):
                 mutate(fake, artifacts)
                 result = {}
                 with self.assertRaisesRegex(helper.Refused, "effective_environment_differs"):
-                    control.check_effective_environment(control.ReadOnlyCluster(fake), artifacts, result)
+                    self.compare(fake, artifacts, result)
                 self.assertEqual(result["effective_environment"][field], "differs")
                 self.assertEqual({value for value in result["effective_environment"].values()} - {"equal", "differs"}, set())
                 self.assertNotIn("private-value", json.dumps(result))
+                self.assertNotIn("secret-uid", json.dumps(result))
+
+    def test_check_qualification_requires_the_inverse_helper_in_the_qualified_revision(self):
+        calls = []
+
+        def git(args, reason):
+            calls.append((args, reason))
+            return ""
+
+        metadata = run_metadata(10, workflow=control.QUALIFICATION_WORKFLOW, event="push", head_sha=SOURCE)
+        with (
+            patch.object(control, "workflow_run_metadata", return_value=metadata) as fetch,
+            patch.object(control, "run", side_effect=git),
+            patch.object(control, "check_provenance", return_value={"qualified": True}),
+        ):
+            self.assertEqual(control.check_qualification(self.packet, WORKFLOW_SHA), {"qualified": True})
+        fetch.assert_called_once_with(10, control.QUALIFICATION_WORKFLOW, expected_sha=SOURCE)
+        (args, reason), = calls
+        self.assertEqual(reason, "qualification_predates_inverse_helper")
+        self.assertEqual(args[3:], ["diff", "--quiet", SOURCE, WORKFLOW_SHA, "--", *inverse_script.INVERSE_HELPER_PATHS])
+
+        def predates(args, reason):
+            raise helper.Refused(reason)
+
+        with (
+            patch.object(control, "workflow_run_metadata", return_value=metadata),
+            patch.object(control, "run", side_effect=predates),
+            patch.object(control, "check_provenance") as provenance,
+            self.assertRaisesRegex(helper.Refused, "qualification_predates_inverse_helper"),
+        ):
+            control.check_qualification(self.packet, WORKFLOW_SHA)
+        provenance.assert_not_called()
 
     def test_download_receipt_binds_pass_status_and_run_id(self):
         def download(args, reason):
@@ -921,6 +1093,16 @@ class MainTest(unittest.TestCase):
         code, receipt = self.run_main(env=dict(self.env, REQUESTED_DIGEST="sha256:" + "f" * 64))
         self.assertEqual((code, receipt["reason"]), (1, "dispatch_evidence_mismatch"))
 
+    def test_main_never_turns_an_attempted_write_into_a_plain_refusal(self):
+        def escaped(_mode, _packet, _live, result, *, writer=None):
+            result.update(stage="read_post_move_state", live_write_attempted=True, reverse_patch="not_attempted")
+            raise subprocess.TimeoutExpired(["kubectl", "get"], 30)
+
+        code, receipt = self.run_main(execute=escaped, env=self.promote_env())
+        self.assertEqual((code, receipt["status"], receipt["reason"]), (1, "HOLD", "UNCERTAIN_AFTER_WRITE"))
+        self.assertEqual(receipt["post_write_failure"], "missing_invalid_or_unavailable_evidence")
+        self.assertIn("--to-revision", receipt["manual_restore_path"])
+
     def test_main_reports_hold_and_reversed_outcomes(self):
         for error, status, reason in (
             (control.Hold("REFUSED_INVERSE"), "HOLD", "REFUSED_INVERSE"),
@@ -942,9 +1124,12 @@ class MainTest(unittest.TestCase):
     def test_image_only_job_timeout_covers_rollout_and_receipt_work(self):
         timeout = re.search(r"(?m)^    timeout-minutes: (\d+)\s*$", self.image_only_job())
         self.assertIsNotNone(timeout)
-        # Forward rollout plus one reverse rollout, and the receipt work around them.
-        self.assertGreaterEqual(int(timeout.group(1)), 2 * (control.ROLLOUT_TIMEOUT // 60) + 25)
-        self.assertLessEqual(int(timeout.group(1)), 360)
+        # Every path has one rollout wait (forward, or the single reverse), plus the two
+        # bounded status reports and at least 40 minutes of checks, receipts and paging.
+        rollout, reports = control.ROLLOUT_TIMEOUT // 60, 2 * control.STATUS_REPORT_TIMEOUT // 60
+        self.assertGreaterEqual(int(timeout.group(1)), rollout + reports + 40)
+        # Not sized for two rollout waits: that path does not exist and would hold prod-train longer.
+        self.assertLess(int(timeout.group(1)), 2 * rollout)
 
     def test_image_only_job_has_no_packet_or_isolated_secret(self):
         job = self.image_only_job()
@@ -959,13 +1144,21 @@ class MainTest(unittest.TestCase):
         self.assertIn("actions: read", permissions)
         self.assertNotIn("issues", permissions)
         self.assertNotIn("gh issue create", job)
-        notifier = job.split("- name: Notify Release of the held inverse", 1)[1].split("- name:", 1)[0]
-        self.assertIn("rollout undo deployment/prod-omi-pusher", notifier)
-        self.assertIn("rollout status", notifier)
-        summary = job.split("- name: Summarize the held or reversed inverse", 1)[1].split("- name:", 1)[0]
+        detect = job.split("- name: Detect a held or reversed image-only write", 1)[1].split("- name:", 1)[0]
+        self.assertIn("--to-revision", detect)
+        self.assertIn("never an unpinned undo", detect)
+        for key in ("reverse_patch", "deployment_uid_before", "deployment_uid_observed"):
+            self.assertIn(key, detect)
+        # Every HOLD pages, whatever its reason.
+        notifier = job.split("- name: Notify Release of the held image-only write", 1)[1].split("- name:", 1)[0]
+        self.assertIn("if: always() && steps.hold.outputs.status == 'HOLD'", notifier)
+        self.assertIn("release_version: ${{ steps.hold.outputs.page }}", notifier)
+        summary = job.split("- name: Summarize the held or reversed image-only write", 1)[1].split("- name:", 1)[0]
         self.assertIn("GITHUB_STEP_SUMMARY", summary)
         self.assertIn("manual_restore_path", summary)
-        self.assertIn("REFUSED_INVERSE_REVERSED", job)
+        self.assertIn("rollout undo deployment/prod-omi-pusher --to-revision=N", summary)
+        self.assertNotRegex(summary, r"rollout undo deployment/prod-omi-pusher\s*\"")
+        self.assertIn("steps.hold.outputs.status == 'REVERSED'", job)
 
 
 class CanaryOnlyWorkflowTest(unittest.TestCase):
@@ -1028,11 +1221,18 @@ class CanaryOnlyWorkflowTest(unittest.TestCase):
     def test_canary_inverse_runs_only_on_the_canary_only_producer(self):
         # A regular deploy can redeploy the serving image (baseline == candidate);
         # the inverse must not run, fail or gate that path.
-        for name in ("Prove the canary inverse admission at one replica", "Upload the canary inverse receipt"):
+        for name in (
+            "Stage the canary inverse helper from workflow controls",
+            "Prove the canary inverse admission at one replica",
+            "Recheck canary dependency versions after the probe",
+            "Upload the canary inverse receipt",
+        ):
             with self.subTest(step=name):
                 condition = re.search(r"(?m)^        if: (.*)$", self.blocks[name]).group(1)
                 self.assertTrue(condition.endswith("&& inputs.pusher_canary_only"), condition)
         inverse = self.blocks["Prove the canary inverse admission at one replica"]
+        self.assertIn('python3 "$PUSHER_CANARY_INVERSE"', inverse)
+        self.assertNotIn("python3 .github/scripts/pusher_canary_inverse.py", self.job)
         self.assertIn('--workflow-sha "$GITHUB_WORKFLOW_SHA"', inverse)
         self.assertIn('--canary-config-map "$PUSHER_CANARY_CONFIG"', inverse)
         self.assertNotIn("--mode", inverse)
@@ -1040,6 +1240,32 @@ class CanaryOnlyWorkflowTest(unittest.TestCase):
         shared = self.blocks["Upload protected production Pusher canary evidence"]
         self.assertNotIn("pusher-prod-canary-inverse-receipt.json", shared)
         self.assertIn(f"name: {control.INVERSE_ARTIFACT}", self.blocks["Upload the canary inverse receipt"])
+
+    def test_inverse_helper_runs_from_the_workflow_control_revision(self):
+        stage = self.blocks["Stage the canary inverse helper from workflow controls"]
+        self.assertIn('git archive "$GITHUB_WORKFLOW_SHA"', stage)
+        self.assertIn('git diff --quiet "$GITHUB_WORKFLOW_SHA"', stage)
+        for path in inverse_script.INVERSE_HELPER_PATHS:
+            self.assertIn(path, stage)
+        recheck = self.blocks["Recheck canary dependency versions after the probe"]
+        self.assertIn("--recheck", recheck)
+        order = [
+            "Stage the canary inverse helper from workflow controls",
+            "Prove the canary inverse admission at one replica",
+            "Exercise isolated production Pusher finalization semantics",
+            "Recheck canary dependency versions after the probe",
+            "Upload the canary inverse receipt",
+            "Remove isolated production Pusher canary",
+        ]
+        offsets = [self.job.index(f"- name: {name}") for name in order]
+        self.assertEqual(offsets, sorted(offsets))
+
+    def test_source_admission_and_the_qualifier_bind_the_inverse_helper(self):
+        admission = (control.ROOT / "backend/scripts/verify_pusher_promotion_evidence.py").read_text(encoding="utf-8")
+        qualifier = (control.ROOT / ".github/workflows/gcp_backend_pusher_auto_deploy.yml").read_text(encoding="utf-8")
+        for path in inverse_script.INVERSE_HELPER_PATHS:
+            self.assertIn(f'"{path}"', admission.split("CONTROL_PATHS = (", 1)[1].split(")", 1)[0])
+            self.assertIn(f"- '{path}'", qualifier)
 
     def test_canary_only_validates_production_pusher_inputs(self):
         validation = self.text.split("Validate Environment Input", 1)[1]

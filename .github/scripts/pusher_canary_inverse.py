@@ -12,7 +12,13 @@ resourceVersion, container name and old digest preconditions, then one replace.
 
 It runs only on a `pusher_canary_only` dispatch, the canary evidence producer for
 the protected image-only promote. A regular deploy may redeploy the serving image,
-so a candidate→baseline inverse is not applicable there.
+so a candidate→baseline inverse is not applicable there. The workflow executes
+this helper and its rehearsal dependency from the immutable workflow-control
+revision (`INVERSE_HELPER_PATHS`), and source admission binds the same paths.
+
+It also records the metadata-only identity (UID and resourceVersion, never data)
+of every Secret and ConfigMap the canary references, once at canary startup and
+again after the semantic probe (`--recheck`), and refuses unless they are stable.
 """
 
 from __future__ import annotations
@@ -21,12 +27,16 @@ import argparse
 import copy
 import hashlib
 import json
+import os
 from pathlib import Path
 import re
 import subprocess
 import sys
 
-from pusher_image_rehearsal import Refused, config_references, require, version
+from pusher_image_rehearsal import Cluster, Refused, config_references, require, version
+
+# The helper and everything it imports; executed from the workflow-control revision.
+INVERSE_HELPER_PATHS = (".github/scripts/pusher_canary_inverse.py", ".github/scripts/pusher_image_rehearsal.py")
 
 IMAGE = re.compile(r"gcr\.io/based-hardware/(?:backend-)?pusher@sha256:[a-f0-9]{64}")
 SHA = re.compile(r"[a-f0-9]{40}")
@@ -247,6 +257,44 @@ def template_parity(canary, live, *, canary_name, live_name, canary_config_map=N
     }
 
 
+def dependency_inventory(cluster, pod_spec, namespace):
+    """Metadata-only identity of every referenced ConfigMap and Secret, deduplicated.
+
+    Secrets are read through PartialObjectMetadata (`Cluster.secret_version`), so no
+    Secret value is fetched. Only `[uid, resourceVersion]` or `None` is kept.
+    """
+    references = {}
+    for reference, optional in config_references(pod_spec):
+        references[reference] = references.get(reference, True) and optional
+    inventory = []
+    for (kind, name), optional in sorted(references.items()):
+        if kind == "secret":
+            observed = cluster.secret_version(name, namespace=namespace, optional=True)
+        else:
+            observed = version(cluster.get(kind, name, namespace=namespace, optional=True))
+        require(optional or observed is not None, "required_dependency_absent")
+        inventory.append({"resource": kind, "name": name, "version": observed})
+    return inventory
+
+
+def inventory_sha256(inventory, *, exclude=None):
+    """Redacted digest of an inventory, without the runtime ConfigMap compared by content."""
+    kept = [item for item in inventory if (item["resource"], item["name"]) != exclude]
+    encoded = json.dumps(kept, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    return hashlib.sha256(encoded).hexdigest()
+
+
+def dependency_record(inventory, canary_config_map):
+    exclude = ("configmap", canary_config_map) if canary_config_map else None
+    return {
+        "names": [[item["resource"], item["name"]] for item in inventory if (item["resource"], item["name"]) != exclude],
+        "excluded": "runtime_config_map" if exclude else None,
+        "startup_sha256": inventory_sha256(inventory, exclude=exclude),
+        "probe_sha256": None,
+        "stable": False,
+    }
+
+
 def kubectl_json(args, *, stdin=None):
     result = subprocess.run(
         ["kubectl", *args], input=stdin, capture_output=True, text=True, check=False, timeout=120
@@ -265,6 +313,7 @@ def record(
     live_name,
     *,
     workflow_sha,
+    cluster,
     canary_config_map=None,
     live_config_map=None,
 ):
@@ -328,6 +377,9 @@ def record(
             "image": candidate,
         },
         "admitted_image": baseline,
+        "dependencies": dependency_record(
+            dependency_inventory(cluster, canary["spec"]["template"]["spec"], namespace), canary_config_map
+        ),
         # The live object the parity was measured against. Promote re-reads it and
         # refuses unless this exact template is still the one it would patch.
         "live_deployment": {"name": live_name, "uid": version(live)[0], "template_sha256": template_sha256(live)},
@@ -342,6 +394,38 @@ def record(
     }
 
 
+def recheck(receipt, cluster, *, namespace, name, run_id, canary_config_map=None):
+    """After the semantic probe: re-read the same references and require identical versions."""
+    require(
+        receipt.get("status") == "PASS"
+        and receipt.get("run_id") == run_id
+        and receipt.get("deployment", {}).get("name") == name
+        and receipt.get("deployment", {}).get("namespace") == namespace
+        and isinstance(receipt.get("dependencies"), dict),
+        "canary_inverse_receipt_missing",
+    )
+    canary = kubectl_json(["get", "deployment", name, "--namespace", namespace, "-o", "json"])
+    require(version(canary)[0] == receipt["deployment"]["uid"], "canary_replaced_during_probe")
+    probe = dependency_record(dependency_inventory(cluster, canary["spec"]["template"]["spec"], namespace), canary_config_map)
+    dependencies = receipt["dependencies"]
+    require(
+        probe["names"] == dependencies["names"] and probe["startup_sha256"] == dependencies["startup_sha256"],
+        "canary_dependencies_changed",
+    )
+    return receipt | {"dependencies": dependencies | {"probe_sha256": probe["startup_sha256"], "stable": True}}
+
+
+def live_cluster(context):
+    kubeconfig = Path(os.environ.get("KUBECONFIG") or "~/.kube/config").expanduser()
+    if not context:
+        result = subprocess.run(
+            ["kubectl", "config", "current-context"], capture_output=True, text=True, check=False, timeout=30
+        )
+        require(result.returncode == 0 and result.stdout.strip(), "kubernetes_context_unavailable")
+        context = result.stdout.strip()
+    return Cluster(kubeconfig, context, isolated=False)
+
+
 def parse_args(argv):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--namespace", required=True)
@@ -353,7 +437,13 @@ def parse_args(argv):
     parser.add_argument("--run-id", type=int, required=True)
     parser.add_argument("--source-sha", required=True)
     parser.add_argument("--workflow-sha", required=True, help="GITHUB_WORKFLOW_SHA of the producing run")
+    parser.add_argument("--context", help="kubeconfig context (default: the current context)")
     parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument(
+        "--recheck",
+        action="store_true",
+        help="re-read the dependency versions recorded in --output after the probe and require them unchanged",
+    )
     return parser.parse_args(argv)
 
 
@@ -361,6 +451,21 @@ def main(argv=None):
     args = parse_args(argv)
     result = {"schema": 1, "status": "REFUSED"}
     try:
+        cluster = live_cluster(args.context)
+        if args.recheck:
+            previous = read_json(args.output)
+            result = previous | {"status": "REFUSED"}
+            result = recheck(
+                previous,
+                cluster,
+                namespace=args.namespace,
+                name=args.name,
+                run_id=args.run_id,
+                canary_config_map=args.canary_config_map,
+            )
+            write_json(args.output, result)
+            print(json.dumps(result, sort_keys=True))
+            return 0
         require(IMAGE.fullmatch(args.candidate_image), "unpinned_canary_image")
         baseline_deployment = kubectl_json(
             ["get", "deployment", args.baseline_deployment, "--namespace", args.namespace, "-o", "json"]
@@ -376,6 +481,7 @@ def main(argv=None):
             args.source_sha,
             args.baseline_deployment,
             workflow_sha=args.workflow_sha,
+            cluster=cluster,
             canary_config_map=args.canary_config_map,
             live_config_map=args.live_config_map,
         )

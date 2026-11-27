@@ -699,12 +699,33 @@ jobs:
       # canary move and before any Pusher promote. It is read-only. It runs only
       # on the canary_only producer: a regular deploy may redeploy the serving
       # image, where a candidate→baseline inverse does not apply.
+      #
+      # The receipt names GITHUB_WORKFLOW_SHA as its producer, so the helper and its
+      # first-party import run from that immutable revision, not from the runtime
+      # source checkout; the runtime copies must also be byte-identical (source
+      # admission binds the same paths) or the step refuses.
+      - name: Stage the canary inverse helper from workflow controls
+        if: env.SERVICE == 'pusher' && github.event.inputs.environment == 'prod' && inputs.pusher_canary_only
+        run: |
+          set -euo pipefail
+          helper_paths=(.github/scripts/pusher_canary_inverse.py .github/scripts/pusher_image_rehearsal.py)
+          controls="$RUNNER_TEMP/pusher-canary-inverse-controls"
+          rm -rf "$controls"
+          mkdir -p "$controls"
+          git archive "$GITHUB_WORKFLOW_SHA" -- "${helper_paths[@]}" | tar -x -C "$controls"
+          if ! git diff --quiet "$GITHUB_WORKFLOW_SHA" -- "${helper_paths[@]}"; then
+            echo "The runtime checkout's canary inverse helper differs from the workflow-control revision." >&2
+            exit 1
+          fi
+          echo "PUSHER_CANARY_INVERSE=$controls/.github/scripts/pusher_canary_inverse.py" >> "$GITHUB_ENV"
+
       - name: Prove the canary inverse admission at one replica
         if: env.SERVICE == 'pusher' && github.event.inputs.environment == 'prod' && inputs.pusher_canary_only
         run: |
           set -euo pipefail
           test -n "$PUSHER_CANARY" -a -n "$PUSHER_CANARY_CONFIG" -a -n "$PUSHER_IMAGE_REPOSITORY" -a -n "$PUSHER_IMAGE_DIGEST"
-          python3 .github/scripts/pusher_canary_inverse.py \
+          test -f "$PUSHER_CANARY_INVERSE"
+          python3 "$PUSHER_CANARY_INVERSE" \
             --namespace prod-omi-backend \
             --name "$PUSHER_CANARY" \
             --candidate-image "$PUSHER_IMAGE_REPOSITORY@$PUSHER_IMAGE_DIGEST" \
@@ -787,6 +808,25 @@ jobs:
             --expected-canary-run-id "$GITHUB_RUN_ID" \
             --expected-canary-source-sha "$CHECKED_OUT_SHA" \
             --expected-canary-workflow-sha "$GITHUB_SHA"
+
+      # Condition 3 of the round-1 delta review: the Secret and ConfigMap identities
+      # recorded at canary startup must still hold after the semantic probe.
+      # Metadata only (UID and resourceVersion); no value is read.
+      - name: Recheck canary dependency versions after the probe
+        if: env.SERVICE == 'pusher' && github.event.inputs.environment == 'prod' && inputs.pusher_canary_only
+        run: |
+          set -euo pipefail
+          test -f "$PUSHER_CANARY_INVERSE"
+          python3 "$PUSHER_CANARY_INVERSE" --recheck \
+            --namespace prod-omi-backend \
+            --name "$PUSHER_CANARY" \
+            --candidate-image "$PUSHER_IMAGE_REPOSITORY@$PUSHER_IMAGE_DIGEST" \
+            --baseline-deployment prod-omi-pusher \
+            --canary-config-map "$PUSHER_CANARY_CONFIG" \
+            --run-id "$GITHUB_RUN_ID" \
+            --source-sha "$CHECKED_OUT_SHA" \
+            --workflow-sha "$GITHUB_WORKFLOW_SHA" \
+            --output pusher-prod-canary-inverse-receipt.json
 
       - name: Upload protected production Pusher canary evidence
         if: env.SERVICE == 'pusher' && github.event.inputs.environment == 'prod'
@@ -1135,8 +1175,13 @@ jobs:
       contents: read
       id-token: write
     runs-on: ubuntu-latest
-    # A forward rollout and, after a refused inverse, one reverse rollout.
-    timeout-minutes: 350
+    # Every path has at most one 160-minute rollout wait: the post-move inverse is
+    # decided before the forward wait, and a failed forward wait holds instead of
+    # reversing. 220 = 160 rollout + 10 for the two 5-minute status reports +
+    # about 20 for checkout, auth, evidence and dry-run checks + about 30 so the
+    # receipt upload, summary and page land before the ceiling. A shorter ceiling
+    # also bounds how long the run holds prod-train.
+    timeout-minutes: 220
     steps:
       - name: Validate protected image-only dispatch
         env:
@@ -1250,85 +1295,118 @@ jobs:
           if-no-files-found: ignore
           retention-days: 90
 
-      - name: Detect a held or reversed inverse refusal
+      - name: Detect a held or reversed image-only write
         id: hold
         if: always()
         run: |
           set -euo pipefail
           receipt="$RUNNER_TEMP/pusher-image-only/receipt.json"
-          reason=""
-          if [[ -s "$receipt" ]]; then
-            reason="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1])).get("reason") or "")' "$receipt")"
-          fi
-          echo "reason=$reason" >> "$GITHUB_OUTPUT"
+          python3 - "$receipt" >> "$GITHUB_OUTPUT" <<'PYTHON'
+          import json, os, re, sys
+
+          path = sys.argv[1]
+          receipt = {}
+          if os.path.exists(path) and os.path.getsize(path):
+              try:
+                  receipt = json.load(open(path, encoding="utf-8"))
+              except ValueError:
+                  receipt = {"status": "HOLD", "reason": "UNCERTAIN_AFTER_WRITE", "hold_stage": "receipt_unreadable"}
+
+          def safe(value):
+              # The page is interpolated by the notifier: keep a closed character set.
+              return re.sub(r"[^A-Za-z0-9 ._:/=@,-]", "_", str(value))[:120]
+
+          status = receipt.get("status") or ""
+          page = ""
+          if status in {"HOLD", "REVERSED"}:
+              fields = ("reason", "hold_stage", "reverse_patch", "deployment_uid_before", "deployment_uid_observed", "serving_image_observed")
+              details = ", ".join(f"{key}={safe(receipt.get(key, 'n/a'))}" for key in fields)
+              if status == "HOLD":
+                  page = (
+                      f"HOLD, no further patch. {details}. Restore only per the runbook Manual recovery after a HOLD: "
+                      "confirm the Deployment UID, then rollout undo --to-revision of the revision verified to hold "
+                      "the pinned baseline digest, never an unpinned undo. See the run summary."
+                  )
+              else:
+                  page = f"REVERSED, promote did not complete. {details}. See the run summary."
+          print(f"status={safe(status)}")
+          print(f"page={page}")
+          PYTHON
 
       # The escalation uses only existing credentials: the job summary and the
       # deploy-channel notifier. No issue is opened (the job token has no
-      # issues: write). The receipt holds categorical values only.
-      - name: Summarize the held or reversed inverse
-        if: always() && (steps.hold.outputs.reason == 'REFUSED_INVERSE' || steps.hold.outputs.reason == 'REFUSED_INVERSE_REVERSED')
+      # issues: write). The receipt holds categorical values and object ids only.
+      - name: Summarize the held or reversed image-only write
+        if: always() && (steps.hold.outputs.status == 'HOLD' || steps.hold.outputs.status == 'REVERSED')
         run: |
           set -euo pipefail
           python3 - "$RUNNER_TEMP/pusher-image-only/receipt.json" >> "$GITHUB_STEP_SUMMARY" <<'PYTHON'
           import json, sys
 
-          receipt = json.load(open(sys.argv[1], encoding="utf-8"))
-          held = receipt.get("reason") == "REFUSED_INVERSE"
+          try:
+              receipt = json.load(open(sys.argv[1], encoding="utf-8"))
+          except (OSError, ValueError):
+              receipt = {"status": "HOLD", "reason": "UNCERTAIN_AFTER_WRITE", "hold_stage": "receipt_unreadable"}
+          held = receipt.get("status") == "HOLD"
           lines = [
-              "### Pusher image-only " + ("HOLD: REFUSED_INVERSE" if held else "reversed after REFUSED_INVERSE"),
+              "### Pusher image-only " + ("HOLD" if held else "REVERSED") + f": `{receipt.get('reason')}`",
               "",
-              "The post-move candidate->baseline server dry-run was refused, and the job made one guarded",
-              "reverse patch. " + (
-                  "That reverse failed or its serving was not proven, so the job held with no further patch."
+              (
+                  "Recovery after the forward write could not prove the baseline, so the job held with no further patch."
                   if held
-                  else "The baseline is serving again with every replica ready; the promote did not complete."
+                  else "The one guarded reverse restored the pinned baseline with every replica ready; the promote did not complete."
               ),
               "",
           ]
           for key in (
-              "stage", "hold_stage", "reason", "inverse_refusal", "reverse_refusal", "reverse_patch_attempted",
+              "stage", "hold_stage", "reason", "post_write_failure", "inverse_refusal", "live_inverse_server_dry_run",
+              "reverse_patch", "reverse_refusal", "deployment_uid_before", "deployment_uid_observed",
               "requested_image", "serving_image_observed", "serving_image", "ready_replicas",
           ):
               if key in receipt:
                   lines.append(f"- `{key}`: `{receipt[key]}`")
           if held:
+              uid = receipt.get("deployment_uid_before", "<deployment_uid_before>")
               lines += [
                   "",
                   "**Manual restore (Release prod-operator):** " + str(receipt.get("manual_restore_path")),
                   "",
                   "```sh",
-                  "kubectl -n prod-omi-backend get deployment prod-omi-pusher \\",
-                  "  -o jsonpath='{.spec.template.spec.containers[?(@.name==\"pusher\")].image}{\"\\n\"}'",
-                  "# only if that reads the candidate:",
-                  "kubectl -n prod-omi-backend rollout undo deployment/prod-omi-pusher",
+                  "# 1. Stop and escalate unless this prints the receipt's deployment_uid_before: " + str(uid),
+                  "kubectl -n prod-omi-backend get deployment prod-omi-pusher -o jsonpath='{.metadata.uid}{\"\\n\"}'",
+                  "# 2. Pick the revision N whose pusher image reads the pinned baseline digest:",
+                  "kubectl -n prod-omi-backend rollout history deployment/prod-omi-pusher",
+                  "kubectl -n prod-omi-backend rollout history deployment/prod-omi-pusher --revision=N -o jsonpath='{.spec.template.spec.containers[?(@.name==\"pusher\")].image}{\"\\n\"}'",
+                  "# 3. Restore that verified revision only, then wait and read back:",
+                  "kubectl -n prod-omi-backend rollout undo deployment/prod-omi-pusher --to-revision=N",
                   "kubectl -n prod-omi-backend rollout status deployment/prod-omi-pusher --timeout=160m",
                   "python3 backend/scripts/deploy_status_report.py --env prod --include-gke --gke-service pusher",
                   "```",
                   "",
-                  "Runbook: backend/docs/runbooks/pusher-image-preservation-proposal.md, Manual recovery after REFUSED_INVERSE.",
+                  "Runbook: backend/docs/runbooks/pusher-image-preservation-proposal.md, Manual recovery after a HOLD.",
               ]
           print("\n".join(lines))
           PYTHON
 
-      - name: Notify Release of the held inverse
-        if: always() && steps.hold.outputs.reason == 'REFUSED_INVERSE'
+      - name: Notify Release of the held image-only write
+        if: always() && steps.hold.outputs.status == 'HOLD'
         uses: ./.github/actions/deployment-notifier
         with:
           deployment_tag: ${{ inputs.pusher_image_digest }}
           environment: prod
-          # Static text only: the notifier interpolates this into its message.
-          release_version: 'REFUSED_INVERSE HOLD, no further patch. Manual restore by the Release prod-operator: read the pusher image of deployment/prod-omi-pusher; only if it is the candidate run kubectl -n prod-omi-backend rollout undo deployment/prod-omi-pusher, then kubectl -n prod-omi-backend rollout status deployment/prod-omi-pusher and read back the pinned baseline digest on every ready pod and a clean deploy_status_report.py. See the run summary and the runbook Manual recovery after REFUSED_INVERSE.'
+          # Built from a closed character set by the detect step.
+          release_version: ${{ steps.hold.outputs.page }}
           status: failure
           telegram_bot_token: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           telegram_chat_id: ${{ secrets.TELEGRAM_CHAT_ID }}
 
-      - name: Notify Release of the reversed inverse
-        if: always() && steps.hold.outputs.reason == 'REFUSED_INVERSE_REVERSED'
+      - name: Notify Release of the reversed image-only write
+        if: always() && steps.hold.outputs.status == 'REVERSED'
         uses: ./.github/actions/deployment-notifier
         with:
           deployment_tag: ${{ inputs.pusher_image_digest }}
           environment: prod
-          release_version: 'REFUSED_INVERSE, reversed: the one guarded reverse restored the pinned baseline and its readiness was verified. The promote did not complete. See the run summary.'
+          release_version: ${{ steps.hold.outputs.page }}
           status: failure
           telegram_bot_token: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           telegram_chat_id: ${{ secrets.TELEGRAM_CHAT_ID }}

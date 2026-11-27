@@ -45,7 +45,15 @@ from pusher_image_rehearsal import (
 
 sys.path.insert(0, str(ROOT / "backend/scripts"))
 sys.path.insert(0, str(ROOT / ".github/scripts"))
-from pusher_canary_inverse import PARITY_CLASSES, PARITY_EXCLUDED, PARITY_NORMALIZED, template_sha256
+from pusher_canary_inverse import (
+    INVERSE_HELPER_PATHS,
+    PARITY_CLASSES,
+    PARITY_EXCLUDED,
+    PARITY_NORMALIZED,
+    dependency_inventory,
+    inventory_sha256,
+    template_sha256,
+)
 from pusher_release_receipt import ReceiptError, config_fingerprint, validate_live_identity
 from verify_pusher_live_deployment_gate import GateError, capacity_evidence
 from verify_pusher_promotion_evidence import _validate_canary, canonical_sha256
@@ -93,18 +101,20 @@ PACKET_FIELDS = frozenset(
 BINDING_FIELDS = ("source_sha", "prior_image", "candidate_image", "qualification_run_id")
 MODES = {"preview", "canary", "promote", "rollback"}
 # Condition 1: a refused post-move inverse gets exactly one guarded reverse patch.
-# If that fails, or its serving cannot be proven, the job HOLDs with no further
-# patch and the operator restores under Release custody. The instructions branch
-# on the observed image because `rollout undo` after a committed reverse would
-# move back to the candidate.
+# Any other failure once the forward write was attempted goes through the same
+# recovery: the single reverse when fresh preconditions are known, otherwise a
+# HOLD. Nothing patches after a HOLD; the operator restores under Release custody.
+REFUSED_INVERSE = "REFUSED_INVERSE"
+UNCERTAIN_AFTER_WRITE = "UNCERTAIN_AFTER_WRITE"
+REVERSE_OUTCOMES = ("not_attempted", "rejected_on_preconditions", "rejected", "unconfirmed", "succeeded")
+RUNBOOK = "backend/docs/runbooks/pusher-image-preservation-proposal.md"
 MANUAL_RESTORE_PATH = (
-    f"Release prod-operator: read the pusher container image of deployment/{TARGET} in {NAMESPACE}. "
-    f"If it is the candidate, run kubectl -n {NAMESPACE} rollout undo deployment/{TARGET} "
-    "(runbook pusher-image-preservation-proposal.md, Manual recovery after REFUSED_INVERSE); "
-    "if it already reads the pinned baseline, do not patch. "
-    f"Then kubectl -n {NAMESPACE} rollout status deployment/{TARGET} --timeout={ROLLOUT_TIMEOUT}s and read back: "
-    f"the pusher image and every ready pod imageID equal {BASELINE}, and "
-    "deploy_status_report.py --env prod --include-gke --gke-service pusher exits 0. "
+    f"Release prod-operator, per {RUNBOOK} (Manual recovery after a HOLD): confirm deployment/{TARGET} in "
+    f"{NAMESPACE} still has the receipt's deployment_uid_before, and stop and escalate if it does not. "
+    "List the rollout history and choose the revision whose pusher image is verified to read "
+    f"{BASELINE}; restore only with kubectl -n {NAMESPACE} rollout undo deployment/{TARGET} "
+    "--to-revision=<that verified revision>, never an unpinned undo. Then wait for rollout status and read back "
+    "that digest on every ready pod and a clean deploy_status_report.py --env prod --include-gke --gke-service pusher. "
     "If the restore is refused or the readback differs, leave traffic as it is and escalate to Release."
 )
 # Same gate and arguments as the ordinary Pusher deploy success path (.github/AGENTS.md).
@@ -121,11 +131,11 @@ STATUS_REPORT_TIMEOUT = 300
 
 
 class Hold(Exception):
-    """The inverse was refused and the one reverse attempt failed; no further patch is safe."""
+    """After the forward write, recovery could not prove the baseline; no further patch is safe."""
 
 
 class Reversed(Exception):
-    """The inverse was refused; the one guarded reverse restored and verified the baseline."""
+    """After the forward write failed a gate, the one guarded reverse restored and verified the baseline."""
 
 
 def pusher_container(obj, name):
@@ -243,18 +253,13 @@ class LiveWriter(ReadOnlyCluster):
 
 
 def dependency_versions(live, deployment):
-    """Identity of every referenced ConfigMap/Secret, read without their content."""
-    references = list(config_references(deployment["spec"]["template"]["spec"]))
-    require(SHARED in {reference for reference, _ in references}, "dependency_inventory_mismatch")
-    inventory = []
-    for (kind, name), optional in sorted(references):
-        if kind == "secret":
-            observed = live.secret_version(name, namespace=NAMESPACE, optional=True)
-        else:
-            observed = version(live.get(kind, name, namespace=NAMESPACE, optional=True))
-        require(optional or observed is not None, "required_dependency_absent")
-        inventory.append({"resource": kind, "name": name, "version": observed})
-    return inventory
+    """Identity of every referenced ConfigMap/Secret, read without their content.
+
+    The same reader the canary producer uses, so promote can compare the two.
+    """
+    pod_spec = deployment["spec"]["template"]["spec"]
+    require(SHARED in {reference for reference, _ in config_references(pod_spec)}, "dependency_inventory_mismatch")
+    return dependency_inventory(live, pod_spec, NAMESPACE)
 
 
 def state(live):
@@ -442,9 +447,19 @@ def download_canary(run_id):
     return result
 
 
-def check_qualification(packet):
-    """Condition 4: the qualification run is fetched, then its artifact is re-verified."""
-    workflow_run_metadata(packet["qualification_run_id"], QUALIFICATION_WORKFLOW, expected_sha=packet["source_sha"])
+def check_qualification(packet, workflow_sha):
+    """Condition 4: the qualification run is fetched, then its artifact is re-verified.
+
+    The qualified revision must already carry this revision's canary inverse helper,
+    byte for byte: a qualification that predates it cannot back a canary that ran it.
+    """
+    metadata = workflow_run_metadata(
+        packet["qualification_run_id"], QUALIFICATION_WORKFLOW, expected_sha=packet["source_sha"]
+    )
+    run(
+        ["git", "-C", str(ROOT), "diff", "--quiet", metadata["head_sha"], workflow_sha, "--", *INVERSE_HELPER_PATHS],
+        "qualification_predates_inverse_helper",
+    )
     return check_provenance({key: packet[key] for key in ("prior_image", "candidate_image", "source_sha", "qualification_run_id")})
 
 
@@ -538,6 +553,13 @@ def check_canary_inverse(inverse, packet, deployment, workflow_sha):
         and isinstance(parity.get("classes"), dict)
         and set(parity["classes"]) == set(PARITY_CLASSES)
         and all(value in {"equal", "differs"} for value in parity["classes"].values())
+        and isinstance(inverse.get("dependencies"), dict)
+        and set(inverse["dependencies"]) == {"names", "excluded", "startup_sha256", "probe_sha256", "stable"}
+        and inverse["dependencies"]["excluded"] == "runtime_config_map"
+        and inverse["dependencies"]["stable"] is True
+        and isinstance(inverse["dependencies"]["startup_sha256"], str)
+        and len(inverse["dependencies"]["startup_sha256"]) == 64
+        and inverse["dependencies"]["probe_sha256"] == inverse["dependencies"]["startup_sha256"]
         and isinstance(live, dict)
         and set(live) == {"name", "uid", "template_sha256"}
         and live["name"] == TARGET
@@ -559,7 +581,7 @@ def check_canary_inverse(inverse, packet, deployment, workflow_sha):
     )
 
 
-def check_effective_environment(live, artifacts, result):
+def check_effective_environment(live, artifacts, before, result):
     """Finding 5: the canary's startup inputs must equal what the live Pusher will start with.
 
     The canary ran against a freshly rendered isolated ConfigMap and a freshly
@@ -567,7 +589,10 @@ def check_effective_environment(live, artifacts, result):
     Reuses the canary-to-production ConfigMap hash of the regular Helm path
     (verify_pusher_promotion_evidence.py) and the canary's redacted template
     parity, and requires the live template to be the one that parity measured.
-    Only `equal`/`differs` per input class is recorded.
+    Referenced Secrets and ConfigMaps must keep the metadata identity (UID and
+    resourceVersion) the canary saw at startup and at probe time, so a rotation
+    between canary and promote refuses. Only `equal`/`differs` per input class is
+    recorded.
     """
     deployment = live.deployment()
     inverse = artifacts["inverse_receipt"]
@@ -580,6 +605,11 @@ def check_effective_environment(live, artifacts, result):
         ),
         "pod_template": (
             "equal" if all(value == "equal" for value in inverse["template_parity"]["classes"].values()) else "differs"
+        ),
+        "dependency_versions": (
+            "equal"
+            if inventory_sha256(before["dependencies"], exclude=SHARED) == inverse["dependencies"]["probe_sha256"]
+            else "differs"
         ),
         "live_template_since_canary": (
             "equal"
@@ -741,7 +771,7 @@ def execute(mode, packet, live, result, *, writer=None):
     result["stage"] = "verify_qualified_candidate"
     for fix in REQUIRED_FIXES:
         run(["git", "merge-base", "--is-ancestor", fix, packet["source_sha"]], "required_gcs_fix_missing")
-    qualification_receipt = check_qualification(packet)
+    qualification_receipt = check_qualification(packet, result["workflow_sha"])
     if mode in {"canary", "promote"}:
         result["stage"] = "verify_canary_evidence"
         artifacts = check_canary(packet, result, qualification_receipt)
@@ -749,13 +779,13 @@ def execute(mode, packet, live, result, *, writer=None):
     result["stage"] = "observe_baseline"
     before = state(live)
     require(before["image"] == BASELINE, "observed_image_changed")
-    result.update(summary(before))
+    result.update(summary(before), deployment_uid_before=before["deployment"][0])
     if mode in {"canary", "promote"}:
         result["stage"] = "verify_reviewed_preview"
         preview = check_reviewed_preview(packet, result)
         require(before["deployment"] == preview["live_baseline"], "reviewed_baseline_changed")
         result["stage"] = "compare_effective_environment"
-        check_effective_environment(live, artifacts, result)
+        check_effective_environment(live, artifacts, before, result)
 
     baseline = live.deployment()
     result["stage"] = "server_dry_run_forward"
@@ -777,23 +807,40 @@ def execute(mode, packet, live, result, *, writer=None):
     check_capacity(live, baseline, admitted)
     require_unchanged(live, before, BASELINE)
 
-    result["stage"] = "live_patch_attempted"
-    changed = writer.patch_image(baseline, TARGET, BASELINE, candidate)
-    # Retain exact change evidence even if a later gate fails. Do not retry an uncertain write.
-    result.update(patch_observed=version(changed), requested_image=candidate)
-
-    result["stage"] = "server_dry_run_post_move_inverse"
-    after = live.deployment()
-    require(image_of(after, TARGET) == candidate, "live_candidate_not_persisted")
+    # From here on the forward write has been attempted. Every exception, not only an
+    # admission refusal, goes through recovery: there is no path back to main()'s
+    # generic evidence error, and nothing retries the forward write.
+    result.update(stage="live_patch_attempted", live_write_attempted=True, reverse_patch="not_attempted")
     try:
+        changed = writer.patch_image(baseline, TARGET, BASELINE, candidate)
+        result.update(patch_observed=version(changed), requested_image=candidate)
+        result["stage"] = "read_post_move_state"
+        after = live.deployment()
+        require(
+            version(after)[0] == before["deployment"][0] and image_of(after, TARGET) == candidate,
+            "live_candidate_not_persisted",
+        )
+        result["stage"] = "server_dry_run_post_move_inverse"
         live.probe(after, TARGET, candidate, BASELINE)
-    except Refused as error:
-        result.update(live_inverse_server_dry_run="REFUSED", inverse_refusal=str(error))
-        reverse_once(live, writer, before, candidate, result)
+    except Exception as error:
+        if isinstance(error, Refused) and result["stage"] == "server_dry_run_post_move_inverse":
+            # Admission answered and refused the inverse (or changed more than the image).
+            result.update(live_inverse_server_dry_run="REFUSED", inverse_refusal=str(error))
+            recover(live, writer, before, candidate, result, trigger=REFUSED_INVERSE)
+        else:
+            # The write, the post-write read or the probe did not answer: outcome unknown.
+            result.update(live_inverse_server_dry_run="UNPROVEN", post_write_failure=categorical(error))
+            recover(live, writer, before, candidate, result, trigger=UNCERTAIN_AFTER_WRITE)
     result["live_inverse_server_dry_run"] = "PASS"
 
     result["stage"] = "verify_serving"
-    identity = verify_serving(live, before, changed, candidate, result)
+    try:
+        identity = verify_serving(live, before, changed, candidate, result)
+    except Exception as error:
+        # The single rollout wait is spent; reversing now would start a second
+        # unbounded rollout past the job ceiling. Hold with the observed state.
+        result["post_write_failure"] = categorical(error)
+        hold(live, result, "forward_serving_unverified", reason=UNCERTAIN_AFTER_WRITE)
     result.update(
         deploy_status_report="PASS",
         serving_image=candidate,
@@ -803,61 +850,89 @@ def execute(mode, packet, live, result, *, writer=None):
     )
 
 
-def hold(live, result, hold_stage):
-    """End in REFUSED_INVERSE HOLD. Nothing after this point may patch."""
+def categorical(error):
+    """A receipt-safe label: Refused reasons are categorical; anything else is its type only."""
+    return str(error) if isinstance(error, Refused) else f"unexpected_{type(error).__name__}"
+
+
+def hold(live, result, hold_stage, *, reason):
+    """End in a HOLD with the observed state. Nothing after this point may patch."""
     try:
-        observed = image_of(live.deployment(), TARGET)
+        observed = live.deployment()
+        observed_uid, observed_image = version(observed)[0], image_of(observed, TARGET)
     except Exception:  # The hold must be reported even if the read fails.
-        observed = "unread"
+        observed_uid, observed_image = "unread", "unread"
     result.update(
-        stage="hold_refused_inverse",
+        stage="hold",
         hold_stage=hold_stage,
-        reason="REFUSED_INVERSE",
+        reason=reason,
         manual_restore_path=MANUAL_RESTORE_PATH,
-        serving_image_observed=observed,
+        deployment_uid_observed=observed_uid,
+        serving_image_observed=observed_image,
     )
     deploy_status_report(strict=False)
-    raise Hold("REFUSED_INVERSE")
+    raise Hold(reason)
 
 
-def reverse_once(live, writer, before, candidate, result):
-    """Condition 1: after a refused post-move inverse, exactly one guarded reverse patch.
+def recover(live, writer, before, candidate, result, *, trigger):
+    """After a failed post-write gate: the one reverse if fresh preconditions are known, else HOLD."""
+    result["stage"] = "recover_after_write"
+    try:
+        observed = live.deployment()
+        known = version(observed)[0] == before["deployment"][0] and image_of(observed, TARGET) == candidate
+    except Exception as error:
+        result["post_write_failure"] = result.get("post_write_failure") or categorical(error)
+        hold(live, result, "post_write_state_unread", reason=UNCERTAIN_AFTER_WRITE)
+    if not known:
+        result["reverse_patch"] = "rejected_on_preconditions"
+        hold(live, result, "post_write_state_unexpected", reason=UNCERTAIN_AFTER_WRITE)
+    reverse_once(live, writer, before, candidate, result, trigger=trigger)
 
-    Fresh preconditions: the Deployment is re-read, so the patch tests the same UID,
-    the current resourceVersion, the pusher container and the candidate image. On
-    success the baseline rollout and readiness are verified and the run reports
-    REVERSED (still a failed promote). Any failure of the patch or of that
-    verification is a HOLD with no further patch.
+
+def reverse_once(live, writer, before, candidate, result, *, trigger):
+    """Condition 1: exactly one guarded reverse patch after the forward write failed a gate.
+
+    Fresh preconditions: the Deployment is re-read immediately before the patch, so
+    it tests the same UID, the current resourceVersion, the pusher container and the
+    candidate image. On success the baseline rollout and readiness are verified and
+    the run reports REVERSED (still a failed promote). Any failure of the patch or
+    of that verification is a HOLD with no further patch.
     """
-    result["stage"] = "reverse_after_refused_inverse"
+    result["stage"] = "reverse_after_write"
     try:
         fresh = live.deployment()
         require(
             version(fresh)[0] == before["deployment"][0] and image_of(fresh, TARGET) == candidate,
             "reverse_preconditions_changed",
         )
-        result["reverse_patch_attempted"] = True
+    except Exception as error:
+        result.update(reverse_patch="rejected_on_preconditions", reverse_refusal=categorical(error))
+        hold(live, result, "reverse_preconditions_unproven", reason=trigger)
+    try:
         reversed_obj = writer.patch_image(fresh, TARGET, candidate, BASELINE)
-        result["reverse_patch_observed"] = version(reversed_obj)
+        result.update(reverse_patch="succeeded", reverse_patch_observed=version(reversed_obj))
     except Exception as error:  # Any outcome but a confirmed reverse is uncertain: hold.
-        result["reverse_refusal"] = str(error) if isinstance(error, Refused) else "reverse_patch_unconfirmed"
-        hold(live, result, "reverse_patch_failed")
+        result.update(
+            reverse_patch="rejected" if isinstance(error, Refused) else "unconfirmed",
+            reverse_refusal=categorical(error),
+        )
+        hold(live, result, "reverse_patch_failed", reason=trigger)
     try:
         result["stage"] = "verify_reverse_serving"
         identity = verify_serving(live, before, reversed_obj, BASELINE, result)
     except Exception as error:
-        result["reverse_refusal"] = str(error) if isinstance(error, Refused) else "reverse_serving_unproven"
-        hold(live, result, "reverse_serving_unverified")
+        result["reverse_refusal"] = categorical(error)
+        hold(live, result, "reverse_serving_unverified", reason=trigger)
     result.update(
-        stage="reversed_after_refused_inverse",
-        reason="REFUSED_INVERSE_REVERSED",
+        stage="reversed_after_write",
+        reason=f"{trigger}_REVERSED",
         deploy_status_report="PASS",
         serving_image=BASELINE,
         serving_deployment_uid=identity["deployment_uid"],
         serving_generation=identity["generation"],
         ready_replicas=identity["ready_replicas"],
     )
-    raise Reversed("REFUSED_INVERSE_REVERSED")
+    raise Reversed(f"{trigger}_REVERSED")
 
 
 def rollback(packet, live, writer, result):
@@ -870,16 +945,21 @@ def rollback(packet, live, writer, result):
     result["stage"] = "observe_candidate"
     before = state(live)
     require(before["image"] == packet["candidate_image"], "observed_image_changed")
-    result.update(summary(before))
+    result.update(summary(before), deployment_uid_before=before["deployment"][0])
     result["stage"] = "server_dry_run_inverse"
     live.probe(live.deployment(), TARGET, packet["candidate_image"], BASELINE)
     result["live_inverse_server_dry_run"] = "PASS"
     require_unchanged(live, before, packet["candidate_image"])
-    result["stage"] = "live_patch_attempted"
-    changed = writer.patch_image(live.deployment(), TARGET, packet["candidate_image"], BASELINE)
-    result.update(patch_observed=version(changed), requested_image=BASELINE)
-    result["stage"] = "verify_serving"
-    identity = verify_serving(live, before, changed, BASELINE, result)
+    result.update(stage="live_patch_attempted", live_write_attempted=True, reverse_patch="not_attempted")
+    try:
+        changed = writer.patch_image(live.deployment(), TARGET, packet["candidate_image"], BASELINE)
+        result.update(patch_observed=version(changed), requested_image=BASELINE)
+        result["stage"] = "verify_serving"
+        identity = verify_serving(live, before, changed, BASELINE, result)
+    except Exception as error:
+        # Rollback is itself the reverse; a failure after its write is never retried.
+        result["post_write_failure"] = categorical(error)
+        hold(live, result, "rollback_unverified", reason=UNCERTAIN_AFTER_WRITE)
     result.update(
         deploy_status_report="PASS",
         serving_image=BASELINE,
@@ -933,6 +1013,18 @@ def main():
         subprocess.TimeoutExpired,
     ):
         result["reason"] = "missing_invalid_or_unavailable_evidence"
+    except Exception as error:  # The receipt must always be printed.
+        result["reason"] = f"unexpected_{type(error).__name__}"
+    if result.get("live_write_attempted") and result["status"] not in {"PASS", "HOLD", "REVERSED"}:
+        # Defence in depth: execute() routes every post-write failure to recovery, but a
+        # write that was attempted must never end as an ordinary refusal that nobody pages.
+        result.update(
+            status="HOLD",
+            post_write_failure=result.get("reason"),
+            reason=UNCERTAIN_AFTER_WRITE,
+            hold_stage=result.get("hold_stage") or "unhandled_after_write",
+            manual_restore_path=MANUAL_RESTORE_PATH,
+        )
     print(json.dumps(result, sort_keys=True))
     return 0 if result["status"] == "PASS" else 1
 

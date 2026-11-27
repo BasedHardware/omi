@@ -4,6 +4,7 @@
 import copy
 import json
 from pathlib import Path
+import re
 import tempfile
 import unittest
 from unittest.mock import patch
@@ -37,7 +38,10 @@ def deployment(image, name, config_map):
                             "name": "pusher",
                             "image": image,
                             "envFrom": [{"configMapRef": {"name": config_map}}],
-                            "env": [{"name": "X", "valueFrom": {"configMapKeyRef": {"name": config_map, "key": "X"}}}],
+                            "env": [
+                                {"name": "X", "valueFrom": {"configMapKeyRef": {"name": config_map, "key": "X"}}},
+                                {"name": "S", "valueFrom": {"secretKeyRef": {"name": "backend-secrets", "key": "S"}}},
+                            ],
                             "terminationMessagePolicy": "File",
                         },
                     ],
@@ -56,6 +60,27 @@ def live_deployment(image=BASELINE):
     obj = deployment(image, "prod-omi-pusher", LIVE_CONFIG)
     obj["metadata"]["uid"] = "live-uid"
     return obj
+
+
+class FakeMetadata:
+    """Metadata-only reads: ConfigMap identity and Secret PartialObjectMetadata, never data."""
+
+    def __init__(self):
+        self.versions = {
+            ("secret", "backend-secrets"): ["secret-uid", "2"],
+            ("configmap", CANARY_CONFIG): ["canary-config-uid", "1"],
+            ("configmap", LIVE_CONFIG): ["config-uid", "1"],
+        }
+        self.reads = []
+
+    def secret_version(self, name, *, namespace, optional=False):
+        self.reads.append(("secret", name))
+        return self.versions.get(("secret", name))
+
+    def get(self, kind, name, *, namespace=None, optional=False):
+        self.reads.append((kind, name))
+        observed = self.versions.get((kind, name))
+        return None if observed is None else {"metadata": {"uid": observed[0], "resourceVersion": observed[1], "name": name}}
 
 
 def resolve(obj, path):
@@ -82,6 +107,7 @@ class InverseTest(unittest.TestCase):
         self.canary = canary_deployment()
         self.baseline = live_deployment()
         self.requests = []
+        self.metadata = FakeMetadata()
 
     def kubectl(self, args, *, stdin=None):
         self.requests.append(list(args))
@@ -97,7 +123,12 @@ class InverseTest(unittest.TestCase):
         return changed
 
     def record(self, **overrides):
-        arguments = {"workflow_sha": WORKFLOW_SHA, "canary_config_map": CANARY_CONFIG, "live_config_map": LIVE_CONFIG} | overrides
+        arguments = {
+            "workflow_sha": WORKFLOW_SHA,
+            "cluster": self.metadata,
+            "canary_config_map": CANARY_CONFIG,
+            "live_config_map": LIVE_CONFIG,
+        } | overrides
         with patch.object(inverse, "kubectl_json", side_effect=self.kubectl):
             return inverse.record(
                 "prod-omi-backend", CANARY, CANDIDATE, BASELINE, 42, SOURCE, "prod-omi-pusher", **arguments
@@ -193,6 +224,82 @@ class InverseTest(unittest.TestCase):
         self.assertEqual(ops[3]["value"], CANDIDATE)
         self.assertEqual(ops[4]["value"], BASELINE)
 
+    def test_records_metadata_only_dependency_versions_at_startup(self):
+        dependencies = self.record()["dependencies"]
+        self.assertEqual(dependencies["names"], [["secret", "backend-secrets"]])
+        self.assertEqual(dependencies["excluded"], "runtime_config_map")
+        self.assertEqual((dependencies["probe_sha256"], dependencies["stable"]), (None, False))
+        self.assertEqual(len(dependencies["startup_sha256"]), 64)
+        self.assertNotIn("secret-uid", json.dumps(dependencies))
+        self.assertIn(("secret", "backend-secrets"), self.metadata.reads)
+
+    def recheck(self, receipt):
+        with patch.object(inverse, "kubectl_json", side_effect=self.kubectl):
+            return inverse.recheck(
+                receipt, self.metadata, namespace="prod-omi-backend", name=CANARY, run_id=42, canary_config_map=CANARY_CONFIG
+            )
+
+    def test_recheck_after_the_probe_requires_stable_dependency_versions(self):
+        receipt = self.record()
+        checked = self.recheck(receipt)
+        self.assertEqual(checked["dependencies"]["probe_sha256"], receipt["dependencies"]["startup_sha256"])
+        self.assertTrue(checked["dependencies"]["stable"])
+        for change in (["secret-uid", "3"], ["other-uid", "2"], None):
+            with self.subTest(change=change):
+                self.metadata.versions[("secret", "backend-secrets")] = change
+                with self.assertRaisesRegex(inverse.Refused, "canary_dependencies_changed|required_dependency_absent"):
+                    self.recheck(receipt)
+
+    def test_recheck_refuses_a_replaced_canary(self):
+        receipt = self.record()
+        self.canary["metadata"]["uid"] = "replaced-uid"
+        with self.assertRaisesRegex(inverse.Refused, "canary_replaced_during_probe"):
+            self.recheck(receipt)
+
+    def test_recheck_main_rewrites_the_receipt_and_fails_closed(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            output = Path(tmp) / "receipt.json"
+            output.write_text(json.dumps(self.record()), encoding="utf-8")
+            self.metadata.versions[("secret", "backend-secrets")] = ["secret-uid", "9"]
+            with patch.object(inverse, "kubectl_json", side_effect=self.kubectl), patch.object(
+                inverse, "live_cluster", return_value=self.metadata
+            ), patch("builtins.print"):
+                code = inverse.main([*self.argv(output), "--canary-config-map", CANARY_CONFIG, "--recheck"])
+            receipt = json.loads(output.read_text(encoding="utf-8"))
+        self.assertEqual((code, receipt["status"], receipt["reason"]), (1, "REFUSED", "canary_dependencies_changed"))
+
+    def argv(self, output):
+        return [
+            "--namespace",
+            "prod-omi-backend",
+            "--name",
+            CANARY,
+            "--candidate-image",
+            CANDIDATE,
+            "--baseline-deployment",
+            "prod-omi-pusher",
+            "--run-id",
+            "42",
+            "--source-sha",
+            SOURCE,
+            "--workflow-sha",
+            WORKFLOW_SHA,
+            "--output",
+            str(output),
+        ]
+
+    def test_helper_paths_cover_the_helper_and_its_first_party_imports(self):
+        root = Path(inverse.__file__).resolve().parents[2]
+        self.assertEqual(
+            inverse.INVERSE_HELPER_PATHS,
+            (".github/scripts/pusher_canary_inverse.py", ".github/scripts/pusher_image_rehearsal.py"),
+        )
+        first_party = {path.stem for path in (root / ".github/scripts").glob("*.py")}
+        for relative in inverse.INVERSE_HELPER_PATHS:
+            source = (root / relative).read_text(encoding="utf-8")
+            imported = set(re.findall(r"(?m)^(?:from|import) ([A-Za-z_][A-Za-z0-9_]*)", source))
+            self.assertLessEqual(imported & first_party, {Path(path).stem for path in inverse.INVERSE_HELPER_PATHS}, relative)
+
     def test_refuses_without_the_producing_workflow_revision(self):
         with self.assertRaisesRegex(inverse.Refused, "invalid_canary_identity"):
             self.record(workflow_sha="main")
@@ -214,14 +321,22 @@ class InverseTest(unittest.TestCase):
         with patch.object(inverse, "kubectl_json", side_effect=changed):
             with self.assertRaisesRegex(inverse.Refused, "canary_inverse_changed_more_than_image"):
                 inverse.record(
-                    "prod-omi-backend", CANARY, CANDIDATE, BASELINE, 42, SOURCE, "prod-omi-pusher", workflow_sha=WORKFLOW_SHA
+                    "prod-omi-backend",
+                    CANARY,
+                    CANDIDATE,
+                    BASELINE,
+                    42,
+                    SOURCE,
+                    "prod-omi-pusher",
+                    workflow_sha=WORKFLOW_SHA,
+                    cluster=self.metadata,
                 )
 
     def test_main_writes_a_refused_receipt_and_fails_closed(self):
         self.canary = canary_deployment(image=BASELINE)
-        with tempfile.TemporaryDirectory() as tmp, patch.object(inverse, "kubectl_json", side_effect=self.kubectl), patch(
-            "builtins.print"
-        ):
+        with tempfile.TemporaryDirectory() as tmp, patch.object(inverse, "kubectl_json", side_effect=self.kubectl), patch.object(
+            inverse, "live_cluster", return_value=self.metadata
+        ), patch("builtins.print"):
             output = Path(tmp) / "receipt.json"
             code = inverse.main(
                 [
@@ -249,9 +364,9 @@ class InverseTest(unittest.TestCase):
 
     def test_main_rejects_an_unpinned_baseline(self):
         self.baseline = live_deployment(image=live_deployment()["spec"]["template"]["spec"]["containers"][0]["image"])
-        with tempfile.TemporaryDirectory() as tmp, patch.object(inverse, "kubectl_json", side_effect=self.kubectl), patch(
-            "builtins.print"
-        ):
+        with tempfile.TemporaryDirectory() as tmp, patch.object(inverse, "kubectl_json", side_effect=self.kubectl), patch.object(
+            inverse, "live_cluster", return_value=self.metadata
+        ), patch("builtins.print"):
             output = Path(tmp) / "receipt.json"
             code = inverse.main(
                 [
