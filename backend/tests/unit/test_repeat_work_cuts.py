@@ -14,7 +14,6 @@ from utils.conversations import llm_input_dedupe as dedupe
 from utils.other import storage, raw_audio_read
 from utils.other.playback_identity import source_fingerprint
 from utils.sync import repeat_work_metrics as metrics
-from utils.sync.poll_limit import with_poll_hint
 
 
 def chunks():
@@ -141,71 +140,20 @@ def test_default_off_flags_are_independent(monkeypatch):
     for name in (
         'PLAYBACK_ON_DEMAND_ENABLED',
         'REPEAT_WORK_REVISION_ENABLED',
-        'SYNC_POLL_BACKOFF_ENABLED',
-        'SYNC_POLL_BACKOFF_PERCENT',
         'SYNC_REPROCESS_COALESCE_ENABLED',
         'CONVERSATION_LLM_INPUT_DEDUPE_ENABLED',
         'OMI_ENV_STAGE',
         'FIRESTORE_EMULATOR_HOST',
     ):
         monkeypatch.delenv(name, raising=False)
-    assert not repeat_work.playback_on_demand() and not repeat_work.poll_backoff()
+    assert not repeat_work.playback_on_demand()
     # 2026-11-01 (repeatflags): dedupe is the serving default everywhere; the
     # outbox coalesce default needs an outbox-owning runtime (prod/emulator).
     assert not sync_reprocess.coalesce_enabled() and sync_reprocess.dedupe_enabled()
     monkeypatch.setenv('REPEAT_WORK_REVISION_ENABLED', 'true')
     # The retired setting is ignored; surviving child defaults stay independent.
     assert not sync_reprocess.coalesce_enabled() and sync_reprocess.dedupe_enabled()
-    assert not repeat_work.playback_on_demand() and not repeat_work.poll_backoff()
-
-
-def test_poll_hint_uses_only_response_state_and_surface_demand(monkeypatch):
-    row = {'status': 'queued', 'job_id': 'j'}
-    monkeypatch.delenv('SYNC_POLL_BACKOFF_ENABLED', raising=False)
-    monkeypatch.setenv('SYNC_POLL_BACKOFF_PERCENT', '100')
-    assert with_poll_hint(row) is row
-    monkeypatch.setenv('SYNC_POLL_BACKOFF_ENABLED', 'true')
-    assert with_poll_hint(row)['poll_after_ms'] == 60000
-    assert with_poll_hint(row, surface_open=True)['poll_after_ms'] == 20000
-    assert with_poll_hint({'status': 'processing'})['poll_after_ms'] == 20000
-    for state in ['completed', 'failed', 'partial_failure']:
-        assert with_poll_hint({'status': state})['poll_after_ms'] == 0
-    assert row == {'status': 'queued', 'job_id': 'j'}
-
-
-def test_poll_backoff_uses_stable_nested_uid_cohorts(monkeypatch):
-    monkeypatch.setenv('SYNC_POLL_BACKOFF_ENABLED', 'true')
-    monkeypatch.setenv('SYNC_POLL_BACKOFF_PERCENT', '5')
-    assert repeat_work.poll_backoff('owner-33')
-    assert repeat_work.poll_backoff('owner-33')
-    assert not repeat_work.poll_backoff('owner-0')
-    assert not repeat_work.poll_backoff('owner-1')
-    assert not repeat_work.poll_backoff()
-    assert with_poll_hint({'status': 'queued'}, uid='owner-0') == {'status': 'queued'}
-    assert with_poll_hint({'status': 'queued'}, uid='owner-33')['poll_after_ms'] == 60000
-
-    monkeypatch.setenv('SYNC_POLL_BACKOFF_PERCENT', '25')
-    assert repeat_work.poll_backoff('owner-33') and repeat_work.poll_backoff('owner-0')
-    assert not repeat_work.poll_backoff('owner-1')
-    monkeypatch.setenv('SYNC_POLL_BACKOFF_PERCENT', '100')
-    assert repeat_work.poll_backoff('owner-1') and repeat_work.poll_backoff()
-
-    monkeypatch.setenv('SYNC_POLL_BACKOFF_ENABLED', 'false')
-    assert not repeat_work.poll_backoff('owner-33')
-
-
-def test_poll_backoff_missing_percent_fails_closed(monkeypatch):
-    monkeypatch.setenv('SYNC_POLL_BACKOFF_ENABLED', 'true')
-    monkeypatch.delenv('SYNC_POLL_BACKOFF_PERCENT', raising=False)
-    assert repeat_work.poll_backoff_cohort('owner-33') == 'out'
-    assert not repeat_work.poll_backoff('owner-33')
-
-
-@pytest.mark.parametrize('percent', ['0', '-1', '101', 'nan', 'inf', 'invalid'])
-def test_poll_backoff_invalid_or_zero_percent_admits_nobody(monkeypatch, percent):
-    monkeypatch.setenv('SYNC_POLL_BACKOFF_ENABLED', 'true')
-    monkeypatch.setenv('SYNC_POLL_BACKOFF_PERCENT', percent)
-    assert not repeat_work.poll_backoff('owner-33')
+    assert not repeat_work.playback_on_demand()
 
 
 def test_source_replacement_during_build_is_rejected():
