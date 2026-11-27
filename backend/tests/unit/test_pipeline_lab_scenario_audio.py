@@ -135,8 +135,8 @@ def test_committed_audio_scenario_is_small_synthetic_and_valid():
 # ---- lookup and --stt modes ----------------------------------------------------------------------------
 
 
-def make_cassette(pcm16, *, provider, model, source, words=None, recorded_at='2026-11-25T00:00:00Z'):
-    key = CassetteKey.for_audio(pcm16, provider=provider, model=model, language='en', vocabulary=[])
+def make_cassette(pcm16, *, provider, model, source, words=None, language='en', recorded_at='2026-11-25T00:00:00Z'):
+    key = CassetteKey.for_audio(pcm16, provider=provider, model=model, language=language, vocabulary=[])
     return Cassette(key, len(pcm16) / 32000, words or [Word(0.2, 0.6, 'w')], recorded_at=recorded_at, source=source)
 
 
@@ -165,6 +165,77 @@ def test_replay_miss_names_the_key_and_the_command(tmp_path):
     pinned = parse(tmp_path, {'audio_file': 'a.wav'}, stt={'provider': 'p', 'model': 'm'})
     with pytest.raises(AudioError, match='p/m\\). Record it with .*record-vendor'):
         prepare(pinned, root=tmp_path / 'absent', fixtures=tmp_path / 'none')
+
+
+def test_routed_legacy_uses_each_piece_language_cassette_and_splices_its_time_range(tmp_path, monkeypatch):
+    from testing.pipeline_lab.lanes.audio import load_pcm16
+    from testing.pipeline_lab.stt_routing import routing
+
+    write_wav(tmp_path / 'a.wav', 4.0)
+    scenario = parse(tmp_path, {'audio_file': 'a.wav'})
+    pcm16 = load_pcm16(tmp_path / 'a.wav')
+    route = routing.Route(
+        route=routing.PARAKEET,
+        reason='legacy:test',
+        provider='shared-provider',
+        model='shared-model',
+        language='zh',
+        pieces=((0.0, 2.0, routing.PARAKEET), (2.0, 4.0, routing.PARAKEET)),
+        piece_details=(
+            (0.0, 2.0, routing.PARAKEET, 'shared-provider', 'shared-model', 'zh'),
+            (2.0, 4.0, routing.PARAKEET, 'shared-provider', 'shared-model', 'fr'),
+        ),
+    )
+    monkeypatch.setattr(routing, 'decide', lambda *args, **kwargs: route)
+    inputs = tmp_path / 'routing-inputs.json'
+    inputs.write_text(json.dumps({'user': {}, 'conversations': {'B': {'language': 'en'}}}))
+    env = {
+        routing.ROUTING_ENV: 'product',
+        routing.INPUTS_ENV: str(inputs),
+        routing.CASSETTES_ENV: json.dumps({routing.PARAKEET: {'provider': 'shared-provider', 'model': 'shared-model'}}),
+    }
+    root = private_root(tmp_path)
+    make_cassette(
+        pcm16,
+        provider='shared-provider',
+        model='shared-model',
+        language='zh',
+        source='vendor',
+        words=[Word(0.4, 0.6, 'zh-first-piece'), Word(2.4, 2.6, 'zh-outside-first-piece')],
+    ).save(root)
+    make_cassette(
+        pcm16,
+        provider='shared-provider',
+        model='shared-model',
+        language='fr',
+        source='vendor',
+        words=[Word(1.4, 1.6, 'fr-outside-second-piece'), Word(2.4, 2.6, 'fr-second-piece')],
+    ).save(root)
+
+    prepared = prepare(scenario, root=root, fixtures=tmp_path / 'none', env=env)['B']
+
+    assert [(word.text, word.start, word.end) for word in prepared.cassette.words] == [
+        ('zh-first-piece', 0.4, 0.6),
+        ('fr-second-piece', 2.4, 2.6),
+    ]
+    assert prepared.route['piece_details'] == [
+        {
+            'start_s': 0.0,
+            'end_s': 2.0,
+            'route': routing.PARAKEET,
+            'provider': 'shared-provider',
+            'model': 'shared-model',
+            'language': 'zh',
+        },
+        {
+            'start_s': 2.0,
+            'end_s': 4.0,
+            'route': routing.PARAKEET,
+            'provider': 'shared-provider',
+            'model': 'shared-model',
+            'language': 'fr',
+        },
+    ]
 
 
 def test_replay_prefers_vendor_then_local_then_synthetic(tmp_path):

@@ -381,14 +381,21 @@ EXCEPTIONS: dict[str, SelectorException] = {
         100,
         'per provider worker pull',
         'Retire legacy state-first provider claims',
-        'af8624d2b1b48dee230e2b15b8321db8d03f7f3e4bd712145bcae5fb508b41a7',
+        '1b208ed8dea6428cd644e02769fefa42653bf5d2971a1d8ac604800251076fb1',
     ),
     'database.outbox_provider_stt.FirestoreProviderSttOutbox.sweep': _legacy(
         'Wrapping compatibility provider sweep checks due only after loading',
         500,
         'provider wake backstop tick',
         'Select only actionable due provider wakes',
-        '6588b6d522fa48ef361b80752381e41491c281501b45d3df586a5c4f67d58176',
+        'daa2d24d76395e072f6d8b4f65b5d29e1932dfd441bf89927be0603a5c5401da',
+    ),
+    'database.outbox_provider_stt.FirestoreProviderSttOutbox.sweep_running': _legacy(
+        'Old running jobs may lack an actionable deadline; paginate by their indexed enqueue age',
+        25,
+        'every two minutes on the provider wake backstop',
+        'Stamp a durable provider recovery deadline and migrate legacy running rows',
+        'da164689c12d28b1314d74807f4ad15d8fd2a044d00c92c5873802a57ff7722b',
     ),
     'database.record_seal_worker.pending_page': _legacy(
         'Legacy seal readiness depends on capture barrier checks after page',

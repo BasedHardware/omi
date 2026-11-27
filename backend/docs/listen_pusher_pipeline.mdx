@@ -6423,7 +6423,7 @@ The funnel `(stage,reason)` pairs are closed:
 | entry | candidate | Known deduplicated candidates, before slot/scan admission; first passes at resolver entry. |
 | eligible | candidate | Late snapshot passed existing retry eligibility and ID check; first pass has a nonempty conversation model. |
 | deferred | slot_limit, coalesced, in_flight | Candidates retained in legacy admission waiters or merged into a UID cohort; retained pending IDs read no snapshot or audio. |
-| skipped | slot_limit, queue_limit, queue_expired, cancelled, cohort_seen, scan_limit, pass_limit, missing, not_completed, deleted, discarded, locked, channel_source, private_cloud_disabled, missing_revision, already_resolved_owner, id_mismatch, empty_transcript, manual_receipt_unavailable, read_error, processing_error, submission_error | One terminal skip; capacity reasons mean the candidate was not scanned, not that its audio was ineligible. |
+| skipped | slot_limit, queue_limit, queue_expired, cancelled, cohort_seen, scan_limit, pass_limit, missing, not_completed, deleted, discarded, locked, channel_source, private_cloud_disabled, missing_revision, already_resolved_owner, split_by_final_pass, id_mismatch, empty_transcript, manual_receipt_unavailable, read_error, processing_error, submission_error | One terminal skip; capacity reasons mean the candidate was not scanned, not that its audio was ineligible. |
 | cas_refused | missing, account_deleting, deleted, discarded, locked, not_completed, revision_changed | Late-only terminal verdict from the actual transaction snapshot, emitted after the outer transaction returns. |
 | cas_committed | done | Late-only terminal commit, including canonical identity no-op; transaction callback retries do not increment. |
 

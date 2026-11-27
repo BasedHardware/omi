@@ -834,3 +834,39 @@ def test_finish_stamp_follows_the_cut_to_its_card_once():
     # A later Finish stamp on the same source never replaces the one the card already carries.
     a[FINISH_STAMP_FIELD] = {'at': NOW + timedelta(minutes=1), 'path': 'tail'}
     assert built(a, window)[FINISH_STAMP_FIELD] == stamp
+
+
+def test_a_rebuilt_row_keeps_a_segment_the_final_pass_split_without_duplicating_it():
+    from utils.conversations.final_pass_split import split_segment_id
+
+    line = {'id': 's1', 'text': 'one two three four five six', 'start': 0, 'end': 10, 'is_user': True}
+    row = recording(segments=[line])
+    group = outline.stretches([row], NOW + timedelta(hours=1))[0]
+    window = planner.windows([group], [[entry()]])[0]
+    built = planner.build('u', window, {'r': row})
+    first = {**built['transcript_segments'][0], 'text': 'one two three', 'end': 5}
+    second = {**first, 'id': split_segment_id('s1', 1), 'text': 'four five six', 'start': 5, 'end': 10}
+    published = {**built, 'transcript_segments': [first, second], 'status': 'completed', 'v3_locked': True}
+    assert not planner.is_unlocked(published)
+    rebuilt = planner.build('u', window, {'r': row}, published)
+    assert [s['text'] for s in rebuilt['transcript_segments']] == ['one two three', 'four five six']
+    assert planner._holds_line(published, window['lines'][0])
+
+
+def test_a_split_line_replanned_under_a_new_id_is_not_appended_again():
+    from utils.conversations.final_pass_split import split_segment_id
+
+    text = 'we should ship the speaker fix on friday morning'
+    row = recording(segments=[{'id': 'new-id', 'text': text, 'start': 0, 'end': 10, 'is_user': True}])
+    group = outline.stretches([row], NOW + timedelta(hours=1))[0]
+    window = planner.windows([group], [[entry()]])[0]
+    built = planner.build('u', window, {'r': row})
+    base = {**built['transcript_segments'][0], 'id': 'old-id'}
+    first = {**base, 'text': 'we should ship the speaker', 'end': 5}
+    second = {**base, 'id': split_segment_id('old-id', 1), 'text': 'fix on friday morning', 'start': 5, 'end': 10}
+    published = {**built, 'transcript_segments': [first, second], 'status': 'completed'}
+    rebuilt = planner.build('u', window, {'r': row}, published)
+    assert [s['text'] for s in rebuilt['transcript_segments']] == [
+        'we should ship the speaker',
+        'fix on friday morning',
+    ]

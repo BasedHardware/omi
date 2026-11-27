@@ -35,6 +35,7 @@ import wave
 from config.batch_conversation_speakers import vendor_turns_enabled
 from config.batch_language_recovery import enabled as independent_recovery_enabled, language_guarded
 from config.batch_pipeline import provider_merge_membership_enabled
+from config.batch_pipeline_retention import LIFECYCLE_SECONDS
 from config.batch_pipeline_vendor_failover import (
     failover_enabled,
     held_redrive_enabled,
@@ -1241,14 +1242,19 @@ class ProviderSttStage:
             # No strict-VAD speech means _call_sync answered silence locally: no vendor call, so
             # nothing was sent or billed (attempt audio, vendor audio metrics and overflow spend).
             sent = 0.0 if intent.get('measured_vad_speech_seconds') == 0 else item.duration_seconds
+            now = self.clock()
+            staged_at = staged_enqueue(job) or job.get('enqueued_at', now)
+            # Job-side repair can reach attempts after the audio lifecycle. Settle them
+            # without scheduling a paid failover that would need the original input.
+            can_fail_over = now - staged_at < LIFECYCLE_SECONDS and failover_enabled() and self._armed()
             settled = self.protocol.settle(
                 segment_id,
                 intent['token'],
-                self.clock(),
+                now,
                 failure=failure,
                 attempt_outcome=VendorAttemptOutcome.ABANDONED,
                 audio_seconds=sent,
-                failover_to=tuple(self._candidates(route)) if failover_enabled() and self._armed() else (),
+                failover_to=tuple(self._candidates(route)) if can_fail_over else (),
             )
             if not settled:
                 return UnitOutcome('done', 'superseded')
