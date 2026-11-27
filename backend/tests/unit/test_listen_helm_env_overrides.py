@@ -585,7 +585,7 @@ def test_secret_reaches_only_the_evidence_and_migrate_steps_via_env():
     assert "secrets." not in evidence["run"]
     step = _step(MIGRATE)
     # Never on the deploy path: a code deploy renders references only.
-    assert step["if"] == "${{ inputs.mode == 'private-env-migrate' }}"
+    assert step["if"] == "${{ inputs.mode != 'evidence' && inputs.mode == 'private-env-migrate' }}"
     assert step["env"] == {"LISTEN_PRIVATE_VALUES_YAML": "${{ secrets.LISTEN_PRIVATE_VALUES_YAML }}"}
     assert "listen_private_env.py migrate" in step["run"]
     assert "umask 077" in step["run"]
@@ -605,9 +605,7 @@ def test_migrate_mode_installs_before_the_secret_and_never_rolls():
     assert install < names.index(MIGRATE) < names.index("Apply the listen private-env ExternalSecret (no roll)")
     assert "pip install" in _step("Install private-env parser before secret injection")["run"]
     assert "prod only" in _step("Install private-env parser before secret injection")["run"]
-    migrate_steps = [
-        s for s in _workflow_steps() if "private-env-migrate" in str(s.get("if")) and "!=" not in str(s.get("if"))
-    ]
+    migrate_steps = [s for s in _workflow_steps() if "inputs.mode == 'private-env-migrate'" in s.get("if", "")]
     assert {s["name"] for s in migrate_steps} == {
         "Install private-env parser before secret injection",
         MIGRATE,
@@ -615,6 +613,7 @@ def test_migrate_mode_installs_before_the_secret_and_never_rolls():
         "Force-sync and verify private listen env against live (no roll)",
     }
     for step in migrate_steps:
+        assert step["if"] == "${{ inputs.mode != 'evidence' && inputs.mode == 'private-env-migrate' }}"
         assert "helm -n" not in (step.get("run") or "") and "rollout" not in (step.get("run") or ""), step["name"]
     apply = _step("Apply the listen private-env ExternalSecret (no roll)")["run"]
     assert '--show-only templates/listen-private-env.yaml | kubectl -n "$namespace" apply -f -' in apply
