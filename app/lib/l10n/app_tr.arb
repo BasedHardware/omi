@@ -4798,9 +4798,9 @@
     "firmwareNewestSupportedForDevice": "Cihazınız zaten desteklenen en yeni firmware sürümünü kullanıyor",
     "firmwareSyncRecordingsFirstTitle": "Önce kayıtlarınızı senkronize edin",
     "firmwareSyncRecordingsFirstMessage": "Bazı kayıtlar hâlâ cihazınızda. Telefonunuza senkronize edilmelerini bekleyin, ardından güncellemeyi başlatın.",
-    "homeLockedTitle": "{count, plural, =1{1 conversation waiting} other{{count} conversations waiting}}",
-    "homeLockedSubtitle": "Kept safe · unlock to read",
-    "homeLockedSubtitleNoPlans": "Kept safe until your allowance resets",
-    "homeTakingLonger": "Taking longer than usual",
-    "homeFinishingOpensWhenReady": "Opens as soon as it's ready"
+    "homeLockedTitle": "{count, plural, =1{1 konuşma bekliyor} other{{count} konuşma bekliyor}}",
+    "homeLockedSubtitle": "Güvenle saklandı · okumak için kilidini açın",
+    "homeLockedSubtitleNoPlans": "Kotanız yenilenene kadar güvenle saklandı",
+    "homeTakingLonger": "Normalden daha uzun sürüyor",
+    "homeFinishingOpensWhenReady": "Hazır olur olmaz açılır"
 }

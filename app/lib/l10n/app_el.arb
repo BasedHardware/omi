@@ -4763,9 +4763,9 @@
     "firmwareNewestSupportedForDevice": "Η συσκευή σας έχει ήδη την πιο πρόσφατη υποστηριζόμενη έκδοση υλικολογισμικού",
     "firmwareSyncRecordingsFirstTitle": "Συγχρονίστε πρώτα τις ηχογραφήσεις σας",
     "firmwareSyncRecordingsFirstMessage": "Μερικές ηχογραφήσεις βρίσκονται ακόμη στη συσκευή σας. Περιμένετε να ολοκληρωθεί ο συγχρονισμός τους στο τηλέφωνό σας και, στη συνέχεια, ξεκινήστε την ενημέρωση.",
-    "homeLockedTitle": "{count, plural, =1{1 conversation waiting} other{{count} conversations waiting}}",
-    "homeLockedSubtitle": "Kept safe · unlock to read",
-    "homeLockedSubtitleNoPlans": "Kept safe until your allowance resets",
-    "homeTakingLonger": "Taking longer than usual",
-    "homeFinishingOpensWhenReady": "Opens as soon as it's ready"
+    "homeLockedTitle": "{count, plural, =1{1 συνομιλία σε αναμονή} other{{count} συνομιλίες σε αναμονή}}",
+    "homeLockedSubtitle": "Ασφαλώς αποθηκευμένη · ξεκλειδώστε για ανάγνωση",
+    "homeLockedSubtitleNoPlans": "Ασφαλώς αποθηκευμένη μέχρι να ανανεωθεί το όριό σας",
+    "homeTakingLonger": "Αργεί περισσότερο από το συνηθισμένο",
+    "homeFinishingOpensWhenReady": "Ανοίγει μόλις είναι έτοιμη"
 }

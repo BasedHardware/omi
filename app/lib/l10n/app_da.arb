@@ -4805,9 +4805,9 @@
     "firmwareNewestSupportedForDevice": "Din enhed kører allerede den nyeste understøttede firmwareversion",
     "firmwareSyncRecordingsFirstTitle": "Synkroniser dine optagelser først",
     "firmwareSyncRecordingsFirstMessage": "Nogle optagelser er stadig på din enhed. Lad dem blive færdige med at synkronisere til din telefon, og start derefter opdateringen.",
-    "homeLockedTitle": "{count, plural, =1{1 conversation waiting} other{{count} conversations waiting}}",
-    "homeLockedSubtitle": "Kept safe · unlock to read",
-    "homeLockedSubtitleNoPlans": "Kept safe until your allowance resets",
-    "homeTakingLonger": "Taking longer than usual",
-    "homeFinishingOpensWhenReady": "Opens as soon as it's ready"
+    "homeLockedTitle": "{count, plural, =1{1 samtale venter} other{{count} samtaler venter}}",
+    "homeLockedSubtitle": "Gemt sikkert · lås op for at læse",
+    "homeLockedSubtitleNoPlans": "Gemt sikkert, indtil din grænse nulstilles",
+    "homeTakingLonger": "Tager længere tid end sædvanligt",
+    "homeFinishingOpensWhenReady": "Åbner, så snart den er klar"
 }

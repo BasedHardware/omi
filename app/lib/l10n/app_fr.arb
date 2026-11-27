@@ -4798,9 +4798,9 @@
     "firmwareNewestSupportedForDevice": "Votre appareil utilise déjà la dernière version de firmware prise en charge",
     "firmwareSyncRecordingsFirstTitle": "Synchronisez d'abord vos enregistrements",
     "firmwareSyncRecordingsFirstMessage": "Certains enregistrements sont encore sur votre appareil. Laissez-les terminer leur synchronisation vers votre téléphone, puis lancez la mise à jour.",
-    "homeLockedTitle": "{count, plural, =1{1 conversation waiting} other{{count} conversations waiting}}",
-    "homeLockedSubtitle": "Kept safe · unlock to read",
-    "homeLockedSubtitleNoPlans": "Kept safe until your allowance resets",
-    "homeTakingLonger": "Taking longer than usual",
-    "homeFinishingOpensWhenReady": "Opens as soon as it's ready"
+    "homeLockedTitle": "{count, plural, =1{1 conversation en attente} other{{count} conversations en attente}}",
+    "homeLockedSubtitle": "Conservée en sécurité · déverrouiller pour lire",
+    "homeLockedSubtitleNoPlans": "Conservée en sécurité jusqu'à la réinitialisation de votre quota",
+    "homeTakingLonger": "Prend plus de temps que d'habitude",
+    "homeFinishingOpensWhenReady": "S'ouvre dès qu'elle est prête"
 }

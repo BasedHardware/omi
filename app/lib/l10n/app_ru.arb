@@ -4798,9 +4798,9 @@
     "firmwareNewestSupportedForDevice": "На вашем устройстве уже установлена последняя поддерживаемая версия прошивки",
     "firmwareSyncRecordingsFirstTitle": "Сначала синхронизируйте записи",
     "firmwareSyncRecordingsFirstMessage": "Некоторые записи всё ещё находятся на устройстве. Дождитесь завершения их синхронизации с телефоном, а затем начните обновление.",
-    "homeLockedTitle": "{count, plural, =1{1 conversation waiting} other{{count} conversations waiting}}",
-    "homeLockedSubtitle": "Kept safe · unlock to read",
-    "homeLockedSubtitleNoPlans": "Kept safe until your allowance resets",
-    "homeTakingLonger": "Taking longer than usual",
-    "homeFinishingOpensWhenReady": "Opens as soon as it's ready"
+    "homeLockedTitle": "{count, plural, =1{1 разговор в ожидании} other{{count} разговоров в ожидании}}",
+    "homeLockedSubtitle": "Надёжно сохранено · разблокируйте, чтобы прочитать",
+    "homeLockedSubtitleNoPlans": "Надёжно сохранено до обновления лимита",
+    "homeTakingLonger": "Занимает больше времени, чем обычно",
+    "homeFinishingOpensWhenReady": "Откроется, как только будет готов"
 }

@@ -4798,9 +4798,9 @@
     "firmwareNewestSupportedForDevice": "Twoje urządzenie ma już najnowszą obsługiwaną wersję oprogramowania układowego",
     "firmwareSyncRecordingsFirstTitle": "Najpierw zsynchronizuj nagrania",
     "firmwareSyncRecordingsFirstMessage": "Niektóre nagrania wciąż znajdują się na urządzeniu. Poczekaj, aż zostaną zsynchronizowane z telefonem, a następnie rozpocznij aktualizację.",
-    "homeLockedTitle": "{count, plural, =1{1 conversation waiting} other{{count} conversations waiting}}",
-    "homeLockedSubtitle": "Kept safe · unlock to read",
-    "homeLockedSubtitleNoPlans": "Kept safe until your allowance resets",
-    "homeTakingLonger": "Taking longer than usual",
-    "homeFinishingOpensWhenReady": "Opens as soon as it's ready"
+    "homeLockedTitle": "{count, plural, =1{1 rozmowa czeka} other{{count} rozmów czeka}}",
+    "homeLockedSubtitle": "Bezpiecznie przechowywane · odblokuj, aby przeczytać",
+    "homeLockedSubtitleNoPlans": "Bezpiecznie przechowywane do odnowienia limitu",
+    "homeTakingLonger": "Trwa to dłużej niż zwykle",
+    "homeFinishingOpensWhenReady": "Otworzy się, gdy tylko będzie gotowa"
 }

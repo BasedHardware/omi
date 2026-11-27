@@ -4763,9 +4763,9 @@
     "firmwareNewestSupportedForDevice": "Vaše zařízení už používá nejnovější podporovanou verzi firmwaru",
     "firmwareSyncRecordingsFirstTitle": "Nejprve synchronizujte své nahrávky",
     "firmwareSyncRecordingsFirstMessage": "Některé nahrávky jsou stále ve vašem zařízení. Počkejte, až se synchronizují do telefonu, a potom spusťte aktualizaci.",
-    "homeLockedTitle": "{count, plural, =1{1 conversation waiting} other{{count} conversations waiting}}",
-    "homeLockedSubtitle": "Kept safe · unlock to read",
-    "homeLockedSubtitleNoPlans": "Kept safe until your allowance resets",
-    "homeTakingLonger": "Taking longer than usual",
-    "homeFinishingOpensWhenReady": "Opens as soon as it's ready"
+    "homeLockedTitle": "{count, plural, =1{1 konverzace čeká} other{{count} konverzací čeká}}",
+    "homeLockedSubtitle": "Bezpečně uloženo · odemkněte pro čtení",
+    "homeLockedSubtitleNoPlans": "Bezpečně uloženo, dokud se váš limit neobnoví",
+    "homeTakingLonger": "Trvá to déle než obvykle",
+    "homeFinishingOpensWhenReady": "Otevře se, jakmile bude připravena"
 }

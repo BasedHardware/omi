@@ -15816,21 +15816,21 @@ class AppLocalizationsFa extends AppLocalizations {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: '$count conversations waiting',
-      one: '1 conversation waiting',
+      other: '$count گفتگو در انتظار است',
+      one: '1 گفتگو در انتظار است',
     );
     return '$_temp0';
   }
 
   @override
-  String get homeLockedSubtitle => 'Kept safe · unlock to read';
+  String get homeLockedSubtitle => 'ایمن نگهداری شده · برای خواندن باز کنید';
 
   @override
-  String get homeLockedSubtitleNoPlans => 'Kept safe until your allowance resets';
+  String get homeLockedSubtitleNoPlans => 'ایمن نگهداری شده تا زمان تمدید سهمیه شما';
 
   @override
-  String get homeTakingLonger => 'Taking longer than usual';
+  String get homeTakingLonger => 'بیشتر از معمول طول می‌کشد';
 
   @override
-  String get homeFinishingOpensWhenReady => 'Opens as soon as it\'s ready';
+  String get homeFinishingOpensWhenReady => 'به محض آماده شدن باز می‌شود';
 }

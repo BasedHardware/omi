@@ -15748,21 +15748,21 @@ class AppLocalizationsTh extends AppLocalizations {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: '$count conversations waiting',
-      one: '1 conversation waiting',
+      other: 'มี $count บทสนทนารออยู่',
+      one: 'มี 1 บทสนทนารออยู่',
     );
     return '$_temp0';
   }
 
   @override
-  String get homeLockedSubtitle => 'Kept safe · unlock to read';
+  String get homeLockedSubtitle => 'เก็บไว้อย่างปลอดภัย · ปลดล็อกเพื่ออ่าน';
 
   @override
-  String get homeLockedSubtitleNoPlans => 'Kept safe until your allowance resets';
+  String get homeLockedSubtitleNoPlans => 'เก็บไว้อย่างปลอดภัยจนกว่าโควตาของคุณจะรีเซ็ต';
 
   @override
-  String get homeTakingLonger => 'Taking longer than usual';
+  String get homeTakingLonger => 'ใช้เวลานานกว่าปกติ';
 
   @override
-  String get homeFinishingOpensWhenReady => 'Opens as soon as it\'s ready';
+  String get homeFinishingOpensWhenReady => 'จะเปิดทันทีที่พร้อม';
 }

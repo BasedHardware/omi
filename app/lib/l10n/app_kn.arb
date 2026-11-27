@@ -12320,9 +12320,9 @@
     "firmwareNewestSupportedForDevice": "ನಿಮ್ಮ ಸಾಧನವು ಈಗಾಗಲೇ ಬೆಂಬಲಿತ ಅತ್ಯಂತ ಹೊಸ ಫಾರ್ಮ್‌ವೇರ್ ಆವೃತ್ತಿಯಲ್ಲಿದೆ",
     "firmwareSyncRecordingsFirstTitle": "ಮೊದಲು ನಿಮ್ಮ ರೆಕಾರ್ಡಿಂಗ್‌ಗಳನ್ನು ಸಿಂಕ್ ಮಾಡಿ",
     "firmwareSyncRecordingsFirstMessage": "ಕೆಲವು ರೆಕಾರ್ಡಿಂಗ್‌ಗಳು ಇನ್ನೂ ನಿಮ್ಮ ಸಾಧನದಲ್ಲಿವೆ. ಅವುಗಳು ನಿಮ್ಮ ಫೋನ್‌ಗೆ ಸಿಂಕ್ ಆಗಲು ಬಿಡಿ, ನಂತರ ನವೀಕರಣ ಪ್ರಾರಂಭಿಸಿ.",
-    "homeLockedTitle": "{count, plural, =1{1 conversation waiting} other{{count} conversations waiting}}",
-    "homeLockedSubtitle": "Kept safe · unlock to read",
-    "homeLockedSubtitleNoPlans": "Kept safe until your allowance resets",
-    "homeTakingLonger": "Taking longer than usual",
-    "homeFinishingOpensWhenReady": "Opens as soon as it's ready"
+    "homeLockedTitle": "{count, plural, =1{1 ಸಂವಾದ ಕಾಯುತ್ತಿದೆ} other{{count} ಸಂವಾದಗಳು ಕಾಯುತ್ತಿವೆ}}",
+    "homeLockedSubtitle": "ಸುರಕ್ಷಿತವಾಗಿ ಇರಿಸಲಾಗಿದೆ · ಓದಲು ಅನ್‌ಲಾಕ್ ಮಾಡಿ",
+    "homeLockedSubtitleNoPlans": "ನಿಮ್ಮ ಮಿತಿ ಮರುಹೊಂದಿಸುವವರೆಗೆ ಸುರಕ್ಷಿತವಾಗಿ ಇರಿಸಲಾಗಿದೆ",
+    "homeTakingLonger": "ಸಾಮಾನ್ಯಕ್ಕಿಂತ ಹೆಚ್ಚು ಸಮಯ ತೆಗೆದುಕೊಳ್ಳುತ್ತಿದೆ",
+    "homeFinishingOpensWhenReady": "ಸಿದ್ಧವಾದ ತಕ್ಷಣ ತೆರೆಯುತ್ತದೆ"
 }

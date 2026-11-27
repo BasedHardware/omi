@@ -4763,9 +4763,9 @@
     "firmwareNewestSupportedForDevice": "Laiteellasi on jo uusin tuettu laiteohjelmistoversio",
     "firmwareSyncRecordingsFirstTitle": "Synkronoi nauhoituksesi ensin",
     "firmwareSyncRecordingsFirstMessage": "Osaa nauhoituksista on vielä laitteella. Anna niiden synkronoitua puhelimeen loppuun ja käynnistä sitten päivitys.",
-    "homeLockedTitle": "{count, plural, =1{1 conversation waiting} other{{count} conversations waiting}}",
-    "homeLockedSubtitle": "Kept safe · unlock to read",
-    "homeLockedSubtitleNoPlans": "Kept safe until your allowance resets",
-    "homeTakingLonger": "Taking longer than usual",
-    "homeFinishingOpensWhenReady": "Opens as soon as it's ready"
+    "homeLockedTitle": "{count, plural, =1{1 keskustelu odottaa} other{{count} keskustelua odottaa}}",
+    "homeLockedSubtitle": "Turvassa · avaa lukeaksesi",
+    "homeLockedSubtitleNoPlans": "Turvassa, kunnes kiintiösi nollautuu",
+    "homeTakingLonger": "Kestää tavallista kauemmin",
+    "homeFinishingOpensWhenReady": "Aukeaa heti, kun se on valmis"
 }

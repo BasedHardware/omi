@@ -12320,9 +12320,9 @@
     "firmwareNewestSupportedForDevice": "Ваша прылада ўжо працуе на найноўшай падтрыманай версіі прашыўкі",
     "firmwareSyncRecordingsFirstTitle": "Спачатку сінхранізуйце свае запісы",
     "firmwareSyncRecordingsFirstMessage": "Некаторыя запісы ўсё яшчэ на вашай прыладзе. Дайце ім завяршыць сінхранізацыю на тэлефон, а потым пачніце абнаўленне.",
-    "homeLockedTitle": "{count, plural, =1{1 conversation waiting} other{{count} conversations waiting}}",
-    "homeLockedSubtitle": "Kept safe · unlock to read",
-    "homeLockedSubtitleNoPlans": "Kept safe until your allowance resets",
-    "homeTakingLonger": "Taking longer than usual",
-    "homeFinishingOpensWhenReady": "Opens as soon as it's ready"
+    "homeLockedTitle": "{count, plural, =1{1 размова чакае} other{{count} размоў чакае}}",
+    "homeLockedSubtitle": "Надзейна захавана · разблакуйце, каб прачытаць",
+    "homeLockedSubtitleNoPlans": "Надзейна захавана, пакуль не абновіцца ваш ліміт",
+    "homeTakingLonger": "Займае больш часу, чым звычайна",
+    "homeFinishingOpensWhenReady": "Адкрыецца, як толькі будзе гатовая"
 }

@@ -15834,21 +15834,21 @@ class AppLocalizationsUr extends AppLocalizations {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: '$count conversations waiting',
-      one: '1 conversation waiting',
+      other: '$count بات چیتیں منتظر ہیں',
+      one: '1 بات چیت منتظر ہے',
     );
     return '$_temp0';
   }
 
   @override
-  String get homeLockedSubtitle => 'Kept safe · unlock to read';
+  String get homeLockedSubtitle => 'محفوظ رکھی گئی · پڑھنے کے لیے ان لاک کریں';
 
   @override
-  String get homeLockedSubtitleNoPlans => 'Kept safe until your allowance resets';
+  String get homeLockedSubtitleNoPlans => 'آپ کے کوٹے کے ری سیٹ ہونے تک محفوظ رکھی گئی';
 
   @override
-  String get homeTakingLonger => 'Taking longer than usual';
+  String get homeTakingLonger => 'عام طور سے زیادہ وقت لگ رہا ہے';
 
   @override
-  String get homeFinishingOpensWhenReady => 'Opens as soon as it\'s ready';
+  String get homeFinishingOpensWhenReady => 'تیار ہوتے ہی کھل جائے گی';
 }

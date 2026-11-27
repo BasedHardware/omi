@@ -12320,9 +12320,9 @@
     "firmwareNewestSupportedForDevice": "המכשיר שלך כבר נמצא בגרסת הקושחה החדשה ביותר הנתמכת עבורו",
     "firmwareSyncRecordingsFirstTitle": "סנכרן תחילה את ההקלטות שלך",
     "firmwareSyncRecordingsFirstMessage": "חלק מההקלטות עדיין נמצאות במכשיר שלך. תן להן להשלים את הסינכרון לטלפון, ואז התחל את העדכון.",
-    "homeLockedTitle": "{count, plural, =1{1 conversation waiting} other{{count} conversations waiting}}",
-    "homeLockedSubtitle": "Kept safe · unlock to read",
-    "homeLockedSubtitleNoPlans": "Kept safe until your allowance resets",
-    "homeTakingLonger": "Taking longer than usual",
-    "homeFinishingOpensWhenReady": "Opens as soon as it's ready"
+    "homeLockedTitle": "{count, plural, =1{שיחה אחת ממתינה} other{{count} שיחות ממתינות}}",
+    "homeLockedSubtitle": "נשמרה בבטחה · בטל נעילה כדי לקרוא",
+    "homeLockedSubtitleNoPlans": "נשמרה בבטחה עד שהמגבלה שלך מתאפסת",
+    "homeTakingLonger": "לוקח יותר זמן מהרגיל",
+    "homeFinishingOpensWhenReady": "תיפתח ברגע שתהיה מוכנה"
 }

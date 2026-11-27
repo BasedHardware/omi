@@ -4763,9 +4763,9 @@
     "firmwareNewestSupportedForDevice": "Вашето устройство вече работи с най-новата поддържана версия на фърмуера",
     "firmwareSyncRecordingsFirstTitle": "Първо синхронизирайте записите си",
     "firmwareSyncRecordingsFirstMessage": "Някои записи все още са на устройството. Оставете ги да приключат със синхронизирането към телефона, след което започнете актуализацията.",
-    "homeLockedTitle": "{count, plural, =1{1 conversation waiting} other{{count} conversations waiting}}",
-    "homeLockedSubtitle": "Kept safe · unlock to read",
-    "homeLockedSubtitleNoPlans": "Kept safe until your allowance resets",
-    "homeTakingLonger": "Taking longer than usual",
-    "homeFinishingOpensWhenReady": "Opens as soon as it's ready"
+    "homeLockedTitle": "{count, plural, =1{1 разговор в очакване} other{{count} разговора в очакване}}",
+    "homeLockedSubtitle": "Запазено безопасно · отключете, за да прочетете",
+    "homeLockedSubtitleNoPlans": "Запазено безопасно, докато лимитът ви се възстанови",
+    "homeTakingLonger": "Отнема повече време от обичайното",
+    "homeFinishingOpensWhenReady": "Отваря се веднага щом е готов"
 }

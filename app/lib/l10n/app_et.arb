@@ -4763,9 +4763,9 @@
     "firmwareNewestSupportedForDevice": "Teie seadmes on juba uusim toetatud püsivaraversioon",
     "firmwareSyncRecordingsFirstTitle": "Sünkroonige oma salvestised esmalt",
     "firmwareSyncRecordingsFirstMessage": "Mõned salvestised on veel teie seadmes. Oodake, kuni need on telefonisse sünkroonitud, ja seejärel alustage uuendust.",
-    "homeLockedTitle": "{count, plural, =1{1 conversation waiting} other{{count} conversations waiting}}",
-    "homeLockedSubtitle": "Kept safe · unlock to read",
-    "homeLockedSubtitleNoPlans": "Kept safe until your allowance resets",
-    "homeTakingLonger": "Taking longer than usual",
-    "homeFinishingOpensWhenReady": "Opens as soon as it's ready"
+    "homeLockedTitle": "{count, plural, =1{1 vestlus ootab} other{{count} vestlust ootab}}",
+    "homeLockedSubtitle": "Turvaliselt hoitud · ava lugemiseks",
+    "homeLockedSubtitleNoPlans": "Turvaliselt hoitud kuni sinu kasutuslimiit lähtestub",
+    "homeTakingLonger": "Võtab tavapärasest rohkem aega",
+    "homeFinishingOpensWhenReady": "Avaneb niipea, kui see on valmis"
 }

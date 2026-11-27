@@ -12320,9 +12320,9 @@
     "firmwareNewestSupportedForDevice": "Vaš uređaj već koristi najnoviju podržanu verziju firmvera",
     "firmwareSyncRecordingsFirstTitle": "Prvo sinhronizujte svoje snimke",
     "firmwareSyncRecordingsFirstMessage": "Neki snimci su još uvijek na vašem uređaju. Sačekajte da se sinhronizuju s telefonom, a zatim pokrenite ažuriranje.",
-    "homeLockedTitle": "{count, plural, =1{1 conversation waiting} other{{count} conversations waiting}}",
-    "homeLockedSubtitle": "Kept safe · unlock to read",
-    "homeLockedSubtitleNoPlans": "Kept safe until your allowance resets",
-    "homeTakingLonger": "Taking longer than usual",
-    "homeFinishingOpensWhenReady": "Opens as soon as it's ready"
+    "homeLockedTitle": "{count, plural, =1{1 razgovor čeka} other{{count} razgovora čeka}}",
+    "homeLockedSubtitle": "Sigurno sačuvano · otključajte za čitanje",
+    "homeLockedSubtitleNoPlans": "Sigurno sačuvano dok se vaše ograničenje ne obnovi",
+    "homeTakingLonger": "Traje duže nego obično",
+    "homeFinishingOpensWhenReady": "Otvoriće se čim bude spreman"
 }

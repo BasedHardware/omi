@@ -4763,9 +4763,9 @@
     "firmwareNewestSupportedForDevice": "आपका डिवाइस पहले से ही नवीनतम समर्थित फर्मवेयर संस्करण पर है",
     "firmwareSyncRecordingsFirstTitle": "पहले अपनी रिकॉर्डिंग सिंक करें",
     "firmwareSyncRecordingsFirstMessage": "कुछ रिकॉर्डिंग अभी भी आपके डिवाइस पर हैं। उन्हें आपके फ़ोन पर सिंक होने दें, फिर अपडेट शुरू करें।",
-    "homeLockedTitle": "{count, plural, =1{1 conversation waiting} other{{count} conversations waiting}}",
-    "homeLockedSubtitle": "Kept safe · unlock to read",
-    "homeLockedSubtitleNoPlans": "Kept safe until your allowance resets",
-    "homeTakingLonger": "Taking longer than usual",
-    "homeFinishingOpensWhenReady": "Opens as soon as it's ready"
+    "homeLockedTitle": "{count, plural, =1{1 बातचीत बाकी है} other{{count} बातचीत बाकी हैं}}",
+    "homeLockedSubtitle": "सुरक्षित रखी गई · पढ़ने के लिए अनलॉक करें",
+    "homeLockedSubtitleNoPlans": "आपकी सीमा रीसेट होने तक सुरक्षित रखी गई",
+    "homeTakingLonger": "सामान्य से ज़्यादा समय लग रहा है",
+    "homeFinishingOpensWhenReady": "तैयार होते ही खुल जाएगी"
 }

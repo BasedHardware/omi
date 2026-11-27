@@ -4859,9 +4859,9 @@
     "firmwareNewestSupportedForDevice": "Az eszközödön már a legújabb támogatott firmware-verzió fut",
     "firmwareSyncRecordingsFirstTitle": "Először szinkronizáld a felvételeidet",
     "firmwareSyncRecordingsFirstMessage": "Néhány felvétel még az eszközödön van. Várd meg, amíg a telefonodra szinkronizálásuk befejeződik, majd indítsd el a frissítést.",
-    "homeLockedTitle": "{count, plural, =1{1 conversation waiting} other{{count} conversations waiting}}",
-    "homeLockedSubtitle": "Kept safe · unlock to read",
-    "homeLockedSubtitleNoPlans": "Kept safe until your allowance resets",
-    "homeTakingLonger": "Taking longer than usual",
-    "homeFinishingOpensWhenReady": "Opens as soon as it's ready"
+    "homeLockedTitle": "{count, plural, =1{1 beszélgetés várakozik} other{{count} beszélgetés várakozik}}",
+    "homeLockedSubtitle": "Biztonságban tárolva · olvasáshoz oldd fel",
+    "homeLockedSubtitleNoPlans": "Biztonságban tárolva, amíg a kereted vissza nem áll",
+    "homeTakingLonger": "Szokásosnál tovább tart",
+    "homeFinishingOpensWhenReady": "Megnyílik, amint elkészül"
 }

@@ -4763,9 +4763,9 @@
     "firmwareNewestSupportedForDevice": "Thiết bị của bạn đã dùng phiên bản firmware mới nhất được hỗ trợ",
     "firmwareSyncRecordingsFirstTitle": "Hãy đồng bộ bản ghi âm của bạn trước",
     "firmwareSyncRecordingsFirstMessage": "Một số bản ghi âm vẫn còn trên thiết bị của bạn. Hãy đợi chúng đồng bộ xong lên điện thoại, sau đó bắt đầu cập nhật.",
-    "homeLockedTitle": "{count, plural, =1{1 conversation waiting} other{{count} conversations waiting}}",
-    "homeLockedSubtitle": "Kept safe · unlock to read",
-    "homeLockedSubtitleNoPlans": "Kept safe until your allowance resets",
-    "homeTakingLonger": "Taking longer than usual",
-    "homeFinishingOpensWhenReady": "Opens as soon as it's ready"
+    "homeLockedTitle": "{count, plural, =1{1 cuộc trò chuyện đang chờ} other{{count} cuộc trò chuyện đang chờ}}",
+    "homeLockedSubtitle": "Được lưu an toàn · Mở khóa để đọc",
+    "homeLockedSubtitleNoPlans": "Được lưu an toàn cho đến khi hạn mức của bạn được đặt lại",
+    "homeTakingLonger": "Mất lâu hơn bình thường",
+    "homeFinishingOpensWhenReady": "Sẽ mở ngay khi sẵn sàng"
 }

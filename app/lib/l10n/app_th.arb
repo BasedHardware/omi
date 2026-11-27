@@ -4763,9 +4763,9 @@
     "firmwareNewestSupportedForDevice": "อุปกรณ์ของคุณใช้เฟิร์มแวร์เวอร์ชันล่าสุดที่รองรับอยู่แล้ว",
     "firmwareSyncRecordingsFirstTitle": "ซิงค์ไฟล์บันทึกเสียงของคุณก่อน",
     "firmwareSyncRecordingsFirstMessage": "ไฟล์บันทึกเสียงบางส่วนยังอยู่ในอุปกรณ์ของคุณ รอให้ซิงค์ไปยังโทรศัพท์เสร็จก่อน แล้วจึงเริ่มการอัปเดต",
-    "homeLockedTitle": "{count, plural, =1{1 conversation waiting} other{{count} conversations waiting}}",
-    "homeLockedSubtitle": "Kept safe · unlock to read",
-    "homeLockedSubtitleNoPlans": "Kept safe until your allowance resets",
-    "homeTakingLonger": "Taking longer than usual",
-    "homeFinishingOpensWhenReady": "Opens as soon as it's ready"
+    "homeLockedTitle": "{count, plural, =1{มี 1 บทสนทนารออยู่} other{มี {count} บทสนทนารออยู่}}",
+    "homeLockedSubtitle": "เก็บไว้อย่างปลอดภัย · ปลดล็อกเพื่ออ่าน",
+    "homeLockedSubtitleNoPlans": "เก็บไว้อย่างปลอดภัยจนกว่าโควตาของคุณจะรีเซ็ต",
+    "homeTakingLonger": "ใช้เวลานานกว่าปกติ",
+    "homeFinishingOpensWhenReady": "จะเปิดทันทีที่พร้อม"
 }

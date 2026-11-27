@@ -4763,9 +4763,9 @@
     "firmwareNewestSupportedForDevice": "Il tuo dispositivo è già sull'ultima versione firmware supportata",
     "firmwareSyncRecordingsFirstTitle": "Sincronizza prima le tue registrazioni",
     "firmwareSyncRecordingsFirstMessage": "Alcune registrazioni sono ancora sul tuo dispositivo. Aspetta che terminino la sincronizzazione con il telefono, poi avvia l'aggiornamento.",
-    "homeLockedTitle": "{count, plural, =1{1 conversation waiting} other{{count} conversations waiting}}",
-    "homeLockedSubtitle": "Kept safe · unlock to read",
-    "homeLockedSubtitleNoPlans": "Kept safe until your allowance resets",
-    "homeTakingLonger": "Taking longer than usual",
-    "homeFinishingOpensWhenReady": "Opens as soon as it's ready"
+    "homeLockedTitle": "{count, plural, =1{1 conversazione in attesa} other{{count} conversazioni in attesa}}",
+    "homeLockedSubtitle": "Conservate al sicuro · sblocca per leggere",
+    "homeLockedSubtitleNoPlans": "Conservate al sicuro finché il tuo limite non si azzera",
+    "homeTakingLonger": "Richiede più tempo del solito",
+    "homeFinishingOpensWhenReady": "Si aprirà appena sarà pronta"
 }

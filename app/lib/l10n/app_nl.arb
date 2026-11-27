@@ -4763,9 +4763,9 @@
     "firmwareNewestSupportedForDevice": "Je apparaat heeft al de nieuwste ondersteunde firmwareversie",
     "firmwareSyncRecordingsFirstTitle": "Synchroniseer eerst je opnames",
     "firmwareSyncRecordingsFirstMessage": "Sommige opnames staan nog op je apparaat. Laat ze eerst volledig synchroniseren naar je telefoon en start daarna de update.",
-    "homeLockedTitle": "{count, plural, =1{1 conversation waiting} other{{count} conversations waiting}}",
-    "homeLockedSubtitle": "Kept safe · unlock to read",
-    "homeLockedSubtitleNoPlans": "Kept safe until your allowance resets",
-    "homeTakingLonger": "Taking longer than usual",
-    "homeFinishingOpensWhenReady": "Opens as soon as it's ready"
+    "homeLockedTitle": "{count, plural, =1{1 gesprek wacht} other{{count} gesprekken wachten}}",
+    "homeLockedSubtitle": "Veilig bewaard · ontgrendel om te lezen",
+    "homeLockedSubtitleNoPlans": "Veilig bewaard tot je limiet opnieuw wordt ingesteld",
+    "homeTakingLonger": "Duurt langer dan gebruikelijk",
+    "homeFinishingOpensWhenReady": "Wordt geopend zodra het klaar is"
 }

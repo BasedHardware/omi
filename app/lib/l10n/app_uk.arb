@@ -4763,9 +4763,9 @@
     "firmwareNewestSupportedForDevice": "Ваш пристрій уже працює на найновішій підтримуваній версії прошивки",
     "firmwareSyncRecordingsFirstTitle": "Спочатку синхронізуйте свої записи",
     "firmwareSyncRecordingsFirstMessage": "Деякі записи ще зберігаються на вашому пристрої. Дочекайтеся завершення синхронізації з телефоном, а потім почніть оновлення.",
-    "homeLockedTitle": "{count, plural, =1{1 conversation waiting} other{{count} conversations waiting}}",
-    "homeLockedSubtitle": "Kept safe · unlock to read",
-    "homeLockedSubtitleNoPlans": "Kept safe until your allowance resets",
-    "homeTakingLonger": "Taking longer than usual",
-    "homeFinishingOpensWhenReady": "Opens as soon as it's ready"
+    "homeLockedTitle": "{count, plural, =1{1 розмова очікує} other{{count} розмов очікують}}",
+    "homeLockedSubtitle": "Надійно збережено · розблокуйте, щоб прочитати",
+    "homeLockedSubtitleNoPlans": "Надійно збережено до відновлення вашої квоти",
+    "homeTakingLonger": "Триває довше, ніж зазвичай",
+    "homeFinishingOpensWhenReady": "Відкриється одразу, як буде готово"
 }

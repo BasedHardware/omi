@@ -4763,9 +4763,9 @@
     "firmwareNewestSupportedForDevice": "Jūsu ierīcē jau ir jaunākā atbalstītā aparatprogrammatūras versija",
     "firmwareSyncRecordingsFirstTitle": "Vispirms sinhronizējiet savus ierakstus",
     "firmwareSyncRecordingsFirstMessage": "Daži ieraksti vēl atrodas jūsu ierīcē. Ļaujiet tiem pabeigt sinhronizēšanu ar tālruni, pēc tam sāciet atjaunināšanu.",
-    "homeLockedTitle": "{count, plural, =1{1 conversation waiting} other{{count} conversations waiting}}",
-    "homeLockedSubtitle": "Kept safe · unlock to read",
-    "homeLockedSubtitleNoPlans": "Kept safe until your allowance resets",
-    "homeTakingLonger": "Taking longer than usual",
-    "homeFinishingOpensWhenReady": "Opens as soon as it's ready"
+    "homeLockedTitle": "{count, plural, =1{1 saruna gaida} other{{count} sarunas gaida}}",
+    "homeLockedSubtitle": "Uzglabātas drošībā · atbloķēt lasīšanai",
+    "homeLockedSubtitleNoPlans": "Uzglabātas drošībā, līdz tiek atjaunots jūsu limits",
+    "homeTakingLonger": "Aizņem vairāk laika nekā parasti",
+    "homeFinishingOpensWhenReady": "Tiks atvērta, tiklīdz būs gatava"
 }

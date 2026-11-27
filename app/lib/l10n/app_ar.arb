@@ -4763,9 +4763,9 @@
     "firmwareNewestSupportedForDevice": "جهازك يعمل بالفعل بأحدث إصدار مدعوم من البرنامج الثابت",
     "firmwareSyncRecordingsFirstTitle": "مزامنة تسجيلاتك أولاً",
     "firmwareSyncRecordingsFirstMessage": "لا تزال بعض التسجيلات على جهازك. دعها تكمل المزامنة إلى هاتفك، ثم ابدأ التحديث.",
-    "homeLockedTitle": "{count, plural, =1{1 conversation waiting} other{{count} conversations waiting}}",
-    "homeLockedSubtitle": "Kept safe · unlock to read",
-    "homeLockedSubtitleNoPlans": "Kept safe until your allowance resets",
-    "homeTakingLonger": "Taking longer than usual",
-    "homeFinishingOpensWhenReady": "Opens as soon as it's ready"
+    "homeLockedTitle": "{count, plural, =1{محادثة واحدة في الانتظار} other{{count} من المحادثات في الانتظار}}",
+    "homeLockedSubtitle": "محفوظة بأمان · افتح القفل للقراءة",
+    "homeLockedSubtitleNoPlans": "محفوظة بأمان حتى تتجدد حصتك",
+    "homeTakingLonger": "يستغرق وقتًا أطول من المعتاد",
+    "homeFinishingOpensWhenReady": "ستُفتح بمجرد أن تجهز"
 }

@@ -12320,9 +12320,9 @@
     "firmwareNewestSupportedForDevice": "আপনার ডিভাইস ইতিমধ্যেই ফার্মওয়্যারের সর্বশেষ সমর্থিত সংস্করণে রয়েছে",
     "firmwareSyncRecordingsFirstTitle": "প্রথমে আপনার রেকর্ডিং সিঙ্ক করুন",
     "firmwareSyncRecordingsFirstMessage": "কিছু রেকর্ডিং এখনও আপনার ডিভাইসে রয়েছে। সেগুলিকে আপনার ফোনে সিঙ্ক শেষ হতে দিন, তারপর আপডেট শুরু করুন।",
-    "homeLockedTitle": "{count, plural, =1{1 conversation waiting} other{{count} conversations waiting}}",
-    "homeLockedSubtitle": "Kept safe · unlock to read",
-    "homeLockedSubtitleNoPlans": "Kept safe until your allowance resets",
-    "homeTakingLonger": "Taking longer than usual",
-    "homeFinishingOpensWhenReady": "Opens as soon as it's ready"
+    "homeLockedTitle": "{count, plural, =1{1টি কথোপকথন অপেক্ষা করছে} other{{count}টি কথোপকথন অপেক্ষা করছে}}",
+    "homeLockedSubtitle": "নিরাপদে সংরক্ষিত · পড়তে আনলক করুন",
+    "homeLockedSubtitleNoPlans": "আপনার সীমা রিসেট হওয়া পর্যন্ত নিরাপদে সংরক্ষিত",
+    "homeTakingLonger": "সাধারণের চেয়ে বেশি সময় নিচ্ছে",
+    "homeFinishingOpensWhenReady": "প্রস্তুত হওয়ামাত্রই খুলে যাবে"
 }

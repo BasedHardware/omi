@@ -4763,9 +4763,9 @@
     "firmwareNewestSupportedForDevice": "Peranti anda sudah menggunakan versi firmware terbaharu yang disokong",
     "firmwareSyncRecordingsFirstTitle": "Segerakkan rakaman anda terlebih dahulu",
     "firmwareSyncRecordingsFirstMessage": "Sebahagian rakaman masih berada pada peranti anda. Biarkan ia selesai disegerakkan ke telefon anda, kemudian mulakan kemas kini.",
-    "homeLockedTitle": "{count, plural, =1{1 conversation waiting} other{{count} conversations waiting}}",
-    "homeLockedSubtitle": "Kept safe · unlock to read",
-    "homeLockedSubtitleNoPlans": "Kept safe until your allowance resets",
-    "homeTakingLonger": "Taking longer than usual",
-    "homeFinishingOpensWhenReady": "Opens as soon as it's ready"
+    "homeLockedTitle": "{count, plural, =1{1 perbualan menunggu} other{{count} perbualan menunggu}}",
+    "homeLockedSubtitle": "Disimpan dengan selamat · buka kunci untuk baca",
+    "homeLockedSubtitleNoPlans": "Disimpan dengan selamat sehingga had anda ditetapkan semula",
+    "homeTakingLonger": "Mengambil masa lebih lama daripada biasa",
+    "homeFinishingOpensWhenReady": "Akan dibuka sebaik sahaja siap"
 }

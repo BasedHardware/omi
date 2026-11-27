@@ -4763,9 +4763,9 @@
     "firmwareNewestSupportedForDevice": "기기가 이미 지원되는 최신 펌웨어 버전을 사용하고 있습니다",
     "firmwareSyncRecordingsFirstTitle": "먼저 녹음을 동기화하세요",
     "firmwareSyncRecordingsFirstMessage": "일부 녹음이 아직 기기에 남아 있습니다. 휴대폰으로의 동기화가 완료되면 업데이트를 시작해 주세요.",
-    "homeLockedTitle": "{count, plural, =1{1 conversation waiting} other{{count} conversations waiting}}",
-    "homeLockedSubtitle": "Kept safe · unlock to read",
-    "homeLockedSubtitleNoPlans": "Kept safe until your allowance resets",
-    "homeTakingLonger": "Taking longer than usual",
-    "homeFinishingOpensWhenReady": "Opens as soon as it's ready"
+    "homeLockedTitle": "{count, plural, =1{대화 1개 대기 중} other{대화 {count}개 대기 중}}",
+    "homeLockedSubtitle": "안전하게 보관됨 · 잠금 해제하여 읽기",
+    "homeLockedSubtitleNoPlans": "한도가 초기화될 때까지 안전하게 보관됩니다",
+    "homeTakingLonger": "평소보다 오래 걸리고 있습니다",
+    "homeFinishingOpensWhenReady": "준비되는 대로 열립니다"
 }
