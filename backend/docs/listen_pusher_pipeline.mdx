@@ -7412,6 +7412,26 @@ the first unit's LID runs before any staging, and only a Parakeet-safe answer ad
 the upload. An unsafe, low-confidence, skipped or refused sample keeps it on legacy.
 Known-unsupported languages are never sampled. False restores the full exclusion.
 
+A supported conversation pin is not capability proof for a multi-language user
+(`single_language_mode` false) whose own live speech shows a language Parakeet
+cannot transcribe: at least 2 of the rolling `users/{uid}.live_stt_language_sessions`
+rows with 10 or more segments in batch-unsupported codes, making up 20% or more of the session's
+classified segments (`und` counts in neither; an ambiguous canonical code such
+as `sr`, which also stands for Croatian, counts as unsupported and is checked on audio). Such an
+upload returns `multilingual_profile` (`BATCH_MULTILINGUAL_PROFILE_ROUTING_ENABLED`,
+default on; `BATCH_ADMISSION_LANGUAGE_EXCLUSION_ENABLED=false` also restores the former
+behavior). With legacy ON, sync intake samples it exactly like
+`unknown_multilingual_conversation`, input `multi`, and logs
+`event=batch_admission_language outcome=reclassified`. A refused sample is recorded under the
+`unknown_multilingual_conversation` exclusion; the reclassified line attributes it. A policy with live record
+enabled keeps its existing `multi` escape to legacy before sampling. The record lane has no sampler, so a new
+owner claim gives it to `legacy_final_pass_v1` like any exclusion. With legacy
+draining or dark, the upload is admitted to batch with input `multi`, classified
+per unit instead of inheriting the pin. Batch inheritance never takes such a user's
+supported pin, so this also holds for a conversation the record lane already gave
+to `batch_sync_v1`, which skips admission (`pin_untrusted`, same switch). Explicit `single_language_mode` and an existing owner win.
+False trusts the pin again (2026-11-26, changes note `2026-11-26-multilingual-profile-routing.md`).
+
 Batch self-LID evidence is bound to the authenticated item's owner, segment and
 versioned intake context. The worker requires nonempty job, content and source
 provenance, a finite probability, and a probe duration matching the first 30
