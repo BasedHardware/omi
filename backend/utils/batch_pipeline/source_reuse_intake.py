@@ -12,7 +12,7 @@ from utils.batch_pipeline import source_reuse
 from utils.executors import db_executor, storage_executor, run_blocking
 
 
-async def stage_alias(store, artifacts, item, unit, context):
+async def stage_alias(store, artifacts, item, unit, context, *, record_origin: bool):
     if not item.source_reuse_key:
         return None
     candidate = await run_blocking(db_executor, lookup, store, item, time.time())
@@ -34,7 +34,7 @@ async def stage_alias(store, artifacts, item, unit, context):
     # Always retain the newly uploaded audio before admitting this alias.
     frozen = with_context(unit.wav, {**context, 'source_reuse_key': item.source_reuse_key})
     try:
-        uri = await run_blocking(storage_executor, artifacts.stage_audio, item, frozen)
+        uri = await run_blocking(storage_executor, artifacts.stage_audio, item, frozen, record_origin=record_origin)
     except Exception:
         source_reuse.observe('custody_failure')
         raise
@@ -48,5 +48,6 @@ async def stage_alias(store, artifacts, item, unit, context):
             'source_reuse_key': item.source_reuse_key,
             'canonical_segment_id': candidate['segment_id'],
         },
+        record_origin=record_origin,
     )
     return staged, {'segment_id': candidate['segment_id'], 'result_uri': result_uri}

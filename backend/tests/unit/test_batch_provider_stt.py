@@ -992,7 +992,9 @@ def dark_intake(world, monkeypatch):
     contexts = []
     monkeypatch.setattr(intake, 'with_context', lambda wav, context: contexts.append(context) or wav)
     monkeypatch.setattr(
-        intake, 'artifacts_for', lambda _store: SimpleNamespace(stage_audio=lambda i, w: 'gs://synthetic/a')
+        intake,
+        'artifacts_for',
+        lambda _store: SimpleNamespace(stage_audio=lambda i, w, *, record_origin: 'gs://synthetic/a'),
     )
     monkeypatch.setattr(
         intake,

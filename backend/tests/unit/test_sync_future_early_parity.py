@@ -131,7 +131,7 @@ def test_early_upload_job_and_context_documents_equal_main(
 
         monkeypatch.setattr(module, 'with_context', freeze)
 
-        def stage(item, wav):
+        def stage(item, wav, *, record_origin=None):
             uri = 'gs://synthetic/audio#1'
             store.rows['artifacts', artifact_id(item.segment_id, uri)] = {
                 'owner_id': item.owner_id,
@@ -384,7 +384,7 @@ async def test_unmarked_rpc_and_coalescing_documents_equal_main_and_old_readers_
         'client_platform': 'ios',
         'intake_context': {'recording_session_id': 'session'},
     }
-    artifacts = types.SimpleNamespace(stage_audio=lambda *a: 'gs://synthetic/audio#1')
+    artifacts = types.SimpleNamespace(stage_audio=lambda *a, **kw: 'gs://synthetic/audio#1')
     for module, seed in ((previous_coalescing, old), (upload_coalescing, current)):
         assert (
             await module.offer(
