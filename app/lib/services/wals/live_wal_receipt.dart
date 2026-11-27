@@ -23,6 +23,7 @@ class LiveWalPurgeSnapshot {
   Set<String> basenames;
   int revision;
   final String documentsPath;
+  bool refreshFailed = false;
 }
 
 class _LiveWalMemoryProof {
@@ -49,6 +50,7 @@ class LiveWalReceipt {
   static const _maxEntries = 128;
   static const maxInventorySourceEntries = _maxEntries;
   static const _maxReceiptBytes = 16 * 1024;
+  static const maxInventoryReceiptBytes = _maxReceiptBytes;
   static const _maxReplayBytes = 32 * 1024 * 1024;
   // A known affected Documents directory contained about 164k leaked audio
   // files. Keep the enumeration finite while allowing that supported scale.
@@ -106,9 +108,6 @@ class LiveWalReceipt {
     if (override != null) return override(directory);
     await _durabilityChannel.invokeMethod<void>('syncDirectory', {'path': directory.path});
   }
-
-  /// Persist the fallback audio entry after receipt publication is unavailable.
-  static Future<void> syncFallbackAudioDirectory(File audio) => _syncDirectory(audio.parent);
 
   static Future<bool> hasPendingReceipt(File audio) => _receipt(audio.parent, path.basename(audio.path)).exists();
 

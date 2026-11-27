@@ -91,6 +91,7 @@ class WalFileManager {
         if (primary == null || backup == null || snapshot.documentsPath != primary.parent.path) {
           return false;
         }
+        if (snapshot.refreshFailed) return false;
         if (snapshot.revision != _indexRevision) {
           try {
             final refreshed = await LiveWalReceipt.capturePurgeSnapshot(primary, backup, _indexRevision);
@@ -100,6 +101,7 @@ class WalFileManager {
               ..revision = refreshed.revision;
           } catch (_) {
             // A stale snapshot grants no deletion authority if refresh is incomplete.
+            snapshot.refreshFailed = true;
             return false;
           }
         }

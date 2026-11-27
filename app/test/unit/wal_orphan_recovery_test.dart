@@ -584,7 +584,7 @@ void main() {
     expect(LiveWalReceipt.directory(dir).listSync().whereType<File>(), isEmpty);
   }, skip: LiveWalReceipt.writeEnabled ? false : 'Receipt writer is disabled by dart-define');
 
-  test('audio directory durability failure leaves bytes in memory and on disk', () async {
+  test('audio directory sync failure still indexes the flushed fallback', () async {
     LiveWalReceipt.syncDirectoryForTesting = (_) async {
       throw const FileSystemException('injected directory sync failure');
     };
@@ -592,10 +592,12 @@ void main() {
     await captureReceiptAudio(writer);
     await writer.finalizeCurrentSession();
     final pending = writer.testWals.singleWhere((wal) => wal.recordingSessionId == 'receipt-session');
-    expect(pending.storage, WalStorage.mem);
-    final files = dir.listSync().whereType<File>().where((file) => file.path.endsWith('.bin')).toList();
-    expect(files, hasLength(1));
-    expect(await files.single.readAsBytes(), orderedEquals(encodeWalFrames(receiptFrames)));
+    expect(pending.storage, WalStorage.disk);
+    final audioFile = File('${dir.path}/${pending.filePath}');
+    expect(await audioFile.readAsBytes(), orderedEquals(encodeWalFrames(receiptFrames)));
+    expect((await WalFileManager.loadIndexedWals()).singleWhere((wal) => wal.filePath == pending.filePath).ownerUid,
+        'owner-a');
+    expect(await receiptFor(pending.filePath!).exists(), isFalse);
     expect(LiveWalReceipt.directory(dir).listSync().whereType<File>(), isEmpty);
   }, skip: LiveWalReceipt.writeEnabled ? false : 'Receipt writer is disabled by dart-define');
 
@@ -969,6 +971,21 @@ void main() {
     expect(managedOrphan.reclaimSkipReason(DateTime.fromMillisecondsSinceEpoch(now * 1000)), 'managed_receipt_missing');
   });
 
+  test('invalid receipt leaves managed audio visible without fencing unrelated recovery', () async {
+    final audioFile = await makePendingReceipt('owner-a');
+    final basename = audioFile.uri.pathSegments.last;
+    await receiptFor(basename).writeAsString('{');
+
+    final result = await census();
+    final orphan = result.orphans.singleWhere((file) => file.filePath == audioFile.path);
+
+    expect(result.complete, isTrue);
+    expect(result.summary['receipt_scan_errors'], 1);
+    expect(result.summary['unreadable_metadata_files'], 0);
+    expect(orphan.classification, 'receiptless_managed');
+    expect(orphan.reclaimSkipReason(DateTime.fromMillisecondsSinceEpoch(now * 1000)), 'managed_receipt_missing');
+  });
+
   test('receipt budget truncation preserves census and withholds managed recovery authority', () async {
     for (var i = 0; i < 129; i++) {
       await makePendingReceipt('owner-a');
@@ -1064,6 +1081,50 @@ void main() {
     expect(writer.testWals, contains(wal));
     expect(await audioFile.exists(), isTrue);
     expect(await receiptFor(basename).exists(), isTrue);
+  });
+
+  test('failed purge-snapshot refresh is memoized for later rows', () async {
+    final audioFile = await makePendingReceipt('owner-a');
+    final basename = audioFile.uri.pathSegments.last;
+    final receiptBody = jsonDecode(await receiptFor(basename).readAsString()) as Map<String, dynamic>;
+    final wal = Wal.fromJson(receiptBody['wal'] as Map<String, dynamic>);
+    final snapshot = (await WalFileManager.captureLiveWalPurgeSnapshot())!;
+    expect(await WalFileManager.saveWals(await WalFileManager.loadIndexedWals()), isTrue);
+    final unreadable = File('${dir.path}/wals.json.corrupt-refresh');
+    await unreadable.writeAsString('{');
+
+    expect(await WalFileManager.matchesPendingLiveWalPurge(audioFile, wal, snapshot), isFalse);
+    expect(snapshot.refreshFailed, isTrue);
+    await unreadable.delete();
+    expect(await WalFileManager.matchesPendingLiveWalPurge(audioFile, wal, snapshot), isFalse);
+    expect(await audioFile.exists(), isTrue);
+    expect(await receiptFor(basename).exists(), isTrue);
+  });
+
+  test('account purge can use exact in-memory writer proof after receipt loss', () async {
+    var failWrite = false;
+    final writer = await ledger(
+      realCensus: true,
+      persist: (rows) async {
+        if (failWrite) throw const FileSystemException('injected index failure');
+        expect(await WalFileManager.saveWals(rows), isTrue);
+      },
+    );
+    await captureReceiptAudio(writer);
+    failWrite = true;
+    await expectLater(writer.finalizeCurrentSession(), throwsA(isA<FileSystemException>()));
+    failWrite = false;
+    final pending = writer.testWals.singleWhere((wal) => wal.liveFileWriteId != null);
+    final audioFile = File('${dir.path}/${pending.filePath}');
+    final receipt = receiptFor(pending.filePath!);
+    expect(await audioFile.exists(), isTrue);
+    expect(await receipt.exists(), isTrue);
+    await receipt.delete();
+
+    await writer.purgeAccountWals('owner-a');
+
+    expect(await audioFile.exists(), isFalse);
+    expect(writer.testWals, isNot(contains(pending)));
   });
 
   test('receiptless managed audio is visible but cannot be recovered or reclaimed', () async {
@@ -1368,7 +1429,7 @@ void main() {
     expect(await file.readAsBytes(), orderedEquals(bytes));
   });
 
-  test('an unreadable receipt still reserves its audio basename', () async {
+  test('an unreadable receipt leaves its audio receiptless and held', () async {
     final directory = await LiveWalReceipt.directory(dir).create();
     final base = LiveWalReceipt.uniqueName(name(now - 2), LiveWalReceipt.newId());
     final candidate = await audio(base);
@@ -1379,7 +1440,10 @@ void main() {
     final restarted = await ledger(realCensus: true);
     await restarted.recoverOrphanAudio();
     expect(restarted.testWals.where((w) => w.filePath == base), isEmpty);
-    expect((await census()).orphans.where((file) => file.filePath == candidate.path), isEmpty);
+    final result = await census();
+    final orphan = result.orphans.singleWhere((file) => file.filePath == candidate.path);
+    expect(orphan.classification, 'receiptless_managed');
+    expect(orphan.reclaimSkipReason(DateTime.fromMillisecondsSinceEpoch(now * 1000)), 'managed_receipt_missing');
     expect(await candidate.exists(), isTrue);
   });
 

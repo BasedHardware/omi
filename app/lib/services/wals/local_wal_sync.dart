@@ -1503,10 +1503,11 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
               // The exclusively reserved managed name and owner-stamped index
               // row preserve custody when the sidecar channel is unavailable.
               // Never overwrite audio protected by a sidecar left from an
-              // ambiguous publication failure.
+              // ambiguous publication failure. Do not retry the failed
+              // directory-sync channel here; file flush and index admission
+              // preserve one stable path for later retry.
               if (await LiveWalReceipt.hasPendingReceipt(file)) rethrow;
               await file.writeAsBytes(data, flush: true);
-              await LiveWalReceipt.syncFallbackAudioDirectory(file);
             }
           }
           if (writeId == null || digest != null) await file.writeAsBytes(data, flush: true);

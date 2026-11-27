@@ -322,9 +322,11 @@ files). A sidecar reserves only its managed basename; missing or unreadable
 sidecars leave that audio visible as receiptless, never eligible for adoption
 or reclaim. The directory scan examines at most 128 ordinary entries, skips
 `staging` and `retired` before the budget, and reports truncation separately.
-Unscanned managed names remain receiptless. Unexpected entries are diagnostic
-and do not invalidate unrelated census results. Unreadable, invalid,
-changed or unresolved census sources prevent adoption. Wrong-typed or quarantined
+Unscanned managed names remain receiptless. Unexpected or invalid sidecar
+entries are diagnostic and do not invalidate unrelated census results; a sidecar
+reserves its basename only after validation and an unchanged-file check.
+Unreadable, invalid, changed or unresolved index, journal, preference or consent
+sources prevent adoption. Wrong-typed or quarantined
 legacy preference inputs also make the census incomplete; recovery and support
 export share one raw, read-only preference snapshot. That snapshot is compared
 again at admission. Consent reads never repair unknown types to cloud defaults:

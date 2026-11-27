@@ -24,7 +24,7 @@ extension _WalAccountPurge on LocalWalSyncImpl {
   /// save for the life of the install. Returns false when the session moved on.
   Future<bool> _purgeDeletedAccountWalsAtLoad(int generation) async {
     final deleted = (await readDeletedAccountUids()).toSet();
-    await _purgeUnindexedAccountWals(deleted, generation);
+    final unindexedPurge = await _purgeUnindexedAccountWals(deleted, generation);
     final doomed = deleted.isEmpty ? const <Wal>[] : _foreignWals.where((w) => deleted.contains(w.ownerUid)).toList();
     final removed = <String, int>{};
     for (final wal in doomed) {
@@ -35,7 +35,20 @@ extension _WalAccountPurge on LocalWalSyncImpl {
     }
     if (removed.isNotEmpty && _isCurrent(generation)) await _saveWalsToFile(generation);
     for (final entry in removed.entries) {
-      DebugLogManager.logEvent('wal_orphan_purge', {'phase': 'load', 'owner_uid': entry.key, 'count': entry.value});
+      DebugLogManager.logEvent('wal_orphan_purge', {
+        'phase': 'load',
+        'owner_uid': entry.key,
+        'count': entry.value,
+        'reference_scan_incomplete': unindexedPurge.referenceScanIncomplete,
+      });
+    }
+    if (unindexedPurge.referenceScanIncomplete && removed.isEmpty) {
+      DebugLogManager.logEvent('wal_orphan_purge', {
+        'phase': 'load',
+        'count': 0,
+        'unindexed_removed': unindexedPurge.removed,
+        'reference_scan_incomplete': true,
+      });
     }
     if (_isCurrent(generation)) return true;
     if (!_walReady.isCompleted) _walReady.complete();

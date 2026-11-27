@@ -275,7 +275,7 @@ Future<RecordingOrphanCensus> captureRecordingCensus(
       await for (final entry in receipts.list(followLinks: false)) {
         final name = path.basename(entry.path);
         if (entry is Directory && const {'staging', 'retired'}.contains(name)) continue;
-        if (++entriesSeen > 128) {
+        if (++entriesSeen > LiveWalReceipt.maxInventorySourceEntries) {
           // Unscanned sidecars can only belong to managed basenames, which are
           // classified receiptless and never adopted or reclaimed.
           receiptScanTruncated = true;
@@ -290,7 +290,6 @@ Future<RecordingOrphanCensus> captureRecordingCensus(
           receiptScanErrors++;
           continue;
         }
-        receiptReferences.add(path.normalize(path.join(roots.first, receiptName)));
         try {
           final stat = await entry.stat();
           if (stat.type != FileSystemEntityType.file) {
@@ -311,7 +310,6 @@ Future<RecordingOrphanCensus> captureRecordingCensus(
   }
   final buckets = {for (final e in memoryBuckets.entries) e.key: List<RecordingInventoryRow>.of(e.value)};
   final indexFiles = <Map<String, Object?>>[], references = <String>{};
-  references.addAll(receiptReferences);
   final loaderEvents = <Map<String, Object?>>[];
   var unreadable = 0, changed = 0, invalidRows = 0;
   for (final meta in metadata) {
@@ -322,13 +320,26 @@ Future<RecordingOrphanCensus> captureRecordingCensus(
       'metadata_changed_ms': meta.changedMs
     };
     _Decoded result;
+    var receiptReadError = false;
     try {
       // Bound one allocation; skipped/unreadable sources prevent certainty about orphans.
       if (meta.kind == 'live_receipt') {
-        final valid = meta.bytes <= 16 * 1024 && await LiveWalReceipt.isValidPendingReceipt(File(meta.filePath));
-        result = _Decoded([], valid ? null : 'invalid_receipt');
+        final valid = meta.bytes <= LiveWalReceipt.maxInventoryReceiptBytes &&
+            await LiveWalReceipt.isValidPendingReceipt(File(meta.filePath));
         final after = await File(meta.filePath).stat();
-        if (after.size != meta.bytes || after.modified.microsecondsSinceEpoch != meta.modifiedUs) changed++;
+        final unchanged = after.size == meta.bytes &&
+            after.modified.microsecondsSinceEpoch == meta.modifiedUs &&
+            after.changed.microsecondsSinceEpoch == meta.changedUs;
+        if (valid && unchanged) {
+          receiptReferences
+              .add(path.normalize(path.join(roots.first, path.basename(meta.filePath).replaceFirst('.json', ''))));
+        } else {
+          // An invalid/changed sidecar grants no reference authority; its
+          // managed audio is independently classified receiptless and held.
+          receiptReadError = true;
+          receiptScanErrors++;
+        }
+        result = _Decoded([], null);
       } else if (meta.bytes > 128 * 1024 * 1024) {
         result = _Decoded([], 'size_limit');
       } else {
@@ -340,11 +351,17 @@ Future<RecordingOrphanCensus> captureRecordingCensus(
         if (after.size != meta.bytes || after.modified.microsecondsSinceEpoch != meta.modifiedUs) changed++;
       }
     } catch (_) {
-      result = _Decoded([], 'unreadable');
+      if (meta.kind == 'live_receipt') {
+        receiptReadError = true;
+        receiptScanErrors++;
+        result = _Decoded([], null);
+      } else {
+        result = _Decoded([], 'unreadable');
+      }
     }
-    details['read_result'] = result.error ?? 'readable';
+    details['read_result'] = receiptReadError ? 'invalid_receipt' : result.error ?? 'readable';
     if (result.error != null) unreadable++;
-    details['rows'] = result.error == null ? result.rows.length : null;
+    details['rows'] = result.error == null && !receiptReadError ? result.rows.length : null;
     details['invalid_minimum_schema_rows'] = result.invalidRows;
     invalidRows += result.invalidRows;
     indexFiles.add(details);
@@ -362,6 +379,7 @@ Future<RecordingOrphanCensus> captureRecordingCensus(
           owner: name == '$expected.json' || name == '$expected.jsonl' ? currentOwner : 'unknown-journal-owner'));
     }
   }
+  references.addAll(receiptReferences);
   final legacy = <RecordingInventoryRow>[
     for (final file in legacyFiles)
       RecordingInventoryRow(
