@@ -57,10 +57,14 @@ def skipped(reason):
     )
 
 
-def serving_guard(authorize=None, custom_stt=False):
+def serving_guard(authorize=None, custom_stt=False, provider_routed=False):
     item = SimpleNamespace(owner_id='owner-test', duration_seconds=40.0)
     return ServingLanguageProbeGuard(
-        object(), item, authorize=authorize or (lambda store, item, snapshots=None: None), custom_stt=custom_stt
+        object(),
+        item,
+        authorize=authorize or (lambda store, item, snapshots=None: None),
+        custom_stt=custom_stt,
+        provider_routed=provider_routed,
     )
 
 
@@ -392,3 +396,19 @@ def test_an_unexpected_error_before_submission_is_counted(lab, monkeypatch):
 
     assert decision.evidence == 'declared'
     assert skipped('error') == before + 1
+
+
+def test_a_vendor_routed_unit_is_not_part_of_the_parakeet_leak(lab):
+    before = skipped('provider_routed')
+
+    decision, _ = resolve(guard=serving_guard(provider_routed=True))
+
+    assert decision.evidence == 'declared'
+    assert lab.self_calls == [] and lab.vendor_calls == [] and lab.funding_calls == []
+    assert skipped('provider_routed') == before + 1
+
+
+def test_sampling_hashes_past_a_shared_silent_opening():
+    opening = b'\x00' * 200_000
+    picks = [audit.sampled(opening + os.urandom(64)) for _ in range(5000)]
+    assert 0 < sum(picks) < len(picks)

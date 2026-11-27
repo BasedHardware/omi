@@ -20,7 +20,8 @@ This audit samples ``SAMPLE_PERCENT`` of those units by a stable hash of their a
 
 It never changes a route, stores nothing, and records no user identifier or transcript. Shadow intake (its own guard
 class) is not audited, and neither is a unit whose owner brought their own STT (BYOK or a custom provider): their
-audio is never sent to an Omi-paid classifier for measurement.
+audio is never sent to an Omi-paid classifier for measurement. A unit admitted to a vendor STT route is skipped too
+(``provider_routed``): it never reaches Parakeet, so it is not part of the leak.
 
 ``BATCH_DECLARED_LANGUAGE_AUDIT_ENABLED=false`` stops sampling.
 """
@@ -41,6 +42,7 @@ from prometheus_client import Counter
 from config.live_stt_gpu_fleet import gpu_fleet_off
 from config.prerecorded_language import language_class
 from config.refactor_switches import default_on
+from utils import funded_processing, stt_cap_dispatch
 from utils.batch_pipeline.language_probe_authorization import ServingLanguageProbeGuard
 from utils.executors import ExecutorSaturatedError, declared_language_audit_executor
 from utils.stt import language_gate
@@ -78,7 +80,8 @@ def audit_enabled() -> bool:
 
 
 def sampled(audio: bytes) -> bool:
-    digest = hashlib.sha256(audio[:65536]).digest()
+    # The whole unit: equal-length units that open with the same silence must not share a decision.
+    digest = hashlib.blake2b(audio, digest_size=8).digest()
     return int.from_bytes(digest[:4], 'big') % 10000 < SAMPLE_PERCENT * 100
 
 
@@ -102,6 +105,9 @@ def maybe_audit(
             return
         if guard.custom_stt:
             SKIPPED.labels('custom_stt').inc()
+            return
+        if guard.provider_routed:
+            SKIPPED.labels('provider_routed').inc()  # a vendor transcribes it; no Parakeet leak to measure
             return
         try:
             probe, seconds = cut(audio)  # only the first 30 s is kept, never the whole unit
@@ -160,19 +166,16 @@ def _probe_allowed() -> bool:
 
 def _authorization(access) -> str | None:
     """None when the sample may be classified, else the skip reason. Never records admission telemetry."""
-    from utils.funded_processing import consent_allows
-    from utils.stt_cap_dispatch import funded_allowance
-
     store, item, authorize = access
     try:
         authorize(store, item, snapshots=None)  # serving's privacy authorization; raises when blocked
-        if not consent_allows(item.owner_id):
+        if not funded_processing.consent_allows(item.owner_id):
             return 'not_authorized'
     except Exception:
         return 'not_authorized'
     try:
         # ready_usage_only: no subscription provisioning. sync_admission would also record held audio and a decision.
-        if not funded_allowance(item.owner_id, lane='batch', ready_usage_only=True).managed:
+        if not stt_cap_dispatch.funded_allowance(item.owner_id, lane='batch', ready_usage_only=True).managed:
             return 'not_funded'
     except Exception:
         return 'not_funded'

@@ -1125,6 +1125,7 @@ async def accept_upload(
                     item,
                     authorize=batch_artifact_authorize,
                     custom_stt=byok_enabled or bool(target and target.get('uses_custom_stt')),
+                    provider_routed=provider,
                 )
                 # Every self/vendor classification gets fresh dispatch authority on CPU.
                 language_decision = await run_blocking(

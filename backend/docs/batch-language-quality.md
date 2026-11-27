@@ -115,7 +115,9 @@ with all rows, and once restricted to `confident="true"` in both numerator and d
 Skips count in `omi_batch_pipeline_declared_language_audit_skipped_total{reason}`.
 Units whose owner brought their own STT (BYOK or a custom provider) are never sampled
 (`reason="custom_stt"`), and owners without an Omi-funded allowance skip as `reason="not_funded"`,
-because the classifier is Omi-paid. The share therefore describes funded, Omi-STT owners.
+because the classifier is Omi-paid. Units admitted to a vendor STT route skip as
+`reason="provider_routed"`, since they never reach Parakeet. The share therefore describes
+Parakeet-routed units of funded, Omi-STT owners. The sample is a stable hash of the whole unit.
 
 The private rollout `fleet_gate.sh` requires language-route coverage for every
 since-T0 completed cohort unit and rejects any unknown/unsupported Parakeet
