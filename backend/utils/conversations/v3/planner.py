@@ -196,13 +196,19 @@ def _join_sitdown(lines: list, entries: list[dict[str, Any]]) -> list[dict[str, 
     return result
 
 
+def _cohesive_manual_group(group):
+    return group.get('after_manual_end') or group.get(
+        'legacy_manual_end', group.get('manual_end') and not group.get('native_manual_end')
+    )
+
+
 def _cohesive_groups(
     groups, outlines, sitdown=False, ownership=None, *, size_cap=False
 ) -> Iterator[tuple[dict[str, Any], list[dict[str, Any]]]]:
     for group, entries in zip(groups, outlines):
         if not entries:
             continue
-        manual = group.get('manual_end') or group.get('after_manual_end')
+        manual = _cohesive_manual_group(group)
         cut_points = [entry['first_line'] - 1 for entry in entries]
         cut_points.extend(
             section['first_line'] - 1
@@ -233,6 +239,7 @@ def _cohesive_groups(
                 **group,
                 'lines': part,
                 'manual_end': bool(last and group.get('manual_end')),
+                'native_manual_end': bool(last and group.get('native_manual_end')),
                 '_keep_unmatched_together': bool(manual),
                 'finished': group['finished'] or not last,
                 'locked': group.get('locked', group['finished']) or not last,
@@ -255,7 +262,10 @@ def windows(groups, outlines, *, cohesion=False, silence_gap=SILENCE, defer_topi
     )
     for group, entries in pairs:
         first_result = len(result)
-        if len(entries) > 1 and (group.get('manual_end') or group.get('after_manual_end')):
+        native_tail = (
+            group['lines'][-1] if group.get('native_manual_end') and not group.get('legacy_manual_end') else None
+        )
+        if len(entries) > 1 and _cohesive_manual_group(group):
             entries = _as_sections(entries)
         for index, entry in enumerate(entries):
             begin = entry['first_line'] - 1
@@ -272,6 +282,8 @@ def windows(groups, outlines, *, cohesion=False, silence_gap=SILENCE, defer_topi
                     'manual_end': bool(
                         group.get('manual_end') and end == len(group['lines']) and part_index == len(capped) - 1
                     ),
+                    '_native_manual_tail': native_tail,
+                    'native_manual_end': native_tail is not None and any(line is native_tail for line in part),
                     '_keep_unmatched_together': bool(
                         group.get('_keep_unmatched_together')
                         or group.get('manual_end')
@@ -322,6 +334,11 @@ def windows(groups, outlines, *, cohesion=False, silence_gap=SILENCE, defer_topi
                         prior['_defer_lock'] = candidate.get('_defer_lock', False)
                         if candidate.get('_defer_lock'):
                             prior['_lock_end'] = candidate['_lock_end']
+                    if candidate['native_manual_end']:
+                        prior['_native_manual_tail'] = native_tail
+                        prior['native_manual_end'] = True
+                    else:
+                        prior['native_manual_end'] = False
                 else:
                     result.append(candidate)
     return result
@@ -472,7 +489,22 @@ def build(uid, window, recordings, existing=None, *, allocated=None, manual_end_
     keep_live_title = prior.get(policy.LIVE_TITLE_STATE) == 'published' and not window['finished'] and not title
     if keep_live_title:
         title = structured.get('title')
-    manual_end = bool(window.get('manual_end') or (existing or {}).get('manual_end'))
+    native_tail = window.get('_native_manual_tail') if window.get('native_manual_end') else None
+    native_binding = policy.native_manual_binding(recordings[native_tail['conversation_id']]) if native_tail else None
+    legacy_manual_end = (window.get('manual_end') and not window.get('native_manual_end')) or (
+        (existing or {}).get('manual_end') and not (existing or {}).get(policy.NATIVE_MANUAL_BINDING)
+    )
+    # A real legacy marker keeps its precedence. An existing native marker is
+    # retained only through the newly validated owner of the exact tail.
+    manual_end = bool(legacy_manual_end or native_binding)
+    recording_ids = list(dict.fromkeys(line['conversation_id'] for line in lines))
+    visibility_receipt = (existing or {}).get(policy.NATIVE_MANUAL_NOTES_VISIBILITY)
+    keeps_native_visibility = isinstance(visibility_receipt, dict) and visibility_receipt == (
+        policy.native_manual_notes_window(
+            {'id': cid, 'started_at': start, 'finished_at': end, 'v3_recording_ids': recording_ids},
+            visibility_receipt.get('recording_id'),
+        )
+    )
     outline_kind = window.get('outline_kind', window['kind'])
     words = window['_stretch_words'] if '_stretch_words' in window else word_count(segments)
     if (
@@ -491,14 +523,24 @@ def build(uid, window, recordings, existing=None, *, allocated=None, manual_end_
         {line['conversation_id'] for line in lines},
         words=words,
         finished=window['finished'] and not window.get('_title_preview'),
-        manual_end=manual_end,
-        manual_end_home_visible=manual_end_home_visible,
+        manual_end=manual_end or keeps_native_visibility,
+        manual_end_home_visible=manual_end_home_visible and bool(legacy_manual_end),
     )
     row: dict[str, Any] = {
         **(existing or {}),
         'id': cid,
         'v3_derived': True,
         'manual_end': manual_end,
+        **(
+            {policy.NATIVE_MANUAL_BINDING: None if legacy_manual_end else native_binding}
+            if native_binding or policy.NATIVE_MANUAL_BINDING in (existing or {})
+            else {}
+        ),
+        **(
+            {policy.NATIVE_MANUAL_NOTES_VISIBILITY: visibility_receipt if keeps_native_visibility else None}
+            if policy.NATIVE_MANUAL_NOTES_VISIBILITY in (existing or {})
+            else {}
+        ),
         'created_at': start,
         'started_at': start,
         'finished_at': end,
@@ -556,7 +598,7 @@ def build(uid, window, recordings, existing=None, *, allocated=None, manual_end_
             )
         ),
         'tile_state': 'writing' if window['finished'] and not window.get('_title_preview') else 'live',
-        'v3_recording_ids': list(dict.fromkeys(l['conversation_id'] for l in lines)),
+        'v3_recording_ids': recording_ids,
         'transcript_segments': segments,
         'recording_pieces': pieces,
         'audio_files': files,
@@ -576,7 +618,10 @@ def build(uid, window, recordings, existing=None, *, allocated=None, manual_end_
         row['structured']['participants'] = [
             {'name': name, 'source': 'transcript'} for name in window.get('people') or []
         ]
-    if existing and segments != existing.get('transcript_segments'):
+    if existing and (
+        segments != existing.get('transcript_segments')
+        or row.get(policy.NATIVE_MANUAL_BINDING) != existing.get(policy.NATIVE_MANUAL_BINDING)
+    ):
         row['sync_content_revision'] = int(existing.get('sync_content_revision') or 0) + 1
     elif not existing:
         row['sync_content_revision'] = 1
@@ -829,7 +874,16 @@ def preserve_finished_windows(planned, existing, recordings=None, *, protect_pro
                     published_partitions.add(partition)
             if owner:
                 if gaps and not window.get('_keep_unmatched_together'):
-                    fresh.append({**window, **fresh_metadata, 'lines': gaps, 'manual_end': False, 'finished': True})
+                    fresh.append(
+                        {
+                            **window,
+                            **fresh_metadata,
+                            'lines': gaps,
+                            'manual_end': False,
+                            'native_manual_end': False,
+                            'finished': True,
+                        }
+                    )
                     gaps = []
                 target = retained.setdefault(
                     owner['id'],
@@ -840,6 +894,7 @@ def preserve_finished_windows(planned, existing, recordings=None, *, protect_pro
                         '_held_provisional': owner['id'] in provisional,
                         '_defer_lock': owner['id'] in provisional and window.get('_defer_lock', False),
                         'manual_end': False,
+                        'native_manual_end': False,
                         'title': owner.get('structured', {}).get('title', ''),
                         'kind': owner.get('outline_kind') or owner.get('kind', 'conversation'),
                         'emoji': owner.get('structured', {}).get('emoji', '💬'),
@@ -853,6 +908,9 @@ def preserve_finished_windows(planned, existing, recordings=None, *, protect_pro
                     target['_defer_lock'] = False
                 if line is window['lines'][-1] and window.get('manual_end'):
                     target['manual_end'] = True
+                    if line is window.get('_native_manual_tail'):
+                        target['_native_manual_tail'] = line
+                        target['native_manual_end'] = True
             else:
                 gaps.append(line)
         if gaps:
@@ -864,6 +922,7 @@ def preserve_finished_windows(planned, existing, recordings=None, *, protect_pro
                     **fresh_metadata,
                     'lines': gaps,
                     'manual_end': bool(window.get('manual_end') and reaches_end),
+                    'native_manual_end': bool(window.get('native_manual_end') and reaches_end),
                     'finished': window['finished'] or not reaches_end,
                 }
             )

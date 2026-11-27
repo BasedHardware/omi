@@ -20,12 +20,11 @@ from database import conversations_v3_rederive as rederive_store
 import asyncio
 from collections.abc import Collection
 import hashlib
-import json
 import logging
 import re
 import time
 from datetime import datetime, timedelta, timezone
-from functools import wraps
+from functools import partial, wraps
 from typing import Any
 from uuid import NAMESPACE_URL, uuid5
 
@@ -68,7 +67,7 @@ from utils.conversations.v3 import (
     visibility,
     context,
 )
-from utils.conversations.v3 import manual_cuts, refinement, preview_wakes, summary_wake
+from utils.conversations.v3 import manual_cuts, refinement, preview_wakes, rederive_plan, summary_wake
 from utils.conversations.v3 import capture_device
 from utils.conversations.v3.word_floor import MIN_TASK_WORDS, has_unspaced_script, text_word_count
 from utils.conversations.processing_trigger import ProcessingTrigger
@@ -106,6 +105,7 @@ BLOCKED = frozenset(
         'remove_not_backfilled',
         'rederive_mixed_runs',
         'backfill_source_unreadable',
+        'backfill_native_finish_unsupported',
         'backfill_donor_unclaimed',
         'backfill_rederive_linked_claims',
         'rederive_live_open',
@@ -215,6 +215,18 @@ def _match(window, existing, used, *, preferred=None):
     # Published claimants are assigned by the planner. Time matching is the fallback
     # for live rows, legacy rows without claims or playback, and deletion tombstones.
     return min(candidates, key=lambda r: (r['id'] != preferred, r['started_at'])) if candidates else None
+
+
+def _revoked_native_window(row, recordings):
+    binding = row.get(policy.NATIVE_MANUAL_BINDING)
+    source = recordings.get(binding.get('recording_id')) if isinstance(binding, dict) else None
+    return bool(
+        source
+        and row.get('v3_process_pending')
+        and not row.get('v3_notes_written')
+        and not row.get(policy.NATIVE_MANUAL_NOTES_VISIBILITY)
+        and policy.native_manual_binding(source) != binding
+    )
 
 
 def _backfill_runs(window, recordings):
@@ -528,6 +540,444 @@ def _exclude_unclaimed_backfill_donors(recordings, rows, *, rederive):
     return unclaimed
 
 
+async def _reconcile_outlines(
+    uid,
+    key,
+    token,
+    groups,
+    cached,
+    report,
+    *,
+    silence_seconds,
+    silence_gap,
+    cohesion,
+    custom_timing,
+    on_open,
+    unlocked_page,
+    retry_failed_outlines,
+    flex_owner_deadline,
+):
+    # Keep a bounded cache; every fingerprint is checked even for finished stretches.
+    if retry_failed_outlines:
+        cached = [row for row in cached if not any(entry.get('_outline_failed') for entry in row['entries'])]
+    saved = {row['fingerprint']: row for row in cached}
+    preview_prefix = f'{silence_seconds}:'
+    scoped_preview_keys = {f"{preview_prefix}{group['key']}" for group in groups} if custom_timing else set()
+    previews = {row['preview_key']: row for row in cached if row.get('preview_key', '').startswith(preview_prefix)}
+    unmatched_previews = {key: row for key, row in previews.items() if key not in scoped_preview_keys}
+    consumed_previews = set()
+    outlines, cache = [], []
+    sources = await run_blocking(db_executor, context.outline_sources, uid, groups)
+    for group in groups:
+        await run_blocking(db_executor, leases.renew, uid, key, token)
+        messages = outline.messages(group, timezone.utc, cohesion=cohesion, silence_gap=silence_gap)
+        messages.append(
+            (
+                'human',
+                context.outline_block(group, sources, [entry['title'] for entries in outlines for entry in entries]),
+            )
+        )
+        # Resume evidence is part of the cache key too.
+        if outlines:
+            previous = outlines[-1][-1]
+            messages.append(('human', 'Preceding conversation: ' + previous['title'] + '\n' + previous['line']))
+        fingerprint = context.cache_key(group, messages)
+        hit = saved.get(fingerprint)
+        preview_key = f"{preview_prefix}{group['key']}" if custom_timing else None
+        preview = previews.get(preview_key) if preview_key else None
+        if preview_key and preview is None and hit is None:
+            matched_key = outline.matching_preview(group, unmatched_previews)
+            if matched_key is not None:
+                preview = unmatched_previews.pop(matched_key)
+                consumed_previews.add(matched_key)
+        preview_fields = {}
+        if hit:
+            entries = hit['entries']
+            report['outline_cache_hits'] = report.get('outline_cache_hits', 0) + 1
+        elif preview is not None:
+            entries = outline.reuse_preview(group, preview)
+            report['outline_cache_hits'] = report.get('outline_cache_hits', 0) + 1
+        elif group['outline_ready'] or on_open:
+            entries, preview_fields = await _derive_outline(
+                uid,
+                key,
+                token,
+                group,
+                messages,
+                fingerprint,
+                report,
+                cohesion=cohesion,
+                silence_gap=silence_gap,
+                preview_key=preview_key,
+                flex_owner_deadline=flex_owner_deadline,
+            )
+        else:
+            # First speech is visible before either the title preview or the outline is ready.
+            entries = [
+                {
+                    'first_line': 1,
+                    'title': '',
+                    'line': '',
+                    'kind': 'conversation',
+                    'people': [],
+                    'sections': [],
+                    'emoji': '💬',
+                }
+            ]
+        outlines.append(entries)
+        outline_failed = any(entry.get('_outline_failed') for entry in entries)
+        if (group['outline_ready'] or on_open or preview is not None) and (
+            not retry_failed_outlines or not outline_failed
+        ):
+            if preview_key and not group['locked'] and not outline_failed:
+                preview_fields = {'preview_key': preview_key, 'anchors': outline.preview_anchors(group, entries)}
+            cache.append({'fingerprint': fingerprint, 'entries': entries, **preview_fields})
+
+    if _keeps_unselected_outlines(custom_timing, on_open, unlocked_page):
+        replaced = {row['fingerprint'] for row in cache}
+        replaced_previews = scoped_preview_keys | consumed_previews
+        cache = [
+            row
+            for row in cached
+            if row.get('preview_key') not in replaced_previews and row['fingerprint'] not in replaced
+        ] + cache
+    return outlines, cache
+
+
+async def _after_projection(
+    uid,
+    key,
+    token,
+    groups,
+    recordings,
+    rows,
+    existing,
+    *,
+    derive,
+    on_open,
+    moved,
+    custom_timing,
+    silence_gap,
+    lock_delay,
+    now,
+):
+    if moved:
+        # Live speech arrived during the pass: the snapshot's windows are committed and the moved
+        # recordings stay owed. Wake the owner at the next minute instead of an immediate re-pass,
+        # which would race the same live recording again.
+        metrics.safe_metric(lambda: metrics.RACES.labels('source_moved').inc())
+        await run_blocking(db_executor, enqueue, uid, at=datetime.now(timezone.utc) + RACE_RETRY)
+    for group in groups if not derive else ():
+        if not (group['locked'] if custom_timing else group['finished']):
+            # A different minute than the currently executing task avoids
+            # Cloud Tasks' completed-name dedupe swallowing the continuation.
+            delay = lock_delay if group['outline_ready'] else min(silence_gap, lock_delay)
+            settle_from = group.get('settle_from', group['end'])
+            await run_blocking(db_executor, enqueue, uid, at=max(settle_from + delay, now + timedelta(minutes=1)))
+    holds = [r[outline.HOLD_UNTIL] for r in recordings.values() if r.get(outline.HOLD_UNTIL) is not None]
+    if holds and not derive:
+        # A held manual-end cut applies when its wait ends, even if no transcript lands.
+        metrics.safe_metric(lambda: metrics.FINISH_HELD.inc())
+        await run_blocking(db_executor, enqueue, uid, at=max(min(holds), now + timedelta(minutes=1)))
+    for row in rows:
+        prior = existing.get(row['id']) or {}
+        if (
+            not row.get('home_hidden')
+            and row.get('home_hidden_reason') == 'wearer_recognition_uncertain'
+            and (prior.get('home_hidden') or prior.get('home_hidden_reason') != 'wearer_recognition_uncertain')
+        ):
+            metrics.safe_metric(lambda: metrics.UNCERTAIN_SHOWN.inc())
+        if row['id'] not in existing:
+            metrics.safe_metric(
+                lambda: metrics.VISIBLE_LATENCY.observe(max(0, (now - row['started_at']).total_seconds()))
+            )
+    if not derive and not on_open and live_title_enabled():
+        for row in rows:
+            if policy.live_title_candidate(row) and not row.get(policy.LIVE_TITLE_STATE):
+                await _maybe_publish_live_title(uid, key, token, row)
+
+
+async def _plan_projection(
+    uid,
+    groups,
+    outlines,
+    recordings,
+    existing,
+    unavailable,
+    *,
+    derive,
+    live,
+    on_open,
+    conversation_id,
+    custom_timing,
+    refine_locked,
+    cohesion,
+    silence_gap,
+    owner_cuts,
+    now,
+    lock_delay,
+    run_id,
+    first_open_gating,
+):
+    preferred = conversation_id if on_open and custom_timing else None
+    revoked_native_ids = {
+        cid for cid, row in existing.items() if not derive and _revoked_native_window(row, recordings)
+    }
+    settled_ids = {cid for cid, row in existing.items() if row.get(policy.NATIVE_MANUAL_SETTLED)}
+    immutable = {cid: row for cid, row in existing.items() if cid not in revoked_native_ids and cid not in settled_ids}
+    # One ownership index per plan (adoption can add rows before a replan), shared by the
+    # two-hour cap and both projections below.
+    ownership = planner.Ownership(immutable, recordings)
+    proposed = planner.windows(
+        groups,
+        outlines,
+        cohesion=cohesion,
+        silence_gap=silence_gap,
+        defer_topic_lock=custom_timing,
+        ownership=ownership,
+    )
+    merge = refinement.candidate(proposed, immutable, recordings) if refine_locked else None
+    if merge and await run_blocking(db_executor, store.merge_donors_have_tasks, uid, merge[1]['_v3_absorbed']):
+        merge = None
+    reserved = set()
+    candidates = proposed
+    if merge is not None:
+        index, merged = merge
+        reserved = {merged['id'], *merged['_v3_absorbed']}
+        candidates = proposed[:index] + proposed[index + 1 :]
+    windows = planner.preserve_finished_windows(
+        candidates, immutable, recordings, protect_provisional=custom_timing, ownership=ownership
+    )
+    if reserved.intersection(window.get('existing_id') for window in windows):
+        merge = None
+        reserved.clear()
+        windows = planner.preserve_finished_windows(
+            proposed, immutable, recordings, protect_provisional=custom_timing, ownership=ownership
+        )
+    # A retained finished conversation owns its id by claim evidence; a fresh window that sorts
+    # before it (late speech overlapping its start) must not time-match the same id. Two planned
+    # rows with one id each re-add the source's held claims, doubling them every pass until the
+    # recording outgrows Firestore's 1 MiB document limit (document_too_large).
+    rows = []
+    used = (
+        reserved
+        | settled_ids
+        | unavailable.keys()
+        | {window['existing_id'] for window in windows if window.get('existing_id')}
+    )
+    used.update(row['id'] for row in existing.values() if row.get('v3_refined') and row.get('v3_claims_transferred_to'))
+    locked_ids = (
+        {row['id'] for row in existing.values() if not planner.is_unlocked(row) and not row.get('deleted')}
+        if custom_timing
+        else set()
+    ) - revoked_native_ids
+    taken = set()
+    allocated = {}
+    await run_blocking(db_executor, visibility.hydrate_recognition, uid, recordings, windows)
+    for window in windows:
+        # An affirmative transcription failure is terminal even before the silence deadline.
+        transcription_failed = any(
+            policy.transcription_failed(recordings[line['conversation_id']]) for line in window['lines']
+        )
+        if transcription_failed:
+            window['finished'] = True
+        # A preview cannot take over a locked card by time matching alone.
+        deferred_lock = (
+            custom_timing and not transcription_failed and (not window['finished'] or window.get('_defer_lock', False))
+        )
+        excluded = used | locked_ids if deferred_lock else used
+        prior = existing.get(window.get('existing_id')) or _match(window, existing, excluded, preferred=preferred)
+        if live and window.get('_outline_failed') and not (prior or {}).get('_v3_protected'):
+            # A repair never replaces windows with the fallback outline's failed tiles; retry later.
+            raise Conflict('rederive_live_outline_failed')
+        if prior:
+            used.add(prior['id'])
+        opening = on_open and prior and prior['id'] == conversation_id and custom_timing
+        if opening:
+            window['finished'] = True
+            deferred_lock = False
+        if deferred_lock:
+            window['_title_preview'] = True
+        revoked_native = bool(prior and prior['id'] in revoked_native_ids)
+        # A manual window that never produced notes may still be open by the natural clock.
+        current_window = {**prior, 'status': 'in_progress'} if prior and revoked_native else prior
+        row = planner.build(
+            uid,
+            window,
+            recordings,
+            current_window,
+            allocated=allocated,
+            manual_end_home_visible=manual_end_home_visible_enabled(),
+        )
+        if owner_cuts and row.get('manual_end') and not row.get(planner.CUT_FIELD):
+            # Experiment end_open_conversation: remember the End that closed this conversation, so
+            # speech recorded before it that lands later still belongs here (planner.Ownership).
+            # Off there are no owner cuts and the field is never written.
+            closed_by = planner.ending_cut(row['finished_at'], owner_cuts, silence_gap)
+            if closed_by is not None:
+                row[planner.CUT_FIELD] = closed_by
+        if row.get('tile_state') == 'live' and reliability_experiments.any_enabled(
+            uid, 'end_button_by_device', 'instant_live_text', 'vendor_recognizer_on_opened_app'
+        ):
+            # Experiments end_button_by_device, instant_live_text and vendor_recognizer_on_opened_app:
+            # an open conversation names the app install behind its latest speech. With all off the
+            # field is never written.
+            capture_device.stamp(row, window['lines'], recordings)
+        if opening and prior and planner.is_unlocked(prior):
+            row['v3_open_locked'] = True
+        row.pop('v3_unlocked', None)
+        if deferred_lock:
+            row['v3_unlocked'] = True
+            lock_end = window.get('_lock_end', row['finished_at'])
+            row['_v3_preview_due_at'] = max(lock_end + lock_delay, now + RACE_RETRY)
+        published_ids = window.get('_published_ids', ())
+        if not prior and (row['id'] in excluded | taken or row['id'] in published_ids):
+            first = window['lines'][0]['conversation_id']
+            seed = f"v3:{uid}:{row['started_at'].isoformat()}:{first}"
+            blocked_ids = excluded | taken | set(published_ids)
+            # Preserve the recording-qualified ID when free. Same-clock windows can also
+            # share a recording, so probe deterministic suffixes in planner order.
+            identifier = str(uuid5(NAMESPACE_URL, seed))
+            suffix = 0
+            while identifier in blocked_ids:
+                suffix += 1
+                identifier = str(uuid5(NAMESPACE_URL, f'{seed}:{suffix}'))
+            row['id'] = identifier
+        taken.add(row['id'])
+        contributing = _backfill_runs(window, recordings)
+        if derive and len(contributing) > 1:
+            # Undo is scoped to one run; a re-derive never merges rows that different runs own.
+            raise Conflict('rederive_mixed_runs')
+        run = contributing[0] if contributing else None
+        if derive or run:
+            # Historical windows never fan out (policy.created_eligible) and take no derived
+            # effects; a live pass over an interrupted backfill's donors keeps the stamp.
+            row['backfilled'] = True
+            if run:
+                row['v3_backfill_run'] = run
+        if live:
+            row['v3_rederive_live_run'] = run_id
+        if prior and prior.get('deleted'):
+            continue
+        before = planner.word_count((prior or {}).get('transcript_segments') or [])
+        new_words = max(0, planner.word_count(row['transcript_segments']) - before)
+        ended = window['finished'] and not deferred_lock
+        if revoked_native:
+            # The natural window, not the stale summary attempt, now owns scheduling.
+            row['v3_process_pending'] = False
+        was_ended = prior and not planner.is_unlocked(prior) and not revoked_native
+        visibility_receipt = row.get(policy.NATIVE_MANUAL_NOTES_VISIBILITY)
+        recovered_native_notes = bool(
+            visibility_receipt
+            and prior
+            and prior.get('v3_process_pending')
+            and not prior.get('v3_notes_written')
+            and not row.get(policy.NATIVE_MANUAL_BINDING)
+        )
+        if recovered_native_notes:
+            # The output committed while the proof was valid. Releasing its stale work
+            # must not trigger a second model call because settlement was interrupted.
+            row.update(
+                v3_notes_written=True,
+                v3_process_pending=False,
+                summary_covers_through=visibility_receipt['finished_at'],
+            )
+        promoted = bool(
+            prior
+            and not row.get('home_hidden')
+            and (
+                row.get('manual_end')
+                and not prior.get('manual_end')
+                and not (window.get('native_manual_end') and prior.get('v3_notes_written'))
+                or prior.get('kind') == 'background'
+                and row['kind'] == 'conversation'
+            )
+        )
+        if promoted and custom_timing and prior:
+            covers = prior.get('summary_covers_through')
+            if covers and covers >= row['finished_at']:
+                promoted = False
+        if promoted:
+            row['summary_covers_through'] = None
+        rewrite = bool(
+            prior is not None
+            and was_ended
+            and not custom_timing
+            and planner.late_rewrite(
+                previous_words=before,
+                new_words=new_words,
+                ended_at=prior['finished_at'],
+                now=now,
+                rewrites=prior.get('v3_rewrites', 0),
+            )
+        )
+        if rewrite:
+            # The old summary no longer covers the window: without this the covered-summary guard
+            # returns the previous notes and the only automatic rewrite is spent on nothing.
+            row['summary_covers_through'] = None
+        outline_recovered = (
+            first_open_gating
+            and on_open
+            and prior
+            and prior.get('v3_process_failure_reason') == 'outline'
+            and not window.get('_outline_failed')
+        )
+        needs_processing = (
+            not was_ended
+            or rewrite
+            or promoted
+            or outline_recovered
+            or (prior or {}).get('tile_state') == 'transcribing'
+        )
+        keep_prior_status = not needs_processing if first_open_gating else not (rewrite or promoted)
+        if prior is not None and was_ended and keep_prior_status:
+            row['status'] = prior['status']
+            row['tile_state'] = 'done' if recovered_native_notes else prior.get('tile_state', 'done')
+        waiting = not transcription_failed and any(
+            policy.transcription_pending(recordings[l['conversation_id']]) for l in window['lines']
+        )
+        if ended and waiting and (not recovered_native_notes or rewrite):
+            row['tile_state'] = 'transcribing'
+            row['v3_process_pending'] = False
+            if not derive:
+                await run_blocking(db_executor, enqueue, uid, at=now + timedelta(minutes=1))
+        if ended and not waiting and needs_processing:
+            if outline_recovered:
+                row.update(v3_process_failed=False, v3_process_failure_reason=None, summary_retryable=False)
+            row['v3_process_pending'] = True
+            row.pop('v3_process_retry_after', None)
+            row['v3_rewrites'] = int((prior or {}).get('v3_rewrites') or 0) + int(rewrite)
+        if (
+            (recovered_native_notes or (prior and prior.get('home_hidden')))
+            and not row.get('v3_process_pending')
+            and policy.created_eligible(row)
+        ):
+            # Recovered settlement and first visibility of already-written notes both
+            # owe created fanout without another model call.
+            row['v3_created_pending'] = True
+        if ended and needs_processing:
+            if not row.get('is_locked') and (transcription_failed or window.get('_outline_failed')):
+                row.update(
+                    await run_blocking(
+                        db_executor,
+                        writers.failure_patch,
+                        reason='transcription' if transcription_failed else 'outline',
+                    )
+                )
+        if derive and row.get('v3_process_pending'):
+            # Same notes obligation, on the backfill's own marker: the live sweep and the live
+            # queue never pick up historical notes.
+            row['v3_process_pending'] = False
+            row['v3_backfill_process_pending'] = True
+        rows.append(row)
+        for rid, claims in row['_v3_claims'].items():
+            allocated.setdefault(rid, []).extend((claim['start'], claim['end']) for claim in claims)
+    if merge is not None:
+        rows.append(merge[1])
+    rows.extend(planner.unavailable_preview(row, recordings) for row in unavailable.values())
+    return rows
+
+
 @_measure_reconcile_writes
 async def reconcile(
     uid,
@@ -553,7 +1003,7 @@ async def reconcile(
     inputs (legacy donors instead of v3_pending recordings), in stamping rows ``backfilled`` and in
     queueing notes on its own marker, drained by the backfill task instead of the live queue.
     ``live`` (with ``derive``) replans the owner's finished live windows from their sealed sources:
-    see rederive_store.load_live_rederive and _live_outcome. An explicit historical timing
+    see rederive_store.load_live_rederive and rederive_plan.live_outcome. An explicit historical timing
     receipt opts that repair into the serving sit-down profile.
     """
     report = {} if report is None else report
@@ -629,6 +1079,27 @@ async def reconcile(
                 uid,
                 **({'conversation_id': conversation_id} if on_open and conversation_id else {}),
             )
+        # The legacy backfill delete set must never depend on native Finish planning.
+        if (
+            derive
+            and rederive
+            and not live
+            and (
+                any(policy.NATIVE_MANUAL_READY in row for row in recordings.values())
+                or any(
+                    row.get(field)
+                    for row in existing.values()
+                    for field in (
+                        policy.NATIVE_MANUAL_BINDING,
+                        policy.NATIVE_MANUAL_NOTES_VISIBILITY,
+                        policy.NATIVE_MANUAL_SETTLED,
+                    )
+                )
+            )
+        ):
+            raise Conflict('backfill_native_finish_unsupported')
+        if on_open and existing.get(conversation_id, {}).get(policy.NATIVE_MANUAL_SETTLED):
+            return 'stored'
         now = datetime.now(timezone.utc)
         eligible = [r for r in recordings.values() if policy.builder_eligible(r)]
         custom_timing = (silence_seconds, lock_seconds) != (DEFAULT_BOUNDARY_SECONDS, DEFAULT_BOUNDARY_SECONDS)
@@ -677,94 +1148,23 @@ async def reconcile(
             ]
             if not groups:
                 return 'stored'
-        # Keep a bounded cache; every fingerprint is checked even for finished stretches.
-        if retry_failed_outlines:
-            cached = [row for row in cached if not any(entry.get('_outline_failed') for entry in row['entries'])]
-        saved = {row['fingerprint']: row for row in cached}
-        preview_prefix = f'{silence_seconds}:'
-        scoped_preview_keys = {f"{preview_prefix}{group['key']}" for group in groups} if custom_timing else set()
-        previews = {row['preview_key']: row for row in cached if row.get('preview_key', '').startswith(preview_prefix)}
-        unmatched_previews = {key: row for key, row in previews.items() if key not in scoped_preview_keys}
-        consumed_previews = set()
-        outlines, cache = [], []
-        sources = await run_blocking(db_executor, context.outline_sources, uid, groups)
-        for group in groups:
-            await run_blocking(db_executor, leases.renew, uid, key, token)
-            messages = outline.messages(group, timezone.utc, cohesion=cohesion, silence_gap=silence_gap)
-            messages.append(
-                (
-                    'human',
-                    context.outline_block(
-                        group, sources, [entry['title'] for entries in outlines for entry in entries]
-                    ),
-                )
-            )
-            # Resume evidence is part of the cache key too.
-            if outlines:
-                previous = outlines[-1][-1]
-                messages.append(('human', 'Preceding conversation: ' + previous['title'] + '\n' + previous['line']))
-            fingerprint = context.cache_key(group, messages)
-            hit = saved.get(fingerprint)
-            preview_key = f"{preview_prefix}{group['key']}" if custom_timing else None
-            preview = previews.get(preview_key) if preview_key else None
-            if preview_key and preview is None and hit is None:
-                matched_key = outline.matching_preview(group, unmatched_previews)
-                if matched_key is not None:
-                    preview = unmatched_previews.pop(matched_key)
-                    consumed_previews.add(matched_key)
-            preview_fields = {}
-            if hit:
-                entries = hit['entries']
-                report['outline_cache_hits'] = report.get('outline_cache_hits', 0) + 1
-            elif preview is not None:
-                entries = outline.reuse_preview(group, preview)
-                report['outline_cache_hits'] = report.get('outline_cache_hits', 0) + 1
-            elif group['outline_ready'] or on_open:
-                entries, preview_fields = await _derive_outline(
-                    uid,
-                    key,
-                    token,
-                    group,
-                    messages,
-                    fingerprint,
-                    report,
-                    cohesion=cohesion,
-                    silence_gap=silence_gap,
-                    preview_key=preview_key,
-                    flex_owner_deadline=flex_owner_deadline,
-                )
-            else:
-                # First speech is visible before either the title preview or the outline is ready.
-                entries = [
-                    {
-                        'first_line': 1,
-                        'title': '',
-                        'line': '',
-                        'kind': 'conversation',
-                        'people': [],
-                        'sections': [],
-                        'emoji': '💬',
-                    }
-                ]
-            outlines.append(entries)
-            outline_failed = any(entry.get('_outline_failed') for entry in entries)
-            if (group['outline_ready'] or on_open or preview is not None) and (
-                not retry_failed_outlines or not outline_failed
-            ):
-                if preview_key and not group['locked'] and not outline_failed:
-                    preview_fields = {'preview_key': preview_key, 'anchors': outline.preview_anchors(group, entries)}
-                cache.append({'fingerprint': fingerprint, 'entries': entries, **preview_fields})
+        outlines, cache = await _reconcile_outlines(
+            uid,
+            key,
+            token,
+            groups,
+            cached,
+            report,
+            silence_seconds=silence_seconds,
+            silence_gap=silence_gap,
+            cohesion=cohesion,
+            custom_timing=custom_timing,
+            on_open=on_open,
+            unlocked_page=unlocked_page,
+            retry_failed_outlines=retry_failed_outlines,
+            flex_owner_deadline=flex_owner_deadline,
+        )
 
-        if _keeps_unselected_outlines(custom_timing, on_open, unlocked_page):
-            replaced = {row['fingerprint'] for row in cache}
-            replaced_previews = scoped_preview_keys | consumed_previews
-            cache = [
-                row
-                for row in cached
-                if row.get('preview_key') not in replaced_previews and row['fingerprint'] not in replaced
-            ] + cache
-
-        preferred = conversation_id if on_open and custom_timing else None
         refine_locked = (
             custom_timing
             and not (derive or on_open)
@@ -781,241 +1181,28 @@ async def reconcile(
             and not eligible_ids.intersection(row.get('v3_recording_ids') or ())
         }
 
-        async def plan():
-            # One ownership index per plan (adoption can add rows before a replan), shared by the
-            # two-hour cap and both projections below.
-            ownership = planner.Ownership(existing, recordings)
-            proposed = planner.windows(
-                groups,
-                outlines,
-                cohesion=cohesion,
-                silence_gap=silence_gap,
-                defer_topic_lock=custom_timing,
-                ownership=ownership,
-            )
-            merge = refinement.candidate(proposed, existing, recordings) if refine_locked else None
-            if merge and await run_blocking(db_executor, store.merge_donors_have_tasks, uid, merge[1]['_v3_absorbed']):
-                merge = None
-            reserved = set()
-            candidates = proposed
-            if merge is not None:
-                index, merged = merge
-                reserved = {merged['id'], *merged['_v3_absorbed']}
-                candidates = proposed[:index] + proposed[index + 1 :]
-            windows = planner.preserve_finished_windows(
-                candidates, existing, recordings, protect_provisional=custom_timing, ownership=ownership
-            )
-            if reserved.intersection(window.get('existing_id') for window in windows):
-                merge = None
-                reserved.clear()
-                windows = planner.preserve_finished_windows(
-                    proposed, existing, recordings, protect_provisional=custom_timing, ownership=ownership
-                )
-            # A retained finished conversation owns its id by claim evidence; a fresh window that sorts
-            # before it (late speech overlapping its start) must not time-match the same id. Two planned
-            # rows with one id each re-add the source's held claims, doubling them every pass until the
-            # recording outgrows Firestore's 1 MiB document limit (document_too_large).
-            rows = []
-            used = (
-                reserved
-                | unavailable.keys()
-                | {window['existing_id'] for window in windows if window.get('existing_id')}
-            )
-            used.update(
-                row['id'] for row in existing.values() if row.get('v3_refined') and row.get('v3_claims_transferred_to')
-            )
-            locked_ids = (
-                {row['id'] for row in existing.values() if not planner.is_unlocked(row) and not row.get('deleted')}
-                if custom_timing
-                else set()
-            )
-            taken = set()
-            allocated = {}
-            await run_blocking(db_executor, visibility.hydrate_recognition, uid, recordings, windows)
-            for window in windows:
-                # An affirmative transcription failure is terminal even before the silence deadline.
-                transcription_failed = any(
-                    policy.transcription_failed(recordings[line['conversation_id']]) for line in window['lines']
-                )
-                if transcription_failed:
-                    window['finished'] = True
-                # A preview cannot take over a locked card by time matching alone.
-                deferred_lock = (
-                    custom_timing
-                    and not transcription_failed
-                    and (not window['finished'] or window.get('_defer_lock', False))
-                )
-                excluded = used | locked_ids if deferred_lock else used
-                prior = existing.get(window.get('existing_id')) or _match(
-                    window, existing, excluded, preferred=preferred
-                )
-                if live and window.get('_outline_failed') and not (prior or {}).get('_v3_protected'):
-                    # A repair never replaces windows with the fallback outline's failed tiles; retry later.
-                    raise Conflict('rederive_live_outline_failed')
-                if prior:
-                    used.add(prior['id'])
-                opening = on_open and prior and prior['id'] == conversation_id and custom_timing
-                if opening:
-                    window['finished'] = True
-                    deferred_lock = False
-                if deferred_lock:
-                    window['_title_preview'] = True
-                row = planner.build(
-                    uid,
-                    window,
-                    recordings,
-                    prior,
-                    allocated=allocated,
-                    manual_end_home_visible=manual_end_home_visible_enabled(),
-                )
-                if owner_cuts and row.get('manual_end') and not row.get(planner.CUT_FIELD):
-                    # Experiment end_open_conversation: remember the End that closed this conversation, so
-                    # speech recorded before it that lands later still belongs here (planner.Ownership).
-                    # Off there are no owner cuts and the field is never written.
-                    closed_by = planner.ending_cut(row['finished_at'], owner_cuts, silence_gap)
-                    if closed_by is not None:
-                        row[planner.CUT_FIELD] = closed_by
-                if row.get('tile_state') == 'live' and reliability_experiments.any_enabled(
-                    uid, 'end_button_by_device', 'instant_live_text', 'vendor_recognizer_on_opened_app'
-                ):
-                    # Experiments end_button_by_device, instant_live_text and vendor_recognizer_on_opened_app:
-                    # an open conversation names the app install behind its latest speech. With all off the
-                    # field is never written.
-                    capture_device.stamp(row, window['lines'], recordings)
-                if opening and prior and planner.is_unlocked(prior):
-                    row['v3_open_locked'] = True
-                row.pop('v3_unlocked', None)
-                if deferred_lock:
-                    row['v3_unlocked'] = True
-                    lock_end = window.get('_lock_end', row['finished_at'])
-                    row['_v3_preview_due_at'] = max(lock_end + lock_delay, now + RACE_RETRY)
-                published_ids = window.get('_published_ids', ())
-                if not prior and (row['id'] in excluded | taken or row['id'] in published_ids):
-                    first = window['lines'][0]['conversation_id']
-                    seed = f"v3:{uid}:{row['started_at'].isoformat()}:{first}"
-                    blocked_ids = excluded | taken | set(published_ids)
-                    # Preserve the recording-qualified ID when free. Same-clock windows can also
-                    # share a recording, so probe deterministic suffixes in planner order.
-                    identifier = str(uuid5(NAMESPACE_URL, seed))
-                    suffix = 0
-                    while identifier in blocked_ids:
-                        suffix += 1
-                        identifier = str(uuid5(NAMESPACE_URL, f'{seed}:{suffix}'))
-                    row['id'] = identifier
-                taken.add(row['id'])
-                contributing = _backfill_runs(window, recordings)
-                if derive and len(contributing) > 1:
-                    # Undo is scoped to one run; a re-derive never merges rows that different runs own.
-                    raise Conflict('rederive_mixed_runs')
-                run = contributing[0] if contributing else None
-                if derive or run:
-                    # Historical windows never fan out (policy.created_eligible) and take no derived
-                    # effects; a live pass over an interrupted backfill's donors keeps the stamp.
-                    row['backfilled'] = True
-                    if run:
-                        row['v3_backfill_run'] = run
-                if live:
-                    row['v3_rederive_live_run'] = run_id
-                if prior and prior.get('deleted'):
-                    continue
-                before = planner.word_count((prior or {}).get('transcript_segments') or [])
-                new_words = max(0, planner.word_count(row['transcript_segments']) - before)
-                ended = window['finished'] and not deferred_lock
-                was_ended = prior and not planner.is_unlocked(prior)
-                promoted = bool(
-                    prior
-                    and not row.get('home_hidden')
-                    and (
-                        row.get('manual_end')
-                        and not prior.get('manual_end')
-                        or prior.get('kind') == 'background'
-                        and row['kind'] == 'conversation'
-                    )
-                )
-                if promoted and custom_timing and prior:
-                    covers = prior.get('summary_covers_through')
-                    if covers and covers >= row['finished_at']:
-                        promoted = False
-                if promoted:
-                    row['summary_covers_through'] = None
-                rewrite = bool(
-                    prior is not None
-                    and was_ended
-                    and not custom_timing
-                    and planner.late_rewrite(
-                        previous_words=before,
-                        new_words=new_words,
-                        ended_at=prior['finished_at'],
-                        now=now,
-                        rewrites=prior.get('v3_rewrites', 0),
-                    )
-                )
-                if rewrite:
-                    # The old summary no longer covers the window: without this the covered-summary guard
-                    # returns the previous notes and the only automatic rewrite is spent on nothing.
-                    row['summary_covers_through'] = None
-                outline_recovered = (
-                    first_open_gating
-                    and on_open
-                    and prior
-                    and prior.get('v3_process_failure_reason') == 'outline'
-                    and not window.get('_outline_failed')
-                )
-                needs_processing = (
-                    not was_ended
-                    or rewrite
-                    or promoted
-                    or outline_recovered
-                    or (prior or {}).get('tile_state') == 'transcribing'
-                )
-                keep_prior_status = not needs_processing if first_open_gating else not (rewrite or promoted)
-                if prior is not None and was_ended and keep_prior_status:
-                    row['status'] = prior['status']
-                    row['tile_state'] = prior.get('tile_state', 'done')
-                waiting = not transcription_failed and any(
-                    policy.transcription_pending(recordings[l['conversation_id']]) for l in window['lines']
-                )
-                if ended and waiting:
-                    row['tile_state'] = 'transcribing'
-                    row['v3_process_pending'] = False
-                    if not derive:
-                        await run_blocking(db_executor, enqueue, uid, at=now + timedelta(minutes=1))
-                if ended and not waiting and needs_processing:
-                    if outline_recovered:
-                        row.update(v3_process_failed=False, v3_process_failure_reason=None, summary_retryable=False)
-                    row['v3_process_pending'] = True
-                    row.pop('v3_process_retry_after', None)
-                    row['v3_rewrites'] = int((prior or {}).get('v3_rewrites') or 0) + int(rewrite)
-                if (
-                    prior
-                    and prior.get('home_hidden')
-                    and not row.get('v3_process_pending')
-                    and policy.created_eligible(row)
-                ):
-                    # Notes written while hidden; the window now shows on Home without a re-note,
-                    # so this is its first visible completed moment and it owes the created fanout.
-                    row['v3_created_pending'] = True
-                if ended and needs_processing:
-                    if not row.get('is_locked') and (transcription_failed or window.get('_outline_failed')):
-                        row.update(
-                            await run_blocking(
-                                db_executor,
-                                writers.failure_patch,
-                                reason='transcription' if transcription_failed else 'outline',
-                            )
-                        )
-                if derive and row.get('v3_process_pending'):
-                    # Same notes obligation, on the backfill's own marker: the live sweep and the live
-                    # queue never pick up historical notes.
-                    row['v3_process_pending'] = False
-                    row['v3_backfill_process_pending'] = True
-                rows.append(row)
-                for rid, claims in row['_v3_claims'].items():
-                    allocated.setdefault(rid, []).extend((claim['start'], claim['end']) for claim in claims)
-            if merge is not None:
-                rows.append(merge[1])
-            rows.extend(planner.unavailable_preview(row, recordings) for row in unavailable.values())
-            return rows
+        plan = partial(
+            _plan_projection,
+            uid,
+            groups,
+            outlines,
+            recordings,
+            existing,
+            unavailable,
+            derive=derive,
+            live=live,
+            on_open=on_open,
+            conversation_id=conversation_id,
+            custom_timing=custom_timing,
+            refine_locked=refine_locked,
+            cohesion=cohesion,
+            silence_gap=silence_gap,
+            owner_cuts=owner_cuts,
+            now=now,
+            lock_delay=lock_delay,
+            run_id=run_id,
+            first_open_gating=first_open_gating,
+        )
 
         rows = await plan()
         # A planned id that already exists outside the loaded closure is adopted as the prior once,
@@ -1034,8 +1221,31 @@ async def reconcile(
         remove = [cid for cid in existing if cid not in planned] if derive and rederive else []
         removed_ids: set[str] = set()
         retire, commit_recordings, commit_existing, priors = {}, recordings, existing, []
+        # An unmatched revoked tile keeps its ID for direct links, but no longer owns speech or work.
+        settle = {
+            cid: {
+                'status': 'completed',
+                'home_hidden': True,
+                'v3_derived': False,
+                'v3_unlocked': False,
+                'v3_process_pending': False,
+                'v3_created_pending': False,
+                'tile_state': 'failed',
+                'summary_retryable': False,
+                'summary_due_at': None,
+                'manual_end': False,
+                policy.NATIVE_MANUAL_BINDING: None,
+                policy.NATIVE_MANUAL_SETTLED: True,
+                'sync_content_revision': int(prior.get('sync_content_revision') or 0) + 1,
+            }
+            for cid, prior in existing.items()
+            if not (derive or on_open)
+            and cid not in planned
+            and not prior.get('deleted')
+            and _revoked_native_window(prior, recordings)
+        }
         if live:
-            rows, retire, touched, sources, priors, outcome = _live_outcome(
+            rows, retire, touched, sources, priors, outcome = rederive_plan.live_outcome(
                 rows, existing, recordings, since=since, until=until, run_id=run_id
             )
             donors = [cid for cid, patch in retire.items() if patch.get('sync_merged_into')]
@@ -1069,6 +1279,7 @@ async def reconcile(
                 key=key,
                 bounded_pending_limit=bounded_pending_limit,
                 unlocked_page=unlocked_page,
+                **({'settle': settle} if settle else {}),
             )
         except Exception:
             if live:
@@ -1093,40 +1304,22 @@ async def reconcile(
             notes_queued=sum(1 for row in rows if row.get('v3_backfill_process_pending')),
             home_visible=sum(1 for row in rows if not row.get('home_hidden')),
         )
-        if moved:
-            # Live speech arrived during the pass: the snapshot's windows are committed and the moved
-            # recordings stay owed. Wake the owner at the next minute instead of an immediate re-pass,
-            # which would race the same live recording again.
-            metrics.safe_metric(lambda: metrics.RACES.labels('source_moved').inc())
-            await run_blocking(db_executor, enqueue, uid, at=datetime.now(timezone.utc) + RACE_RETRY)
-        for group in groups if not derive else ():
-            if not (group['locked'] if custom_timing else group['finished']):
-                # A different minute than the currently executing task avoids
-                # Cloud Tasks' completed-name dedupe swallowing the continuation.
-                delay = lock_delay if group['outline_ready'] else min(silence_gap, lock_delay)
-                settle_from = group.get('settle_from', group['end'])
-                await run_blocking(db_executor, enqueue, uid, at=max(settle_from + delay, now + timedelta(minutes=1)))
-        holds = [r[outline.HOLD_UNTIL] for r in recordings.values() if r.get(outline.HOLD_UNTIL) is not None]
-        if holds and not derive:
-            # A held manual-end cut applies when its wait ends, even if no transcript lands.
-            metrics.safe_metric(lambda: metrics.FINISH_HELD.inc())
-            await run_blocking(db_executor, enqueue, uid, at=max(min(holds), now + timedelta(minutes=1)))
-        for row in rows:
-            prior = existing.get(row['id']) or {}
-            if (
-                not row.get('home_hidden')
-                and row.get('home_hidden_reason') == 'wearer_recognition_uncertain'
-                and (prior.get('home_hidden') or prior.get('home_hidden_reason') != 'wearer_recognition_uncertain')
-            ):
-                metrics.safe_metric(lambda: metrics.UNCERTAIN_SHOWN.inc())
-            if row['id'] not in existing:
-                metrics.safe_metric(
-                    lambda: metrics.VISIBLE_LATENCY.observe(max(0, (now - row['started_at']).total_seconds()))
-                )
-        if not derive and not on_open and live_title_enabled():
-            for row in rows:
-                if policy.live_title_candidate(row) and not row.get(policy.LIVE_TITLE_STATE):
-                    await _maybe_publish_live_title(uid, key, token, row)
+        await _after_projection(
+            uid,
+            key,
+            token,
+            groups,
+            recordings,
+            rows,
+            existing,
+            derive=derive,
+            on_open=on_open,
+            moved=moved,
+            custom_timing=custom_timing,
+            silence_gap=silence_gap,
+            lock_delay=lock_delay,
+            now=now,
+        )
         metrics.safe_metric(lambda: metrics.RECONCILES.labels('committed').inc())
         deferred = preview_wakes(rows, recordings)
     except Conflict as error:
@@ -1208,11 +1401,10 @@ async def reconcile(
         if skip
         else await run_blocking(db_executor, has_pending, uid)
     )
+    if pending and _pass < 2:
+        return await reconcile(uid, background=background, _pass=_pass + 1)
     if pending:
-        if _pass < 2:
-            return await reconcile(uid, background=background, _pass=_pass + 1)
-        else:
-            await run_blocking(db_executor, enqueue, uid, at=datetime.now(timezone.utc) + timedelta(minutes=1))
+        await run_blocking(db_executor, enqueue, uid, at=datetime.now(timezone.utc) + timedelta(minutes=1))
     return 'committed'
 
 
@@ -1236,201 +1428,6 @@ async def _maybe_publish_live_title(uid, key, token, row):
         )
 
 
-def _held_claims(recordings, cid):
-    """(recording id, list position, claim) for every claim the loaded sources hold for one row."""
-    return [
-        (rid, index, claim)
-        for rid, recording in recordings.items()
-        for index, claim in enumerate(recording.get('claims') or [])
-        if isinstance(claim, dict) and claim.get('conversation_id') == cid
-    ]
-
-
-def _speech(row):
-    return [(s.get('id'), s.get('start'), s.get('end'), s.get('text')) for s in row.get('transcript_segments') or []]
-
-
-def _spoken(row):
-    """Each stored segment of a row by recorded clock: (segment id, text, absolute start to 10 ms)."""
-    keys = set()
-    for s in row.get('transcript_segments') or []:
-        try:
-            at = row['started_at'] + timedelta(seconds=float(s.get('start') or 0))
-        except (TypeError, ValueError, KeyError):
-            continue
-        keys.add((s.get('id'), ' '.join(str(s.get('text') or '').split()), round(at.timestamp(), 2)))
-    return keys
-
-
-def _same_window(row, original, held):
-    """The rebuilt window has the stored row's speech, bounds, claims and Home decision: leave it alone."""
-    if any(
-        row.get(k) != original.get(k)
-        for k in ('started_at', 'finished_at', 'kind', 'home_hidden', 'home_hidden_reason', 'manual_end')
-    ):
-        return False
-    if _speech(row) != _speech(original):
-        return False
-    before = {}
-    for rid, _index, claim in held:
-        before.setdefault(rid, []).append((claim.get('start'), claim.get('end')))
-    after = {rid: [(c['start'], c['end']) for c in spans] for rid, spans in row['_v3_claims'].items() if spans}
-    return {k: sorted(v) for k, v in before.items()} == {k: sorted(v) for k, v in after.items()}
-
-
-def _survivor(original, planned):
-    """The rebuilt window that absorbed most of a retired row's time (earliest on a tie), if any."""
-    start, end = original.get('started_at'), original.get('finished_at')
-    best, best_overlap = None, None
-    for row in sorted(planned, key=lambda r: r['started_at']):
-        overlap = (min(end, row['finished_at']) - max(start, row['started_at'])).total_seconds()
-        touches = overlap > 0 or row['started_at'] <= start <= row['finished_at']
-        if touches and (best_overlap is None or overlap > best_overlap):
-            best, best_overlap = row['id'], overlap
-    return best
-
-
-def _stored_bytes(value):
-    """Mirrors rederive_store.stored_bytes, kept here so the async reconcile path stays pure."""
-    return len(json.dumps(value, default=str).encode())
-
-
-def _retire_patch(survivor, run_id, prior):
-    """A retired live row becomes a sync bridge to the window that absorbed it.
-
-    Deleted and discarded hide it everywhere a merged-away conversation is hidden, reads by id follow
-    ``sync_merged_into`` to the survivor, and dropping ``v3_derived`` keeps every v3 planning read
-    (closure claims, time queries, adoption) from treating it as a deletion tombstone.
-    """
-    return {
-        'deleted': True,
-        'discarded': True,
-        # Owes no summary: the debt query must not keep selecting a row its repair refuses.
-        'summary_due_at': None,
-        'sync_merged_into': survivor,
-        'v3_derived': False,
-        'v3_rederive_live_run': run_id,
-        # As a sync merge's absorbed row: its claims went to the survivor, so deleting the bridge later
-        # releases nothing of the survivor's, and cached copies see the redirect.
-        'v3_claims_transferred_to': survivor,
-        'sync_content_revision': int(prior.get('sync_content_revision') or 0) + 1,
-    }
-
-
-def _live_outcome(rows, existing, recordings, *, since, until, run_id):
-    """Turn a live re-derive's planned rows into what it writes, retires and records for undo.
-
-    Protected rows are never written. A rebuilt window equal to its stored row is not written (no
-    notes re-run). A rebuilt window keeps the id of the earliest row it absorbs (service._match);
-    every other eligible row it absorbs is retired into it. Returns (rows to write, retire patches,
-    touched row ids, recordings to commit, undo priors, ledger counts).
-    """
-    protected = {cid for cid, row in existing.items() if row.get('_v3_protected')}
-    eligible = {cid: row for cid, row in existing.items() if cid not in protected}
-    planned = [row for row in rows if row['id'] not in protected]
-    for row in planned:
-        if row['status'] == 'in_progress':
-            raise Conflict('rederive_live_open')
-        if row['started_at'] < since or row['finished_at'] > until:
-            raise Conflict('rederive_live_boundary')
-    unchanged = {
-        row['id']
-        for row in planned
-        if row['id'] in eligible
-        and _same_window(row, eligible[row['id']]['_v3_original'], _held_claims(recordings, row['id']))
-    }
-    # Nothing a row said may disappear: every eligible row's speech is in a rebuilt or protected row.
-    kept_speech = set().union(*(_spoken(row) for row in planned), *(_spoken(existing[cid]) for cid in protected))
-    before_speech = set().union(*(_spoken(prior['_v3_original']) for prior in eligible.values()))
-    if before_speech - kept_speech:
-        raise Conflict('rederive_live_coverage')
-    planned_ids = {row['id'] for row in planned}
-    retire, kept = {}, 0
-    for cid, prior in eligible.items():
-        if cid in planned_ids:
-            continue
-        survivor = _survivor(prior['_v3_original'], planned)
-        if survivor is None:
-            # No rebuilt window covers its time: nothing absorbed it, so it stays as it is.
-            kept += 1
-            continue
-        retire[cid] = _retire_patch(survivor, run_id, prior['_v3_raw'])
-    # The survivor lists its bridges (sync_merged_from), as a sync merge does: deleting it purges them.
-    # The list lands in the final batch with the retirements, never before the bridges exist.
-    merged_from = {}
-    for cid, patch in retire.items():
-        donors = merged_from.setdefault(patch['sync_merged_into'], set())
-        donors.add(cid)
-        donors.update(eligible[cid]['_v3_raw'].get('sync_merged_from') or [])
-    lineage = {}
-    for row in planned:
-        if row['id'] in merged_from:
-            had = (eligible.get(row['id']) or {}).get('_v3_raw', {}).get('sync_merged_from') or []
-            lineage[row['id']] = {'sync_merged_from': sorted({*had, *merged_from[row['id']]})}
-    write = [row for row in planned if row['id'] not in unchanged or row['id'] in merged_from]
-    touched = {row['id'] for row in write} | set(retire)
-    sources = {rid for row in write for rid in row.get('v3_recording_ids') or []} & recordings.keys()
-    sources |= {
-        rid
-        for rid, recording in recordings.items()
-        if any(isinstance(c, dict) and c.get('conversation_id') in touched for c in recording.get('claims') or [])
-    }
-    for rid in sources:
-        recording = recordings[rid]
-        claims = [
-            c
-            for c in recording.get('claims') or []
-            if not (isinstance(c, dict) and c.get('conversation_id') in touched)
-        ]
-        claims += [{'conversation_id': row['id'], **span} for row in write for span in row['_v3_claims'].get(rid) or []]
-        stored = recording.get('_v3_stored_bytes', 0)
-        after = stored - recording.get('_v3_stored_claims_bytes', 0) + _stored_bytes(claims)
-        if after > stored and after > rederive_store.SOURCE_MAX_BYTES:
-            # Growing a source past the document limit fails every retry; block before any write.
-            raise Conflict('document_too_large')
-    if len(sources) + 2 * len(retire) + len(lineage) + 2 > store.BATCH_MAX_WRITES:
-        # Reserve a write for each retirement and its task-link marker, plus the lineage, row and lease.
-        raise Conflict('backfill_partition_budget')
-    new_sources = {row['id']: set(row.get('v3_recording_ids') or []) for row in write}
-    priors = []
-    for cid in sorted(touched):
-        prior = eligible.get(cid)
-        if prior is not None and prior['_v3_raw'].get('v3_rederive_live_run') == run_id:
-            # Already this run's (a resumed partition): its first prior is the one undo restores.
-            continue
-        held = _held_claims(recordings, cid)
-        entry = {
-            'id': cid,
-            'sources': sorted(new_sources.get(cid, set()) | {rid for rid, _i, _c in held}),
-            'claims': [{'recording_id': rid, 'index': index, 'claim': claim} for rid, index, claim in held],
-        }
-        if prior is None:
-            entry['created'] = True
-        else:
-            entry['raw'] = prior['_v3_raw']
-        if cid in retire:
-            entry['retired_into'] = retire[cid]['sync_merged_into']
-        if _stored_bytes(entry) > rederive_store.SOURCE_MAX_BYTES:
-            # The prior holds the whole stored row; one that cannot be written leaves no exact undo.
-            raise Conflict('document_too_large')
-        priors.append(entry)
-    counts = {
-        'windows_after': len(planned),
-        'visible_after': sum(1 for row in planned if not row.get('home_hidden')),
-        'rows_unchanged': len(unchanged),
-        'rows_rebuilt': sum(1 for row in write if row['id'] in eligible),
-        'rows_created': sum(1 for row in write if row['id'] not in eligible),
-        'rows_retired': len(retire),
-        'rows_kept_unabsorbed': kept,
-        'priors_recorded': len(priors),
-        # The partition's settle step baselines these rows' copies by id rather than listing the run's;
-        # a resumed partition's rows the failed attempt already wrote keep their first copy.
-        'prior_ids': sorted(touched),
-        'segments_checked': len(before_speech),
-    }
-    return write, {**retire, **lineage}, touched, sources, priors, counts
-
-
 def _commit(
     uid,
     token,
@@ -1443,6 +1440,7 @@ def _commit(
     remove=(),
     removed_ids=None,
     retire=None,
+    settle=None,
     key='builder',
     bounded_pending_limit=None,
     unlocked_page=None,
@@ -1464,6 +1462,7 @@ def _commit(
             removed_ids=removed_ids,
             retire=retire,
             key=key,
+            **({'settle': settle} if settle else {}),
             **({'bounded_pending_limit': bounded_pending_limit} if bounded_pending_limit is not None else {}),
             **({'unlocked_page': unlocked_page} if unlocked_page is not None else {}),
         )
@@ -1620,8 +1619,9 @@ def _process(uid, row, token):
         if not (manual or row.get('backfilled') or row.get('v3_unlocked') or policy.live_summary_target(row)):
             summary_lease = (row['id'], token, row.get('finished_at'))
         try:
-            with fence.writer(uid, row['id'], token), models.notes_mode(
-                uid, backfilled=bool(row.get('backfilled')), background_lease=summary_lease
+            with (
+                fence.writer(uid, row['id'], token, native_binding=row.get(policy.NATIVE_MANUAL_BINDING)),
+                models.notes_mode(uid, backfilled=bool(row.get('backfilled')), background_lease=summary_lease),
             ):
                 result = process_conversation(
                     uid,

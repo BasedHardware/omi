@@ -43,6 +43,89 @@ def test_manual_end_wake_survives_a_completed_live_task_in_same_minute(monkeypat
     assert all(kw['schedule_at'] == int(fixed.timestamp()) for _, kw in tasks.values())
 
 
+def test_native_ready_name_survives_live_tombstone_and_retains_same_revision(monkeypatch):
+    monkeypatch.setenv('CONVERSATIONS_V3_TASKS_URL', 'https://test.invalid')
+    from google.api_core.exceptions import AlreadyExists
+    from utils import cloud_tasks
+
+    class FakeCloudTasks:
+        tasks = {}
+
+        @staticmethod
+        def queue_path(project, location, queue):
+            return queue
+
+        @staticmethod
+        def task_path(project, location, queue, task_id):
+            return queue + '/' + task_id
+
+        def create_task(self, *, parent, task):
+            if task.name in self.tasks:
+                raise AlreadyExists('completed name retained')
+            self.tasks[task.name] = task
+
+    fake = FakeCloudTasks()
+    monkeypatch.setattr(cloud_tasks, '_get_tasks_client', lambda: fake)
+    monkeypatch.setenv('SYNC_TASKS_PROJECT', 'synthetic')
+    monkeypatch.setenv('SYNC_TASKS_LOCATION', 'synthetic')
+    monkeypatch.setenv('SYNC_TASKS_INVOKER_SA', 'synthetic@example.invalid')
+    start = datetime(2026, 11, 16, 12, 0, tzinfo=timezone.utc)
+    triggers.enqueue('owner', at=start)
+    triggers.enqueue('owner', at=start, native_manual_ready=('recording', 7))
+    triggers.enqueue('owner', at=start + timedelta(minutes=1), native_manual_ready=('recording', 7))
+    triggers.enqueue('owner', at=start, native_manual_ready=('recording', 8))
+    triggers.enqueue('owner', at=start, native_manual_ready=('recording', 7), native_rearm=True)
+    triggers.enqueue('owner', at=start + timedelta(minutes=1), native_manual_ready=('recording', 7), native_rearm=True)
+    assert len(fake.tasks) == 4
+    assert sum('-native-rearm-' in name for name in fake.tasks) == 1
+    ready = [task for task in fake.tasks.values() if b'native_manual_ready' in task.http_request.body]
+    assert len(ready) == 3
+
+
+@pytest.mark.asyncio
+async def test_busy_native_ready_leaves_cloud_task_retryable(monkeypatch):
+    from starlette.requests import Request
+
+    from routers import conversations_v3_tasks
+
+    lanes = []
+
+    async def busy(uid, *, background=False):
+        lanes.append(background)
+        return 'busy'
+
+    monkeypatch.setattr(service, 'reconcile', busy)
+    http_request = Request({'type': 'http', 'headers': []})
+    request = conversations_v3_tasks.ReconcileRequest(uid='owner')
+    assert await conversations_v3_tasks.reconcile(request, http_request) == {'outcome': 'busy'}
+    request = conversations_v3_tasks.ReconcileRequest(uid='owner', trigger='native_manual_ready')
+    with pytest.raises(HTTPException) as error:
+        await conversations_v3_tasks.reconcile(request, http_request)
+    assert error.value.status_code == 503
+    assert lanes == [True, False]
+
+
+def test_scheduled_wake_rounds_up_and_coalesces_in_delivery_minute(monkeypatch):
+    tasks = {}
+    attempts = []
+    monkeypatch.setenv('CONVERSATIONS_V3_TASKS_URL', 'https://test.invalid')
+
+    def enqueue(queue, url, name, payload, *, schedule_at):
+        attempts.append((name, schedule_at))
+        tasks.setdefault(name, schedule_at)
+
+    monkeypatch.setattr(triggers, 'enqueue_named_task', enqueue)
+    start = datetime(2026, 11, 16, 12, 0, tzinfo=timezone.utc)
+    for seconds in (5, 5.5, 60, 59.5):
+        triggers.enqueue('owner', at=start + timedelta(seconds=seconds))
+
+    epoch = int(start.timestamp())
+    assert [when - epoch for _, when in attempts] == [5, 6, 60, 60]
+    assert [name.rsplit('-', 1)[-1] for name, when in attempts] == [str(when // 60) for _, when in attempts]
+    assert len(tasks) == 2
+    assert attempts[2] == attempts[3]
+
+
 @pytest.mark.parametrize(
     'stage,seen,capable,cohort,expected',
     [

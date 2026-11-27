@@ -25,7 +25,7 @@ from google.cloud import firestore
 from database.batch_pipeline_projection_protocol import normalized_binding
 from database.batch_pipeline_projection_outbox import arm as arm_projection
 from database.batch_pipeline_projection_finish import projection_finish_state_fields
-from database.batch_pipeline_projection import assignment_held_without_recovery, OPERATOR_INTENTS
+from utils.batch_pipeline.held_terminal import assignment_held_without_recovery, OPERATOR_INTENTS
 from database.batch_pipeline_shadow_hook import mirror_refresh
 from utils.batch_pipeline.scheduler import owner_key
 from config.policy import ProjectionPolicy

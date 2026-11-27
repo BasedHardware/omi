@@ -905,21 +905,61 @@ void main() {
       expect(FinishedCapturePage.match(rows, 'rec-3'), isNull);
     });
 
-    test('matches a derived conversation by source recording ID without audio pieces', () {
-      final row = _conversation('derived', extra: {
-        'v3_recording_ids': ['rec-1'],
-      });
-
+    test('exact derived recording lineage matches without playable audio and survives cache hydration', () {
+      final row = _conversation(
+        'derived-transcript',
+        extra: {
+          'v3_derived': true,
+          'v3_recording_ids': ['rec-1', null, 7, ''],
+          'recording_pieces': [],
+        },
+      );
       expect(row.v3!.recordingPieces, isEmpty);
-      expect(FinishedCapturePage.match([row], 'rec-1'), same(row));
+      expect(row.v3!.recordingIds, ['rec-1']);
+      final cached = ServerConversation.fromJson(row.toJson());
+      expect(FinishedCapturePage.match([cached], 'rec-1')?.id, row.id);
+      expect(FinishedCapturePage.match([cached], 'rec'), isNull);
+      expect(FinishedCapturePage.match([cached], '7'), isNull);
     });
 
-    test('ignores a derived conversation with unrelated source recording IDs', () {
-      final row = _conversation('derived', extra: {
-        'v3_recording_ids': ['rec-2'],
-      });
+    test('lineage does not match non-derived, recording, discarded, or locked rows', () {
+      final rows = [
+        for (final flags in [
+          <String, dynamic>{},
+          {'v3_derived': false},
+          {'v3_derived': 'true'},
+          {'v3_derived': true, 'recording': true},
+          {'v3_derived': true, 'discarded': true},
+          {'v3_derived': true, 'is_locked': true},
+        ])
+          _conversation(
+            'decoy',
+            extra: {
+              'v3_recording_ids': ['rec-1'],
+              ...flags,
+            },
+          ),
+        _conversation('malformed', extra: {'v3_derived': true, 'v3_recording_ids': 'rec-1'}),
+      ];
+      expect(FinishedCapturePage.match(rows, 'rec-1'), isNull);
+    });
 
-      expect(FinishedCapturePage.match([row], 'rec-1'), isNull);
+    test('lineage requires explicit completed status even after caching', () {
+      for (final status in ['processing', 'in_progress', 'failed', 'future_status', null]) {
+        final json = _row('derived-transcript', extra: {
+          'v3_derived': true,
+          'v3_recording_ids': ['rec-1'],
+        });
+        if (status == null) {
+          json.remove('status');
+        } else {
+          json['status'] = status;
+        }
+        final row = ServerConversation.fromJson(json);
+        expect(FinishedCapturePage.match([row], 'rec-1'), isNull, reason: 'status=$status');
+        final cached = ServerConversation.fromJson(row.toJson());
+        expect(FinishedCapturePage.match([cached], 'rec-1'), isNull, reason: 'cached status=$status');
+      }
     });
 
     test('of several conversations from one recording it opens the newest, the top Home row', () {
