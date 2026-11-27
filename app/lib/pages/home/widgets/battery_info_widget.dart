@@ -58,7 +58,7 @@ class _BatteryInfoWidgetState extends State<BatteryInfoWidget> {
         // This reduces battery drain by avoiding unnecessary rebuilds during other provider updates
         return Selector<DeviceProvider, (int, BtDevice?, BtDevice?, bool, bool)>(
           selector: (_, provider) => (
-            provider.batteryLevel,
+            provider.displayBatteryLevel,
             provider.connectedDevice,
             provider.pairedDevice,
             provider.isConnecting,
@@ -97,6 +97,11 @@ class _BatteryInfoWidgetState extends State<BatteryInfoWidget> {
                       ),
                     ),
                   ),
+                  // A charging bolt shows even when the percentage is unknown or withheld.
+                  if (isCharging && !hasBattery) ...[
+                    const SizedBox(width: 6.0),
+                    Icon(Icons.bolt, key: const Key('battery_pill_charging'), color: OmiColors.textSecondary, size: 13),
+                  ],
                   // Only show battery indicator and percentage when battery level is valid (> 0)
                   if (hasBattery) ...[
                     const SizedBox(width: 6.0),

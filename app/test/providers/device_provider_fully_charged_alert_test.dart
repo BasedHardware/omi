@@ -10,6 +10,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/providers/device_provider.dart';
+import 'package:omi/services/devices/battery_display_policy.dart';
 import 'package:omi/services/devices/connectors/omi_connection.dart';
 import 'package:omi/services/devices/models.dart';
 import 'package:omi/services/devices.dart';
@@ -114,6 +115,8 @@ void main() {
       // Ignore if another suite already initialized the singleton.
     }
   });
+
+  group('battery display guard', _batteryDisplayGuardTests);
 
   testWidgets('first charge rechecks after settling and keeps the latest reading', (tester) async {
     final pendingStatus = Completer<List<int>>();
@@ -492,4 +495,140 @@ DeviceProvider _provider(
     fullyChargedNotification: notifications.add,
     fullyChargedLevelMismatch: onMismatch,
   );
+}
+
+void _batteryDisplayGuardTests() {
+  DeviceProvider guarded(_ChargingTransport transport, _Clock clock, {bool allowed = true}) => DeviceProvider(
+        chargingConnectionLoader: (_) async => OmiDeviceConnection(_device(), transport),
+        clock: () => clock.wall,
+        monotonicNow: () => clock.mono,
+        fullyChargedNotification: (_) {},
+        batteryDisplayGuardAllowed: () async => allowed,
+        batteryStuckStore: InMemoryBatteryStuckStore(),
+      );
+
+  testWidgets('a low reading while charging shows no percentage until charging stops', (tester) async {
+    final transport = _ChargingTransport()..value = [1];
+    final clock = _Clock();
+    final provider = guarded(transport, clock);
+    addTearDown(transport.notifications.close);
+    addTearDown(transport.batteryNotifications.close);
+    addTearDown(provider.dispose);
+    provider.connectedDevice = _device();
+    provider.setIsConnected(true);
+    await provider.initiateChargingStatusListener();
+    await provider.initiateBleBatteryListener();
+    transport.batteryNotifications.add([1]);
+    expect(provider.batteryLevel, 1, reason: 'the raw reading is kept for firmware gating');
+    expect(provider.displayBatteryLevel, -1);
+    expect(provider.batteryHideReason, BatteryHideReason.chargingLow);
+    expect(provider.batteryReadingStuck, isFalse);
+
+    transport.notifications.add([0]);
+    transport.batteryNotifications.add([100]);
+    expect(provider.displayBatteryLevel, 100);
+    expect(provider.batteryHideReason, isNull);
+    await tester.pump(const Duration(minutes: 1));
+  });
+
+  testWidgets('a flat near-empty reading turns into a stuck reading after ten minutes', (tester) async {
+    final transport = _ChargingTransport()..value = [0];
+    final clock = _Clock();
+    final provider = guarded(transport, clock);
+    addTearDown(transport.notifications.close);
+    addTearDown(transport.batteryNotifications.close);
+    addTearDown(provider.dispose);
+    provider.connectedDevice = _device();
+    provider.setIsConnected(true);
+    await provider.initiateChargingStatusListener();
+    await provider.initiateBleBatteryListener();
+    transport.batteryNotifications.add([1]);
+    expect(provider.displayBatteryLevel, 1);
+
+    var notified = 0;
+    provider.addListener(() => notified++);
+    clock.advance(const Duration(minutes: 10, seconds: 1));
+    await tester.pump(const Duration(minutes: 10, seconds: 1));
+    expect(provider.displayBatteryLevel, -1);
+    expect(provider.batteryHideReason, BatteryHideReason.flat);
+    expect(provider.batteryReadingStuck, isTrue);
+    expect(notified, greaterThan(0), reason: 'the UI wakes when the reading turns stale');
+
+    transport.batteryNotifications.add([93]);
+    expect(provider.displayBatteryLevel, 93);
+    expect(provider.batteryReadingStuck, isFalse);
+  });
+
+  testWidgets('first pairing hides a stuck near-empty reading and holds the low-battery alert', (tester) async {
+    final transport = _ChargingTransport()..value = [0];
+    final clock = _Clock();
+    final provider = guarded(transport, clock);
+    addTearDown(transport.notifications.close);
+    addTearDown(transport.batteryNotifications.close);
+    addTearDown(provider.dispose);
+    final device = _device();
+    final finish = provider.prepareFirstChargeCheck(device.id);
+    await provider.setConnectedDevice(device);
+    provider.setIsConnected(true);
+    await provider.initiateChargingStatusListener();
+    await provider.initiateBleBatteryListener();
+    finish();
+    transport.battery = [1];
+    await tester.pump(const Duration(seconds: 13));
+    expect(provider.batteryLevel, 1);
+    expect(provider.displayBatteryLevel, -1);
+    expect(provider.settingsBatteryLevel, -1);
+    expect(provider.batteryHideReason, BatteryHideReason.firstPairing);
+    expect(provider.hasLowBatteryAlertedForTesting, isFalse);
+  });
+
+  testWidgets('a falling near-empty reading is real: it shows and alerts', (tester) async {
+    final transport = _ChargingTransport()..value = [0];
+    final clock = _Clock();
+    final provider = guarded(transport, clock);
+    addTearDown(transport.notifications.close);
+    addTearDown(transport.batteryNotifications.close);
+    addTearDown(provider.dispose);
+    final device = _device();
+    final finish = provider.prepareFirstChargeCheck(device.id);
+    await provider.setConnectedDevice(device);
+    provider.setIsConnected(true);
+    await provider.initiateChargingStatusListener();
+    await provider.initiateBleBatteryListener();
+    finish();
+    transport.battery = [4];
+    await tester.pump(const Duration(seconds: 13));
+    expect(provider.displayBatteryLevel, -1);
+    transport.batteryNotifications.add([3]);
+    expect(provider.displayBatteryLevel, 3);
+    expect(provider.hasLowBatteryAlertedForTesting, isTrue);
+  });
+
+  testWidgets('the kill switch shows the pendant reading as reported', (tester) async {
+    final transport = _ChargingTransport()..value = [1];
+    final clock = _Clock();
+    final provider = guarded(transport, clock, allowed: false);
+    addTearDown(transport.notifications.close);
+    addTearDown(transport.batteryNotifications.close);
+    addTearDown(provider.dispose);
+    provider.connectedDevice = _device();
+    provider.setIsConnected(true);
+    await provider.initiateChargingStatusListener();
+    await provider.initiateBleBatteryListener();
+    await tester.pump();
+    transport.batteryNotifications.add([1]);
+    expect(provider.displayBatteryLevel, 1);
+    expect(provider.batteryHideReason, isNull);
+  });
+
+  testWidgets('non-Omi devices are never guarded', (tester) async {
+    final transport = _ChargingTransport()..value = [1];
+    final clock = _Clock();
+    final provider = guarded(transport, clock);
+    addTearDown(provider.dispose);
+    provider.connectedDevice = BtDevice(id: 'glass', name: 'OmiGlass', type: DeviceType.openglass, rssi: -50);
+    provider.isCharging = true;
+    provider.batteryLevel = 1;
+    expect(provider.displayBatteryLevel, 1);
+  });
 }

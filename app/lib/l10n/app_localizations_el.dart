@@ -15947,4 +15947,7 @@ class AppLocalizationsEl extends AppLocalizations {
   @override
   String get firmwareSyncRecordingsFirstMessage =>
       'Μερικές ηχογραφήσεις βρίσκονται ακόμη στη συσκευή σας. Περιμένετε να ολοκληρωθεί ο συγχρονισμός τους στο τηλέφωνό σας και, στη συνέχεια, ξεκινήστε την ενημέρωση.';
+
+  @override
+  String get batteryRestartToRefresh => 'Κάντε επανεκκίνηση του Omi για να ανανεωθεί η ένδειξη';
 }

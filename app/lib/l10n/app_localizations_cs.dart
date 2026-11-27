@@ -15841,4 +15841,7 @@ class AppLocalizationsCs extends AppLocalizations {
   @override
   String get firmwareSyncRecordingsFirstMessage =>
       'Některé nahrávky jsou stále ve vašem zařízení. Počkejte, až se synchronizují do telefonu, a potom spusťte aktualizaci.';
+
+  @override
+  String get batteryRestartToRefresh => 'Restartujte Omi pro obnovení údaje';
 }

@@ -6,7 +6,12 @@
 // a time with bounded backoff (app/lib/services/devices/ARCHITECTURE.md).
 import 'dart:async';
 
+import 'package:omi/services/devices/battery_display_policy.dart';
+import 'package:omi/services/devices/battery_stuck_store.dart';
 import 'package:omi/services/devices/charge_start_tracker.dart';
+import 'package:omi/services/experiments/battery_display_guard_gate.dart';
+import 'package:omi/utils/analytics/registry/events.g.dart';
+import 'package:omi/utils/analytics/registry/typed_events.dart';
 import 'package:omi/services/devices/fully_charged_alert_gate.dart';
 import 'package:omi/services/wals/sync_wake_scope.dart';
 import 'dart:io';
@@ -120,8 +125,37 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
   Future<bool>? _findDeviceRequest;
   StreamSubscription<List<int>>? _bleBatteryLevelListener;
   StreamSubscription? _bleChargingStatusListener;
+
+  /// The percentage the pendant last sent. Firmware-update gating and diagnostics
+  /// read this; UI reads [displayBatteryLevel].
   int batteryLevel = -1;
-  int get settingsBatteryLevel => _firstChargeDeviceId == null ? batteryLevel : -1;
+
+  /// The percentage to show, or -1 when it is unknown or not believable (see
+  /// [BatteryDisplayPolicy]): a low reading while charging or a stuck near-empty one.
+  int get displayBatteryLevel => batteryHideReason == null ? batteryLevel : -1;
+
+  /// Why [batteryLevel] is withheld from the UI, or null when it shows.
+  BatteryHideReason? get batteryHideReason {
+    final device = capabilityNormalizedDevice ?? connectedDevice;
+    // Only the Omi pendant firmware has the stale-reading behavior this guards.
+    if (device == null || DeviceConnectionFactory.resolveDeviceType(device) != DeviceType.omi) return null;
+    return _batteryDisplay.hideReason(batteryLevel, charging: isCharging);
+  }
+
+  /// True when a near-empty reading looks stuck; restarting Omi refreshes it.
+  bool get batteryReadingStuck {
+    final reason = batteryHideReason;
+    return reason != null && reason != BatteryHideReason.chargingLow;
+  }
+
+  int get settingsBatteryLevel => _firstChargeDeviceId == null ? displayBatteryLevel : -1;
+  final BatteryDisplayPolicy _batteryDisplay;
+  final Future<bool> Function() _batteryDisplayGuardAllowed;
+  bool _batteryDisplayGuardLoaded = false;
+  String? _batteryDisplayDeviceId;
+  int _batteryDisplaySession = -1;
+  Timer? _batteryDisplayTimer;
+  final Set<BatteryHideReason> _reportedHideReasons = {};
   bool isCharging = false;
   bool? _observedChargingStatus;
   bool? get observedChargingStatus => _observedChargingStatus;
@@ -211,7 +245,11 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     Duration? fullyChargedMinimumDwell,
     FullyChargedNotification? fullyChargedNotification,
     FullyChargedLevelMismatch? fullyChargedLevelMismatch,
-  })  : _bleDiagnosticsLoader = bleDiagnosticsLoader ?? BleHostApi().getDeviceDiagnostics,
+    Future<bool> Function()? batteryDisplayGuardAllowed,
+    BatteryStuckStore? batteryStuckStore,
+  })  : _batteryDisplay = BatteryDisplayPolicy(clock: clock, store: batteryStuckStore ?? PrefsBatteryStuckStore()),
+        _batteryDisplayGuardAllowed = batteryDisplayGuardAllowed ?? BatteryDisplayGuardGate.allowed,
+        _bleDiagnosticsLoader = bleDiagnosticsLoader ?? BleHostApi().getDeviceDiagnostics,
         _findDeviceRunner = findDeviceRunner ?? _defaultFindDeviceRunner,
         _deviceInfoConnectionLoader = deviceInfoConnectionLoader ?? ServiceManager.instance().device.ensureConnection,
         _chargingConnectionLoader = chargingConnectionLoader ?? ServiceManager.instance().device.ensureConnection,
@@ -645,6 +683,7 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     final device = connectedDevice!;
     final batteryDeviceId = device.id;
     final batterySession = _batterySession;
+    _beginBatteryDisplay(batteryDeviceId, batterySession);
     _bleBatteryLevelListener?.cancel();
     final connection = await _chargingConnectionLoader(batteryDeviceId);
     if (!_isCurrentBatterySession(generation, batterySession, batteryDeviceId)) return;
@@ -679,22 +718,82 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     } else if (_firstChargeDeviceId == null) {
       _cancelBatteryRead();
     }
-    if (batteryLevel != value) {
-      BatteryWidgetService().updateBatteryInfo(
-        deviceName: connectedDevice?.name ?? '',
-        batteryLevel: value,
-        deviceType: connectedDevice?.type.name ?? 'omi',
-        isConnected: true,
-      );
-    }
-    _noteLowBattery(value);
+    _batteryDisplay.onSample(value, charging: isCharging);
+    final wasShown = displayBatteryLevel;
     final notified = _updateBatteryLevel(value, refresh: refresh);
-    if (firstChargeResolved && !notified) notifyListeners();
+    _noteLowBattery(value);
+    _noteBatteryDisplay();
+    if ((firstChargeResolved || wasShown != displayBatteryLevel) && !notified) notifyListeners();
   }
+
+  void _beginBatteryDisplay(String deviceId, int session) {
+    if (_batteryDisplayDeviceId == deviceId && _batteryDisplaySession == session) return;
+    _batteryDisplayDeviceId = deviceId;
+    _batteryDisplaySession = session;
+    _batteryDisplayTimer?.cancel();
+    _batteryDisplayTimer = null;
+    _reportedHideReasons.clear();
+    _batteryDisplay.beginConnection(deviceId);
+    if (!_batteryDisplayGuardLoaded) {
+      _batteryDisplayGuardLoaded = true;
+      unawaited(_loadBatteryDisplayGuard());
+    }
+  }
+
+  Future<void> _loadBatteryDisplayGuard() async {
+    final allowed = await _batteryDisplayGuardAllowed();
+    if (_isDisposed || _batteryDisplay.enabled == allowed) return;
+    _batteryDisplay.enabled = allowed;
+    _noteBatteryDisplay();
+    notifyListeners();
+  }
+
+  /// Publishes the shown battery to the iOS widget, reports a newly hidden reading
+  /// once per connection, and wakes the UI when a flat reading turns stale.
+  void _noteBatteryDisplay() {
+    final device = connectedDevice;
+    if (device == null) return;
+    BatteryWidgetService().updateBatteryInfo(
+      deviceName: device.name,
+      batteryLevel: displayBatteryLevel,
+      deviceType: device.type.name,
+      isConnected: true,
+    );
+    final reason = batteryHideReason;
+    if (reason != null) _batteryDisplay.rememberIfStuck(batteryLevel, charging: isCharging);
+    if (reason != null && _reportedHideReasons.add(reason)) {
+      try {
+        const TypedEvents().emit(BatteryReadingHidden(reason: _hiddenReasonWire(reason)));
+      } catch (e) {
+        Logger.debug('Battery Reading Hidden not reported: $e');
+      }
+    }
+    _batteryDisplayTimer?.cancel();
+    _batteryDisplayTimer = null;
+    final wait = _batteryDisplay.untilFlat(batteryLevel, charging: isCharging);
+    if (wait == null) return;
+    final session = _batterySession;
+    _batteryDisplayTimer = Timer(wait + const Duration(seconds: 1), () {
+      _batteryDisplayTimer = null;
+      if (_isDisposed || session != _batterySession) return;
+      final hidden = batteryHideReason != null;
+      _noteBatteryDisplay();
+      if (hidden) notifyListeners();
+    });
+  }
+
+  static BatteryReadingHiddenReason _hiddenReasonWire(BatteryHideReason reason) => switch (reason) {
+        BatteryHideReason.chargingLow => BatteryReadingHiddenReason.chargingLow,
+        BatteryHideReason.firstPairing => BatteryReadingHiddenReason.firstPairing,
+        BatteryHideReason.longCharge => BatteryReadingHiddenReason.longCharge,
+        BatteryHideReason.flat => BatteryReadingHiddenReason.flat,
+      };
 
   void _noteLowBattery(int value) {
     if (value > 20) _hasLowBatteryAlerted = false;
     if (value >= 20 || _hasLowBatteryAlerted || _firstChargeDeviceId != null) return;
+    // A stuck or charging reading is not a low battery; alert once it shows.
+    if (batteryHideReason != null) return;
     _hasLowBatteryAlerted = true;
     final ctx = globalNavigatorKey.currentContext;
     unawaited(NotificationService.instance.createNotification(
@@ -724,6 +823,7 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     _cancelBatteryRead();
     _firstChargeDeviceId = device.id;
     _firstPairingCandidateId = null;
+    _batteryDisplay.markFirstPairing(device.id);
     if (_chargingStatusReady) _updateFirstChargeCheck(isCharging);
     return true;
   }
@@ -854,8 +954,12 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
   void _publishChargingStatus(bool charging) {
     final changed = _observedChargingStatus != charging;
     _observedChargingStatus = charging;
+    final deviceId = connectedDevice?.id;
+    if (deviceId != null) _batteryDisplay.onCharging(deviceId, charging);
+    final wasShown = displayBatteryLevel;
     isCharging = charging;
-    if (changed) notifyListeners();
+    _noteBatteryDisplay();
+    if (changed || wasShown != displayBatteryLevel) notifyListeners();
   }
 
   Future<void> _presentFullyChargedNotification(String deviceId) async {
@@ -914,6 +1018,8 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
 
   void _resetBatteryState() {
     _batterySession++;
+    _batteryDisplayTimer?.cancel();
+    _batteryDisplayTimer = null;
     _clearFirstChargeCheck();
     _chargingStatusReady = false;
     batteryLevel = -1;
@@ -1119,6 +1225,7 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     _bleBatteryLevelListener?.cancel();
     _bleChargingStatusListener?.cancel();
     _clearFirstChargeCheck();
+    _batteryDisplayTimer?.cancel();
     _fullyChargedAlert.dispose();
     _discoveryTimer?.cancel();
     _disconnectRescanTimer?.cancel();
@@ -1297,6 +1404,7 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     SyncHealthWatchdog.instance.recordSyncActivity(source: 'device_connected');
 
     // Read initial battery level
+    _beginBatteryDisplay(device.id, batterySession);
     int currentLevel = await _retrieveBatteryLevel(device.id);
     if (!_isCurrentBatterySession(generation, batterySession, device.id)) return;
     if (_readoptPairMovedOn(device.id)) {
@@ -1304,13 +1412,9 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
       return;
     }
     if (currentLevel >= 0 && currentLevel <= 100) {
+      _batteryDisplay.onSample(currentLevel, charging: isCharging);
       _updateBatteryLevel(currentLevel);
-      BatteryWidgetService().updateBatteryInfo(
-        deviceName: device.name,
-        batteryLevel: currentLevel,
-        deviceType: device.type.name,
-        isConnected: true,
-      );
+      _noteBatteryDisplay();
     }
 
     // Anchor the charge-start edge before subscribing to battery so a

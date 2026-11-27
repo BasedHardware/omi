@@ -235,6 +235,7 @@ Source: events.json. Presence is not task success. Existing SDK provenance/ident
 | orphanAudioReclaim | Orphan Audio Reclaim | deleted_files, deleted_bytes, working, unknown_capture_time, capture_too_young, mtime_too_young, outside_documents, pass_cap, sources_changed, referenced, file_changed, sidecar_type, duration_ms, result, census_complete | active | orphan-audio-reclaim |
 | walCustodyAudit | WAL Custody Audit | agree_covered, agree_pending, disagree, unknown, released | active | wal-custody-audit |
 | appForegroundEnded | App Foreground Ended | foreground_seconds, capturing_seconds | active | app-foreground-time |
+| batteryReadingHidden | Battery Reading Hidden | reason | active | battery-reading-hidden |
 
 ## App Review Opportunity decisions
 

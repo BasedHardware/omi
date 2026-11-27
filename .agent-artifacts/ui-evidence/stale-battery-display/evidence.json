@@ -1,0 +1,12 @@
+{
+  "version": 1,
+  "images": [
+    {
+      "file": "001-mobile-ios-battery-stuck.png",
+      "platform": "mobile-ios",
+      "description": "Device Settings when the pendant keeps reporting a stuck near-empty reading after charging: Battery shows a dash with 'Restart Omi to refresh' instead of 1%",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    }
+  ]
+}

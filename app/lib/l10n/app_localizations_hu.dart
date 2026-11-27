@@ -15900,4 +15900,7 @@ class AppLocalizationsHu extends AppLocalizations {
   @override
   String get firmwareSyncRecordingsFirstMessage =>
       'Néhány felvétel még az eszközödön van. Várd meg, amíg a telefonodra szinkronizálásuk befejeződik, majd indítsd el a frissítést.';
+
+  @override
+  String get batteryRestartToRefresh => 'Indítsa újra az Omit a frissítéshez';
 }

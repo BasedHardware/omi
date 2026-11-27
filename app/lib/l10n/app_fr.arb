@@ -4803,5 +4803,6 @@
     "playStripePlanPaused": "Votre forfait {plan} est en pause.",
     "firmwareNewestSupportedForDevice": "Votre appareil utilise déjà la dernière version de firmware prise en charge",
     "firmwareSyncRecordingsFirstTitle": "Synchronisez d'abord vos enregistrements",
-    "firmwareSyncRecordingsFirstMessage": "Certains enregistrements sont encore sur votre appareil. Laissez-les terminer leur synchronisation vers votre téléphone, puis lancez la mise à jour."
+    "firmwareSyncRecordingsFirstMessage": "Certains enregistrements sont encore sur votre appareil. Laissez-les terminer leur synchronisation vers votre téléphone, puis lancez la mise à jour.",
+    "batteryRestartToRefresh": "Redémarrez Omi pour actualiser"
 }

@@ -15614,4 +15614,7 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get firmwareSyncRecordingsFirstMessage => '일부 녹음이 아직 기기에 남아 있습니다. 휴대폰으로의 동기화가 완료되면 업데이트를 시작해 주세요.';
+
+  @override
+  String get batteryRestartToRefresh => '새로고침하려면 Omi를 다시 시작하세요';
 }

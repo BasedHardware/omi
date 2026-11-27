@@ -4803,5 +4803,6 @@
     "playStripePlanPaused": "{plan} planın duraklatıldı.",
     "firmwareNewestSupportedForDevice": "Cihazınız zaten desteklenen en yeni firmware sürümünü kullanıyor",
     "firmwareSyncRecordingsFirstTitle": "Önce kayıtlarınızı senkronize edin",
-    "firmwareSyncRecordingsFirstMessage": "Bazı kayıtlar hâlâ cihazınızda. Telefonunuza senkronize edilmelerini bekleyin, ardından güncellemeyi başlatın."
+    "firmwareSyncRecordingsFirstMessage": "Bazı kayıtlar hâlâ cihazınızda. Telefonunuza senkronize edilmelerini bekleyin, ardından güncellemeyi başlatın.",
+    "batteryRestartToRefresh": "Yenilemek için Omi'yi yeniden başlatın"
 }

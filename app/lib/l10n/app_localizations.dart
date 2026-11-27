@@ -27800,6 +27800,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Some recordings are still on your device. Let them finish syncing to your phone, then start the update.'**
   String get firmwareSyncRecordingsFirstMessage;
+
+  /// Short caption under the Battery value (shown as a dash) in Omi device settings when the pendant's near-empty battery reading looks stuck after charging. Tells the user that restarting the Omi pendant refreshes the reading. Omi is the product name; keep it untranslated.
+  ///
+  /// In en, this message translates to:
+  /// **'Restart Omi to refresh'**
+  String get batteryRestartToRefresh;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {
