@@ -1,6 +1,7 @@
 package com.friend.ios
 
 import android.content.Context
+import io.flutter.util.PathUtils
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
@@ -20,6 +21,7 @@ class LiveWalReceiptDurabilityChannelTest {
         documents.mkdirs()
         val nested = File(documents, "nested").apply { mkdirs() }
 
+        assertEquals(PathUtils.getDataDirectory(context).canonicalFile, documents)
         assertEquals(
             documents.canonicalFile,
             LiveWalReceiptDurabilityChannel.checkedDirectory(context, documents.path),

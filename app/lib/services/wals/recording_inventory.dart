@@ -263,6 +263,9 @@ Future<RecordingOrphanCensus> captureRecordingCensus(
       }
     }
   }
+  // A receipt can reserve only a managed basename. Scan errors therefore
+  // withhold authority for those names (classified receiptless), but cannot
+  // hide references to ordinary audio or make unrelated census work unsafe.
   final receipts = LiveWalReceipt.directory(Directory(roots.first));
   try {
     final receiptType = await FileSystemEntity.type(receipts.path, followLinks: false);
@@ -280,7 +283,6 @@ Future<RecordingOrphanCensus> captureRecordingCensus(
         }
         if (entry is! File) {
           receiptScanErrors++;
-          linksSkipped++;
           continue;
         }
         final receiptName = name.endsWith('.json') ? name.substring(0, name.length - 5) : '';
@@ -303,7 +305,6 @@ Future<RecordingOrphanCensus> captureRecordingCensus(
       }
     } else if (receiptType != FileSystemEntityType.notFound) {
       receiptScanErrors++;
-      linksSkipped++;
     }
   } catch (_) {
     receiptScanErrors++;
@@ -485,9 +486,9 @@ Future<RecordingOrphanCensus> captureRecordingCensus(
       'audio_file_scope': 'audio_prefix_bin_part_torn_and_wav',
       'local_only_history': buckets.values.expand((rows) => rows).any((r) => r.onDeviceOnly || r.holdForUser),
       'legacy_preferences_complete': legacyPreferencesComplete,
+      'receipt_scan_errors': receiptScanErrors,
       'receipt_scan_truncated': receiptScanTruncated,
       'orphan_census_complete': legacyPreferencesComplete &&
-          receiptScanErrors == 0 &&
           unreadable == 0 &&
           invalidRows == 0 &&
           unresolvedReferences == 0 &&

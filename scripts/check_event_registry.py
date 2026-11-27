@@ -121,8 +121,8 @@ def validate(doc, root=ROOT, prior=None):
                     raise ValueError('consumer metadata incomplete')
                 # Execute, not substring-match: positive signal and wrong cohort/build negatives.
                 with sqlite3.connect(':memory:') as db:
-                    db.execute('CREATE TABLE events(event TEXT, app_namespace TEXT, build_number TEXT)')
-                    db.executemany('INSERT INTO events VALUES (?, ?, ?)', [(event['wire_name'], 'mobile-test', '1'), (event['wire_name'], 'desktop-test', '1'), (event['wire_name'], 'mobile-test', '2'), ('unrelated', 'mobile-test', '1')])
+                    db.execute('CREATE TABLE events(event TEXT, app_namespace TEXT, build_number TEXT, receipt_scan_truncated TEXT, census_complete TEXT)')
+                    db.executemany('INSERT INTO events VALUES (?, ?, ?, ?, ?)', [(event['wire_name'], 'mobile-test', '1', 'false', 'true'), (event['wire_name'], 'desktop-test', '1', 'false', 'true'), (event['wire_name'], 'mobile-test', '2', 'false', 'true'), ('unrelated', 'mobile-test', '1', 'false', 'true')])
                     rows = db.execute(query, {'app_namespace': 'mobile-test', 'build_number': '1'}).fetchall()
                     if rows != [(event['wire_name'], 1)]:
                         raise ValueError('query must select the event only in the specified namespace/build')

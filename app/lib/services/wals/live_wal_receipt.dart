@@ -42,17 +42,21 @@ class LiveWalReceipt {
   static const directoryName = '.wal-live-receipts';
   static const writeEnabled = !bool.fromEnvironment('OMI_LIVE_WAL_RECEIPT_OFF');
   static const purgeEnabled = !bool.fromEnvironment('OMI_LIVE_WAL_RECEIPT_PURGE_OFF');
+  static Future<void> Function(File file, String body)? writeReceiptForTesting;
   static const _pending = '.json';
   static const _stagingDirectory = 'staging';
   static const _retiredDirectory = 'retired';
   static const _maxEntries = 128;
+  static const maxInventorySourceEntries = _maxEntries;
   static const _maxReceiptBytes = 16 * 1024;
   static const _maxReplayBytes = 32 * 1024 * 1024;
   // A known affected Documents directory contained about 164k leaked audio
   // files. Keep the enumeration finite while allowing that supported scale.
   static const _maxIndexDirectoryEntries = 262144;
   static const _maxQuarantineIndexes = 4096;
-  static const _maxPurgeIndexBytes = 32 * 1024 * 1024;
+  // Large, valid indexes and several quarantine generations can exceed 32 MiB.
+  // Keep the reference scan bounded while allowing ordinary repair history.
+  static const _maxPurgeIndexBytes = 128 * 1024 * 1024;
   static final _idPattern = RegExp(r'^[a-f0-9]{32}$');
   static final _managedNamePattern =
       RegExp(r'_wr([a-f0-9]{32})(?:_clke[0-9a-z]{1,32})?_[^_]+\.bin$', caseSensitive: false);
@@ -103,6 +107,17 @@ class LiveWalReceipt {
     await _durabilityChannel.invokeMethod<void>('syncDirectory', {'path': directory.path});
   }
 
+  /// Persist the fallback audio entry after receipt publication is unavailable.
+  static Future<void> syncFallbackAudioDirectory(File audio) => _syncDirectory(audio.parent);
+
+  static Future<bool> hasPendingReceipt(File audio) => _receipt(audio.parent, path.basename(audio.path)).exists();
+
+  static Future<void> _writeTemporaryReceipt(File file, String body) async {
+    final override = writeReceiptForTesting;
+    if (override != null) return override(file, body);
+    await file.writeAsString(body, flush: true);
+  }
+
   static Future<Directory> _checkedDirectory(Directory directory) async {
     final existed = await FileSystemEntity.type(directory.path, followLinks: false) == FileSystemEntityType.directory;
     await directory.create(recursive: true);
@@ -138,24 +153,29 @@ class LiveWalReceipt {
     final body = jsonEncode({'version': 1, 'length': bytes.length, 'wal': fields});
     if (utf8.encode(body).length > _maxReceiptBytes) throw const FormatException('live WAL receipt too large');
     if (await pending.exists()) throw const FileSystemException('live WAL receipt already exists');
-    await temporary.writeAsString(body, flush: true);
-    await temporary.rename(pending.path);
-    // The rename crosses directories, so persist both the removed staging name
-    // and the newly published pending name before audio bytes can be written.
     try {
+      await _writeTemporaryReceipt(temporary, body);
+      await temporary.rename(pending.path);
+      // The rename crosses directories, so persist both the removed staging name
+      // and the newly published pending name before audio bytes can be written.
       await _syncDirectory(staging);
       await _syncDirectory(pending.parent);
     } catch (error, stackTrace) {
+      // A partial staging write is not scanned or replayed. Retire it and sync
+      // its directory so retries cannot accumulate abandoned receipt blobs.
+      try {
+        if (await temporary.exists()) await temporary.delete();
+        await _syncDirectory(staging);
+      } catch (_) {
+        // Preserve the original publication error; staging is never authority.
+      }
       // Audio has not been written yet. Best-effort retirement prevents a
       // failed durability barrier from leaving a receipt that blocks reuse.
       try {
-        if (await pending.exists()) {
-          await pending.delete();
-          await _syncDirectory(pending.parent);
-        }
+        if (await pending.exists()) await pending.delete();
+        await _syncDirectory(pending.parent);
       } catch (_) {
-        // Preserve the original barrier failure; any surviving sidecar remains
-        // fail-closed and cannot authorize audio recovery or deletion.
+        // Any surviving final sidecar is still content-checked and fail-closed.
       }
       Error.throwWithStackTrace(error, stackTrace);
     }

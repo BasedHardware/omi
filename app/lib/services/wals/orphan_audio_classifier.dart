@@ -28,6 +28,9 @@ class _CachedAudioFrames {
 
 /// Device-local data only. Export [summary], never this object or its candidates.
 class RecordingOrphanCensus {
+  static const _maxFenceSources = 512 + LiveWalReceipt.maxInventorySourceEntries;
+  static const _maxFenceDirectories = 5;
+
   RecordingOrphanCensus(this.summary, this.orphans, this._directories, this._sources, this.owner, this.frameCache);
   final Map<String, Object?> summary;
   final List<OrphanAudioFile> orphans;
@@ -52,10 +55,10 @@ class RecordingOrphanCensus {
   bool sourcesUnchanged() {
     // An unusually large receipt archive remains classified but is deferred
     // rather than doing unbounded synchronous work on the capture queue.
-    if (_sources.length > 512 || _directories.length > 4) return false;
+    if (_sources.length > _maxFenceSources || _directories.length > _maxFenceDirectories) return false;
     try {
       for (final e in _directories.entries) {
-        // omi-perf-allow: sync-file-io -- At most four directory stamps; no traversal, and no await between final fence and publication.
+        // omi-perf-allow: sync-file-io -- At most five directory stamps; no traversal, and no await between final fence and publication.
         final stat = FileStat.statSync(e.key);
         if (stat.type != FileSystemEntityType.directory ||
             stat.modified != e.value.modified ||
@@ -64,7 +67,7 @@ class RecordingOrphanCensus {
         }
       }
       for (final source in _sources) {
-        // omi-perf-allow: sync-file-io -- At most 512 metadata stamps; larger archives defer, and audio/frame reads stay off the queue.
+        // omi-perf-allow: sync-file-io -- At most 640 metadata stamps, including the 128-entry receipt budget; larger archives defer.
         final stat = FileStat.statSync(source.filePath);
         if (stat.type != FileSystemEntityType.file ||
             stat.size != source.bytes ||

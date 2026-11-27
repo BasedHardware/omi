@@ -56,12 +56,14 @@ extension _WalAccountPurge on LocalWalSyncImpl {
     final doomed = [..._wals, ..._retiredWals, ..._foreignWals].where(owned).toList();
     final unindexedPurge = await _purgeUnindexedAccountWals({uid}, generation);
     final unindexedRemoved = unindexedPurge.removed;
+    var referenceScanIncomplete = unindexedPurge.referenceScanIncomplete;
     final needsPurgeSnapshot = doomed.any((wal) =>
         LiveWalReceipt.isManagedBasename(path.basename(wal.filePath ?? '')) &&
         !_confirmedDurableWalKeys.contains(_durableKey(wal)));
     final LiveWalPurgeSnapshot? purgeSnapshot;
     if (needsPurgeSnapshot) {
       purgeSnapshot = await WalFileManager.captureLiveWalPurgeSnapshot();
+      if (purgeSnapshot == null) referenceScanIncomplete = true;
     } else {
       purgeSnapshot = null;
     }
@@ -81,7 +83,7 @@ extension _WalAccountPurge on LocalWalSyncImpl {
       'owner_uid': uid,
       'count': removed,
       'unindexed_removed': unindexedRemoved,
-      'reference_scan_incomplete': unindexedPurge.referenceScanIncomplete,
+      'reference_scan_incomplete': referenceScanIncomplete,
       'requested': doomed.length,
     });
     return removed + unindexedRemoved;

@@ -1500,15 +1500,16 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
               digest = await LiveWalReceipt.prepare(file, wal, writeId, data);
             } catch (_) {
               _emitLiveWalReceipt(WalWriteReceiptResult.publishFailed);
-              try {
-                await file.delete();
-              } catch (_) {
-                // Leave an empty receiptless file visible if cleanup fails.
-              }
-              rethrow;
+              // The exclusively reserved managed name and owner-stamped index
+              // row preserve custody when the sidecar channel is unavailable.
+              // Never overwrite audio protected by a sidecar left from an
+              // ambiguous publication failure.
+              if (await LiveWalReceipt.hasPendingReceipt(file)) rethrow;
+              await file.writeAsBytes(data, flush: true);
+              await LiveWalReceipt.syncFallbackAudioDirectory(file);
             }
           }
-          await file.writeAsBytes(data, flush: true);
+          if (writeId == null || digest != null) await file.writeAsBytes(data, flush: true);
           wal.fileSha256 = digest ?? (wal.liveRingId == null ? null : sha256.convert(data).toString());
           wal.liveFileWriteId = digest == null ? null : writeId;
           if (wal.liveRingId != null) wal.liveDeviceId = wal.device;
