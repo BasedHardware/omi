@@ -762,6 +762,8 @@ def test_synthetic_speaker_evidence_verification(
         assert completed_receipt['executor_revision'] == 'worker-sync-rehearsal'
         assert completed_receipt['dispatch'] == 'completed'
         assert not {'job', 'task', 'marker_job', 'confirm_until', 'wait_until'}.intersection(completed_receipt)
+        assert speaker_evidence_verification.reserve_task(uid, 'other-job', queue_path, 'other-task') is None
+        assert control.get().to_dict() == completed_receipt
     elif delivery == 'unchecked_sweep':
         expected['task_admitted'] = 1
     assert deltas == expected

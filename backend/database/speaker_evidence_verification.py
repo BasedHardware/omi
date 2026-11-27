@@ -169,8 +169,9 @@ def reserve_task(uid: str, job_id: str, queue_path: str, task_id: str) -> Task |
         if run is None:
             return None
         task = Task(run, _digest(job_id), f'{queue_path}/tasks/{task_id}')
+        # Completion scrubs the task name but retains the terminal dispatch state.
         if run.change(
-            lambda state: 'task' not in state,
+            lambda state: 'dispatch' not in state and 'task' not in state,
             task=task.name,
             job=task.job,
             dispatch='pending',
