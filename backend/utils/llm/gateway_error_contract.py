@@ -367,14 +367,14 @@ def retryable_provider_failure_answer_enabled() -> bool:
 
 
 def retryable_provider_failure_http_exception(error: BaseException, *, route: str) -> HTTPException | None:
-    """Answer a transient provider/transport failure with the retryable contract.
+    """Build the mobile boundary's typed 503 for a transient provider/transport failure.
 
-    Internal task boundaries (the Cloud Tasks builder routes) use this so a
-    provider 5xx on a gateway-first call cannot surface as an unhandled 500:
-    the task answers 503 + Retry-After and the queue retries it. Returns None
-    for anything that is not a retryable provider fault, or when the kill
-    switch is off, so the caller re-raises the original error and genuine
-    Omi-side bugs keep their loud 500.
+    Cloud Tasks routes may use this adapter for classification and metric
+    recording, but must translate the result to ``retry_response`` (409):
+    Cloud Tasks ignores ``Retry-After`` and can system-throttle a queue that
+    sees fast 5xx responses. Returns None for anything that is not a retryable
+    provider fault, or when the kill switch is off, so the caller re-raises the
+    original error and genuine Omi-side bugs keep their loud 500.
     """
     failure_class = retryable_provider_failure_class(error)
     if failure_class is None or not retryable_provider_failure_answer_enabled():

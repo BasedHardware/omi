@@ -1,5 +1,6 @@
 """Synthetic v3 switch, read boundaries, capture and released-wire contracts."""
 
+import json
 from datetime import datetime, timedelta, timezone
 from unittest.mock import MagicMock
 
@@ -99,9 +100,9 @@ async def test_busy_native_ready_leaves_cloud_task_retryable(monkeypatch):
     request = conversations_v3_tasks.ReconcileRequest(uid='owner')
     assert await conversations_v3_tasks.reconcile(request, http_request) == {'outcome': 'busy'}
     request = conversations_v3_tasks.ReconcileRequest(uid='owner', trigger='native_manual_ready')
-    with pytest.raises(HTTPException) as error:
-        await conversations_v3_tasks.reconcile(request, http_request)
-    assert error.value.status_code == 503
+    retry = await conversations_v3_tasks.reconcile(request, http_request)
+    assert retry.status_code == 409
+    assert json.loads(retry.body) == {'status': 'retry', 'reason': 'locked'}
     assert lanes == [True, False]
 
 

@@ -136,12 +136,17 @@ KNOWN = {
 
 
 @pytest.fixture(scope='module')
-def real_keys():
+def router_modules():
     # Parsing every router is the expensive part; do it in setup, not the timed call.
     class Ctx:
         source = Source()
 
-    return {v.key for v in tt.check_task_target_retry_semantics(Ctx())}
+    return tt.load_router_modules(Ctx.source)
+
+
+@pytest.fixture(scope='module')
+def real_keys(router_modules):
+    return {v.key for v in tt.violations_for(TASK_EDGES, router_modules, Violation)}
 
 
 def test_real_tree_has_no_new_violators(real_keys):
@@ -154,3 +159,16 @@ def test_real_tree_has_no_new_violators(real_keys):
 def test_listen_finalization_route_never_answers_503(real_keys):
     # M1 L04-3: the sync_reprocess branch answered 503 on an expected first-summary retry.
     assert not [k for k in real_keys if 'conversation_finalization.py' in k and k.endswith('/503')]
+
+
+def test_conversations_v3_task_routes_are_mounted_without_direct_429_or_503_answers(router_modules):
+    edges = [
+        Edge('conversations-v3-reconcile', '/v1/conversations-v3/reconcile'),
+        Edge('conversations-v3-backfill', '/v1/conversations-v3/backfill'),
+    ]
+    for edge in edges:
+        handler, findings = tt.scan_route(router_modules, edge.route)
+        assert handler is not None, edge.route
+        # Typed provider translation is covered by route-level tests. This scanner check is
+        # specifically for direct response construction in the registered handlers.
+        assert not [finding for finding in findings if finding.status in {429, 503}], edge.id

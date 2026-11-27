@@ -16,7 +16,7 @@ RETRYABLE_PROCESSING_ROUTES = frozenset(
 
 RETRYABLE_PROCESSING_RESPONSES_TOTAL = Counter(
     'omi_conversation_processing_retryable_responses_total',
-    'Conversation processing and internal task failures answered with the typed retryable response',
+    'Conversation processing and internal task failures answered with a retryable response (typed 503 for synchronous callers, 409 retry_response for task targets)',
     ['failure_class', 'route'],
 )
 

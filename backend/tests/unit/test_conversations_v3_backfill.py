@@ -6,6 +6,7 @@ allowed are the backfill stamps and the notes marker the backfill drains itself.
 """
 
 import asyncio
+import json
 import os
 from concurrent.futures import ThreadPoolExecutor
 from copy import deepcopy
@@ -1338,9 +1339,9 @@ async def test_route_respects_the_switch_and_maps_busy_to_retry(monkeypatch):
     assert off.value.status_code == 404
     monkeypatch.setenv('CONVERSATIONS_V3_BACKFILL', 'on')
     monkeypatch.setattr(backfill, 'run_step', AsyncMock(side_effect=backfill.BackfillRetry('busy')))
-    with pytest.raises(HTTPException) as busy:
-        await route.run_backfill(body, _retry=0)
-    assert busy.value.status_code == 503
+    busy = await route.run_backfill(body, _retry=0)
+    assert busy.status_code == 409
+    assert json.loads(busy.body) == {'status': 'retry', 'reason': 'locked'}
 
 
 # ---- operator script ------------------------------------------------------------------------

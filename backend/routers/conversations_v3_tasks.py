@@ -17,7 +17,10 @@ from utils.conversations.v3 import (
 )
 from utils.observability.reasons import RetryReason
 from utils.workers.retry import exhausted_transaction_retry_class, retry_response
-from utils.llm.gateway_error_contract import retryable_provider_failure_http_exception
+from utils.llm.gateway_error_contract import (
+    is_retryable_processing_http_exception,
+    retryable_provider_failure_http_exception,
+)
 from config.conversations_v3 import backfill_enabled
 
 router = APIRouter()
@@ -36,13 +39,14 @@ async def reconcile(body: ReconcileRequest, request: Request, _retry: int = Depe
                 return {'outcome': await service.reconcile(body.uid, background=True)}
             outcome = await service.reconcile(body.uid)
             if outcome == 'busy':
-                raise HTTPException(503, 'Owner busy; retry')
+                return retry_response(RetryReason.LOCKED)
             return {'outcome': outcome}
     except Exception as error:
-        # The composition boundary may already have answered a provider fault
-        # with the typed retryable contract (and recorded its metric). Re-raise
-        # that answer unchanged instead of remapping its chained cause.
+        # Keep the shared boundary's metric, but adapt its mobile 503 contract
+        # to the task-target 409 contract; Cloud Tasks ignores Retry-After.
         if isinstance(error, HTTPException):
+            if is_retryable_processing_http_exception(error):
+                return retry_response(RetryReason.DEPENDENCY_WARMING)
             raise
         if os.getenv('CONVERSATIONS_V3_RECONCILE_RETRY_RESPONSE', 'on').strip().lower() != 'off':
             retry_class = exhausted_transaction_retry_class(error)
@@ -56,14 +60,12 @@ async def reconcile(body: ReconcileRequest, request: Request, _retry: int = Depe
             if retry_class is not None:
                 metrics.RACES.labels(retry_class).inc()
                 return retry_response(reason)
-        # A gateway-first call (the v3 outline) can raise a provider 5xx. Answer
-        # the existing retryable contract so Cloud Tasks retries the task instead
-        # of the failure surfacing as an unhandled 500; anything else keeps its
-        # loud 500.
+        # Classify and record provider faults with the shared adapter, then use
+        # the contract-(d) response shape for this Cloud Tasks target.
         retryable = retryable_provider_failure_http_exception(error, route='conversations_v3_reconcile')
         if retryable is None:
             raise
-        raise retryable from error
+        return retry_response(RetryReason.DEPENDENCY_WARMING)
 
 
 @router.post('/v1/conversations-v3/sweep', include_in_schema=False)
@@ -87,17 +89,18 @@ async def run_backfill(body: BackfillRequest, _retry: int = Depends(verify_cloud
     try:
         return await backfill.run_step(body.uid, body.run_id, body.partition, body.phase)
     except backfill.BackfillRetry:
-        raise HTTPException(503, 'Owner busy; retry')
+        return retry_response(RetryReason.LOCKED)
     except Exception as error:
-        # The derive pass runs the same gateway-first outline call; a provider
-        # 5xx answers the retryable contract instead of an unhandled 500. An
-        # already-typed answer from the composition boundary is re-raised as is.
+        # An already-typed provider 503 has been counted at the composition
+        # boundary; translate it without recording the same failure twice.
         if isinstance(error, HTTPException):
+            if is_retryable_processing_http_exception(error):
+                return retry_response(RetryReason.DEPENDENCY_WARMING)
             raise
         retryable = retryable_provider_failure_http_exception(error, route='conversations_v3_backfill')
         if retryable is None:
             raise
-        raise retryable from error
+        return retry_response(RetryReason.DEPENDENCY_WARMING)
 
 
 @router.post('/v1/conversations-v3/legacy-users', include_in_schema=False)
