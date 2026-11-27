@@ -1788,14 +1788,14 @@
     "gcp_firestore_indexes.yml/validate_merged_prod_indexes": {
       "budget_p50_minutes": 5,
       "display_name": "validate_merged_prod_indexes",
-      "expected_runs_class": "unsampled-pr-sentinel",
-      "expected_runs_per_day": 1,
+      "expected_runs_class": "non-pr-or-unsampled",
+      "expected_runs_per_day": 0.1,
       "if": "github.ref == 'refs/heads/main' && github.event_name == 'push'",
       "matrix": {},
       "matrix_size": 1,
       "needs": [],
       "owner": "Release system owner (SCA-2225)",
-      "rationale": "Local manifest validation and explicit pending owner/deadline replace the production push writer that blocked pinned reconcile run 43613610960; zero GCP calls, no cloud credentials or schema lock.",
+      "rationale": "Local manifest validation and explicit pending owner/deadline replace the production push writer that blocked pinned reconcile run 43613610960; zero GCP calls, no cloud credentials or schema lock. This job has no pull-request path. The 0.1/day entry is the positive sentinel required by the workflow-level budget validator.",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
