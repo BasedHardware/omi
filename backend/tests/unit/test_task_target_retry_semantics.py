@@ -156,14 +156,18 @@ def test_listen_finalization_route_never_answers_503(real_keys):
     assert not [k for k in real_keys if 'conversation_finalization.py' in k and k.endswith('/503')]
 
 
-def test_conversations_v3_task_routes_never_answer_429_or_503():
+def test_conversations_v3_task_routes_are_mounted_without_direct_429_or_503_answers():
     class Ctx:
         source = Source()
 
+    modules = tt.load_router_modules(Ctx.source)
     edges = [
         Edge('conversations-v3-reconcile', '/v1/conversations-v3/reconcile'),
         Edge('conversations-v3-backfill', '/v1/conversations-v3/backfill'),
     ]
-    findings = tt.violations_for(edges, tt.load_router_modules(Ctx.source), Violation)
-    forbidden = [finding.scope for finding in findings if finding.scope.endswith(('/429', '/503'))]
-    assert forbidden == []
+    for edge in edges:
+        handler, findings = tt.scan_route(modules, edge.route)
+        assert handler is not None, edge.route
+        # Typed provider translation is covered by route-level tests. This scanner check is
+        # specifically for direct response construction in the registered handlers.
+        assert not [finding for finding in findings if finding.status in {429, 503}], edge.id

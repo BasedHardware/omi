@@ -8,8 +8,8 @@ its 30s `request_timeout`; the failure is now classified at the boundary.
 - Synchronous mobile requests keep the typed 503 + `Retry-After: 2` +
   `conversation_processing_retryable` answer. The `reconcile` and `backfill`
   Cloud Tasks routes translate that retryable provider answer to HTTP 409
-  `dependency_warming`, which uses the queue's 30-300s backoff; Cloud Tasks
-  ignores `Retry-After` and fast 5xx answers can throttle the queue.
+  `dependency_warming`, which uses the owning queue's configured backoff. Cloud
+  Tasks ignores `Retry-After` and fast 5xx answers can throttle the queue.
 - A typed retryable 503 from the composition boundary is translated without
   recording its metric twice. Other typed HTTP answers pass through unchanged.
 - Owner-busy on native manual-ready reconcile and backfill answers HTTP 409

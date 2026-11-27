@@ -102,7 +102,7 @@ cloud_tasks:
   staging-conversations-v3-backfill:
     # Operator-planned per-owner v3 backfill/repair steps (utils/conversations/v3/backfill.py). One
     # dispatch at a time keeps historical outline/notes work off the live conversations-v3 queue
-    # and bounds it to one owner partition; a 503 (owner busy) retries after a minute.
+    # and bounds it to one owner partition; a 409 retry_response (locked) retries on queue backoff.
     max_concurrent_dispatches: 1
     max_dispatches_per_second: 1
     max_attempts: 5
