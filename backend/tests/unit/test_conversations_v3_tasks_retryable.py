@@ -169,11 +169,16 @@ async def test_backfill_route_answers_provider_5xx_as_retryable(monkeypatch):
     monkeypatch.setenv('CONVERSATIONS_V3_BACKFILL', 'on')
     monkeypatch.setattr(backfill, 'run_step', AsyncMock(side_effect=provider_502()))
     body = route.BackfillRequest(uid='u', run_id='run-1', partition=0)
+    metric = RETRYABLE_PROCESSING_RESPONSES_TOTAL.labels(
+        failure_class='provider_status', route='conversations_v3_backfill'
+    )
+    before = metric._value.get()
 
     with pytest.raises(HTTPException) as raised:
         await route.run_backfill(body, _retry=0)
 
     assert_retryable(raised.value)
+    assert metric._value.get() == before + 1
 
 
 @pytest.mark.asyncio
@@ -192,9 +197,14 @@ async def test_backfill_route_keeps_owner_busy_as_its_own_503(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_backfill_route_re_raises_an_already_typed_answer(monkeypatch):
-    """The composition boundary already recorded its metric; do not remap it."""
+    """A typed answer wrapping a provider fault is preserved without a second metric."""
     monkeypatch.setenv('CONVERSATIONS_V3_BACKFILL', 'on')
     typed = HTTPException(status_code=503, detail=RETRYABLE_CONVERSATION_PROCESSING_ERROR_DETAIL)
+    typed.__cause__ = provider_502()
+    metric = RETRYABLE_PROCESSING_RESPONSES_TOTAL.labels(
+        failure_class='provider_status', route='conversations_v3_backfill'
+    )
+    before = metric._value.get()
     monkeypatch.setattr(backfill, 'run_step', AsyncMock(side_effect=typed))
     body = route.BackfillRequest(uid='u', run_id='run-1', partition=0)
 
@@ -202,6 +212,7 @@ async def test_backfill_route_re_raises_an_already_typed_answer(monkeypatch):
         await route.run_backfill(body, _retry=0)
 
     assert raised.value is typed
+    assert metric._value.get() == before
 
 
 @pytest.mark.asyncio
