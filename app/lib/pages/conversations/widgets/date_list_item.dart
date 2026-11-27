@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
-import 'package:omi/l10n/app_localizations.dart';
 import 'package:omi/ui/ui.dart';
+import 'package:omi/utils/l10n_extensions.dart';
 
 /// A day group header in the conversation list: "Today", "Yesterday", "Wed, Sep 23", and the year
 /// when it is not the current one (hub audit #16). Today gets a header too.
@@ -43,7 +43,7 @@ class DateListItem extends StatelessWidget {
                 expanded: !collapsed,
                 child: OmiIconButton(
                   key: ValueKey('collapse_day_${DateUtils.dateOnly(date).toIso8601String()}'),
-                  label: collapsed ? AppLocalizations.of(context).expand : AppLocalizations.of(context).collapseAction,
+                  label: collapsed ? context.l10n.expand : context.l10n.collapseAction,
                   onPressed: onToggle,
                   icon: Icon(collapsed ? Icons.expand_more : Icons.expand_less, size: 20),
                 ),

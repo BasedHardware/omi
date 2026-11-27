@@ -197,10 +197,16 @@ class HomeFeedProvider extends ChangeNotifier {
     return _read(replace: false);
   }
 
+  bool _automaticPagingPaused = false;
+
+  // A collapsed day makes older history opt-in. An in-flight page can still land.
+  void setAutomaticPagingPaused(bool paused) => _automaticPagingPaused = paused;
+
   Future<void> warm() async {
     final generation = _generation;
     for (var request = 1; request < maxWarmRequests && generation == _generation && _active && !_off; request++) {
-      if (!_hasMore ||
+      if (_automaticPagingPaused ||
+          !_hasMore ||
           problem != null ||
           _items.length >= maxCards ||
           _bytes >= maxBytes ||

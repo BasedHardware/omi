@@ -404,7 +404,7 @@ class _ConversationsPageState extends State<ConversationsPage>
     if (_manualPaging) return;
     if (!_usesCards(source)) {
       if (_scrollController.position.extentAfter < _scrollController.position.viewportDimension * 2) {
-        _requestMoreIfNeeded(source);
+        unawaited(_requestMoreIfNeeded(source));
       }
       return;
     }
@@ -415,8 +415,13 @@ class _ConversationsPageState extends State<ConversationsPage>
   final GlobalKey<HomeDailyRecapsState> _recapsKey = GlobalKey<HomeDailyRecapsState>();
   String? _loadMoreFilterKey;
   final Set<DateTime> _collapsedConversationDays = {};
-  // Set by the last build: while a day is collapsed paging is manual (Show more), so scrolling must not prefetch.
   bool _manualPaging = false;
+
+  void _setManualPaging(bool manual) {
+    _manualPaging = manual;
+    _feed?.setAutomaticPagingPaused(manual);
+  }
+
   String? _lastLoadMoreRequestKey;
   bool _isBootstrapping = true;
   bool _initialOverlayPending = false;
@@ -693,6 +698,7 @@ class _ConversationsPageState extends State<ConversationsPage>
       final conversationProvider = context.read<ConversationProvider>();
       episodes?.observeHomeConversations(conversationProvider);
       _feed = context.read<HomeFeedProvider?>();
+      _feed?.setAutomaticPagingPaused(_manualPaging);
       _feed?.setActive(!_wasBackgrounded && _homeTabActive);
       if (widget.requestInitialLoad && _feed != null && _usesCards(conversationProvider)) {
         await _feed!.start();
@@ -809,8 +815,8 @@ class _ConversationsPageState extends State<ConversationsPage>
     return ready.future;
   }
 
-  bool _requestMoreIfNeeded(ConversationProvider provider) {
-    if (provider.isLoadingConversations) return false;
+  Future<void> _requestMoreIfNeeded(ConversationProvider provider) async {
+    if (provider.isLoadingConversations) return;
 
     final filterKey = conversationLoadMoreFilterKey(
       query: provider.previousQuery,
@@ -831,40 +837,34 @@ class _ConversationsPageState extends State<ConversationsPage>
     final String pageOrCount;
     final isSearch = provider.previousQuery.isNotEmpty || provider.selectedSpeakerId != null;
     if (isSearch) {
-      if (provider.totalSearchPages <= provider.currentSearchPage) return false;
+      if (provider.totalSearchPages <= provider.currentSearchPage) return;
       pageOrCount = 'page:${provider.currentSearchPage}';
     } else {
-      if (!provider.hasMoreConversations) return false;
+      if (!provider.hasMoreConversations) return;
       pageOrCount = 'offset:${provider.conversationServerOffset}';
     }
 
     final requestKey = '$filterKey|$pageOrCount';
-    if (_lastLoadMoreRequestKey == requestKey) return false;
+    if (_lastLoadMoreRequestKey == requestKey) return;
     _lastLoadMoreRequestKey = requestKey;
 
-    final request = isSearch ? provider.searchMoreConversations() : provider.getMoreConversationsFromServer();
-    unawaited(
-      request.then((succeeded) {
-        if (mounted &&
-            shouldReleaseConversationLoadMoreLatch(
-              currentRequestKey: _lastLoadMoreRequestKey,
-              requestKey: requestKey,
-              succeeded: succeeded,
-            )) {
-          // A failed page fetch leaves the cursor/page unchanged; release the
-          // latch so the next scroll or Show more tap can retry the same page.
-          _lastLoadMoreRequestKey = null;
-        }
-        // Only automatic server paging can continue across sparse pages.
-        if (!isSearch && mounted && succeeded && !_manualPaging && _autoLoadMorePages < _maxAutoLoadMorePages) {
-          _autoLoadMorePages++;
-          WidgetsBinding.instance.addPostFrameCallback((_) {
-            if (mounted) _prefetchCards(fromScroll: false);
-          });
-        }
-      }),
-    );
-    return true;
+    final succeeded = await (isSearch ? provider.searchMoreConversations() : provider.getMoreConversationsFromServer());
+    if (!mounted) return;
+    if (shouldReleaseConversationLoadMoreLatch(
+      currentRequestKey: _lastLoadMoreRequestKey,
+      requestKey: requestKey,
+      succeeded: succeeded,
+    )) {
+      // A failed page fetch leaves the cursor/page unchanged, so allow a retry.
+      _lastLoadMoreRequestKey = null;
+    }
+    // Only automatic server paging can continue across sparse pages.
+    if (!isSearch && succeeded && !_manualPaging && _autoLoadMorePages < _maxAutoLoadMorePages) {
+      _autoLoadMorePages++;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _prefetchCards(fromScroll: false);
+      });
+    }
   }
 
   void scrollToTop() {
@@ -878,6 +878,7 @@ class _ConversationsPageState extends State<ConversationsPage>
     if (_v3Watching) _v3?.unwatch();
     _v3Watching = false;
     _stopV3Quick();
+    _feed?.setAutomaticPagingPaused(false);
     _afterEndPreview?.removeListener(_onPreviewAfterEnd);
     _afterEndPreview = null;
     WidgetsBinding.instance.removeObserver(this);
@@ -1302,7 +1303,7 @@ class _ConversationsPageState extends State<ConversationsPage>
         };
         final collapsedDays = _collapsedConversationDays.intersection(collapsibleDays);
         final hasCollapsedDays = collapsedDays.isNotEmpty;
-        _manualPaging = hasCollapsedDays;
+        _setManualPaging(hasCollapsedDays);
         final builtRows = _processingFirst(
             _buildConversationListRows(
               dates: mergedDates,
@@ -1570,20 +1571,21 @@ class _ConversationsPageState extends State<ConversationsPage>
                     if (index == conversationRows.length) {
                       Logger.debug('loading more conversations');
                       if (cardsOn) {
-                        if (feed.loading) return _buildLoadMoreShimmer();
                         // Collapsed days can leave the list too short to scroll, so scroll prefetch never fires.
                         if (hasCollapsedDays && feed.hasMore && feed.problem == null) {
                           return Center(
                             child: OmiButton.tertiary(
                               key: const Key('conversations_show_more_cards'),
                               label: context.l10n.loadMoreConversations,
-                              onPressed: () => unawaited(feed.loadMore()),
+                              isLoading: feed.loading,
+                              onPressed: feed.loadMore,
                             ),
                           );
                         }
+                        if (feed.loading) return _buildLoadMoreShimmer();
                         return const SizedBox(height: 20);
                       }
-                      if (convoProvider.isLoadingConversations) {
+                      if (convoProvider.isLoadingConversations && (!hasCollapsedDays || !canLoadMore)) {
                         return _buildLoadMoreShimmer();
                       }
                       // A failed older page ends the list with one quiet line, not silence (X6);
@@ -1598,13 +1600,13 @@ class _ConversationsPageState extends State<ConversationsPage>
                           },
                         );
                       }
-                      // widget.loadMoreMemories(); // CALL this only when visible
                       if (hasCollapsedDays) {
                         if (!canLoadMore) return const SizedBox(height: 20);
                         return Center(
                           child: OmiButton.tertiary(
                             key: const Key('conversations_show_more'),
                             label: context.l10n.loadMoreConversations,
+                            isLoading: convoProvider.isLoadingConversations,
                             onPressed: () => _requestMoreIfNeeded(context.read<ConversationProvider>()),
                           ),
                         );
@@ -1613,7 +1615,7 @@ class _ConversationsPageState extends State<ConversationsPage>
                         key: const Key('conversations-key'),
                         onVisibilityChanged: (visibilityInfo) {
                           if (!_manualPaging && visibilityInfo.visibleFraction > 0) {
-                            _requestMoreIfNeeded(context.read<ConversationProvider>());
+                            unawaited(_requestMoreIfNeeded(context.read<ConversationProvider>()));
                           }
                         },
                         child: const SizedBox(height: 20, width: double.maxFinite),
@@ -1652,6 +1654,7 @@ class _ConversationsPageState extends State<ConversationsPage>
                           onToggle: canCollapse
                               ? () => setState(() {
                                     if (!_collapsedConversationDays.add(day)) _collapsedConversationDays.remove(day);
+                                    _setManualPaging(collapsibleDays.any(_collapsedConversationDays.contains));
                                   })
                               : null,
                         );

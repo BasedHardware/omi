@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
@@ -18,6 +19,7 @@ import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/providers/home_feed_provider.dart';
 import 'package:omi/providers/local_recordings_provider.dart';
 import 'package:omi/ui/components/omi_button.dart';
+import 'package:omi/ui/components/omi_spinner.dart';
 import 'package:visibility_detector/visibility_detector.dart';
 
 import '../../support/typed_conversation_screen.dart';
@@ -235,6 +237,7 @@ void main() {
           status: ConversationStatus.completed,
         );
     final firstPage = List.generate(50, (index) => conversation('conversation-$index', today));
+    final pageReady = Completer<void>();
     var requests = 0;
     final provider = ConversationProvider(
       conversationListFetcher: () async => (items: firstPage, ok: true),
@@ -242,6 +245,7 @@ void main() {
     );
     provider.conversationPageFetcherOverride = () async {
       requests++;
+      await pageReady.future;
       return (items: [conversation('older', today.subtract(const Duration(days: 1)))], ok: true, truncated: false);
     };
     addTearDown(provider.dispose);
@@ -255,14 +259,19 @@ void main() {
     await tester.pump(const Duration(milliseconds: 250));
     expect(requests, 0);
     expect(find.text('Load More'), findsOneWidget);
-    expect(find.byKey(const Key('conversations_show_more')), findsOneWidget);
-    expect(find.byType(OmiButton), findsOneWidget);
-    expect(tester.getSize(find.byType(OmiButton)).height, greaterThanOrEqualTo(48));
+    final button = find.byKey(const Key('conversations_show_more'));
+    final size = tester.getSize(button);
+    expect(size.height, greaterThanOrEqualTo(48));
 
-    await tester.tap(find.byKey(const Key('conversations_show_more')));
+    await tester.tap(button);
     await tester.pump();
+    expect(tester.getSize(button), size);
+    expect(find.descendant(of: button, matching: find.byType(OmiSpinner)), findsOneWidget);
+    await tester.tap(button);
     await tester.pump();
     expect(requests, 1);
+    pageReady.complete();
+    await tester.pump();
     expect(provider.conversations.any((conversation) => conversation.id == 'older'), isTrue);
     await tester.pumpWidget(const SizedBox.shrink());
   });
@@ -311,7 +320,7 @@ void main() {
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
-  testWidgets('collapsed Home card days load older cards only when requested', (tester) async {
+  testWidgets('collapsed Home card days stop warming and load older cards only when requested', (tester) async {
     tester.view.physicalSize = const Size(800, 1600);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
@@ -337,20 +346,22 @@ void main() {
           revision: 'fixture',
         );
     final cursors = <String?>[];
+    final warmPageReady = Completer<void>();
+    final manualPageReady = Completer<void>();
     final feed = HomeFeedProvider(
       owner: () => 'fixture',
       fetch: ({cursor}) async {
         cursors.add(cursor);
+        if (cursor == 'warm') await warmPageReady.future;
+        if (cursor == 'manual') await manualPageReady.future;
         return ApiSuccess(HomeFeedPage(
-          // The newest page ends beyond the seven-day warm window, so only the button loads more.
-          items: cursor == null
-              ? [
-                  card('new', today.add(const Duration(hours: 9))),
-                  card('old', today.subtract(const Duration(days: 10)))
-                ]
-              : [card('older', today.subtract(const Duration(days: 11)))],
-          nextCursor: cursor == null ? 'next' : null,
-          hasMore: cursor == null,
+          items: switch (cursor) {
+            null => [card('new', today.add(const Duration(hours: 9)))],
+            'warm' => [card('old', today.subtract(const Duration(days: 1)))],
+            _ => [card('older', today.subtract(const Duration(days: 2)))],
+          },
+          nextCursor: switch (cursor) { null => 'warm', 'warm' => 'manual', _ => null },
+          hasMore: cursor != 'manual',
           truncated: false,
           generation: 'fixture',
         ));
@@ -365,20 +376,31 @@ void main() {
     await tester.runAsync(feed.start);
     await tester.pumpWidget(screen);
     await tester.pump();
-    expect(cursors, [null]);
+    expect(cursors, [null, 'warm']);
 
     await tester.tap(find.byKey(ValueKey('collapse_day_${today.toIso8601String()}')));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 250));
     expect(find.text('new'), findsNothing);
+    warmPageReady.complete();
+    await tester.runAsync(() => feed.loadMore());
+    await tester.pump();
+    expect(cursors, [null, 'warm']);
     expect(find.text('old'), findsOneWidget);
     expect(find.text('Load More'), findsOneWidget);
-    expect(find.byKey(const Key('conversations_show_more_cards')), findsOneWidget);
-
-    await tester.tap(find.byKey(const Key('conversations_show_more_cards')));
-    await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 50)));
+    final button = find.byKey(const Key('conversations_show_more_cards'));
+    final size = tester.getSize(button);
+    await tester.tap(button);
     await tester.pump();
-    expect(cursors, [null, 'next']);
+    expect(tester.getSize(button), size);
+    expect(find.descendant(of: button, matching: find.byType(OmiSpinner)), findsOneWidget);
+    await tester.tap(button);
+    await tester.pump();
+    expect(cursors, [null, 'warm', 'manual']);
+    manualPageReady.complete();
+    await tester.runAsync(() => feed.loadMore());
+    await tester.pump();
+    expect(cursors, [null, 'warm', 'manual']);
     expect(find.text('Load More'), findsNothing);
     await tester.pumpWidget(const SizedBox.shrink());
   });
