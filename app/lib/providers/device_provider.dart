@@ -176,6 +176,7 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
   bool _isDisposed = false;
   final Debouncer _disconnectDebouncer = Debouncer(delay: const Duration(milliseconds: 500));
   final Debouncer _connectDebouncer = Debouncer(delay: const Duration(milliseconds: 100));
+  final DateTime Function() _clock;
 
   void Function(BtDevice device)? onDeviceConnected;
   void Function(BtDevice device, int fileCount, int totalBytes)? onOfflineDataDetected;
@@ -215,9 +216,10 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
         _findDeviceRunner = findDeviceRunner ?? _defaultFindDeviceRunner,
         _deviceInfoConnectionLoader = deviceInfoConnectionLoader ?? ServiceManager.instance().device.ensureConnection,
         _chargingConnectionLoader = chargingConnectionLoader ?? ServiceManager.instance().device.ensureConnection,
-        _wedgeMonitor = captureWedgeMonitor ?? CaptureWedgeMonitor.instance {
+        _wedgeMonitor = captureWedgeMonitor ?? CaptureWedgeMonitor.instance,
+        _clock = clock ?? DateTime.now {
     _fullyChargedAlert = FullyChargedAlertGate(
-      now: clock ?? DateTime.now,
+      now: _clock,
       monotonicNow: monotonicNow,
       minimumDwell: fullyChargedMinimumDwell ?? FullyChargedAlertGate.minimumOnChargerDwell,
       onFullyCharged: (level) {
@@ -1292,7 +1294,7 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     await refreshOfflineStorageCapability();
     if (!_isCurrentBatterySession(generation, batterySession, device.id)) return;
     if (normalizedDevice.isPendant) {
-      SharedPreferencesUtil().lastPendantConnectedAt = DateTime.now().millisecondsSinceEpoch;
+      SharedPreferencesUtil().lastPendantConnectedAt = _clock().millisecondsSinceEpoch;
     }
     setIsConnected(true);
     // A live link is sync-activity evidence for the stall watchdog: the
@@ -1859,6 +1861,12 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
         // Check if this is the paired device or currently connected device
         // Coz connectedDevice and pairedDevice are the same but connectedDevice becomes null after disconnect
         if (deviceId == connectedDevice?.id || deviceId == pairedDevice?.id) {
+          // Record when the live pendant link ended, before any UI debounce.
+          if (_isCurrent(generation) &&
+              connectedDevice?.id == deviceId &&
+              capabilityNormalizedDevice?.isPendant == true) {
+            SharedPreferencesUtil().lastPendantConnectedAt = _clock().millisecondsSinceEpoch;
+          }
           // Capture sees the loss before a sub-500ms reconnect can cancel the
           // UI debounce. Native published its reason before this callback.
           _notifyCaptureLinkLost(deviceId);

@@ -201,7 +201,7 @@ class _PendantReconnectNudgeCardState extends State<PendantReconnectNudgeCard> w
 }
 
 class HomePendantReconnectNudge extends StatelessWidget {
-  const HomePendantReconnectNudge({required this.homeSelected});
+  const HomePendantReconnectNudge({super.key, required this.homeSelected});
 
   final bool homeSelected;
 

@@ -766,7 +766,7 @@ class SharedPreferencesUtil {
 
   set lastSyncAlertTimestamp(int value) => saveInt('lastSyncAlertTimestamp', value);
 
-  // Per-account epoch millis from a successful pendant link or pairing.
+  // Per-account epoch millis from the last evidence of a live pendant link, including when it ends.
   int get lastPendantConnectedAt => uid.isEmpty ? 0 : getInt(_userScopedKey('lastPendantConnectedAt', uid));
 
   set lastPendantConnectedAt(int value) {
