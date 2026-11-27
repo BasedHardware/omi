@@ -15,7 +15,7 @@ from utils.batch_pipeline.contracts import Priority, ProjectionBinding, WorkItem
 from utils.batch_pipeline.record_partial_audio import digest, inventory_digest, missing_units, union
 from utils.batch_pipeline.scheduler import owner_key
 from utils.batch_pipeline.source_audio import MAGIC, batch_timing_store
-from utils.batch_pipeline.record_language import prove_manifest
+from utils.batch_pipeline.record_language import authorize_record_language, prove_manifest
 from utils.executors import db_executor, storage_executor, run_blocking
 from utils.other.storage import list_audio_chunks
 from utils.observability.reasons import ReasonFamily, reason_label
@@ -276,7 +276,8 @@ async def admit_page(
     row = pending['record_snapshot']
     from utils.batch_pipeline.language_receipt import auto_language_cohort
 
-    receipt_enabled = auto_language_cohort(
+    protection, untrusted_pin = await authorize_record_language(artifacts, seed_for(pending), row.get('language'))
+    receipt_enabled = untrusted_pin or auto_language_cohort(
         server_batch_only=row.get('server_batch_only') is True,
         client_platform=row.get('client_platform'),
         native_record=True,
@@ -297,7 +298,6 @@ async def admit_page(
         )
         for i, (start, duration, _) in enumerate(units)
     ]
-    protection = await run_blocking(db_executor, artifacts.authorize, seed_for(pending))
     binding = ProjectionBinding(
         uid,
         'bp_' + content,
@@ -330,7 +330,7 @@ async def admit_page(
             'client_device_id': binding.client_device_id,
             'client_platform': binding.client_platform,
             'conversation_id': cid,
-            'stt_language': binding.language or '',
+            'stt_language': 'multi' if untrusted_pin else binding.language or '',
             'stt_language_evidence': 'declared',
             'stt_language_confidence': 1.0,
         }
@@ -341,7 +341,7 @@ async def admit_page(
             'references': refs,
             'context': context,
         }
-        if row.get('server_batch_only') is True:
+        if untrusted_pin or row.get('server_batch_only') is True:
             manifest = await prove_manifest(store, artifacts, item, manifest)
         if item.language_receipt_enabled:
             language_receipts[item.segment_id] = language_admission_receipt(manifest['context'])
