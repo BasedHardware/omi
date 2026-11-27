@@ -415,12 +415,8 @@ class _ConversationsPageState extends State<ConversationsPage>
   final GlobalKey<HomeDailyRecapsState> _recapsKey = GlobalKey<HomeDailyRecapsState>();
   String? _loadMoreFilterKey;
   final Set<DateTime> _collapsedConversationDays = {};
+  // Set by the last build: while a day is collapsed paging is manual (Show more), so scrolling must not prefetch.
   bool _manualPaging = false;
-
-  void _setManualPaging(bool manual) {
-    _manualPaging = manual;
-    _feed?.setAutomaticPagingPaused(manual);
-  }
 
   String? _lastLoadMoreRequestKey;
   bool _isBootstrapping = true;
@@ -698,7 +694,6 @@ class _ConversationsPageState extends State<ConversationsPage>
       final conversationProvider = context.read<ConversationProvider>();
       episodes?.observeHomeConversations(conversationProvider);
       _feed = context.read<HomeFeedProvider?>();
-      _feed?.setAutomaticPagingPaused(_manualPaging);
       _feed?.setActive(!_wasBackgrounded && _homeTabActive);
       if (widget.requestInitialLoad && _feed != null && _usesCards(conversationProvider)) {
         await _feed!.start();
@@ -878,7 +873,6 @@ class _ConversationsPageState extends State<ConversationsPage>
     if (_v3Watching) _v3?.unwatch();
     _v3Watching = false;
     _stopV3Quick();
-    _feed?.setAutomaticPagingPaused(false);
     _afterEndPreview?.removeListener(_onPreviewAfterEnd);
     _afterEndPreview = null;
     WidgetsBinding.instance.removeObserver(this);
@@ -1303,7 +1297,7 @@ class _ConversationsPageState extends State<ConversationsPage>
         };
         final collapsedDays = _collapsedConversationDays.intersection(collapsibleDays);
         final hasCollapsedDays = collapsedDays.isNotEmpty;
-        _setManualPaging(hasCollapsedDays);
+        _manualPaging = hasCollapsedDays;
         final builtRows = _processingFirst(
             _buildConversationListRows(
               dates: mergedDates,
@@ -1654,7 +1648,6 @@ class _ConversationsPageState extends State<ConversationsPage>
                           onToggle: canCollapse
                               ? () => setState(() {
                                     if (!_collapsedConversationDays.add(day)) _collapsedConversationDays.remove(day);
-                                    _setManualPaging(collapsibleDays.any(_collapsedConversationDays.contains));
                                   })
                               : null,
                         );

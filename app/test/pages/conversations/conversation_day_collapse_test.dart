@@ -320,7 +320,7 @@ void main() {
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
-  testWidgets('collapsed Home card days stop warming and load older cards only when requested', (tester) async {
+  testWidgets('collapsed Home card days load older cards only when requested', (tester) async {
     tester.view.physicalSize = const Size(800, 1600);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
@@ -346,22 +346,22 @@ void main() {
           revision: 'fixture',
         );
     final cursors = <String?>[];
-    final warmPageReady = Completer<void>();
-    final manualPageReady = Completer<void>();
+    final nextPageReady = Completer<void>();
     final feed = HomeFeedProvider(
       owner: () => 'fixture',
       fetch: ({cursor}) async {
         cursors.add(cursor);
-        if (cursor == 'warm') await warmPageReady.future;
-        if (cursor == 'manual') await manualPageReady.future;
+        if (cursor == 'next') await nextPageReady.future;
         return ApiSuccess(HomeFeedPage(
-          items: switch (cursor) {
-            null => [card('new', today.add(const Duration(hours: 9)))],
-            'warm' => [card('old', today.subtract(const Duration(days: 1)))],
-            _ => [card('older', today.subtract(const Duration(days: 2)))],
-          },
-          nextCursor: switch (cursor) { null => 'warm', 'warm' => 'manual', _ => null },
-          hasMore: cursor != 'manual',
+          // The newest page ends beyond the seven-day warm window, so only the button loads more.
+          items: cursor == null
+              ? [
+                  card('new', today.add(const Duration(hours: 9))),
+                  card('old', today.subtract(const Duration(days: 10)))
+                ]
+              : [card('older', today.subtract(const Duration(days: 11)))],
+          nextCursor: cursor == null ? 'next' : null,
+          hasMore: cursor == null,
           truncated: false,
           generation: 'fixture',
         ));
@@ -376,16 +376,12 @@ void main() {
     await tester.runAsync(feed.start);
     await tester.pumpWidget(screen);
     await tester.pump();
-    expect(cursors, [null, 'warm']);
+    expect(cursors, [null]);
 
     await tester.tap(find.byKey(ValueKey('collapse_day_${today.toIso8601String()}')));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 250));
     expect(find.text('new'), findsNothing);
-    warmPageReady.complete();
-    await tester.runAsync(() => feed.loadMore());
-    await tester.pump();
-    expect(cursors, [null, 'warm']);
     expect(find.text('old'), findsOneWidget);
     expect(find.text('Load More'), findsOneWidget);
     final button = find.byKey(const Key('conversations_show_more_cards'));
@@ -396,11 +392,11 @@ void main() {
     expect(find.descendant(of: button, matching: find.byType(OmiSpinner)), findsOneWidget);
     await tester.tap(button);
     await tester.pump();
-    expect(cursors, [null, 'warm', 'manual']);
-    manualPageReady.complete();
-    await tester.runAsync(() => feed.loadMore());
+    expect(cursors, [null, 'next']);
+    nextPageReady.complete();
+    await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 50)));
     await tester.pump();
-    expect(cursors, [null, 'warm', 'manual']);
+    expect(cursors, [null, 'next']);
     expect(find.text('Load More'), findsNothing);
     await tester.pumpWidget(const SizedBox.shrink());
   });
