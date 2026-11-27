@@ -21,8 +21,10 @@ class FakeLivePreviewEngine implements LivePreviewEngine {
   @override
   Stream<LivePreviewResult> get results => _results.stream;
 
-  void emit(String id, String text, bool isFinal, {DateTime? startedAt, DateTime? endedAt}) => _results
-      .add(LivePreviewResult(segmentId: id, text: text, isFinal: isFinal, startedAt: startedAt, endedAt: endedAt));
+  void emit(String id, String text, bool isFinal,
+          {DateTime? startedAt, DateTime? endedAt, List<LivePreviewSpan> spans = const []}) =>
+      _results.add(LivePreviewResult(
+          segmentId: id, text: text, isFinal: isFinal, startedAt: startedAt, endedAt: endedAt, spans: spans));
 
   /// The running engine dies (what the native side reports as `failure`).
   void fail(LivePreviewEngineKind engine) => _results.addError(LivePreviewRuntimeFailure(engine));

@@ -323,9 +323,18 @@ def settle_processing(
     notes=False,
     content_hash=None,
     word_floor_outcomes: tuple[bool, bool] | None = None,
+    tail_words: int | None = None,
     firestore_client=None,
 ):
     """Settle one processing attempt; `notes` marks a completed notes write (arms the created delivery).
+
+    Reliability experiment ``live_words_cascade``: ``tail_words`` is not None when the notes just written
+    read the phone's live tail of the End that closed this conversation (``note_summary_tail`` has
+    stamped the count). Stored speech that landed while the pass ran normally fails the settle
+    (``processing_source_changed``) and the notes are written again. When the grouping pass marked every
+    such landing as speech the tail had already shown the notes (``v3_tail_absorbed``), the settle stands
+    instead and covers the conversation as it is now. None (always, when the experiment is off) keeps the
+    baseline rule.
 
     A settle is not a failure, so it clears the content-scoped attempt budget: the budget counts
     consecutive failures, and a later pass on unchanged content must start from zero instead of
@@ -364,10 +373,13 @@ def settle_processing(
                 return False, False, None, False, None, None
         if not skipped and not row.get('deleted') and not permits_native_source(tx, client, uid, row, repairs=repairs):
             return _STALE_NATIVE_SOURCE
+        absorbed_landing = False
         if not skipped and not row.get('deleted') and row.get('sync_content_revision') != revision:
             decoded = store.decode_row(uid, snapshot)
             if not content_hash or processing_hash(decoded) != content_hash:
-                raise Conflict('processing_source_changed')
+                if tail_words is None or not tail_absorbed(row, revision):
+                    raise Conflict('processing_source_changed')
+                absorbed_landing = True
         written = bool(notes and not skipped and not row.get('deleted'))
         armed = written and policy.created_eligible(
             {**row, 'v3_notes_written': True, 'v3_process_failed': False, 'v3_process_pending': False}
@@ -403,7 +415,11 @@ def settle_processing(
             'v3_process_failed': False,
             'v3_process_failure_reason': None,
             'summary_retryable': False,
-            **({'summary_covers_through': covers} if not skipped and not row.get('deleted') else {}),
+            **(
+                {'summary_covers_through': row.get('finished_at') if absorbed_landing else covers}
+                if not skipped and not row.get('deleted')
+                else {}
+            ),
             **(
                 {'title_locked': True}
                 if not skipped and not row.get('home_hidden') and (row.get('structured') or {}).get('title')
@@ -448,6 +464,67 @@ def settle_processing(
         metrics.safe_metric(lambda: metrics.observe_word_floor(*word_floor_outcomes))
     _observe_eligible(uid, cid, eligible)
     return armed
+
+
+TAIL_WORDS_FIELD = 'v3_summary_tail_words'
+TAIL_ABSORBED_FIELD = 'v3_tail_absorbed'
+TAIL_SINCE_FIELD = 'v3_summary_tail_since'
+
+
+def tail_absorbed(row, revision) -> bool:
+    """Whether every change of ``row`` since ``revision`` is stored speech its notes already read as live tail.
+
+    The grouping pass stamps ``v3_tail_absorbed`` = {from, to} when a landing adds no words beyond the tail
+    credit: the revisions ``from``..``to`` differ only by such landings. A landing that goes beyond it
+    moves the revision on without the stamp, so the stamp no longer reaches the current revision.
+    """
+    mark = row.get(TAIL_ABSORBED_FIELD)
+    if not isinstance(mark, dict) or not isinstance(revision, int):
+        return False
+    start, end = mark.get('from'), mark.get('to')
+    return (
+        isinstance(start, int) and isinstance(end, int) and start <= revision <= end == row.get('sync_content_revision')
+    )
+
+
+def note_summary_tail(uid, cid, token, words, since=None, *, firestore_client=None) -> bool:
+    """Stamp how many words of the phone's live tail the notes just stored used (a number, never text).
+
+    Reliability experiment ``live_words_cascade``. Written by the summary pass under its lease before it
+    writes the notes, because the batch text for the same speech usually lands seconds later, before the
+    pass settles: the grouping pass must already find the count to know that speech is not new to the
+    notes. Returns True when it wrote; a row whose count already equals ``words`` (a conversation without
+    a tail included) is left alone.
+    """
+    client = firestore_client or store.get_firestore_client()
+    ref = store.user_conversations(client, uid).document(cid)
+    held = leases.lease_ref(client, uid, 'summary-' + cid)
+
+    @firestore.transactional
+    def note(tx):
+        row = ref.get(transaction=tx).to_dict() or {}
+        lease = held.get(transaction=tx).to_dict() or {}
+        if lease.get('token') != token or not lease.get('until') or lease['until'] <= datetime.now(timezone.utc):
+            return False
+        if not row or not python_owns_finalization(row) or row.get('deleted'):
+            return False
+        marked = row.get(TAIL_ABSORBED_FIELD) is not None
+        same = int(row.get(TAIL_WORDS_FIELD) or 0) == int(words) and row.get(TAIL_SINCE_FIELD) == since
+        if same and not marked:
+            return False
+        # A mark left by an earlier summary of this conversation says nothing about this one.
+        tx.update(
+            ref,
+            {
+                TAIL_WORDS_FIELD: int(words),
+                # When the first of those words was spoken: stored speech from there on is the tail's.
+                TAIL_SINCE_FIELD: since,
+                **({TAIL_ABSORBED_FIELD: None} if marked else {}),
+            },
+        )
+        return True
+
+    return note(client.transaction())
 
 
 def show_summary_stored(uid, cid, token, *, firestore_client=None):
