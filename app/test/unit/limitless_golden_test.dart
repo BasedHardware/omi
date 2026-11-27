@@ -1136,7 +1136,8 @@ void main() {
       bleWrapper(10, 0, 1, [
         ...intField(1, 1234),
         ...storedMessage,
-        ...realtimeAudioBytes([liveFrame])
+        ...realtimeAudioBytes([liveFrame]),
+        0x1b, // A malformed trailing field must not discard complete audio already parsed.
       ]),
     );
 
@@ -1227,19 +1228,23 @@ void main() {
         10,
         0,
         1,
-        pendantMessage(
-          storageBufferBytes(
-            session: 7,
-            seq: 1,
-            index: 100,
-            page: flashPageBytes(1750000000000, [
-              audioWrapper(audioBlobOfFrames([withheldFrame]))
-            ]),
+        [
+          ...bytesField(4, const []),
+          ...pendantMessage(
+            storageBufferBytes(
+              session: 7,
+              seq: 1,
+              index: 100,
+              page: flashPageBytes(1750000000000, [
+                audioWrapper(audioBlobOfFrames([withheldFrame]))
+              ]),
+            ),
           ),
-        ),
+        ],
       ),
     );
     await pumpEventQueue();
+    expect(realtimeFrames, isEmpty, reason: 'an empty live field does not bypass the stored-page ACK barrier');
 
     connection.releaseBatchDrainAfterSyncFailure();
     transport.emit(

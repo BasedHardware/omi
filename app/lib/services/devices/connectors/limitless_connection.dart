@@ -577,30 +577,31 @@ class LimitlessDeviceConnection extends DeviceConnection {
     final liveFrames = <List<int>>[];
 
     try {
+      parse:
       while (pos < payload.length) {
         final fieldStart = pos;
         final tagResult = _decodeVarint(payload, pos);
         final tag = tagResult[0] as int;
         pos = tagResult[1] as int;
-        if (tag == 0 || pos <= fieldStart) return false;
+        if (tag == 0 || pos <= fieldStart) break parse;
 
         final fieldNumber = tag >> 3;
         final wireType = tag & 0x07;
         switch (wireType) {
           case 0:
             final value = _decodeVarint(payload, pos);
-            if ((value[1] as int) <= pos) return false;
+            if ((value[1] as int) <= pos) break parse;
             pos = value[1] as int;
             break;
           case 1:
-            if (pos + 8 > payload.length) return false;
+            if (pos + 8 > payload.length) break parse;
             pos += 8;
             break;
           case 2:
             final lengthResult = _decodeVarint(payload, pos);
             final length = lengthResult[0] as int;
             final valueStart = lengthResult[1] as int;
-            if (valueStart <= pos || length < 0 || length > payload.length - valueStart) return false;
+            if (valueStart <= pos || length < 0 || length > payload.length - valueStart) break parse;
             pos = valueStart + length;
             if (fieldNumber == 2) {
               final storageBuffer = payload.sublist(valueStart, pos);
@@ -632,15 +633,15 @@ class LimitlessDeviceConnection extends DeviceConnection {
             }
             break;
           case 5:
-            if (pos + 4 > payload.length) return false;
+            if (pos + 4 > payload.length) break parse;
             pos += 4;
             break;
           default:
-            return false;
+            break parse;
         }
       }
     } catch (_) {
-      return false;
+      // Publish complete audio fields parsed before a malformed trailing field.
     }
 
     if (storedFrames.isEmpty && liveFrames.isEmpty && !withheldStoredFrames) return false;

@@ -583,8 +583,13 @@ class _WalItemDetailPageState extends State<WalItemDetailPage> {
     );
 
     if (confirmed && context.mounted) {
-      Navigator.of(context).pop(); // Go back to previous screen
-      context.read<SyncProvider>().deleteWal(widget.wal);
+      try {
+        await context.read<SyncProvider>().deleteWal(widget.wal);
+        if (context.mounted) Navigator.of(context).pop(); // Go back to previous screen
+      } catch (error) {
+        Logger.debug('WAL detail delete failed: ${error.runtimeType}');
+        if (context.mounted) OmiFeedback.error(context, context.l10n.failedToDeleteSomeItems);
+      }
     }
   }
 

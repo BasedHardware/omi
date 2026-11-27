@@ -128,7 +128,14 @@ class WalListItem extends StatelessWidget {
             confirmLabel: context.l10n.delete,
             destructive: true,
           );
-          if (confirmed) await syncProvider.deleteWal(wal);
+          if (confirmed) {
+            try {
+              await syncProvider.deleteWal(wal);
+            } catch (error) {
+              Logger.debug('Sync delete failed: ${error.runtimeType}');
+              if (context.mounted) OmiFeedback.error(context, context.l10n.failedToDeleteSomeItems);
+            }
+          }
         },
       );
     }
@@ -174,8 +181,13 @@ class WalListItem extends StatelessWidget {
               color: Colors.red,
               child: const Icon(Icons.delete, color: Colors.white),
             ),
-            onDismissed: (direction) {
-              ServiceManager.instance().wal.getSyncs().deleteWal(wal);
+            onDismissed: (direction) async {
+              try {
+                await syncProvider.deleteWal(wal);
+              } catch (error) {
+                Logger.debug('Sync delete failed: ${error.runtimeType}');
+                if (context.mounted) OmiFeedback.error(context, context.l10n.failedToDeleteSomeItems);
+              }
             },
             child: GestureDetector(
               behavior: HitTestBehavior.opaque,
@@ -232,7 +244,14 @@ class WalListItem extends StatelessWidget {
                           confirmLabel: context.l10n.delete,
                           destructive: true,
                         );
-                        if (confirmed) await syncProvider.deleteWal(wal);
+                        if (confirmed) {
+                          try {
+                            await syncProvider.deleteWal(wal);
+                          } catch (error) {
+                            Logger.debug('Sync delete failed: ${error.runtimeType}');
+                            if (context.mounted) OmiFeedback.error(context, context.l10n.failedToDeleteSomeItems);
+                          }
+                        }
                       }),
                     ],
                     if (showBar) ...[
@@ -450,7 +469,9 @@ class _SyncPageState extends State<SyncPage> {
               }
             }
             if (!context.mounted || uid != SharedPreferencesUtil().uid) return;
-            final retained = provider.allWals.any((wal) => targets.contains(syncedIdentity(wal)));
+            final retained = provider.allWals.any(
+              (wal) => wal.status == WalStatus.synced && targets.contains(syncedIdentity(wal)),
+            );
             if (failed || retained) {
               OmiFeedback.error(context, context.l10n.failedToDeleteSomeItems);
             } else {
@@ -507,9 +528,12 @@ class _SyncPageState extends State<SyncPage> {
             destructive: true,
           );
           if (confirmed && context.mounted) {
-            await provider.deleteAllClearableWals();
-            if (context.mounted) {
-              OmiFeedback.confirm(context, context.l10n.allFilesDeleted);
+            try {
+              await provider.deleteAllClearableWals();
+              if (context.mounted) OmiFeedback.confirm(context, context.l10n.allFilesDeleted);
+            } catch (error) {
+              Logger.debug('Sync clear all failed: ${error.runtimeType}');
+              if (context.mounted) OmiFeedback.error(context, context.l10n.failedToDeleteSomeItems);
             }
           }
         },

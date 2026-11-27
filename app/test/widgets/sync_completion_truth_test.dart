@@ -78,6 +78,7 @@ class _Sync extends ChangeNotifier with WalDerivedSyncViews implements SyncProvi
   String? retainedPendingId;
   String? retainedSyncedId;
   bool failSyncedBulkAfterPartial = false;
+  bool failClearAll = false;
   List<Wal>? discoveredWals;
 
   @override
@@ -93,6 +94,11 @@ class _Sync extends ChangeNotifier with WalDerivedSyncViews implements SyncProvi
     wals.removeWhere((wal) => targets.contains(wal.id) && wal.id != retainedSyncedId);
     notifyListeners();
     if (failSyncedBulkAfterPartial) throw StateError('synthetic device ACK failure');
+  }
+
+  @override
+  Future<void> deleteAllClearableWals() async {
+    if (failClearAll) throw StateError('synthetic device ACK failure');
   }
 
   @override
@@ -458,6 +464,47 @@ void main() {
     expect(sync.allWals, [retained]);
     expect(find.text(l.failedToDeleteSomeItems), findsOneWidget);
     expect(find.text(l.syncedFilesDeleted), findsNothing);
+  });
+
+  testWidgets('Classic Clear Synced ignores newly discovered pending ring audio', (tester) async {
+    final now = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+    Wal ring(int start, WalStatus status) => Wal(
+          timerStart: start,
+          codec: BleAudioCodec.opus,
+          seconds: 30,
+          storage: WalStorage.sdcard,
+          status: status,
+          device: 'synthetic-pendant',
+          fileNum: -1,
+        );
+
+    final original = ring(now - 30, WalStatus.synced);
+    final newlyDiscovered = ring(now - 29, WalStatus.miss);
+    final sync = await _pump(tester, const SyncPage(), WalStatus.synced, recordings: [original]);
+    sync.discoveredWals = [newlyDiscovered];
+
+    final l = await _clearSynced(tester);
+
+    expect(sync.allWals, [newlyDiscovered]);
+    expect(find.text(l.failedToDeleteSomeItems), findsNothing);
+    expect(find.text(l.syncedFilesDeleted), findsOneWidget);
+  });
+
+  testWidgets('Classic Clear All reports an ACK failure', (tester) async {
+    final sync = await _pump(tester, const SyncPage(), WalStatus.synced);
+    sync.failClearAll = true;
+    final l = AppLocalizations.of(tester.element(find.byType(SyncPage)));
+
+    await tester.tap(find.byTooltip(l.manageStorage));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text(l.clearAll));
+    await tester.pumpAndSettle();
+    expect(find.text(l.deleteAllFiles), findsOneWidget);
+    await tester.tap(find.text(l.clearAll));
+    await tester.pumpAndSettle();
+
+    expect(find.text(l.failedToDeleteSomeItems), findsOneWidget);
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets('Classic Clear Pending reports a retained ring after its virtual row is rebuilt', (tester) async {

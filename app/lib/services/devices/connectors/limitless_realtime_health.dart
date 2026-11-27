@@ -123,13 +123,12 @@ class LimitlessRealtimeHealth {
   }
 
   Future<void> _reactivate() async {
-    var wroteEnable = false;
     try {
       if (_closed || !isCurrent()) {
         close();
         return;
       }
-      wroteEnable = await reactivate().timeout(reactivationTimeout);
+      await reactivate().timeout(reactivationTimeout);
     } catch (_) {
       // Failed or skipped writes share the episode's bounded retry budget.
     } finally {

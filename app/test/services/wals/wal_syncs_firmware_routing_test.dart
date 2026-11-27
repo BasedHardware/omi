@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:omi/services/experiments/pendant_ring_drain_gate.dart';
 import 'package:omi/services/wals/ring_drain_policy.dart';
 import 'package:omi/services/wals/ring_storage_sync.dart';
+import 'package:omi/services/wals/flash_page_wal_sync.dart';
 import 'package:omi/services/wals/wal_syncs.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/backend/schema/conversation.dart';
@@ -103,6 +104,68 @@ class _FailingSdcard extends _SpySdcard {
     events.add('sd-failed');
     throw StateError('device read incomplete');
   }
+}
+
+class _DeleteSpyPhone extends _PhoneSync {
+  _DeleteSpyPhone(this.events) : super(events: events);
+  final List<String> events;
+
+  @override
+  Future<void> deleteAllSyncedWals() async => events.add('phone-delete');
+
+  @override
+  Future<void> deleteAllPendingWals() async => events.add('phone-pending-delete');
+}
+
+class _DeleteSpySdcard extends SDCardWalSyncImpl {
+  _DeleteSpySdcard(this.events) : super(_Listener());
+  final List<String> events;
+
+  @override
+  Future<void> deleteAllSyncedWals() async => events.add('sdcard-delete');
+
+  @override
+  Future<void> deleteAllPendingWals() async => events.add('sdcard-pending-delete');
+}
+
+class _DeleteSpyFlashPage extends FlashPageWalSyncImpl {
+  _DeleteSpyFlashPage(this.events, {this.fail = false}) : super(_Listener());
+  final List<String> events;
+  final bool fail;
+
+  @override
+  Future<void> deleteAllSyncedWals() async {
+    events.add('flash-delete');
+    if (fail) throw StateError('device ACK was capped');
+  }
+
+  @override
+  Future<void> deleteAllPendingWals() async {
+    events.add('flash-pending-delete');
+    if (fail) throw StateError('device ACK was capped');
+  }
+}
+
+class _DeleteSpyStorage extends StorageSyncImpl {
+  _DeleteSpyStorage(this.events) : super(_Listener());
+  final List<String> events;
+
+  @override
+  Future<void> deleteAllSyncedWals() async => events.add('storage-delete');
+
+  @override
+  Future<void> deleteAllPendingWals() async => events.add('storage-pending-delete');
+}
+
+class _DeleteSpyRing extends RingStorageSyncImpl {
+  _DeleteSpyRing(this.events) : super(_Listener());
+  final List<String> events;
+
+  @override
+  Future<void> deleteAllSyncedWals() async => events.add('ring-delete');
+
+  @override
+  Future<void> deleteAllPendingWals() async => events.add('ring-pending-delete');
 }
 
 class _SpySdcard extends SDCardWalSyncImpl {
@@ -251,6 +314,42 @@ void main() {
       await pass;
       expect(events, ['phone-live', 'device-start', 'device-settled']);
     });
+  });
+
+  test('bulk synced deletion reaches later stores after a flash ACK failure', () async {
+    final events = <String>[];
+    final syncs = WalSyncs(
+      _Listener(),
+      phoneSync: _DeleteSpyPhone(events),
+      sdcardSync: _DeleteSpySdcard(events),
+      flashPageSync: _DeleteSpyFlashPage(events, fail: true),
+      storageSync: _DeleteSpyStorage(events),
+      ringSync: _DeleteSpyRing(events),
+    );
+
+    await expectLater(syncs.deleteAllSyncedWals(), throwsStateError);
+    expect(events, ['phone-delete', 'sdcard-delete', 'flash-delete', 'storage-delete', 'ring-delete']);
+  });
+
+  test('bulk pending deletion reaches later stores after a flash failure', () async {
+    final events = <String>[];
+    final syncs = WalSyncs(
+      _Listener(),
+      phoneSync: _DeleteSpyPhone(events),
+      sdcardSync: _DeleteSpySdcard(events),
+      flashPageSync: _DeleteSpyFlashPage(events, fail: true),
+      storageSync: _DeleteSpyStorage(events),
+      ringSync: _DeleteSpyRing(events),
+    );
+
+    await expectLater(syncs.deleteAllPendingWals(), throwsStateError);
+    expect(events, [
+      'phone-pending-delete',
+      'sdcard-pending-delete',
+      'flash-pending-delete',
+      'storage-pending-delete',
+      'ring-pending-delete',
+    ]);
   });
 
   group('legacy SD isolation', () {

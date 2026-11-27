@@ -396,19 +396,37 @@ class WalSyncs implements IWalSync {
   }
 
   Future<void> deleteAllSyncedWals() async {
-    await _phoneSync.deleteAllSyncedWals();
-    await _sdcardSync.deleteAllSyncedWals();
-    await _flashPageSync.deleteAllSyncedWals();
-    await _storageSync.deleteAllSyncedWals();
-    await _ringSync.deleteAllSyncedWals();
+    await _runDeleteOperations([
+      _phoneSync.deleteAllSyncedWals,
+      _sdcardSync.deleteAllSyncedWals,
+      _flashPageSync.deleteAllSyncedWals,
+      _storageSync.deleteAllSyncedWals,
+      _ringSync.deleteAllSyncedWals,
+    ]);
   }
 
   Future<void> deleteAllPendingWals() async {
-    await _phoneSync.deleteAllPendingWals();
-    await _sdcardSync.deleteAllPendingWals();
-    await _flashPageSync.deleteAllPendingWals();
-    await _storageSync.deleteAllPendingWals();
-    await _ringSync.deleteAllPendingWals();
+    await _runDeleteOperations([
+      _phoneSync.deleteAllPendingWals,
+      _sdcardSync.deleteAllPendingWals,
+      _flashPageSync.deleteAllPendingWals,
+      _storageSync.deleteAllPendingWals,
+      _ringSync.deleteAllPendingWals,
+    ]);
+  }
+
+  Future<void> _runDeleteOperations(List<Future<void> Function()> deleteOperations) async {
+    Object? firstError;
+    StackTrace? firstStackTrace;
+    for (final delete in deleteOperations) {
+      try {
+        await delete();
+      } catch (error, stackTrace) {
+        firstError ??= error;
+        firstStackTrace ??= stackTrace;
+      }
+    }
+    if (firstError != null) Error.throwWithStackTrace(firstError, firstStackTrace!);
   }
 
   /// Terminal corruption is produced by the phone-local WAL owner. Device
