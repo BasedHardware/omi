@@ -236,9 +236,12 @@ class LiveWalReceipt {
   }
 
   /// Receiptless files have no replay journal to fence an incomplete write.
-  /// Persist their directory entry before index admission and remove a partial
-  /// reservation if either the write or its directory barrier fails.
+  /// Persist their directory entry before index admission. Remove partial or
+  /// empty reservations, but keep completed bytes when only the parent barrier
+  /// fails so the live WAL can retry that barrier without losing audio.
   static Future<void> writeReceiptlessAudio(File audio, List<int> bytes) async {
+    var audioWriteStarted = false;
+    var audioWriteCompleted = false;
     try {
       // After an open circuit's retry deadline expires, prove this directory
       // can sync before creating receiptless audio. If the probe fails, there
@@ -248,17 +251,33 @@ class LiveWalReceipt {
         throw LiveWalDirectorySyncException(StateError('directory sync circuit is open'),
             circuitOpened: false, reportFailure: false);
       }
+      audioWriteStarted = true;
       await writeAudio(audio, bytes);
+      audioWriteCompleted = true;
       await syncAudioParentDirectory(audio);
     } catch (error, stackTrace) {
       Object? cleanupError;
       StackTrace? cleanupStackTrace;
-      try {
-        await discardReceiptlessAudio(audio);
-      } catch (failure, failureStackTrace) {
-        // Keep the WAL in memory; a later recovery scan remains conservative.
-        cleanupError = failure;
-        cleanupStackTrace = failureStackTrace;
+      if (!audioWriteCompleted) {
+        var removeReservation = audioWriteStarted;
+        if (!removeReservation) {
+          // A retry circuit can fail before writing. Remove the caller's empty
+          // exclusive reservation, but never remove an older completed file.
+          try {
+            removeReservation = await audio.length() == 0;
+          } on FileSystemException {
+            removeReservation = false;
+          }
+        }
+        if (removeReservation) {
+          try {
+            await discardReceiptlessAudio(audio);
+          } catch (failure, failureStackTrace) {
+            // Keep the WAL in memory; a later recovery scan remains conservative.
+            cleanupError = failure;
+            cleanupStackTrace = failureStackTrace;
+          }
+        }
       }
       if (cleanupError is LiveWalDirectorySyncException) {
         Error.throwWithStackTrace(cleanupError, cleanupStackTrace!);

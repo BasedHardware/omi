@@ -144,11 +144,13 @@ void main() {
 
   test('a failed pendant file write still blocks ingress even when the risk is count_cap', () async {
     final telemetry = <RegisteredEvent>[];
+    final backpressure = <bool>[];
     final sync = LocalWalSyncImpl(
       _Listener(),
       freeDiskBytes: () async => 64 << 30,
       backlogTelemetry: WalBacklogTelemetry(emit: telemetry.add),
     );
+    sync.onPendantStorageBackpressureChanged = backpressure.add;
     sync.setDeviceInfo('test-pendant', 'Omi');
     final buffered = Wal(
       timerStart: 1700000000,
@@ -177,9 +179,22 @@ void main() {
       expect(sync.retentionRisk?.reason, 'count_cap');
       expect(buffered.storage, WalStorage.mem);
       expect(buffered.data, hasLength(2000));
-      final dropped = frame(2000);
-      expect(sync.onFrameCaptured(dropped), same(dropped));
-      expect(sync.testFrames, isEmpty, reason: 'the full memory WAL counts toward the storage-blocked buffer');
+      expect(backpressure, [true], reason: 'a failed write suspends the physical capture source');
+      for (var counter = 2000; counter < 2256; counter++) {
+        sync.onFrameCaptured(frame(counter));
+        expect(sync.lastFrameAccepted, isTrue);
+      }
+      expect(sync.testFrames, hasLength(256));
+      expect(
+        sync.testFrames.map((captured) => captured.syncKey.bytes[0] | (captured.syncKey.bytes[1] << 8)),
+        orderedEquals(List.generate(256, (i) => i + 2000)),
+      );
+      expect(buffered.totalFrames + sync.testFrames.length, 2256,
+          reason: 'accepted frames stay in a fixed, bounded in-flight allowance');
+      final beyondBound = frame(2256);
+      expect(sync.onFrameCaptured(beyondBound), same(beyondBound));
+      expect(sync.lastFrameAccepted, isFalse);
+      expect(sync.testFrames, hasLength(256));
       await sync.onAudioCodecChanged(BleAudioCodec.opus);
       expect(
         telemetry.whereType<PendantFramesDropped>().map((event) => event.properties),
@@ -193,7 +208,7 @@ void main() {
     }
   });
 
-  test('the real flush reports one count-only observation per nonempty pendant drop window', () async {
+  test('the real flush preserves bounded backpressure frames after its initial drop window', () async {
     final events = <RegisteredEvent>[];
     final sync = LocalWalSyncImpl(
       _Listener(),
@@ -214,7 +229,8 @@ void main() {
     expect(sync.testWals.single.totalFrames, 2000);
     sync.onFrameCaptured(frame(2003));
     await sync.onAudioCodecChanged(BleAudioCodec.opus);
-    expect(events.whereType<PendantFramesDropped>().last.properties, {'count': 1, 'reason': 'disk_reserve'});
-    expect(events.whereType<PendantFramesDropped>(), hasLength(2));
+    expect(events.whereType<PendantFramesDropped>().single.properties, {'count': 3, 'reason': 'disk_reserve'});
+    expect(sync.testWals.fold<int>(0, (count, wal) => count + wal.totalFrames), 2001,
+        reason: 'the accepted frame stays retained while storage backpressure is active');
   });
 }

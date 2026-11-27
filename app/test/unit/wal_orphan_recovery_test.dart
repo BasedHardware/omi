@@ -663,18 +663,84 @@ void main() {
     expect(LiveWalReceipt.directory(dir).listSync().whereType<File>(), isEmpty);
   }, skip: LiveWalReceipt.writeEnabled ? false : 'Receipt writer is disabled by dart-define');
 
-  test('audio directory sync failure retains the recording in memory', () async {
-    LiveWalReceipt.syncDirectoryForTesting = (_) async {
-      throw const FileSystemException('injected directory sync failure');
+  test('audio directory sync failure keeps receiptless bytes and retries without rewriting', () async {
+    var allowSync = false;
+    LiveWalReceipt.syncDirectoryForTesting = (directory) async {
+      if (directory.path == dir.path && !allowSync) {
+        throw const FileSystemException('injected directory sync failure');
+      }
     };
     final writer = await ledger(realCensus: true);
     await captureReceiptAudio(writer);
+    SharedPreferencesUtil().uid = 'legacy';
     await writer.finalizeCurrentSession();
     final pending = writer.testWals.singleWhere((wal) => wal.recordingSessionId == 'receipt-session');
     expect(pending.storage, WalStorage.mem);
     expect(pending.data, isNotEmpty);
     expect((await WalFileManager.loadIndexedWals()).any((wal) => wal.filePath == pending.filePath), isFalse);
-    expect(LiveWalReceipt.directory(dir).listSync().whereType<File>(), isEmpty);
+    final audioFiles = dir.listSync().whereType<File>().where((file) => file.path.endsWith('.bin')).toList();
+    expect(audioFiles, hasLength(1));
+    final file = audioFiles.single;
+    final expected = encodeWalFrames(pending.data);
+    expect(await file.readAsBytes(), orderedEquals(expected));
+    expect(receiptlessManagedCount(await census()), 1,
+        reason: 'restart inventory sees aggregate-only bytes, not replayable ownership');
+    expect((await WalFileManager.loadIndexedWals()).any((wal) => wal.filePath == file.uri.pathSegments.last), isFalse);
+    expect(await file.readAsBytes(), orderedEquals(expected));
+    final restarted = await ledger(realCensus: true);
+    expect(restarted.testWals.any((wal) => wal.filePath == file.uri.pathSegments.last), isFalse,
+        reason: 'a fresh WAL service does not claim receiptless audio after restart');
+    expect(await file.readAsBytes(), orderedEquals(expected));
+
+    allowSync = true;
+    await writer.onAudioCodecChanged(BleAudioCodec.opus);
+    final retried = writer.testWals.singleWhere((wal) => wal.recordingSessionId == 'receipt-session');
+    expect(retried.storage, WalStorage.disk);
+    expect(retried.filePath, file.uri.pathSegments.last, reason: 'retry reuses the completed file');
+    expect(await file.readAsBytes(), orderedEquals(expected));
+    expect((await WalFileManager.loadIndexedWals()).any((wal) => wal.filePath == retried.filePath), isTrue);
+  }, skip: LiveWalReceipt.writeEnabled ? false : 'Receipt writer is disabled by dart-define');
+
+  test('stale receipt publication failure after logout emits no publishFailed telemetry', () async {
+    final entered = Completer<void>();
+    final release = Completer<void>();
+    final events = <WalWriteReceipt>[];
+    LiveWalReceipt.writeReceiptForTesting = (file, body) async {
+      if (!entered.isCompleted) entered.complete();
+      await release.future;
+      throw const FileSystemException('injected receipt publication failure');
+    };
+    final writer = await ledger(receiptTelemetry: events.add);
+    await captureReceiptAudio(writer);
+    final finalize = writer.finalizeCurrentSession();
+    await entered.future;
+    writer.clearUserData();
+    release.complete();
+    await finalize;
+    expect(events.where((event) => event.result == WalWriteReceiptResult.publishFailed), isEmpty);
+  }, skip: LiveWalReceipt.writeEnabled ? false : 'Receipt writer is disabled by dart-define');
+
+  test('stale directory sync failure after logout emits no directorySyncFailed telemetry', () async {
+    final entered = Completer<void>();
+    final release = Completer<void>();
+    final events = <WalWriteReceipt>[];
+    LiveWalReceipt.syncDirectoryForTesting = (directory) async {
+      if (directory.path != dir.path) return;
+      if (!entered.isCompleted) entered.complete();
+      await release.future;
+      throw const FileSystemException('injected parent directory sync failure');
+    };
+    LiveWalReceipt.writeReceiptForTesting = (file, body) async {
+      throw const FileSystemException('force receiptless fallback');
+    };
+    final writer = await ledger(receiptTelemetry: events.add);
+    await captureReceiptAudio(writer);
+    final finalize = writer.finalizeCurrentSession();
+    await entered.future;
+    writer.clearUserData();
+    release.complete();
+    await finalize;
+    expect(events.where((event) => event.result == WalWriteReceiptResult.directorySyncFailed), isEmpty);
   }, skip: LiveWalReceipt.writeEnabled ? false : 'Receipt writer is disabled by dart-define');
 
   test('repeated directory sync failures back off and recover only after a successful barrier probe', () async {
@@ -682,7 +748,8 @@ void main() {
     var syncElapsed = Duration.zero;
     var allowSync = false;
     var syncCalls = 0;
-    LiveWalReceipt.syncDirectoryForTesting = (_) async {
+    LiveWalReceipt.syncDirectoryForTesting = (directory) async {
+      if (directory.path != dir.path) return;
       syncCalls++;
       if (!allowSync) throw const FileSystemException('injected persistent directory sync failure');
     };
@@ -694,7 +761,10 @@ void main() {
       receiptTelemetry: events.add,
     );
     await captureReceiptAudio(writer);
+    SharedPreferencesUtil().uid = 'legacy';
     await writer.finalizeCurrentSession();
+    await writer.onAudioCodecChanged(BleAudioCodec.opus);
+    await writer.onAudioCodecChanged(BleAudioCodec.opus);
 
     final held = writer.testWals.singleWhere((wal) => wal.recordingSessionId == 'receipt-session');
     expect(held.storage, WalStorage.mem);
@@ -708,7 +778,7 @@ void main() {
     var retained = writer.testWals.where((wal) => wal.storage == WalStorage.mem).toList();
     expect(retained.map((wal) => wal.recordingSessionId), containsAll(['receipt-session', 'fast-retry-session']));
     expect(syncCalls, 3, reason: 'the open circuit fails fast without repeatedly calling the native channel');
-    expect(dir.listSync().whereType<File>().where((file) => file.path.endsWith('.bin')), isEmpty);
+    expect(dir.listSync().whereType<File>().where((file) => file.path.endsWith('.bin')), hasLength(1));
 
     final firstRetryAfter = LiveWalReceipt.directorySyncRetryAfterForTesting!;
     syncElapsed = firstRetryAfter + const Duration(milliseconds: 1);
